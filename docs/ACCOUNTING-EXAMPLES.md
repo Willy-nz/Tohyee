@@ -6,13 +6,14 @@ proves it". Test names start with the example IDs they cover:
 
 - `tests/unit/decimal.test.ts` (R1, R3), `tests/unit/costing.test.ts`
   (W1-W12, pure costing maths) and `tests/unit/invoice-amounts.test.ts`
-  (I1-I6, pure invoice maths)
+  (I1-I6, pure invoice maths; CP1, CP2 and CP4 paid status)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
   P1-P3), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
-  `tests/integration/contacts.test.ts` (D1, D2 for contacts) and
-  `tests/integration/invoices.test.ts` (I1-I9, D1, D2 for invoices), all
-  against a real PostgreSQL database
+  `tests/integration/contacts.test.ts` (D1, D2 for contacts),
+  `tests/integration/invoices.test.ts` (I1-I9, D1, D2 for invoices) and
+  `tests/integration/customer-payments.test.ts` (CP1-CP8), all against a
+  real PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -162,6 +163,56 @@ An invoice's amounts are tax **exclusive** (GST is added on top), tax
 - **Correcting an approved invoice**: it can't be edited, and its journals
   can't be corrected in the ledger. Void it and raise a new one.
 - **Foreign-currency invoices**: invoices are in the base currency only.
+
+## Customer payments
+
+A customer payment is money received against one approved sales invoice.
+Recording it posts one journal dated the payment date: Dr the bank account the
+money went into / Cr accounts receivable (1100). The bank account must be an
+active account of type bank. Amounts must be more than zero, with at most
+2 decimal places.
+
+An invoice's amount due is its total less its active (not voided) payments.
+Its paid status is **unpaid** (nothing paid), **part paid** or **paid**
+(nothing due). Both are worked out from the payments every time; they're
+never stored or typed in.
+
+- **CP1** INV-0001 for 115.00 (I1). Pay 115.00 into 1000: the journal is
+  Dr 1000 115.00 / Cr 1100 115.00, dated the payment date. Amount due
+  **0.00**; status **paid**.
+- **CP2** The same invoice paid 50.00, then 65.00: amount due **65.00** and
+  **part paid** after the first; **0.00** and **paid** after the second.
+- **CP3** Paying 115.01 against a 115.00 invoice is refused (no overpayments
+  yet). Paying a draft or a voided invoice is refused. Amounts must be more
+  than zero with at most 2 decimal places: 0.00, -5.00 and 10.001 are
+  refused.
+- **CP4** Voiding the 65.00 payment from CP2 on a later date in an open
+  period posts the exact reversal on that date (Dr 1100 65.00 /
+  Cr 1000 65.00). Amount due goes back to **65.00**; status **part paid**. A
+  second void is refused.
+- **CP5** Voiding INV-0001 while it has an active payment is refused ("void
+  its payments first"). After its payments are voided, voiding the invoice
+  works.
+- **CP6** A payment dated in a locked period is refused, and nothing is
+  posted.
+- **CP7** Retrying a payment with the same idempotency key and content returns
+  the same payment (201 then 200); the same key with a different amount is
+  refused (409).
+- **CP8** The bank account must be an active account of type bank: paying
+  into 1100, or into an archived bank account, is refused.
+
+### Not supported yet (refused rather than guessed)
+
+- **Overpayments and prepayments**: a payment can't be more than the amount
+  due, and it can't be dated before the invoice date (until then accounts
+  receivable would be in credit, which is a prepayment).
+- **One payment for several invoices**: each payment is against exactly one
+  invoice.
+- **Foreign-currency bank accounts**: payments go into bank accounts in the
+  base currency only.
+- **Correcting a payment**: its journals can't be corrected in the ledger.
+  Void the payment and record it again. A void can't be dated before the
+  payment.
 
 ## Reports
 

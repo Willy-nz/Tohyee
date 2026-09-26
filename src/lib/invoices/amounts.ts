@@ -1,7 +1,20 @@
-import { add, dec, isZero, mul, mulDiv, roundHalfUp, sub, toFixedString, ZERO_DECIMAL, type Decimal } from "@/lib/money/decimal";
+import {
+  add,
+  dec,
+  isPositive,
+  isZero,
+  mul,
+  mulDiv,
+  roundHalfUp,
+  sub,
+  toFixedString,
+  ZERO_DECIMAL,
+  type Decimal,
+} from "@/lib/money/decimal";
 
 // Browser-safe: the invoice editor uses this for its live totals, and the
-// server uses it again when saving and approving.
+// server uses it again when saving and approving, and to work out what's
+// still due.
 
 export const AMOUNTS_MODES = ["exclusive", "inclusive", "no_tax"] as const;
 export type AmountsMode = (typeof AMOUNTS_MODES)[number];
@@ -10,6 +23,16 @@ export const AMOUNTS_MODE_LABELS: Readonly<Record<AmountsMode, string>> = {
   exclusive: "Tax exclusive",
   inclusive: "Tax inclusive",
   no_tax: "No tax",
+};
+
+/** Whether an approved invoice has been paid. Worked out from its payments, never stored. */
+export const PAID_STATUSES = ["unpaid", "part_paid", "paid"] as const;
+export type PaidStatus = (typeof PAID_STATUSES)[number];
+
+export const PAID_STATUS_LABELS: Readonly<Record<PaidStatus, string>> = {
+  unpaid: "Unpaid",
+  part_paid: "Part paid",
+  paid: "Paid",
 };
 
 export type InvoiceLineInput = {
@@ -75,5 +98,27 @@ export function calculateInvoice(mode: AmountsMode, lines: readonly InvoiceLineI
     subtotal: toFixedString(subtotal, scale),
     taxTotal: toFixedString(taxTotal, scale),
     total: toFixedString(add(subtotal, taxTotal), scale),
+  };
+}
+
+export type InvoicePaymentStatus = {
+  amountPaid: string;
+  amountDue: string;
+  paidStatus: PaidStatus;
+};
+
+/**
+ * What's still due on an approved invoice, from its total and the sum of its
+ * active (not voided) payments (worked examples CP1, CP2 and CP4): unpaid
+ * while nothing is paid, part paid while something is still due, then paid.
+ * Payments can't add up to more than the total, so nothing is ever overpaid.
+ */
+export function invoicePaymentStatus(total: string, amountPaid: string, scale: number): InvoicePaymentStatus {
+  const paid = dec(amountPaid);
+  const due = sub(dec(total), paid);
+  return {
+    amountPaid: toFixedString(paid, scale),
+    amountDue: toFixedString(due, scale),
+    paidStatus: isZero(paid) ? "unpaid" : isPositive(due) ? "part_paid" : "paid",
   };
 }
