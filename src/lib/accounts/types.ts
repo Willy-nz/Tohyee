@@ -37,7 +37,9 @@ export function isDebitNormal(accountClass: AccountClass): boolean {
 /** Accounts other features look up by role rather than by code. */
 export const SYSTEM_KEYS = [
   "bank",
+  "accounts_receivable",
   "inventory",
+  "gst",
   "cost_of_goods_sold",
   "retained_earnings",
   "unrealised_fx_gain",

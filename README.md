@@ -35,8 +35,11 @@ own.
 - **General ledger**: a starting NZ chart of accounts, manual journals,
   corrections by reversal and replacement, and period locks. The database
   itself refuses unbalanced journals and edits to posted history.
-- **Contacts**: customers and suppliers, archived rather than deleted, ready
-  for invoices and bills.
+- **Contacts**: customers and suppliers, archived rather than deleted.
+- **Sales invoices** with GST worked out per line (tax exclusive, tax
+  inclusive or no tax): drafts, approval that numbers the invoice
+  (`INV-0001`, …) and posts it to the ledger, and voiding that reverses it.
+  Customer payments, credit notes and the GST return aren't built yet.
 - **Stock**: receipts, sales, returns, stocktake adjustments and landed cost,
   with weighted-average costing to the cent.
 - **Foreign-currency revaluation** of foreign-currency bank, asset and
@@ -140,6 +143,7 @@ the `Origin` and `Sec-Fetch-Site` headers).
 | Organisation | `GET/PATCH /api/organisations/:id/settings`, `GET/POST /api/organisations/:id/members`, `PATCH/DELETE /api/organisations/:id/members/:userId` |
 | Accounts | `GET/POST /api/accounts`, `PATCH /api/accounts/:id` |
 | Contacts | `GET/POST /api/contacts`, `PATCH /api/contacts/:id` |
+| Invoices | `GET/POST /api/invoices`, `GET/PATCH/DELETE /api/invoices/:id`, `POST /api/invoices/:id/approve`, `POST /api/invoices/:id/void` |
 | Ledger | `GET/POST /api/ledger/journals`, `GET /api/ledger/journals/:id`, `POST /api/ledger/journals/corrections`, `GET/PATCH /api/ledger/period-controls`, `GET/POST /api/ledger/revaluations` |
 | Stock | `GET/POST /api/inventory/movements` |
 | Reports | `GET /api/reports/trial-balance`, `/profit-and-loss`, `/balance-sheet`, `/inventory-valuation` |

@@ -23,6 +23,7 @@ export const PATCH = route<Context>(async (request, context) => {
       displayName: body.displayName,
       baseCurrency: body.baseCurrency,
       financialYearEndMonth: body.financialYearEndMonth,
+      gstBasis: body.gstBasis,
     }),
   );
   await syncOrganisationRegistry(settings);

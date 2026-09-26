@@ -462,7 +462,11 @@ describeWithDatabase("contacts (customers and suppliers)", () => {
     await expect(asUser(owner, (tx) => tx.query("delete from contacts"))).rejects.toThrow(
       "contacts can't be deleted; archive them instead",
     );
+    // Invoices refer to contacts, so a plain truncate is refused before the trigger runs.
     await expect(asUser(owner, (tx) => tx.query("truncate contacts"))).rejects.toThrow(
+      "cannot truncate a table referenced in a foreign key constraint",
+    );
+    await expect(asUser(owner, (tx) => tx.query("truncate contacts cascade"))).rejects.toThrow(
       "contacts can't be deleted; archive them instead",
     );
   });

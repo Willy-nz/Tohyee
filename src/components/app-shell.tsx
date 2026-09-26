@@ -22,6 +22,7 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
       { href: "/operations/ledger-journals", label: "Journals" },
       { href: "/operations/accounts", label: "Chart of accounts" },
       { href: "/operations/contacts", label: "Contacts" },
+      { href: "/operations/invoices", label: "Invoices" },
       { href: "/operations/inventory", label: "Stock" },
       { href: "/operations/reports", label: "Reports" },
       { href: "/operations/fx-revaluation", label: "FX revaluation", minRole: "bookkeeper" },

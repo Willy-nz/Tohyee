@@ -4,13 +4,15 @@ These are the acceptance examples for posting and stock behaviour. Each one
 has real numbers and a matching automated test, so "approved" means "a test
 proves it". Test names start with the example IDs they cover:
 
-- `tests/unit/decimal.test.ts` (R1, R3) and `tests/unit/costing.test.ts`
-  (W1-W12, pure costing maths)
+- `tests/unit/decimal.test.ts` (R1, R3), `tests/unit/costing.test.ts`
+  (W1-W12, pure costing maths) and `tests/unit/invoice-amounts.test.ts`
+  (I1-I6, pure invoice maths)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
   P1-P3), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
-  F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP) and
-  `tests/integration/contacts.test.ts` (D1, D2 for contacts), all against a
-  real PostgreSQL database
+  F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
+  `tests/integration/contacts.test.ts` (D1, D2 for contacts) and
+  `tests/integration/invoices.test.ts` (I1-I9, D1, D2 for invoices), all
+  against a real PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -116,6 +118,50 @@ A USD bank account holds USD 1,000.00, booked at NZD 1,600.00. Revalue on
   NZD is an unrealised **loss**.
 - **F7** Only accounts marked with a foreign currency can be revalued, and
   only when their balance has the normal sign.
+
+## Sales invoices
+
+An invoice's amounts are tax **exclusive** (GST is added on top), tax
+**inclusive** (the prices already include GST) or **no tax**.
+
+- Line amount = quantity x unit price, rounded once to cents, half away from
+  zero. Quantities and unit prices allow up to 4 decimal places.
+- GST is worked out and rounded on each line, then added up. Exclusive:
+  line amount x rate. Inclusive: line amount x rate / (1 + rate), which is
+  3/23 at 15%, and the net is the line amount less its GST. Per-line rounding
+  matches Xero; the owner is still confirming it, so all invoice rounding
+  lives in one place (`src/lib/invoices/amounts.ts`).
+- Drafts post nothing. Approving posts one journal dated the invoice date:
+  Dr accounts receivable (1100) for the total, Cr each revenue account for
+  its net amount, Cr GST (2100) for the GST. There's no GST line when the GST
+  is 0.00.
+- Numbers `INV-0001`, `INV-0002`, ... are given on approval, with no gaps.
+
+| ID | Invoice | Result |
+| --- | --- | --- |
+| I1 | Exclusive: 2 x 50.00 at 15% | Net **100.00**, GST **15.00**, total **115.00**. Journal: Dr 1100 115.00 / Cr 4000 100.00 / Cr 2100 15.00 |
+| I2 | Inclusive: 1 x 115.00 at 15% | Net **100.00**, GST **15.00**, total **115.00** |
+| I3 | Exclusive: three lines of 1 x 3.33 at 15% | GST **0.50** a line (0.4995 rounds up), GST **1.50**, total **11.49** |
+| I4 | Inclusive: 1 x 10.00 at 15% | GST = 10.00 x 3/23 = 1.3043 -> **1.30**; net **8.70** |
+| I5 | Exclusive: 100.00 at standard 15% + 50.00 zero-rated, both to 4000 | GST **15.00**, total **165.00**; Cr 4000 **150.00** |
+| I6 | No tax: 1 x 80.00 | Total **80.00**, no GST line. Journal: Dr 1100 80.00 / Cr 4000 80.00 |
+
+- **I7** Voiding I1 on a later date in an open period posts the exact
+  reversal on that date (Dr 4000 100.00 / Dr 2100 15.00 / Cr 1100 115.00).
+  The invoice shows as voided, and a second void is refused.
+- **I8** Approving an invoice dated in a locked period is refused; the draft
+  stays a draft.
+- **I9** Retrying an approval with the same idempotency key returns the same
+  invoice number and journal. Drafts post nothing.
+
+### Not supported yet (refused rather than guessed)
+
+- **Negative or zero lines** (discounts, credits): quantities and unit prices
+  must be more than zero, and a line that rounds to 0.00 is refused. Credit
+  notes come later.
+- **Correcting an approved invoice**: it can't be edited, and its journals
+  can't be corrected in the ledger. Void it and raise a new one.
+- **Foreign-currency invoices**: invoices are in the base currency only.
 
 ## Reports
 

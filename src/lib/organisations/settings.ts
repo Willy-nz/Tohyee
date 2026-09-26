@@ -4,7 +4,8 @@ import { coreQuery } from "@/lib/db/transactions";
 import { ValidationError } from "@/lib/errors";
 import { isFinancialYearEndMonth } from "@/lib/financial-year";
 import { parseCurrencyCode } from "@/lib/money/currency";
-import { requireString } from "@/lib/validation";
+import { GST_BASES, type GstBasis } from "@/lib/tax/categories";
+import { requireOneOf, requireString } from "@/lib/validation";
 
 export type OrganisationSettings = {
   organisationId: string;
@@ -12,6 +13,8 @@ export type OrganisationSettings = {
   baseCurrency: string;
   /** The financial year ends on the last day of this month (1-12). */
   financialYearEndMonth: number;
+  /** For the GST return (not built yet); nothing else uses it. */
+  gstBasis: GstBasis;
   hasPostings: boolean;
 };
 
@@ -21,9 +24,10 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     display_name: string;
     base_currency: string;
     financial_year_end_month: number;
+    gst_basis: GstBasis;
     has_postings: boolean;
   }>(
-    `select organisation_id, display_name, base_currency, financial_year_end_month,
+    `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis,
             exists (select 1 from ledger_journals) as has_postings
        from organisation_settings where id = true`,
   );
@@ -33,6 +37,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     displayName: row.display_name,
     baseCurrency: row.base_currency,
     financialYearEndMonth: row.financial_year_end_month,
+    gstBasis: row.gst_basis,
     hasPostings: row.has_postings,
   };
 }
@@ -46,14 +51,14 @@ function parseFinancialYearEndMonth(input: unknown): number {
 }
 
 /**
- * Admins can rename the organisation and set its financial year end. The base
- * currency can only change before anything has been posted; after that every
- * amount would change meaning. The year end only affects reports, so it can
- * change at any time.
+ * Admins can rename the organisation and set its financial year end and GST
+ * basis. The base currency can only change before anything has been posted;
+ * after that every amount would change meaning. The year end only affects
+ * reports, so it can change at any time.
  */
 export async function updateOrganisationSettings(
   tx: OrgTx,
-  input: { displayName?: unknown; baseCurrency?: unknown; financialYearEndMonth?: unknown },
+  input: { displayName?: unknown; baseCurrency?: unknown; financialYearEndMonth?: unknown; gstBasis?: unknown },
 ): Promise<OrganisationSettings> {
   const current = await getOrganisationSettings(tx);
   const displayName =
@@ -68,6 +73,8 @@ export async function updateOrganisationSettings(
     input.financialYearEndMonth === undefined
       ? current.financialYearEndMonth
       : parseFinancialYearEndMonth(input.financialYearEndMonth);
+  const gstBasis =
+    input.gstBasis === undefined ? current.gstBasis : requireOneOf(input.gstBasis, "gstBasis", GST_BASES);
 
   if (baseCurrency !== current.baseCurrency && current.hasPostings) {
     throw new ValidationError(
@@ -77,17 +84,18 @@ export async function updateOrganisationSettings(
 
   await tx.query(
     `update organisation_settings
-        set display_name = $1, base_currency = $2, financial_year_end_month = $3, updated_at = now()
+        set display_name = $1, base_currency = $2, financial_year_end_month = $3, gst_basis = $4,
+            updated_at = now()
       where id = true`,
-    [displayName, baseCurrency, financialYearEndMonth],
+    [displayName, baseCurrency, financialYearEndMonth, gstBasis],
   );
   await writeAuditEvent(tx, {
     eventType: "organisation.settings_updated",
     entityType: "organisation_settings",
     entityId: tx.organisationId,
-    details: { displayName, baseCurrency, financialYearEndMonth },
+    details: { displayName, baseCurrency, financialYearEndMonth, gstBasis },
   });
-  return { ...current, displayName, baseCurrency, financialYearEndMonth };
+  return { ...current, displayName, baseCurrency, financialYearEndMonth, gstBasis };
 }
 
 /**

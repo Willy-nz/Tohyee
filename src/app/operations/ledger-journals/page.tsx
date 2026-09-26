@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { Money, RequireOrganisation, useAccounts } from "@/components/books";
@@ -23,6 +24,7 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   correction: "Correction",
   inventory: "Stock",
   fx_revaluation: "FX revaluation",
+  invoice: "Invoice",
 };
 
 function KindBadge({ journal }: { journal: Journal }) {
@@ -73,7 +75,7 @@ function JournalDetail({
       ) : null}
       {correctionJournals.length > 0 ? (
         <Notice tone="warning">
-          Corrected by{" "}
+          {journal.origin === "invoice" ? "The invoice was voided: reversed by" : "Corrected by"}{" "}
           {correctionJournals.map((entry, index) => (
             <span key={entry.id}>
               {index > 0 ? " and " : ""}
@@ -89,6 +91,18 @@ function JournalDetail({
         <p className={ui.muted}>
           This journal was created by {journal.origin === "inventory" ? "a stock movement" : "an FX revaluation"}. Correct it
           there so the records stay in step with the ledger.
+        </p>
+      ) : null}
+      {journal.origin === "invoice" ? (
+        <p className={ui.muted}>
+          This journal was posted by {journal.correctionKind === "reversal" ? "voiding" : "approving"} a sales invoice, so it
+          can&apos;t be corrected here.
+          {journal.correctionKind === "reversal" ? null : (
+            <>
+              {" "}
+              To cancel it, void the invoice from <Link href="/operations/invoices">Invoices</Link>.
+            </>
+          )}
         </p>
       ) : null}
       <div className={ui.tableWrap}>
@@ -270,6 +284,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="manual">Manual</option>
               <option value="inventory">Stock</option>
               <option value="fx_revaluation">FX revaluation</option>
+              <option value="invoice">Invoices</option>
               <option value="reversal">Reversals</option>
               <option value="replacement">Replacements</option>
             </select>
