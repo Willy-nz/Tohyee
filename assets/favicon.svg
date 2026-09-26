@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Toeyee favicon</title>
+  <desc id="desc">A compact Toeyee icon for small UI surfaces.</desc>
+  <rect width="64" height="64" rx="14" fill="#eef1f4"/>
+  <path d="M21 12L17 25L29 31L31 18Z" fill="#111111"/>
+  <path d="M43 12L47 25L35 31L33 18Z" fill="#111111"/>
+  <path d="M16 28L13 34L13 45L18 50L23 51L25 60H39L41 51L46 50L51 45L51 34L48 28L42 22L39 18H25L22 22Z" fill="#111111"/>
+  <path d="M23 25L19 32L21 44L27 49L32 50L33 56H31H33L38 50L44 44L46 32L42 25L37 22L32 19H32L27 22Z" fill="#f6f7f8"/>
+  <path d="M23 32H32V40H23Z" fill="#111111"/>
+  <path d="M32 32H41V40H32Z" fill="#111111"/>
+  <path d="M26 40H38L41 50H23Z" fill="#111111"/>
+  <path d="M27 43H37V50H27Z" fill="#f6f7f8"/>
+  <path d="M32 42L35 45L38 42Z" fill="#111111"/>
+  <path d="M19 41L25 42L22 47L18 45Z" fill="#111111"/>
+  <path d="M45 41L39 42L42 47L46 45Z" fill="#111111"/>
+</svg>

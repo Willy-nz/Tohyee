@@ -1,0 +1,51 @@
+.screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(56, 189, 248, 0.18), transparent 35%),
+    radial-gradient(circle at 80% 90%, rgba(37, 99, 235, 0.16), transparent 40%),
+    var(--background);
+}
+
+.panel {
+  display: grid;
+  gap: 16px;
+  width: min(420px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 28px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.3rem;
+  font-weight: 750;
+}
+
+.brandDot {
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #38bdf8, #2563eb);
+}
+
+.title {
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.text {
+  color: var(--muted);
+  font-size: 0.93rem;
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+}

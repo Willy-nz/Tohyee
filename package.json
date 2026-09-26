@@ -1,0 +1,41 @@
+{
+  "name": "toeyee",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "db:start": "docker compose up -d postgres",
+    "db:stop": "docker compose down",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "admin": "tsx scripts/admin.ts",
+    "package:release": "node ./scripts/package-release.mjs",
+    "validate:foundation": "./scripts/validate-foundation.sh"
+  },
+  "dependencies": {
+    "next": "16.3.6",
+    "pg": "^8.23.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}
