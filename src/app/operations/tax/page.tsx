@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -63,8 +64,8 @@ function Tax({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Notice tone="info">
-        Tax codes are set up here ready for GST. They aren&apos;t applied to journals yet, so GST returns aren&apos;t calculated in
-        Tohyee for now.
+        Tax codes set the GST on <Link href="/operations/invoices">sales invoices</Link>. They aren&apos;t applied to
+        journals you enter by hand, and GST returns aren&apos;t calculated in Tohyee yet.
       </Notice>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {can("admin") ? (

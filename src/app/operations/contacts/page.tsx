@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useId, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -194,7 +195,8 @@ function Contacts({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Notice tone="info">
-        Invoices and bills aren&apos;t built yet, so contacts aren&apos;t used anywhere else in Tohyee for now.
+        Contacts marked as customers can be sent <Link href="/operations/invoices">sales invoices</Link>. Bills aren&apos;t
+        built yet, so suppliers aren&apos;t used anywhere else in Tohyee for now.
       </Notice>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {canEdit && createKey ? (

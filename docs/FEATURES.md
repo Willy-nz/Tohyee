@@ -26,9 +26,17 @@ that something happened.
   splits earnings into this year and previous years.
 - **Contacts**: customers and suppliers with optional email, phone, postal
   address and GST number (format-checked only); search by name or email;
-  archiving instead of deleting. Not yet used by anything else: invoices and
-  bills come next.
-- **Tax codes** as settings (not yet applied to journals).
+  archiving instead of deleting. Customers are used by sales invoices;
+  suppliers aren't used yet (bills come next).
+- **Tax codes** as settings. Sales invoices apply them; manual journals don't.
+- **Sales invoices** in the base currency: drafts that can be edited and
+  deleted, tax-exclusive, tax-inclusive or no-tax amounts, GST worked out and
+  rounded per line, approval that numbers the invoice (`INV-0001`, with no
+  gaps) and posts its journal on the invoice date, and voiding that posts the
+  exact reversal on the void date. Period locks apply to both; approving and
+  voiding are idempotent. See examples I1-I9.
+- **GST basis** setting (invoice, payments or hybrid). Stored and shown only;
+  the GST return will use it.
 - **Update check** against GitHub releases.
 
 ## Not built yet, on purpose
@@ -50,9 +58,10 @@ isn't acceptable, because people would trust it:
 
 ## Next, in rough order
 
-1. Sales invoices, bills and payments against contacts (the core of a
-   Xero-style ledger), with GST codes on lines and a GST return built from
-   postings.
+1. Customer payments against sales invoices, credit notes, bills and supplier
+   payments (the core of a Xero-style ledger), and a GST return built from
+   postings using the GST basis setting. Invoice PDFs and emailing come with
+   or after these.
 2. Bank feeds (through an NZ open-banking provider, still to be chosen) and
    bank reconciliation that matches real transactions.
 3. Backdated stock movements with proper re-costing.
