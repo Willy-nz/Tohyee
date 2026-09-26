@@ -4,7 +4,13 @@ import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { AMOUNTS_MODES, calculateInvoice, type AmountsMode } from "@/lib/invoices/amounts";
+import {
+  AMOUNTS_MODES,
+  calculateInvoice,
+  invoicePaymentStatus,
+  type AmountsMode,
+  type PaidStatus,
+} from "@/lib/invoices/amounts";
 import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
@@ -20,6 +26,7 @@ import {
 } from "@/lib/money/decimal";
 import {
   asRecord,
+  optionalBoolean,
   optionalId,
   optionalSource,
   optionalString,
@@ -35,6 +42,7 @@ import {
  * Approving gives it the next number (INV-0001, ...) and posts its journal;
  * after that it can't change, only be voided, which posts the exact reversal.
  * The amounts are worked out in `@/lib/invoices/amounts` (examples I1-I9).
+ * Payments against approved invoices are in `@/lib/invoices/payments`.
  */
 export const INVOICE_STATUSES = ["draft", "approved", "voided"] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
@@ -70,6 +78,12 @@ export type InvoiceSummary = {
   subtotal: string;
   taxTotal: string;
   total: string;
+  /** The sum of the invoice's active payments (examples CP1-CP4). */
+  amountPaid: string;
+  /** What's still to be paid on an approved invoice; null for drafts and voided invoices. */
+  amountDue: string | null;
+  /** Worked out from the invoice's active payments; null for drafts and voided invoices. */
+  paidStatus: PaidStatus | null;
   approvalJournalId: string | null;
   approvedAt: string | null;
   approvedByEmail: string | null;
@@ -112,6 +126,7 @@ type InvoiceRow = {
   subtotal: string;
   tax_total: string;
   total: string;
+  amount_paid: string;
   approval_journal_id: string | null;
   approved_at: string | null;
   approved_by_email: string | null;
@@ -126,8 +141,17 @@ type InvoiceRow = {
 
 const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name as contact_name, i.invoice_date,
   i.due_date, i.reference, i.amounts_mode, i.currency_code, i.subtotal, i.tax_total, i.total,
-  i.approval_journal_id, i.approved_at, i.approved_by_email, i.void_date, i.void_journal_id,
+  paid.amount_paid, i.approval_journal_id, i.approved_at, i.approved_by_email, i.void_date, i.void_journal_id,
   i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at`;
+
+/** Invoices with their customer and the sum of their active payments. */
+const SUMMARY_FROM = `sales_invoices i
+  join contacts c on c.id = i.contact_id
+  cross join lateral (
+    select coalesce(sum(p.amount), 0) as amount_paid
+      from customer_payments p
+     where p.invoice_id = i.id and p.status = 'active'
+  ) paid`;
 
 type LineRow = {
   line_order: number;
@@ -146,6 +170,8 @@ type LineRow = {
 };
 
 function toSummary(row: InvoiceRow): InvoiceSummary {
+  const payment = invoicePaymentStatus(row.total, row.amount_paid, currencyMinorUnits(row.currency_code));
+  const approved = row.status === "approved";
   return {
     id: row.id,
     status: row.status,
@@ -160,6 +186,9 @@ function toSummary(row: InvoiceRow): InvoiceSummary {
     subtotal: row.subtotal,
     taxTotal: row.tax_total,
     total: row.total,
+    amountPaid: payment.amountPaid,
+    amountDue: approved ? payment.amountDue : null,
+    paidStatus: approved ? payment.paidStatus : null,
     approvalJournalId: row.approval_journal_id,
     approvedAt: row.approved_at,
     approvedByEmail: row.approved_by_email,
@@ -525,7 +554,7 @@ function invoiceLabel(invoice: InvoiceSummary): string {
 export async function getInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise<Invoice> {
   const invoiceId = requireId(invoiceIdInput, "invoiceId");
   const result = await tx.query<InvoiceRow>(
-    `select ${SUMMARY_COLUMNS} from sales_invoices i join contacts c on c.id = i.contact_id where i.id = $1`,
+    `select ${SUMMARY_COLUMNS} from ${SUMMARY_FROM} where i.id = $1`,
     [invoiceId],
   );
   const row = result.rows[0];
@@ -547,7 +576,7 @@ export async function getInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise<In
 }
 
 /** Loads an invoice and locks it until the transaction ends. */
-async function lockInvoice(tx: OrgTx, invoiceId: string): Promise<Invoice> {
+export async function lockInvoice(tx: OrgTx, invoiceId: string): Promise<Invoice> {
   const locked = await tx.query("select id from sales_invoices where id = $1 for update", [invoiceId]);
   if (locked.rowCount === 0) {
     throw new NotFoundError("Invoice not found.");
@@ -563,22 +592,27 @@ function assertDraft(invoice: Invoice, action: "edited" | "deleted"): void {
   }
 }
 
-/** Newest first, 50 at a time; `status` filters, `beforeId` pages. */
+/**
+ * Newest first, 50 at a time; `status` filters, `awaitingPayment` keeps only
+ * approved invoices with something still due, and `beforeId` pages.
+ */
 export async function listInvoices(
   tx: OrgTx,
-  filters: { status?: unknown; beforeId?: unknown; limit?: unknown } = {},
+  filters: { status?: unknown; awaitingPayment?: unknown; beforeId?: unknown; limit?: unknown } = {},
 ): Promise<{ invoices: InvoiceSummary[]; nextBeforeId: string | null }> {
   const status =
     filters.status == null || filters.status === "" ? null : requireOneOf(filters.status, "status", INVOICE_STATUSES);
+  const awaitingPayment = optionalBoolean(filters.awaitingPayment, "awaitingPayment") ?? false;
   const beforeId = optionalId(filters.beforeId, "beforeId");
   const limitRaw = Number(filters.limit ?? 50);
   const limit = Number.isInteger(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : 50;
   const result = await tx.query<InvoiceRow>(
-    `select ${SUMMARY_COLUMNS} from sales_invoices i join contacts c on c.id = i.contact_id
+    `select ${SUMMARY_COLUMNS} from ${SUMMARY_FROM}
       where ($1::text is null or i.status = $1) and ($2::bigint is null or i.id < $2)
+        and (not $3::boolean or (i.status = 'approved' and paid.amount_paid < i.total))
       order by i.id desc
       limit ${limit + 1}`,
-    [status, beforeId],
+    [status, beforeId, awaitingPayment],
   );
   const rows = result.rows.slice(0, limit);
   return {
@@ -732,36 +766,51 @@ export async function deleteInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise
   });
 }
 
+type ControlAccount = { systemKey: string; label: string; accountClass: string };
+
+const RECEIVABLE_ACCOUNT: ControlAccount = { systemKey: "accounts_receivable", label: "accounts receivable", accountClass: "asset" };
+const GST_ACCOUNT: ControlAccount = { systemKey: "gst", label: "GST", accountClass: "liability" };
+
 /**
- * The accounts receivable and GST accounts, found by their system keys (see
- * the default chart: 1100 and 2100).
+ * A control account, found by its system key (see the default chart: 1100
+ * for accounts receivable and 2100 for GST). `refused` says what can't be done
+ * without it.
  */
-async function invoiceControlAccounts(tx: OrgTx): Promise<{ receivable: string; gst: string }> {
-  const result = await tx.query<{ system_key: string; code: string; name: string; account_class: string; currency_code: string | null }>(
-    `select system_key, code, name, account_class, currency_code from accounts
-      where system_key in ('accounts_receivable', 'gst')`,
+async function controlAccountCode(tx: OrgTx, control: ControlAccount, refused: string): Promise<string> {
+  const result = await tx.query<{ code: string; name: string; account_class: string; currency_code: string | null }>(
+    "select code, name, account_class, currency_code from accounts where system_key = $1",
+    [control.systemKey],
   );
-  const find = (systemKey: string, label: string, accountClass: string) => {
-    const row = result.rows.find((entry) => entry.system_key === systemKey);
-    if (!row) {
-      throw new ValidationError(
-        `No account is set up as ${label}, so invoices can't be approved. A new organisation gets one in its starting chart of accounts.`,
-      );
-    }
-    if (row.account_class !== accountClass) {
-      throw new ValidationError(`Account ${row.code} (${row.name}) is used for ${label}, so it has to be an ${accountClass} account.`);
-    }
-    if (row.currency_code !== null) {
-      throw new ValidationError(
-        `Account ${row.code} (${row.name}) is used for ${label}, so it has to be in the base currency, not ${row.currency_code}.`,
-      );
-    }
-    return row.code;
-  };
+  const row = result.rows[0];
+  if (!row) {
+    throw new ValidationError(
+      `No account is set up as ${control.label}, so ${refused}. A new organisation gets one in its starting chart of accounts.`,
+    );
+  }
+  if (row.account_class !== control.accountClass) {
+    throw new ValidationError(
+      `Account ${row.code} (${row.name}) is used for ${control.label}, so it has to be an ${control.accountClass} account.`,
+    );
+  }
+  if (row.currency_code !== null) {
+    throw new ValidationError(
+      `Account ${row.code} (${row.name}) is used for ${control.label}, so it has to be in the base currency, not ${row.currency_code}.`,
+    );
+  }
+  return row.code;
+}
+
+async function invoiceControlAccounts(tx: OrgTx): Promise<{ receivable: string; gst: string }> {
+  const refused = "invoices can't be approved";
   return {
-    receivable: find("accounts_receivable", "accounts receivable", "asset"),
-    gst: find("gst", "GST", "liability"),
+    receivable: await controlAccountCode(tx, RECEIVABLE_ACCOUNT, refused),
+    gst: await controlAccountCode(tx, GST_ACCOUNT, refused),
   };
+}
+
+/** The accounts receivable account that customer payments are credited to. */
+export async function receivableAccountCode(tx: OrgTx): Promise<string> {
+  return controlAccountCode(tx, RECEIVABLE_ACCOUNT, "payments can't be recorded");
 }
 
 export function formatInvoiceNumber(sequence: number): string {
@@ -899,7 +948,8 @@ export async function approveInvoice(
 /**
  * Voids an approved invoice (example I7): posts the exact reversal of its
  * journal on the void date, which must be in an open period. An invoice can
- * only be voided once, and a draft is deleted rather than voided.
+ * only be voided once, a draft is deleted rather than voided, and an invoice
+ * with active payments is refused until they're voided (example CP5).
  */
 export async function voidInvoice(
   tx: OrgTx,
@@ -934,6 +984,12 @@ export async function voidInvoice(
   }
   if (current.status === "voided") {
     throw new ConflictError(`${invoiceLabel(current)} has already been voided.`);
+  }
+  if (!isZero(dec(current.amountPaid))) {
+    // Example CP5. The database refuses it too.
+    throw new ConflictError(
+      `${invoiceLabel(current)} has payments against it, so it can't be voided. Void its payments first.`,
+    );
   }
   if (voidDate < current.invoiceDate) {
     throw new ValidationError(`The void date can't be before the invoice date (${current.invoiceDate}).`);
