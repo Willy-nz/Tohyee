@@ -34,7 +34,7 @@ export function LoginForm() {
       <div className={styles.panel}>
         <div className={styles.brand}>
           <span className={styles.brandDot} aria-hidden />
-          Toeyee
+          Tohyee
         </div>
         <div>
           <h1 className={styles.title}>Sign in</h1>

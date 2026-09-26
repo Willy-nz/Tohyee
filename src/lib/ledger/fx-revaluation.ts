@@ -166,7 +166,7 @@ export async function listFxRevaluations(
  * Period-end revaluation of foreign-currency asset and liability accounts.
  *
  * For each account you give the foreign-currency balance and the closing
- * rate (units of base currency per 1 unit of foreign currency). Toeyee then:
+ * rate (units of base currency per 1 unit of foreign currency). Tohyee then:
  * - takes the carrying amount from the ledger (the account's base-currency
  *   balance as at the revaluation date),
  * - computes the revalued amount = foreign amount x rate, rounded to cents,

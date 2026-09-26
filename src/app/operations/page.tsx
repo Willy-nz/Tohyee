@@ -85,7 +85,7 @@ export default function OperationsPage() {
   return (
     <Page>
       <PageHeader
-        title={current ? current.displayName : "Welcome to Toeyee"}
+        title={current ? current.displayName : "Welcome to Tohyee"}
         description="A quick look at the books. Amounts are in the organisation's base currency."
       />
       <RequireOrganisation>{(organisationId) => <Overview organisationId={organisationId} />}</RequireOrganisation>

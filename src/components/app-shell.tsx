@@ -68,7 +68,7 @@ function Shell({ children }: { children: ReactNode }) {
       <aside className={styles.sidebar}>
         <div className={styles.brand}>
           <span className={styles.brandDot} aria-hidden />
-          Toeyee
+          Tohyee
         </div>
         <nav aria-label="Primary">
           {NAV.map((group) => {

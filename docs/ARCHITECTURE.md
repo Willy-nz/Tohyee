@@ -1,6 +1,6 @@
-# Toeyee architecture
+# Tohyee architecture
 
-This is the source of truth for how Toeyee is put together. If code and this
+This is the source of truth for how Tohyee is put together. If code and this
 document disagree, flag it instead of quietly picking one.
 
 ## System shape

@@ -44,7 +44,7 @@ export async function applyMigrations(
     const unknown = existing.rows.filter((row) => !known.has(row.version));
     if (unknown.length > 0) {
       throw new Error(
-        `This database has migrations this version of Toeyee doesn't know about (${unknown
+        `This database has migrations this version of Tohyee doesn't know about (${unknown
           .map((row) => row.version)
           .join(", ")}). Is an older version of the app running against a newer database?`,
       );

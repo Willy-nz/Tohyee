@@ -15,7 +15,7 @@ type Options = {
   query?: Record<string, string | number | boolean | null | undefined>;
 };
 
-/** Calls the Toeyee API with the session cookie. Signs you out on 401. */
+/** Calls the Tohyee API with the session cookie. Signs you out on 401. */
 export async function api<T>(path: string, options: Options = {}): Promise<T> {
   const url = new URL(path, window.location.origin);
   for (const [name, value] of Object.entries(options.query ?? {})) {

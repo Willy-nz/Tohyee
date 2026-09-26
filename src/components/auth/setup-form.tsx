@@ -43,7 +43,7 @@ export function SetupForm() {
       <div className={styles.panel}>
         <div className={styles.brand}>
           <span className={styles.brandDot} aria-hidden />
-          Toeyee
+          Tohyee
         </div>
         <div>
           <h1 className={styles.title}>First-time setup</h1>

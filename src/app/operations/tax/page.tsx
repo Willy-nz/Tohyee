@@ -64,7 +64,7 @@ function Tax({ organisationId }: { organisationId: string }) {
     <>
       <Notice tone="info">
         Tax codes are set up here ready for GST. They aren&apos;t applied to journals yet, so GST returns aren&apos;t calculated in
-        Toeyee for now.
+        Tohyee for now.
       </Notice>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {can("admin") ? (
