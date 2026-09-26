@@ -194,7 +194,7 @@ export async function updateAccount(
   }
   if (!isActive && existing.systemKey) {
     throw new ValidationError(
-      "This account is used by Toeyee for automatic postings, so it can't be archived. Rename it instead.",
+      "This account is used by Tohyee for automatic postings, so it can't be archived. Rename it instead.",
     );
   }
 

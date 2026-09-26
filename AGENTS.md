@@ -8,7 +8,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# Toeyee project rules
+# Tohyee project rules
 
 The rules for coding agents are in `.github/copilot-instructions.md`. Read it,
 and the docs it lists, before changing anything. The short version:

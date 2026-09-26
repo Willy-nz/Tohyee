@@ -216,7 +216,7 @@ async function loadMovement(tx: OrgTx, where: string, values: unknown[]): Promis
  * - The item's balance row is locked first, so two movements for the same
  *   item can't interleave.
  * - Movements dated before the item's latest movement are refused for now:
- *   backdating needs every later movement to be re-costed, which Toeyee
+ *   backdating needs every later movement to be re-costed, which Tohyee
  *   doesn't do yet, and silently mis-costing is worse than saying no.
  * - Retries with the same idempotency key return the original movement
  *   (checked before anything is recalculated).

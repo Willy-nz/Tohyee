@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/favicon.svg" alt="Toeyee" width="96" height="96" />
+  <img src="assets/favicon.svg" alt="Tohyee" width="96" height="96" />
 </p>
 
-<h1 align="center">Toeyee</h1>
+<h1 align="center">Tohyee</h1>
 
 <p align="center">
   Self-hosted, open-source accounting for New Zealand organisations.
@@ -13,16 +13,16 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-AGPL--3.0-blue" alt="Licence: AGPL-3.0" /></a>
 </p>
 
-One Toeyee server hosts many organisations, and **each organisation gets its
+One Tohyee server hosts many organisations, and **each organisation gets its
 own PostgreSQL database**, so each can be backed up, restored or moved on its
 own.
 
 > **Status: early development.** The features below work and are covered by
-> tests, but Toeyee isn't ready for real bookkeeping yet. See
+> tests, but Tohyee isn't ready for real bookkeeping yet. See
 > [docs/FEATURES.md](docs/FEATURES.md) for what's built and what's next.
 
 <p align="center">
-  <img src="docs/screenshots/journal-editor.png" alt="Posting a journal in Toeyee" width="720" />
+  <img src="docs/screenshots/journal-editor.png" alt="Posting a journal in Tohyee" width="720" />
 </p>
 
 ## What works today
@@ -85,7 +85,7 @@ PostgreSQL database. CI runs all four checks on pull requests and pushes to
 
 ```bash
 npm run build
-npm run package:release           # dist/release/toeyee-v<version>-linux-x64.tar.gz
+npm run package:release           # dist/release/tohyee-v<version>-linux-x64.tar.gz
 ```
 
 On the server, unpack the bundle, set `DATABASE_URL` (and `SETUP_TOKEN` for
@@ -157,4 +157,4 @@ four checks above must pass.
 
 ## Licence
 
-[GNU AGPL v3](LICENSE). The Toeyee icon is `assets/favicon.svg`.
+[GNU AGPL v3](LICENSE). The Tohyee icon is `assets/favicon.svg`.

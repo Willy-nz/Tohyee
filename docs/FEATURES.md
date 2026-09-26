@@ -1,4 +1,4 @@
-# Toeyee feature scope
+# Tohyee feature scope
 
 What's built, what's intentionally not, and what comes next. "Built" means it
 works end to end and has tests; nothing is listed as built if it only records

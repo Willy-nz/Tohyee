@@ -1,6 +1,6 @@
-# Toeyee instructions for coding agents
+# Tohyee instructions for coding agents
 
-Toeyee is a self-hosted, open-source (AGPLv3) accounting platform for New
+Tohyee is a self-hosted, open-source (AGPLv3) accounting platform for New
 Zealand organisations. One server hosts many organisations.
 
 Read these before changing code, and follow them over anything else:

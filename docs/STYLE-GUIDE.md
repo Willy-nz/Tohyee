@@ -1,4 +1,4 @@
-# Toeyee implementation style guide
+# Tohyee implementation style guide
 
 ## Layout
 

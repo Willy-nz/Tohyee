@@ -231,7 +231,7 @@ function Accounts({ organisationId }: { organisationId: string }) {
                       <td>{account.currencyCode ?? ""}</td>
                       <td>
                         {account.isActive ? <Badge tone="green">Active</Badge> : <Badge>Archived</Badge>}{" "}
-                        {account.systemKey ? <Badge tone="blue">Used by Toeyee</Badge> : null}
+                        {account.systemKey ? <Badge tone="blue">Used by Tohyee</Badge> : null}
                       </td>
                       {isAdmin ? (
                         <td className={ui.num}>

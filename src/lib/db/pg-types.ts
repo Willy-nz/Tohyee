@@ -8,7 +8,7 @@ const defaultTimestampTzParser = pg.types.getTypeParser(TIMESTAMPTZ_OID, "text")
 ) => Date;
 
 /**
- * Type parsers for every pool Toeyee opens.
+ * Type parsers for every pool Tohyee opens.
  *
  * - DATE stays a plain "YYYY-MM-DD" string. The pg default turns it into a
  *   JavaScript Date at local midnight, which broke date comparisons in

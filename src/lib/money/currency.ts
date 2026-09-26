@@ -1,7 +1,7 @@
 import { ValidationError } from "@/lib/errors";
 
 /**
- * Currencies Toeyee knows the minor units for (ISO 4217). Posted amounts are
+ * Currencies Tohyee knows the minor units for (ISO 4217). Posted amounts are
  * rounded to these places at the posting boundary.
  */
 export const CURRENCY_MINOR_UNITS: Readonly<Record<string, number>> = {

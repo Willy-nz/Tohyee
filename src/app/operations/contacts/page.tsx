@@ -194,7 +194,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Notice tone="info">
-        Invoices and bills aren&apos;t built yet, so contacts aren&apos;t used anywhere else in Toeyee for now.
+        Invoices and bills aren&apos;t built yet, so contacts aren&apos;t used anywhere else in Tohyee for now.
       </Notice>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {canEdit && createKey ? (
