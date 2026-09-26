@@ -25,6 +25,12 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   inventory: "Stock",
   fx_revaluation: "FX revaluation",
   invoice: "Invoice",
+  customer_payment: "Customer payment",
+};
+
+const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
+  invoice: "The invoice was voided: reversed by",
+  customer_payment: "The payment was voided: reversed by",
 };
 
 function KindBadge({ journal }: { journal: Journal }) {
@@ -75,7 +81,7 @@ function JournalDetail({
       ) : null}
       {correctionJournals.length > 0 ? (
         <Notice tone="warning">
-          {journal.origin === "invoice" ? "The invoice was voided: reversed by" : "Corrected by"}{" "}
+          {REVERSED_BY[journal.origin] ?? "Corrected by"}{" "}
           {correctionJournals.map((entry, index) => (
             <span key={entry.id}>
               {index > 0 ? " and " : ""}
@@ -101,6 +107,18 @@ function JournalDetail({
             <>
               {" "}
               To cancel it, void the invoice from <Link href="/operations/invoices">Invoices</Link>.
+            </>
+          )}
+        </p>
+      ) : null}
+      {journal.origin === "customer_payment" ? (
+        <p className={ui.muted}>
+          This journal was posted by {journal.correctionKind === "reversal" ? "voiding" : "recording"} a customer payment, so
+          it can&apos;t be corrected here.
+          {journal.correctionKind === "reversal" ? null : (
+            <>
+              {" "}
+              To undo it, void the payment from its invoice in <Link href="/operations/invoices">Invoices</Link>.
             </>
           )}
         </p>
@@ -285,6 +303,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="inventory">Stock</option>
               <option value="fx_revaluation">FX revaluation</option>
               <option value="invoice">Invoices</option>
+              <option value="customer_payment">Customer payments</option>
               <option value="reversal">Reversals</option>
               <option value="replacement">Replacements</option>
             </select>

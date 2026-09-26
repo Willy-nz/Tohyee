@@ -4,6 +4,7 @@ import type { SessionUser } from "@/lib/auth/sessions";
 import { migrateEverything } from "@/lib/db/migrations";
 import { createContact } from "@/lib/contacts/service";
 import type { Actor } from "@/lib/db/org-transaction";
+import { listPayments, recordPayment, voidPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, deleteInvoice, updateInvoice, voidInvoice } from "@/lib/invoices/service";
 import { postJournal } from "@/lib/ledger/journals";
 import { createTaxCode } from "@/lib/tax/codes";
@@ -112,6 +113,32 @@ describeWithDatabase("separate admin and runtime logins (DATABASE_ADMIN_URL)", (
       return (await voidInvoice(tx, saved.id, { idempotencyKey: key("v"), voidDate: "2026-06-20" })).invoice;
     });
     expect(invoice).toMatchObject({ status: "voided", invoiceNumber: "INV-0001", total: "115.00" });
+  });
+
+  it("customer payments can be recorded, listed and voided as the runtime login", async () => {
+    const result = await inOrganisation(ORG, actor, async (tx) => {
+      const { contact } = await createContact(tx, { idempotencyKey: key("c"), name: "Paying Customer", isCustomer: true });
+      const { invoice: saved } = await createInvoice(tx, {
+        idempotencyKey: key("i"),
+        contactId: contact.id,
+        invoiceDate: "2026-06-15",
+        dueDate: "2026-07-15",
+        amountsMode: "no_tax",
+        lines: [{ description: "Service", quantity: "1", unitPrice: "80", accountCode: "4000" }],
+      });
+      const { invoice } = await approveInvoice(tx, saved.id, { idempotencyKey: key("a") });
+      const { payment } = await recordPayment(tx, invoice.id, {
+        idempotencyKey: key("p"),
+        paymentDate: "2026-06-16",
+        amount: "30.00",
+        bankAccountCode: "1000",
+      });
+      const voided = await voidPayment(tx, invoice.id, payment.id, { idempotencyKey: key("vp"), voidDate: "2026-06-17" });
+      return { voided, payments: await listPayments(tx, invoice.id) };
+    });
+    expect(result.voided.payment).toMatchObject({ status: "voided", amount: "30.00", voidDate: "2026-06-17" });
+    expect(result.voided.invoice).toMatchObject({ amountPaid: "0.00", amountDue: "80.00", paidStatus: "unpaid" });
+    expect(result.payments.map((entry) => entry.status)).toEqual(["voided"]);
   });
 
   it("the runtime login can't change the schema or rewrite posted history", async () => {

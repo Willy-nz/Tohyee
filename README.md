@@ -39,7 +39,10 @@ own.
 - **Sales invoices** with GST worked out per line (tax exclusive, tax
   inclusive or no tax): drafts, approval that numbers the invoice
   (`INV-0001`, …) and posts it to the ledger, and voiding that reverses it.
-  Customer payments, credit notes and the GST return aren't built yet.
+- **Customer payments** against an approved invoice, into a bank account:
+  each one posts to the ledger, part payments are fine, and the invoice shows
+  what's still due. Credit notes, overpayments and the GST return aren't built
+  yet.
 - **Stock**: receipts, sales, returns, stocktake adjustments and landed cost,
   with weighted-average costing to the cent.
 - **Foreign-currency revaluation** of foreign-currency bank, asset and
@@ -143,7 +146,8 @@ the `Origin` and `Sec-Fetch-Site` headers).
 | Organisation | `GET/PATCH /api/organisations/:id/settings`, `GET/POST /api/organisations/:id/members`, `PATCH/DELETE /api/organisations/:id/members/:userId` |
 | Accounts | `GET/POST /api/accounts`, `PATCH /api/accounts/:id` |
 | Contacts | `GET/POST /api/contacts`, `PATCH /api/contacts/:id` |
-| Invoices | `GET/POST /api/invoices`, `GET/PATCH/DELETE /api/invoices/:id`, `POST /api/invoices/:id/approve`, `POST /api/invoices/:id/void` |
+| Invoices | `GET/POST /api/invoices` (`?awaitingPayment=true` for approved invoices with an amount due), `GET/PATCH/DELETE /api/invoices/:id`, `POST /api/invoices/:id/approve`, `POST /api/invoices/:id/void` |
+| Customer payments | `GET/POST /api/invoices/:id/payments`, `POST /api/invoices/:id/payments/:paymentId/void` |
 | Ledger | `GET/POST /api/ledger/journals`, `GET /api/ledger/journals/:id`, `POST /api/ledger/journals/corrections`, `GET/PATCH /api/ledger/period-controls`, `GET/POST /api/ledger/revaluations` |
 | Stock | `GET/POST /api/inventory/movements` |
 | Reports | `GET /api/reports/trial-balance`, `/profit-and-loss`, `/balance-sheet`, `/inventory-valuation` |

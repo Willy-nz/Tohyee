@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { InvoiceStatusBadge } from "@/components/invoices/invoice-editor";
+import { InvoiceStatusBadge, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
@@ -14,15 +14,20 @@ import type { InvoiceStatus, InvoiceSummary } from "@/lib/invoices/service";
 
 type InvoicePage = { invoices: InvoiceSummary[]; nextBeforeId: string | null };
 
-const FILTERS: Array<{ status: InvoiceStatus | null; label: string }> = [
-  { status: null, label: "All" },
-  { status: "draft", label: "Drafts" },
-  { status: "approved", label: "Approved" },
-  { status: "voided", label: "Voided" },
+type Filter = { label: string; status: InvoiceStatus | null; awaitingPayment: boolean; empty: string };
+
+const FILTERS: Filter[] = [
+  { label: "All", status: null, awaitingPayment: false, empty: "No invoices yet." },
+  { label: "Drafts", status: "draft", awaitingPayment: false, empty: "No draft invoices." },
+  { label: "Approved", status: "approved", awaitingPayment: false, empty: "No approved invoices." },
+  { label: "Awaiting payment", status: null, awaitingPayment: true, empty: "No approved invoices are awaiting payment." },
+  { label: "Voided", status: "voided", awaitingPayment: false, empty: "No voided invoices." },
 ];
 
-function InvoiceList({ organisationId, status }: { organisationId: string; status: InvoiceStatus | null }) {
-  const list = useApiData<InvoicePage>("/api/invoices", { organisationId, status });
+function InvoiceList({ organisationId, filter }: { organisationId: string; filter: Filter }) {
+  const { status } = filter;
+  const awaitingPayment = filter.awaitingPayment ? "true" : null;
+  const list = useApiData<InvoicePage>("/api/invoices", { organisationId, status, awaitingPayment });
   const [more, setMore] = useState<InvoicePage | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
 
@@ -33,7 +38,7 @@ function InvoiceList({ organisationId, status }: { organisationId: string; statu
     if (!nextBeforeId) return;
     try {
       const page = await api<InvoicePage>("/api/invoices", {
-        query: { organisationId, status, beforeId: nextBeforeId },
+        query: { organisationId, status, awaitingPayment, beforeId: nextBeforeId },
       });
       setMore((current) => ({ invoices: [...(current?.invoices ?? []), ...page.invoices], nextBeforeId: page.nextBeforeId }));
     } catch (caught) {
@@ -48,7 +53,7 @@ function InvoiceList({ organisationId, status }: { organisationId: string; statu
     return <p className={ui.muted}>Loading…</p>;
   }
   if (invoices.length === 0) {
-    return <Empty>{status ? `No ${status} invoices.` : "No invoices yet."}</Empty>;
+    return <Empty>{filter.empty}</Empty>;
   }
   return (
     <>
@@ -63,7 +68,9 @@ function InvoiceList({ organisationId, status }: { organisationId: string; statu
               <th>Due</th>
               <th>Reference</th>
               <th>Status</th>
+              <th>Payment</th>
               <th className={ui.num}>Total</th>
+              <th className={ui.num}>Amount due</th>
             </tr>
           </thead>
           <tbody>
@@ -79,9 +86,11 @@ function InvoiceList({ organisationId, status }: { organisationId: string; statu
                 <td>
                   <InvoiceStatusBadge status={invoice.status} />
                 </td>
+                <td>{invoice.paidStatus ? <PaidStatusBadge status={invoice.paidStatus} /> : null}</td>
                 <td className={ui.num}>
                   <Money value={invoice.total} />
                 </td>
+                <td className={ui.num}>{invoice.amountDue !== null ? <Money value={invoice.amountDue} /> : null}</td>
               </tr>
             ))}
           </tbody>
@@ -101,11 +110,11 @@ function InvoiceList({ organisationId, status }: { organisationId: string; statu
 function Invoices({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const router = useRouter();
-  const [status, setStatus] = useState<InvoiceStatus | null>(null);
+  const [filter, setFilter] = useState<Filter>(FILTERS[0]);
   return (
     <Card
       title="Sales invoices"
-      description="Newest first. Drafts post nothing; approving numbers the invoice and posts it."
+      description="Newest first. Drafts post nothing; approving numbers the invoice and posts it. Amount due is the total less the invoice's payments."
       actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/invoices/new")}>New invoice</Button> : null}
     >
       <div className={ui.tabs} role="tablist" aria-label="Invoice status">
@@ -114,15 +123,15 @@ function Invoices({ organisationId }: { organisationId: string }) {
             key={entry.label}
             type="button"
             role="tab"
-            aria-selected={status === entry.status}
-            className={`${ui.tab} ${status === entry.status ? ui.tabActive : ""}`}
-            onClick={() => setStatus(entry.status)}
+            aria-selected={filter === entry}
+            className={`${ui.tab} ${filter === entry ? ui.tabActive : ""}`}
+            onClick={() => setFilter(entry)}
           >
             {entry.label}
           </button>
         ))}
       </div>
-      <InvoiceList key={status ?? "all"} organisationId={organisationId} status={status} />
+      <InvoiceList key={filter.label} organisationId={organisationId} filter={filter} />
     </Card>
   );
 }

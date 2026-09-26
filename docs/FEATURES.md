@@ -35,6 +35,14 @@ that something happened.
   gaps) and posts its journal on the invoice date, and voiding that posts the
   exact reversal on the void date. Period locks apply to both; approving and
   voiding are idempotent. See examples I1-I9.
+- **Customer payments** against one approved sales invoice at a time:
+  recording a payment posts Dr the bank account / Cr accounts receivable on
+  the payment date, and voiding it posts the exact reversal on the void date.
+  An invoice's amount due and paid status (unpaid, part paid, paid) are worked
+  out from its active payments, and the invoice list can show just the
+  invoices awaiting payment. Overpayments are refused, and an invoice with
+  active payments can't be voided. Period locks apply; recording and voiding
+  are idempotent. See examples CP1-CP8.
 - **GST basis** setting (invoice, payments or hybrid). Stored and shown only;
   the GST return will use it.
 - **Update check** against GitHub releases.
@@ -58,10 +66,10 @@ isn't acceptable, because people would trust it:
 
 ## Next, in rough order
 
-1. Customer payments against sales invoices, credit notes, bills and supplier
-   payments (the core of a Xero-style ledger), and a GST return built from
-   postings using the GST basis setting. Invoice PDFs and emailing come with
-   or after these.
+1. Credit notes, bills and supplier payments (the core of a Xero-style
+   ledger), customer payments across several invoices, overpayments and
+   prepayments, and a GST return built from postings using the GST basis
+   setting. Invoice PDFs and emailing come with or after these.
 2. Bank feeds (through an NZ open-banking provider, still to be chosen) and
    bank reconciliation that matches real transactions.
 3. Backdated stock movements with proper re-costing.

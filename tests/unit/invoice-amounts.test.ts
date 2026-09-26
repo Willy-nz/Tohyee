@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateInvoice, type InvoiceLineInput } from "@/lib/invoices/amounts";
+import { calculateInvoice, type InvoiceLineInput, invoicePaymentStatus } from "@/lib/invoices/amounts";
 
 const GST_15 = "0.15";
 const ZERO_RATED = "0";
@@ -79,5 +79,38 @@ describe("invoice line rounding", () => {
     const result = calculateInvoice("exclusive", [line("1", "1005")], 0);
     // 1005 x 0.15 = 150.75 -> 151
     expect(result).toMatchObject({ subtotal: "1005", taxTotal: "151", total: "1156" });
+  });
+});
+
+describe("invoice paid status (worked examples)", () => {
+  it("CP1: 115.00 paid against a 115.00 invoice leaves 0.00 due, so it's paid", () => {
+    expect(invoicePaymentStatus("115.00", "115.00", 2)).toEqual({
+      amountPaid: "115.00",
+      amountDue: "0.00",
+      paidStatus: "paid",
+    });
+  });
+
+  it("CP2: nothing paid is unpaid; 50.00 then 65.00 is part paid with 65.00 due, then paid", () => {
+    expect(invoicePaymentStatus("115.00", "0", 2)).toEqual({ amountPaid: "0.00", amountDue: "115.00", paidStatus: "unpaid" });
+    expect(invoicePaymentStatus("115.00", "50.00", 2)).toEqual({
+      amountPaid: "50.00",
+      amountDue: "65.00",
+      paidStatus: "part_paid",
+    });
+    expect(invoicePaymentStatus("115.00", "115.00", 2).paidStatus).toBe("paid");
+  });
+
+  it("CP4: voiding the 65.00 payment leaves 50.00 paid, so 65.00 is due again and it's part paid", () => {
+    expect(invoicePaymentStatus("115.00", "50.00", 2)).toEqual({
+      amountPaid: "50.00",
+      amountDue: "65.00",
+      paidStatus: "part_paid",
+    });
+  });
+
+  it("works to the cent and in the currency's minor units", () => {
+    expect(invoicePaymentStatus("11.49", "11.48", 2)).toEqual({ amountPaid: "11.48", amountDue: "0.01", paidStatus: "part_paid" });
+    expect(invoicePaymentStatus("1156", "156", 0)).toEqual({ amountPaid: "156", amountDue: "1000", paidStatus: "part_paid" });
   });
 });
