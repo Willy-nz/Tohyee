@@ -9,7 +9,14 @@ import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
 import { formatMoney, todayInBrowser } from "@/lib/format";
-import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode, calculateInvoice } from "@/lib/invoices/amounts";
+import {
+  AMOUNTS_MODE_LABELS,
+  AMOUNTS_MODES,
+  type AmountsMode,
+  calculateInvoice,
+  PAID_STATUS_LABELS,
+  type PaidStatus,
+} from "@/lib/invoices/amounts";
 import type { Invoice, InvoiceStatus } from "@/lib/invoices/service";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { dec, isDecimalString, mul, toPlainString } from "@/lib/money/decimal";
@@ -24,6 +31,16 @@ const STATUS_BADGES: Record<InvoiceStatus, { label: string; tone: "neutral" | "g
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   const badge = STATUS_BADGES[status];
   return <Badge tone={badge.tone}>{badge.label}</Badge>;
+}
+
+const PAID_STATUS_TONES: Record<PaidStatus, "amber" | "blue" | "green"> = {
+  unpaid: "amber",
+  part_paid: "blue",
+  paid: "green",
+};
+
+export function PaidStatusBadge({ status }: { status: PaidStatus }) {
+  return <Badge tone={PAID_STATUS_TONES[status]}>{PAID_STATUS_LABELS[status]}</Badge>;
 }
 
 /** 0.15 -> "15%". */

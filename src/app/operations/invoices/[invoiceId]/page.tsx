@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { formatRate, formatUnitPrice, InvoiceStatusBadge } from "@/components/invoices/invoice-editor";
+import { formatRate, formatUnitPrice, InvoiceStatusBadge, PaidStatusBadge } from "@/components/invoices/invoice-editor";
+import { InvoicePayments } from "@/components/invoices/invoice-payments";
 import { Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -89,6 +90,8 @@ function InvoiceActions({
   if (invoice.status === "voided") {
     return null;
   }
+  // Example CP5: an invoice with active payments is voided after its payments.
+  const hasPayments = invoice.status === "approved" && invoice.paidStatus !== "unpaid";
   return (
     <Card
       title={invoice.status === "draft" ? "Draft" : "Void"}
@@ -99,6 +102,9 @@ function InvoiceActions({
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {hasPayments ? (
+        <Notice tone="info">This invoice has payments against it. Void its payments first, then void the invoice.</Notice>
+      ) : null}
       {invoice.status === "draft" ? (
         <div className={ui.actions}>
           <Button onClick={approve} disabled={busy}>
@@ -122,7 +128,7 @@ function InvoiceActions({
               required
             />
           </Field>
-          <Button variant="danger" onClick={voidInvoice} disabled={busy || !voidDate}>
+          <Button variant="danger" onClick={voidInvoice} disabled={busy || !voidDate || hasPayments}>
             {busy ? "Working…" : "Void invoice"}
           </Button>
         </div>
@@ -134,7 +140,7 @@ function InvoiceActions({
 function InvoiceView({ organisationId, invoiceId }: { organisationId: string; invoiceId: string }) {
   const { can } = useWorkspace();
   const details = useApiData<{ invoice: Invoice }>(`/api/invoices/${encodeURIComponent(invoiceId)}`, { organisationId });
-  // Approving or voiding returns the updated invoice, which is shown straight away.
+  // Approving, voiding and payments return the updated invoice, which is shown straight away.
   const [updated, setUpdated] = useState<Invoice | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -159,7 +165,12 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
       <Card
         title={invoice.invoiceNumber ?? `Draft #${invoice.id}`}
         description={`To ${invoice.contactName} · ${AMOUNTS_MODE_LABELS[invoice.amountsMode]} · ${invoice.currencyCode}`}
-        actions={<InvoiceStatusBadge status={invoice.status} />}
+        actions={
+          <>
+            <InvoiceStatusBadge status={invoice.status} />
+            {invoice.paidStatus ? <PaidStatusBadge status={invoice.paidStatus} /> : null}
+          </>
+        }
       >
         <div className={ui.grid4}>
           <Stat label="Invoice date" value={formatDate(invoice.invoiceDate)} />
@@ -217,6 +228,12 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           <Stat label={hasTax ? "Subtotal (excl. GST)" : "Subtotal"} value={<Money value={invoice.subtotal} />} />
           {hasTax ? <Stat label="GST" value={<Money value={invoice.taxTotal} />} /> : null}
           <Stat label={`Total (${invoice.currencyCode})`} value={<Money value={invoice.total} />} />
+          {invoice.status === "approved" ? (
+            <>
+              <Stat label="Paid" value={<Money value={invoice.amountPaid} />} />
+              <Stat label="Amount due" value={<Money value={invoice.amountDue} />} />
+            </>
+          ) : null}
         </div>
         <p className={ui.muted}>
           Saved by {invoice.createdByEmail ?? "unknown"} on {formatDateTime(invoice.createdAt)}.
@@ -236,6 +253,16 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           ) : null}
         </p>
       </Card>
+      {invoice.status !== "draft" ? (
+        <InvoicePayments
+          organisationId={organisationId}
+          invoice={invoice}
+          onChanged={(next, text) => {
+            setUpdated(next);
+            setMessage(text);
+          }}
+        />
+      ) : null}
       {can("bookkeeper") ? (
         <InvoiceActions
           key={invoice.status}

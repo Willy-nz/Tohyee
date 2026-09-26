@@ -31,6 +31,7 @@ toeyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ tax_codes, accounting_period_controls
 ├─ contacts               customers and suppliers
 ├─ sales_invoices, sales_invoice_lines, sales_invoice_numbering
+├─ customer_payments      money received against sales invoices
 └─ audit_events
 ```
 
@@ -144,8 +145,8 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, contacts, invoices and reports |
-| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices |
+| viewer | read journals, stock, contacts, invoices, customer payments and reports |
+| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments |
 | admin | + chart of accounts, tax codes, period locks, settings, people |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -171,6 +172,11 @@ Enforced by the database itself, not just the app:
   can't change at all. Lines of approved and voided invoices are frozen, and
   neither table can be truncated. Invoice numbers come from a one-row counter
   that can only move forward by one, so `INV-` numbers have no gaps.
+- Customer payments: a payment is recorded against an approved invoice, in
+  the invoice's currency and dated on or after it, and an invoice's active
+  payments can't add up to more than its total. Payments can't be edited,
+  deleted or truncated; the only change allowed is voiding one, once, which
+  fills in its void details. An invoice with active payments can't be voided.
 
 Enforced by the app (and covered by tests):
 
@@ -183,14 +189,19 @@ Enforced by the app (and covered by tests):
   same key and content returns the original result; the same key with
   different content is refused (409). The key check happens before anything
   is recalculated, so retries still work after a period is locked.
-- Journals made by stock movements, FX revaluations or sales invoices can't be
-  corrected in the ledger; they are corrected at their source (an invoice is
-  voided) so the sub-ledgers stay in step.
+- Journals made by stock movements, FX revaluations, sales invoices or
+  customer payments can't be corrected in the ledger; they are corrected at
+  their source (an invoice or payment is voided) so the sub-ledgers stay in
+  step.
 - Sales invoices post to the accounts marked "Used by Tohyee" for accounts
   receivable and GST (1100 and 2100 in the starting chart), so those can't be
   archived. Invoice amounts are worked out in one place
   (`src/lib/invoices/amounts.ts`), which the editor also uses for its live
   totals.
+- Customer payments debit an active, base-currency account of type `bank`
+  and credit the accounts receivable account above. An invoice's amount paid,
+  amount due and paid status (`unpaid`, `part_paid`, `paid`) are worked out
+  from its active payments whenever it's read; they are never stored.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 
