@@ -7,14 +7,14 @@
   return JSON. Wrap every handler in `route()` so errors become consistent
   JSON responses.
 - `src/lib/<area>/`: business logic (`ledger`, `inventory`, `accounts`,
-  `contacts`, `reports`, `tax`, `organisations`, `users`, `auth`).
+  `contacts`, `invoices`, `reports`, `tax`, `organisations`, `users`, `auth`).
 - `src/lib/db/`: connections, transactions, migrations, provisioning.
 - `src/app/operations/**`: screens. Client components talk to the API with
   `api()` from `src/lib/client/api.ts`.
 - Code that runs in the browser may import **types** from server modules, but
   **values** only from browser-safe modules (`money/decimal`, `money/currency`,
-  `accounts/types`, `auth/roles`, `tax/categories`, `financial-year`,
-  `format`, `errors`).
+  `accounts/types`, `auth/roles`, `tax/categories`, `invoices/amounts`,
+  `financial-year`, `format`, `errors`).
 
 ## Organisation data
 

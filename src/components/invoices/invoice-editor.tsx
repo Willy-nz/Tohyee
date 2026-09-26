@@ -221,15 +221,15 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
         <table className={ui.table}>
           <thead>
             <tr>
-              <th>Description</th>
+              <th style={{ minWidth: 220 }}>Description</th>
               <th className={ui.num} style={{ width: 100 }}>
                 Quantity
               </th>
               <th className={ui.num} style={{ width: 130 }}>
                 Unit price
               </th>
-              <th style={{ width: "22%" }}>Account</th>
-              {hasTax ? <th style={{ width: "16%" }}>Tax code</th> : null}
+              <th style={{ width: "20%" }}>Account</th>
+              {hasTax ? <th style={{ width: "14%" }}>Tax code</th> : null}
               {hasTax ? <th className={ui.num}>GST</th> : null}
               <th className={ui.num}>
                 {amountsMode === "inclusive" ? "Amount (incl. GST)" : amountsMode === "exclusive" ? "Amount (excl. GST)" : "Amount"}

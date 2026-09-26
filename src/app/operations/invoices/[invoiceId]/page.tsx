@@ -24,7 +24,7 @@ function InvoiceActions({
 }: {
   organisationId: string;
   invoice: Invoice;
-  onChanged: (message: string) => void;
+  onChanged: (invoice: Invoice, message: string) => void;
 }) {
   const router = useRouter();
   // One key per action on this page, so a retry after a dropped connection
@@ -56,7 +56,7 @@ function InvoiceActions({
         method: "POST",
         body: { organisationId, source: "ui", idempotencyKey: approveKey },
       });
-      onChanged(`Approved as ${result.invoice.invoiceNumber} and posted to the ledger.`);
+      onChanged(result.invoice, `Approved as ${result.invoice.invoiceNumber} and posted to the ledger.`);
     });
   }
 
@@ -75,11 +75,14 @@ function InvoiceActions({
       return;
     }
     void run(async () => {
-      await api<{ invoice: Invoice }>(`/api/invoices/${invoice.id}/void`, {
+      const result = await api<{ invoice: Invoice }>(`/api/invoices/${invoice.id}/void`, {
         method: "POST",
         body: { organisationId, source: "ui", idempotencyKey: voidKey, voidDate },
       });
-      onChanged(`Voided ${invoice.invoiceNumber}. Its journal was reversed on ${formatDate(voidDate)}.`);
+      onChanged(
+        result.invoice,
+        `Voided ${result.invoice.invoiceNumber}. Its journal was reversed on ${formatDate(result.invoice.voidDate)}.`,
+      );
     });
   }
 
@@ -131,6 +134,8 @@ function InvoiceActions({
 function InvoiceView({ organisationId, invoiceId }: { organisationId: string; invoiceId: string }) {
   const { can } = useWorkspace();
   const details = useApiData<{ invoice: Invoice }>(`/api/invoices/${encodeURIComponent(invoiceId)}`, { organisationId });
+  // Approving or voiding returns the updated invoice, which is shown straight away.
+  const [updated, setUpdated] = useState<Invoice | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   if (details.error) {
@@ -146,7 +151,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
   if (!details.data) {
     return <p className={ui.muted}>Loading…</p>;
   }
-  const { invoice } = details.data;
+  const invoice = updated ?? details.data.invoice;
   const hasTax = invoice.amountsMode !== "no_tax";
   return (
     <>
@@ -236,9 +241,9 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           key={invoice.status}
           organisationId={organisationId}
           invoice={invoice}
-          onChanged={(text) => {
+          onChanged={(next, text) => {
+            setUpdated(next);
             setMessage(text);
-            details.reload();
           }}
         />
       ) : null}
