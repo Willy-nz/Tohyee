@@ -11,6 +11,7 @@ import { formatDate } from "@/lib/format";
 import type { PeriodControls } from "@/lib/ledger/period-controls";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import type { OrganisationSettings } from "@/lib/organisations/settings";
+import { GST_BASES, GST_BASIS_LABELS, type GstBasis } from "@/lib/tax/categories";
 
 // The forms below remount when their data reloads (so the fields show what
 // was saved), which would wipe their own state. Success messages therefore
@@ -21,6 +22,7 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
   const [displayName, setDisplayName] = useState(settings.displayName);
   const [baseCurrency, setBaseCurrency] = useState(settings.baseCurrency);
   const [financialYearEndMonth, setFinancialYearEndMonth] = useState(settings.financialYearEndMonth);
+  const [gstBasis, setGstBasis] = useState<GstBasis>(settings.gstBasis);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -29,7 +31,7 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
     try {
       await api(`/api/organisations/${organisationId}/settings`, {
         method: "PATCH",
-        body: { displayName, baseCurrency, financialYearEndMonth },
+        body: { displayName, baseCurrency, financialYearEndMonth, gstBasis },
       });
       onSaved(
         displayName === settings.displayName
@@ -65,6 +67,15 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
             {MONTH_NAMES.map((name, index) => (
               <option key={name} value={index + 1}>
                 {name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="GST basis" hint="How GST returns will be worked out. Saved for the GST return, which isn't built yet; nothing uses it today.">
+          <select value={gstBasis} onChange={(event) => setGstBasis(event.target.value as GstBasis)}>
+            {GST_BASES.map((basis) => (
+              <option key={basis} value={basis}>
+                {GST_BASIS_LABELS[basis]}
               </option>
             ))}
           </select>

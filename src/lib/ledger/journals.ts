@@ -27,7 +27,7 @@ import {
   requireString,
 } from "@/lib/validation";
 
-export type JournalOrigin = "manual" | "correction" | "inventory" | "fx_revaluation";
+export type JournalOrigin = "manual" | "correction" | "inventory" | "fx_revaluation" | "invoice";
 export type CorrectionKind = "reversal" | "replacement";
 
 export type JournalLine = {
@@ -406,7 +406,7 @@ export async function listJournals(
   }
   const referenceQuery = optionalString(filters.referenceQuery, "referenceQuery", { maxLength: 100 });
   const kind = optionalString(filters.kind, "kind", { maxLength: 20 });
-  const validKinds = ["primary", "reversal", "replacement", "manual", "inventory", "fx_revaluation"];
+  const validKinds = ["primary", "reversal", "replacement", "manual", "inventory", "fx_revaluation", "invoice"];
   if (kind && !validKinds.includes(kind)) {
     throw new ValidationError(`kind must be one of: ${validKinds.join(", ")}.`);
   }
@@ -427,7 +427,7 @@ export async function listJournals(
   }
   if (kind === "primary") conditions.push("correction_kind is null");
   if (kind === "reversal" || kind === "replacement") conditions.push(`correction_kind = ${param(kind)}`);
-  if (kind === "manual" || kind === "inventory" || kind === "fx_revaluation") {
+  if (kind === "manual" || kind === "inventory" || kind === "fx_revaluation" || kind === "invoice") {
     conditions.push(`origin = ${param(kind)}`);
   }
   if (beforeId) conditions.push(`id < ${param(beforeId)}`);
@@ -477,7 +477,8 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
     !alreadyReversed &&
     journal.correctionKind !== "reversal" &&
     journal.origin !== "inventory" &&
-    journal.origin !== "fx_revaluation"
+    journal.origin !== "fx_revaluation" &&
+    journal.origin !== "invoice"
   );
 }
 
@@ -485,8 +486,8 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
  * Corrects a posted journal without editing it: posts a reversal of the
  * original and a replacement, both dated `postingDate` (which must be in an
  * open period). A replacement can itself be corrected later. Journals created
- * by stock movements or FX revaluations must be corrected at their source, so
- * the stock records and the ledger stay in step.
+ * by stock movements, FX revaluations or sales invoices must be corrected at
+ * their source, so those records and the ledger stay in step.
  */
 export async function correctJournal(
   tx: OrgTx,
@@ -513,6 +514,11 @@ export async function correctJournal(
   if (original.origin === "fx_revaluation") {
     throw new ValidationError(
       `Journal #${original.id} was created by an FX revaluation and can't be corrected here.`,
+    );
+  }
+  if (original.origin === "invoice") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a sales invoice (${original.reference}), so it can't be corrected in the ledger. To cancel an approved invoice, void it.`,
     );
   }
   if (original.correctionKind === "reversal") {

@@ -2,8 +2,11 @@ import pg from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { migrateEverything } from "@/lib/db/migrations";
+import { createContact } from "@/lib/contacts/service";
 import type { Actor } from "@/lib/db/org-transaction";
+import { approveInvoice, createInvoice, deleteInvoice, updateInvoice, voidInvoice } from "@/lib/invoices/service";
 import { postJournal } from "@/lib/ledger/journals";
+import { createTaxCode } from "@/lib/tax/codes";
 import {
   createTestLogin,
   createTestOrganisation,
@@ -77,6 +80,38 @@ describeWithDatabase("separate admin and runtime logins (DATABASE_ADMIN_URL)", (
       tx.query<{ count: string }>("select count(*)::text as count from ledger_journals"),
     );
     expect(listed.rows[0].count).toBe("1");
+  });
+
+  it("sales invoices can be drafted, edited, deleted, approved and voided as the runtime login", async () => {
+    const invoice = await inOrganisation(ORG, actor, async (tx) => {
+      await createTaxCode(tx, {
+        idempotencyKey: key("tax"),
+        code: "GST",
+        label: "GST",
+        category: "standard",
+        rate: "0.15",
+        effectiveFrom: "2026-01-01",
+      });
+      const { contact } = await createContact(tx, { idempotencyKey: key("c"), name: "Hardened Customer", isCustomer: true });
+      const draft = (quantity: string) =>
+        createInvoice(tx, {
+          idempotencyKey: key("i"),
+          contactId: contact.id,
+          invoiceDate: "2026-06-15",
+          dueDate: "2026-07-15",
+          amountsMode: "exclusive",
+          lines: [{ description: "Service", quantity, unitPrice: "50", accountCode: "4000", taxCode: "GST" }],
+        });
+      const scrap = (await draft("1")).invoice;
+      await deleteInvoice(tx, scrap.id);
+      const { invoice: saved } = await draft("1");
+      await updateInvoice(tx, saved.id, {
+        lines: [{ description: "Service", quantity: "2", unitPrice: "50", accountCode: "4000", taxCode: "GST" }],
+      });
+      await approveInvoice(tx, saved.id, { idempotencyKey: key("a") });
+      return (await voidInvoice(tx, saved.id, { idempotencyKey: key("v"), voidDate: "2026-06-20" })).invoice;
+    });
+    expect(invoice).toMatchObject({ status: "voided", invoiceNumber: "INV-0001", total: "115.00" });
   });
 
   it("the runtime login can't change the schema or rewrite posted history", async () => {
