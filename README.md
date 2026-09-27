@@ -41,7 +41,7 @@ own.
   (`INV-0001`, …) and posts it to the ledger, and voiding that reverses it.
 - **Customer payments** against an approved invoice, into a bank account:
   each one posts to the ledger, part payments are fine, and the invoice shows
-  what's still due. Overpayments and the GST return aren't built yet.
+  what's still due. Overpayments aren't built yet.
 - **Sales credit notes**: drafts, approval that numbers them (`CN-0001`, …)
   and posts them, credit applied to one or more of the customer's invoices,
   unused credit kept on the credit note or refunded from a bank account, and
@@ -59,6 +59,11 @@ own.
   liability accounts, reversed automatically the next day.
 - **Reports**: trial balance, profit and loss, balance sheet and stock
   valuation, with a financial year end you choose (31 March by default).
+- **GST return** (GST101A, boxes 5-15) on the invoice basis for 1, 2 or 6
+  months, worked out from approved and voided documents, with the lines in
+  each box, Box 9 and 13 adjustments, and "Mark as filed", which stores the
+  figures for good and shows if they've changed since. The payments and
+  hybrid bases aren't built yet.
 
 <p align="center">
   <img src="docs/screenshots/balance-sheet.png" alt="Balance sheet report" width="620" />
@@ -165,6 +170,7 @@ the `Origin` and `Sec-Fetch-Site` headers).
 | Ledger | `GET/POST /api/ledger/journals`, `GET /api/ledger/journals/:id`, `POST /api/ledger/journals/corrections`, `GET/PATCH /api/ledger/period-controls`, `GET/POST /api/ledger/revaluations` |
 | Stock | `GET/POST /api/inventory/movements` |
 | Reports | `GET /api/reports/trial-balance`, `/profit-and-loss`, `/balance-sheet`, `/inventory-valuation` |
+| GST return | `GET/POST /api/reports/gst-return` (`?periodStart=&periodEnd=`; `POST` works it out with `adjustments`), `GET/POST /api/gst-returns` (`POST` marks a return as filed, admins), `GET /api/gst-returns/:id` |
 | Tax | `GET/POST /api/tax/codes` |
 | Health | `GET /api/health` |
 

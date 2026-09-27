@@ -40,6 +40,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ supplier_credit_notes, supplier_credit_note_lines
 ├─ supplier_credit_note_applications   credit applied to bills
 ├─ supplier_credit_note_refunds        credit paid back by suppliers
+├─ gst_returns, gst_return_adjustments, gst_return_lines   filed GST returns
 └─ audit_events
 ```
 
@@ -153,9 +154,9 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds) and reports |
+| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports, the GST return and filed GST returns |
 | bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments; save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds |
-| admin | + chart of accounts, tax codes, period locks, settings, people |
+| admin | + chart of accounts, tax codes, period locks, settings, people; mark GST returns as filed |
 | owner | + manage other owners (an organisation always keeps one) |
 
 People who aren't members get "not found", so organisation IDs can't be
@@ -225,6 +226,14 @@ Enforced by the database itself, not just the app:
   note, active applications plus active refunds can't add up to more than its
   total. A bill with active credit applied, or a supplier credit note with
   active applications or refunds, can't be voided.
+- Filed GST returns (`gst_returns` with its `gst_return_adjustments` and
+  `gst_return_lines` snapshot) can't be edited, deleted or truncated, and
+  adjustments and lines can only be added while the return is being filed.
+  A return covers 1, 2 or 6 whole calendar months, its boxes must follow the
+  GST101A arithmetic (Box 7 = 5 - 6, Box 8 = Box 7 x 3 / 23, and so on), and
+  at commit its adjustments and lines must match its counts and Box 5, 6, 9,
+  11 and 13 totals. An exclusion constraint stops two filed returns covering
+  the same day.
 
 Enforced by the app (and covered by tests):
 
@@ -280,6 +289,15 @@ Enforced by the app (and covered by tests):
   and its removal date. Refunds received debit an active, base-currency
   account of type `bank` and credit accounts payable. Remaining credit and
   credit status are worked out whenever they're read; they are never stored.
+- The GST return (invoice basis) is worked out from documents, not postings:
+  sales invoices, sales credit notes, bills and supplier credit notes count on
+  their own date when approved and the other way on their void date, line by
+  line, by the tax code's category (`src/lib/reports/gst-return.ts`; the box
+  maths is in `src/lib/reports/gst-boxes.ts`). Box 8 and Box 12 are worked
+  out from the box totals (x 3 / 23, rounded once), so they can differ from
+  the lines' own GST by rounding. The payments and hybrid bases and
+  standard-rated lines at a rate other than 15% are refused. Filing takes a
+  lock on the settings row so returns are filed one at a time.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 

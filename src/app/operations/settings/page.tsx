@@ -71,7 +71,7 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
             ))}
           </select>
         </Field>
-        <Field label="GST basis" hint="How GST returns will be worked out. Saved for the GST return, which isn't built yet; nothing uses it today.">
+        <Field label="GST basis" hint="How GST returns are worked out. Only the invoice basis is built so far; the GST return refuses the others.">
           <select value={gstBasis} onChange={(event) => setGstBasis(event.target.value as GstBasis)}>
             {GST_BASES.map((basis) => (
               <option key={basis} value={basis}>
