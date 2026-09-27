@@ -7,15 +7,20 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { getInvoice, lockInvoice, receivableAccountCode, type Invoice } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { cmp, dec, isZero, parseDecimalInput, toFixedString, toPlainString } from "@/lib/money/decimal";
+import { creditNoteCreditStatus, type CreditStatus } from "@/lib/invoices/amounts";
+import { add, cmp, dec, isPositive, isZero, parseDecimalInput, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { optionalSource, optionalString, requireId, requireIdempotencyKey } from "@/lib/validation";
 
 /**
- * Customer payments against approved sales invoices (examples CP1-CP8). Each
- * payment is against one invoice and posts Dr the bank account / Cr accounts
- * receivable on the payment date. A payment can't be edited; voiding it posts
- * the exact reversal on the void date. An invoice's amount due and paid status
- * are worked out from its active payments whenever it's read, never stored.
+ * Customer payments against approved sales invoices (examples CP1-CP8 and
+ * OP1-OP4). Each payment is against one invoice and posts Dr the bank account /
+ * Cr accounts receivable on the payment date, for the full amount received.
+ * Whatever it pays beyond the invoice's amount due is its overpayment, fixed
+ * when it's recorded: credit for the customer that can be applied to their
+ * other invoices or refunded (src/lib/invoices/overpayments.ts). A payment
+ * can't be edited; voiding it posts the exact reversal on the void date. An
+ * invoice's amount due and paid status, and what's left of an overpayment,
+ * are worked out whenever they're read, never stored.
  */
 export const PAYMENT_STATUSES = ["active", "voided"] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
@@ -24,9 +29,22 @@ export type CustomerPayment = {
   id: string;
   invoiceId: string;
   invoiceNumber: string;
+  contactId: string;
+  contactName: string;
   status: PaymentStatus;
   paymentDate: string;
+  /** The full amount received. */
   amount: string;
+  /** The part that pays the invoice. */
+  invoiceAmount: string;
+  /** The part beyond the invoice's amount due when it was recorded; 0.00 if none. */
+  overpaymentAmount: string;
+  overpaymentApplied: string;
+  overpaymentRefunded: string;
+  /** What's left of the overpayment to apply or refund; 0.00 once voided. */
+  overpaymentRemaining: string;
+  /** Null when there's no overpayment. */
+  overpaymentStatus: CreditStatus | null;
   currencyCode: string;
   bankAccountId: string;
   bankAccountCode: string;
@@ -45,9 +63,14 @@ type PaymentRow = {
   id: string;
   invoice_id: string;
   invoice_number: string;
+  contact_id: string;
+  contact_name: string;
   status: PaymentStatus;
   payment_date: string;
   amount: string;
+  overpayment_amount: string;
+  overpayment_applied: string;
+  overpayment_refunded: string;
   currency_code: string;
   bank_account_id: string;
   bank_account_code: string;
@@ -62,21 +85,42 @@ type PaymentRow = {
   voided_at: string | null;
 };
 
-const PAYMENT_SELECT = `select p.id, p.invoice_id, i.invoice_number, p.status, p.payment_date, p.amount, p.currency_code,
-       p.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, p.reference, p.journal_id,
-       p.created_by_email, p.created_at, p.void_date, p.void_journal_id, p.voided_by_email, p.voided_at
+export const PAYMENT_SELECT = `select p.id, p.invoice_id, i.invoice_number, i.contact_id, c.name as contact_name, p.status,
+       p.payment_date, p.amount, p.overpayment_amount, used.overpayment_applied, used.overpayment_refunded,
+       p.currency_code, p.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, p.reference,
+       p.journal_id, p.created_by_email, p.created_at, p.void_date, p.void_journal_id, p.voided_by_email, p.voided_at
   from customer_payments p
   join sales_invoices i on i.id = p.invoice_id
-  join accounts a on a.id = p.bank_account_id`;
+  join contacts c on c.id = i.contact_id
+  join accounts a on a.id = p.bank_account_id
+  cross join lateral (
+    select coalesce((select sum(o.amount) from customer_overpayment_applications o
+                      where o.payment_id = p.id and o.status = 'active'), 0) as overpayment_applied,
+           coalesce((select sum(r.amount) from customer_overpayment_refunds r
+                      where r.payment_id = p.id and r.status = 'active'), 0) as overpayment_refunded
+  ) used`;
 
-function toPayment(row: PaymentRow): CustomerPayment {
+export function toPayment(row: PaymentRow): CustomerPayment {
+  const scale = currencyMinorUnits(row.currency_code);
+  const amount = dec(row.amount);
+  const overpayment = dec(row.overpayment_amount);
+  const hasOverpayment = !isZero(overpayment);
+  const credit = creditNoteCreditStatus(row.overpayment_amount, row.overpayment_applied, row.overpayment_refunded, scale);
   return {
     id: row.id,
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
+    contactId: row.contact_id,
+    contactName: row.contact_name,
     status: row.status,
     paymentDate: row.payment_date,
-    amount: toFixedString(dec(row.amount), currencyMinorUnits(row.currency_code)),
+    amount: toFixedString(amount, scale),
+    invoiceAmount: toFixedString(sub(amount, overpayment), scale),
+    overpaymentAmount: toFixedString(overpayment, scale),
+    overpaymentApplied: credit.amountApplied,
+    overpaymentRefunded: credit.amountRefunded,
+    overpaymentRemaining: row.status === "active" ? credit.remainingCredit : toFixedString(dec("0"), scale),
+    overpaymentStatus: hasOverpayment && row.status === "active" ? credit.creditStatus : null,
     currencyCode: row.currency_code,
     bankAccountId: row.bank_account_id,
     bankAccountCode: row.bank_account_code,
@@ -92,7 +136,7 @@ function toPayment(row: PaymentRow): CustomerPayment {
   };
 }
 
-async function getPayment(tx: OrgTx, paymentId: string): Promise<CustomerPayment> {
+export async function getPayment(tx: OrgTx, paymentId: string): Promise<CustomerPayment> {
   const result = await tx.query<PaymentRow>(`${PAYMENT_SELECT} where p.id = $1`, [paymentId]);
   const row = result.rows[0];
   if (!row) {
@@ -178,10 +222,12 @@ async function resolveBankAccount(
 }
 
 /**
- * Records a payment against an approved invoice (examples CP1-CP3, CP6-CP8):
- * posts one journal on the payment date, Dr the bank account / Cr accounts
- * receivable. It can't be more than the amount due, dated before the invoice,
- * or dated in a locked period.
+ * Records a payment against an approved invoice (examples CP1-CP3, CP6-CP8,
+ * OP1, OP3 and OP4): posts one journal on the payment date for the full
+ * amount, Dr the bank account / Cr accounts receivable. Anything beyond the
+ * invoice's amount due is the payment's overpayment. It can't be against an
+ * invoice that's already paid, dated before the invoice (prepayments aren't
+ * supported) or dated in a locked period.
  */
 export async function recordPayment(
   tx: OrgTx,
@@ -238,18 +284,17 @@ export async function recordPayment(
   }
   if (paymentDate < invoice.invoiceDate) {
     throw new ValidationError(
-      `The payment date can't be before the invoice date (${invoice.invoiceDate}). Prepayments aren't supported yet.`,
+      `The payment date can't be before the invoice date (${invoice.invoiceDate}). Prepayments aren't supported yet: raise the invoice first.`,
     );
   }
   const due = dec(invoice.amountDue!);
   if (isZero(due)) {
+    // Example OP4: a second payment for a paid invoice is refused, not taken as an overpayment.
     throw new ConflictError(`Invoice ${invoice.invoiceNumber} is already paid in full.`);
   }
-  if (cmp(amount, due) > 0) {
-    throw new ValidationError(
-      `The payment of ${toFixedString(amount, scale)} is more than the amount due (${invoice.amountDue}). Overpayments aren't supported yet.`,
-    );
-  }
+  // Example OP1: whatever is paid beyond the amount due is the payment's overpayment.
+  const beyondDue = sub(amount, due);
+  const overpayment = isPositive(beyondDue) ? beyondDue : ZERO_DECIMAL;
   const bank = await resolveBankAccount(tx, bankAccountCode);
   const receivable = await receivableAccountCode(tx);
 
@@ -279,10 +324,10 @@ export async function recordPayment(
   try {
     await tx.query(
       `insert into customer_payments (
-         id, command_source, idempotency_key, request_hash, invoice_id, payment_date, amount, currency_code,
-         bank_account_id, reference, journal_id, created_by_user_id, created_by_email
+         id, command_source, idempotency_key, request_hash, invoice_id, payment_date, amount, overpayment_amount,
+         currency_code, bank_account_id, reference, journal_id, created_by_user_id, created_by_email
        )
-       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13)`,
+       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8::numeric, $9, $10, $11, $12, $13, $14)`,
       [
         paymentId,
         source,
@@ -291,6 +336,7 @@ export async function recordPayment(
         invoiceId,
         paymentDate,
         fixedAmount,
+        toFixedString(overpayment, scale),
         invoice.currencyCode,
         bank.id,
         reference,
@@ -317,6 +363,7 @@ export async function recordPayment(
       invoiceNumber: invoice.invoiceNumber,
       paymentDate,
       amount: fixedAmount,
+      overpaymentAmount: toFixedString(overpayment, scale),
       bankAccountCode: bank.code,
       journalId: posted.journal.id,
     },
@@ -325,9 +372,10 @@ export async function recordPayment(
 }
 
 /**
- * Voids a payment (example CP4): posts the exact reversal of its journal on
- * the void date, which must be in an open period and not before the payment.
- * The amount is due again. A payment can only be voided once.
+ * Voids a payment (examples CP4 and OP8): posts the exact reversal of its
+ * journal on the void date, which must be in an open period and not before the
+ * payment. The amount is due again. A payment can only be voided once, and
+ * not while any of its overpayment is applied or refunded.
  */
 export async function voidPayment(
   tx: OrgTx,
@@ -362,6 +410,8 @@ export async function voidPayment(
     return earlier;
   }
   const invoice = await lockInvoice(tx, invoiceId);
+  // Overpayment applications and refunds lock the payment, so they wait for this void or it waits for them.
+  await tx.query("select id from customer_payments where id = $1 for update", [paymentId]);
   const committedMeanwhile = await replay();
   if (committedMeanwhile) {
     return committedMeanwhile;
@@ -369,6 +419,12 @@ export async function voidPayment(
   const payment = await getPayment(tx, paymentId);
   if (payment.status === "voided") {
     throw new ConflictError("This payment has already been voided.");
+  }
+  if (cmp(add(dec(payment.overpaymentApplied), dec(payment.overpaymentRefunded)), ZERO_DECIMAL) > 0) {
+    // Example OP8. The database refuses it too.
+    throw new ConflictError(
+      "This payment's overpayment has been applied or refunded, so it can't be voided. Remove its applications and void its refunds first.",
+    );
   }
   if (voidDate < payment.paymentDate) {
     throw new ValidationError(`The void date can't be before the payment date (${payment.paymentDate}).`);

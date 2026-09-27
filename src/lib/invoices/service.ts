@@ -148,18 +148,23 @@ const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name 
   paid.amount_paid, credited.amount_credited, i.approval_journal_id, i.approved_at, i.approved_by_email, i.void_date, i.void_journal_id,
   i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at`;
 
-/** Invoices with their customer, the sum of their active payments and the credit applied to them. */
+/**
+ * Invoices with their customer, what their active payments paid on them (a
+ * payment less its overpayment, example OP1) and the credit applied to them
+ * from credit notes and from overpayments on the customer's other invoices.
+ */
 const SUMMARY_FROM = `sales_invoices i
   join contacts c on c.id = i.contact_id
   cross join lateral (
-    select coalesce(sum(p.amount), 0) as amount_paid
+    select coalesce(sum(p.amount - p.overpayment_amount), 0) as amount_paid
       from customer_payments p
      where p.invoice_id = i.id and p.status = 'active'
   ) paid
   cross join lateral (
-    select coalesce(sum(a.amount), 0) as amount_credited
-      from sales_credit_note_applications a
-     where a.invoice_id = i.id and a.status = 'active'
+    select coalesce((select sum(a.amount) from sales_credit_note_applications a
+                      where a.invoice_id = i.id and a.status = 'active'), 0)
+         + coalesce((select sum(o.amount) from customer_overpayment_applications o
+                      where o.invoice_id = i.id and o.status = 'active'), 0) as amount_credited
   ) credited`;
 
 type LineRow = {
@@ -1000,7 +1005,12 @@ export async function voidInvoice(
   if (current.status === "voided") {
     throw new ConflictError(`${invoiceLabel(current)} has already been voided.`);
   }
-  if (!isZero(dec(current.amountPaid))) {
+  // A payment that was all overpayment (example OP4) pays nothing on the invoice, so check for any active payment.
+  const activePayments = await tx.query(
+    "select 1 from customer_payments where invoice_id = $1 and status = 'active' limit 1",
+    [invoiceId],
+  );
+  if (activePayments.rowCount !== 0) {
     // Example CP5. The database refuses it too.
     throw new ConflictError(
       `${invoiceLabel(current)} has payments against it, so it can't be voided. Void its payments first.`,
