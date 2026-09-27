@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { GstReturnReport } from "@/components/reports/gst-return";
 import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 
@@ -323,6 +324,7 @@ const TABS = [
   { key: "bs", label: "Balance sheet" },
   { key: "tb", label: "Trial balance" },
   { key: "stock", label: "Stock valuation" },
+  { key: "gst", label: "GST return" },
 ] as const;
 
 function Reports({ organisationId }: { organisationId: string }) {
@@ -347,6 +349,7 @@ function Reports({ organisationId }: { organisationId: string }) {
       {tab === "bs" ? <BalanceSheetReport organisationId={organisationId} /> : null}
       {tab === "tb" ? <TrialBalanceReport organisationId={organisationId} /> : null}
       {tab === "stock" ? <StockReport organisationId={organisationId} /> : null}
+      {tab === "gst" ? <GstReturnReport organisationId={organisationId} /> : null}
     </>
   );
 }
