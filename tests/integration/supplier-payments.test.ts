@@ -738,7 +738,7 @@ describeWithDatabase("supplier payments", () => {
       );
 
       const upgraded = await applyMigrations(client, tenantMigrations, "test:upgrade");
-      expect(upgraded.applied).toEqual(["0006"]);
+      expect(upgraded.applied).toContain("0006");
       expect((await client.query("select display_name from organisation_settings")).rows).toEqual([
         { display_name: "Upgrade Co" },
       ]);

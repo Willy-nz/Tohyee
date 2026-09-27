@@ -28,6 +28,8 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   customer_payment: "Customer payment",
   bill: "Bill",
   supplier_payment: "Supplier payment",
+  sales_credit_note: "Credit note",
+  sales_credit_note_refund: "Credit note refund",
 };
 
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
@@ -35,6 +37,8 @@ const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
   customer_payment: "The payment was voided: reversed by",
   bill: "The bill was voided: reversed by",
   supplier_payment: "The payment was voided: reversed by",
+  sales_credit_note: "The credit note was voided: reversed by",
+  sales_credit_note_refund: "The refund was voided: reversed by",
 };
 
 function KindBadge({ journal }: { journal: Journal }) {
@@ -147,6 +151,31 @@ function JournalDetail({
             <>
               {" "}
               To undo it, void the payment from its bill in <Link href="/operations/bills">Bills</Link>.
+            </>
+          )}
+        </p>
+      ) : null}
+      {journal.origin === "sales_credit_note" ? (
+        <p className={ui.muted}>
+          This journal was posted by {journal.correctionKind === "reversal" ? "voiding" : "approving"} a sales credit note,
+          so it can&apos;t be corrected here.
+          {journal.correctionKind === "reversal" ? null : (
+            <>
+              {" "}
+              To cancel it, void the credit note from <Link href="/operations/credit-notes">Credit notes</Link>.
+            </>
+          )}
+        </p>
+      ) : null}
+      {journal.origin === "sales_credit_note_refund" ? (
+        <p className={ui.muted}>
+          This journal was posted by {journal.correctionKind === "reversal" ? "voiding" : "recording"} a credit note refund,
+          so it can&apos;t be corrected here.
+          {journal.correctionKind === "reversal" ? null : (
+            <>
+              {" "}
+              To undo it, void the refund from its credit note in{" "}
+              <Link href="/operations/credit-notes">Credit notes</Link>.
             </>
           )}
         </p>
@@ -334,6 +363,8 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="customer_payment">Customer payments</option>
               <option value="bill">Bills</option>
               <option value="supplier_payment">Supplier payments</option>
+              <option value="sales_credit_note">Credit notes</option>
+              <option value="sales_credit_note_refund">Credit note refunds</option>
               <option value="reversal">Reversals</option>
               <option value="replacement">Replacements</option>
             </select>
