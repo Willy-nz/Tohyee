@@ -13,9 +13,10 @@ proves it". Test names start with the example IDs they cover:
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
   `tests/integration/invoices.test.ts` (I1-I9, D1, D2 for invoices),
-  `tests/integration/customer-payments.test.ts` (CP1-CP8) and
-  `tests/integration/bills.test.ts` (B1-B8, D1, D2 for bills), all against a
-  real PostgreSQL database
+  `tests/integration/customer-payments.test.ts` (CP1-CP8),
+  `tests/integration/bills.test.ts` (B1-B8, D1, D2 for bills) and
+  `tests/integration/supplier-payments.test.ts` (SP1-SP8), all against a real
+  PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -257,8 +258,9 @@ code (`src/lib/invoices/amounts.ts`, see "Sales invoices").
 
 ### Not supported yet (refused rather than guessed)
 
-- **Supplier payments**: bills can't be paid in Tohyee yet, so a bill stays in
-  accounts payable until it's voided.
+- **Paying bills other than one at a time**: supplier payments (see
+  "Supplier payments" below) pay one bill each, from a base-currency bank
+  account, and have their own list of what isn't supported yet.
 - **Negative or zero lines** (discounts, supplier credit notes): the same
   rules as invoices.
 - **Correcting an approved bill**: it can't be edited, and its journal can't
@@ -266,6 +268,55 @@ code (`src/lib/invoices/amounts.ts`, see "Sales invoices").
   dated before the bill.
 - **Foreign-currency bills**: bills are in the base currency only, and lines
   can't go to foreign-currency accounts.
+
+## Supplier payments
+
+A supplier payment is money paid against one approved bill. It's the mirror
+of a customer payment. Recording it posts one journal dated the payment date:
+Dr accounts payable (2000) / Cr the bank account the money came from. The bank
+account must be an active, base-currency account of type bank. Amounts must be
+more than zero, with at most 2 decimal places.
+
+A bill's amount due is its total less its active (not voided) payments. Its
+paid status is **unpaid** (nothing paid), **part paid** or **paid** (nothing
+due). Both are worked out from the payments every time; they're never stored
+or typed in.
+
+- **SP1** Bill B1 (total 230.00). Pay 230.00 from 1000: the journal is
+  Dr 2000 230.00 / Cr 1000 230.00, dated the payment date. Amount due
+  **0.00**; status **paid**.
+- **SP2** The same bill paid 100.00, then 130.00: amount due **130.00** and
+  **part paid** after the first; **0.00** and **paid** after the second.
+- **SP3** Paying 230.01 against a 230.00 bill is refused (no overpayments
+  yet). Paying a draft or a voided bill is refused. A payment dated before the
+  bill date is refused. Amounts must be more than zero with at most 2 decimal
+  places: 0.00, -5.00 and 10.001 are refused.
+- **SP4** Voiding the 130.00 payment from SP2 on a later date in an open
+  period posts the exact reversal on that date (Dr 1000 130.00 /
+  Cr 2000 130.00). Amount due goes back to **130.00**; status **part paid**. A
+  second void is refused, and so is a void dated before the payment.
+- **SP5** Voiding bill B1 while it has an active payment is refused ("void its
+  payments first"). After its payments are voided, voiding the bill works.
+- **SP6** A payment or a void dated in a locked period is refused, and nothing
+  is posted.
+- **SP7** Retrying a payment with the same idempotency key and content returns
+  the same payment (201 then 200); the same key with a different amount is
+  refused (409).
+- **SP8** The bank account must be an active, base-currency account of type
+  bank: paying from 2000, or from an archived bank account, is refused.
+
+### Not supported yet (refused rather than guessed)
+
+- **One payment for several bills**: each payment is against exactly one
+  bill.
+- **Overpayments and prepayments to suppliers**: a payment can't be more than
+  the amount due, and it can't be dated before the bill date.
+- **Foreign-currency bank accounts**: payments are made from bank accounts in
+  the base currency only.
+- **Batch payments and bank files** (e.g. ABA): each payment is recorded on
+  its own, and no bank file is made.
+- **Correcting a payment**: its journals can't be corrected in the ledger.
+  Void the payment and record it again.
 
 ## Reports
 

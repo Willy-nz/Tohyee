@@ -3,7 +3,7 @@ import { listJournals, postJournal } from "@/lib/ledger/journals";
 
 /**
  * GET: newest first, 50 at a time. Filters: postingDateFrom, postingDateTo,
- * referenceQuery, kind (primary|reversal|replacement|manual|inventory|fx_revaluation|invoice|customer_payment|bill),
+ * referenceQuery, kind (primary|reversal|replacement|manual|inventory|fx_revaluation|invoice|customer_payment|bill|supplier_payment),
  * beforeId (for the next page), limit (max 200).
  */
 export const GET = route(async (request) => {

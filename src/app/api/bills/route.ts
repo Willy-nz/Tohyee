@@ -3,13 +3,15 @@ import { createBill, listBills } from "@/lib/bills/service";
 
 /**
  * GET: newest first, 50 at a time. Filters: status (draft|approved|voided),
- * beforeId (next page), limit (max 200).
+ * awaitingPayment (true: approved bills with something still due), beforeId
+ * (next page), limit (max 200).
  */
 export const GET = route(async (request) => {
   const params = searchParams(request);
   const result = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) =>
     listBills(tx, {
       status: params.get("status"),
+      awaitingPayment: params.get("awaitingPayment"),
       beforeId: params.get("beforeId"),
       limit: params.get("limit"),
     }),

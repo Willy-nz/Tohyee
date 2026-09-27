@@ -33,6 +33,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ sales_invoices, sales_invoice_lines, sales_invoice_numbering
 ├─ customer_payments      money received against sales invoices
 ├─ bills, bill_lines      bills from suppliers
+├─ supplier_payments      money paid against bills
 └─ audit_events
 ```
 
@@ -146,8 +147,8 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, contacts, invoices, customer payments, bills and reports |
-| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments; save, approve, void and delete draft bills |
+| viewer | read journals, stock, contacts, invoices, customer payments, bills, supplier payments and reports |
+| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments; save, approve, void and delete draft bills; record and void supplier payments |
 | admin | + chart of accounts, tax codes, period locks, settings, people |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -185,6 +186,11 @@ Enforced by the database itself, not just the app:
   unique index stops a supplier having two bills that aren't voided (drafts
   included) with the same supplier invoice number, compared ignoring case and
   spaces.
+- Supplier payments: a payment is recorded against an approved bill, in the
+  bill's currency and dated on or after it, and a bill's active payments can't
+  add up to more than its total. Payments can't be edited, deleted or
+  truncated; the only change allowed is voiding one, once, which fills in its
+  void details. A bill with active payments can't be voided.
 
 Enforced by the app (and covered by tests):
 
@@ -198,9 +204,9 @@ Enforced by the app (and covered by tests):
   different content is refused (409). The key check happens before anything
   is recalculated, so retries still work after a period is locked.
 - Journals made by stock movements, FX revaluations, sales invoices,
-  customer payments or bills can't be corrected in the ledger; they are
-  corrected at their source (an invoice, payment or bill is voided) so the
-  sub-ledgers stay in step.
+  customer payments, bills or supplier payments can't be corrected in the
+  ledger; they are corrected at their source (an invoice, payment or bill is
+  voided) so the sub-ledgers stay in step.
 - Sales invoices post to the accounts marked "Used by Tohyee" for accounts
   receivable and GST (1100 and 2100 in the starting chart), so those can't be
   archived. Invoice amounts are worked out in one place
@@ -218,6 +224,10 @@ Enforced by the app (and covered by tests):
   GST accounts are refused (`src/lib/bills/accounts.ts`, which the editor also
   uses to filter its account list). Bill amounts are worked out with the same
   code as sales invoices.
+- Supplier payments debit the accounts payable account above and credit an
+  active, base-currency account of type `bank`. A bill's amount paid, amount
+  due and paid status (`unpaid`, `part_paid`, `paid`) are worked out from its
+  active payments whenever it's read; they are never stored.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 
