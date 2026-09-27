@@ -16,6 +16,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
   `tests/integration/invoices.test.ts` (I1-I9, D1, D2 for invoices),
   `tests/integration/customer-payments.test.ts` (CP1-CP8),
+  `tests/integration/customer-overpayments.test.ts` (OP1-OP11),
   `tests/integration/bills.test.ts` (B1-B8, D1, D2 for bills) and
   `tests/integration/supplier-payments.test.ts` (SP1-SP8) and
   `tests/integration/credit-notes.test.ts` (CN1-CN12) and
@@ -180,8 +181,10 @@ money went into / Cr accounts receivable (1100). The bank account must be an
 active account of type bank. Amounts must be more than zero, with at most
 2 decimal places.
 
-An invoice's amount due is its total less its active (not voided) payments
-and the active credit applied to it from sales credit notes (CN3). Its paid
+An invoice's amount due is its total less the part of its active (not
+voided) payments that paid it (a payment less its overpayment, OP1) and the
+active credit applied to it from sales credit notes (CN3) and from
+overpayments (OP2). Its paid
 status is **unpaid** (nothing paid), **part paid** or **paid**
 (nothing due). Both are worked out from the payments every time; they're
 never stored or typed in.
@@ -191,10 +194,10 @@ never stored or typed in.
   **0.00**; status **paid**.
 - **CP2** The same invoice paid 50.00, then 65.00: amount due **65.00** and
   **part paid** after the first; **0.00** and **paid** after the second.
-- **CP3** Paying 115.01 against a 115.00 invoice is refused (no overpayments
-  yet). Paying a draft or a voided invoice is refused. Amounts must be more
-  than zero with at most 2 decimal places: 0.00, -5.00 and 10.001 are
-  refused.
+- **CP3** Paying a draft, a voided or an already-paid invoice is refused
+  (OP4). Amounts must be more than zero with at most 2 decimal places: 0.00,
+  -5.00 and 10.001 are refused. Paying 115.01 against a 115.00 invoice is not
+  refused: it pays the invoice and the extra 0.01 is an overpayment (OP1).
 - **CP4** Voiding the 65.00 payment from CP2 on a later date in an open
   period posts the exact reversal on that date (Dr 1100 65.00 /
   Cr 1000 65.00). Amount due goes back to **65.00**; status **part paid**. A
@@ -212,9 +215,11 @@ never stored or typed in.
 
 ### Not supported yet (refused rather than guessed)
 
-- **Overpayments and prepayments**: a payment can't be more than the amount
-  due, and it can't be dated before the invoice date (until then accounts
-  receivable would be in credit, which is a prepayment).
+- **Prepayments**: a payment can't be dated before the invoice date. Money
+  received before an invoice exists is refused; raise the invoice first.
+  Under s9(1) of the GST Act a payment received can trigger the time of
+  supply (IRD interpretation statement IS 10/03), so how GST should work on
+  prepayments is still to be decided by the owner.
 - **One payment for several invoices**: each payment is against exactly one
   invoice.
 - **Foreign-currency bank accounts**: payments go into bank accounts in the
@@ -222,6 +227,102 @@ never stored or typed in.
 - **Correcting a payment**: its journals can't be corrected in the ledger.
   Void the payment and record it again. A void can't be dated before the
   payment.
+
+## Customer overpayments
+
+An overpayment is the part of a customer payment that's more than the
+invoice's amount due when the payment is recorded. The payment still posts
+**one journal** for the full amount received: Dr the bank account /
+Cr accounts receivable (1100). No GST is posted: the invoice already carried
+the GST, and the excess isn't payment for a new supply. The excess sits in
+1100 as credit for that customer, the way a credit note's remaining credit
+does.
+
+- When a payment is recorded it's split once, and the split is kept: the
+  part that pays the invoice (at most the amount due at that moment) and the
+  overpayment (the rest). A payment that's no more than the amount due has
+  no overpayment and works exactly as before (CP1-CP8).
+- **Applying** an overpayment to other approved invoices of the same
+  customer and currency works like applying credit-note credit (CN3-CN5): it
+  posts **no journal** (both sides are 1100). One command can cover several
+  invoices, with one date and an amount for each, all or nothing. Each amount
+  is more than zero with at most 2 decimal places and no more than that
+  invoice's amount due; the total is no more than what's left of the
+  overpayment; the date is on or after both the payment date and the invoice
+  date. It can't be applied to the invoice it overpaid.
+- **Removing** an application (once, dated on or after the application)
+  posts no journal and puts the amount back on both.
+- **Refunding** what's left posts Dr 1100 / Cr the bank account on the
+  refund date (on or after the payment date), from an active, base-currency
+  account of type bank. A refund can be voided once, which posts the exact
+  reversal.
+- What's left of an overpayment is the overpayment less its active
+  applications and active refunds; its status is **open** (none used),
+  **part used** or **used** (none left). Only the split is stored; the rest
+  is worked out every time.
+- Voiding a payment is refused while any of its overpayment is applied or
+  refunded ("remove its applications and void its refunds first"). Otherwise
+  the void reverses the full amount received.
+- The GST return (invoice basis) isn't changed by overpayments,
+  applications, removals or refunds.
+- Period locks apply to recording, applying, removing, refunding and voiding,
+  by their dates, even when no journal is posted.
+
+Setup: the credit notes setup (customer Kobe Ltd, INV-0001 = I1, total
+115.00, and INV-0002 = I6, no tax, 80.00) plus customer Rex Ltd with INV-0003
+(no tax, 50.00), all dated 10 May 2026. Each example starts from the setup
+plus the steps it names.
+
+- **OP1** Pay 130.00 into 1000 against INV-0001: one journal,
+  Dr 1000 130.00 / Cr 1100 130.00. Invoice part **115.00**, overpayment
+  **15.00**. INV-0001 due **0.00**, **paid**. Overpayment left **15.00**,
+  **open**. Kobe's 1100 balance is 80.00 - 15.00 = **65.00**.
+- **OP2** From OP1, apply 15.00 of the overpayment to INV-0002: no journal.
+  INV-0002 due **65.00**, **part paid**. Overpayment left **0.00**, **used**.
+- **OP3** Pay INV-0001 50.00, then 100.00: the second payment's invoice part
+  is **65.00** and its overpayment **35.00**; INV-0001 due **0.00**, **paid**.
+  With a 15.00 credit note applied first, paying 115.00 is 100.00 on the
+  invoice and 15.00 overpaid.
+- **OP4** Paying an invoice that's already paid (e.g. paying INV-0001 115.00
+  again after OP1) is refused ("already paid in full"), not taken as an
+  overpayment, so a payment entered twice by mistake is caught.
+- **OP5** Refused, and nothing changes: applying more than what's left of the
+  overpayment; more than an invoice's amount due (one bad line fails the
+  whole command); Rex Ltd's INV-0003; the invoice the payment overpaid; a
+  draft or voided invoice; dated before the payment date or the invoice date;
+  amounts 0.00, -1.00 and 1.001; applying or refunding from a payment with no
+  overpayment or a voided payment.
+- **OP6** From OP2, removing the application on a later date posts no
+  journal: INV-0002 due back to **80.00**; overpayment left back to
+  **15.00**. A second removal is refused, and so is one dated before the
+  application.
+- **OP7** From OP1, refunding 15.00 from 1000 posts Dr 1100 15.00 /
+  Cr 1000 15.00; left **0.00**. Refunding 15.01, from 1100, or from an
+  archived bank account is refused. Voiding the refund later posts
+  Dr 1000 15.00 / Cr 1100 15.00; left back to **15.00**.
+- **OP8** Voiding the OP1 payment while any of its overpayment is applied or
+  refunded is refused. After those are removed or voided, voiding posts
+  Dr 1100 130.00 / Cr 1000 130.00; INV-0001 due back to **115.00**; the
+  overpayment can't be used again. Voiding INV-0002 while overpayment credit
+  is applied to it is refused ("remove its credit first").
+- **OP9** A GST return for the period with OP1, an application and a refund
+  in it has the same boxes and lines as one with only the invoices.
+- **OP10** Recording, applying, removing, refunding or voiding dated in a
+  locked period is refused, and nothing is posted.
+- **OP11** Retrying record, apply, remove, refund or void with the same
+  idempotency key and content returns the same result; the same key with
+  different content is refused (409).
+
+### Not supported yet (refused rather than guessed)
+
+- **Prepayments**: see customer payments above.
+- **Supplier overpayments**: supplier payments still can't be more than the
+  amount due (SP3).
+- **Receiving money that isn't against an invoice** (e.g. a customer who
+  paid twice): refused, like prepayments, until they're decided.
+- **Foreign-currency** payments and invoices.
+- **Correcting an overpayment refund**: its journals can't be corrected in
+  the ledger. Void the refund and record it again.
 
 ## Bills
 
@@ -379,7 +480,7 @@ starts from the setup plus the steps it names.
   or voided credit note; dated before the credit note or invoice date; amounts
   0.00, -1.00 and 1.001.
 - **CN6** After CN3, a payment of 92.00 makes INV-0001 **paid**; 92.01
-  instead is refused.
+  instead pays 92.00 and overpays 0.01 (OP1).
 - **CN7** Starting from CN3, removing that application on a later date posts
   no journal: INV-0001 due back to **115.00**; CN-0001 remaining back to
   **23.00**, **open**. A second removal is refused, and so is a removal dated
@@ -408,7 +509,8 @@ starts from the setup plus the steps it names.
 
 - **Applying credit across currencies**: credit is applied only to invoices in
   the credit note's currency.
-- **Overpayments and prepayments as credit**: only credit notes give credit.
+- **Prepayments as credit**: only credit notes and overpayments (OP1-OP8)
+  give credit.
 - **Applying credit from the invoice page**: apply it from the credit note's
   page. The invoice page shows the credit applied and links to the customer's
   credit notes with credit left.

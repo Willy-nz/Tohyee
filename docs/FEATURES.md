@@ -42,9 +42,17 @@ that something happened.
   the payment date, and voiding it posts the exact reversal on the void date.
   An invoice's amount due and paid status (unpaid, part paid, paid) are worked
   out from its active payments, and the invoice list can show just the
-  invoices awaiting payment. Overpayments are refused, and an invoice with
-  active payments can't be voided. Period locks apply; recording and voiding
-  are idempotent. See examples CP1-CP8.
+  invoices awaiting payment. An invoice with active payments can't be voided.
+  Period locks apply; recording and voiding are idempotent. See examples
+  CP1-CP8.
+- **Customer overpayments**: a payment of more than the amount due pays the
+  invoice and keeps the rest as an overpayment, credit for the customer in
+  accounts receivable (one journal for the whole payment, no GST on the
+  overpayment). It's applied to the customer's other invoices in one
+  all-or-nothing command (no journal) or refunded from a bank account, and
+  applications can be removed and refunds voided. A payment whose overpayment
+  is used can't be voided, and a second payment for a paid invoice is
+  refused. See examples OP1-OP11.
 - **Bills** from suppliers in the base currency: drafts that can be edited and
   deleted, with the supplier's invoice number (a supplier can't have two bills
   that aren't voided with the same number, ignoring case and spaces),
@@ -135,8 +143,9 @@ isn't acceptable, because people would trust it:
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
 1. The GST return on the payments and hybrid bases; then customer and
-   supplier payments across several invoices or bills, overpayments and
-   prepayments. Invoice and credit note PDFs and emailing come with or after
+   supplier payments across several invoices or bills, supplier
+   overpayments, and prepayments (once the owner has decided how GST works
+   on them). Invoice and credit note PDFs and emailing come with or after
    these.
 2. Bank feeds (through an NZ open-banking provider, still to be chosen) and
    bank reconciliation that matches real transactions.
