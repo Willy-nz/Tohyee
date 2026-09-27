@@ -226,9 +226,9 @@ code (`src/lib/invoices/amounts.ts`, see "Sales invoices").
 - The supplier must be an active contact marked as a supplier. The
   supplier's invoice number is required, and a supplier can't have two bills
   that aren't voided with the same number, ignoring case and spaces.
-- Line accounts are expense, direct costs or asset accounts, but not bank,
-  accounts receivable, accounts payable or GST. Tax codes come from the same
-  list as invoices.
+- Line accounts are active, base-currency accounts of type expense or direct
+  costs, or asset accounts, but not bank, accounts receivable, accounts
+  payable or GST. Tax codes come from the same list as invoices.
 - Drafts post nothing. Approving posts one journal dated the bill date: Dr
   each line's account for its net amount, Dr GST (2100) for the GST, Cr
   accounts payable (2000) for the total. There's no GST line when the GST is
