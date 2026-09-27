@@ -37,6 +37,7 @@ import {
   startTestServer,
   testDatabaseUrl,
   type TestServer,
+  waitForLockWaiters,
   withDb,
 } from "../helpers/test-server";
 
@@ -459,6 +460,139 @@ describeWithDatabase("bills", () => {
     }
   });
 
+  it("L4, B6, B7, B8: retrying an approval or a void after its period is locked returns the original, not a lock error", async () => {
+    const approveKey = key("approve");
+    const { bill: approved } = await approve((await draft()).id, approveKey);
+    const { bill: toVoid } = await approve((await draft()).id);
+    const voidKey = key("void");
+    const { bill: voided } = await voidIt(toVoid.id, "2026-05-20", voidKey);
+    const waiting = await draft();
+    const journalsBefore = await journalCount();
+
+    await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: "2026-05-31" }));
+    try {
+      expect(await approve(approved.id, approveKey)).toMatchObject({
+        created: false,
+        bill: { id: approved.id, status: "approved", approvalJournalId: approved.approvalJournalId },
+      });
+      expect(await voidIt(toVoid.id, "2026-05-20", voidKey)).toMatchObject({
+        created: false,
+        bill: { id: toVoid.id, status: "voided", voidDate: "2026-05-20", voidJournalId: voided.voidJournalId },
+      });
+      // Anything new in the locked period is still refused.
+      await expect(approve(waiting.id)).rejects.toThrow(/2026-05-10 is in a locked period/);
+      await expect(voidIt(approved.id, "2026-05-20")).rejects.toThrow(/2026-05-20 is in a locked period/);
+      expect(await journalCount()).toBe(journalsBefore);
+    } finally {
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+    }
+  });
+
+  it("B6, B8: approvals and voids at the same moment take turns: a retry queued behind the first returns it; a second one is refused", async () => {
+    /** Starts the requests while holding the bill's lock, so they all queue behind it, then lets them go. */
+    const atOnce = async <T>(billId: string, requests: Array<() => Promise<T>>) => {
+      const { settling } = await asUser(owner, async (tx) => {
+        await tx.query("select id from bills where id = $1 for update", [billId]);
+        const queued = requests.map((request) => request());
+        // Handle their results now: one refused as soon as the lock is released mustn't be an unhandled rejection.
+        const handled = Promise.allSettled(queued);
+        await waitForLockWaiters(tx, queued.length);
+        return { settling: handled };
+      });
+      return settling;
+    };
+    const fulfilled = <T>(outcomes: PromiseSettledResult<T>[]) =>
+      outcomes.map((outcome) => {
+        if (outcome.status === "rejected") throw outcome.reason;
+        return outcome.value;
+      });
+    const [retried, rival] = [await draft(), await draft()];
+    const journalsBefore = await journalCount();
+
+    // Two copies of an approval (the same key) approve it once; the second returns the first.
+    const approveKey = key("approve");
+    const approvals = fulfilled(
+      await atOnce(retried.id, [() => approve(retried.id, approveKey), () => approve(retried.id, approveKey)]),
+    );
+    expect(approvals.map((result) => result.created).sort()).toEqual([false, true]);
+    expect(approvals[0].bill.approvalJournalId).toEqual(expect.any(String));
+    expect(approvals[1].bill).toMatchObject({ status: "approved", approvalJournalId: approvals[0].bill.approvalJournalId });
+    expect(await journalCount()).toBe(journalsBefore + 1);
+
+    // Two approvals with different keys: one approves it and the other is refused.
+    const rivals = await atOnce(rival.id, [() => approve(rival.id), () => approve(rival.id)]);
+    expect(rivals.map((outcome) => outcome.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(rivals.find((outcome) => outcome.status === "rejected")?.reason).toMatchObject({
+      message: `Bill ${rival.supplierInvoiceNumber} from Kauri Supplies is already approved.`,
+    });
+    expect(await journalCount()).toBe(journalsBefore + 2);
+
+    // Two copies of a void post one reversal.
+    const voidKey = key("void");
+    const voids = fulfilled(
+      await atOnce(retried.id, [
+        () => voidIt(retried.id, "2026-06-15", voidKey),
+        () => voidIt(retried.id, "2026-06-15", voidKey),
+      ]),
+    );
+    expect(voids.map((result) => result.created).sort()).toEqual([false, true]);
+    expect(voids[0].bill.voidJournalId).toEqual(expect.any(String));
+    expect(voids[1].bill).toMatchObject({ status: "voided", voidJournalId: voids[0].bill.voidJournalId });
+    expect(await journalCount()).toBe(journalsBefore + 3);
+
+    // Two voids with different keys: one voids it and the other is refused.
+    const rivalVoids = await atOnce(rival.id, [() => voidIt(rival.id, "2026-06-15"), () => voidIt(rival.id, "2026-06-16")]);
+    expect(rivalVoids.map((outcome) => outcome.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(rivalVoids.find((outcome) => outcome.status === "rejected")?.reason).toMatchObject({
+      message: `Bill ${rival.supplierInvoiceNumber} from Kauri Supplies has already been voided.`,
+    });
+    expect(await journalCount()).toBe(journalsBefore + 4);
+    for (const billId of [retried.id, rival.id]) {
+      expect((await asUser(viewer, (tx) => getBill(tx, billId))).status).toBe("voided");
+    }
+  });
+
+  it("B5: a number another request saves at the same moment is still refused, by the database", async () => {
+    const renumbered = await draft({ supplierInvoiceNumber: "RACE-OTHER" });
+    // Save "RACE 1" but keep its transaction open. The requests below can't see it yet, so they pass the
+    // service's own check, then wait at the database's unique index until it commits.
+    const { settling } = await asUser(bookkeeper, async (tx) => {
+      await createBill(tx, {
+        idempotencyKey: key("bill"),
+        contactId: supplier.id,
+        billDate: "2026-05-10",
+        dueDate: "2026-06-20",
+        supplierInvoiceNumber: "RACE 1",
+        amountsMode: "exclusive",
+        lines: [line("1", "200.00")],
+      });
+      const queued = [
+        draft({ supplierInvoiceNumber: "race1" }),
+        asUser(bookkeeper, (other) => updateBill(other, renumbered.id, { supplierInvoiceNumber: "Race 1" })),
+      ];
+      // Handle their results now: they're refused as soon as this commits, maybe before it returns.
+      const handled = Promise.allSettled(queued);
+      await waitForLockWaiters(tx, queued.length);
+      return { settling: handled };
+    });
+    const outcomes = await settling;
+    expect(outcomes.map((outcome) => (outcome.status === "rejected" ? (outcome.reason as Error).message : outcome.status))).toEqual(
+      ["race1", "Race 1"].map(
+        (number) =>
+          `Kauri Supplies already has a bill with the invoice number ${number}. Numbers are compared ignoring case and spaces, so check this bill hasn't been entered already.`,
+      ),
+    );
+    const saved = await asUser(owner, (tx) =>
+      tx.query<{ supplier_invoice_number: string }>(
+        `select supplier_invoice_number from bills
+          where contact_id = $1 and lower(regexp_replace(supplier_invoice_number, '[[:space:]]', '', 'g')) = 'race1'`,
+        [supplier.id],
+      ),
+    );
+    expect(saved.rows).toEqual([{ supplier_invoice_number: "RACE 1" }]);
+    expect((await asUser(viewer, (tx) => getBill(tx, renumbered.id))).supplierInvoiceNumber).toBe("RACE-OTHER");
+  });
+
   it("D1, D2: saving a draft is idempotent: the same key and content return it; different content is refused", async () => {
     const command = {
       idempotencyKey: key("bill"),
@@ -863,6 +997,13 @@ describeWithDatabase("bills", () => {
     expect((await get(outsiderCookie, bill.id)).status).toBe(404);
     expect((await post(outsiderCookie, { ...command, idempotencyKey: key("http") })).status).toBe(404);
     expect((await approveOver(outsiderCookie, bill.id, key("x"))).status).toBe(404);
+    const kept = (await body(await post(bookkeeperCookie, { ...command, idempotencyKey: key("http"), supplierInvoiceNumber: "HTTP-5" })))
+      .bill as Bill;
+    expect((await patch(outsiderCookie, kept.id, { dueDate: "2026-07-01" })).status).toBe(404);
+    expect((await remove(outsiderCookie, kept.id)).status).toBe(404);
+    expect((await approveOver(bookkeeperCookie, kept.id, key("http-approve"))).status).toBe(201);
+    expect((await voidOver(outsiderCookie, kept.id, key("x"), "2026-06-20")).status).toBe(404);
+    expect((await body(await get(viewerCookie, kept.id))).bill).toMatchObject({ status: "approved", dueDate: "2026-06-30" });
     expect((await billsRoute.GET(apiRequest(`/api/bills?organisationId=${ORG}`), noContext)).status).toBe(401);
   });
 
