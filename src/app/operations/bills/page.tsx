@@ -6,6 +6,7 @@ import { useState } from "react";
 import { BillStatusBadge } from "@/components/bills/bill-editor";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { BillStatus, BillSummary } from "@/lib/bills/service";
@@ -14,18 +15,20 @@ import { formatDate } from "@/lib/format";
 
 type BillPage = { bills: BillSummary[]; nextBeforeId: string | null };
 
-type Filter = { label: string; status: BillStatus | null; empty: string };
+type Filter = { label: string; status: BillStatus | null; awaitingPayment: boolean; empty: string };
 
 const FILTERS: Filter[] = [
-  { label: "All", status: null, empty: "No bills yet." },
-  { label: "Drafts", status: "draft", empty: "No draft bills." },
-  { label: "Approved", status: "approved", empty: "No approved bills." },
-  { label: "Voided", status: "voided", empty: "No voided bills." },
+  { label: "All", status: null, awaitingPayment: false, empty: "No bills yet." },
+  { label: "Drafts", status: "draft", awaitingPayment: false, empty: "No draft bills." },
+  { label: "Approved", status: "approved", awaitingPayment: false, empty: "No approved bills." },
+  { label: "Awaiting payment", status: null, awaitingPayment: true, empty: "No approved bills are awaiting payment." },
+  { label: "Voided", status: "voided", awaitingPayment: false, empty: "No voided bills." },
 ];
 
 function BillList({ organisationId, filter }: { organisationId: string; filter: Filter }) {
   const { status } = filter;
-  const list = useApiData<BillPage>("/api/bills", { organisationId, status });
+  const awaitingPayment = filter.awaitingPayment ? "true" : null;
+  const list = useApiData<BillPage>("/api/bills", { organisationId, status, awaitingPayment });
   const [more, setMore] = useState<BillPage | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
 
@@ -35,7 +38,9 @@ function BillList({ organisationId, filter }: { organisationId: string; filter: 
   async function loadMore() {
     if (!nextBeforeId) return;
     try {
-      const page = await api<BillPage>("/api/bills", { query: { organisationId, status, beforeId: nextBeforeId } });
+      const page = await api<BillPage>("/api/bills", {
+        query: { organisationId, status, awaitingPayment, beforeId: nextBeforeId },
+      });
       setMore((current) => ({ bills: [...(current?.bills ?? []), ...page.bills], nextBeforeId: page.nextBeforeId }));
     } catch (caught) {
       setMoreError(errorMessage(caught));
@@ -63,7 +68,9 @@ function BillList({ organisationId, filter }: { organisationId: string; filter: 
               <th>Date</th>
               <th>Due</th>
               <th>Status</th>
+              <th>Payment</th>
               <th className={ui.num}>Total</th>
+              <th className={ui.num}>Amount due</th>
             </tr>
           </thead>
           <tbody>
@@ -78,9 +85,11 @@ function BillList({ organisationId, filter }: { organisationId: string; filter: 
                 <td>
                   <BillStatusBadge status={bill.status} />
                 </td>
+                <td>{bill.paidStatus ? <PaidStatusBadge status={bill.paidStatus} /> : null}</td>
                 <td className={ui.num}>
                   <Money value={bill.total} />
                 </td>
+                <td className={ui.num}>{bill.amountDue !== null ? <Money value={bill.amountDue} /> : null}</td>
               </tr>
             ))}
           </tbody>
@@ -104,7 +113,7 @@ function Bills({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Bills"
-      description="Newest first. Drafts post nothing; approving posts the bill to accounts payable on its bill date. Paying bills isn't built yet."
+      description="Newest first. Drafts post nothing; approving posts the bill to accounts payable on its bill date. Amount due is the total less the bill's payments."
       actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/bills/new")}>New bill</Button> : null}
     >
       <div className={ui.tabs} role="tablist" aria-label="Bill status">

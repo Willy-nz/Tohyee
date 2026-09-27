@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { BillStatusBadge } from "@/components/bills/bill-editor";
+import { BillPayments } from "@/components/bills/bill-payments";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { formatRate, formatUnitPrice } from "@/components/invoices/invoice-editor";
+import { formatRate, formatUnitPrice, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { Bill } from "@/lib/bills/service";
@@ -90,6 +91,8 @@ function BillActions({
   if (bill.status === "voided") {
     return null;
   }
+  // Example SP5: a bill with active payments is voided after its payments.
+  const hasPayments = bill.status === "approved" && bill.paidStatus !== "unpaid";
   return (
     <Card
       title={bill.status === "draft" ? "Draft" : "Void"}
@@ -100,6 +103,9 @@ function BillActions({
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {hasPayments ? (
+        <Notice tone="info">This bill has payments against it. Void its payments first, then void the bill.</Notice>
+      ) : null}
       {bill.status === "draft" ? (
         <div className={ui.actions}>
           <Button onClick={approve} disabled={busy}>
@@ -123,7 +129,7 @@ function BillActions({
               required
             />
           </Field>
-          <Button variant="danger" onClick={voidBill} disabled={busy || !voidDate}>
+          <Button variant="danger" onClick={voidBill} disabled={busy || !voidDate || hasPayments}>
             {busy ? "Working…" : "Void bill"}
           </Button>
         </div>
@@ -160,7 +166,12 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
       <Card
         title={`Bill ${bill.supplierInvoiceNumber}`}
         description={`From ${bill.contactName} · ${AMOUNTS_MODE_LABELS[bill.amountsMode]} · ${bill.currencyCode}`}
-        actions={<BillStatusBadge status={bill.status} />}
+        actions={
+          <>
+            <BillStatusBadge status={bill.status} />
+            {bill.paidStatus ? <PaidStatusBadge status={bill.paidStatus} /> : null}
+          </>
+        }
       >
         <div className={ui.grid4}>
           <Stat label="Bill date" value={formatDate(bill.billDate)} />
@@ -218,6 +229,12 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           <Stat label={hasTax ? "Subtotal (excl. GST)" : "Subtotal"} value={<Money value={bill.subtotal} />} />
           {hasTax ? <Stat label="GST" value={<Money value={bill.taxTotal} />} /> : null}
           <Stat label={`Total (${bill.currencyCode})`} value={<Money value={bill.total} />} />
+          {bill.status === "approved" ? (
+            <>
+              <Stat label="Paid" value={<Money value={bill.amountPaid} />} />
+              <Stat label="Amount due" value={<Money value={bill.amountDue} />} />
+            </>
+          ) : null}
         </div>
         <p className={ui.muted}>
           Bill #{bill.id}, saved by {bill.createdByEmail ?? "unknown"} on {formatDateTime(bill.createdAt)}.
@@ -237,6 +254,16 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           ) : null}
         </p>
       </Card>
+      {bill.status !== "draft" ? (
+        <BillPayments
+          organisationId={organisationId}
+          bill={bill}
+          onChanged={(next, text) => {
+            setUpdated(next);
+            setMessage(text);
+          }}
+        />
+      ) : null}
       {can("bookkeeper") ? (
         <BillActions
           key={bill.status}

@@ -6,7 +6,13 @@ import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { AMOUNTS_MODES, calculateInvoice, type AmountsMode } from "@/lib/invoices/amounts";
+import {
+  AMOUNTS_MODES,
+  calculateInvoice,
+  invoicePaymentStatus,
+  type AmountsMode,
+  type PaidStatus,
+} from "@/lib/invoices/amounts";
 import { controlAccountCode, GST_ACCOUNT, type ControlAccount } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
@@ -23,6 +29,7 @@ import {
 } from "@/lib/money/decimal";
 import {
   asRecord,
+  optionalBoolean,
   optionalId,
   optionalSource,
   optionalString,
@@ -40,7 +47,7 @@ import {
  * only be voided, which posts the exact reversal. The amounts are worked out
  * the same way as invoices, in `@/lib/invoices/amounts` (examples B1-B4). A
  * bill is known by its supplier's own invoice number; Tohyee doesn't number
- * bills itself.
+ * bills itself. Payments against approved bills are in `@/lib/bills/payments`.
  */
 export const BILL_STATUSES = ["draft", "approved", "voided"] as const;
 export type BillStatus = (typeof BILL_STATUSES)[number];
@@ -76,6 +83,12 @@ export type BillSummary = {
   subtotal: string;
   taxTotal: string;
   total: string;
+  /** The sum of the bill's active payments (examples SP1-SP4). */
+  amountPaid: string;
+  /** What's still to be paid on an approved bill; null for drafts and voided bills. */
+  amountDue: string | null;
+  /** Worked out from the bill's active payments; null for drafts and voided bills. */
+  paidStatus: PaidStatus | null;
   approvalJournalId: string | null;
   approvedAt: string | null;
   approvedByEmail: string | null;
@@ -117,6 +130,7 @@ type BillRow = {
   subtotal: string;
   tax_total: string;
   total: string;
+  amount_paid: string;
   approval_journal_id: string | null;
   approved_at: string | null;
   approved_by_email: string | null;
@@ -131,10 +145,17 @@ type BillRow = {
 
 const SUMMARY_COLUMNS = `b.id, b.status, b.contact_id, c.name as contact_name, b.bill_date, b.due_date,
   b.supplier_invoice_number, b.amounts_mode, b.currency_code, b.subtotal, b.tax_total, b.total,
-  b.approval_journal_id, b.approved_at, b.approved_by_email, b.void_date, b.void_journal_id, b.voided_at,
+  paid.amount_paid, b.approval_journal_id, b.approved_at, b.approved_by_email, b.void_date, b.void_journal_id, b.voided_at,
   b.voided_by_email, b.created_by_email, b.created_at, b.updated_at`;
 
-const SUMMARY_FROM = "bills b join contacts c on c.id = b.contact_id";
+/** Bills with their supplier and the sum of their active payments. */
+const SUMMARY_FROM = `bills b
+  join contacts c on c.id = b.contact_id
+  cross join lateral (
+    select coalesce(sum(p.amount), 0) as amount_paid
+      from supplier_payments p
+     where p.bill_id = b.id and p.status = 'active'
+  ) paid`;
 
 type LineRow = {
   line_order: number;
@@ -153,6 +174,8 @@ type LineRow = {
 };
 
 function toSummary(row: BillRow): BillSummary {
+  const payment = invoicePaymentStatus(row.total, row.amount_paid, currencyMinorUnits(row.currency_code));
+  const approved = row.status === "approved";
   return {
     id: row.id,
     status: row.status,
@@ -166,6 +189,9 @@ function toSummary(row: BillRow): BillSummary {
     subtotal: row.subtotal,
     taxTotal: row.tax_total,
     total: row.total,
+    amountPaid: payment.amountPaid,
+    amountDue: approved ? payment.amountDue : null,
+    paidStatus: approved ? payment.paidStatus : null,
     approvalJournalId: row.approval_journal_id,
     approvedAt: row.approved_at,
     approvedByEmail: row.approved_by_email,
@@ -635,22 +661,27 @@ function assertDraft(bill: Bill, action: "edited" | "deleted"): void {
   }
 }
 
-/** Newest first, 50 at a time; `status` filters and `beforeId` pages. */
+/**
+ * Newest first, 50 at a time; `status` filters, `awaitingPayment` keeps only
+ * approved bills with something still due, and `beforeId` pages.
+ */
 export async function listBills(
   tx: OrgTx,
-  filters: { status?: unknown; beforeId?: unknown; limit?: unknown } = {},
+  filters: { status?: unknown; awaitingPayment?: unknown; beforeId?: unknown; limit?: unknown } = {},
 ): Promise<{ bills: BillSummary[]; nextBeforeId: string | null }> {
   const status =
     filters.status == null || filters.status === "" ? null : requireOneOf(filters.status, "status", BILL_STATUSES);
+  const awaitingPayment = optionalBoolean(filters.awaitingPayment, "awaitingPayment") ?? false;
   const beforeId = optionalId(filters.beforeId, "beforeId");
   const limitRaw = Number(filters.limit ?? 50);
   const limit = Number.isInteger(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : 50;
   const result = await tx.query<BillRow>(
     `select ${SUMMARY_COLUMNS} from ${SUMMARY_FROM}
       where ($1::text is null or b.status = $1) and ($2::bigint is null or b.id < $2)
+        and (not $3::boolean or (b.status = 'approved' and paid.amount_paid < b.total))
       order by b.id desc
       limit ${limit + 1}`,
-    [status, beforeId],
+    [status, beforeId, awaitingPayment],
   );
   const rows = result.rows.slice(0, limit);
   return {
@@ -817,6 +848,11 @@ export async function deleteBill(tx: OrgTx, billIdInput: unknown): Promise<void>
 
 const PAYABLE_ACCOUNT: ControlAccount = { systemKey: "accounts_payable", label: "accounts payable", accountClass: "liability" };
 
+/** The accounts payable account that supplier payments are debited to. */
+export async function payableAccountCode(tx: OrgTx): Promise<string> {
+  return controlAccountCode(tx, PAYABLE_ACCOUNT, "payments can't be recorded");
+}
+
 async function billControlAccounts(tx: OrgTx): Promise<{ payable: string; gst: string }> {
   const refused = "bills can't be approved";
   return {
@@ -948,8 +984,9 @@ export async function approveBill(
 /**
  * Voids an approved bill (example B6): posts the exact reversal of its
  * journal on the void date, which must be in an open period and not before
- * the bill date. A bill can only be voided once, and a draft is deleted
- * rather than voided.
+ * the bill date. A bill can only be voided once, a draft is deleted rather
+ * than voided, and a bill with active payments is refused until they're
+ * voided (example SP5).
  */
 export async function voidBill(
   tx: OrgTx,
@@ -984,6 +1021,12 @@ export async function voidBill(
   }
   if (current.status === "voided") {
     throw new ConflictError(`${billLabel(current)} has already been voided.`);
+  }
+  if (!isZero(dec(current.amountPaid))) {
+    // Example SP5. The database refuses it too.
+    throw new ConflictError(
+      `${billLabel(current)} has payments against it, so it can't be voided. Void its payments first.`,
+    );
   }
   if (voidDate < current.billDate) {
     throw new ValidationError(`The void date can't be before the bill date (${current.billDate}).`);

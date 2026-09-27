@@ -34,7 +34,8 @@ export type JournalOrigin =
   | "fx_revaluation"
   | "invoice"
   | "customer_payment"
-  | "bill";
+  | "bill"
+  | "supplier_payment";
 export type CorrectionKind = "reversal" | "replacement";
 
 export type JournalLine = {
@@ -413,7 +414,7 @@ export async function listJournals(
   }
   const referenceQuery = optionalString(filters.referenceQuery, "referenceQuery", { maxLength: 100 });
   const kind = optionalString(filters.kind, "kind", { maxLength: 20 });
-  const origins = ["manual", "inventory", "fx_revaluation", "invoice", "customer_payment", "bill"];
+  const origins = ["manual", "inventory", "fx_revaluation", "invoice", "customer_payment", "bill", "supplier_payment"];
   const validKinds = ["primary", "reversal", "replacement", ...origins];
   if (kind && !validKinds.includes(kind)) {
     throw new ValidationError(`kind must be one of: ${validKinds.join(", ")}.`);
@@ -488,7 +489,8 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
     journal.origin !== "fx_revaluation" &&
     journal.origin !== "invoice" &&
     journal.origin !== "customer_payment" &&
-    journal.origin !== "bill"
+    journal.origin !== "bill" &&
+    journal.origin !== "supplier_payment"
   );
 }
 
@@ -496,9 +498,9 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
  * Corrects a posted journal without editing it: posts a reversal of the
  * original and a replacement, both dated `postingDate` (which must be in an
  * open period). A replacement can itself be corrected later. Journals created
- * by stock movements, FX revaluations, sales invoices, customer payments or
- * bills must be corrected at their source, so those records and the ledger
- * stay in step.
+ * by stock movements, FX revaluations, sales invoices, customer payments,
+ * bills or supplier payments must be corrected at their source, so those
+ * records and the ledger stay in step.
  */
 export async function correctJournal(
   tx: OrgTx,
@@ -540,6 +542,11 @@ export async function correctJournal(
   if (original.origin === "bill") {
     throw new ValidationError(
       `Journal #${original.id} was posted by a bill (${original.reference}), so it can't be corrected in the ledger. To cancel an approved bill, void it.`,
+    );
+  }
+  if (original.origin === "supplier_payment") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a supplier payment (${original.reference}), so it can't be corrected in the ledger. To undo a payment, void it from its bill.`,
     );
   }
   if (original.correctionKind === "reversal") {
