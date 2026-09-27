@@ -104,6 +104,21 @@ PostgreSQL database. CI runs all four checks on pull requests and pushes to
 
 ## Running on a server
 
+**Windows:** download `tohyee-v<version>-windows.zip` from the
+[latest release](https://github.com/Willy-nz/Tohyee/releases/latest), install
+[Docker Desktop](https://www.docker.com/products/docker-desktop/), extract the
+zip and double-click `Install-Tohyee.cmd`. It creates random passwords, starts
+Tohyee and PostgreSQL, and opens first-time setup. Both restart by themselves
+whenever Docker Desktop starts (after a restart, once you sign in). The zip's
+`README.txt` covers backups, updates and network access; the files are in
+[`deploy/windows`](deploy/windows).
+
+**Docker:** the image is `ghcr.io/willy-nz/tohyee:<version>`. It needs
+`DATABASE_URL` (a PostgreSQL 15+ login that can create databases) and, for the
+first run, `SETUP_TOKEN`; it listens on port 3000.
+
+**Linux without Docker:**
+
 ```bash
 npm run build
 npm run package:release           # dist/release/tohyee-v<version>-linux-x64.tar.gz
