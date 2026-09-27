@@ -18,6 +18,23 @@ import type { Actor } from "@/lib/db/org-transaction";
 import { listPayments, recordPayment, voidPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, deleteInvoice, updateInvoice, voidInvoice } from "@/lib/invoices/service";
 import { postJournal } from "@/lib/ledger/journals";
+import {
+  applySupplierCreditNote,
+  listSupplierCreditNoteApplications,
+  removeSupplierCreditNoteApplication,
+} from "@/lib/supplier-credit-notes/applications";
+import {
+  listSupplierCreditNoteRefunds,
+  refundSupplierCreditNote,
+  voidSupplierCreditNoteRefund,
+} from "@/lib/supplier-credit-notes/refunds";
+import {
+  approveSupplierCreditNote,
+  createSupplierCreditNote,
+  deleteSupplierCreditNote,
+  updateSupplierCreditNote,
+  voidSupplierCreditNote,
+} from "@/lib/supplier-credit-notes/service";
 import { createTaxCode } from "@/lib/tax/codes";
 import {
   createTestLogin,
@@ -254,6 +271,62 @@ describeWithDatabase("separate admin and runtime logins (DATABASE_ADMIN_URL)", (
       };
     });
     expect(result.voided).toMatchObject({ status: "voided", creditNoteNumber: "CN-0001", total: "30.00" });
+    expect(result.applications.map((entry) => entry.status)).toEqual(["removed"]);
+    expect(result.refunds.map((entry) => entry.status)).toEqual(["voided"]);
+  });
+
+  it("supplier credit notes can be drafted, approved, applied, refunded and voided as the runtime login", async () => {
+    const result = await inOrganisation(ORG, actor, async (tx) => {
+      const { contact } = await createContact(tx, { idempotencyKey: key("c"), name: "Crediting Supplier", isSupplier: true });
+      const { bill: savedBill } = await createBill(tx, {
+        idempotencyKey: key("b"),
+        contactId: contact.id,
+        billDate: "2026-06-15",
+        dueDate: "2026-07-15",
+        supplierInvoiceNumber: "S-1",
+        amountsMode: "no_tax",
+        lines: [{ description: "Accounting", quantity: "1", unitPrice: "80", accountCode: "6010" }],
+      });
+      const { bill } = await approveBill(tx, savedBill.id, { idempotencyKey: key("a") });
+      const draft = () =>
+        createSupplierCreditNote(tx, {
+          idempotencyKey: key("scn"),
+          contactId: contact.id,
+          creditNoteDate: "2026-06-16",
+          supplierCreditNoteNumber: "SC-1",
+          amountsMode: "no_tax",
+          lines: [{ description: "Discount", quantity: "1", unitPrice: "20", accountCode: "6010" }],
+        });
+      await deleteSupplierCreditNote(tx, (await draft()).creditNote.id);
+      const { creditNote: saved } = await draft();
+      await updateSupplierCreditNote(tx, saved.id, {
+        lines: [{ description: "Discount", quantity: "1", unitPrice: "30", accountCode: "6010" }],
+      });
+      await approveSupplierCreditNote(tx, saved.id, { idempotencyKey: key("sca") });
+      const applied = await applySupplierCreditNote(tx, saved.id, {
+        idempotencyKey: key("sap"),
+        applicationDate: "2026-06-17",
+        applications: [{ billId: bill.id, amount: "20.00" }],
+      });
+      await removeSupplierCreditNoteApplication(tx, saved.id, applied.applications[0].id, {
+        idempotencyKey: key("srm"),
+        removalDate: "2026-06-18",
+      });
+      const { refund } = await refundSupplierCreditNote(tx, saved.id, {
+        idempotencyKey: key("srf"),
+        refundDate: "2026-06-18",
+        amount: "30.00",
+        bankAccountCode: "1000",
+      });
+      await voidSupplierCreditNoteRefund(tx, saved.id, refund.id, { idempotencyKey: key("svr"), voidDate: "2026-06-19" });
+      const voided = await voidSupplierCreditNote(tx, saved.id, { idempotencyKey: key("svc"), voidDate: "2026-06-20" });
+      return {
+        voided: voided.creditNote,
+        applications: await listSupplierCreditNoteApplications(tx, saved.id),
+        refunds: await listSupplierCreditNoteRefunds(tx, saved.id),
+      };
+    });
+    expect(result.voided).toMatchObject({ status: "voided", supplierCreditNoteNumber: "SC-1", total: "30.00" });
     expect(result.applications.map((entry) => entry.status)).toEqual(["removed"]);
     expect(result.refunds.map((entry) => entry.status)).toEqual(["voided"]);
   });

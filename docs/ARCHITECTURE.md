@@ -37,6 +37,9 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ sales_credit_notes, sales_credit_note_lines, sales_credit_note_numbering
 ├─ sales_credit_note_applications   credit applied to sales invoices
 ├─ sales_credit_note_refunds        credit paid back to customers
+├─ supplier_credit_notes, supplier_credit_note_lines
+├─ supplier_credit_note_applications   credit applied to bills
+├─ supplier_credit_note_refunds        credit paid back by suppliers
 └─ audit_events
 ```
 
@@ -150,8 +153,8 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments and reports |
-| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments; save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments |
+| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds) and reports |
+| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments; save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds |
 | admin | + chart of accounts, tax codes, period locks, settings, people |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -190,8 +193,8 @@ Enforced by the database itself, not just the app:
   included) with the same supplier invoice number, compared ignoring case and
   spaces.
 - Supplier payments: a payment is recorded against an approved bill, in the
-  bill's currency and dated on or after it, and a bill's active payments can't
-  add up to more than its total. Payments can't be edited, deleted or
+  bill's currency and dated on or after it, and a bill's active payments plus
+  active credit applied can't add up to more than its total. Payments can't be edited, deleted or
   truncated; the only change allowed is voiding one, once, which fills in its
   void details. A bill with active payments can't be voided.
 - Sales credit notes: only drafts can be changed or deleted, and a draft can't
@@ -210,6 +213,18 @@ Enforced by the database itself, not just the app:
   active applications plus active refunds can't add up to more than its total.
   An invoice with active credit applied, or a credit note with active
   applications or refunds, can't be voided.
+- Supplier credit notes work the same way on the bills side: only drafts can
+  be changed or deleted, an approved one can only become voided, lines of
+  approved and voided ones are frozen, and none of their tables can be
+  truncated. There's no Tohyee number; a unique index stops a supplier having
+  two supplier credit notes that aren't voided (drafts included) with the same
+  supplier's credit note number, compared ignoring case and spaces.
+  Applications need an approved supplier credit note and an approved bill of
+  the same supplier and currency, dated on or after both, and can only be
+  removed once; refunds can only be voided once. For every supplier credit
+  note, active applications plus active refunds can't add up to more than its
+  total. A bill with active credit applied, or a supplier credit note with
+  active applications or refunds, can't be voided.
 
 Enforced by the app (and covered by tests):
 
@@ -223,9 +238,10 @@ Enforced by the app (and covered by tests):
   different content is refused (409). The key check happens before anything
   is recalculated, so retries still work after a period is locked.
 - Journals made by stock movements, FX revaluations, sales invoices,
-  customer payments, sales credit notes, credit note refunds, bills or
-  supplier payments can't be corrected in the ledger; they are corrected at
-  their source (an invoice, payment, credit note, refund or bill is voided) so
+  customer payments, sales credit notes, credit note refunds, bills,
+  supplier payments, supplier credit notes or supplier credit note refunds
+  can't be corrected in the ledger; they are corrected at their source (an
+  invoice, payment, credit note, refund or bill is voided) so
   the sub-ledgers stay in step.
 - Sales invoices post to the accounts marked "Used by Tohyee" for accounts
   receivable and GST (1100 and 2100 in the starting chart), so those can't be
@@ -256,7 +272,14 @@ Enforced by the app (and covered by tests):
 - Supplier payments debit the accounts payable account above and credit an
   active, base-currency account of type `bank`. A bill's amount paid, amount
   due and paid status (`unpaid`, `part_paid`, `paid`) are worked out from its
-  active payments whenever it's read; they are never stored.
+  active payments and active credit applied whenever it's read; they are
+  never stored.
+- Supplier credit notes use the bill line rules and maths and post the mirror
+  of a bill (Dr accounts payable / Cr the line accounts and GST). Applying
+  credit to bills posts no journal, but period locks still apply to its date
+  and its removal date. Refunds received debit an active, base-currency
+  account of type `bank` and credit accounts payable. Remaining credit and
+  credit status are worked out whenever they're read; they are never stored.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 

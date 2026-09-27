@@ -277,7 +277,7 @@ export async function applySupplierCreditNote(
   }
   if (cmp(total, dec(creditNote.remainingCredit!)) > 0) {
     throw new ValidationError(
-      `The credit applied (${toFixedString(total, scale)}) is more than ${supplierCreditNoteLabel(creditNote)}'s remaining credit (${creditNote.remainingCredit}).`,
+      `The credit applied (${toFixedString(total, scale)}) is more than the remaining credit on ${supplierCreditNoteLabel(creditNote)} (${creditNote.remainingCredit}).`,
     );
   }
   await assertPostingDateAllowed(tx, applicationDate);
