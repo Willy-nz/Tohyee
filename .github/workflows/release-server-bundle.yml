@@ -1,5 +1,10 @@
 name: Release server bundle
 
+# Pushing a v* tag (matching package.json's version) publishes a release with:
+# - tohyee-v<version>-windows.zip: Docker Desktop installer for Windows
+# - tohyee-v<version>-linux-x64.tar.gz: the plain Node.js bundle
+# and the Docker image ghcr.io/willy-nz/tohyee:<version> (and :latest).
+
 on:
   push:
     tags:
@@ -7,18 +12,19 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4.4.0
+        uses: actions/setup-node@v7.0.0
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -31,12 +37,41 @@ jobs:
             echo "Tag ${GITHUB_REF_NAME} does not match package version ${expected_tag}."
             exit 1
           fi
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Build production app
         run: npm run build
 
-      - name: Package release bundle
+      - name: Package Linux bundle
         run: npm run package:release
+
+      - name: Package Windows installer
+        run: node scripts/package-windows.mjs
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/willy-nz/tohyee:${{ env.VERSION }}
+            ghcr.io/willy-nz/tohyee:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/Willy-nz/Tohyee
+            org.opencontainers.image.description=Tohyee: self-hosted, open-source accounting for New Zealand organisations
+            org.opencontainers.image.licenses=AGPL-3.0-only
+            org.opencontainers.image.version=${{ env.VERSION }}
 
       - name: Ensure release exists
         env:
@@ -45,10 +80,7 @@ jobs:
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
             gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes
 
-      - name: Attach bundle to release
-        uses: softprops/action-gh-release@v2.3.3
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            dist/release/*.tar.gz
-            dist/release/*.sha256
+      - name: Attach files to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/release/*.zip dist/release/*.tar.gz dist/release/*.sha256 --clobber

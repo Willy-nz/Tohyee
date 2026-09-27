@@ -66,3 +66,31 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  docker:
+    name: Docker image and Windows installer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Build the Docker image (not pushed)
+        run: docker build --tag tohyee:ci .
+
+      - name: Start it with PostgreSQL and check it answers
+        run: |
+          docker network create tohyee-ci
+          docker run -d --name ci-postgres --network tohyee-ci \
+            -e POSTGRES_USER=tohyee -e POSTGRES_PASSWORD=ci-password -e POSTGRES_DB=tohyee postgres:17
+          for i in $(seq 1 30); do docker exec ci-postgres pg_isready -U tohyee -d tohyee && break; sleep 2; done
+          docker run -d --name ci-tohyee --network tohyee-ci -p 3000:3000 \
+            -e DATABASE_URL=postgresql://tohyee:ci-password@ci-postgres:5432/tohyee tohyee:ci
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/api/health; then echo; exit 0; fi
+            sleep 2
+          done
+          docker logs ci-tohyee
+          exit 1
+
+      - name: Package the Windows installer
+        run: node scripts/package-windows.mjs

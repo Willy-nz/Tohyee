@@ -1,0 +1,43 @@
+# Tohyee on Windows with Docker Desktop.
+# Don't run this directly: Install-Tohyee.cmd creates the .env file it needs
+# (random database password and setup token) and starts it.
+#
+# "restart: unless-stopped" brings Tohyee and its database back up whenever
+# Docker Desktop starts, e.g. after the computer restarts and you sign in.
+
+name: tohyee
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tohyee
+      POSTGRES_USER: tohyee
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run Install-Tohyee.cmd first}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tohyee -d tohyee"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  tohyee:
+    image: ghcr.io/willy-nz/tohyee:${TOHYEE_VERSION:?Run Install-Tohyee.cmd first}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://tohyee:${POSTGRES_PASSWORD}@postgres:5432/tohyee
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
+      TOHYEE_TIME_ZONE: Pacific/Auckland
+    ports:
+      # Only this computer can open Tohyee. To let other computers on your
+      # network use it, set TOHYEE_LISTEN=0.0.0.0 in .env and run
+      # Install-Tohyee.cmd again.
+      - "${TOHYEE_LISTEN:-127.0.0.1}:${TOHYEE_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:
