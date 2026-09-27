@@ -38,6 +38,7 @@ import {
   startTestServer,
   testDatabaseUrl,
   type TestServer,
+  waitForLockWaiters,
   withDb,
 } from "../helpers/test-server";
 
@@ -429,6 +430,55 @@ describeWithDatabase("sales invoices", () => {
     } finally {
       await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
     }
+  });
+
+  it("I7, I9: approvals and voids at the same moment take turns: a retry queued behind the first returns it; numbers stay gap-free", async () => {
+    const drafted = await draft();
+    const approveKey = key("approve");
+    const [left, right] = [await draft(), await draft()];
+    const journalsBefore = await journalCount();
+
+    // Hold the invoice's lock so both copies of the request pass the first key check and queue behind it.
+    const copies = await asUser(owner, async (tx) => {
+      await tx.query("select id from sales_invoices where id = $1 for update", [drafted.id]);
+      const queued = [approve(drafted.id, approveKey), approve(drafted.id, approveKey)];
+      await waitForLockWaiters(tx, 2);
+      return queued;
+    });
+    const results = await Promise.all(copies);
+    expect(results.map((result) => result.created).sort()).toEqual([false, true]);
+    expect(results[1].invoice).toMatchObject({
+      status: "approved",
+      invoiceNumber: results[0].invoice.invoiceNumber,
+      approvalJournalId: results[0].invoice.approvalJournalId,
+    });
+    expect(await journalCount()).toBe(journalsBefore + 1);
+
+    // Two invoices queued behind the number counter get the next two numbers.
+    const pair = await asUser(owner, async (tx) => {
+      await tx.query("select last_number from sales_invoice_numbering where id = true for update");
+      const queued = [approve(left.id), approve(right.id)];
+      await waitForLockWaiters(tx, 2);
+      return queued;
+    });
+    const numbers = (await Promise.all(pair)).map(({ invoice }) => sequenceOf(invoice)).sort((a, b) => a - b);
+    const first = sequenceOf(results[0].invoice);
+    expect(numbers).toEqual([first + 1, first + 2]);
+    expect(await journalCount()).toBe(journalsBefore + 3);
+
+    // Two copies of a void queued behind the invoice's lock void it once.
+    const voidKey = key("void");
+    const voids = await asUser(owner, async (tx) => {
+      await tx.query("select id from sales_invoices where id = $1 for update", [left.id]);
+      const queued = [voidIt(left.id, "2026-06-15", voidKey), voidIt(left.id, "2026-06-15", voidKey)];
+      await waitForLockWaiters(tx, 2);
+      return queued;
+    });
+    const voided = await Promise.all(voids);
+    expect(voided.map((result) => result.created).sort()).toEqual([false, true]);
+    expect(voided[0].invoice.voidJournalId).toEqual(expect.any(String));
+    expect(voided[1].invoice).toMatchObject({ status: "voided", voidJournalId: voided[0].invoice.voidJournalId });
+    expect(await journalCount()).toBe(journalsBefore + 4);
   });
 
   it("numbers are per organisation and run INV-0001, INV-0002, ... in approval order", async () => {
