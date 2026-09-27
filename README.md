@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Willy-nz/toeyee/actions/workflows/ci.yml"><img src="https://github.com/Willy-nz/toeyee/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/Willy-nz/Tohyee/actions/workflows/ci.yml"><img src="https://github.com/Willy-nz/Tohyee/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-AGPL--3.0-blue" alt="Licence: AGPL-3.0" /></a>
 </p>
 
@@ -100,13 +100,13 @@ Put it behind HTTPS (e.g. Caddy or nginx) if it's reachable beyond your own
 network.
 
 **Backups:** each organisation is a normal PostgreSQL database, so
-`pg_dump -Fc -d toeyee_org_<id>` backs one up. Back up the core database
-(`toeyee`) too. Built-in scheduled backups are on the roadmap.
+`pg_dump -Fc -d tohyee_org_<id>` backs one up. Back up the core database
+(`tohyee`) too. Built-in scheduled backups are on the roadmap.
 
 **Locked out?** The admin commands work straight against the database. They
 need a checkout of this repository (with `npm install` done) and
 `DATABASE_URL` pointing at the server's core database; the release bundle
-doesn't include them. The new password is read from `TOEYEE_PASSWORD` or asked
+doesn't include them. The new password is read from `TOHYEE_PASSWORD` or asked
 for when you run the command.
 
 ```bash

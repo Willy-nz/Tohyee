@@ -35,7 +35,7 @@ export function errorResponse(error: unknown): NextResponse {
     const message = error instanceof Error ? error.message : "The request was rejected by the database.";
     return json({ error: message, code: `db_${pgCode}` }, { status: CLIENT_PG_ERRORS[pgCode] });
   }
-  console.error("[toeyee] unexpected error:", error);
+  console.error("[tohyee] unexpected error:", error);
   return json({ error: "Something went wrong on the server. Check the server logs.", code: "internal_error" }, { status: 500 });
 }
 

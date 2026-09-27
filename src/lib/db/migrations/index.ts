@@ -13,7 +13,7 @@ export async function migrateCoreDatabase(): Promise<MigrationRunResult> {
   const databaseName = coreDatabaseName();
   const client = await connectAsAdmin(databaseName);
   try {
-    const result = await applyMigrations(client, coreMigrations, "toeyee:core-migrations");
+    const result = await applyMigrations(client, coreMigrations, "tohyee:core-migrations");
     await grantRuntimeAccess(client, databaseName);
     return result;
   } finally {
@@ -25,7 +25,7 @@ export async function migrateCoreDatabase(): Promise<MigrationRunResult> {
 export async function applyTenantMigrations(databaseName: string): Promise<MigrationRunResult> {
   const client = await connectAsAdmin(databaseName);
   try {
-    const result = await applyMigrations(client, tenantMigrations, "toeyee:tenant-migrations");
+    const result = await applyMigrations(client, tenantMigrations, "tohyee:tenant-migrations");
     await grantRuntimeAccess(client, databaseName);
     return result;
   } finally {

@@ -1,30 +1,30 @@
 services:
   postgres:
     image: postgres:17
-    container_name: toeyee-postgres
+    container_name: tohyee-postgres
     environment:
-      POSTGRES_DB: toeyee
+      POSTGRES_DB: tohyee
       POSTGRES_USER: app_user
       POSTGRES_PASSWORD: app_password
     ports:
       - "5432:5432"
     volumes:
-      - toeyee_postgres_data:/var/lib/postgresql/data
+      - tohyee_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app_user -d toeyee"]
+      test: ["CMD-SHELL", "pg_isready -U app_user -d tohyee"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7
-    container_name: toeyee-redis
+    container_name: tohyee-redis
     ports:
       - "6379:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - toeyee_redis_data:/data
+      - tohyee_redis_data:/data
 
 volumes:
-  toeyee_postgres_data:
-  toeyee_redis_data:
+  tohyee_postgres_data:
+  tohyee_redis_data:

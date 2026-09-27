@@ -65,6 +65,6 @@ let dummyHash: Promise<string> | null = null;
  * whether an email address has an account.
  */
 export async function verifyAgainstDummy(password: string): Promise<void> {
-  dummyHash ??= hashPassword("toeyee-dummy-password-for-timing");
+  dummyHash ??= hashPassword("tohyee-dummy-password-for-timing");
   await verifyPassword(password, await dummyHash);
 }

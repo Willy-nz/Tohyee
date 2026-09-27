@@ -4,7 +4,7 @@ import {
   getDatabaseUrl,
   withDatabaseName,
 } from "@/lib/db/connection";
-import { toeyeeTypes } from "@/lib/db/pg-types";
+import { tohyeeTypes } from "@/lib/db/pg-types";
 
 type OrganisationPoolEntry = {
   pool: pg.Pool;
@@ -19,18 +19,18 @@ type PoolRegistry = {
 
 // Kept on globalThis so dev-server hot reloads don't leak connection pools.
 const globalForPools = globalThis as typeof globalThis & {
-  __toeyeePools?: PoolRegistry;
+  __tohyeePools?: PoolRegistry;
 };
 
 function registry(): PoolRegistry {
-  if (!globalForPools.__toeyeePools) {
-    globalForPools.__toeyeePools = {
+  if (!globalForPools.__tohyeePools) {
+    globalForPools.__tohyeePools = {
       core: null,
       admin: null,
       organisations: new Map(),
     };
   }
-  return globalForPools.__toeyeePools;
+  return globalForPools.__tohyeePools;
 }
 
 function positiveInt(value: string | undefined, fallback: number): number {
@@ -44,11 +44,11 @@ function createPool(connectionString: string, max: number): pg.Pool {
     max,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
-    types: toeyeeTypes,
+    types: tohyeeTypes,
   });
   // An idle client dying (e.g. database restart) must not crash the server.
   pool.on("error", (error) => {
-    console.error("[toeyee] idle database connection error:", error.message);
+    console.error("[tohyee] idle database connection error:", error.message);
   });
   return pool;
 }
@@ -57,7 +57,7 @@ function createPool(connectionString: string, max: number): pg.Pool {
 export function getCorePool(): pg.Pool {
   const pools = registry();
   if (!pools.core) {
-    pools.core = createPool(getDatabaseUrl(), positiveInt(process.env.TOEYEE_CORE_POOL_SIZE, 10));
+    pools.core = createPool(getDatabaseUrl(), positiveInt(process.env.TOHYEE_CORE_POOL_SIZE, 10));
   }
   return pools.core;
 }
@@ -73,7 +73,7 @@ export function getAdminPool(): pg.Pool {
 
 /**
  * One small pool per organisation database. Least-recently-used pools are
- * closed when there are more than TOEYEE_MAX_ORG_POOLS open.
+ * closed when there are more than TOHYEE_MAX_ORG_POOLS open.
  */
 export function getOrganisationPool(databaseName: string): pg.Pool {
   const pools = registry();
@@ -85,11 +85,11 @@ export function getOrganisationPool(databaseName: string): pg.Pool {
 
   const pool = createPool(
     withDatabaseName(getDatabaseUrl(), databaseName),
-    positiveInt(process.env.TOEYEE_ORG_POOL_SIZE, 5),
+    positiveInt(process.env.TOHYEE_ORG_POOL_SIZE, 5),
   );
   pools.organisations.set(databaseName, { pool, lastUsedAt: Date.now() });
 
-  const maxPools = positiveInt(process.env.TOEYEE_MAX_ORG_POOLS, 25);
+  const maxPools = positiveInt(process.env.TOHYEE_MAX_ORG_POOLS, 25);
   if (pools.organisations.size > maxPools) {
     const [oldestName, oldest] = [...pools.organisations.entries()]
       .filter(([name]) => name !== databaseName)
@@ -115,7 +115,7 @@ export async function closeOrganisationPool(databaseName: string): Promise<void>
 export async function connectAsAdmin(databaseName: string): Promise<pg.Client> {
   const client = new pg.Client({
     connectionString: withDatabaseName(getAdminDatabaseUrl(), databaseName),
-    types: toeyeeTypes,
+    types: tohyeeTypes,
     connectionTimeoutMillis: 10_000,
   });
   await client.connect();

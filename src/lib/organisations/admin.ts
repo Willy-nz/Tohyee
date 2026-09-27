@@ -89,7 +89,7 @@ export async function createOrganisation(
   try {
     await provisionOrganisation(id);
   } catch (error) {
-    console.error(`[toeyee] provisioning ${id} failed:`, error);
+    console.error(`[tohyee] provisioning ${id} failed:`, error);
   }
 
   const organisation = await getOrganisation(id);

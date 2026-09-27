@@ -28,7 +28,7 @@ type Workspace = {
 };
 
 const WorkspaceContext = createContext<Workspace | null>(null);
-const STORAGE_KEY = "toeyee.currentOrganisation";
+const STORAGE_KEY = "tohyee.currentOrganisation";
 const listeners = new Set<() => void>();
 
 function readStoredOrganisation(): string | null {

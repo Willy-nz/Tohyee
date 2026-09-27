@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import pg from "pg";
 import { describe } from "vitest";
 import { hashPassword } from "@/lib/auth/password";
-import { createSession, type SessionUser } from "@/lib/auth/sessions";
+import { createSession, SESSION_COOKIE, type SessionUser } from "@/lib/auth/sessions";
 import { migrateCoreDatabase } from "@/lib/db/migrations";
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { closeAllPools } from "@/lib/db/pools";
@@ -83,13 +83,13 @@ export async function startTestServer(options: { separateRuntimeLogin?: boolean 
   if (!testDatabaseUrl) {
     throw new Error("TEST_DATABASE_URL is not set.");
   }
-  const coreDatabase = `toeyee_t_${randomBytes(4).toString("hex")}`;
+  const coreDatabase = `tohyee_t_${randomBytes(4).toString("hex")}`;
   const admin = new pg.Client({ connectionString: testDatabaseUrl });
   await admin.connect();
   await admin.query(`create database "${coreDatabase}"`);
   await admin.end();
 
-  const runtimeLogin = options.separateRuntimeLogin ? await createTestLogin("toeyee_rt") : null;
+  const runtimeLogin = options.separateRuntimeLogin ? await createTestLogin("tohyee_rt") : null;
   if (runtimeLogin) {
     process.env.DATABASE_ADMIN_URL = withDb(testDatabaseUrl, coreDatabase);
     process.env.DATABASE_URL = withLogin(
@@ -152,7 +152,7 @@ export async function sessionCookieFor(user: SessionUser): Promise<string> {
   const session = await withCoreTransaction((client) =>
     createSession(client, user.id, { userAgent: "vitest", ipAddress: null }),
   );
-  return `toeyee_session=${session.token}`;
+  return `${SESSION_COOKIE}=${session.token}`;
 }
 
 export async function createTestOrganisation(
@@ -198,9 +198,9 @@ export function apiRequest(
   const headers: Record<string, string> = {};
   if (options.cookie) headers.cookie = options.cookie;
   if (options.body !== undefined) headers["content-type"] = "application/json";
-  const origin = options.origin === undefined ? "http://toeyee.test" : options.origin;
+  const origin = options.origin === undefined ? "http://tohyee.test" : options.origin;
   if (origin) headers.origin = origin;
-  return new Request(`http://toeyee.test${path}`, {
+  return new Request(`http://tohyee.test${path}`, {
     method: options.method ?? "GET",
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),

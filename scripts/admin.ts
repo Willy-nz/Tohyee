@@ -5,7 +5,7 @@
  *   npm run admin -- create-user --email you@example.com --name "Your Name" --server-admin
  *   npm run admin -- set-password --email you@example.com
  *
- * Passwords are read from the TOEYEE_PASSWORD environment variable or asked
+ * Passwords are read from the TOHYEE_PASSWORD environment variable or asked
  * for interactively, so they don't end up in shell history.
  */
 import { createInterface } from "node:readline/promises";
@@ -21,8 +21,8 @@ function option(args: string[], name: string): string | null {
 }
 
 async function readPassword(): Promise<string> {
-  if (process.env.TOEYEE_PASSWORD) {
-    return process.env.TOEYEE_PASSWORD;
+  if (process.env.TOHYEE_PASSWORD) {
+    return process.env.TOHYEE_PASSWORD;
   }
   const rl = createInterface({ input: stdin, output: stdout });
   try {
