@@ -35,7 +35,9 @@ export type JournalOrigin =
   | "invoice"
   | "customer_payment"
   | "bill"
-  | "supplier_payment";
+  | "supplier_payment"
+  | "sales_credit_note"
+  | "sales_credit_note_refund";
 export type CorrectionKind = "reversal" | "replacement";
 
 export type JournalLine = {
@@ -413,8 +415,18 @@ export async function listJournals(
     throw new ValidationError("postingDateFrom must be on or before postingDateTo.");
   }
   const referenceQuery = optionalString(filters.referenceQuery, "referenceQuery", { maxLength: 100 });
-  const kind = optionalString(filters.kind, "kind", { maxLength: 20 });
-  const origins = ["manual", "inventory", "fx_revaluation", "invoice", "customer_payment", "bill", "supplier_payment"];
+  const kind = optionalString(filters.kind, "kind", { maxLength: 40 });
+  const origins = [
+    "manual",
+    "inventory",
+    "fx_revaluation",
+    "invoice",
+    "customer_payment",
+    "bill",
+    "supplier_payment",
+    "sales_credit_note",
+    "sales_credit_note_refund",
+  ];
   const validKinds = ["primary", "reversal", "replacement", ...origins];
   if (kind && !validKinds.includes(kind)) {
     throw new ValidationError(`kind must be one of: ${validKinds.join(", ")}.`);
@@ -490,7 +502,9 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
     journal.origin !== "invoice" &&
     journal.origin !== "customer_payment" &&
     journal.origin !== "bill" &&
-    journal.origin !== "supplier_payment"
+    journal.origin !== "supplier_payment" &&
+    journal.origin !== "sales_credit_note" &&
+    journal.origin !== "sales_credit_note_refund"
   );
 }
 
@@ -499,7 +513,8 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
  * original and a replacement, both dated `postingDate` (which must be in an
  * open period). A replacement can itself be corrected later. Journals created
  * by stock movements, FX revaluations, sales invoices, customer payments,
- * bills or supplier payments must be corrected at their source, so those
+ * bills, supplier payments, sales credit notes or credit note refunds must be
+ * corrected at their source, so those
  * records and the ledger stay in step.
  */
 export async function correctJournal(
@@ -547,6 +562,16 @@ export async function correctJournal(
   if (original.origin === "supplier_payment") {
     throw new ValidationError(
       `Journal #${original.id} was posted by a supplier payment (${original.reference}), so it can't be corrected in the ledger. To undo a payment, void it from its bill.`,
+    );
+  }
+  if (original.origin === "sales_credit_note") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a sales credit note (${original.reference}), so it can't be corrected in the ledger. To cancel an approved credit note, void it.`,
+    );
+  }
+  if (original.origin === "sales_credit_note_refund") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a credit note refund (${original.reference}), so it can't be corrected in the ledger. To undo a refund, void it from its credit note.`,
     );
   }
   if (original.correctionKind === "reversal") {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { calculateInvoice, type InvoiceLineInput, invoicePaymentStatus } from "@/lib/invoices/amounts";
+import {
+  calculateInvoice,
+  creditNoteCreditStatus,
+  type InvoiceLineInput,
+  invoicePaymentStatus,
+} from "@/lib/invoices/amounts";
 
 const GST_15 = "0.15";
 const ZERO_RATED = "0";
@@ -144,5 +149,53 @@ describe("invoice paid status (worked examples)", () => {
   it("works to the cent and in the currency's minor units", () => {
     expect(invoicePaymentStatus("11.49", "11.48", 2)).toEqual({ amountPaid: "11.48", amountDue: "0.01", paidStatus: "part_paid" });
     expect(invoicePaymentStatus("1156", "156", 0)).toEqual({ amountPaid: "156", amountDue: "1000", paidStatus: "part_paid" });
+  });
+});
+
+describe("credit note amounts (worked examples)", () => {
+  it("CN2: exclusive 1 x 20.00 at 15% -> net 20.00, GST 3.00, total 23.00", () => {
+    const result = calculateInvoice("exclusive", [line("1", "20.00")], 2);
+    expect(result).toMatchObject({ subtotal: "20.00", taxTotal: "3.00", total: "23.00" });
+  });
+
+  it("CN10: inclusive 1 x 15.00 at 15% -> GST 1.96, net 13.04, total 15.00 (same maths as invoices)", () => {
+    const result = calculateInvoice("inclusive", [line("1", "15.00")], 2);
+    expect(result.lines).toEqual([{ lineAmount: "15.00", netAmount: "13.04", taxAmount: "1.96" }]);
+    expect(result).toMatchObject({ subtotal: "13.04", taxTotal: "1.96", total: "15.00" });
+  });
+
+  it("CN2-CN4, CN7, CN8: remaining credit is the total less active applications and refunds", () => {
+    expect(creditNoteCreditStatus("23.00", "0", "0", 2)).toEqual({
+      amountApplied: "0.00",
+      amountRefunded: "0.00",
+      remainingCredit: "23.00",
+      creditStatus: "open",
+    });
+    expect(creditNoteCreditStatus("23.00", "23.00", "0", 2)).toMatchObject({ remainingCredit: "0.00", creditStatus: "used" });
+    expect(creditNoteCreditStatus("115.00", "100.00", "0", 2)).toMatchObject({
+      remainingCredit: "15.00",
+      creditStatus: "part_used",
+    });
+    expect(creditNoteCreditStatus("115.00", "100.00", "15.00", 2)).toEqual({
+      amountApplied: "100.00",
+      amountRefunded: "15.00",
+      remainingCredit: "0.00",
+      creditStatus: "used",
+    });
+  });
+});
+
+describe("invoice paid status with credit applied (worked examples)", () => {
+  it("CN3: 23.00 credited against a 115.00 invoice leaves 92.00 due, part paid", () => {
+    expect(invoicePaymentStatus("115.00", "0", 2, "23.00")).toEqual({
+      amountPaid: "0.00",
+      amountDue: "92.00",
+      paidStatus: "part_paid",
+    });
+  });
+
+  it("CN4, CN6: credit and payments together settle the invoice", () => {
+    expect(invoicePaymentStatus("80.00", "0", 2, "80.00")).toMatchObject({ amountDue: "0.00", paidStatus: "paid" });
+    expect(invoicePaymentStatus("115.00", "92.00", 2, "23.00")).toMatchObject({ amountDue: "0.00", paidStatus: "paid" });
   });
 });

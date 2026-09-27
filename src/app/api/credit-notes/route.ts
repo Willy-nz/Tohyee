@@ -1,18 +1,19 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
-import { createInvoice, listInvoices } from "@/lib/invoices/service";
+import { createCreditNote, listCreditNotes } from "@/lib/credit-notes/service";
 
 /**
  * GET: newest first, 50 at a time. Filters: status (draft|approved|voided),
- * awaitingPayment (true: approved invoices with something still due), contactId
- * (one customer's invoices), beforeId (next page), limit (max 200).
+ * contactId (one customer's credit notes), hasRemainingCredit (true: approved
+ * credit notes with credit left to apply or refund), beforeId (next page),
+ * limit (max 200).
  */
 export const GET = route(async (request) => {
   const params = searchParams(request);
   const result = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) =>
-    listInvoices(tx, {
+    listCreditNotes(tx, {
       status: params.get("status"),
-      awaitingPayment: params.get("awaitingPayment"),
       contactId: params.get("contactId"),
+      hasRemainingCredit: params.get("hasRemainingCredit"),
       beforeId: params.get("beforeId"),
       limit: params.get("limit"),
     }),
@@ -20,16 +21,15 @@ export const GET = route(async (request) => {
   return json(result);
 });
 
-/** Saves a draft invoice. Drafts post nothing until they're approved. */
+/** Saves a draft credit note. Drafts post nothing and have no number until they're approved. */
 export const POST = route(async (request) => {
   const body = await readJson(request);
   const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
-    createInvoice(tx, {
+    createCreditNote(tx, {
       source: body.source,
       idempotencyKey: body.idempotencyKey,
       contactId: body.contactId,
-      invoiceDate: body.invoiceDate,
-      dueDate: body.dueDate,
+      creditNoteDate: body.creditNoteDate,
       reference: body.reference,
       amountsMode: body.amountsMode,
       lines: body.lines,

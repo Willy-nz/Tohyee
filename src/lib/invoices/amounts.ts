@@ -14,7 +14,7 @@ import {
 
 // Browser-safe: the invoice editor uses this for its live totals, and the
 // server uses it again when saving and approving, and to work out what's
-// still due.
+// still due. Credit notes use the same line maths.
 
 export const AMOUNTS_MODES = ["exclusive", "inclusive", "no_tax"] as const;
 export type AmountsMode = (typeof AMOUNTS_MODES)[number];
@@ -108,17 +108,66 @@ export type InvoicePaymentStatus = {
 };
 
 /**
- * What's still due on an approved invoice, from its total and the sum of its
- * active (not voided) payments (worked examples CP1, CP2 and CP4): unpaid
- * while nothing is paid, part paid while something is still due, then paid.
- * Payments can't add up to more than the total, so nothing is ever overpaid.
+ * What's still due on an approved invoice, from its total, the sum of its
+ * active (not voided) payments and the sum of the credit applied to it from
+ * credit notes (worked examples CP1, CP2, CP4 and CN3): unpaid while nothing
+ * is paid or credited, part paid while something is still due, then paid.
+ * Payments and credit can't add up to more than the total, so nothing is ever
+ * overpaid.
  */
-export function invoicePaymentStatus(total: string, amountPaid: string, scale: number): InvoicePaymentStatus {
+export function invoicePaymentStatus(
+  total: string,
+  amountPaid: string,
+  scale: number,
+  amountCredited = "0",
+): InvoicePaymentStatus {
   const paid = dec(amountPaid);
-  const due = sub(dec(total), paid);
+  const credited = dec(amountCredited);
+  const settled = add(paid, credited);
+  const due = sub(dec(total), settled);
   return {
     amountPaid: toFixedString(paid, scale),
     amountDue: toFixedString(due, scale),
-    paidStatus: isZero(paid) ? "unpaid" : isPositive(due) ? "part_paid" : "paid",
+    paidStatus: isZero(settled) ? "unpaid" : isPositive(due) ? "part_paid" : "paid",
+  };
+}
+
+/** How much of an approved credit note has been used. Worked out from its applications and refunds, never stored. */
+export const CREDIT_STATUSES = ["open", "part_used", "used"] as const;
+export type CreditStatus = (typeof CREDIT_STATUSES)[number];
+
+export const CREDIT_STATUS_LABELS: Readonly<Record<CreditStatus, string>> = {
+  open: "Open",
+  part_used: "Part used",
+  used: "Used",
+};
+
+export type CreditNoteCreditStatus = {
+  amountApplied: string;
+  amountRefunded: string;
+  remainingCredit: string;
+  creditStatus: CreditStatus;
+};
+
+/**
+ * What's left of an approved credit note (worked examples CN2-CN4, CN7 and
+ * CN8): its total less its active applications and active refunds. Open while
+ * none of it is used, part used while some credit remains, then used.
+ */
+export function creditNoteCreditStatus(
+  total: string,
+  amountApplied: string,
+  amountRefunded: string,
+  scale: number,
+): CreditNoteCreditStatus {
+  const applied = dec(amountApplied);
+  const refunded = dec(amountRefunded);
+  const used = add(applied, refunded);
+  const remaining = sub(dec(total), used);
+  return {
+    amountApplied: toFixedString(applied, scale),
+    amountRefunded: toFixedString(refunded, scale),
+    remainingCredit: toFixedString(remaining, scale),
+    creditStatus: isZero(used) ? "open" : isPositive(remaining) ? "part_used" : "used",
   };
 }

@@ -60,6 +60,20 @@ that something happened.
   Overpayments are refused, and a bill with active payments can't be voided.
   Period locks apply; recording and voiding are idempotent. See examples
   SP1-SP8.
+- **Sales credit notes** in the base currency: drafts with the same lines,
+  amounts modes and per-line GST as invoices (a new draft can start from an
+  approved invoice's lines), approval that numbers the credit note
+  (`CN-0001`, from its own counter, with no gaps) and posts Dr revenue and GST
+  / Cr accounts receivable on its date, and voiding that posts the exact
+  reversal. Approved credit is applied to one or more of the same customer's
+  approved invoices in one all-or-nothing command (no journal; it lowers their
+  amount due), an application can be removed once, and unused credit stays on
+  the credit note or is refunded from a bank account (Dr accounts receivable /
+  Cr bank; a refund can be voided). Remaining credit, credit status (open,
+  part used, used) and an invoice's credit applied are worked out, never
+  stored. A credit note with active applications or refunds, or an invoice
+  with credit applied, can't be voided. Period locks apply to every step;
+  every command is idempotent. See examples CN1-CN12.
 - **GST basis** setting (invoice, payments or hybrid). Stored and shown only;
   the GST return will use it.
 - **Update check** against GitHub releases.
@@ -83,10 +97,11 @@ isn't acceptable, because people would trust it:
 
 ## Next, in rough order
 
-1. Credit notes (the core of a Xero-style ledger), customer and supplier
-   payments across several invoices or bills, overpayments and prepayments,
-   and a GST return built from postings using the GST basis setting. Invoice
-   PDFs and emailing come with or after these.
+1. Supplier credit notes (mirroring sales credit notes), then customer and
+   supplier payments across several invoices or bills, overpayments and
+   prepayments, and a GST return built from postings using the GST basis
+   setting. Invoice and credit note PDFs and emailing come with or after
+   these.
 2. Bank feeds (through an NZ open-banking provider, still to be chosen) and
    bank reconciliation that matches real transactions.
 3. Backdated stock movements with proper re-costing.

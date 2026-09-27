@@ -34,6 +34,9 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ customer_payments      money received against sales invoices
 ├─ bills, bill_lines      bills from suppliers
 ├─ supplier_payments      money paid against bills
+├─ sales_credit_notes, sales_credit_note_lines, sales_credit_note_numbering
+├─ sales_credit_note_applications   credit applied to sales invoices
+├─ sales_credit_note_refunds        credit paid back to customers
 └─ audit_events
 ```
 
@@ -147,8 +150,8 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, contacts, invoices, customer payments, bills, supplier payments and reports |
-| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments; save, approve, void and delete draft bills; record and void supplier payments |
+| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments and reports |
+| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments; save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments |
 | admin | + chart of accounts, tax codes, period locks, settings, people |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -191,6 +194,22 @@ Enforced by the database itself, not just the app:
   add up to more than its total. Payments can't be edited, deleted or
   truncated; the only change allowed is voiding one, once, which fills in its
   void details. A bill with active payments can't be voided.
+- Sales credit notes: only drafts can be changed or deleted, and a draft can't
+  be voided (it's deleted instead). An approved credit note can only become
+  voided (and then only its void details change); a voided one can't change at
+  all. Lines of approved and voided credit notes are frozen, and none of the
+  credit note tables can be truncated. Credit note numbers come from their own
+  one-row counter that can only move forward by one, so `CN-` numbers have no
+  gaps.
+- Credit note applications and refunds can't be edited or deleted; the only
+  change allowed is removing an application, or voiding a refund, once, which
+  fills in its removal or void details. An application needs an approved
+  credit note and an approved invoice of the same customer and currency, and
+  is dated on or after both. For every invoice, active payments plus active
+  credit applied can't add up to more than its total; for every credit note,
+  active applications plus active refunds can't add up to more than its total.
+  An invoice with active credit applied, or a credit note with active
+  applications or refunds, can't be voided.
 
 Enforced by the app (and covered by tests):
 
@@ -204,9 +223,10 @@ Enforced by the app (and covered by tests):
   different content is refused (409). The key check happens before anything
   is recalculated, so retries still work after a period is locked.
 - Journals made by stock movements, FX revaluations, sales invoices,
-  customer payments, bills or supplier payments can't be corrected in the
-  ledger; they are corrected at their source (an invoice, payment or bill is
-  voided) so the sub-ledgers stay in step.
+  customer payments, sales credit notes, credit note refunds, bills or
+  supplier payments can't be corrected in the ledger; they are corrected at
+  their source (an invoice, payment, credit note, refund or bill is voided) so
+  the sub-ledgers stay in step.
 - Sales invoices post to the accounts marked "Used by Tohyee" for accounts
   receivable and GST (1100 and 2100 in the starting chart), so those can't be
   archived. Invoice amounts are worked out in one place
@@ -215,7 +235,16 @@ Enforced by the app (and covered by tests):
 - Customer payments debit an active, base-currency account of type `bank`
   and credit the accounts receivable account above. An invoice's amount paid,
   amount due and paid status (`unpaid`, `part_paid`, `paid`) are worked out
-  from its active payments whenever it's read; they are never stored.
+  from its active payments and active credit applied whenever it's read; they
+  are never stored.
+- Sales credit notes use the invoice line maths and post the mirror of an
+  invoice (Dr revenue and GST / Cr accounts receivable). Applying credit to
+  invoices posts no journal, since both sides are accounts receivable, but
+  period locks still apply to its date and its removal date. Refunds credit an
+  active, base-currency account of type `bank` and debit accounts receivable.
+  A credit note's amount applied, amount refunded, remaining credit and credit
+  status (`open`, `part_used`, `used`) are worked out whenever it's read; they
+  are never stored.
 - Bills debit each line's account for its amount excluding GST, debit GST and
   credit the account marked "Used by Tohyee" for accounts payable (2000 in the
   starting chart), so it can't be archived either. Bill lines go to active,

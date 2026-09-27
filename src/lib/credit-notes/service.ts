@@ -7,10 +7,11 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import {
   AMOUNTS_MODES,
   calculateInvoice,
-  invoicePaymentStatus,
+  creditNoteCreditStatus,
   type AmountsMode,
-  type PaidStatus,
+  type CreditStatus,
 } from "@/lib/invoices/amounts";
+import { controlAccountCode, GST_ACCOUNT, RECEIVABLE_ACCOUNT } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
@@ -38,17 +39,18 @@ import {
 } from "@/lib/validation";
 
 /**
- * Sales invoices. A draft can be edited and deleted and posts nothing.
- * Approving gives it the next number (INV-0001, ...) and posts its journal;
- * after that it can't change, only be voided, which posts the exact reversal.
- * The amounts are worked out in `@/lib/invoices/amounts` (examples I1-I9).
- * Payments against approved invoices are in `@/lib/invoices/payments`, and
- * credit applied from credit notes in `@/lib/credit-notes/applications`.
+ * Sales credit notes. A draft can be edited and deleted and posts nothing.
+ * Approving gives it the next number (CN-0001, ...) and posts its journal,
+ * Dr each line's account and GST / Cr accounts receivable; after that it
+ * can't change, only be voided, which posts the exact reversal. Lines follow
+ * the invoice rules and maths (`@/lib/invoices/amounts`). Approved credit is
+ * applied to invoices in `@/lib/credit-notes/applications` and refunded in
+ * `@/lib/credit-notes/refunds` (examples CN1-CN12).
  */
-export const INVOICE_STATUSES = ["draft", "approved", "voided"] as const;
-export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+export const CREDIT_NOTE_STATUSES = ["draft", "approved", "voided"] as const;
+export type CreditNoteStatus = (typeof CREDIT_NOTE_STATUSES)[number];
 
-export type InvoiceLine = {
+export type CreditNoteLine = {
   lineOrder: number;
   description: string;
   quantity: string;
@@ -65,28 +67,27 @@ export type InvoiceLine = {
   taxAmount: string;
 };
 
-export type InvoiceSummary = {
+export type CreditNoteSummary = {
   id: string;
-  status: InvoiceStatus;
-  invoiceNumber: string | null;
+  status: CreditNoteStatus;
+  creditNoteNumber: string | null;
   contactId: string;
   contactName: string;
-  invoiceDate: string;
-  dueDate: string;
+  creditNoteDate: string;
   reference: string | null;
   amountsMode: AmountsMode;
   currencyCode: string;
   subtotal: string;
   taxTotal: string;
   total: string;
-  /** The sum of the invoice's active payments (examples CP1-CP4). */
-  amountPaid: string;
-  /** The sum of the credit applied to the invoice from credit notes (examples CN3, CN4, CN7). */
-  amountCredited: string;
-  /** What's still to be paid on an approved invoice; null for drafts and voided invoices. */
-  amountDue: string | null;
-  /** Worked out from the invoice's active payments and credit; null for drafts and voided invoices. */
-  paidStatus: PaidStatus | null;
+  /** The sum of the credit note's active applications to invoices. */
+  amountApplied: string;
+  /** The sum of the credit note's active refunds. */
+  amountRefunded: string;
+  /** What's left to apply or refund on an approved credit note; null for drafts and voided credit notes. */
+  remainingCredit: string | null;
+  /** Worked out from its active applications and refunds; null for drafts and voided credit notes. */
+  creditStatus: CreditStatus | null;
   approvalJournalId: string | null;
   approvedAt: string | null;
   approvedByEmail: string | null;
@@ -99,38 +100,36 @@ export type InvoiceSummary = {
   updatedAt: string;
 };
 
-export type Invoice = InvoiceSummary & { lines: InvoiceLine[] };
+export type CreditNote = CreditNoteSummary & { lines: CreditNoteLine[] };
 
 /** What a person enters. An edit leaves out anything it doesn't change; `lines` replaces every line. */
-export type InvoiceInput = {
+export type CreditNoteInput = {
   contactId?: unknown;
-  invoiceDate?: unknown;
-  dueDate?: unknown;
+  creditNoteDate?: unknown;
   reference?: unknown;
   amountsMode?: unknown;
   lines?: unknown;
 };
 
 const MAX_LINES = 200;
-/** Quantities and unit prices allow up to 4 decimal places. */
+/** Quantities and unit prices allow up to 4 decimal places, as on invoices. */
 const LINE_INPUT_SCALE = 4;
 
-type InvoiceRow = {
+type CreditNoteRow = {
   id: string;
-  status: InvoiceStatus;
-  invoice_number: string | null;
+  status: CreditNoteStatus;
+  credit_note_number: string | null;
   contact_id: string;
   contact_name: string;
-  invoice_date: string;
-  due_date: string;
+  credit_note_date: string;
   reference: string | null;
   amounts_mode: AmountsMode;
   currency_code: string;
   subtotal: string;
   tax_total: string;
   total: string;
-  amount_paid: string;
-  amount_credited: string;
+  amount_applied: string;
+  amount_refunded: string;
   approval_journal_id: string | null;
   approved_at: string | null;
   approved_by_email: string | null;
@@ -143,24 +142,24 @@ type InvoiceRow = {
   updated_at: string;
 };
 
-const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name as contact_name, i.invoice_date,
-  i.due_date, i.reference, i.amounts_mode, i.currency_code, i.subtotal, i.tax_total, i.total,
-  paid.amount_paid, credited.amount_credited, i.approval_journal_id, i.approved_at, i.approved_by_email, i.void_date, i.void_journal_id,
-  i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at`;
+const SUMMARY_COLUMNS = `n.id, n.status, n.credit_note_number, n.contact_id, c.name as contact_name, n.credit_note_date,
+  n.reference, n.amounts_mode, n.currency_code, n.subtotal, n.tax_total, n.total, applied.amount_applied,
+  refunded.amount_refunded, n.approval_journal_id, n.approved_at, n.approved_by_email, n.void_date, n.void_journal_id,
+  n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at`;
 
-/** Invoices with their customer, the sum of their active payments and the credit applied to them. */
-const SUMMARY_FROM = `sales_invoices i
-  join contacts c on c.id = i.contact_id
+/** Credit notes with their customer and the sums of their active applications and refunds. */
+const SUMMARY_FROM = `sales_credit_notes n
+  join contacts c on c.id = n.contact_id
   cross join lateral (
-    select coalesce(sum(p.amount), 0) as amount_paid
-      from customer_payments p
-     where p.invoice_id = i.id and p.status = 'active'
-  ) paid
-  cross join lateral (
-    select coalesce(sum(a.amount), 0) as amount_credited
+    select coalesce(sum(a.amount), 0) as amount_applied
       from sales_credit_note_applications a
-     where a.invoice_id = i.id and a.status = 'active'
-  ) credited`;
+     where a.credit_note_id = n.id and a.status = 'active'
+  ) applied
+  cross join lateral (
+    select coalesce(sum(r.amount), 0) as amount_refunded
+      from sales_credit_note_refunds r
+     where r.credit_note_id = n.id and r.status = 'active'
+  ) refunded`;
 
 type LineRow = {
   line_order: number;
@@ -178,28 +177,31 @@ type LineRow = {
   tax_amount: string;
 };
 
-function toSummary(row: InvoiceRow): InvoiceSummary {
-  const scale = currencyMinorUnits(row.currency_code);
-  const payment = invoicePaymentStatus(row.total, row.amount_paid, scale, row.amount_credited);
+function toSummary(row: CreditNoteRow): CreditNoteSummary {
+  const credit = creditNoteCreditStatus(
+    row.total,
+    row.amount_applied,
+    row.amount_refunded,
+    currencyMinorUnits(row.currency_code),
+  );
   const approved = row.status === "approved";
   return {
     id: row.id,
     status: row.status,
-    invoiceNumber: row.invoice_number,
+    creditNoteNumber: row.credit_note_number,
     contactId: row.contact_id,
     contactName: row.contact_name,
-    invoiceDate: row.invoice_date,
-    dueDate: row.due_date,
+    creditNoteDate: row.credit_note_date,
     reference: row.reference,
     amountsMode: row.amounts_mode,
     currencyCode: row.currency_code,
     subtotal: row.subtotal,
     taxTotal: row.tax_total,
     total: row.total,
-    amountPaid: payment.amountPaid,
-    amountCredited: toFixedString(dec(row.amount_credited), scale),
-    amountDue: approved ? payment.amountDue : null,
-    paidStatus: approved ? payment.paidStatus : null,
+    amountApplied: credit.amountApplied,
+    amountRefunded: credit.amountRefunded,
+    remainingCredit: approved ? credit.remainingCredit : null,
+    creditStatus: approved ? credit.creditStatus : null,
     approvalJournalId: row.approval_journal_id,
     approvedAt: row.approved_at,
     approvedByEmail: row.approved_by_email,
@@ -213,7 +215,7 @@ function toSummary(row: InvoiceRow): InvoiceSummary {
   };
 }
 
-function toLine(row: LineRow): InvoiceLine {
+function toLine(row: LineRow): CreditNoteLine {
   return {
     lineOrder: row.line_order,
     description: row.description,
@@ -234,8 +236,7 @@ function toLine(row: LineRow): InvoiceLine {
 /** A draft as entered, validated but not yet checked against the organisation's data. */
 type DraftDetails = {
   contactId: string;
-  invoiceDate: string;
-  dueDate: string;
+  creditNoteDate: string;
   reference: string | null;
   amountsMode: AmountsMode;
   lines: Array<{
@@ -268,18 +269,14 @@ type ResolvedDraft = DraftDetails & {
   }>;
 };
 
-function parseDraft(input: InvoiceInput): DraftDetails {
+function parseDraft(input: CreditNoteInput): DraftDetails {
   const contactId = requireId(input.contactId, "contactId");
-  const invoiceDate = parseIsoDate(input.invoiceDate, "invoiceDate");
-  const dueDate = parseIsoDate(input.dueDate, "dueDate");
-  if (dueDate < invoiceDate) {
-    throw new ValidationError("The due date can't be before the invoice date.");
-  }
+  const creditNoteDate = parseIsoDate(input.creditNoteDate, "creditNoteDate");
   const reference = optionalString(input.reference, "reference", { maxLength: 100 });
   const amountsMode = requireOneOf(input.amountsMode, "amountsMode", AMOUNTS_MODES);
   const rawLines = requireArray(input.lines, "lines", MAX_LINES);
   if (rawLines.length === 0) {
-    throw new ValidationError("An invoice needs at least one line.");
+    throw new ValidationError("A credit note needs at least one line.");
   }
   const lines = rawLines.map((raw, index) => {
     const label = `Line ${index + 1}`;
@@ -287,7 +284,7 @@ function parseDraft(input: InvoiceInput): DraftDetails {
     const taxCode = optionalString(line.taxCode, `${label} tax code`, { maxLength: 20 })?.toUpperCase() ?? null;
     if (amountsMode === "no_tax" && taxCode !== null) {
       throw new ValidationError(
-        `${label} has a tax code, but the invoice's amounts have no tax. Remove the tax code or change the amounts to tax exclusive or inclusive.`,
+        `${label} has a tax code, but the credit note's amounts have no tax. Remove the tax code or change the amounts to tax exclusive or inclusive.`,
       );
     }
     if (amountsMode !== "no_tax" && taxCode === null) {
@@ -301,15 +298,14 @@ function parseDraft(input: InvoiceInput): DraftDetails {
       taxCode,
     };
   });
-  return { contactId, invoiceDate, dueDate, reference, amountsMode, lines };
+  return { contactId, creditNoteDate, reference, amountsMode, lines };
 }
 
 /** Normalised content for the idempotency fingerprint. */
 function hashPayload(draft: DraftDetails): Record<string, unknown> {
   return {
     contactId: draft.contactId,
-    invoiceDate: draft.invoiceDate,
-    dueDate: draft.dueDate,
+    creditNoteDate: draft.creditNoteDate,
     reference: draft.reference,
     amountsMode: draft.amountsMode,
     lines: draft.lines.map((line) => ({ ...line, accountCode: line.accountCode.toLowerCase() })),
@@ -317,10 +313,11 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
 }
 
 /**
- * Checks a draft against the organisation's data and works out its amounts.
- * Run when a draft is saved and again when it's approved: the customer must be
- * an active contact marked as a customer, each line's account an active
- * revenue account, and each tax code active and in effect on the invoice date.
+ * Checks a draft against the organisation's data and works out its amounts,
+ * with the same rules as an invoice. Run when a draft is saved and again when
+ * it's approved: the customer must be an active contact marked as a
+ * customer, each line's account an active revenue account, and each tax code
+ * active and in effect on the credit note date.
  */
 async function resolveDraft(tx: OrgTx, draft: DraftDetails): Promise<ResolvedDraft> {
   const contact = await tx.query<{ name: string; is_customer: boolean; is_archived: boolean }>(
@@ -368,7 +365,7 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails): Promise<ResolvedDra
     }
     if (account.account_class !== "revenue") {
       throw new ValidationError(
-        `${label}: account ${account.code} (${account.name}) isn't a revenue account. Invoice lines go to revenue accounts, like Sales.`,
+        `${label}: account ${account.code} (${account.name}) isn't a revenue account. Credit note lines go to revenue accounts, like Sales.`,
       );
     }
     let taxCodeId: string | null = null;
@@ -381,9 +378,12 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails): Promise<ResolvedDra
       if (!taxCode.is_active) {
         throw new ValidationError(`${label}: tax code ${taxCode.code} is inactive.`);
       }
-      if (taxCode.effective_from > draft.invoiceDate || (taxCode.effective_to !== null && taxCode.effective_to < draft.invoiceDate)) {
+      if (
+        taxCode.effective_from > draft.creditNoteDate ||
+        (taxCode.effective_to !== null && taxCode.effective_to < draft.creditNoteDate)
+      ) {
         throw new ValidationError(
-          `${label}: tax code ${taxCode.code} isn't in effect on ${draft.invoiceDate} (it applies from ${taxCode.effective_from}${
+          `${label}: tax code ${taxCode.code} isn't in effect on ${draft.creditNoteDate} (it applies from ${taxCode.effective_from}${
             taxCode.effective_to ? ` to ${taxCode.effective_to}` : ""
           }).`,
         );
@@ -438,8 +438,7 @@ type StoredLine = {
 
 type StoredHeader = {
   contactId: string;
-  invoiceDate: string;
-  dueDate: string;
+  creditNoteDate: string;
   reference: string | null;
   amountsMode: AmountsMode;
   currencyCode: string;
@@ -451,17 +450,16 @@ type StoredHeader = {
 const plain = (value: string) => toPlainString(dec(value));
 
 /** What's stored for a draft's header and lines, to tell whether an edit changed anything. */
-function headerState(invoice: StoredHeader): string {
+function headerState(creditNote: StoredHeader): string {
   return JSON.stringify([
-    invoice.contactId,
-    invoice.invoiceDate,
-    invoice.dueDate,
-    invoice.reference,
-    invoice.amountsMode,
-    invoice.currencyCode,
-    plain(invoice.subtotal),
-    plain(invoice.taxTotal),
-    plain(invoice.total),
+    creditNote.contactId,
+    creditNote.creditNoteDate,
+    creditNote.reference,
+    creditNote.amountsMode,
+    creditNote.currencyCode,
+    plain(creditNote.subtotal),
+    plain(creditNote.taxTotal),
+    plain(creditNote.total),
   ]);
 }
 
@@ -481,7 +479,7 @@ function linesState(lines: readonly StoredLine[]): string {
   );
 }
 
-function sameAsStored(resolved: ResolvedDraft, current: Invoice): { header: boolean; lines: boolean } {
+function sameAsStored(resolved: ResolvedDraft, current: CreditNote): { header: boolean; lines: boolean } {
   return {
     header: headerState(resolved) === headerState(current),
     lines: linesState(resolved.resolvedLines) === linesState(current.lines),
@@ -489,14 +487,13 @@ function sameAsStored(resolved: ResolvedDraft, current: Invoice): { header: bool
 }
 
 /** The saved draft, in the shape a person would send it. */
-function draftOf(invoice: Invoice): DraftDetails {
+function draftOf(creditNote: CreditNote): DraftDetails {
   return {
-    contactId: invoice.contactId,
-    invoiceDate: invoice.invoiceDate,
-    dueDate: invoice.dueDate,
-    reference: invoice.reference,
-    amountsMode: invoice.amountsMode,
-    lines: invoice.lines.map((line) => ({
+    contactId: creditNote.contactId,
+    creditNoteDate: creditNote.creditNoteDate,
+    reference: creditNote.reference,
+    amountsMode: creditNote.amountsMode,
+    lines: creditNote.lines.map((line) => ({
       description: line.description,
       quantity: toPlainString(dec(line.quantity)),
       unitPrice: toPlainString(dec(line.unitPrice)),
@@ -506,11 +503,11 @@ function draftOf(invoice: Invoice): DraftDetails {
   };
 }
 
-async function insertLines(tx: OrgTx, invoiceId: string, lines: ResolvedDraft["resolvedLines"]): Promise<void> {
+async function insertLines(tx: OrgTx, creditNoteId: string, lines: ResolvedDraft["resolvedLines"]): Promise<void> {
   const values: unknown[] = [];
   const tuples = lines.map((line, index) => {
     values.push(
-      invoiceId,
+      creditNoteId,
       index + 1,
       line.description,
       line.quantity,
@@ -527,8 +524,8 @@ async function insertLines(tx: OrgTx, invoiceId: string, lines: ResolvedDraft["r
     return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric)`;
   });
   await tx.query(
-    `insert into sales_invoice_lines (invoice_id, line_order, description, quantity, unit_price, account_id,
-                                      tax_code_id, tax_rate, line_amount, net_amount, tax_amount)
+    `insert into sales_credit_note_lines (credit_note_id, line_order, description, quantity, unit_price, account_id,
+                                          tax_code_id, tax_rate, line_amount, net_amount, tax_amount)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -548,7 +545,7 @@ async function findByKey(
 ): Promise<{ id: string; hash: string } | null> {
   const columns = KEY_COLUMNS[command];
   const result = await tx.query<{ id: string; hash: string }>(
-    `select id, ${columns.hash} as hash from sales_invoices where ${columns.source} = $1 and ${columns.key} = $2`,
+    `select id, ${columns.hash} as hash from sales_credit_notes where ${columns.source} = $1 and ${columns.key} = $2`,
     [source, idempotencyKey],
   );
   return result.rows[0] ?? null;
@@ -558,105 +555,115 @@ function isUniqueViolation(error: unknown): boolean {
   return (error as { code?: string }).code === "23505";
 }
 
-function invoiceLabel(invoice: InvoiceSummary): string {
-  return invoice.invoiceNumber ? `Invoice ${invoice.invoiceNumber}` : `Draft invoice #${invoice.id}`;
+export function creditNoteLabel(creditNote: CreditNoteSummary): string {
+  return creditNote.creditNoteNumber ? `Credit note ${creditNote.creditNoteNumber}` : `Draft credit note #${creditNote.id}`;
 }
 
-export async function getInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise<Invoice> {
-  const invoiceId = requireId(invoiceIdInput, "invoiceId");
-  const result = await tx.query<InvoiceRow>(
-    `select ${SUMMARY_COLUMNS} from ${SUMMARY_FROM} where i.id = $1`,
-    [invoiceId],
-  );
+export async function getCreditNote(tx: OrgTx, creditNoteIdInput: unknown): Promise<CreditNote> {
+  const creditNoteId = requireId(creditNoteIdInput, "creditNoteId");
+  const result = await tx.query<CreditNoteRow>(`select ${SUMMARY_COLUMNS} from ${SUMMARY_FROM} where n.id = $1`, [
+    creditNoteId,
+  ]);
   const row = result.rows[0];
   if (!row) {
-    throw new NotFoundError("Invoice not found.");
+    throw new NotFoundError("Credit note not found.");
   }
   const lines = await tx.query<LineRow>(
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
             l.net_amount, l.tax_amount
-       from sales_invoice_lines l
+       from sales_credit_note_lines l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
-      where l.invoice_id = $1
+      where l.credit_note_id = $1
       order by l.line_order`,
-    [invoiceId],
+    [creditNoteId],
   );
   return { ...toSummary(row), lines: lines.rows.map(toLine) };
 }
 
-/** Loads an invoice and locks it until the transaction ends. */
-export async function lockInvoice(tx: OrgTx, invoiceId: string): Promise<Invoice> {
-  const locked = await tx.query("select id from sales_invoices where id = $1 for update", [invoiceId]);
+/** Loads a credit note and locks it until the transaction ends. */
+export async function lockCreditNote(tx: OrgTx, creditNoteId: string): Promise<CreditNote> {
+  const locked = await tx.query("select id from sales_credit_notes where id = $1 for update", [creditNoteId]);
   if (locked.rowCount === 0) {
-    throw new NotFoundError("Invoice not found.");
+    throw new NotFoundError("Credit note not found.");
   }
-  return getInvoice(tx, invoiceId);
+  return getCreditNote(tx, creditNoteId);
 }
 
-function assertDraft(invoice: Invoice, action: "edited" | "deleted"): void {
-  if (invoice.status !== "draft") {
-    throw new ConflictError(`${invoiceLabel(invoice)} is ${invoice.status}, so it can't be ${action}.${
-      invoice.status === "approved" ? " Void it instead." : ""
-    }`);
+function assertDraft(creditNote: CreditNote, action: "edited" | "deleted"): void {
+  if (creditNote.status !== "draft") {
+    throw new ConflictError(
+      `${creditNoteLabel(creditNote)} is ${creditNote.status}, so it can't be ${action}.${
+        creditNote.status === "approved" ? " Void it instead." : ""
+      }`,
+    );
   }
 }
 
 /**
- * Newest first, 50 at a time; `status` filters, `awaitingPayment` keeps only
- * approved invoices with something still due (after payments and credit),
- * `contactId` keeps one customer's invoices, and `beforeId` pages.
+ * Newest first, 50 at a time; `status` filters, `contactId` keeps one
+ * customer's credit notes, `hasRemainingCredit` keeps only approved credit
+ * notes with credit left to apply or refund, and `beforeId` pages.
  */
-export async function listInvoices(
+export async function listCreditNotes(
   tx: OrgTx,
-  filters: { status?: unknown; awaitingPayment?: unknown; contactId?: unknown; beforeId?: unknown; limit?: unknown } = {},
-): Promise<{ invoices: InvoiceSummary[]; nextBeforeId: string | null }> {
+  filters: {
+    status?: unknown;
+    contactId?: unknown;
+    hasRemainingCredit?: unknown;
+    beforeId?: unknown;
+    limit?: unknown;
+  } = {},
+): Promise<{ creditNotes: CreditNoteSummary[]; nextBeforeId: string | null }> {
   const status =
-    filters.status == null || filters.status === "" ? null : requireOneOf(filters.status, "status", INVOICE_STATUSES);
-  const awaitingPayment = optionalBoolean(filters.awaitingPayment, "awaitingPayment") ?? false;
+    filters.status == null || filters.status === ""
+      ? null
+      : requireOneOf(filters.status, "status", CREDIT_NOTE_STATUSES);
   const contactId = optionalId(filters.contactId, "contactId");
+  const hasRemainingCredit = optionalBoolean(filters.hasRemainingCredit, "hasRemainingCredit") ?? false;
   const beforeId = optionalId(filters.beforeId, "beforeId");
   const limitRaw = Number(filters.limit ?? 50);
   const limit = Number.isInteger(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : 50;
-  const result = await tx.query<InvoiceRow>(
+  const result = await tx.query<CreditNoteRow>(
     `select ${SUMMARY_COLUMNS} from ${SUMMARY_FROM}
-      where ($1::text is null or i.status = $1) and ($2::bigint is null or i.id < $2)
-        and (not $3::boolean or (i.status = 'approved' and paid.amount_paid + credited.amount_credited < i.total))
-        and ($4::bigint is null or i.contact_id = $4)
-      order by i.id desc
+      where ($1::text is null or n.status = $1) and ($2::bigint is null or n.contact_id = $2)
+        and (not $3::boolean
+             or (n.status = 'approved' and applied.amount_applied + refunded.amount_refunded < n.total))
+        and ($4::bigint is null or n.id < $4)
+      order by n.id desc
       limit ${limit + 1}`,
-    [status, beforeId, awaitingPayment, contactId],
+    [status, contactId, hasRemainingCredit, beforeId],
   );
   const rows = result.rows.slice(0, limit);
   return {
-    invoices: rows.map(toSummary),
+    creditNotes: rows.map(toSummary),
     nextBeforeId: result.rows.length > limit ? rows[rows.length - 1].id : null,
   };
 }
 
-/** Saves a new draft. Drafts post nothing. */
-export async function createInvoice(
+/** Saves a new draft (example CN1). Drafts post nothing and have no number. */
+export async function createCreditNote(
   tx: OrgTx,
-  input: InvoiceInput & { source?: unknown; idempotencyKey: unknown },
-): Promise<{ created: boolean; invoice: Invoice }> {
+  input: CreditNoteInput & { source?: unknown; idempotencyKey: unknown },
+): Promise<{ created: boolean; creditNote: CreditNote }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const draft = parseDraft(input);
-  const hash = requestHash("sales_invoice", hashPayload(draft));
+  const hash = requestHash("sales_credit_note", hashPayload(draft));
 
   const existing = await findByKey(tx, "create", source, idempotencyKey);
   if (existing) {
-    assertSameRequest(existing.hash, hash, "invoice");
-    return { created: false, invoice: await getInvoice(tx, existing.id) };
+    assertSameRequest(existing.hash, hash, "credit note");
+    return { created: false, creditNote: await getCreditNote(tx, existing.id) };
   }
 
   const resolved = await resolveDraft(tx, draft);
   const inserted = await tx.query<{ id: string }>(
-    `insert into sales_invoices (command_source, idempotency_key, request_hash, contact_id, invoice_date, due_date,
-                                 reference, amounts_mode, currency_code, subtotal, tax_total, total,
-                                 created_by_user_id, created_by_email)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14)
+    `insert into sales_credit_notes (command_source, idempotency_key, request_hash, contact_id, credit_note_date,
+                                     reference, amounts_mode, currency_code, subtotal, tax_total, total,
+                                     created_by_user_id, created_by_email)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10::numeric, $11::numeric, $12, $13)
      on conflict (command_source, idempotency_key) do nothing
      returning id`,
     [
@@ -664,8 +671,7 @@ export async function createInvoice(
       idempotencyKey,
       hash,
       resolved.contactId,
-      resolved.invoiceDate,
-      resolved.dueDate,
+      resolved.creditNoteDate,
       resolved.reference,
       resolved.amountsMode,
       resolved.currencyCode,
@@ -676,30 +682,30 @@ export async function createInvoice(
       tx.actor.email,
     ],
   );
-  const invoiceId = inserted.rows[0]?.id;
-  if (!invoiceId) {
+  const creditNoteId = inserted.rows[0]?.id;
+  if (!creditNoteId) {
     // Another request with the same key committed first.
     const winner = await findByKey(tx, "create", source, idempotencyKey);
     if (!winner) {
-      throw new ConflictError("That invoice is being saved by another request. Try again.");
+      throw new ConflictError("That credit note is being saved by another request. Try again.");
     }
-    assertSameRequest(winner.hash, hash, "invoice");
-    return { created: false, invoice: await getInvoice(tx, winner.id) };
+    assertSameRequest(winner.hash, hash, "credit note");
+    return { created: false, creditNote: await getCreditNote(tx, winner.id) };
   }
-  await insertLines(tx, invoiceId, resolved.resolvedLines);
+  await insertLines(tx, creditNoteId, resolved.resolvedLines);
   await writeAuditEvent(tx, {
-    eventType: "invoice.created",
-    entityType: "sales_invoice",
-    entityId: invoiceId,
+    eventType: "credit_note.created",
+    entityType: "sales_credit_note",
+    entityId: creditNoteId,
     details: {
       contactId: resolved.contactId,
-      invoiceDate: resolved.invoiceDate,
+      creditNoteDate: resolved.creditNoteDate,
       amountsMode: resolved.amountsMode,
       total: resolved.total,
       lines: resolved.resolvedLines.length,
     },
   });
-  return { created: true, invoice: await getInvoice(tx, invoiceId) };
+  return { created: true, creditNote: await getCreditNote(tx, creditNoteId) };
 }
 
 /**
@@ -707,14 +713,17 @@ export async function createInvoice(
  * all the lines. Everything is checked and the amounts worked out again. An
  * edit that changes nothing isn't saved or audited.
  */
-export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: InvoiceInput): Promise<Invoice> {
-  const current = await lockInvoice(tx, requireId(invoiceIdInput, "invoiceId"));
+export async function updateCreditNote(
+  tx: OrgTx,
+  creditNoteIdInput: unknown,
+  input: CreditNoteInput,
+): Promise<CreditNote> {
+  const current = await lockCreditNote(tx, requireId(creditNoteIdInput, "creditNoteId"));
   assertDraft(current, "edited");
   const saved = draftOf(current);
   const draft = parseDraft({
     contactId: input.contactId === undefined ? saved.contactId : input.contactId,
-    invoiceDate: input.invoiceDate === undefined ? saved.invoiceDate : input.invoiceDate,
-    dueDate: input.dueDate === undefined ? saved.dueDate : input.dueDate,
+    creditNoteDate: input.creditNoteDate === undefined ? saved.creditNoteDate : input.creditNoteDate,
     reference: input.reference === undefined ? saved.reference : input.reference,
     amountsMode: input.amountsMode === undefined ? saved.amountsMode : input.amountsMode,
     lines: input.lines === undefined ? saved.lines : input.lines,
@@ -725,23 +734,22 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
     return current;
   }
 
-  const changed: string[] = (["contactId", "invoiceDate", "dueDate", "reference", "amountsMode"] as const).filter(
+  const changed: string[] = (["contactId", "creditNoteDate", "reference", "amountsMode"] as const).filter(
     (field) => resolved[field] !== current[field],
   );
   if (!same.lines) {
     changed.push("lines");
   }
   await tx.query(
-    `update sales_invoices
-        set contact_id = $2, invoice_date = $3, due_date = $4, reference = $5, amounts_mode = $6,
-            currency_code = $7, subtotal = $8::numeric, tax_total = $9::numeric, total = $10::numeric,
+    `update sales_credit_notes
+        set contact_id = $2, credit_note_date = $3, reference = $4, amounts_mode = $5,
+            currency_code = $6, subtotal = $7::numeric, tax_total = $8::numeric, total = $9::numeric,
             updated_at = now()
       where id = $1`,
     [
       current.id,
       resolved.contactId,
-      resolved.invoiceDate,
-      resolved.dueDate,
+      resolved.creditNoteDate,
       resolved.reference,
       resolved.amountsMode,
       resolved.currencyCode,
@@ -750,135 +758,97 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
       resolved.total,
     ],
   );
-  await tx.query("delete from sales_invoice_lines where invoice_id = $1", [current.id]);
+  await tx.query("delete from sales_credit_note_lines where credit_note_id = $1", [current.id]);
   await insertLines(tx, current.id, resolved.resolvedLines);
   await writeAuditEvent(tx, {
-    eventType: "invoice.updated",
-    entityType: "sales_invoice",
+    eventType: "credit_note.updated",
+    entityType: "sales_credit_note",
     entityId: current.id,
     details: { changed, total: { from: current.total, to: resolved.total } },
   });
-  return getInvoice(tx, current.id);
+  return getCreditNote(tx, current.id);
 }
 
-/** Deletes a draft (approved invoices are voided instead). */
-export async function deleteInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise<void> {
-  const current = await lockInvoice(tx, requireId(invoiceIdInput, "invoiceId"));
+/** Deletes a draft (approved credit notes are voided instead). */
+export async function deleteCreditNote(tx: OrgTx, creditNoteIdInput: unknown): Promise<void> {
+  const current = await lockCreditNote(tx, requireId(creditNoteIdInput, "creditNoteId"));
   assertDraft(current, "deleted");
-  await tx.query("delete from sales_invoice_lines where invoice_id = $1", [current.id]);
-  await tx.query("delete from sales_invoices where id = $1", [current.id]);
+  await tx.query("delete from sales_credit_note_lines where credit_note_id = $1", [current.id]);
+  await tx.query("delete from sales_credit_notes where id = $1", [current.id]);
   await writeAuditEvent(tx, {
-    eventType: "invoice.deleted",
-    entityType: "sales_invoice",
+    eventType: "credit_note.deleted",
+    entityType: "sales_credit_note",
     entityId: current.id,
     details: {
       contactId: current.contactId,
       contactName: current.contactName,
-      invoiceDate: current.invoiceDate,
+      creditNoteDate: current.creditNoteDate,
       total: current.total,
     },
   });
 }
 
-export type ControlAccount = { systemKey: string; label: string; accountClass: string };
-
-export const RECEIVABLE_ACCOUNT: ControlAccount = { systemKey: "accounts_receivable", label: "accounts receivable", accountClass: "asset" };
-export const GST_ACCOUNT: ControlAccount = { systemKey: "gst", label: "GST", accountClass: "liability" };
-
-/**
- * A control account, found by its system key (see the default chart: 1100
- * for accounts receivable, 2000 for accounts payable and 2100 for GST).
- * `refused` says what can't be done without it.
- */
-export async function controlAccountCode(tx: OrgTx, control: ControlAccount, refused: string): Promise<string> {
-  const result = await tx.query<{ code: string; name: string; account_class: string; currency_code: string | null }>(
-    "select code, name, account_class, currency_code from accounts where system_key = $1",
-    [control.systemKey],
-  );
-  const row = result.rows[0];
-  if (!row) {
-    throw new ValidationError(
-      `No account is set up as ${control.label}, so ${refused}. A new organisation gets one in its starting chart of accounts.`,
-    );
-  }
-  if (row.account_class !== control.accountClass) {
-    throw new ValidationError(
-      `Account ${row.code} (${row.name}) is used for ${control.label}, so it has to be an ${control.accountClass} account.`,
-    );
-  }
-  if (row.currency_code !== null) {
-    throw new ValidationError(
-      `Account ${row.code} (${row.name}) is used for ${control.label}, so it has to be in the base currency, not ${row.currency_code}.`,
-    );
-  }
-  return row.code;
-}
-
-async function invoiceControlAccounts(tx: OrgTx): Promise<{ receivable: string; gst: string }> {
-  const refused = "invoices can't be approved";
+async function creditNoteControlAccounts(tx: OrgTx): Promise<{ receivable: string; gst: string }> {
+  const refused = "credit notes can't be approved";
   return {
     receivable: await controlAccountCode(tx, RECEIVABLE_ACCOUNT, refused),
     gst: await controlAccountCode(tx, GST_ACCOUNT, refused),
   };
 }
 
-/** The accounts receivable account that customer payments are credited to. */
-export async function receivableAccountCode(tx: OrgTx): Promise<string> {
-  return controlAccountCode(tx, RECEIVABLE_ACCOUNT, "payments can't be recorded");
-}
-
-export function formatInvoiceNumber(sequence: number): string {
-  return `INV-${String(sequence).padStart(4, "0")}`;
+export function formatCreditNoteNumber(sequence: number): string {
+  return `CN-${String(sequence).padStart(4, "0")}`;
 }
 
 /**
- * Takes the next invoice number. The counter row stays locked until the
- * transaction ends, and a refused approval rolls it back, so there are no gaps.
+ * Takes the next credit note number from its own counter (not the invoice
+ * one). The counter row stays locked until the transaction ends, and a
+ * refused approval rolls it back, so there are no gaps (example CN11).
  */
-async function takeInvoiceNumber(tx: OrgTx): Promise<{ sequence: number; invoiceNumber: string }> {
+async function takeCreditNoteNumber(tx: OrgTx): Promise<{ sequence: number; creditNoteNumber: string }> {
   const result = await tx.query<{ last_number: number }>(
-    "update sales_invoice_numbering set last_number = last_number + 1 where id = true returning last_number",
+    "update sales_credit_note_numbering set last_number = last_number + 1 where id = true returning last_number",
   );
   const sequence = Number(result.rows[0].last_number);
-  return { sequence, invoiceNumber: formatInvoiceNumber(sequence) };
+  return { sequence, creditNoteNumber: formatCreditNoteNumber(sequence) };
 }
 
 /**
- * Approves a draft (examples I1-I6, I8, I9): gives it the next number and
- * posts one journal on the invoice date, Dr accounts receivable for the total,
- * Cr each revenue account for its net amount and Cr GST for the GST. Refused
- * in a locked period, leaving the draft as it was.
+ * Approves a draft (examples CN2, CN10-CN12): gives it the next number and
+ * posts one journal on the credit note date, Dr each line's account for its
+ * net amount, Dr GST for the GST and Cr accounts receivable for the total.
+ * Refused in a locked period, leaving the draft as it was.
  */
-export async function approveInvoice(
+export async function approveCreditNote(
   tx: OrgTx,
-  invoiceIdInput: unknown,
+  creditNoteIdInput: unknown,
   command: { source?: unknown; idempotencyKey: unknown },
-): Promise<{ created: boolean; invoice: Invoice }> {
-  const invoiceId = requireId(invoiceIdInput, "invoiceId");
+): Promise<{ created: boolean; creditNote: CreditNote }> {
+  const creditNoteId = requireId(creditNoteIdInput, "creditNoteId");
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
-  const hash = requestHash("invoice_approval", { invoiceId });
+  const hash = requestHash("credit_note_approval", { creditNoteId });
   const replay = async () => {
     const earlier = await findByKey(tx, "approve", source, idempotencyKey);
     if (!earlier) {
       return null;
     }
-    assertSameRequest(earlier.hash, hash, "invoice approval");
-    return { created: false, invoice: await getInvoice(tx, earlier.id) };
+    assertSameRequest(earlier.hash, hash, "credit note approval");
+    return { created: false, creditNote: await getCreditNote(tx, earlier.id) };
   };
 
   const earlier = await replay();
   if (earlier) {
     return earlier;
   }
-  const current = await lockInvoice(tx, invoiceId);
+  const current = await lockCreditNote(tx, creditNoteId);
   // The original of a retry may have committed while this request waited for the lock.
   const committedMeanwhile = await replay();
   if (committedMeanwhile) {
     return committedMeanwhile;
   }
   if (current.status !== "draft") {
-    throw new ConflictError(`${invoiceLabel(current)} is already ${current.status}.`);
+    throw new ConflictError(`${creditNoteLabel(current)} is already ${current.status}.`);
   }
   if (current.currencyCode !== tx.baseCurrency) {
     throw new ValidationError(
@@ -893,10 +863,10 @@ export async function approveInvoice(
       "This draft's amounts no longer match its tax codes. Open it and save it again, then check the totals before approving.",
     );
   }
-  const accounts = await invoiceControlAccounts(tx);
-  await assertPostingDateAllowed(tx, current.invoiceDate);
+  const accounts = await creditNoteControlAccounts(tx);
+  await assertPostingDateAllowed(tx, current.creditNoteDate);
 
-  const { sequence, invoiceNumber } = await takeInvoiceNumber(tx);
+  const { sequence, creditNoteNumber } = await takeCreditNoteNumber(tx);
   const scale = currencyMinorUnits(tx.baseCurrency);
   const revenue = new Map<string, { code: string; amount: Decimal }>();
   for (const line of resolved.resolvedLines) {
@@ -906,125 +876,134 @@ export async function approveInvoice(
   }
   const customer = resolved.contactName;
   const journalLines = [
-    { accountCode: accounts.receivable, debitAmount: resolved.total, creditAmount: "0", description: customer },
     ...[...revenue.values()]
       .filter((entry) => !isZero(entry.amount))
       .map((entry) => ({
         accountCode: entry.code,
-        debitAmount: "0",
-        creditAmount: toFixedString(entry.amount, scale),
+        debitAmount: toFixedString(entry.amount, scale),
+        creditAmount: "0",
         description: customer,
       })),
     ...(isZero(dec(resolved.taxTotal))
       ? []
-      : [{ accountCode: accounts.gst, debitAmount: "0", creditAmount: resolved.taxTotal, description: "GST" }]),
+      : [{ accountCode: accounts.gst, debitAmount: resolved.taxTotal, creditAmount: "0", description: "GST" }]),
+    { accountCode: accounts.receivable, debitAmount: "0", creditAmount: resolved.total, description: customer },
   ];
   const posted = await postJournalBody(
     tx,
-    "invoice:approval",
-    invoiceId,
+    "sales_credit_note:approval",
+    creditNoteId,
     parseJournalBody(tx, {
-      postingDate: current.invoiceDate,
-      reference: invoiceNumber,
-      description: `Invoice ${invoiceNumber} to ${customer}`,
+      postingDate: current.creditNoteDate,
+      reference: creditNoteNumber,
+      description: `Credit note ${creditNoteNumber} to ${customer}`,
       lines: journalLines,
     }),
-    { origin: "invoice" },
+    { origin: "sales_credit_note" },
   );
 
   try {
     await tx.query(
-      `update sales_invoices
-          set status = 'approved', invoice_sequence = $2, invoice_number = $3, approval_journal_id = $4,
+      `update sales_credit_notes
+          set status = 'approved', credit_note_sequence = $2, credit_note_number = $3, approval_journal_id = $4,
               approve_command_source = $5, approve_idempotency_key = $6, approve_request_hash = $7,
               approved_by_user_id = $8, approved_by_email = $9, approved_at = now(), updated_at = now()
         where id = $1`,
-      [invoiceId, sequence, invoiceNumber, posted.journal.id, source, idempotencyKey, hash, tx.actor.userId, tx.actor.email],
+      [
+        creditNoteId,
+        sequence,
+        creditNoteNumber,
+        posted.journal.id,
+        source,
+        idempotencyKey,
+        hash,
+        tx.actor.userId,
+        tx.actor.email,
+      ],
     );
   } catch (error) {
     if (isUniqueViolation(error)) {
-      // The same key was used to approve another invoice by a request that committed first.
+      // The same key was used to approve another credit note by a request that committed first.
       throw new ConflictError(
-        "That idempotency key was already used for a different invoice approval. Use a new key for a new invoice approval.",
+        "That idempotency key was already used for a different credit note approval. Use a new key for a new credit note approval.",
       );
     }
     throw error;
   }
   await writeAuditEvent(tx, {
-    eventType: "invoice.approved",
-    entityType: "sales_invoice",
-    entityId: invoiceId,
-    details: { invoiceNumber, journalId: posted.journal.id, invoiceDate: current.invoiceDate, total: resolved.total },
+    eventType: "credit_note.approved",
+    entityType: "sales_credit_note",
+    entityId: creditNoteId,
+    details: {
+      creditNoteNumber,
+      journalId: posted.journal.id,
+      creditNoteDate: current.creditNoteDate,
+      total: resolved.total,
+    },
   });
-  return { created: true, invoice: await getInvoice(tx, invoiceId) };
+  return { created: true, creditNote: await getCreditNote(tx, creditNoteId) };
 }
 
 /**
- * Voids an approved invoice (example I7): posts the exact reversal of its
- * journal on the void date, which must be in an open period. An invoice can
- * only be voided once, a draft is deleted rather than voided, and an invoice
- * with active payments is refused until they're voided (example CP5), or with
- * credit applied until that's removed (example CN9).
+ * Voids an approved credit note (example CN9): posts the exact reversal of
+ * its journal on the void date, which must be in an open period and not
+ * before the credit note. A credit note can only be voided once, a draft is
+ * deleted rather than voided, and one with active applications or refunds is
+ * refused until they're removed or voided.
  */
-export async function voidInvoice(
+export async function voidCreditNote(
   tx: OrgTx,
-  invoiceIdInput: unknown,
+  creditNoteIdInput: unknown,
   command: { source?: unknown; idempotencyKey: unknown; voidDate: unknown },
-): Promise<{ created: boolean; invoice: Invoice }> {
-  const invoiceId = requireId(invoiceIdInput, "invoiceId");
+): Promise<{ created: boolean; creditNote: CreditNote }> {
+  const creditNoteId = requireId(creditNoteIdInput, "creditNoteId");
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const voidDate = parseIsoDate(command.voidDate, "voidDate");
-  const hash = requestHash("invoice_void", { invoiceId, voidDate });
+  const hash = requestHash("credit_note_void", { creditNoteId, voidDate });
   const replay = async () => {
     const earlier = await findByKey(tx, "void", source, idempotencyKey);
     if (!earlier) {
       return null;
     }
-    assertSameRequest(earlier.hash, hash, "invoice void");
-    return { created: false, invoice: await getInvoice(tx, earlier.id) };
+    assertSameRequest(earlier.hash, hash, "credit note void");
+    return { created: false, creditNote: await getCreditNote(tx, earlier.id) };
   };
 
   const earlier = await replay();
   if (earlier) {
     return earlier;
   }
-  const current = await lockInvoice(tx, invoiceId);
+  const current = await lockCreditNote(tx, creditNoteId);
   const committedMeanwhile = await replay();
   if (committedMeanwhile) {
     return committedMeanwhile;
   }
   if (current.status === "draft") {
-    throw new ConflictError("This invoice is still a draft, so there's nothing to void. Delete it instead.");
+    throw new ConflictError("This credit note is still a draft, so there's nothing to void. Delete it instead.");
   }
   if (current.status === "voided") {
-    throw new ConflictError(`${invoiceLabel(current)} has already been voided.`);
+    throw new ConflictError(`${creditNoteLabel(current)} has already been voided.`);
   }
-  if (!isZero(dec(current.amountPaid))) {
-    // Example CP5. The database refuses it too.
-    throw new ConflictError(
-      `${invoiceLabel(current)} has payments against it, so it can't be voided. Void its payments first.`,
-    );
-  }
-  if (!isZero(dec(current.amountCredited))) {
+  if (!isZero(dec(current.amountApplied)) || !isZero(dec(current.amountRefunded))) {
     // Example CN9. The database refuses it too.
     throw new ConflictError(
-      `${invoiceLabel(current)} has credit applied to it, so it can't be voided. Remove its credit first.`,
+      `${creditNoteLabel(current)} has credit applied or refunded, so it can't be voided. Remove its applications and refunds first.`,
     );
   }
-  if (voidDate < current.invoiceDate) {
-    throw new ValidationError(`The void date can't be before the invoice date (${current.invoiceDate}).`);
+  if (voidDate < current.creditNoteDate) {
+    throw new ValidationError(`The void date can't be before the credit note date (${current.creditNoteDate}).`);
   }
 
   const original = await getJournal(tx, current.approvalJournalId!);
   const posted = await postJournalBody(
     tx,
-    "invoice:void",
-    invoiceId,
+    "sales_credit_note:void",
+    creditNoteId,
     parseJournalBody(tx, {
       postingDate: voidDate,
-      reference: `VOID-${current.invoiceNumber}`,
-      description: `Void of invoice ${current.invoiceNumber}`,
+      reference: `VOID-${current.creditNoteNumber}`,
+      description: `Void of credit note ${current.creditNoteNumber}`,
       lines: original.lines.map((line) => ({
         accountCode: line.accountCode,
         debitAmount: line.creditAmount,
@@ -1032,31 +1011,31 @@ export async function voidInvoice(
         description: line.description,
       })),
     }),
-    { origin: "invoice", relatedJournalId: original.id, correctionKind: "reversal" },
+    { origin: "sales_credit_note", relatedJournalId: original.id, correctionKind: "reversal" },
   );
 
   try {
     await tx.query(
-      `update sales_invoices
+      `update sales_credit_notes
           set status = 'voided', void_date = $2, void_journal_id = $3, void_command_source = $4,
               void_idempotency_key = $5, void_request_hash = $6, voided_by_user_id = $7, voided_by_email = $8,
               voided_at = now(), updated_at = now()
         where id = $1`,
-      [invoiceId, voidDate, posted.journal.id, source, idempotencyKey, hash, tx.actor.userId, tx.actor.email],
+      [creditNoteId, voidDate, posted.journal.id, source, idempotencyKey, hash, tx.actor.userId, tx.actor.email],
     );
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new ConflictError(
-        "That idempotency key was already used for a different invoice void. Use a new key for a new invoice void.",
+        "That idempotency key was already used for a different credit note void. Use a new key for a new credit note void.",
       );
     }
     throw error;
   }
   await writeAuditEvent(tx, {
-    eventType: "invoice.voided",
-    entityType: "sales_invoice",
-    entityId: invoiceId,
-    details: { invoiceNumber: current.invoiceNumber, voidDate, journalId: posted.journal.id },
+    eventType: "credit_note.voided",
+    entityType: "sales_credit_note",
+    entityId: creditNoteId,
+    details: { creditNoteNumber: current.creditNoteNumber, voidDate, journalId: posted.journal.id },
   });
-  return { created: true, invoice: await getInvoice(tx, invoiceId) };
+  return { created: true, creditNote: await getCreditNote(tx, creditNoteId) };
 }
