@@ -24,7 +24,7 @@ export const NZ_DEFAULT_CHART: readonly ChartTemplateAccount[] = [
   { code: "1630", name: "Accumulated depreciation - computer equipment", type: "fixed_asset" },
   { code: "1640", name: "Motor vehicles", type: "fixed_asset" },
   { code: "1650", name: "Accumulated depreciation - motor vehicles", type: "fixed_asset" },
-  { code: "2000", name: "Accounts payable", type: "current_liability" },
+  { code: "2000", name: "Accounts payable", type: "current_liability", systemKey: "accounts_payable" },
   { code: "2100", name: "GST", type: "current_liability", systemKey: "gst" },
   { code: "2200", name: "PAYE payable", type: "current_liability" },
   { code: "2300", name: "Income tax payable", type: "current_liability" },

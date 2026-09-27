@@ -766,17 +766,17 @@ export async function deleteInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise
   });
 }
 
-type ControlAccount = { systemKey: string; label: string; accountClass: string };
+export type ControlAccount = { systemKey: string; label: string; accountClass: string };
 
 const RECEIVABLE_ACCOUNT: ControlAccount = { systemKey: "accounts_receivable", label: "accounts receivable", accountClass: "asset" };
-const GST_ACCOUNT: ControlAccount = { systemKey: "gst", label: "GST", accountClass: "liability" };
+export const GST_ACCOUNT: ControlAccount = { systemKey: "gst", label: "GST", accountClass: "liability" };
 
 /**
  * A control account, found by its system key (see the default chart: 1100
- * for accounts receivable and 2100 for GST). `refused` says what can't be done
- * without it.
+ * for accounts receivable, 2000 for accounts payable and 2100 for GST).
+ * `refused` says what can't be done without it.
  */
-async function controlAccountCode(tx: OrgTx, control: ControlAccount, refused: string): Promise<string> {
+export async function controlAccountCode(tx: OrgTx, control: ControlAccount, refused: string): Promise<string> {
   const result = await tx.query<{ code: string; name: string; account_class: string; currency_code: string | null }>(
     "select code, name, account_class, currency_code from accounts where system_key = $1",
     [control.systemKey],

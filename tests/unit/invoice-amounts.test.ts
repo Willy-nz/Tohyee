@@ -51,6 +51,38 @@ describe("invoice amounts (worked examples)", () => {
   });
 });
 
+/** Bills use the same maths as invoices (docs/ACCOUNTING-EXAMPLES.md, "Bills"). */
+describe("bill amounts (worked examples)", () => {
+  const EXEMPT = "0";
+
+  it("B1: exclusive 1 x 200.00 at 15% -> net 200.00, GST 30.00, total 230.00", () => {
+    const result = calculateInvoice("exclusive", [line("1", "200.00")], 2);
+    expect(result.lines).toEqual([{ lineAmount: "200.00", netAmount: "200.00", taxAmount: "30.00" }]);
+    expect(result).toMatchObject({ subtotal: "200.00", taxTotal: "30.00", total: "230.00" });
+  });
+
+  it("B2: inclusive 1 x 46.00 at 15% -> GST 46.00 x 3/23 = 6.00; net 40.00; total 46.00", () => {
+    const result = calculateInvoice("inclusive", [line("1", "46.00")], 2);
+    expect(result.lines).toEqual([{ lineAmount: "46.00", netAmount: "40.00", taxAmount: "6.00" }]);
+    expect(result).toMatchObject({ subtotal: "40.00", taxTotal: "6.00", total: "46.00" });
+  });
+
+  it("B3: exclusive, three lines of 1 x 3.33 -> GST 0.50 a line, GST 1.50, total 11.49 (same as I3)", () => {
+    const result = calculateInvoice("exclusive", [line("1", "3.33"), line("1", "3.33"), line("1", "3.33")], 2);
+    expect(result.lines.map((entry) => entry.taxAmount)).toEqual(["0.50", "0.50", "0.50"]);
+    expect(result).toMatchObject({ subtotal: "9.99", taxTotal: "1.50", total: "11.49" });
+  });
+
+  it("B4: 100.00 exclusive at standard 15% + 20.00 exempt -> GST 15.00, total 135.00", () => {
+    const result = calculateInvoice("exclusive", [line("1", "100.00"), line("1", "20.00", EXEMPT)], 2);
+    expect(result.lines.map((entry) => [entry.netAmount, entry.taxAmount])).toEqual([
+      ["100.00", "15.00"],
+      ["20.00", "0.00"],
+    ]);
+    expect(result).toMatchObject({ subtotal: "120.00", taxTotal: "15.00", total: "135.00" });
+  });
+});
+
 describe("invoice line rounding", () => {
   it("rounds quantity x unit price once to cents, half away from zero", () => {
     // 3 x 3.3333 = 9.9999 -> 10.00 (not 3 x 3.33 = 9.99); 1.5 x 0.3333 = 0.49995 -> 0.50.
