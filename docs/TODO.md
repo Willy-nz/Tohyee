@@ -12,6 +12,8 @@ agents: these come before the "Next" list in docs/FEATURES.md. Anything marked
 4. **Custom reports.** Reports area with tabs Home, Custom, Drafts, Published, Archived. Edit layout: the report as a page with an editable title, organisation and period, columns per period, grouped rows with totals, formula rows (e.g. Gross Profit), and a toolbar (text block, table, rows/columns, move up/down, delete, PDF). To confirm with Jess: what each toolbar button does, and what else a custom report can change.
 5. **History, notes and attachments** on journals: show who did what and when (already in the audit log), add notes, and attach files (stored with the organisation's data so backups include them). To confirm: invoices, bills, credit notes and contacts too?
 
+6. **Use Tohyee from anywhere** (phone or laptop, away from home), the way a media server lets you reach it remotely. Needs: a secure way in without opening ports by hand (e.g. a built-in secure tunnel or relay), HTTPS, stronger sign-in for remote use (e.g. two-step verification), and screens that work on a phone. How it connects (our own relay, or an existing tunnel service) is to confirm with Jess.
+
 Still open from before: payments and hybrid GST bases (needs worked examples from Jess), and confirming zero-rated purchases stay out of Box 11.
 
 ## Step 1: Bigcapital review (do this before building items 1-5)
