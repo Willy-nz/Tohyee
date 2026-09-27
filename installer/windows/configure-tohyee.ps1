@@ -45,8 +45,14 @@ try {
   }
 
   # Only Administrators and SYSTEM can read a file or folder (it holds passwords).
+  # Inheritance flags only apply to folders; on a file they'd lock everyone out.
   function Protect-Path([string]$Path) {
-    Invoke-Checked 'icacls.exe' @($Path, '/inheritance:r', '/grant:r', '*S-1-5-32-544:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F', '/Q')
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+      $grants = @('*S-1-5-32-544:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F')
+    } else {
+      $grants = @('*S-1-5-32-544:F', '*S-1-5-18:F')
+    }
+    Invoke-Checked 'icacls.exe' (@($Path, '/inheritance:r', '/grant:r') + $grants + @('/Q'))
   }
 
   # --- Settings and passwords -------------------------------------------------

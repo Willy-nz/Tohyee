@@ -55,6 +55,8 @@ function Show-Logs {
   Get-ChildItem (Join-Path $dataRoot 'logs') -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "--- $($_.Name)"; Get-Content $_.FullName -Tail 80 }
   Get-ChildItem (Join-Path $dataRoot 'pgdata\log') -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "--- pg $($_.Name)"; Get-Content $_.FullName -Tail 40 }
   Get-Service -Name 'Tohyee*' -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-Host
+  & icacls.exe (Join-Path $dataRoot 'tohyee.env') | Out-Host
+  & whoami.exe /groups | Select-String 'S-1-5-32-544|Mandatory Label' | Out-Host
 }
 
 try {
