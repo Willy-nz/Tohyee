@@ -5,6 +5,15 @@ import { listSupplierPayments, recordSupplierPayment, voidSupplierPayment } from
 import { approveBill, createBill, deleteBill, updateBill, voidBill } from "@/lib/bills/service";
 import { migrateEverything } from "@/lib/db/migrations";
 import { createContact } from "@/lib/contacts/service";
+import { applyCreditNote, listApplications, removeApplication } from "@/lib/credit-notes/applications";
+import { listRefunds, refundCreditNote, voidRefund } from "@/lib/credit-notes/refunds";
+import {
+  approveCreditNote,
+  createCreditNote,
+  deleteCreditNote,
+  updateCreditNote,
+  voidCreditNote,
+} from "@/lib/credit-notes/service";
 import type { Actor } from "@/lib/db/org-transaction";
 import { listPayments, recordPayment, voidPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, deleteInvoice, updateInvoice, voidInvoice } from "@/lib/invoices/service";
@@ -193,6 +202,60 @@ describeWithDatabase("separate admin and runtime logins (DATABASE_ADMIN_URL)", (
     expect(result.voided.payment).toMatchObject({ status: "voided", amount: "30.00", voidDate: "2026-06-17" });
     expect(result.voided.bill).toMatchObject({ amountPaid: "0.00", amountDue: "80.00", paidStatus: "unpaid" });
     expect(result.payments.map((entry) => entry.status)).toEqual(["voided"]);
+  });
+
+  it("sales credit notes can be drafted, approved, applied, refunded and voided as the runtime login", async () => {
+    const result = await inOrganisation(ORG, actor, async (tx) => {
+      const { contact } = await createContact(tx, { idempotencyKey: key("c"), name: "Credited Customer", isCustomer: true });
+      const { invoice: savedInvoice } = await createInvoice(tx, {
+        idempotencyKey: key("i"),
+        contactId: contact.id,
+        invoiceDate: "2026-06-15",
+        dueDate: "2026-07-15",
+        amountsMode: "no_tax",
+        lines: [{ description: "Service", quantity: "1", unitPrice: "80", accountCode: "4000" }],
+      });
+      const { invoice } = await approveInvoice(tx, savedInvoice.id, { idempotencyKey: key("a") });
+      const draft = () =>
+        createCreditNote(tx, {
+          idempotencyKey: key("cn"),
+          contactId: contact.id,
+          creditNoteDate: "2026-06-16",
+          amountsMode: "no_tax",
+          lines: [{ description: "Refund", quantity: "1", unitPrice: "20", accountCode: "4000" }],
+        });
+      await deleteCreditNote(tx, (await draft()).creditNote.id);
+      const { creditNote: saved } = await draft();
+      await updateCreditNote(tx, saved.id, {
+        lines: [{ description: "Refund", quantity: "1", unitPrice: "30", accountCode: "4000" }],
+      });
+      await approveCreditNote(tx, saved.id, { idempotencyKey: key("ca") });
+      const applied = await applyCreditNote(tx, saved.id, {
+        idempotencyKey: key("ap"),
+        applicationDate: "2026-06-17",
+        applications: [{ invoiceId: invoice.id, amount: "20.00" }],
+      });
+      await removeApplication(tx, saved.id, applied.applications[0].id, {
+        idempotencyKey: key("rm"),
+        removalDate: "2026-06-18",
+      });
+      const { refund } = await refundCreditNote(tx, saved.id, {
+        idempotencyKey: key("rf"),
+        refundDate: "2026-06-18",
+        amount: "30.00",
+        bankAccountCode: "1000",
+      });
+      await voidRefund(tx, saved.id, refund.id, { idempotencyKey: key("vr"), voidDate: "2026-06-19" });
+      const voided = await voidCreditNote(tx, saved.id, { idempotencyKey: key("vc"), voidDate: "2026-06-20" });
+      return {
+        voided: voided.creditNote,
+        applications: await listApplications(tx, saved.id),
+        refunds: await listRefunds(tx, saved.id),
+      };
+    });
+    expect(result.voided).toMatchObject({ status: "voided", creditNoteNumber: "CN-0001", total: "30.00" });
+    expect(result.applications.map((entry) => entry.status)).toEqual(["removed"]);
+    expect(result.refunds.map((entry) => entry.status)).toEqual(["voided"]);
   });
 
   it("the runtime login can't change the schema or rewrite posted history", async () => {

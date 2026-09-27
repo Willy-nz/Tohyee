@@ -41,8 +41,11 @@ own.
   (`INV-0001`, …) and posts it to the ledger, and voiding that reverses it.
 - **Customer payments** against an approved invoice, into a bank account:
   each one posts to the ledger, part payments are fine, and the invoice shows
-  what's still due. Credit notes, overpayments and the GST return aren't built
-  yet.
+  what's still due. Overpayments and the GST return aren't built yet.
+- **Sales credit notes**: drafts, approval that numbers them (`CN-0001`, …)
+  and posts them, credit applied to one or more of the customer's invoices,
+  unused credit kept on the credit note or refunded from a bank account, and
+  voiding. Supplier credit notes come next.
 - **Supplier payments** against an approved bill, from a bank account: each
   one posts to the ledger, part payments are fine, and the bill shows what's
   still due.
@@ -149,8 +152,9 @@ the `Origin` and `Sec-Fetch-Site` headers).
 | Organisation | `GET/PATCH /api/organisations/:id/settings`, `GET/POST /api/organisations/:id/members`, `PATCH/DELETE /api/organisations/:id/members/:userId` |
 | Accounts | `GET/POST /api/accounts`, `PATCH /api/accounts/:id` |
 | Contacts | `GET/POST /api/contacts`, `PATCH /api/contacts/:id` |
-| Invoices | `GET/POST /api/invoices` (`?awaitingPayment=true` for approved invoices with an amount due), `GET/PATCH/DELETE /api/invoices/:id`, `POST /api/invoices/:id/approve`, `POST /api/invoices/:id/void` |
+| Invoices | `GET/POST /api/invoices` (`?awaitingPayment=true` for approved invoices with an amount due, `?contactId=` for one customer's), `GET/PATCH/DELETE /api/invoices/:id` (GET includes the credit applied), `POST /api/invoices/:id/approve`, `POST /api/invoices/:id/void` |
 | Customer payments | `GET/POST /api/invoices/:id/payments`, `POST /api/invoices/:id/payments/:paymentId/void` |
+| Sales credit notes | `GET/POST /api/credit-notes` (`?status=`, `?contactId=`, `?hasRemainingCredit=true`), `GET/PATCH/DELETE /api/credit-notes/:id`, `POST /api/credit-notes/:id/approve`, `POST /api/credit-notes/:id/void`, `GET/POST /api/credit-notes/:id/applications`, `POST /api/credit-notes/:id/applications/:applicationId/remove`, `GET/POST /api/credit-notes/:id/refunds`, `POST /api/credit-notes/:id/refunds/:refundId/void` |
 | Bills | `GET/POST /api/bills` (`?status=` filters by draft, approved or voided; `?awaitingPayment=true` for approved bills with an amount due), `GET/PATCH/DELETE /api/bills/:id`, `POST /api/bills/:id/approve`, `POST /api/bills/:id/void` |
 | Supplier payments | `GET/POST /api/bills/:id/payments`, `POST /api/bills/:id/payments/:paymentId/void` |
 | Ledger | `GET/POST /api/ledger/journals`, `GET /api/ledger/journals/:id`, `POST /api/ledger/journals/corrections`, `GET/PATCH /api/ledger/period-controls`, `GET/POST /api/ledger/revaluations` |

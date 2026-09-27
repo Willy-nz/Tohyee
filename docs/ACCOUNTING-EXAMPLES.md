@@ -7,6 +7,7 @@ proves it". Test names start with the example IDs they cover:
 - `tests/unit/decimal.test.ts` (R1, R3), `tests/unit/costing.test.ts`
   (W1-W12, pure costing maths) and `tests/unit/invoice-amounts.test.ts`
   (I1-I6 and B1-B4, pure invoice and bill maths; CP1, CP2 and CP4 paid
+  status; CN2, CN10 credit note maths and CN2-CN4, CN6-CN8 credit and paid
   status)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
   P1-P3), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
@@ -15,7 +16,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/invoices.test.ts` (I1-I9, D1, D2 for invoices),
   `tests/integration/customer-payments.test.ts` (CP1-CP8),
   `tests/integration/bills.test.ts` (B1-B8, D1, D2 for bills) and
-  `tests/integration/supplier-payments.test.ts` (SP1-SP8), all against a real
+  `tests/integration/supplier-payments.test.ts` (SP1-SP8) and
+  `tests/integration/credit-notes.test.ts` (CN1-CN12), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -162,7 +164,7 @@ An invoice's amounts are tax **exclusive** (GST is added on top), tax
 
 - **Negative or zero lines** (discounts, credits): quantities and unit prices
   must be more than zero, and a line that rounds to 0.00 is refused. Credit
-  notes come later.
+  the customer with a sales credit note instead (CN1-CN12).
 - **Correcting an approved invoice**: it can't be edited, and its journals
   can't be corrected in the ledger. Void it and raise a new one.
 - **Foreign-currency invoices**: invoices are in the base currency only.
@@ -175,8 +177,9 @@ money went into / Cr accounts receivable (1100). The bank account must be an
 active account of type bank. Amounts must be more than zero, with at most
 2 decimal places.
 
-An invoice's amount due is its total less its active (not voided) payments.
-Its paid status is **unpaid** (nothing paid), **part paid** or **paid**
+An invoice's amount due is its total less its active (not voided) payments
+and the active credit applied to it from sales credit notes (CN3). Its paid
+status is **unpaid** (nothing paid), **part paid** or **paid**
 (nothing due). Both are worked out from the payments every time; they're
 never stored or typed in.
 
@@ -317,6 +320,99 @@ or typed in.
   its own, and no bank file is made.
 - **Correcting a payment**: its journals can't be corrected in the ledger.
   Void the payment and record it again.
+
+## Sales credit notes
+
+A sales credit note is credit given to a customer, e.g. for goods returned or
+an overcharge. Its lines work exactly like invoice lines (the same amounts
+modes, line rules and per-line GST in `src/lib/invoices/amounts.ts`).
+
+- Drafts post nothing, can be edited and deleted, and have no number.
+- Approving numbers it `CN-0001`, `CN-0002`, ... with no gaps, from its own
+  counter (separate from `INV-`), and posts one journal dated the credit note
+  date: Dr each revenue account for its net amount, Dr GST (2100) for the GST,
+  Cr accounts receivable (1100) for the total. There's no GST line when the
+  GST is 0.00. Approved credit notes can't be edited.
+- **Applying** approved credit to approved invoices of the same customer and
+  currency posts **no journal** (both sides are accounts receivable); it only
+  changes the amounts due. One command can apply credit to several invoices,
+  with one date and an amount for each, and it's all or nothing. Each amount
+  is more than zero with at most 2 decimal places and no more than that
+  invoice's amount due; the total is no more than the remaining credit. The
+  date is on or after both the credit note date and the invoice date.
+- **Removing** an application (once, dated on or after the application)
+  posts no journal and puts the amount back on both. Nothing is deleted.
+- **Refunding** remaining credit posts Dr 1100 / Cr the bank account on the
+  refund date (on or after the credit note date), from an active,
+  base-currency account of type bank. A refund can be voided once, which posts
+  the exact reversal on the void date.
+- A credit note's remaining credit is its total less its active applications
+  and active refunds; its credit status is **open** (none used), **part used**
+  or **used** (none left). An invoice's amount due is its total less its active
+  payments and active credit applied. All of these are worked out every time,
+  never stored.
+- Period locks apply to approving, applying, removing, refunding and voiding,
+  by their dates, even when no journal is posted.
+
+Setup: customer Kobe Ltd has INV-0001 = I1 (total 115.00, Dr 1100 115.00 /
+Cr 4000 100.00 / Cr 2100 15.00) and INV-0002 = I6 (no tax, 80.00). Each example
+starts from the setup plus the steps it names.
+
+- **CN1** A draft credit note, exclusive, 1 x 20.00 at 15% to 4000, posts
+  nothing, can be edited and deleted, and uses no number.
+- **CN2** Approving it gives **CN-0001**: net **20.00**, GST **3.00**, total
+  **23.00**. Journal on its date: Dr 4000 20.00 / Dr 2100 3.00 /
+  Cr 1100 23.00. Remaining credit **23.00**; status **open**.
+- **CN3** Applying 23.00 of CN-0001 to INV-0001 posts no journal. INV-0001 is
+  credited **23.00**, amount due **92.00**, **part paid**. CN-0001 remaining
+  **0.00**, **used**.
+- **CN4** CN-0002 is exclusive 1 x 100.00 at 15% (total 115.00). One command
+  applies 80.00 to INV-0002 and 20.00 to INV-0001 (after CN3, due 92.00):
+  INV-0002 due **0.00**, **paid**; INV-0001 due **72.00**; CN-0002 remaining
+  **15.00**, **part used**.
+- **CN5** Refused, and nothing changes: applying more than the remaining
+  credit; more than an invoice's amount due (one bad line fails the whole
+  command); an invoice of another customer; a draft or voided invoice; a draft
+  or voided credit note; dated before the credit note or invoice date; amounts
+  0.00, -1.00 and 1.001.
+- **CN6** After CN3, a payment of 92.00 makes INV-0001 **paid**; 92.01
+  instead is refused.
+- **CN7** Starting from CN3, removing that application on a later date posts
+  no journal: INV-0001 due back to **115.00**; CN-0001 remaining back to
+  **23.00**, **open**. A second removal is refused, and so is a removal dated
+  before the application.
+- **CN8** Refunding CN-0002's remaining 15.00 from 1000 posts
+  Dr 1100 15.00 / Cr 1000 15.00 on the refund date; remaining **0.00**,
+  **used**. Refunding 15.01 is refused; refunding from 1100 or from an
+  archived bank account is refused. Voiding the refund later posts
+  Dr 1000 15.00 / Cr 1100 15.00; remaining back to **15.00**.
+- **CN9** Voiding CN-0001 while it has an active application is refused
+  ("remove its applications and refunds first"); after removing it, voiding
+  posts Dr 1100 23.00 / Cr 4000 20.00 / Cr 2100 3.00. Voiding INV-0001 while
+  credit is applied to it is refused ("remove its credit first").
+- **CN10** Inclusive: 1 x 15.00 at 15% gives GST **1.96**, net **13.04**,
+  total **15.00** (the same maths as invoices).
+- **CN11** Approving, applying, removing, refunding or voiding dated in a
+  locked period is refused, and nothing is posted or numbered. Approving two
+  credit notes gives CN-0001 and CN-0002 with no gap, even with a refused
+  approval in between; drafts never take a number; `INV-` numbering is
+  unaffected.
+- **CN12** Retrying approve, apply, refund or void with the same idempotency
+  key and content returns the same result; the same key with different
+  content is refused (409).
+
+### Not supported yet (refused rather than guessed)
+
+- **Supplier credit notes**: they come in the next change, mirroring these.
+- **Applying credit across currencies**: credit is applied only to invoices in
+  the credit note's currency.
+- **Overpayments and prepayments as credit**: only credit notes give credit.
+- **Applying credit from the invoice page**: apply it from the credit note's
+  page. The invoice page shows the credit applied and links to the customer's
+  credit notes with credit left.
+- **Credit note PDFs and emailing**.
+- **Correcting a credit note or a refund**: their journals can't be corrected
+  in the ledger. Void and raise them again.
 
 ## Reports
 
