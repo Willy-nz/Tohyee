@@ -43,6 +43,9 @@ own.
   each one posts to the ledger, part payments are fine, and the invoice shows
   what's still due. Credit notes, overpayments and the GST return aren't built
   yet.
+- **Supplier payments** against an approved bill, from a bank account: each
+  one posts to the ledger, part payments are fine, and the bill shows what's
+  still due.
 - **Stock**: receipts, sales, returns, stocktake adjustments and landed cost,
   with weighted-average costing to the cent.
 - **Foreign-currency revaluation** of foreign-currency bank, asset and
@@ -148,7 +151,8 @@ the `Origin` and `Sec-Fetch-Site` headers).
 | Contacts | `GET/POST /api/contacts`, `PATCH /api/contacts/:id` |
 | Invoices | `GET/POST /api/invoices` (`?awaitingPayment=true` for approved invoices with an amount due), `GET/PATCH/DELETE /api/invoices/:id`, `POST /api/invoices/:id/approve`, `POST /api/invoices/:id/void` |
 | Customer payments | `GET/POST /api/invoices/:id/payments`, `POST /api/invoices/:id/payments/:paymentId/void` |
-| Bills | `GET/POST /api/bills` (`?status=` filters by draft, approved or voided), `GET/PATCH/DELETE /api/bills/:id`, `POST /api/bills/:id/approve`, `POST /api/bills/:id/void` |
+| Bills | `GET/POST /api/bills` (`?status=` filters by draft, approved or voided; `?awaitingPayment=true` for approved bills with an amount due), `GET/PATCH/DELETE /api/bills/:id`, `POST /api/bills/:id/approve`, `POST /api/bills/:id/void` |
+| Supplier payments | `GET/POST /api/bills/:id/payments`, `POST /api/bills/:id/payments/:paymentId/void` |
 | Ledger | `GET/POST /api/ledger/journals`, `GET /api/ledger/journals/:id`, `POST /api/ledger/journals/corrections`, `GET/PATCH /api/ledger/period-controls`, `GET/POST /api/ledger/revaluations` |
 | Stock | `GET/POST /api/inventory/movements` |
 | Reports | `GET /api/reports/trial-balance`, `/profit-and-loss`, `/balance-sheet`, `/inventory-valuation` |

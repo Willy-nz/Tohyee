@@ -51,7 +51,15 @@ that something happened.
   rounded per line as on sales invoices. Approving posts Dr each line's
   account and GST / Cr accounts payable on the bill date, and voiding posts
   the exact reversal on the void date. Period locks apply; approving and
-  voiding are idempotent. Paying bills isn't built yet. See examples B1-B8.
+  voiding are idempotent. See examples B1-B8.
+- **Supplier payments** against one approved bill at a time: recording a
+  payment posts Dr accounts payable / Cr the bank account on the payment date,
+  and voiding it posts the exact reversal on the void date. A bill's amount
+  due and paid status (unpaid, part paid, paid) are worked out from its active
+  payments, and the bill list can show just the bills awaiting payment.
+  Overpayments are refused, and a bill with active payments can't be voided.
+  Period locks apply; recording and voiding are idempotent. See examples
+  SP1-SP8.
 - **GST basis** setting (invoice, payments or hybrid). Stored and shown only;
   the GST return will use it.
 - **Update check** against GitHub releases.
@@ -75,8 +83,8 @@ isn't acceptable, because people would trust it:
 
 ## Next, in rough order
 
-1. Credit notes and supplier payments (the core of a Xero-style ledger),
-   customer payments across several invoices, overpayments and prepayments,
+1. Credit notes (the core of a Xero-style ledger), customer and supplier
+   payments across several invoices or bills, overpayments and prepayments,
    and a GST return built from postings using the GST basis setting. Invoice
    PDFs and emailing come with or after these.
 2. Bank feeds (through an NZ open-banking provider, still to be chosen) and
