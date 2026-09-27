@@ -7,10 +7,12 @@ import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { formatRate, formatUnitPrice, InvoiceStatusBadge, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { InvoicePayments } from "@/components/invoices/invoice-payments";
-import { Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
+import { Badge, Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, formatQuantity, todayInBrowser } from "@/lib/format";
+import type { CreditNoteApplication } from "@/lib/credit-notes/applications";
+import type { CreditNoteSummary } from "@/lib/credit-notes/service";
+import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { Invoice } from "@/lib/invoices/service";
 
@@ -90,7 +92,7 @@ function InvoiceActions({
   if (invoice.status === "voided") {
     return null;
   }
-  // Example CP5: an invoice with active payments is voided after its payments.
+  // Examples CP5 and CN9: an invoice with active payments or credit applied is voided after they're removed.
   const hasPayments = invoice.status === "approved" && invoice.paidStatus !== "unpaid";
   return (
     <Card
@@ -103,7 +105,10 @@ function InvoiceActions({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {hasPayments ? (
-        <Notice tone="info">This invoice has payments against it. Void its payments first, then void the invoice.</Notice>
+        <Notice tone="info">
+          This invoice has payments or credit against it. Void its payments and remove its credit first, then void the
+          invoice.
+        </Notice>
       ) : null}
       {invoice.status === "draft" ? (
         <div className={ui.actions}>
@@ -137,9 +142,88 @@ function InvoiceActions({
   );
 }
 
+/**
+ * Credit applied to an invoice from credit notes (example CN3). Credit is
+ * applied and removed on the credit note's page.
+ */
+function InvoiceCredit({ creditApplied }: { creditApplied: CreditNoteApplication[] }) {
+  return (
+    <Card
+      title="Credit applied"
+      description="Credit from credit notes lowers the amount due without posting a journal. Apply or remove it on the credit note."
+    >
+      <div className={ui.tableWrap}>
+        <table className={ui.table}>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Credit note</th>
+              <th>Status</th>
+              <th className={ui.num}>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {creditApplied.map((application) => (
+              <tr key={application.id}>
+                <td>{formatDate(application.applicationDate)}</td>
+                <td>
+                  <Link href={`/operations/credit-notes/${application.creditNoteId}`}>{application.creditNoteNumber}</Link>
+                </td>
+                <td>
+                  {application.status === "active" ? (
+                    <Badge tone="green">Active</Badge>
+                  ) : (
+                    <>
+                      <Badge tone="red">Removed</Badge>
+                      <span className={ui.muted}> on {formatDate(application.removalDate)}</span>
+                    </>
+                  )}
+                </td>
+                <td className={ui.num}>
+                  <Money value={application.amount} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+/** Points to the customer's approved credit notes that still have credit to apply. */
+function UnusedCredit({ organisationId, invoice }: { organisationId: string; invoice: Invoice }) {
+  const list = useApiData<{ creditNotes: CreditNoteSummary[] }>("/api/credit-notes", {
+    organisationId,
+    contactId: invoice.contactId,
+    hasRemainingCredit: "true",
+  });
+  const creditNotes = (list.data?.creditNotes ?? []).filter((creditNote) => creditNote.currencyCode === invoice.currencyCode);
+  if (creditNotes.length === 0) {
+    return null;
+  }
+  return (
+    <Notice tone="info">
+      {invoice.contactName} has unused credit:{" "}
+      {creditNotes.map((creditNote, index) => (
+        <span key={creditNote.id}>
+          {index > 0 ? ", " : ""}
+          <Link href={`/operations/credit-notes/${creditNote.id}`}>{creditNote.creditNoteNumber}</Link> (
+          {formatMoney(creditNote.remainingCredit)} left)
+        </span>
+      ))}
+      . Apply it from the credit note.
+    </Notice>
+  );
+}
+
 function InvoiceView({ organisationId, invoiceId }: { organisationId: string; invoiceId: string }) {
   const { can } = useWorkspace();
-  const details = useApiData<{ invoice: Invoice }>(`/api/invoices/${encodeURIComponent(invoiceId)}`, { organisationId });
+  const router = useRouter();
+  const details = useApiData<{ invoice: Invoice; creditApplied: CreditNoteApplication[] }>(
+    `/api/invoices/${encodeURIComponent(invoiceId)}`,
+    { organisationId },
+  );
   // Approving, voiding and payments return the updated invoice, which is shown straight away.
   const [updated, setUpdated] = useState<Invoice | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -159,9 +243,13 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
   }
   const invoice = updated ?? details.data.invoice;
   const hasTax = invoice.amountsMode !== "no_tax";
+  const { creditApplied } = details.data;
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
+      {invoice.status === "approved" && invoice.paidStatus !== "paid" ? (
+        <UnusedCredit organisationId={organisationId} invoice={invoice} />
+      ) : null}
       <Card
         title={invoice.invoiceNumber ?? `Draft #${invoice.id}`}
         description={`To ${invoice.contactName} · ${AMOUNTS_MODE_LABELS[invoice.amountsMode]} · ${invoice.currencyCode}`}
@@ -169,6 +257,15 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           <>
             <InvoiceStatusBadge status={invoice.status} />
             {invoice.paidStatus ? <PaidStatusBadge status={invoice.paidStatus} /> : null}
+            {invoice.status === "approved" && can("bookkeeper") ? (
+              <Button
+                size="small"
+                variant="secondary"
+                onClick={() => router.push(`/operations/credit-notes/new?fromInvoice=${encodeURIComponent(invoice.id)}`)}
+              >
+                Create credit note
+              </Button>
+            ) : null}
           </>
         }
       >
@@ -231,6 +328,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           {invoice.status === "approved" ? (
             <>
               <Stat label="Paid" value={<Money value={invoice.amountPaid} />} />
+              <Stat label="Credited" value={<Money value={invoice.amountCredited} />} />
               <Stat label="Amount due" value={<Money value={invoice.amountDue} />} />
             </>
           ) : null}
@@ -263,6 +361,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           }}
         />
       ) : null}
+      {creditApplied.length > 0 ? <InvoiceCredit creditApplied={creditApplied} /> : null}
       {can("bookkeeper") ? (
         <InvoiceActions
           key={invoice.status}

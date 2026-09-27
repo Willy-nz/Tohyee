@@ -114,7 +114,7 @@ function Invoices({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Sales invoices"
-      description="Newest first. Drafts post nothing; approving numbers the invoice and posts it. Amount due is the total less the invoice's payments."
+      description="Newest first. Drafts post nothing; approving numbers the invoice and posts it. Amount due is the total less the invoice's payments and the credit applied to it."
       actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/invoices/new")}>New invoice</Button> : null}
     >
       <div className={ui.tabs} role="tablist" aria-label="Invoice status">
