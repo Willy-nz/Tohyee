@@ -14,6 +14,11 @@ import type { Invoice } from "@/lib/invoices/service";
 
 type PaymentResult = { payment: CustomerPayment; invoice: Invoice };
 
+/** Amounts arrive as fixed strings like "0.00". */
+function isZeroAmount(amount: string): boolean {
+  return /^0(\.0+)?$/.test(amount);
+}
+
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
 }
@@ -100,7 +105,10 @@ function RecordPaymentForm({
             required
           />
         </Field>
-        <Field label={`Amount (${invoice.currencyCode})`} hint={`${formatMoney(invoice.amountDue)} is due.`}>
+        <Field
+          label={`Amount (${invoice.currencyCode})`}
+          hint={`${formatMoney(invoice.amountDue)} is due. Anything more is kept as an overpayment: credit for ${invoice.contactName}.`}
+        >
           <input inputMode="decimal" value={fields.amount} onChange={(event) => set("amount", event.target.value)} required />
         </Field>
         <Field label="Bank account">
@@ -122,7 +130,7 @@ function RecordPaymentForm({
           {busy ? "Recording…" : "Record payment"}
         </Button>
         <span className={ui.muted}>
-          Posts the payment on its date: debit the bank account, credit accounts receivable.
+          Posts the whole payment on its date: debit the bank account, credit accounts receivable.
         </span>
       </div>
     </form>
@@ -154,7 +162,7 @@ function VoidPaymentForm({
     event.preventDefault();
     if (
       !window.confirm(
-        `Void the payment of ${formatMoney(payment.amount)} received on ${formatDate(payment.paymentDate)}? This posts a reversal of its journal on ${formatDate(voidDate)}, so the amount is due again. It can't be undone.`,
+        `Void the payment of ${formatMoney(payment.amount)} received on ${formatDate(payment.paymentDate)}? This posts a reversal of its journal on ${formatDate(voidDate)}, so the amount is due again${payment.overpaymentStatus ? " and its overpayment is cancelled" : ""}. It can't be undone.`,
       )
     ) {
       return;
@@ -246,6 +254,7 @@ export function InvoicePayments({
                 <th>Status</th>
                 <th>Journal</th>
                 <th className={ui.num}>Amount</th>
+                <th>Overpaid</th>
                 {bookkeeper ? <th /> : null}
               </tr>
             </thead>
@@ -272,6 +281,14 @@ export function InvoicePayments({
                   </td>
                   <td className={ui.num}>
                     <Money value={payment.amount} />
+                  </td>
+                  <td>
+                    {isZeroAmount(payment.overpaymentAmount) ? null : (
+                      <Link href={`/operations/overpayments/${payment.id}`}>
+                        {formatMoney(payment.overpaymentAmount)}
+                        {payment.status === "active" ? ` (${formatMoney(payment.overpaymentRemaining)} left)` : ""}
+                      </Link>
+                    )}
                   </td>
                   {bookkeeper ? (
                     <td>
@@ -314,7 +331,9 @@ export function InvoicePayments({
             list.reload();
             onChanged(
               result.invoice,
-              `Recorded a payment of ${formatMoney(result.payment.amount)} on ${formatDate(result.payment.paymentDate)} and posted it to the ledger; ${formatMoney(result.invoice.amountDue)} is due.`,
+              result.payment.overpaymentStatus
+                ? `Recorded a payment of ${formatMoney(result.payment.amount)} on ${formatDate(result.payment.paymentDate)} and posted it to the ledger. It paid ${formatMoney(result.payment.invoiceAmount)} on this invoice; the other ${formatMoney(result.payment.overpaymentAmount)} is an overpayment. Apply it to ${result.invoice.contactName}'s other invoices or refund it from the Overpaid link.`
+                : `Recorded a payment of ${formatMoney(result.payment.amount)} on ${formatDate(result.payment.paymentDate)} and posted it to the ledger; ${formatMoney(result.invoice.amountDue)} is due.`,
             );
           }}
         />
