@@ -830,7 +830,7 @@ create index bill_lines_account_idx on bill_lines (account_id);
 -- deleted instead). Once approved, a bill can only be voided: nothing but its
 -- status and void details may change, and it can't be deleted. Its lines are
 -- frozen with it.
-create function toeyee_guard_bill() returns trigger
+create function tohyee_guard_bill() returns trigger
 language plpgsql as $$
 begin
   if tg_op = 'TRUNCATE' then
@@ -862,7 +862,7 @@ begin
 end;
 $$;
 
-create function toeyee_guard_bill_line() returns trigger
+create function tohyee_guard_bill_line() returns trigger
 language plpgsql as $$
 declare
   parent_status text;
@@ -889,16 +889,16 @@ $$;
 
 create trigger bills_guard
   before update or delete on bills
-  for each row execute function toeyee_guard_bill();
+  for each row execute function tohyee_guard_bill();
 create trigger bills_no_truncate
   before truncate on bills
-  for each statement execute function toeyee_guard_bill();
+  for each statement execute function tohyee_guard_bill();
 create trigger bill_lines_guard
   before insert or update or delete on bill_lines
-  for each row execute function toeyee_guard_bill_line();
+  for each row execute function tohyee_guard_bill_line();
 create trigger bill_lines_no_truncate
   before truncate on bill_lines
-  for each statement execute function toeyee_guard_bill_line();
+  for each statement execute function tohyee_guard_bill_line();
 `,
   },
 ];
