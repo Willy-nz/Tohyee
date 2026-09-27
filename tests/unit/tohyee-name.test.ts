@@ -11,6 +11,12 @@ import { closeAllPools, getCorePool, getOrganisationPool } from "@/lib/db/pools"
 
 // The project's old name, written as t[o]eyee so this file doesn't match itself.
 const OLD_NAME = /t[o]eyee/i;
+const OLD_NAME_WORDS = /\w*t[o]eyee\w*/gi;
+
+/** Whole words containing the old name, other than the kept database function names. */
+function oldNamesIn(text: string, keptNames: ReadonlySet<string>): string[] {
+  return [...text.matchAll(OLD_NAME_WORDS)].map((match) => match[0]).filter((word) => !keptNames.has(word));
+}
 
 describe("the Tohyee name", () => {
   it("the old name only survives in database functions created by released migrations", () => {
@@ -27,11 +33,22 @@ describe("the Tohyee name", () => {
     );
     expect(keptNames.size).toBeGreaterThan(0);
 
+    // Only whole kept names pass: a new name that starts with one is still caught.
+    const old = ["t", "oeyee"].join("");
+    const kept = [...keptNames][0];
+    expect(oldNamesIn(`perform ${kept}(new.id);`, keptNames)).toEqual([]);
+    expect(oldNamesIn(`create function ${kept}_v2()`, keptNames)).toEqual([`${kept}_v2`]);
+    expect(oldNamesIn(`create function ${old}_brand_new()`, keptNames)).toEqual([`${old}_brand_new`]);
+    expect(oldNamesIn(`container_name: ${old.toUpperCase()}-postgres`, keptNames)).toEqual([old.toUpperCase()]);
+
     const offenders: string[] = [];
     const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
       .split("\0")
       .filter((file) => file && existsSync(file));
     for (const file of files) {
+      if (oldNamesIn(file, keptNames).length > 0) {
+        offenders.push(`${file}: file name`);
+      }
       const content = readFileSync(file);
       if (content.includes(0)) {
         continue; // binary, e.g. screenshots
@@ -40,11 +57,7 @@ describe("the Tohyee name", () => {
         .toString("utf8")
         .split("\n")
         .forEach((line, index) => {
-          let rest = line;
-          for (const name of keptNames) {
-            rest = rest.replaceAll(name, "");
-          }
-          if (OLD_NAME.test(rest)) {
+          if (oldNamesIn(line, keptNames).length > 0) {
             offenders.push(`${file}:${index + 1}: ${line.trim()}`);
           }
         });
