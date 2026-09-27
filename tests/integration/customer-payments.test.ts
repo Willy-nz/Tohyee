@@ -225,12 +225,9 @@ describeWithDatabase("customer payments", () => {
     ]);
   });
 
-  it("CP3: overpayments, payments against drafts or voided invoices, and amounts that aren't positive with at most 2 decimal places are refused", async () => {
+  it("CP3: payments against drafts, voided or paid invoices, and amounts that aren't positive with at most 2 decimal places are refused", async () => {
     const invoice = await approved();
     const journalsBefore = await journalCount();
-    await expect(pay(invoice.id, { amount: "115.01" })).rejects.toThrow(
-      "The payment of 115.01 is more than the amount due (115.00). Overpayments aren't supported yet.",
-    );
     await expect(pay(invoice.id, { amount: "0" })).rejects.toThrow("amount must not be zero.");
     await expect(pay(invoice.id, { amount: "0.00" })).rejects.toThrow("amount must not be zero.");
     await expect(pay(invoice.id, { amount: "-5.00" })).rejects.toThrow("amount can't be negative.");
@@ -240,9 +237,9 @@ describeWithDatabase("customer payments", () => {
     expect(await journalCount()).toBe(journalsBefore);
     expect(await paymentsOf(invoice.id)).toEqual([]);
 
-    // Paying exactly what's due is fine, to the cent; after that nothing more can be paid.
+    // Paying exactly what's due is fine, to the cent; after that nothing more can be paid (OP4).
+    // Paying more than what's due is an overpayment: see customer-overpayments.test.ts.
     await pay(invoice.id, { amount: "100.00" });
-    await expect(pay(invoice.id, { amount: "15.01" })).rejects.toThrow("is more than the amount due (15.00)");
     expect((await pay(invoice.id, { amount: "15" })).invoice).toMatchObject({ amountDue: "0.00", paidStatus: "paid" });
     await expect(pay(invoice.id, { amount: "0.01" })).rejects.toThrow(`Invoice ${invoice.invoiceNumber} is already paid in full.`);
 
@@ -516,9 +513,9 @@ describeWithDatabase("customer payments", () => {
     expect((await body(different)).error).toMatch(/already used for a different payment/);
     // The key belongs to that payment, so it can't be used for another invoice either.
     expect((await record(bookkeeperCookie, command, (await approved()).id)).status).toBe(409);
-    const refused = await record(bookkeeperCookie, { ...command, idempotencyKey: key("http-pay"), amount: "65.01" });
+    const refused = await record(bookkeeperCookie, { ...command, idempotencyKey: key("http-pay"), amount: "10.001" });
     expect(refused.status).toBe(400);
-    expect((await body(refused)).error).toMatch(/more than the amount due \(65\.00\)/);
+    expect((await body(refused)).error).toMatch(/at most 2 decimal places/);
     expect(await journalCount()).toBe(journalsBefore + 2); // the payment, and the other invoice's approval
 
     const listedOver = await list(viewerCookie);
@@ -599,7 +596,7 @@ describeWithDatabase("customer payments", () => {
   it("payments are dated on or after the invoice date; without a reference the journals use the invoice number", async () => {
     const invoice = await approved();
     await expect(pay(invoice.id, { paymentDate: "2026-05-09" })).rejects.toThrow(
-      "The payment date can't be before the invoice date (2026-05-10). Prepayments aren't supported yet.",
+      "The payment date can't be before the invoice date (2026-05-10). Prepayments aren't supported yet: raise the invoice first.",
     );
     await expect(pay(invoice.id, { paymentDate: "20/05/2026" })).rejects.toThrow(/paymentDate/);
     await expect(pay(invoice.id, { reference: "x".repeat(101) })).rejects.toThrow("reference can be at most 100 characters.");
@@ -675,7 +672,7 @@ describeWithDatabase("customer payments", () => {
     );
   });
 
-  it("the database refuses overpayments, payments against unapproved invoices, and any change but a single void", async () => {
+  it("the database refuses payments that don't split into invoice part and overpayment correctly, payments against unapproved invoices, and any change but a single void", async () => {
     const invoice = await approved();
     const { payment } = await pay(invoice.id, { amount: "100.00" });
     const drafted = await draft();
@@ -688,8 +685,9 @@ describeWithDatabase("customer payments", () => {
         [key("sql"), status, invoiceId, paymentDate, amount, currency, payment.bankAccountId, payment.journalId],
       );
 
+    // 15.01 against 15.00 due must record an overpayment of 0.01 (OP1); this one says 0.
     await expect(insert(invoice.id, "15.01")).rejects.toThrow(
-      `Payments against invoice ${invoice.invoiceNumber} can't add up to more than its total`,
+      `The overpayment on a payment against invoice ${invoice.invoiceNumber} must be what it pays beyond the amount due (15.00)`,
     );
     await expect(insert(drafted.id, "1.00")).rejects.toThrow("Payments can only be recorded against approved invoices");
     await expect(insert(invoice.id, "1.00", "2026-05-09")).rejects.toThrow("A payment can't be dated before its invoice");
@@ -715,7 +713,8 @@ describeWithDatabase("customer payments", () => {
     await expect(sql("delete from customer_payments where id = $1", [payment.id])).rejects.toThrow(
       "Customer payments can't be deleted; void them instead",
     );
-    await expect(sql("truncate customer_payments")).rejects.toThrow("customer_payments can't be truncated");
+    // Overpayment applications and refunds refer to payments, so a plain truncate is refused before the trigger runs.
+    await expect(sql("truncate customer_payments cascade")).rejects.toThrow(/can't be truncated/);
 
     // An invoice with active payments can't be voided, even directly.
     await expect(

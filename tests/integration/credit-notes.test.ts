@@ -609,7 +609,7 @@ describeWithDatabase("sales credit notes", () => {
     expect(await world.invoiceNow(i6)).toMatchObject({ amountCredited: "0.00", amountDue: "80.00" });
   });
 
-  it("CN6: after CN3, a payment of 92.00 makes INV-0001 paid; 92.01 instead is refused", async () => {
+  it("CN6: after CN3, a payment of 92.00 makes INV-0001 paid; 92.01 instead pays 92.00 and overpays 0.01 (OP1)", async () => {
     const world = await afterCn3();
     const pay = (amount: string) =>
       world.asUser(bookkeeper, (tx) =>
@@ -620,9 +620,19 @@ describeWithDatabase("sales credit notes", () => {
           bankAccountCode: "1000",
         }),
       );
-    await expect(pay("92.01")).rejects.toThrow("The payment of 92.01 is more than the amount due (92.00).");
     const { invoice } = await pay("92.00");
     expect(invoice).toMatchObject({ amountPaid: "92.00", amountCredited: "23.00", amountDue: "0.00", paidStatus: "paid" });
+    const other = await afterCn3();
+    const overpaid = await other.asUser(bookkeeper, (tx) =>
+      recordPayment(tx, other.i1.id, {
+        idempotencyKey: key("pay"),
+        paymentDate: "2026-05-22",
+        amount: "92.01",
+        bankAccountCode: "1000",
+      }),
+    );
+    expect(overpaid.payment).toMatchObject({ amount: "92.01", invoiceAmount: "92.00", overpaymentAmount: "0.01" });
+    expect(overpaid.invoice).toMatchObject({ amountPaid: "92.00", amountCredited: "23.00", amountDue: "0.00", paidStatus: "paid" });
     // The database refuses it too.
     await expect(
       world.sql(
@@ -632,7 +642,7 @@ describeWithDatabase("sales credit notes", () => {
            from customer_payments limit 1`,
         [world.i1.id],
       ),
-    ).rejects.toThrow("Payments against invoice INV-0001 can't add up to more than its total");
+    ).rejects.toThrow("Invoice INV-0001 is already paid in full");
   });
 
   it("CN7: removing the CN3 application later posts nothing; INV-0001 115.00 due, CN-0001 23.00 remaining, open; a second or early removal is refused", async () => {
