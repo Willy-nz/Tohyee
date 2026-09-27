@@ -386,6 +386,26 @@ describeWithDatabase("customer payments", () => {
     }
   });
 
+  it("L4, CP4, CP7: retrying a payment void after its period is locked returns the original, not a lock error", async () => {
+    const invoice = await approved();
+    const { payment } = await pay(invoice.id, { amount: "40.00" });
+    const voidKey = key("void-pay");
+    const { payment: voided } = await voidPay(invoice.id, payment.id, "2026-05-25", voidKey);
+    const journalsBefore = await journalCount();
+
+    await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: "2026-05-31" }));
+    try {
+      expect(await voidPay(invoice.id, payment.id, "2026-05-25", voidKey)).toMatchObject({
+        created: false,
+        payment: { id: payment.id, status: "voided", voidDate: "2026-05-25", voidJournalId: voided.voidJournalId },
+        invoice: { id: invoice.id, amountPaid: "0.00", amountDue: "115.00", paidStatus: "unpaid" },
+      });
+      expect(await journalCount()).toBe(journalsBefore);
+    } finally {
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+    }
+  });
+
   it("CP7: over HTTP a retry with the same key and content returns the payment (201 then 200); a different amount is a 409", async () => {
     const invoice = await approved();
     const [bookkeeperCookie, viewerCookie, outsiderCookie] = await Promise.all(

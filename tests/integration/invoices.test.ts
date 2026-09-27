@@ -400,6 +400,37 @@ describeWithDatabase("sales invoices", () => {
     expect(await journalCount()).toBe(journalsBefore + 1);
   });
 
+  it("L4, I7, I9: retrying an approval or a void after its period is locked returns the original, not a lock error", async () => {
+    const approveKey = key("approve");
+    const { invoice: approved } = await approve((await draft()).id, approveKey);
+    const { invoice: toVoid } = await approve((await draft()).id);
+    const voidKey = key("void");
+    const { invoice: voided } = await voidIt(toVoid.id, "2026-05-20", voidKey);
+    const journalsBefore = await journalCount();
+
+    await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: "2026-05-31" }));
+    try {
+      expect(await approve(approved.id, approveKey)).toMatchObject({
+        created: false,
+        invoice: {
+          id: approved.id,
+          status: "approved",
+          invoiceNumber: approved.invoiceNumber,
+          approvalJournalId: approved.approvalJournalId,
+        },
+      });
+      expect(await voidIt(toVoid.id, "2026-05-20", voidKey)).toMatchObject({
+        created: false,
+        invoice: { id: toVoid.id, status: "voided", voidDate: "2026-05-20", voidJournalId: voided.voidJournalId },
+      });
+      // Something new in the locked period is still refused.
+      await expect(voidIt(approved.id, "2026-05-20")).rejects.toThrow(/2026-05-20 is in a locked period/);
+      expect(await journalCount()).toBe(journalsBefore);
+    } finally {
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+    }
+  });
+
   it("numbers are per organisation and run INV-0001, INV-0002, ... in approval order", async () => {
     await createTestOrganisation(owner, OTHER_ORG);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'bookkeeper')", [
@@ -791,6 +822,12 @@ describeWithDatabase("sales invoices", () => {
     expect((await get(outsiderCookie, invoice.id)).status).toBe(404);
     expect((await post(outsiderCookie, { ...command, idempotencyKey: key("http") })).status).toBe(404);
     expect((await approveOver(outsiderCookie, invoice.id, key("x"))).status).toBe(404);
+    const kept = (await body(await post(bookkeeperCookie, { ...command, idempotencyKey: key("http") }))).invoice as Invoice;
+    expect((await patch(outsiderCookie, kept.id, { reference: "Outsider edit" })).status).toBe(404);
+    expect((await remove(outsiderCookie, kept.id)).status).toBe(404);
+    expect((await approveOver(bookkeeperCookie, kept.id, key("http-approve"))).status).toBe(201);
+    expect((await voidOver(outsiderCookie, kept.id, key("x"), "2026-06-20")).status).toBe(404);
+    expect((await body(await get(viewerCookie, kept.id))).invoice).toMatchObject({ status: "approved", reference: "Web order 88" });
     expect((await invoicesRoute.GET(apiRequest(`/api/invoices?organisationId=${ORG}`), noContext)).status).toBe(401);
   });
 
