@@ -8,12 +8,14 @@ import { BillPayments } from "@/components/bills/bill-payments";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { formatRate, formatUnitPrice, PaidStatusBadge } from "@/components/invoices/invoice-editor";
-import { Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
+import { Badge, Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { Bill } from "@/lib/bills/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, formatQuantity, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
+import type { SupplierCreditNoteApplication } from "@/lib/supplier-credit-notes/applications";
+import type { SupplierCreditNoteSummary } from "@/lib/supplier-credit-notes/service";
 
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
@@ -91,7 +93,7 @@ function BillActions({
   if (bill.status === "voided") {
     return null;
   }
-  // Example SP5: a bill with active payments is voided after its payments.
+  // Examples SP5 and SCN9: a bill with active payments or credit applied is voided after they're removed.
   const hasPayments = bill.status === "approved" && bill.paidStatus !== "unpaid";
   return (
     <Card
@@ -104,7 +106,9 @@ function BillActions({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {hasPayments ? (
-        <Notice tone="info">This bill has payments against it. Void its payments first, then void the bill.</Notice>
+        <Notice tone="info">
+          This bill has payments or credit against it. Void its payments and remove its credit first, then void the bill.
+        </Notice>
       ) : null}
       {bill.status === "draft" ? (
         <div className={ui.actions}>
@@ -138,9 +142,90 @@ function BillActions({
   );
 }
 
+/**
+ * Credit applied to a bill from supplier credit notes (example SCN3). Credit
+ * is applied and removed on the supplier credit note's page.
+ */
+function BillCredit({ creditApplied }: { creditApplied: SupplierCreditNoteApplication[] }) {
+  return (
+    <Card
+      title="Credit applied"
+      description="Credit from supplier credit notes lowers the amount due without posting a journal. Apply or remove it on the supplier credit note."
+    >
+      <div className={ui.tableWrap}>
+        <table className={ui.table}>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Supplier credit note</th>
+              <th>Status</th>
+              <th className={ui.num}>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {creditApplied.map((application) => (
+              <tr key={application.id}>
+                <td>{formatDate(application.applicationDate)}</td>
+                <td>
+                  <Link href={`/operations/supplier-credit-notes/${application.creditNoteId}`}>
+                    {application.supplierCreditNoteNumber}
+                  </Link>
+                </td>
+                <td>
+                  {application.status === "active" ? (
+                    <Badge tone="green">Active</Badge>
+                  ) : (
+                    <>
+                      <Badge tone="red">Removed</Badge>
+                      <span className={ui.muted}> on {formatDate(application.removalDate)}</span>
+                    </>
+                  )}
+                </td>
+                <td className={ui.num}>
+                  <Money value={application.amount} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+/** Points to the supplier's approved credit notes that still have credit to apply. */
+function UnusedCredit({ organisationId, bill }: { organisationId: string; bill: Bill }) {
+  const list = useApiData<{ creditNotes: SupplierCreditNoteSummary[] }>("/api/supplier-credit-notes", {
+    organisationId,
+    contactId: bill.contactId,
+    hasRemainingCredit: "true",
+  });
+  const creditNotes = (list.data?.creditNotes ?? []).filter((creditNote) => creditNote.currencyCode === bill.currencyCode);
+  if (creditNotes.length === 0) {
+    return null;
+  }
+  return (
+    <Notice tone="info">
+      {bill.contactName} has unused credit:{" "}
+      {creditNotes.map((creditNote, index) => (
+        <span key={creditNote.id}>
+          {index > 0 ? ", " : ""}
+          <Link href={`/operations/supplier-credit-notes/${creditNote.id}`}>{creditNote.supplierCreditNoteNumber}</Link> (
+          {formatMoney(creditNote.remainingCredit)} left)
+        </span>
+      ))}
+      . Apply it from the supplier credit note.
+    </Notice>
+  );
+}
+
 function BillView({ organisationId, billId }: { organisationId: string; billId: string }) {
   const { can } = useWorkspace();
-  const details = useApiData<{ bill: Bill }>(`/api/bills/${encodeURIComponent(billId)}`, { organisationId });
+  const router = useRouter();
+  const details = useApiData<{ bill: Bill; creditApplied: SupplierCreditNoteApplication[] }>(
+    `/api/bills/${encodeURIComponent(billId)}`,
+    { organisationId },
+  );
   // Approving and voiding return the updated bill, which is shown straight away.
   const [updated, setUpdated] = useState<Bill | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -160,9 +245,13 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
   }
   const bill = updated ?? details.data.bill;
   const hasTax = bill.amountsMode !== "no_tax";
+  const { creditApplied } = details.data;
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
+      {bill.status === "approved" && bill.paidStatus !== "paid" ? (
+        <UnusedCredit organisationId={organisationId} bill={bill} />
+      ) : null}
       <Card
         title={`Bill ${bill.supplierInvoiceNumber}`}
         description={`From ${bill.contactName} · ${AMOUNTS_MODE_LABELS[bill.amountsMode]} · ${bill.currencyCode}`}
@@ -170,6 +259,15 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           <>
             <BillStatusBadge status={bill.status} />
             {bill.paidStatus ? <PaidStatusBadge status={bill.paidStatus} /> : null}
+            {bill.status === "approved" && can("bookkeeper") ? (
+              <Button
+                size="small"
+                variant="secondary"
+                onClick={() => router.push(`/operations/supplier-credit-notes/new?fromBill=${encodeURIComponent(bill.id)}`)}
+              >
+                Create credit note
+              </Button>
+            ) : null}
           </>
         }
       >
@@ -232,6 +330,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           {bill.status === "approved" ? (
             <>
               <Stat label="Paid" value={<Money value={bill.amountPaid} />} />
+              <Stat label="Credited" value={<Money value={bill.amountCredited} />} />
               <Stat label="Amount due" value={<Money value={bill.amountDue} />} />
             </>
           ) : null}
@@ -264,6 +363,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           }}
         />
       ) : null}
+      {creditApplied.length > 0 ? <BillCredit creditApplied={creditApplied} /> : null}
       {can("bookkeeper") ? (
         <BillActions
           key={bill.status}

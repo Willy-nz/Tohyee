@@ -25,6 +25,7 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
       { href: "/operations/invoices", label: "Invoices" },
       { href: "/operations/credit-notes", label: "Credit notes" },
       { href: "/operations/bills", label: "Bills" },
+      { href: "/operations/supplier-credit-notes", label: "Supplier credit notes" },
       { href: "/operations/inventory", label: "Stock" },
       { href: "/operations/reports", label: "Reports" },
       { href: "/operations/fx-revaluation", label: "FX revaluation", minRole: "bookkeeper" },
