@@ -1,6 +1,6 @@
 import packageJson from "../../../package.json";
 
-const GITHUB_REPOSITORY = "Willy-nz/toeyee";
+const GITHUB_REPOSITORY = "Willy-nz/Tohyee";
 const GITHUB_RELEASES_LATEST_URL = `https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest`;
 
 type GitHubReleaseAsset = {
@@ -186,7 +186,7 @@ export async function getLatestReleaseCheck(): Promise<LatestReleaseCheck> {
   const response = await fetch(GITHUB_RELEASES_LATEST_URL, {
     headers: {
       accept: "application/vnd.github+json",
-      "user-agent": "toeyee-update-check",
+      "user-agent": "tohyee-update-check",
     },
     cache: "no-store",
   });

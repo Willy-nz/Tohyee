@@ -37,7 +37,7 @@ export function parseOptionalIsoDate(input: unknown, fieldName: string): string 
 
 /** The server's business time zone. Dates like "today" are taken from here. */
 export function businessTimeZone(): string {
-  return process.env.TOEYEE_TIME_ZONE?.trim() || "Pacific/Auckland";
+  return process.env.TOHYEE_TIME_ZONE?.trim() || "Pacific/Auckland";
 }
 
 /** Today's date (YYYY-MM-DD) in the business time zone. */

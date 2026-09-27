@@ -38,6 +38,7 @@ import {
   startTestServer,
   testDatabaseUrl,
   type TestServer,
+  waitForLockWaiters,
   withDb,
 } from "../helpers/test-server";
 
@@ -398,6 +399,86 @@ describeWithDatabase("sales invoices", () => {
     await expect(approve(first.id)).rejects.toThrow(`Invoice ${approved.invoice.invoiceNumber} is already approved.`);
     expect((await asUser(viewer, (tx) => getInvoice(tx, second.id))).status).toBe("draft");
     expect(await journalCount()).toBe(journalsBefore + 1);
+  });
+
+  it("L4, I7, I9: retrying an approval or a void after its period is locked returns the original, not a lock error", async () => {
+    const approveKey = key("approve");
+    const { invoice: approved } = await approve((await draft()).id, approveKey);
+    const { invoice: toVoid } = await approve((await draft()).id);
+    const voidKey = key("void");
+    const { invoice: voided } = await voidIt(toVoid.id, "2026-05-20", voidKey);
+    const journalsBefore = await journalCount();
+
+    await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: "2026-05-31" }));
+    try {
+      expect(await approve(approved.id, approveKey)).toMatchObject({
+        created: false,
+        invoice: {
+          id: approved.id,
+          status: "approved",
+          invoiceNumber: approved.invoiceNumber,
+          approvalJournalId: approved.approvalJournalId,
+        },
+      });
+      expect(await voidIt(toVoid.id, "2026-05-20", voidKey)).toMatchObject({
+        created: false,
+        invoice: { id: toVoid.id, status: "voided", voidDate: "2026-05-20", voidJournalId: voided.voidJournalId },
+      });
+      // Something new in the locked period is still refused.
+      await expect(voidIt(approved.id, "2026-05-20")).rejects.toThrow(/2026-05-20 is in a locked period/);
+      expect(await journalCount()).toBe(journalsBefore);
+    } finally {
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+    }
+  });
+
+  it("I7, I9: approvals and voids at the same moment take turns: a retry queued behind the first returns it; numbers stay gap-free", async () => {
+    const drafted = await draft();
+    const approveKey = key("approve");
+    const [left, right] = [await draft(), await draft()];
+    const journalsBefore = await journalCount();
+
+    // Hold the invoice's lock so both copies of the request pass the first key check and queue behind it.
+    const copies = await asUser(owner, async (tx) => {
+      await tx.query("select id from sales_invoices where id = $1 for update", [drafted.id]);
+      const queued = [approve(drafted.id, approveKey), approve(drafted.id, approveKey)];
+      await waitForLockWaiters(tx, 2);
+      return queued;
+    });
+    const results = await Promise.all(copies);
+    expect(results.map((result) => result.created).sort()).toEqual([false, true]);
+    expect(results[1].invoice).toMatchObject({
+      status: "approved",
+      invoiceNumber: results[0].invoice.invoiceNumber,
+      approvalJournalId: results[0].invoice.approvalJournalId,
+    });
+    expect(await journalCount()).toBe(journalsBefore + 1);
+
+    // Two invoices queued behind the number counter get the next two numbers.
+    const pair = await asUser(owner, async (tx) => {
+      await tx.query("select last_number from sales_invoice_numbering where id = true for update");
+      const queued = [approve(left.id), approve(right.id)];
+      await waitForLockWaiters(tx, 2);
+      return queued;
+    });
+    const numbers = (await Promise.all(pair)).map(({ invoice }) => sequenceOf(invoice)).sort((a, b) => a - b);
+    const first = sequenceOf(results[0].invoice);
+    expect(numbers).toEqual([first + 1, first + 2]);
+    expect(await journalCount()).toBe(journalsBefore + 3);
+
+    // Two copies of a void queued behind the invoice's lock void it once.
+    const voidKey = key("void");
+    const voids = await asUser(owner, async (tx) => {
+      await tx.query("select id from sales_invoices where id = $1 for update", [left.id]);
+      const queued = [voidIt(left.id, "2026-06-15", voidKey), voidIt(left.id, "2026-06-15", voidKey)];
+      await waitForLockWaiters(tx, 2);
+      return queued;
+    });
+    const voided = await Promise.all(voids);
+    expect(voided.map((result) => result.created).sort()).toEqual([false, true]);
+    expect(voided[0].invoice.voidJournalId).toEqual(expect.any(String));
+    expect(voided[1].invoice).toMatchObject({ status: "voided", voidJournalId: voided[0].invoice.voidJournalId });
+    expect(await journalCount()).toBe(journalsBefore + 4);
   });
 
   it("numbers are per organisation and run INV-0001, INV-0002, ... in approval order", async () => {
@@ -791,6 +872,12 @@ describeWithDatabase("sales invoices", () => {
     expect((await get(outsiderCookie, invoice.id)).status).toBe(404);
     expect((await post(outsiderCookie, { ...command, idempotencyKey: key("http") })).status).toBe(404);
     expect((await approveOver(outsiderCookie, invoice.id, key("x"))).status).toBe(404);
+    const kept = (await body(await post(bookkeeperCookie, { ...command, idempotencyKey: key("http") }))).invoice as Invoice;
+    expect((await patch(outsiderCookie, kept.id, { reference: "Outsider edit" })).status).toBe(404);
+    expect((await remove(outsiderCookie, kept.id)).status).toBe(404);
+    expect((await approveOver(bookkeeperCookie, kept.id, key("http-approve"))).status).toBe(201);
+    expect((await voidOver(outsiderCookie, kept.id, key("x"), "2026-06-20")).status).toBe(404);
+    expect((await body(await get(viewerCookie, kept.id))).invoice).toMatchObject({ status: "approved", reference: "Web order 88" });
     expect((await invoicesRoute.GET(apiRequest(`/api/invoices?organisationId=${ORG}`), noContext)).status).toBe(401);
   });
 

@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { DbClient } from "@/lib/db/transactions";
 import { coreQuery } from "@/lib/db/transactions";
 
-export const SESSION_COOKIE = "toeyee_session";
+export const SESSION_COOKIE = "tohyee_session";
 /** A session ends after this many days without use (see getSessionUser). */
 export const SESSION_LIFETIME_DAYS = 14;
 const REFRESH_AFTER_MS = 60 * 60 * 1000;
@@ -127,7 +127,7 @@ export function readCookie(request: Request, name: string): string | null {
 }
 
 function isSecureRequest(request: Request): boolean {
-  const override = process.env.TOEYEE_COOKIE_SECURE?.trim().toLowerCase();
+  const override = process.env.TOHYEE_COOKIE_SECURE?.trim().toLowerCase();
   if (override === "true") return true;
   if (override === "false") return false;
   const forwarded = request.headers.get("x-forwarded-proto");

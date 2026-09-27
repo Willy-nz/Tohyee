@@ -31,7 +31,7 @@ export function databaseNameOf(url: string): string {
   const parsed = new URL(url);
   const name = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
   if (!name) {
-    throw new UnavailableError("DATABASE_URL must include a database name, e.g. .../toeyee");
+    throw new UnavailableError("DATABASE_URL must include a database name, e.g. .../tohyee");
   }
   return name;
 }
@@ -50,12 +50,12 @@ export function coreDatabaseName(): string {
   return databaseNameOf(getDatabaseUrl());
 }
 
-/** Prefix for organisation databases, e.g. "toeyee_org_" + slug. */
+/** Prefix for organisation databases, e.g. "tohyee_org_" + slug. */
 export function organisationDatabasePrefix(): string {
-  const configured = process.env.TOEYEE_ORG_DATABASE_PREFIX?.trim();
+  const configured = process.env.TOHYEE_ORG_DATABASE_PREFIX?.trim();
   if (configured && /^[a-z][a-z0-9_]{0,20}$/.test(configured)) {
     return configured;
   }
   const core = coreDatabaseName().toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 20);
-  return `${/^[a-z]/.test(core) ? core : "toeyee"}_org_`;
+  return `${/^[a-z]/.test(core) ? core : "tohyee"}_org_`;
 }

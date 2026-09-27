@@ -35,6 +35,7 @@ import {
   startTestServer,
   testDatabaseUrl,
   type TestServer,
+  waitForLockWaiters,
   withDb,
 } from "../helpers/test-server";
 
@@ -384,6 +385,83 @@ describeWithDatabase("customer payments", () => {
     } finally {
       await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
     }
+  });
+
+  it("L4, CP4, CP7: retrying a payment void after its period is locked returns the original, not a lock error", async () => {
+    const invoice = await approved();
+    const { payment } = await pay(invoice.id, { amount: "40.00" });
+    const voidKey = key("void-pay");
+    const { payment: voided } = await voidPay(invoice.id, payment.id, "2026-05-25", voidKey);
+    const journalsBefore = await journalCount();
+
+    await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: "2026-05-31" }));
+    try {
+      expect(await voidPay(invoice.id, payment.id, "2026-05-25", voidKey)).toMatchObject({
+        created: false,
+        payment: { id: payment.id, status: "voided", voidDate: "2026-05-25", voidJournalId: voided.voidJournalId },
+        invoice: { id: invoice.id, amountPaid: "0.00", amountDue: "115.00", paidStatus: "unpaid" },
+      });
+      expect(await journalCount()).toBe(journalsBefore);
+    } finally {
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+    }
+  });
+
+  it("CP3, CP4, CP7: payments and voids at the same moment take turns: a retry queued behind the first returns it; they can't overpay", async () => {
+    const invoice = await approved();
+    const payKey = key("pay");
+    const journalsBefore = await journalCount();
+
+    // Hold the invoice's lock so both copies of the request pass the first key check and queue behind it.
+    const copies = await asUser(owner, async (tx) => {
+      await tx.query("select id from sales_invoices where id = $1 for update", [invoice.id]);
+      const queued = [
+        pay(invoice.id, { amount: "60.00", idempotencyKey: payKey }),
+        pay(invoice.id, { amount: "60.00", idempotencyKey: payKey }),
+      ];
+      await waitForLockWaiters(tx, 2);
+      return queued;
+    });
+    const results = await Promise.all(copies);
+    expect(results.map((result) => result.created).sort()).toEqual([false, true]);
+    expect(results[1].payment.id).toBe(results[0].payment.id);
+    expect(await journalCount()).toBe(journalsBefore + 1);
+
+    // With 55.00 due, two payments of 55.00 queue up: the first is recorded and the second is refused.
+    const rivals = await asUser(owner, async (tx) => {
+      await tx.query("select id from sales_invoices where id = $1 for update", [invoice.id]);
+      const queued = [pay(invoice.id, { amount: "55.00" }), pay(invoice.id, { amount: "55.00" })];
+      await waitForLockWaiters(tx, 2);
+      return queued;
+    });
+    const outcomes = await Promise.allSettled(rivals);
+    expect(outcomes.map((outcome) => outcome.status).sort()).toEqual(["fulfilled", "rejected"]);
+    const refused = outcomes.find((outcome) => outcome.status === "rejected");
+    expect(refused?.reason).toMatchObject({
+      message: `Invoice ${invoice.invoiceNumber} is already paid in full.`,
+    });
+    expect((await paymentsOf(invoice.id)).map((entry) => [entry.amount, entry.status])).toEqual([
+      ["60.00", "active"],
+      ["55.00", "active"],
+    ]);
+    expect(await invoiceNow(invoice.id)).toMatchObject({ amountPaid: "115.00", amountDue: "0.00", paidStatus: "paid" });
+    expect(await journalCount()).toBe(journalsBefore + 2);
+
+    // Two copies of a payment void queued behind the invoice's lock void it once.
+    const voidKey = key("void-pay");
+    const voids = await asUser(owner, async (tx) => {
+      await tx.query("select id from sales_invoices where id = $1 for update", [invoice.id]);
+      const paymentId = results[0].payment.id;
+      const queued = [voidPay(invoice.id, paymentId, "2026-06-01", voidKey), voidPay(invoice.id, paymentId, "2026-06-01", voidKey)];
+      await waitForLockWaiters(tx, 2);
+      return queued;
+    });
+    const voided = await Promise.all(voids);
+    expect(voided.map((result) => result.created).sort()).toEqual([false, true]);
+    expect(voided[0].payment.voidJournalId).toEqual(expect.any(String));
+    expect(voided[1].payment).toMatchObject({ status: "voided", voidJournalId: voided[0].payment.voidJournalId });
+    expect(await invoiceNow(invoice.id)).toMatchObject({ amountPaid: "55.00", amountDue: "60.00", paidStatus: "part_paid" });
+    expect(await journalCount()).toBe(journalsBefore + 3);
   });
 
   it("CP7: over HTTP a retry with the same key and content returns the payment (201 then 200); a different amount is a 409", async () => {

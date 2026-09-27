@@ -165,7 +165,7 @@ describeWithDatabase("separate admin and runtime logins (DATABASE_ADMIN_URL)", (
   });
 
   it("other logins on the same PostgreSQL server can't connect to an organisation's database", async () => {
-    const outsider = await createTestLogin("toeyee_outsider");
+    const outsider = await createTestLogin("tohyee_outsider");
     try {
       const error = await asLogin(
         withLogin(withDb(testDatabaseUrl!, databaseName), outsider.role, outsider.password),

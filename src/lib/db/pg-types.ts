@@ -17,7 +17,7 @@ const defaultTimestampTzParser = pg.types.getTypeParser(TIMESTAMPTZ_OID, "text")
  * - TIMESTAMPTZ becomes an ISO-8601 string so API payloads are predictable.
  * - NUMERIC and INT8 already arrive as strings, which is what we want.
  */
-export const toeyeeTypes: pg.CustomTypesConfig = {
+export const tohyeeTypes: pg.CustomTypesConfig = {
   getTypeParser: ((oid: number, format?: string) => {
     if (format === undefined || format === "text") {
       if (oid === DATE_OID) {

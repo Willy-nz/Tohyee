@@ -17,13 +17,13 @@ decision by the project owner; do not change it to schema-per-organisation or
 row-level tenancy.
 
 ```
-toeyee                  core database (DATABASE_URL)
+tohyee                  core database (DATABASE_URL)
 ├─ organisations        registry: id, name, database_name, status
 ├─ users, sessions      logins
 ├─ organisation_members who can open which organisation, with what role
 └─ admin_audit_events   server-level audit trail
 
-toeyee_org_glimmers     one database per organisation (organisation "glimmers")
+tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ organisation_settings  (records which organisation owns this database)
 ├─ accounts, ledger_journals, ledger_journal_lines
 ├─ ledger_fx_revaluation_runs / _items
@@ -53,13 +53,13 @@ Rules:
   caller's role, opens a transaction on that organisation's database, and
   checks the database's `organisation_settings.organisation_id` matches.
 - Organisation databases are named `<core database>_org_<organisation id>`,
-  with dashes turned into underscores (set `TOEYEE_ORG_DATABASE_PREFIX` to
+  with dashes turned into underscores (set `TOHYEE_ORG_DATABASE_PREFIX` to
   change the prefix). The name is stored in the registry when the
   organisation is created, so changing the prefix later only affects new
   organisations.
 - One small connection pool per organisation database, least-recently-used
-  pools are closed (`TOEYEE_MAX_ORG_POOLS`, default 25;
-  `TOEYEE_ORG_POOL_SIZE`, default 5). Size PostgreSQL's `max_connections`
+  pools are closed (`TOHYEE_MAX_ORG_POOLS`, default 25;
+  `TOHYEE_ORG_POOL_SIZE`, default 5). Size PostgreSQL's `max_connections`
   accordingly.
 - Migrations run at startup. Apart from a server admin creating or repairing
   an organisation, requests never run DDL or take advisory locks.
@@ -220,7 +220,7 @@ Not built into the app yet. Because each organisation is its own database,
 a backup is simply:
 
 ```
-pg_dump -Fc -d toeyee_org_<id> > <id>-2026-09-30.dump
+pg_dump -Fc -d tohyee_org_<id> > <id>-2026-09-30.dump
 ```
 
 and back up the core database the same way. There is no restore tooling yet,
