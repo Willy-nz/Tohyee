@@ -12,8 +12,8 @@ import {
 } from "@/lib/validation";
 
 /**
- * Customers and suppliers. Invoices and bills will use them later; for now
- * they're a list the organisation keeps. Contacts are archived, never deleted.
+ * Customers and suppliers. Sales invoices go to customers and bills come from
+ * suppliers. Contacts are archived, never deleted.
  */
 export type Contact = {
   id: string;

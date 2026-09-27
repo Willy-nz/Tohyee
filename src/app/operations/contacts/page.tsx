@@ -195,8 +195,8 @@ function Contacts({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Notice tone="info">
-        Contacts marked as customers can be sent <Link href="/operations/invoices">sales invoices</Link>. Bills aren&apos;t
-        built yet, so suppliers aren&apos;t used anywhere else in Tohyee for now.
+        Contacts marked as customers can be sent <Link href="/operations/invoices">sales invoices</Link>, and{" "}
+        <Link href="/operations/bills">bills</Link> can be entered from contacts marked as suppliers.
       </Notice>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {canEdit && createKey ? (
