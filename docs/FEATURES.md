@@ -132,6 +132,8 @@ isn't acceptable, because people would trust it:
 
 ## Next, in rough order
 
+The owner's to-do list in [TODO.md](TODO.md) comes first.
+
 1. The GST return on the payments and hybrid bases; then customer and
    supplier payments across several invoices or bills, overpayments and
    prepayments. Invoice and credit note PDFs and emailing come with or after
