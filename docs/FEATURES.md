@@ -21,7 +21,8 @@ that something happened.
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
   posts its journal in the same transaction.
-- **Reports**: trial balance, profit and loss, balance sheet, stock valuation.
+- **Reports**: trial balance, profit and loss, balance sheet, stock valuation
+  and the GST return (below).
   The financial year end is a setting (default 31 March); the balance sheet
   splits earnings into this year and previous years.
 - **Contacts**: customers and suppliers with optional email, phone, postal
@@ -89,8 +90,24 @@ that something happened.
   note with active applications or refunds, or a bill with credit applied,
   can't be voided. Period locks apply to every step; every command is
   idempotent. See examples SCN1-SCN12.
-- **GST basis** setting (invoice, payments or hybrid). Stored and shown only;
-  the GST return will use it.
+- **GST basis** setting (invoice, payments or hybrid). The GST return uses
+  it: only the invoice basis is built so far.
+- **GST return** (NZ GST101A, boxes 5-15) on the invoice basis, for 1, 2 or 6
+  whole calendar months, under Reports. Worked out from sales invoices, sales
+  credit notes, bills and supplier credit notes: each counts on its own date
+  when approved and the other way on its void date; drafts, payments,
+  refunds, credit applications, manual journals, stock movements and FX
+  revaluations don't count. Lines go into boxes by their tax code's category
+  (standard, zero rated, exempt, out of scope), and every box can be opened
+  to see its lines. GST on transactions is shown next to Box 8 and Box 12 for
+  information (the difference is rounding). Box 9 and Box 13 adjustments are
+  entered with a description. "Mark as filed" (admins) stores the period,
+  basis, adjustments, every box and the counted lines, and is idempotent;
+  filed returns can't be changed or deleted and can't overlap (the database
+  refuses). A filed return shows its stored figures and "Changed since
+  filed", box by box, if documents in its period were approved or voided
+  afterwards. Standard-rated lines at a rate other than 15% are refused. See
+  examples G1-G9.
 - **Update check** against GitHub releases.
 
 ## Not built yet, on purpose
@@ -107,14 +124,17 @@ isn't acceptable, because people would trust it:
 - AI suggestions
 - bank feeds and bank reconciliation
 - import staging
-- tax transactions and the tax summary
+- the GST return on the payments and hybrid bases (refused for now)
+- amending a filed GST return, imported goods (Customs GST), GST rates other
+  than 15%, recording the GST payment or refund to IRD, and filing to IRD
+  electronically
 - stock "recomputation"
 
 ## Next, in rough order
 
-1. Customer and supplier payments across several invoices or bills, overpayments and
-   prepayments, and a GST return built from postings using the GST basis
-   setting. Invoice and credit note PDFs and emailing come with or after
+1. The GST return on the payments and hybrid bases; then customer and
+   supplier payments across several invoices or bills, overpayments and
+   prepayments. Invoice and credit note PDFs and emailing come with or after
    these.
 2. Bank feeds (through an NZ open-banking provider, still to be chosen) and
    bank reconciliation that matches real transactions.

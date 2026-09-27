@@ -18,6 +18,7 @@ import type { Actor } from "@/lib/db/org-transaction";
 import { listPayments, recordPayment, voidPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, deleteInvoice, updateInvoice, voidInvoice } from "@/lib/invoices/service";
 import { postJournal } from "@/lib/ledger/journals";
+import { calculateGstReturn, fileGstReturn, getGstReturn, listGstReturns } from "@/lib/reports/gst-return";
 import {
   applySupplierCreditNote,
   listSupplierCreditNoteApplications,
@@ -331,6 +332,23 @@ describeWithDatabase("separate admin and runtime logins (DATABASE_ADMIN_URL)", (
     expect(result.refunds.map((entry) => entry.status)).toEqual(["voided"]);
   });
 
+  it("GST returns can be worked out, filed and read as the runtime login", async () => {
+    const period = { periodStart: "2026-06-01", periodEnd: "2026-06-30" };
+    const result = await inOrganisation(ORG, actor, async (tx) => {
+      const calculated = await calculateGstReturn(tx, period);
+      const idempotencyKey = key("gst");
+      const { created, gstReturn } = await fileGstReturn(tx, { idempotencyKey, ...period });
+      const retried = await fileGstReturn(tx, { idempotencyKey, ...period });
+      const listed = await listGstReturns(tx);
+      return { calculated, created, gstReturn, retried, listed, read: await getGstReturn(tx, gstReturn.id) };
+    });
+    expect(result.created).toBe(true);
+    expect(result.retried).toMatchObject({ created: false, gstReturn: { id: result.gstReturn.id } });
+    expect(result.gstReturn.boxes).toEqual(result.calculated.boxes);
+    expect(result.listed.gstReturns.map((entry) => entry.id)).toEqual([result.gstReturn.id]);
+    expect(result.read.changedSinceFiled).toBe(false);
+  });
+
   it("the runtime login can't change the schema or rewrite posted history", async () => {
     const runtimeUrl = withDb(process.env.DATABASE_URL!, databaseName);
     await asLogin(runtimeUrl, async (client) => {
@@ -343,6 +361,9 @@ describeWithDatabase("separate admin and runtime logins (DATABASE_ADMIN_URL)", (
         "update ledger_journals set reference = 'changed'",
         "delete from ledger_journal_lines",
         "truncate audit_events",
+        "update gst_returns set box15 = 0",
+        "delete from gst_return_lines",
+        "truncate gst_return_adjustments",
         "insert into schema_migrations (version, name, checksum) values ('999', 'x', 'x')",
       ]) {
         const error = await client.query(sql).then(

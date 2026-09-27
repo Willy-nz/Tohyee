@@ -15,6 +15,9 @@ const APPEND_ONLY_TABLES = [
   "ledger_fx_revaluation_runs",
   "ledger_fx_revaluation_run_items",
   "inventory_movements",
+  "gst_returns",
+  "gst_return_adjustments",
+  "gst_return_lines",
 ];
 
 function quoteRole(role: string): string {

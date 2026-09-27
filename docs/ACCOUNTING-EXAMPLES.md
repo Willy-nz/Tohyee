@@ -8,7 +8,8 @@ proves it". Test names start with the example IDs they cover:
   (W1-W12, pure costing maths) and `tests/unit/invoice-amounts.test.ts`
   (I1-I6 and B1-B4, pure invoice and bill maths; CP1, CP2 and CP4 paid
   status; CN2, CN10 credit note maths and CN2-CN4, CN6-CN8 credit and paid
-  status)
+  status) and `tests/unit/gst-return.test.ts` (G1, G2, G5-G9, pure GST
+  return maths and periods)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
   P1-P3), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
@@ -18,8 +19,9 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/bills.test.ts` (B1-B8, D1, D2 for bills) and
   `tests/integration/supplier-payments.test.ts` (SP1-SP8) and
   `tests/integration/credit-notes.test.ts` (CN1-CN12) and
-  `tests/integration/supplier-credit-notes.test.ts` (SCN1-SCN12), all
-  against a real PostgreSQL database
+  `tests/integration/supplier-credit-notes.test.ts` (SCN1-SCN12) and
+  `tests/integration/gst-returns.test.ts` (G1-G9), all against a real
+  PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -531,3 +533,100 @@ journals; the balance sheet works profit out when it runs.
 - **P3** Profit and loss: net profit = income - cost of sales + other
   income - expenses. Without a start date it covers the financial year to
   date, and then equals the balance sheet's current year earnings.
+
+## GST return
+
+The GST return is New Zealand's GST101A (boxes 5-15), worked out on the
+**invoice basis** from approved documents. Nothing is typed in except the
+Box 9 and Box 13 adjustments.
+
+- A **GST event** is a document change on a date. Only these count:
+  - a sales invoice approved (+, on its invoice date) or voided (-, on its
+    void date);
+  - a sales credit note approved (-, on its date) or voided (+, on its void
+    date);
+  - a bill approved (+, on its bill date) or voided (-, on its void date);
+  - a supplier credit note approved (-, on its date) or voided (+, on its
+    void date).
+
+  Drafts never count. Payments, refunds, credit applications, manual
+  journals, stock movements and FX revaluations don't count.
+- Each line of a counted document goes by its tax code's category (a line
+  with no tax code counts as out of scope). Amounts are the line's amount
+  including GST (its net amount plus its GST).
+  - Sales: standard -> Box 5; zero rated -> Box 5 and Box 6; exempt and out
+    of scope -> left out.
+  - Purchases: standard -> Box 11; zero rated, exempt and out of scope ->
+    left out (no GST to claim).
+- Boxes are exact decimals with 2 places, rounded half away from zero:
+  Box 7 = 5 - 6; Box 8 = Box 7 x 3 / 23; Box 9 = debit adjustments;
+  Box 10 = 8 + 9; Box 12 = Box 11 x 3 / 23; Box 13 = credit adjustments;
+  Box 14 = 12 + 13; Box 15 = 10 - 14 (positive: GST to pay; negative: a
+  refund). Boxes can be negative, e.g. a period with more credit notes than
+  sales.
+- **GST on transactions** is the sum of the counted lines' own GST (sales and
+  purchases separately). Its difference from Box 8 and Box 12 is shown as
+  information only (rounding).
+- Box 9 (debit) and Box 13 (credit) adjustments are GST amounts with a
+  description, each more than zero with at most 2 decimal places.
+- A return covers 1, 2 or 6 whole calendar months: it starts on the 1st and
+  ends on the last day of a month.
+- **Mark as filed** (admins only) stores the period, basis, adjustments, every
+  box and the counted lines, with who filed it and when. Filed returns can't
+  be changed, deleted or truncated, and two filed returns can't cover the
+  same day. A filed return shows its stored figures; if the figures worked out
+  now differ, it shows "Changed since filed" with each changed box's filed
+  and current values.
+
+Period 1 Apr 2026 - 31 May 2026 unless stated, with documents dated inside
+it. I1, I5, I6, B1, B4, CN-0001 and CR-7 are the documents from the examples
+above.
+
+- **G1** I1 (standard, total 115.00) and B1 (standard, total 230.00):
+  Box 5 **115.00**, Box 6 **0.00**, Box 7 **115.00**, Box 8 **15.00**,
+  Box 9 **0.00**, Box 10 **15.00**, Box 11 **230.00**, Box 12 **30.00**,
+  Box 13 **0.00**, Box 14 **30.00**, Box 15 **-15.00** (a refund of 15.00).
+- **G2** I5 (100.00 standard + 50.00 zero rated, exclusive, total 165.00):
+  Box 5 **165.00**, Box 6 **50.00**, Box 7 **115.00**, Box 8 **15.00**.
+- **G3** Left out: I6 (no tax, 80.00) and an invoice line with an exempt
+  code. B4 (100.00 at 15% + 20.00 exempt, total 135.00): Box 11 **115.00**,
+  Box 12 **15.00**. A zero-rated bill line of 50.00 is left out of Box 11.
+- **G4** Credit notes: I1 plus CN-0001 (exclusive 1 x 20.00 at 15%, total
+  23.00): Box 5 **92.00**, Box 8 **12.00**. B1 plus supplier credit note
+  CR-7 (total 46.00): Box 11 **184.00**, Box 12 **24.00**. Credit
+  applications and payments change nothing.
+- **G5** Timing: I1 dated 31 Mar 2026 and voided 15 Apr 2026. The Feb-Mar
+  return has Box 5 **115.00**; the Apr-May return has Box 5 **-115.00** and
+  Box 8 **-15.00**. A draft invoice dated in the period is left out. A
+  customer payment dated in the period changes nothing.
+- **G6** Rounding: three invoices of 1 x 10.00 inclusive at 15% (GST 1.30
+  each): Box 5 **30.00**, Box 8 = 30.00 x 3/23 = 3.913 -> **3.91**; GST on
+  transactions **3.90**, difference **0.01**.
+- **G7** Adjustments: with G1, a Box 9 adjustment of 23.00 and a Box 13
+  adjustment of 11.50: Box 10 **38.00**, Box 14 **41.50**, Box 15 **-3.50**.
+  Adjustments of 0.00, -1.00 or 1.001 are refused.
+- **G8** Filing G1 stores its boxes; retrying with the same idempotency key
+  returns the same return; filing another return that overlaps it by any day
+  (e.g. 1 May - 31 May) is refused; a viewer or bookkeeper can't file. After
+  filing, approving a bill dated 10 May makes the filed return show "Changed
+  since filed" with Box 11 and Box 12 filed vs current. The database refuses
+  to change or delete a filed return.
+- **G9** Periods: 1 Apr - 30 Apr, 1 Apr - 31 May and 1 Apr - 30 Sep are
+  allowed; 2 Apr - 31 May, 1 Apr - 30 Jun (3 months) and 1 Apr - 15 May are
+  refused. An organisation on the payments or hybrid basis is refused with
+  "GST returns on the payments and hybrid bases aren't built yet." A
+  standard-rated line at a rate other than 15% in the period is refused,
+  naming its document.
+
+### Not supported yet (refused rather than guessed)
+
+- **Payments and hybrid bases**: refused with the message in G9; they come
+  next.
+- **Amending a filed return**: a filed return can't be changed. "Changed since
+  filed" shows what's different; correcting it with IRD is done outside
+  Tohyee.
+- **Imported goods** (GST paid to Customs): there's nowhere to record it yet.
+- **Recording the GST payment or refund to IRD**: filing posts no journal.
+- **Filing to IRD electronically**: "Mark as filed" records that you filed the
+  return yourself (through myIR), with the figures it had at the time.
+- **Other GST rates**: standard-rated lines must be at 15%.

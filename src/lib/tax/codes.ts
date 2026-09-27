@@ -60,7 +60,8 @@ export async function listTaxCodes(tx: OrgTx): Promise<TaxCode[]> {
 /**
  * Tax codes are settings (e.g. GST 15%). Sales invoice lines use them to work
  * out GST, which is posted when the invoice is approved. Manual journal lines
- * don't carry tax codes, and the GST return isn't built yet.
+ * don't carry tax codes. The GST return puts document lines into boxes by
+ * their tax code's category.
  */
 export async function createTaxCode(
   tx: OrgTx,

@@ -13,7 +13,7 @@ export type OrganisationSettings = {
   baseCurrency: string;
   /** The financial year ends on the last day of this month (1-12). */
   financialYearEndMonth: number;
-  /** For the GST return (not built yet); nothing else uses it. */
+  /** For the GST return (only the invoice basis is built); nothing else uses it. */
   gstBasis: GstBasis;
   hasPostings: boolean;
 };
