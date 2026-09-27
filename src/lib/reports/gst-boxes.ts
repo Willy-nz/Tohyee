@@ -1,0 +1,225 @@
+import { parseIsoDate } from "@/lib/dates";
+import { ValidationError } from "@/lib/errors";
+import {
+  add,
+  cmp,
+  dec,
+  type Decimal,
+  mulDiv,
+  parseDecimalInput,
+  sub,
+  toFixedString,
+  ZERO_DECIMAL,
+} from "@/lib/money/decimal";
+
+/**
+ * The GST return's box maths (NZ GST101A, boxes 5-15), periods and
+ * adjustments. Pure, so it's shared with the browser and unit tested on its
+ * own; the documents that feed it are read in `gst-return.ts`.
+ */
+
+/** A return covers this many whole calendar months. */
+export const GST_RETURN_PERIOD_MONTHS = [1, 2, 6] as const;
+
+/** The only GST rate handled: standard-rated lines at any other rate are refused. */
+export const GST_STANDARD_RATE = "0.15";
+
+export const GST_BOX_KEYS = [
+  "box5",
+  "box6",
+  "box7",
+  "box8",
+  "box9",
+  "box10",
+  "box11",
+  "box12",
+  "box13",
+  "box14",
+  "box15",
+] as const;
+export type GstBoxKey = (typeof GST_BOX_KEYS)[number];
+export type GstBoxes = Record<GstBoxKey, string>;
+
+/** Short descriptions of each box, in the order of the IRD form. */
+export const GST_BOX_LABELS: Readonly<Record<GstBoxKey, string>> = {
+  box5: "Total sales and income, including GST and zero-rated supplies",
+  box6: "Zero-rated supplies included in Box 5",
+  box7: "Box 5 less Box 6",
+  box8: "GST on Box 7 (Box 7 x 3 / 23)",
+  box9: "Debit adjustments",
+  box10: "Total GST collected on sales and income (Box 8 + Box 9)",
+  box11: "Total purchases and expenses, including GST",
+  box12: "GST on Box 11 (Box 11 x 3 / 23)",
+  box13: "Credit adjustments",
+  box14: "Total GST credit for purchases and expenses (Box 12 + Box 13)",
+  box15: "Box 10 less Box 14: GST to pay, or a refund if negative",
+};
+
+/** The box number shown to people, e.g. "box11" -> "11". */
+export function gstBoxNumber(box: GstBoxKey): string {
+  return box.slice(3);
+}
+
+export const GST_ADJUSTMENT_BOXES = ["9", "13"] as const;
+export type GstAdjustmentBox = (typeof GST_ADJUSTMENT_BOXES)[number];
+
+/** A GST amount typed in for Box 9 (debit) or Box 13 (credit), with what it's for. */
+export type GstAdjustment = { box: GstAdjustmentBox; description: string; amount: string };
+
+export const MAX_GST_ADJUSTMENTS = 50;
+
+const MONEY_SCALE = 2;
+
+function money(value: Decimal): string {
+  return toFixedString(value, MONEY_SCALE);
+}
+
+function monthIndex(isoDate: string): number {
+  return Number(isoDate.slice(0, 4)) * 12 + Number(isoDate.slice(5, 7)) - 1;
+}
+
+/** The last day of the month `months` months on from `periodStart`'s month (YYYY-MM-DD). */
+export function gstPeriodEnd(periodStart: string, months: number): string {
+  const index = monthIndex(periodStart) + months;
+  const lastDay = new Date(Date.UTC(Math.floor(index / 12), index % 12, 0));
+  return lastDay.toISOString().slice(0, 10);
+}
+
+/**
+ * A return covers 1, 2 or 6 whole calendar months: it starts on the 1st and
+ * ends on the last day of a month.
+ */
+export function parseGstPeriod(
+  periodStartInput: unknown,
+  periodEndInput: unknown,
+): { periodStart: string; periodEnd: string; months: number } {
+  const periodStart = parseIsoDate(periodStartInput, "periodStart");
+  const periodEnd = parseIsoDate(periodEndInput, "periodEnd");
+  if (!periodStart.endsWith("-01")) {
+    throw new ValidationError("A GST return starts on the 1st of a month.");
+  }
+  if (periodEnd < periodStart) {
+    throw new ValidationError("periodEnd must be after periodStart.");
+  }
+  const months = monthIndex(periodEnd) - monthIndex(periodStart) + 1;
+  if (gstPeriodEnd(periodStart, months) !== periodEnd) {
+    throw new ValidationError("A GST return ends on the last day of a month.");
+  }
+  if (!(GST_RETURN_PERIOD_MONTHS as readonly number[]).includes(months)) {
+    throw new ValidationError(`A GST return covers 1, 2 or 6 whole months, not ${months}.`);
+  }
+  return { periodStart, periodEnd, months };
+}
+
+/** Box 9 and Box 13 adjustments: each a GST amount more than zero with at most 2 decimal places. */
+export function parseGstAdjustments(input: unknown): GstAdjustment[] {
+  if (input == null) {
+    return [];
+  }
+  if (!Array.isArray(input)) {
+    throw new ValidationError("adjustments must be a list.");
+  }
+  if (input.length > MAX_GST_ADJUSTMENTS) {
+    throw new ValidationError(`A GST return can have at most ${MAX_GST_ADJUSTMENTS} adjustments.`);
+  }
+  return input.map((entry, index) => {
+    const field = `adjustments[${index}]`;
+    if (entry == null || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new ValidationError(`${field} must be an object.`);
+    }
+    const record = entry as Record<string, unknown>;
+    const box = typeof record.box === "number" ? String(record.box) : record.box;
+    if (typeof box !== "string" || !(GST_ADJUSTMENT_BOXES as readonly string[]).includes(box.trim())) {
+      throw new ValidationError(`${field}.box must be 9 (debit adjustment) or 13 (credit adjustment).`);
+    }
+    if (typeof record.description !== "string" || record.description.trim().length === 0) {
+      throw new ValidationError(`${field}.description is required, e.g. "Bad debt recovered".`);
+    }
+    const description = record.description.trim();
+    if (description.length > 200) {
+      throw new ValidationError(`${field}.description can be at most 200 characters.`);
+    }
+    const amount = parseDecimalInput(record.amount, `${field}.amount`, { maxScale: MONEY_SCALE });
+    return { box: box.trim() as GstAdjustmentBox, description, amount: money(dec(amount)) };
+  });
+}
+
+export type GstReturnFigures = {
+  boxes: GstBoxes;
+  /** The counted lines' own GST, for comparing with Box 8 and Box 12 (rounding). Information only. */
+  gstOnTransactions: {
+    sales: string;
+    purchases: string;
+    /** Box 8 less the sales lines' GST. */
+    salesDifference: string;
+    /** Box 12 less the purchase lines' GST. */
+    purchasesDifference: string;
+  };
+};
+
+/**
+ * Boxes 5-15 from the totals of the counted lines and the adjustments:
+ * Box 7 = 5 - 6, Box 8 = 7 x 3 / 23, Box 10 = 8 + 9, Box 12 = 11 x 3 / 23,
+ * Box 14 = 12 + 13, Box 15 = 10 - 14. Amounts are exact, rounded once to
+ * 2 places, half away from zero.
+ */
+export function calculateGstBoxes(input: {
+  box5: string;
+  box6: string;
+  box11: string;
+  salesGst: string;
+  purchasesGst: string;
+  adjustments: readonly GstAdjustment[];
+}): GstReturnFigures {
+  const three = dec("3");
+  const twentyThree = dec("23");
+  let box9 = ZERO_DECIMAL;
+  let box13 = ZERO_DECIMAL;
+  for (const adjustment of input.adjustments) {
+    if (adjustment.box === "9") box9 = add(box9, dec(adjustment.amount));
+    else box13 = add(box13, dec(adjustment.amount));
+  }
+  const box5 = dec(input.box5);
+  const box6 = dec(input.box6);
+  const box7 = sub(box5, box6);
+  const box8 = mulDiv(box7, three, twentyThree, MONEY_SCALE);
+  const box10 = add(box8, box9);
+  const box11 = dec(input.box11);
+  const box12 = mulDiv(box11, three, twentyThree, MONEY_SCALE);
+  const box14 = add(box12, box13);
+  const box15 = sub(box10, box14);
+  const salesGst = dec(input.salesGst);
+  const purchasesGst = dec(input.purchasesGst);
+  return {
+    boxes: {
+      box5: money(box5),
+      box6: money(box6),
+      box7: money(box7),
+      box8: money(box8),
+      box9: money(box9),
+      box10: money(box10),
+      box11: money(box11),
+      box12: money(box12),
+      box13: money(box13),
+      box14: money(box14),
+      box15: money(box15),
+    },
+    gstOnTransactions: {
+      sales: money(salesGst),
+      purchases: money(purchasesGst),
+      salesDifference: money(sub(box8, salesGst)),
+      purchasesDifference: money(sub(box12, purchasesGst)),
+    },
+  };
+}
+
+export type GstBoxChange = { box: GstBoxKey; filed: string; current: string };
+
+/** The boxes whose amounts differ, in box order. */
+export function changedGstBoxes(filed: GstBoxes, current: GstBoxes): GstBoxChange[] {
+  return GST_BOX_KEYS.filter((box) => cmp(dec(filed[box]), dec(current[box])) !== 0).map((box) => ({
+    box,
+    filed: filed[box],
+    current: current[box],
+  }));
+}
