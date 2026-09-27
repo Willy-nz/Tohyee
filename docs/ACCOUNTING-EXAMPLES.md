@@ -8,7 +8,7 @@ proves it". Test names start with the example IDs they cover:
   (W1-W12, pure costing maths) and `tests/unit/invoice-amounts.test.ts`
   (I1-I6 and B1-B4, pure invoice and bill maths; CP1, CP2 and CP4 paid
   status; CN2, CN10 credit note maths and CN2-CN4, CN6-CN8 credit and paid
-  status) and `tests/unit/gst-return.test.ts` (G1, G2, G6, G7, G9, pure GST
+  status) and `tests/unit/gst-return.test.ts` (G1, G2, G5-G9, pure GST
   return maths and periods)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
   P1-P3), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
