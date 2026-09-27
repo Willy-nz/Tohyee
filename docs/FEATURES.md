@@ -26,9 +26,10 @@ that something happened.
   splits earnings into this year and previous years.
 - **Contacts**: customers and suppliers with optional email, phone, postal
   address and GST number (format-checked only); search by name or email;
-  archiving instead of deleting. Customers are used by sales invoices;
-  suppliers aren't used yet (bills come next).
-- **Tax codes** as settings. Sales invoices apply them; manual journals don't.
+  archiving instead of deleting. Customers are used by sales invoices and
+  suppliers by bills.
+- **Tax codes** as settings. Sales invoices and bills apply them; manual
+  journals don't.
 - **Sales invoices** in the base currency: drafts that can be edited and
   deleted, tax-exclusive, tax-inclusive or no-tax amounts, GST worked out and
   rounded per line, approval that numbers the invoice (`INV-0001`, with no
@@ -43,6 +44,14 @@ that something happened.
   invoices awaiting payment. Overpayments are refused, and an invoice with
   active payments can't be voided. Period locks apply; recording and voiding
   are idempotent. See examples CP1-CP8.
+- **Bills** from suppliers in the base currency: drafts that can be edited and
+  deleted, with the supplier's invoice number (a supplier can't have two bills
+  that aren't voided with the same number, ignoring case and spaces),
+  tax-exclusive, tax-inclusive or no-tax amounts and GST worked out and
+  rounded per line as on sales invoices. Approving posts Dr each line's
+  account and GST / Cr accounts payable on the bill date, and voiding posts
+  the exact reversal on the void date. Period locks apply; approving and
+  voiding are idempotent. Paying bills isn't built yet. See examples B1-B8.
 - **GST basis** setting (invoice, payments or hybrid). Stored and shown only;
   the GST return will use it.
 - **Update check** against GitHub releases.
@@ -66,10 +75,10 @@ isn't acceptable, because people would trust it:
 
 ## Next, in rough order
 
-1. Credit notes, bills and supplier payments (the core of a Xero-style
-   ledger), customer payments across several invoices, overpayments and
-   prepayments, and a GST return built from postings using the GST basis
-   setting. Invoice PDFs and emailing come with or after these.
+1. Credit notes and supplier payments (the core of a Xero-style ledger),
+   customer payments across several invoices, overpayments and prepayments,
+   and a GST return built from postings using the GST basis setting. Invoice
+   PDFs and emailing come with or after these.
 2. Bank feeds (through an NZ open-banking provider, still to be chosen) and
    bank reconciliation that matches real transactions.
 3. Backdated stock movements with proper re-costing.

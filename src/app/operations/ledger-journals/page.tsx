@@ -26,11 +26,13 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   fx_revaluation: "FX revaluation",
   invoice: "Invoice",
   customer_payment: "Customer payment",
+  bill: "Bill",
 };
 
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
   invoice: "The invoice was voided: reversed by",
   customer_payment: "The payment was voided: reversed by",
+  bill: "The bill was voided: reversed by",
 };
 
 function KindBadge({ journal }: { journal: Journal }) {
@@ -119,6 +121,18 @@ function JournalDetail({
             <>
               {" "}
               To undo it, void the payment from its invoice in <Link href="/operations/invoices">Invoices</Link>.
+            </>
+          )}
+        </p>
+      ) : null}
+      {journal.origin === "bill" ? (
+        <p className={ui.muted}>
+          This journal was posted by {journal.correctionKind === "reversal" ? "voiding" : "approving"} a bill, so it
+          can&apos;t be corrected here.
+          {journal.correctionKind === "reversal" ? null : (
+            <>
+              {" "}
+              To cancel it, void the bill from <Link href="/operations/bills">Bills</Link>.
             </>
           )}
         </p>
@@ -304,6 +318,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="fx_revaluation">FX revaluation</option>
               <option value="invoice">Invoices</option>
               <option value="customer_payment">Customer payments</option>
+              <option value="bill">Bills</option>
               <option value="reversal">Reversals</option>
               <option value="replacement">Replacements</option>
             </select>

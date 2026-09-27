@@ -64,8 +64,9 @@ function Tax({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Notice tone="info">
-        Tax codes set the GST on <Link href="/operations/invoices">sales invoices</Link>. They aren&apos;t applied to
-        journals you enter by hand, and GST returns aren&apos;t calculated in Tohyee yet.
+        Tax codes set the GST on <Link href="/operations/invoices">sales invoices</Link> and{" "}
+        <Link href="/operations/bills">bills</Link>. They aren&apos;t applied to journals you enter by hand, and GST
+        returns aren&apos;t calculated in Tohyee yet.
       </Notice>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {can("admin") ? (

@@ -1,6 +1,7 @@
 import pg from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { SessionUser } from "@/lib/auth/sessions";
+import { approveBill, createBill, deleteBill, updateBill, voidBill } from "@/lib/bills/service";
 import { migrateEverything } from "@/lib/db/migrations";
 import { createContact } from "@/lib/contacts/service";
 import type { Actor } from "@/lib/db/org-transaction";
@@ -139,6 +140,31 @@ describeWithDatabase("separate admin and runtime logins (DATABASE_ADMIN_URL)", (
     expect(result.voided.payment).toMatchObject({ status: "voided", amount: "30.00", voidDate: "2026-06-17" });
     expect(result.voided.invoice).toMatchObject({ amountPaid: "0.00", amountDue: "80.00", paidStatus: "unpaid" });
     expect(result.payments.map((entry) => entry.status)).toEqual(["voided"]);
+  });
+
+  it("bills can be drafted, edited, deleted, approved and voided as the runtime login", async () => {
+    const bill = await inOrganisation(ORG, actor, async (tx) => {
+      const { contact } = await createContact(tx, { idempotencyKey: key("c"), name: "Hardened Supplier", isSupplier: true });
+      const draft = () =>
+        createBill(tx, {
+          idempotencyKey: key("b"),
+          contactId: contact.id,
+          billDate: "2026-06-15",
+          dueDate: "2026-07-15",
+          supplierInvoiceNumber: "H-1",
+          amountsMode: "no_tax",
+          lines: [{ description: "Accounting", quantity: "1", unitPrice: "200", accountCode: "6010" }],
+        });
+      const scrap = (await draft()).bill;
+      await deleteBill(tx, scrap.id);
+      const { bill: saved } = await draft();
+      await updateBill(tx, saved.id, {
+        lines: [{ description: "Accounting", quantity: "2", unitPrice: "200", accountCode: "6010" }],
+      });
+      await approveBill(tx, saved.id, { idempotencyKey: key("a") });
+      return (await voidBill(tx, saved.id, { idempotencyKey: key("v"), voidDate: "2026-06-20" })).bill;
+    });
+    expect(bill).toMatchObject({ status: "voided", supplierInvoiceNumber: "H-1", total: "400.00" });
   });
 
   it("the runtime login can't change the schema or rewrite posted history", async () => {

@@ -6,13 +6,15 @@ proves it". Test names start with the example IDs they cover:
 
 - `tests/unit/decimal.test.ts` (R1, R3), `tests/unit/costing.test.ts`
   (W1-W12, pure costing maths) and `tests/unit/invoice-amounts.test.ts`
-  (I1-I6, pure invoice maths; CP1, CP2 and CP4 paid status)
+  (I1-I6 and B1-B4, pure invoice and bill maths; CP1, CP2 and CP4 paid
+  status)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
   P1-P3), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
-  `tests/integration/invoices.test.ts` (I1-I9, D1, D2 for invoices) and
-  `tests/integration/customer-payments.test.ts` (CP1-CP8), all against a
+  `tests/integration/invoices.test.ts` (I1-I9, D1, D2 for invoices),
+  `tests/integration/customer-payments.test.ts` (CP1-CP8) and
+  `tests/integration/bills.test.ts` (B1-B8, D1, D2 for bills), all against a
   real PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -213,6 +215,57 @@ never stored or typed in.
 - **Correcting a payment**: its journals can't be corrected in the ledger.
   Void the payment and record it again. A void can't be dated before the
   payment.
+
+## Bills
+
+A bill is an invoice from a supplier. Bills work like sales invoices the
+other way round: the same amounts modes (tax exclusive, tax inclusive or no
+tax), the same line maths and the same per-line GST rounding, from the same
+code (`src/lib/invoices/amounts.ts`, see "Sales invoices").
+
+- The supplier must be an active contact marked as a supplier. The
+  supplier's invoice number is required, and a supplier can't have two bills
+  that aren't voided with the same number, ignoring case and spaces.
+- Line accounts are active, base-currency accounts of type expense or direct
+  costs, or asset accounts, but not bank, accounts receivable, accounts
+  payable or GST. Tax codes come from the same list as invoices.
+- Drafts post nothing. Approving posts one journal dated the bill date: Dr
+  each line's account for its net amount, Dr GST (2100) for the GST, Cr
+  accounts payable (2000) for the total. There's no GST line when the GST is
+  0.00. Its reference is the supplier's invoice number.
+- An approved bill can't be edited, and its journal can't be corrected in the
+  ledger. It can be voided once, which posts the exact reversal.
+
+| ID | Bill | Result |
+| --- | --- | --- |
+| B1 | Exclusive: 1 x 200.00 at 15% to 6010 | Net **200.00**, GST **30.00**, total **230.00**. Journal: Dr 6010 200.00 / Dr 2100 30.00 / Cr 2000 230.00 |
+| B2 | Inclusive: 1 x 46.00 at 15% to 6040 | GST = 46.00 x 3/23 = **6.00**; net **40.00**; total **46.00** |
+| B3 | Exclusive: three lines of 1 x 3.33 at 15% | GST **0.50** a line, GST **1.50**, total **11.49** (same as I3) |
+| B4 | Exclusive: 100.00 at standard 15% + 20.00 exempt | GST **15.00**, total **135.00** |
+
+- **B5** A second bill (not voided) from the same supplier with supplier
+  invoice number "inv 42" when "INV42" exists is refused; after the first one
+  is voided it's allowed. The same number from a different supplier is fine.
+- **B6** Voiding B1 on a later date in an open period posts the exact
+  reversal on that date (Dr 2000 230.00 / Cr 6010 200.00 / Cr 2100 30.00).
+  The bill shows as voided, and a second void is refused.
+- **B7** Approving a bill dated in a locked period is refused; the draft stays
+  a draft.
+- **B8** Retrying an approval with the same idempotency key returns the same
+  journal. Drafts post nothing. A contact that is only a customer, or is
+  archived, can't be the supplier.
+
+### Not supported yet (refused rather than guessed)
+
+- **Supplier payments**: bills can't be paid in Tohyee yet, so a bill stays in
+  accounts payable until it's voided.
+- **Negative or zero lines** (discounts, supplier credit notes): the same
+  rules as invoices.
+- **Correcting an approved bill**: it can't be edited, and its journal can't
+  be corrected in the ledger. Void it and enter it again. A void can't be
+  dated before the bill.
+- **Foreign-currency bills**: bills are in the base currency only, and lines
+  can't go to foreign-currency accounts.
 
 ## Reports
 
