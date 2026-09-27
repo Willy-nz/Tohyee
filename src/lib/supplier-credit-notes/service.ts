@@ -2,6 +2,7 @@ import { parseAccountCodeInput } from "@/lib/accounts/service";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
 import { billLineAccountProblem } from "@/lib/bills/accounts";
+import { PAYABLE_ACCOUNT } from "@/lib/bills/service";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -9,11 +10,11 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import {
   AMOUNTS_MODES,
   calculateInvoice,
-  invoicePaymentStatus,
+  creditNoteCreditStatus,
   type AmountsMode,
-  type PaidStatus,
+  type CreditStatus,
 } from "@/lib/invoices/amounts";
-import { controlAccountCode, GST_ACCOUNT, type ControlAccount } from "@/lib/invoices/service";
+import { controlAccountCode, GST_ACCOUNT } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
@@ -41,19 +42,20 @@ import {
 } from "@/lib/validation";
 
 /**
- * Bills from suppliers, the purchase side of sales invoices. A draft can be
- * edited and deleted and posts nothing. Approving posts its journal (Dr each
- * line's account and GST / Cr accounts payable); after that it can't change,
- * only be voided, which posts the exact reversal. The amounts are worked out
- * the same way as invoices, in `@/lib/invoices/amounts` (examples B1-B4). A
- * bill is known by its supplier's own invoice number; Tohyee doesn't number
- * bills itself. Payments against approved bills are in `@/lib/bills/payments`,
- * and supplier credit applied to them in `@/lib/supplier-credit-notes/applications`.
+ * Supplier credit notes, the bills side of sales credit notes. A draft can be
+ * edited and deleted and posts nothing. Approving posts its journal,
+ * Dr accounts payable / Cr each line's account and GST; after that it can't
+ * change, only be voided, which posts the exact reversal. Lines follow the
+ * bill account rules (`@/lib/bills/accounts`) and the invoice maths
+ * (`@/lib/invoices/amounts`). Like a bill, a supplier credit note is known by
+ * the supplier's own number; Tohyee doesn't number it. Approved credit is
+ * applied to bills in `@/lib/supplier-credit-notes/applications` and refunds
+ * received are in `@/lib/supplier-credit-notes/refunds` (examples SCN1-SCN12).
  */
-export const BILL_STATUSES = ["draft", "approved", "voided"] as const;
-export type BillStatus = (typeof BILL_STATUSES)[number];
+export const SUPPLIER_CREDIT_NOTE_STATUSES = ["draft", "approved", "voided"] as const;
+export type SupplierCreditNoteStatus = (typeof SUPPLIER_CREDIT_NOTE_STATUSES)[number];
 
-export type BillLine = {
+export type SupplierCreditNoteLine = {
   lineOrder: number;
   description: string;
   quantity: string;
@@ -70,28 +72,28 @@ export type BillLine = {
   taxAmount: string;
 };
 
-export type BillSummary = {
+export type SupplierCreditNoteSummary = {
   id: string;
-  status: BillStatus;
+  status: SupplierCreditNoteStatus;
+  /** The supplier's own number for the credit note they sent, as it was typed. */
+  supplierCreditNoteNumber: string;
   contactId: string;
   contactName: string;
-  billDate: string;
-  dueDate: string;
-  /** The supplier's own number for the invoice they sent, as it was typed. */
-  supplierInvoiceNumber: string;
+  creditNoteDate: string;
+  reference: string | null;
   amountsMode: AmountsMode;
   currencyCode: string;
   subtotal: string;
   taxTotal: string;
   total: string;
-  /** The sum of the bill's active payments (examples SP1-SP4). */
-  amountPaid: string;
-  /** The sum of the supplier credit applied to the bill (examples SCN3, SCN4). */
-  amountCredited: string;
-  /** What's still to be paid on an approved bill; null for drafts and voided bills. */
-  amountDue: string | null;
-  /** Worked out from the bill's active payments and credit applied; null for drafts and voided bills. */
-  paidStatus: PaidStatus | null;
+  /** The sum of the credit note's active applications to bills. */
+  amountApplied: string;
+  /** The sum of the credit note's active refunds received. */
+  amountRefunded: string;
+  /** What's left to apply or refund on an approved credit note; null for drafts and voided credit notes. */
+  remainingCredit: string | null;
+  /** Worked out from its active applications and refunds; null for drafts and voided credit notes. */
+  creditStatus: CreditStatus | null;
   approvalJournalId: string | null;
   approvedAt: string | null;
   approvedByEmail: string | null;
@@ -104,37 +106,37 @@ export type BillSummary = {
   updatedAt: string;
 };
 
-export type Bill = BillSummary & { lines: BillLine[] };
+export type SupplierCreditNote = SupplierCreditNoteSummary & { lines: SupplierCreditNoteLine[] };
 
 /** What a person enters. An edit leaves out anything it doesn't change; `lines` replaces every line. */
-export type BillInput = {
+export type SupplierCreditNoteInput = {
   contactId?: unknown;
-  billDate?: unknown;
-  dueDate?: unknown;
-  supplierInvoiceNumber?: unknown;
+  creditNoteDate?: unknown;
+  supplierCreditNoteNumber?: unknown;
+  reference?: unknown;
   amountsMode?: unknown;
   lines?: unknown;
 };
 
 const MAX_LINES = 200;
-/** Quantities and unit prices allow up to 4 decimal places. */
+/** Quantities and unit prices allow up to 4 decimal places, as on bills. */
 const LINE_INPUT_SCALE = 4;
 
-type BillRow = {
+type CreditNoteRow = {
   id: string;
-  status: BillStatus;
+  status: SupplierCreditNoteStatus;
+  supplier_credit_note_number: string;
   contact_id: string;
   contact_name: string;
-  bill_date: string;
-  due_date: string;
-  supplier_invoice_number: string;
+  credit_note_date: string;
+  reference: string | null;
   amounts_mode: AmountsMode;
   currency_code: string;
   subtotal: string;
   tax_total: string;
   total: string;
-  amount_paid: string;
-  amount_credited: string;
+  amount_applied: string;
+  amount_refunded: string;
   approval_journal_id: string | null;
   approved_at: string | null;
   approved_by_email: string | null;
@@ -147,24 +149,24 @@ type BillRow = {
   updated_at: string;
 };
 
-const SUMMARY_COLUMNS = `b.id, b.status, b.contact_id, c.name as contact_name, b.bill_date, b.due_date,
-  b.supplier_invoice_number, b.amounts_mode, b.currency_code, b.subtotal, b.tax_total, b.total,
-  paid.amount_paid, credited.amount_credited, b.approval_journal_id, b.approved_at, b.approved_by_email, b.void_date, b.void_journal_id, b.voided_at,
-  b.voided_by_email, b.created_by_email, b.created_at, b.updated_at`;
+const SUMMARY_COLUMNS = `n.id, n.status, n.supplier_credit_note_number, n.contact_id, c.name as contact_name, n.credit_note_date,
+  n.reference, n.amounts_mode, n.currency_code, n.subtotal, n.tax_total, n.total, applied.amount_applied,
+  refunded.amount_refunded, n.approval_journal_id, n.approved_at, n.approved_by_email, n.void_date, n.void_journal_id,
+  n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at`;
 
-/** Bills with their supplier and the sums of their active payments and supplier credit applied. */
-const SUMMARY_FROM = `bills b
-  join contacts c on c.id = b.contact_id
+/** Supplier credit notes with their supplier and the sums of their active applications and refunds. */
+const SUMMARY_FROM = `supplier_credit_notes n
+  join contacts c on c.id = n.contact_id
   cross join lateral (
-    select coalesce(sum(p.amount), 0) as amount_paid
-      from supplier_payments p
-     where p.bill_id = b.id and p.status = 'active'
-  ) paid
-  cross join lateral (
-    select coalesce(sum(a.amount), 0) as amount_credited
+    select coalesce(sum(a.amount), 0) as amount_applied
       from supplier_credit_note_applications a
-     where a.bill_id = b.id and a.status = 'active'
-  ) credited`;
+     where a.credit_note_id = n.id and a.status = 'active'
+  ) applied
+  cross join lateral (
+    select coalesce(sum(r.amount), 0) as amount_refunded
+      from supplier_credit_note_refunds r
+     where r.credit_note_id = n.id and r.status = 'active'
+  ) refunded`;
 
 type LineRow = {
   line_order: number;
@@ -182,27 +184,31 @@ type LineRow = {
   tax_amount: string;
 };
 
-function toSummary(row: BillRow): BillSummary {
-  const scale = currencyMinorUnits(row.currency_code);
-  const payment = invoicePaymentStatus(row.total, row.amount_paid, scale, row.amount_credited);
+function toSummary(row: CreditNoteRow): SupplierCreditNoteSummary {
+  const credit = creditNoteCreditStatus(
+    row.total,
+    row.amount_applied,
+    row.amount_refunded,
+    currencyMinorUnits(row.currency_code),
+  );
   const approved = row.status === "approved";
   return {
     id: row.id,
     status: row.status,
+    supplierCreditNoteNumber: row.supplier_credit_note_number,
     contactId: row.contact_id,
     contactName: row.contact_name,
-    billDate: row.bill_date,
-    dueDate: row.due_date,
-    supplierInvoiceNumber: row.supplier_invoice_number,
+    creditNoteDate: row.credit_note_date,
+    reference: row.reference,
     amountsMode: row.amounts_mode,
     currencyCode: row.currency_code,
     subtotal: row.subtotal,
     taxTotal: row.tax_total,
     total: row.total,
-    amountPaid: payment.amountPaid,
-    amountCredited: toFixedString(dec(row.amount_credited), scale),
-    amountDue: approved ? payment.amountDue : null,
-    paidStatus: approved ? payment.paidStatus : null,
+    amountApplied: credit.amountApplied,
+    amountRefunded: credit.amountRefunded,
+    remainingCredit: approved ? credit.remainingCredit : null,
+    creditStatus: approved ? credit.creditStatus : null,
     approvalJournalId: row.approval_journal_id,
     approvedAt: row.approved_at,
     approvedByEmail: row.approved_by_email,
@@ -216,7 +222,7 @@ function toSummary(row: BillRow): BillSummary {
   };
 }
 
-function toLine(row: LineRow): BillLine {
+function toLine(row: LineRow): SupplierCreditNoteLine {
   return {
     lineOrder: row.line_order,
     description: row.description,
@@ -237,9 +243,9 @@ function toLine(row: LineRow): BillLine {
 /** A draft as entered, validated but not yet checked against the organisation's data. */
 type DraftDetails = {
   contactId: string;
-  billDate: string;
-  dueDate: string;
-  supplierInvoiceNumber: string;
+  creditNoteDate: string;
+  supplierCreditNoteNumber: string;
+  reference: string | null;
   amountsMode: AmountsMode;
   lines: Array<{
     description: string;
@@ -271,20 +277,17 @@ type ResolvedDraft = DraftDetails & {
   }>;
 };
 
-function parseDraft(input: BillInput): DraftDetails {
+function parseDraft(input: SupplierCreditNoteInput): DraftDetails {
   const contactId = requireId(input.contactId, "contactId");
-  const billDate = parseIsoDate(input.billDate, "billDate");
-  const dueDate = parseIsoDate(input.dueDate, "dueDate");
-  if (dueDate < billDate) {
-    throw new ValidationError("The due date can't be before the bill date.");
-  }
-  const supplierInvoiceNumber = requireString(input.supplierInvoiceNumber, "supplierInvoiceNumber", {
+  const creditNoteDate = parseIsoDate(input.creditNoteDate, "creditNoteDate");
+  const supplierCreditNoteNumber = requireString(input.supplierCreditNoteNumber, "supplierCreditNoteNumber", {
     maxLength: 100,
   });
+  const reference = optionalString(input.reference, "reference", { maxLength: 100 });
   const amountsMode = requireOneOf(input.amountsMode, "amountsMode", AMOUNTS_MODES);
   const rawLines = requireArray(input.lines, "lines", MAX_LINES);
   if (rawLines.length === 0) {
-    throw new ValidationError("A bill needs at least one line.");
+    throw new ValidationError("A credit note needs at least one line.");
   }
   const lines = rawLines.map((raw, index) => {
     const label = `Line ${index + 1}`;
@@ -292,7 +295,7 @@ function parseDraft(input: BillInput): DraftDetails {
     const taxCode = optionalString(line.taxCode, `${label} tax code`, { maxLength: 20 })?.toUpperCase() ?? null;
     if (amountsMode === "no_tax" && taxCode !== null) {
       throw new ValidationError(
-        `${label} has a tax code, but the bill's amounts have no tax. Remove the tax code or change the amounts to tax exclusive or inclusive.`,
+        `${label} has a tax code, but the credit note's amounts have no tax. Remove the tax code or change the amounts to tax exclusive or inclusive.`,
       );
     }
     if (amountsMode !== "no_tax" && taxCode === null) {
@@ -308,27 +311,28 @@ function parseDraft(input: BillInput): DraftDetails {
       taxCode,
     };
   });
-  return { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines };
+  return { contactId, creditNoteDate, supplierCreditNoteNumber, reference, amountsMode, lines };
 }
 
 /** Normalised content for the idempotency fingerprint. */
 function hashPayload(draft: DraftDetails): Record<string, unknown> {
   return {
     contactId: draft.contactId,
-    billDate: draft.billDate,
-    dueDate: draft.dueDate,
-    supplierInvoiceNumber: draft.supplierInvoiceNumber,
+    creditNoteDate: draft.creditNoteDate,
+    supplierCreditNoteNumber: draft.supplierCreditNoteNumber,
+    reference: draft.reference,
     amountsMode: draft.amountsMode,
     lines: draft.lines.map((line) => ({ ...line, accountCode: line.accountCode.toLowerCase() })),
   };
 }
 
 /**
- * Checks a draft against the organisation's data and works out its amounts.
- * Run when a draft is saved and again when it's approved: the supplier must be
- * an active contact marked as a supplier, each line's account an active
- * account that can take bill lines (`billLineAccountProblem`), and each tax
- * code active and in effect on the bill date.
+ * Checks a draft against the organisation's data and works out its amounts,
+ * with the same rules as a bill. Run when a draft is saved and again when
+ * it's approved: the supplier must be an active contact marked as a
+ * supplier, each line's account an active account that can take bill lines
+ * (`billLineAccountProblem`), and each tax code active and in effect on the
+ * credit note date.
  */
 async function resolveDraft(tx: OrgTx, draft: DraftDetails): Promise<ResolvedDraft> {
   const contact = await tx.query<{ name: string; is_supplier: boolean; is_archived: boolean }>(
@@ -403,9 +407,12 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails): Promise<ResolvedDra
       if (!taxCode.is_active) {
         throw new ValidationError(`${label}: tax code ${taxCode.code} is inactive.`);
       }
-      if (taxCode.effective_from > draft.billDate || (taxCode.effective_to !== null && taxCode.effective_to < draft.billDate)) {
+      if (
+        taxCode.effective_from > draft.creditNoteDate ||
+        (taxCode.effective_to !== null && taxCode.effective_to < draft.creditNoteDate)
+      ) {
         throw new ValidationError(
-          `${label}: tax code ${taxCode.code} isn't in effect on ${draft.billDate} (it applies from ${taxCode.effective_from}${
+          `${label}: tax code ${taxCode.code} isn't in effect on ${draft.creditNoteDate} (it applies from ${taxCode.effective_from}${
             taxCode.effective_to ? ` to ${taxCode.effective_to}` : ""
           }).`,
         );
@@ -446,50 +453,55 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails): Promise<ResolvedDra
   };
 }
 
-/** The expression the unique index on non-voided bills uses: no whitespace, lower case. */
+/** The expression the unique index on non-voided supplier credit notes uses: no whitespace, lower case. */
 const COMPARABLE_NUMBER = (column: string) => `lower(regexp_replace(${column}, '[[:space:]]', '', 'g'))`;
-const NUMBER_INDEX = "bills_supplier_invoice_number_key";
+const NUMBER_INDEX = "supplier_credit_notes_number_key";
 
-function numberTaken(supplier: string, number: string, existing?: { id: string; status: BillStatus }): ConflictError {
+function numberTaken(
+  supplier: string,
+  number: string,
+  existing?: { id: string; status: SupplierCreditNoteStatus },
+): ConflictError {
   return new ConflictError(
-    `${supplier} already has a bill with the invoice number ${number}${
-      existing ? ` (${existing.status} bill #${existing.id})` : ""
-    }. Numbers are compared ignoring case and spaces, so check this bill hasn't been entered already.`,
+    `${supplier} already has a supplier credit note numbered ${number}${
+      existing ? ` (${existing.status} supplier credit note #${existing.id})` : ""
+    }. Numbers are compared ignoring case and spaces, so check this credit note hasn't been entered already.`,
   );
 }
 
 /**
- * Example B5: a supplier can't have two bills that aren't voided with the
- * same invoice number, ignoring case and spaces. The database's unique index
- * refuses it too; this finds the other bill to say which one it is.
+ * Example SCN11: a supplier can't have two supplier credit notes that aren't
+ * voided with the same number, ignoring case and spaces. Bill numbers are
+ * separate. The database's unique index refuses it too; this finds the other
+ * credit note to say which one it is.
  */
-async function assertNumberFree(tx: OrgTx, draft: ResolvedDraft, exceptBillId: string | null): Promise<void> {
-  const clash = await tx.query<{ id: string; status: BillStatus; supplier_invoice_number: string }>(
-    `select id, status, supplier_invoice_number from bills
+async function assertNumberFree(tx: OrgTx, draft: ResolvedDraft, exceptCreditNoteId: string | null): Promise<void> {
+  const clash = await tx.query<{ id: string; status: SupplierCreditNoteStatus; supplier_credit_note_number: string }>(
+    `select id, status, supplier_credit_note_number from supplier_credit_notes
       where contact_id = $1 and status <> 'voided'
-        and ${COMPARABLE_NUMBER("supplier_invoice_number")} = ${COMPARABLE_NUMBER("$2::text")}
+        and ${COMPARABLE_NUMBER("supplier_credit_note_number")} = ${COMPARABLE_NUMBER("$2::text")}
         and ($3::bigint is null or id <> $3)
       order by id
       limit 1`,
-    [draft.contactId, draft.supplierInvoiceNumber, exceptBillId],
+    [draft.contactId, draft.supplierCreditNoteNumber, exceptCreditNoteId],
   );
   const existing = clash.rows[0];
   if (existing) {
-    throw numberTaken(draft.contactName, existing.supplier_invoice_number, existing);
+    throw numberTaken(draft.contactName, existing.supplier_credit_note_number, existing);
   }
 }
 
 /**
- * Waits for a statement that saves a bill's supplier and number. If another
- * request saved the same number after `assertNumberFree` looked, the unique
- * index refuses this one, and the person is told why.
+ * Waits for a statement that saves a supplier credit note's supplier and
+ * number. If another request saved the same number after `assertNumberFree`
+ * looked, the unique index refuses this one, and the person is told why.
  */
 async function savingNumber<T>(draft: ResolvedDraft, statement: Promise<T>): Promise<T> {
   try {
     return await statement;
   } catch (error) {
     if (isUniqueViolation(error, NUMBER_INDEX)) {
-      throw numberTaken(draft.contactName, draft.supplierInvoiceNumber);
+      throw numberTaken(draft.contactName, draft.supplierCreditNoteNumber);
     }
     throw error;
   }
@@ -509,9 +521,9 @@ type StoredLine = {
 
 type StoredHeader = {
   contactId: string;
-  billDate: string;
-  dueDate: string;
-  supplierInvoiceNumber: string;
+  creditNoteDate: string;
+  supplierCreditNoteNumber: string;
+  reference: string | null;
   amountsMode: AmountsMode;
   currencyCode: string;
   subtotal: string;
@@ -522,17 +534,17 @@ type StoredHeader = {
 const plain = (value: string) => toPlainString(dec(value));
 
 /** What's stored for a draft's header and lines, to tell whether an edit changed anything. */
-function headerState(bill: StoredHeader): string {
+function headerState(creditNote: StoredHeader): string {
   return JSON.stringify([
-    bill.contactId,
-    bill.billDate,
-    bill.dueDate,
-    bill.supplierInvoiceNumber,
-    bill.amountsMode,
-    bill.currencyCode,
-    plain(bill.subtotal),
-    plain(bill.taxTotal),
-    plain(bill.total),
+    creditNote.contactId,
+    creditNote.creditNoteDate,
+    creditNote.supplierCreditNoteNumber,
+    creditNote.reference,
+    creditNote.amountsMode,
+    creditNote.currencyCode,
+    plain(creditNote.subtotal),
+    plain(creditNote.taxTotal),
+    plain(creditNote.total),
   ]);
 }
 
@@ -552,7 +564,7 @@ function linesState(lines: readonly StoredLine[]): string {
   );
 }
 
-function sameAsStored(resolved: ResolvedDraft, current: Bill): { header: boolean; lines: boolean } {
+function sameAsStored(resolved: ResolvedDraft, current: SupplierCreditNote): { header: boolean; lines: boolean } {
   return {
     header: headerState(resolved) === headerState(current),
     lines: linesState(resolved.resolvedLines) === linesState(current.lines),
@@ -560,14 +572,14 @@ function sameAsStored(resolved: ResolvedDraft, current: Bill): { header: boolean
 }
 
 /** The saved draft, in the shape a person would send it. */
-function draftOf(bill: Bill): DraftDetails {
+function draftOf(creditNote: SupplierCreditNote): DraftDetails {
   return {
-    contactId: bill.contactId,
-    billDate: bill.billDate,
-    dueDate: bill.dueDate,
-    supplierInvoiceNumber: bill.supplierInvoiceNumber,
-    amountsMode: bill.amountsMode,
-    lines: bill.lines.map((line) => ({
+    contactId: creditNote.contactId,
+    creditNoteDate: creditNote.creditNoteDate,
+    supplierCreditNoteNumber: creditNote.supplierCreditNoteNumber,
+    reference: creditNote.reference,
+    amountsMode: creditNote.amountsMode,
+    lines: creditNote.lines.map((line) => ({
       description: line.description,
       quantity: toPlainString(dec(line.quantity)),
       unitPrice: toPlainString(dec(line.unitPrice)),
@@ -577,11 +589,11 @@ function draftOf(bill: Bill): DraftDetails {
   };
 }
 
-async function insertLines(tx: OrgTx, billId: string, lines: ResolvedDraft["resolvedLines"]): Promise<void> {
+async function insertLines(tx: OrgTx, creditNoteId: string, lines: ResolvedDraft["resolvedLines"]): Promise<void> {
   const values: unknown[] = [];
   const tuples = lines.map((line, index) => {
     values.push(
-      billId,
+      creditNoteId,
       index + 1,
       line.description,
       line.quantity,
@@ -598,8 +610,8 @@ async function insertLines(tx: OrgTx, billId: string, lines: ResolvedDraft["reso
     return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric)`;
   });
   await tx.query(
-    `insert into bill_lines (bill_id, line_order, description, quantity, unit_price, account_id,
-                             tax_code_id, tax_rate, line_amount, net_amount, tax_amount)
+    `insert into supplier_credit_note_lines (credit_note_id, line_order, description, quantity, unit_price, account_id,
+                                             tax_code_id, tax_rate, line_amount, net_amount, tax_amount)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -619,7 +631,7 @@ async function findByKey(
 ): Promise<{ id: string; hash: string } | null> {
   const columns = KEY_COLUMNS[command];
   const result = await tx.query<{ id: string; hash: string }>(
-    `select id, ${columns.hash} as hash from bills where ${columns.source} = $1 and ${columns.key} = $2`,
+    `select id, ${columns.hash} as hash from supplier_credit_notes where ${columns.source} = $1 and ${columns.key} = $2`,
     [source, idempotencyKey],
   );
   return result.rows[0] ?? null;
@@ -630,94 +642,107 @@ function isUniqueViolation(error: unknown, constraint?: string): boolean {
   return code === "23505" && (constraint === undefined || violated === constraint);
 }
 
-function billLabel(bill: BillSummary): string {
-  return `Bill ${bill.supplierInvoiceNumber} from ${bill.contactName}`;
+export function supplierCreditNoteLabel(creditNote: SupplierCreditNoteSummary): string {
+  return `Supplier credit note ${creditNote.supplierCreditNoteNumber} from ${creditNote.contactName}`;
 }
 
-export async function getBill(tx: OrgTx, billIdInput: unknown): Promise<Bill> {
-  const billId = requireId(billIdInput, "billId");
-  const result = await tx.query<BillRow>(`select ${SUMMARY_COLUMNS} from ${SUMMARY_FROM} where b.id = $1`, [billId]);
+export async function getSupplierCreditNote(tx: OrgTx, creditNoteIdInput: unknown): Promise<SupplierCreditNote> {
+  const creditNoteId = requireId(creditNoteIdInput, "creditNoteId");
+  const result = await tx.query<CreditNoteRow>(`select ${SUMMARY_COLUMNS} from ${SUMMARY_FROM} where n.id = $1`, [
+    creditNoteId,
+  ]);
   const row = result.rows[0];
   if (!row) {
-    throw new NotFoundError("Bill not found.");
+    throw new NotFoundError("Supplier credit note not found.");
   }
   const lines = await tx.query<LineRow>(
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
             l.net_amount, l.tax_amount
-       from bill_lines l
+       from supplier_credit_note_lines l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
-      where l.bill_id = $1
+      where l.credit_note_id = $1
       order by l.line_order`,
-    [billId],
+    [creditNoteId],
   );
   return { ...toSummary(row), lines: lines.rows.map(toLine) };
 }
 
-/** Loads a bill and locks it until the transaction ends. */
-export async function lockBill(tx: OrgTx, billId: string): Promise<Bill> {
-  const locked = await tx.query("select id from bills where id = $1 for update", [billId]);
+/** Loads a supplier credit note and locks it until the transaction ends. */
+export async function lockSupplierCreditNote(tx: OrgTx, creditNoteId: string): Promise<SupplierCreditNote> {
+  const locked = await tx.query("select id from supplier_credit_notes where id = $1 for update", [creditNoteId]);
   if (locked.rowCount === 0) {
-    throw new NotFoundError("Bill not found.");
+    throw new NotFoundError("Supplier credit note not found.");
   }
-  return getBill(tx, billId);
+  return getSupplierCreditNote(tx, creditNoteId);
 }
 
-function assertDraft(bill: Bill, action: "edited" | "deleted"): void {
-  if (bill.status !== "draft") {
+function assertDraft(creditNote: SupplierCreditNote, action: "edited" | "deleted"): void {
+  if (creditNote.status !== "draft") {
     throw new ConflictError(
-      `${billLabel(bill)} is ${bill.status}, so it can't be ${action}.${bill.status === "approved" ? " Void it instead." : ""}`,
+      `${supplierCreditNoteLabel(creditNote)} is ${creditNote.status}, so it can't be ${action}.${
+        creditNote.status === "approved" ? " Void it instead." : ""
+      }`,
     );
   }
 }
 
 /**
- * Newest first, 50 at a time; `status` filters, `awaitingPayment` keeps only
- * approved bills with something still due, `contactId` keeps one supplier's
- * bills, and `beforeId` pages.
+ * Newest first, 50 at a time; `status` filters, `contactId` keeps one
+ * supplier's credit notes, `hasRemainingCredit` keeps only approved credit
+ * notes with credit left to apply or refund, and `beforeId` pages.
  */
-export async function listBills(
+export async function listSupplierCreditNotes(
   tx: OrgTx,
-  filters: { status?: unknown; awaitingPayment?: unknown; contactId?: unknown; beforeId?: unknown; limit?: unknown } = {},
-): Promise<{ bills: BillSummary[]; nextBeforeId: string | null }> {
+  filters: {
+    status?: unknown;
+    contactId?: unknown;
+    hasRemainingCredit?: unknown;
+    beforeId?: unknown;
+    limit?: unknown;
+  } = {},
+): Promise<{ creditNotes: SupplierCreditNoteSummary[]; nextBeforeId: string | null }> {
   const status =
-    filters.status == null || filters.status === "" ? null : requireOneOf(filters.status, "status", BILL_STATUSES);
-  const awaitingPayment = optionalBoolean(filters.awaitingPayment, "awaitingPayment") ?? false;
+    filters.status == null || filters.status === ""
+      ? null
+      : requireOneOf(filters.status, "status", SUPPLIER_CREDIT_NOTE_STATUSES);
   const contactId = optionalId(filters.contactId, "contactId");
+  const hasRemainingCredit = optionalBoolean(filters.hasRemainingCredit, "hasRemainingCredit") ?? false;
   const beforeId = optionalId(filters.beforeId, "beforeId");
   const limitRaw = Number(filters.limit ?? 50);
   const limit = Number.isInteger(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : 50;
-  const result = await tx.query<BillRow>(
+  const result = await tx.query<CreditNoteRow>(
     `select ${SUMMARY_COLUMNS} from ${SUMMARY_FROM}
-      where ($1::text is null or b.status = $1) and ($2::bigint is null or b.id < $2)
-        and (not $3::boolean or (b.status = 'approved' and paid.amount_paid + credited.amount_credited < b.total))
-        and ($4::bigint is null or b.contact_id = $4)
-      order by b.id desc
+      where ($1::text is null or n.status = $1) and ($2::bigint is null or n.contact_id = $2)
+        and (not $3::boolean
+             or (n.status = 'approved' and applied.amount_applied + refunded.amount_refunded < n.total))
+        and ($4::bigint is null or n.id < $4)
+      order by n.id desc
       limit ${limit + 1}`,
-    [status, beforeId, awaitingPayment, contactId],
+    [status, contactId, hasRemainingCredit, beforeId],
   );
   const rows = result.rows.slice(0, limit);
   return {
-    bills: rows.map(toSummary),
+    creditNotes: rows.map(toSummary),
     nextBeforeId: result.rows.length > limit ? rows[rows.length - 1].id : null,
   };
 }
 
-/** Saves a new draft (examples B1-B5, B8). Drafts post nothing. */
-export async function createBill(
+/** Saves a new draft (examples SCN1, SCN11). Drafts post nothing. */
+export async function createSupplierCreditNote(
   tx: OrgTx,
-  input: BillInput & { source?: unknown; idempotencyKey: unknown },
-): Promise<{ created: boolean; bill: Bill }> {
+  input: SupplierCreditNoteInput & { source?: unknown; idempotencyKey: unknown },
+): Promise<{ created: boolean; creditNote: SupplierCreditNote }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const draft = parseDraft(input);
-  const hash = requestHash("bill", hashPayload(draft));
+  const hash = requestHash("supplier_credit_note", hashPayload(draft));
 
   const existing = await findByKey(tx, "create", source, idempotencyKey);
   if (existing) {
-    assertSameRequest(existing.hash, hash, "bill");
-    return { created: false, bill: await getBill(tx, existing.id) };
+    assertSameRequest(existing.hash, hash, "supplier credit note");
+    return { created: false, creditNote: await getSupplierCreditNote(tx, existing.id) };
   }
 
   const resolved = await resolveDraft(tx, draft);
@@ -725,9 +750,9 @@ export async function createBill(
   const inserted = await savingNumber(
     resolved,
     tx.query<{ id: string }>(
-      `insert into bills (command_source, idempotency_key, request_hash, contact_id, bill_date, due_date,
-                          supplier_invoice_number, amounts_mode, currency_code, subtotal, tax_total, total,
-                          created_by_user_id, created_by_email)
+      `insert into supplier_credit_notes (command_source, idempotency_key, request_hash, contact_id, credit_note_date,
+                                          supplier_credit_note_number, reference, amounts_mode, currency_code,
+                                          subtotal, tax_total, total, created_by_user_id, created_by_email)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14)
        on conflict (command_source, idempotency_key) do nothing
        returning id`,
@@ -736,9 +761,9 @@ export async function createBill(
         idempotencyKey,
         hash,
         resolved.contactId,
-        resolved.billDate,
-        resolved.dueDate,
-        resolved.supplierInvoiceNumber,
+        resolved.creditNoteDate,
+        resolved.supplierCreditNoteNumber,
+        resolved.reference,
         resolved.amountsMode,
         resolved.currencyCode,
         resolved.subtotal,
@@ -749,31 +774,31 @@ export async function createBill(
       ],
     ),
   );
-  const billId = inserted.rows[0]?.id;
-  if (!billId) {
+  const creditNoteId = inserted.rows[0]?.id;
+  if (!creditNoteId) {
     // Another request with the same key committed first.
     const winner = await findByKey(tx, "create", source, idempotencyKey);
     if (!winner) {
-      throw new ConflictError("That bill is being saved by another request. Try again.");
+      throw new ConflictError("That supplier credit note is being saved by another request. Try again.");
     }
-    assertSameRequest(winner.hash, hash, "bill");
-    return { created: false, bill: await getBill(tx, winner.id) };
+    assertSameRequest(winner.hash, hash, "supplier credit note");
+    return { created: false, creditNote: await getSupplierCreditNote(tx, winner.id) };
   }
-  await insertLines(tx, billId, resolved.resolvedLines);
+  await insertLines(tx, creditNoteId, resolved.resolvedLines);
   await writeAuditEvent(tx, {
-    eventType: "bill.created",
-    entityType: "bill",
-    entityId: billId,
+    eventType: "supplier_credit_note.created",
+    entityType: "supplier_credit_note",
+    entityId: creditNoteId,
     details: {
       contactId: resolved.contactId,
-      supplierInvoiceNumber: resolved.supplierInvoiceNumber,
-      billDate: resolved.billDate,
+      supplierCreditNoteNumber: resolved.supplierCreditNoteNumber,
+      creditNoteDate: resolved.creditNoteDate,
       amountsMode: resolved.amountsMode,
       total: resolved.total,
       lines: resolved.resolvedLines.length,
     },
   });
-  return { created: true, bill: await getBill(tx, billId) };
+  return { created: true, creditNote: await getSupplierCreditNote(tx, creditNoteId) };
 }
 
 /**
@@ -781,16 +806,20 @@ export async function createBill(
  * all the lines. Everything is checked and the amounts worked out again. An
  * edit that changes nothing isn't saved or audited.
  */
-export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInput): Promise<Bill> {
-  const current = await lockBill(tx, requireId(billIdInput, "billId"));
+export async function updateSupplierCreditNote(
+  tx: OrgTx,
+  creditNoteIdInput: unknown,
+  input: SupplierCreditNoteInput,
+): Promise<SupplierCreditNote> {
+  const current = await lockSupplierCreditNote(tx, requireId(creditNoteIdInput, "creditNoteId"));
   assertDraft(current, "edited");
   const saved = draftOf(current);
   const draft = parseDraft({
     contactId: input.contactId === undefined ? saved.contactId : input.contactId,
-    billDate: input.billDate === undefined ? saved.billDate : input.billDate,
-    dueDate: input.dueDate === undefined ? saved.dueDate : input.dueDate,
-    supplierInvoiceNumber:
-      input.supplierInvoiceNumber === undefined ? saved.supplierInvoiceNumber : input.supplierInvoiceNumber,
+    creditNoteDate: input.creditNoteDate === undefined ? saved.creditNoteDate : input.creditNoteDate,
+    supplierCreditNoteNumber:
+      input.supplierCreditNoteNumber === undefined ? saved.supplierCreditNoteNumber : input.supplierCreditNoteNumber,
+    reference: input.reference === undefined ? saved.reference : input.reference,
     amountsMode: input.amountsMode === undefined ? saved.amountsMode : input.amountsMode,
     lines: input.lines === undefined ? saved.lines : input.lines,
   });
@@ -802,7 +831,7 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
   await assertNumberFree(tx, resolved, current.id);
 
   const changed: string[] = (
-    ["contactId", "billDate", "dueDate", "supplierInvoiceNumber", "amountsMode"] as const
+    ["contactId", "creditNoteDate", "supplierCreditNoteNumber", "reference", "amountsMode"] as const
   ).filter((field) => resolved[field] !== current[field]);
   if (!same.lines) {
     changed.push("lines");
@@ -810,17 +839,17 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
   await savingNumber(
     resolved,
     tx.query(
-      `update bills
-          set contact_id = $2, bill_date = $3, due_date = $4, supplier_invoice_number = $5, amounts_mode = $6,
-              currency_code = $7, subtotal = $8::numeric, tax_total = $9::numeric, total = $10::numeric,
-              updated_at = now()
+      `update supplier_credit_notes
+          set contact_id = $2, credit_note_date = $3, supplier_credit_note_number = $4, reference = $5,
+              amounts_mode = $6, currency_code = $7, subtotal = $8::numeric, tax_total = $9::numeric,
+              total = $10::numeric, updated_at = now()
         where id = $1`,
       [
         current.id,
         resolved.contactId,
-        resolved.billDate,
-        resolved.dueDate,
-        resolved.supplierInvoiceNumber,
+        resolved.creditNoteDate,
+        resolved.supplierCreditNoteNumber,
+        resolved.reference,
         resolved.amountsMode,
         resolved.currencyCode,
         resolved.subtotal,
@@ -829,46 +858,39 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
       ],
     ),
   );
-  await tx.query("delete from bill_lines where bill_id = $1", [current.id]);
+  await tx.query("delete from supplier_credit_note_lines where credit_note_id = $1", [current.id]);
   await insertLines(tx, current.id, resolved.resolvedLines);
   await writeAuditEvent(tx, {
-    eventType: "bill.updated",
-    entityType: "bill",
+    eventType: "supplier_credit_note.updated",
+    entityType: "supplier_credit_note",
     entityId: current.id,
     details: { changed, total: { from: current.total, to: resolved.total } },
   });
-  return getBill(tx, current.id);
+  return getSupplierCreditNote(tx, current.id);
 }
 
-/** Deletes a draft (approved bills are voided instead). */
-export async function deleteBill(tx: OrgTx, billIdInput: unknown): Promise<void> {
-  const current = await lockBill(tx, requireId(billIdInput, "billId"));
+/** Deletes a draft (approved supplier credit notes are voided instead). */
+export async function deleteSupplierCreditNote(tx: OrgTx, creditNoteIdInput: unknown): Promise<void> {
+  const current = await lockSupplierCreditNote(tx, requireId(creditNoteIdInput, "creditNoteId"));
   assertDraft(current, "deleted");
-  await tx.query("delete from bill_lines where bill_id = $1", [current.id]);
-  await tx.query("delete from bills where id = $1", [current.id]);
+  await tx.query("delete from supplier_credit_note_lines where credit_note_id = $1", [current.id]);
+  await tx.query("delete from supplier_credit_notes where id = $1", [current.id]);
   await writeAuditEvent(tx, {
-    eventType: "bill.deleted",
-    entityType: "bill",
+    eventType: "supplier_credit_note.deleted",
+    entityType: "supplier_credit_note",
     entityId: current.id,
     details: {
       contactId: current.contactId,
       contactName: current.contactName,
-      supplierInvoiceNumber: current.supplierInvoiceNumber,
-      billDate: current.billDate,
+      supplierCreditNoteNumber: current.supplierCreditNoteNumber,
+      creditNoteDate: current.creditNoteDate,
       total: current.total,
     },
   });
 }
 
-export const PAYABLE_ACCOUNT: ControlAccount = { systemKey: "accounts_payable", label: "accounts payable", accountClass: "liability" };
-
-/** The accounts payable account that supplier payments are debited to. */
-export async function payableAccountCode(tx: OrgTx): Promise<string> {
-  return controlAccountCode(tx, PAYABLE_ACCOUNT, "payments can't be recorded");
-}
-
-async function billControlAccounts(tx: OrgTx): Promise<{ payable: string; gst: string }> {
-  const refused = "bills can't be approved";
+async function creditNoteControlAccounts(tx: OrgTx): Promise<{ payable: string; gst: string }> {
+  const refused = "supplier credit notes can't be approved";
   return {
     payable: await controlAccountCode(tx, PAYABLE_ACCOUNT, refused),
     gst: await controlAccountCode(tx, GST_ACCOUNT, refused),
@@ -876,41 +898,41 @@ async function billControlAccounts(tx: OrgTx): Promise<{ payable: string; gst: s
 }
 
 /**
- * Approves a draft (examples B1-B4, B7, B8): posts one journal on the bill
- * date, Dr each line's account for its net amount, Dr GST for the GST and
- * Cr accounts payable for the total. Refused in a locked period, leaving the
- * draft as it was.
+ * Approves a draft (examples SCN2, SCN10, SCN12): posts one journal on the
+ * credit note date, Dr accounts payable for the total, Cr each line's account
+ * for its net amount and Cr GST for the GST. Refused in a locked period,
+ * leaving the draft as it was.
  */
-export async function approveBill(
+export async function approveSupplierCreditNote(
   tx: OrgTx,
-  billIdInput: unknown,
+  creditNoteIdInput: unknown,
   command: { source?: unknown; idempotencyKey: unknown },
-): Promise<{ created: boolean; bill: Bill }> {
-  const billId = requireId(billIdInput, "billId");
+): Promise<{ created: boolean; creditNote: SupplierCreditNote }> {
+  const creditNoteId = requireId(creditNoteIdInput, "creditNoteId");
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
-  const hash = requestHash("bill_approval", { billId });
+  const hash = requestHash("supplier_credit_note_approval", { creditNoteId });
   const replay = async () => {
     const earlier = await findByKey(tx, "approve", source, idempotencyKey);
     if (!earlier) {
       return null;
     }
-    assertSameRequest(earlier.hash, hash, "bill approval");
-    return { created: false, bill: await getBill(tx, earlier.id) };
+    assertSameRequest(earlier.hash, hash, "supplier credit note approval");
+    return { created: false, creditNote: await getSupplierCreditNote(tx, earlier.id) };
   };
 
   const earlier = await replay();
   if (earlier) {
     return earlier;
   }
-  const current = await lockBill(tx, billId);
+  const current = await lockSupplierCreditNote(tx, creditNoteId);
   // The original of a retry may have committed while this request waited for the lock.
   const committedMeanwhile = await replay();
   if (committedMeanwhile) {
     return committedMeanwhile;
   }
   if (current.status !== "draft") {
-    throw new ConflictError(`${billLabel(current)} is already ${current.status}.`);
+    throw new ConflictError(`${supplierCreditNoteLabel(current)} is already ${current.status}.`);
   }
   if (current.currencyCode !== tx.baseCurrency) {
     throw new ValidationError(
@@ -925,140 +947,138 @@ export async function approveBill(
       "This draft's amounts no longer match its tax codes. Open it and save it again, then check the totals before approving.",
     );
   }
-  const accounts = await billControlAccounts(tx);
-  await assertPostingDateAllowed(tx, current.billDate);
+  const accounts = await creditNoteControlAccounts(tx);
+  await assertPostingDateAllowed(tx, current.creditNoteDate);
 
   const scale = currencyMinorUnits(tx.baseCurrency);
-  const costs = new Map<string, { code: string; amount: Decimal }>();
+  const credited = new Map<string, { code: string; amount: Decimal }>();
   for (const line of resolved.resolvedLines) {
-    const entry = costs.get(line.accountId) ?? { code: line.accountCode, amount: ZERO_DECIMAL };
+    const entry = credited.get(line.accountId) ?? { code: line.accountCode, amount: ZERO_DECIMAL };
     entry.amount = add(entry.amount, dec(line.netAmount));
-    costs.set(line.accountId, entry);
+    credited.set(line.accountId, entry);
   }
   const supplier = resolved.contactName;
+  const number = current.supplierCreditNoteNumber;
   const journalLines = [
-    ...[...costs.values()]
+    { accountCode: accounts.payable, debitAmount: resolved.total, creditAmount: "0", description: supplier },
+    ...[...credited.values()]
       .filter((entry) => !isZero(entry.amount))
       .map((entry) => ({
         accountCode: entry.code,
-        debitAmount: toFixedString(entry.amount, scale),
-        creditAmount: "0",
+        debitAmount: "0",
+        creditAmount: toFixedString(entry.amount, scale),
         description: supplier,
       })),
     ...(isZero(dec(resolved.taxTotal))
       ? []
-      : [{ accountCode: accounts.gst, debitAmount: resolved.taxTotal, creditAmount: "0", description: "GST" }]),
-    { accountCode: accounts.payable, debitAmount: "0", creditAmount: resolved.total, description: supplier },
+      : [{ accountCode: accounts.gst, debitAmount: "0", creditAmount: resolved.taxTotal, description: "GST" }]),
   ];
   const posted = await postJournalBody(
     tx,
-    "bill:approval",
-    billId,
+    "supplier_credit_note:approval",
+    creditNoteId,
     parseJournalBody(tx, {
-      postingDate: current.billDate,
-      reference: current.supplierInvoiceNumber,
-      description: `Bill ${current.supplierInvoiceNumber} from ${supplier}`,
+      postingDate: current.creditNoteDate,
+      reference: number,
+      description: `Supplier credit note ${number} from ${supplier}`,
       lines: journalLines,
     }),
-    { origin: "bill" },
+    { origin: "supplier_credit_note" },
   );
 
   try {
     await tx.query(
-      `update bills
-          set status = 'approved', approval_journal_id = $2, approve_command_source = $3,
-              approve_idempotency_key = $4, approve_request_hash = $5, approved_by_user_id = $6,
-              approved_by_email = $7, approved_at = now(), updated_at = now()
+      `update supplier_credit_notes
+          set status = 'approved', approval_journal_id = $2,
+              approve_command_source = $3, approve_idempotency_key = $4, approve_request_hash = $5,
+              approved_by_user_id = $6, approved_by_email = $7, approved_at = now(), updated_at = now()
         where id = $1`,
-      [billId, posted.journal.id, source, idempotencyKey, hash, tx.actor.userId, tx.actor.email],
+      [creditNoteId, posted.journal.id, source, idempotencyKey, hash, tx.actor.userId, tx.actor.email],
     );
   } catch (error) {
     if (isUniqueViolation(error)) {
-      // The same key was used to approve another bill by a request that committed first.
+      // The same key was used to approve another supplier credit note by a request that committed first.
       throw new ConflictError(
-        "That idempotency key was already used for a different bill approval. Use a new key for a new bill approval.",
+        "That idempotency key was already used for a different supplier credit note approval. Use a new key for a new supplier credit note approval.",
       );
     }
     throw error;
   }
   await writeAuditEvent(tx, {
-    eventType: "bill.approved",
-    entityType: "bill",
-    entityId: billId,
+    eventType: "supplier_credit_note.approved",
+    entityType: "supplier_credit_note",
+    entityId: creditNoteId,
     details: {
-      supplierInvoiceNumber: current.supplierInvoiceNumber,
+      supplierCreditNoteNumber: number,
       journalId: posted.journal.id,
-      billDate: current.billDate,
+      creditNoteDate: current.creditNoteDate,
       total: resolved.total,
     },
   });
-  return { created: true, bill: await getBill(tx, billId) };
+  return { created: true, creditNote: await getSupplierCreditNote(tx, creditNoteId) };
 }
 
 /**
- * Voids an approved bill (example B6): posts the exact reversal of its
- * journal on the void date, which must be in an open period and not before
- * the bill date. A bill can only be voided once, a draft is deleted rather
- * than voided, and a bill with active payments is refused until they're
- * voided (example SP5).
+ * Voids an approved supplier credit note (examples SCN9, SCN11, SCN12): posts
+ * the exact reversal of its journal on the void date, which must be in an
+ * open period and not before the credit note. A credit note can only be
+ * voided once, a draft is deleted rather than voided, and one with active
+ * applications or refunds is refused until they're removed or voided. Once
+ * voided, its number can be used again.
  */
-export async function voidBill(
+export async function voidSupplierCreditNote(
   tx: OrgTx,
-  billIdInput: unknown,
+  creditNoteIdInput: unknown,
   command: { source?: unknown; idempotencyKey: unknown; voidDate: unknown },
-): Promise<{ created: boolean; bill: Bill }> {
-  const billId = requireId(billIdInput, "billId");
+): Promise<{ created: boolean; creditNote: SupplierCreditNote }> {
+  const creditNoteId = requireId(creditNoteIdInput, "creditNoteId");
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const voidDate = parseIsoDate(command.voidDate, "voidDate");
-  const hash = requestHash("bill_void", { billId, voidDate });
+  const hash = requestHash("supplier_credit_note_void", { creditNoteId, voidDate });
   const replay = async () => {
     const earlier = await findByKey(tx, "void", source, idempotencyKey);
     if (!earlier) {
       return null;
     }
-    assertSameRequest(earlier.hash, hash, "bill void");
-    return { created: false, bill: await getBill(tx, earlier.id) };
+    assertSameRequest(earlier.hash, hash, "supplier credit note void");
+    return { created: false, creditNote: await getSupplierCreditNote(tx, earlier.id) };
   };
 
   const earlier = await replay();
   if (earlier) {
     return earlier;
   }
-  const current = await lockBill(tx, billId);
+  const current = await lockSupplierCreditNote(tx, creditNoteId);
   const committedMeanwhile = await replay();
   if (committedMeanwhile) {
     return committedMeanwhile;
   }
   if (current.status === "draft") {
-    throw new ConflictError("This bill is still a draft, so there's nothing to void. Delete it instead.");
+    throw new ConflictError("This supplier credit note is still a draft, so there's nothing to void. Delete it instead.");
   }
   if (current.status === "voided") {
-    throw new ConflictError(`${billLabel(current)} has already been voided.`);
+    throw new ConflictError(`${supplierCreditNoteLabel(current)} has already been voided.`);
   }
-  if (!isZero(dec(current.amountPaid))) {
-    // Example SP5. The database refuses it too.
+  if (!isZero(dec(current.amountApplied)) || !isZero(dec(current.amountRefunded))) {
+    // Example SCN9. The database refuses it too.
     throw new ConflictError(
-      `${billLabel(current)} has payments against it, so it can't be voided. Void its payments first.`,
+      `${supplierCreditNoteLabel(current)} has credit applied or refunded, so it can't be voided. Remove its applications and refunds first.`,
     );
   }
-  if (!isZero(dec(current.amountCredited))) {
-    // Example SCN9. The database refuses it too.
-    throw new ConflictError(`${billLabel(current)} has credit applied to it, so it can't be voided. Remove its credit first.`);
-  }
-  if (voidDate < current.billDate) {
-    throw new ValidationError(`The void date can't be before the bill date (${current.billDate}).`);
+  if (voidDate < current.creditNoteDate) {
+    throw new ValidationError(`The void date can't be before the credit note date (${current.creditNoteDate}).`);
   }
 
   const original = await getJournal(tx, current.approvalJournalId!);
   const posted = await postJournalBody(
     tx,
-    "bill:void",
-    billId,
+    "supplier_credit_note:void",
+    creditNoteId,
     parseJournalBody(tx, {
       postingDate: voidDate,
       reference: `VOID-${original.reference}`.slice(0, 100),
-      description: `Void of bill ${current.supplierInvoiceNumber} from ${current.contactName}`,
+      description: `Void of supplier credit note ${current.supplierCreditNoteNumber} from ${current.contactName}`,
       lines: original.lines.map((line) => ({
         accountCode: line.accountCode,
         debitAmount: line.creditAmount,
@@ -1066,31 +1086,31 @@ export async function voidBill(
         description: line.description,
       })),
     }),
-    { origin: "bill", relatedJournalId: original.id, correctionKind: "reversal" },
+    { origin: "supplier_credit_note", relatedJournalId: original.id, correctionKind: "reversal" },
   );
 
   try {
     await tx.query(
-      `update bills
+      `update supplier_credit_notes
           set status = 'voided', void_date = $2, void_journal_id = $3, void_command_source = $4,
               void_idempotency_key = $5, void_request_hash = $6, voided_by_user_id = $7, voided_by_email = $8,
               voided_at = now(), updated_at = now()
         where id = $1`,
-      [billId, voidDate, posted.journal.id, source, idempotencyKey, hash, tx.actor.userId, tx.actor.email],
+      [creditNoteId, voidDate, posted.journal.id, source, idempotencyKey, hash, tx.actor.userId, tx.actor.email],
     );
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new ConflictError(
-        "That idempotency key was already used for a different bill void. Use a new key for a new bill void.",
+        "That idempotency key was already used for a different supplier credit note void. Use a new key for a new supplier credit note void.",
       );
     }
     throw error;
   }
   await writeAuditEvent(tx, {
-    eventType: "bill.voided",
-    entityType: "bill",
-    entityId: billId,
-    details: { supplierInvoiceNumber: current.supplierInvoiceNumber, voidDate, journalId: posted.journal.id },
+    eventType: "supplier_credit_note.voided",
+    entityType: "supplier_credit_note",
+    entityId: creditNoteId,
+    details: { supplierCreditNoteNumber: current.supplierCreditNoteNumber, voidDate, journalId: posted.journal.id },
   });
-  return { created: true, bill: await getBill(tx, billId) };
+  return { created: true, creditNote: await getSupplierCreditNote(tx, creditNoteId) };
 }

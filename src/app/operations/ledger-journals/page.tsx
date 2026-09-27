@@ -30,6 +30,8 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   supplier_payment: "Supplier payment",
   sales_credit_note: "Credit note",
   sales_credit_note_refund: "Credit note refund",
+  supplier_credit_note: "Supplier credit note",
+  supplier_credit_note_refund: "Supplier refund",
 };
 
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
@@ -39,6 +41,8 @@ const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
   supplier_payment: "The payment was voided: reversed by",
   sales_credit_note: "The credit note was voided: reversed by",
   sales_credit_note_refund: "The refund was voided: reversed by",
+  supplier_credit_note: "The supplier credit note was voided: reversed by",
+  supplier_credit_note_refund: "The refund was voided: reversed by",
 };
 
 function KindBadge({ journal }: { journal: Journal }) {
@@ -176,6 +180,32 @@ function JournalDetail({
               {" "}
               To undo it, void the refund from its credit note in{" "}
               <Link href="/operations/credit-notes">Credit notes</Link>.
+            </>
+          )}
+        </p>
+      ) : null}
+      {journal.origin === "supplier_credit_note" ? (
+        <p className={ui.muted}>
+          This journal was posted by {journal.correctionKind === "reversal" ? "voiding" : "approving"} a supplier credit
+          note, so it can&apos;t be corrected here.
+          {journal.correctionKind === "reversal" ? null : (
+            <>
+              {" "}
+              To cancel it, void the credit note from{" "}
+              <Link href="/operations/supplier-credit-notes">Supplier credit notes</Link>.
+            </>
+          )}
+        </p>
+      ) : null}
+      {journal.origin === "supplier_credit_note_refund" ? (
+        <p className={ui.muted}>
+          This journal was posted by {journal.correctionKind === "reversal" ? "voiding" : "recording"} a refund received
+          from a supplier, so it can&apos;t be corrected here.
+          {journal.correctionKind === "reversal" ? null : (
+            <>
+              {" "}
+              To undo it, void the refund from its credit note in{" "}
+              <Link href="/operations/supplier-credit-notes">Supplier credit notes</Link>.
             </>
           )}
         </p>
@@ -365,6 +395,8 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="supplier_payment">Supplier payments</option>
               <option value="sales_credit_note">Credit notes</option>
               <option value="sales_credit_note_refund">Credit note refunds</option>
+              <option value="supplier_credit_note">Supplier credit notes</option>
+              <option value="supplier_credit_note_refund">Supplier refunds</option>
               <option value="reversal">Reversals</option>
               <option value="replacement">Replacements</option>
             </select>

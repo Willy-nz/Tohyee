@@ -1,14 +1,17 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { deleteBill, getBill, updateBill } from "@/lib/bills/service";
+import { listBillCredit } from "@/lib/supplier-credit-notes/applications";
 
 type Context = { params: Promise<{ billId: string }> };
 
+/** GET: the bill, and the credit applied to it from supplier credit notes (active and removed, oldest first). */
 export const GET = route<Context>(async (request, context) => {
   const { billId } = await context.params;
-  const bill = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", (tx) =>
-    getBill(tx, billId),
-  );
-  return json({ bill });
+  const result = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", async (tx) => {
+    const bill = await getBill(tx, billId);
+    return { bill, creditApplied: await listBillCredit(tx, bill.id) };
+  });
+  return json(result);
 });
 
 /** Edits a draft. Fields left out keep their values; `lines` replaces every line. */

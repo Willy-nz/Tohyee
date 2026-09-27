@@ -17,8 +17,9 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/customer-payments.test.ts` (CP1-CP8),
   `tests/integration/bills.test.ts` (B1-B8, D1, D2 for bills) and
   `tests/integration/supplier-payments.test.ts` (SP1-SP8) and
-  `tests/integration/credit-notes.test.ts` (CN1-CN12), all against a real
-  PostgreSQL database
+  `tests/integration/credit-notes.test.ts` (CN1-CN12) and
+  `tests/integration/supplier-credit-notes.test.ts` (SCN1-SCN12), all
+  against a real PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -264,8 +265,8 @@ code (`src/lib/invoices/amounts.ts`, see "Sales invoices").
 - **Paying bills other than one at a time**: supplier payments (see
   "Supplier payments" below) pay one bill each, from a base-currency bank
   account, and have their own list of what isn't supported yet.
-- **Negative or zero lines** (discounts, supplier credit notes): the same
-  rules as invoices.
+- **Negative or zero lines** (e.g. discounts): the same rules as invoices.
+  Credit from a supplier is a supplier credit note (SCN1-SCN12).
 - **Correcting an approved bill**: it can't be edited, and its journal can't
   be corrected in the ledger. Void it and enter it again. A void can't be
   dated before the bill.
@@ -280,10 +281,10 @@ Dr accounts payable (2000) / Cr the bank account the money came from. The bank
 account must be an active, base-currency account of type bank. Amounts must be
 more than zero, with at most 2 decimal places.
 
-A bill's amount due is its total less its active (not voided) payments. Its
-paid status is **unpaid** (nothing paid), **part paid** or **paid** (nothing
-due). Both are worked out from the payments every time; they're never stored
-or typed in.
+A bill's amount due is its total less its active (not voided) payments and
+the active credit applied to it from supplier credit notes (SCN3). Its paid
+status is **unpaid** (nothing paid), **part paid** or **paid** (nothing
+due). Both are worked out every time; they're never stored or typed in.
 
 - **SP1** Bill B1 (total 230.00). Pay 230.00 from 1000: the journal is
   Dr 2000 230.00 / Cr 1000 230.00, dated the payment date. Amount due
@@ -403,7 +404,6 @@ starts from the setup plus the steps it names.
 
 ### Not supported yet (refused rather than guessed)
 
-- **Supplier credit notes**: they come in the next change, mirroring these.
 - **Applying credit across currencies**: credit is applied only to invoices in
   the credit note's currency.
 - **Overpayments and prepayments as credit**: only credit notes give credit.
@@ -413,6 +413,107 @@ starts from the setup plus the steps it names.
 - **Credit note PDFs and emailing**.
 - **Correcting a credit note or a refund**: their journals can't be corrected
   in the ledger. Void and raise them again.
+
+## Supplier credit notes
+
+A supplier credit note is credit a supplier gives us, e.g. for goods returned
+or an overcharge on a bill. It's the mirror of a sales credit note. Its lines
+work exactly like bill lines (the same amounts modes and line maths in
+`src/lib/invoices/amounts.ts`, and the bill line account rules in
+`src/lib/bills/accounts.ts`).
+
+- The supplier must be an active contact marked as a supplier. There's no
+  Tohyee number: the supplier's credit note number is required, and a
+  supplier can't have two supplier credit notes that aren't voided (drafts
+  included) with the same number, ignoring case and spaces. These numbers are
+  separate from bill numbers.
+- Drafts post nothing and can be edited and deleted. Approving posts one
+  journal dated the credit note date: Dr accounts payable (2000) for the
+  total, Cr each line's account for its net amount, Cr GST (2100) for the
+  GST. There's no GST line when the GST is 0.00. Approved supplier credit
+  notes can't be edited.
+- **Applying** approved credit to approved bills of the same supplier and
+  currency posts **no journal** (both sides are accounts payable); it only
+  changes the amounts due. One command can apply credit to several bills,
+  with one date and an amount for each, and it's all or nothing. Each amount
+  is more than zero with at most 2 decimal places and no more than that
+  bill's amount due; the total is no more than the remaining credit. The date
+  is on or after both the credit note date and the bill date.
+- **Removing** an application (once, dated on or after the application)
+  posts no journal and puts the amount back on both. Nothing is deleted.
+- **Refund received**: the supplier pays remaining credit back into an
+  active, base-currency account of type bank. It posts Dr the bank account /
+  Cr 2000 on the refund date (on or after the credit note date). A refund can
+  be voided once, which posts the exact reversal on the void date.
+- A supplier credit note's remaining credit is its total less its active
+  applications and active refunds; its credit status is **open** (none used),
+  **part used** or **used** (none left). A bill's amount due is its total less
+  its active supplier payments and active credit applied, and its paid status
+  uses that amount due. All of these are worked out every time, never stored.
+- A bill with active credit applied can't be voided ("remove its credit
+  first"). A supplier credit note can only be voided when it has no active
+  applications or refunds.
+- Period locks apply to approving, applying, removing, refunding and voiding,
+  by their dates, even when no journal is posted.
+
+Setup: supplier Paw Supplies has bill B1 (exclusive 1 x 200.00 at 15% to
+6010: Dr 6010 200.00 / Dr 2100 30.00 / Cr 2000 230.00) and bill BX (no tax,
+1 x 80.00 to 6040, total 80.00). Each example starts from the setup plus the
+steps it names.
+
+- **SCN1** A draft supplier credit note "CR-7", exclusive, 1 x 40.00 at 15%
+  to 6010, posts nothing and can be edited and deleted.
+- **SCN2** Approving it: net **40.00**, GST **6.00**, total **46.00**.
+  Journal on its date: Dr 2000 46.00 / Cr 6010 40.00 / Cr 2100 6.00.
+  Remaining credit **46.00**; status **open**.
+- **SCN3** Applying 46.00 of CR-7 to B1 posts no journal. B1 is credited
+  **46.00**, amount due **184.00**, **part paid**. CR-7 remaining **0.00**,
+  **used**.
+- **SCN4** After SCN3, "CR-8" is exclusive 1 x 100.00 at 15% (total 115.00).
+  One command applies 80.00 to BX and 20.00 to B1: BX due **0.00**, **paid**;
+  B1 due **164.00**; CR-8 remaining **15.00**, **part used**.
+- **SCN5** Refused, and nothing changes: applying more than the remaining
+  credit; more than a bill's amount due (one bad line fails the whole
+  command); a bill of another supplier; a draft or voided bill; a draft or
+  voided credit note; dated before the credit note or bill date; amounts
+  0.00, -1.00 and 1.001.
+- **SCN6** After SCN3, a supplier payment of 184.00 makes B1 **paid**; 184.01
+  instead is refused.
+- **SCN7** Starting from SCN3, removing that application on a later date posts
+  no journal: B1 due back to **230.00**; CR-7 remaining back to **46.00**,
+  **open**. A second removal is refused, and so is a removal dated before the
+  application.
+- **SCN8** After SCN4, the supplier refunds CR-8's remaining 15.00 into 1000:
+  Dr 1000 15.00 / Cr 2000 15.00 on the refund date; remaining **0.00**,
+  **used**. Refunding 15.01 is refused; a refund into 2000 or into an archived
+  bank account is refused. Voiding the refund later posts Dr 2000 15.00 /
+  Cr 1000 15.00; remaining back to **15.00**.
+- **SCN9** Voiding CR-7 while it has an active application is refused
+  ("remove its applications and refunds first"); after removing it, voiding
+  posts Dr 6010 40.00 / Dr 2100 6.00 / Cr 2000 46.00. Voiding B1 while credit
+  is applied to it is refused ("remove its credit first").
+- **SCN10** Inclusive: 1 x 46.00 at 15% gives GST **6.00**, net **40.00**,
+  total **46.00** (the same maths as bills).
+- **SCN11** A second supplier credit note from Paw Supplies numbered "cr7"
+  while "CR 7" exists and isn't voided (draft or approved) is refused; after
+  the first is voided it's allowed. The same number from another supplier, or
+  on a bill, is fine.
+- **SCN12** Approving, applying, removing, refunding or voiding dated in a
+  locked period is refused, and nothing is posted. Retrying approve, apply,
+  refund or void with the same idempotency key and content returns the same
+  result; the same key with different content is refused (409).
+
+### Not supported yet (refused rather than guessed)
+
+- **Applying credit across currencies**: credit is applied only to bills in
+  the credit note's currency.
+- **Supplier prepayments and overpayments as credit**: only supplier credit
+  notes give credit.
+- **Applying credit from the bill page**: apply it from the supplier credit
+  note's page. The bill page shows the credit applied and a note when the
+  supplier has unused credit.
+- **Correcting a supplier credit note or a refund**: their journals can't be
+  corrected in the ledger. Void and enter them again.
 
 ## Reports
 

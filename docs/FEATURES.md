@@ -74,6 +74,21 @@ that something happened.
   stored. A credit note with active applications or refunds, or an invoice
   with credit applied, can't be voided. Period locks apply to every step;
   every command is idempotent. See examples CN1-CN12.
+- **Supplier credit notes** in the base currency: drafts with the same lines,
+  amounts modes and line account rules as bills (a new draft can start from a
+  bill's supplier and lines), carrying the supplier's credit note number
+  (required, and unique per supplier among credit notes that aren't voided,
+  ignoring case and spaces). Approval posts Dr accounts payable / Cr the line
+  accounts and GST on its date, and voiding posts the exact reversal.
+  Approved credit is applied to one or more of the same supplier's approved
+  bills in one all-or-nothing command (no journal; it lowers their amount
+  due), an application can be removed once, and unused credit stays on the
+  supplier credit note or is refunded by the supplier into a bank account
+  (Dr bank / Cr accounts payable; a refund can be voided). A bill's amount due
+  is its total less its active payments and credit applied. A supplier credit
+  note with active applications or refunds, or a bill with credit applied,
+  can't be voided. Period locks apply to every step; every command is
+  idempotent. See examples SCN1-SCN12.
 - **GST basis** setting (invoice, payments or hybrid). Stored and shown only;
   the GST return will use it.
 - **Update check** against GitHub releases.
@@ -97,8 +112,7 @@ isn't acceptable, because people would trust it:
 
 ## Next, in rough order
 
-1. Supplier credit notes (mirroring sales credit notes), then customer and
-   supplier payments across several invoices or bills, overpayments and
+1. Customer and supplier payments across several invoices or bills, overpayments and
    prepayments, and a GST return built from postings using the GST basis
    setting. Invoice and credit note PDFs and emailing come with or after
    these.

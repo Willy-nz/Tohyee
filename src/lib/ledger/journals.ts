@@ -37,7 +37,9 @@ export type JournalOrigin =
   | "bill"
   | "supplier_payment"
   | "sales_credit_note"
-  | "sales_credit_note_refund";
+  | "sales_credit_note_refund"
+  | "supplier_credit_note"
+  | "supplier_credit_note_refund";
 export type CorrectionKind = "reversal" | "replacement";
 
 export type JournalLine = {
@@ -426,6 +428,8 @@ export async function listJournals(
     "supplier_payment",
     "sales_credit_note",
     "sales_credit_note_refund",
+    "supplier_credit_note",
+    "supplier_credit_note_refund",
   ];
   const validKinds = ["primary", "reversal", "replacement", ...origins];
   if (kind && !validKinds.includes(kind)) {
@@ -504,7 +508,9 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
     journal.origin !== "bill" &&
     journal.origin !== "supplier_payment" &&
     journal.origin !== "sales_credit_note" &&
-    journal.origin !== "sales_credit_note_refund"
+    journal.origin !== "sales_credit_note_refund" &&
+    journal.origin !== "supplier_credit_note" &&
+    journal.origin !== "supplier_credit_note_refund"
   );
 }
 
@@ -513,9 +519,9 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
  * original and a replacement, both dated `postingDate` (which must be in an
  * open period). A replacement can itself be corrected later. Journals created
  * by stock movements, FX revaluations, sales invoices, customer payments,
- * bills, supplier payments, sales credit notes or credit note refunds must be
- * corrected at their source, so those
- * records and the ledger stay in step.
+ * bills, supplier payments, sales credit notes, credit note refunds, supplier
+ * credit notes or refunds received from suppliers must be corrected at their
+ * source, so those records and the ledger stay in step.
  */
 export async function correctJournal(
   tx: OrgTx,
@@ -572,6 +578,16 @@ export async function correctJournal(
   if (original.origin === "sales_credit_note_refund") {
     throw new ValidationError(
       `Journal #${original.id} was posted by a credit note refund (${original.reference}), so it can't be corrected in the ledger. To undo a refund, void it from its credit note.`,
+    );
+  }
+  if (original.origin === "supplier_credit_note") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a supplier credit note (${original.reference}), so it can't be corrected in the ledger. To cancel an approved supplier credit note, void it.`,
+    );
+  }
+  if (original.origin === "supplier_credit_note_refund") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a refund received from a supplier (${original.reference}), so it can't be corrected in the ledger. To undo a refund, void it from its supplier credit note.`,
     );
   }
   if (original.correctionKind === "reversal") {

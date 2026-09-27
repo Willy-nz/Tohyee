@@ -45,10 +45,14 @@ own.
 - **Sales credit notes**: drafts, approval that numbers them (`CN-0001`, …)
   and posts them, credit applied to one or more of the customer's invoices,
   unused credit kept on the credit note or refunded from a bank account, and
-  voiding. Supplier credit notes come next.
+  voiding.
 - **Supplier payments** against an approved bill, from a bank account: each
   one posts to the ledger, part payments are fine, and the bill shows what's
   still due.
+- **Supplier credit notes**: drafts carrying the supplier's credit note
+  number, approval that posts them, credit applied to one or more of the
+  supplier's bills, unused credit kept on the credit note or refunded by the
+  supplier into a bank account, and voiding.
 - **Stock**: receipts, sales, returns, stocktake adjustments and landed cost,
   with weighted-average costing to the cent.
 - **Foreign-currency revaluation** of foreign-currency bank, asset and
@@ -155,8 +159,9 @@ the `Origin` and `Sec-Fetch-Site` headers).
 | Invoices | `GET/POST /api/invoices` (`?awaitingPayment=true` for approved invoices with an amount due, `?contactId=` for one customer's), `GET/PATCH/DELETE /api/invoices/:id` (GET includes the credit applied), `POST /api/invoices/:id/approve`, `POST /api/invoices/:id/void` |
 | Customer payments | `GET/POST /api/invoices/:id/payments`, `POST /api/invoices/:id/payments/:paymentId/void` |
 | Sales credit notes | `GET/POST /api/credit-notes` (`?status=`, `?contactId=`, `?hasRemainingCredit=true`), `GET/PATCH/DELETE /api/credit-notes/:id`, `POST /api/credit-notes/:id/approve`, `POST /api/credit-notes/:id/void`, `GET/POST /api/credit-notes/:id/applications`, `POST /api/credit-notes/:id/applications/:applicationId/remove`, `GET/POST /api/credit-notes/:id/refunds`, `POST /api/credit-notes/:id/refunds/:refundId/void` |
-| Bills | `GET/POST /api/bills` (`?status=` filters by draft, approved or voided; `?awaitingPayment=true` for approved bills with an amount due), `GET/PATCH/DELETE /api/bills/:id`, `POST /api/bills/:id/approve`, `POST /api/bills/:id/void` |
+| Bills | `GET/POST /api/bills` (`?status=` filters by draft, approved or voided; `?awaitingPayment=true` for approved bills with an amount due; `?contactId=`), `GET/PATCH/DELETE /api/bills/:id` (`GET` includes the credit applied), `POST /api/bills/:id/approve`, `POST /api/bills/:id/void` |
 | Supplier payments | `GET/POST /api/bills/:id/payments`, `POST /api/bills/:id/payments/:paymentId/void` |
+| Supplier credit notes | `GET/POST /api/supplier-credit-notes` (`?status=`, `?contactId=`, `?hasRemainingCredit=true`), `GET/PATCH/DELETE /api/supplier-credit-notes/:id`, `POST /api/supplier-credit-notes/:id/approve`, `POST /api/supplier-credit-notes/:id/void`, `GET/POST /api/supplier-credit-notes/:id/applications`, `POST /api/supplier-credit-notes/:id/applications/:applicationId/remove`, `GET/POST /api/supplier-credit-notes/:id/refunds`, `POST /api/supplier-credit-notes/:id/refunds/:refundId/void` |
 | Ledger | `GET/POST /api/ledger/journals`, `GET /api/ledger/journals/:id`, `POST /api/ledger/journals/corrections`, `GET/PATCH /api/ledger/period-controls`, `GET/POST /api/ledger/revaluations` |
 | Stock | `GET/POST /api/inventory/movements` |
 | Reports | `GET /api/reports/trial-balance`, `/profit-and-loss`, `/balance-sheet`, `/inventory-valuation` |
