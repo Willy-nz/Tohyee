@@ -1,5 +1,5 @@
-// Packages the Windows (Docker Desktop) installer into
-// dist/release/tohyee-v<version>-windows.zip, with this release's version
+// Packages the Docker Desktop option for Windows into
+// dist/release/tohyee-v<version>-windows-docker.zip, with this release's version
 // written into Install-Tohyee.ps1 so it runs that version's image.
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -11,7 +11,7 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const version = String(JSON.parse(fs.readFileSync(path.join(repositoryRoot, "package.json"), "utf8")).version);
 const sourceDir = path.join(repositoryRoot, "deploy", "windows");
 const releaseDir = path.join(repositoryRoot, "dist", "release");
-const folderName = `tohyee-v${version}-windows`;
+const folderName = `tohyee-v${version}-windows-docker`;
 const folder = path.join(releaseDir, folderName);
 const zipPath = path.join(releaseDir, `${folderName}.zip`);
 

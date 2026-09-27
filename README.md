@@ -104,16 +104,20 @@ PostgreSQL database. CI runs all four checks on pull requests and pushes to
 
 ## Running on a server
 
-**Windows:** download `tohyee-v<version>-windows.zip` from the
-[latest release](https://github.com/Willy-nz/Tohyee/releases/latest), install
-[Docker Desktop](https://www.docker.com/products/docker-desktop/), extract the
-zip and double-click `Install-Tohyee.cmd`. It creates random passwords, starts
-Tohyee and PostgreSQL, and opens first-time setup. Both restart by themselves
-whenever Docker Desktop starts (after a restart, once you sign in). The zip's
-`README.txt` covers backups, updates and network access; the files are in
-[`deploy/windows`](deploy/windows).
+**Windows:** download `TohyeeSetup-<version>.exe` from the
+[latest release](https://github.com/Willy-nz/Tohyee/releases/latest) and run
+it. It installs Tohyee with its own PostgreSQL (nothing else to install) as
+two Windows services, `Tohyee` and `TohyeePostgres`, that start whenever the
+computer starts, even before anyone signs in. The last page of the installer
+shows the setup token for creating the first admin login. Open Tohyee at
+http://localhost:3000 (Start menu: **Open Tohyee**); **Back up Tohyee** in the
+Start menu saves everything to `Documents\Tohyee backups`. Data and settings
+live in `%ProgramData%\Tohyee` and are kept when you update or uninstall.
+The installer is built and tested on Windows by
+`.github/workflows/windows-installer.yml` from [`installer/windows`](installer/windows).
 
-**Docker:** the image is `ghcr.io/willy-nz/tohyee:<version>`. It needs
+**Docker:** `tohyee-v<version>-windows-docker.zip` runs Tohyee in Docker
+Desktop instead (see [`deploy/windows`](deploy/windows)). The image is `ghcr.io/willy-nz/tohyee:<version>`. It needs
 `DATABASE_URL` (a PostgreSQL 15+ login that can create databases) and, for the
 first run, `SETUP_TOKEN`; it listens on port 3000.
 

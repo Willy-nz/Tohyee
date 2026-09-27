@@ -1,5 +1,8 @@
-TOHYEE ON WINDOWS
-=================
+TOHYEE ON WINDOWS WITH DOCKER DESKTOP
+=====================================
+
+Most people should use TohyeeSetup-<version>.exe from the release instead:
+it needs no Docker. This zip is for people who already use Docker Desktop.
 
 Tohyee runs inside Docker Desktop, together with its own PostgreSQL
 database. Once installed it starts by itself whenever the computer restarts
