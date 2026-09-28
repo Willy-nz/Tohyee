@@ -78,6 +78,15 @@ const MENUS: Menu[] = [
           { href: "/operations/reports?report=stock", label: "Stock valuation" },
         ],
       },
+      {
+        heading: "Custom reports",
+        links: [
+          { href: "/operations/reports?view=custom", label: "New custom report", minRole: "bookkeeper" },
+          { href: "/operations/reports?view=drafts", label: "Drafts" },
+          { href: "/operations/reports?view=published", label: "Published" },
+          { href: "/operations/reports?view=archived", label: "Archived" },
+        ],
+      },
     ],
   },
   {
@@ -405,10 +414,10 @@ function Shell({ children, warnings }: { children: ReactNode; warnings: string[]
 
   return (
     <div className={styles.shell}>
-      <a href="#main-content" className={styles.skipLink}>
+      <a href="#main-content" className={styles.skipLink} data-print="hide">
         Skip to content
       </a>
-      <header className={styles.topbar}>
+      <header className={styles.topbar} data-print="hide">
         <div className={styles.topRow}>
           <Link href="/operations" className={styles.brand}>
             <span className={styles.brandDot} aria-hidden />

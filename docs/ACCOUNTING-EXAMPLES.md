@@ -25,7 +25,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/gst-returns.test.ts` (G1-G9) and
   `tests/integration/gst-bases.test.ts` (G10-G22) and
   `tests/integration/record-extras.test.ts` (NF1-NF14) and
-  `tests/integration/home.test.ts` (H1-H4), all against a real
+  `tests/integration/home.test.ts` (H1-H4) and
+  `tests/integration/custom-reports.test.ts` (CR1-CR10), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -921,6 +922,124 @@ journals; the balance sheet works profit out when it runs.
 - **P3** Profit and loss: net profit = income - cost of sales + other
   income - expenses. Without a start date it covers the financial year to
   date, and then equals the balance sheet's current year earnings.
+
+### Custom reports
+
+A custom report is a copy of a standard report (profit and loss or balance
+sheet) that can be changed: its title, its columns, its rows, and extra
+tables and notes (decided with the owner, 29 Sep 2026). It posts nothing and
+changes no figures in the ledger; its numbers come from the same account
+totals as the standard reports, worked out when it's opened.
+
+- **Columns** are whole calendar periods ending on a month end: 1 to 12
+  months, quarters (3 months) or years (12 months), newest first. Profit and
+  loss columns cover each period; balance sheet columns are as at each
+  period's last day. Options: a **difference** column (the first column less
+  the second) with a **%** column (difference / the second column's amount,
+  as a percentage rounded to 1 decimal place, halves away from zero; blank
+  when the second column is 0.00), and for profit and loss only a **year to
+  date** column (from the start of the financial year that the first
+  column's period ends in). A budget column comes later, with budgets.
+- **Rows** belong to a table. A **group** lists accounts, chosen by account
+  type or by account code, each in its natural direction as on the standard
+  reports (income as credits, costs as debits), with a total; it can show
+  its accounts or just its total. A **formula** row adds and subtracts other
+  rows of the same table (groups, formulas, earnings lines). A **heading**
+  is just text. The balance sheet's **earnings** rows (previous years and
+  current year) are worked out as on the balance sheet (P2). Rows can be
+  renamed, moved up and down, added and deleted.
+- A report can have several **tables** and **notes** (text blocks), in any
+  order.
+- Nothing is hidden: accounts with a balance that aren't in any group are
+  listed under "Not in this report", and an account in more than one group
+  is flagged, so a report that no longer adds up to the ledger says so.
+- **Published** means a frozen copy: publishing keeps the figures, rows and
+  columns as they were at that moment, and a published report never changes
+  (the database refuses). The draft stays editable. Drafts and published
+  reports can be archived and brought back; only drafts can be deleted.
+
+Setup: the starting chart, a 31 March year end, and these journals (Dr / Cr,
+all through 1000 Business bank account):
+
+| Date | Journal |
+| --- | --- |
+| 1 Mar 2026 | Dr 1000 5,000.00 / Cr 3000 Owner funds introduced |
+| 20 Mar 2026 | Dr 1000 500.00 / Cr 4000 Sales |
+| 10 Apr 2026 | Dr 1000 1,000.00 / Cr 4000 Sales |
+| 15 Apr 2026 | Dr 6010 Accounting fees 100.00 / Cr 1000 |
+| 12 May 2026 | Dr 1000 1,500.00 / Cr 4000 Sales |
+| 13 May 2026 | Dr 5000 Cost of goods sold 400.00 / Cr 1000 |
+| 8 Jun 2026 | Dr 1000 1,200.00 / Cr 4000 Sales |
+| 9 Jun 2026 | Dr 5000 300.00 / Cr 1000 |
+| 20 Jun 2026 | Dr 6010 250.00 / Cr 1000 |
+| 30 Jun 2026 | Dr 1000 20.00 / Cr 4200 Interest income |
+
+- **CR1** A new custom report from **Profit and loss**, one month ending
+  30 Jun 2026, has the rows Revenue (group: revenue accounts), Cost of sales
+  (direct costs), Gross profit (formula: Revenue - Cost of sales), Other
+  income, Expenses (expenses and depreciation) and Net profit (formula:
+  Gross profit + Other income - Expenses). June: Revenue **1,200.00** (4000),
+  Cost of sales **300.00** (5000), Gross profit **900.00**, Other income
+  **20.00** (4200), Expenses **250.00** (6010), Net profit **670.00**, the
+  same as the standard profit and loss for 1-30 Jun 2026.
+- **CR2** Three monthly columns ending 30 Jun 2026, with difference, % and
+  year to date (1 Apr - 30 Jun 2026):
+
+  | Row | Jun 2026 | May 2026 | Apr 2026 | Difference | % | Year to date |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+  | Revenue | 1,200.00 | 1,500.00 | 1,000.00 | -300.00 | -20.0 | 3,700.00 |
+  | Cost of sales | 300.00 | 400.00 | 0.00 | -100.00 | -25.0 | 700.00 |
+  | Gross profit | 900.00 | 1,100.00 | 1,000.00 | -200.00 | -18.2 | 3,000.00 |
+  | Other income | 20.00 | 0.00 | 0.00 | 20.00 | (blank) | 20.00 |
+  | Expenses | 250.00 | 0.00 | 100.00 | 250.00 | (blank) | 350.00 |
+  | Net profit | 670.00 | 1,100.00 | 900.00 | -430.00 | -39.1 | 2,670.00 |
+
+  The year to date equals the three months added up, and the March sale
+  (last financial year) isn't in it.
+- **CR3** Two quarterly columns ending 30 Jun 2026: Apr-Jun 2026 net profit
+  **2,670.00**, Jan-Mar 2026 **500.00**, difference **2,170.00**, **434.0**%.
+- **CR4** Changing rows (June, as CR1): renaming Revenue to "Sales" and
+  showing its total only, and moving Expenses above Gross profit, change no
+  figures. A new formula row "Trading result" = Gross profit - Expenses is
+  **650.00**. A new group "Accounting fees" with account 6010 only is
+  **250.00**, and 6010 is then flagged as in two groups. Deleting Other
+  income is refused while Net profit uses it; after Net profit is deleted it
+  works, and 4200 Interest income (**20.00** in June) is listed under "Not
+  in this report".
+- **CR5** A second table "Cash" with one group of account 1000 (as at the
+  end of each column's period on a balance sheet; for profit and loss the
+  movement in the period, so June: 1,200.00 + 20.00 - 300.00 - 250.00 =
+  **670.00**) and a note "Figures are unaudited." sit after the first
+  table, in that order; moving the note up puts it first.
+- **CR6** A new custom report from **Balance sheet**, two monthly columns
+  ending 30 Jun 2026, with difference and %: Assets **8,170.00** / **7,500.00**
+  (1000), Liabilities **0.00** / **0.00**, Net assets (formula: Assets -
+  Liabilities) **8,170.00** / **7,500.00**, Equity accounts **5,000.00** (3000),
+  Earnings from previous years **500.00** / **500.00**, Current year
+  earnings **2,670.00** / **2,000.00**, Total equity (formula) **8,170.00** /
+  **7,500.00**; Net assets difference **670.00**, **8.9**%. The same as the
+  standard balance sheet at 30 Jun and 31 May 2026. A year to date column is
+  refused on a balance sheet.
+- **CR7** Publishing CR2 keeps a frozen copy. After another sale of 100.00
+  on 15 Jun 2026 (Dr 1000 / Cr 4000), the draft shows June Revenue
+  **1,300.00** and Net profit **770.00**; the published copy still shows
+  **1,200.00** and **670.00**. Changing or deleting a published report is
+  refused, also by the database; archiving it and bringing it back works.
+  A draft can be deleted.
+- **CR8** Refused, and nothing is saved: a period end that isn't a month end
+  (15 Jun 2026); 0 or 13 columns; a % column without a difference column; a
+  difference column with only one period; a formula that uses itself, or two
+  formulas that use each other; a formula using a row of another table; an
+  unknown account code; an empty title, or one over 200 characters; a note
+  over 5,000 characters; more than 20 tables and notes, or 100 rows in a
+  table.
+- **CR9** A custom report's figures for a column always equal the standard
+  report for the same dates (P&L for its period; balance sheet at its last
+  day), whatever the rows, as long as nothing is "Not in this report" or in
+  two groups.
+- **CR10** Viewers can open drafts and published reports; only bookkeepers
+  and admins can create, change, publish, archive and delete them. Opening a
+  report posts nothing.
 
 ### Home
 

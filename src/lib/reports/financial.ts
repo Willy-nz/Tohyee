@@ -32,7 +32,7 @@ function moneyFormatter(tx: OrgTx): Money {
   return (value) => toFixedString(value, scale);
 }
 
-type AccountTotalsRow = {
+export type AccountTotalsRow = {
   id: string;
   code: string;
   name: string;
@@ -42,14 +42,14 @@ type AccountTotalsRow = {
   credits: string;
 };
 
-async function financialYearEndMonth(tx: OrgTx): Promise<number> {
+export async function financialYearEndMonth(tx: OrgTx): Promise<number> {
   const result = await tx.query<{ financial_year_end_month: number }>(
     "select financial_year_end_month from organisation_settings where id = true",
   );
   return result.rows[0].financial_year_end_month;
 }
 
-async function accountTotals(tx: OrgTx, from: string | null, to: string): Promise<AccountTotalsRow[]> {
+export async function accountTotals(tx: OrgTx, from: string | null, to: string): Promise<AccountTotalsRow[]> {
   const result = await tx.query<AccountTotalsRow>(
     `select a.id, a.code, a.name, a.account_class, a.account_type,
             coalesce(sum(l.debit_amount), 0)::text as debits,
@@ -114,7 +114,7 @@ type ReportLine = { accountId: string; code: string; name: string; amount: strin
 type ReportSection = { key: string; label: string; lines: ReportLine[]; total: string };
 
 /** Balance in the account's natural direction (credits for income, debits for costs). */
-function naturalAmount(row: AccountTotalsRow): Decimal {
+export function naturalAmount(row: AccountTotalsRow): Decimal {
   const net = sub(dec(row.debits), dec(row.credits));
   return isDebitNormal(row.account_class) ? net : neg(net);
 }
@@ -185,7 +185,7 @@ export async function profitAndLoss(tx: OrgTx, input: { from?: unknown; to?: unk
 }
 
 /** Income minus expenses across the given account totals. */
-function earningsOf(rows: AccountTotalsRow[]): Decimal {
+export function earningsOf(rows: AccountTotalsRow[]): Decimal {
   let earnings = ZERO_DECIMAL;
   for (const row of rows) {
     if (row.account_class === "revenue") earnings = add(earnings, naturalAmount(row));

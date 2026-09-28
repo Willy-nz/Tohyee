@@ -115,3 +115,14 @@ code {
   border-radius: 6px;
   padding: 1px 5px;
 }
+
+/* Printing (custom reports' "Print or save as PDF"): only the page itself. */
+@media print {
+  [data-print="hide"] {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+  }
+}
