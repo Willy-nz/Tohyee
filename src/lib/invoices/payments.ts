@@ -225,9 +225,9 @@ async function resolveBankAccount(
  * Records a payment against an approved invoice (examples CP1-CP3, CP6-CP8,
  * OP1, OP3 and OP4): posts one journal on the payment date for the full
  * amount, Dr the bank account / Cr accounts receivable. Anything beyond the
- * invoice's amount due is the payment's overpayment. It can't be against an
- * invoice that's already paid, dated before the invoice (prepayments aren't
- * supported) or dated in a locked period.
+ * invoice's amount due is the payment's overpayment (all of it when the
+ * invoice is already paid). It can't be dated before the invoice
+ * (prepayments aren't supported) or in a locked period.
  */
 export async function recordPayment(
   tx: OrgTx,
@@ -287,12 +287,10 @@ export async function recordPayment(
       `The payment date can't be before the invoice date (${invoice.invoiceDate}). Prepayments aren't supported yet: raise the invoice first.`,
     );
   }
+  // Examples OP1 and OP4: whatever is paid beyond the amount due is the payment's overpayment. A
+  // payment for an invoice that's already paid (e.g. the customer paid twice) is all overpayment:
+  // credit on the customer's account, to apply to their other invoices or refund.
   const due = dec(invoice.amountDue!);
-  if (isZero(due)) {
-    // Example OP4: a second payment for a paid invoice is refused, not taken as an overpayment.
-    throw new ConflictError(`Invoice ${invoice.invoiceNumber} is already paid in full.`);
-  }
-  // Example OP1: whatever is paid beyond the amount due is the payment's overpayment.
   const beyondDue = sub(amount, due);
   const overpayment = isPositive(beyondDue) ? beyondDue : ZERO_DECIMAL;
   const bank = await resolveBankAccount(tx, bankAccountCode);
