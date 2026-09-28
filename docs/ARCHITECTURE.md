@@ -169,10 +169,15 @@ re-runs the whole sequence.
   `Sec-Fetch-Site` check) on top of `SameSite` cookies.
 - First-time setup creates the first server admin and needs `SETUP_TOKEN`
   from the server's environment. It only works while there are no users.
-- Break-glass: `npm run admin -- set-password --email ...` (or
-  `reset-two-step --email ...`) from a checkout of
-  the repository with `DATABASE_URL` pointing at the core database (the
-  release bundle doesn't include it).
+- Command-line tool (`scripts/admin.ts`; `npm run admin`, or
+  `node tohyee-admin.cjs` in the Docker image, bundled by
+  `scripts/build-admin.mjs`): the server settings for Docker and Linux
+  (organisations, users, remote access, email, updates) and break-glass
+  (`set-password`, `reset-two-step`). It runs on the server against the core
+  database with no user, so it calls the same functions as `/api/admin/*`
+  with an actor whose id is null and whose email is `cli` in the audit trail.
+  It saves remote access without starting or stopping the tunnel (the
+  running server does that at start-up).
 
 ### Roles
 
@@ -194,7 +199,7 @@ Server-wide:
   two-step sign-in) and uses the same `/api/admin/*` routes through the local
   address. It starts when its user signs in to Windows (HKCU Run key, set by
   the installer and switchable from its menu). The browser `/server` pages
-  stay for other platforms until the command-line tool covers them.
+  stay as a fallback until the owner has tried the server app on a real server.
 
 Per organisation (lowest to highest):
 

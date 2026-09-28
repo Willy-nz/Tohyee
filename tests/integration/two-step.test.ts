@@ -188,7 +188,7 @@ describeWithDatabase("two-step sign-in (authenticator app and backup codes)", ()
 
   it("a lost phone: an emailed link (with the password again) resets two-step and starts setting it up again", async () => {
     await updateEmailSettings(
-      { sessionId: "s", user: { id: "00000000-0000-0000-0000-000000000000", email: "jess@example.com", displayName: "Jess", isServerAdmin: true } },
+      { user: { id: "00000000-0000-0000-0000-000000000000", email: "jess@example.com", isServerAdmin: true } },
       { host: "smtp.gmail.com", port: 465, username: "books@example.com", password: "app-password" },
     );
     later();

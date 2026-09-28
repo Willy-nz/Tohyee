@@ -43,3 +43,16 @@ export async function writeAdminAuditEvent(
     ],
   );
 }
+
+/**
+ * Who is changing server settings: a signed-in server admin (the server app,
+ * or the browser pages), or the command-line tool on the server itself, which
+ * has no user (`id` null) and is recorded by its `email` label.
+ */
+export type AdminActor = { id: string | null; email: string };
+
+/** A server admin, or the command-line tool, for the server settings functions. */
+export type ServerAdminAuth = { user: AdminActor & { isServerAdmin: boolean } };
+
+/** The command-line tool (`npm run admin`), recorded in the audit trail as "cli". */
+export const COMMAND_LINE_ADMIN: ServerAdminAuth = { user: { id: null, email: "cli", isServerAdmin: true } };

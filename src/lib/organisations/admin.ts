@@ -1,6 +1,5 @@
-import { writeAdminAuditEvent } from "@/lib/audit";
+import { type AdminActor, writeAdminAuditEvent } from "@/lib/audit";
 import { normaliseEmail } from "@/lib/auth/service";
-import type { SessionUser } from "@/lib/auth/sessions";
 import { organisationDatabasePrefix } from "@/lib/db/connection";
 import { getOrganisationPool } from "@/lib/db/pools";
 import { coreQuery, withCoreTransaction, withTransaction } from "@/lib/db/transactions";
@@ -42,7 +41,7 @@ export function databaseNameFor(organisationId: string): string {
  * "failed" so a server admin can retry.
  */
 export async function createOrganisation(
-  actor: SessionUser,
+  actor: AdminActor,
   input: { id: unknown; displayName: unknown; baseCurrency?: unknown; ownerEmail?: unknown },
 ): Promise<OrganisationRecord> {
   const id = parseOrganisationId(input.id);
@@ -99,7 +98,7 @@ export async function createOrganisation(
   return organisation;
 }
 
-export async function retryProvisioning(actor: SessionUser, organisationIdInput: string) {
+export async function retryProvisioning(actor: AdminActor, organisationIdInput: string) {
   const id = parseOrganisationId(organisationIdInput);
   const organisation = await getOrganisation(id);
   if (!organisation) {
@@ -125,7 +124,7 @@ export async function retryProvisioning(actor: SessionUser, organisationIdInput:
  * the registry and the organisation's own settings.
  */
 export async function updateOrganisation(
-  actor: SessionUser,
+  actor: AdminActor,
   organisationIdInput: string,
   input: { displayName?: unknown; isActive?: unknown },
 ): Promise<OrganisationRecord> {
