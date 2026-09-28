@@ -99,14 +99,19 @@ that something happened.
   note with active applications or refunds, or a bill with credit applied,
   can't be voided. Period locks apply to every step; every command is
   idempotent. See examples SCN1-SCN12.
-- **GST basis** setting (invoice, payments or hybrid). The GST return uses
-  it: only the invoice basis is built so far.
-- **GST return** (NZ GST101A, boxes 5-15) on the invoice basis, for 1, 2 or 6
-  whole calendar months, under Reports. Worked out from sales invoices, sales
-  credit notes, bills, supplier credit notes and spend or receive money: each counts on its own date
-  when approved and the other way on its void date; drafts, payments,
-  refunds, credit applications, manual journals, stock movements and FX
-  revaluations don't count. Lines go into boxes by their tax code's category
+- **GST basis** setting (invoice, payments or hybrid), used by the GST
+  return.
+- **GST return** (NZ GST101A, boxes 5-15) on the invoice, payments or hybrid
+  basis, for 1, 2 or 6 whole calendar months, under Reports. Worked out from
+  sales invoices, sales credit notes, bills, supplier credit notes and spend
+  or receive money. On the invoice basis each document counts on its own
+  date when approved and the other way on its void date; on the payments
+  basis it counts when paid, credited or refunded, each line in proportion;
+  the hybrid basis counts sales the invoice way and purchases the payments
+  way; spend and receive money count on their date on every basis (examples
+  G1-G22). Drafts, manual journals, stock movements and FX revaluations
+  never count. After a change of basis the next return suggests IRD's IR546
+  adjustment for debtors and creditors, added with one click. Lines go into boxes by their tax code's category
   (standard, zero rated, exempt, out of scope), and every box can be opened
   to see its lines. GST on transactions is shown next to Box 8 and Box 12 for
   information (the difference is rounding). Box 9 and Box 13 adjustments are
@@ -159,7 +164,8 @@ isn't acceptable, because people would trust it:
 - bank feeds from providers other than Akahu, foreign-currency bank
   accounts, splitting one posted transaction across several statement
   lines, and old Excel (.xls) files
-- the GST return on the payments and hybrid bases (refused for now)
+- GST: deferred-payment supplies of $225,000 or more on the payments basis
+  (section 19D), checking payments-basis eligibility, and bad debt write-offs
 - amending a filed GST return, imported goods (Customs GST), GST rates other
   than 15%, recording the GST payment or refund to IRD, and filing to IRD
   electronically
@@ -169,8 +175,7 @@ isn't acceptable, because people would trust it:
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
-1. The GST return on the payments and hybrid bases; then customer and
-   supplier payments across several invoices or bills, supplier
+1. Customer and supplier payments across several invoices or bills, supplier
    overpayments, and prepayments (once the owner has decided how GST works
    on them). Invoice and credit note PDFs and emailing come with or after
    these.

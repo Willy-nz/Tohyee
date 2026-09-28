@@ -18,17 +18,35 @@ import {
   type GstBoxKey,
   type GstReturnFigures,
 } from "@/lib/reports/gst-boxes";
-import type { FiledGstReturn, FiledGstReturnSummary, GstEventType, GstReturnLine } from "@/lib/reports/gst-return";
-import type { TaxCategory } from "@/lib/tax/categories";
+import type {
+  FiledGstReturn,
+  FiledGstReturnSummary,
+  GstBasisChange,
+  GstEventType,
+  GstReturnLine,
+} from "@/lib/reports/gst-return";
+import { GST_BASIS_LABELS, type GstBasis, type TaxCategory } from "@/lib/tax/categories";
 
 type Calculated = GstReturnFigures & {
   periodStart: string;
   periodEnd: string;
   months: number;
+  basis: GstBasis;
   currencyCode: string;
   adjustments: GstAdjustment[];
   lines: GstReturnLine[];
   filedReturns: FiledGstReturnSummary[];
+  basisChange: GstBasisChange | null;
+};
+
+/** What the report counts on each basis (docs/ACCOUNTING-EXAMPLES.md, G1-G18). */
+const BASIS_DESCRIPTIONS: Record<GstBasis, string> = {
+  invoice:
+    "NZ GST101A on the invoice basis: sales invoices, credit notes, bills and supplier credit notes count when they're approved or voided.",
+  payments:
+    "NZ GST101A on the payments basis: invoices, bills and credit notes count when they're paid, credited or refunded, each line in proportion.",
+  hybrid:
+    "NZ GST101A on the hybrid basis: sales count when they're approved or voided; bills and supplier credit notes count when they're paid, credited or refunded.",
 };
 
 const EVENT_LABELS: Record<GstEventType, string> = {
@@ -42,6 +60,20 @@ const EVENT_LABELS: Record<GstEventType, string> = {
   supplier_credit_note_voided: "Supplier credit note voided",
   bank_transaction_posted: "Bank transaction",
   bank_transaction_voided: "Bank transaction voided",
+  customer_payment: "Customer payment",
+  customer_payment_voided: "Customer payment voided",
+  credit_note_applied: "Credit applied",
+  credit_note_application_removed: "Credit removed",
+  credit_note_refunded: "Credit note refunded",
+  credit_note_refund_voided: "Credit note refund voided",
+  overpayment_applied: "Overpayment applied",
+  overpayment_application_removed: "Overpayment removed",
+  supplier_payment: "Supplier payment",
+  supplier_payment_voided: "Supplier payment voided",
+  supplier_credit_note_applied: "Supplier credit applied",
+  supplier_credit_note_application_removed: "Supplier credit removed",
+  supplier_credit_note_refunded: "Supplier refund received",
+  supplier_credit_note_refund_voided: "Supplier refund voided",
 };
 
 const CATEGORY_LABELS: Record<TaxCategory, string> = {
@@ -211,15 +243,23 @@ function LinesTable({ lines }: { lines: GstReturnLine[] }) {
           </tr>
         </thead>
         <tbody>
-          {lines.map((line) => (
-            <tr key={`${line.eventType}-${line.documentId}-${line.documentLineOrder}`}>
+          {lines.map((line, index) => (
+            <tr key={`${line.eventType}-${line.documentId}-${line.documentLineOrder}-${index}`}>
               <td>{formatDate(line.eventDate)}</td>
               <td>
                 {line.documentNumber}
                 {line.reference ? <span className={ui.muted}> · {line.reference}</span> : null}
               </td>
               <td>{line.contactName}</td>
-              <td>{EVENT_LABELS[line.eventType]}</td>
+              <td>
+                {EVENT_LABELS[line.eventType]}
+                {line.settledAmount && line.documentTotal ? (
+                  <span className={ui.muted}>
+                    {" "}
+                    · <Money value={line.settledAmount} /> of <Money value={line.documentTotal} />
+                  </span>
+                ) : null}
+              </td>
               <td className={ui.muted}>
                 {line.description}
                 {line.taxCode ? ` · ${line.taxCode}` : ""}
@@ -325,7 +365,7 @@ function FiledReturnDetail({ organisationId, gstReturnId }: { organisationId: st
       title={filed ? `Filed return ${formatDate(filed.periodStart)} to ${formatDate(filed.periodEnd)}` : "Filed return"}
       description={
         filed
-          ? `Filed ${formatDateTime(filed.filedAt)} by ${filed.filedByEmail}. These are the figures as filed (${filed.currencyCode}, ${filed.basis} basis).`
+          ? `Filed ${formatDateTime(filed.filedAt)} by ${filed.filedByEmail}. These are the figures as filed (${filed.currencyCode}, ${GST_BASIS_LABELS[filed.basis].toLowerCase()}).`
           : undefined
       }
     >
@@ -335,8 +375,8 @@ function FiledReturnDetail({ organisationId, gstReturnId }: { organisationId: st
         <>
           {filed.changedSinceFiled ? (
             <Notice tone="warning">
-              <strong>Changed since filed.</strong> A document dated in this period was approved or voided after the
-              return was filed. Amending a filed return isn&apos;t supported yet.
+              <strong>Changed since filed.</strong> Something dated in this period was recorded, voided or removed after
+              the return was filed. Amending a filed return isn&apos;t supported yet.
               <div className={ui.tableWrap}>
                 <table className={ui.table}>
                   <thead>
@@ -373,6 +413,54 @@ function FiledReturnDetail({ organisationId, gstReturnId }: { organisationId: st
         </>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * The IR546 adjustment for a change of GST basis since the last filed return
+ * (G20, G21), with one click to add it as an adjustment.
+ */
+function BasisChangeNotice({
+  change,
+  added,
+  onAdd,
+}: {
+  change: GstBasisChange;
+  added: GstAdjustment[];
+  onAdd: (adjustment: GstAdjustment) => void;
+}) {
+  const suggestion = change.suggestion;
+  const alreadyAdded =
+    suggestion !== null &&
+    added.some(
+      (adjustment) =>
+        adjustment.box === suggestion.box &&
+        adjustment.description === suggestion.description &&
+        adjustment.amount === suggestion.amount,
+    );
+  return (
+    <Notice tone="info">
+      <strong>
+        GST basis changed from {GST_BASIS_LABELS[change.from].toLowerCase()} to {GST_BASIS_LABELS[change.to].toLowerCase()}.
+      </strong>{" "}
+      The last return filed ended {formatDate(change.asAt)}. At that date GST on debtors was{" "}
+      <Money value={change.debtorsGst} /> and GST on creditors <Money value={change.creditorsGst} />.{" "}
+      {suggestion ? (
+        <>
+          IRD&apos;s IR546 calls for a {suggestion.box === "9" ? "Box 9 (debit)" : "Box 13 (credit)"} adjustment of{" "}
+          <Money value={suggestion.amount} /> in the first return on the new basis.{" "}
+          {alreadyAdded ? (
+            <Badge tone="green">Added</Badge>
+          ) : (
+            <Button variant="secondary" size="small" onClick={() => onAdd(suggestion)}>
+              Add this adjustment
+            </Button>
+          )}
+        </>
+      ) : (
+        "No adjustment is needed."
+      )}
+    </Notice>
   );
 }
 
@@ -431,21 +519,27 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
     setStatus(null);
   }
 
-  async function addAdjustment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const next = [...adjustments, { box: form.box, description: form.description.trim(), amount: form.amount.trim() }];
+  /** The server checks an adjustment before it's kept, so a bad amount never replaces good figures. */
+  async function keepAdjustment(adjustment: GstAdjustment): Promise<boolean> {
     try {
-      // The server checks the adjustment before it's kept, so a bad amount never replaces good figures.
       const checked = await api<Calculated>("/api/reports/gst-return", {
         method: "POST",
-        body: { organisationId, periodStart: start, periodEnd, adjustments: next },
+        body: { organisationId, periodStart: start, periodEnd, adjustments: [...adjustments, adjustment] },
       });
       setAdjustments(checked.adjustments);
-      setForm({ ...form, description: "", amount: "" });
       setFormError(null);
       setFileKey(newIdempotencyKey("gst"));
+      return true;
     } catch (caught) {
       setFormError(errorMessage(caught));
+      return false;
+    }
+  }
+
+  async function addAdjustment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (await keepAdjustment({ box: form.box, description: form.description.trim(), amount: form.amount.trim() })) {
+      setForm({ ...form, description: "", amount: "" });
     }
   }
 
@@ -487,7 +581,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
     <>
       <Card
         title="GST return"
-        description="NZ GST101A on the invoice basis, worked out from sales invoices, credit notes, bills and supplier credit notes approved or voided in the period."
+        description={data ? BASIS_DESCRIPTIONS[data.basis] : "NZ GST101A, worked out from the documents dated in the period."}
         actions={
           <div className={ui.inlineForm}>
             <Field label="Start month">
@@ -529,6 +623,13 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
                   .join(", ")}
                 ). Its stored figures are under Filed returns.
               </Notice>
+            ) : null}
+            {data.basisChange ? (
+              <BasisChangeNotice
+                change={data.basisChange}
+                added={adjustments}
+                onAdd={(adjustment) => void keepAdjustment(adjustment)}
+              />
             ) : null}
             <BoxesTable figures={data} selected={selected} onSelect={setSelected} />
             {can("admin") && !alreadyFiled ? (
@@ -616,7 +717,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
                           {formatDate(entry.periodStart)} to {formatDate(entry.periodEnd)}
                         </Button>
                       </td>
-                      <td>{entry.basis}</td>
+                      <td>{GST_BASIS_LABELS[entry.basis]}</td>
                       <td className={ui.num}>
                         <Money value={entry.boxes.box15} />
                       </td>

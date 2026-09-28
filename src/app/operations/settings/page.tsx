@@ -71,7 +71,7 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
             ))}
           </select>
         </Field>
-        <Field label="GST basis" hint="How GST returns are worked out. Only the invoice basis is built so far; the GST return refuses the others.">
+        <Field label="GST basis" hint="How GST returns are worked out. The payments basis is for sales of $2 million or less in the last 12 months (Tohyee doesn't check this). After a change, the next GST return suggests the adjustment IRD asks for.">
           <select value={gstBasis} onChange={(event) => setGstBasis(event.target.value as GstBasis)}>
             {GST_BASES.map((basis) => (
               <option key={basis} value={basis}>

@@ -65,11 +65,12 @@ own.
   liability accounts, reversed automatically the next day.
 - **Reports**: trial balance, profit and loss, balance sheet and stock
   valuation, with a financial year end you choose (31 March by default).
-- **GST return** (GST101A, boxes 5-15) on the invoice basis for 1, 2 or 6
-  months, worked out from approved and voided documents, with the lines in
-  each box, Box 9 and 13 adjustments, and "Mark as filed", which stores the
-  figures for good and shows if they've changed since. The payments and
-  hybrid bases aren't built yet.
+- **GST return** (GST101A, boxes 5-15) on the invoice, payments or hybrid
+  basis for 1, 2 or 6 months, worked out from documents (on the payments
+  basis, when they're paid, credited or refunded, split in proportion), with
+  the lines in each box, Box 9 and 13 adjustments, the IR546 adjustment
+  suggested after a change of basis, and "Mark as filed", which stores the
+  figures for good and shows if they've changed since.
 
 <p align="center">
   <img src="docs/screenshots/balance-sheet.png" alt="Balance sheet report" width="620" />

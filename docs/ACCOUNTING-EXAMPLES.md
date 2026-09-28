@@ -8,8 +8,8 @@ proves it". Test names start with the example IDs they cover:
   (W1-W12, pure costing maths) and `tests/unit/invoice-amounts.test.ts`
   (I1-I6 and B1-B4, pure invoice and bill maths; CP1, CP2 and CP4 paid
   status; CN2, CN10 credit note maths and CN2-CN4, CN6-CN8 credit and paid
-  status) and `tests/unit/gst-return.test.ts` (G1, G2, G5-G9, pure GST
-  return maths and periods)
+  status) and `tests/unit/gst-return.test.ts` (G1, G2, G5-G9, G11, G12,
+  G20, G21, pure GST return maths, periods, shares and basis changes)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
   P1-P3), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
@@ -21,7 +21,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/supplier-payments.test.ts` (SP1-SP8) and
   `tests/integration/credit-notes.test.ts` (CN1-CN12) and
   `tests/integration/supplier-credit-notes.test.ts` (SCN1-SCN12) and
-  `tests/integration/gst-returns.test.ts` (G1-G9), all against a real
+  `tests/integration/gst-returns.test.ts` (G1-G9) and
+  `tests/integration/gst-bases.test.ts` (G10-G22), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -308,8 +309,9 @@ plus the steps it names.
   Dr 1100 130.00 / Cr 1000 130.00; INV-0001 due back to **115.00**; the
   overpayment can't be used again. Voiding INV-0002 while overpayment credit
   is applied to it is refused ("remove its credit first").
-- **OP9** A GST return for the period with OP1, an application and a refund
-  in it has the same boxes and lines as one with only the invoices.
+- **OP9** A GST return on the invoice basis for the period with OP1, an
+  application and a refund in it has the same boxes and lines as one with only
+  the invoices. (On the payments basis see G15.)
 - **OP10** Recording, applying, removing, refunding or voiding dated in a
   locked period is refused, and nothing is posted.
 - **OP11** Retrying record, apply, remove, refund or void with the same
@@ -816,9 +818,11 @@ journals; the balance sheet works profit out when it runs.
 
 ## GST return
 
-The GST return is New Zealand's GST101A (boxes 5-15), worked out on the
-**invoice basis** from approved documents. Nothing is typed in except the
-Box 9 and Box 13 adjustments.
+The GST return is New Zealand's GST101A (boxes 5-15), worked out from
+approved documents on the organisation's GST basis: **invoice** (G1-G9),
+**payments** or **hybrid** (G10-G22). Nothing is typed in except the Box 9
+and Box 13 adjustments. The rules below are the invoice basis; the payments
+and hybrid bases change only *when* a document counts.
 
 - A **GST event** is a document change on a date. Only these count:
   - a sales invoice approved (+, on its invoice date) or voided (-, on its
@@ -895,15 +899,180 @@ above.
   to change or delete a filed return.
 - **G9** Periods: 1 Apr - 30 Apr, 1 Apr - 31 May and 1 Apr - 30 Sep are
   allowed; 2 Apr - 31 May, 1 Apr - 30 Jun (3 months) and 1 Apr - 15 May are
-  refused. An organisation on the payments or hybrid basis is refused with
-  "GST returns on the payments and hybrid bases aren't built yet." A
-  standard-rated line at a rate other than 15% in the period is refused,
-  naming its document.
+  refused. A standard-rated line at a rate other than 15% in the period is
+  refused, naming its document.
+
+### Payments and hybrid bases
+
+Sources: IRD's IR375 GST guide (March 2026) and IR546 "Change of GST
+accounting basis" (March 2026). On the **payments basis** GST is accounted
+for when a payment is made or received; on the **hybrid basis** sales are on
+the invoice basis and purchases on the payments basis. IRD's guides don't
+say how to split a part payment across a document's lines or when a credit
+note counts on the payments basis; Tohyee's choices for those are marked
+*(Tohyee's rule)*.
+
+- **Which documents count when**:
+
+  | Basis    | Sales invoices and credit notes | Bills and supplier credit notes |
+  |----------|---------------------------------|---------------------------------|
+  | Invoice  | when approved / voided (G1-G9)  | when approved / voided (G1-G9)  |
+  | Payments | when settled                    | when settled                    |
+  | Hybrid   | when approved / voided          | when settled                    |
+
+  Spend and receive money count on their date on every basis: they're paid
+  when they're posted.
+- A document is **settled** by these, each on its own date:
+  - a customer payment against an invoice (only the part that pays the
+    invoice, not an overpayment);
+  - a supplier payment against a bill;
+  - credit applied from a credit note to an invoice, or from a supplier credit
+    note to a bill. This settles **both** documents: the invoice (or bill)
+    counts +, the credit note counts - *(Tohyee's rule)*;
+  - a credit note refund (the credit note counts -), or a refund received on a
+    supplier credit note (-) *(Tohyee's rule)*;
+  - overpayment credit applied to another invoice (that invoice counts +).
+
+  Voiding a payment or refund, or removing an application, counts the same
+  amounts the other way on its void or removal date. An overpayment refund
+  never counts (the overpayment was never counted). Approving or voiding a
+  document counts nothing on its own: a document can't be voided while it
+  has payments, credit or refunds, so nothing of it is left counted.
+- **Split in proportion** *(Tohyee's rule)*: a settlement counts each line of
+  the document by its share: line amount (including GST) x amount settled /
+  document total, rounded to 2 places, half away from zero. Any cent left over
+  goes to the line with the largest amount (the first such line), so the
+  shares add up to exactly the amount settled. The line's GST share is worked
+  out the same way (the leftover cent going to the line with the most GST),
+  and adds up to the document's GST x amount settled / document total. Each
+  share then goes in the boxes by the line's tax code as on the invoice basis.
+  Across several part payments a line's shares can differ from the line by a
+  cent; the amount settled is always exact.
+
+Documents (all exclusive, from the examples above): **I1** 1 x 100.00 at 15%,
+total 115.00; **I5** 100.00 at 15% (115.00) + 50.00 zero rated, total
+165.00; **CN-0001** 1 x 20.00 at 15%, total 23.00; **B1** 1 x 200.00 at 15%,
+total 230.00; **CR-7** 1 x 40.00 at 15%, total 46.00. Periods are two months
+unless stated.
+
+- **G10** Payments basis, paid later: I1 dated 25 Mar 2026, paid 115.00 on
+  20 Apr. Feb-Mar: Box 5 **0.00**. Apr-May: Box 5 **115.00**, Box 8
+  **15.00**, one line "customer payment" dated 20 Apr.
+- **G11** Part payment: I5 paid 82.50 on 15 Apr. Shares 115.00 x 82.50 /
+  165.00 = **57.50** (standard) and 50.00 x 82.50 / 165.00 = **25.00** (zero
+  rated). Apr-May: Box 5 **82.50**, Box 6 **25.00**, Box 7 **57.50**, Box 8
+  **7.50**. The other 82.50, paid 10 Jun, counts in Jun-Jul the same way.
+- **G12** Rounding a share: an invoice, inclusive, with three lines of 10.00
+  (standard, standard, zero rated; GST 1.30, 1.30, 0.00; total 30.00) paid
+  10.00. Each share is 3.333 -> 3.33, which adds up to 9.99, so the first
+  line gets the leftover cent: **3.34**, **3.33**, **3.33**. Box 5
+  **10.00**, Box 6 **3.33**, Box 7 **6.67**, Box 8 = 6.67 x 3/23 = 0.870 ->
+  **0.87**. GST shares 0.433 -> 0.43 each, which add up to 0.86 against
+  2.60 x 10.00 / 30.00 = 0.867 -> 0.87, so the first line's is **0.44**; GST
+  on transactions **0.87**. Paying the other 20.00 gives shares 6.667 ->
+  6.67 each (20.01), so the first line's is **6.66**; each line has then
+  counted exactly 10.00.
+- **G13** Credit notes: I1 approved 1 Apr, CN-0001 approved 5 Apr and applied
+  to I1 on 5 Apr, and the other 92.00 paid on 20 Apr. Apr-May: I1 +23.00
+  (credit applied), CN-0001 -23.00 (credit applied), I1 +92.00 (payment):
+  Box 5 **92.00**, Box 8 **12.00** (the same as G4 on the invoice basis).
+  If instead I1 is paid in full on 20 Apr and CN-0001's 23.00 is refunded on
+  12 Jun: Apr-May Box 5 **115.00**, Box 8 **15.00**; Jun-Jul Box 5
+  **-23.00**, Box 8 **-3.00**. A credit note that's approved but not applied
+  or refunded counts nothing.
+- **G14** Purchases: B1 approved 2 Apr and 115.00 paid on 30 Apr: Box 11
+  **115.00**, Box 12 **15.00**. CR-7 applied to B1 on 10 May counts B1
+  +46.00 and CR-7 -46.00 (nothing overall) and the other 69.00 paid on
+  20 May: Apr-May Box 11 **184.00**, Box 12 **24.00** (the same as G4).
+- **G15** Overpayments: 150.00 received against I1 on 20 Apr (overpayment
+  35.00) counts **115.00**. Applying the 35.00 on 10 May to another
+  invoice of 115.00 (standard) counts that invoice's share, **35.00**:
+  Apr-May Box 5 **150.00**, Box 8 = 150.00 x 3/23 = 19.565 -> **19.57**. If
+  the 35.00 is refunded instead, the refund counts nothing and Box 5 is
+  **115.00**.
+- **G16** Voids and removals: I1's 115.00 payment on 20 Apr is voided on
+  3 Jun. Apr-May Box 5 **115.00**; Jun-Jul Box 5 **-115.00**, Box 8
+  **-15.00**. Removing G13's credit application on 8 Jun counts I1 -23.00 and
+  CN-0001 +23.00 in Jun-Jul. A draft, and an approved invoice or bill with
+  nothing settled, count nothing.
+- **G17** Spend money of 57.50 inclusive at 15% dated 3 Apr counts on 3 Apr on
+  every basis: Box 11 **57.50**, Box 12 **7.50**.
+- **G18** Hybrid: I1 approved 10 Apr and not paid; B1 approved 12 Apr, 115.00
+  paid 25 May. Apr-May: Box 5 **115.00**, Box 8 **15.00** (sales when
+  approved), Box 11 **115.00**, Box 12 **15.00** (purchases when paid),
+  Box 15 **0.00**. A customer payment in the period changes nothing; a bill
+  approved but not paid counts nothing.
+- **G19** Filing on the payments or hybrid basis stores the basis and the
+  counted lines, each with its event (e.g. "customer payment"), the amount
+  settled and the document's total. After filing G10's Apr-May return,
+  recording a payment against I5 dated 15 May makes it show "Changed since
+  filed". A filed return is always worked out again on the basis it was filed
+  on, even if the organisation's basis has changed since.
+
+**Changing basis (IR546).** The first return after a change adjusts for the
+documents still outstanding at the end of the last period on the old basis,
+so nothing is counted twice or missed. Tohyee finds the change from the
+filed returns: when the latest filed return that ends before this period was
+filed on another basis, it suggests the adjustment, and one click adds it as
+a Box 9 or Box 13 adjustment (it can be removed like any other). Once a
+return on the new basis is filed, there's no suggestion. Changes made before
+the first return filed in Tohyee aren't known to it.
+
+- **GST on debtors** at that date: for each approved invoice dated on or
+  before it and not voided by then, the amount still owed (its total less
+  what was settled by then) x its GST / its total, rounded to 2 places; less
+  the same for each approved credit note's credit not yet applied or
+  refunded. **GST on creditors**: the same for bills and supplier credit
+  notes.
+- The adjustment is GST on debtors if sales move from counting when settled
+  to counting when approved (-, the other way), plus GST on creditors if
+  purchases move from counting when approved to counting when settled (-,
+  the other way). More than 0.00 is a Box 9 adjustment; less than 0.00 is a
+  Box 13 adjustment of its size; 0.00 suggests nothing. That's IR546's six
+  cases:
+
+  | From -> to          | Adjustment (IR546)                               |
+  |---------------------|--------------------------------------------------|
+  | Payments -> invoice | debtors - creditors: Box 9 if more, else Box 13  |
+  | Invoice -> payments | creditors - debtors: Box 9 if more, else Box 13  |
+  | Payments -> hybrid  | GST on debtors, Box 9                            |
+  | Invoice -> hybrid   | GST on creditors, Box 9                          |
+  | Hybrid -> payments  | GST on debtors, Box 13                           |
+  | Hybrid -> invoice   | GST on creditors, Box 13                         |
+
+  IR546 doesn't cover the one-sided changes when the amount is less than
+  0.00 (e.g. more unused credit notes than money owed); Tohyee suggests it in
+  the other box, as the same rule gives *(Tohyee's rule)*.
+
+- **G20** Feb-Mar 2026 was filed on the invoice basis. At 31 Mar: I1 (dated
+  25 Mar, not paid) GST **15.00**; I5 (82.50 paid 30 Mar, 82.50 owed)
+  82.50 x 15.00 / 165.00 = **7.50**; CN-0001 (approved in March, not
+  applied) **-3.00**: GST on debtors **19.50**. B1 (not paid) GST on
+  creditors **30.00**. The basis is now payments, so the Apr-May return
+  suggests Box 9 **10.50** (30.00 - 19.50), "Change of GST basis from
+  invoice to payments at 31 Mar 2026: GST on debtors 19.50, GST on creditors
+  30.00".
+- **G21** The same documents for the other changes: payments -> invoice
+  Box 13 **10.50**; invoice -> hybrid Box 9 **30.00**; payments -> hybrid
+  Box 9 **19.50**; hybrid -> payments Box 13 **19.50**; hybrid -> invoice
+  Box 13 **30.00**. With no filed return before the period, or the latest one
+  on the same basis, nothing is suggested. Payments -> hybrid with only
+  CN-0001 outstanding (GST on debtors -3.00) suggests Box 13 **3.00**.
+- **G22** A payment dated on or before 31 Mar that was voided after it still
+  counts as paid at 31 Mar; a document voided on or before 31 Mar isn't
+  outstanding.
 
 ### Not supported yet (refused rather than guessed)
 
-- **Payments and hybrid bases**: refused with the message in G9; they come
-  next.
+- **Deferred-payment supplies of $225,000 or more** (section 19D): an
+  organisation on the payments basis has to account for these on the invoice
+  basis. Tohyee counts them like any other invoice (when paid); adjust for
+  them yourself with Box 9.
+- **Checking eligibility for the payments basis** (sales of $2 million or
+  less): Tohyee uses whichever basis is set and doesn't check turnover.
+- **Bad debts**: there's no write-off yet. (On the payments basis IRD allows
+  no deduction for a written-off debt that was never paid, because it was
+  never counted.)
 - **Amending a filed return**: a filed return can't be changed. "Changed since
   filed" shows what's different; correcting it with IRD is done outside
   Tohyee.

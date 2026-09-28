@@ -333,15 +333,23 @@ Enforced by the app (and covered by tests):
   and its removal date. Refunds received debit an active, base-currency
   account of type `bank` and credit accounts payable. Remaining credit and
   credit status are worked out whenever they're read; they are never stored.
-- The GST return (invoice basis) is worked out from documents, not postings:
-  sales invoices, sales credit notes, bills and supplier credit notes count on
-  their own date when approved and the other way on their void date, line by
-  line, by the tax code's category (`src/lib/reports/gst-return.ts`; the box
-  maths is in `src/lib/reports/gst-boxes.ts`). Box 8 and Box 12 are worked
-  out from the box totals (x 3 / 23, rounded once), so they can differ from
-  the lines' own GST by rounding. The payments and hybrid bases and
-  standard-rated lines at a rate other than 15% are refused. Filing takes a
-  lock on the settings row so returns are filed one at a time.
+- The GST return is worked out from documents, not postings, line by line,
+  by the tax code's category (`src/lib/reports/gst-return.ts`; the box maths,
+  settlement shares and basis-change adjustment are in
+  `src/lib/reports/gst-boxes.ts`). On the invoice basis sales invoices, sales
+  credit notes, bills and supplier credit notes count on their own date when
+  approved and the other way on their void date. On the payments basis they
+  count when settled (payments, credit applications, refunds, overpayments
+  applied, and their voids and removals), each settlement counting every line
+  in proportion; the hybrid basis does sales the invoice way and purchases
+  the payments way. Bank transactions count on their date on every basis.
+  Box 8 and Box 12 are worked out from the box totals (x 3 / 23, rounded
+  once), so they can differ from the lines' own GST by rounding.
+  Standard-rated lines at a rate other than 15% are refused. A filed return
+  keeps its basis and is always worked out again on it. A change of basis is
+  found from the filed returns, and the IR546 debtors/creditors adjustment is
+  suggested, never added on its own. Filing takes a lock on the settings row
+  so returns are filed one at a time.
 - Bank statements: statement lines are what the bank says, stored as money in
   positive and money out negative. They can't be deleted or edited (only
   reconciled, excluded, or deleted with their whole import), and importing

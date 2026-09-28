@@ -791,7 +791,7 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
       await applyMigrations(client, tenantMigrations.filter((migration) => migration.version < "0011"), "test:upgrade");
       await client.query(`insert into organisation_settings (organisation_id, display_name, base_currency) values ('upgrade-co', 'Upgrade Co', 'NZD')`);
       await client.query(`insert into accounts (code, name, account_class, account_type) values ('2400', 'Credit card', 'liability', 'current_liability')`);
-      expect((await applyMigrations(client, tenantMigrations, "test:upgrade")).applied).toEqual(["0011"]);
+      expect((await applyMigrations(client, tenantMigrations.filter((migration) => migration.version <= "0011"), "test:upgrade")).applied).toEqual(["0011"]);
       expect((await client.query("select account_type from accounts where code = '2400'")).rows).toEqual([{ account_type: "credit_card" }]);
       const origin = await client.query<{ definition: string }>(
         "select pg_get_constraintdef(oid) as definition from pg_constraint where conname = 'ledger_journals_origin_check'",
