@@ -109,6 +109,7 @@ export default function UsersPage() {
                   <td>
                     {user.isActive ? null : <Badge tone="red">Disabled</Badge>}{" "}
                     {user.isServerAdmin ? <Badge tone="blue">Server admin</Badge> : null}{" "}
+                    {user.twoStepEnabled ? <Badge tone="green">Two-step on</Badge> : <Badge tone="amber">Two-step not set up</Badge>}{" "}
                     <span className={ui.muted}>
                       {user.organisationCount} organisation{user.organisationCount === 1 ? "" : "s"}
                     </span>
@@ -131,6 +132,26 @@ export default function UsersPage() {
                       >
                         Reset password
                       </Button>
+                      {user.twoStepEnabled ? (
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Reset two-step sign-in for ${user.email}? Their authenticator app and backup codes stop working, they're signed out everywhere, and they set it up again at their next sign-in. Only do this if you're sure it's really them asking (e.g. a lost phone).`,
+                              )
+                            ) {
+                              void act(
+                                () => api(`/api/admin/users/${user.id}/two-step`, { method: "DELETE" }),
+                                `Two-step sign-in reset for ${user.email}.`,
+                              );
+                            }
+                          }}
+                        >
+                          Reset two-step
+                        </Button>
+                      ) : null}
                       {user.id !== me.id ? (
                         <>
                           <Button
