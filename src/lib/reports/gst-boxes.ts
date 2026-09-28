@@ -1,16 +1,22 @@
 import { parseIsoDate } from "@/lib/dates";
 import { ValidationError } from "@/lib/errors";
 import {
+  abs,
   add,
   cmp,
   dec,
   type Decimal,
+  isNegative,
+  isZero,
   mulDiv,
+  neg,
   parseDecimalInput,
   sub,
+  sum,
   toFixedString,
   ZERO_DECIMAL,
 } from "@/lib/money/decimal";
+import { GST_BASIS_LABELS, type GstBasis } from "@/lib/tax/categories";
 
 /**
  * The GST return's box maths (NZ GST101A, boxes 5-15), periods and
@@ -222,4 +228,116 @@ export function changedGstBoxes(filed: GstBoxes, current: GstBoxes): GstBoxChang
     filed: filed[box],
     current: current[box],
   }));
+}
+
+export type GstSide = "sales" | "purchases";
+
+/**
+ * Whether a side's documents count when they're settled (paid, credited or
+ * refunded) rather than when they're approved: everything on the payments
+ * basis, purchases on the hybrid basis (G10-G18).
+ */
+export function countsWhenSettled(basis: GstBasis, side: GstSide): boolean {
+  return basis === "payments" || (basis === "hybrid" && side === "purchases");
+}
+
+/**
+ * The index of the line with the largest size (the first one on a tie).
+ */
+function largestIndex(values: readonly Decimal[]): number {
+  let best = 0;
+  for (let index = 1; index < values.length; index += 1) {
+    if (cmp(abs(values[index]), abs(values[best])) > 0) best = index;
+  }
+  return best;
+}
+
+/**
+ * Shares `value x settled / total` of each value, rounded to 2 places, with
+ * the cents left over from rounding given to the largest value so the shares
+ * add up to `target`.
+ */
+function shareOut(values: readonly Decimal[], settled: Decimal, total: Decimal, target: Decimal): Decimal[] {
+  const shares = values.map((value) => mulDiv(value, settled, total, MONEY_SCALE));
+  const leftover = sub(target, sum(shares));
+  if (!isZero(leftover) && values.length > 0) {
+    const index = largestIndex(values);
+    shares[index] = add(shares[index], leftover);
+  }
+  return shares;
+}
+
+/**
+ * A settlement's share of each document line (G11, G12): line amount x amount
+ * settled / document total, rounded to 2 places, with any leftover cent on
+ * the largest line so the shares add up to exactly the amount settled. GST
+ * shares the same way, adding up to the document's GST x settled / total.
+ * Amounts include GST. Returns positive shares for a positive settlement.
+ */
+export function settlementShares(
+  lines: readonly { amount: string; gst: string }[],
+  settledInput: string,
+  totalInput: string,
+): { amount: string; gst: string }[] {
+  const settled = dec(settledInput);
+  const total = dec(totalInput);
+  if (lines.length === 0 || isZero(total)) return lines.map(() => ({ amount: "0.00", gst: "0.00" }));
+  const amounts = lines.map((line) => dec(line.amount));
+  const gsts = lines.map((line) => dec(line.gst));
+  const amountShares = shareOut(amounts, settled, total, settled);
+  const gstTarget = mulDiv(sum(gsts), settled, total, MONEY_SCALE);
+  const gstShares = shareOut(gsts, settled, total, gstTarget);
+  return amountShares.map((amount, index) => ({ amount: money(amount), gst: money(gstShares[index]) }));
+}
+
+/** GST included in what's still owed on a document: owed x GST / total, rounded to 2 places. */
+export function gstInOutstanding(owed: string, gst: string, total: string): string {
+  if (isZero(dec(total))) return "0.00";
+  return money(mulDiv(dec(owed), dec(gst), dec(total), MONEY_SCALE));
+}
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function longDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return `${day} ${MONTH_NAMES[month - 1]} ${year}`;
+}
+
+/**
+ * The IR546 adjustment for a change of GST basis (G20, G21): GST on debtors
+ * when sales move from counting when settled to counting when approved (less
+ * it the other way), plus GST on creditors when purchases move from counting
+ * when approved to counting when settled (less it the other way). More than
+ * 0 is a Box 9 adjustment, less than 0 a Box 13 one; 0 is none.
+ */
+export function basisChangeAdjustment(input: {
+  from: GstBasis;
+  to: GstBasis;
+  asAt: string;
+  debtorsGst: string;
+  creditorsGst: string;
+}): GstAdjustment | null {
+  const parts: string[] = [];
+  let total = ZERO_DECIMAL;
+  const salesBefore = countsWhenSettled(input.from, "sales");
+  const salesAfter = countsWhenSettled(input.to, "sales");
+  if (salesBefore !== salesAfter) {
+    const debtors = dec(input.debtorsGst);
+    total = add(total, salesBefore ? debtors : neg(debtors));
+    parts.push(`GST on debtors ${money(debtors)}`);
+  }
+  const purchasesBefore = countsWhenSettled(input.from, "purchases");
+  const purchasesAfter = countsWhenSettled(input.to, "purchases");
+  if (purchasesBefore !== purchasesAfter) {
+    const creditors = dec(input.creditorsGst);
+    total = add(total, purchasesAfter ? creditors : neg(creditors));
+    parts.push(`GST on creditors ${money(creditors)}`);
+  }
+  if (parts.length === 0 || isZero(total)) return null;
+  const label = (basis: GstBasis) => GST_BASIS_LABELS[basis].replace(/ basis$/, "").toLowerCase();
+  return {
+    box: isNegative(total) ? "13" : "9",
+    description: `Change of GST basis from ${label(input.from)} to ${label(input.to)} at ${longDate(input.asAt)}: ${parts.join(", ")}`,
+    amount: money(abs(total)),
+  };
 }
