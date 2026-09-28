@@ -17,6 +17,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/invoices.test.ts` (I1-I9, D1, D2 for invoices),
   `tests/integration/customer-payments.test.ts` (CP1-CP8),
   `tests/integration/customer-overpayments.test.ts` (OP1-OP11),
+  `tests/integration/multi-payments.test.ts` (MP1-MP10, SMP1-SMP6),
   `tests/integration/bills.test.ts` (B1-B8, D1, D2 for bills) and
   `tests/integration/supplier-payments.test.ts` (SP1-SP8) and
   `tests/integration/credit-notes.test.ts` (CN1-CN12) and
@@ -223,13 +224,81 @@ never stored or typed in.
   Under s9(1) of the GST Act a payment received can trigger the time of
   supply (IRD interpretation statement IS 10/03), so how GST should work on
   prepayments is still to be decided by the owner.
-- **One payment for several invoices**: each payment is against exactly one
-  invoice.
+- **One payment for several invoices**: see "Payments for several invoices"
+  below.
 - **Foreign-currency bank accounts**: payments go into bank accounts in the
   base currency only.
 - **Correcting a payment**: its journals can't be corrected in the ledger.
   Void the payment and record it again. A void can't be dated before the
   payment.
+
+## Payments for several invoices
+
+One amount received from a customer can pay several of their invoices at
+once (decided with the owner, 29 Sep 2026). It posts **one journal** dated
+the payment date, with **one line on the bank account** for the whole amount
+received (so it matches the one deposit on the bank statement) and one credit
+line on accounts receivable (1100) for each invoice. Each invoice's part is
+kept as a payment against that invoice, so its amount due, paid status,
+Home, the GST return and overpayments work exactly as for a payment against
+one invoice (CP1-CP8, OP1-OP11). The amount for each invoice is typed in; a
+part payment is just a smaller amount.
+
+- The invoices are approved invoices of the same customer, each listed once.
+  Each amount is more than zero, with at most 2 decimal places, and no more
+  than that invoice's amount due. The payment date is on or after every
+  invoice's date, in an open period; the bank account follows CP8.
+- The amounts for the invoices add up to the amount received. The only
+  exception: when **every** invoice is paid in full, the amount received can
+  be more, and the extra is an **overpayment** (OP1), kept on the part for
+  the last invoice listed.
+- It's undone as a whole: **voiding** the payment (once, dated on or after
+  it, in an open period) posts the exact reversal of its journal and voids
+  every invoice's part. One invoice's part can't be voided on its own
+  ("void the whole payment"), and the payment can't be voided while its
+  overpayment is applied or refunded (OP8).
+- An invoice with an active part of such a payment can't be voided (CP5).
+
+Setup: customer Kobe Ltd with INV-0001 = I1 (total 115.00) and INV-0002 =
+I6 (no tax, 80.00), customer Rex Ltd with INV-0003 (no tax, 50.00), all
+dated 10 May 2026. Payments are dated 15 May 2026 into 1000.
+
+- **MP1** Kobe Ltd pays 195.00 for INV-0001 (115.00) and INV-0002 (80.00):
+  one journal, Dr 1000 **195.00** / Cr 1100 **115.00** (INV-0001) /
+  Cr 1100 **80.00** (INV-0002). Both invoices due **0.00**, **paid**; each
+  shows a payment of its part, dated 15 May.
+- **MP2** 155.00 for INV-0001 (115.00) and INV-0002 (40.00): Dr 1000 155.00 /
+  Cr 1100 115.00 / Cr 1100 40.00. INV-0001 **paid**; INV-0002 due **40.00**,
+  **part paid**.
+- **MP3** 210.00 for INV-0001 (115.00) and INV-0002 (80.00), both in full:
+  Dr 1000 210.00 / Cr 1100 115.00 / Cr 1100 95.00. The part for INV-0002 is
+  95.00, of which **15.00** is an overpayment, **open**; it can be applied to
+  Kobe's other invoices (not INV-0002) or refunded, as in OP2 and OP7.
+- **MP4** Refused, and nothing is posted: less received than the amounts
+  for the invoices (150.00 for 115.00 + 40.00); more received when not every
+  invoice is paid in full (160.00 for 115.00 + 40.00: the extra isn't an
+  overpayment, because INV-0002 isn't paid in full); an amount more than an invoice's amount due (INV-0002
+  80.01); Rex Ltd's INV-0003 with Kobe's invoices; the same invoice twice; a
+  draft or voided invoice; no invoices; dated before an invoice's date;
+  amounts 0.00, -1.00 and 1.001.
+- **MP5** Voiding MP1 on 20 May posts one journal, Dr 1100 115.00 /
+  Dr 1100 80.00 / Cr 1000 195.00, dated 20 May; both invoices due again
+  (**115.00** and **80.00**). Voiding INV-0001's part on its own is refused;
+  a second void, and a void dated before 15 May, are refused.
+- **MP6** Voiding MP3 while 5.00 of its overpayment is applied to another
+  Kobe invoice is refused; after the application is removed it works.
+- **MP7** Voiding INV-0002 while MP1 is active is refused ("void its
+  payments first").
+- **MP8** A GST return on the payments basis for May 2026 counts MP1 exactly
+  like two separate payments of 115.00 and 80.00 on 15 May (G10-G22); on the
+  invoice basis it changes nothing.
+- **MP9** A bank statement line of +195.00 on 15 May 2026 matches MP1's one
+  bank journal line and reconciles it.
+- **MP10** Recording or voiding dated in a locked period is refused, and
+  nothing is posted. Retrying with the same idempotency key and content
+  returns the same payment; the same key with different content is refused
+  (409). A bank account that isn't an active base-currency bank account is
+  refused (CP8).
 
 ## Customer overpayments
 
@@ -421,8 +490,8 @@ due). Both are worked out every time; they're never stored or typed in.
 
 ### Not supported yet (refused rather than guessed)
 
-- **One payment for several bills**: each payment is against exactly one
-  bill.
+- **One payment for several bills**: see "Payments for several bills"
+  below.
 - **Overpayments and prepayments to suppliers**: a payment can't be more than
   the amount due, and it can't be dated before the bill date.
 - **Foreign-currency bank accounts**: payments are made from bank accounts in
@@ -431,6 +500,41 @@ due). Both are worked out every time; they're never stored or typed in.
   its own, and no bank file is made.
 - **Correcting a payment**: its journals can't be corrected in the ledger.
   Void the payment and record it again.
+
+## Payments for several bills
+
+The mirror of payments for several invoices (decided with the owner, 29 Sep
+2026): one amount paid to a supplier for several of their bills posts **one
+journal** dated the payment date, one debit line on accounts payable (2000)
+for each bill and **one line on the bank account** for the whole amount. Each
+bill's part is kept as a payment against that bill (SP1-SP8). The rules are
+the same as for invoices, except that there are **no overpayments**: the
+amounts for the bills must add up to exactly the amount paid, and none can be
+more than its bill's amount due.
+
+Setup: supplier Kiwi Supplies with bills B1 (total 230.00) and B4 (total
+135.00), and supplier Rata Ltd with a no-tax bill of 60.00, all dated 10 May
+2026. Payments are dated 15 May 2026 from 1000.
+
+- **SMP1** 365.00 to Kiwi Supplies for B1 (230.00) and B4 (135.00): one
+  journal, Dr 2000 **230.00** (B1) / Dr 2000 **135.00** (B4) / Cr 1000
+  **365.00**. Both bills due **0.00**, **paid**.
+- **SMP2** 330.00 for B1 (230.00) and B4 (100.00): B4 due **35.00**, **part
+  paid**.
+- **SMP3** Refused, and nothing is posted: 370.00 for B1 (230.00) and B4
+  (135.00) (no supplier overpayments); amounts that don't add up to the
+  amount paid; an amount more than a bill's amount due; Rata Ltd's bill with
+  Kiwi's; the same bill twice; a draft or voided bill; no bills; dated before
+  a bill's date; amounts 0.00, -1.00 and 1.001.
+- **SMP4** Voiding SMP1 on 20 May posts one journal, Dr 1000 365.00 /
+  Cr 2000 230.00 / Cr 2000 135.00; both bills due again. Voiding one bill's
+  part on its own is refused, and so are a second void and one dated before
+  15 May. Voiding B1 while SMP1 is active is refused.
+- **SMP5** A GST return on the payments basis counts SMP1 like two separate
+  payments of 230.00 and 135.00 on 15 May; a statement line of -365.00 on
+  15 May matches its one bank journal line.
+- **SMP6** Locked periods, retries with the same idempotency key (same or
+  different content) and bank accounts work as in SP6-SP8.
 
 ## Sales credit notes
 

@@ -27,6 +27,8 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   fx_revaluation: "FX revaluation",
   invoice: "Invoice",
   customer_payment: "Customer payment",
+  customer_payment_batch: "Payment for several invoices",
+  supplier_payment_batch: "Payment for several bills",
   bill: "Bill",
   supplier_payment: "Supplier payment",
   sales_credit_note: "Credit note",
@@ -41,6 +43,8 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
   invoice: "The invoice was voided: reversed by",
   customer_payment: "The payment was voided: reversed by",
+  customer_payment_batch: "The payment was voided: reversed by",
+  supplier_payment_batch: "The payment was voided: reversed by",
   bill: "The bill was voided: reversed by",
   supplier_payment: "The payment was voided: reversed by",
   sales_credit_note: "The credit note was voided: reversed by",
@@ -138,6 +142,24 @@ function JournalDetail({
             <>
               {" "}
               To undo it, void the payment from its invoice in <Link href="/operations/invoices">Invoices</Link>.
+            </>
+          )}
+        </p>
+      ) : null}
+      {journal.origin === "customer_payment_batch" || journal.origin === "supplier_payment_batch" ? (
+        <p className={ui.muted}>
+          This journal was posted by {journal.correctionKind === "reversal" ? "voiding" : "recording"} a payment for several{" "}
+          {journal.origin === "customer_payment_batch" ? "invoices" : "bills"}, so it can&apos;t be corrected here.
+          {journal.correctionKind === "reversal" ? null : (
+            <>
+              {" "}
+              To undo it, void the whole payment from{" "}
+              {journal.origin === "customer_payment_batch" ? (
+                <Link href="/operations/customer-payments">payments for several invoices</Link>
+              ) : (
+                <Link href="/operations/supplier-payments">payments for several bills</Link>
+              )}
+              .
             </>
           )}
         </p>
@@ -428,8 +450,10 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="fx_revaluation">FX revaluation</option>
               <option value="invoice">Invoices</option>
               <option value="customer_payment">Customer payments</option>
+              <option value="customer_payment_batch">Payments for several invoices</option>
               <option value="bill">Bills</option>
               <option value="supplier_payment">Supplier payments</option>
+              <option value="supplier_payment_batch">Payments for several bills</option>
               <option value="sales_credit_note">Credit notes</option>
               <option value="sales_credit_note_refund">Credit note refunds</option>
               <option value="supplier_credit_note">Supplier credit notes</option>

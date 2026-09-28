@@ -32,6 +32,7 @@ const MENUS: Menu[] = [
           { href: "/operations/invoices", label: "Invoices" },
           { href: "/operations/invoices?show=awaiting", label: "Awaiting payment" },
           { href: "/operations/credit-notes", label: "Credit notes" },
+          { href: "/operations/customer-payments", label: "Payments for several invoices" },
         ],
       },
       {
@@ -39,6 +40,7 @@ const MENUS: Menu[] = [
         links: [
           { href: "/operations/invoices/new", label: "New invoice", minRole: "bookkeeper" },
           { href: "/operations/credit-notes/new", label: "New credit note", minRole: "bookkeeper" },
+          { href: "/operations/customer-payments/new", label: "Receive a payment", minRole: "bookkeeper" },
         ],
       },
     ],
@@ -52,6 +54,7 @@ const MENUS: Menu[] = [
           { href: "/operations/bills", label: "Bills" },
           { href: "/operations/bills?show=awaiting", label: "Awaiting payment" },
           { href: "/operations/supplier-credit-notes", label: "Supplier credit notes" },
+          { href: "/operations/supplier-payments", label: "Payments for several bills" },
         ],
       },
       {
@@ -59,6 +62,7 @@ const MENUS: Menu[] = [
         links: [
           { href: "/operations/bills/new", label: "New bill", minRole: "bookkeeper" },
           { href: "/operations/supplier-credit-notes/new", label: "New supplier credit note", minRole: "bookkeeper" },
+          { href: "/operations/supplier-payments/new", label: "Pay bills", minRole: "bookkeeper" },
         ],
       },
     ],
@@ -126,8 +130,8 @@ const MENUS: Menu[] = [
 /** The paths a menu covers, so its button shows as the current area. */
 const AREAS: Record<string, string[]> = {
   Home: ["/operations"],
-  Sales: ["/operations/sales", "/operations/invoices", "/operations/credit-notes", "/operations/overpayments"],
-  Purchases: ["/operations/purchases", "/operations/bills", "/operations/supplier-credit-notes"],
+  Sales: ["/operations/sales", "/operations/invoices", "/operations/credit-notes", "/operations/overpayments", "/operations/customer-payments"],
+  Purchases: ["/operations/purchases", "/operations/bills", "/operations/supplier-credit-notes", "/operations/supplier-payments"],
   Reporting: ["/operations/reports"],
   Accounting: [
     "/operations/bank-accounts",

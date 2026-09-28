@@ -304,6 +304,11 @@ export function InvoicePayments({
                   </td>
                   <td className={ui.num}>
                     <Money value={payment.amount} />
+                    {payment.batchId ? (
+                      <div className={ui.muted}>
+                        <Link href={`/operations/customer-payments/${payment.batchId}`}>part of a payment for several invoices</Link>
+                      </div>
+                    ) : null}
                   </td>
                   <td>
                     {isZeroAmount(payment.overpaymentAmount) ? null : (
@@ -315,7 +320,9 @@ export function InvoicePayments({
                   </td>
                   {bookkeeper ? (
                     <td>
-                      {payment.status === "active" ? (
+                      {payment.status === "active" && payment.batchId ? (
+                        <Link href={`/operations/customer-payments/${payment.batchId}`}>Void the whole payment…</Link>
+                      ) : payment.status === "active" ? (
                         <Button size="small" variant="secondary" onClick={() => setVoiding(payment)} disabled={voiding !== null}>
                           Void…
                         </Button>

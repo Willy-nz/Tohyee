@@ -34,6 +34,8 @@ export type JournalOrigin =
   | "fx_revaluation"
   | "invoice"
   | "customer_payment"
+  | "customer_payment_batch"
+  | "supplier_payment_batch"
   | "bill"
   | "supplier_payment"
   | "sales_credit_note"
@@ -427,8 +429,10 @@ export async function listJournals(
     "fx_revaluation",
     "invoice",
     "customer_payment",
+    "customer_payment_batch",
     "bill",
     "supplier_payment",
+    "supplier_payment_batch",
     "sales_credit_note",
     "sales_credit_note_refund",
     "supplier_credit_note",
@@ -511,6 +515,8 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
     journal.origin !== "fx_revaluation" &&
     journal.origin !== "invoice" &&
     journal.origin !== "customer_payment" &&
+    journal.origin !== "customer_payment_batch" &&
+    journal.origin !== "supplier_payment_batch" &&
     journal.origin !== "bill" &&
     journal.origin !== "supplier_payment" &&
     journal.origin !== "sales_credit_note" &&
@@ -568,6 +574,11 @@ export async function correctJournal(
   if (original.origin === "customer_payment") {
     throw new ValidationError(
       `Journal #${original.id} was posted by a customer payment (${original.reference}), so it can't be corrected in the ledger. To undo a payment, void it from its invoice.`,
+    );
+  }
+  if (original.origin === "customer_payment_batch" || original.origin === "supplier_payment_batch") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a payment for several ${original.origin === "customer_payment_batch" ? "invoices" : "bills"} (${original.reference}), so it can't be corrected in the ledger. To undo it, void the payment.`,
     );
   }
   if (original.origin === "bill") {

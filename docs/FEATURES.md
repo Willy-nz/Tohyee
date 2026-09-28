@@ -57,6 +57,13 @@ that something happened.
   invoices awaiting payment. An invoice with active payments can't be voided.
   Period locks apply; recording and voiding are idempotent. See examples
   CP1-CP8.
+- **Payments for several invoices** ("Receive a payment" under Sales): one
+  payment from a customer, with the amount typed for each of their invoices,
+  posts one journal with one bank line for the whole amount and one accounts
+  receivable line per invoice, so it matches one bank statement line. Anything
+  more than the amounts typed is kept as an overpayment, but only when every
+  invoice is paid in full. It's voided only as a whole (one reversal), not one
+  invoice at a time. See examples MP1-MP10.
 - **Customer overpayments**: a payment of more than the amount due pays the
   invoice and keeps the rest as an overpayment, credit for the customer in
   accounts receivable (one journal for the whole payment, no GST on the
@@ -82,6 +89,10 @@ that something happened.
   Overpayments are refused, and a bill with active payments can't be voided.
   Period locks apply; recording and voiding are idempotent. See examples
   SP1-SP8.
+- **Payments for several bills** ("Pay bills" under Purchases): the same for
+  one payment to a supplier (Dr accounts payable per bill / Cr bank once). The
+  amounts must add up to the payment exactly, since supplier overpayments
+  aren't built. See examples SMP1-SMP6.
 - **Sales credit notes** in the base currency: drafts with the same lines,
   amounts modes and per-line GST as invoices (a new draft can start from an
   approved invoice's lines), approval that numbers the credit note
@@ -192,8 +203,7 @@ isn't acceptable, because people would trust it:
 
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
-1. Customer and supplier payments across several invoices or bills, supplier
-   overpayments, and prepayments (once the owner has decided how GST works
+1. Supplier overpayments and prepayments (once the owner has decided how GST works
    on them). Invoice and credit note PDFs and emailing come with or after
    these.
 2. Backdated stock movements with proper re-costing.

@@ -39,6 +39,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ customer_overpayment_refunds        overpayments paid back to customers
 ├─ bills, bill_lines      bills from suppliers
 ├─ supplier_payments      money paid against bills
+├─ customer_payment_batches, supplier_payment_batches   one payment for several invoices or bills (its parts are customer or supplier payments)
 ├─ sales_credit_notes, sales_credit_note_lines, sales_credit_note_numbering
 ├─ sales_credit_note_applications   credit applied to sales invoices
 ├─ sales_credit_note_refunds        credit paid back to customers
@@ -201,7 +202,7 @@ Per organisation (lowest to highest):
 | Role | Can |
 | --- | --- |
 | viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports, the GST return and filed GST returns; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments; save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; add notes and files, and edit, delete or remove their own |
+| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; add notes and files, and edit, delete or remove their own |
 | admin | + chart of accounts, tax codes, period locks, settings, people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -259,6 +260,14 @@ Enforced by the database itself, not just the app:
   active credit applied can't add up to more than its total. Payments can't be edited, deleted or
   truncated; the only change allowed is voiding one, once, which fills in its
   void details. A bill with active payments can't be voided.
+- Payments for several invoices or bills: a batch row holds the date, amount,
+  bank account and the one journal; each invoice or bill gets an ordinary
+  customer or supplier payment row with the batch's id, sharing that journal
+  (so amount due, overpayments, the GST return and bank matching work
+  unchanged). The database checks, at commit, that a batch's parts have its
+  contact, date, bank account and journal and add up to its amount. A batch
+  is voided whole: a part can only be voided once its batch has been, in the
+  same transaction, all with the batch's void journal.
 - Sales credit notes: only drafts can be changed or deleted, and a draft can't
   be voided (it's deleted instead). An approved credit note can only become
   voided (and then only its void details change); a voided one can't change at
