@@ -1,4 +1,6 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
+import { assertRequiredFields, parseCustomInput, resolveDocumentCustom } from "@/lib/custom-fields/service";
+import type { CustomValues } from "@/lib/custom-fields/values";
 import { type AccountClass, isBankOrCreditCard, type AccountType } from "@/lib/accounts/types";
 import { assertRequiredTags, checkNewTags, hashableLine, loadTrackingContext, parseTrackingInput, sortedTags, type TrackingTags } from "@/lib/tracking/service";
 import { writeAuditEvent } from "@/lib/audit";
@@ -44,6 +46,8 @@ export type BankTransactionLine = {
   taxAmount: string;
   /** Tracking categories (TC10): category id -> value id. */
   tracking: TrackingTags;
+  /** Custom field values (CF10), field id -> value. */
+  customFields: CustomValues;
 };
 
 export type BankTransaction = {
@@ -67,6 +71,7 @@ export type BankTransaction = {
   voidJournalId: string | null;
   createdByEmail: string | null;
   createdAt: string;
+  customFields: CustomValues;
   lines: BankTransactionLine[];
 };
 
@@ -91,6 +96,7 @@ type Row = {
   void_journal_id: string | null;
   created_by_email: string | null;
   created_at: string;
+  custom_fields: CustomValues;
   lines: Array<Omit<BankTransactionLine, "lineAmount" | "netAmount" | "taxAmount"> & Record<"lineAmount" | "netAmount" | "taxAmount", string>>;
 };
 
@@ -98,12 +104,12 @@ const SELECT = `
   select t.id, t.kind, t.status, t.account_id, a.code as account_code, a.name as account_name, t.contact_id,
          c.name as contact_name, t.transaction_date::text, t.reference, t.amounts_mode, t.currency_code,
          t.subtotal::text, t.tax_total::text, t.total::text, t.journal_id, t.void_date::text, t.void_journal_id,
-         t.created_by_email, t.created_at,
+         t.created_by_email, t.created_at, t.custom_fields,
          (select jsonb_agg(jsonb_build_object(
                    'lineOrder', l.line_order, 'description', l.description, 'accountCode', la.code,
                    'accountName', la.name, 'taxCode', tc.code, 'taxRate', l.tax_rate::text,
                    'lineAmount', l.line_amount::text, 'netAmount', l.net_amount::text, 'taxAmount', l.tax_amount::text,
-                   'tracking', l.tracking)
+                   'tracking', l.tracking, 'customFields', l.custom_fields)
                  order by l.line_order)
             from bank_transaction_lines l
             join accounts la on la.id = l.account_id
@@ -137,6 +143,7 @@ function toTransaction(row: Row): BankTransaction {
     voidJournalId: row.void_journal_id,
     createdByEmail: row.created_by_email,
     createdAt: row.created_at,
+    customFields: row.custom_fields ?? {},
     lines: (row.lines ?? []).map((line) => ({
       ...line,
       lineAmount: money(line.lineAmount),
@@ -197,6 +204,7 @@ export type BankTransactionInput = {
   reference?: unknown;
   amountsMode: unknown;
   lines: unknown;
+  customFields?: unknown;
 };
 
 type ParsedInput = {
@@ -206,7 +214,15 @@ type ParsedInput = {
   date: string;
   reference: string | null;
   amountsMode: AmountsMode;
-  lines: Array<{ description: string; accountCode: string; taxCode: string | null; amount: string; tracking: TrackingTags }>;
+  lines: Array<{
+    description: string;
+    accountCode: string;
+    taxCode: string | null;
+    amount: string;
+    tracking: TrackingTags;
+    customFields: Record<string, unknown> | undefined;
+  }>;
+  customInput: Record<string, unknown> | undefined;
 };
 
 function parseInput(tx: OrgTx, input: BankTransactionInput): ParsedInput {
@@ -231,8 +247,10 @@ function parseInput(tx: OrgTx, input: BankTransactionInput): ParsedInput {
         taxCode: amountsMode === "no_tax" ? null : taxCode,
         amount: parseDecimalInput(entry.amount, `${label} amount`, { maxScale: scale }),
         tracking: sortedTags(parseTrackingInput(entry.tracking, label)),
+        customFields: parseCustomInput(entry.customFields, `${label}: `),
       };
     }),
+    customInput: parseCustomInput(input.customFields, ""),
   };
 }
 
@@ -362,7 +380,13 @@ export async function createBankTransaction(
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const parsed = parseInput(tx, input);
-  const hash = requestHash("bank_transaction", { ...parsed, lines: parsed.lines.map(hashableLine) });
+  const { customInput, ...hashed } = parsed;
+  // Values that weren't sent stay out, so older requests hash the same.
+  const hash = requestHash("bank_transaction", {
+    ...hashed,
+    ...(customInput !== undefined ? { customFields: customInput } : {}),
+    lines: parsed.lines.map(hashableLine),
+  });
   const earlier = await tx.query<{ id: string; request_hash: string }>(
     "select id, request_hash from bank_transactions where command_source = $1 and idempotency_key = $2",
     [source, idempotencyKey],
@@ -377,6 +401,13 @@ export async function createBankTransaction(
   assertRequiredTags(
     tracking,
     resolved.resolvedLines.map((line) => ({ tags: line.tracking, accountClass: line.accountClass })),
+  );
+  const custom = await resolveDocumentCustom(tx, resolved.kind, parsed.customInput, parsed.lines.map((line) => line.customFields));
+  assertRequiredFields(
+    custom.ctx,
+    resolved.kind,
+    custom.body,
+    resolved.resolvedLines.map((line, index) => ({ values: custom.lines[index], accountClass: line.accountClass })),
   );
   if (options.expectedTotal !== undefined && toFixedString(dec(options.expectedTotal), 2) !== resolved.total) {
     throw new ValidationError(
@@ -414,8 +445,8 @@ export async function createBankTransaction(
   await tx.query(
     `insert into bank_transactions (
        id, command_source, idempotency_key, request_hash, kind, account_id, contact_id, transaction_date, reference,
-       amounts_mode, currency_code, subtotal, tax_total, total, journal_id, created_by_user_id, created_by_email
-     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13::numeric, $14::numeric, $15, $16, $17)`,
+       amounts_mode, currency_code, subtotal, tax_total, total, journal_id, created_by_user_id, created_by_email, custom_fields
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::numeric, $13::numeric, $14::numeric, $15, $16, $17, $18::jsonb)`,
     [
       id,
       source,
@@ -434,15 +465,28 @@ export async function createBankTransaction(
       posted.journal.id,
       tx.actor.userId,
       tx.actor.email,
+      JSON.stringify(custom.body),
     ],
   );
   for (const [index, line] of resolved.resolvedLines.entries()) {
     await tx.query(
       `insert into bank_transaction_lines (
          bank_transaction_id, line_order, description, quantity, unit_price, account_id, tax_code_id, tax_rate,
-         line_amount, net_amount, tax_amount, tracking
-       ) values ($1, $2, $3, 1, $4::numeric, $5, $6, $7::numeric, $4::numeric, $8::numeric, $9::numeric, $10::jsonb)`,
-      [id, index + 1, line.description, line.lineAmount, line.accountId, line.taxCodeId, line.taxRate, line.netAmount, line.taxAmount, JSON.stringify(line.tracking)],
+         line_amount, net_amount, tax_amount, tracking, custom_fields
+       ) values ($1, $2, $3, 1, $4::numeric, $5, $6, $7::numeric, $4::numeric, $8::numeric, $9::numeric, $10::jsonb, $11::jsonb)`,
+      [
+        id,
+        index + 1,
+        line.description,
+        line.lineAmount,
+        line.accountId,
+        line.taxCodeId,
+        line.taxRate,
+        line.netAmount,
+        line.taxAmount,
+        JSON.stringify(line.tracking),
+        JSON.stringify(custom.lines[index]),
+      ],
     );
   }
   await writeAuditEvent(tx, {

@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, Suspense, useId, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
+import { CustomFieldInputs, CustomValueCell, listColumns, startingValues, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
+import { type CustomFieldSetup, type CustomFieldUse, type CustomValues, fieldsFor } from "@/lib/custom-fields/values";
 import { formatGstNumber } from "@/lib/format";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 
@@ -20,6 +22,7 @@ type Draft = {
   phone: string;
   gstNumber: string;
   postalAddress: string;
+  customFields: CustomValues;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -30,6 +33,7 @@ const EMPTY_DRAFT: Draft = {
   phone: "",
   gstNumber: "",
   postalAddress: "",
+  customFields: {},
 };
 
 function draftFrom(contact: Contact): Draft {
@@ -41,7 +45,23 @@ function draftFrom(contact: Contact): Draft {
     phone: contact.phone ?? "",
     gstNumber: formatGstNumber(contact.gstNumber),
     postalAddress: contact.postalAddress ?? "",
+    customFields: contact.customFields,
   };
+}
+
+function rolesOf(draft: { isCustomer: boolean; isSupplier: boolean }): CustomFieldUse[] {
+  return [...(draft.isCustomer ? (["customer"] as const) : []), ...(draft.isSupplier ? (["supplier"] as const) : [])];
+}
+
+/**
+ * The values to save: only fields for the contact's roles (a supplier-only
+ * contact doesn't get a customer field's default, CF3), plus values it
+ * already had.
+ */
+function valuesToSave(setup: CustomFieldSetup | null | undefined, draft: Draft, saved: CustomValues): CustomValues {
+  if (!setup) return draft.customFields;
+  const allowed = new Set(fieldsFor(setup.fields, "contact", rolesOf(draft), saved).map((field) => field.id));
+  return Object.fromEntries(Object.entries(draft.customFields).filter(([id]) => allowed.has(id)));
 }
 
 function kind(contact: Contact): string {
@@ -51,11 +71,16 @@ function kind(contact: Contact): string {
 
 function ContactForm({
   initial,
+  saved,
+  customSetup,
   submitLabel,
   onSubmit,
   onCancel,
 }: {
   initial: Draft;
+  /** The contact's stored custom field values ({} for a new one). */
+  saved: CustomValues;
+  customSetup: CustomFieldSetup | null | undefined;
   submitLabel: string;
   onSubmit: (draft: Draft) => Promise<void>;
   onCancel: () => void;
@@ -64,13 +89,18 @@ function ContactForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const typeLabelId = useId();
+  // Values for fields the contact's roles use are shown; the rest (like a
+  // customer field's default on a supplier) are kept aside and not saved.
+  const shownIds = new Set(fieldsFor(customSetup?.fields ?? [], "contact", rolesOf(draft), saved).map((field) => field.id));
+  const shown = Object.fromEntries(Object.entries(draft.customFields).filter(([id]) => shownIds.has(id)));
+  const hidden = Object.fromEntries(Object.entries(draft.customFields).filter(([id]) => !shownIds.has(id)));
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await onSubmit(draft);
+      await onSubmit({ ...draft, customFields: valuesToSave(customSetup, draft, saved) });
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -149,6 +179,13 @@ function ContactForm({
           maxLength={500}
         />
       </Field>
+      <CustomFieldInputs
+        setup={customSetup}
+        record="contact"
+        uses={rolesOf(draft)}
+        value={shown}
+        onChange={(values) => setDraft({ ...draft, customFields: { ...hidden, ...values } })}
+      />
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>
           {busy ? "Saving…" : submitLabel}
@@ -177,8 +214,10 @@ function Contacts({ organisationId }: { organisationId: string }) {
   const [editing, setEditing] = useState<Contact | null>(null);
   const [viewing, setViewing] = useState<Contact | null>(null);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const customSetup = useCustomFields(organisationId);
   // Customers or suppliers only, from the Contacts menu (?type=).
   const type = useSearchParams().get("type");
+  const columns = listColumns(customSetup.data, "contact", type === "customers" ? ["customer"] : type === "suppliers" ? ["supplier"] : ["customer", "supplier"]);
   const rows = (contacts.data?.contacts ?? []).filter((contact) =>
     type === "customers" ? contact.isCustomer : type === "suppliers" ? contact.isSupplier : true,
   );
@@ -206,10 +245,13 @@ function Contacts({ organisationId }: { organisationId: string }) {
         <Link href="/operations/bills">bills</Link> can be entered from contacts marked as suppliers.
       </Notice>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
-      {canEdit && createKey ? (
+      {/* Opens once the custom fields are known, so their defaults are filled in from the start. */}
+      {canEdit && createKey && (customSetup.data || customSetup.error) ? (
         <Card title="New contact">
           <ContactForm
-            initial={EMPTY_DRAFT}
+            initial={{ ...EMPTY_DRAFT, customFields: startingValues(customSetup.data, "contact", ["customer", "supplier"]) }}
+            saved={{}}
+            customSetup={customSetup.data}
             submitLabel="Add contact"
             onCancel={() => setCreateKey(null)}
             onSubmit={async (draft) => {
@@ -229,6 +271,8 @@ function Contacts({ organisationId }: { organisationId: string }) {
           <ContactForm
             key={editing.id}
             initial={draftFrom(editing)}
+            saved={editing.customFields}
+            customSetup={customSetup.data}
             submitLabel="Save changes"
             onCancel={() => setEditing(null)}
             onSubmit={async (draft) => {
@@ -300,6 +344,9 @@ function Contacts({ organisationId }: { organisationId: string }) {
                   <th>Email</th>
                   <th>Phone</th>
                   <th>GST number</th>
+                  {columns.map((field) => (
+                    <th key={field.id}>{field.label}</th>
+                  ))}
                   <th />
                 </tr>
               </thead>
@@ -318,6 +365,9 @@ function Contacts({ organisationId }: { organisationId: string }) {
                     <td>{contact.email ?? ""}</td>
                     <td>{contact.phone ?? ""}</td>
                     <td>{formatGstNumber(contact.gstNumber)}</td>
+                    {columns.map((field) => (
+                      <CustomValueCell key={field.id} field={field} values={contact.customFields} />
+                    ))}
                     <td className={ui.num}>
                       <span className={ui.actions} style={{ justifyContent: "flex-end" }}>
                         <Button

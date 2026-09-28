@@ -1,4 +1,12 @@
 import { writeAuditEvent } from "@/lib/audit";
+import {
+  keptCustom,
+  loadCustomFieldContext,
+  missingRequiredField,
+  parseCustomInput,
+  resolveCustomValues,
+} from "@/lib/custom-fields/service";
+import { type CustomFieldUse, type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
@@ -25,6 +33,8 @@ export type Contact = {
   postalAddress: string | null;
   /** Digits only, e.g. "123456789". */
   gstNumber: string | null;
+  /** Custom field values (CF3), field id -> value. */
+  customFields: CustomValues;
   isArchived: boolean;
 };
 
@@ -37,9 +47,10 @@ export type ContactInput = {
   phone?: unknown;
   postalAddress?: unknown;
   gstNumber?: unknown;
+  customFields?: unknown;
 };
 
-type ContactDetails = Omit<Contact, "id" | "isArchived">;
+type ContactDetails = Omit<Contact, "id" | "isArchived" | "customFields">;
 
 const DETAIL_FIELDS = ["name", "isCustomer", "isSupplier", "email", "phone", "postalAddress", "gstNumber"] as const;
 
@@ -53,11 +64,12 @@ type ContactRow = {
   phone: string | null;
   postal_address: string | null;
   gst_number: string | null;
+  custom_fields: CustomValues;
   is_archived: boolean;
 };
 
 const COLUMNS =
-  "id, request_hash, name, is_customer, is_supplier, email, phone, postal_address, gst_number, is_archived";
+  "id, request_hash, name, is_customer, is_supplier, email, phone, postal_address, gst_number, custom_fields, is_archived";
 
 function toContact(row: ContactRow): Contact {
   return {
@@ -69,8 +81,32 @@ function toContact(row: ContactRow): Contact {
     phone: row.phone,
     postalAddress: row.postal_address,
     gstNumber: row.gst_number,
+    customFields: row.custom_fields ?? {},
     isArchived: row.is_archived,
   };
+}
+
+function rolesOf(details: { isCustomer: boolean; isSupplier: boolean }): CustomFieldUse[] {
+  return [...(details.isCustomer ? (["customer"] as const) : []), ...(details.isSupplier ? (["supplier"] as const) : [])];
+}
+
+/**
+ * Checks a contact's custom field values (CF3, CF7, CF8): the ones sent, or
+ * for a new contact each field's default. A required field for one of the
+ * contact's roles must be set.
+ */
+async function contactCustomValues(
+  tx: OrgTx,
+  raw: Record<string, unknown> | undefined,
+  details: ContactDetails,
+  saved: CustomValues | null,
+): Promise<CustomValues> {
+  const ctx = await loadCustomFieldContext(tx);
+  const uses = rolesOf(details);
+  const values = resolveCustomValues(ctx, raw === undefined && saved ? saved : raw, { record: "contact", uses, kept: keptCustom(saved ?? {}) });
+  const missing = missingRequiredField(ctx, values, { record: "contact", uses });
+  if (missing) throw new ValidationError(`${missing} is required.`);
+  return values;
 }
 
 function detailsOf(contact: Contact): ContactDetails {
@@ -205,21 +241,25 @@ export async function createContact(
     postalAddress: parsePostalAddress(input.postalAddress),
     gstNumber: parseGstNumber(input.gstNumber),
   });
+  const rawCustom = parseCustomInput(input.customFields, "");
 
-  const hash = requestHash("contact", details);
+  // Values that weren't sent stay out of the hash, so older requests hash the same.
+  const hash = requestHash("contact", rawCustom === undefined ? details : { ...details, customFields: rawCustom });
   const existing = await findByKey(tx, source, idempotencyKey);
   if (existing) {
     assertSameRequest(existing.request_hash, hash, "contact");
     return { created: false, contact: toContact(existing) };
   }
 
+  const customFields = await contactCustomValues(tx, rawCustom, details, null);
+
   // No separate name check first: the original of a retry could commit between
   // it and the key check above. The unique indexes decide, and the key is
   // checked again before a name clash is reported.
   const inserted = await tx.query<ContactRow>(
     `insert into contacts (command_source, idempotency_key, request_hash, name, is_customer, is_supplier,
-                           email, phone, postal_address, gst_number)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                           email, phone, postal_address, gst_number, custom_fields)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
      on conflict do nothing
      returning ${COLUMNS}`,
     [
@@ -233,6 +273,7 @@ export async function createContact(
       details.phone,
       details.postalAddress,
       details.gstNumber,
+      JSON.stringify(customFields),
     ],
   );
   const row = inserted.rows[0];
@@ -250,7 +291,7 @@ export async function createContact(
     eventType: "contact.created",
     entityType: "contact",
     entityId: row.id,
-    details,
+    details: Object.keys(customFields).length > 0 ? { ...details, customFields } : details,
   });
   return { created: true, contact: toContact(row) };
 }
@@ -272,12 +313,17 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
       input.postalAddress === undefined ? before.postalAddress : parsePostalAddress(input.postalAddress),
     gstNumber: input.gstNumber === undefined ? before.gstNumber : parseGstNumber(input.gstNumber),
   });
+  const customFields = await contactCustomValues(tx, parseCustomInput(input.customFields, ""), after, current.customFields);
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   for (const field of DETAIL_FIELDS) {
     if (before[field] !== after[field]) {
       changes[field] = { from: before[field], to: after[field] };
     }
+  }
+  // Custom field changes are in the history too (CF3).
+  if (customValuesKey(current.customFields) !== customValuesKey(customFields)) {
+    changes.customFields = { from: current.customFields, to: customFields };
   }
   if (Object.keys(changes).length === 0) {
     return current;
@@ -294,7 +340,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
     const updated = await tx.query<ContactRow>(
       `update contacts
           set name = $2, is_customer = $3, is_supplier = $4, email = $5, phone = $6,
-              postal_address = $7, gst_number = $8, updated_at = now()
+              postal_address = $7, gst_number = $8, custom_fields = $9::jsonb, updated_at = now()
         where id = $1
         returning ${COLUMNS}`,
       [
@@ -306,6 +352,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
         after.phone,
         after.postalAddress,
         after.gstNumber,
+        JSON.stringify(customFields),
       ],
     );
     row = updated.rows[0];

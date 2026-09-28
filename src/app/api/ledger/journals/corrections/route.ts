@@ -13,6 +13,7 @@ export const POST = route(async (request) => {
       reference: body.reference,
       description: body.description,
       lines: body.lines,
+      customFields: body.customFields,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });
