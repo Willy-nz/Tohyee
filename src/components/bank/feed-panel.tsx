@@ -26,7 +26,7 @@ type SyncResult = { added: number; duplicates: number; possibleDuplicates: numbe
 
 function LinkFeedForm({ organisationId, account, onLinked }: { organisationId: string; account: BankAccount; onLinked: () => void }) {
   const today = todayInBrowser();
-  const options = useApiData<{ mode: string; accounts: AkahuAccountOption[] }>("/api/bank-feeds/akahu/accounts", { organisationId });
+  const options = useApiData<{ accounts: AkahuAccountOption[] }>("/api/bank-feeds/akahu/accounts", { organisationId });
   const [akahuAccountId, setAkahuAccountId] = useState("");
   // A year back by default; Akahu may have more or less depending on the bank.
   const [startDate, setStartDate] = useState(() => (account.lastLineDate && account.lastLineDate < today ? account.lastLineDate : daysBefore(today, 365)));
@@ -48,21 +48,18 @@ function LinkFeedForm({ organisationId, account, onLinked }: { organisationId: s
   }
 
   if (options.error) {
-    return <Notice tone="warning">{options.error}</Notice>;
+    return (
+      <Notice tone="warning">
+        {options.error} <Link href="/operations/bank-accounts">Bank accounts</Link>
+      </Notice>
+    );
   }
   if (!options.data) return <p className={ui.muted}>Asking Akahu which accounts are shared…</p>;
   const free = options.data.accounts.filter((option) => !option.linkedAccountId || option.linkedAccountId === account.id);
   if (free.length === 0) {
     return (
       <Empty>
-        Akahu has no unlinked accounts to offer.{" "}
-        {options.data.mode === "oauth" ? (
-          <>
-            Use Connect banks on <Link href="/operations/bank-accounts">Bank accounts</Link> to share more.
-          </>
-        ) : (
-          "Share more accounts with the Akahu app at my.akahu.nz."
-        )}
+        Akahu has no unlinked accounts to offer. Connect more banks, or share more accounts with the personal app, at my.akahu.nz.
       </Empty>
     );
   }
