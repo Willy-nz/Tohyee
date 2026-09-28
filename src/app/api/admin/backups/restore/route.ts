@@ -5,7 +5,8 @@ import { backupFileInFolder, restoreBackupAsCopy } from "@/lib/backups/service";
 /**
  * Restores a backup from the backup folder as a new organisation (a copy):
  * `file` (as listed by GET /api/admin/backups), optional `id` and
- * `displayName` for the copy. Nothing existing is overwritten.
+ * `displayName` for the copy, and `key` when the backup was made on another
+ * server (that server's backup key). Nothing existing is overwritten.
  */
 export const POST = route(async (request) => {
   const auth = await requireAuth(request);
@@ -15,6 +16,7 @@ export const POST = route(async (request) => {
     file: await backupFileInFolder(body.file),
     id: body.id,
     displayName: body.displayName,
+    key: body.key,
   });
   return json({ organisation }, { status: 201 });
 });

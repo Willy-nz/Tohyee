@@ -17,7 +17,9 @@ in as a server admin with two-step sign-in. There's no browser involved.
 - Restarting the services and the tray menu's "Back up now" (the older,
   unencrypted whole-server copy to Documents) ask Windows for permission
   (UAC); the app itself runs as you. The **Backups** tab is the built-in
-  nightly backups: settings, status, back up now and restore as a copy.
+  nightly backups: settings, status, back up now, restore as a copy, and the
+  backup key (show it with your password, check your saved copy). Until a
+  saved copy has been checked, the window opens on Backups with a reminder.
 - `TohyeeTray.exe --self-test <file>` checks it can reach Tohyee (the
   installer's CI test runs it, signed in with a test login).
 

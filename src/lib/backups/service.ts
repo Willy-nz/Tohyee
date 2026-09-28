@@ -213,7 +213,7 @@ function toTarget(o: OrganisationRecord): Target {
 }
 
 /** Decrypts a backup into `pg_restore --list`: proves the key opens it, nothing was changed, and PostgreSQL can read it. */
-export async function checkBackup(file: string): Promise<BackupHeader> {
+export async function checkBackup(file: string, otherKey?: string): Promise<BackupHeader> {
   const restore = startPgTool("pg_restore", ["--list"], "postgres");
   restore.child.stdout?.resume();
   // pg_restore --list stops reading after the table of contents, but the whole
@@ -244,7 +244,7 @@ export async function checkBackup(file: string): Promise<BackupHeader> {
       callback();
     },
   });
-  const [header] = await Promise.all([readDecrypted(file, feed), restore.done]);
+  const [header] = await Promise.all([readDecrypted(file, feed, otherKey), restore.done]);
   return header;
 }
 
@@ -457,9 +457,11 @@ export async function backupFileInFolder(name: unknown): Promise<string> {
  */
 export async function restoreBackupAsCopy(
   actor: AdminActor,
-  input: { file: string; id?: unknown; displayName?: unknown; ownerEmail?: unknown },
+  input: { file: string; id?: unknown; displayName?: unknown; ownerEmail?: unknown; key?: unknown },
 ): Promise<OrganisationRecord> {
-  if (!secretsAvailable()) throw new UnavailableError("Restoring needs the TOHYEE_SECRET_KEY the backup was made with.");
+  // The backup key of the server that made it, when that isn't this one.
+  const otherKey = typeof input.key === "string" && input.key.trim() ? input.key.trim() : undefined;
+  if (!otherKey && !secretsAvailable()) throw new UnavailableError("Restoring needs the backup key the backup was made with.");
   const { header } = await readBackupHeader(input.file);
   if (header.kind !== "organisation" || !header.organisationId) {
     throw new ValidationError("That's a backup of the server's own database (users and settings), not of an organisation. Restoring it is a job for a database administrator (see docs/ARCHITECTURE.md).");
@@ -468,7 +470,7 @@ export async function restoreBackupAsCopy(
     throw new ValidationError(`That backup was made by a newer version of Tohyee (${header.tohyeeVersion}). Update this server first.`);
   }
   // Proves the key is right and the file is whole before anything is created.
-  await checkBackup(input.file);
+  await checkBackup(input.file, otherKey);
 
   const made = localParts(new Date(header.createdAt));
   const id = parseOrganisationId(
@@ -517,7 +519,7 @@ export async function restoreBackupAsCopy(
     await getAdminPool().query(`create database ${quoteSqlIdentifier(databaseName)}`);
     const restore = startPgTool("pg_restore", ["--no-owner", "--no-privileges", "--exit-on-error", `--dbname=${databaseName}`], databaseName);
     restore.child.stdout?.resume();
-    const [fed, restored] = await Promise.allSettled([readDecrypted(input.file, restore.child.stdin!), restore.done]);
+    const [fed, restored] = await Promise.allSettled([readDecrypted(input.file, restore.child.stdin!, otherKey), restore.done]);
     // If pg_restore stopped, its own message says why (feeding it then fails with a broken pipe).
     if (restored.status === "rejected") throw restored.reason;
     if (fed.status === "rejected") throw fed.reason;
@@ -547,8 +549,8 @@ export async function restoreBackupAsCopy(
 }
 
 /** Decrypts a backup to a plain pg_dump file, for a database administrator (e.g. restoring the server's own database). */
-export async function decryptBackupTo(file: string, outFile: string): Promise<BackupHeader> {
-  await checkBackup(file);
+export async function decryptBackupTo(file: string, outFile: string, otherKey?: string): Promise<BackupHeader> {
+  await checkBackup(file, otherKey);
   const out = createWriteStream(outFile, { mode: 0o600, flags: "wx" });
-  return readDecrypted(file, out);
+  return readDecrypted(file, out, otherKey);
 }

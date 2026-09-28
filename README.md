@@ -176,9 +176,12 @@ daily and 12 monthly backups. Point the folder at a OneDrive (or other
 cloud-synced) folder to get copies off the computer. Restoring makes a copy of
 the organisation, with the same people, so the current books are never
 overwritten. It's all in the server settings under **Backups** (or
-`backups ...` in the command-line tool). **Keep a copy of `TOHYEE_SECRET_KEY`
+`backups ...` in the command-line tool). **Keep a copy of the backup key
 somewhere safe that isn't the backup folder**: without it the backups can't be
-opened. pg_dump and pg_restore come with the Windows installer and the Docker
+opened. The server app's Backups tab shows the key (after your password) and
+checks your saved copy when you paste it back; until someone has, server admins
+see a reminder on every page. To restore on a new server, give the old
+server's key when restoring (the new server keeps its own). pg_dump and pg_restore come with the Windows installer and the Docker
 image; elsewhere they need to be on the PATH (or set `TOHYEE_PG_BIN`).
 
 ### Server settings from the command line

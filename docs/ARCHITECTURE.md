@@ -439,8 +439,13 @@ as the admin login, straight into an encrypted file:
   its 16-byte tag. The header is the GCM additional data, so it can't be
   changed either. The key is HKDF-SHA256 of `TOHYEE_SECRET_KEY` ("tohyee
   backups v1"), separate from the key for stored secrets. Losing
-  `TOHYEE_SECRET_KEY` means losing the backups, so the docs and the server
-  app tell people to keep a copy elsewhere.
+  `TOHYEE_SECRET_KEY` means losing the backups, so (`key.ts`) a server admin
+  can see it after typing their password again (5 wrong tries in 15 minutes
+  blocks it), and proves a saved copy by pasting it back: the server compares
+  it and records when, for that key's fingerprint, in `server_settings`
+  (`backup_key`). Until a saved copy of the current key has been checked,
+  server admins see a reminder on every page and the server app opens on
+  Backups. The key never goes in the audit trail.
 - **Where**: the backup folder (a server setting; default
   `TOHYEE_BACKUP_DIR`, else `%ProgramData%\Tohyee\backups` on Windows or
   `./backups`), one sub-folder per organisation and `_server` for the core
@@ -469,7 +474,9 @@ as the admin login, straight into an encrypted file:
   its `organisation_settings` at the new ID, then provisions it as usual
   (migrations up to this server's version, runtime-login grants). Any failure
   drops the new database and registry row. A backup from a newer Tohyee is
-  refused. The core database isn't restored by the app: `backups decrypt`
+  refused. A backup made on another server (or before the key changed) is
+  restored by giving that server's key with the request; this server's own
+  key is never replaced. The core database isn't restored by the app: `backups decrypt`
   turns a file into a plain pg_dump for a database administrator.
 - Tests (`tests/integration/backups.test.ts`) back up and restore real
   organisations, with one login and with a separate runtime login, and check

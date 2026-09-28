@@ -41,7 +41,8 @@ export type BackupHeader = {
   keyId: string;
 };
 
-function rawSecretKey(): string {
+/** This server's TOHYEE_SECRET_KEY, which backups are encrypted with. */
+export function rawSecretKey(): string {
   const raw = process.env.TOHYEE_SECRET_KEY?.trim();
   if (!raw || raw.length < 32) {
     throw new UnavailableError(
@@ -51,14 +52,18 @@ function rawSecretKey(): string {
   return raw;
 }
 
-/** The backup key: HKDF from TOHYEE_SECRET_KEY, separate from the key for stored secrets. */
-function backupKey(): Buffer {
-  return Buffer.from(hkdfSync("sha256", Buffer.from(rawSecretKey(), "utf8"), Buffer.alloc(0), "tohyee backups v1", 32));
+/**
+ * The backup key: HKDF from TOHYEE_SECRET_KEY (or, to open a backup made on
+ * another server, that server's key), separate from the key for stored secrets.
+ */
+function backupKey(otherKey?: string): Buffer {
+  const raw = otherKey === undefined ? rawSecretKey() : otherKey.trim();
+  return Buffer.from(hkdfSync("sha256", Buffer.from(raw, "utf8"), Buffer.alloc(0), "tohyee backups v1", 32));
 }
 
 /** A short fingerprint of the backup key, so a wrong key is reported as such. */
-export function backupKeyId(): string {
-  return createHash("sha256").update("tohyee backup key id").update(backupKey()).digest("hex").slice(0, 16);
+export function backupKeyId(otherKey?: string): string {
+  return createHash("sha256").update("tohyee backup key id").update(backupKey(otherKey)).digest("hex").slice(0, 16);
 }
 
 function headerBytes(header: BackupHeader): Buffer {
@@ -131,18 +136,21 @@ export async function readBackupHeader(file: string): Promise<OpenedBackup> {
 
 /**
  * Decrypts a backup into `target` (e.g. pg_restore's input, or a file).
- * Throws if the key is wrong or the file was changed or damaged. The tag is
+ * Throws if the key is wrong or the file was changed or damaged. `otherKey`
+ * is the backup key of the server that made it, when that isn't this one. The tag is
  * only checked at the very end, so decrypt to a throwaway place first
  * (`checkBackup`) before feeding anything that can't be undone.
  */
-export async function readDecrypted(file: string, target: Writable): Promise<BackupHeader> {
+export async function readDecrypted(file: string, target: Writable, otherKey?: string): Promise<BackupHeader> {
   const opened = await readBackupHeader(file);
-  if (opened.header.keyId !== backupKeyId()) {
+  if (opened.header.keyId !== backupKeyId(otherKey)) {
     throw new ValidationError(
-      "This backup was made with a different TOHYEE_SECRET_KEY, so it can't be opened with this server's key. Set the key the backup was made with.",
+      otherKey === undefined
+        ? "This backup was made with a different key (another server's, or before the key was changed), so this server's key can't open it. Give the backup key it was made with."
+        : "That isn't the key this backup was made with.",
     );
   }
-  const decipher = createDecipheriv("aes-256-gcm", backupKey(), opened.iv);
+  const decipher = createDecipheriv("aes-256-gcm", backupKey(otherKey), opened.iv);
   decipher.setAAD(opened.headerBytes);
   decipher.setAuthTag(opened.tag);
   const source = createReadStream(file, { start: opened.dataStart, end: opened.dataEnd });

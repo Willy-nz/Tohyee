@@ -64,7 +64,8 @@ namespace Tohyee.Tray
             tabs.TabPages.Add(Tab("Users", new UsersPage(_api)));
             tabs.TabPages.Add(Tab("Remote access", new RemoteAccessPage(_api)));
             tabs.TabPages.Add(Tab("Email", new EmailPage(_api)));
-            tabs.TabPages.Add(Tab("Backups", new BackupsPage(_api)));
+            var backupsTab = Tab("Backups", new BackupsPage(_api));
+            tabs.TabPages.Add(backupsTab);
             tabs.TabPages.Add(Tab("Updates", new UpdatesPage(_api)));
 
             var signOut = Ui.Btn("Sign out", async (s, e) =>
@@ -80,6 +81,26 @@ namespace Tohyee.Tray
             panel.Controls.Add(tabs);
             panel.Controls.Add(bottom);
             Swap(panel);
+            RemindAboutBackupKey(tabs, backupsTab);
+        }
+
+        /// <summary>Until a saved copy of the backup key has been checked, open on the Backups tab and say why.</summary>
+        private async void RemindAboutBackupKey(TabControl tabs, TabPage backupsTab)
+        {
+            try
+            {
+                var result = await _api.Get("/api/admin/backups");
+                var keyStatus = J.Obj(result, "keyStatus");
+                if (!J.Bool(keyStatus, "keySet") || J.Str(keyStatus, "savedCopyCheckedAt") != null || tabs.IsDisposed) return;
+                tabs.SelectedTab = backupsTab;
+                MessageBox.Show(this,
+                    "Save a copy of your backup key.\n\nBackups can only be opened with it, so if this computer is lost or rebuilt without a copy, the backups can't be restored. Use \"Show the key\", save it in a password manager, then \"Check my saved copy\".",
+                    "Tohyee", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (ApiException)
+            {
+                // The Backups tab shows the problem itself.
+            }
         }
 
         private static TabPage Tab(string title, Control page)

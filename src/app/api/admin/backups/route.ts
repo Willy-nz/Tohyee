@@ -8,6 +8,7 @@ import {
   recentBackupRuns,
   updateBackupSettings,
 } from "@/lib/backups/service";
+import { backupKeyStatus } from "@/lib/backups/key";
 
 /** GET: backup settings, each database's latest and last good backup, recent attempts and the files in the folder. Server admins only. */
 export const GET = route(async (request) => {
@@ -16,6 +17,7 @@ export const GET = route(async (request) => {
   const files = await listBackupFiles();
   return json({
     settings: await getBackupSettings(),
+    keyStatus: await backupKeyStatus(),
     status: await backupStatus(),
     runs: await recentBackupRuns(30),
     // Paths on the server stay on the server; files are named relative to the backup folder.

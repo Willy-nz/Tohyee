@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getPageSession } from "@/lib/auth/page-session";
 import { twoStepRequired } from "@/lib/auth/sessions";
+import { BACKUP_KEY_REMINDER, backupKeyNeedsSaving } from "@/lib/backups/key";
 import { listMembershipsForUser } from "@/lib/organisations/registry";
 import { localAdminUrl } from "@/lib/server-admin/local";
 
@@ -26,12 +27,15 @@ export default async function OperationsLayout({ children }: LayoutProps<"/opera
           ? "ready"
           : organisation.migrationStatus,
   }));
-  const warnings =
-    session.user.isServerAdmin && !twoStepRequired()
-      ? [
-          "Two-step sign-in is off: this server has no TOHYEE_SECRET_KEY, so people sign in with a password only. Set it (32+ random characters) in the server's environment and restart Tohyee before letting anyone in from outside your network. The Windows installer sets it when you update.",
-        ]
-      : [];
+  const warnings: string[] = [];
+  if (session.user.isServerAdmin && !twoStepRequired()) {
+    warnings.push(
+      "Two-step sign-in is off: this server has no TOHYEE_SECRET_KEY, so people sign in with a password only. Set it (32+ random characters) in the server's environment and restart Tohyee before letting anyone in from outside your network. The Windows installer sets it when you update.",
+    );
+  }
+  if (session.user.isServerAdmin && (await backupKeyNeedsSaving())) {
+    warnings.push(BACKUP_KEY_REMINDER);
+  }
   return (
     <AppShell
       user={session.user}

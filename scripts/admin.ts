@@ -25,6 +25,7 @@ import {
 } from "@/lib/organisations/admin";
 import { getRemoteAccess, updateRemoteAccess } from "@/lib/remote/settings";
 import { getLatestReleaseCheck } from "@/lib/updates/server-updates";
+import { backupKeyStatus, checkSavedBackupKey, revealBackupKey } from "@/lib/backups/key";
 import {
   backUpNow,
   backupStatus,
@@ -82,9 +83,14 @@ Backups (encrypted with TOHYEE_SECRET_KEY: keep a copy of that key somewhere saf
   backups run [--id ORGANISATION]           back up now (everything, or one organisation)
   backups list [--id ORGANISATION] [--json]
   backups check --file FILE                 prove a backup opens and PostgreSQL can read it
-  backups restore --file FILE [--id NEW-ID] [--name NAME] [--owner EMAIL]
+  backups restore --file FILE [--id NEW-ID] [--name NAME] [--owner EMAIL] [--other-key]
                                             restores as a new organisation (a copy); nothing is overwritten
-  backups decrypt --file FILE --out DUMP    a plain pg_dump file, for a database administrator
+  backups decrypt --file FILE --out DUMP [--other-key]
+                                            a plain pg_dump file, for a database administrator
+                                            --other-key: the backup was made on another server; its key
+                                            from TOHYEE_BACKUP_KEY or asked
+  backups key show                          the backup key, to save somewhere safe (not with the backups)
+  backups key check                         checks your saved copy (TOHYEE_BACKUP_KEY or asked)
 
 Updates
   updates check [--json]
@@ -417,6 +423,12 @@ async function email(command: string | undefined, args: string[]) {
   throw new UsageError(`Unknown email command${command ? ` "${command}"` : ""}.`);
 }
 
+/** With --other-key: the backup key of the server that made the backup. */
+async function otherKey(args: string[]): Promise<string | undefined> {
+  if (!flag(args, "other-key")) return undefined;
+  return secret("TOHYEE_BACKUP_KEY", "The backup key of the server that made this backup: ");
+}
+
 function megabytes(bytes: number | null): string {
   return bytes === null ? "" : `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
@@ -429,10 +441,12 @@ async function backups(command: string | undefined, args: string[]) {
   if (command === "status") {
     const settings = await getBackupSettings();
     const status = await backupStatus();
-    show(args, { settings, status }, () => {
+    const keyStatus = await backupKeyStatus();
+    show(args, { settings, keyStatus, status }, () => {
       console.log(`Nightly backups: ${settings.enabled ? `on, at ${settings.time} (${settings.timeZone})` : "off"}`);
       console.log(`Folder: ${settings.folder}${settings.folder === settings.defaultFolder ? " (the default)" : ""}`);
       if (!settings.keySet) console.log("TOHYEE_SECRET_KEY isn't set, so backups can't be made (they're encrypted with it).");
+      else if (!keyStatus.savedCopyCheckedAt) console.log("Nobody has checked a saved copy of the backup key yet. Without a copy, backups can't be opened if this server is lost: run backups key show.");
       console.log("");
       table(
         status.map((s) => ({
@@ -493,8 +507,11 @@ async function backups(command: string | undefined, args: string[]) {
     return;
   }
   if (command === "restore") {
+    const file = required(args, "file");
+    const key = await otherKey(args);
     const organisation = await restoreBackupAsCopy(COMMAND_LINE_ADMIN.user, {
-      file: required(args, "file"),
+      file,
+      key,
       id: option(args, "id") ?? undefined,
       displayName: option(args, "name") ?? undefined,
       ownerEmail: option(args, "owner") ?? undefined,
@@ -504,8 +521,31 @@ async function backups(command: string | undefined, args: string[]) {
   }
   if (command === "decrypt") {
     const out = required(args, "out");
-    const header = await decryptBackupTo(required(args, "file"), out);
+    const file = required(args, "file");
+    const header = await decryptBackupTo(file, out, await otherKey(args));
     console.log(`Wrote ${out}: a pg_dump (custom format) of ${header.databaseName}. Restore it with pg_restore. It isn't encrypted, so delete it when you're done.`);
+    return;
+  }
+  if (command === "key") {
+    const [what] = args;
+    if (what === "show") {
+      const { key, keyId } = await revealBackupKey(COMMAND_LINE_ADMIN, undefined);
+      console.log("The backup key (this server's TOHYEE_SECRET_KEY). Backups can only be opened with it.");
+      console.log("Save it somewhere safe that isn't the backup folder (a password manager), then run: backups key check");
+      console.log("");
+      console.log(key);
+      console.log("");
+      console.log(`Fingerprint: ${keyId}`);
+      return;
+    }
+    if (what === "check") {
+      const status = await checkSavedBackupKey(COMMAND_LINE_ADMIN, await secret("TOHYEE_BACKUP_KEY", "Paste your saved copy of the key: "));
+      console.log(`That's the right key (fingerprint ${status.keyId}). The reminder is off until the key changes.`);
+      return;
+    }
+    const status = await backupKeyStatus();
+    if (!status.keySet) console.log("TOHYEE_SECRET_KEY isn't set, so there's no backup key yet.");
+    else console.log(status.savedCopyCheckedAt ? `A saved copy was checked ${when(status.savedCopyCheckedAt)} by ${status.savedCopyCheckedByEmail}.` : "Nobody has checked a saved copy of this key yet: run backups key show, save it, then backups key check.");
     return;
   }
   throw new UsageError(`Unknown backups command${command ? ` "${command}"` : ""}.`);

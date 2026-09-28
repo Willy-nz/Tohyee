@@ -20,7 +20,10 @@ that something happened.
   chooses (a OneDrive folder gets copies off the computer); each checked after
   it's made; 14 daily and 12 monthly kept; failures retried hourly and
   emailed to server admins. **Restoring** makes a copy of the organisation, so
-  nothing is overwritten.
+  nothing is overwritten, and works on a new server given the old server's
+  key. **Keeping the key**: server admins can see the backup key (with their
+  password) and check a saved copy by pasting it back; they're reminded on
+  every page until someone has.
 - **Menus**: Home, Sales, Purchases, Reporting, Accounting, Tax and Contacts
   across the top, each opening to its overview, lists and settings; a ☰ menu
   with the same sections on phones, where line editors stack each line's
