@@ -6,7 +6,7 @@ import { Fragment, Suspense, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { CustomReportList, StartCustomReport } from "@/components/reports/custom-report";
-import { activeCategories, useTracking } from "@/components/tracking";
+import { reportCategories, useTracking } from "@/components/tracking";
 import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import type { ProfitAndLossSplit, SplitColumn, SplitGroup } from "@/lib/reports/financial";
@@ -251,7 +251,7 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
   const [from, setFrom] = useState<string | null>(null);
   const [to, setTo] = useState(todayInBrowser);
   const [splitBy, setSplitBy] = useState("");
-  const categories = activeCategories(useTracking(organisationId).data);
+  const categories = reportCategories(useTracking(organisationId).data);
   const splitting = categories.some((category) => category.id === splitBy) ? splitBy : "";
   const report = useApiData<ProfitAndLoss>(splitting ? null : "/api/reports/profit-and-loss", { organisationId, from, to });
   const split = useApiData<ProfitAndLossSplit>(splitting ? "/api/reports/profit-and-loss" : null, { organisationId, from, to, splitBy: splitting });

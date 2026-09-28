@@ -6,6 +6,7 @@ import { InOutCells, journalHref, LineDetails, LineStatusBadge, originLabel } fr
 import { Pager } from "@/components/bank/reconcile-panel";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -260,6 +261,7 @@ export function TransactionsPanel({ organisationId, account }: { organisationId:
   });
   const transfers = useApiData<{ transfers: BankTransfer[] }>("/api/bank-transfers", { organisationId, accountId: account.id, limit: 200 });
   const tracking = useTracking(organisationId);
+  const customSetup = useCustomFields(organisationId);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -292,12 +294,14 @@ export function TransactionsPanel({ organisationId, account }: { organisationId:
                   <td>
                     {transaction.contactName}
                     {transaction.reference ? <div className={ui.muted}>{transaction.reference}</div> : null}
+                    <CustomValuesText setup={customSetup.data} values={transaction.customFields} />
                   </td>
                   <td>
                     {transaction.lines.map((line) => (
                       <div key={line.lineOrder}>
                         {line.description} <span className={ui.muted}>({line.accountCode})</span>
                         <TrackingTagsText setup={tracking.data} tags={line.tracking} />
+                        <CustomValuesText setup={customSetup.data} values={line.customFields} />
                       </div>
                     ))}
                   </td>

@@ -26,6 +26,7 @@ export const PATCH = route<Context>(async (request, context) => {
       supplierInvoiceNumber: body.supplierInvoiceNumber,
       amountsMode: body.amountsMode,
       lines: body.lines,
+      customFields: body.customFields,
     }),
   );
   return json({ bill });

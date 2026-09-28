@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { Badge, Button, Field, Notice, Stat, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
@@ -22,6 +23,7 @@ import type { Invoice, InvoiceStatus } from "@/lib/invoices/service";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { dec, isDecimalString, mul, toPlainString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
+import { type CustomFieldSetup, type CustomValues } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 const STATUS_BADGES: Record<InvoiceStatus, { label: string; tone: "neutral" | "green" | "red" }> = {
@@ -64,6 +66,7 @@ type EditorLine = {
   accountCode: string;
   taxCode: string;
   tracking: TrackingTags;
+  customFields: CustomValues;
 };
 
 let lineKey = 0;
@@ -74,8 +77,8 @@ function nextLineKey(): number {
 
 type Defaults = { accountCode: string; taxCode: string };
 
-function blankLine(defaults: Defaults): EditorLine {
-  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", tracking: {}, ...defaults };
+function blankLine(defaults: Defaults, customFields: CustomValues = {}): EditorLine {
+  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", tracking: {}, customFields, ...defaults };
 }
 
 /** Invoice lines go to revenue accounts, the same rule the server checks. */
@@ -90,12 +93,13 @@ type FormProps = {
   customers: Contact[];
   taxCodes: TaxCode[];
   tracking: TrackingSetup;
+  customSetup: CustomFieldSetup;
   invoice?: Invoice;
   onSaved: (invoice: Invoice) => void;
   onCancel: () => void;
 };
 
-function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCodes, tracking, invoice, onSaved, onCancel }: FormProps) {
+function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCodes, tracking, customSetup, invoice, onSaved, onCancel }: FormProps) {
   const scale = currencyMinorUnits(baseCurrency);
   const activeTaxCodes = taxCodes.filter((taxCode) => taxCode.isActive);
   const defaults: Defaults = {
@@ -107,6 +111,10 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
   const [dueDate, setDueDate] = useState(invoice?.dueDate ?? "");
   const [reference, setReference] = useState(invoice?.reference ?? "");
   const [amountsMode, setAmountsMode] = useState<AmountsMode>(invoice?.amountsMode ?? "exclusive");
+  const lineDefaults = startingValues(customSetup, "line", ["invoice"]);
+  const [customFields, setCustomFields] = useState<CustomValues>(
+    () => invoice?.customFields ?? startingValues(customSetup, "document", ["invoice"]),
+  );
   const [lines, setLines] = useState<EditorLine[]>(() =>
     invoice
       ? invoice.lines.map((line) => ({
@@ -117,8 +125,9 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
           accountCode: line.accountCode,
           taxCode: line.taxCode ?? defaults.taxCode,
           tracking: line.tracking ?? {},
+          customFields: line.customFields ?? {},
         }))
-      : [blankLine(defaults)],
+      : [blankLine(defaults, lineDefaults)],
   );
   // One key per new invoice, so a double click or a retry can't save it twice.
   const [idempotencyKey] = useState(() => newIdempotencyKey("invoice"));
@@ -168,7 +177,9 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
         accountCode: line.accountCode,
         taxCode: hasTax ? line.taxCode || null : null,
         tracking: line.tracking,
+        customFields: line.customFields,
       })),
+      customFields,
     };
     try {
       const result = invoice
@@ -240,6 +251,7 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
           </select>
         </Field>
       </div>
+      <CustomFieldInputs setup={customSetup} record="document" uses={["invoice"]} value={customFields} onChange={setCustomFields} />
       <div className={ui.tableWrap}>
         <table className={`${ui.table} ${ui.stackOnPhone}`}>
           <thead>
@@ -307,6 +319,15 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
                     value={line.tracking}
                     onChange={(tags) => update(line.key, { tracking: tags })}
                   />
+                  <CustomFieldInputs
+                    compact
+                    setup={customSetup}
+                    record="line"
+                    uses={["invoice"]}
+                    labelPrefix={`Line ${index + 1}`}
+                    value={line.customFields}
+                    onChange={(values) => update(line.key, { customFields: values })}
+                  />
                 </td>
                 {hasTax ? (
                   <td data-label="Tax code">
@@ -346,7 +367,7 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
           <tfoot>
             <tr>
               <td colSpan={hasTax ? 8 : 6}>
-                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaults)])}>
+                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaults, lineDefaults)])}>
                   Add line
                 </Button>
               </td>
@@ -393,11 +414,12 @@ export function InvoiceEditor({
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
   const tracking = useTracking(organisationId);
-  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error;
+  const customSetup = useCustomFields(organisationId);
+  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error;
   if (error) {
     return <Notice tone="error">{error}</Notice>;
   }
-  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data) {
+  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data || !customSetup.data) {
     return <p className={ui.muted}>Loading…</p>;
   }
   return (
@@ -408,6 +430,7 @@ export function InvoiceEditor({
       customers={contacts.data.contacts}
       taxCodes={taxCodes.data.taxCodes}
       tracking={tracking.data}
+      customSetup={customSetup.data}
       invoice={invoice}
       onSaved={onSaved}
       onCancel={onCancel}

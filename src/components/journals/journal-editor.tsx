@@ -7,8 +7,10 @@ import { formatMoney, todayInBrowser } from "@/lib/format";
 import type { JournalWithLines } from "@/lib/ledger/journals";
 import { add, cmp, dec, isDecimalString, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { AccountSelect } from "@/components/books";
+import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { Button, Field, Notice, ui } from "@/components/ui";
+import type { CustomValues } from "@/lib/custom-fields/values";
 import type { TrackingTags } from "@/lib/tracking/service";
 
 type EditorLine = {
@@ -18,6 +20,8 @@ type EditorLine = {
   debit: string;
   credit: string;
   tracking: TrackingTags;
+  /** Undefined until the custom field set-up loads, then the line's values. */
+  customFields?: CustomValues;
 };
 
 let lineKey = 0;
@@ -53,6 +57,11 @@ export type JournalEditorProps = {
  */
 export function JournalEditor({ organisationId, accounts, mode, original, onDone, onCancel }: JournalEditorProps) {
   const tracking = useTracking(organisationId);
+  const customSetup = useCustomFields(organisationId);
+  // Before the set-up loads, new records have no defaults yet; they're filled in once it has.
+  const [customFields, setCustomFields] = useState<CustomValues | undefined>(original ? original.customFields : undefined);
+  const headerValues = customFields ?? startingValues(customSetup.data, "document", ["journal"]);
+  const lineValues = (line: EditorLine) => line.customFields ?? startingValues(customSetup.data, "line", ["journal"]);
   const [postingDate, setPostingDate] = useState(todayInBrowser);
   const [reference, setReference] = useState(original?.reference ?? "");
   const [description, setDescription] = useState(original?.description ?? "");
@@ -67,6 +76,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
             debit: /^0*(\.0*)?$/.test(line.debitAmount) ? "" : line.debitAmount,
             credit: /^0*(\.0*)?$/.test(line.creditAmount) ? "" : line.creditAmount,
             tracking: line.tracking ?? {},
+            customFields: line.customFields ?? {},
           };
         })
       : [blankLine(), blankLine()],
@@ -95,16 +105,18 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
         debitAmount: line.debit || null,
         creditAmount: line.credit || null,
         tracking: line.tracking,
+        customFields: lineValues(line),
       }));
     try {
       if (mode === "new") {
         const result = await api<{ journal: { id: string } }>("/api/ledger/journals", {
           method: "POST",
-          body: { organisationId, source: "ui", idempotencyKey, postingDate, reference, description, lines: payloadLines },
+          body: { organisationId, source: "ui", idempotencyKey, postingDate, reference, description, lines: payloadLines, customFields: headerValues },
         });
         setIdempotencyKey(newIdempotencyKey("journal"));
         setReference("");
         setDescription("");
+        setCustomFields(undefined);
         setLines([blankLine(), blankLine()]);
         onDone(result.journal.id);
       } else {
@@ -119,6 +131,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
             reference,
             description,
             lines: payloadLines,
+            customFields: headerValues,
           },
         });
         onDone(result.replacementJournal.id);
@@ -150,6 +163,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
           <input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} />
         </Field>
       </div>
+      <CustomFieldInputs setup={customSetup.data} record="document" uses={["journal"]} value={headerValues} onChange={setCustomFields} />
       <div className={ui.tableWrap}>
         <table className={`${ui.table} ${ui.stackOnPhone}`}>
           <thead>
@@ -180,6 +194,15 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
                     labelPrefix={`Line ${index + 1}`}
                     value={line.tracking}
                     onChange={(tags) => update(line.key, { tracking: tags })}
+                  />
+                  <CustomFieldInputs
+                    compact
+                    setup={customSetup.data}
+                    record="line"
+                    uses={["journal"]}
+                    labelPrefix={`Line ${index + 1}`}
+                    value={lineValues(line)}
+                    onChange={(values) => update(line.key, { customFields: values })}
                   />
                 </td>
                 <td data-label="Line description">

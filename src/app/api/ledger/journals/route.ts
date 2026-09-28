@@ -33,6 +33,7 @@ export const POST = route(async (request) => {
       description: body.description,
       currencyCode: body.currencyCode,
       lines: body.lines,
+      customFields: body.customFields,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

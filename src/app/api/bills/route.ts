@@ -33,6 +33,7 @@ export const POST = route(async (request) => {
       supplierInvoiceNumber: body.supplierInvoiceNumber,
       amountsMode: body.amountsMode,
       lines: body.lines,
+      customFields: body.customFields,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

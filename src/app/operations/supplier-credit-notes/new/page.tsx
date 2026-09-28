@@ -26,7 +26,9 @@ function fromBill(bill: Bill): SupplierCreditNoteStart {
       accountCode: line.accountCode,
       taxCode: line.taxCode,
       tracking: line.tracking,
+      customFields: line.customFields,
     })),
+    customFields: bill.customFields,
   };
 }
 

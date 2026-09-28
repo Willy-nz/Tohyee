@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
+import { CustomValueCell, listColumns, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
 import { InvoiceStatusBadge, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -28,6 +29,7 @@ function InvoiceList({ organisationId, filter }: { organisationId: string; filte
   const { status } = filter;
   const awaitingPayment = filter.awaitingPayment ? "true" : null;
   const list = useApiData<InvoicePage>("/api/invoices", { organisationId, status, awaitingPayment });
+  const columns = listColumns(useCustomFields(organisationId).data, "document", ["invoice"]);
   const [more, setMore] = useState<InvoicePage | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
 
@@ -67,6 +69,9 @@ function InvoiceList({ organisationId, filter }: { organisationId: string; filte
               <th>Date</th>
               <th>Due</th>
               <th>Reference</th>
+              {columns.map((field) => (
+                <th key={field.id}>{field.label}</th>
+              ))}
               <th>Status</th>
               <th>Payment</th>
               <th className={ui.num}>Total</th>
@@ -83,6 +88,9 @@ function InvoiceList({ organisationId, filter }: { organisationId: string; filte
                 <td>{formatDate(invoice.invoiceDate)}</td>
                 <td>{formatDate(invoice.dueDate)}</td>
                 <td className={ui.muted}>{invoice.reference}</td>
+                {columns.map((field) => (
+                  <CustomValueCell key={field.id} field={field} values={invoice.customFields} />
+                ))}
                 <td>
                   <InvoiceStatusBadge status={invoice.status} />
                 </td>
