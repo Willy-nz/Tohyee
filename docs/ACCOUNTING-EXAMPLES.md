@@ -622,6 +622,177 @@ steps it names.
 - **Correcting a supplier credit note or a refund**: their journals can't be
   corrected in the ledger. Void and enter them again.
 
+## Bank accounts, statements and reconciliation
+
+Bank accounts (type **bank**, an asset) and credit cards (type **credit
+card**, a liability) hold **statement lines**: what the bank says happened,
+brought in from an Akahu bank feed or an imported file. Statement lines are
+not ledger entries. Nothing is posted until a line is reconciled, and
+reconciling ties each line to journal lines on the same account.
+
+- A statement line has a date, an amount, a description and, when the bank
+  gives them, the payee, particulars, code, reference and running balance.
+  Its amount is from the account holder's point of view: **money in is
+  positive** (a deposit; on a credit card, a refund or a payment to the card)
+  and **money out is negative** (a withdrawal; on a credit card, a purchase).
+  Money in is a debit to the bank or credit card account; money out is a
+  credit.
+- Lines are **unreconciled**, **reconciled** or **excluded** (e.g. a
+  duplicate, or something that isn't the organisation's). Only unreconciled
+  lines count towards "reconcile N items". Deleting an import removes its
+  lines, and is refused while any of them is reconciled.
+- **Duplicates.** A line from a bank feed or an OFX file with the bank's own
+  transaction id is never added twice. Lines without one are compared on
+  date, amount, description and reference: an import adds a line only when
+  the file has more of that line than the account already has, so the same
+  file imported twice adds nothing and two genuine identical coffees on one
+  day are both kept. A line that matches a line from another source on date
+  and amount is added but flagged **possible duplicate**.
+- **Reconciling** a line ties it to one or more journal lines on the same
+  account whose amounts add up to the line's amount, dated within 60 days of
+  it. A journal line can be reconciled once. The journal lines come from:
+  - **matching** something already posted (a customer or supplier payment, a
+    refund, a transfer, a bank transaction or a manual journal): posts
+    nothing;
+  - **paying invoices or bills** from the line: records customer payments
+    (money in) or supplier payments (money out) dated the line date, into the
+    line's account, one per invoice or bill, adding up to the line's amount;
+  - a **bank transaction** (spend money for money out, receive money for money
+    in): a contact, lines with accounts, tax codes and amounts, tax exclusive,
+    inclusive or no tax (the invoice line maths). It posts one journal dated
+    the line date: for spend money Dr each line's account for its net amount
+    and Dr GST for the GST / Cr the bank or credit card account; receive
+    money is the other way round. It counts in the GST return like a bill
+    (spend) or an invoice (receive);
+  - a **transfer** to or from another bank or credit card account: Dr the
+    account the money went to / Cr the account it came from, dated the line
+    date. The other account's own statement line then matches the transfer.
+- **Unreconciling** puts the line back to unreconciled and posts nothing.
+  Payments, bank transactions and transfers made from the line stay; void them
+  separately. A payment, refund, bank transaction or transfer whose journal
+  line on a bank or credit card account is reconciled can't be voided
+  ("unreconcile it first").
+- **Bank rules** suggest a bank transaction for lines whose description,
+  payee, particulars, code or reference contains some text, optionally only
+  for money in or out and one account. A suggestion posts nothing until it's
+  confirmed.
+- Period locks apply to reconciling and unreconciling by the line's date,
+  even when nothing is posted, and to everything posted.
+- Bank transactions and transfers can't be edited. Voiding one (not while
+  reconciled) posts the exact reversal on the void date; a voided spend or
+  receive money counts again, the other way, in the GST return on its void
+  date.
+
+Setup: 1000 Business bank account (bank), 1010 Savings account (bank), 2400
+Credit card (credit card), tax code GST (15%), customer Kobe Ltd with
+INV-0001 = I1 (total 115.00, 10 May 2026), supplier Kauri Supplies with bill
+B1 (total 230.00, 10 May 2026), contact Z Energy.
+
+- **BK1** Importing this CSV into 1000 adds three unreconciled lines and posts
+  nothing:
+
+  ```
+  Date,Amount,Payee,Particulars,Code,Reference
+  20/05/2026,115.00,KOBE LTD,INV-0001,,
+  21/05/2026,-46.00,Z ENERGY,,,
+  22/05/2026,-500.00,TRANSFER,SAVINGS,,
+  ```
+
+  Dates are day first. 1000's "reconcile" count is **3**. The column layout
+  used (heading row, which column is which, date order, whether amounts are
+  flipped) is saved on 1000: the next CSV or Excel file with the same columns
+  is read with it, so a mapping chosen by hand sticks (a card export
+  `Date,Amount,Details` with 20.00 for a purchase, imported once with
+  "flip amounts", reads the next file's 15.00 as **-15.00**). A file whose
+  columns differ is read with a freshly worked-out layout.
+- **BK2** Importing the same file again adds **0** lines (3 duplicates). A
+  file with those three rows and one more adds **1**. A file with two
+  identical rows (21/05/2026, -4.50, CAFE) adds **2** the first time and
+  **0** the second.
+- **BK3** The same three transactions as an OFX file, a QIF file, an Excel
+  (.xlsx) file, an ISO 20022 CAMT.053 file and an MT940 file give the same
+  lines as BK1. OFX lines keep the bank's FITID, and importing OFX then the
+  CSV flags the CSV's lines as possible duplicates instead of skipping them.
+- **BK4** A customer payment of 115.00 into 1000 on 20 May against INV-0001
+  (Dr 1000 115.00 / Cr 1100 115.00) matches the BK1 line +115.00: nothing is
+  posted, the line is **reconciled**, the count is **2**. Matching it to a
+  journal line already reconciled, on another account, dated more than 60
+  days away, or not adding up to 115.00 is refused.
+- **BK5** From the +115.00 line with no payment yet, paying INV-0001 115.00
+  records a customer payment dated 20 May into 1000 (Dr 1000 115.00 /
+  Cr 1100 115.00) and reconciles the line; INV-0001 is **paid**. From a
+  -230.00 line, paying B1 records a supplier payment (Dr 2000 230.00 /
+  Cr 1000 230.00). Paying amounts that don't add up to the line is refused.
+- **BK6** From the -46.00 line, spend money to Z Energy, one line to 6120
+  Motor vehicle expenses, GST, tax inclusive, 46.00: GST **6.00**, net
+  **40.00**. Journal on 21 May: Dr 6120 40.00 / Dr 2100 6.00 / Cr 1000
+  46.00. The line is reconciled. It adds **46.00** to the May GST return's
+  Box 11 and **6.00** to its purchases GST.
+- **BK7** From a +57.50 line, receive money from Kobe Ltd, 4000 Sales, GST,
+  tax inclusive: Dr 1000 57.50 / Cr 4000 50.00 / Cr 2100 7.50, adding
+  **57.50** to Box 5. A +2.30 interest line, receive money to 4200 with no tax: Dr 1000
+  2.30 / Cr 4200 2.30, in no GST box.
+- **BK8** From the -500.00 line, a transfer to 1010: Dr 1010 500.00 / Cr 1000
+  500.00 on 22 May. A +500.00 line on 1010 matches the transfer's 1010
+  journal line (BK4).
+- **BK9** Credit card: a -86.25 line on 2400, spend money to 6130, GST,
+  inclusive: Dr 6130 75.00 / Dr 2100 11.25 / Cr 2400 86.25. Paying the card,
+  a -86.25 line on 1000 is a transfer to 2400: Dr 2400 86.25 / Cr 1000 86.25,
+  and the card's +86.25 line matches it. Supplier payments can be paid from a
+  credit card.
+- **BK10** A rule "description contains Z ENERGY, money out: spend money to Z
+  Energy, 6120, GST, inclusive" suggests the BK6 bank transaction for the
+  -46.00 line and posts nothing until it's confirmed.
+- **BK11** Unreconciling the BK6 line posts nothing; the line is unreconciled
+  again and the bank transaction stays. Voiding the bank transaction while it
+  was reconciled is refused; after unreconciling, voiding it posts Dr 1000
+  46.00 / Cr 6120 40.00 / Cr 2100 6.00 on the void date, which takes
+  **46.00** off Box 11 of the GST return covering the void date. The same "unreconcile it first" rule
+  stops voiding a reconciled customer payment.
+- **BK12** An unreconciled line can be excluded and brought back; a reconciled
+  line can't be excluded. Deleting the BK1 import is refused while one of its
+  lines is reconciled, and removes its lines once none is.
+- **BK13** Reconciling or unreconciling a line dated in a locked period is
+  refused, and nothing changes.
+- **BK14** Retrying an import, reconcile, bank transaction, transfer or void
+  with the same idempotency key and content returns the same result; the same
+  key with different content is refused (409).
+
+### Bank feeds (Akahu)
+
+Bank feeds come from Akahu (NZ open finance). A server admin sets up the
+Akahu app once for the server: its App ID token, and either a personal-app
+user token (the admin's own bank logins) or the App secret for Akahu's OAuth
+consent flow, where each organisation connects its own banks. Tokens are
+stored encrypted with the server's `TOHYEE_SECRET_KEY`. An organisation then
+links each Akahu account to one of its bank or credit card accounts, with a
+start date for the history to bring in.
+
+- Syncing reads settled transactions only (pending ones wait until they
+  settle) from two days before the last line it brought in (lines already
+  there are skipped by Akahu's id), or from the start date the first time, as far back as Akahu and the bank allow. Network calls
+  happen outside database transactions; each account's lines are then added
+  in one transaction.
+- Akahu's amount is signed the same way as statement lines (negative is money
+  out). Its date is converted to the New Zealand date. Particulars, code,
+  reference and the merchant name come across when Akahu has them.
+- Accounts sync on a schedule (every 6 hours by default) and on demand. A
+  failed sync keeps the error on the account and changes nothing.
+
+- **BK15** An Akahu account linked to 1000 with a start date of 1 May 2026
+  returns two settled transactions (-46.00 on 21 May, +115.00 on 20 May) and
+  one pending: two lines are added with Akahu's ids. Syncing again adds none.
+  A +115.00 line on 20 May already imported from a CSV is flagged as a
+  possible duplicate of the feed line.
+- **BK16** Akahu's balance for the account is kept as the statement balance
+  with its date, shown next to the ledger balance.
+
+### Not supported yet (refused rather than guessed)
+
+- **Foreign-currency bank accounts** can't take statement lines.
+- **Splitting a journal line** across several statement lines.
+- **Older Excel files** (.xls): save them as .xlsx or CSV.
+
 ## Reports
 
 The financial year ends on the last day of a month chosen in Settings
@@ -652,7 +823,9 @@ Box 9 and Box 13 adjustments.
     date);
   - a bill approved (+, on its bill date) or voided (-, on its void date);
   - a supplier credit note approved (-, on its date) or voided (+, on its
-    void date).
+    void date);
+  - spend or receive money posted (+, on its date; spend counts like a bill,
+    receive like an invoice) or voided (-, on its void date). See BK6, BK7.
 
   Drafts never count. Payments, refunds, credit applications, manual
   journals, stock movements and FX revaluations don't count.
