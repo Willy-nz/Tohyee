@@ -2,7 +2,8 @@ import type { Migration } from "@/lib/db/migrations/types";
 
 /**
  * Migrations for the core (control-plane) database named in DATABASE_URL.
- * It holds the organisation registry, users, sessions and memberships only.
+ * It holds the organisation registry, users, sessions, memberships and
+ * server-wide integration settings (the Akahu app for bank feeds) only.
  * No accounting data ever lives here; that belongs to each organisation's own
  * database (see tenant.ts).
  */
@@ -91,6 +92,22 @@ create trigger admin_audit_events_append_only
 create trigger admin_audit_events_no_truncate
   before truncate on admin_audit_events
   for each statement execute function toeyee_forbid_mutation();
+`,
+  },
+  {
+    version: "0002",
+    name: "server_settings",
+    sql: `
+-- Server-wide integration settings, set by server admins (e.g. the Akahu app
+-- used for bank feeds). Secrets are stored encrypted with TOHYEE_SECRET_KEY
+-- and never returned to the browser. No accounting data lives here.
+create table server_settings (
+  key text primary key check (key ~ '^[a-z][a-z0-9_]{0,62}$'),
+  value jsonb not null default '{}'::jsonb,
+  secret_ciphertext text,
+  updated_by_email text,
+  updated_at timestamptz not null default now()
+);
 `,
   },
 ];
