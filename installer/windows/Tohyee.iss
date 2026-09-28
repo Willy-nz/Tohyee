@@ -71,7 +71,7 @@ Filename: "{group}\Tohyee server settings.url"; Section: "InternetShortcut"; Key
 
 [Icons]
 Name: "{group}\Tohyee server settings"; Filename: "{app}\tray\TohyeeTray.exe"; Parameters: "--settings"; Comment: "Organisations, users, remote access, email and updates (this computer only)"
-Name: "{group}\Back up Tohyee"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\Backup-Tohyee.ps1"""; Comment: "Back up all Tohyee data to Documents\Tohyee backups"
+Name: "{group}\Back up Tohyee"; Filename: "{app}\tray\TohyeeTray.exe"; Parameters: "--back-up"; Comment: "Back up every organisation now, encrypted, to the backup folder (sign in first)"
 Name: "{group}\Tohyee logs"; Filename: "{commonappdata}\Tohyee\logs"
 Name: "{group}\Uninstall Tohyee"; Filename: "{uninstallexe}"
 

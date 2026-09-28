@@ -134,8 +134,9 @@ it. It installs Tohyee with its own PostgreSQL (nothing else to install) as
 two Windows services, `Tohyee` and `TohyeePostgres`, that start whenever the
 computer starts, even before anyone signs in. The last page of the installer
 shows the setup token for creating the first admin login. Open Tohyee at
-http://localhost:3000 (Start menu: **Open Tohyee**); **Back up Tohyee** in the
-Start menu saves everything to `Documents\Tohyee backups`. Data and settings
+http://localhost:3000 (Start menu: **Open Tohyee**). Backups run every night,
+encrypted; **Back up Tohyee** in the Start menu (or **Back up now** in the
+tray icon's menu) runs them straight away. Data and settings
 live in `%ProgramData%\Tohyee` and are kept when you update or uninstall.
 The installer is built and tested on Windows by
 `.github/workflows/windows-installer.yml` from [`installer/windows`](installer/windows).

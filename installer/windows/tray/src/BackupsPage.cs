@@ -214,7 +214,8 @@ namespace Tohyee.Tray
             }
         }
 
-        private async Task BackUpNow()
+        /// <summary>Backs up every organisation (and the server's own database) now, encrypted, into the backup folder.</summary>
+        internal async Task BackUpNow()
         {
             Ui.Show(_message, "Backing up… this can take a few minutes.", false);
             if (await Ui.Busy(this, _message, async () =>

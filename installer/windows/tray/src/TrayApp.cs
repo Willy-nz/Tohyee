@@ -45,7 +45,7 @@ namespace Tohyee.Tray
         private string _version;
         private bool _checking;
 
-        public TrayApp(TraySettings settings, bool openSettings)
+        public TrayApp(TraySettings settings, bool openSettings, bool backUp = false)
         {
             _settings = settings;
             _api = new TohyeeApi(settings.AdminUrl);
@@ -60,7 +60,7 @@ namespace Tohyee.Tray
             menu.Items.Add(new ToolStripMenuItem("Server settings…", null, (s, e) => ShowSettings()));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem("Restart Tohyee", null, (s, e) => RestartServices()));
-            menu.Items.Add(new ToolStripMenuItem("Back up now", null, (s, e) => BackUp()));
+            menu.Items.Add(new ToolStripMenuItem("Back up now", null, (s, e) => BackUpNow()));
             menu.Items.Add(new ToolStripMenuItem("Open the logs folder", null, (s, e) => OpenFolder(_settings.LogsDir)));
             menu.Items.Add(new ToolStripSeparator());
             _startWithWindowsItem = new ToolStripMenuItem("Start when I sign in to Windows", null, (s, e) => ToggleStartWithWindows()) { Checked = StartsWithWindows() };
@@ -83,7 +83,8 @@ namespace Tohyee.Tray
             _timer.Tick += async (s, e) => await Check();
             _timer.Start();
             Forget(Check());
-            if (openSettings) ShowSettings();
+            if (backUp) BackUpNow();
+            else if (openSettings) ShowSettings();
         }
 
         // ------------------------------------------------------------ status
@@ -252,15 +253,11 @@ namespace Tohyee.Tray
             RunElevated("-NoProfile -Command \"Restart-Service -Name TohyeePostgres -Force; Restart-Service -Name Tohyee -Force\"");
         }
 
-        private void BackUp()
+        /// <summary>Encrypted backups of every organisation now, in the server settings window (after signing in).</summary>
+        public void BackUpNow()
         {
-            var script = Path.Combine(_settings.InstallDir, "scripts", "Backup-Tohyee.ps1");
-            if (!File.Exists(script))
-            {
-                MessageBox.Show("The backup script isn't installed (" + script + ").", "Tohyee", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            RunElevated("-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\"");
+            ShowSettings();
+            _settingsForm.BackUpNow();
         }
 
         private static void RunElevated(string powershellArguments)
