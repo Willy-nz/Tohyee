@@ -118,6 +118,18 @@ try {
   Write-Host "Organisation: $($created.organisation.provisioningStatus), schema $($created.organisation.schemaVersion)"
   if ($created.organisation.provisioningStatus -ne 'ready') { throw 'The organisation was not provisioned.' }
 
+  Write-Host '== Backups (the bundled pg_dump and pg_restore) and a restore as a copy'
+  $backups = Invoke-RestMethod -Uri "$adminUrl/api/admin/backups" -Method Post -ContentType 'application/json' -Headers $adminOrigin -Body '{}' -WebSession $session -TimeoutSec 600
+  $backups.runs | ForEach-Object { Write-Host "  $($_.organisationId): $($_.status) $($_.filePath) $($_.error)" }
+  if (@($backups.runs | Where-Object { $_.status -ne 'ok' }).Count -ne 0 -or @($backups.runs).Count -ne 2) { throw 'The backups did not all succeed.' }
+  $listed = Invoke-RestMethod -Uri "$adminUrl/api/admin/backups" -WebSession $session
+  if ($listed.settings.folder -ne (Join-Path $dataRoot 'backups')) { throw "Unexpected backup folder $($listed.settings.folder)." }
+  $ciFile = @($listed.files | Where-Object { $_.header.organisationId -eq 'ci' })[0].name
+  $restoreBody = @{ file = $ciFile; id = 'ci-restored' } | ConvertTo-Json
+  $restored = Invoke-RestMethod -Uri "$adminUrl/api/admin/backups/restore" -Method Post -ContentType 'application/json' -Headers $adminOrigin -Body $restoreBody -WebSession $session -TimeoutSec 600
+  Write-Host "Restored: $($restored.organisation.id), $($restored.organisation.provisioningStatus)"
+  if ($restored.organisation.provisioningStatus -ne 'ready') { throw 'The restored copy is not ready.' }
+
   Write-Host '== The Tohyee server app (tray icon and server settings)'
   $trayExe = Join-Path $installDir 'tray\TohyeeTray.exe'
   if (-not (Test-Path $trayExe)) { throw 'TohyeeTray.exe was not installed.' }
@@ -157,7 +169,9 @@ try {
   $backup = @{ code = $enrolled.backupCodes[0] } | ConvertTo-Json
   Invoke-RestMethod -Uri "$url/api/auth/two-step/verify" -Method Post -ContentType 'application/json' -Headers $origin -Body $backup -WebSession $again | Out-Null
   $me = Invoke-RestMethod -Uri "$url/api/auth/session" -WebSession $again
-  if ($me.organisations.Count -ne 1) { throw 'The organisation was not there after the update.' }
+  # Both the organisation and its restored copy (from the backup test above) are kept.
+  $ids = @($me.organisations | ForEach-Object { $_.id })
+  if (-not ($ids -contains 'ci') -or -not ($ids -contains 'ci-restored')) { throw "The organisations were not there after the update (found: $($ids -join ', '))." }
   Write-Host 'Signed in (password and backup code) after the update: data kept.'
   $cloudflared = Join-Path $installDir 'cloudflared\cloudflared.exe'
   if (-not (Test-Path $cloudflared)) { throw 'cloudflared.exe was not installed.' }

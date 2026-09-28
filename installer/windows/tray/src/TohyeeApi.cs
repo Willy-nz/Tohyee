@@ -39,7 +39,7 @@ namespace Tohyee.Tray
         {
             _baseUrl = baseUrl.TrimEnd('/');
             var handler = new HttpClientHandler { CookieContainer = _cookies, UseCookies = true, AllowAutoRedirect = false, UseProxy = false };
-            _client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) };
+            _client = new HttpClient(handler) { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
             // The server checks that changes come from its own address.
             _client.DefaultRequestHeaders.Add("Origin", _baseUrl);
             _client.DefaultRequestHeaders.UserAgent.ParseAdd("TohyeeTray/1.0");
@@ -53,6 +53,12 @@ namespace Tohyee.Tray
         public Task<Dictionary<string, object>> Post(string path, object body)
         {
             return Send(HttpMethod.Post, path, body ?? new Dictionary<string, object>());
+        }
+
+        /// <summary>A POST that may take a while (a backup or a restore): waits up to 30 minutes.</summary>
+        public Task<Dictionary<string, object>> PostLong(string path, object body)
+        {
+            return Send(HttpMethod.Post, path, body ?? new Dictionary<string, object>(), TimeSpan.FromMinutes(30));
         }
 
         public Task<Dictionary<string, object>> Put(string path, object body)
@@ -70,8 +76,14 @@ namespace Tohyee.Tray
             return Send(HttpMethod.Delete, path, null);
         }
 
-        private async Task<Dictionary<string, object>> Send(HttpMethod method, string path, object body)
+        private Task<Dictionary<string, object>> Send(HttpMethod method, string path, object body)
         {
+            return Send(method, path, body, TimeSpan.FromSeconds(60));
+        }
+
+        private async Task<Dictionary<string, object>> Send(HttpMethod method, string path, object body, TimeSpan timeout)
+        {
+            using (var cancel = new System.Threading.CancellationTokenSource(timeout))
             using (var request = new HttpRequestMessage(method, _baseUrl + path))
             {
                 if (body != null)
@@ -81,7 +93,7 @@ namespace Tohyee.Tray
                 HttpResponseMessage response;
                 try
                 {
-                    response = await _client.SendAsync(request).ConfigureAwait(false);
+                    response = await _client.SendAsync(request, cancel.Token).ConfigureAwait(false);
                 }
                 catch (HttpRequestException)
                 {
@@ -171,6 +183,20 @@ namespace Tohyee.Tray
         {
             object value;
             return obj != null && obj.TryGetValue(key, out value) && value is bool && (bool)value;
+        }
+
+        public static double Num(Dictionary<string, object> obj, string key)
+        {
+            object value;
+            if (obj == null || !obj.TryGetValue(key, out value) || value == null) return 0;
+            try
+            {
+                return Convert.ToDouble(value, CultureInfo.InvariantCulture);
+            }
+            catch (FormatException)
+            {
+                return 0;
+            }
         }
 
         public static int Int(Dictionary<string, object> obj, string key)

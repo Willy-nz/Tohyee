@@ -134,8 +134,9 @@ it. It installs Tohyee with its own PostgreSQL (nothing else to install) as
 two Windows services, `Tohyee` and `TohyeePostgres`, that start whenever the
 computer starts, even before anyone signs in. The last page of the installer
 shows the setup token for creating the first admin login. Open Tohyee at
-http://localhost:3000 (Start menu: **Open Tohyee**); **Back up Tohyee** in the
-Start menu saves everything to `Documents\Tohyee backups`. Data and settings
+http://localhost:3000 (Start menu: **Open Tohyee**). Backups run every night,
+encrypted; **Back up Tohyee** in the Start menu (or **Back up now** in the
+tray icon's menu) runs them straight away. Data and settings
 live in `%ProgramData%\Tohyee` and are kept when you update or uninstall.
 The installer is built and tested on Windows by
 `.github/workflows/windows-installer.yml` from [`installer/windows`](installer/windows).
@@ -168,9 +169,21 @@ the server settings too, for security alerts and lost-phone reset links. The Win
 installer and Docker image include Cloudflare's `cloudflared`; on Linux,
 install it or set `TOHYEE_CLOUDFLARED_PATH`.
 
-**Backups:** each organisation is a normal PostgreSQL database, so
-`pg_dump -Fc -d tohyee_org_<id>` backs one up. Back up the core database
-(`tohyee`) too. Built-in scheduled backups are on the roadmap.
+**Backups:** every night (2am by default) Tohyee backs up each organisation,
+and its own database of users and settings, into files in the backup folder:
+one sub-folder per organisation, encrypted with the server's
+`TOHYEE_SECRET_KEY`, each checked after it's written, keeping the last 14
+daily and 12 monthly backups. Point the folder at a OneDrive (or other
+cloud-synced) folder to get copies off the computer. Restoring makes a copy of
+the organisation, with the same people, so the current books are never
+overwritten. It's all in the server settings under **Backups** (or
+`backups ...` in the command-line tool). **Keep a copy of the backup key
+somewhere safe that isn't the backup folder**: without it the backups can't be
+opened. The server app's Backups tab shows the key (after your password) and
+checks your saved copy when you paste it back; until someone has, server admins
+see a reminder on every page. To restore on a new server, give the old
+server's key when restoring (the new server keeps its own). pg_dump and pg_restore come with the Windows installer and the Docker
+image; elsewhere they need to be on the PATH (or set `TOHYEE_PG_BIN`).
 
 ### Server settings from the command line
 

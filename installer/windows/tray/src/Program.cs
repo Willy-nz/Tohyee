@@ -12,10 +12,12 @@ namespace Tohyee.Tray
     {
         private const string MutexName = @"Local\TohyeeTray";
         private const string ShowEventName = @"Local\TohyeeTray.ShowSettings";
+        private const string BackUpEventName = @"Local\TohyeeTray.BackUpNow";
 
         /// <summary>
         ///   TohyeeTray.exe               the tray icon (started when you sign in to Windows)
         ///   TohyeeTray.exe --settings    the tray icon, with the server settings window open
+        ///   TohyeeTray.exe --back-up     the same, backing up every organisation now (Start menu: Back up Tohyee)
         ///   TohyeeTray.exe --self-test &lt;file&gt;   checks it can reach Tohyee (used by the installer test)
         /// </summary>
         [STAThread]
@@ -27,21 +29,24 @@ namespace Tohyee.Tray
                 return SelfTest(settings, args.Length >= 2 ? args[1] : null);
             }
             var openSettings = args.Contains("--settings");
+            var backUp = args.Contains("--back-up");
 
             bool first;
             using (var mutex = new Mutex(true, MutexName, out first))
             using (var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName))
+            using (var backUpEvent = new EventWaitHandle(false, EventResetMode.AutoReset, BackUpEventName))
             {
                 if (!first)
                 {
-                    // Already running: ask it to open the settings window.
-                    if (openSettings) showEvent.Set();
+                    // Already running: ask it to open the settings window (and back up).
+                    if (backUp) backUpEvent.Set();
+                    else if (openSettings) showEvent.Set();
                     return 0;
                 }
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                using (var app = new TrayApp(settings, openSettings))
+                using (var app = new TrayApp(settings, openSettings, backUp))
                 {
                     var context = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
                     var listener = new Thread(() =>
@@ -53,6 +58,15 @@ namespace Tohyee.Tray
                     })
                     { IsBackground = true };
                     listener.Start();
+                    var backUpListener = new Thread(() =>
+                    {
+                        while (backUpEvent.WaitOne())
+                        {
+                            context.Post(_ => app.BackUpNow(), null);
+                        }
+                    })
+                    { IsBackground = true };
+                    backUpListener.Start();
                     Application.Run(app);
                 }
                 GC.KeepAlive(mutex);

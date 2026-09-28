@@ -14,8 +14,13 @@ in as a server admin with two-step sign-in. There's no browser involved.
   app's menu turns that off and on).
 - It reads the ports from `%ProgramData%\Tohyee\tray.ini`, which the
   installer writes (defaults: 3000 for the books, 3001 for server settings).
-- Restarting the services and backing up ask Windows for permission (UAC);
-  the app itself runs as you.
+- Restarting the services asks Windows for permission (UAC); the app itself
+  runs as you. The tray menu's "Back up now" (and the Start menu's "Back up
+  Tohyee", `TohyeeTray.exe --back-up`) opens the Backups tab, after signing
+  in, and runs the encrypted backups straight away. The **Backups** tab is the built-in
+  nightly backups: settings, status, back up now, restore as a copy, and the
+  backup key (show it with your password, check your saved copy). Until a
+  saved copy has been checked, the window opens on Backups with a reminder.
 - `TohyeeTray.exe --self-test <file>` checks it can reach Tohyee (the
   installer's CI test runs it, signed in with a test login).
 

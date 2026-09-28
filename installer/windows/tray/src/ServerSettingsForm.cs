@@ -15,6 +15,10 @@ namespace Tohyee.Tray
         private readonly TraySettings _settings;
         private readonly Panel _body = new Panel { Dock = DockStyle.Fill };
         private readonly Label _who = new Label { AutoSize = true, ForeColor = Color.White, Anchor = AnchorStyles.Right };
+        private TabControl _tabs;
+        private TabPage _backupsTab;
+        private BackupsPage _backupsPage;
+        private bool _backUpWhenSignedIn;
 
         public ServerSettingsForm(TohyeeApi api, TraySettings settings)
         {
@@ -64,6 +68,9 @@ namespace Tohyee.Tray
             tabs.TabPages.Add(Tab("Users", new UsersPage(_api)));
             tabs.TabPages.Add(Tab("Remote access", new RemoteAccessPage(_api)));
             tabs.TabPages.Add(Tab("Email", new EmailPage(_api)));
+            var backupsPage = new BackupsPage(_api);
+            var backupsTab = Tab("Backups", backupsPage);
+            tabs.TabPages.Add(backupsTab);
             tabs.TabPages.Add(Tab("Updates", new UpdatesPage(_api)));
 
             var signOut = Ui.Btn("Sign out", async (s, e) =>
@@ -79,6 +86,52 @@ namespace Tohyee.Tray
             panel.Controls.Add(tabs);
             panel.Controls.Add(bottom);
             Swap(panel);
+            _tabs = tabs;
+            _backupsTab = backupsTab;
+            _backupsPage = backupsPage;
+            RemindAboutBackupKey(tabs, backupsTab);
+            if (_backUpWhenSignedIn)
+            {
+                _backUpWhenSignedIn = false;
+                StartBackUp();
+            }
+        }
+
+        /// <summary>
+        /// The tray menu's and Start menu's "Back up now": the same encrypted
+        /// backups as the nightly ones, run straight away on the Backups tab.
+        /// Signing in comes first if needed.
+        /// </summary>
+        public void BackUpNow()
+        {
+            if (_backupsPage != null && !_backupsPage.IsDisposed) StartBackUp();
+            else _backUpWhenSignedIn = true;
+        }
+
+        private void StartBackUp()
+        {
+            _tabs.SelectedTab = _backupsTab;
+            var page = _backupsPage;
+            BeginInvoke((Action)(async () => await page.BackUpNow()));
+        }
+
+        /// <summary>Until a saved copy of the backup key has been checked, open on the Backups tab and say why.</summary>
+        private async void RemindAboutBackupKey(TabControl tabs, TabPage backupsTab)
+        {
+            try
+            {
+                var result = await _api.Get("/api/admin/backups");
+                var keyStatus = J.Obj(result, "keyStatus");
+                if (!J.Bool(keyStatus, "keySet") || J.Str(keyStatus, "savedCopyCheckedAt") != null || tabs.IsDisposed) return;
+                tabs.SelectedTab = backupsTab;
+                MessageBox.Show(this,
+                    "Save a copy of your backup key.\n\nBackups can only be opened with it, so if this computer is lost or rebuilt without a copy, the backups can't be restored. Use \"Show the key\", save it in a password manager, then \"Check my saved copy\".",
+                    "Tohyee", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (ApiException)
+            {
+                // The Backups tab shows the problem itself.
+            }
         }
 
         private static TabPage Tab(string title, Control page)
