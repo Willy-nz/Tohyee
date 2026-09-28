@@ -13,9 +13,7 @@ type Context = { params: Promise<{ accountId: string }> };
 export const POST = route<Context>(async (request, context) => {
   const { accountId } = await context.params;
   const body = await readJson(request);
-  const { credentials, connectionId } = await withOrganisation(request, body.organisationId, "admin", (tx, { auth }) =>
-    akahuCredentialsFor(tx, auth),
-  );
+  const credentials = await withOrganisation(request, body.organisationId, "admin", (tx) => akahuCredentialsFor(tx));
   let accounts;
   try {
     accounts = await listAkahuAccounts(credentials);
@@ -30,7 +28,6 @@ export const POST = route<Context>(async (request, context) => {
       akahuAccountName: [akahuAccount.name, akahuAccount.formatted_account].filter(Boolean).join(" · "),
       connectionName: akahuAccount.connection?.name ?? null,
       startDate: body.startDate,
-      connectionId,
     }),
   );
   return json({ linked: true }, { status: 201 });
