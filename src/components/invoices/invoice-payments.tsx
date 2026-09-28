@@ -11,8 +11,19 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import type { CustomerPayment } from "@/lib/invoices/payments";
 import type { Invoice } from "@/lib/invoices/service";
+import { dec, isPositive, sub, toPlainString } from "@/lib/money/decimal";
 
 type PaymentResult = { payment: CustomerPayment; invoice: Invoice };
+
+/** How much an amount typed in is over what's due, or null if it isn't (or isn't a number yet). */
+function amountBeyondDue(amount: string, due: string): string | null {
+  try {
+    const extra = sub(dec(amount.trim()), dec(due));
+    return isPositive(extra) ? toPlainString(extra) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Amounts arrive as fixed strings like "0.00". */
 function isZeroAmount(amount: string): boolean {
@@ -56,6 +67,17 @@ function RecordPaymentForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const extra = amountBeyondDue(fields.amount, invoice.amountDue ?? "0");
+    if (
+      extra !== null &&
+      !window.confirm(
+        invoice.paidStatus === "paid"
+          ? `${invoice.invoiceNumber} is already paid. Record ${formatMoney(fields.amount)} anyway? All of it will be kept as credit for ${invoice.contactName}, to apply to their other invoices or refund.`
+          : `This is ${formatMoney(extra)} more than is due. Record it? The extra will be kept as credit for ${invoice.contactName}, to apply to their other invoices or refund.`,
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -228,7 +250,8 @@ export function InvoicePayments({
   });
   const [voiding, setVoiding] = useState<CustomerPayment | null>(null);
   const bookkeeper = can("bookkeeper");
-  const canRecord = bookkeeper && invoice.status === "approved" && invoice.paidStatus !== "paid";
+  // A paid invoice can still take a payment (example OP4: the customer paid twice); it's all kept as credit.
+  const canRecord = bookkeeper && invoice.status === "approved";
   const payments = list.data?.payments ?? [];
 
   return (
