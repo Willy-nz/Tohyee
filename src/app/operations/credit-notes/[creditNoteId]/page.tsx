@@ -14,6 +14,7 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { CreditNote } from "@/lib/credit-notes/service";
 import { formatDate, formatDateTime, formatQuantity, todayInBrowser } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
+import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
@@ -294,6 +295,12 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
       {can("bookkeeper") ? (
         <CreditNoteActions key={creditNote.status} organisationId={organisationId} creditNote={creditNote} onChanged={onChanged} />
       ) : null}
+      <RecordExtrasPanel
+        key={`${creditNote.status}-${message ?? ""}`}
+        organisationId={organisationId}
+        recordType="sales_credit_note"
+        recordId={creditNote.id}
+      />
       <p>
         <Link href="/operations/credit-notes">Back to credit notes</Link>
       </p>

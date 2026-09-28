@@ -99,6 +99,12 @@ that something happened.
   note with active applications or refunds, or a bill with credit applied,
   can't be voided. Period locks apply to every step; every command is
   idempotent. See examples SCN1-SCN12.
+- **Notes, files and history** on journals, sales invoices, bills, sales
+  credit notes, supplier credit notes and contacts: notes that their author
+  or an admin can edit or delete (the history keeps the old text), files
+  (PDF, JPG, PNG, HEIC, Word, Excel, CSV, up to 10 MB each) stored in the
+  organisation's own database, and a history of who did what and when,
+  including payments, credit and refunds. See examples NF1-NF14.
 - **GST basis** setting (invoice, payments or hybrid), used by the GST
   return.
 - **GST return** (NZ GST101A, boxes 5-15) on the invoice, payments or hybrid
@@ -157,7 +163,6 @@ isn't acceptable, because people would trust it:
 - backups, restores and restore activation
 - update runs and recovery incidents
 - export jobs and downloads
-- attachments
 - job executions
 - AI suggestions
 - import staging (other than bank statements)

@@ -61,6 +61,9 @@ own.
   with GST, or a transfer. Bank rules fill in the usual ones.
 - **Stock**: receipts, sales, returns, stocktake adjustments and landed cost,
   with weighted-average costing to the cent.
+- **Notes, files and history** on journals, invoices, bills, credit notes and
+  contacts: attach receipts and statements (stored in the organisation's own
+  database, so backups include them) and see who did what and when.
 - **Foreign-currency revaluation** of foreign-currency bank, asset and
   liability accounts, reversed automatically the next day.
 - **Reports**: trial balance, profit and loss, balance sheet and stock
@@ -208,6 +211,7 @@ the `Origin` and `Sec-Fetch-Site` headers).
 | Stock | `GET/POST /api/inventory/movements` |
 | Reports | `GET /api/reports/trial-balance`, `/profit-and-loss`, `/balance-sheet`, `/inventory-valuation` |
 | GST return | `GET/POST /api/reports/gst-return` (`?periodStart=&periodEnd=`; `POST` works it out with `adjustments`), `GET/POST /api/gst-returns` (`POST` marks a return as filed, admins), `GET /api/gst-returns/:id` |
+| Notes, files and history | `GET /api/records/:type/:id` (type: `journal`, `invoice`, `bill`, `credit-note`, `supplier-credit-note`, `contact`), `POST /api/records/:type/:id/notes`, `PATCH/DELETE /api/records/:type/:id/notes/:noteId`, `POST /api/records/:type/:id/attachments` (multipart `file`), `GET/DELETE /api/records/:type/:id/attachments/:attachmentId` |
 | Tax | `GET/POST /api/tax/codes` |
 | Health | `GET /api/health` |
 

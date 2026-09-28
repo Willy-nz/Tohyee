@@ -53,6 +53,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bank_transactions, bank_transaction_lines   spend and receive money
 ├─ bank_transfers         money moved between bank and card accounts
 ├─ bank_rules             text to look for, and the bank transaction to suggest
+├─ record_notes, record_attachments   notes and files on journals, documents and contacts
 └─ audit_events
 ```
 
@@ -185,9 +186,9 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports, the GST return and filed GST returns |
-| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments; save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds |
-| admin | + chart of accounts, tax codes, period locks, settings, people; mark GST returns as filed |
+| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports, the GST return and filed GST returns; read notes, download files and see the history |
+| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments; save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; add notes and files, and edit, delete or remove their own |
+| admin | + chart of accounts, tax codes, period locks, settings, people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
 People who aren't members get "not found", so organisation IDs can't be
@@ -205,6 +206,13 @@ Enforced by the database itself, not just the app:
   `inventory_movements`, FX revaluation runs and `audit_events` reject
   `UPDATE`, `DELETE` and `TRUNCATE`. Corrections are new rows.
 - Stock on hand and carrying value can't go negative.
+- Notes and files (examples NF1-NF14) post nothing. Files are stored in the
+  organisation's own database (`record_attachments.content`), so its backup
+  includes them; the type is checked from the contents as well as the name.
+  `record_notes` and `record_attachments` reject `DELETE` and `TRUNCATE`: a
+  deleted note keeps its row, and removing a file clears only its contents
+  (and can't be undone). Every add, edit and delete goes to `audit_events`
+  with the old text, which is where a record's history comes from.
 - Contacts are archived, never deleted: `contacts` rejects `DELETE` and
   `TRUNCATE`, and no two active contacts share a name (ignoring case).
 - Sales invoices: only drafts can be changed or deleted. An approved invoice

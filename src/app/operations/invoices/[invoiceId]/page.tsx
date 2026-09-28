@@ -17,6 +17,7 @@ import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { OverpaymentApplication } from "@/lib/invoices/overpayments";
 import type { CustomerPayment } from "@/lib/invoices/payments";
 import type { Invoice } from "@/lib/invoices/service";
+import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
@@ -431,6 +432,12 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           }}
         />
       ) : null}
+      <RecordExtrasPanel
+        key={`${invoice.status}-${message ?? ""}`}
+        organisationId={organisationId}
+        recordType="sales_invoice"
+        recordId={invoice.id}
+      />
       <p>
         <Link href="/operations/invoices">Back to invoices</Link>
       </p>

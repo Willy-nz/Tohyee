@@ -36,6 +36,7 @@ import {
   requireOneOf,
   requireString,
 } from "@/lib/validation";
+import { removeRecordExtras } from "@/lib/records/extras";
 
 /**
  * Sales invoices. A draft can be edited and deleted and posts nothing.
@@ -770,6 +771,8 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
 export async function deleteInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise<void> {
   const current = await lockInvoice(tx, requireId(invoiceIdInput, "invoiceId"));
   assertDraft(current, "deleted");
+  // Its notes and files go with it (NF12).
+  await removeRecordExtras(tx, "sales_invoice", current.id);
   await tx.query("delete from sales_invoice_lines where invoice_id = $1", [current.id]);
   await tx.query("delete from sales_invoices where id = $1", [current.id]);
   await writeAuditEvent(tx, {

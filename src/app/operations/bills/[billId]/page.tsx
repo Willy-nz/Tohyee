@@ -16,6 +16,7 @@ import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { SupplierCreditNoteApplication } from "@/lib/supplier-credit-notes/applications";
 import type { SupplierCreditNoteSummary } from "@/lib/supplier-credit-notes/service";
+import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
@@ -375,6 +376,12 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           }}
         />
       ) : null}
+      <RecordExtrasPanel
+        key={`${bill.status}-${message ?? ""}`}
+        organisationId={organisationId}
+        recordType="bill"
+        recordId={bill.id}
+      />
       <p>
         <Link href="/operations/bills">Back to bills</Link>
       </p>

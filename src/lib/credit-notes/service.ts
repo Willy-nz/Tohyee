@@ -37,6 +37,7 @@ import {
   requireOneOf,
   requireString,
 } from "@/lib/validation";
+import { removeRecordExtras } from "@/lib/records/extras";
 
 /**
  * Sales credit notes. A draft can be edited and deleted and posts nothing.
@@ -773,6 +774,8 @@ export async function updateCreditNote(
 export async function deleteCreditNote(tx: OrgTx, creditNoteIdInput: unknown): Promise<void> {
   const current = await lockCreditNote(tx, requireId(creditNoteIdInput, "creditNoteId"));
   assertDraft(current, "deleted");
+  // Its notes and files go with it (NF12).
+  await removeRecordExtras(tx, "sales_credit_note", current.id);
   await tx.query("delete from sales_credit_note_lines where credit_note_id = $1", [current.id]);
   await tx.query("delete from sales_credit_notes where id = $1", [current.id]);
   await writeAuditEvent(tx, {
