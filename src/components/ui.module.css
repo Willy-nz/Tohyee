@@ -364,3 +364,15 @@
 .inlineForm > .field {
   min-width: 160px;
 }
+
+/* A button that reads like a link, e.g. an amount that fills in a box when clicked. */
+.linkButton {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
