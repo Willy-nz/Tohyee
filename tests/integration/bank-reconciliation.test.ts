@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import * as reconcileRoute from "@/app/api/statement-lines/[lineId]/reconcile/route";
 import * as linesRoute from "@/app/api/bank-accounts/[accountId]/statement-lines/route";
 import * as importsRoute from "@/app/api/bank-accounts/[accountId]/imports/route";
-import * as adminFeedsRoute from "@/app/api/admin/bank-feeds/route";
+import * as akahuSettingsRoute from "@/app/api/bank-feeds/akahu/settings/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import {
   createBankAccount,
@@ -15,7 +15,7 @@ import {
   type StatementLine,
 } from "@/lib/bank/accounts";
 import { setAkahuFetchForTests } from "@/lib/bank/akahu/client";
-import { linkBankFeed, updateAkahuServerSettings } from "@/lib/bank/akahu/settings";
+import { linkBankFeed } from "@/lib/bank/akahu/settings";
 import { syncBankFeedAccount } from "@/lib/bank/akahu/sync";
 import { deleteImport, importStatementFile, previewImport } from "@/lib/bank/imports";
 import { reconcileStatementLine, suggestionsForLine, unreconcileStatementLine } from "@/lib/bank/reconcile";
@@ -691,17 +691,41 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
 
   it("BK15, BK16: an Akahu feed brings in settled transactions once, flags a CSV twin, and keeps the balance", async () => {
     const world = await setup();
-    const ownerAuth = { sessionId: "s", user: { id: owner.id, email: owner.email, displayName: "Owner", isServerAdmin: true } };
-    await expect(
-      updateAkahuServerSettings({ ...ownerAuth, user: { ...ownerAuth.user, isServerAdmin: false } }, { mode: "personal", appToken: "app_token_abc", userToken: "user_token_xyz" }),
-    ).rejects.toThrow("Only a server admin can set up bank feeds.");
-    const settings = await updateAkahuServerSettings(ownerAuth, { mode: "personal", appToken: "app_token_abc", userToken: "user_token_xyz" });
-    expect(settings).toMatchObject({ mode: "personal", hasUserToken: true, hasAppSecret: false, appTokenHint: expect.stringContaining("app_token_") });
-    const stored = await coreQuery<{ secret_ciphertext: string; value: unknown }>("select secret_ciphertext, value from server_settings where key = 'akahu'");
-    expect(stored.rows[0].secret_ciphertext).not.toContain("user_token_xyz");
-    // The server settings route never returns secrets.
-    const adminCookie = await sessionCookieFor(owner);
-    const read = await body(await adminFeedsRoute.GET(apiRequest("/api/admin/bank-feeds", { cookie: adminCookie }), undefined as unknown));
+    // Each organisation saves its own Akahu personal app. Only admins can, and the tokens are checked with Akahu first.
+    const saveTokens = async (user: SessionUser, fields: Record<string, unknown>) =>
+      akahuSettingsRoute.PUT(
+        apiRequest("/api/bank-feeds/akahu/settings", {
+          method: "PUT",
+          cookie: await sessionCookieFor(user),
+          body: { organisationId: world.org, ...fields },
+        }),
+        undefined as unknown,
+      );
+    setAkahuFetchForTests(async () => new Response(JSON.stringify({ success: false, message: "Invalid token" }), { status: 401 }));
+    expect((await saveTokens(bookkeeper, { appToken: "app_token_abc", userToken: "user_token_xyz" })).status).toBe(403);
+    const refused = await saveTokens(owner, { appToken: "app_token_abc", userToken: "user_token_bad" });
+    expect(refused.status).toBe(400);
+    expect(((await body(refused)) as { error: string }).error).toBe("Akahu refused the tokens: Invalid token. Check the App ID token and user token.");
+    const accountsReply = { success: true, items: [{ _id: "acc_1", name: "Business", type: "CHECKING", balance: { current: 1023.5 } }] };
+    setAkahuFetchForTests(async () => new Response(JSON.stringify(accountsReply), { status: 200 }));
+    const saved = await saveTokens(owner, { appToken: "app_token_abc", userToken: "user_token_xyz", syncEveryHours: 4 });
+    expect(saved.status).toBe(200);
+    expect(await body(saved)).toMatchObject({
+      accountCount: 1,
+      akahu: { configured: true, syncEveryHours: 4, appTokenHint: "app_token_…_abc" },
+    });
+    // Blank tokens keep the saved ones.
+    expect(await body(await saveTokens(owner, { syncEveryHours: 6 }))).toMatchObject({ akahu: { configured: true, syncEveryHours: 6 } });
+    const stored = await world.sql("select app_token_ciphertext, user_token_ciphertext, status from akahu_connections order by id");
+    expect(stored.rows.map((row) => row.status)).toEqual(["removed", "active"]);
+    expect(JSON.stringify(stored.rows)).not.toMatch(/user_token_xyz|app_token_abc/);
+    const read = await body(
+      await akahuSettingsRoute.GET(
+        apiRequest(`/api/bank-feeds/akahu/settings?organisationId=${world.org}`, { cookie: await sessionCookieFor(viewer) }),
+        undefined as unknown,
+      ),
+    );
+    expect(read).toMatchObject({ akahu: { configured: true } });
     expect(JSON.stringify(read)).not.toContain("user_token_xyz");
 
     // A CSV line already there for 20 May.
@@ -727,7 +751,7 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
       return new Response(JSON.stringify({ success: true }), { status: 200 });
     });
     await world.asUser(owner, (tx) =>
-      linkBankFeed(tx, world.bank.id, { akahuAccountId: "acc_1", akahuAccountName: "Business", startDate: "2026-05-01", connectionId: null }),
+      linkBankFeed(tx, world.bank.id, { akahuAccountId: "acc_1", akahuAccountName: "Business", startDate: "2026-05-01" }),
     );
     const organisation = (await getOrganisation(world.org))!;
     const first = await syncBankFeedAccount(organisation, world.bank.id);
@@ -750,7 +774,7 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
     setAkahuFetchForTests(async () => new Response(JSON.stringify({ success: false, message: "Token revoked" }), { status: 401 }));
     await expect(syncBankFeedAccount(organisation, world.bank.id)).rejects.toThrow("Akahu refused the tokens: Token revoked");
     expect(await world.asUser(viewer, (tx) => getBankAccount(tx, world.bank.id))).toMatchObject({
-      feed: { lastSyncStatus: "failed", lastSyncError: "Akahu refused the tokens: Token revoked" },
+      feed: { lastSyncStatus: "failed", lastSyncError: "Akahu refused the tokens: Token revoked. Check the App ID token and user token." },
     });
     expect((await world.lines(world.bank.id, "unreconciled")).length).toBe(3);
   });
