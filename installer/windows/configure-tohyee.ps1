@@ -178,6 +178,8 @@ try {
   <env name="TOHYEE_SECRET_KEY" value="$(X $settings['TOHYEE_SECRET_KEY'])"/>
   <env name="TOHYEE_TIME_ZONE" value="Pacific/Auckland"/>
   <env name="TOHYEE_CLOUDFLARED_PATH" value="$(X $CloudflaredExe)"/>
+  <env name="TOHYEE_PG_BIN" value="$(X $PgBin)"/>
+  <env name="TOHYEE_BACKUP_DIR" value="$(X (Join-Path $DataRoot 'backups'))"/>
 </service>
 "@
   [System.IO.File]::WriteAllText((Join-Path $ServiceDir 'TohyeeServer.xml'), $xml)

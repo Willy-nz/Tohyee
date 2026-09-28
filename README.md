@@ -168,9 +168,18 @@ the server settings too, for security alerts and lost-phone reset links. The Win
 installer and Docker image include Cloudflare's `cloudflared`; on Linux,
 install it or set `TOHYEE_CLOUDFLARED_PATH`.
 
-**Backups:** each organisation is a normal PostgreSQL database, so
-`pg_dump -Fc -d tohyee_org_<id>` backs one up. Back up the core database
-(`tohyee`) too. Built-in scheduled backups are on the roadmap.
+**Backups:** every night (2am by default) Tohyee backs up each organisation,
+and its own database of users and settings, into files in the backup folder:
+one sub-folder per organisation, encrypted with the server's
+`TOHYEE_SECRET_KEY`, each checked after it's written, keeping the last 14
+daily and 12 monthly backups. Point the folder at a OneDrive (or other
+cloud-synced) folder to get copies off the computer. Restoring makes a copy of
+the organisation, with the same people, so the current books are never
+overwritten. It's all in the server settings under **Backups** (or
+`backups ...` in the command-line tool). **Keep a copy of `TOHYEE_SECRET_KEY`
+somewhere safe that isn't the backup folder**: without it the backups can't be
+opened. pg_dump and pg_restore come with the Windows installer and the Docker
+image; elsewhere they need to be on the PATH (or set `TOHYEE_PG_BIN`).
 
 ### Server settings from the command line
 

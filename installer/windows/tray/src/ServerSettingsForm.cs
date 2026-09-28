@@ -64,6 +64,7 @@ namespace Tohyee.Tray
             tabs.TabPages.Add(Tab("Users", new UsersPage(_api)));
             tabs.TabPages.Add(Tab("Remote access", new RemoteAccessPage(_api)));
             tabs.TabPages.Add(Tab("Email", new EmailPage(_api)));
+            tabs.TabPages.Add(Tab("Backups", new BackupsPage(_api)));
             tabs.TabPages.Add(Tab("Updates", new UpdatesPage(_api)));
 
             var signOut = Ui.Btn("Sign out", async (s, e) =>

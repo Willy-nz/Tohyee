@@ -15,6 +15,12 @@ that something happened.
   running, restarts it, backs it up and opens the logs, and a window for the
   settings. On Docker and Linux they're a **command-line tool**
   (`tohyee-admin.cjs` in the image, `npm run admin` from a checkout).
+- **Nightly backups** of each organisation (and the server's own database),
+  encrypted with the server's secret key, into a folder the server admin
+  chooses (a OneDrive folder gets copies off the computer); each checked after
+  it's made; 14 daily and 12 monthly kept; failures retried hourly and
+  emailed to server admins. **Restoring** makes a copy of the organisation, so
+  nothing is overwritten.
 - **Menus**: Home, Sales, Purchases, Reporting, Accounting, Tax and Contacts
   across the top, each opening to its overview, lists and settings; a ☰ menu
   with the same sections on phones, where line editors stack each line's
@@ -173,7 +179,8 @@ These only arrive as working features. A screen that just records a status
 someone types in (for example "backup completed") without doing the work
 isn't acceptable, because people would trust it:
 
-- backups, restores and restore activation
+- switching people over to a restored copy (restores make a new
+  organisation; moving people or retiring the original is done by hand)
 - update runs and recovery incidents
 - export jobs and downloads
 - job executions
@@ -198,11 +205,10 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    on them). Invoice and credit note PDFs and emailing come with or after
    these.
 2. Backdated stock movements with proper re-costing.
-3. Scheduled per-organisation backups (`pg_dump`) and tested restores.
-4. Stock depth: an item list, locations/bins, lots and serial numbers,
+3. Stock depth: an item list, locations/bins, lots and serial numbers,
    variants, assemblies/bundles, stock takes.
-5. NZ payroll, fixed assets, projects and time tracking.
-6. Multi-currency transactions.
+4. NZ payroll, fixed assets, projects and time tracking.
+5. Multi-currency transactions.
 
 ## Guardrails
 

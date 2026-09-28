@@ -34,6 +34,11 @@ services:
       SETUP_TOKEN: ${SETUP_TOKEN:-}
       TOHYEE_SECRET_KEY: ${TOHYEE_SECRET_KEY:-}
       TOHYEE_TIME_ZONE: Pacific/Auckland
+    volumes:
+      # Nightly backups (encrypted). To have them in OneDrive, set
+      # TOHYEE_BACKUP_FOLDER in .env to a folder such as
+      # C:\Users\you\OneDrive\Tohyee backups and run Install-Tohyee.cmd again.
+      - ${TOHYEE_BACKUP_FOLDER:-backups}:/backups
     ports:
       # Only this computer can open Tohyee. To let other computers on your
       # network use it, set TOHYEE_LISTEN=0.0.0.0 in .env and run
@@ -42,3 +47,4 @@ services:
 
 volumes:
   postgres_data:
+  backups:

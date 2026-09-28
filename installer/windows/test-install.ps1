@@ -118,6 +118,18 @@ try {
   Write-Host "Organisation: $($created.organisation.provisioningStatus), schema $($created.organisation.schemaVersion)"
   if ($created.organisation.provisioningStatus -ne 'ready') { throw 'The organisation was not provisioned.' }
 
+  Write-Host '== Backups (the bundled pg_dump and pg_restore) and a restore as a copy'
+  $backups = Invoke-RestMethod -Uri "$adminUrl/api/admin/backups" -Method Post -ContentType 'application/json' -Headers $adminOrigin -Body '{}' -WebSession $session -TimeoutSec 600
+  $backups.runs | ForEach-Object { Write-Host "  $($_.organisationId): $($_.status) $($_.filePath) $($_.error)" }
+  if (@($backups.runs | Where-Object { $_.status -ne 'ok' }).Count -ne 0 -or @($backups.runs).Count -ne 2) { throw 'The backups did not all succeed.' }
+  $listed = Invoke-RestMethod -Uri "$adminUrl/api/admin/backups" -WebSession $session
+  if ($listed.settings.folder -ne (Join-Path $dataRoot 'backups')) { throw "Unexpected backup folder $($listed.settings.folder)." }
+  $ciFile = @($listed.files | Where-Object { $_.header.organisationId -eq 'ci' })[0].name
+  $restoreBody = @{ file = $ciFile; id = 'ci-restored' } | ConvertTo-Json
+  $restored = Invoke-RestMethod -Uri "$adminUrl/api/admin/backups/restore" -Method Post -ContentType 'application/json' -Headers $adminOrigin -Body $restoreBody -WebSession $session -TimeoutSec 600
+  Write-Host "Restored: $($restored.organisation.id), $($restored.organisation.provisioningStatus)"
+  if ($restored.organisation.provisioningStatus -ne 'ready') { throw 'The restored copy is not ready.' }
+
   Write-Host '== The Tohyee server app (tray icon and server settings)'
   $trayExe = Join-Path $installDir 'tray\TohyeeTray.exe'
   if (-not (Test-Path $trayExe)) { throw 'TohyeeTray.exe was not installed.' }

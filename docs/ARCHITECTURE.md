@@ -429,22 +429,58 @@ Still to come for other jobs: a transactional outbox and bounded retries.
 
 ## Backups and restore
 
-Not built into the app yet. Because each organisation is its own database,
-a backup is simply:
+`src/lib/backups/`. Each database (every ready organisation, plus the core
+database) is dumped with `pg_dump --format=custom --no-owner --no-privileges`
+as the admin login, straight into an encrypted file:
 
-```
-pg_dump -Fc -d tohyee_org_<id> > <id>-2026-09-30.dump
-```
-
-and back up the core database the same way. There is no restore tooling yet,
-and restoring an organisation from a dump hasn't been tested, so treat
-restores as a manual job for a database administrator until that's built.
+- **Format** (`format.ts`): `TOHYEE-BACKUP 1\n`, a JSON header line (what's
+  inside: organisation, database, schema version, Tohyee version, when, a
+  fingerprint of the key), then a 12-byte IV, the AES-256-GCM ciphertext and
+  its 16-byte tag. The header is the GCM additional data, so it can't be
+  changed either. The key is HKDF-SHA256 of `TOHYEE_SECRET_KEY` ("tohyee
+  backups v1"), separate from the key for stored secrets. Losing
+  `TOHYEE_SECRET_KEY` means losing the backups, so the docs and the server
+  app tell people to keep a copy elsewhere.
+- **Where**: the backup folder (a server setting; default
+  `TOHYEE_BACKUP_DIR`, else `%ProgramData%\Tohyee\backups` on Windows or
+  `./backups`), one sub-folder per organisation and `_server` for the core
+  database, files named `<id>_<YYYY-MM-DD_HHmmss>.tohyee-backup` in the
+  business time zone. Saving the setting checks the server can write there.
+  It's written as `.partial` and renamed once checked.
+- **Checked** after writing: the whole file is decrypted (so the tag is
+  verified) into `pg_restore --list`.
+- **Kept**: the newest of each of the last 14 days that have a backup and the
+  first of each of the last 12 months (`retention.ts`); only files with that
+  organisation's prefix in its folder are ever deleted.
+- **Recorded**: every attempt is a row in `backup_runs` (core database),
+  written by the code doing the work: started, ok or failed with the error,
+  file and size.
+- **When** (`scheduler.ts`, started from `instrumentation.ts`, off with
+  `TOHYEE_BACKUP_SCHEDULER=off`): every 5 minutes it checks whether each
+  database has a good backup since today's set time (default 02:00); a failed
+  one is retried an hour later, and server admins are emailed about the first
+  failure of the day. One backup job runs at a time (advisory lock), and
+  "Back up now" (server app, `/api/admin/backups`, `backups run`) uses the
+  same code.
+- **Restoring** (`restoreBackupAsCopy`) never overwrites: it checks the file
+  first, registers a new organisation (ID `<id>-<YYYYMMDD>` by default, name
+  "... (restored from <date>)", the original's members, or the given owner if
+  the original is gone), creates its database, `pg_restore`s into it, points
+  its `organisation_settings` at the new ID, then provisions it as usual
+  (migrations up to this server's version, runtime-login grants). Any failure
+  drops the new database and registry row. A backup from a newer Tohyee is
+  refused. The core database isn't restored by the app: `backups decrypt`
+  turns a file into a plain pg_dump for a database administrator.
+- Tests (`tests/integration/backups.test.ts`) back up and restore real
+  organisations, with one login and with a separate runtime login, and check
+  that a changed file or the wrong key is refused.
 
 ## Open decisions
 
 - Canonical production HTTPS origin and local/offline access model.
 - Break-glass recovery ownership beyond the admin CLI.
-- Backup key custody and recovery targets; built-in scheduled backups.
+- Backup key custody beyond "keep a copy of TOHYEE_SECRET_KEY", and recovery
+  targets. Restoring the core database is still manual.
 - Remote BI connectivity.
 - Multi-currency transactions (line-level foreign amounts and rates).
 - Backdated stock movements (needs re-costing of later movements).

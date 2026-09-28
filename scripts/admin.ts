@@ -25,6 +25,16 @@ import {
 } from "@/lib/organisations/admin";
 import { getRemoteAccess, updateRemoteAccess } from "@/lib/remote/settings";
 import { getLatestReleaseCheck } from "@/lib/updates/server-updates";
+import {
+  backUpNow,
+  backupStatus,
+  checkBackup,
+  decryptBackupTo,
+  getBackupSettings,
+  listBackupFiles,
+  restoreBackupAsCopy,
+  updateBackupSettings,
+} from "@/lib/backups/service";
 import { listUsers, updateUser } from "@/lib/users/admin";
 
 const actor = COMMAND_LINE_ADMIN.user;
@@ -64,6 +74,17 @@ Email (for security alerts and two-step reset links)
                                             password: TOHYEE_EMAIL_PASSWORD or asked (blank keeps the saved one)
   email test --to EMAIL
   email clear
+
+Backups (encrypted with TOHYEE_SECRET_KEY: keep a copy of that key somewhere safe)
+  backups status [--json]                   each database's latest and last good backup
+  backups set [--on|--off] [--folder PATH] [--time 02:00]
+                                            --folder "" goes back to the default folder
+  backups run [--id ORGANISATION]           back up now (everything, or one organisation)
+  backups list [--id ORGANISATION] [--json]
+  backups check --file FILE                 prove a backup opens and PostgreSQL can read it
+  backups restore --file FILE [--id NEW-ID] [--name NAME] [--owner EMAIL]
+                                            restores as a new organisation (a copy); nothing is overwritten
+  backups decrypt --file FILE --out DUMP    a plain pg_dump file, for a database administrator
 
 Updates
   updates check [--json]
@@ -396,6 +417,100 @@ async function email(command: string | undefined, args: string[]) {
   throw new UsageError(`Unknown email command${command ? ` "${command}"` : ""}.`);
 }
 
+function megabytes(bytes: number | null): string {
+  return bytes === null ? "" : `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function when(iso: string | null): string {
+  return iso ? new Date(iso).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
+}
+
+async function backups(command: string | undefined, args: string[]) {
+  if (command === "status") {
+    const settings = await getBackupSettings();
+    const status = await backupStatus();
+    show(args, { settings, status }, () => {
+      console.log(`Nightly backups: ${settings.enabled ? `on, at ${settings.time} (${settings.timeZone})` : "off"}`);
+      console.log(`Folder: ${settings.folder}${settings.folder === settings.defaultFolder ? " (the default)" : ""}`);
+      if (!settings.keySet) console.log("TOHYEE_SECRET_KEY isn't set, so backups can't be made (they're encrypted with it).");
+      console.log("");
+      table(
+        status.map((s) => ({
+          Database: s.organisationId ?? "(server: users and settings)",
+          "Last good backup": s.lastGood ? when(s.lastGood.finishedAt) : "never",
+          Size: megabytes(s.lastGood?.sizeBytes ?? null),
+          "Latest attempt": s.latest ? `${s.latest.status}${s.latest.status === "failed" ? `: ${s.latest.error}` : ""}` : "",
+        })),
+      );
+    });
+    return;
+  }
+  if (command === "set") {
+    const input: { enabled?: boolean; folder?: string; time?: string } = {};
+    if (flag(args, "on") || flag(args, "off")) input.enabled = onOff(args);
+    const folderIndex = args.indexOf("--folder");
+    if (folderIndex !== -1) {
+      const value = args[folderIndex + 1];
+      if (value === undefined) throw new UsageError("--folder needs a path (or \"\" for the default).");
+      input.folder = value;
+    }
+    const time = option(args, "time");
+    if (time !== null) input.time = time;
+    if (Object.keys(input).length === 0) throw new UsageError("Say what to change: --on/--off, --folder or --time.");
+    const settings = await updateBackupSettings(COMMAND_LINE_ADMIN, input);
+    console.log(`Backups saved: ${settings.enabled ? `nightly at ${settings.time}` : "off"}, into ${settings.folder}.`);
+    return;
+  }
+  if (command === "run") {
+    const organisationId = option(args, "id") ?? undefined;
+    const runs = await backUpNow({ trigger: "manual", requestedByEmail: "cli", organisationId });
+    for (const run of runs) {
+      const name = run.organisationId ?? "server";
+      console.log(run.status === "ok" ? `${name}: backed up to ${run.filePath} (${megabytes(run.sizeBytes)})` : `${name}: FAILED: ${run.error}`);
+    }
+    if (runs.some((run) => run.status !== "ok")) process.exitCode = 1;
+    return;
+  }
+  if (command === "list") {
+    const files = await listBackupFiles(option(args, "id") ?? undefined);
+    show(args, files, () =>
+      table(
+        files.map((f) => ({
+          File: f.path,
+          Organisation: f.header ? (f.header.organisationId ?? "(server)") : "",
+          Made: f.header ? when(f.header.createdAt) : "",
+          Size: megabytes(f.sizeBytes),
+          Problem: f.problem ?? "",
+        })),
+      ),
+    );
+    return;
+  }
+  if (command === "check") {
+    const file = required(args, "file");
+    const header = await checkBackup(file);
+    console.log(`OK: ${header.organisationId ?? "the server's own database"}, made ${when(header.createdAt)} by Tohyee ${header.tohyeeVersion}. It opens with this server's key and PostgreSQL can read it.`);
+    return;
+  }
+  if (command === "restore") {
+    const organisation = await restoreBackupAsCopy(COMMAND_LINE_ADMIN.user, {
+      file: required(args, "file"),
+      id: option(args, "id") ?? undefined,
+      displayName: option(args, "name") ?? undefined,
+      ownerEmail: option(args, "owner") ?? undefined,
+    });
+    console.log(`Restored as ${organisation.displayName} (${organisation.id}). Check it in the books; the original hasn't been touched.`);
+    return;
+  }
+  if (command === "decrypt") {
+    const out = required(args, "out");
+    const header = await decryptBackupTo(required(args, "file"), out);
+    console.log(`Wrote ${out}: a pg_dump (custom format) of ${header.databaseName}. Restore it with pg_restore. It isn't encrypted, so delete it when you're done.`);
+    return;
+  }
+  throw new UsageError(`Unknown backups command${command ? ` "${command}"` : ""}.`);
+}
+
 async function updates(command: string | undefined, args: string[]) {
   if (command !== "check") throw new UsageError(`Unknown updates command${command ? ` "${command}"` : ""}.`);
   const check = await getLatestReleaseCheck();
@@ -418,6 +533,7 @@ async function main(argv: string[]): Promise<void> {
   if (area === "remote-access") return remoteAccess(command, rest);
   if (area === "email") return email(command, rest);
   if (area === "updates") return updates(command, rest);
+  if (area === "backups") return backups(command, rest);
   if (area === undefined || area === "help" || area === "--help" || area === "-h") {
     console.log(HELP);
     if (area === undefined) process.exitCode = 1;

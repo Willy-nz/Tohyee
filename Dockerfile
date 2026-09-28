@@ -19,18 +19,32 @@ ADD https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VE
 RUN echo "${CLOUDFLARED_SHA256}  /cloudflared" | sha256sum -c - && chmod 0755 /cloudflared
 
 FROM node:22-bookworm-slim
+# pg_dump and pg_restore for backups, from PostgreSQL's own apt repository:
+# they must be at least the database server's version (17 in docker-compose).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl \
+ && install -d /usr/share/postgresql-common/pgdg \
+ && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client-17 \
+ && apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /backups && chown node:node /backups
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
-    TOHYEE_CLOUDFLARED_PATH=/usr/local/bin/cloudflared
+    TOHYEE_CLOUDFLARED_PATH=/usr/local/bin/cloudflared \
+    TOHYEE_BACKUP_DIR=/backups
 COPY --from=cloudflared /cloudflared /usr/local/bin/cloudflared
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/public ./public
 # The command-line tool: docker compose exec tohyee node tohyee-admin.cjs help
 COPY --from=build --chown=node:node /app/dist/tohyee-admin.cjs ./tohyee-admin.cjs
+# Backups (Server settings > Backups); mount a volume or a folder here.
+VOLUME /backups
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

@@ -281,7 +281,7 @@ namespace Tohyee.Tray
             }
         }
 
-        private static void OpenFolder(string path)
+        internal static void OpenFolder(string path)
         {
             try
             {
