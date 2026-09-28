@@ -67,6 +67,7 @@ Source: "{#SourceDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterin
 [INI]
 Filename: "{group}\Open Tohyee.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:3000"
 Filename: "{autodesktop}\Tohyee.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:3000"; Tasks: desktopicon
+Filename: "{group}\Tohyee server settings.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:3001/server"
 
 [Icons]
 Name: "{group}\Tohyee server settings"; Filename: "{app}\tray\TohyeeTray.exe"; Parameters: "--settings"; Comment: "Organisations, users, remote access, email and updates (this computer only)"
@@ -77,6 +78,7 @@ Name: "{group}\Uninstall Tohyee"; Filename: "{uninstallexe}"
 [UninstallDelete]
 Type: files; Name: "{group}\Open Tohyee.url"
 Type: files; Name: "{autodesktop}\Tohyee.url"
+Type: files; Name: "{group}\Tohyee server settings.url"
 
 [Registry]
 ; Start the tray icon when this person signs in to Windows (like a media server's).
