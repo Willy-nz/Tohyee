@@ -39,6 +39,9 @@ jobs:
       # The database tests create and drop their own throwaway databases and
       # logins, so they need a login that can do that.
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      # The backup tests run pg_dump and pg_restore, which must be at least
+      # the database's version (17).
+      TOHYEE_PG_BIN: /usr/lib/postgresql/17/bin
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -51,6 +54,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: PostgreSQL 17 client tools (for the backup tests)
+        run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Check foundation docs
         run: npm run validate:foundation
@@ -84,13 +94,20 @@ jobs:
             -e POSTGRES_USER=tohyee -e POSTGRES_PASSWORD=ci-password -e POSTGRES_DB=tohyee postgres:17
           for i in $(seq 1 30); do docker exec ci-postgres pg_isready -U tohyee -d tohyee && break; sleep 2; done
           docker run -d --name ci-tohyee --network tohyee-ci -p 3000:3000 \
-            -e DATABASE_URL=postgresql://tohyee:ci-password@ci-postgres:5432/tohyee tohyee:ci
+            -e DATABASE_URL=postgresql://tohyee:ci-password@ci-postgres:5432/tohyee \
+            -e TOHYEE_SECRET_KEY=ci-secret-key-0123456789abcdefghijklmnop tohyee:ci
           for i in $(seq 1 60); do
             if curl -sf http://localhost:3000/api/health; then echo; exit 0; fi
             sleep 2
           done
           docker logs ci-tohyee
           exit 1
+
+      - name: The command-line tool and a backup work inside the image
+        run: |
+          docker exec ci-tohyee node tohyee-admin.cjs users list
+          docker exec ci-tohyee node tohyee-admin.cjs backups run
+          docker exec ci-tohyee sh -c 'node tohyee-admin.cjs backups check --file "$(ls /backups/_server/*.tohyee-backup | head -n 1)"'
 
       - name: Package the Windows installer
         run: node scripts/package-windows.mjs
