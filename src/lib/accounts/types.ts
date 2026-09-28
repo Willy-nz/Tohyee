@@ -10,6 +10,7 @@ export const ACCOUNT_TYPES = {
   fixed_asset: { accountClass: "asset", label: "Fixed asset" },
   non_current_asset: { accountClass: "asset", label: "Non-current asset" },
   current_liability: { accountClass: "liability", label: "Current liability" },
+  credit_card: { accountClass: "liability", label: "Credit card" },
   non_current_liability: { accountClass: "liability", label: "Non-current liability" },
   equity: { accountClass: "equity", label: "Equity" },
   revenue: { accountClass: "revenue", label: "Revenue" },
@@ -27,6 +28,15 @@ export function isAccountType(value: unknown): value is AccountType {
 
 export function classOfType(type: AccountType): AccountClass {
   return ACCOUNT_TYPES[type].accountClass;
+}
+
+/**
+ * Bank accounts and credit cards: the accounts money moves through. They hold
+ * statement lines (bank feeds and imports), and payments, refunds, bank
+ * transactions and transfers go through them.
+ */
+export function isBankOrCreditCard(type: string): boolean {
+  return type === "bank" || type === "credit_card";
 }
 
 /** Debit-normal classes increase with debits; the rest increase with credits. */
