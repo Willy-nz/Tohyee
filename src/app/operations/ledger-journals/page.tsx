@@ -11,6 +11,7 @@ import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { Journal, JournalWithLines } from "@/lib/ledger/journals";
+import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 type JournalDetails = {
   journal: JournalWithLines;
@@ -396,6 +397,9 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
         />
+      ) : null}
+      {selected ? (
+        <RecordExtrasPanel key={`journal-${selected}`} organisationId={organisationId} recordType="ledger_journal" recordId={selected} />
       ) : null}
 
       <Card title="Journals">
