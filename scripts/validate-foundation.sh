@@ -11,7 +11,7 @@ docs/STYLE-GUIDE.md
 .gitignore
 '
 
-legacy_pattern='Home Ledger|Akahu|SQLite|ledger\.db|Plex|password-based|single-file'
+legacy_pattern='Home Ledger|SQLite|ledger\.db|Plex|password-based|single-file'
 
 for file in $required_files; do
   [ -f "$file" ] || {
