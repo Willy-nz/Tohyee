@@ -2396,10 +2396,10 @@ language sql stable as $$
                     where payment_id = payment and status = 'active'), 0)
 $$;
 
--- A payment is recorded as active, against an approved invoice with
--- something due, in the invoice's currency and dated on or after it. Its
--- overpayment must be exactly what it pays beyond the invoice's amount due at
--- that moment, so what's settled on an invoice never goes over its total. The
+-- A payment is recorded as active, against an approved invoice, in the
+-- invoice's currency and dated on or after it. Its overpayment must be
+-- exactly what it pays beyond the invoice's amount due at that moment (all of
+-- it if the invoice is already paid), so what's settled on an invoice never goes over its total. The
 -- invoice stays locked until the transaction ends, so two payments can't both
 -- take what's left.
 create or replace function toeyee_check_customer_payment() returns trigger
@@ -2427,9 +2427,6 @@ begin
     raise exception 'A payment can''t be dated before its invoice' using errcode = 'P0001';
   end if;
   due := invoice.total - tohyee_invoice_settled(new.invoice_id);
-  if due <= 0 then
-    raise exception 'Invoice % is already paid in full', invoice.invoice_number using errcode = 'P0001';
-  end if;
   if new.overpayment_amount <> greatest(new.amount - due, 0) then
     raise exception 'The overpayment on a payment against invoice % must be what it pays beyond the amount due (%)',
       invoice.invoice_number, due using errcode = 'P0001';
