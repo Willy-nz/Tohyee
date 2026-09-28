@@ -71,6 +71,8 @@ try {
     $settings['POSTGRES_PASSWORD'] = New-Secret 32
     $settings['SETUP_TOKEN'] = New-Secret 32
   }
+  # Encrypts bank feed tokens. Added on upgrade too; changing it later makes saved tokens unreadable.
+  if (-not $settings.Contains('TOHYEE_SECRET_KEY')) { $settings['TOHYEE_SECRET_KEY'] = New-Secret 48 }
   foreach ($default in @(@('TOHYEE_PORT', '3000'), @('TOHYEE_LISTEN', '127.0.0.1'), @('POSTGRES_PORT', '5433'))) {
     if (-not $settings.Contains($default[0])) { $settings[$default[0]] = $default[1] }
   }
@@ -162,6 +164,7 @@ try {
   <env name="HOSTNAME" value="$(X $settings['TOHYEE_LISTEN'])"/>
   <env name="DATABASE_URL" value="$(X $databaseUrl)"/>
   <env name="SETUP_TOKEN" value="$(X $settings['SETUP_TOKEN'])"/>
+  <env name="TOHYEE_SECRET_KEY" value="$(X $settings['TOHYEE_SECRET_KEY'])"/>
   <env name="TOHYEE_TIME_ZONE" value="Pacific/Auckland"/>
 </service>
 "@
