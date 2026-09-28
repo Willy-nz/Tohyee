@@ -15,6 +15,7 @@
     "db:stop": "docker compose down",
     "db:migrate": "tsx scripts/migrate.ts",
     "admin": "tsx scripts/admin.ts",
+    "build:admin": "node scripts/build-admin.mjs",
     "package:release": "node ./scripts/package-release.mjs",
     "validate:foundation": "./scripts/validate-foundation.sh"
   },
@@ -32,6 +33,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tsx": "^4.23.15",

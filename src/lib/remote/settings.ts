@@ -1,5 +1,4 @@
-import { writeAdminAuditEvent } from "@/lib/audit";
-import type { AuthContext } from "@/lib/auth/guard";
+import { type ServerAdminAuth, writeAdminAuditEvent } from "@/lib/audit";
 import { twoStepRequired } from "@/lib/auth/sessions";
 import { withCoreTransaction } from "@/lib/db/transactions";
 import { ForbiddenError, UnavailableError, ValidationError } from "@/lib/errors";
@@ -114,9 +113,14 @@ export async function applyRemoteAccess(): Promise<void> {
 
 /** Saves remote access (server admins only): `enabled`, `tunnelToken` (blank keeps it), `publicUrl`; `clear: true` removes it. */
 export async function updateRemoteAccess(
-  auth: AuthContext,
+  auth: ServerAdminAuth,
   input: { enabled?: unknown; tunnelToken?: unknown; publicUrl?: unknown; clear?: unknown },
+  options: { apply?: boolean } = {},
 ): Promise<RemoteAccess> {
+  // The running server starts or stops the tunnel. The command-line tool is a
+  // separate process that exits straight away, so it only saves (apply: false)
+  // and the server picks the change up when it's restarted.
+  const apply = options.apply ?? true;
   if (!auth.user.isServerAdmin) throw new ForbiddenError("Only a server admin can set up remote access.");
   const actor = { userId: auth.user.id, email: auth.user.email };
   if (input.clear === true) {
@@ -124,7 +128,7 @@ export async function updateRemoteAccess(
       await deleteServerSetting(client, "remote_access");
       await writeAdminAuditEvent(client, actor, { eventType: "server.remote_access_cleared", entityType: "server_setting", entityId: "remote_access" });
     });
-    await applyRemoteAccess();
+    if (apply) await applyRemoteAccess();
     return getRemoteAccess();
   }
   if (!secretsAvailable()) {
@@ -151,6 +155,6 @@ export async function updateRemoteAccess(
       details: { enabled, publicUrl, tokenChanged: Boolean(typed) },
     });
   });
-  await applyRemoteAccess();
+  if (apply) await applyRemoteAccess();
   return getRemoteAccess();
 }

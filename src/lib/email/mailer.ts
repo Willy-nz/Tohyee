@@ -1,6 +1,5 @@
 import nodemailer from "nodemailer";
-import { writeAdminAuditEvent } from "@/lib/audit";
-import type { AuthContext } from "@/lib/auth/guard";
+import { type ServerAdminAuth, writeAdminAuditEvent } from "@/lib/audit";
 import { withCoreTransaction } from "@/lib/db/transactions";
 import { ForbiddenError, UnavailableError, ValidationError } from "@/lib/errors";
 import { deleteServerSetting, readServerSetting, writeServerSetting } from "@/lib/server-settings";
@@ -60,7 +59,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Saves the SMTP details (server admins only). A blank password keeps the saved one; `clear: true` removes everything. */
 export async function updateEmailSettings(
-  auth: AuthContext,
+  auth: ServerAdminAuth,
   input: {
     host?: unknown;
     port?: unknown;

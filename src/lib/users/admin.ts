@@ -1,9 +1,8 @@
-import { writeAdminAuditEvent } from "@/lib/audit";
+import { type AdminActor, writeAdminAuditEvent } from "@/lib/audit";
 import { normaliseEmail, parseDisplayName } from "@/lib/auth/service";
 import { hashPassword, validateNewPassword } from "@/lib/auth/password";
 import { resetTwoStep } from "@/lib/auth/two-step";
 import { sendSecurityAlert } from "@/lib/email/mailer";
-import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { optionalBoolean, optionalString } from "@/lib/validation";
@@ -65,7 +64,7 @@ function assertUuid(id: string): string {
 }
 
 export async function createUser(
-  actor: SessionUser,
+  actor: AdminActor,
   input: { email: unknown; displayName: unknown; password: unknown; isServerAdmin?: unknown },
 ): Promise<UserSummary> {
   const email = normaliseEmail(input.email);
@@ -101,7 +100,7 @@ export async function createUser(
  * or set a new password (which signs that person out everywhere).
  */
 export async function updateUser(
-  actor: SessionUser,
+  actor: AdminActor,
   userIdInput: string,
   input: {
     displayName?: unknown;
@@ -179,7 +178,7 @@ export async function updateUser(
  * Resets someone's two-step sign-in (a server admin, for a lost phone). They
  * are signed out everywhere and set it up again at their next sign-in.
  */
-export async function resetUserTwoStep(actor: SessionUser, userIdInput: string): Promise<UserSummary> {
+export async function resetUserTwoStep(actor: AdminActor, userIdInput: string): Promise<UserSummary> {
   const userId = assertUuid(userIdInput);
   const summary = await withCoreTransaction(async (client) => {
     const found = await client.query<UserRow>(`${USER_SELECT} where u.id = $1 for update of u`, [userId]);

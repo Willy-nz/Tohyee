@@ -106,8 +106,8 @@ Server settings (organisations, users, remote access, email, updates) only
 open on the server computer itself: they're refused over the network and
 through the Cloudflare Tunnel. On Windows the server app's icon also shows
 whether Tohyee is running, and can restart it or back it up. Change the port with `TOHYEE_ADMIN_PORT`. In
-Docker, where that address isn't reachable from outside the container, use
-`npm run admin` (the command-line tool) instead.
+Docker or on Linux, use the command-line tool instead, which does everything
+the server settings do (see [Server settings from the command line](#server-settings-from-the-command-line)).
 
 Database migrations run automatically when the server starts. To run them by
 hand: `npm run db:migrate`.
@@ -172,16 +172,26 @@ install it or set `TOHYEE_CLOUDFLARED_PATH`.
 `pg_dump -Fc -d tohyee_org_<id>` backs one up. Back up the core database
 (`tohyee`) too. Built-in scheduled backups are on the roadmap.
 
-**Locked out?** The admin commands work straight against the database. They
-need a checkout of this repository (with `npm install` done) and
-`DATABASE_URL` pointing at the server's core database; the release bundle
-doesn't include them. The new password is read from `TOHYEE_PASSWORD` or asked
-for when you run the command.
+### Server settings from the command line
+
+For Docker and Linux servers (and for anyone locked out), the command-line
+tool covers organisations, users, remote access, email and updates. It works
+straight against the database, on the server itself, and records each change
+in the audit trail as `cli`. In Docker it's in the image:
 
 ```bash
-npm run admin -- set-password --email you@example.com
-npm run admin -- create-user --email you@example.com --name "You" --server-admin
+docker compose exec tohyee node tohyee-admin.cjs help
+docker compose exec tohyee node tohyee-admin.cjs organisations list
+docker compose exec tohyee node tohyee-admin.cjs organisations create --id green-island --name "Green Island" --owner you@example.com
+docker compose exec tohyee node tohyee-admin.cjs users set-password --email you@example.com
 ```
+
+From a checkout of this repository (with `npm install` done and
+`DATABASE_URL` pointing at the core database) it's `npm run admin -- <same
+arguments>`. Passwords and tokens are read from `TOHYEE_PASSWORD`,
+`TOHYEE_EMAIL_PASSWORD` and `TOHYEE_TUNNEL_TOKEN`, or asked for without
+showing what you type. Remote access changes take effect when Tohyee next
+starts, because the running server runs the tunnel.
 
 **Releases:** pushing a `v*` tag builds a release bundle and attaches it to a
 GitHub release (`.github/workflows/release-server-bundle.yml`); the tag must

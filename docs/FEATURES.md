@@ -13,7 +13,8 @@ that something happened.
   Windows they're in the **Tohyee server app**: an icon by the clock (started
   when you sign in, like a media server's) that shows whether Tohyee is
   running, restarts it, backs it up and opens the logs, and a window for the
-  settings.
+  settings. On Docker and Linux they're a **command-line tool**
+  (`tohyee-admin.cjs` in the image, `npm run admin` from a checkout).
 - **Menus**: Home, Sales, Purchases, Reporting, Accounting, Tax and Contacts
   across the top, each opening to its overview, lists and settings; a ☰ menu
   with the same sections on phones, where line editors stack each line's

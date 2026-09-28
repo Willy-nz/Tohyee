@@ -8,7 +8,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+RUN npm run build && node scripts/build-admin.mjs
 
 FROM node:22-bookworm-slim AS cloudflared
 # cloudflared runs the Cloudflare Tunnel for remote access (Server > Remote access).
@@ -29,6 +29,8 @@ COPY --from=cloudflared /cloudflared /usr/local/bin/cloudflared
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/public ./public
+# The command-line tool: docker compose exec tohyee node tohyee-admin.cjs help
+COPY --from=build --chown=node:node /app/dist/tohyee-admin.cjs ./tohyee-admin.cjs
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
