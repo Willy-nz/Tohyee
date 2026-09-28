@@ -9,6 +9,9 @@
  *
  * Then it starts the bank feed scheduler, which syncs linked Akahu accounts
  * that are due (off with TOHYEE_BANK_FEEDS_SCHEDULER=off).
+ *
+ * It also starts the Cloudflare Tunnel connector if remote access is turned on
+ * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") {
@@ -46,5 +49,16 @@ export async function register() {
   if (process.env.TOHYEE_BANK_FEEDS_SCHEDULER !== "off") {
     const { startBankFeedScheduler } = await import("@/lib/bank/akahu/sync");
     startBankFeedScheduler();
+  }
+
+  if (process.env.TOHYEE_REMOTE_ACCESS !== "off") {
+    const { applyRemoteAccess } = await import("@/lib/remote/settings");
+    const { stopTunnelOnExit } = await import("@/lib/remote/tunnel");
+    stopTunnelOnExit();
+    try {
+      await applyRemoteAccess();
+    } catch (error) {
+      console.warn("[tohyee] Remote access couldn't start:", error instanceof Error ? error.message : error);
+    }
   }
 }
