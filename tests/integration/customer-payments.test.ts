@@ -241,7 +241,8 @@ describeWithDatabase("customer payments", () => {
     // Paying more than what's due is an overpayment: see customer-overpayments.test.ts.
     await pay(invoice.id, { amount: "100.00" });
     expect((await pay(invoice.id, { amount: "15" })).invoice).toMatchObject({ amountDue: "0.00", paidStatus: "paid" });
-    await expect(pay(invoice.id, { amount: "0.01" })).rejects.toThrow(`Invoice ${invoice.invoiceNumber} is already paid in full.`);
+    // Another payment after that is all overpayment (OP4).
+    expect((await pay(invoice.id, { amount: "0.01" })).payment).toMatchObject({ invoiceAmount: "0.00", overpaymentAmount: "0.01" });
 
     const drafted = await draft();
     const voided = await approved();
@@ -424,7 +425,7 @@ describeWithDatabase("customer payments", () => {
     expect(results[1].payment.id).toBe(results[0].payment.id);
     expect(await journalCount()).toBe(journalsBefore + 1);
 
-    // With 55.00 due, two payments of 55.00 queue up: the first is recorded and the second is refused.
+    // With 55.00 due, two payments of 55.00 queue up: the first pays the invoice and the second is all overpayment (OP4).
     const rivals = await asUser(owner, async (tx) => {
       await tx.query("select id from sales_invoices where id = $1 for update", [invoice.id]);
       const queued = [pay(invoice.id, { amount: "55.00" }), pay(invoice.id, { amount: "55.00" })];
@@ -432,17 +433,16 @@ describeWithDatabase("customer payments", () => {
       return queued;
     });
     const outcomes = await Promise.allSettled(rivals);
-    expect(outcomes.map((outcome) => outcome.status).sort()).toEqual(["fulfilled", "rejected"]);
-    const refused = outcomes.find((outcome) => outcome.status === "rejected");
-    expect(refused?.reason).toMatchObject({
-      message: `Invoice ${invoice.invoiceNumber} is already paid in full.`,
-    });
-    expect((await paymentsOf(invoice.id)).map((entry) => [entry.amount, entry.status])).toEqual([
-      ["60.00", "active"],
-      ["55.00", "active"],
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(["fulfilled", "fulfilled"]);
+    expect(
+      (await paymentsOf(invoice.id)).map((entry) => [entry.amount, entry.invoiceAmount, entry.overpaymentAmount, entry.status]),
+    ).toEqual([
+      ["60.00", "60.00", "0.00", "active"],
+      ["55.00", "55.00", "0.00", "active"],
+      ["55.00", "0.00", "55.00", "active"],
     ]);
     expect(await invoiceNow(invoice.id)).toMatchObject({ amountPaid: "115.00", amountDue: "0.00", paidStatus: "paid" });
-    expect(await journalCount()).toBe(journalsBefore + 2);
+    expect(await journalCount()).toBe(journalsBefore + 3);
 
     // Two copies of a payment void queued behind the invoice's lock void it once.
     const voidKey = key("void-pay");
@@ -457,8 +457,9 @@ describeWithDatabase("customer payments", () => {
     expect(voided.map((result) => result.created).sort()).toEqual([false, true]);
     expect(voided[0].payment.voidJournalId).toEqual(expect.any(String));
     expect(voided[1].payment).toMatchObject({ status: "voided", voidJournalId: voided[0].payment.voidJournalId });
+    // The second 55.00 stays an overpayment: its split was fixed when it was recorded.
     expect(await invoiceNow(invoice.id)).toMatchObject({ amountPaid: "55.00", amountDue: "60.00", paidStatus: "part_paid" });
-    expect(await journalCount()).toBe(journalsBefore + 3);
+    expect(await journalCount()).toBe(journalsBefore + 4);
   });
 
   it("CP7: over HTTP a retry with the same key and content returns the payment (201 then 200); a different amount is a 409", async () => {

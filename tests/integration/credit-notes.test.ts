@@ -642,7 +642,7 @@ describeWithDatabase("sales credit notes", () => {
            from customer_payments limit 1`,
         [world.i1.id],
       ),
-    ).rejects.toThrow("Invoice INV-0001 is already paid in full");
+    ).rejects.toThrow("must be what it pays beyond the amount due (0.00)");
   });
 
   it("CN7: removing the CN3 application later posts nothing; INV-0001 115.00 due, CN-0001 23.00 remaining, open; a second or early removal is refused", async () => {

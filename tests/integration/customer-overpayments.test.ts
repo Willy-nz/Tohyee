@@ -383,12 +383,32 @@ describeWithDatabase("customer overpayments", () => {
     expect(paid.invoice).toMatchObject({ amountPaid: "100.00", amountCredited: "15.00", amountDue: "0.00", paidStatus: "paid" });
   });
 
-  it("OP4: a payment against an invoice that's already paid is refused, not taken as an overpayment", async () => {
+  it("OP4: paying INV-0001 115.00 again after OP1 is all overpayment: credit for Kobe Ltd that can be refunded", async () => {
     const world = await afterOp1();
     const journalsBefore = await world.journalCount();
-    await expect(world.pay(world.i1.id, "115.00")).rejects.toThrow("Invoice INV-0001 is already paid in full.");
-    expect(await world.journalCount()).toBe(journalsBefore);
-    expect(await world.count("customer_payments")).toBe(1);
+    const { payment, invoice } = await world.pay(world.i1.id, "115.00", { paymentDate: "2026-05-16" });
+    expect(payment).toMatchObject({
+      amount: "115.00",
+      invoiceAmount: "0.00",
+      overpaymentAmount: "115.00",
+      overpaymentRemaining: "115.00",
+      overpaymentStatus: "open",
+    });
+    expect(await world.postedLines(payment.journalId)).toEqual([
+      ["1000", "115.00", "0.00"],
+      ["1100", "0.00", "115.00"],
+    ]);
+    expect(invoice).toMatchObject({ amountPaid: "115.00", amountDue: "0.00", paidStatus: "paid" });
+    expect(await world.journalCount()).toBe(journalsBefore + 1);
+    // Refunded in full, the customer's account is back where it was.
+    const { refund } = await world.refund(payment.id, { amount: "115.00" });
+    expect(await world.postedLines(refund.journalId)).toEqual([
+      ["1100", "115.00", "0.00"],
+      ["1000", "0.00", "115.00"],
+    ]);
+    expect(await world.paymentNow(payment.id)).toMatchObject({ overpaymentRemaining: "0.00", overpaymentStatus: "used" });
+    // INV-0001 can't be voided while it has active payments, even one that paid nothing on it.
+    await expect(world.voidTheInvoice(world.i1.id, "2026-06-01")).rejects.toThrow("has payments against it");
   });
 
   it("OP5: over-applying, other customers, unapproved invoices, voided payments, early dates and bad amounts are refused, and nothing changes", async () => {
@@ -746,7 +766,7 @@ describeWithDatabase("customer overpayments", () => {
     );
     await expect(insertPayment(world.i6.id, "70.00", "4.00")).rejects.toThrow("must be what it pays beyond");
     await expect(insertPayment(world.i6.id, "10.00", "11.00")).rejects.toThrow("must be what it pays beyond");
-    await expect(insertPayment(world.i1.id, "1.00", "1.00")).rejects.toThrow("Invoice INV-0001 is already paid in full");
+    await expect(insertPayment(world.i1.id, "1.00", "0.50")).rejects.toThrow("must be what it pays beyond the amount due (0.00)");
 
     const insertApplication = (paymentId: string, invoiceId: string, amount: string, date = "2026-05-22", status = "active") =>
       world.sql(
