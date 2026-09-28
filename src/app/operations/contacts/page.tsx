@@ -9,6 +9,7 @@ import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
 import { formatGstNumber } from "@/lib/format";
+import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 type Draft = {
   name: string;
@@ -173,6 +174,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
   // One idempotency key per "New contact" form, so a retried save can't add the contact twice.
   const [createKey, setCreateKey] = useState<string | null>(null);
   const [editing, setEditing] = useState<Contact | null>(null);
+  const [viewing, setViewing] = useState<Contact | null>(null);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const rows = contacts.data?.contacts ?? [];
 
@@ -293,7 +295,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
                   <th>Email</th>
                   <th>Phone</th>
                   <th>GST number</th>
-                  {canEdit ? <th /> : null}
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -311,32 +313,42 @@ function Contacts({ organisationId }: { organisationId: string }) {
                     <td>{contact.email ?? ""}</td>
                     <td>{contact.phone ?? ""}</td>
                     <td>{formatGstNumber(contact.gstNumber)}</td>
-                    {canEdit ? (
-                      <td className={ui.num}>
-                        <span className={ui.actions} style={{ justifyContent: "flex-end" }}>
-                          <Button
-                            variant="secondary"
-                            size="small"
-                            aria-label={`Edit ${contact.name}`}
-                            onClick={() => {
-                              setCreateKey(null);
-                              setStatus(null);
-                              setEditing(contact);
-                            }}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            size="small"
-                            aria-label={`${contact.isArchived ? "Unarchive" : "Archive"} ${contact.name}`}
-                            onClick={() => void setArchived(contact, !contact.isArchived)}
-                          >
-                            {contact.isArchived ? "Unarchive" : "Archive"}
-                          </Button>
-                        </span>
-                      </td>
-                    ) : null}
+                    <td className={ui.num}>
+                      <span className={ui.actions} style={{ justifyContent: "flex-end" }}>
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          aria-label={`Notes and files for ${contact.name}`}
+                          onClick={() => setViewing(viewing?.id === contact.id ? null : contact)}
+                        >
+                          Notes &amp; files
+                        </Button>
+                        {canEdit ? (
+                          <>
+                            <Button
+                              variant="secondary"
+                              size="small"
+                              aria-label={`Edit ${contact.name}`}
+                              onClick={() => {
+                                setCreateKey(null);
+                                setStatus(null);
+                                setEditing(contact);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="small"
+                              aria-label={`${contact.isArchived ? "Unarchive" : "Archive"} ${contact.name}`}
+                              onClick={() => void setArchived(contact, !contact.isArchived)}
+                            >
+                              {contact.isArchived ? "Unarchive" : "Archive"}
+                            </Button>
+                          </>
+                        ) : null}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -344,6 +356,15 @@ function Contacts({ organisationId }: { organisationId: string }) {
           </div>
         )}
       </Card>
+      {viewing ? (
+        <RecordExtrasPanel
+          key={viewing.id}
+          organisationId={organisationId}
+          recordType="contact"
+          recordId={viewing.id}
+          title={`${viewing.name}: notes, files and history`}
+        />
+      ) : null}
     </>
   );
 }
