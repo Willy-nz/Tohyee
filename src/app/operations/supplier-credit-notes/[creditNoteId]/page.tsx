@@ -17,6 +17,7 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, formatQuantity, todayInBrowser } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { SupplierCreditNote } from "@/lib/supplier-credit-notes/service";
+import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 type CreditNote = SupplierCreditNote;
 
@@ -300,6 +301,12 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
       {can("bookkeeper") ? (
         <CreditNoteActions key={creditNote.status} organisationId={organisationId} creditNote={creditNote} onChanged={onChanged} />
       ) : null}
+      <RecordExtrasPanel
+        key={`${creditNote.status}-${message ?? ""}`}
+        organisationId={organisationId}
+        recordType="supplier_credit_note"
+        recordId={creditNote.id}
+      />
       <p>
         <Link href="/operations/supplier-credit-notes">Back to supplier credit notes</Link>
       </p>
