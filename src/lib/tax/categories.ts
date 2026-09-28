@@ -5,7 +5,7 @@ export type TaxCategory = (typeof TAX_CATEGORIES)[number];
 /**
  * How GST returns are worked out: on invoices raised, on payments, or a mix
  * (sales on invoice, purchases on payments). Stored in organisation settings
- * for the GST return, which handles only the invoice basis so far.
+ * for the GST return, which handles all three (G1-G22).
  */
 export const GST_BASES = ["invoice", "payments", "hybrid"] as const;
 export type GstBasis = (typeof GST_BASES)[number];
