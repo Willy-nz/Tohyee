@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, Suspense, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { CustomReportList, StartCustomReport } from "@/components/reports/custom-report";
 import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 
@@ -328,14 +329,14 @@ const TABS = [
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
 
-function Reports({ organisationId }: { organisationId: string }) {
+function StandardReports({ organisationId }: { organisationId: string }) {
   const router = useRouter();
   const params = useSearchParams();
   // The report shown is in the address (?report=), so the menus can open each one.
   const tab: TabKey = TABS.find((entry) => entry.key === params.get("report"))?.key ?? "pnl";
   return (
     <>
-      <div className={ui.tabs} role="tablist">
+      <div className={ui.tabs} role="tablist" aria-label="Standard reports">
         {TABS.map((entry) => (
           <button
             key={entry.key}
@@ -356,6 +357,43 @@ function Reports({ organisationId }: { organisationId: string }) {
       <p className={ui.muted}>
         The GST return is under <Link href="/operations/gst-return">Tax</Link>.
       </p>
+    </>
+  );
+}
+
+/** Reports: the standard reports (Home), and custom reports: new, drafts, published and archived (examples CR1-CR10). */
+const VIEWS = [
+  { key: "home", label: "Home" },
+  { key: "custom", label: "Custom" },
+  { key: "drafts", label: "Drafts" },
+  { key: "published", label: "Published" },
+  { key: "archived", label: "Archived" },
+] as const;
+type ViewKey = (typeof VIEWS)[number]["key"];
+
+function Reports({ organisationId }: { organisationId: string }) {
+  const router = useRouter();
+  const params = useSearchParams();
+  const view: ViewKey = VIEWS.find((entry) => entry.key === params.get("view"))?.key ?? "home";
+  return (
+    <>
+      <div className={ui.tabs} role="tablist" aria-label="Reports">
+        {VIEWS.map((entry) => (
+          <button
+            key={entry.key}
+            type="button"
+            role="tab"
+            aria-selected={view === entry.key}
+            className={`${ui.tab} ${view === entry.key ? ui.tabActive : ""}`}
+            onClick={() => router.replace(entry.key === "home" ? "/operations/reports" : `/operations/reports?view=${entry.key}`, { scroll: false })}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+      {view === "home" ? <StandardReports organisationId={organisationId} /> : null}
+      {view === "custom" ? <StartCustomReport organisationId={organisationId} /> : null}
+      {view === "drafts" || view === "published" || view === "archived" ? <CustomReportList key={view} organisationId={organisationId} view={view} /> : null}
     </>
   );
 }

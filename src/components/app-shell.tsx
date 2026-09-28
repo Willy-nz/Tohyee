@@ -31,6 +31,7 @@ const MENUS: Menu[] = [
           { href: "/operations/sales", label: "Sales overview" },
           { href: "/operations/invoices", label: "Invoices" },
           { href: "/operations/invoices?show=awaiting", label: "Awaiting payment" },
+          { href: "/operations/customer-payments", label: "Payments for several invoices" },
           { href: "/operations/credit-notes", label: "Credit notes" },
           { href: "/operations/overpayments", label: "Overpayments" },
         ],
@@ -40,6 +41,7 @@ const MENUS: Menu[] = [
         links: [
           { href: "/operations/invoices/new", label: "New invoice", minRole: "bookkeeper" },
           { href: "/operations/credit-notes/new", label: "New credit note", minRole: "bookkeeper" },
+          { href: "/operations/customer-payments/new", label: "Receive a payment", minRole: "bookkeeper" },
         ],
       },
     ],
@@ -53,6 +55,7 @@ const MENUS: Menu[] = [
           { href: "/operations/bills", label: "Bills" },
           { href: "/operations/bills?show=awaiting", label: "Awaiting payment" },
           { href: "/operations/supplier-credit-notes", label: "Supplier credit notes" },
+          { href: "/operations/supplier-payments", label: "Payments for several bills" },
         ],
       },
       {
@@ -60,6 +63,7 @@ const MENUS: Menu[] = [
         links: [
           { href: "/operations/bills/new", label: "New bill", minRole: "bookkeeper" },
           { href: "/operations/supplier-credit-notes/new", label: "New supplier credit note", minRole: "bookkeeper" },
+          { href: "/operations/supplier-payments/new", label: "Pay bills", minRole: "bookkeeper" },
         ],
       },
     ],
@@ -73,6 +77,15 @@ const MENUS: Menu[] = [
           { href: "/operations/reports?report=bs", label: "Balance sheet" },
           { href: "/operations/reports?report=tb", label: "Trial balance" },
           { href: "/operations/reports?report=stock", label: "Stock valuation" },
+        ],
+      },
+      {
+        heading: "Custom reports",
+        links: [
+          { href: "/operations/reports?view=custom", label: "New custom report", minRole: "bookkeeper" },
+          { href: "/operations/reports?view=drafts", label: "Drafts" },
+          { href: "/operations/reports?view=published", label: "Published" },
+          { href: "/operations/reports?view=archived", label: "Archived" },
         ],
       },
     ],
@@ -127,8 +140,8 @@ const MENUS: Menu[] = [
 /** The paths a menu covers, so its button shows as the current area. */
 const AREAS: Record<string, string[]> = {
   Home: ["/operations"],
-  Sales: ["/operations/sales", "/operations/invoices", "/operations/credit-notes", "/operations/overpayments"],
-  Purchases: ["/operations/purchases", "/operations/bills", "/operations/supplier-credit-notes"],
+  Sales: ["/operations/sales", "/operations/invoices", "/operations/credit-notes", "/operations/overpayments", "/operations/customer-payments"],
+  Purchases: ["/operations/purchases", "/operations/bills", "/operations/supplier-credit-notes", "/operations/supplier-payments"],
   Reporting: ["/operations/reports"],
   Accounting: [
     "/operations/bank-accounts",
@@ -402,10 +415,10 @@ function Shell({ children, warnings }: { children: ReactNode; warnings: string[]
 
   return (
     <div className={styles.shell}>
-      <a href="#main-content" className={styles.skipLink}>
+      <a href="#main-content" className={styles.skipLink} data-print="hide">
         Skip to content
       </a>
-      <header className={styles.topbar}>
+      <header className={styles.topbar} data-print="hide">
         <div className={styles.topRow}>
           <Link href="/operations" className={styles.brand}>
             <span className={styles.brandDot} aria-hidden />

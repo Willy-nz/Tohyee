@@ -41,6 +41,8 @@ export type SupplierPayment = {
   voidJournalId: string | null;
   voidedByEmail: string | null;
   voidedAt: string | null;
+  /** Set when it's one bill's part of a payment for several bills (SMP1-SMP6), which is voided as a whole. */
+  batchId: string | null;
 };
 
 type PaymentRow = {
@@ -62,11 +64,13 @@ type PaymentRow = {
   void_journal_id: string | null;
   voided_by_email: string | null;
   voided_at: string | null;
+  batch_id: string | null;
 };
 
 const PAYMENT_SELECT = `select p.id, p.bill_id, b.supplier_invoice_number, p.status, p.payment_date, p.amount,
        p.currency_code, p.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, p.reference,
-       p.journal_id, p.created_by_email, p.created_at, p.void_date, p.void_journal_id, p.voided_by_email, p.voided_at
+       p.journal_id, p.created_by_email, p.created_at, p.void_date, p.void_journal_id, p.voided_by_email, p.voided_at,
+       p.batch_id
   from supplier_payments p
   join bills b on b.id = p.bill_id
   join accounts a on a.id = p.bank_account_id`;
@@ -91,6 +95,7 @@ function toPayment(row: PaymentRow): SupplierPayment {
     voidJournalId: row.void_journal_id,
     voidedByEmail: row.voided_by_email,
     voidedAt: row.voided_at,
+    batchId: row.batch_id,
   };
 }
 
@@ -149,7 +154,7 @@ function isUniqueViolation(error: unknown): boolean {
  * The account a payment is made from (example SP8): an active bank account
  * in the base currency.
  */
-async function resolveBankAccount(
+export async function resolveBankAccount(
   tx: OrgTx,
   code: string,
 ): Promise<{ id: string; code: string; name: string }> {
@@ -371,6 +376,10 @@ export async function voidSupplierPayment(
   const payment = await getPayment(tx, paymentId);
   if (payment.status === "voided") {
     throw new ConflictError("This payment has already been voided.");
+  }
+  if (payment.batchId) {
+    // Example SMP4. The database refuses it too.
+    throw new ConflictError("This is part of a payment for several bills, so it can't be voided on its own: void the whole payment.");
   }
   if (voidDate < payment.paymentDate) {
     throw new ValidationError(`The void date can't be before the payment date (${payment.paymentDate}).`);

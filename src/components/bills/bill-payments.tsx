@@ -272,10 +272,17 @@ export function BillPayments({
                   </td>
                   <td className={ui.num}>
                     <Money value={payment.amount} />
+                    {payment.batchId ? (
+                      <div className={ui.muted}>
+                        <Link href={`/operations/supplier-payments/${payment.batchId}`}>part of a payment for several bills</Link>
+                      </div>
+                    ) : null}
                   </td>
                   {bookkeeper ? (
                     <td>
-                      {payment.status === "active" ? (
+                      {payment.status === "active" && payment.batchId ? (
+                        <Link href={`/operations/supplier-payments/${payment.batchId}`}>Void the whole payment…</Link>
+                      ) : payment.status === "active" ? (
                         <Button size="small" variant="secondary" onClick={() => setVoiding(payment)} disabled={voiding !== null}>
                           Void…
                         </Button>
