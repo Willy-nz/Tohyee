@@ -37,6 +37,18 @@ that something happened.
   and the GST return (below).
   The financial year end is a setting (default 31 March); the balance sheet
   splits earnings into this year and previous years.
+- **Custom reports** (Reporting, tabs Home, Custom, Drafts, Published and
+  Archived): start from the profit and loss or balance sheet, then change the
+  title, the columns (1-12 months, quarters or years, a difference and %
+  column, and year to date on profit and loss), and the rows (groups of
+  accounts by type or by code, showing each account or just the total,
+  formula rows that add and subtract other rows, headings, and the balance
+  sheet's earnings lines), move and delete them, and add more tables and
+  notes. Accounts left out or counted twice are listed on the report.
+  Publishing keeps a frozen copy that never changes (the database refuses);
+  drafts and published reports can be archived and brought back, and drafts
+  deleted. "Print or save as PDF" prints just the report. Budget columns
+  come with budgets. See examples CR1-CR10.
 - **Contacts**: customers and suppliers with optional email, phone, postal
   address and GST number (format-checked only); search by name or email;
   archiving instead of deleting. Customers are used by sales invoices and
