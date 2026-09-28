@@ -129,8 +129,9 @@ that something happened.
   paying invoices or bills, creating spend or receive money (with GST), or a
   transfer between accounts; lines can be excluded, unreconciled and imports
   deleted. **Bank rules** fill in spend or receive money from text in the
-  line. Server admins set up the Akahu app (a personal app, or a full app
-  where each organisation connects its own banks). See examples BK1-BK16.
+  line. Each organisation sets up its own Akahu personal app (with its own
+  bank logins) and an organisation admin enters its tokens, which are checked
+  with Akahu and stored encrypted. See examples BK1-BK16.
 - **Update check** against GitHub releases.
 
 ## Not built yet, on purpose

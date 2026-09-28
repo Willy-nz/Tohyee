@@ -21,8 +21,6 @@ tohyee                  core database (DATABASE_URL)
 ├─ organisations        registry: id, name, database_name, status
 ├─ users, sessions      logins
 ├─ organisation_members who can open which organisation, with what role
-├─ server_settings      server-wide integration settings, e.g. the Akahu app
-│                       (secrets encrypted with TOHYEE_SECRET_KEY; never accounting data)
 └─ admin_audit_events   server-level audit trail
 
 tohyee_org_glimmers     one database per organisation (organisation "glimmers")
@@ -46,7 +44,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ supplier_credit_note_refunds        credit paid back by suppliers
 ├─ gst_returns, gst_return_adjustments, gst_return_lines   filed GST returns
 ├─ bank_account_settings  per bank/card account: statement balance, import layout, Akahu feed link
-├─ akahu_connections, akahu_oauth_states   the organisation's Akahu consent (token encrypted)
+├─ akahu_connections      the organisation's own Akahu personal app (tokens encrypted)
 ├─ bank_statement_imports, bank_statement_lines   statement files and bank feed syncs
 ├─ bank_reconciliations, bank_reconciliation_items   which journal lines each statement line is
 ├─ bank_transactions, bank_transaction_lines   spend and receive money
@@ -348,7 +346,7 @@ tested against.
 
 The only background job so far is the bank feed sync: every 15 minutes the
 server checks each ready organisation for linked accounts not synced in the
-last few hours (a server setting) and syncs them one at a time
+last few hours (the organisation's "sync every" setting) and syncs them one at a time
 (`src/lib/bank/akahu/sync.ts`, started from `src/instrumentation.ts`; set
 `TOHYEE_BANK_FEEDS_SCHEDULER=off` to stop it). A failure is kept on the
 account and shown on its Bank feed tab, and the next run tries again. It makes

@@ -760,13 +760,14 @@ B1 (total 230.00, 10 May 2026), contact Z Energy.
 
 ### Bank feeds (Akahu)
 
-Bank feeds come from Akahu (NZ open finance). A server admin sets up the
-Akahu app once for the server: its App ID token, and either a personal-app
-user token (the admin's own bank logins) or the App secret for Akahu's OAuth
-consent flow, where each organisation connects its own banks. Tokens are
-stored encrypted with the server's `TOHYEE_SECRET_KEY`. An organisation then
-links each Akahu account to one of its bank or credit card accounts, with a
-start date for the history to bring in.
+Bank feeds come from Akahu (NZ open finance). Each organisation sets up its
+own Akahu **personal app** at my.akahu.nz with its own bank logins, and an
+organisation admin enters the app's App ID token and user token in Tohyee.
+The tokens are checked with Akahu before they're saved, stored encrypted
+(with the server's `TOHYEE_SECRET_KEY`) in the organisation's own database,
+and never shown again. An admin then links each Akahu account to one of the
+organisation's bank or credit card accounts, with a start date for the
+history to bring in.
 
 - Syncing reads settled transactions only (pending ones wait until they
   settle) from two days before the last line it brought in (lines already
@@ -776,8 +777,11 @@ start date for the history to bring in.
 - Akahu's amount is signed the same way as statement lines (negative is money
   out). Its date is converted to the New Zealand date. Particulars, code,
   reference and the merchant name come across when Akahu has them.
-- Accounts sync on a schedule (every 6 hours by default) and on demand. A
-  failed sync keeps the error on the account and changes nothing.
+- Accounts sync on a schedule (every 6 hours by default, 1-24 per
+  organisation) and on demand. A failed sync keeps the error on the account
+  and changes nothing. Saving new tokens replaces the old ones and linked
+  accounts carry on; removing them stops syncing until tokens are saved
+  again.
 
 - **BK15** An Akahu account linked to 1000 with a start date of 1 May 2026
   returns two settled transactions (-46.00 on 21 May, +115.00 on 20 May) and
