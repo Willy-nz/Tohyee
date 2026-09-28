@@ -4,6 +4,7 @@
  *
  *   npm run admin -- create-user --email you@example.com --name "Your Name" --server-admin
  *   npm run admin -- set-password --email you@example.com
+ *   npm run admin -- reset-two-step --email you@example.com
  *
  * Passwords are read from the TOHYEE_PASSWORD environment variable or asked
  * for interactively, so they don't end up in shell history.
@@ -12,8 +13,9 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { hashPassword, validateNewPassword } from "@/lib/auth/password";
 import { normaliseEmail, parseDisplayName } from "@/lib/auth/service";
+import { resetTwoStep } from "@/lib/auth/two-step";
 import { closeAllPools } from "@/lib/db/pools";
-import { coreQuery } from "@/lib/db/transactions";
+import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 
 function option(args: string[], name: string): string | null {
   const index = args.indexOf(`--${name}`);
@@ -76,8 +78,21 @@ async function main() {
     console.log(`Password updated for ${email}; their other sessions were signed out.`);
     return;
   }
+  if (command === "reset-two-step") {
+    // For someone who has lost their phone and backup codes and can't use an
+    // emailed reset link (e.g. the only server admin, with no email set up).
+    const email = normaliseEmail(option(args, "email"));
+    const found = await coreQuery<{ id: string }>("select id from users where email = $1", [email]);
+    const userId = found.rows[0]?.id;
+    if (!userId) {
+      throw new Error(`No user with the email ${email}.`);
+    }
+    await withCoreTransaction((client) => resetTwoStep(client, userId, { userId: null, email: "admin-cli" }, "command_line"));
+    console.log(`Two-step sign-in reset for ${email}; they set it up again at their next sign-in.`);
+    return;
+  }
   console.log(
-    "Usage:\n  npm run admin -- create-user --email EMAIL --name NAME [--server-admin]\n  npm run admin -- set-password --email EMAIL",
+    "Usage:\n  npm run admin -- create-user --email EMAIL --name NAME [--server-admin]\n  npm run admin -- set-password --email EMAIL\n  npm run admin -- reset-two-step --email EMAIL",
   );
   process.exitCode = 1;
 }

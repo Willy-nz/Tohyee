@@ -129,15 +129,28 @@ export async function startTestServer(options: { separateRuntimeLogin?: boolean 
 let passwordHashCache: Promise<string> | null = null;
 export const TEST_PASSWORD = "correct-horse-battery";
 
+/**
+ * A user for tests. They count as having two-step sign-in set up (with a
+ * placeholder key that's never read), so sessions from sessionCookieFor are
+ * fully signed in even when a test sets TOHYEE_SECRET_KEY. Pass
+ * `twoStep: false` for someone who hasn't set it up.
+ */
 export async function createTestUser(
   email: string,
-  options: { serverAdmin?: boolean; displayName?: string } = {},
+  options: { serverAdmin?: boolean; displayName?: string; twoStep?: boolean } = {},
 ): Promise<SessionUser> {
   passwordHashCache ??= hashPassword(TEST_PASSWORD);
+  const twoStep = options.twoStep ?? true;
   const result = await coreQuery<{ id: string }>(
-    `insert into users (email, display_name, password_hash, is_server_admin)
-     values ($1, $2, $3, $4) returning id`,
-    [email, options.displayName ?? email.split("@")[0], await passwordHashCache, options.serverAdmin ?? false],
+    `insert into users (email, display_name, password_hash, is_server_admin, totp_secret_ciphertext, totp_enabled_at)
+     values ($1, $2, $3, $4, $5, case when $5::text is null then null else now() end) returning id`,
+    [
+      email,
+      options.displayName ?? email.split("@")[0],
+      await passwordHashCache,
+      options.serverAdmin ?? false,
+      twoStep ? "test-placeholder" : null,
+    ],
   );
   return {
     id: result.rows[0].id,

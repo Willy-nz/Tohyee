@@ -1,6 +1,8 @@
 import { writeAdminAuditEvent } from "@/lib/audit";
 import { normaliseEmail, parseDisplayName } from "@/lib/auth/service";
 import { hashPassword, validateNewPassword } from "@/lib/auth/password";
+import { resetTwoStep } from "@/lib/auth/two-step";
+import { sendSecurityAlert } from "@/lib/email/mailer";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -15,6 +17,7 @@ export type UserSummary = {
   lastLoginAt: string | null;
   createdAt: string;
   organisationCount: number;
+  twoStepEnabled: boolean;
 };
 
 type UserRow = {
@@ -26,6 +29,7 @@ type UserRow = {
   last_login_at: string | null;
   created_at: string;
   organisation_count: string;
+  two_step_enabled: boolean;
 };
 
 function toSummary(row: UserRow): UserSummary {
@@ -38,12 +42,13 @@ function toSummary(row: UserRow): UserSummary {
     lastLoginAt: row.last_login_at,
     createdAt: row.created_at,
     organisationCount: Number(row.organisation_count),
+    twoStepEnabled: row.two_step_enabled,
   };
 }
 
 const USER_SELECT = `
   select u.id, u.email, u.display_name, u.is_server_admin, u.is_active,
-         u.last_login_at, u.created_at,
+         u.last_login_at, u.created_at, u.totp_enabled_at is not null as two_step_enabled,
          (select count(*) from organisation_members m where m.user_id = u.id)::text as organisation_count
     from users u`;
 
@@ -168,4 +173,24 @@ export async function updateUser(
     const row = await client.query<UserRow>(`${USER_SELECT} where u.id = $1`, [userId]);
     return toSummary(row.rows[0]);
   });
+}
+
+/**
+ * Resets someone's two-step sign-in (a server admin, for a lost phone). They
+ * are signed out everywhere and set it up again at their next sign-in.
+ */
+export async function resetUserTwoStep(actor: SessionUser, userIdInput: string): Promise<UserSummary> {
+  const userId = assertUuid(userIdInput);
+  const summary = await withCoreTransaction(async (client) => {
+    const found = await client.query<UserRow>(`${USER_SELECT} where u.id = $1 for update of u`, [userId]);
+    if (!found.rows[0]) throw new NotFoundError("User not found.");
+    await resetTwoStep(client, userId, { userId: actor.id, email: actor.email }, "admin");
+    const after = await client.query<UserRow>(`${USER_SELECT} where u.id = $1`, [userId]);
+    return toSummary(after.rows[0]);
+  });
+  await sendSecurityAlert(summary.email, "two-step sign-in was reset", [
+    `A server admin (${actor.email}) reset two-step sign-in for your Tohyee account and signed out its sessions.`,
+    "You'll set up your authenticator app again the next time you sign in.",
+  ]);
+  return summary;
 }

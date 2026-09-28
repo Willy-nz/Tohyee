@@ -8,7 +8,7 @@ export const POST = route(async (request) => {
   const body = await readJson(request);
   const result = await signIn({ email: body.email, password: body.password }, sessionMetaFrom(request));
   return json(
-    { user: result.user },
+    { user: result.user, stage: result.stage },
     { headers: { "set-cookie": sessionCookieHeader(request, result.token) } },
   );
 });

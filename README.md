@@ -125,8 +125,9 @@ The installer is built and tested on Windows by
 **Docker:** `tohyee-v<version>-windows-docker.zip` runs Tohyee in Docker
 Desktop instead (see [`deploy/windows`](deploy/windows)). The image is `ghcr.io/willy-nz/tohyee:<version>`. It needs
 `DATABASE_URL` (a PostgreSQL 15+ login that can create databases), for the
-first run `SETUP_TOKEN`, and for bank feeds `TOHYEE_SECRET_KEY` (32+ random
-characters; the installers create it); it listens on port 3000.
+first run `SETUP_TOKEN`, and `TOHYEE_SECRET_KEY` (32+ random characters: it
+turns on two-step sign-in and encrypts stored secrets; the installers create
+it); it listens on port 3000.
 
 **Linux without Docker:**
 
@@ -135,10 +136,19 @@ npm run build
 npm run package:release           # dist/release/tohyee-v<version>-linux-x64.tar.gz
 ```
 
-On the server, unpack the bundle, set `DATABASE_URL` (and `SETUP_TOKEN` for
-the first run, and `TOHYEE_SECRET_KEY` for bank feeds) in the environment, and start it with `PORT=3000 ./start.sh`.
+On the server, unpack the bundle, set `DATABASE_URL`, `TOHYEE_SECRET_KEY`
+(and `SETUP_TOKEN` for the first run) in the environment, and start it with `PORT=3000 ./start.sh`.
 Put it behind HTTPS (e.g. Caddy or nginx) if it's reachable beyond your own
 network.
+
+**From anywhere (phone or laptop):** Server → Remote access connects Tohyee
+to a free Cloudflare Tunnel (you need a domain on Cloudflare), so it has an
+https address without opening ports on your router. Everyone signs in with
+a password and an authenticator app (two-step sign-in), which is required
+whenever `TOHYEE_SECRET_KEY` is set (the installers set it). Set up Server →
+Email too, for security alerts and lost-phone reset links. The Windows
+installer and Docker image include Cloudflare's `cloudflared`; on Linux,
+install it or set `TOHYEE_CLOUDFLARED_PATH`.
 
 **Backups:** each organisation is a normal PostgreSQL database, so
 `pg_dump -Fc -d tohyee_org_<id>` backs one up. Back up the core database

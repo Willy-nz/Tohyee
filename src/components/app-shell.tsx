@@ -46,6 +46,8 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { href: "/operations/organisations", label: "Organisations", serverAdmin: true },
       { href: "/operations/users", label: "Users", serverAdmin: true },
+      { href: "/operations/remote-access", label: "Remote access", serverAdmin: true },
+      { href: "/operations/email", label: "Email", serverAdmin: true },
       { href: "/operations/server", label: "Updates", serverAdmin: true },
     ],
   },
@@ -55,7 +57,7 @@ function isActive(pathname: string, href: string) {
   return href === "/operations" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function Shell({ children }: { children: ReactNode }) {
+function Shell({ children, warnings }: { children: ReactNode; warnings: string[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, organisations, current, selectOrganisation, can } = useWorkspace();
@@ -137,6 +139,11 @@ function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main id="main-content" className={styles.content} tabIndex={-1}>
+          {warnings.map((warning) => (
+            <div key={warning} role="alert" className={styles.serverWarning}>
+              {warning}
+            </div>
+          ))}
           {children}
         </main>
       </div>
@@ -147,15 +154,18 @@ function Shell({ children }: { children: ReactNode }) {
 export function AppShell({
   user,
   organisations,
+  warnings = [],
   children,
 }: {
   user: WorkspaceUser;
   organisations: WorkspaceOrganisation[];
+  /** Server problems shown on every page (only passed for server admins). */
+  warnings?: string[];
   children: ReactNode;
 }) {
   return (
     <WorkspaceProvider user={user} organisations={organisations}>
-      <Shell>{children}</Shell>
+      <Shell warnings={warnings}>{children}</Shell>
     </WorkspaceProvider>
   );
 }

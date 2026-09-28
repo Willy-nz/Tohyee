@@ -1,7 +1,8 @@
 # Installs the freshly built TohyeeSetup on this (throwaway CI) Windows
-# machine and checks it end to end: services, health, first-time setup,
-# creating an organisation, surviving a service restart, updating in place
-# and uninstalling. Needs Administrator (GitHub's Windows runners are).
+# machine and checks it end to end: services, health, first-time setup
+# (including two-step sign-in), creating an organisation, surviving a service
+# restart, updating in place (signing in with a backup code), the bundled
+# cloudflared, and uninstalling. Needs Administrator (GitHub's Windows runners are).
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -13,6 +14,29 @@ $dataRoot = Join-Path $env:ProgramData 'Tohyee'
 $installDir = Join-Path $env:ProgramFiles 'Tohyee'
 $url = 'http://localhost:3000'
 $origin = @{ Origin = $url }
+
+# Authenticator code (RFC 6238) for the two-step sign-in check.
+function Get-TotpCode([string]$Secret, [long]$UnixSeconds = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
+  $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  $key = New-Object System.Collections.Generic.List[byte]
+  [long]$buffer = 0
+  $bits = 0
+  foreach ($char in $Secret.ToUpperInvariant().Replace(' ', '').ToCharArray()) {
+    $buffer = (($buffer -shl 5) -bor $alphabet.IndexOf($char)) -band 0xFFFF
+    $bits += 5
+    if ($bits -ge 8) {
+      $key.Add([byte](($buffer -shr ($bits - 8)) -band 255))
+      $bits -= 8
+    }
+  }
+  $counter = [BitConverter]::GetBytes([long][Math]::Floor($UnixSeconds / 30.0))
+  if ([BitConverter]::IsLittleEndian) { [Array]::Reverse($counter) }
+  $hmac = New-Object System.Security.Cryptography.HMACSHA1 (, $key.ToArray())
+  $hash = $hmac.ComputeHash($counter)
+  $offset = $hash[$hash.Length - 1] -band 0x0f
+  $binary = (([long]$hash[$offset] -band 0x7f) -shl 24) -bor ([long]$hash[$offset + 1] -shl 16) -bor ([long]$hash[$offset + 2] -shl 8) -bor [long]$hash[$offset + 3]
+  return ($binary % 1000000).ToString('000000')
+}
 
 function Install-Tohyee([string]$Label) {
   Write-Host "== Install ($Label)"
@@ -68,7 +92,15 @@ try {
   Write-Host '== First-time setup and an organisation'
   $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
   $body = @{ setupToken = $first['SETUP_TOKEN']; email = 'ci@example.com'; displayName = 'CI'; password = 'ci-password-long-enough-123' } | ConvertTo-Json
-  Invoke-RestMethod -Uri "$url/api/auth/setup" -Method Post -ContentType 'application/json' -Headers $origin -Body $body -WebSession $session | Out-Null
+  $setupResult = Invoke-RestMethod -Uri "$url/api/auth/setup" -Method Post -ContentType 'application/json' -Headers $origin -Body $body -WebSession $session
+  # The installer sets TOHYEE_SECRET_KEY, so two-step sign-in is required: set up an authenticator first.
+  if (-not $first['TOHYEE_SECRET_KEY']) { throw 'The installer did not create TOHYEE_SECRET_KEY.' }
+  if ($setupResult.stage -ne 'enrol') { throw "Expected to set up two-step sign-in after setup, got stage '$($setupResult.stage)'." }
+  $enrolment = Invoke-RestMethod -Uri "$url/api/auth/two-step/enrol" -WebSession $session
+  $confirm = @{ code = (Get-TotpCode $enrolment.secret) } | ConvertTo-Json
+  $enrolled = Invoke-RestMethod -Uri "$url/api/auth/two-step/enrol" -Method Post -ContentType 'application/json' -Headers $origin -Body $confirm -WebSession $session
+  if ($enrolled.backupCodes.Count -ne 10) { throw 'Two-step set-up did not return 10 backup codes.' }
+  Write-Host 'Two-step sign-in set up.'
   $org = @{ id = 'ci'; displayName = 'CI Ltd'; baseCurrency = 'NZD'; ownerEmail = 'ci@example.com' } | ConvertTo-Json
   $created = Invoke-RestMethod -Uri "$url/api/admin/organisations" -Method Post -ContentType 'application/json' -Headers $origin -Body $org -WebSession $session
   Write-Host "Organisation: $($created.organisation.provisioningStatus), schema $($created.organisation.schemaVersion)"
@@ -87,8 +119,18 @@ try {
   $second = Read-Settings
   if ($second['POSTGRES_PASSWORD'] -ne $first['POSTGRES_PASSWORD']) { throw 'The update changed the database password.' }
   $login = @{ email = 'ci@example.com'; password = 'ci-password-long-enough-123' } | ConvertTo-Json
-  Invoke-RestMethod -Uri "$url/api/auth/login" -Method Post -ContentType 'application/json' -Headers $origin -Body $login | Out-Null
-  Write-Host 'Signed in after the update: data kept.'
+  $again = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+  $signedIn = Invoke-RestMethod -Uri "$url/api/auth/login" -Method Post -ContentType 'application/json' -Headers $origin -Body $login -WebSession $again
+  if ($signedIn.stage -ne 'verify') { throw "Expected a two-step code after the password, got stage '$($signedIn.stage)'." }
+  # A backup code, so this doesn't depend on waiting for a new authenticator code.
+  $backup = @{ code = $enrolled.backupCodes[0] } | ConvertTo-Json
+  Invoke-RestMethod -Uri "$url/api/auth/two-step/verify" -Method Post -ContentType 'application/json' -Headers $origin -Body $backup -WebSession $again | Out-Null
+  $me = Invoke-RestMethod -Uri "$url/api/auth/session" -WebSession $again
+  if ($me.organisations.Count -ne 1) { throw 'The organisation was not there after the update.' }
+  Write-Host 'Signed in (password and backup code) after the update: data kept.'
+  $cloudflared = Join-Path $installDir 'cloudflared\cloudflared.exe'
+  if (-not (Test-Path $cloudflared)) { throw 'cloudflared.exe was not installed.' }
+  Write-Host (& $cloudflared --version)
 
   Write-Host '== Uninstall'
   Start-Process -FilePath (Join-Path $installDir 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait

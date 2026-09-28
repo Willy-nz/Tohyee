@@ -6,7 +6,7 @@ import {
   verifyAgainstDummy,
   verifyPassword,
 } from "@/lib/auth/password";
-import { createSession, type SessionMeta, type SessionUser } from "@/lib/auth/sessions";
+import { createSession, type SessionMeta, type SessionStage, type SessionUser, twoStepRequired } from "@/lib/auth/sessions";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 import {
   ConflictError,
@@ -52,7 +52,11 @@ function setupTokenMatches(presented: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-type SignedIn = { user: SessionUser; token: string; expiresAt: Date };
+/**
+ * `stage` says what's next: "full" means signed in; "verify" and "enrol" mean
+ * the session is pending until the second step is done (or set up).
+ */
+type SignedIn = { user: SessionUser; token: string; expiresAt: Date; stage: SessionStage };
 
 /** Creates the very first user (a server admin). Only works while there are no users. */
 export async function completeSetup(
@@ -85,11 +89,13 @@ export async function completeSetup(
       entityType: "user",
       entityId: userId,
     });
-    const session = await createSession(client, userId, meta);
+    const required = twoStepRequired();
+    const session = await createSession(client, userId, meta, { pending: required });
     return {
       user: { id: userId, email, displayName, isServerAdmin: true },
       token: session.token,
       expiresAt: session.expiresAt,
+      stage: required ? "enrol" : "full",
     };
   });
 }
@@ -103,6 +109,7 @@ type UserAuthRow = {
   is_active: boolean;
   failed_login_count: number;
   locked_until: string | null;
+  two_step_enabled: boolean;
 };
 
 export async function signIn(
@@ -118,7 +125,7 @@ export async function signIn(
 
   const found = await coreQuery<UserAuthRow>(
     `select id, email, display_name, password_hash, is_server_admin, is_active,
-            failed_login_count, locked_until
+            failed_login_count, locked_until, totp_enabled_at is not null as two_step_enabled
        from users where email = $1`,
     [email],
   );
@@ -149,15 +156,21 @@ export async function signIn(
     throw new UnauthorizedError(SIGN_IN_FAILED);
   }
 
+  // With two-step sign-in, the password only opens a pending session; the
+  // second step (or setting it up) finishes signing in.
+  const required = twoStepRequired();
+  const stage: SessionStage = !required ? "full" : user.two_step_enabled ? "verify" : "enrol";
   return withCoreTransaction(async (client) => {
     await client.query(
       `update users
-          set failed_login_count = 0, locked_until = null, last_login_at = now()
+          set failed_login_count = 0, locked_until = case when $2 then locked_until else null end,
+              last_login_at = case when $2 then last_login_at else now() end
         where id = $1`,
-      [user.id],
+      [user.id, required],
     );
-    const session = await createSession(client, user.id, meta);
+    const session = await createSession(client, user.id, meta, { pending: required });
     return {
+      stage,
       user: {
         id: user.id,
         email: user.email,

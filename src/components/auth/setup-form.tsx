@@ -21,7 +21,7 @@ export function SetupForm() {
     setBusy(true);
     setError(null);
     try {
-      await api("/api/auth/setup", {
+      const result = await api<{ stage: "full" | "enrol" }>("/api/auth/setup", {
         method: "POST",
         body: {
           setupToken: form.get("setupToken"),
@@ -30,7 +30,8 @@ export function SetupForm() {
           password: form.get("password"),
         },
       });
-      router.replace("/operations/organisations");
+      // With two-step sign-in, the new admin sets up an authenticator app first.
+      router.replace(result.stage === "full" ? "/operations/organisations" : "/login");
       router.refresh();
     } catch (caught) {
       setError(errorMessage(caught));
