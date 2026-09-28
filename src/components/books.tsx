@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import type { ReactNode } from "react";
 import type { Account } from "@/lib/accounts/service";
 import { ACCOUNT_CLASSES, type AccountClass } from "@/lib/accounts/types";
@@ -19,7 +18,7 @@ export const CLASS_LABELS: Record<AccountClass, string> = {
 
 /** Renders children only when an organisation is selected and ready. */
 export function RequireOrganisation({ children }: { children: (organisationId: string) => ReactNode }) {
-  const { current, user } = useWorkspace();
+  const { current, user, serverSettingsUrl } = useWorkspace();
   const hydrated = useHydrated();
   if (!hydrated) {
     return <p className={ui.muted}>Loading…</p>;
@@ -30,8 +29,15 @@ export function RequireOrganisation({ children }: { children: (organisationId: s
         <Empty>
           {user.isServerAdmin ? (
             <>
-              You aren&apos;t a member of any organisation. Create one in{" "}
-              <Link href="/operations/organisations">Organisations</Link>.
+              You aren&apos;t a member of any organisation. Create one in the server settings, on the server
+              computer: open Tohyee server settings from the Start menu
+              {serverSettingsUrl ? (
+                <>
+                  {" "}
+                  or go to <code>{serverSettingsUrl}</code> there
+                </>
+              ) : null}
+              .
             </>
           ) : (
             <>You aren&apos;t a member of any organisation yet. Ask a server admin to add you.</>

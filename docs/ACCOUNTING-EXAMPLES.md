@@ -23,7 +23,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/supplier-credit-notes.test.ts` (SCN1-SCN12) and
   `tests/integration/gst-returns.test.ts` (G1-G9) and
   `tests/integration/gst-bases.test.ts` (G10-G22) and
-  `tests/integration/record-extras.test.ts` (NF1-NF14), all against a real
+  `tests/integration/record-extras.test.ts` (NF1-NF14) and
+  `tests/integration/home.test.ts` (H1-H4), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -816,6 +817,36 @@ journals; the balance sheet works profit out when it runs.
 - **P3** Profit and loss: net profit = income - cost of sales + other
   income - expenses. Without a start date it covers the financial year to
   date, and then equals the balance sheet's current year earnings.
+
+### Home
+
+Home shows a card for each bank account, money owed to you, bills to pay and
+the next GST return. It's worked out whenever it's opened, posts nothing, and
+viewers can see it. "Today" is the date in the business time zone
+(Pacific/Auckland unless `TOHYEE_TIME_ZONE` says otherwise).
+
+- **H1** Bank accounts: one card for each active bank or credit card account,
+  with its balance in Tohyee (the ledger), its statement balance if any, and
+  "Reconcile N items" for its unreconciled statement lines (excluded lines
+  don't count), or "All reconciled". Archived accounts aren't shown.
+- **H2** Money owed to you, on 1 Jun 2026: INV-0001 (115.00, due 20 Jun,
+  50.00 paid) and INV-0002 (230.00, due 10 May, nothing paid): owed
+  **295.00** on **2** invoices, of which **230.00** on **1** invoice is
+  overdue (due before today; an invoice due today isn't overdue). Drafts,
+  voided invoices and paid invoices don't count. Credit applied (CN3) and
+  overpayment credit applied (OP2) lower what's owed; credit that hasn't been
+  applied yet doesn't.
+- **H3** Bills to pay works the same way for approved bills, less supplier
+  payments and supplier credit applied: B1 (230.00, due 30 Jun, 115.00 paid)
+  and B4 (135.00, due 20 May): **250.00** on **2** bills, **135.00** overdue
+  on **1**.
+- **H4** Next GST return: the period straight after the latest filed return,
+  the same length. With Feb-Mar 2026 filed, it's **1 Apr - 31 May 2026**,
+  with Box 15 worked out as the GST return would on the organisation's basis,
+  with no adjustments (G1 gives **-15.00**, a refund). If no GST return has
+  been filed in Tohyee, Home says so and links to the GST return instead of
+  guessing the period. If the GST return can't be worked out (e.g. a
+  standard-rated line at another rate, G9), Home shows why.
 
 ## GST return
 

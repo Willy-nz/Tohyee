@@ -5,14 +5,14 @@ import { createOrganisation, listAllOrganisations } from "@/lib/organisations/ad
 /** Every organisation on this server (server admins only). */
 export const GET = route(async (request) => {
   const auth = await requireAuth(request);
-  requireServerAdmin(auth);
+  requireServerAdmin(auth, request);
   return json({ organisations: await listAllOrganisations() });
 });
 
 /** Creates an organisation and its own database. */
 export const POST = route(async (request) => {
   const auth = await requireAuth(request);
-  requireServerAdmin(auth);
+  requireServerAdmin(auth, request);
   const body = await readJson(request);
   const organisation = await createOrganisation(auth.user, {
     id: body.id,

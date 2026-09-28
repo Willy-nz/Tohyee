@@ -1,0 +1,92 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.tileTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.tileTitle a {
+  color: var(--foreground);
+}
+
+.kind {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.figure {
+  font-size: 1.5rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.rows {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.row span:last-child {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.overdue span:last-child {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.action {
+  margin-top: auto;
+  align-self: flex-start;
+  border-radius: 8px;
+  background: var(--accent);
+  padding: 8px 12px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.action:hover {
+  background: var(--accent-strong);
+  color: #fff;
+  text-decoration: none;
+}
+
+.quiet {
+  margin-top: auto;
+  color: var(--success);
+  font-weight: 600;
+}
+
+.sectionTitle {
+  margin: 8px 0 10px;
+  font-size: 1.05rem;
+}

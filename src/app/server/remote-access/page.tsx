@@ -240,7 +240,7 @@ export default function RemoteAccessPage() {
               <li>
                 For an extra lock, Cloudflare Access (Zero Trust) can ask for an email code before anyone even reaches the sign-in page.
               </li>
-              <li>Set up Server → Email too, so people get security alerts and can reset two-step sign-in if they lose their phone.</li>
+              <li>Set up Email (in these server settings) too, so people get security alerts and can reset two-step sign-in if they lose their phone.</li>
             </ul>
           </Card>
         </>

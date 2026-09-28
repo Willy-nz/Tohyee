@@ -10,6 +10,9 @@
  * Then it starts the bank feed scheduler, which syncs linked Akahu accounts
  * that are due (off with TOHYEE_BANK_FEEDS_SCHEDULER=off).
  *
+ * Before that it opens the local-only address for server settings
+ * (127.0.0.1, TOHYEE_ADMIN_PORT; "off" turns it off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -19,6 +22,11 @@ export async function register() {
   }
   if (process.env.NEXT_PHASE === "phase-production-build") {
     return;
+  }
+  // Server settings open only from this computer (see src/lib/server-admin/local.ts).
+  if (process.env.TOHYEE_ADMIN_PORT !== "off") {
+    const { startLocalAdminListener } = await import("@/lib/server-admin/listener");
+    startLocalAdminListener();
   }
   if (process.env.TOHYEE_SKIP_STARTUP_MIGRATIONS === "1") {
     console.log("[tohyee] Skipping startup migrations (TOHYEE_SKIP_STARTUP_MIGRATIONS=1).");

@@ -10,13 +10,15 @@ import styles from "./auth.module.css";
 export type LoginStage = "password" | "verify" | "enrol";
 
 type Props = {
+  /** Where to go once signed in (checked by the login page). */
+  next?: string;
   /** Where a session in progress is up to (after a reload part-way through). */
   initialStage?: LoginStage;
   initialEmail?: string;
   emailResetAvailable?: boolean;
 };
 
-export function LoginForm({ initialStage = "password", initialEmail = "", emailResetAvailable = false }: Props) {
+export function LoginForm({ next = "/operations", initialStage = "password", initialEmail = "", emailResetAvailable = false }: Props) {
   const router = useRouter();
   const [stage, setStage] = useState<LoginStage>(initialStage);
   const [email, setEmail] = useState(initialEmail);
@@ -25,7 +27,7 @@ export function LoginForm({ initialStage = "password", initialEmail = "", emailR
   const [busy, setBusy] = useState(false);
 
   function finish() {
-    router.replace("/operations");
+    router.replace(next);
     router.refresh();
   }
 

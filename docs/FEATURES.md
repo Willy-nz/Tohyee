@@ -8,6 +8,14 @@ that something happened.
 
 - **Organisations**, each with its own PostgreSQL database, created and
   repaired by server admins.
+- **Server settings apart from the books** (organisations, users, remote
+  access, email, updates), open only on the server computer itself.
+- **Menus**: Home, Sales, Purchases, Reporting, Accounting, Tax and Contacts
+  across the top, each opening to its overview, lists and settings; a ☰ menu
+  with the same sections on phones, where line editors stack each line's
+  fields. **Home** (examples H1-H4): a card per bank account with its
+  balances and "Reconcile N items", money owed to you and bills to pay (with
+  what's overdue), and the next GST return's Box 15 so far.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
@@ -149,7 +157,7 @@ that something happened.
   backup codes from your profile.
 - **Server email** (Gmail or other SMTP, password encrypted) for security
   alerts and two-step reset links, with a test button.
-- **Remote access** through a Cloudflare Tunnel (Server → Remote access):
+- **Remote access** through a Cloudflare Tunnel (in the server settings):
   paste the tunnel token, Tohyee runs Cloudflare's connector and shows its
   status; needs two-step sign-in to be in force.
 - **Update check** against GitHub releases.

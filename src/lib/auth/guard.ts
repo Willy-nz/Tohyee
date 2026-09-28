@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth/sessions";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "@/lib/errors";
 import { getMembership, type Membership } from "@/lib/organisations/registry";
+import { assertLocalAdminRequest } from "@/lib/server-admin/local";
 
 export type AuthContext = {
   sessionId: string;
@@ -72,10 +73,16 @@ export function assertSameOrigin(request: Request): void {
   }
 }
 
-export function requireServerAdmin(auth: AuthContext): void {
+/**
+ * A server admin, on the server computer itself (see
+ * src/lib/server-admin/local.ts): server settings can't be changed over the
+ * network or through the tunnel.
+ */
+export function requireServerAdmin(auth: AuthContext, request: Request): void {
   if (!auth.user.isServerAdmin) {
     throw new ForbiddenError("Only a server admin can do that.");
   }
+  assertLocalAdminRequest(request.headers);
 }
 
 /**

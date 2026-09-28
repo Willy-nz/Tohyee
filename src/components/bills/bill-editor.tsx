@@ -206,7 +206,7 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
         </Field>
       </div>
       <div className={ui.tableWrap}>
-        <table className={ui.table}>
+        <table className={`${ui.table} ${ui.stackOnPhone}`}>
           <thead>
             <tr>
               <th style={{ minWidth: 220 }}>Description</th>
@@ -228,7 +228,7 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
           <tbody>
             {lines.map((line, index) => (
               <tr key={line.key}>
-                <td>
+                <td data-label="Description">
                   <input
                     aria-label={`Line ${index + 1} description`}
                     value={line.description}
@@ -237,7 +237,7 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
                     required
                   />
                 </td>
-                <td>
+                <td data-label="Quantity">
                   <input
                     aria-label={`Line ${index + 1} quantity`}
                     inputMode="decimal"
@@ -247,7 +247,7 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
                     required
                   />
                 </td>
-                <td>
+                <td data-label="Unit price">
                   <input
                     aria-label={`Line ${index + 1} unit price`}
                     inputMode="decimal"
@@ -257,7 +257,7 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
                     required
                   />
                 </td>
-                <td>
+                <td data-label="Account">
                   <AccountSelect
                     ariaLabel={`Line ${index + 1} account`}
                     accounts={accounts}
@@ -268,7 +268,7 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
                   />
                 </td>
                 {hasTax ? (
-                  <td>
+                  <td data-label="Tax code">
                     <select
                       aria-label={`Line ${index + 1} tax code`}
                       value={line.taxCode}
@@ -286,9 +286,9 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
                     </select>
                   </td>
                 ) : null}
-                {hasTax ? <td className={ui.num}>{complete[index] ? money(amounts.lines[index].taxAmount) : ""}</td> : null}
-                <td className={ui.num}>{complete[index] ? money(amounts.lines[index].lineAmount) : ""}</td>
-                <td>
+                {hasTax ? <td data-label="GST" className={ui.num}>{complete[index] ? money(amounts.lines[index].taxAmount) : ""}</td> : null}
+                <td data-label="Amount" className={ui.num}>{complete[index] ? money(amounts.lines[index].lineAmount) : ""}</td>
+                <td data-label="">
                   <Button
                     variant="secondary"
                     size="small"

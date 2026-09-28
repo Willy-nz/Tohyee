@@ -8,7 +8,7 @@ import { retryProvisioning } from "@/lib/organisations/admin";
  */
 export const POST = route<{ params: Promise<{ organisationId: string }> }>(async (request, context) => {
   const auth = await requireAuth(request);
-  requireServerAdmin(auth);
+  requireServerAdmin(auth, request);
   const { organisationId } = await context.params;
   return json({ organisation: await retryProvisioning(auth.user, organisationId) });
 });

@@ -6,7 +6,7 @@ import { getLatestReleaseCheck } from "@/lib/updates/server-updates";
 /** Compares this server's version with the latest GitHub release (server admins only). */
 export const GET = route(async (request) => {
   const auth = await requireAuth(request);
-  requireServerAdmin(auth);
+  requireServerAdmin(auth, request);
   try {
     return json(await getLatestReleaseCheck());
   } catch (error) {

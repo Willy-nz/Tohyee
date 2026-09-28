@@ -159,7 +159,7 @@ re-runs the whole sequence.
   person out everywhere. Without `TOHYEE_SECRET_KEY`, sign-in is password
   only and server admins see a warning on every page; remote access can't be
   turned on.
-- Security alerts are emailed (when Server → Email is set up) for two-step
+- Security alerts are emailed (when Email is set up in the server settings) for two-step
   turned on or reset, a backup code used, new backup codes and a lockout.
   A failed alert never blocks the action.
 - Five failed sign-ins lock the account for 15 minutes. Unknown emails take
@@ -178,9 +178,16 @@ re-runs the whole sequence.
 
 Server-wide:
 
-- **Server admin**: creates organisations and users, repairs organisations.
-  Being a server admin does *not* grant access to any organisation's books;
-  that trust boundary is deliberate.
+- **Server admin**: creates organisations and users, repairs organisations,
+  sets up remote access and email. Being a server admin does *not* grant
+  access to any organisation's books; that trust boundary is deliberate.
+  Server settings live apart from the books (`/server`) and only work on the
+  server computer itself: Tohyee opens a second address on 127.0.0.1
+  (`TOHYEE_ADMIN_PORT`, default the main port + 1) that passes requests on to
+  the main server with a secret header made fresh at each start
+  (`src/lib/server-admin/`). `/api/admin/*` and the `/server` pages refuse
+  anything without it, so they can't be reached over the network or through
+  the Cloudflare Tunnel even with a server admin's session.
 
 Per organisation (lowest to highest):
 
@@ -382,7 +389,7 @@ tested against.
 
 ## Remote access
 
-Server → Remote access runs Cloudflare's `cloudflared` connector as a child
+Remote access (server settings) runs Cloudflare's `cloudflared` connector as a child
 process (`src/lib/remote/tunnel.ts`) with the tunnel token a server admin
 pasted from Cloudflare's dashboard (stored encrypted). The tunnel's public
 hostname is pointed at `http://127.0.0.1:<port>` in Cloudflare, so nothing is

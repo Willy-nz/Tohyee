@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { BillStatusBadge } from "@/components/bills/bill-editor";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -15,14 +15,14 @@ import { formatDate } from "@/lib/format";
 
 type BillPage = { bills: BillSummary[]; nextBeforeId: string | null };
 
-type Filter = { label: string; status: BillStatus | null; awaitingPayment: boolean; empty: string };
+type Filter = { slug: string; label: string; status: BillStatus | null; awaitingPayment: boolean; empty: string };
 
 const FILTERS: Filter[] = [
-  { label: "All", status: null, awaitingPayment: false, empty: "No bills yet." },
-  { label: "Drafts", status: "draft", awaitingPayment: false, empty: "No draft bills." },
-  { label: "Approved", status: "approved", awaitingPayment: false, empty: "No approved bills." },
-  { label: "Awaiting payment", status: null, awaitingPayment: true, empty: "No approved bills are awaiting payment." },
-  { label: "Voided", status: "voided", awaitingPayment: false, empty: "No voided bills." },
+  { slug: "all", label: "All", status: null, awaitingPayment: false, empty: "No bills yet." },
+  { slug: "drafts", label: "Drafts", status: "draft", awaitingPayment: false, empty: "No draft bills." },
+  { slug: "approved", label: "Approved", status: "approved", awaitingPayment: false, empty: "No approved bills." },
+  { slug: "awaiting", label: "Awaiting payment", status: null, awaitingPayment: true, empty: "No approved bills are awaiting payment." },
+  { slug: "voided", label: "Voided", status: "voided", awaitingPayment: false, empty: "No voided bills." },
 ];
 
 function BillList({ organisationId, filter }: { organisationId: string; filter: Filter }) {
@@ -109,7 +109,9 @@ function BillList({ organisationId, filter }: { organisationId: string; filter: 
 function Bills({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const router = useRouter();
-  const [filter, setFilter] = useState<Filter>(FILTERS[0]);
+  const params = useSearchParams();
+  // The list shown is in the address (?show=), so the menus can open "Awaiting payment".
+  const filter = FILTERS.find((entry) => entry.slug === params.get("show")) ?? FILTERS[0];
   return (
     <Card
       title="Bills"
@@ -124,7 +126,7 @@ function Bills({ organisationId }: { organisationId: string }) {
             role="tab"
             aria-selected={filter === entry}
             className={`${ui.tab} ${filter === entry ? ui.tabActive : ""}`}
-            onClick={() => setFilter(entry)}
+            onClick={() => router.replace(entry.slug === "all" ? "/operations/bills" : `/operations/bills?show=${entry.slug}`, { scroll: false })}
           >
             {entry.label}
           </button>
@@ -139,7 +141,9 @@ export default function BillsPage() {
   return (
     <Page>
       <PageHeader title="Bills" description="Bills from your suppliers, with GST worked out per line." />
-      <RequireOrganisation>{(organisationId) => <Bills organisationId={organisationId} />}</RequireOrganisation>
+      <Suspense fallback={null}>
+        <RequireOrganisation>{(organisationId) => <Bills organisationId={organisationId} />}</RequireOrganisation>
+      </Suspense>
     </Page>
   );
 }

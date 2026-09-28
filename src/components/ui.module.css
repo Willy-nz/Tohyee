@@ -376,3 +376,43 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* Line editors on phones: each line becomes a card with its fields stacked. */
+@media (max-width: 700px) {
+  .stackOnPhone thead {
+    display: none;
+  }
+
+  .stackOnPhone,
+  .stackOnPhone tbody,
+  .stackOnPhone tfoot,
+  .stackOnPhone tr,
+  .stackOnPhone td {
+    display: block;
+    width: 100%;
+  }
+
+  .stackOnPhone tbody tr {
+    border-bottom: 1px solid var(--line-strong);
+    padding: 6px 0;
+  }
+
+  .stackOnPhone td {
+    border: 0;
+    padding: 4px 12px;
+    text-align: left;
+  }
+
+  .stackOnPhone td:empty {
+    display: none;
+  }
+
+  .stackOnPhone td[data-label]:not([data-label=""])::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+}
