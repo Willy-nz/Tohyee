@@ -1,7 +1,8 @@
 # Builds dist\windows\TohyeeSetup-<version>.exe. Runs on a Windows machine
 # (GitHub's windows-latest) after `npm ci` and `npm run build`.
-# Downloads Node.js (same version as the build), PostgreSQL, WinSW and the
-# Visual C++ runtime, stages them with the app, and compiles Tohyee.iss.
+# Downloads Node.js (same version as the build), PostgreSQL, WinSW, the
+# Visual C++ runtime and Cloudflare's cloudflared (for remote access), stages
+# them with the app, and compiles Tohyee.iss.
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -12,6 +13,11 @@ $PostgresVersion = '17.11'
 $PostgresUrl = 'https://sbp.enterprisedb.com/getfile.jsp?fileid=1260569'
 $WinSwUrl = 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe'
 $VcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
+# cloudflared runs the Cloudflare Tunnel for remote access (Server > Remote access).
+# Pinned, and checked against the SHA-256 of that release's file.
+$CloudflaredVersion = '2026.9.3'
+$CloudflaredUrl = "https://github.com/cloudflare/cloudflared/releases/download/$CloudflaredVersion/cloudflared-windows-amd64.exe"
+$CloudflaredSha256 = 'f096265ec2fcbe9bb6e2d64268db167ced3fcbb83d894bdb9e2fcdb26f2ea7e2'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $out = Join-Path $root 'dist\windows'
@@ -24,7 +30,7 @@ if (-not (Test-Path (Join-Path $root '.next\standalone\server.js'))) {
 }
 
 Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $stage, $downloads, (Join-Path $stage 'node'), (Join-Path $stage 'service'), (Join-Path $stage 'scripts') | Out-Null
+New-Item -ItemType Directory -Force -Path $stage, $downloads, (Join-Path $stage 'node'), (Join-Path $stage 'service'), (Join-Path $stage 'scripts'), (Join-Path $stage 'cloudflared') | Out-Null
 
 Write-Host "== App $version"
 Copy-Item -Recurse (Join-Path $root '.next\standalone') (Join-Path $stage 'app')
@@ -58,6 +64,13 @@ foreach ($unused in @('pgAdmin 4', 'StackBuilder', 'doc', 'include', 'symbols'))
 Write-Host '== WinSW and the Visual C++ runtime'
 Invoke-WebRequest $WinSwUrl -OutFile (Join-Path $stage 'service\WinSW-x64.exe')
 Invoke-WebRequest $VcRedistUrl -OutFile (Join-Path $stage 'vc_redist.x64.exe')
+
+Write-Host "== cloudflared $CloudflaredVersion"
+$cloudflaredExe = Join-Path $stage 'cloudflared\cloudflared.exe'
+Invoke-WebRequest $CloudflaredUrl -OutFile $cloudflaredExe
+$cloudflaredHash = (Get-FileHash $cloudflaredExe -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($cloudflaredHash -ne $CloudflaredSha256) { throw "cloudflared download has SHA-256 $cloudflaredHash, expected $CloudflaredSha256." }
+Invoke-WebRequest "https://raw.githubusercontent.com/cloudflare/cloudflared/$CloudflaredVersion/LICENSE" -OutFile (Join-Path $stage 'cloudflared\LICENSE.txt')
 
 foreach ($script in @('configure-tohyee.ps1', 'remove-services.ps1', 'Backup-Tohyee.ps1')) {
   Copy-Item (Join-Path $PSScriptRoot $script) (Join-Path $stage "scripts\$script")

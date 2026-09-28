@@ -52,6 +52,7 @@ Source: "{#SourceDir}\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs create
 Source: "{#SourceDir}\node\*"; DestDir: "{app}\node"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "{#SourceDir}\pgsql\*"; DestDir: "{app}\pgsql"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "{#SourceDir}\service\*"; DestDir: "{app}\service"; Flags: ignoreversion
+Source: "{#SourceDir}\cloudflared\*"; DestDir: "{app}\cloudflared"; Flags: ignoreversion
 Source: "{#SourceDir}\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall

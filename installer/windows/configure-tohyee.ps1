@@ -1,7 +1,7 @@
 # Sets up (or updates) Tohyee's database and Windows services. Run by
 # TohyeeSetup.exe as Administrator after it copies the program files.
 #
-#   Program files: <InstallDir>  (node, pgsql, app, service, scripts)
+#   Program files: <InstallDir>  (node, pgsql, app, service, scripts, cloudflared)
 #   Data:          %ProgramData%\Tohyee  (pgdata, service, logs, tohyee.env)
 #
 # Services (both start automatically when Windows starts, before anyone signs in):
@@ -29,6 +29,7 @@ try {
   $EnvFile = Join-Path $DataRoot 'tohyee.env'
   $NodeExe = Join-Path $InstallDir 'node\node.exe'
   $AppDir = Join-Path $InstallDir 'app'
+  $CloudflaredExe = Join-Path $InstallDir 'cloudflared\cloudflared.exe'
 
   function New-Secret([int]$Length) {
     $chars = [char[]]'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
@@ -166,6 +167,7 @@ try {
   <env name="SETUP_TOKEN" value="$(X $settings['SETUP_TOKEN'])"/>
   <env name="TOHYEE_SECRET_KEY" value="$(X $settings['TOHYEE_SECRET_KEY'])"/>
   <env name="TOHYEE_TIME_ZONE" value="Pacific/Auckland"/>
+  <env name="TOHYEE_CLOUDFLARED_PATH" value="$(X $CloudflaredExe)"/>
 </service>
 "@
   [System.IO.File]::WriteAllText((Join-Path $ServiceDir 'TohyeeServer.xml'), $xml)
