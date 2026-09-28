@@ -1,8 +1,10 @@
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
 import {
+  getSessionState,
   getSessionUser,
   readCookie,
   SESSION_COOKIE,
+  type SessionState,
   type SessionUser,
 } from "@/lib/auth/sessions";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "@/lib/errors";
@@ -19,6 +21,18 @@ export async function authenticate(request: Request): Promise<AuthContext> {
     throw new UnauthorizedError();
   }
   return session;
+}
+
+/**
+ * Any session, including one part-way through two-step sign-in. Only the
+ * two-step routes (and sign-out) use this; everything else uses authenticate.
+ */
+export async function authenticateAnyStage(request: Request): Promise<SessionState> {
+  const state = await getSessionState(readCookie(request, SESSION_COOKIE));
+  if (!state) {
+    throw new UnauthorizedError();
+  }
+  return state;
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
