@@ -18,8 +18,7 @@ If these conflict with each other or with a request, say so instead of picking o
   organisation can be backed up and moved on its own. Do not switch to a
   shared database, schema-per-organisation or row-level tenancy, and don't
   write docs that say otherwise.
-- The core database holds only the registry, users, sessions, memberships and
-  server-wide integration settings (encrypted secrets). Never accounting data.
+- The core database holds only the registry, users, sessions and memberships.
 - Requests carry organisation IDs; database names come from the registry.
 - Organisation data is only touched through `withOrganisation()` /
   `withOrganisationTransaction()`.
