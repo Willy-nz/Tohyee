@@ -96,14 +96,16 @@ npm run dev                       # http://localhost:3000
 
 The first visit goes to **/setup**: enter the `SETUP_TOKEN` and create the
 first server admin. Then, on the same computer, open the **server settings**
-at http://127.0.0.1:3001/server (the main port + 1; on Windows, "Tohyee
-server settings" in the Start menu) and create an organisation under
-**Organisations**. It gets its own database with a starting NZ chart of
+and create an organisation under **Organisations**. On Windows that's the
+**Tohyee server app**: the Tohyee icon by the clock (it starts when you sign in
+to Windows) or "Tohyee server settings" in the Start menu. Elsewhere it's
+http://127.0.0.1:3001/server (the main port + 1). It gets its own database with a starting NZ chart of
 accounts, and you're its owner.
 
 Server settings (organisations, users, remote access, email, updates) only
 open on the server computer itself: they're refused over the network and
-through the Cloudflare Tunnel. Change the port with `TOHYEE_ADMIN_PORT`. In
+through the Cloudflare Tunnel. On Windows the server app's icon also shows
+whether Tohyee is running, and can restart it or back it up. Change the port with `TOHYEE_ADMIN_PORT`. In
 Docker, where that address isn't reachable from outside the container, use
 `npm run admin` (the command-line tool) instead.
 

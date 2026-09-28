@@ -9,7 +9,8 @@ import { ForbiddenError } from "@/lib/errors";
  * secret is made fresh each time the server starts and never leaves the
  * process, so a request can only carry it if it came in through that local
  * address: not from the network, and not through the Cloudflare Tunnel (which
- * connects to the main port). A Windows server app will use the same address.
+ * connects to the main port). The Windows server app (installer/windows/tray)
+ * uses the same address.
  */
 export const LOCAL_ADMIN_HEADER = "x-tohyee-local-admin";
 
@@ -48,7 +49,7 @@ export function isLocalAdminRequest(headers: Headers): boolean {
 }
 
 export const SERVER_COMPUTER_ONLY =
-  "Server settings can only be changed on the server computer itself. On that computer, open the Tohyee server settings from the Start menu.";
+  "Server settings can only be changed on the server computer itself, in the Tohyee server app: on that computer, click the Tohyee icon by the clock, or open Tohyee server settings from the Start menu.";
 
 export function assertLocalAdminRequest(headers: Headers): void {
   if (!isLocalAdminRequest(headers)) {

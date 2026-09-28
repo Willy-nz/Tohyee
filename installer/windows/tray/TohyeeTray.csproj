@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The Tohyee server app for Windows: a tray icon by the clock that shows the
+    server is running, and a window for the server settings (organisations,
+    users, remote access, email, updates). Built for .NET Framework 4.8, which
+    comes with Windows 10 and 11, so nothing else needs installing.
+    Built by installer/windows/build.ps1 with `dotnet build`.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>TohyeeTray</AssemblyName>
+    <RootNamespace>Tohyee.Tray</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Product>Tohyee</Product>
+    <Description>Tohyee server</Description>
+    <Version>0.0.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.ServiceProcess" />
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

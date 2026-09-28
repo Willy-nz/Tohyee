@@ -18,3 +18,7 @@ data/
 tmp/
 .DS_Store
 *.tsbuildinfo
+
+# Tohyee server app (Windows) build output
+installer/windows/tray/bin/
+installer/windows/tray/obj/

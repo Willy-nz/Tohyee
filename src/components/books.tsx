@@ -30,7 +30,7 @@ export function RequireOrganisation({ children }: { children: (organisationId: s
           {user.isServerAdmin ? (
             <>
               You aren&apos;t a member of any organisation. Create one in the server settings, on the server
-              computer: open Tohyee server settings from the Start menu
+              computer: click the Tohyee icon by the clock, or open Tohyee server settings from the Start menu
               {serverSettingsUrl ? (
                 <>
                   {" "}
