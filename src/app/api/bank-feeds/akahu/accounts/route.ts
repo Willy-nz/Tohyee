@@ -5,7 +5,7 @@ import { akahuCredentialsFor } from "@/lib/bank/akahu/settings";
 /** GET: the Akahu accounts this organisation can link, and which of its bank accounts each is linked to. */
 export const GET = route(async (request) => {
   const organisationId = searchParams(request).get("organisationId");
-  const { credentials, mode } = await withOrganisation(request, organisationId, "admin", (tx, { auth }) => akahuCredentialsFor(tx, auth));
+  const credentials = await withOrganisation(request, organisationId, "admin", (tx) => akahuCredentialsFor(tx));
   let accounts;
   try {
     accounts = await listAkahuAccounts(credentials);
@@ -21,7 +21,6 @@ export const GET = route(async (request) => {
   );
   const linkedTo = new Map(links.map((link) => [link.akahu_account_id, link.account_id]));
   return json({
-    mode,
     accounts: accounts.map((account) => ({
       id: account._id,
       name: account.name,
