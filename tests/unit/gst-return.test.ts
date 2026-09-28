@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  basisChangeAdjustment,
   calculateGstBoxes,
   changedGstBoxes,
+  countsWhenSettled,
+  gstInOutstanding,
+  settlementShares,
   gstPeriodEnd,
   parseGstAdjustments,
   parseGstPeriod,
@@ -143,5 +147,87 @@ describe("GST return maths", () => {
       { box: "box15", filed: "-15.00", current: "-30.00" },
     ]);
     expect(changedGstBoxes(filed.boxes, filed.boxes)).toEqual([]);
+  });
+});
+
+/** docs/ACCOUNTING-EXAMPLES.md, "Payments and hybrid bases": shares and basis changes. */
+describe("GST payments and hybrid bases maths", () => {
+  it("G10-G18: which side counts when settled on each basis", () => {
+    expect(countsWhenSettled("invoice", "sales")).toBe(false);
+    expect(countsWhenSettled("invoice", "purchases")).toBe(false);
+    expect(countsWhenSettled("payments", "sales")).toBe(true);
+    expect(countsWhenSettled("payments", "purchases")).toBe(true);
+    expect(countsWhenSettled("hybrid", "sales")).toBe(false);
+    expect(countsWhenSettled("hybrid", "purchases")).toBe(true);
+  });
+
+  it("G11: I5 paid 82.50 splits in proportion", () => {
+    const i5 = [
+      { amount: "115.00", gst: "15.00" },
+      { amount: "50.00", gst: "0.00" },
+    ];
+    expect(settlementShares(i5, "82.50", "165.00")).toEqual([
+      { amount: "57.50", gst: "7.50" },
+      { amount: "25.00", gst: "0.00" },
+    ]);
+    const figures = calculateGstBoxes({ box5: "82.50", box6: "25.00", box11: "0", salesGst: "7.50", purchasesGst: "0", ...noAdjustments });
+    expect(figures.boxes.box7).toBe("57.50");
+    expect(figures.boxes.box8).toBe("7.50");
+    // Paid in full, a document's shares are its lines.
+    expect(settlementShares(i5, "165.00", "165.00")).toEqual([
+      { amount: "115.00", gst: "15.00" },
+      { amount: "50.00", gst: "0.00" },
+    ]);
+  });
+
+  it("G12: the leftover cent goes to the largest (first) line", () => {
+    const lines = [
+      { amount: "10.00", gst: "1.30" },
+      { amount: "10.00", gst: "1.30" },
+      { amount: "10.00", gst: "0.00" },
+    ];
+    const first = settlementShares(lines, "10.00", "30.00");
+    expect(first).toEqual([
+      { amount: "3.34", gst: "0.44" },
+      { amount: "3.33", gst: "0.43" },
+      { amount: "3.33", gst: "0.00" },
+    ]);
+    const figures = calculateGstBoxes({ box5: "10.00", box6: "3.33", box11: "0", salesGst: "0.87", purchasesGst: "0", ...noAdjustments });
+    expect(figures.boxes.box7).toBe("6.67");
+    expect(figures.boxes.box8).toBe("0.87");
+    const rest = settlementShares(lines, "20.00", "30.00");
+    expect(rest.map((share) => share.amount)).toEqual(["6.66", "6.67", "6.67"]);
+    expect(rest.map((share) => share.gst)).toEqual(["0.86", "0.87", "0.00"]);
+  });
+
+  it("G20: GST in what's still owed", () => {
+    expect(gstInOutstanding("115.00", "15.00", "115.00")).toBe("15.00");
+    expect(gstInOutstanding("82.50", "15.00", "165.00")).toBe("7.50");
+    expect(gstInOutstanding("-23.00", "3.00", "23.00")).toBe("-3.00");
+  });
+
+  it("G20, G21: the IR546 adjustment for each change of basis", () => {
+    const at = { asAt: "2026-03-31", debtorsGst: "19.50", creditorsGst: "30.00" };
+    expect(basisChangeAdjustment({ from: "invoice", to: "payments", ...at })).toEqual({
+      box: "9",
+      description: "Change of GST basis from invoice to payments at 31 Mar 2026: GST on debtors 19.50, GST on creditors 30.00",
+      amount: "10.50",
+    });
+    const box = (from: "invoice" | "payments" | "hybrid", to: "invoice" | "payments" | "hybrid") => {
+      const adjustment = basisChangeAdjustment({ from, to, ...at });
+      return adjustment ? `${adjustment.box}:${adjustment.amount}` : null;
+    };
+    expect(box("payments", "invoice")).toBe("13:10.50");
+    expect(box("invoice", "hybrid")).toBe("9:30.00");
+    expect(box("payments", "hybrid")).toBe("9:19.50");
+    expect(box("hybrid", "payments")).toBe("13:19.50");
+    expect(box("hybrid", "invoice")).toBe("13:30.00");
+    expect(box("invoice", "invoice")).toBeNull();
+    expect(basisChangeAdjustment({ from: "payments", to: "hybrid", asAt: "2026-03-31", debtorsGst: "-3.00", creditorsGst: "0" })).toEqual({
+      box: "13",
+      description: "Change of GST basis from payments to hybrid at 31 Mar 2026: GST on debtors -3.00",
+      amount: "3.00",
+    });
+    expect(basisChangeAdjustment({ from: "invoice", to: "payments", asAt: "2026-03-31", debtorsGst: "30.00", creditorsGst: "30.00" })).toBeNull();
   });
 });
