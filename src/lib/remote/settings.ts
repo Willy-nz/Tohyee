@@ -7,6 +7,7 @@ import { cloudflaredProgram, startTunnel, stopTunnel, type TunnelState, tunnelSt
 import { secretsAvailable } from "@/lib/secrets";
 import { deleteServerSetting, readServerSetting, writeServerSetting } from "@/lib/server-settings";
 import { optionalString } from "@/lib/validation";
+import { mainServerTarget } from "@/lib/server-admin/listener";
 
 /**
  * Remote access through a Cloudflare Tunnel (use Tohyee from anywhere). A
@@ -36,7 +37,8 @@ export type RemoteAccess = {
 
 /** The local address cloudflared should forward to (127.0.0.1, not localhost, which can mean IPv6 on Windows). */
 export function localServiceAddress(): string {
-  return `http://127.0.0.1:${process.env.PORT?.trim() || "3000"}`;
+  const { host, port } = mainServerTarget();
+  return `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
 }
 
 /**

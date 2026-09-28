@@ -14,6 +14,9 @@ $dataRoot = Join-Path $env:ProgramData 'Tohyee'
 $installDir = Join-Path $env:ProgramFiles 'Tohyee'
 $url = 'http://localhost:3000'
 $origin = @{ Origin = $url }
+# Server settings: this computer only, on the main port + 1.
+$adminUrl = 'http://localhost:3001'
+$adminOrigin = @{ Origin = $adminUrl }
 
 # Authenticator code (RFC 6238) for the two-step sign-in check.
 function Get-TotpCode([string]$Secret, [long]$UnixSeconds = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
@@ -102,7 +105,15 @@ try {
   if ($enrolled.backupCodes.Count -ne 10) { throw 'Two-step set-up did not return 10 backup codes.' }
   Write-Host 'Two-step sign-in set up.'
   $org = @{ id = 'ci'; displayName = 'CI Ltd'; baseCurrency = 'NZD'; ownerEmail = 'ci@example.com' } | ConvertTo-Json
-  $created = Invoke-RestMethod -Uri "$url/api/admin/organisations" -Method Post -ContentType 'application/json' -Headers $origin -Body $org -WebSession $session
+  # Server settings answer only on the local server settings address, not the main one.
+  $refused = $null
+  try {
+    Invoke-RestMethod -Uri "$url/api/admin/organisations" -Method Post -ContentType 'application/json' -Headers $origin -Body $org -WebSession $session | Out-Null
+  } catch {
+    $refused = [int]$_.Exception.Response.StatusCode
+  }
+  if ($refused -ne 403) { throw "Expected server settings to be refused on the main address (403), got '$refused'." }
+  $created = Invoke-RestMethod -Uri "$adminUrl/api/admin/organisations" -Method Post -ContentType 'application/json' -Headers $adminOrigin -Body $org -WebSession $session
   Write-Host "Organisation: $($created.organisation.provisioningStatus), schema $($created.organisation.schemaVersion)"
   if ($created.organisation.provisioningStatus -ne 'ready') { throw 'The organisation was not provisioned.' }
 

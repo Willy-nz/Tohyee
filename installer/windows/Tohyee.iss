@@ -60,6 +60,7 @@ Source: "{#SourceDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterin
 [INI]
 Filename: "{group}\Open Tohyee.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:3000"
 Filename: "{autodesktop}\Tohyee.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:3000"; Tasks: desktopicon
+Filename: "{group}\Tohyee server settings.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:3001/server"
 
 [Icons]
 Name: "{group}\Back up Tohyee"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\Backup-Tohyee.ps1"""; Comment: "Back up all Tohyee data to Documents\Tohyee backups"
@@ -69,6 +70,7 @@ Name: "{group}\Uninstall Tohyee"; Filename: "{uninstallexe}"
 [UninstallDelete]
 Type: files; Name: "{group}\Open Tohyee.url"
 Type: files; Name: "{autodesktop}\Tohyee.url"
+Type: files; Name: "{group}\Tohyee server settings.url"
 
 [Run]
 Filename: "{code:GetOpenUrl}"; Description: "Open Tohyee now"; Flags: postinstall shellexec nowait skipifsilent

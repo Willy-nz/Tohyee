@@ -141,7 +141,7 @@ export async function emailConfigured(): Promise<boolean> {
 /** Sends one email. Throws if email isn't set up or the server refuses it. */
 export async function sendEmail(message: OutgoingEmail): Promise<void> {
   const configured = await sender();
-  if (!configured) throw new UnavailableError("This server can't send email yet. A server admin can set it up under Server → Email.");
+  if (!configured) throw new UnavailableError("This server can't send email yet. A server admin can set it up under Email in the server settings, on the server computer.");
   try {
     await configured.send({ ...message, from: configured.from });
   } catch (error) {

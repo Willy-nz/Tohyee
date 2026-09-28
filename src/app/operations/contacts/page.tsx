@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useId, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { type FormEvent, Suspense, useId, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -176,7 +177,11 @@ function Contacts({ organisationId }: { organisationId: string }) {
   const [editing, setEditing] = useState<Contact | null>(null);
   const [viewing, setViewing] = useState<Contact | null>(null);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const rows = contacts.data?.contacts ?? [];
+  // Customers or suppliers only, from the Contacts menu (?type=).
+  const type = useSearchParams().get("type");
+  const rows = (contacts.data?.contacts ?? []).filter((contact) =>
+    type === "customers" ? contact.isCustomer : type === "suppliers" ? contact.isSupplier : true,
+  );
 
   async function setArchived(contact: Contact, isArchived: boolean) {
     setStatus(null);
@@ -239,7 +244,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
         </Card>
       ) : null}
       <Card
-        title="Contacts"
+        title={type === "customers" ? "Customers" : type === "suppliers" ? "Suppliers" : "Contacts"}
         actions={
           <>
             <label className={ui.checkbox}>
@@ -376,7 +381,9 @@ export default function ContactsPage() {
         title="Contacts"
         description="Your customers and suppliers. Contacts you no longer deal with can be archived; they're kept, never deleted."
       />
-      <RequireOrganisation>{(organisationId) => <Contacts key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
+      <Suspense fallback={null}>
+        <RequireOrganisation>{(organisationId) => <Contacts key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
+      </Suspense>
     </Page>
   );
 }

@@ -25,6 +25,8 @@ type Workspace = {
   selectOrganisation(id: string): void;
   /** True if the signed-in user has at least this role in the current organisation. */
   can(role: Role): boolean;
+  /** Where server settings open on the server computer (for server admins); null if they're off. */
+  serverSettingsUrl: string | null;
 };
 
 const WorkspaceContext = createContext<Workspace | null>(null);
@@ -51,10 +53,12 @@ function subscribe(listener: () => void) {
 export function WorkspaceProvider({
   user,
   organisations,
+  serverSettingsUrl = null,
   children,
 }: {
   user: WorkspaceUser;
   organisations: WorkspaceOrganisation[];
+  serverSettingsUrl?: string | null;
   children: ReactNode;
 }) {
   const storedId = useSyncExternalStore(subscribe, readStoredOrganisation, () => null);
@@ -77,8 +81,9 @@ export function WorkspaceProvider({
       current,
       selectOrganisation,
       can: (role: Role) => (current ? roleAtLeast(current.role, role) : false),
+      serverSettingsUrl,
     }),
-    [user, organisations, current, selectOrganisation],
+    [user, organisations, current, selectOrganisation, serverSettingsUrl],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

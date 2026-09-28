@@ -5,7 +5,7 @@ import { sendEmail } from "@/lib/email/mailer";
 /** Sends a test email to the signed-in server admin. */
 export const POST = route(async (request) => {
   const auth = await requireAuth(request);
-  requireServerAdmin(auth);
+  requireServerAdmin(auth, request);
   await sendEmail({
     to: auth.user.email,
     subject: "Tohyee: test email",

@@ -145,7 +145,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
         </Field>
       </div>
       <div className={ui.tableWrap}>
-        <table className={ui.table}>
+        <table className={`${ui.table} ${ui.stackOnPhone}`}>
           <thead>
             <tr>
               <th style={{ width: "34%" }}>Account</th>
@@ -162,7 +162,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
           <tbody>
             {lines.map((line, index) => (
               <tr key={line.key}>
-                <td>
+                <td data-label="Account">
                   <AccountSelect
                     ariaLabel={`Line ${index + 1} account`}
                     accounts={accounts}
@@ -170,7 +170,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
                     onChange={(code) => update(line.key, { accountCode: code })}
                   />
                 </td>
-                <td>
+                <td data-label="Line description">
                   <input
                     aria-label={`Line ${index + 1} description`}
                     value={line.description}
@@ -178,7 +178,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
                     maxLength={200}
                   />
                 </td>
-                <td>
+                <td data-label="Debit">
                   <input
                     aria-label={`Line ${index + 1} debit`}
                     inputMode="decimal"
@@ -187,7 +187,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
                     onChange={(event) => update(line.key, { debit: event.target.value, credit: event.target.value ? "" : line.credit })}
                   />
                 </td>
-                <td>
+                <td data-label="Credit">
                   <input
                     aria-label={`Line ${index + 1} credit`}
                     inputMode="decimal"
@@ -196,7 +196,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
                     onChange={(event) => update(line.key, { credit: event.target.value, debit: event.target.value ? "" : line.debit })}
                   />
                 </td>
-                <td>
+                <td data-label="">
                   <Button
                     variant="secondary"
                     size="small"

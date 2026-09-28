@@ -64,6 +64,10 @@ own.
 - **Notes, files and history** on journals, invoices, bills, credit notes and
   contacts: attach receipts and statements (stored in the organisation's own
   database, so backups include them) and see who did what and when.
+- **Menus** like Xero's: Home, Sales, Purchases, Reporting, Accounting, Tax
+  and Contacts, and a ☰ menu on phones. **Home** shows each bank account
+  with what's left to reconcile, money owed to you, bills to pay and the next
+  GST return.
 - **Foreign-currency revaluation** of foreign-currency bank, asset and
   liability accounts, reversed automatically the next day.
 - **Reports**: trial balance, profit and loss, balance sheet and stock
@@ -91,9 +95,17 @@ npm run dev                       # http://localhost:3000
 ```
 
 The first visit goes to **/setup**: enter the `SETUP_TOKEN` and create the
-first server admin. Then create an organisation under **Organisations**. It
-gets its own database with a starting NZ chart of accounts, and you're its
-owner.
+first server admin. Then, on the same computer, open the **server settings**
+at http://127.0.0.1:3001/server (the main port + 1; on Windows, "Tohyee
+server settings" in the Start menu) and create an organisation under
+**Organisations**. It gets its own database with a starting NZ chart of
+accounts, and you're its owner.
+
+Server settings (organisations, users, remote access, email, updates) only
+open on the server computer itself: they're refused over the network and
+through the Cloudflare Tunnel. Change the port with `TOHYEE_ADMIN_PORT`. In
+Docker, where that address isn't reachable from outside the container, use
+`npm run admin` (the command-line tool) instead.
 
 Database migrations run automatically when the server starts. To run them by
 hand: `npm run db:migrate`.
@@ -145,12 +157,12 @@ On the server, unpack the bundle, set `DATABASE_URL`, `TOHYEE_SECRET_KEY`
 Put it behind HTTPS (e.g. Caddy or nginx) if it's reachable beyond your own
 network.
 
-**From anywhere (phone or laptop):** Server → Remote access connects Tohyee
+**From anywhere (phone or laptop):** Remote access in the server settings connects Tohyee
 to a free Cloudflare Tunnel (you need a domain on Cloudflare), so it has an
 https address without opening ports on your router. Everyone signs in with
 a password and an authenticator app (two-step sign-in), which is required
-whenever `TOHYEE_SECRET_KEY` is set (the installers set it). Set up Server →
-Email too, for security alerts and lost-phone reset links. The Windows
+whenever `TOHYEE_SECRET_KEY` is set (the installers set it). Set up Email in
+the server settings too, for security alerts and lost-phone reset links. The Windows
 installer and Docker image include Cloudflare's `cloudflared`; on Linux,
 install it or set `TOHYEE_CLOUDFLARED_PATH`.
 

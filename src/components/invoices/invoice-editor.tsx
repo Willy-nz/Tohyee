@@ -235,7 +235,7 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
         </Field>
       </div>
       <div className={ui.tableWrap}>
-        <table className={ui.table}>
+        <table className={`${ui.table} ${ui.stackOnPhone}`}>
           <thead>
             <tr>
               <th style={{ minWidth: 220 }}>Description</th>
@@ -257,7 +257,7 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
           <tbody>
             {lines.map((line, index) => (
               <tr key={line.key}>
-                <td>
+                <td data-label="Description">
                   <input
                     aria-label={`Line ${index + 1} description`}
                     value={line.description}
@@ -266,7 +266,7 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
                     required
                   />
                 </td>
-                <td>
+                <td data-label="Quantity">
                   <input
                     aria-label={`Line ${index + 1} quantity`}
                     inputMode="decimal"
@@ -276,7 +276,7 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
                     required
                   />
                 </td>
-                <td>
+                <td data-label="Unit price">
                   <input
                     aria-label={`Line ${index + 1} unit price`}
                     inputMode="decimal"
@@ -286,7 +286,7 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
                     required
                   />
                 </td>
-                <td>
+                <td data-label="Account">
                   <AccountSelect
                     ariaLabel={`Line ${index + 1} account`}
                     accounts={accounts}
@@ -297,7 +297,7 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
                   />
                 </td>
                 {hasTax ? (
-                  <td>
+                  <td data-label="Tax code">
                     <select
                       aria-label={`Line ${index + 1} tax code`}
                       value={line.taxCode}
@@ -315,9 +315,9 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
                     </select>
                   </td>
                 ) : null}
-                {hasTax ? <td className={ui.num}>{complete[index] ? money(amounts.lines[index].taxAmount) : ""}</td> : null}
-                <td className={ui.num}>{complete[index] ? money(amounts.lines[index].lineAmount) : ""}</td>
-                <td>
+                {hasTax ? <td data-label="GST" className={ui.num}>{complete[index] ? money(amounts.lines[index].taxAmount) : ""}</td> : null}
+                <td data-label="Amount" className={ui.num}>{complete[index] ? money(amounts.lines[index].lineAmount) : ""}</td>
+                <td data-label="">
                   <Button
                     variant="secondary"
                     size="small"

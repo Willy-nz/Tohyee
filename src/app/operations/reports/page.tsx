@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Fragment, Suspense, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { GstReturnReport } from "@/components/reports/gst-return";
 import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 
@@ -324,11 +325,14 @@ const TABS = [
   { key: "bs", label: "Balance sheet" },
   { key: "tb", label: "Trial balance" },
   { key: "stock", label: "Stock valuation" },
-  { key: "gst", label: "GST return" },
 ] as const;
+type TabKey = (typeof TABS)[number]["key"];
 
 function Reports({ organisationId }: { organisationId: string }) {
-  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("pnl");
+  const router = useRouter();
+  const params = useSearchParams();
+  // The report shown is in the address (?report=), so the menus can open each one.
+  const tab: TabKey = TABS.find((entry) => entry.key === params.get("report"))?.key ?? "pnl";
   return (
     <>
       <div className={ui.tabs} role="tablist">
@@ -339,7 +343,7 @@ function Reports({ organisationId }: { organisationId: string }) {
             role="tab"
             aria-selected={tab === entry.key}
             className={`${ui.tab} ${tab === entry.key ? ui.tabActive : ""}`}
-            onClick={() => setTab(entry.key)}
+            onClick={() => router.replace(`/operations/reports?report=${entry.key}`, { scroll: false })}
           >
             {entry.label}
           </button>
@@ -349,7 +353,9 @@ function Reports({ organisationId }: { organisationId: string }) {
       {tab === "bs" ? <BalanceSheetReport organisationId={organisationId} /> : null}
       {tab === "tb" ? <TrialBalanceReport organisationId={organisationId} /> : null}
       {tab === "stock" ? <StockReport organisationId={organisationId} /> : null}
-      {tab === "gst" ? <GstReturnReport organisationId={organisationId} /> : null}
+      <p className={ui.muted}>
+        The GST return is under <Link href="/operations/gst-return">Tax</Link>.
+      </p>
     </>
   );
 }
@@ -358,7 +364,9 @@ export default function ReportsPage() {
   return (
     <Page>
       <PageHeader title="Reports" description="Built straight from the ledger, in the organisation's base currency." />
-      <RequireOrganisation>{(organisationId) => <Reports key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
+      <Suspense fallback={null}>
+        <RequireOrganisation>{(organisationId) => <Reports key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
+      </Suspense>
     </Page>
   );
 }

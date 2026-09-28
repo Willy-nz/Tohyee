@@ -4,7 +4,7 @@ import { updateUser } from "@/lib/users/admin";
 
 export const PATCH = route<{ params: Promise<{ userId: string }> }>(async (request, context) => {
   const auth = await requireAuth(request);
-  requireServerAdmin(auth);
+  requireServerAdmin(auth, request);
   const { userId } = await context.params;
   const body = await readJson(request);
   const user = await updateUser(auth.user, userId, {

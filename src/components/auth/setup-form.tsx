@@ -31,7 +31,7 @@ export function SetupForm() {
         },
       });
       // With two-step sign-in, the new admin sets up an authenticator app first.
-      router.replace(result.stage === "full" ? "/operations/organisations" : "/login");
+      router.replace(result.stage === "full" ? "/operations" : "/login");
       router.refresh();
     } catch (caught) {
       setError(errorMessage(caught));

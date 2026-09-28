@@ -9,6 +9,7 @@ import { closeAllPools } from "@/lib/db/pools";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 import { createOrganisation } from "@/lib/organisations/admin";
 import { getOrganisation } from "@/lib/organisations/registry";
+import { LOCAL_ADMIN_HEADER, localAdminSecret } from "@/lib/server-admin/local";
 
 /**
  * Integration tests need a PostgreSQL server where TEST_DATABASE_URL's login
@@ -222,12 +223,19 @@ export function key(label = "k"): string {
 }
 
 /** Builds a Request like a browser on the same origin would send. */
+/**
+ * A request to an API route. Server settings routes (/api/admin, /api/updates)
+ * only answer requests from the server computer's local address, so those are
+ * marked as local unless `local: false` is passed.
+ */
 export function apiRequest(
   path: string,
-  options: { method?: string; cookie?: string; body?: unknown; origin?: string | null } = {},
+  options: { method?: string; cookie?: string; body?: unknown; origin?: string | null; local?: boolean } = {},
 ): Request {
   const headers: Record<string, string> = {};
   if (options.cookie) headers.cookie = options.cookie;
+  const local = options.local ?? (path.startsWith("/api/admin") || path.startsWith("/api/updates"));
+  if (local) headers[LOCAL_ADMIN_HEADER] = localAdminSecret();
   if (options.body !== undefined) headers["content-type"] = "application/json";
   const origin = options.origin === undefined ? "http://tohyee.test" : options.origin;
   if (origin) headers.origin = origin;
