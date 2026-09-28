@@ -1,4 +1,5 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
+import { isBankOrCreditCard } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
 import { PAYABLE_ACCOUNT } from "@/lib/bills/service";
 import { parseIsoDate } from "@/lib/dates";
@@ -172,9 +173,9 @@ async function resolveBankAccount(
   if (!row.is_active) {
     throw new ValidationError(`${label} is archived, so refunds can't be received into it.`);
   }
-  if (row.account_type !== "bank") {
+  if (!isBankOrCreditCard(row.account_type)) {
     throw new ValidationError(
-      `${label} isn't a bank account, so refunds can't be received into it. Choose a bank account.`,
+      `${label} isn't a bank account, so refunds can't be received into it. Choose a bank or credit card account.`,
     );
   }
   if (row.currency_code !== null) {
