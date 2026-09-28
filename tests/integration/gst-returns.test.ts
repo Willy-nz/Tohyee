@@ -17,7 +17,6 @@ import { coreQuery } from "@/lib/db/transactions";
 import { recordPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, type Invoice, voidInvoice } from "@/lib/invoices/service";
 import { postJournal } from "@/lib/ledger/journals";
-import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { calculateGstReturn, fileGstReturn, getGstReturn, listGstReturns } from "@/lib/reports/gst-return";
 import { applySupplierCreditNote } from "@/lib/supplier-credit-notes/applications";
 import {
@@ -335,6 +334,8 @@ describeWithDatabase("GST return", () => {
         amount: "115.00",
         gst: "15.00",
         boxes: ["5"],
+        settledAmount: null,
+        documentTotal: null,
       },
       {
         side: "purchases",
@@ -354,6 +355,8 @@ describeWithDatabase("GST return", () => {
         amount: "230.00",
         gst: "30.00",
         boxes: ["11"],
+        settledAmount: null,
+        documentTotal: null,
       },
     ]);
   });
@@ -861,7 +864,7 @@ describeWithDatabase("GST return", () => {
     ]);
   });
 
-  it("G9: 1, 2 and 6 whole-month periods are allowed; other periods, the payments and hybrid bases and other rates are refused", async () => {
+  it("G9: 1, 2 and 6 whole-month periods are allowed; other periods and other rates are refused", async () => {
     const world = await setup();
     for (const [periodStart, periodEnd, months] of [
       ["2026-04-01", "2026-04-30", 1],
@@ -878,13 +881,6 @@ describeWithDatabase("GST return", () => {
       await expect(world.calculate({ periodStart, periodEnd })).rejects.toThrow(message);
       await expect(world.file({ periodStart, periodEnd })).rejects.toThrow(message);
     }
-
-    for (const gstBasis of ["payments", "hybrid"]) {
-      await world.asUser(owner, (tx) => updateOrganisationSettings(tx, { gstBasis }));
-      await expect(world.calculate()).rejects.toThrow("GST returns on the payments and hybrid bases aren't built yet.");
-      await expect(world.file()).rejects.toThrow("GST returns on the payments and hybrid bases aren't built yet.");
-    }
-    await world.asUser(owner, (tx) => updateOrganisationSettings(tx, { gstBasis: "invoice" }));
 
     await world.asUser(owner, (tx) =>
       createTaxCode(tx, {
