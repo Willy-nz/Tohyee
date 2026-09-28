@@ -521,7 +521,7 @@ describeWithDatabase("GST return on the payments and hybrid bases", () => {
     await client.connect();
     try {
       await applyMigrations(client, tenantMigrations.filter((migration) => migration.version <= "0011"), "test:upgrade");
-      expect((await applyMigrations(client, tenantMigrations, "test:upgrade")).applied).toEqual(["0012"]);
+      expect((await applyMigrations(client, tenantMigrations.filter((migration) => migration.version <= "0012"), "test:upgrade")).applied).toEqual(["0012"]);
       const check = await client.query<{ definition: string }>(
         "select pg_get_constraintdef(oid) as definition from pg_constraint where conname = 'gst_return_lines_event_type_check'",
       );
