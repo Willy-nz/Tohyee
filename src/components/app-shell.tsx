@@ -46,7 +46,6 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { href: "/operations/organisations", label: "Organisations", serverAdmin: true },
       { href: "/operations/users", label: "Users", serverAdmin: true },
-      { href: "/operations/bank-feeds", label: "Bank feeds", serverAdmin: true },
       { href: "/operations/server", label: "Updates", serverAdmin: true },
     ],
   },
