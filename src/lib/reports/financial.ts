@@ -211,7 +211,7 @@ export async function balanceSheet(tx: OrgTx, input: { asAt?: unknown }) {
     ["bank", "current_asset", "inventory", "fixed_asset", "non_current_asset"],
     money,
   );
-  const liabilities = buildSections(rows, ["current_liability", "non_current_liability"], money);
+  const liabilities = buildSections(rows, ["credit_card", "current_liability", "non_current_liability"], money);
   const equity = buildSections(rows, ["equity"], money);
 
   const allEarnings = earningsOf(rows);
