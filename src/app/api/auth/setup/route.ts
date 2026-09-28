@@ -22,7 +22,7 @@ export const POST = route(async (request) => {
     sessionMetaFrom(request),
   );
   return json(
-    { user: result.user },
+    { user: result.user, stage: result.stage },
     { status: 201, headers: { "set-cookie": sessionCookieHeader(request, result.token) } },
   );
 });
