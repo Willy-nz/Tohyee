@@ -5,6 +5,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
+import { assertRequiredTags, checkNewTags, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, type TrackingTags } from "@/lib/tracking/service";
 import { currencyMinorUnits, parseCurrencyCode } from "@/lib/money/currency";
 import {
   add,
@@ -55,6 +56,8 @@ export type JournalLine = {
   description: string | null;
   debitAmount: string;
   creditAmount: string;
+  /** Tracking categories (TC3-TC5): category id -> value id. */
+  tracking: TrackingTags;
 };
 
 export type Journal = {
@@ -127,6 +130,7 @@ export type JournalBody = {
     debit: string;
     credit: string;
     description: string | null;
+    tracking: TrackingTags;
   }>;
   total: string;
 };
@@ -195,6 +199,7 @@ export function parseJournalBody(
       debit: toFixedString(dec(debit), scale),
       credit: toFixedString(dec(credit), scale),
       description: optionalString(line.description, `${label} description`, { maxLength: 200 }),
+      tracking: sortedTags(parseTrackingInput(line.tracking, label)),
     };
   });
 
@@ -231,6 +236,8 @@ function journalHash(body: JournalBody, options: PostOptions): string {
       debit: line.debit,
       credit: line.credit,
       description: line.description,
+      // Only when tagged, so journals from before tracking keep their hashes.
+      ...(Object.keys(line.tracking).length > 0 ? { tracking: line.tracking } : {}),
     })),
     origin: options.origin,
     relatedJournalId: options.relatedJournalId ?? null,
@@ -268,8 +275,9 @@ export async function getJournal(tx: OrgTx, journalId: string): Promise<JournalW
     description: string | null;
     debit_amount: string;
     credit_amount: string;
+    tracking: TrackingTags;
   }>(
-    `select l.line_order, l.account_id, a.code, a.name, l.description, l.debit_amount, l.credit_amount
+    `select l.line_order, l.account_id, a.code, a.name, l.description, l.debit_amount, l.credit_amount, l.tracking
        from ledger_journal_lines l
        join accounts a on a.id = l.account_id
       where l.journal_id = $1
@@ -286,6 +294,7 @@ export async function getJournal(tx: OrgTx, journalId: string): Promise<JournalW
       description: line.description,
       debitAmount: line.debit_amount,
       creditAmount: line.credit_amount,
+      tracking: line.tracking ?? {},
     })),
   };
 }
@@ -357,12 +366,12 @@ export async function postJournalBody(
   const values: unknown[] = [];
   const tuples = body.lines.map((line, index) => {
     const account = accounts.get(line.accountCode)!;
-    values.push(journalId, index + 1, account.id, line.description, line.debit, line.credit);
-    const base = index * 6;
-    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}::numeric, $${base + 6}::numeric)`;
+    values.push(journalId, index + 1, account.id, line.description, line.debit, line.credit, JSON.stringify(line.tracking ?? {}));
+    const base = index * 7;
+    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}::numeric, $${base + 6}::numeric, $${base + 7}::jsonb)`;
   });
   await tx.query(
-    `insert into ledger_journal_lines (journal_id, line_order, account_id, description, debit_amount, credit_amount)
+    `insert into ledger_journal_lines (journal_id, line_order, account_id, description, debit_amount, credit_amount, tracking)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -400,7 +409,23 @@ export async function postJournal(
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const body = parseJournalBody(tx, command);
+  await checkManualTags(tx, body);
   return postJournalBody(tx, source, idempotencyKey, body, { origin: "manual" });
+}
+
+/** Tags typed on a manual journal (or a correction's replacement): usable, and required ones present (TC5, TC6). */
+async function checkManualTags(tx: OrgTx, body: JournalBody, kept: ReadonlySet<string> = new Set()): Promise<void> {
+  const ctx = await loadTrackingContext(tx);
+  body.lines.forEach((line, index) => checkNewTags(ctx, line.tracking, `Line ${index + 1}`, kept));
+  if (!ctx.advancedFeatures) return;
+  const accounts = await resolveAccountsByCode(
+    tx,
+    body.lines.map((line) => line.accountCode),
+  );
+  assertRequiredTags(
+    ctx,
+    body.lines.map((line) => ({ tags: line.tracking, accountClass: accounts.get(line.accountCode)!.accountClass })),
+  );
 }
 
 export type JournalListFilters = {
@@ -659,6 +684,7 @@ export async function correctJournal(
       debitAmount: line.creditAmount,
       creditAmount: line.debitAmount,
       description: line.description,
+      tracking: line.tracking,
     })),
   });
   const replacementBody = parseJournalBody(tx, {
@@ -669,6 +695,7 @@ export async function correctJournal(
     lines: command.lines,
   });
 
+  await checkManualTags(tx, replacementBody, keptValues(original.lines));
   const reversal = await postJournalBody(tx, commandSource, reversalKey, reversalBody, {
     origin: "correction",
     relatedJournalId: originalId,

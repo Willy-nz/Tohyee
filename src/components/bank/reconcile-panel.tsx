@@ -14,6 +14,7 @@ import {
 } from "@/components/bank/common";
 import { AccountSelect, Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate } from "@/components/invoices/invoice-editor";
 import { Badge, Button, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -28,12 +29,13 @@ import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode, calculateInvoice 
 import type { InvoiceSummary } from "@/lib/invoices/service";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
+import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 const PAGE_SIZE = 50;
 
 type Mode = "match" | "payments" | "bank_transaction" | "transfer";
 
-type Lookups = { accounts: Account[]; contacts: Contact[]; taxCodes: TaxCode[] };
+type Lookups = { accounts: Account[]; contacts: Contact[]; taxCodes: TaxCode[]; tracking: TrackingSetup };
 
 type Submit = (command: Record<string, unknown>) => Promise<void>;
 
@@ -312,7 +314,7 @@ function PaymentsForm({
   );
 }
 
-type EditorLine = { key: number; description: string; accountCode: string; taxCode: string; amount: string };
+type EditorLine = { key: number; description: string; accountCode: string; taxCode: string; amount: string; tracking: TrackingTags };
 let lineKey = 0;
 
 function BankTransactionForm({
@@ -347,6 +349,7 @@ function BankTransactionForm({
       accountCode: rule?.suggestedLine.accountCode ?? "",
       taxCode: rule?.suggestedLine.taxCode ?? defaultTaxCode,
       amount: unsigned,
+      tracking: {},
     },
   ]);
   const [saveRule, setSaveRule] = useState(false);
@@ -385,6 +388,7 @@ function BankTransactionForm({
         accountCode: entry.accountCode,
         taxCode: hasTax ? entry.taxCode : undefined,
         amount: entry.amount.trim(),
+        tracking: entry.tracking,
       })),
     });
     if (saveRule && ruleText.trim()) {
@@ -481,6 +485,12 @@ function BankTransactionForm({
                     onChange={(code) => update(entry.key, { accountCode: code })}
                     required
                   />
+                  <TrackingSelects
+                    setup={lookups.tracking}
+                    labelPrefix={`Line ${index + 1}`}
+                    value={entry.tracking}
+                    onChange={(tags) => update(entry.key, { tracking: tags })}
+                  />
                 </td>
                 {hasTax ? (
                   <td>
@@ -534,7 +544,7 @@ function BankTransactionForm({
           variant="secondary"
           size="small"
           onClick={() =>
-            setLines((current) => [...current, { key: ++lineKey, description: line.description, accountCode: "", taxCode: defaultTaxCode, amount: "" }])
+            setLines((current) => [...current, { key: ++lineKey, description: line.description, accountCode: "", taxCode: defaultTaxCode, amount: "", tracking: {} }])
           }
         >
           Add a line
@@ -742,10 +752,11 @@ export function ReconcilePanel({
   const accounts = useApiData<{ accounts: Account[] }>("/api/accounts", { organisationId });
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
-  const lookupError = accounts.error ?? contacts.error ?? taxCodes.error;
+  const tracking = useTracking(organisationId);
+  const lookupError = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error;
   const lookups: Lookups | null =
-    accounts.data && contacts.data && taxCodes.data
-      ? { accounts: accounts.data.accounts, contacts: contacts.data.contacts, taxCodes: taxCodes.data.taxCodes }
+    accounts.data && contacts.data && taxCodes.data && tracking.data
+      ? { accounts: accounts.data.accounts, contacts: contacts.data.contacts, taxCodes: taxCodes.data.taxCodes, tracking: tracking.data }
       : null;
 
   function finished() {

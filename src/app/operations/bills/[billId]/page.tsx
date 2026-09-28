@@ -7,6 +7,7 @@ import { BillStatusBadge } from "@/components/bills/bill-editor";
 import { BillPayments } from "@/components/bills/bill-payments";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { formatRate, formatUnitPrice, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -221,6 +222,7 @@ function UnusedCredit({ organisationId, bill }: { organisationId: string; bill: 
 }
 
 function BillView({ organisationId, billId }: { organisationId: string; billId: string }) {
+  const trackingSetup = useTracking(organisationId);
   const { can } = useWorkspace();
   const router = useRouter();
   const details = useApiData<{ bill: Bill; creditApplied: SupplierCreditNoteApplication[] }>(
@@ -305,6 +307,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
                   <td className={ui.num}>{formatUnitPrice(line.unitPrice)}</td>
                   <td>
                     {line.accountCode} · {line.accountName}
+                    <TrackingTagsText setup={trackingSetup.data} tags={line.tracking} />
                   </td>
                   {hasTax ? (
                     <td>

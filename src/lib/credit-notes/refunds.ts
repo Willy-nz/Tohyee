@@ -396,6 +396,7 @@ export async function voidRefund(
         debitAmount: line.creditAmount,
         creditAmount: line.debitAmount,
         description: line.description,
+        tracking: line.tracking,
       })),
     }),
     { origin: "sales_credit_note_refund", relatedJournalId: original.id, correctionKind: "reversal" },

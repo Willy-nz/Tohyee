@@ -107,6 +107,7 @@ const MENUS: Menu[] = [
         heading: "Settings",
         links: [
           { href: "/operations/settings", label: "Settings and locks", minRole: "admin" },
+          { href: "/operations/settings/tracking", label: "Tracking categories", minRole: "admin" },
           { href: "/operations/members", label: "People and roles", minRole: "admin" },
         ],
       },

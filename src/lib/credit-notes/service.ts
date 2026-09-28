@@ -1,4 +1,6 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
+import type { AccountClass } from "@/lib/accounts/types";
+import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import { writeAuditEvent } from "@/lib/audit";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -66,6 +68,8 @@ export type CreditNoteLine = {
   lineAmount: string;
   netAmount: string;
   taxAmount: string;
+  /** Tracking categories (TC4, TC10): category id -> value id. */
+  tracking: TrackingTags;
 };
 
 export type CreditNoteSummary = {
@@ -176,6 +180,7 @@ type LineRow = {
   line_amount: string;
   net_amount: string;
   tax_amount: string;
+  tracking: TrackingTags;
 };
 
 function toSummary(row: CreditNoteRow): CreditNoteSummary {
@@ -231,6 +236,7 @@ function toLine(row: LineRow): CreditNoteLine {
     lineAmount: row.line_amount,
     netAmount: row.net_amount,
     taxAmount: row.tax_amount,
+    tracking: row.tracking ?? {},
   };
 }
 
@@ -246,6 +252,7 @@ type DraftDetails = {
     unitPrice: string;
     accountCode: string;
     taxCode: string | null;
+    tracking: TrackingTags;
   }>;
 };
 
@@ -267,6 +274,8 @@ type ResolvedDraft = DraftDetails & {
     lineAmount: string;
     netAmount: string;
     taxAmount: string;
+    tracking: TrackingTags;
+    accountClass: AccountClass;
   }>;
 };
 
@@ -297,6 +306,7 @@ function parseDraft(input: CreditNoteInput): DraftDetails {
       unitPrice: parseDecimalInput(line.unitPrice, `${label} unit price`, { maxScale: LINE_INPUT_SCALE }),
       accountCode: parseAccountCodeInput(line.accountCode, `${label} account`),
       taxCode,
+      tracking: sortedTags(parseTrackingInput(line.tracking, label)),
     };
   });
   return { contactId, creditNoteDate, reference, amountsMode, lines };
@@ -309,7 +319,7 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     creditNoteDate: draft.creditNoteDate,
     reference: draft.reference,
     amountsMode: draft.amountsMode,
-    lines: draft.lines.map((line) => ({ ...line, accountCode: line.accountCode.toLowerCase() })),
+    lines: draft.lines.map((line) => hashableLine({ ...line, accountCode: line.accountCode.toLowerCase() })),
   };
 }
 
@@ -320,7 +330,9 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
  * customer, each line's account an active revenue account, and each tax code
  * active and in effect on the credit note date.
  */
-async function resolveDraft(tx: OrgTx, draft: DraftDetails): Promise<ResolvedDraft> {
+async function resolveDraft(tx: OrgTx, draft: DraftDetails, kept: ReadonlySet<string> = new Set()): Promise<ResolvedDraft> {
+  const tracking = await loadTrackingContext(tx);
+  draft.lines.forEach((line, index) => checkNewTags(tracking, line.tracking, `Line ${index + 1}`, kept));
   const contact = await tx.query<{ name: string; is_customer: boolean; is_archived: boolean }>(
     "select name, is_customer, is_archived from contacts where id = $1",
     [draft.contactId],
@@ -392,7 +404,7 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails): Promise<ResolvedDra
       taxCodeId = taxCode.id;
       taxRate = toPlainString(dec(taxCode.rate));
     }
-    return { ...line, accountId: account.id, accountCode: account.code, taxCodeId, taxRate };
+    return { ...line, accountId: account.id, accountCode: account.code, accountClass: account.account_class as AccountClass, taxCodeId, taxRate };
   });
 
   const scale = currencyMinorUnits(tx.baseCurrency);
@@ -421,6 +433,8 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails): Promise<ResolvedDra
       taxCodeId: line.taxCodeId,
       taxRate: line.taxRate,
       ...amounts.lines[index],
+      tracking: line.tracking,
+      accountClass: line.accountClass,
     })),
   };
 }
@@ -435,6 +449,7 @@ type StoredLine = {
   lineAmount: string;
   netAmount: string;
   taxAmount: string;
+  tracking: TrackingTags;
 };
 
 type StoredHeader = {
@@ -476,6 +491,7 @@ function linesState(lines: readonly StoredLine[]): string {
       plain(line.lineAmount),
       plain(line.netAmount),
       plain(line.taxAmount),
+      trackingKey(line.tracking),
     ]),
   );
 }
@@ -500,6 +516,7 @@ function draftOf(creditNote: CreditNote): DraftDetails {
       unitPrice: toPlainString(dec(line.unitPrice)),
       accountCode: line.accountCode,
       taxCode: line.taxCode,
+      tracking: line.tracking,
     })),
   };
 }
@@ -519,14 +536,15 @@ async function insertLines(tx: OrgTx, creditNoteId: string, lines: ResolvedDraft
       line.lineAmount,
       line.netAmount,
       line.taxAmount,
+      JSON.stringify(line.tracking),
     );
-    const base = index * 11;
+    const base = index * 12;
     const p = (offset: number) => `$${base + offset}`;
-    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric)`;
+    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb)`;
   });
   await tx.query(
     `insert into sales_credit_note_lines (credit_note_id, line_order, description, quantity, unit_price, account_id,
-                                          tax_code_id, tax_rate, line_amount, net_amount, tax_amount)
+                                          tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -572,7 +590,7 @@ export async function getCreditNote(tx: OrgTx, creditNoteIdInput: unknown): Prom
   const lines = await tx.query<LineRow>(
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
-            l.net_amount, l.tax_amount
+            l.net_amount, l.tax_amount, l.tracking
        from sales_credit_note_lines l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
@@ -729,7 +747,7 @@ export async function updateCreditNote(
     amountsMode: input.amountsMode === undefined ? saved.amountsMode : input.amountsMode,
     lines: input.lines === undefined ? saved.lines : input.lines,
   });
-  const resolved = await resolveDraft(tx, draft);
+  const resolved = await resolveDraft(tx, draft, keptValues(current.lines));
   const same = sameAsStored(resolved, current);
   if (same.header && same.lines) {
     return current;
@@ -859,23 +877,29 @@ export async function approveCreditNote(
     );
   }
 
-  const resolved = await resolveDraft(tx, draftOf(current));
+  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines));
   const same = sameAsStored(resolved, current);
   if (!same.header || !same.lines) {
     throw new ConflictError(
       "This draft's amounts no longer match its tax codes. Open it and save it again, then check the totals before approving.",
     );
   }
+  assertRequiredTags(
+    await loadTrackingContext(tx),
+    resolved.resolvedLines.map((line) => ({ tags: line.tracking, accountClass: line.accountClass })),
+  );
   const accounts = await creditNoteControlAccounts(tx);
   await assertPostingDateAllowed(tx, current.creditNoteDate);
 
   const { sequence, creditNoteNumber } = await takeCreditNoteNumber(tx);
   const scale = currencyMinorUnits(tx.baseCurrency);
-  const revenue = new Map<string, { code: string; amount: Decimal }>();
+  // One line per account and set of tracking tags (TC4, TC10).
+  const revenue = new Map<string, { code: string; amount: Decimal; tracking: TrackingTags }>();
   for (const line of resolved.resolvedLines) {
-    const entry = revenue.get(line.accountId) ?? { code: line.accountCode, amount: ZERO_DECIMAL };
+    const key = `${line.accountId}|${trackingKey(line.tracking)}`;
+    const entry = revenue.get(key) ?? { code: line.accountCode, amount: ZERO_DECIMAL, tracking: line.tracking };
     entry.amount = add(entry.amount, dec(line.netAmount));
-    revenue.set(line.accountId, entry);
+    revenue.set(key, entry);
   }
   const customer = resolved.contactName;
   const journalLines = [
@@ -886,6 +910,7 @@ export async function approveCreditNote(
         debitAmount: toFixedString(entry.amount, scale),
         creditAmount: "0",
         description: customer,
+        tracking: entry.tracking,
       })),
     ...(isZero(dec(resolved.taxTotal))
       ? []
@@ -1012,6 +1037,7 @@ export async function voidCreditNote(
         debitAmount: line.creditAmount,
         creditAmount: line.debitAmount,
         description: line.description,
+        tracking: line.tracking,
       })),
     }),
     { origin: "sales_credit_note", relatedJournalId: original.id, correctionKind: "reversal" },

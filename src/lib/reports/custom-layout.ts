@@ -64,10 +64,14 @@ export type ReportBlock =
   | { id: string; kind: "table"; title: string; rows: ReportRow[] }
   | { id: string; kind: "text"; text: string };
 
+/** Profit and loss only: count just the lines tagged with this value or a value under it (TC8). */
+export type ReportTrackingFilter = { categoryId: string; valueId: string };
+
 export type CustomReportLayout = {
   title: string;
   columns: ReportColumnsSetting;
   blocks: ReportBlock[];
+  filter?: ReportTrackingFilter | null;
 };
 
 export type ReportColumnKind = "period" | "difference" | "percent" | "year_to_date";
@@ -109,6 +113,8 @@ export type CustomReportFigures = {
   notInReport: ComputedLine[];
   /** Accounts with a balance that more than one group of the same table includes. */
   inSeveralGroups: Array<{ tableTitle: string; code: string; name: string; groups: string[] }>;
+  /** The tracking filter, as shown on the report, e.g. "Location: Otago" (TC8). */
+  filterLabel?: string | null;
   computedAt: string;
 };
 

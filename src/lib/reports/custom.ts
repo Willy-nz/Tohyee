@@ -28,7 +28,8 @@ import {
   type ReportValues,
   templateLayout,
 } from "@/lib/reports/custom-layout";
-import { accountTotals, type AccountTotalsRow, earningsOf, financialYearEndMonth, naturalAmount } from "@/lib/reports/financial";
+import { accountTotals, type AccountTotalsRow, earningsOf, financialYearEndMonth, naturalAmount, type TrackingFilter } from "@/lib/reports/financial";
+import { valueWithDescendants } from "@/lib/tracking/service";
 import { optionalSource, requireId, requireIdempotencyKey } from "@/lib/validation";
 
 /**
@@ -191,7 +192,17 @@ export async function parseLayout(tx: OrgTx, base: CustomReportBase, input: unkn
     const unknown = [...codes].filter((code) => !known.has(code));
     if (unknown.length > 0) throw new ValidationError(`There's no account ${unknown.join(", ")}.`);
   }
-  return { title, columns, blocks };
+  let filter: CustomReportLayout["filter"] = null;
+  if (raw.filter != null) {
+    const f = record(raw.filter, "The filter");
+    if (base !== "profit_and_loss") throw new ValidationError("Only a profit and loss can be filtered by a tracking category.");
+    const categoryId = requireId(f.categoryId, "filter category");
+    const valueId = requireId(f.valueId, "filter value");
+    const found = await tx.query("select 1 from tracking_values where id = $1 and category_id = $2", [valueId, categoryId]);
+    if (found.rowCount === 0) throw new ValidationError("The filter's value isn't in its tracking category.");
+    filter = { categoryId, valueId };
+  }
+  return { title, columns, blocks, ...(filter ? { filter } : {}) };
 }
 
 type Account = { id: string; code: string; name: string; accountClass: AccountClass; accountType: AccountType };
@@ -211,6 +222,16 @@ export async function computeCustomReport(tx: OrgTx, base: CustomReportBase, lay
   const money = (value: Decimal) => toFixedString(value, scale);
   const yearEndMonth = await financialYearEndMonth(tx);
   const setting = layout.columns;
+  let trackingFilter: TrackingFilter | null = null;
+  let filterLabel: string | null = null;
+  if (layout.filter && base === "profit_and_loss") {
+    trackingFilter = { categoryId: layout.filter.categoryId, valueIds: await valueWithDescendants(tx, layout.filter.valueId) };
+    const label = await tx.query<{ category: string; value: string }>(
+      "select c.name as category, v.name as value from tracking_values v join tracking_categories c on c.id = v.category_id where v.id = $1",
+      [layout.filter.valueId],
+    );
+    filterLabel = label.rows[0] ? `${label.rows[0].category}: ${label.rows[0].value}` : null;
+  }
 
   // The columns that hold amounts: each period, and the year to date.
   const amountColumns: ReportColumn[] = periodColumns(base, setting);
@@ -238,7 +259,7 @@ export async function computeCustomReport(tx: OrgTx, base: CustomReportBase, lay
   const amounts = new Map<string, Map<string, Decimal>>();
   const earnings = new Map<string, { previous: Decimal; current: Decimal }>();
   for (const column of amountColumns) {
-    const totals: AccountTotalsRow[] = await accountTotals(tx, column.from, column.to!);
+    const totals: AccountTotalsRow[] = await accountTotals(tx, column.from, column.to!, trackingFilter);
     const byAccount = new Map<string, Decimal>();
     for (const row of totals) byAccount.set(row.id, naturalAmount(row));
     amounts.set(column.key, byAccount);
@@ -336,6 +357,7 @@ export async function computeCustomReport(tx: OrgTx, base: CustomReportBase, lay
     blocks,
     notInReport,
     inSeveralGroups,
+    filterLabel,
     computedAt: new Date().toISOString(),
   };
 }

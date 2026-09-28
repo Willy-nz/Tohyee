@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate, InvoiceStatusBadge } from "@/components/invoices/invoice-editor";
 import { Button, Field, Notice, Stat, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
@@ -16,6 +17,7 @@ import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode, calculateInvoice 
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
+import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 /** Bills have the same statuses as invoices: draft, approved and voided. */
 export function BillStatusBadge({ status }: { status: BillStatus }) {
@@ -29,6 +31,7 @@ type EditorLine = {
   unitPrice: string;
   accountCode: string;
   taxCode: string;
+  tracking: TrackingTags;
 };
 
 let lineKey = 0;
@@ -39,7 +42,7 @@ function nextLineKey(): number {
 
 /** New lines have no account, so each cost is put somewhere on purpose. */
 function blankLine(taxCode: string): EditorLine {
-  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode };
+  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {} };
 }
 
 /** The accounts bill lines can go to, the same rule the server checks. */
@@ -53,12 +56,13 @@ type FormProps = {
   accounts: Account[];
   contacts: Contact[];
   taxCodes: TaxCode[];
+  tracking: TrackingSetup;
   bill?: Bill;
   onSaved: (bill: Bill) => void;
   onCancel: () => void;
 };
 
-function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, bill, onSaved, onCancel }: FormProps) {
+function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, tracking, bill, onSaved, onCancel }: FormProps) {
   const scale = currencyMinorUnits(baseCurrency);
   const activeTaxCodes = taxCodes.filter((taxCode) => taxCode.isActive);
   const defaultTaxCode = (activeTaxCodes.find((taxCode) => taxCode.category === "standard") ?? activeTaxCodes[0])?.code ?? "";
@@ -76,6 +80,7 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
           unitPrice: line.unitPrice,
           accountCode: line.accountCode,
           taxCode: line.taxCode ?? defaultTaxCode,
+          tracking: line.tracking ?? {},
         }))
       : [blankLine(defaultTaxCode)],
   );
@@ -125,6 +130,7 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
         unitPrice: line.unitPrice,
         accountCode: line.accountCode,
         taxCode: hasTax ? line.taxCode || null : null,
+        tracking: line.tracking,
       })),
     };
     try {
@@ -266,6 +272,12 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
                     onChange={(code) => update(line.key, { accountCode: code })}
                     required
                   />
+                  <TrackingSelects
+                    setup={tracking}
+                    labelPrefix={`Line ${index + 1}`}
+                    value={line.tracking}
+                    onChange={(tags) => update(line.key, { tracking: tags })}
+                  />
                 </td>
                 {hasTax ? (
                   <td data-label="Tax code">
@@ -355,11 +367,12 @@ export function BillEditor({
   const accounts = useAccounts(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
-  const error = accounts.error ?? contacts.error ?? taxCodes.error;
+  const tracking = useTracking(organisationId);
+  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error;
   if (error) {
     return <Notice tone="error">{error}</Notice>;
   }
-  if (!accounts.data || !contacts.data || !taxCodes.data) {
+  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data) {
     return <p className={ui.muted}>Loading…</p>;
   }
   return (
@@ -369,6 +382,7 @@ export function BillEditor({
       accounts={accounts.data.accounts}
       contacts={contacts.data.contacts}
       taxCodes={taxCodes.data.taxCodes}
+      tracking={tracking.data}
       bill={bill}
       onSaved={onSaved}
       onCancel={onCancel}

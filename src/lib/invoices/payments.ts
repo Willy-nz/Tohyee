@@ -452,6 +452,7 @@ export async function voidPayment(
         debitAmount: line.creditAmount,
         creditAmount: line.debitAmount,
         description: line.description,
+        tracking: line.tracking,
       })),
     }),
     { origin: "customer_payment", relatedJournalId: original.id, correctionKind: "reversal" },

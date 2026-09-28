@@ -22,6 +22,7 @@ function fromInvoice(invoice: Invoice): CreditNoteStart {
       unitPrice: line.unitPrice,
       accountCode: line.accountCode,
       taxCode: line.taxCode,
+      tracking: line.tracking,
     })),
   };
 }

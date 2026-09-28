@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { formatRate, formatUnitPrice, InvoiceStatusBadge, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { InvoicePayments } from "@/components/invoices/invoice-payments";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
@@ -271,6 +272,7 @@ function UnusedCredit({ organisationId, invoice }: { organisationId: string; inv
 }
 
 function InvoiceView({ organisationId, invoiceId }: { organisationId: string; invoiceId: string }) {
+  const trackingSetup = useTracking(organisationId);
   const { can } = useWorkspace();
   const router = useRouter();
   const details = useApiData<{
@@ -359,6 +361,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
                   <td className={ui.num}>{formatUnitPrice(line.unitPrice)}</td>
                   <td>
                     {line.accountCode} · {line.accountName}
+                    <TrackingTagsText setup={trackingSetup.data} tags={line.tracking} />
                   </td>
                   {hasTax ? (
                     <td>

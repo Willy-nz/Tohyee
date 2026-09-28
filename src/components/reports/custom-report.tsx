@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 import { Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { activeCategories, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
@@ -29,8 +30,10 @@ import {
   type ReportColumn,
   type ReportColumnsSetting,
   type ReportRow,
+  type ReportTrackingFilter,
   type ReportValues,
 } from "@/lib/reports/custom-layout";
+import type { TrackingSetup } from "@/lib/tracking/service";
 
 /**
  * Custom reports (examples CR1-CR10): the lists (drafts, published,
@@ -557,21 +560,32 @@ function RowEditor({
 function ColumnsEditor({
   base,
   initial,
+  initialFilter,
+  tracking,
   busy,
   onSave,
   onCancel,
 }: {
   base: CustomReportBase;
   initial: ReportColumnsSetting;
+  initialFilter: ReportTrackingFilter | null;
+  tracking: TrackingSetup | null;
   busy: boolean;
-  onSave: (setting: ReportColumnsSetting) => void;
+  onSave: (setting: ReportColumnsSetting, filter: ReportTrackingFilter | null) => void;
   onCancel: () => void;
 }) {
   const [setting, setSetting] = useState(initial);
+  const [filter, setFilter] = useState(initialFilter ? `${initialFilter.categoryId}:${initialFilter.valueId}` : "");
   const [error, setError] = useState<string | null>(null);
+  // Only a profit and loss can be filtered: balance sheet lines (AR, AP, GST, bank) aren't tagged (TC8).
+  const categories = base === "profit_and_loss" ? activeCategories(tracking) : [];
   function save() {
     if (setting.difference && setting.periodCount < 2) return setError("A difference needs at least two period columns.");
-    onSave({ ...setting, percent: setting.difference && setting.percent, yearToDate: base === "profit_and_loss" && setting.yearToDate });
+    const [categoryId, valueId] = filter.split(":");
+    onSave(
+      { ...setting, percent: setting.difference && setting.percent, yearToDate: base === "profit_and_loss" && setting.yearToDate },
+      filter && categoryId && valueId ? { categoryId, valueId } : null,
+    );
   }
   return (
     <Card title="Columns" description="Whole months, quarters or years, newest first, ending on a month end.">
@@ -625,6 +639,24 @@ function ColumnsEditor({
           </label>
         ) : null}
       </div>
+      {categories.length > 0 || filter ? (
+        <Field label="Only lines tagged" hint="Counts only lines tagged with this value or a value under it.">
+          <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+            <option value="">Everything (no filter)</option>
+            {categories.map((category) => (
+              <optgroup key={category.id} label={category.name}>
+                {category.values
+                  .filter((value) => value.isActive || filter === `${category.id}:${value.id}`)
+                  .map((value) => (
+                    <option key={value.id} value={`${category.id}:${value.id}`}>
+                      {category.name}: {value.path}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+        </Field>
+      ) : null}
       <p className={ui.muted}>A budget column comes later, once budgets are built.</p>
       <div className={ui.actions}>
         <Button onClick={save} disabled={busy}>
@@ -676,6 +708,7 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
   const { can, current } = useWorkspace();
   const loaded = useApiData<Loaded>(`/api/custom-reports/${encodeURIComponent(reportId)}`, { organisationId });
   const accounts = useAccounts(organisationId, true);
+  const tracking = useTracking(organisationId);
   const [state, setState] = useState<Loaded | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
   const [busy, setBusy] = useState(false);
@@ -833,9 +866,20 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
         <ColumnsEditor
           base={report.base}
           initial={report.layout.columns}
+          initialFilter={report.layout.filter ?? null}
+          tracking={tracking.data}
           busy={busy}
           onCancel={() => setEditing(null)}
-          onSave={(setting) => change((layout) => void (layout.columns = setting), () => setEditing(null))}
+          onSave={(setting, filter) =>
+            change(
+              (layout) => {
+                layout.columns = setting;
+                if (filter) layout.filter = filter;
+                else delete layout.filter;
+              },
+              () => setEditing(null),
+            )
+          }
         />
       ) : null}
       {editing?.kind === "row" && editingTable ? (
@@ -873,6 +917,12 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
             {current?.displayName}
             <br />
             {CUSTOM_REPORT_BASES[report.base]} · {periodSummary(figures)} · {figures.currencyCode}
+            {figures.filterLabel ? (
+              <>
+                <br />
+                Only lines tagged {figures.filterLabel}
+              </>
+            ) : null}
           </p>
         </header>
         {figures.blocks.map((block) => (

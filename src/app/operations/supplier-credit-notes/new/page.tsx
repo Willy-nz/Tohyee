@@ -25,6 +25,7 @@ function fromBill(bill: Bill): SupplierCreditNoteStart {
       unitPrice: line.unitPrice,
       accountCode: line.accountCode,
       taxCode: line.taxCode,
+      tracking: line.tracking,
     })),
   };
 }
