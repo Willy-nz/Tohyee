@@ -169,7 +169,9 @@ try {
   $backup = @{ code = $enrolled.backupCodes[0] } | ConvertTo-Json
   Invoke-RestMethod -Uri "$url/api/auth/two-step/verify" -Method Post -ContentType 'application/json' -Headers $origin -Body $backup -WebSession $again | Out-Null
   $me = Invoke-RestMethod -Uri "$url/api/auth/session" -WebSession $again
-  if ($me.organisations.Count -ne 1) { throw 'The organisation was not there after the update.' }
+  # Both the organisation and its restored copy (from the backup test above) are kept.
+  $ids = @($me.organisations | ForEach-Object { $_.id })
+  if (-not ($ids -contains 'ci') -or -not ($ids -contains 'ci-restored')) { throw "The organisations were not there after the update (found: $($ids -join ', '))." }
   Write-Host 'Signed in (password and backup code) after the update: data kept.'
   $cloudflared = Join-Path $installDir 'cloudflared\cloudflared.exe'
   if (-not (Test-Path $cloudflared)) { throw 'cloudflared.exe was not installed.' }
