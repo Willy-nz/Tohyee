@@ -14,7 +14,7 @@ agents: these come before the "Next" list in docs/FEATURES.md. Anything marked
 
 6. **Use Tohyee from anywhere** (phone or laptop, away from home), the way a media server lets you reach it remotely. Decided with Jess (28 Sep 2026): Cloudflare Tunnel; two-step sign-in with an authenticator app and backup codes, required for everyone; email (Gmail/Outlook SMTP) for security alerts and reset links, not sign-in codes. Built: the tunnel (Remote access in the server settings), two-step sign-in and server email, and phone screens (a ☰ menu, and line editors that stack on a phone).
 
-Done from before: payments and hybrid GST bases (examples G10-G22, from IRD's IR375 and IR546; Jess chose split in proportion for part payments, credit notes counting when applied or refunded, and the basis-change adjustment suggested with one click). Still open: confirming zero-rated purchases stay out of Box 11.
+Done from before: payments and hybrid GST bases (examples G10-G22, from IRD's IR375 and IR546; Jess chose split in proportion for part payments, credit notes counting when applied or refunded, and the basis-change adjustment suggested with one click). Confirmed with Jess (29 Sep 2026): only zero-rated supplies (sales) count, in Box 6; zero-rated purchases stay out of Box 11, as built.
 
 ## Step 1: Bigcapital review (do this before building items 1-5)
 

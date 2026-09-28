@@ -875,7 +875,9 @@ and hybrid bases change only *when* a document counts.
   - Sales: standard -> Box 5; zero rated -> Box 5 and Box 6; exempt and out
     of scope -> left out.
   - Purchases: standard -> Box 11; zero rated, exempt and out of scope ->
-    left out (no GST to claim).
+    left out (no GST to claim). Confirmed with the owner (29 Sep 2026): only
+    zero-rated sales are reported (Box 6); zero-rated purchases stay out of
+    Box 11.
 - Boxes are exact decimals with 2 places, rounded half away from zero:
   Box 7 = 5 - 6; Box 8 = Box 7 x 3 / 23; Box 9 = debit adjustments;
   Box 10 = 8 + 9; Box 12 = Box 11 x 3 / 23; Box 13 = credit adjustments;
