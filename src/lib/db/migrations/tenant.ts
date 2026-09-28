@@ -2718,7 +2718,6 @@ create table bank_account_settings (
   akahu_account_id text unique check (akahu_account_id is null or akahu_account_id ~ '^acc_[A-Za-z0-9]+$'),
   akahu_account_name text,
   akahu_connection_name text,
-  akahu_connection_id bigint,
   feed_start_date date,
   feed_active boolean not null default false,
   last_synced_at timestamptz,
@@ -2730,28 +2729,24 @@ create table bank_account_settings (
   check (not feed_active or (akahu_account_id is not null and feed_start_date is not null))
 );
 
--- Enduring Akahu consent given through OAuth by this organisation. The user
--- access token is encrypted with the server's TOHYEE_SECRET_KEY.
+-- The organisation's own Akahu personal app (bank feeds, BK15): its App ID
+-- token and user token, encrypted with the server's TOHYEE_SECRET_KEY. Each
+-- organisation sets up its own, so feeds only ever reach its own bank logins.
+-- Saving new tokens removes the old row; only one row is active at a time.
 create table akahu_connections (
   id bigserial primary key,
-  token_ciphertext text not null,
-  scope text,
-  status text not null default 'active' check (status in ('active', 'revoked')),
-  connected_by_email text,
-  connected_at timestamptz not null default now(),
-  revoked_at timestamptz
-);
-alter table bank_account_settings
-  add constraint bank_account_settings_akahu_connection_fkey
-  foreign key (akahu_connection_id) references akahu_connections(id);
-
--- One-use state values for the Akahu OAuth redirect.
-create table akahu_oauth_states (
-  state text primary key check (length(state) >= 32),
-  user_id uuid,
+  app_token_ciphertext text not null,
+  user_token_ciphertext text not null,
+  app_token_hint text not null check (length(app_token_hint) between 1 and 40),
+  sync_every_hours integer not null default 6 check (sync_every_hours between 1 and 24),
+  status text not null default 'active' check (status in ('active', 'removed')),
+  created_by_email text,
   created_at timestamptz not null default now(),
-  used_at timestamptz
+  removed_at timestamptz,
+  removed_by_email text,
+  check ((status = 'active') = (removed_at is null))
 );
+create unique index akahu_connections_one_active on akahu_connections ((true)) where status = 'active';
 
 -- A file import or a bank feed sync. Deleting an import (only while none of
 -- its lines is reconciled) marks it and its lines deleted.
