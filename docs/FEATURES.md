@@ -64,8 +64,9 @@ that something happened.
   all-or-nothing command (no journal) or refunded from a bank account, and
   applications can be removed and refunds voided. A payment whose overpayment
   is used can't be voided. A payment for an invoice that's already paid (the
-  customer paid twice) is all credit, after a confirmation on screen. See
-  examples OP1-OP11.
+  customer paid twice) is all credit, after a confirmation on screen. Sales >
+  Overpayments lists them all (or those with credit left, with the total
+  left), each linking to its page. See examples OP1-OP11.
 - **Bills** from suppliers in the base currency: drafts that can be edited and
   deleted, with the supplier's invoice number (a supplier can't have two bills
   that aren't voided with the same number, ignoring case and spaces),

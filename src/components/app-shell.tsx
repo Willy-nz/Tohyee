@@ -32,6 +32,7 @@ const MENUS: Menu[] = [
           { href: "/operations/invoices", label: "Invoices" },
           { href: "/operations/invoices?show=awaiting", label: "Awaiting payment" },
           { href: "/operations/credit-notes", label: "Credit notes" },
+          { href: "/operations/overpayments", label: "Overpayments" },
         ],
       },
       {
