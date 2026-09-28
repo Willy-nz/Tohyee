@@ -36,7 +36,7 @@ function journalHref(journalId: string): string {
 
 /** Payments go into active bank accounts in the base currency (example CP8). */
 function isPaymentAccount(account: Account): boolean {
-  return account.accountType === "bank" && account.currencyCode === null;
+  return (account.accountType === "bank" || account.accountType === "credit_card") && account.currencyCode === null;
 }
 
 function RecordPaymentForm({
