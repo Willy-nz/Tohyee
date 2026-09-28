@@ -35,17 +35,23 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=no
+; The only per-user setting is starting the tray icon when you sign in.
+UsedUserAreasWarning=no
 UninstallDisplayName=Tohyee
 UninstallDisplayIcon={app}\node\node.exe
 
 [Tasks]
 Name: "desktopicon"; Description: "Add a Tohyee shortcut to the desktop"
+Name: "starttray"; Description: "Start the Tohyee server app (the icon by the clock) when I sign in to Windows"
 
 [InstallDelete]
 ; Replace the program files cleanly on updates (your data lives elsewhere).
 Type: filesandordirs; Name: "{app}\app"
 Type: filesandordirs; Name: "{app}\node"
 Type: filesandordirs; Name: "{app}\scripts"
+Type: filesandordirs; Name: "{app}\tray"
+; Older versions opened the server settings in the browser.
+Type: files; Name: "{group}\Tohyee server settings.url"
 
 [Files]
 Source: "{#SourceDir}\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs ignoreversion
@@ -54,15 +60,16 @@ Source: "{#SourceDir}\pgsql\*"; DestDir: "{app}\pgsql"; Flags: recursesubdirs cr
 Source: "{#SourceDir}\service\*"; DestDir: "{app}\service"; Flags: ignoreversion
 Source: "{#SourceDir}\cloudflared\*"; DestDir: "{app}\cloudflared"; Flags: ignoreversion
 Source: "{#SourceDir}\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "{#SourceDir}\tray\*"; DestDir: "{app}\tray"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "{#SourceDir}\LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [INI]
 Filename: "{group}\Open Tohyee.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:3000"
 Filename: "{autodesktop}\Tohyee.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:3000"; Tasks: desktopicon
-Filename: "{group}\Tohyee server settings.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:3001/server"
 
 [Icons]
+Name: "{group}\Tohyee server settings"; Filename: "{app}\tray\TohyeeTray.exe"; Parameters: "--settings"; Comment: "Organisations, users, remote access, email and updates (this computer only)"
 Name: "{group}\Back up Tohyee"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\Backup-Tohyee.ps1"""; Comment: "Back up all Tohyee data to Documents\Tohyee backups"
 Name: "{group}\Tohyee logs"; Filename: "{commonappdata}\Tohyee\logs"
 Name: "{group}\Uninstall Tohyee"; Filename: "{uninstallexe}"
@@ -70,12 +77,18 @@ Name: "{group}\Uninstall Tohyee"; Filename: "{uninstallexe}"
 [UninstallDelete]
 Type: files; Name: "{group}\Open Tohyee.url"
 Type: files; Name: "{autodesktop}\Tohyee.url"
-Type: files; Name: "{group}\Tohyee server settings.url"
+
+[Registry]
+; Start the tray icon when this person signs in to Windows (like a media server's).
+; The app's menu turns this off and on again.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Tohyee"; ValueData: """{app}\tray\TohyeeTray.exe"""; Tasks: starttray; Flags: uninsdeletevalue
 
 [Run]
+Filename: "{app}\tray\TohyeeTray.exe"; Flags: nowait runasoriginaluser skipifsilent
 Filename: "{code:GetOpenUrl}"; Description: "Open Tohyee now"; Flags: postinstall shellexec nowait skipifsilent
 
 [UninstallRun]
+Filename: "{sys}\taskkill.exe"; Parameters: "/IM TohyeeTray.exe /F"; Flags: runhidden waituntilterminated; RunOnceId: "StopTohyeeTray"
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\remove-services.ps1"" -InstallDir ""{app}"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveTohyeeServices"
 
 [Code]
@@ -105,9 +118,10 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
 begin
-  { Stop the services so their files can be replaced on an update. }
+  { Stop the services and the tray icon so their files can be replaced on an update. }
   Exec(PowerShellExe(), '-NoProfile -Command "Stop-Service -Name Tohyee -Force -ErrorAction SilentlyContinue; Stop-Service -Name TohyeePostgres -Force -ErrorAction SilentlyContinue"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM TohyeeTray.exe /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := '';
 end;
 

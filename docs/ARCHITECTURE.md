@@ -187,7 +187,14 @@ Server-wide:
   the main server with a secret header made fresh at each start
   (`src/lib/server-admin/`). `/api/admin/*` and the `/server` pages refuse
   anything without it, so they can't be reached over the network or through
-  the Cloudflare Tunnel even with a server admin's session.
+  the Cloudflare Tunnel even with a server admin's session. On Windows the
+  server settings are a native app (`installer/windows/tray`, .NET Framework
+  4.8, which Windows 10 and 11 include): a tray icon that shows whether the
+  services are running and a window that signs in as a server admin (with
+  two-step sign-in) and uses the same `/api/admin/*` routes through the local
+  address. It starts when its user signs in to Windows (HKCU Run key, set by
+  the installer and switchable from its menu). The browser `/server` pages
+  stay for other platforms until the command-line tool covers them.
 
 Per organisation (lowest to highest):
 

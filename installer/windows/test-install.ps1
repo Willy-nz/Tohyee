@@ -1,6 +1,7 @@
 # Installs the freshly built TohyeeSetup on this (throwaway CI) Windows
 # machine and checks it end to end: services, health, first-time setup
-# (including two-step sign-in), creating an organisation, surviving a service
+# (including two-step sign-in), creating an organisation, the Tohyee server
+# app (tray) reaching its server settings, surviving a service
 # restart, updating in place (signing in with a backup code), the bundled
 # cloudflared, and uninstalling. Needs Administrator (GitHub's Windows runners are).
 
@@ -116,6 +117,25 @@ try {
   $created = Invoke-RestMethod -Uri "$adminUrl/api/admin/organisations" -Method Post -ContentType 'application/json' -Headers $adminOrigin -Body $org -WebSession $session
   Write-Host "Organisation: $($created.organisation.provisioningStatus), schema $($created.organisation.schemaVersion)"
   if ($created.organisation.provisioningStatus -ne 'ready') { throw 'The organisation was not provisioned.' }
+
+  Write-Host '== The Tohyee server app (tray icon and server settings)'
+  $trayExe = Join-Path $installDir 'tray\TohyeeTray.exe'
+  if (-not (Test-Path $trayExe)) { throw 'TohyeeTray.exe was not installed.' }
+  $trayIni = Join-Path $dataRoot 'tray.ini'
+  if (-not (Test-Path $trayIni)) { throw 'The installer did not write tray.ini.' }
+  Get-Content $trayIni | Write-Host
+  # Signs in (with the next authenticator code, since this one is used) and lists the organisations.
+  $trayResult = Join-Path $env:TEMP 'tohyee-tray-self-test.txt'
+  $env:TOHYEE_TRAY_TEST_EMAIL = 'ci@example.com'
+  $env:TOHYEE_TRAY_TEST_PASSWORD = 'ci-password-long-enough-123'
+  $env:TOHYEE_TRAY_TEST_CODE = Get-TotpCode $enrolment.secret ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + 30)
+  try {
+    $tray = Start-Process -FilePath $trayExe -ArgumentList @('--self-test', "`"$trayResult`"") -Wait -PassThru
+  } finally {
+    Remove-Item Env:TOHYEE_TRAY_TEST_EMAIL, Env:TOHYEE_TRAY_TEST_PASSWORD, Env:TOHYEE_TRAY_TEST_CODE -ErrorAction SilentlyContinue
+  }
+  if (Test-Path $trayResult) { Get-Content $trayResult | Write-Host }
+  if ($tray.ExitCode -ne 0) { throw "The Tohyee server app's self-test failed (exit code $($tray.ExitCode))." }
 
   Write-Host '== Restart both services (as after a reboot)'
   Stop-Service Tohyee

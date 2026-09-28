@@ -9,7 +9,11 @@ that something happened.
 - **Organisations**, each with its own PostgreSQL database, created and
   repaired by server admins.
 - **Server settings apart from the books** (organisations, users, remote
-  access, email, updates), open only on the server computer itself.
+  access, email, updates), open only on the server computer itself. On
+  Windows they're in the **Tohyee server app**: an icon by the clock (started
+  when you sign in, like a media server's) that shows whether Tohyee is
+  running, restarts it, backs it up and opens the logs, and a window for the
+  settings.
 - **Menus**: Home, Sales, Purchases, Reporting, Accounting, Tax and Contacts
   across the top, each opening to its overview, lists and settings; a ☰ menu
   with the same sections on phones, where line editors stack each line's

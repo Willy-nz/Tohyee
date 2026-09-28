@@ -6,7 +6,9 @@
 #
 # Services (both start automatically when Windows starts, before anyone signs in):
 #   TohyeePostgres  PostgreSQL, listening on localhost only
-#   Tohyee          the Tohyee server (node), http://localhost:<port>
+#   Tohyee          the Tohyee server (node), http://localhost:<port>, and its
+#                   server settings address, http://127.0.0.1:<admin port>
+#                   (this computer only; the tray app uses it)
 #
 # Safe to run again: existing passwords and data are kept.
 
@@ -77,12 +79,19 @@ try {
   foreach ($default in @(@('TOHYEE_PORT', '3000'), @('TOHYEE_LISTEN', '127.0.0.1'), @('POSTGRES_PORT', '5433'))) {
     if (-not $settings.Contains($default[0])) { $settings[$default[0]] = $default[1] }
   }
+  # Server settings: 127.0.0.1 only, used by the Tohyee server app (tray icon).
+  if (-not $settings.Contains('TOHYEE_ADMIN_PORT')) { $settings['TOHYEE_ADMIN_PORT'] = [string]([int]$settings['TOHYEE_PORT'] + 1) }
   $lines = @('# Tohyee settings. Keep this file private and keep a copy with your backups:',
     '# it holds the database password, and a new one will not open your existing data.',
     '# After changing TOHYEE_PORT or TOHYEE_LISTEN, run the Tohyee setup again (Repair).')
   foreach ($key in $settings.Keys) { $lines += "$key=$($settings[$key])" }
   [System.IO.File]::WriteAllLines($EnvFile, [string[]]$lines)
   Protect-Path $EnvFile
+  # Where the tray app finds Tohyee: ports only, nothing secret, readable by everyone.
+  [System.IO.File]::WriteAllLines((Join-Path $DataRoot 'tray.ini'), [string[]]@(
+    '# Written by the Tohyee installer for the tray app. Change the ports in tohyee.env instead.',
+    "PORT=$($settings['TOHYEE_PORT'])",
+    "ADMIN_PORT=$($settings['TOHYEE_ADMIN_PORT'])"))
 
   $pgPort = $settings['POSTGRES_PORT']
   $env:PGPASSWORD = $settings['POSTGRES_PASSWORD']
@@ -163,6 +172,7 @@ try {
   <env name="NEXT_TELEMETRY_DISABLED" value="1"/>
   <env name="PORT" value="$(X $settings['TOHYEE_PORT'])"/>
   <env name="HOSTNAME" value="$(X $settings['TOHYEE_LISTEN'])"/>
+  <env name="TOHYEE_ADMIN_PORT" value="$(X $settings['TOHYEE_ADMIN_PORT'])"/>
   <env name="DATABASE_URL" value="$(X $databaseUrl)"/>
   <env name="SETUP_TOKEN" value="$(X $settings['SETUP_TOKEN'])"/>
   <env name="TOHYEE_SECRET_KEY" value="$(X $settings['TOHYEE_SECRET_KEY'])"/>

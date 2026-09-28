@@ -1,7 +1,8 @@
 # Builds dist\windows\TohyeeSetup-<version>.exe. Runs on a Windows machine
 # (GitHub's windows-latest) after `npm ci` and `npm run build`.
 # Downloads Node.js (same version as the build), PostgreSQL, WinSW, the
-# Visual C++ runtime and Cloudflare's cloudflared (for remote access), stages
+# Visual C++ runtime and Cloudflare's cloudflared (for remote access), builds
+# the Tohyee server app (installer\windows\tray, needs the .NET SDK), stages
 # them with the app, and compiles Tohyee.iss.
 
 $ErrorActionPreference = 'Stop'
@@ -71,6 +72,13 @@ Invoke-WebRequest $CloudflaredUrl -OutFile $cloudflaredExe
 $cloudflaredHash = (Get-FileHash $cloudflaredExe -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($cloudflaredHash -ne $CloudflaredSha256) { throw "cloudflared download has SHA-256 $cloudflaredHash, expected $CloudflaredSha256." }
 Invoke-WebRequest "https://raw.githubusercontent.com/cloudflare/cloudflared/$CloudflaredVersion/LICENSE" -OutFile (Join-Path $stage 'cloudflared\LICENSE.txt')
+
+Write-Host '== Tohyee server app (tray icon and server settings)'
+# .NET Framework 4.8 comes with Windows 10 and 11, so nothing extra is installed.
+& dotnet build (Join-Path $PSScriptRoot 'tray\TohyeeTray.csproj') -c Release -o (Join-Path $stage 'tray') "-p:Version=$version" --nologo
+if ($LASTEXITCODE -ne 0) { throw "Building the Tohyee server app failed with exit code $LASTEXITCODE" }
+if (-not (Test-Path (Join-Path $stage 'tray\TohyeeTray.exe'))) { throw 'The Tohyee server app (TohyeeTray.exe) was not built.' }
+Get-ChildItem (Join-Path $stage 'tray') -Include *.pdb, *.xml -Recurse | Remove-Item -Force
 
 foreach ($script in @('configure-tohyee.ps1', 'remove-services.ps1', 'Backup-Tohyee.ps1')) {
   Copy-Item (Join-Path $PSScriptRoot $script) (Join-Path $stage "scripts\$script")
