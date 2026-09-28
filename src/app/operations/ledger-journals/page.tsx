@@ -32,6 +32,7 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   sales_credit_note_refund: "Credit note refund",
   supplier_credit_note: "Supplier credit note",
   supplier_credit_note_refund: "Supplier refund",
+  customer_overpayment_refund: "Overpayment refund",
 };
 
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
@@ -43,6 +44,7 @@ const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
   sales_credit_note_refund: "The refund was voided: reversed by",
   supplier_credit_note: "The supplier credit note was voided: reversed by",
   supplier_credit_note_refund: "The refund was voided: reversed by",
+  customer_overpayment_refund: "The refund was voided: reversed by",
 };
 
 function KindBadge({ journal }: { journal: Journal }) {
@@ -180,6 +182,19 @@ function JournalDetail({
               {" "}
               To undo it, void the refund from its credit note in{" "}
               <Link href="/operations/credit-notes">Credit notes</Link>.
+            </>
+          )}
+        </p>
+      ) : null}
+      {journal.origin === "customer_overpayment_refund" ? (
+        <p className={ui.muted}>
+          This journal was posted by {journal.correctionKind === "reversal" ? "voiding" : "recording"} a refund of a
+          customer overpayment, so it can&apos;t be corrected here.
+          {journal.correctionKind === "reversal" ? null : (
+            <>
+              {" "}
+              To undo it, void the refund from the overpayment, which is linked from the overpaid invoice in{" "}
+              <Link href="/operations/invoices">Invoices</Link>.
             </>
           )}
         </p>
@@ -397,6 +412,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="sales_credit_note_refund">Credit note refunds</option>
               <option value="supplier_credit_note">Supplier credit notes</option>
               <option value="supplier_credit_note_refund">Supplier refunds</option>
+              <option value="customer_overpayment_refund">Overpayment refunds</option>
               <option value="reversal">Reversals</option>
               <option value="replacement">Replacements</option>
             </select>

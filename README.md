@@ -41,7 +41,8 @@ own.
   (`INV-0001`, …) and posts it to the ledger, and voiding that reverses it.
 - **Customer payments** against an approved invoice, into a bank account:
   each one posts to the ledger, part payments are fine, and the invoice shows
-  what's still due. Overpayments aren't built yet.
+  what's still due. Paying more than what's due keeps the rest as an
+  overpayment, credit for the customer to apply to other invoices or refund.
 - **Sales credit notes**: drafts, approval that numbers them (`CN-0001`, …)
   and posts them, credit applied to one or more of the customer's invoices,
   unused credit kept on the credit note or refunded from a bank account, and

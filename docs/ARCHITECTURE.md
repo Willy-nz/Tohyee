@@ -31,7 +31,9 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ tax_codes, accounting_period_controls
 ├─ contacts               customers and suppliers
 ├─ sales_invoices, sales_invoice_lines, sales_invoice_numbering
-├─ customer_payments      money received against sales invoices
+├─ customer_payments      money received against sales invoices (with any overpayment)
+├─ customer_overpayment_applications   overpayments applied to other sales invoices
+├─ customer_overpayment_refunds        overpayments paid back to customers
 ├─ bills, bill_lines      bills from suppliers
 ├─ supplier_payments      money paid against bills
 ├─ sales_credit_notes, sales_credit_note_lines, sales_credit_note_numbering
@@ -182,10 +184,18 @@ Enforced by the database itself, not just the app:
   neither table can be truncated. Invoice numbers come from a one-row counter
   that can only move forward by one, so `INV-` numbers have no gaps.
 - Customer payments: a payment is recorded against an approved invoice, in
-  the invoice's currency and dated on or after it, and an invoice's active
-  payments can't add up to more than its total. Payments can't be edited,
+  the invoice's currency and dated on or after it. Its
+  overpayment must be exactly what it pays beyond the amount due at that
+  moment, so what's settled on an invoice (payments less overpayments, plus
+  credit applied) never goes over its total. Payments can't be edited,
   deleted or truncated; the only change allowed is voiding one, once, which
-  fills in its void details. An invoice with active payments can't be voided.
+  fills in its void details, and not while its overpayment is applied or
+  refunded. An invoice with active payments can't be voided.
+- Customer overpayments: applications and refunds follow the credit note
+  rules (applied only to other approved invoices of the same customer and
+  currency, never more than what's left, removed or voided once, never
+  edited, deleted or truncated), and an invoice with overpayment credit
+  applied can't be voided.
 - Bills: only drafts can be changed or deleted, and a draft can't be voided
   (it's deleted instead). An approved bill can only become voided (and then
   only its void details change); a voided one can't change at all. Lines of
@@ -258,9 +268,14 @@ Enforced by the app (and covered by tests):
   (`src/lib/invoices/amounts.ts`), which the editor also uses for its live
   totals.
 - Customer payments debit an active, base-currency account of type `bank`
-  and credit the accounts receivable account above. An invoice's amount paid,
-  amount due and paid status (`unpaid`, `part_paid`, `paid`) are worked out
-  from its active payments and active credit applied whenever it's read; they
+  and credit the accounts receivable account above, for the full amount
+  received. The part beyond the invoice's amount due is stored once, as the
+  payment's overpayment; it stays in accounts receivable as credit for the
+  customer, and applying it posts no journal while refunding it posts
+  Dr accounts receivable / Cr the bank account (`src/lib/invoices/overpayments.ts`).
+  An invoice's amount paid, amount due and paid status (`unpaid`,
+  `part_paid`, `paid`), and what's left of an overpayment, are worked out
+  from active payments, applications and refunds whenever they're read; they
   are never stored.
 - Sales credit notes use the invoice line maths and post the mirror of an
   invoice (Dr revenue and GST / Cr accounts receivable). Applying credit to

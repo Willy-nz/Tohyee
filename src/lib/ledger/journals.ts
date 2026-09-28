@@ -39,7 +39,8 @@ export type JournalOrigin =
   | "sales_credit_note"
   | "sales_credit_note_refund"
   | "supplier_credit_note"
-  | "supplier_credit_note_refund";
+  | "supplier_credit_note_refund"
+  | "customer_overpayment_refund";
 export type CorrectionKind = "reversal" | "replacement";
 
 export type JournalLine = {
@@ -430,6 +431,7 @@ export async function listJournals(
     "sales_credit_note_refund",
     "supplier_credit_note",
     "supplier_credit_note_refund",
+    "customer_overpayment_refund",
   ];
   const validKinds = ["primary", "reversal", "replacement", ...origins];
   if (kind && !validKinds.includes(kind)) {
@@ -510,7 +512,8 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
     journal.origin !== "sales_credit_note" &&
     journal.origin !== "sales_credit_note_refund" &&
     journal.origin !== "supplier_credit_note" &&
-    journal.origin !== "supplier_credit_note_refund"
+    journal.origin !== "supplier_credit_note_refund" &&
+    journal.origin !== "customer_overpayment_refund"
   );
 }
 
@@ -520,7 +523,8 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
  * open period). A replacement can itself be corrected later. Journals created
  * by stock movements, FX revaluations, sales invoices, customer payments,
  * bills, supplier payments, sales credit notes, credit note refunds, supplier
- * credit notes or refunds received from suppliers must be corrected at their
+ * credit notes, refunds received from suppliers or refunds of customer
+ * overpayments must be corrected at their
  * source, so those records and the ledger stay in step.
  */
 export async function correctJournal(
@@ -588,6 +592,11 @@ export async function correctJournal(
   if (original.origin === "supplier_credit_note_refund") {
     throw new ValidationError(
       `Journal #${original.id} was posted by a refund received from a supplier (${original.reference}), so it can't be corrected in the ledger. To undo a refund, void it from its supplier credit note.`,
+    );
+  }
+  if (original.origin === "customer_overpayment_refund") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a refund of a customer overpayment (${original.reference}), so it can't be corrected in the ledger. To undo a refund, void it from the overpayment.`,
     );
   }
   if (original.correctionKind === "reversal") {

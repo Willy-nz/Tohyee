@@ -14,6 +14,8 @@ import type { CreditNoteApplication } from "@/lib/credit-notes/applications";
 import type { CreditNoteSummary } from "@/lib/credit-notes/service";
 import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
+import type { OverpaymentApplication } from "@/lib/invoices/overpayments";
+import type { CustomerPayment } from "@/lib/invoices/payments";
 import type { Invoice } from "@/lib/invoices/service";
 
 function journalHref(journalId: string): string {
@@ -143,44 +145,73 @@ function InvoiceActions({
 }
 
 /**
- * Credit applied to an invoice from credit notes (example CN3). Credit is
- * applied and removed on the credit note's page.
+ * Credit applied to an invoice from credit notes (example CN3) and from
+ * overpayments on the customer's other invoices (example OP2). Credit is
+ * applied and removed on the credit note's or overpayment's page.
  */
-function InvoiceCredit({ creditApplied }: { creditApplied: CreditNoteApplication[] }) {
+function InvoiceCredit({
+  creditApplied,
+  overpaymentCreditApplied,
+}: {
+  creditApplied: CreditNoteApplication[];
+  overpaymentCreditApplied: OverpaymentApplication[];
+}) {
+  const rows = [
+    ...creditApplied.map((application) => ({
+      id: `cn-${application.id}`,
+      date: application.applicationDate,
+      source: (
+        <Link href={`/operations/credit-notes/${application.creditNoteId}`}>{application.creditNoteNumber}</Link>
+      ),
+      status: application.status,
+      removalDate: application.removalDate,
+      amount: application.amount,
+    })),
+    ...overpaymentCreditApplied.map((application) => ({
+      id: `op-${application.id}`,
+      date: application.applicationDate,
+      source: (
+        <Link href={`/operations/overpayments/${application.paymentId}`}>
+          Overpayment on {application.sourceInvoiceNumber}
+        </Link>
+      ),
+      status: application.status,
+      removalDate: application.removalDate,
+      amount: application.amount,
+    })),
+  ].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return (
     <Card
       title="Credit applied"
-      description="Credit from credit notes lowers the amount due without posting a journal. Apply or remove it on the credit note."
+      description="Credit from credit notes and overpayments lowers the amount due without posting a journal. Apply or remove it on the credit note or overpayment."
     >
       <div className={ui.tableWrap}>
         <table className={ui.table}>
           <thead>
             <tr>
               <th>Date</th>
-              <th>Credit note</th>
+              <th>From</th>
               <th>Status</th>
               <th className={ui.num}>Amount</th>
             </tr>
           </thead>
           <tbody>
-            {creditApplied.map((application) => (
-              <tr key={application.id}>
-                <td>{formatDate(application.applicationDate)}</td>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td>{formatDate(row.date)}</td>
+                <td>{row.source}</td>
                 <td>
-                  <Link href={`/operations/credit-notes/${application.creditNoteId}`}>{application.creditNoteNumber}</Link>
-                </td>
-                <td>
-                  {application.status === "active" ? (
+                  {row.status === "active" ? (
                     <Badge tone="green">Active</Badge>
                   ) : (
                     <>
                       <Badge tone="red">Removed</Badge>
-                      <span className={ui.muted}> on {formatDate(application.removalDate)}</span>
+                      <span className={ui.muted}> on {formatDate(row.removalDate)}</span>
                     </>
                   )}
                 </td>
                 <td className={ui.num}>
-                  <Money value={application.amount} />
+                  <Money value={row.amount} />
                 </td>
               </tr>
             ))}
@@ -191,28 +222,49 @@ function InvoiceCredit({ creditApplied }: { creditApplied: CreditNoteApplication
   );
 }
 
-/** Points to the customer's approved credit notes that still have credit to apply. */
+/** Points to the customer's approved credit notes and overpayments that still have credit to apply. */
 function UnusedCredit({ organisationId, invoice }: { organisationId: string; invoice: Invoice }) {
   const list = useApiData<{ creditNotes: CreditNoteSummary[] }>("/api/credit-notes", {
     organisationId,
     contactId: invoice.contactId,
     hasRemainingCredit: "true",
   });
+  const overpaymentList = useApiData<{ overpayments: CustomerPayment[] }>("/api/overpayments", {
+    organisationId,
+    contactId: invoice.contactId,
+    hasRemainingCredit: "true",
+  });
   const creditNotes = (list.data?.creditNotes ?? []).filter((creditNote) => creditNote.currencyCode === invoice.currencyCode);
-  if (creditNotes.length === 0) {
+  const overpayments = (overpaymentList.data?.overpayments ?? []).filter(
+    (payment) => payment.currencyCode === invoice.currencyCode && payment.invoiceId !== invoice.id,
+  );
+  if (creditNotes.length === 0 && overpayments.length === 0) {
     return null;
   }
+  const sources = [
+    ...creditNotes.map((creditNote) => (
+      <span key={`cn-${creditNote.id}`}>
+        <Link href={`/operations/credit-notes/${creditNote.id}`}>{creditNote.creditNoteNumber}</Link> (
+        {formatMoney(creditNote.remainingCredit)} left)
+      </span>
+    )),
+    ...overpayments.map((payment) => (
+      <span key={`op-${payment.id}`}>
+        <Link href={`/operations/overpayments/${payment.id}`}>the overpayment on {payment.invoiceNumber}</Link> (
+        {formatMoney(payment.overpaymentRemaining)} left)
+      </span>
+    )),
+  ];
   return (
     <Notice tone="info">
       {invoice.contactName} has unused credit:{" "}
-      {creditNotes.map((creditNote, index) => (
-        <span key={creditNote.id}>
+      {sources.map((source, index) => (
+        <span key={source.key}>
           {index > 0 ? ", " : ""}
-          <Link href={`/operations/credit-notes/${creditNote.id}`}>{creditNote.creditNoteNumber}</Link> (
-          {formatMoney(creditNote.remainingCredit)} left)
+          {source}
         </span>
       ))}
-      . Apply it from the credit note.
+      . Apply it from the credit note or overpayment.
     </Notice>
   );
 }
@@ -220,7 +272,11 @@ function UnusedCredit({ organisationId, invoice }: { organisationId: string; inv
 function InvoiceView({ organisationId, invoiceId }: { organisationId: string; invoiceId: string }) {
   const { can } = useWorkspace();
   const router = useRouter();
-  const details = useApiData<{ invoice: Invoice; creditApplied: CreditNoteApplication[] }>(
+  const details = useApiData<{
+    invoice: Invoice;
+    creditApplied: CreditNoteApplication[];
+    overpaymentCreditApplied: OverpaymentApplication[];
+  }>(
     `/api/invoices/${encodeURIComponent(invoiceId)}`,
     { organisationId },
   );
@@ -243,7 +299,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
   }
   const invoice = updated ?? details.data.invoice;
   const hasTax = invoice.amountsMode !== "no_tax";
-  const { creditApplied } = details.data;
+  const { creditApplied, overpaymentCreditApplied } = details.data;
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
@@ -361,7 +417,9 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           }}
         />
       ) : null}
-      {creditApplied.length > 0 ? <InvoiceCredit creditApplied={creditApplied} /> : null}
+      {creditApplied.length > 0 || overpaymentCreditApplied.length > 0 ? (
+        <InvoiceCredit creditApplied={creditApplied} overpaymentCreditApplied={overpaymentCreditApplied} />
+      ) : null}
       {can("bookkeeper") ? (
         <InvoiceActions
           key={invoice.status}

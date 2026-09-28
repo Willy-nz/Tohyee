@@ -1098,7 +1098,11 @@ describeWithDatabase("GST return", () => {
       await client.query(
         `insert into organisation_settings (organisation_id, display_name, base_currency) values ('upgrade-co', 'Upgrade Co', 'NZD')`,
       );
-      const upgraded = await applyMigrations(client, tenantMigrations, "test:upgrade");
+      const upgraded = await applyMigrations(
+        client,
+        tenantMigrations.filter((migration) => migration.version <= "0009"),
+        "test:upgrade",
+      );
       expect(upgraded.applied).toEqual(["0009"]);
       expect((await client.query("select display_name, gst_basis from organisation_settings")).rows).toEqual([
         { display_name: "Upgrade Co", gst_basis: "invoice" },
