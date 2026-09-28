@@ -861,7 +861,11 @@ describeWithDatabase("customer overpayments", () => {
       await client.query(
         `insert into organisation_settings (organisation_id, display_name, base_currency) values ('upgrade-co', 'Upgrade Co', 'NZD')`,
       );
-      const upgraded = await applyMigrations(client, tenantMigrations, "test:upgrade");
+      const upgraded = await applyMigrations(
+        client,
+        tenantMigrations.filter((migration) => migration.version <= "0010"),
+        "test:upgrade",
+      );
       expect(upgraded.applied).toEqual(["0010"]);
       expect((await client.query("select display_name from organisation_settings")).rows).toEqual([
         { display_name: "Upgrade Co" },

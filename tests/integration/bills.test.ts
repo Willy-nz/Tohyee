@@ -701,7 +701,7 @@ describeWithDatabase("bills", () => {
       [{ lines: [line("1", "10", "GST", "2000")] }, /^Line 1: account 2000 \(Accounts payable\) is the accounts payable account\./],
       [{ lines: [line("1", "10", "GST", "2100")] }, /^Line 1: account 2100 \(GST\) is the GST account\./],
       [{ lines: [line("1", "10", "GST", "4000")] }, /^Line 1: account 4000 \(Sales\) is a revenue account\./],
-      [{ lines: [line("1", "10", "GST", "2400")] }, /^Line 1: account 2400 \(Credit card\) is a current liability account\./],
+      [{ lines: [line("1", "10", "GST", "2400")] }, /^Line 1: account 2400 \(Credit card\) is a credit card account\./],
       [{ lines: [line("1", "10", "GST", "3100")] }, /^Line 1: account 3100 \(Owner drawings\) is an equity account\./],
       [{ lines: [line("1", "10", "GST", "6300")] }, /^Line 1: account 6300 \(Depreciation\) is a depreciation account\./],
       [{ lines: [line("1", "10", "GST", "1210")] }, /^Line 1: account 1210 \(USD deposit\) is in USD/],
