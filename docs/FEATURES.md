@@ -103,7 +103,7 @@ that something happened.
   it: only the invoice basis is built so far.
 - **GST return** (NZ GST101A, boxes 5-15) on the invoice basis, for 1, 2 or 6
   whole calendar months, under Reports. Worked out from sales invoices, sales
-  credit notes, bills and supplier credit notes: each counts on its own date
+  credit notes, bills, supplier credit notes and spend or receive money: each counts on its own date
   when approved and the other way on its void date; drafts, payments,
   refunds, credit applications, manual journals, stock movements and FX
   revaluations don't count. Lines go into boxes by their tax code's category
@@ -117,6 +117,21 @@ that something happened.
   filed", box by box, if documents in its period were approved or voided
   afterwards. Standard-rated lines at a rate other than 15% are refused. See
   examples G1-G9.
+- **Bank accounts and reconciliation**. Bank and credit card accounts (any
+  number, any bank) with a statement balance, the balance in Tohyee and a
+  count of lines to reconcile. Statements come in as files (CSV and Excel
+  with column mapping that's remembered per account, OFX/QFX/QBO, QIF,
+  CAMT.053 and MT940; up to 10 MB) or through an **Akahu bank feed** (NZ),
+  which can bring in history from a chosen start date (as far back as Akahu
+  and the bank allow) and then syncs in the background. Duplicates are
+  skipped; lines that look like a file-and-feed duplicate are flagged. Each
+  line is reconciled by matching what's already posted (within 60 days),
+  paying invoices or bills, creating spend or receive money (with GST), or a
+  transfer between accounts; lines can be excluded, unreconciled and imports
+  deleted. **Bank rules** fill in spend or receive money from text in the
+  line. Each organisation sets up its own Akahu personal app (with its own
+  bank logins) and an organisation admin enters its tokens, which are checked
+  with Akahu and stored encrypted. See examples BK1-BK16.
 - **Update check** against GitHub releases.
 
 ## Not built yet, on purpose
@@ -131,8 +146,10 @@ isn't acceptable, because people would trust it:
 - attachments
 - job executions
 - AI suggestions
-- bank feeds and bank reconciliation
-- import staging
+- import staging (other than bank statements)
+- bank feeds from providers other than Akahu, foreign-currency bank
+  accounts, splitting one posted transaction across several statement
+  lines, and old Excel (.xls) files
 - the GST return on the payments and hybrid bases (refused for now)
 - amending a filed GST return, imported goods (Customs GST), GST rates other
   than 15%, recording the GST payment or refund to IRD, and filing to IRD
@@ -148,14 +165,12 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    overpayments, and prepayments (once the owner has decided how GST works
    on them). Invoice and credit note PDFs and emailing come with or after
    these.
-2. Bank feeds (through an NZ open-banking provider, still to be chosen) and
-   bank reconciliation that matches real transactions.
-3. Backdated stock movements with proper re-costing.
-4. Scheduled per-organisation backups (`pg_dump`) and tested restores.
-5. Stock depth: an item list, locations/bins, lots and serial numbers,
+2. Backdated stock movements with proper re-costing.
+3. Scheduled per-organisation backups (`pg_dump`) and tested restores.
+4. Stock depth: an item list, locations/bins, lots and serial numbers,
    variants, assemblies/bundles, stock takes.
-6. NZ payroll, fixed assets, projects and time tracking.
-7. Multi-currency transactions.
+5. NZ payroll, fixed assets, projects and time tracking.
+6. Multi-currency transactions.
 
 ## Guardrails
 

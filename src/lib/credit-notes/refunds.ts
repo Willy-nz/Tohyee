@@ -1,4 +1,5 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
+import { isBankOrCreditCard } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
 import {
   creditNoteLabel,
@@ -170,8 +171,8 @@ async function resolveBankAccount(
   if (!row.is_active) {
     throw new ValidationError(`${label} is archived, so refunds can't be paid from it.`);
   }
-  if (row.account_type !== "bank") {
-    throw new ValidationError(`${label} isn't a bank account, so refunds can't be paid from it. Choose a bank account.`);
+  if (!isBankOrCreditCard(row.account_type)) {
+    throw new ValidationError(`${label} isn't a bank account, so refunds can't be paid from it. Choose a bank or credit card account.`);
   }
   if (row.currency_code !== null) {
     throw new ValidationError(

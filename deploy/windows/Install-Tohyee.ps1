@@ -98,6 +98,8 @@ if ($firstInstall) {
   $settings['TOHYEE_VERSION'] = $TohyeeVersion
   Write-Host "Kept your existing passwords. Version: $previous -> $TohyeeVersion"
 }
+# Encrypts bank feed tokens. Added on upgrade too; changing it later makes saved tokens unreadable.
+if (-not $settings.Contains('TOHYEE_SECRET_KEY')) { $settings['TOHYEE_SECRET_KEY'] = New-Secret 48 }
 Write-EnvFile $EnvFile $settings
 $port = if ($settings.Contains('TOHYEE_PORT')) { $settings['TOHYEE_PORT'] } else { '3000' }
 

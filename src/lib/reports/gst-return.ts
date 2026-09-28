@@ -21,7 +21,9 @@ import { optionalSource, requireId, requireIdempotencyKey } from "@/lib/validati
  * The GST return (NZ GST101A, boxes 5-15) on the invoice basis, worked out
  * from approved documents: a sales invoice, sales credit note, bill or
  * supplier credit note counts on the date it was approved (its own date) and
- * again, the other way, on the date it was voided. Drafts, payments, refunds,
+ * again, the other way, on the date it was voided. Bank transactions (BK6,
+ * BK7, BK11) count the same way: spend money like a bill, receive money like
+ * an invoice. Drafts, payments, refunds,
  * credit applications, manual journals, stock movements and FX revaluations
  * don't count. See "GST return" in docs/ACCOUNTING-EXAMPLES.md (G1-G9).
  */
@@ -35,10 +37,12 @@ export const GST_EVENT_TYPES = [
   "bill_voided",
   "supplier_credit_note_approved",
   "supplier_credit_note_voided",
+  "bank_transaction_posted",
+  "bank_transaction_voided",
 ] as const;
 export type GstEventType = (typeof GST_EVENT_TYPES)[number];
 
-export type GstDocumentType = "sales_invoice" | "sales_credit_note" | "bill" | "supplier_credit_note";
+export type GstDocumentType = "sales_invoice" | "sales_credit_note" | "bill" | "supplier_credit_note" | "bank_transaction";
 export type GstLineBox = "5" | "6" | "11";
 
 /** One document line in a GST event, with the boxes it counts in (none when it's left out). */
@@ -131,6 +135,16 @@ with events as (
          s.supplier_credit_note_number, s.reference, s.contact_id
     from supplier_credit_notes s
    where s.status = 'voided' and s.void_date between $1 and $2
+  union all
+  select case t.kind when 'spend' then 'purchases' else 'sales' end, 'bank_transaction_posted', t.transaction_date, 1,
+         'bank_transaction', t.id, coalesce(t.reference, 'BT-' || t.id), t.reference, t.contact_id
+    from bank_transactions t
+   where t.transaction_date between $1 and $2
+  union all
+  select case t.kind when 'spend' then 'purchases' else 'sales' end, 'bank_transaction_voided', t.void_date, -1,
+         'bank_transaction', t.id, coalesce(t.reference, 'BT-' || t.id), t.reference, t.contact_id
+    from bank_transactions t
+   where t.status = 'voided' and t.void_date between $1 and $2
 ),
 document_lines as (
   select 'sales_invoice' as document_type, invoice_id as document_id, line_order, description, tax_code_id,
@@ -146,6 +160,9 @@ document_lines as (
   select 'supplier_credit_note', credit_note_id, line_order, description, tax_code_id, tax_rate, net_amount,
          tax_amount
     from supplier_credit_note_lines
+  union all
+  select 'bank_transaction', bank_transaction_id, line_order, description, tax_code_id, tax_rate, net_amount, tax_amount
+    from bank_transaction_lines
 )
 select e.side, e.event_type, e.event_date, e.document_type, e.document_id::text, e.document_number, e.reference,
        e.contact_id::text, c.name as contact_name, l.line_order as document_line_order, l.description,
@@ -172,6 +189,7 @@ const DOCUMENT_LABELS: Record<GstDocumentType, string> = {
   sales_credit_note: "credit note",
   bill: "bill",
   supplier_credit_note: "supplier credit note",
+  bank_transaction: "bank transaction",
 };
 
 function toLine(row: EventLineRow): GstReturnLine {

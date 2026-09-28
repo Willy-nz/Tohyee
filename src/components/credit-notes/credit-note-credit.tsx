@@ -28,7 +28,7 @@ function laterOf(first: string, second: string): string {
 
 /** Refunds are paid from active bank accounts in the base currency (example CN8). */
 function isRefundAccount(account: Account): boolean {
-  return account.accountType === "bank" && account.currencyCode === null;
+  return (account.accountType === "bank" || account.accountType === "credit_card") && account.currencyCode === null;
 }
 
 /**

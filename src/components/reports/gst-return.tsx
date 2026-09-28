@@ -40,6 +40,8 @@ const EVENT_LABELS: Record<GstEventType, string> = {
   bill_voided: "Bill voided",
   supplier_credit_note_approved: "Supplier credit note approved",
   supplier_credit_note_voided: "Supplier credit note voided",
+  bank_transaction_posted: "Bank transaction",
+  bank_transaction_voided: "Bank transaction voided",
 };
 
 const CATEGORY_LABELS: Record<TaxCategory, string> = {

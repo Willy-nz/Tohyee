@@ -54,6 +54,11 @@ own.
   number, approval that posts them, credit applied to one or more of the
   supplier's bills, unused credit kept on the credit note or refunded by the
   supplier into a bank account, and voiding.
+- **Bank accounts and credit cards** with reconciliation: import statements
+  (CSV, Excel, OFX, QIF, CAMT.053, MT940) or bring them in with an Akahu bank
+  feed (NZ banks, with history from a start date you choose), then reconcile
+  each line by matching, paying invoices or bills, spend or receive money
+  with GST, or a transfer. Bank rules fill in the usual ones.
 - **Stock**: receipts, sales, returns, stocktake adjustments and landed cost,
   with weighted-average costing to the cent.
 - **Foreign-currency revaluation** of foreign-currency bank, asset and
@@ -119,8 +124,9 @@ The installer is built and tested on Windows by
 
 **Docker:** `tohyee-v<version>-windows-docker.zip` runs Tohyee in Docker
 Desktop instead (see [`deploy/windows`](deploy/windows)). The image is `ghcr.io/willy-nz/tohyee:<version>`. It needs
-`DATABASE_URL` (a PostgreSQL 15+ login that can create databases) and, for the
-first run, `SETUP_TOKEN`; it listens on port 3000.
+`DATABASE_URL` (a PostgreSQL 15+ login that can create databases), for the
+first run `SETUP_TOKEN`, and for bank feeds `TOHYEE_SECRET_KEY` (32+ random
+characters; the installers create it); it listens on port 3000.
 
 **Linux without Docker:**
 
@@ -130,7 +136,7 @@ npm run package:release           # dist/release/tohyee-v<version>-linux-x64.tar
 ```
 
 On the server, unpack the bundle, set `DATABASE_URL` (and `SETUP_TOKEN` for
-the first run) in the environment, and start it with `PORT=3000 ./start.sh`.
+the first run, and `TOHYEE_SECRET_KEY` for bank feeds) in the environment, and start it with `PORT=3000 ./start.sh`.
 Put it behind HTTPS (e.g. Caddy or nginx) if it's reachable beyond your own
 network.
 

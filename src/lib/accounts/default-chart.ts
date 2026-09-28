@@ -28,7 +28,7 @@ export const NZ_DEFAULT_CHART: readonly ChartTemplateAccount[] = [
   { code: "2100", name: "GST", type: "current_liability", systemKey: "gst" },
   { code: "2200", name: "PAYE payable", type: "current_liability" },
   { code: "2300", name: "Income tax payable", type: "current_liability" },
-  { code: "2400", name: "Credit card", type: "current_liability" },
+  { code: "2400", name: "Credit card", type: "credit_card" },
   { code: "2800", name: "Term loan", type: "non_current_liability" },
   { code: "3000", name: "Owner funds introduced", type: "equity" },
   { code: "3100", name: "Owner drawings", type: "equity" },

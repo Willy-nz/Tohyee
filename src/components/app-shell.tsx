@@ -21,6 +21,8 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
       { href: "/operations", label: "Overview" },
       { href: "/operations/ledger-journals", label: "Journals" },
       { href: "/operations/accounts", label: "Chart of accounts" },
+      { href: "/operations/bank-accounts", label: "Bank accounts" },
+      { href: "/operations/bank-rules", label: "Bank rules" },
       { href: "/operations/contacts", label: "Contacts" },
       { href: "/operations/invoices", label: "Invoices" },
       { href: "/operations/credit-notes", label: "Credit notes" },

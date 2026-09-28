@@ -43,6 +43,13 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ supplier_credit_note_applications   credit applied to bills
 ├─ supplier_credit_note_refunds        credit paid back by suppliers
 ├─ gst_returns, gst_return_adjustments, gst_return_lines   filed GST returns
+├─ bank_account_settings  per bank/card account: statement balance, import layout, Akahu feed link
+├─ akahu_connections      the organisation's own Akahu personal app (tokens encrypted)
+├─ bank_statement_imports, bank_statement_lines   statement files and bank feed syncs
+├─ bank_reconciliations, bank_reconciliation_items   which journal lines each statement line is
+├─ bank_transactions, bank_transaction_lines   spend and receive money
+├─ bank_transfers         money moved between bank and card accounts
+├─ bank_rules             text to look for, and the bank transaction to suggest
 └─ audit_events
 ```
 
@@ -313,6 +320,22 @@ Enforced by the app (and covered by tests):
   the lines' own GST by rounding. The payments and hybrid bases and
   standard-rated lines at a rate other than 15% are refused. Filing takes a
   lock on the settings row so returns are filed one at a time.
+- Bank statements: statement lines are what the bank says, stored as money in
+  positive and money out negative. They can't be deleted or edited (only
+  reconciled, excluded, or deleted with their whole import), and importing
+  never posts anything. A reconciliation links a line to journal lines on the
+  same account that add up to it exactly (checked at commit by a deferred
+  trigger); a journal line can be in only one active reconciliation, and a
+  reconciled journal can't be voided or reversed until it's unreconciled.
+  Spend and receive money (`bank_transactions`) post like a bill or an
+  invoice without the payable or receivable, and count in the GST return on
+  their date (spend as purchases, receive as sales). Transfers post
+  Dr to / Cr from between two base-currency bank or card accounts.
+- Bank feeds (Akahu) are read outside any database transaction: a sync reads
+  what to fetch in one short transaction, calls Akahu, then adds new lines in
+  a second. Feed lines carry Akahu's transaction id, so a line is never added
+  twice; lines that match a file line on date and amount are flagged as
+  possible duplicates rather than skipped.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 
@@ -321,9 +344,16 @@ tested against.
 
 ## Background work
 
-Not built yet. When it is: durable idempotency, a transactional outbox,
-bounded retries, no network calls inside business transactions, and jobs that
-carry organisation IDs and re-resolve the database from the registry.
+The only background job so far is the bank feed sync: every 15 minutes the
+server checks each ready organisation for linked accounts not synced in the
+last few hours (the organisation's "sync every" setting) and syncs them one at a time
+(`src/lib/bank/akahu/sync.ts`, started from `src/instrumentation.ts`; set
+`TOHYEE_BANK_FEEDS_SCHEDULER=off` to stop it). A failure is kept on the
+account and shown on its Bank feed tab, and the next run tries again. It makes
+no network calls inside a database transaction and re-resolves each
+organisation from the registry.
+
+Still to come for other jobs: a transactional outbox and bounded retries.
 
 ## Backups and restore
 

@@ -33,6 +33,8 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   supplier_credit_note: "Supplier credit note",
   supplier_credit_note_refund: "Supplier refund",
   customer_overpayment_refund: "Overpayment refund",
+  bank_transaction: "Bank transaction",
+  bank_transfer: "Transfer",
 };
 
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
@@ -45,6 +47,8 @@ const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
   supplier_credit_note: "The supplier credit note was voided: reversed by",
   supplier_credit_note_refund: "The refund was voided: reversed by",
   customer_overpayment_refund: "The refund was voided: reversed by",
+  bank_transaction: "The bank transaction was voided: reversed by",
+  bank_transfer: "The transfer was voided: reversed by",
 };
 
 function KindBadge({ journal }: { journal: Journal }) {
@@ -195,6 +199,20 @@ function JournalDetail({
               {" "}
               To undo it, void the refund from the overpayment, which is linked from the overpaid invoice in{" "}
               <Link href="/operations/invoices">Invoices</Link>.
+            </>
+          )}
+        </p>
+      ) : null}
+      {journal.origin === "bank_transaction" || journal.origin === "bank_transfer" ? (
+        <p className={ui.muted}>
+          This journal was posted by {journal.correctionKind === "reversal" ? "voiding" : "posting"} a{" "}
+          {journal.origin === "bank_transaction" ? "bank transaction" : "transfer between bank accounts"}, so it can&apos;t
+          be corrected here.
+          {journal.correctionKind === "reversal" ? null : (
+            <>
+              {" "}
+              To undo it, unreconcile it and void it from its bank account in{" "}
+              <Link href="/operations/bank-accounts">Bank accounts</Link>.
             </>
           )}
         </p>
@@ -413,6 +431,8 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
               <option value="supplier_credit_note">Supplier credit notes</option>
               <option value="supplier_credit_note_refund">Supplier refunds</option>
               <option value="customer_overpayment_refund">Overpayment refunds</option>
+              <option value="bank_transaction">Bank transactions</option>
+              <option value="bank_transfer">Transfers</option>
               <option value="reversal">Reversals</option>
               <option value="replacement">Replacements</option>
             </select>

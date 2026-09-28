@@ -6,6 +6,9 @@
  * - A failed organisation migration only blocks that organisation.
  * - Skipped during `next build`, when DATABASE_URL isn't set, or when
  *   TOHYEE_SKIP_STARTUP_MIGRATIONS=1.
+ *
+ * Then it starts the bank feed scheduler, which syncs linked Akahu accounts
+ * that are due (off with TOHYEE_BANK_FEEDS_SCHEDULER=off).
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") {
@@ -38,5 +41,10 @@ export async function register() {
         `[tohyee] Organisation ${organisation.organisationId} migrated: ${organisation.applied.join(", ")}`,
       );
     }
+  }
+
+  if (process.env.TOHYEE_BANK_FEEDS_SCHEDULER !== "off") {
+    const { startBankFeedScheduler } = await import("@/lib/bank/akahu/sync");
+    startBankFeedScheduler();
   }
 }

@@ -40,7 +40,9 @@ export type JournalOrigin =
   | "sales_credit_note_refund"
   | "supplier_credit_note"
   | "supplier_credit_note_refund"
-  | "customer_overpayment_refund";
+  | "customer_overpayment_refund"
+  | "bank_transaction"
+  | "bank_transfer";
 export type CorrectionKind = "reversal" | "replacement";
 
 export type JournalLine = {
@@ -432,6 +434,8 @@ export async function listJournals(
     "supplier_credit_note",
     "supplier_credit_note_refund",
     "customer_overpayment_refund",
+    "bank_transaction",
+    "bank_transfer",
   ];
   const validKinds = ["primary", "reversal", "replacement", ...origins];
   if (kind && !validKinds.includes(kind)) {
@@ -513,7 +517,9 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
     journal.origin !== "sales_credit_note_refund" &&
     journal.origin !== "supplier_credit_note" &&
     journal.origin !== "supplier_credit_note_refund" &&
-    journal.origin !== "customer_overpayment_refund"
+    journal.origin !== "customer_overpayment_refund" &&
+    journal.origin !== "bank_transaction" &&
+    journal.origin !== "bank_transfer"
   );
 }
 
@@ -597,6 +603,16 @@ export async function correctJournal(
   if (original.origin === "customer_overpayment_refund") {
     throw new ValidationError(
       `Journal #${original.id} was posted by a refund of a customer overpayment (${original.reference}), so it can't be corrected in the ledger. To undo a refund, void it from the overpayment.`,
+    );
+  }
+  if (original.origin === "bank_transaction") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a bank transaction (${original.reference}), so it can't be corrected in the ledger. To undo it, void the bank transaction.`,
+    );
+  }
+  if (original.origin === "bank_transfer") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a transfer between bank accounts (${original.reference}), so it can't be corrected in the ledger. To undo it, void the transfer.`,
     );
   }
   if (original.correctionKind === "reversal") {
