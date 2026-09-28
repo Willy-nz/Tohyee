@@ -19,7 +19,10 @@ row-level tenancy.
 ```
 tohyee                  core database (DATABASE_URL)
 ├─ organisations        registry: id, name, database_name, status
-├─ users, sessions      logins
+├─ users, sessions      logins, two-step sign-in (authenticator key encrypted),
+│                       user_backup_codes, two_step_reset_tokens
+├─ server_settings      email sending and remote access (secrets encrypted with
+│                       TOHYEE_SECRET_KEY; never accounting data)
 ├─ organisation_members who can open which organisation, with what role
 └─ admin_audit_events   server-level audit trail
 
@@ -140,6 +143,24 @@ re-runs the whole sequence.
   while the session is still in use; the server decides when it ends.)
   Changing your password signs out your other sessions; an admin reset signs
   out all of them.
+- **Two-step sign-in** is required for everyone whenever the server has
+  `TOHYEE_SECRET_KEY` (the Windows installers create it). The password only
+  opens a *pending* session (10 minutes, can do nothing but finish signing
+  in); an authenticator code (RFC 6238, 30 seconds, one step either side, a
+  code never accepted twice) or a one-use backup code (10, scrypt-hashed)
+  then replaces it with a new, full session token. People without it set up
+  are sent to set it up (QR code, first code, backup codes) before anything
+  else, including existing sessions after an upgrade. Five wrong codes end a
+  pending session; ten in a row lock the account for 15 minutes. Lost phone:
+  a backup code, an emailed reset link (after the password; the link needs
+  the password again, lasts 30 minutes and works once), a server admin reset
+  from Users, or `npm run admin -- reset-two-step`. Each reset signs the
+  person out everywhere. Without `TOHYEE_SECRET_KEY`, sign-in is password
+  only and server admins see a warning on every page; remote access can't be
+  turned on.
+- Security alerts are emailed (when Server → Email is set up) for two-step
+  turned on or reset, a backup code used, new backup codes and a lockout.
+  A failed alert never blocks the action.
 - Five failed sign-ins lock the account for 15 minutes. Unknown emails take
   about the same time to reject as wrong passwords (a dummy password check
   runs). A lockout message does reveal that the email has an account.
@@ -147,7 +168,8 @@ re-runs the whole sequence.
   `Sec-Fetch-Site` check) on top of `SameSite` cookies.
 - First-time setup creates the first server admin and needs `SETUP_TOKEN`
   from the server's environment. It only works while there are no users.
-- Break-glass: `npm run admin -- set-password --email ...` from a checkout of
+- Break-glass: `npm run admin -- set-password --email ...` (or
+  `reset-two-step --email ...`) from a checkout of
   the repository with `DATABASE_URL` pointing at the core database (the
   release bundle doesn't include it).
 
@@ -341,6 +363,21 @@ Enforced by the app (and covered by tests):
 
 See `docs/ACCOUNTING-EXAMPLES.md` for the worked examples these rules are
 tested against.
+
+## Remote access
+
+Server → Remote access runs Cloudflare's `cloudflared` connector as a child
+process (`src/lib/remote/tunnel.ts`) with the tunnel token a server admin
+pasted from Cloudflare's dashboard (stored encrypted). The tunnel's public
+hostname is pointed at `http://127.0.0.1:<port>` in Cloudflare, so nothing is
+opened on the router and Cloudflare provides HTTPS. Requests arrive with
+`X-Forwarded-Proto: https`, so session cookies are `Secure`. The connector is
+started at boot when remote access is on (`TOHYEE_REMOTE_ACCESS=off` stops
+that), restarted with growing waits if it stops, and its status comes from
+its own `/ready` endpoint. The Windows installer and the Docker image include
+a pinned, checksum-verified `cloudflared`; elsewhere set
+`TOHYEE_CLOUDFLARED_PATH` or put it on the `PATH`. Emailed links use the saved
+public address rather than the request's Host header.
 
 ## Background work
 

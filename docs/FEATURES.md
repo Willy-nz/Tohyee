@@ -132,6 +132,15 @@ that something happened.
   line. Each organisation sets up its own Akahu personal app (with its own
   bank logins) and an organisation admin enters its tokens, which are checked
   with Akahu and stored encrypted. See examples BK1-BK16.
+- **Two-step sign-in** for everyone: an authenticator app (QR code set-up)
+  plus 10 one-use backup codes; wrong-code limits and lockout; lost-phone
+  reset by emailed link, by a server admin, or from the command line; new
+  backup codes from your profile.
+- **Server email** (Gmail or other SMTP, password encrypted) for security
+  alerts and two-step reset links, with a test button.
+- **Remote access** through a Cloudflare Tunnel (Server → Remote access):
+  paste the tunnel token, Tohyee runs Cloudflare's connector and shows its
+  status; needs two-step sign-in to be in force.
 - **Update check** against GitHub releases.
 
 ## Not built yet, on purpose
