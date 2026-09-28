@@ -39,6 +39,7 @@ import {
   requireOneOf,
   requireString,
 } from "@/lib/validation";
+import { removeRecordExtras } from "@/lib/records/extras";
 
 /**
  * Bills from suppliers, the purchase side of sales invoices. A draft can be
@@ -844,6 +845,8 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
 export async function deleteBill(tx: OrgTx, billIdInput: unknown): Promise<void> {
   const current = await lockBill(tx, requireId(billIdInput, "billId"));
   assertDraft(current, "deleted");
+  // Its notes and files go with it (NF12).
+  await removeRecordExtras(tx, "bill", current.id);
   await tx.query("delete from bill_lines where bill_id = $1", [current.id]);
   await tx.query("delete from bills where id = $1", [current.id]);
   await writeAuditEvent(tx, {
