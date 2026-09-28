@@ -183,8 +183,8 @@ Enforced by the database itself, not just the app:
   can't change at all. Lines of approved and voided invoices are frozen, and
   neither table can be truncated. Invoice numbers come from a one-row counter
   that can only move forward by one, so `INV-` numbers have no gaps.
-- Customer payments: a payment is recorded against an approved invoice with
-  something due, in the invoice's currency and dated on or after it. Its
+- Customer payments: a payment is recorded against an approved invoice, in
+  the invoice's currency and dated on or after it. Its
   overpayment must be exactly what it pays beyond the amount due at that
   moment, so what's settled on an invoice (payments less overpayments, plus
   credit applied) never goes over its total. Payments can't be edited,

@@ -194,8 +194,8 @@ never stored or typed in.
   **0.00**; status **paid**.
 - **CP2** The same invoice paid 50.00, then 65.00: amount due **65.00** and
   **part paid** after the first; **0.00** and **paid** after the second.
-- **CP3** Paying a draft, a voided or an already-paid invoice is refused
-  (OP4). Amounts must be more than zero with at most 2 decimal places: 0.00,
+- **CP3** Paying a draft or a voided invoice is refused (paying an
+  already-paid invoice is all overpayment, OP4). Amounts must be more than zero with at most 2 decimal places: 0.00,
   -5.00 and 10.001 are refused. Paying 115.01 against a 115.00 invoice is not
   refused: it pays the invoice and the extra 0.01 is an overpayment (OP1).
 - **CP4** Voiding the 65.00 payment from CP2 on a later date in an open
@@ -283,9 +283,12 @@ plus the steps it names.
   is **65.00** and its overpayment **35.00**; INV-0001 due **0.00**, **paid**.
   With a 15.00 credit note applied first, paying 115.00 is 100.00 on the
   invoice and 15.00 overpaid.
-- **OP4** Paying an invoice that's already paid (e.g. paying INV-0001 115.00
-  again after OP1) is refused ("already paid in full"), not taken as an
-  overpayment, so a payment entered twice by mistake is caught.
+- **OP4** Paying an invoice that's already paid (e.g. the customer pays
+  INV-0001 115.00 again after OP1) is all overpayment: invoice part **0.00**,
+  overpayment **115.00**, one journal Dr 1000 115.00 / Cr 1100 115.00. It's
+  credit on the customer's account, to apply to their other invoices or
+  refund (OP7). The screen asks for confirmation first, so a payment entered
+  twice by mistake is caught.
 - **OP5** Refused, and nothing changes: applying more than what's left of the
   overpayment; more than an invoice's amount due (one bad line fails the
   whole command); Rex Ltd's INV-0003; the invoice the payment overpaid; a
@@ -318,8 +321,8 @@ plus the steps it names.
 - **Prepayments**: see customer payments above.
 - **Supplier overpayments**: supplier payments still can't be more than the
   amount due (SP3).
-- **Receiving money that isn't against an invoice** (e.g. a customer who
-  paid twice): refused, like prepayments, until they're decided.
+- **Receiving money that isn't against any invoice**: refused, like
+  prepayments. (A customer who paid an invoice twice is OP4.)
 - **Foreign-currency** payments and invoices.
 - **Correcting an overpayment refund**: its journals can't be corrected in
   the ledger. Void the refund and record it again.
