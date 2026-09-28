@@ -40,6 +40,7 @@ import {
   requireOneOf,
   requireString,
 } from "@/lib/validation";
+import { removeRecordExtras } from "@/lib/records/extras";
 
 /**
  * Supplier credit notes, the bills side of sales credit notes. A draft can be
@@ -873,6 +874,8 @@ export async function updateSupplierCreditNote(
 export async function deleteSupplierCreditNote(tx: OrgTx, creditNoteIdInput: unknown): Promise<void> {
   const current = await lockSupplierCreditNote(tx, requireId(creditNoteIdInput, "creditNoteId"));
   assertDraft(current, "deleted");
+  // Its notes and files go with it (NF12).
+  await removeRecordExtras(tx, "supplier_credit_note", current.id);
   await tx.query("delete from supplier_credit_note_lines where credit_note_id = $1", [current.id]);
   await tx.query("delete from supplier_credit_notes where id = $1", [current.id]);
   await writeAuditEvent(tx, {
