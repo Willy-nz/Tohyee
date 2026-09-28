@@ -6,12 +6,13 @@ import {
   refreshAkahuAccount,
   type AkahuTransaction,
 } from "@/lib/bank/akahu/client";
-import { akahuCredentialsForAccount, akahuServerConfig } from "@/lib/bank/akahu/settings";
+import { akahuCredentialsForAccount } from "@/lib/bank/akahu/settings";
 import { makeLine, type ParsedStatementLine } from "@/lib/bank/formats/common";
 import { writeAuditEvent } from "@/lib/audit";
 import { businessTimeZone } from "@/lib/dates";
 import { type Actor, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { listAllOrganisations } from "@/lib/organisations/admin";
+import { secretsAvailable } from "@/lib/secrets";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 
 /**
@@ -128,21 +129,16 @@ export async function syncBankFeedAccount(
 let running = false;
 
 /**
- * Syncs every linked account on the server that's due (not synced in the
- * last `syncEveryHours`), one at a time. Returns how many were synced.
+ * Syncs every linked account on the server that's due (not synced within its
+ * organisation's "sync every" hours), one at a time. Organisations without
+ * Akahu tokens have no active feeds that can sync, and are skipped.
  */
 export async function syncDueBankFeeds(): Promise<{ synced: number; failed: number }> {
-  if (running) return { synced: 0, failed: 0 };
+  if (running || !secretsAvailable()) return { synced: 0, failed: 0 };
   running = true;
   let synced = 0;
   let failed = 0;
   try {
-    let hours: number;
-    try {
-      hours = (await akahuServerConfig()).syncEveryHours;
-    } catch {
-      return { synced, failed };
-    }
     for (const organisation of await listAllOrganisations()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       let due: string[] = [];
@@ -150,10 +146,12 @@ export async function syncDueBankFeeds(): Promise<{ synced: number; failed: numb
         due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) =>
           (
             await tx.query<{ account_id: string }>(
-              `select account_id from bank_account_settings
-                where feed_active and (last_synced_at is null or last_synced_at < now() - make_interval(hours => $1))
-                order by last_synced_at nulls first`,
-              [hours],
+              `select s.account_id
+                 from bank_account_settings s
+                 join akahu_connections c on c.status = 'active'
+                where s.feed_active
+                  and (s.last_synced_at is null or s.last_synced_at < now() - make_interval(hours => c.sync_every_hours))
+                order by s.last_synced_at nulls first`,
             )
           ).rows.map((row) => row.account_id),
         );

@@ -2,12 +2,11 @@ import { UnavailableError, ValidationError } from "@/lib/errors";
 
 /**
  * A small client for Akahu's API (NZ open finance), used for bank feeds.
- * https://developers.akahu.nz. Requests carry the app's App ID token
- * (X-Akahu-Id) and a user access token (Authorization: Bearer). Every call
+ * https://developers.akahu.nz. Requests carry the organisation's personal app
+ * App ID token (X-Akahu-Id) and user token (Authorization: Bearer). Every call
  * has a timeout, and none is made inside a database transaction.
  */
 export const AKAHU_API = "https://api.akahu.io/v1";
-export const AKAHU_OAUTH = "https://oauth.akahu.nz";
 
 export type AkahuCredentials = { appToken: string; userToken: string };
 
@@ -78,7 +77,8 @@ async function call<T>(
   }
   if (!response.ok || data.success === false) {
     const message = typeof data.message === "string" ? data.message : `Akahu answered ${response.status}.`;
-    throw new AkahuError(response.status, response.status === 401 ? `Akahu refused the tokens: ${message}` : message);
+    const refused = response.status === 401 || response.status === 403;
+    throw new AkahuError(response.status, refused ? `Akahu refused the tokens: ${message}${/[.!?]$/.test(message) ? "" : "."} Check the App ID token and user token.` : message);
   }
   return data as T;
 }
@@ -124,34 +124,6 @@ export async function refreshAkahuAccount(credentials: AkahuCredentials, account
   } catch {
     // A refresh is a request, not a promise; the sync reads whatever Akahu has.
   }
-}
-
-/** Where to send someone to give this app enduring consent (OAuth). */
-export function akahuAuthorizeUrl(appToken: string, redirectUri: string, state: string): string {
-  const params = new URLSearchParams({
-    client_id: appToken,
-    response_type: "code",
-    redirect_uri: redirectUri,
-    scope: "ENDURING_CONSENT",
-    state,
-  });
-  return `${AKAHU_OAUTH}/?${params.toString()}`;
-}
-
-/** Exchanges an OAuth code for a user access token. */
-export async function exchangeAkahuCode(
-  appToken: string,
-  appSecret: string,
-  code: string,
-  redirectUri: string,
-): Promise<{ accessToken: string; scope: string | null }> {
-  const data = await call<{ access_token?: string; scope?: string }>("/token", {
-    appToken,
-    method: "POST",
-    body: { grant_type: "authorization_code", code, redirect_uri: redirectUri, client_id: appToken, client_secret: appSecret },
-  });
-  if (!data.access_token) throw new AkahuError(0, "Akahu didn't return an access token.");
-  return { accessToken: data.access_token, scope: data.scope ?? null };
 }
 
 /** Turns an Akahu failure into a message for the person who asked. */

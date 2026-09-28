@@ -1,246 +1,192 @@
-import { writeAdminAuditEvent, writeAuditEvent } from "@/lib/audit";
-import type { AuthContext } from "@/lib/auth/guard";
+import { writeAuditEvent } from "@/lib/audit";
 import { lockStatementAccount } from "@/lib/bank/accounts";
 import type { AkahuCredentials } from "@/lib/bank/akahu/client";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
-import { ForbiddenError, NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
+import { NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
-import { optionalString, requireId, requireOneOf, requireString } from "@/lib/validation";
+import { optionalString, requireId, requireString } from "@/lib/validation";
 
 /**
- * The server's Akahu app, set up once by a server admin (bank feeds, BK15):
- * - personal mode: the admin's own Akahu personal app (App ID token and user
- *   token). Only server admins can link its accounts to an organisation's
- *   bank accounts, because it reaches the admin's own bank logins.
- * - OAuth mode: a full Akahu app (App ID token and App secret). Each
- *   organisation connects its own banks through Akahu's consent screen.
- * Secrets are encrypted with TOHYEE_SECRET_KEY and never sent to the browser.
+ * Each organisation's own Akahu personal app (bank feeds, BK15). An
+ * organisation admin creates a personal app at my.akahu.nz with the
+ * organisation's own bank logins and enters its App ID token and user token
+ * here. They're stored encrypted with the server's TOHYEE_SECRET_KEY, in the
+ * organisation's own database, and never sent back to the browser.
  */
-export type AkahuMode = "personal" | "oauth";
-
-export type AkahuServerSettings = {
-  mode: AkahuMode | null;
-  appTokenHint: string | null;
-  hasUserToken: boolean;
-  hasAppSecret: boolean;
-  redirectUri: string | null;
-  syncEveryHours: number;
-  secretsAvailable: boolean;
-  updatedAt: string | null;
-  updatedByEmail: string | null;
-};
-
-type StoredValue = { mode?: AkahuMode; appToken?: string; redirectUri?: string; syncEveryHours?: number };
-type StoredSecrets = { userToken?: string; appSecret?: string };
-
 export const DEFAULT_SYNC_HOURS = 6;
 
-async function readStored(): Promise<{ value: StoredValue; secrets: StoredSecrets; updatedAt: string | null; updatedByEmail: string | null }> {
-  const result = await coreQuery<{ value: StoredValue; secret_ciphertext: string | null; updated_at: string; updated_by_email: string | null }>(
-    "select value, secret_ciphertext, updated_at, updated_by_email from server_settings where key = 'akahu'",
-  );
-  const row = result.rows[0];
-  if (!row) return { value: {}, secrets: {}, updatedAt: null, updatedByEmail: null };
-  let secrets: StoredSecrets = {};
-  if (row.secret_ciphertext && secretsAvailable()) {
-    try {
-      secrets = JSON.parse(decryptSecret(row.secret_ciphertext)) as StoredSecrets;
-    } catch {
-      secrets = {};
-    }
-  }
-  return { value: row.value ?? {}, secrets, updatedAt: row.updated_at, updatedByEmail: row.updated_by_email };
-}
-
-export async function getAkahuServerSettings(): Promise<AkahuServerSettings> {
-  const stored = await readStored();
-  const token = stored.value.appToken ?? null;
-  return {
-    mode: stored.value.mode ?? null,
-    appTokenHint: token ? `${token.slice(0, 10)}…${token.slice(-4)}` : null,
-    hasUserToken: Boolean(stored.secrets.userToken),
-    hasAppSecret: Boolean(stored.secrets.appSecret),
-    redirectUri: stored.value.redirectUri ?? null,
-    syncEveryHours: stored.value.syncEveryHours ?? DEFAULT_SYNC_HOURS,
-    secretsAvailable: secretsAvailable(),
-    updatedAt: stored.updatedAt,
-    updatedByEmail: stored.updatedByEmail,
-  };
-}
-
-/** The decrypted server config, for syncs and OAuth. Throws when Akahu isn't set up. */
-export async function akahuServerConfig(): Promise<{
-  mode: AkahuMode;
-  appToken: string;
-  userToken: string | null;
-  appSecret: string | null;
-  redirectUri: string | null;
+export type AkahuSettings = {
+  configured: boolean;
+  appTokenHint: string | null;
   syncEveryHours: number;
-}> {
-  if (!secretsAvailable()) {
-    throw new UnavailableError("The server has no TOHYEE_SECRET_KEY, so bank feeds can't be used. A server admin needs to set it.");
-  }
-  const stored = await readStored();
-  if (!stored.value.mode || !stored.value.appToken) {
-    throw new UnavailableError("Bank feeds aren't set up on this server yet. A server admin can add the Akahu app under Server > Bank feeds.");
-  }
+  createdAt: string | null;
+  createdByEmail: string | null;
+  /** False when the server has no TOHYEE_SECRET_KEY, so tokens can't be stored. */
+  secretsAvailable: boolean;
+};
+
+type ConnectionRow = {
+  id: string;
+  app_token_ciphertext: string;
+  user_token_ciphertext: string;
+  app_token_hint: string;
+  sync_every_hours: number;
+  created_at: string;
+  created_by_email: string | null;
+};
+
+async function activeConnection(tx: OrgTx): Promise<ConnectionRow | null> {
+  const result = await tx.query<ConnectionRow>(
+    `select id, app_token_ciphertext, user_token_ciphertext, app_token_hint, sync_every_hours, created_at, created_by_email
+       from akahu_connections where status = 'active'`,
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function getAkahuSettings(tx: OrgTx): Promise<AkahuSettings> {
+  const row = await activeConnection(tx);
   return {
-    mode: stored.value.mode,
-    appToken: stored.value.appToken,
-    userToken: stored.secrets.userToken ?? null,
-    appSecret: stored.secrets.appSecret ?? null,
-    redirectUri: stored.value.redirectUri ?? null,
-    syncEveryHours: stored.value.syncEveryHours ?? DEFAULT_SYNC_HOURS,
+    configured: row !== null,
+    appTokenHint: row?.app_token_hint ?? null,
+    syncEveryHours: row?.sync_every_hours ?? DEFAULT_SYNC_HOURS,
+    createdAt: row?.created_at ?? null,
+    createdByEmail: row?.created_by_email ?? null,
+    secretsAvailable: secretsAvailable(),
   };
 }
+
+function hint(appToken: string): string {
+  return `${appToken.slice(0, 10)}…${appToken.slice(-4)}`;
+}
+
+export type AkahuSettingsInput = { appToken?: unknown; userToken?: unknown; syncEveryHours?: unknown };
 
 /**
- * Saves the Akahu app (server admins only). Blank secrets keep the ones
- * already stored; `clear: true` removes everything.
+ * Checks the tokens someone typed (before anything is stored or sent to
+ * Akahu). Blank tokens mean "keep the saved one", so they come back null.
  */
-export async function updateAkahuServerSettings(
-  auth: AuthContext,
-  input: {
-    mode?: unknown;
-    appToken?: unknown;
-    userToken?: unknown;
-    appSecret?: unknown;
-    redirectUri?: unknown;
-    syncEveryHours?: unknown;
-    clear?: unknown;
-  },
-): Promise<AkahuServerSettings> {
-  if (!auth.user.isServerAdmin) throw new ForbiddenError("Only a server admin can set up bank feeds.");
-  if (input.clear === true) {
-    await withCoreTransaction(async (client) => {
-      await client.query("delete from server_settings where key = 'akahu'");
-      await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
-        eventType: "server.akahu_cleared",
-        entityType: "server_setting",
-        entityId: "akahu",
-      });
-    });
-    return getAkahuServerSettings();
+export function parseAkahuSettingsInput(input: AkahuSettingsInput): {
+  appToken: string | null;
+  userToken: string | null;
+  syncEveryHours: number | null;
+} {
+  const appToken = optionalString(input.appToken, "appToken", { maxLength: 200 });
+  const userToken = optionalString(input.userToken, "userToken", { maxLength: 500 });
+  if (appToken && !/^app_token_[A-Za-z0-9]+$/.test(appToken)) throw new ValidationError("The App ID token should start with app_token_.");
+  if (userToken && !/^user_token_[A-Za-z0-9]+$/.test(userToken)) throw new ValidationError("The user token should start with user_token_.");
+  let syncEveryHours: number | null = null;
+  if (input.syncEveryHours != null && input.syncEveryHours !== "") {
+    syncEveryHours = Number(input.syncEveryHours);
+    if (!Number.isInteger(syncEveryHours) || syncEveryHours < 1 || syncEveryHours > 24) {
+      throw new ValidationError("Sync every must be 1 to 24 hours.");
+    }
   }
+  return { appToken, userToken, syncEveryHours };
+}
+
+/** The tokens to use after a save: the typed ones, or the saved ones where left blank. */
+export async function resolveAkahuTokens(
+  tx: OrgTx,
+  typed: { appToken: string | null; userToken: string | null },
+): Promise<AkahuCredentials> {
+  const row = typed.appToken && typed.userToken ? null : await activeConnection(tx);
+  const appToken = typed.appToken ?? (row ? decryptSecret(row.app_token_ciphertext) : null);
+  const userToken = typed.userToken ?? (row ? decryptSecret(row.user_token_ciphertext) : null);
+  if (!appToken) throw new ValidationError("Enter the App ID token from your Akahu personal app.");
+  if (!userToken) throw new ValidationError("Enter the user token from your Akahu personal app.");
+  return { appToken, userToken };
+}
+
+function requireSecrets(): void {
   if (!secretsAvailable()) {
     throw new UnavailableError(
-      "Set TOHYEE_SECRET_KEY (a random value of at least 32 characters) in the server's environment and restart Tohyee first, so the Akahu tokens can be stored encrypted.",
+      "This server has no TOHYEE_SECRET_KEY, so Akahu tokens can't be stored safely. The server admin needs to set it (32+ random characters) and restart Tohyee.",
     );
   }
-  const mode = requireOneOf(input.mode, "mode", ["personal", "oauth"] as const);
-  const stored = await readStored();
-  const appTokenInput = optionalString(input.appToken, "appToken", { maxLength: 200 });
-  const appToken = appTokenInput ?? stored.value.appToken;
-  if (!appToken) throw new ValidationError("Enter the Akahu App ID token.");
-  if (!/^app_token_[A-Za-z0-9]+$/.test(appToken)) throw new ValidationError("The App ID token should start with app_token_.");
-  const userToken = optionalString(input.userToken, "userToken", { maxLength: 500 }) ?? stored.secrets.userToken;
-  const appSecret = optionalString(input.appSecret, "appSecret", { maxLength: 500 }) ?? stored.secrets.appSecret;
-  if (userToken && !/^user_token_[A-Za-z0-9]+$/.test(userToken)) throw new ValidationError("The user token should start with user_token_.");
-  let redirectUri = optionalString(input.redirectUri, "redirectUri", { maxLength: 500 }) ?? stored.value.redirectUri ?? null;
-  if (mode === "personal" && !userToken) throw new ValidationError("A personal app needs its user token.");
-  if (mode === "oauth") {
-    if (!appSecret) throw new ValidationError("A full Akahu app needs its App secret.");
-    if (!redirectUri) throw new ValidationError("A full Akahu app needs the redirect URL registered with Akahu.");
-  }
-  if (redirectUri) {
-    let url: URL;
-    try {
-      url = new URL(redirectUri);
-    } catch {
-      throw new ValidationError("The redirect URL isn't a valid URL.");
-    }
-    if (url.protocol !== "https:" && url.hostname !== "localhost") throw new ValidationError("The redirect URL must use https.");
-    if (!url.pathname.endsWith("/api/bank-feeds/akahu/callback")) {
-      throw new ValidationError("The redirect URL must end with /api/bank-feeds/akahu/callback (this server's address first).");
-    }
-    redirectUri = url.toString();
-  }
-  const hoursRaw = input.syncEveryHours == null || input.syncEveryHours === "" ? stored.value.syncEveryHours ?? DEFAULT_SYNC_HOURS : Number(input.syncEveryHours);
-  if (!Number.isInteger(hoursRaw) || hoursRaw < 1 || hoursRaw > 24) throw new ValidationError("Sync every must be 1 to 24 hours.");
-  const value: StoredValue = { mode, appToken, redirectUri: redirectUri ?? undefined, syncEveryHours: hoursRaw };
-  const secrets: StoredSecrets = { userToken: userToken ?? undefined, appSecret: appSecret ?? undefined };
-  await withCoreTransaction(async (client) => {
-    await client.query(
-      `insert into server_settings (key, value, secret_ciphertext, updated_by_email, updated_at)
-       values ('akahu', $1::jsonb, $2, $3, now())
-       on conflict (key) do update set value = excluded.value, secret_ciphertext = excluded.secret_ciphertext,
-                                       updated_by_email = excluded.updated_by_email, updated_at = now()`,
-      [JSON.stringify(value), encryptSecret(JSON.stringify(secrets)), auth.user.email],
-    );
-    await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
-      eventType: "server.akahu_updated",
-      entityType: "server_setting",
-      entityId: "akahu",
-      details: { mode, redirectUri, syncEveryHours: hoursRaw, userTokenChanged: Boolean(input.userToken), appSecretChanged: Boolean(input.appSecret) },
-    });
-  });
-  return getAkahuServerSettings();
 }
 
 /**
- * The credentials an organisation uses: the admin's personal app (server
- * admins only), or the organisation's own OAuth consent. `connectionId` is
- * the consent used, when there is one.
+ * Saves the organisation's Akahu personal app (admins only; the route checks
+ * the tokens with Akahu first). The previous tokens are removed. Linked
+ * accounts carry on with the new tokens.
  */
-export async function akahuCredentialsFor(
+export async function saveAkahuSettings(
   tx: OrgTx,
-  auth: AuthContext | null,
-): Promise<{ credentials: AkahuCredentials; connectionId: string | null; mode: AkahuMode }> {
-  const config = await akahuServerConfig();
-  if (config.mode === "personal") {
-    if (auth && !auth.user.isServerAdmin) {
-      throw new ForbiddenError("This server's bank feeds use the server admin's own Akahu app, so only a server admin can manage them.");
-    }
-    if (!config.userToken) throw new UnavailableError("The server's Akahu personal app has no user token.");
-    return { credentials: { appToken: config.appToken, userToken: config.userToken }, connectionId: null, mode: "personal" };
-  }
-  const connection = await tx.query<{ id: string; token_ciphertext: string }>(
-    "select id, token_ciphertext from akahu_connections where status = 'active' order by id desc limit 1",
+  credentials: AkahuCredentials,
+  syncEveryHours: number | null,
+): Promise<AkahuSettings> {
+  requireSecrets();
+  const previous = await activeConnection(tx);
+  const hours = syncEveryHours ?? previous?.sync_every_hours ?? DEFAULT_SYNC_HOURS;
+  await tx.query(
+    "update akahu_connections set status = 'removed', removed_at = now(), removed_by_email = $1 where status = 'active'",
+    [tx.actor.email],
   );
-  const row = connection.rows[0];
-  if (!row) throw new ValidationError("This organisation hasn't connected its banks through Akahu yet. Use Connect banks first.");
-  return { credentials: { appToken: config.appToken, userToken: decryptSecret(row.token_ciphertext) }, connectionId: row.id, mode: "oauth" };
+  const inserted = await tx.query<{ id: string }>(
+    `insert into akahu_connections (app_token_ciphertext, user_token_ciphertext, app_token_hint, sync_every_hours, created_by_email)
+     values ($1, $2, $3, $4, $5) returning id`,
+    [encryptSecret(credentials.appToken), encryptSecret(credentials.userToken), hint(credentials.appToken), hours, tx.actor.email],
+  );
+  await writeAuditEvent(tx, {
+    eventType: "bank_feed.akahu_saved",
+    entityType: "akahu_connection",
+    entityId: inserted.rows[0].id,
+    details: { appTokenHint: hint(credentials.appToken), syncEveryHours: hours, replaced: previous !== null },
+  });
+  return getAkahuSettings(tx);
 }
 
-/** The credentials for syncing one linked account (no user: the scheduler, or a sync button). */
+/** Removes the organisation's Akahu tokens. Linked accounts stay linked but can't sync until new tokens are saved. */
+export async function removeAkahuSettings(tx: OrgTx): Promise<AkahuSettings> {
+  const removed = await tx.query<{ id: string }>(
+    "update akahu_connections set status = 'removed', removed_at = now(), removed_by_email = $1 where status = 'active' returning id",
+    [tx.actor.email],
+  );
+  for (const row of removed.rows) {
+    await writeAuditEvent(tx, { eventType: "bank_feed.akahu_removed", entityType: "akahu_connection", entityId: row.id });
+  }
+  return getAkahuSettings(tx);
+}
+
+/** The organisation's Akahu credentials. Throws when they aren't set up. */
+export async function akahuCredentialsFor(tx: OrgTx): Promise<AkahuCredentials & { syncEveryHours: number }> {
+  requireSecrets();
+  const row = await activeConnection(tx);
+  if (!row) {
+    throw new ValidationError(
+      "Bank feeds aren't set up for this organisation yet. An admin can add its Akahu personal app under Bank accounts → Akahu bank feeds.",
+    );
+  }
+  return {
+    appToken: decryptSecret(row.app_token_ciphertext),
+    userToken: decryptSecret(row.user_token_ciphertext),
+    syncEveryHours: row.sync_every_hours,
+  };
+}
+
+/** The credentials and link for syncing one account. */
 export async function akahuCredentialsForAccount(
   tx: OrgTx,
   accountId: string,
-): Promise<{ credentials: AkahuCredentials; akahuAccountId: string; startDate: string; statementBalanceAt: string | null }> {
-  const settings = await tx.query<{ akahu_account_id: string | null; akahu_connection_id: string | null; feed_start_date: string | null; feed_active: boolean }>(
-    "select akahu_account_id, akahu_connection_id, feed_start_date::text, feed_active from bank_account_settings where account_id = $1",
+): Promise<{ credentials: AkahuCredentials; akahuAccountId: string; startDate: string }> {
+  const settings = await tx.query<{ akahu_account_id: string | null; feed_start_date: string | null; feed_active: boolean }>(
+    "select akahu_account_id, feed_start_date::text, feed_active from bank_account_settings where account_id = $1",
     [accountId],
   );
   const link = settings.rows[0];
   if (!link?.akahu_account_id || !link.feed_active || !link.feed_start_date) {
     throw new ValidationError("This account isn't linked to a bank feed.");
   }
-  const config = await akahuServerConfig();
-  if (config.mode === "personal") {
-    if (!config.userToken) throw new UnavailableError("The server's Akahu personal app has no user token.");
-    return { credentials: { appToken: config.appToken, userToken: config.userToken }, akahuAccountId: link.akahu_account_id, startDate: link.feed_start_date, statementBalanceAt: null };
-  }
-  const connection = await tx.query<{ token_ciphertext: string; status: string }>(
-    "select token_ciphertext, status from akahu_connections where id = $1",
-    [link.akahu_connection_id],
-  );
-  const row = connection.rows[0];
-  if (!row || row.status !== "active") throw new ValidationError("The Akahu consent this feed used was revoked. Connect banks again and relink.");
-  return {
-    credentials: { appToken: config.appToken, userToken: decryptSecret(row.token_ciphertext) },
-    akahuAccountId: link.akahu_account_id,
-    startDate: link.feed_start_date,
-    statementBalanceAt: null,
-  };
+  const { appToken, userToken } = await akahuCredentialsFor(tx);
+  return { credentials: { appToken, userToken }, akahuAccountId: link.akahu_account_id, startDate: link.feed_start_date };
 }
 
 /** Links an Akahu account to a bank or credit card account, with the first date to bring in. */
 export async function linkBankFeed(
   tx: OrgTx,
   accountIdInput: unknown,
-  input: { akahuAccountId: unknown; akahuAccountName?: unknown; connectionName?: unknown; startDate: unknown; connectionId: string | null },
+  input: { akahuAccountId: unknown; akahuAccountName?: unknown; connectionName?: unknown; startDate: unknown },
 ): Promise<void> {
   const accountId = requireId(accountIdInput, "accountId");
   const akahuAccountId = requireString(input.akahuAccountId, "akahuAccountId", { maxLength: 100 });
@@ -255,7 +201,7 @@ export async function linkBankFeed(
   await tx.query(
     `update bank_account_settings
         set akahu_account_id = $2, akahu_account_name = $3, akahu_connection_name = $4, feed_start_date = $5,
-            akahu_connection_id = $6, feed_active = true, last_sync_status = 'never', last_sync_error = null, updated_at = now()
+            feed_active = true, last_sync_status = 'never', last_sync_error = null, updated_at = now()
       where account_id = $1`,
     [
       accountId,
@@ -263,7 +209,6 @@ export async function linkBankFeed(
       optionalString(input.akahuAccountName, "akahuAccountName", { maxLength: 200 }),
       optionalString(input.connectionName, "connectionName", { maxLength: 200 }),
       startDate,
-      input.connectionId,
     ],
   );
   await writeAuditEvent(tx, {
@@ -279,7 +224,7 @@ export async function unlinkBankFeed(tx: OrgTx, accountIdInput: unknown): Promis
   const accountId = requireId(accountIdInput, "accountId");
   const result = await tx.query(
     `update bank_account_settings
-        set akahu_account_id = null, akahu_account_name = null, akahu_connection_name = null, akahu_connection_id = null,
+        set akahu_account_id = null, akahu_account_name = null, akahu_connection_name = null,
             feed_active = false, updated_at = now()
       where account_id = $1`,
     [accountId],
