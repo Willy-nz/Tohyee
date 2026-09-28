@@ -22,7 +22,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/credit-notes.test.ts` (CN1-CN12) and
   `tests/integration/supplier-credit-notes.test.ts` (SCN1-SCN12) and
   `tests/integration/gst-returns.test.ts` (G1-G9) and
-  `tests/integration/gst-bases.test.ts` (G10-G22), all against a real
+  `tests/integration/gst-bases.test.ts` (G10-G22) and
+  `tests/integration/record-extras.test.ts` (NF1-NF14), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -1081,3 +1082,70 @@ the first return filed in Tohyee aren't known to it.
 - **Filing to IRD electronically**: "Mark as filed" records that you filed the
   return yourself (through myIR), with the figures it had at the time.
 - **Other GST rates**: standard-rated lines must be at 15%.
+
+## Notes, files and history
+
+Journals, sales invoices, bills, sales credit notes, supplier credit notes and
+contacts each have **notes**, **files** and a **history**. None of them posts
+anything or changes a document's figures, so they work on drafts, approved
+and voided documents, and in locked periods. Decided with Jess (28 Sep 2026):
+
+- **Files are stored in the organisation's own database**, so a backup of that
+  database includes them. Allowed: PDF, JPG, PNG, HEIC, Word (.doc, .docx),
+  Excel (.xls, .xlsx) and CSV, **10 MB** each at most, up to 100 files per
+  record. The type is checked from the file's contents as well as its name: a
+  file named `receipt.pdf` that isn't a PDF is refused.
+- **Notes can be edited or deleted** by the person who wrote them or an admin
+  (or owner), and the history keeps what they said before.
+- Viewers can read notes, download files and see the history. Bookkeepers and
+  above can add notes and files. A file can be removed by the person who added
+  it or an admin: its contents are deleted from the database (so a file added
+  by mistake is really gone), but the history keeps its name, size, who added
+  it and who removed it.
+- The **history** lists, oldest first, who did what and when: the record's own
+  events (created, edited, approved, voided...), events on things attached to
+  it (payments, credit applied, refunds), and notes and files added, edited or
+  removed.
+
+Examples use INV-0001 (I1, a draft then approved), with Jess as a bookkeeper,
+Ana as an admin and Vic as a viewer.
+
+- **NF1** Jess adds the note "Customer asked for 14-day terms" to INV-0001.
+  It shows with her email and the time. The history has "Note added" by Jess.
+  Nothing is posted; the invoice's total and status don't change.
+- **NF2** Retrying NF1 with the same idempotency key returns the same note
+  (no second note); the same key with different text is refused.
+- **NF3** A note must have 1-5,000 characters after trimming spaces; an
+  empty note or one of 5,001 characters is refused.
+- **NF4** Jess edits her note to "Customer asked for 20-day terms". The note
+  shows the new text and "edited". The history has "Note edited" with the old
+  and new text. Editing with an out-of-date version (someone changed it in
+  the meantime) is refused: "This note was changed by someone else. Reload
+  and try again."
+- **NF5** Ana (admin) can edit or delete Jess's note. Another bookkeeper
+  can't ("Only the person who wrote a note, or an admin, can change it"). Vic
+  (viewer) can read notes but can't add, edit or delete them.
+- **NF6** Deleting the note removes it from the notes list; the history keeps
+  "Note deleted" with the text it had.
+- **NF7** Jess attaches `receipt.pdf` (a real PDF, 250 KB) to bill B1. It
+  lists with its name, type, size, who added it and when, and downloads as
+  the same bytes. The history has "File added: receipt.pdf".
+- **NF8** Refused: an 11 MB PDF ("Files can be at most 10 MB"); an empty file;
+  `notes.txt` and `setup.exe` (type not allowed); `photo.png` whose contents
+  are a PDF ("doesn't look like a PNG"). A record with 100 files refuses the
+  101st.
+- **NF9** Retrying NF7 with the same idempotency key returns the same file;
+  the same key with a different file is refused.
+- **NF10** Jess removes `receipt.pdf`. It's gone from the list and can't be
+  downloaded; the history keeps "File removed: receipt.pdf (250 KB)" by Jess.
+  Another bookkeeper can't remove a file Jess added; Ana can.
+- **NF11** INV-0001's history, after it's approved, paid 50.00, credited
+  23.00 from CN-0001, and given NF1's note, lists: invoice
+  created, invoice approved, payment recorded 50.00, credit applied 23.00,
+  note added, in the order they happened, each with who did it.
+- **NF12** Deleting a draft invoice, bill, credit note or supplier credit note
+  deletes its notes and its files' contents too.
+- **NF13** Contacts and journals work the same way: a note on contact Kobe
+  Ltd, and a file on journal #1 (e.g. the signed board minute behind it).
+- **NF14** A note or file for a record that doesn't exist (e.g. invoice
+  999999) is refused as not found, and an unknown record type is refused.
