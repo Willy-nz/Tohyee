@@ -122,7 +122,8 @@ export type BillInput = {
   dueDate?: unknown;
   supplierInvoiceNumber?: unknown;
   amountsMode?: unknown;
-  lines?: unknown;  customFields?: unknown;
+  lines?: unknown;
+  customFields?: unknown;
 };
 
 const MAX_LINES = 200;
