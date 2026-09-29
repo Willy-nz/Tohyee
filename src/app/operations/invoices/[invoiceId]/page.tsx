@@ -32,7 +32,7 @@ function InvoiceActions({
 }: {
   organisationId: string;
   invoice: Invoice;
-  onChanged: (invoice: Invoice, message: string) => void;
+  onChanged: (invoice: Invoice, message: string, warning?: string) => void;
 }) {
   const router = useRouter();
   // One key per action on this page, so a retry after a dropped connection
@@ -60,11 +60,12 @@ function InvoiceActions({
       return;
     }
     void run(async () => {
-      const result = await api<{ invoice: Invoice }>(`/api/invoices/${invoice.id}/approve`, {
+      const result = await api<{ invoice: Invoice; creditWarning?: string }>(`/api/invoices/${invoice.id}/approve`, {
         method: "POST",
         body: { organisationId, source: "ui", idempotencyKey: approveKey },
       });
-      onChanged(result.invoice, `Approved as ${result.invoice.invoiceNumber} and posted to the ledger.`);
+      // Over the customer's credit limit with "warn": approved, and said so (RC3).
+      onChanged(result.invoice, `Approved as ${result.invoice.invoiceNumber} and posted to the ledger.`, result.creditWarning);
     });
   }
 
@@ -288,6 +289,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
   // Approving, voiding and payments return the updated invoice, which is shown straight away.
   const [updated, setUpdated] = useState<Invoice | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   if (details.error) {
     return (
@@ -308,6 +310,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
+      {warning ? <Notice tone="warning">Over the credit limit: {warning}</Notice> : null}
       {invoice.status === "approved" && invoice.paidStatus !== "paid" ? (
         <UnusedCredit organisationId={organisationId} invoice={invoice} />
       ) : null}
@@ -434,9 +437,10 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           key={invoice.status}
           organisationId={organisationId}
           invoice={invoice}
-          onChanged={(next, text) => {
+          onChanged={(next, text, creditWarning) => {
             setUpdated(next);
             setMessage(text);
+            setWarning(creditWarning ?? null);
           }}
         />
       ) : null}

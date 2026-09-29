@@ -1,5 +1,6 @@
 import { writeAuditEvent } from "@/lib/audit";
 import { updateContact } from "@/lib/contacts/service";
+import { dueDateFromTerms } from "@/lib/customers/service";
 import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -8,7 +9,7 @@ import { cmp, dec, toFixedString } from "@/lib/money/decimal";
 import { parseOptionalIsoDate } from "@/lib/dates";
 import { listMembers } from "@/lib/organisations/members";
 import { syncedFor } from "@/lib/crm/mail/service";
-import { crmEnabled, requireCrm } from "@/lib/crm/switch";
+import { crmEnabled, requireCrm, requirePeople } from "@/lib/crm/switch";
 import { optionalId, optionalString, requireId, requireString } from "@/lib/validation";
 
 /**
@@ -53,6 +54,8 @@ export type Person = {
   jobTitle: string | null;
   email: string | null;
   phone: string | null;
+  /** The company's primary contact for invoices (RC6); at most one per company. */
+  isPrimary: boolean;
   isArchived: boolean;
 };
 
@@ -144,7 +147,7 @@ async function requireContact(tx: OrgTx, id: string): Promise<{ id: string; name
 // ---------------------------------------------------------------------------
 // People (CRM2)
 
-const PERSON_SELECT = `select p.id, p.contact_id, c.name as contact_name, p.first_name, p.last_name, p.job_title, p.email, p.phone, p.is_archived
+const PERSON_SELECT = `select p.id, p.contact_id, c.name as contact_name, p.first_name, p.last_name, p.job_title, p.email, p.phone, p.is_primary, p.is_archived
   from crm_people p left join contacts c on c.id = p.contact_id`;
 
 type PersonRow = {
@@ -156,6 +159,7 @@ type PersonRow = {
   job_title: string | null;
   email: string | null;
   phone: string | null;
+  is_primary: boolean;
   is_archived: boolean;
 };
 
@@ -170,6 +174,7 @@ function toPerson(row: PersonRow): Person {
     jobTitle: row.job_title,
     email: row.email,
     phone: row.phone,
+    isPrimary: row.is_primary,
     isArchived: row.is_archived,
   };
 }
@@ -198,12 +203,28 @@ export async function getPerson(tx: OrgTx, idInput: unknown): Promise<Person> {
   return toPerson(result.rows[0]);
 }
 
-type PersonInput = { contactId?: unknown; firstName?: unknown; lastName?: unknown; jobTitle?: unknown; email?: unknown; phone?: unknown; isArchived?: unknown };
+type PersonInput = {
+  contactId?: unknown;
+  firstName?: unknown;
+  lastName?: unknown;
+  jobTitle?: unknown;
+  email?: unknown;
+  phone?: unknown;
+  isPrimary?: unknown;
+  isArchived?: unknown;
+};
 
 async function personValues(tx: OrgTx, input: PersonInput, current: Person | null) {
   const contactId = input.contactId === undefined ? (current?.contactId ?? null) : optionalId(input.contactId === "" ? null : input.contactId, "contactId");
   if (contactId) await requireContact(tx, contactId);
   if (input.isArchived !== undefined && typeof input.isArchived !== "boolean") throw new ValidationError("isArchived must be true or false.");
+  if (input.isPrimary !== undefined && typeof input.isPrimary !== "boolean") throw new ValidationError("isPrimary must be true or false.");
+  const isArchived = input.isArchived === undefined ? (current?.isArchived ?? false) : (input.isArchived as boolean);
+  // Archived people and people at no company can't be the primary contact (RC6).
+  const wantedPrimary = input.isPrimary === undefined ? (current?.isPrimary ?? false) : (input.isPrimary as boolean);
+  if (wantedPrimary && input.isPrimary === true && !contactId) throw new ValidationError("Only someone at a company can be its primary contact.");
+  if (wantedPrimary && input.isPrimary === true && isArchived) throw new ValidationError("An archived person can't be the primary contact.");
+  const isPrimary = wantedPrimary && Boolean(contactId) && !isArchived && (current === null || contactId === current.contactId || input.isPrimary === true);
   return {
     contactId,
     firstName: input.firstName === undefined && current ? current.firstName : requireString(input.firstName, "first name", { maxLength: 100 }),
@@ -211,16 +232,28 @@ async function personValues(tx: OrgTx, input: PersonInput, current: Person | nul
     jobTitle: input.jobTitle === undefined ? (current?.jobTitle ?? null) : optionalString(input.jobTitle, "job title", { maxLength: 100 }),
     email: input.email === undefined ? (current?.email ?? null) : parseEmail(input.email),
     phone: input.phone === undefined ? (current?.phone ?? null) : optionalString(input.phone, "phone", { maxLength: 50 }),
-    isArchived: input.isArchived === undefined ? (current?.isArchived ?? false) : (input.isArchived as boolean),
+    isPrimary,
+    isArchived,
   };
 }
 
+/** Making someone the primary contact takes it from whoever had it at that company (RC6). */
+async function clearOtherPrimary(tx: OrgTx, contactId: string | null, personId: string | null): Promise<void> {
+  if (!contactId) return;
+  await tx.query("select id from contacts where id = $1 for update", [contactId]);
+  await tx.query("update crm_people set is_primary = false, updated_at = now() where contact_id = $1 and is_primary and id <> coalesce($2::bigint, 0)", [
+    contactId,
+    personId,
+  ]);
+}
+
 export async function createPerson(tx: OrgTx, input: PersonInput): Promise<Person> {
-  await requireCrm(tx);
+  await requirePeople(tx);
   const values = await personValues(tx, input, null);
+  if (values.isPrimary) await clearOtherPrimary(tx, values.contactId, null);
   const inserted = await tx.query<{ id: string }>(
-    `insert into crm_people (contact_id, first_name, last_name, job_title, email, phone) values ($1, $2, $3, $4, $5, $6) returning id`,
-    [values.contactId, values.firstName, values.lastName, values.jobTitle, values.email, values.phone],
+    `insert into crm_people (contact_id, first_name, last_name, job_title, email, phone, is_primary) values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+    [values.contactId, values.firstName, values.lastName, values.jobTitle, values.email, values.phone, values.isPrimary],
   );
   const id = inserted.rows[0].id;
   await writeAuditEvent(tx, { eventType: "crm.person_created", entityType: "crm_person", entityId: id, details: values });
@@ -228,13 +261,15 @@ export async function createPerson(tx: OrgTx, input: PersonInput): Promise<Perso
 }
 
 export async function updatePerson(tx: OrgTx, idInput: unknown, input: PersonInput): Promise<Person> {
-  await requireCrm(tx);
+  await requirePeople(tx);
   const current = await getPerson(tx, idInput);
   const values = await personValues(tx, input, current);
+  if (values.isPrimary) await clearOtherPrimary(tx, values.contactId, current.id);
   await tx.query(
-    `update crm_people set contact_id = $2, first_name = $3, last_name = $4, job_title = $5, email = $6, phone = $7, is_archived = $8, updated_at = now()
+    `update crm_people set contact_id = $2, first_name = $3, last_name = $4, job_title = $5, email = $6, phone = $7, is_archived = $8,
+            is_primary = $9, updated_at = now()
       where id = $1`,
-    [current.id, values.contactId, values.firstName, values.lastName, values.jobTitle, values.email, values.phone, values.isArchived],
+    [current.id, values.contactId, values.firstName, values.lastName, values.jobTitle, values.email, values.phone, values.isArchived, values.isPrimary],
   );
   await writeAuditEvent(tx, { eventType: "crm.person_updated", entityType: "crm_person", entityId: current.id, details: values });
   return getPerson(tx, current.id);
@@ -415,7 +450,8 @@ function addDays(date: string, days: number): string {
 /**
  * Makes a draft invoice from a won opportunity (CRM5): one line with its name
  * and amount, the first active revenue account and the standard GST code
- * (no tax if there isn't one), dated today and due in 20 days. A prospect
+ * (no tax if there isn't one), dated today and due on the customer's payment
+ * terms, or in 20 days if they have none (RC1). A prospect
  * becomes a customer. Making it again returns the same invoice.
  */
 export async function makeInvoiceFromOpportunity(tx: OrgTx, idInput: unknown): Promise<{ created: boolean; invoice: Invoice }> {
@@ -443,7 +479,8 @@ export async function makeInvoiceFromOpportunity(tx: OrgTx, idInput: unknown): P
     idempotencyKey: `opportunity-${locked.id}`,
     contactId: locked.contactId,
     invoiceDate: today,
-    dueDate: addDays(today, 20),
+    // The customer's payment terms if they have any (RC1), else 20 days.
+    dueDate: (await dueDateFromTerms(tx, locked.contactId, today)) ?? addDays(today, 20),
     amountsMode: gst ? "exclusive" : "no_tax",
     reference: locked.name.slice(0, 100),
     lines: [{ description: locked.name, quantity: "1", unitPrice: locked.amount, accountCode: account.rows[0].code, taxCode: gst }],

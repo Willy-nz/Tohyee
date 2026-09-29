@@ -52,11 +52,12 @@ const OPTIONAL: ModuleRow[] = [
     setting: "advancedFeatures",
     title: "Advanced reporting",
     description:
-      "For bigger organisations: tracking categories (Department, Class, Location and segments of your own) on every line with the profit and loss split and filtered by them, custom fields, and salespeople with sales by salesperson.",
+      "For bigger organisations: tracking categories (Department, Class, Location and segments of your own) on every line with the profit and loss split and filtered by them, custom fields, salespeople with sales by salesperson, and richer customers (credit limits, groups, price levels, parent customers).",
     links: [
       { href: "/operations/settings/tracking", label: "Tracking categories" },
       { href: "/operations/settings/custom-fields", label: "Custom fields" },
       { href: "/operations/settings/salespeople", label: "Salespeople" },
+      { href: "/operations/settings/customers", label: "Customers" },
     ],
   },
 ];

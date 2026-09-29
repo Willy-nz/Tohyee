@@ -1632,6 +1632,149 @@ with default salesperson Aroha; customer Rata Ltd with none; GST 15%.
 - **SR8** The June report's Aroha row lists invoice 1 (100.00) and the
   credit note (20.00).
 
+## Richer customers (advanced features)
+
+The owner asked (29 Sep 2026) for richer customers, step 4 of the
+NetSuite-style plan, choosing all five parts below. They follow NetSuite's
+customer record
+([terms](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1418163.html),
+[credit limits](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1415896.html),
+[customer categories, price levels](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1412993.html),
+[sub-customers](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1413598.html))
+and, for payment terms, Xero's. Where they're silent the rules below are our
+choice.
+
+- **Payment terms are for everyone** (Xero has them for every
+  organisation), not only with **Advanced (ERP) features** on. Each term is
+  one of: N days after the invoice date, N days after the end of the
+  invoice's month, or day N of the following month (NetSuite's date-driven
+  terms; a day the month doesn't have becomes its last day). A new
+  organisation starts with Due on receipt, 7 days, 14 days, 30 days, 20th of
+  the following month, and 30 days after the end of the month. A customer
+  has a default term; a new invoice sent without a due date gets it from the
+  term. The due date can still be changed while the invoice is a draft.
+  Changing or archiving a term, or a customer's term, never changes a saved
+  invoice.
+- The **billing address** is the old postal address (nothing moves); a
+  customer also has a **delivery address**. Both are for everyone.
+- **Contact people** are the CRM's people at the company (there's one list,
+  not two): name, job title (their role), email and phone, and one of them
+  can be the **primary contact** for invoices. They can be managed while the
+  CRM or Advanced reporting is on.
+- With Advanced reporting on, a customer can have a **credit limit**, a
+  **customer group** (NetSuite's customer categories), a default **price
+  level** and a **parent customer**. Groups and price levels are lists that
+  are archived, never deleted. A price level is a percent on (a markup) or
+  off (a discount) the base price; nothing is priced from it until items
+  arrive, so invoices don't change.
+- **Credit limit check**: when an invoice is approved, the customer's
+  balance (their approved invoices' amounts due, less credit notes and
+  overpayments not yet used or refunded) plus the invoice's total is compared
+  with their limit. Going over it is either a **warning** (the default: the
+  invoice is approved and the warning is shown and kept in its history) or
+  **blocked** (refused with a message; the draft stays as it was and no
+  number is used), set per organisation. Exactly at the limit is fine. No
+  limit means no check, and with Advanced reporting off nothing is checked.
+  The limit is the customer's own, not shared with its parent or subs.
+- **Parent customers**: both must be customers, a customer can't be its own
+  parent or under one of its own subs, and a tree is at most 4 levels deep
+  (the database refuses otherwise). A customer with subs must stay a
+  customer.
+- **Aged receivables** (a new report, for everyone): what each customer owes
+  as at a date, by days past each invoice's due date (current, 1-30, 31-60,
+  61-90, over 90), less credit not yet used, worked out from the documents
+  as they stood on that date. Its total equals accounts receivable on the
+  balance sheet on that date. With **roll-up**, a parent shows the total of
+  itself and everything under it, with its subs indented beneath. Customer
+  statements don't exist yet, so there's no statement roll-up.
+
+Setup: Advanced reporting on; GST 15%; the six starting payment terms.
+
+- **RC1** Customer Kobe Ltd has "20th of the following month". A new invoice
+  dated 15 June 2026 sent without a due date is due **20 July 2026**; one
+  dated 31 December 2026 is due **20 January 2027**; one sent with a due
+  date of 30 June 2026 keeps it, and the draft's due date can be changed to
+  1 August 2026. With "30 days" the 15 June invoice is due **15 July 2026**,
+  with "30 days after the end of the month" **30 July 2026**, and with "Due
+  on receipt" **15 June 2026**. A term "31st of the following month" on an
+  invoice dated 10 January 2026 gives **28 February 2026**. For a customer
+  with no terms the due date is still required. This works with Advanced
+  reporting off.
+- **RC2** A second term called "30 DAYS" is refused, and terms can't be
+  deleted. Archiving "30 days": it can't be chosen for a customer, and a
+  customer already on it keeps it but new invoices need a due date typed.
+  Changing Kobe's term to "7 days" doesn't change its saved invoices.
+- **RC3** (warn) Kobe has a credit limit of **1,000.00**. Invoice A for
+  500.00 + GST = **575.00** is approved and unpaid. Approving invoice B for
+  400.00 + GST = **460.00** takes Kobe to **1,035.00**: B is approved (and
+  posts Dr 1100 460.00 / Cr 4000 400.00 / Cr 2100 60.00 as usual) with the
+  warning "Kobe Ltd owes 575.00, so this invoice for 460.00 takes them to
+  1035.00, 35.00 over their credit limit of 1000.00."
+- **RC4** (block) The same with the setting on block: approving B is
+  refused with that message, B stays a draft and INV-0002 is still unused.
+  After a payment of **100.00** on A, Kobe owes **475.00**; 475.00 + 460.00
+  = **935.00**, so B is approved as INV-0002.
+- **RC5** Credit counts: with A (575.00) approved, a credit note for
+  100.00 + GST = **115.00** not yet applied, and a payment of 690.00 on a
+  third invoice of 575.00 (an overpayment of **115.00** left), Kobe owes
+  575.00 - 115.00 - 115.00 = **345.00**, so B (460.00) takes them to
+  **805.00**, under 1,000.00. With a limit of exactly 805.00 B is approved
+  with no warning; at 804.99 it's over by 0.01. With no limit, or with
+  Advanced reporting off, nothing is checked.
+- **RC6** A contact saved with a postal address keeps it as its billing
+  address; a delivery address "12 Wharf St, Dunedin 9016" is saved beside
+  it. People Aroha (primary) and Ben work at Kobe Ltd: Kobe's primary
+  contact is Aroha. Making Ben primary takes it from Aroha. An archived
+  person, or someone at no company, can't be primary; archiving the primary
+  person leaves the company with none. People can be added with only
+  Advanced reporting on, and are refused with both it and the CRM off.
+- **RC7** Customer groups Retail and Wholesale; price levels "Wholesale"
+  **-10** (10% off) and "Trade plus" **5** (5% on). Kobe is in Wholesale
+  with price level Wholesale; its invoices' amounts are unchanged. A price
+  level of -100 or 1000.01 is refused, names are unique ignoring case, an
+  archived group or level can't be chosen (a customer already on it keeps
+  it), and neither can be deleted.
+- **RC8** Kobe Group Ltd is the parent of Kobe Auckland and Kobe Dunedin,
+  and Kobe Dunedin of Kobe Mosgiel (3 levels). Making Kobe Group Ltd a sub
+  of Kobe Mosgiel is refused (a loop), as is a customer as its own parent
+  and a supplier-only parent. Kobe Mosgiel can have a sub, Kobe Mosgiel
+  North (4 levels), but a sub of that is refused (5 levels). Kobe Group Ltd
+  can't stop being a customer while it has subs.
+- **RC9** Aged receivables as at **31 July 2026**: Rata Ltd's invoice of
+  460.00 due 31 March 2026 with 60.00 paid (**400.00**, 122 days, over 90);
+  Kobe Auckland's invoice of **345.00** due 15 May 2026 (77 days, 61-90) and
+  its unused credit note of **23.00**; Kobe Dunedin's invoice of **115.00**
+  due 20 July 2026 (11 days, 1-30) and **230.00** due 20 August 2026
+  (current). Kobe Mosgiel's invoice dated 5 August 2026, and Kobe
+  Auckland's invoice voided on 10 May 2026, don't count. Totals: current **230.00**, 1-30 **115.00**, 31-60 **0.00**, 61-90
+  **345.00**, over 90 **400.00**, credit **23.00**, total **1,067.00**, the
+  same as account 1100 on the balance sheet at 31 July 2026. Rows: Kobe
+  Auckland **322.00**, Kobe Dunedin **345.00**, Rata Ltd **400.00**.
+- **RC10** With roll-up (the tree from RC8): Kobe Group Ltd (nothing of its
+  own) shows current 230.00, 1-30 115.00, 61-90 345.00, credit 23.00, total
+  **667.00**, with Kobe Auckland (322.00) and Kobe Dunedin (345.00) beneath
+  it; Kobe Mosgiel owes nothing and isn't shown; Rata Ltd **400.00**. The
+  grand total is still **1,067.00**.
+- **RC11** As at **30 June 2026** (the same documents): Kobe Dunedin's
+  first invoice is current (115.00), Kobe Auckland's is 46 days overdue
+  (31-60, 345.00), Rata's 91 days (over 90, 400.00), credit 23.00, total
+  **837.00**. Voiding Rata's payment on 10 August 2026 doesn't change the
+  report as at 31 July; as at 10 August Rata owes **460.00**.
+- **RC12** With Advanced reporting off: customers keep their credit limit,
+  group, price level and parent, but new ones can't be set ("Advanced
+  reporting is off"), and approving over a limit is neither warned nor
+  blocked. Payment terms and delivery addresses still work.
+
+### Not supported yet (refused rather than guessed)
+
+- Prices from price levels (they come with items), and credit limits
+  shared across a parent and its subs (each customer's limit is its own).
+- Holding orders over the limit (there are no sales orders yet) or
+  checking the limit when a draft is saved (only approving is checked).
+- Customer statements (and so their roll-up); only aged receivables rolls
+  up.
+- Terms with early-payment discounts (NetSuite's "2% 10 Net 30").
+
 ## Modules and the CRM
 
 Decided with the owner (29 Sep 2026): Tohyee has four modules: **Accounting**
@@ -1664,7 +1807,8 @@ Proposal, Won or Lost (Twenty's stages, with its "Customer" called Won, and
 Lost added). Stages change freely until an opportunity has made an invoice.
 A **won opportunity can make a draft invoice** for its company: one line with
 the opportunity's name and amount, the first active revenue account and the
-standard GST code, dated today and due in 20 days, which is then edited and
+standard GST code, dated today and due on the customer's payment terms (in
+20 days if they have none, RC1), which is then edited and
 approved like any other. Making it marks a prospect as a customer too. An
 opportunity makes at most one invoice.
 

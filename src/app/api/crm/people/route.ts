@@ -13,7 +13,15 @@ export const GET = route(async (request) => {
 export const POST = route(async (request) => {
   const body = await readJson(request);
   const person = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
-    createPerson(tx, { contactId: body.contactId, firstName: body.firstName, lastName: body.lastName, jobTitle: body.jobTitle, email: body.email, phone: body.phone }),
+    createPerson(tx, {
+      contactId: body.contactId,
+      firstName: body.firstName,
+      lastName: body.lastName,
+      jobTitle: body.jobTitle,
+      email: body.email,
+      phone: body.phone,
+      isPrimary: body.isPrimary,
+    }),
   );
   return json({ person }, { status: 201 });
 });

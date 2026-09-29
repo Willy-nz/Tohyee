@@ -15,6 +15,7 @@ export const PATCH = route<Context>(async (request, context) => {
       jobTitle: body.jobTitle,
       email: body.email,
       phone: body.phone,
+      isPrimary: body.isPrimary,
       isArchived: body.isArchived,
     }),
   );
