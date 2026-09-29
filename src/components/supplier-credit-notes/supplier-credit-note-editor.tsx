@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
+import { LineItemPicker, useItems } from "@/components/items";
+import type { ItemList } from "@/lib/items/service";
 import { useApiData } from "@/components/hooks";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { TrackingSelects, useTracking } from "@/components/tracking";
@@ -23,6 +25,8 @@ import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 type EditorLine = {
   key: number;
+  itemId: string;
+  unitId: string;
   description: string;
   quantity: string;
   unitPrice: string;
@@ -40,7 +44,7 @@ function nextLineKey(): number {
 
 /** New lines have no account, so each credit is put somewhere on purpose. */
 function blankLine(taxCode: string, customFields: CustomValues = {}): EditorLine {
-  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {}, customFields };
+  return { key: nextLineKey(), itemId: "", unitId: "", description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {}, customFields };
 }
 
 /** The accounts supplier credit note lines can go to: the bill line rule the server checks. */
@@ -53,12 +57,13 @@ export type SupplierCreditNoteStart = {
   contactId: string;
   reference: string | null;
   amountsMode: AmountsMode;
-  lines: Array<{ description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null; tracking?: TrackingTags; customFields?: CustomValues }>;
+  lines: Array<{ description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null; tracking?: TrackingTags; customFields?: CustomValues; itemId?: string | null; unitId?: string | null }>;
   customFields?: CustomValues;
 };
 
 type FormProps = {
   organisationId: string;
+  items: ItemList | null;
   baseCurrency: string;
   accounts: Account[];
   suppliers: Contact[];
@@ -73,6 +78,7 @@ type FormProps = {
 
 function SupplierCreditNoteForm({
   organisationId,
+  items,
   baseCurrency,
   accounts,
   suppliers,
@@ -107,6 +113,8 @@ function SupplierCreditNoteForm({
     initial && initial.lines.length > 0
       ? initial.lines.map((line) => ({
           key: nextLineKey(),
+          itemId: line.itemId ?? "",
+          unitId: line.unitId ?? "",
           description: line.description,
           quantity: line.quantity,
           unitPrice: line.unitPrice,
@@ -159,6 +167,8 @@ function SupplierCreditNoteForm({
       reference: reference.trim() || null,
       amountsMode,
       lines: lines.map((line) => ({
+        itemId: line.itemId || null,
+        unitId: line.unitId || null,
         description: line.description,
         quantity: line.quantity,
         unitPrice: line.unitPrice,
@@ -272,6 +282,16 @@ function SupplierCreditNoteForm({
                     onChange={(event) => update(line.key, { description: event.target.value })}
                     maxLength={500}
                     required
+                  />
+                  <LineItemPicker
+                    organisationId={organisationId}
+                    items={items}
+                    side="purchase"
+                    contactId={contactId}
+                    itemId={line.itemId}
+                    unitId={line.unitId}
+                    labelPrefix={`Line ${index + 1}`}
+                    onPick={(patch) => update(line.key, patch)}
                   />
                 </td>
                 <td>
@@ -404,6 +424,7 @@ export function SupplierCreditNoteEditor({
   onCancel: () => void;
 }) {
   const accounts = useAccounts(organisationId);
+  const items = useItems(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
   const tracking = useTracking(organisationId);
@@ -420,6 +441,7 @@ export function SupplierCreditNoteEditor({
       organisationId={organisationId}
       baseCurrency={baseCurrency}
       accounts={accounts.data.accounts}
+      items={items.data}
       suppliers={contacts.data.contacts}
       taxCodes={taxCodes.data.taxCodes}
       tracking={tracking.data}

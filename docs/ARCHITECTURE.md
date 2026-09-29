@@ -34,6 +34,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ tax_codes, accounting_period_controls
 ├─ contacts               customers and suppliers (with terms, credit limit, group, price level, parent)
 ├─ payment_terms, customer_groups, price_levels   lists for customers (archived, never deleted)
+├─ items, item_units, item_level_prices, item_suppliers, kit_components   products and services
 ├─ sales_invoices, sales_invoice_lines, sales_invoice_numbering
 ├─ customer_payments      money received against sales invoices (with any overpayment)
 ├─ customer_overpayment_applications   overpayments applied to other sales invoices
@@ -465,6 +466,20 @@ Enforced by the app (and covered by tests):
   the credit limit (`organisation_settings.credit_limit_action`: warn or
   block). Aged receivables reads the same documents as at a date
   (`src/lib/reports/aged-receivables.ts`), never the ledger, and ties to it.
+- Products and services (IT1-IT9): `items` (code unique ignoring case,
+  never deleted), `item_units` (a fixed multiple of the base unit; the
+  database refuses changing a unit's size or deleting it),
+  `item_level_prices`, `item_suppliers` (one preferred, a unique index) and
+  `kit_components` (a trigger keeps kits out of kits and parts out of being
+  kits). Invoice, bill and credit note lines have `item_id`, `unit_id` and
+  `base_quantity`; a trigger checks the unit is the item's and that the base
+  quantity is exactly quantity x the unit's size. What picking an item fills
+  is worked out in one place (`src/lib/items/pricing.ts`, shared with the
+  editors); the server fills blank fields on item lines the same way
+  (`src/lib/items/lines.ts`) and otherwise treats the line exactly as
+  before, so amounts, GST and journals don't depend on items. Units, level
+  prices, supplier prices and kits can only be given new values while
+  Advanced reporting is on; an item keeps them when it's turned off.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 

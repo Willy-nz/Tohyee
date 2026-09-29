@@ -9,7 +9,9 @@ proves it". Test names start with the example IDs they cover:
   (I1-I6 and B1-B4, pure invoice and bill maths; CP1, CP2 and CP4 paid
   status; CN2, CN10 credit note maths and CN2-CN4, CN6-CN8 credit and paid
   status) and `tests/unit/gst-return.test.ts` (G1, G2, G5-G9, G11, G12,
-  G20, G21, pure GST return maths, periods, shares and basis changes)
+  G20, G21, pure GST return maths, periods, shares and basis changes) and
+  `tests/unit/item-pricing.test.ts` (IT2, IT4-IT6, pure item price and
+  unit maths)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
   P1-P3), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
@@ -30,6 +32,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/tracking.test.ts` (TC1-TC10) and
   `tests/integration/custom-fields.test.ts` (CS1-CS3, CF1-CF10) and
   `tests/integration/salespeople.test.ts` (SR1-SR8) and
+  `tests/integration/customers.test.ts` (RC1-RC12) and
+  `tests/integration/items.test.ts` (IT1-IT9) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM9) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9), all against a real
   PostgreSQL database
@@ -1767,13 +1771,125 @@ Setup: Advanced reporting on; GST 15%; the six starting payment terms.
 
 ### Not supported yet (refused rather than guessed)
 
-- Prices from price levels (they come with items), and credit limits
-  shared across a parent and its subs (each customer's limit is its own).
+- Credit limits shared across a parent and its subs (each customer's limit
+  is its own). Prices from price levels arrived with items (IT4).
 - Holding orders over the limit (there are no sales orders yet) or
   checking the limit when a draft is saved (only approving is checked).
 - Customer statements (and so their roll-up); only aged receivables rolls
   up.
 - Terms with early-payment discounts (NetSuite's "2% 10 Net 30").
+
+## Products and services (items)
+
+The owner asked (29 Sep 2026) for items, step 4 of the NetSuite-style plan
+continued: a products and services list like
+[Xero's items](https://central.xero.com/s/article/Add-an-item), with
+[NetSuite's](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_N2093617.html)
+item types, units of measure, price levels, vendor prices and kits. Where
+they're silent the rules below are our choice.
+
+- **Every organisation** has the item list (Xero has it for everyone): a
+  **code** (unique, ignoring case, archived items included), a name, an
+  optional description, a **sale price** and a **purchase price** (excluding
+  GST, for the base unit, up to 4 decimal places), an **income account**
+  (revenue), a **purchase account** (the bill line rules), and **sales** and
+  **purchase tax codes**. Items are archived, never deleted.
+- **Types**: **service**, **non-stock** and **stock** for everyone; **kit**
+  (a bundle of other items) only with **Advanced reporting** on. A stock item
+  only records its type in this step: nothing moves stock or posts cost of
+  sales until stock tracking (ST1-ST12). An item's type can't change once a
+  document line uses it.
+- **Picking an item** on an invoice, bill or credit note line fills its
+  description (the item's description, else its name), unit price, account
+  and tax code, which stay editable on a draft. The API does the same for
+  any of those left blank on a line with an item. Lines without an item work
+  as before. Amounts, GST and journals are worked out from the line exactly
+  as before; the item only fills it in.
+- With **Advanced reporting** on (NetSuite's extras):
+  - **Units of measure**: an item counts in its **base unit** (default
+    "each"; e.g. kg) and can have other units that are a fixed multiple of
+    it ("Box of 12" = 12 each). A line records the unit it's in, and its
+    quantity in the base unit is worked out exactly (quantity x the unit's
+    size) and stored with it. A unit's size never changes (lines use it);
+    units are renamed or archived. An item can start sales and purchases in
+    one of its units; the price filled in is the base price x the unit's
+    size.
+  - **Price levels** (from richer customers, RC7) price items: an item's
+    price for a level is its sale price adjusted by the level's percent,
+    rounded once to cents, half away from zero, unless the item has its own
+    price for that level. Picking an item on an invoice or credit note for a
+    customer with a default price level fills that price.
+  - **Supplier prices**: per item, suppliers with their price and their own
+    code for it, at most one **preferred**. Picking an item on a bill or
+    supplier credit note fills that supplier's price, else the item's
+    purchase price.
+  - **Kits**: a kit lists other items and quantities. Kits can't be inside
+    kits (NetSuite's kits can; costing a kit of kits needs a decision, so
+    it's refused), and kits are sold, not bought.
+  - Turning Advanced reporting off keeps an item's units, level prices,
+    supplier prices and kit parts, and documents keep their lines, but new
+    ones can't be set and prices come from the item's own sale and purchase
+    prices.
+
+Setup: GST 15%; supplier Paw Supplies; customers Kobe Ltd and Rata Ltd.
+Item **WIDGET** "Widget", stock, sale price **12.00**, purchase price
+**5.00**, income 4000, purchase account 1400, GST both ways.
+
+- **IT1** With Advanced reporting off, WIDGET, a service item "Engraving"
+  and a non-stock item "Gift box" can be added. A second item coded
+  "widget" is refused (codes ignore case). Archiving WIDGET keeps it; it
+  can't be deleted (the database refuses) or picked on a new line, but a
+  draft that already has it can still be saved and approved. Once a line
+  uses WIDGET its type can't change. A retry with the same key returns the
+  same item; the same key with a different item is refused (409); a viewer
+  can't add items.
+- **IT2** An invoice to Kobe with a line of only WIDGET and quantity **4**
+  is filled in as "Widget", 4 x **12.00** to 4000 with GST. Approving posts
+  Dr 1100 **55.20** / Cr 4000 **48.00** / Cr 2100 **7.20**, as any invoice
+  line does. On a draft the price can be changed to 11.50 (net 46.00) and is
+  kept. A line without an item still works. A sales credit note filled from
+  WIDGET works the same way.
+- **IT3** A bill from Paw Supplies with a line of only "Gift box" (purchase
+  price **2.00**, account 5100, GST) and quantity 10 is filled in and
+  approves as Dr 5100 **20.00** / Dr 2100 **3.00** / Cr 2000 **23.00**. A
+  supplier credit note filled from it works the same way.
+- **IT4** (Advanced reporting on) Price levels "Wholesale" **-10** and "Trade
+  plus" **5** (RC7). Kobe has Wholesale, Rata Trade plus, and a third
+  customer none. WIDGET picked for Kobe is **10.80** (12.00 x 0.90), for Rata
+  **12.60** (12.00 x 1.05) and for the third customer **12.00**. A sale price
+  of **9.99** gives **8.99** (8.991) and **10.49** (10.4895). With WIDGET's
+  own Wholesale price of **10.00**, Kobe gets **10.00**. With Advanced
+  reporting off, Kobe gets **12.00**.
+- **IT5** (Advanced reporting on) WIDGET gets the unit "Box of 12" (12
+  each). An invoice line of **2** "Box of 12" is filled at **144.00** a box
+  (12.00 x 12), comes to **288.00** and records **24** each. Quantities are
+  exact: 0.3333 of a "Pack of 3" is **0.9999** each. A unit's size can't be
+  changed (the database refuses too), a unit of another item is refused,
+  and a unit named like the base unit is refused. With Advanced reporting
+  off, units can't be added.
+- **IT6** (Advanced reporting on) WIDGET's suppliers: Paw Supplies at
+  **4.80** (their code PS-W1, preferred) and Otago Wholesale with no price.
+  WIDGET on a bill from Paw is filled at **4.80**; from Otago Wholesale at
+  **5.00** (the item's purchase price). Two preferred suppliers, or a
+  customer-only contact as a supplier, are refused.
+- **IT7** (Advanced reporting on) Kit "GIFT-SET" = 1 WIDGET + 2 CANDLE,
+  sale price 30.00. An invoice line of one GIFT-SET is filled at **30.00**
+  to its income account. A kit inside a kit, a kit with no parts, a kit on
+  a bill, and making a kit's part into a kit are all refused. (Its cost of
+  sales and stock come with stock tracking, ST8.)
+- **IT8** With Advanced reporting off: kits, units, level prices and
+  supplier prices can't be set ("Advanced reporting is off"); an item that
+  already has them keeps them.
+- **IT9** The items API: listing (viewer), adding and changing (bookkeeper),
+  and "what picking an item fills" (`/api/items/line-defaults`) give the
+  same answers as IT2-IT6.
+
+### Not supported yet (refused rather than guessed)
+
+- Kits inside kits, and kits on bills or supplier credit notes.
+- Changing a unit's size or an item's type once used; archive and add new.
+- Quantity price breaks, prices in other currencies, and item images.
+- Assemblies (building stock from parts) and item variants.
 
 ## Modules and the CRM
 
