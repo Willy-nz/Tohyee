@@ -98,9 +98,16 @@ describeWithDatabase("products and services", () => {
           lines,
         }),
       ).then((result) => result.bill);
+    // Stock to sell (stock tracking, ST1): a bill of 10 WIDGETs at 5.00.
+    const receive = async (quantity = "10") => {
+      const draft = await as((tx) =>
+        createBill(tx, { idempotencyKey: key("bill"), contactId: paw.id, billDate: "2026-06-01", dueDate: "2026-07-15", supplierInvoiceNumber: key("S"), amountsMode: "exclusive", lines: [{ itemId: widget.id, quantity }] }),
+      );
+      await as((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("a") }));
+    };
     const journalLines = async (journalId: string) =>
       (await as((tx) => getJournal(tx, journalId))).lines.map((line) => [line.accountCode, line.debitAmount, line.creditAmount]);
-    return { org, as, paw, kobe, rata, item, widget, invoice, bill, contact, journalLines };
+    return { org, as, paw, kobe, rata, item, widget, invoice, bill, contact, journalLines, receive };
   }
 
   it("IT1: the item list for everyone: unique codes, archived never deleted, type fixed once used, idempotent", async () => {
@@ -123,9 +130,10 @@ describeWithDatabase("products and services", () => {
     );
 
     // A draft with WIDGET, then WIDGET archived: the draft can still be saved and approved, but a new line can't pick it.
+    await w.receive();
     const draft = await w.invoice(w.kobe.id, [{ itemId: w.widget.id, quantity: "1" }]);
     await w.as((tx) => updateItem(tx, w.widget.id, { isActive: false }));
-    await expect(w.as((tx) => updateItem(tx, w.widget.id, { itemType: "non_stock" }))).rejects.toThrow("its type can't change");
+    await expect(w.as((tx) => updateItem(tx, w.widget.id, { itemType: "non_stock" }))).rejects.toThrow("type can't change");
     await expect(w.invoice(w.kobe.id, [{ itemId: w.widget.id, quantity: "1" }])).rejects.toThrow("WIDGET is archived");
     await w.as((tx) => updateInvoice(tx, draft.id, { reference: "Kept" }));
     expect((await w.as((tx) => approveInvoice(tx, draft.id, { idempotencyKey: key("a") }))).invoice.status).toBe("approved");
@@ -159,16 +167,27 @@ describeWithDatabase("products and services", () => {
     );
     expect(cheaper.lines[0]).toMatchObject({ unitPrice: "11.5", description: "Widget (special)", lineAmount: "46.00" });
 
+    await w.receive();
     const plain = await w.invoice(w.kobe.id, [{ itemId: w.widget.id, quantity: "4" }]);
     const approved = (await w.as((tx) => approveInvoice(tx, plain.id, { idempotencyKey: key("a") }))).invoice;
     expect(await w.journalLines(approved.approvalJournalId!)).toEqual([
       ["1100", "55.20", "0.00"],
       ["4000", "0.00", "48.00"],
       ["2100", "0.00", "7.20"],
+      // WIDGET is a stock item, so stock tracking adds its cost of sales (ST2).
+      ["5000", "20.00", "0.00"],
+      ["1400", "0.00", "20.00"],
     ]);
 
     const credit = await w.as((tx) =>
-      createCreditNote(tx, { idempotencyKey: key("cn"), contactId: w.kobe.id, creditNoteDate: "2026-06-20", amountsMode: "exclusive", lines: [{ itemId: w.widget.id, quantity: "1" }] }),
+      createCreditNote(tx, {
+        idempotencyKey: key("cn"),
+        contactId: w.kobe.id,
+        creditNoteDate: "2026-06-20",
+        amountsMode: "exclusive",
+        lines: [{ itemId: w.widget.id, quantity: "1" }],
+        returnInvoiceId: approved.id,
+      }),
     );
     const cn = (await w.as((tx) => approveCreditNote(tx, credit.creditNote.id, { idempotencyKey: key("a") }))).creditNote;
     expect(cn.lines[0]).toMatchObject({ itemId: w.widget.id, unitPrice: "12", lineAmount: "12.00" });
@@ -176,6 +195,9 @@ describeWithDatabase("products and services", () => {
       ["4000", "12.00", "0.00"],
       ["2100", "1.80", "0.00"],
       ["1100", "0.00", "13.80"],
+      // The returned WIDGET goes back into stock at its sale's cost (ST5).
+      ["1400", "5.00", "0.00"],
+      ["5000", "0.00", "5.00"],
     ]);
 
     // An item with no sale price needs the price typed.

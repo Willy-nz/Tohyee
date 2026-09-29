@@ -245,24 +245,44 @@ export async function balanceSheet(tx: OrgTx, input: { asAt?: unknown }) {
   };
 }
 
+/**
+ * Stock on hand and its value by item and location (ST3, ST12), with the
+ * inventory account's balance beside it: they're always equal to the cent.
+ */
 export async function inventoryValuation(tx: OrgTx) {
   const money = moneyFormatter(tx);
   const result = await tx.query<{
     item_code: string;
+    item_name: string | null;
+    base_unit: string | null;
+    location_value_id: string | null;
+    location_name: string | null;
     on_hand_quantity: string;
     carrying_value: string;
     last_movement_date: string | null;
   }>(
-    `select item_code, on_hand_quantity, carrying_value, last_movement_date
-       from inventory_item_balances
-      where on_hand_quantity <> 0 or carrying_value <> 0
-      order by item_code`,
+    `select b.item_code, i.name as item_name, i.base_unit, b.location_value_id, v.name as location_name,
+            b.on_hand_quantity, b.carrying_value, b.last_movement_date
+       from inventory_item_balances b
+       left join items i on lower(i.code) = lower(b.item_code)
+       left join tracking_values v on v.id = b.location_value_id
+      where b.on_hand_quantity <> 0 or b.carrying_value <> 0
+      order by lower(b.item_code), v.name nulls first`,
+  );
+  const account = await tx.query<{ code: string | null; balance: string }>(
+    `select a.code, coalesce(sum(l.debit_amount - l.credit_amount), 0)::text as balance
+       from accounts a left join ledger_journal_lines l on l.account_id = a.id
+      where a.system_key = 'inventory' group by a.code`,
   );
   let total = ZERO_DECIMAL;
   const items = result.rows.map((row) => {
     total = add(total, dec(row.carrying_value));
     return {
       itemCode: row.item_code,
+      itemName: row.item_name,
+      unit: row.base_unit,
+      locationValueId: row.location_value_id,
+      locationName: row.location_name,
       quantity: row.on_hand_quantity,
       value: money(dec(row.carrying_value)),
       averageCost: isZero(dec(row.on_hand_quantity))
@@ -271,7 +291,13 @@ export async function inventoryValuation(tx: OrgTx) {
       lastMovementDate: row.last_movement_date,
     };
   });
-  return { currencyCode: tx.baseCurrency, items, totalValue: money(total) };
+  return {
+    currencyCode: tx.baseCurrency,
+    items,
+    totalValue: money(total),
+    inventoryAccountCode: account.rows[0]?.code ?? null,
+    inventoryAccountBalance: money(dec(account.rows[0]?.balance ?? "0")),
+  };
 }
 
 export type SplitColumn = { key: string; label: string; valueId: string | null };

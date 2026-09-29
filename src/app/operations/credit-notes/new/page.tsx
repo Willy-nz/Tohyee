@@ -29,6 +29,7 @@ function fromInvoice(invoice: Invoice): CreditNoteStart {
     })),
     customFields: invoice.customFields,
     salespersonId: invoice.salespersonId,
+    returnInvoiceId: invoice.id,
   };
 }
 

@@ -731,10 +731,11 @@ describeWithDatabase("bills", () => {
         line("1", "10", "GST", "5100"),
         line("1", "10", "GST", "1200"),
         line("1", "10", "GST", "1620"),
-        line("1", "10", "GST", "1400"),
       ],
     });
-    expect(allowed.lines.map((entry) => entry.accountCode)).toEqual(["6010", "5100", "1200", "1620", "1400"]);
+    expect(allowed.lines.map((entry) => entry.accountCode)).toEqual(["6010", "5100", "1200", "1620"]);
+    // The inventory account takes only stock items, so stock always equals it (ST1).
+    await expect(draft({ lines: [line("1", "10", "GST", "1400")] })).rejects.toThrow("which only stock items go to");
     expect(allowed.lines[0]).toMatchObject({ quantity: "1.2345", unitPrice: "10.1234", lineAmount: "12.50" });
   });
 

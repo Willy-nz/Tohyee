@@ -30,7 +30,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ organisation_settings  (records which organisation owns this database)
 ├─ accounts, ledger_journals, ledger_journal_lines
 ├─ ledger_fx_revaluation_runs / _items
-├─ inventory_item_balances, inventory_movements
+├─ inventory_item_balances, inventory_movements   stock by item code and location (a Location tracking value)
 ├─ tax_codes, accounting_period_controls
 ├─ contacts               customers and suppliers (with terms, credit limit, group, price level, parent)
 ├─ payment_terms, customer_groups, price_levels   lists for customers (archived, never deleted)
@@ -228,7 +228,9 @@ Enforced by the database itself, not just the app:
 - Posted history is append-only: `ledger_journals`, `ledger_journal_lines`,
   `inventory_movements`, FX revaluation runs and `audit_events` reject
   `UPDATE`, `DELETE` and `TRUNCATE`. Corrections are new rows.
-- Stock on hand and carrying value can't go negative.
+- Stock on hand and carrying value can't go negative unless the
+  organisation allows negative stock, and that setting can't be turned off
+  while anything is below zero (triggers); zero stock has zero value.
 - Notes and files (examples NF1-NF14) post nothing. Files are stored in the
   organisation's own database (`record_attachments.content`), so its backup
   includes them; the type is checked from the contents as well as the name.
@@ -480,6 +482,21 @@ Enforced by the app (and covered by tests):
   before, so amounts, GST and journals don't depend on items. Units, level
   prices, supplier prices and kits can only be given new values while
   Advanced reporting is on; an item keeps them when it's turned off.
+- Stock tracking (ST1-ST12, `src/lib/inventory/stock.ts`): balances are per
+  item code and location (`inventory_item_balances`, unique ignoring a null
+  location). Approving a bill, invoice or credit note with stock items locks
+  each balance it touches, costs the movements with `./costing` and adds
+  their lines to the document's own journal (cost of sales tagged like the
+  line, inventory untagged), then records `inventory_movements` with the
+  document as their source and the journal's id. A void undoes them newest
+  first (`reversal` movements): stock that went out comes back at the value
+  it went out at; stock that came in goes back out exactly, and only if
+  nothing has moved there since (otherwise refused, since later movements
+  would need re-costing). Credit notes returning stock name the invoice it
+  came from (`return_invoice_id`) and restock at those sales' cost. Stock
+  lines on bills and supplier credit notes must be on the inventory account
+  and nothing else can be (bills, manual journals, corrections and stock
+  movements are all checked), so stock equals the account to the cent.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 
@@ -577,4 +594,5 @@ as the admin login, straight into an encrypted file:
   targets. Restoring the core database is still manual.
 - Remote BI connectivity.
 - Multi-currency transactions (line-level foreign amounts and rates).
-- Backdated stock movements (needs re-costing of later movements).
+- Backdated stock movements (needs re-costing of later movements), and
+  voiding documents whose stock has moved since.

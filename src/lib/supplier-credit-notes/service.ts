@@ -4,6 +4,7 @@ import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
+import { assertInventoryLines, planDocumentStock, planDocumentVoid } from "@/lib/inventory/stock";
 import { fillLinesFromItems, isBlank, LINE_ITEM_COLUMNS, LINE_ITEM_JOINS, lineForHash, lineItemFields, type LineItemFields, type LineItemRef, type LineItemRow, parseLineItem, resolveLineItems, type ResolvedLineItem } from "@/lib/items/lines";
 import { billLineAccountProblem } from "@/lib/bills/accounts";
 import { PAYABLE_ACCOUNT } from "@/lib/bills/service";
@@ -467,10 +468,12 @@ async function resolveDraft(
       taxCodeId = taxCode.id;
       taxRate = toPlainString(dec(taxCode.rate));
     }
-    return { ...line, accountId: account.id, accountCode: account.code, accountClass: account.account_class as AccountClass, taxCodeId, taxRate };
+    return { ...line, accountId: account.id, accountCode: account.code, accountClass: account.account_class as AccountClass, accountSystemKey: account.system_key, taxCodeId, taxRate };
   });
 
   const lineItems = await resolveLineItems(tx, draft.lines, "purchase", keptItems);
+  // Stock items go to the inventory account, and only they do (ST1, ST6).
+  assertInventoryLines(lines.map((line, index) => ({ ...lineItems[index], accountSystemKey: line.accountSystemKey, accountCode: line.accountCode })));
   const scale = currencyMinorUnits(tx.baseCurrency);
   const amounts = calculateInvoice(draft.amountsMode, lines, scale);
   amounts.lines.forEach((line, index) => {
@@ -1069,6 +1072,15 @@ export async function approveSupplierCreditNote(
       ? []
       : [{ accountCode: accounts.gst, debitAmount: "0", creditAmount: resolved.taxTotal, description: "GST" }]),
   ];
+  // Stock items move stock and post cost of sales in the same journal (ST1-ST11).
+  const stock = await planDocumentStock(
+    tx,
+    "supplier_credit_note",
+    { id: creditNoteId, date: current.creditNoteDate, reference: current.supplierCreditNoteNumber, contactId: current.contactId },
+    resolved.resolvedLines,
+    `Stock returned, supplier credit note ${current.supplierCreditNoteNumber}`,
+  );
+  if (stock) journalLines.push(...stock.journalLines);
   const posted = await postJournalBody(
     tx,
     "supplier_credit_note:approval",
@@ -1081,6 +1093,7 @@ export async function approveSupplierCreditNote(
     }),
     { origin: "supplier_credit_note" },
   );
+  await stock?.planner.record(posted.journal.id);
 
   try {
     await tx.query(
@@ -1167,6 +1180,13 @@ export async function voidSupplierCreditNote(
   }
 
   const original = await getJournal(tx, current.approvalJournalId!);
+  const voidStock = await planDocumentVoid(
+    tx,
+    "supplier_credit_note",
+    { id: creditNoteId, date: voidDate, reference: `VOID-${original.reference}`.slice(0, 100) },
+    (lineIndex) => current.lines[lineIndex]?.tracking ?? {},
+    `Stock back on void of ${original.reference}`,
+  );
   const posted = await postJournalBody(
     tx,
     "supplier_credit_note:void",
@@ -1175,16 +1195,20 @@ export async function voidSupplierCreditNote(
       postingDate: voidDate,
       reference: `VOID-${original.reference}`.slice(0, 100),
       description: `Void of supplier credit note ${current.supplierCreditNoteNumber} from ${current.contactName}`,
-      lines: original.lines.map((line) => ({
-        accountCode: line.accountCode,
-        debitAmount: line.creditAmount,
-        creditAmount: line.debitAmount,
-        description: line.description,
-        tracking: line.tracking,
-      })),
+      lines: [
+        ...original.lines.map((line) => ({
+          accountCode: line.accountCode,
+          debitAmount: line.creditAmount,
+          creditAmount: line.debitAmount,
+          description: line.description,
+          tracking: line.tracking,
+        })),
+        ...(voidStock?.journalLines ?? []),
+      ],
     }),
     { origin: "supplier_credit_note", relatedJournalId: original.id, correctionKind: "reversal" },
   );
+  await voidStock?.planner.record(posted.journal.id);
 
   try {
     await tx.query(

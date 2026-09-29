@@ -48,8 +48,20 @@ type BalanceSheet = {
 };
 type Valuation = {
   currencyCode: string;
-  items: Array<{ itemCode: string; quantity: string; value: string; averageCost: string | null; lastMovementDate: string | null }>;
+  items: Array<{
+    itemCode: string;
+    itemName: string | null;
+    unit: string | null;
+    locationValueId: string | null;
+    locationName: string | null;
+    quantity: string;
+    value: string;
+    averageCost: string | null;
+    lastMovementDate: string | null;
+  }>;
   totalValue: string;
+  inventoryAccountCode: string | null;
+  inventoryAccountBalance: string;
 };
 
 function GroupRows({ title, group, totalLabel }: { title: string; group: Group; totalLabel: string }) {
@@ -389,7 +401,7 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
 function StockReport({ organisationId }: { organisationId: string }) {
   const report = useApiData<Valuation>("/api/reports/inventory-valuation", { organisationId });
   return (
-    <Card title="Stock valuation" description="Weighted average cost. Matches the inventory account to the cent.">
+    <Card title="Stock on hand" description="By item and location, at weighted average cost per location. Matches the inventory account to the cent.">
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
@@ -401,6 +413,7 @@ function StockReport({ organisationId }: { organisationId: string }) {
               <thead>
                 <tr>
                   <th>Item</th>
+                  <th>Location</th>
                   <th className={ui.num}>On hand</th>
                   <th className={ui.num}>Average cost</th>
                   <th className={ui.num}>Value</th>
@@ -409,9 +422,16 @@ function StockReport({ organisationId }: { organisationId: string }) {
               </thead>
               <tbody>
                 {report.data.items.map((item) => (
-                  <tr key={item.itemCode}>
-                    <td>{item.itemCode}</td>
-                    <td className={ui.num}>{formatQuantity(item.quantity)}</td>
+                  <tr key={`${item.itemCode}|${item.locationValueId ?? ""}`}>
+                    <td>
+                      {item.itemCode}
+                      {item.itemName ? <span className={ui.muted}> · {item.itemName}</span> : null}
+                    </td>
+                    <td>{item.locationName ?? ""}</td>
+                    <td className={ui.num}>
+                      {formatQuantity(item.quantity)}
+                      {item.unit ? ` ${item.unit}` : ""}
+                    </td>
                     <td className={ui.num}>{item.averageCost ? formatMoney(item.averageCost, 4) : ""}</td>
                     <td className={ui.num}>
                       <Money value={item.value} />
@@ -422,12 +442,21 @@ function StockReport({ organisationId }: { organisationId: string }) {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={3}>Total ({report.data.currencyCode})</td>
+                  <td colSpan={4}>Total ({report.data.currencyCode})</td>
                   <td className={ui.num}>
                     <Money value={report.data.totalValue} />
                   </td>
                   <td />
                 </tr>
+                {report.data.inventoryAccountCode ? (
+                  <tr>
+                    <td colSpan={4}>Inventory account {report.data.inventoryAccountCode} in the ledger</td>
+                    <td className={ui.num}>
+                      <Money value={report.data.inventoryAccountBalance} />
+                    </td>
+                    <td />
+                  </tr>
+                ) : null}
               </tfoot>
             </table>
           </div>
