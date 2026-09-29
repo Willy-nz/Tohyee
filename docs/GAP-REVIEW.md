@@ -25,7 +25,7 @@ rules are well settled; then the larger scope items.
 | 3 | **Purchase orders** (approve, then turn into a bill) | Standard in Xero and NetSuite | Medium. Built overnight (examples PO) |
 | 4 | **Budgets** and the budget column in custom reports (TODO item 4) | Not-for-profits and boards report against budget | Medium. Built overnight (examples BU) |
 | 5 | **Stock transfers** between locations | The one stock movement missing after PR #36 | Small. Built overnight (examples TR) |
-| 6 | **Fixed assets**: register, IRD depreciation (DV/SL), disposals | Every year-end needs it | Large |
+| 6 | **Fixed assets**: register, IRD depreciation (DV/SL), disposals | Every year-end needs it | Large. Built overnight (examples FA) |
 | 7 | **Expense claims** (staff paid back) | Common in Xero | Medium. Built overnight (examples EC) |
 | 8 | **Projects and time tracking** | In Jess's scope | Large |
 | 9 | **Multi-currency invoices and bills** | In Jess's scope | Large |

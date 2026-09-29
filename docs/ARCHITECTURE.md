@@ -47,6 +47,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ purchase_orders, purchase_order_lines, purchase_order_numbering   purchase orders (post nothing; copied to bills)
 ├─ supplier_payments      money paid against bills
 ├─ expense_claims, expense_claim_receipts, expense_claim_payments   staff expense claims, their receipts and payments
+├─ fixed_asset_types, fixed_assets, fixed_asset_numbering   the fixed asset register (archived, never deleted)
+├─ fixed_asset_depreciation_runs, fixed_asset_disposals, fixed_asset_depreciation_lines   depreciation runs and disposals, and the months each charged
 ├─ customer_payment_batches, supplier_payment_batches   one payment for several invoices or bills (its parts are customer or supplier payments)
 ├─ custom_reports         custom report drafts, and published frozen copies with their figures
 ├─ budgets, budget_amounts   budgets (post nothing; archived, never deleted) and their amounts per account and month
@@ -216,9 +218,9 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, expense claims, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices and purchase orders; print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices; add notes and files, and edit, delete or remove their own |
-| admin | + approve their own expense claims; chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
+| viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices and purchase orders; print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
+| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices; add notes and files, and edit, delete or remove their own |
+| admin | + approve their own expense claims; fixed asset types and the part-month settings; chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
 People who aren't members get "not found", so organisation IDs can't be
@@ -310,6 +312,33 @@ Enforced by the database itself, not just the app:
   marked "Used by Tohyee" for expense claims payable (2010 in the starting
   chart; migration 0028 gave existing organisations one at 2010 or the next
   free code), which bills, bank transactions and receipts can't use.
+- Fixed assets (FA1-FA14): registering an asset posts nothing (its cost is
+  already in the ledger). `fixed_asset_types`, `fixed_assets`, runs and
+  disposals refuse `DELETE` and `TRUNCATE`; a type's accounts can't change
+  once it has assets; an asset from a bill line must be on an approved
+  bill's line on its type's asset account, and assets from one line never
+  cost more than it (excluding GST); a bill with a registered asset can't be
+  voided. Once an asset has depreciation or a disposal that counts, only its
+  name, description and tracking change, and it can't be archived. Runs are
+  to a month end after the latest active run (one active run per month end);
+  only the latest can be rolled back, once, and not while an asset it
+  depreciated has an active disposal. A disposal is of a registered asset,
+  after the latest run, one active per asset, and its figures satisfy cost -
+  accumulated + recovered + capital gain - loss = proceeds; it's undone
+  once. `fixed_asset_depreciation_lines` (one row per asset per financial
+  year a run or disposal charged) never change; a rolled back run or undone
+  disposal takes its rows out of the count (triggers). The maths is in
+  `src/lib/fixed-assets/depreciation.ts` (browser-safe): whole months, each
+  financial year's figure so far rounded once, never below the residual
+  value; the rates are typed in by the organisation (no built-in IRD
+  rates). Runs, disposals and asset changes take the settings row lock so
+  they're worked out one at a time. Run and disposal journals (origins
+  `fixed_asset_depreciation`, `fixed_asset_disposal`) are corrected by
+  rolling back or undoing, and 7030/7040 (system keys
+  `fixed_asset_disposal`, `fixed_asset_capital_gain`; migration 0029 gave
+  existing organisations them at those codes or the next free ones) are the
+  default gain, loss and capital gain accounts. The register
+  (`src/lib/fixed-assets/register.ts`) ties to the ledger per account.
 - Purchase orders (PO1-PO9): only drafts can be changed or deleted. An
   approved one can only become cancelled (and then only its cancel details
   change), and only while no bill that isn't voided names it; its lines are
@@ -372,7 +401,7 @@ Enforced by the app (and covered by tests):
 - Journals made by stock movements, FX revaluations, sales invoices,
   customer payments, sales credit notes, credit note refunds, bills,
   supplier payments, supplier credit notes, supplier credit note refunds,
-  expense claims or their payments
+  expense claims or their payments, depreciation runs or asset disposals
   can't be corrected in the ledger; they are corrected at their source (an
   invoice, payment, credit note, refund, bill or expense claim is voided) so
   the sub-ledgers stay in step.

@@ -22,6 +22,8 @@ export type JournalSourceType =
   | "bank_transfer"
   | "expense_claim"
   | "expense_claim_payment"
+  | "fixed_asset_depreciation"
+  | "fixed_asset_disposal"
   | "journal";
 
 export type JournalSource = {
@@ -91,6 +93,13 @@ sources (journal_id, source_type, link_id, number, contact_id) as (
   union all
   select j, 'expense_claim_payment', p.claim_id, 'CLAIM-' || p.claim_id, null::bigint
     from expense_claim_payments p cross join lateral (values (p.journal_id), (p.void_journal_id)) v(j) where j is not null
+  union all
+  select j, 'fixed_asset_depreciation', r.id, 'DEP-' || to_char(r.period_end, 'YYYY-MM'), null::bigint
+    from fixed_asset_depreciation_runs r cross join lateral (values (r.journal_id), (r.rollback_journal_id)) v(j) where j is not null
+  union all
+  select j, 'fixed_asset_disposal', f.id, f.asset_number, null::bigint
+    from fixed_asset_disposals d join fixed_assets f on f.id = d.asset_id
+    cross join lateral (values (d.journal_id), (d.undo_journal_id)) v(j) where j is not null
 )`;
 
 /** Columns to select alongside a journal `j` joined to `sources s` and `contacts sc` (all left joins). */
@@ -125,6 +134,8 @@ const NAMES: Record<Exclude<JournalSourceType, "journal">, { label: string; href
   bank_transfer: { label: "transfer", href: (id) => `/operations/bank-accounts/${id}` },
   expense_claim: { label: "expense claim", href: (id) => `/operations/expense-claims/${id}` },
   expense_claim_payment: { label: "payment of expense claim", href: (id) => `/operations/expense-claims/${id}` },
+  fixed_asset_depreciation: { label: "depreciation run", href: (id) => `/operations/fixed-assets/depreciation?run=${id}` },
+  fixed_asset_disposal: { label: "disposal of", href: (id) => `/operations/fixed-assets/${id}` },
 };
 
 const ORIGIN_NAMES: Record<string, string> = {

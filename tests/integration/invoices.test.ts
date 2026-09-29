@@ -944,6 +944,9 @@ describeWithDatabase("sales invoices", () => {
         { code: "2010", system_key: "expense_claims_payable" },
         { code: "2100", system_key: "gst" },
         { code: "4000", system_key: null },
+        // Added by migration 0029 (fixed assets, FA1).
+        { code: "7030", system_key: "fixed_asset_disposal" },
+        { code: "7040", system_key: "fixed_asset_capital_gain" },
       ]);
       expect((await client.query("select last_number from sales_invoice_numbering")).rows).toEqual([{ last_number: 0 }]);
       const origin = await client.query<{ definition: string }>(

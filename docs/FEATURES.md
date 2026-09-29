@@ -187,6 +187,28 @@ that something happened.
   reversals). Locked periods apply. The GST return counts claims like
   bills (receipts with no tax code are left out). Mileage, batch payments
   and a submit-only role aren't built.
+- **Fixed assets** (Accounting; FA1-FA14, not yet approved by Jess), like
+  Xero's fixed asset register: **asset types** (admins) with their asset,
+  accumulated depreciation and depreciation expense accounts and a default
+  method and rate that the organisation types in (no built-in IRD rates);
+  **assets** numbered `FA-0001`, registered from an approved bill line
+  (the cost excluding GST, never more than the line; the bill can't then be
+  voided) or typed in, optionally with opening accumulated depreciation at
+  a month end for bringing in an existing register; registering posts
+  nothing. **Diminishing value**, **straight line** or **no depreciation**,
+  in whole months, never below a residual value, with settings for whether
+  the months of purchase and disposal count. **Depreciation runs** to a
+  month end post one journal (Dr depreciation / Cr accumulated depreciation
+  per asset type and tracking), go forward only, catch up assets registered
+  late, and the latest can be rolled back. **Disposals** (sale or write-off)
+  charge depreciation to the disposal, take off cost and accumulated
+  depreciation, clear the proceeds from the account the sale was coded to
+  and post the loss, depreciation recovered or capital gain (7030, 7040 by
+  default); they can be undone. The **fixed asset register** (Reporting)
+  shows each asset's cost, accumulated depreciation, book value and this
+  year's depreciation by type, disposals this year, and ties to the ledger
+  account by account. Tax depreciation beside book, pooling and low-value
+  write-offs aren't built.
 - **Customer payments** against one approved sales invoice at a time:
   recording a payment posts Dr the bank account / Cr accounts receivable on
   the payment date, and voiding it posts the exact reversal on the void date.
@@ -417,7 +439,7 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll, fixed assets, projects and time tracking.
+4. NZ payroll, projects and time tracking.
 5. Multi-currency transactions.
 
 ## Guardrails
