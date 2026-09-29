@@ -200,7 +200,13 @@ that something happened.
   assignees; logged **calls, meetings and notes**; and a **timeline** per
   company that also shows its invoices, credit notes, bills and payments.
   People, opportunities, tasks and activities are never deleted (CRM1-CRM9).
-  Email and calendar sync (Gmail and Microsoft 365) comes next.
+  **Email and calendar sync**: each member connects their own Gmail or
+  Microsoft 365 mailbox (read-only, through the organisation's own Google or
+  Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
+  emails and meetings with known people and companies (subject and a short
+  preview, never full bodies or attachments) and shows them on timelines,
+  with each mailbox choosing whether the team sees subjects or only that
+  something happened (MAIL1-MAIL9).
 - **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never

@@ -13,6 +13,9 @@
  * Before that it opens the local-only address for server settings
  * (127.0.0.1, TOHYEE_ADMIN_PORT; "off" turns it off).
  *
+ * And the CRM mail sync, which syncs connected Gmail and Microsoft 365
+ * mailboxes every 15 minutes (off with TOHYEE_MAIL_SYNC_SCHEDULER=off).
+ *
  * And the backup scheduler, which backs up every organisation each night
  * (off with TOHYEE_BACKUP_SCHEDULER=off; the time and folder are server settings).
  *
@@ -60,6 +63,11 @@ export async function register() {
   if (process.env.TOHYEE_BANK_FEEDS_SCHEDULER !== "off") {
     const { startBankFeedScheduler } = await import("@/lib/bank/akahu/sync");
     startBankFeedScheduler();
+  }
+
+  if (process.env.TOHYEE_MAIL_SYNC_SCHEDULER !== "off") {
+    const { startMailScheduler } = await import("@/lib/crm/mail/service");
+    startMailScheduler();
   }
 
   if (process.env.TOHYEE_BACKUP_SCHEDULER !== "off") {
