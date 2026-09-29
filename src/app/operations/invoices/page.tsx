@@ -6,6 +6,7 @@ import { Suspense, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { CustomValueCell, listColumns, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
+import { useSalespeople } from "@/components/salespeople";
 import { InvoiceStatusBadge, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -29,6 +30,8 @@ function InvoiceList({ organisationId, filter }: { organisationId: string; filte
   const { status } = filter;
   const awaitingPayment = filter.awaitingPayment ? "true" : null;
   const list = useApiData<InvoicePage>("/api/invoices", { organisationId, status, awaitingPayment });
+  // The salesperson column shows while advanced features are on (SR1).
+  const showSalesperson = useSalespeople(organisationId).data?.advancedFeatures ?? false;
   const columns = listColumns(useCustomFields(organisationId).data, "document", ["invoice"]);
   const [more, setMore] = useState<InvoicePage | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
@@ -69,6 +72,7 @@ function InvoiceList({ organisationId, filter }: { organisationId: string; filte
               <th>Date</th>
               <th>Due</th>
               <th>Reference</th>
+              {showSalesperson ? <th>Salesperson</th> : null}
               {columns.map((field) => (
                 <th key={field.id}>{field.label}</th>
               ))}
@@ -88,6 +92,7 @@ function InvoiceList({ organisationId, filter }: { organisationId: string; filte
                 <td>{formatDate(invoice.invoiceDate)}</td>
                 <td>{formatDate(invoice.dueDate)}</td>
                 <td className={ui.muted}>{invoice.reference}</td>
+                {showSalesperson ? <td>{invoice.salespersonName ?? ""}</td> : null}
                 {columns.map((field) => (
                   <CustomValueCell key={field.id} field={field} values={invoice.customFields} />
                 ))}

@@ -28,7 +28,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/home.test.ts` (H1-H4) and
   `tests/integration/custom-reports.test.ts` (CR1-CR10) and
   `tests/integration/tracking.test.ts` (TC1-TC10) and
-  `tests/integration/custom-fields.test.ts` (CS1-CS3, CF1-CF10), all against a real
+  `tests/integration/custom-fields.test.ts` (CS1-CS3, CF1-CF10) and
+  `tests/integration/salespeople.test.ts` (SR1-SR8), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -1562,6 +1563,72 @@ lines).
 - **CF10** Spend money reconciled from a bank line with "Grant code" =
   "LOT-22" keeps it; a receive-money transaction doesn't get "Grant code"
   (it's on spend money only).
+
+## Salespeople (advanced features)
+
+The owner asked (29 Sep 2026) for salespeople to work the way NetSuite's
+sales reps do
+([marking a sales rep](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1039206.html),
+[Sales by Sales Rep Summary](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1117863.html)).
+NetSuite's help doesn't say how every detail works, so where it's silent the
+rules below are our choice. Like tracking categories, salespeople only show
+while **Advanced (ERP) features** is on.
+
+- A **salesperson** has a name (unique, ignoring case) and an optional
+  email. Salespeople are archived, never deleted. (In NetSuite they're
+  employees ticked as sales reps; Tohyee has no employee records yet.)
+- A **customer** can have a default salesperson. A **sales invoice** and a
+  **sales credit note** each have one salesperson (or none). A new invoice
+  or credit note gets the customer's default when none is sent; a credit
+  note started from an invoice gets the invoice's salesperson. It can be
+  changed while the document is a draft and is fixed once approved.
+  Changing a customer's default doesn't change documents already saved.
+- The salesperson never changes an amount, an account or a GST box. Team
+  selling (splitting a sale between several salespeople) and commissions
+  aren't built.
+- An archived salesperson can't be chosen for a new document, and an
+  archived default isn't applied; a draft that already has them keeps them
+  and can be approved. With the setting off, documents keep their
+  salesperson but can't be given a new one.
+- **Sales by salesperson** (a report for a date range), one row per
+  salesperson plus "Not set", amounts excluding GST: **Invoices** is how
+  many invoices are dated in the range (approved, including ones voided
+  later); **Sales** is those invoices' amounts excluding GST, less invoices
+  voided in the range (on their void date); **Credit notes** is the same for
+  sales credit notes; **Net sales** is Sales less Credit notes. Drafts never
+  count. Each row opens to the documents behind it. The total net sales
+  equals the income that invoices and credit notes posted in the range.
+
+Setup: advanced features on; salespeople Aroha and Ben; customer Kobe Ltd
+with default salesperson Aroha; customer Rata Ltd with none; GST 15%.
+
+- **SR1** A new invoice for Kobe Ltd with no salesperson sent gets Aroha;
+  one sent with Ben keeps Ben; one for Rata Ltd has none. A second
+  salesperson called "aroha" is refused, and a salesperson can't be
+  deleted.
+- **SR2** Kobe's invoice for 100.00 (tax exclusive) with Aroha posts
+  Dr 1100 **115.00** / Cr 4000 **100.00** / Cr 2100 **15.00**, exactly as
+  without a salesperson. After approval its salesperson can't be changed.
+- **SR3** June 2026: invoice 1 Kobe/Aroha 100.00, invoice 2 Kobe/Ben
+  200.00, invoice 3 Rata/none 50.00 (all tax exclusive), a credit note from
+  invoice 1 for 20.00 (it gets Aroha), and a draft invoice for 999.00 with
+  Ben. Sales by salesperson for June: Aroha invoices **1**, sales
+  **100.00**, credit notes **20.00**, net **80.00**; Ben **1**, **200.00**,
+  **0.00**, **200.00**; Not set **1**, **50.00**, **0.00**, **50.00**; total
+  **3**, **350.00**, **20.00**, **330.00**, the same as June's income on
+  4000.
+- **SR4** Voiding invoice 2 on 5 July 2026: June is unchanged; July shows
+  Ben invoices **0**, sales **-200.00**, net **-200.00**.
+- **SR5** A tax inclusive invoice for 115.00 with Aroha counts **100.00**.
+- **SR6** Archiving Ben: a new invoice with Ben is refused ("Ben is
+  archived"); the draft that already had Ben keeps him and can be approved.
+  Archiving Aroha: a new invoice for Kobe gets no salesperson. Changing
+  Kobe's default to Ben (restored) doesn't change invoice 1.
+- **SR7** With the setting off, a new invoice for Kobe gets no salesperson,
+  and one sent with Aroha is refused; a draft that already had Aroha keeps
+  her.
+- **SR8** The June report's Aroha row lists invoice 1 (100.00) and the
+  credit note (20.00).
 
 ## Notes, files and history
 

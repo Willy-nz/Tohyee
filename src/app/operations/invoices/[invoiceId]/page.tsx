@@ -336,6 +336,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           <Stat label="Reference" value={invoice.reference ?? "—"} />
           <Stat label="Customer" value={invoice.contactName} />
         </div>
+        {invoice.salespersonName ? <div className={ui.muted}>Salesperson: {invoice.salespersonName}</div> : null}
         <CustomValuesText setup={customSetup.data} values={invoice.customFields} />
         <div className={ui.tableWrap}>
           <table className={ui.table}>

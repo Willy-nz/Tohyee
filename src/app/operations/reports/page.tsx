@@ -6,6 +6,7 @@ import { Fragment, Suspense, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { CustomReportList, StartCustomReport } from "@/components/reports/custom-report";
+import { SalesBySalespersonReport, useSalespeople } from "@/components/salespeople";
 import { reportCategories, useTracking } from "@/components/tracking";
 import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
@@ -440,6 +441,7 @@ const TABS = [
   { key: "bs", label: "Balance sheet" },
   { key: "tb", label: "Trial balance" },
   { key: "stock", label: "Stock valuation" },
+  { key: "sales", label: "Sales by salesperson" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
 
@@ -448,10 +450,12 @@ function StandardReports({ organisationId }: { organisationId: string }) {
   const params = useSearchParams();
   // The report shown is in the address (?report=), so the menus can open each one.
   const tab: TabKey = TABS.find((entry) => entry.key === params.get("report"))?.key ?? "pnl";
+  // Sales by salesperson is an advanced feature (SR3).
+  const advanced = useSalespeople(organisationId).data?.advancedFeatures ?? false;
   return (
     <>
       <div className={ui.tabs} role="tablist" aria-label="Standard reports">
-        {TABS.map((entry) => (
+        {TABS.filter((entry) => entry.key !== "sales" || advanced || tab === "sales").map((entry) => (
           <button
             key={entry.key}
             type="button"
@@ -468,6 +472,7 @@ function StandardReports({ organisationId }: { organisationId: string }) {
       {tab === "bs" ? <BalanceSheetReport organisationId={organisationId} /> : null}
       {tab === "tb" ? <TrialBalanceReport organisationId={organisationId} /> : null}
       {tab === "stock" ? <StockReport organisationId={organisationId} /> : null}
+      {tab === "sales" ? <SalesBySalespersonReport organisationId={organisationId} /> : null}
       <p className={ui.muted}>
         The GST return is under <Link href="/operations/gst-return">Tax</Link>.
       </p>

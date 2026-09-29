@@ -1,4 +1,5 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
+import { parseSalespersonInput, resolveSalesperson } from "@/lib/salespeople/service";
 import { assertRequiredFields, type CustomFieldContext, keptCustom, parseCustomInput, resolveDocumentCustom } from "@/lib/custom-fields/service";
 import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import type { AccountClass } from "@/lib/accounts/types";
@@ -106,6 +107,9 @@ export type CreditNoteSummary = {
   createdByEmail: string | null;
   /** Custom field values (CF4), field id -> value. */
   customFields: CustomValues;
+  /** The salesperson (SR1), or null. */
+  salespersonId: string | null;
+  salespersonName: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -118,7 +122,9 @@ export type CreditNoteInput = {
   creditNoteDate?: unknown;
   reference?: unknown;
   amountsMode?: unknown;
-  lines?: unknown;  customFields?: unknown;
+  lines?: unknown;
+  customFields?: unknown;
+  salespersonId?: unknown;
 };
 
 const MAX_LINES = 200;
@@ -149,6 +155,8 @@ type CreditNoteRow = {
   voided_by_email: string | null;
   created_by_email: string | null;
   custom_fields: CustomValues;
+  salesperson_id: string | null;
+  salesperson_name: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -156,11 +164,13 @@ type CreditNoteRow = {
 const SUMMARY_COLUMNS = `n.id, n.status, n.credit_note_number, n.contact_id, c.name as contact_name, n.credit_note_date,
   n.reference, n.amounts_mode, n.currency_code, n.subtotal, n.tax_total, n.total, applied.amount_applied,
   refunded.amount_refunded, n.approval_journal_id, n.approved_at, n.approved_by_email, n.void_date, n.void_journal_id,
-  n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at, n.custom_fields`;
+  n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at, n.custom_fields,
+  n.salesperson_id, sp.name as salesperson_name`;
 
 /** Credit notes with their customer and the sums of their active applications and refunds. */
 const SUMMARY_FROM = `sales_credit_notes n
   join contacts c on c.id = n.contact_id
+  left join salespeople sp on sp.id = n.salesperson_id
   cross join lateral (
     select coalesce(sum(a.amount), 0) as amount_applied
       from sales_credit_note_applications a
@@ -224,6 +234,8 @@ function toSummary(row: CreditNoteRow): CreditNoteSummary {
     voidedByEmail: row.voided_by_email,
     createdByEmail: row.created_by_email,
     customFields: row.custom_fields ?? {},
+    salespersonId: row.salesperson_id,
+    salespersonName: row.salesperson_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -265,6 +277,8 @@ type DraftDetails = {
     customFields: Record<string, unknown> | undefined;
   }>;
   customInput: Record<string, unknown> | undefined;
+  /** As sent: undefined when not sent (the customer's default applies), null for none. */
+  salespersonInput: string | null | undefined;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -276,6 +290,7 @@ type ResolvedDraft = DraftDetails & {
   total: string;
   customFields: CustomValues;
   customCtx: CustomFieldContext;
+  salespersonId: string | null;
   resolvedLines: Array<{
     description: string;
     quantity: string;
@@ -324,7 +339,7 @@ function parseDraft(input: CreditNoteInput): DraftDetails {
       customFields: parseCustomInput(line.customFields, `${label}: `),
     };
   });
-  return { contactId, creditNoteDate, reference, amountsMode, lines, customInput: parseCustomInput(input.customFields, "") };
+  return { contactId, creditNoteDate, reference, amountsMode, lines, customInput: parseCustomInput(input.customFields, ""), salespersonInput: parseSalespersonInput(input.salespersonId) };
 }
 
 /** Normalised content for the idempotency fingerprint. */
@@ -337,6 +352,7 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     lines: draft.lines.map((line) => hashableLine({ ...line, accountCode: line.accountCode.toLowerCase() })),
     // Values that weren't sent stay out, so older requests hash the same.
     ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
+    ...(draft.salespersonInput !== undefined ? { salespersonId: draft.salespersonInput } : {}),
   };
 }
 
@@ -352,7 +368,9 @@ async function resolveDraft(
   draft: DraftDetails,
   kept: ReadonlySet<string> = new Set(),
   keptFields: ReadonlySet<string> = new Set(),
+  keptSalesperson: string | null = null,
 ): Promise<ResolvedDraft> {
+  const salesperson = await resolveSalesperson(tx, draft.salespersonInput, { contactId: draft.contactId, kept: keptSalesperson });
   const custom = await resolveDocumentCustom(tx, "credit_note", draft.customInput, draft.lines.map((line) => line.customFields), keptFields);
   const tracking = await loadTrackingContext(tx);
   draft.lines.forEach((line, index) => checkNewTags(tracking, line.tracking, `Line ${index + 1}`, kept));
@@ -444,6 +462,7 @@ async function resolveDraft(
     ...draft,
     customFields: custom.body,
     customCtx: custom.ctx,
+    salespersonId: salesperson.id,
     contactName: customer.name,
     currencyCode: tx.baseCurrency,
     subtotal: amounts.subtotal,
@@ -489,6 +508,7 @@ type StoredHeader = {
   taxTotal: string;
   total: string;
   customFields: CustomValues;
+  salespersonId: string | null;
 };
 
 const plain = (value: string) => toPlainString(dec(value));
@@ -505,6 +525,7 @@ function headerState(creditNote: StoredHeader): string {
     plain(creditNote.taxTotal),
     plain(creditNote.total),
     customValuesKey(creditNote.customFields),
+    creditNote.salespersonId,
   ]);
 }
 
@@ -550,6 +571,7 @@ function draftOf(creditNote: CreditNote): DraftDetails {
       customFields: line.customFields,
     })),
     customInput: creditNote.customFields,
+    salespersonInput: creditNote.salespersonId,
   };
 }
 
@@ -745,7 +767,11 @@ export async function createCreditNote(
     return { created: false, creditNote: await getCreditNote(tx, winner.id) };
   }
   await insertLines(tx, creditNoteId, resolved.resolvedLines);
-  await tx.query("update sales_credit_notes set custom_fields = $2::jsonb where id = $1", [creditNoteId, JSON.stringify(resolved.customFields)]);
+  await tx.query("update sales_credit_notes set custom_fields = $2::jsonb, salesperson_id = $3 where id = $1", [
+    creditNoteId,
+    JSON.stringify(resolved.customFields),
+    resolved.salespersonId,
+  ]);
   await writeAuditEvent(tx, {
     eventType: "credit_note.created",
     entityType: "sales_credit_note",
@@ -781,8 +807,15 @@ export async function updateCreditNote(
     amountsMode: input.amountsMode === undefined ? saved.amountsMode : input.amountsMode,
     lines: input.lines === undefined ? saved.lines : input.lines,
     customFields: input.customFields === undefined ? saved.customInput : input.customFields,
+    salespersonId: input.salespersonId === undefined ? saved.salespersonInput : input.salespersonId,
   });
-  const resolved = await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)));
+  const resolved = await resolveDraft(
+    tx,
+    draft,
+    keptValues(current.lines),
+    keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)),
+    current.salespersonId,
+  );
   const same = sameAsStored(resolved, current);
   if (same.header && same.lines) {
     return current;
@@ -796,6 +829,9 @@ export async function updateCreditNote(
   }
   if (customValuesKey(resolved.customFields) !== customValuesKey(current.customFields)) {
     changed.push("customFields");
+  }
+  if (resolved.salespersonId !== current.salespersonId) {
+    changed.push("salespersonId");
   }
   await tx.query(
     `update sales_credit_notes
@@ -817,7 +853,11 @@ export async function updateCreditNote(
   );
   await tx.query("delete from sales_credit_note_lines where credit_note_id = $1", [current.id]);
   await insertLines(tx, current.id, resolved.resolvedLines);
-  await tx.query("update sales_credit_notes set custom_fields = $2::jsonb where id = $1", [current.id, JSON.stringify(resolved.customFields)]);
+  await tx.query("update sales_credit_notes set custom_fields = $2::jsonb, salesperson_id = $3 where id = $1", [
+    current.id,
+    JSON.stringify(resolved.customFields),
+    resolved.salespersonId,
+  ]);
   await writeAuditEvent(tx, {
     eventType: "credit_note.updated",
     entityType: "sales_credit_note",
@@ -916,7 +956,13 @@ export async function approveCreditNote(
     );
   }
 
-  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)));
+  const resolved = await resolveDraft(
+    tx,
+    draftOf(current),
+    keptValues(current.lines),
+    keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)),
+    current.salespersonId,
+  );
   const same = sameAsStored(resolved, current);
   if (!same.header || !same.lines) {
     throw new ConflictError(
