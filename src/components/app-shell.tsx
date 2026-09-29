@@ -64,6 +64,7 @@ const MENUS: Menu[] = [
           { href: "/operations/purchase-orders", label: "Purchase orders" },
           { href: "/operations/supplier-credit-notes", label: "Supplier credit notes" },
           { href: "/operations/supplier-payments", label: "Payments for several bills" },
+          { href: "/operations/expense-claims", label: "Expense claims" },
         ],
       },
       {
@@ -73,6 +74,7 @@ const MENUS: Menu[] = [
           { href: "/operations/purchase-orders/new", label: "New purchase order", minRole: "bookkeeper" },
           { href: "/operations/supplier-credit-notes/new", label: "New supplier credit note", minRole: "bookkeeper" },
           { href: "/operations/supplier-payments/new", label: "Pay bills", minRole: "bookkeeper" },
+          { href: "/operations/expense-claims/new", label: "New expense claim", minRole: "bookkeeper" },
         ],
       },
     ],
@@ -91,6 +93,8 @@ const MENUS: Menu[] = [
           { href: "/operations/reports?report=transactions", label: "Account transactions" },
           { href: "/operations/reports?report=journals", label: "Journal report" },
           { href: "/operations/reports?report=sales", label: "Sales by salesperson", module: "reporting" },
+          { href: "/operations/reports?report=budget", label: "Budget vs actual" },
+          { href: "/operations/budgets", label: "Budgets" },
         ],
       },
       {
@@ -185,8 +189,8 @@ const AREAS: Record<string, string[]> = {
     "/operations/overpayments",
     "/operations/customer-payments",
   ],
-  Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/supplier-credit-notes", "/operations/supplier-payments"],
-  Reporting: ["/operations/reports"],
+  Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/supplier-credit-notes", "/operations/supplier-payments", "/operations/expense-claims"],
+  Reporting: ["/operations/reports", "/operations/budgets"],
   Accounting: [
     "/operations/bank-accounts",
     "/operations/bank-rules",

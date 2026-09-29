@@ -74,8 +74,21 @@ that something happened.
   notes. Accounts left out or counted twice are listed on the report.
   Publishing keeps a frozen copy that never changes (the database refuses);
   drafts and published reports can be archived and brought back, and drafts
-  deleted. "Print or save as PDF" prints just the report. Budget columns
-  come with budgets. See examples CR1-CR10.
+  deleted. "Print or save as PDF" prints just the report. A profit and loss
+  can show a **budget column** and **actual less budget** (BU7). See
+  examples CR1-CR10.
+- **Budgets** (Reporting; BU1-BU8, not yet approved by Jess), like Xero's
+  budget manager: every organisation has an **overall budget**, and can add
+  **named budgets**, each optionally for one tracking value (a Department,
+  or a grant or segment as a custom segment). Each holds an amount per
+  profit and loss account per month, typed or **quick filled** (the same
+  amount each month, optionally changing by a % each month, or last year's
+  actuals, optionally changed by a %). Budgets post nothing, are archived
+  (never deleted), and every change of amounts is in the history with the
+  amounts before and after. **Budget vs actual** shows actual, budget,
+  variance and variance % per account with section totals, gross and net
+  profit, for whole months; a budget for a tracking value compares with
+  only that value's lines. Balance sheet budgets aren't built.
 - **Contacts**: customers and suppliers with optional email, phone, postal
   (billing) address and GST number (format-checked only); search by name or
   email; archiving instead of deleting. Customers are used by sales invoices
@@ -161,6 +174,19 @@ that something happened.
   more than was ordered (the database refuses too). An approved purchase
   order with no bills can be cancelled. Stock comes in on the bill (ST1).
   "Print or save as PDF" like quotes. Emailing isn't built.
+- **Expense claims** (Purchases; EC1-EC12, not yet approved by Jess), like
+  Xero's older expense claims: a member enters the receipts they paid for
+  themselves (date, supplier, description, account, tax code, amount
+  including GST, optional tracking) and attaches the receipts as files;
+  submits the claim; a bookkeeper or admin approves it (not their own,
+  unless they're an admin or owner), which posts Dr each expense account
+  and GST / Cr **Expense claims payable** (2010, a new system account) on
+  the claim date, or declines it back with a reason. Paying it (in full or
+  in parts, from a bank account) clears the liability and matches in bank
+  reconciliation; payments and unpaid approved claims can be voided (exact
+  reversals). Locked periods apply. The GST return counts claims like
+  bills (receipts with no tax code are left out). Mileage, batch payments
+  and a submit-only role aren't built.
 - **Customer payments** against one approved sales invoice at a time:
   recording a payment posts Dr the bank account / Cr accounts receivable on
   the payment date, and voiding it posts the exact reversal on the void date.

@@ -34,6 +34,7 @@ import {
   type ReportValues,
 } from "@/lib/reports/custom-layout";
 import type { TrackingSetup } from "@/lib/tracking/service";
+import type { Budget } from "@/lib/budgets/service";
 
 /**
  * Custom reports (examples CR1-CR10): the lists (drafts, published,
@@ -562,6 +563,7 @@ function ColumnsEditor({
   initial,
   initialFilter,
   tracking,
+  budgets,
   busy,
   onSave,
   onCancel,
@@ -570,6 +572,7 @@ function ColumnsEditor({
   initial: ReportColumnsSetting;
   initialFilter: ReportTrackingFilter | null;
   tracking: TrackingSetup | null;
+  budgets: Budget[];
   busy: boolean;
   onSave: (setting: ReportColumnsSetting, filter: ReportTrackingFilter | null) => void;
   onCancel: () => void;
@@ -582,8 +585,15 @@ function ColumnsEditor({
   function save() {
     if (setting.difference && setting.periodCount < 2) return setError("A difference needs at least two period columns.");
     const [categoryId, valueId] = filter.split(":");
+    const { budgetId, budgetDifference, ...rest } = setting;
     onSave(
-      { ...setting, percent: setting.difference && setting.percent, yearToDate: base === "profit_and_loss" && setting.yearToDate },
+      {
+        ...rest,
+        percent: setting.difference && setting.percent,
+        yearToDate: base === "profit_and_loss" && setting.yearToDate,
+        // A budget column for the first period (BU7), profit and loss only.
+        ...(base === "profit_and_loss" && budgetId ? { budgetId, budgetDifference: Boolean(budgetDifference) } : {}),
+      },
       filter && categoryId && valueId ? { categoryId, valueId } : null,
     );
   }
@@ -657,7 +667,32 @@ function ColumnsEditor({
           </select>
         </Field>
       ) : null}
-      <p className={ui.muted}>A budget column comes later, once budgets are built.</p>
+      {base === "profit_and_loss" ? (
+        <div className={ui.grid3}>
+          <Field label="Budget column" hint="The budget for the first (newest) period.">
+            <select value={setting.budgetId ?? ""} onChange={(event) => setSetting({ ...setting, budgetId: event.target.value || undefined })}>
+              <option value="">No budget column</option>
+              {budgets
+                .filter((budget) => !budget.archivedAt || budget.id === setting.budgetId)
+                .map((budget) => (
+                  <option key={budget.id} value={budget.id}>
+                    {budget.name}
+                    {budget.trackingLabel ? ` (${budget.trackingLabel})` : ""}
+                  </option>
+                ))}
+            </select>
+          </Field>
+          <label className={ui.checkbox}>
+            <input
+              type="checkbox"
+              checked={Boolean(setting.budgetId && setting.budgetDifference)}
+              disabled={!setting.budgetId}
+              onChange={(event) => setSetting({ ...setting, budgetDifference: event.target.checked })}
+            />{" "}
+            Actual less budget
+          </label>
+        </div>
+      ) : null}
       <div className={ui.actions}>
         <Button onClick={save} disabled={busy}>
           {busy ? "Saving…" : "Save columns"}
@@ -709,6 +744,7 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
   const loaded = useApiData<Loaded>(`/api/custom-reports/${encodeURIComponent(reportId)}`, { organisationId });
   const accounts = useAccounts(organisationId, true);
   const tracking = useTracking(organisationId);
+  const budgets = useApiData<{ budgets: Budget[] }>("/api/budgets", { organisationId });
   const [state, setState] = useState<Loaded | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
   const [busy, setBusy] = useState(false);
@@ -868,6 +904,7 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
           initial={report.layout.columns}
           initialFilter={report.layout.filter ?? null}
           tracking={tracking.data}
+          budgets={budgets.data?.budgets ?? []}
           busy={busy}
           onCancel={() => setEditing(null)}
           onSave={(setting, filter) =>

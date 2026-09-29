@@ -40,6 +40,8 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   customer_overpayment_refund: "Overpayment refund",
   bank_transaction: "Bank transaction",
   bank_transfer: "Transfer",
+  expense_claim: "Expense claim",
+  expense_claim_payment: "Expense claim payment",
 };
 
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
@@ -56,6 +58,8 @@ const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
   customer_overpayment_refund: "The refund was voided: reversed by",
   bank_transaction: "The bank transaction was voided: reversed by",
   bank_transfer: "The transfer was voided: reversed by",
+  expense_claim: "The expense claim was voided: reversed by",
+  expense_claim_payment: "The payment was voided: reversed by",
 };
 
 function KindBadge({ journal }: { journal: Journal }) {

@@ -940,6 +940,8 @@ describeWithDatabase("sales invoices", () => {
       expect((await client.query("select code, system_key from accounts order by code")).rows).toEqual([
         { code: "1000", system_key: "bank" },
         { code: "1100", system_key: "accounts_receivable" },
+        // Added by migration 0028 (expense claims, EC1).
+        { code: "2010", system_key: "expense_claims_payable" },
         { code: "2100", system_key: "gst" },
         { code: "4000", system_key: null },
       ]);

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, Suspense, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { BudgetVsActualReport } from "@/components/budgets";
 import { AgedReceivablesReport } from "@/components/customers";
 import { AccountTransactionsReport, AgedPayablesReport, JournalReportView } from "@/components/reports/ledger-reports";
 import { CustomReportList, StartCustomReport } from "@/components/reports/custom-report";
@@ -477,6 +478,7 @@ const TABS = [
   { key: "transactions", label: "Account transactions" },
   { key: "journals", label: "Journal report" },
   { key: "sales", label: "Sales by salesperson" },
+  { key: "budget", label: "Budget vs actual" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
 
@@ -512,6 +514,7 @@ function StandardReports({ organisationId }: { organisationId: string }) {
       {tab === "transactions" ? <AccountTransactionsReport organisationId={organisationId} /> : null}
       {tab === "journals" ? <JournalReportView organisationId={organisationId} /> : null}
       {tab === "sales" ? <SalesBySalespersonReport organisationId={organisationId} /> : null}
+      {tab === "budget" ? <BudgetVsActualReport organisationId={organisationId} initialBudgetId={params.get("budget")} /> : null}
       <p className={ui.muted} data-print="hide">
         The GST return and GST audit report are under <Link href="/operations/gst-return">Tax</Link>; customer statements are under{" "}
         <Link href="/operations/customer-statements">Contacts</Link>.

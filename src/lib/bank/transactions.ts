@@ -177,6 +177,7 @@ export async function listBankTransactions(
 const CONTROL_KEYS: Record<string, string> = {
   accounts_receivable: "the accounts receivable account (record a customer payment instead)",
   accounts_payable: "the accounts payable account (record a supplier payment instead)",
+  expense_claims_payable: "the expense claims payable account (pay the expense claim instead)",
   gst: "the GST account (GST is worked out from the tax codes)",
 };
 

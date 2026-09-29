@@ -49,6 +49,7 @@ export const SYSTEM_KEYS = [
   "bank",
   "accounts_receivable",
   "accounts_payable",
+  "expense_claims_payable",
   "inventory",
   "gst",
   "cost_of_goods_sold",

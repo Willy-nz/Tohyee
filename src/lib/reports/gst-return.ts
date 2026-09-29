@@ -60,10 +60,14 @@ export const GST_EVENT_TYPES = [
   "supplier_credit_note_application_removed",
   "supplier_credit_note_refunded",
   "supplier_credit_note_refund_voided",
+  "expense_claim_approved",
+  "expense_claim_voided",
+  "expense_claim_payment",
+  "expense_claim_payment_voided",
 ] as const;
 export type GstEventType = (typeof GST_EVENT_TYPES)[number];
 
-export type GstDocumentType = "sales_invoice" | "sales_credit_note" | "bill" | "supplier_credit_note" | "bank_transaction";
+export type GstDocumentType = "sales_invoice" | "sales_credit_note" | "bill" | "supplier_credit_note" | "bank_transaction" | "expense_claim";
 export type GstLineBox = "5" | "6" | "11";
 
 /** One document line in a GST event, with the boxes it counts in (none when it's left out). */
@@ -75,7 +79,8 @@ export type GstReturnLine = {
   documentId: string;
   documentNumber: string;
   reference: string | null;
-  contactId: string;
+  /** Null for expense claims: their receipts name a supplier rather than a contact. */
+  contactId: string | null;
   contactName: string;
   documentLineOrder: number;
   description: string;
@@ -107,7 +112,7 @@ type RawEventRow = {
   document_id: string;
   document_number: string;
   reference: string | null;
-  contact_id: string;
+  contact_id: string | null;
   contact_name: string;
   document_line_order: number;
   description: string;
@@ -206,7 +211,15 @@ const SETTLEMENTS_SQL = `
   select 'purchases', 'supplier_credit_note_refund_voided', r.void_date, 1, 'supplier_credit_note', r.credit_note_id,
          r.id, r.amount
     from supplier_credit_note_refunds r
-   where $4 and r.status = 'voided' and r.void_date between $1 and $2`;
+   where $4 and r.status = 'voided' and r.void_date between $1 and $2
+  union all
+  select 'purchases', 'expense_claim_payment', p.payment_date, 1, 'expense_claim', p.claim_id, p.id, p.amount
+    from expense_claim_payments p
+   where $4 and p.payment_date between $1 and $2
+  union all
+  select 'purchases', 'expense_claim_payment_voided', p.void_date, -1, 'expense_claim', p.claim_id, p.id, p.amount
+    from expense_claim_payments p
+   where $4 and p.status = 'voided' and p.void_date between $1 and $2`;
 
 /**
  * Every line of every GST event dated in the period, in one statement so the
@@ -251,6 +264,14 @@ with events as (
     from supplier_credit_notes s
    where not $4 and s.status = 'voided' and s.void_date between $1 and $2
   union all
+  select 'purchases', 'expense_claim_approved', x.claim_date, 1, 'expense_claim', x.id, null, null
+    from expense_claims x
+   where not $4 and x.status in ('approved', 'voided') and x.claim_date between $1 and $2
+  union all
+  select 'purchases', 'expense_claim_voided', x.void_date, -1, 'expense_claim', x.id, null, null
+    from expense_claims x
+   where not $4 and x.status = 'voided' and x.void_date between $1 and $2
+  union all
   select case t.kind when 'spend' then 'purchases' else 'sales' end, 'bank_transaction_posted', t.transaction_date, 1,
          'bank_transaction', t.id, null, null
     from bank_transactions t
@@ -264,16 +285,19 @@ with events as (
   ${SETTLEMENTS_SQL}
 ),
 documents as (
-  select 'sales_invoice' as document_type, id as document_id, invoice_number as document_number, reference, contact_id
+  select 'sales_invoice' as document_type, id as document_id, invoice_number as document_number, reference, contact_id,
+         null::text as claimant
     from sales_invoices
   union all
-  select 'sales_credit_note', id, credit_note_number, reference, contact_id from sales_credit_notes
+  select 'sales_credit_note', id, credit_note_number, reference, contact_id, null from sales_credit_notes
   union all
-  select 'bill', id, supplier_invoice_number, null, contact_id from bills
+  select 'bill', id, supplier_invoice_number, null, contact_id, null from bills
   union all
-  select 'supplier_credit_note', id, supplier_credit_note_number, reference, contact_id from supplier_credit_notes
+  select 'supplier_credit_note', id, supplier_credit_note_number, reference, contact_id, null from supplier_credit_notes
   union all
-  select 'bank_transaction', id, coalesce(reference, 'BT-' || id), reference, contact_id from bank_transactions
+  select 'bank_transaction', id, coalesce(reference, 'BT-' || id), reference, contact_id, null from bank_transactions
+  union all
+  select 'expense_claim', id, 'CLAIM-' || id, null, null, claimant_email from expense_claims
 ),
 document_lines as (
   select 'sales_invoice' as document_type, invoice_id as document_id, line_order, description, tax_code_id,
@@ -292,18 +316,22 @@ document_lines as (
   union all
   select 'bank_transaction', bank_transaction_id, line_order, description, tax_code_id, tax_rate, net_amount, tax_amount
     from bank_transaction_lines
+  union all
+  select 'expense_claim', claim_id, line_order, supplier_name || ': ' || description, tax_code_id, tax_rate, net_amount,
+         tax_amount
+    from expense_claim_receipts
 )
 select e.side, e.event_type, e.event_date, e.sign, e.settlement_id::text, e.settled::text,
        (sum(l.net_amount + l.tax_amount) over (partition by e.event_type, e.document_type, e.document_id,
                                                            e.settlement_id))::text as document_total,
        e.document_type, e.document_id::text, d.document_number, d.reference,
-       d.contact_id::text, c.name as contact_name, l.line_order as document_line_order, l.description,
+       d.contact_id::text, coalesce(c.name, d.claimant) as contact_name, l.line_order as document_line_order, l.description,
        t.code as tax_code, coalesce(t.category, 'out_of_scope') as category, l.tax_rate::text,
        (l.net_amount + l.tax_amount)::text as line_amount, l.tax_amount::text as line_gst
   from events e
   join documents d on d.document_type = e.document_type and d.document_id = e.document_id
   join document_lines l on l.document_type = e.document_type and l.document_id = e.document_id
-  join contacts c on c.id = d.contact_id
+  left join contacts c on c.id = d.contact_id
   left join tax_codes t on t.id = l.tax_code_id
  order by e.side desc, e.event_date, e.document_type, e.document_id, e.event_type, e.settlement_id, l.line_order`;
 
@@ -323,6 +351,7 @@ const DOCUMENT_LABELS: Record<GstDocumentType, string> = {
   bill: "bill",
   supplier_credit_note: "supplier credit note",
   bank_transaction: "bank transaction",
+  expense_claim: "expense claim",
 };
 
 function toLine(
@@ -535,6 +564,14 @@ with outstanding as (
                         and (r.status = 'active' or r.void_date > $1)), 0)
     from supplier_credit_notes s
    where s.status in ('approved', 'voided') and s.credit_note_date <= $1 and (s.status = 'approved' or s.void_date > $1)
+  union all
+  select 'purchases', x.total, x.tax_total, 1,
+         x.total
+         - coalesce((select sum(p.amount) from expense_claim_payments p
+                      where p.claim_id = x.id and p.payment_date <= $1
+                        and (p.status = 'active' or p.void_date > $1)), 0)
+    from expense_claims x
+   where x.status in ('approved', 'voided') and x.claim_date <= $1 and (x.status = 'approved' or x.void_date > $1)
 )
 select side, total::text, tax_total::text, (owed * sign)::text as owed
   from outstanding

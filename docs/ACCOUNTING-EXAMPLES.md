@@ -44,7 +44,9 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
   `tests/integration/printed-documents.test.ts` (PD1-PD8) and
   `tests/integration/purchase-orders.test.ts` (PO1-PO9) and
-  `tests/integration/stock-transfers.test.ts` (TR1-TR6), all against
+  `tests/integration/stock-transfers.test.ts` (TR1-TR6) and
+  `tests/integration/budgets.test.ts` (BU1-BU8) and
+  `tests/integration/expense-claims.test.ts` (EC1-EC12), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -1040,7 +1042,8 @@ totals as the standard reports, worked out when it's opened.
   as a percentage rounded to 1 decimal place, halves away from zero; blank
   when the second column is 0.00), and for profit and loss only a **year to
   date** column (from the start of the financial year that the first
-  column's period ends in). A budget column comes later, with budgets.
+  column's period ends in). A profit and loss can also have a budget
+  column and an actual less budget column (see "Budgets", BU7).
 - **Rows** belong to a table. A **group** lists accounts, chosen by account
   type or by account code, each in its natural direction as on the standard
   reports (income as credits, costs as debits), with a total; it can show
@@ -2919,3 +2922,279 @@ Christchurch; WIDGET (stock, purchase price 5.00); negative stock off.
 - Should a transfer into a location that's below zero be allowed (filling
   the shortfall at the transferred cost, with the difference to cost of
   sales like ST10), rather than refused?
+
+## Budgets (examples not yet approved by Jess)
+
+Written overnight from Xero's budget manager; Jess hasn't approved them yet.
+Every organisation has an **overall budget**, which can't be archived, and
+can add **named budgets**, each optionally for **one tracking value** (a
+Department, or a not-for-profit's grant or segment as a custom segment). A
+budget holds an **amount per profit and loss account per month**, in the
+account's natural direction (income as credits, costs as debits, so both are
+typed as positive amounts), with at most the currency's decimal places.
+Budgets **post nothing** and never change a ledger figure.
+
+- Amounts are typed, or **quick filled** for chosen accounts over chosen
+  months: the **same amount each month**, optionally changing by a % each
+  month (worked out exactly and rounded once per month, so rounding never
+  compounds, like Xero's "adjust by % each month"), or **last year's
+  actuals** for the same months (filtered to the budget's tracking value
+  when it has one), optionally changed by a % (each month rounded once,
+  halves away from zero). A quick fill replaces those months' amounts.
+- Only **profit and loss accounts** (revenue, other income, direct costs,
+  expenses, depreciation) take budget amounts; the database refuses others.
+- Budgets are **archived**, never deleted (the database refuses deleting a
+  budget or an amount; an amount is set to 0.00 instead). An archived budget
+  can't change until it's brought back. Names are unique among budgets that
+  aren't archived, ignoring case. A budget's tracking value never changes.
+- Every change of amounts is in the history with the amounts before and
+  after, and who changed them. Budgets are saved against the version that was
+  loaded, so two people can't overwrite each other's changes.
+- **Budget vs actual** (Reporting): for whole months, each profit and loss
+  account's actual (from the ledger, like the profit and loss, and only lines
+  tagged with the budget's value or one under it when it has one), budget,
+  **variance** (actual less budget) and **variance %** (variance / budget,
+  1 decimal place, halves away from zero, blank when the budget is 0.00),
+  with section totals, gross profit and net profit. A positive variance on a
+  cost means it's **over** budget.
+- **Budget column in custom reports** (TODO item 4): a profit and loss custom
+  report can show a chosen budget for its first period, and an **actual less
+  budget** column. A published copy keeps the budget figures as they were.
+
+Setup: the starting chart, a 31 March year end, Advanced reporting on,
+Department values Retail and Wholesale, and these journals (through 1000;
+the 4000 lines tagged as shown, everything else untagged):
+
+| Date | Journal |
+| --- | --- |
+| 1 Apr, 1 May, 1 Jun 2025 | Dr 6150 Rent 500.00 / Cr 1000 (each) |
+| 10 Apr 2025 | Dr 1000 1,000.00 / Cr 4000 700.00 (Retail) / Cr 4000 300.00 (Wholesale) |
+| 12 May 2025 | Dr 1000 1,200.00 / Cr 4000 1,200.00 (Retail) |
+| 9 Jun 2025 | Dr 1000 800.00 / Cr 4000 800.00 (Wholesale) |
+| 1 Apr, 1 May, 1 Jun 2026 | Dr 6150 500.00 / Cr 1000 (each) |
+| 10 Apr 2026 | Dr 1000 1,100.00 / Cr 4000 800.00 (Retail) / Cr 4000 300.00 (Wholesale) |
+| 12 May 2026 | Dr 1000 1,000.00 / Cr 4000 1,000.00 (Retail) |
+| 8 Jun 2026 | Dr 1000 1,300.00 / Cr 4000 1,000.00 (Retail) / Cr 4000 300.00 (Wholesale) |
+| 20 Jun 2026 | Dr 6010 Accounting fees 250.00 / Cr 1000 |
+
+- **BU1** A new organisation has one budget, **Overall budget**, which
+  can't be archived (the database refuses too). A named budget "Retail
+  plan" for Department: Retail is added; a second "retail plan" is refused
+  while the first isn't archived. With Advanced reporting off a budget can't
+  have a tracking value, and an archived value can't be chosen. Archiving
+  Retail plan moves it to the archived list; while archived its amounts
+  can't change; bringing it back works. The database refuses deleting a
+  budget and changing its tracking value. No journals are posted.
+- **BU2** Typing the overall budget's amounts: 4000 Apr 2026 **1,000.00**,
+  May **1,000.00**, Jun **1,200.00**; 6150 **500.00** for each of Apr-Jun
+  2026; 6010 Jun 2026 **200.00**. The grid for 12 months from Apr 2026 shows
+  4000's total **3,200.00** and a total for Apr of **1,500.00**. The history
+  shows each amount changed from 0.00. Refused, with nothing saved: account
+  1000 (not a profit and loss account; the database refuses too), 10.005
+  (three decimal places), a month "2026-13", the same account and month
+  twice, and a save against an older version. The database refuses deleting
+  an amount.
+- **BU3** Quick fill, same amount: 6150 at **500.00** for 12 months from
+  Apr 2026 makes every month 500.00 (total **6,000.00**). With **+2%** each
+  month the first six months are **500.00, 510.00, 520.20, 530.60, 541.22,
+  552.04** (500.00 x 1.02^n, each rounded once).
+- **BU4** Quick fill, last year's actuals, Apr-Jun 2026 on the overall
+  budget: 4000 becomes **1,000.00, 1,200.00, 800.00**; with **+10%**,
+  **1,100.00, 1,320.00, 880.00**; 6150 with **-5%**, **475.00** each month.
+  On Retail plan (Department: Retail) 4000 becomes **700.00, 1,200.00,
+  0.00**, only last year's Retail lines.
+- **BU5** Budget vs actual, the overall budget (BU2), Apr-Jun 2026:
+
+  | Row | Actual | Budget | Variance | % |
+  | --- | ---: | ---: | ---: | ---: |
+  | 4000 Sales | 3,400.00 | 3,200.00 | 200.00 | 6.3 |
+  | Gross profit | 3,400.00 | 3,200.00 | 200.00 | 6.3 |
+  | 6010 Accounting fees | 250.00 | 200.00 | 50.00 | 25.0 |
+  | 6150 Rent | 1,500.00 | 1,500.00 | 0.00 | 0.0 |
+  | Expenses | 1,750.00 | 1,700.00 | 50.00 | 2.9 |
+  | Net profit | 1,650.00 | 1,500.00 | 150.00 | 10.0 |
+
+  For June alone: Sales **1,300.00 / 1,200.00 / 100.00 / 8.3**, Expenses
+  **750.00 / 700.00 / 50.00 / 7.1**, Net profit **550.00 / 500.00 / 50.00 /
+  10.0**. An account with actuals and no budget shows a blank %. A 'from'
+  month after the 'to' month is refused.
+- **BU6** Budget vs actual for Retail plan with 4000 at **900.00** for each
+  of Apr-Jun 2026: actual **2,800.00** (Retail lines only: 800.00 + 1,000.00
+  + 1,000.00), budget **2,700.00**, variance **100.00**, **3.7**%. Rent and
+  fees aren't tagged Retail, so they aren't in it; net profit **2,800.00 /
+  2,700.00 / 100.00 / 3.7**.
+- **BU7** A custom profit and loss (CR1) for June 2026 with a budget column
+  (the overall budget, BU2) and actual less budget: Revenue **1,300.00 |
+  1,200.00 | 100.00**, Expenses **750.00 | 700.00 | 50.00**, Net profit
+  **550.00 | 500.00 | 50.00**. With one quarterly column (Apr-Jun 2026) the
+  budget column is the three months: Revenue budget **3,200.00**, Net profit
+  **1,650.00 | 1,500.00 | 150.00**. Publishing keeps the figures: after June's
+  4000 budget changes to 1,250.00 the draft's Revenue budget is **1,250.00**
+  and the published copy's still **1,200.00**. Refused: a budget column on a
+  balance sheet, an actual less budget column without a budget column, and a
+  budget that doesn't exist.
+- **BU8** Viewers can list and open budgets and budget vs actual; only
+  bookkeepers and admins can add, change, fill and archive them. Across
+  BU1-BU8 budgets post no journals.
+
+### Not supported yet (refused rather than guessed)
+
+- **Balance sheet budgets** (Xero has them): budgets hold profit and loss
+  accounts only, and the database refuses others.
+- A budget for **more than one tracking value** (Xero allows two
+  categories): one value per budget.
+- Importing and exporting budgets (Xero's CSV), and budget columns on the
+  standard profit and loss (they're on custom reports and budget vs actual).
+- A budget column for a period other than the custom report's first column,
+  and a year to date budget column.
+
+### Questions for Jess (budgets)
+
+- Variance is actual less budget for every row, so on costs a positive
+  variance is over budget. Would you rather costs show budget less actual
+  (so positive is always good), as some reports do?
+- Should budgets also cover balance sheet accounts, as Xero's do?
+- Is one tracking value per budget enough for grants and segments, or do
+  you need a budget for a combination (e.g. a Department and a Grant)?
+
+## Expense claims (examples not yet approved by Jess)
+
+Written overnight from Xero's (older) expense claims and Tohyee's own bill
+and supplier payment rules (B1-B8, SP1-SP8); Jess hasn't approved them yet.
+A member (bookkeeper or above) enters the **receipts** they paid for
+themselves: date, supplier's name, description, account, tax code and the
+amount **including GST**, with optional tracking, and attaches photos or
+PDFs of the receipts as files (NF7). The claim is theirs: who made it comes
+from the sign-in, never the form.
+
+- A **draft** can be changed or deleted by its claimant only. Receipts go to
+  the accounts a bill line can use (B1), except the inventory account (stock
+  comes in on bills) and expense claims payable. GST is worked out and
+  rounded per receipt from the tax inclusive amount, as on bills (B2). A
+  receipt with **no tax code** has no GST: that's how a receipt that isn't a
+  valid GST receipt (or a supplier that isn't GST registered) is entered.
+- **Submitting** sends it for approval; it then can't be changed (the
+  database refuses) until it's approved or declined.
+- **Declining** (bookkeeper or above) returns a submitted claim to its
+  claimant as a draft, with a reason; it posts nothing.
+- **Approving** (bookkeeper or above, but not your own claim unless you're an
+  admin or owner) posts one journal on the **claim date** (typed, on or after
+  the latest receipt): Dr each receipt's account for its amount excluding GST
+  (one line per account and set of tags), Dr GST (2100) for the GST, Cr
+  **Expense claims payable** (2010, a new system account; organisations that
+  already had a 2010 get the next free code) for the total. Its reference is
+  `CLAIM-` and the claim's id.
+- **Paying** (in full or in part) posts Dr expense claims payable / Cr the
+  bank account on the payment date, like a supplier payment (SP1); it can't
+  be more than what's due or dated before the claim. A payment can be voided
+  (the exact reversal). What's paid and due is worked out from the payments.
+  The bank line matches a statement line in reconciliation like any payment.
+- **Voiding** an approved claim with no active payments posts the exact
+  reversal on the void date (the database refuses voiding one with active
+  payments). Locked periods apply to approving, paying and voiding.
+- The **GST return** counts claims like bills: on the invoice basis on the
+  claim date (and back on the void date), on the payments and hybrid bases
+  when they're paid, each receipt in proportion. Receipts with no tax code
+  are left out of the boxes. Filed lines from claims have no contact; they
+  show the claimant.
+- Claim journals can't be corrected in the ledger; the claim is voided.
+
+Setup: the starting chart, tax code GST (15%), members Jess (owner), Aroha
+and Sam (bookkeepers) and a viewer. Sam's claim "June market trip":
+
+| Receipt | Supplier | Account | Tax | Amount | GST | Net |
+| --- | --- | --- | --- | ---: | ---: | ---: |
+| 3 Jun 2026 | Z Energy, fuel | 6120 Motor vehicle expenses | GST | 69.00 | 9.00 | 60.00 |
+| 5 Jun 2026 | Paper Plus, printer paper | 6140 Printing and stationery | GST | 23.00 | 3.00 | 20.00 |
+| 6 Jun 2026 | Farmers market, parking | 6180 Travel - national | none | 8.00 | 0.00 | 8.00 |
+
+- **EC1** The draft's total is **100.00**, GST **12.00**, excluding GST
+  **88.00**, and posts nothing. Refused: receipts to 1400 (stock), 1000
+  (bank), 2010 (expense claims payable) and 2100 (GST), an amount of 0.00 or
+  1.001, an unknown tax code, no supplier name. Aroha can't change or delete
+  Sam's draft; Sam can (without the parking, 92.00 / GST 12.00). A new
+  organisation has 2010 Expense claims payable; an existing one whose 2010 is
+  taken gets 2011.
+- **EC2** A claim with no receipts can't be submitted. Once submitted it
+  can't be changed or deleted (the database refuses changing its receipts
+  or deleting it), and it's listed as awaiting approval. Nothing is posted.
+- **EC3** Aroha approves it with claim date **10 Jun 2026**: journal
+  `CLAIM-n` on 10 Jun, Dr 6120 **60.00** / Dr 6140 **20.00** / Dr 6180
+  **8.00** / Dr 2100 **12.00** / Cr 2010 **100.00**. Due **100.00**,
+  **unpaid**. Sam (a bookkeeper) can't approve his own claim; Jess (owner)
+  can approve hers. A claim date of 5 Jun (before the 6 Jun receipt) is
+  refused. A retry with the same key returns the same claim; the same key
+  with another date is refused. The database refuses changing an approved
+  claim.
+- **EC4** Paying **100.00** from 1000 on 15 Jun 2026 posts Dr 2010
+  **100.00** / Cr 1000 **100.00**: due **0.00**, **paid**, 2010 back to
+  **0.00**. A statement line of -100.00 on 15 Jun matches that bank line
+  exactly and reconciles.
+- **EC5** Paying **40.00** leaves **60.00** due (**part paid**, awaiting
+  payment); 60.01 and a payment dated 9 Jun (before the claim date) are
+  refused (the database refuses paying more than the total too); 60.00 more
+  makes it **paid**, and a retry with the same key returns the same payment.
+  Voiding the 60.00 payment on 20 Jun posts Dr 1000 **60.00** / Cr 2010
+  **60.00**; due **60.00** again. A second void, and deleting a payment, are
+  refused.
+- **EC6** Declining needs a reason. Aroha declines it ("Parking isn't
+  claimable"): it's a **draft** again showing the reason, who declined it
+  and when. Sam removes the parking and resubmits (**92.00**); it can then
+  be approved. Declining a draft or an approved claim is refused. The
+  claim's history shows it was made, submitted, declined and approved.
+- **EC7** Voiding the approved claim while it has an active payment is
+  refused ("Void its payments first"); after the payment is voided, voiding
+  on 30 Jun posts Dr 2010 **100.00** / Cr 6120 **60.00** / Cr 6140 **20.00**
+  / Cr 6180 **8.00** / Cr 2100 **12.00**. A second void, a void dated before
+  the claim date and paying a voided claim are refused.
+- **EC8** With the period locked to 30 Jun, approving with claim date 10 Jun
+  is refused and the claim stays submitted; approving on 1 Jul works; with
+  the lock moved to 1 Jul, paying and voiding on 1 Jul are refused. Only the
+  approval posted.
+- **EC9** With Department required, submitting a claim whose receipt has
+  no Department is refused ("Line 1 needs a Department"); a receipt tagged
+  Retail posts its 6120 line tagged Retail, and the GST and 2010 lines
+  untagged.
+- **EC10** GST return for June 2026, invoice basis: the claim counts on 10
+  Jun, Box 11 **92.00** (69.00 + 23.00; the parking has no tax code and is
+  left out), Box 12 **12.00**; each line shows the supplier and description
+  and the claimant; filed, its lines keep the claimant and no contact.
+  Payments basis for July: nothing until it's paid; after **40.00** is paid
+  on 15 Jul, Box 11 **36.80** and Box 12 **4.80** (40% of each receipt). A
+  second claim approved and voided in June adds nothing.
+- **EC11** A PDF of a receipt attached to the claim is listed with it.
+  Viewers can list and open claims but can't make them (403); a claim made
+  through the API belongs to whoever is signed in.
+- **EC12** The approval and payment journals can't be corrected in the
+  ledger (void the claim or the payment), and account transactions for 2010
+  show them as "Expense claim CLAIM-n" and "Payment of expense claim
+  CLAIM-n", linking to the claim.
+
+### Not supported yet (refused rather than guessed)
+
+- **Viewers making their own claims** (Xero's "submit only" role): only
+  bookkeepers and above can make claims, since viewers can't change
+  anything today.
+- **Mileage claims** (a rate per kilometre), **foreign-currency receipts**,
+  and receipts on **stock items** (they come in on bills).
+- **One payment for several claims** (a batch), and paying claims through a
+  bank file.
+- Checking what a valid GST receipt needs (IRD's taxable supply
+  information: the supplier's GST number over $200, and so on): the claimant
+  or approver chooses "No GST" when it isn't one.
+- Changing an approved claim: void it (with no payments) and make a new
+  one.
+
+### Questions for Jess (expense claims)
+
+- Should staff who otherwise only view the books be able to make their own
+  claims (a new "submit only" role, like Xero's)?
+- A bookkeeper can't approve their own claim, but an admin or owner can
+  (so a one-person organisation still works). Is that right, or should
+  nobody approve their own claim?
+- Should Tohyee check the GST receipt rules (e.g. require the supplier's
+  GST number on receipts over $200) before GST is claimed?
+- Is 2010 "Expense claims payable" a good code, or would you rather claims
+  go to accounts payable (2000) as Xero's newer expenses do?
+- Should the claim date default to the approval date (as built) or the
+  latest receipt's date?

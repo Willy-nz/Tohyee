@@ -47,7 +47,9 @@ export type JournalOrigin =
   | "supplier_credit_note_refund"
   | "customer_overpayment_refund"
   | "bank_transaction"
-  | "bank_transfer";
+  | "bank_transfer"
+  | "expense_claim"
+  | "expense_claim_payment";
 export type CorrectionKind = "reversal" | "replacement";
 
 export type JournalLine = {
@@ -610,7 +612,9 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
     journal.origin !== "supplier_credit_note_refund" &&
     journal.origin !== "customer_overpayment_refund" &&
     journal.origin !== "bank_transaction" &&
-    journal.origin !== "bank_transfer"
+    journal.origin !== "bank_transfer" &&
+    journal.origin !== "expense_claim" &&
+    journal.origin !== "expense_claim_payment"
   );
 }
 
