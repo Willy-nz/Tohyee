@@ -435,6 +435,17 @@ Enforced by the app (and covered by tests):
   organisation's members when set. An opportunity's `invoice_id` is set once
   and a trigger keeps it won from then on. The rules are in
   `src/lib/crm/service.ts`; only the invoice it makes ever reaches the ledger.
+- CRM mail sync: the organisation's Google/Microsoft app is in
+  `crm_mail_settings` (secrets encrypted with TOHYEE_SECRET_KEY); each
+  member's mailbox in `crm_connected_accounts` (tokens encrypted). OAuth uses
+  a one-time state (`<organisation>.<random>`, 15 minutes, tied to the
+  signed-in user) and the address the request came in on for the redirect.
+  A sync reads what's due in one short transaction, calls Google or
+  Microsoft Graph with nothing open, then writes in a second: only messages
+  and events with a known participant go into `crm_messages` /
+  `crm_calendar_events`, linked through `crm_participant_links`.
+  Disconnecting deletes those rows. Every 15 minutes, off with
+  TOHYEE_MAIL_SYNC_SCHEDULER=off. The code is in `src/lib/crm/mail/`.
 - Salespeople: `salespeople` (never deleted), `contacts.default_salesperson_id`
   and `salesperson_id` on `sales_invoices` and `sales_credit_notes`, fixed
   with the rest of the document once approved. Sales by salesperson reads

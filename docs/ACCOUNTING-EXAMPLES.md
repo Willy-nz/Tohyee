@@ -30,7 +30,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/tracking.test.ts` (TC1-TC10) and
   `tests/integration/custom-fields.test.ts` (CS1-CS3, CF1-CF10) and
   `tests/integration/salespeople.test.ts` (SR1-SR8) and
-  `tests/integration/crm.test.ts` (MOD1, CRM1-CRM9), all against a real
+  `tests/integration/crm.test.ts` (MOD1, CRM1-CRM9) and
+  `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -1712,6 +1713,76 @@ when approved.
   won; open means not Won or Lost).
 - **CRM9** The pipeline board groups open and closed opportunities by stage
   with a total per stage (amounts excluding GST).
+
+## CRM email and calendar sync
+
+The owner asked (29 Sep 2026) for email and calendar sync in the first round of
+the CRM; the details follow Twenty's connected accounts:
+each member of an organisation can connect their own **Gmail** or
+**Microsoft 365** mailbox and calendar, and emails and meetings with people
+the CRM knows show on those people's and companies' timelines. Like Akahu,
+each organisation uses its own Google or Microsoft app: an admin enters its
+client ID and secret (stored encrypted, never shown again), and the page
+shows the redirect address to register with Google or Microsoft. Tohyee asks
+for read-only access (Gmail and Google Calendar read-only; Microsoft
+Mail.Read and Calendars.Read, plus offline access), never sends or changes
+anything, and needs TOHYEE_SECRET_KEY to store the tokens.
+
+- Only emails and meetings with at least one **known participant** are
+  kept: someone whose address is a CRM person's email or a contact's email
+  (ignoring case), other than the mailbox's owner. Everything else is never
+  stored. A participant counts once however many times they appear.
+- Each kept email records who it was from and to, when, whether it was
+  sent or received, its subject and a short preview (at most 300
+  characters); never the full body or attachments. Each kept meeting
+  records its title, start, end, location and attendees.
+- Each connected account chooses what the rest of the team sees:
+  **subject and preview** (the default) or **only that it happened** (who
+  and when, with "(private)" for the subject and no preview). The owner of
+  the account always sees everything that was kept.
+- Syncs run every 15 minutes, or on "Sync now". The first sync looks back
+  30 days (emails) and 30 days either side of today (meetings); later syncs
+  fetch what's new since the last one. An email or meeting already kept is
+  never kept twice (it's matched by the provider's id); a changed meeting is
+  updated.
+- Disconnecting deletes the account's tokens and everything it synced (the
+  copies in Tohyee, never the mailbox). A failed sync is recorded with its
+  error and retried next time; three failures in a row pause the account
+  until it's reconnected.
+- The CRM must be on to connect or sync.
+
+Setup: CRM on; company Mānuka Vets (hello@manukavets.nz) with person Aroha
+Ngata (aroha@manukavets.nz); Jess connects jess@glimmers.nz.
+
+- **MAIL1** Settings: saving a Google client ID and secret stores the secret
+  encrypted and shows it only as "saved"; without TOHYEE_SECRET_KEY saving is
+  refused. Only admins can change it; the redirect address shown ends in
+  /api/crm/mail/callback.
+- **MAIL2** Connecting: the Google sign-in address carries the client ID,
+  the redirect address, read-only scopes, offline access and a one-time
+  state; the callback with that state stores the account (jess@glimmers.nz,
+  Google) with encrypted tokens. A callback with an unknown, used or
+  expired (over 15 minutes) state, or from another signed-in user, is
+  refused.
+- **MAIL3** First sync of Gmail with three emails: from
+  aroha@manukavets.nz to Jess ("Paw print order"), from Jess to
+  hello@manukavets.nz ("Quote"), and from newsletter@shop.example to Jess.
+  The first two are kept (received and sent), linked to Aroha and to
+  Mānuka Vets; the newsletter isn't stored at all.
+- **MAIL4** Syncing again with the same emails keeps nothing new; a fourth
+  email to aroha@manukavets.nz is added.
+- **MAIL5** Calendar: a meeting "Clinic visit" with aroha@manukavets.nz is
+  kept and linked to Aroha and Mānuka Vets; a meeting with only Jess isn't;
+  moving the clinic visit an hour later updates it.
+- **MAIL6** Mānuka Vets' timeline shows the two emails and the meeting,
+  with subject and preview, newest first, among its other entries.
+- **MAIL7** Setting Jess's account to "only that it happened": other
+  members see "(private)" and no preview; Jess still sees the subject.
+- **MAIL8** Microsoft 365 works the same way (Graph messages and calendar
+  view), matched and linked the same.
+- **MAIL9** Disconnecting removes the account and its synced emails and
+  meetings from the timeline. Three failed syncs in a row pause it with the
+  last error shown.
 
 ## Notes, files and history
 

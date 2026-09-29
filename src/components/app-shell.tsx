@@ -152,6 +152,7 @@ const MENUS: Menu[] = [
           { href: "/operations/crm/people", label: "People" },
           { href: "/operations/crm/pipeline", label: "Pipeline" },
           { href: "/operations/crm/tasks", label: "Tasks" },
+          { href: "/operations/crm/mail", label: "Email and calendar" },
         ],
       },
     ],

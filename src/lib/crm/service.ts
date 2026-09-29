@@ -7,6 +7,8 @@ import { createInvoice, getInvoice, type Invoice } from "@/lib/invoices/service"
 import { cmp, dec, toFixedString } from "@/lib/money/decimal";
 import { parseOptionalIsoDate } from "@/lib/dates";
 import { listMembers } from "@/lib/organisations/members";
+import { syncedFor } from "@/lib/crm/mail/service";
+import { crmEnabled, requireCrm } from "@/lib/crm/switch";
 import { optionalId, optionalString, requireId, requireString } from "@/lib/validation";
 
 /**
@@ -109,15 +111,7 @@ export type Activity = {
 // ---------------------------------------------------------------------------
 // The switch and the team
 
-export async function crmEnabled(tx: OrgTx): Promise<boolean> {
-  const result = await tx.query<{ crm_enabled: boolean }>("select crm_enabled from organisation_settings where id = true");
-  return result.rows[0]?.crm_enabled === true;
-}
-
-/** Refuses CRM commands while the module is off (MOD1). */
-export async function requireCrm(tx: OrgTx): Promise<void> {
-  if (!(await crmEnabled(tx))) throw new ConflictError("The CRM is off. An admin can turn it on in Settings.");
-}
+export { crmEnabled, requireCrm };
 
 /** The organisation's members, who can own opportunities and be assigned tasks. */
 export async function listTeam(tx: OrgTx): Promise<TeamMember[]> {
@@ -810,7 +804,9 @@ export type TimelineEntry = {
     | "credit_note"
     | "customer_payment"
     | "bill"
-    | "supplier_payment";
+    | "supplier_payment"
+    | "email"
+    | "meeting";
   at: string;
   title: string;
   detail: string | null;
@@ -909,6 +905,32 @@ export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promi
       amount: toFixedString(dec(doc.amount), 2),
       href: hrefs[doc.kind](doc.id),
       by: doc.by,
+    });
+  }
+  // Synced emails and meetings (MAIL6), hidden where their mailbox's owner chose so (MAIL7).
+  const synced = await syncedFor(tx, { contactId });
+  for (const email of synced.emails) {
+    entries.push({
+      kind: "email",
+      at: email.sentAt,
+      title: `${email.direction === "sent" ? "Email sent" : "Email received"}: ${email.subject ?? "(no subject)"}`,
+      detail: [email.direction === "sent" ? `to ${email.toEmails.join(", ")}` : `from ${email.fromName ?? email.fromEmail}`, email.preview]
+        .filter(Boolean)
+        .join(" · "),
+      amount: null,
+      href: null,
+      by: email.mailbox,
+    });
+  }
+  for (const meeting of synced.meetings) {
+    entries.push({
+      kind: "meeting",
+      at: meeting.startsAt,
+      title: `Meeting: ${meeting.title ?? "(no title)"}`,
+      detail: [meeting.location, meeting.attendeeEmails.join(", ")].filter(Boolean).join(" · "),
+      amount: null,
+      href: null,
+      by: meeting.mailbox,
     });
   }
   return entries.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
