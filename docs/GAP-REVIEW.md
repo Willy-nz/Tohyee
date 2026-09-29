@@ -24,7 +24,7 @@ rules are well settled; then the larger scope items.
 | 2 | **Sales documents**: quotes (accept to invoice), repeating invoices, printable invoice/credit note/statement PDFs | Daily sales work in Xero | Medium. Built overnight (examples QT, RI, PD) |
 | 3 | **Purchase orders** (approve, then turn into a bill) | Standard in Xero and NetSuite | Medium. Built overnight (examples PO) |
 | 4 | **Budgets** and the budget column in custom reports (TODO item 4) | Not-for-profits and boards report against budget | Medium |
-| 5 | **Stock transfers** between locations | The one stock movement missing after PR #36 | Small |
+| 5 | **Stock transfers** between locations | The one stock movement missing after PR #36 | Small. Built overnight (examples TR) |
 | 6 | **Fixed assets**: register, IRD depreciation (DV/SL), disposals | Every year-end needs it | Large |
 | 7 | **Expense claims** (staff paid back) | Common in Xero | Medium |
 | 8 | **Projects and time tracking** | In Jess's scope | Large |

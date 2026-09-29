@@ -53,8 +53,12 @@ that something happened.
   the purchase price, and the bill that fills the shortfall tops up cost of
   sales. Stock always equals the inventory account (the database and the
   app keep anything else off it), and the **stock on hand** report shows it
-  by item and location beside the ledger. Transfers between locations
-  aren't built yet.
+  by item and location beside the ledger. **Transfers between locations**
+  (Stock screen; TR1-TR6, not yet approved by Jess) move a quantity at the
+  from-location's average cost (the whole remaining value when all of it
+  goes) with a journal moving the value between the locations on the
+  inventory account, whose total never changes; the negative stock
+  setting, backdating and period locks are respected.
 - **Reports**: trial balance, profit and loss, balance sheet, stock valuation,
   aged receivables and payables, account transactions, the journal report,
   customer statements, the GST return and GST audit report (below).
@@ -373,7 +377,8 @@ isn't acceptable, because people would trust it:
 - amending a filed GST return, imported goods (Customs GST), GST rates other
   than 15%, recording the GST payment or refund to IRD, and filing to IRD
   electronically
-- stock "recomputation", and transfers between locations
+- stock "recomputation" (transfers between locations are built; editing or
+  voiding a transfer, and transfers in transit, aren't)
 
 ## Next, in rough order
 
@@ -383,7 +388,7 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    on them). Emailing invoices, credit notes, quotes and statements comes
    with or after these (they print already).
 2. Backdated stock movements with proper re-costing.
-3. Stock depth: transfers between locations, bins, lots and serial
+3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
 4. NZ payroll, fixed assets, projects and time tracking.

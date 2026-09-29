@@ -31,6 +31,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ accounts, ledger_journals, ledger_journal_lines
 ├─ ledger_fx_revaluation_runs / _items
 ├─ inventory_item_balances, inventory_movements   stock by item code and location (a Location tracking value)
+├─ stock_transfers        stock moved between locations (append-only; its two movements and journal point at it)
 ├─ tax_codes, accounting_period_controls
 ├─ contacts               customers and suppliers (with terms, credit limit, group, price level, parent)
 ├─ payment_terms, customer_groups, price_levels   lists for customers (archived, never deleted)
@@ -214,7 +215,7 @@ Per organisation (lowest to highest):
 | Role | Can |
 | --- | --- |
 | viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices and purchase orders; print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices; add notes and files, and edit, delete or remove their own |
+| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices; add notes and files, and edit, delete or remove their own |
 | admin | + chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -230,7 +231,7 @@ Enforced by the database itself, not just the app:
   there are at least two lines and that debits = credits = the header totals.
 - Each line is either a debit or a credit, never both or neither.
 - Posted history is append-only: `ledger_journals`, `ledger_journal_lines`,
-  `inventory_movements`, FX revaluation runs and `audit_events` reject
+  `inventory_movements`, `stock_transfers`, FX revaluation runs and `audit_events` reject
   `UPDATE`, `DELETE` and `TRUNCATE`. Corrections are new rows.
 - Stock on hand and carrying value can't go negative unless the
   organisation allows negative stock, and that setting can't be turned off
@@ -512,6 +513,15 @@ Enforced by the app (and covered by tests):
   lines on bills and supplier credit notes must be on the inventory account
   and nothing else can be (bills, manual journals, corrections and stock
   movements are all checked), so stock equals the account to the cent.
+- Stock transfers (TR1-TR6, `src/lib/inventory/transfers.ts`): the planner
+  takes the quantity out of the from-location as an issue (average,
+  negative stock setting, backdating check) and into the to-location at the
+  same value, refusing a to-location below zero. One journal (origin
+  `inventory`) posts Dr inventory tagged with the to-location / Cr
+  inventory tagged with the from-location, since bills tag inventory lines
+  by Location; the account's total is unchanged. `stock_transfers` is
+  append-only, and a check ties `transfer_out`/`transfer_in` movements to
+  source type `transfer`.
 - Ledger and document reports (AGP, ATX, JR, GA, CST) store nothing and
   post nothing. Aged payables (`src/lib/reports/aged-payables.ts`) and
   customer statements (`customer-statements.ts`) read the documents as at a

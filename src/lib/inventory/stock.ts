@@ -103,7 +103,7 @@ const MOVEMENT_COLUMNS = `id, movement_type, movement_date, item_code, item_id, 
 
 type Planned = {
   key: string;
-  movementType: "receipt" | "issue" | "customer_return" | "supplier_return" | "reversal";
+  movementType: "receipt" | "issue" | "customer_return" | "supplier_return" | "reversal" | "transfer_out" | "transfer_in";
   itemId: string | null;
   itemCode: string;
   location: string | null;
@@ -123,7 +123,8 @@ export type DocumentSource =
   | "credit_note"
   | "credit_note_void"
   | "supplier_credit_note"
-  | "supplier_credit_note_void";
+  | "supplier_credit_note_void"
+  | "transfer";
 
 /**
  * Plans a document's stock movements against locked balances, then records
@@ -237,6 +238,27 @@ export class StockPlanner {
       { type: "receipt", quantity, value },
       label,
     );
+  }
+
+  /**
+   * Moves stock between two locations (TR1-TR5): out of `from` at its
+   * average (as an issue: exact, rounded once, the whole value when all of
+   * it goes, and the negative stock setting applies), then into `to` at that
+   * same value. Coming into a location that's below zero is refused, since
+   * only a bill costs a shortfall (ST10).
+   */
+  async transfer(item: { itemId: string; itemCode: string }, from: string, to: string, quantity: string, label: string): Promise<{ value: string }> {
+    const base = { itemId: item.itemId, itemCode: item.itemCode, originalMovementId: null, reversalOf: null, lineIndex: 0, offsetAccountId: this.ctx.inventoryAccountId };
+    const out = await this.apply({ ...base, key: "OUT", movementType: "transfer_out", location: from }, { type: "issue", quantity }, label);
+    const target = await this.balance(item.itemCode, to);
+    if (isNegative(dec(target.quantity))) {
+      throw new ValidationError(
+        `${label}: ${placeLabel(this.ctx, item.itemCode, to)} is below zero, so stock can only come in there on a bill, where the shortfall is costed (ST10).`,
+      );
+    }
+    const value = toPlainString(neg(dec(out.valueDelta)));
+    await this.apply({ ...base, key: "IN", movementType: "transfer_in", location: to }, { type: "receipt", quantity, value }, label);
+    return { value };
   }
 
   /** Restocks part of an earlier sale at that sale's cost (ST5, W8, W9). */

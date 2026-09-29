@@ -134,6 +134,7 @@ describeWithDatabase("ledger", () => {
         "ledger_fx_revaluation_runs",
         "ledger_journal_lines",
         "ledger_journals",
+        "stock_transfers",
       ].map((table) => [table, UPDATE_DELETE_TRUNCATE]),
     );
     await expect(inOrg((tx) => tx.query("truncate audit_events"))).rejects.toThrow(/append-only/);

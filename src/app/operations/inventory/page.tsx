@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useMemo, useState } from "react";
 import { AccountSelect, Money, RequireOrganisation, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { useItems } from "@/components/items";
 import { useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -11,6 +12,8 @@ import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import type { Movement, MovementType } from "@/lib/inventory/movements";
+import type { StockTransfer } from "@/lib/inventory/transfers";
+import type { ItemList } from "@/lib/items/service";
 import type { TrackingCategory } from "@/lib/tracking/service";
 
 const TYPES: Array<{ value: Exclude<MovementType, "reversal">; label: string; help: string }> = [
@@ -25,6 +28,8 @@ const TYPES: Array<{ value: Exclude<MovementType, "reversal">; label: string; he
 const TYPE_LABELS = {
   ...Object.fromEntries(TYPES.map((type) => [type.value, type.label])),
   reversal: "Void (reversed)",
+  transfer_out: "Transferred out",
+  transfer_in: "Transferred in",
 } as Record<MovementType, string>;
 
 const SOURCE_LINKS: Record<string, { label: string; href: (id: string) => string }> = {
@@ -60,7 +65,7 @@ function MovementForm({
   onPosted: (movement: Movement) => void;
 }) {
   const inventoryDefault = accounts.find((account) => account.systemKey === "inventory")?.code ?? "";
-  const [type, setType] = useState<Exclude<MovementType, "reversal">>("receipt");
+  const [type, setType] = useState<(typeof TYPES)[number]["value"]>("receipt");
   const [fields, setFields] = useState({
     movementDate: todayInBrowser(),
     itemCode: "",
@@ -129,7 +134,7 @@ function MovementForm({
           <select
             value={type}
             onChange={(event) => {
-              const next = event.target.value as Exclude<MovementType, "reversal">;
+              const next = event.target.value as (typeof TYPES)[number]["value"];
               setType(next);
               setOffsetAccount(defaultOffset(next, accounts));
             }}
@@ -222,12 +227,131 @@ function MovementForm({
   );
 }
 
+/**
+ * Moves stock between locations (TR1-TR6) at the from-location's average
+ * cost; the journal moves the value between the locations on the inventory
+ * account, so its total never changes.
+ */
+function TransferForm({
+  organisationId,
+  items,
+  locations,
+  onPosted,
+}: {
+  organisationId: string;
+  items: ItemList | null;
+  locations: TrackingCategory;
+  onPosted: (transfer: StockTransfer) => void;
+}) {
+  const [fields, setFields] = useState({ transferDate: todayInBrowser(), itemId: "", from: "", to: "", quantity: "", reference: "", description: "" });
+  const [key, setKey] = useState(() => newIdempotencyKey("transfer"));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const stockItems = (items?.items ?? []).filter((item) => item.itemType === "stock" && item.isActive);
+  const places = locations.values.filter((value) => value.isActive);
+
+  function set<K extends keyof typeof fields>(name: K, value: string) {
+    setFields((current) => ({ ...current, [name]: value }));
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ transfer: StockTransfer }>("/api/inventory/transfers", {
+        method: "POST",
+        body: {
+          organisationId,
+          source: "ui",
+          idempotencyKey: key,
+          transferDate: fields.transferDate,
+          itemId: fields.itemId,
+          fromLocationValueId: fields.from,
+          toLocationValueId: fields.to,
+          quantity: fields.quantity,
+          reference: fields.reference,
+          description: fields.description || undefined,
+        },
+      });
+      setKey(newIdempotencyKey("transfer"));
+      setFields((current) => ({ ...current, quantity: "", reference: "", description: "" }));
+      onPosted(result.transfer);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <div className={ui.grid3}>
+        <Field label="Item">
+          <select value={fields.itemId} onChange={(event) => set("itemId", event.target.value)} required>
+            <option value="">Choose a stock item</option>
+            {stockItems.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.code} · {item.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="From">
+          <select value={fields.from} onChange={(event) => set("from", event.target.value)} required>
+            <option value="">Choose a location</option>
+            {locations.values.map((value) => (
+              <option key={value.id} value={value.id}>
+                {value.path}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="To">
+          <select value={fields.to} onChange={(event) => set("to", event.target.value)} required>
+            <option value="">Choose a location</option>
+            {places
+              .filter((value) => value.id !== fields.from)
+              .map((value) => (
+                <option key={value.id} value={value.id}>
+                  {value.path}
+                </option>
+              ))}
+          </select>
+        </Field>
+      </div>
+      <div className={ui.grid4}>
+        <Field label="Date" hint="Not before either location's latest movement.">
+          <input type="date" value={fields.transferDate} onChange={(event) => set("transferDate", event.target.value)} required />
+        </Field>
+        <Field label="Quantity">
+          <input inputMode="decimal" value={fields.quantity} onChange={(event) => set("quantity", event.target.value)} required />
+        </Field>
+        <Field label="Reference">
+          <input value={fields.reference} onChange={(event) => set("reference", event.target.value)} maxLength={100} required />
+        </Field>
+        <Field label="Description">
+          <input value={fields.description} onChange={(event) => set("description", event.target.value)} maxLength={500} />
+        </Field>
+      </div>
+      <div className={ui.actions}>
+        <Button type="submit" disabled={busy}>
+          {busy ? "Transferring…" : "Transfer stock"}
+        </Button>
+        <span className={ui.muted}>Moves it at the average cost where it is now. The inventory account&apos;s total doesn&apos;t change.</span>
+      </div>
+    </form>
+  );
+}
+
 function Inventory({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const accounts = useAccounts(organisationId);
   const movements = useApiData<{ movements: Movement[] }>("/api/inventory/movements", { organisationId });
   const tracking = useTracking(organisationId);
   const locations = tracking.data?.categories.find((category) => category.kind === "location") ?? null;
+  const items = useItems(organisationId);
   const [message, setMessage] = useState<string | null>(null);
   const recentIssues = useMemo(
     () => (movements.data?.movements ?? []).filter((movement) => movement.movementType === "issue"),
@@ -239,7 +363,7 @@ function Inventory({ organisationId }: { organisationId: string }) {
       <Notice tone="info">
         Stock is costed at weighted average per item and location and always matches the inventory account to the cent. Stock
         items on bills, invoices and credit notes move stock on their own; record other movements (stocktakes, landed cost)
-        here. Movements dated before an item&apos;s latest movement aren&apos;t accepted yet, because every later sale would need
+        and transfers between locations here. Movements dated before an item&apos;s latest movement aren&apos;t accepted yet, because every later sale would need
         re-costing.
       </Notice>
       {message ? <Notice tone="success">{message}</Notice> : null}
@@ -261,6 +385,21 @@ function Inventory({ organisationId }: { organisationId: string }) {
           ) : (
             <p className={ui.muted}>{accounts.error ?? "Loading accounts…"}</p>
           )}
+        </Card>
+      ) : null}
+      {can("bookkeeper") && locations && locations.values.length > 1 ? (
+        <Card title="Transfer between locations">
+          <TransferForm
+            organisationId={organisationId}
+            items={items.data}
+            locations={locations}
+            onPosted={(transfer) => {
+              setMessage(
+                `Transferred ${formatQuantity(transfer.quantity)} ${transfer.itemCode} from ${transfer.fromLocationName} to ${transfer.toLocationName}: ${formatMoney(transfer.value)} (journal #${transfer.journalId}).`,
+              );
+              movements.reload();
+            }}
+          />
         </Card>
       ) : null}
       <Card title="Recent movements">

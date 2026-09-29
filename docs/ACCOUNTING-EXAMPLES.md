@@ -43,7 +43,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/quotes.test.ts` (QT1-QT8) and
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
   `tests/integration/printed-documents.test.ts` (PD1-PD8) and
-  `tests/integration/purchase-orders.test.ts` (PO1-PO9), all against
+  `tests/integration/purchase-orders.test.ts` (PO1-PO9) and
+  `tests/integration/stock-transfers.test.ts` (TR1-TR6), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -164,14 +165,13 @@ sales, 5000 cost of goods sold.
   supplier credit note for 2 Widgets @ 8.00 + GST posts Dr 2000 **18.40** /
   Cr 1400 **16.00** / Cr 2100 **2.40**, and Dr 1400 **3.00** / Cr 5000
   **3.00** (they were carried at 6.50 each), leaving 10 worth 65.00.
-- **Transfers between locations** aren't built yet (see below).
+- **Transfers between locations**: see "Stock transfers between locations"
+  (TR1-TR6, not yet approved by Jess).
 - **Stock equals the ledger**: across ST1-ST11 the stock report's total
   equals account 1400 on the trial balance, to the cent (tested).
 
 ### Not supported yet (refused rather than guessed)
 
-- **Transfers between locations**: not built. Move stock with a stocktake
-  adjustment out of one location and into another, at a cost you give.
 - **Voiding a bill or sales credit note whose stock has moved since**:
   refused (it needs later movements re-costed).
 - **Credit notes returning stock without the invoice it was sold on**:
@@ -2839,3 +2839,83 @@ GST). No locations.
 - New purchase orders start with the organisation's postal address as the
   delivery address. Would a separate "delivery address" setting (a shop or
   warehouse) be better?
+
+## Stock transfers between locations (examples not yet approved by Jess)
+
+Written overnight from NetSuite's inventory transfers and the weighted
+average rules already approved (W1-W12, ST1-ST12); Jess hasn't approved
+them yet. A transfer moves a quantity of a **stock item** (in its base
+unit) from one location to another on a date:
+
+- It leaves the **from** location at that location's weighted average,
+  exactly as stock going out does (W1-W4): quantity x value / quantity on
+  hand, rounded once to cents, and the **whole remaining value** when
+  everything left there is moved. It arrives at the **to** location at that
+  same value, so the to-location's average becomes a mix of the two.
+- The inventory account's **total never changes**, and nothing goes to cost
+  of sales. Because bills tag their inventory lines with the line's
+  Location (ST1), the inventory account does carry Location tags, so a
+  transfer posts one journal on its date that moves the value between the
+  locations: **Dr 1400 tagged with the to-location / Cr 1400 tagged with the
+  from-location**. Its two stock movements ("transferred out" and
+  "transferred in") point at that journal and at the transfer. (Cost of
+  sales lines on 1400 aren't tagged, ST2, so 1400 by Location in the ledger
+  doesn't yet equal stock by location; that's a question for Jess below.)
+- The **negative stock** setting applies to the from-location as it does to
+  sales (ST9-ST11). Stock can't come into a location that's **below zero**
+  by transfer, since only a bill costs a shortfall (ST10).
+- Transfers are never changed or deleted (the database refuses); a
+  transfer back undoes one. The period lock applies to the date.
+
+Setup: Advanced reporting on, Location values Dunedin, Auckland and
+Christchurch; WIDGET (stock, purchase price 5.00); negative stock off.
+
+- **TR1** After a bill of 10 WIDGET @ 5.00 into Dunedin (ST1: Dunedin 10
+  worth 50.00), transferring **4** from Dunedin to Auckland on 15 Jun 2026
+  moves **20.00**: journal on 15 Jun Dr 1400 [Auckland] **20.00** / Cr 1400
+  [Dunedin] **20.00**. Dunedin **6 worth 30.00**, Auckland **4 worth
+  20.00**; 1400 still **50.00**; no cost of sales. The movements show
+  Dunedin -4 (-20.00) and Auckland +4 (+20.00), both with that journal.
+- **TR2** A bill of 3 @ 3.3333 into Dunedin (10.00): transferring 1 moves
+  **3.33**, then transferring the other 2 moves the remaining **6.67**
+  (W3, W4). Dunedin 0 worth 0.00; Auckland 3 worth **10.00**.
+- **TR3** Dunedin 10 worth 50.00 and Auckland 10 worth 70.00: transferring
+  4 from Dunedin makes Auckland **14 worth 90.00**; selling 1 from Auckland
+  then costs **6.43** (90.00 / 14), leaving Auckland 13 worth 83.57.
+  Dunedin stays 6 worth 30.00.
+- **TR4** Dunedin 2 worth 10.00, negative stock off: transferring 3 is
+  **refused** ("Only 2 on hand"). With negative stock on it moves **15.00**
+  (3 at the 5.00 average), leaving Dunedin **-1 worth -5.00** and Auckland
+  3 worth 15.00; a transfer back into Dunedin while it's below zero is
+  refused.
+- **TR5** Refused, with nothing moved: the same location at both ends, a
+  quantity of 0, a non-stock item, a date before the item's latest
+  movement at either location (backdating, as W's rules), an archived
+  destination, a date in a locked period, and an organisation with no
+  locations set up.
+- **TR6** A retry with the same key returns the same transfer; the same
+  key with a different quantity is refused (409). After TR1's transfer the
+  bill into Dunedin can't be voided (its stock has moved since, ST4's
+  rule). A viewer can list transfers but not make one. Across TR1-TR6
+  stock equals account 1400 to the cent (tested).
+
+### Not supported yet (refused rather than guessed)
+
+- Voiding or editing a transfer: make a transfer back.
+- Transfers in transit (NetSuite's transfer orders with a ship and receive
+  step), several items in one transfer, and transfers in a unit other than
+  the item's base unit.
+- Backdated transfers (as for every stock movement).
+
+### Questions for Jess (stock transfers)
+
+- Transfers post a journal between locations on 1400 (Dr to-location / Cr
+  from-location) because bills tag 1400 by Location. Cost of sales lines
+  on 1400 aren't tagged by location (ST2), so 1400 filtered by Location in
+  the ledger won't equal the stock report by location. Should all 1400
+  lines carry the location (a change to ST2's journals), or should
+  transfers post nothing and stock by location live only in the stock
+  report?
+- Should a transfer into a location that's below zero be allowed (filling
+  the shortfall at the transferred cost, with the difference to cost of
+  sales like ST10), rather than refused?
