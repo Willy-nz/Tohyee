@@ -189,7 +189,19 @@ that something happened.
   line. Each organisation sets up its own Akahu personal app (with its own
   bank logins) and an organisation admin enters its tokens, which are checked
   with Akahu and stored encrypted. See examples BK1-BK16.
-- **Advanced (ERP) features** (an organisation setting, off by default) with
+- **Modules**: Accounting and Tax are always on; the **CRM** and
+  **Advanced reporting** are switched on per organisation in Settings, and
+  their menus and screens show only while on (MOD1).
+- **CRM** (after [Twenty](https://github.com/twentyhq/twenty), built in):
+  companies are the contacts, which can now also be **prospects**; **people**
+  at each company; **opportunities** with Twenty's stages (plus Lost) on a
+  drag-and-drop pipeline board, where a won one makes its draft invoice in
+  one click (and makes a prospect a customer); **tasks** with due dates and
+  assignees; logged **calls, meetings and notes**; and a **timeline** per
+  company that also shows its invoices, credit notes, bills and payments.
+  People, opportunities, tasks and activities are never deleted (CRM1-CRM9).
+  Email and calendar sync (Gmail and Microsoft 365) comes next.
+- **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never
   delete), and each optionally required on income and expense lines before

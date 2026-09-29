@@ -29,7 +29,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/custom-reports.test.ts` (CR1-CR10) and
   `tests/integration/tracking.test.ts` (TC1-TC10) and
   `tests/integration/custom-fields.test.ts` (CS1-CS3, CF1-CF10) and
-  `tests/integration/salespeople.test.ts` (SR1-SR8), all against a real
+  `tests/integration/salespeople.test.ts` (SR1-SR8) and
+  `tests/integration/crm.test.ts` (MOD1, CRM1-CRM9), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -1629,6 +1630,88 @@ with default salesperson Aroha; customer Rata Ltd with none; GST 15%.
   her.
 - **SR8** The June report's Aroha row lists invoice 1 (100.00) and the
   credit note (20.00).
+
+## Modules and the CRM
+
+Decided with the owner (29 Sep 2026): Tohyee has four modules: **Accounting**
+and **Tax** (always on), **CRM** and **Advanced reporting** (each switched on
+per organisation in Settings). Advanced reporting is the existing
+"advanced features" switch: tracking categories and segments, custom fields,
+salespeople and their reports. The CRM follows
+[Twenty](https://github.com/twentyhq/twenty) (AGPL-3.0, the same licence as
+Tohyee): its companies, people, opportunities, tasks, notes and timeline,
+built into Tohyee rather than run alongside it.
+
+- **MOD1** A new organisation has the CRM and Advanced reporting off. Turning
+  either on or off is recorded in the history. With the CRM off its menu and
+  screens are hidden and its commands are refused ("The CRM is off"); what
+  was entered is kept.
+
+**Companies** are Tohyee's contacts, so the CRM and the accounts share one
+list. As well as customer and supplier, a contact can be a **prospect**
+(someone you hope to sell to). A contact must be at least one of the three;
+a prospect-only contact can't be put on an invoice, bill or credit note
+until it's marked as a customer, and only the CRM can make one.
+
+**People** work at a company (or at none): first and last name, job title,
+email and phone. People are archived, never deleted.
+
+**Opportunities** (deals) have a name, a company, a point of contact (one of
+its people), an owner (a member of the organisation), an amount excluding
+GST, an expected close date and a **stage**: New, Screening, Meeting,
+Proposal, Won or Lost (Twenty's stages, with its "Customer" called Won, and
+Lost added). Stages change freely until an opportunity has made an invoice.
+A **won opportunity can make a draft invoice** for its company: one line with
+the opportunity's name and amount, the first active revenue account and the
+standard GST code, dated today and due in 20 days, which is then edited and
+approved like any other. Making it marks a prospect as a customer too. An
+opportunity makes at most one invoice.
+
+**Tasks** have a title, optional details, a due date, an assignee (a
+member), a status (To do, In progress, Done) and can be about a company, a
+person or an opportunity. **Activities** record a call, a meeting or a note
+on a company, person or opportunity, with when it happened. Tasks and
+activities are edited but never deleted (a task is marked done; an activity
+can be corrected, and the change is in the history).
+
+A company's **timeline** lists, newest first: its activities, tasks,
+opportunities (created and stage changes), and its approved invoices, credit
+notes, customer payments, bills and supplier payments, each linking to it.
+
+None of the CRM posts anything except the draft invoice, which posts only
+when approved.
+
+- **CRM1** Adding Mānuka Vets as a prospect (not a customer or supplier)
+  works with the CRM on and is refused with it off; a draft invoice for it is
+  refused ("isn't marked as a customer"). A contact that's none of the three
+  is refused.
+- **CRM2** People: Aroha Ngata (Practice manager, aroha@manukavets.nz) at
+  Mānuka Vets. A person's company must be an existing contact; an email must
+  look like one. A person can't be deleted, only archived.
+- **CRM3** Opportunity "Memorial paw prints 2027" for Mānuka Vets, 2,400.00,
+  closing 2026-12-15, point of contact Aroha, owner Jess, stage New. The
+  point of contact must work at that company. The amount can't be negative.
+- **CRM4** Moving it New → Proposal → Lost → Proposal works and each move is
+  in the history (the timeline shows "Proposal → Lost").
+- **CRM5** Marking it Won and making the invoice: a draft invoice for Mānuka
+  Vets dated today, one line "Memorial paw prints 2027" 1 × 2,400.00 to 4000
+  with GST (15%), total **2,760.00**; Mānuka Vets is now a customer (still a
+  prospect too); nothing is posted until the draft is approved. Making the
+  invoice again returns the same invoice; an opportunity that isn't Won
+  can't make one; once it has an invoice its stage can't change.
+- **CRM6** Tasks: "Send sample kit" due 2026-10-01 for Jess about the
+  opportunity, To do → Done. The assignee must be a member of the
+  organisation. A task can't be deleted.
+- **CRM7** Activities: a call with Aroha on 2026-09-28 10:00 ("Talked about
+  pricing"), a meeting and a note on Mānuka Vets. An activity must be about
+  something (a company, person or opportunity).
+- **CRM8** Mānuka Vets' timeline after CRM3-CRM7 and approving the CRM5
+  invoice lists, newest first, the approved invoice, the task, the
+  activities and the opportunity's events, and the company's list shows 1
+  open task and the open pipeline total **0.00** (the only opportunity is
+  won; open means not Won or Lost).
+- **CRM9** The pipeline board groups open and closed opportunities by stage
+  with a total per stage (amounts excluding GST).
 
 ## Notes, files and history
 

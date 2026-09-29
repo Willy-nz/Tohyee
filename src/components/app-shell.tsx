@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, Suspense, useEffect, useId, useRef, useState } from "react";
+import { useModules } from "@/components/modules";
 import { ROLE_LABELS, type Role } from "@/lib/auth/roles";
 import styles from "./app-shell.module.css";
 import {
@@ -12,9 +13,11 @@ import {
   type WorkspaceUser,
 } from "./workspace";
 
-type MenuLink = { href: string; label: string; minRole?: Role };
+/** An optional module a menu or link belongs to (example MOD1); shown only while it's on. */
+type ModuleKey = "crm" | "reporting";
+type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
 type MenuGroup = { heading?: string; links: MenuLink[] };
-type Menu = { label: string; href?: string; groups: MenuGroup[] };
+type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey };
 
 /**
  * The accounting menus: Home, Sales, Purchases, Reporting, Accounting, Tax,
@@ -77,6 +80,7 @@ const MENUS: Menu[] = [
           { href: "/operations/reports?report=bs", label: "Balance sheet" },
           { href: "/operations/reports?report=tb", label: "Trial balance" },
           { href: "/operations/reports?report=stock", label: "Stock valuation" },
+          { href: "/operations/reports?report=sales", label: "Sales by salesperson", module: "reporting" },
         ],
       },
       {
@@ -107,9 +111,9 @@ const MENUS: Menu[] = [
         heading: "Settings",
         links: [
           { href: "/operations/settings", label: "Settings and locks", minRole: "admin" },
-          { href: "/operations/settings/tracking", label: "Tracking categories", minRole: "admin" },
-          { href: "/operations/settings/custom-fields", label: "Custom fields", minRole: "admin" },
-          { href: "/operations/settings/salespeople", label: "Salespeople", minRole: "admin" },
+          { href: "/operations/settings/tracking", label: "Tracking categories", minRole: "admin", module: "reporting" },
+          { href: "/operations/settings/custom-fields", label: "Custom fields", minRole: "admin", module: "reporting" },
+          { href: "/operations/settings/salespeople", label: "Salespeople", minRole: "admin", module: "reporting" },
           { href: "/operations/members", label: "People and roles", minRole: "admin" },
         ],
       },
@@ -138,6 +142,20 @@ const MENUS: Menu[] = [
       },
     ],
   },
+  {
+    label: "CRM",
+    module: "crm",
+    groups: [
+      {
+        links: [
+          { href: "/operations/crm/companies", label: "Companies" },
+          { href: "/operations/crm/people", label: "People" },
+          { href: "/operations/crm/pipeline", label: "Pipeline" },
+          { href: "/operations/crm/tasks", label: "Tasks" },
+        ],
+      },
+    ],
+  },
 ];
 
 /** The paths a menu covers, so its button shows as the current area. */
@@ -158,6 +176,7 @@ const AREAS: Record<string, string[]> = {
   ],
   Tax: ["/operations/gst-return", "/operations/tax"],
   Contacts: ["/operations/contacts"],
+  CRM: ["/operations/crm"],
 };
 
 function inArea(pathname: string, label: string): boolean {
@@ -178,11 +197,13 @@ function isCurrent(pathname: string, search: URLSearchParams, href: string): boo
 }
 
 function useVisibleMenus(): Menu[] {
-  const { can } = useWorkspace();
-  return MENUS.map((menu) => ({
+  const { can, current } = useWorkspace();
+  const modules = useModules(current?.id ?? null);
+  const moduleOn = (key: ModuleKey | undefined) => !key || Boolean(modules?.[key]);
+  return MENUS.filter((menu) => moduleOn(menu.module)).map((menu) => ({
     ...menu,
     groups: menu.groups
-      .map((group) => ({ ...group, links: group.links.filter((link) => !link.minRole || can(link.minRole)) }))
+      .map((group) => ({ ...group, links: group.links.filter((link) => (!link.minRole || can(link.minRole)) && moduleOn(link.module)) }))
       .filter((group) => group.links.length > 0),
   }));
 }

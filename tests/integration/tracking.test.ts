@@ -146,15 +146,15 @@ describeWithDatabase("tracking categories", () => {
       ["class", "Class", 0],
       ["location", "Location", 0],
     ]);
-    await expect(w.as((tx) => createTrackingValue(tx, { categoryId: w.department, name: "Retail" }))).rejects.toThrow(/Advanced features are off/);
+    await expect(w.as((tx) => createTrackingValue(tx, { categoryId: w.department, name: "Retail" }))).rejects.toThrow(/Advanced reporting is off/);
     await w.as((tx) => updateOrganisationSettings(tx, { advancedFeatures: true }));
     await w.add(w.department, "Retail");
     await w.add(w.department, "Wholesale");
     const tagged = (await w.draftInvoice([w.line("100.00", w.tags("Retail"))])).invoice;
     await w.as((tx) => updateOrganisationSettings(tx, { advancedFeatures: false }));
-    await expect(w.draftInvoice([w.line("100.00", w.tags("Retail"))])).rejects.toThrow(/advanced features are off/);
+    await expect(w.draftInvoice([w.line("100.00", w.tags("Retail"))])).rejects.toThrow(/advanced reporting is off/);
     // A draft tagged while it was on keeps its tags, but gets no new ones.
-    await expect(w.as((tx) => updateInvoice(tx, tagged.id, { lines: [w.line("100.00", w.tags("Wholesale"))] }))).rejects.toThrow(/advanced features are off/);
+    await expect(w.as((tx) => updateInvoice(tx, tagged.id, { lines: [w.line("100.00", w.tags("Wholesale"))] }))).rejects.toThrow(/advanced reporting is off/);
     await w.as((tx) => updateInvoice(tx, tagged.id, { lines: [w.line("120.00", w.tags("Retail"))] }));
     const kept = (await w.approve(tagged.id)).invoice;
     expect(await w.lines(kept.approvalJournalId!)).toContainEqual(["4000", "0.00", "120.00", w.tags("Retail")]);

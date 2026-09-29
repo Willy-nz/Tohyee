@@ -179,7 +179,7 @@ describeWithDatabase("salespeople", () => {
     const draft = await w.invoice(w.kobe.id, "10.00");
     await w.as((tx) => updateOrganisationSettings(tx, { advancedFeatures: false }));
     expect((await w.invoice(w.kobe.id, "10.00")).salespersonId).toBeNull();
-    await expect(w.invoice(w.kobe.id, "10.00", { salespersonId: w.aroha })).rejects.toThrow("Advanced features are off");
+    await expect(w.invoice(w.kobe.id, "10.00", { salespersonId: w.aroha })).rejects.toThrow("Advanced reporting is off");
     const edited = await w.as((tx) => updateInvoice(tx, draft.id, { reference: "PO 1" }));
     expect(edited.salespersonId).toBe(w.aroha);
     expect((await w.approve(draft.id)).salespersonId).toBe(w.aroha);

@@ -74,7 +74,7 @@ export async function getCustomFieldSetup(tx: OrgTx): Promise<CustomFieldSetup> 
 
 async function requireAdvanced(tx: OrgTx): Promise<void> {
   if (!(await advancedFeaturesOn(tx))) {
-    throw new ConflictError("Advanced features are off. Turn them on in Settings first.");
+    throw new ConflictError("Advanced reporting is off. Turn it on in Settings › Modules first.");
   }
 }
 
@@ -401,7 +401,7 @@ export function resolveCustomValues(
     if (normalised === null) continue;
     const already = kept.has(`${id}=${JSON.stringify(normalised)}`);
     if (!already) {
-      if (!ctx.advancedFeatures) throw new ValidationError(`${prefix}advanced features are off, so ${field.label} can't be set.`);
+      if (!ctx.advancedFeatures) throw new ValidationError(`${prefix}advanced reporting is off, so ${field.label} can't be set.`);
       if (!field.isActive) throw new ValidationError(`${prefix}${field.label} is archived.`);
       if (!field.usedOn.some((use) => options.uses.includes(use))) {
         throw new ValidationError(`${prefix}${field.label} isn't used on ${options.uses.map((use) => useLabel(options.record, use)).join(" or ")}.`);

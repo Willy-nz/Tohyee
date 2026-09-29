@@ -157,7 +157,7 @@ export function SalespeopleManager({ organisationId }: { organisationId: string 
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!loaded.data) return <p className={ui.muted}>Loading…</p>;
   const setup = current ?? loaded.data;
-  if (!setup.advancedFeatures) return <Notice tone="info">Advanced features are off. Turn them on in Settings to use salespeople.</Notice>;
+  if (!setup.advancedFeatures) return <Notice tone="info">Advanced reporting is off. Turn it on in Settings › Modules to use salespeople.</Notice>;
   if (!can("admin")) return <Notice tone="warning">Only organisation admins and owners can change salespeople.</Notice>;
   const saved = (next: SalespeopleSetup, text: string) => {
     setCurrent(next);

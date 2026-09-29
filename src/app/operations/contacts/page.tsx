@@ -6,6 +6,7 @@ import { type FormEvent, Suspense, useId, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { CustomFieldInputs, CustomValueCell, listColumns, startingValues, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
+import { useModules } from "@/components/modules";
 import { SalespersonField, useSalespeople } from "@/components/salespeople";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -27,6 +28,8 @@ type Draft = {
   customFields: CustomValues;
   /** "" for none. */
   defaultSalespersonId: string;
+  /** Only the CRM makes prospects (CRM1). */
+  isProspect: boolean;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -39,6 +42,7 @@ const EMPTY_DRAFT: Draft = {
   postalAddress: "",
   customFields: {},
   defaultSalespersonId: "",
+  isProspect: false,
 };
 
 function draftFrom(contact: Contact): Draft {
@@ -52,11 +56,16 @@ function draftFrom(contact: Contact): Draft {
     postalAddress: contact.postalAddress ?? "",
     customFields: contact.customFields,
     defaultSalespersonId: contact.defaultSalespersonId ?? "",
+    isProspect: contact.isProspect,
   };
 }
 
-function rolesOf(draft: { isCustomer: boolean; isSupplier: boolean }): CustomFieldUse[] {
-  return [...(draft.isCustomer ? (["customer"] as const) : []), ...(draft.isSupplier ? (["supplier"] as const) : [])];
+/** A prospect uses the customer fields, as on the server. */
+function rolesOf(draft: { isCustomer: boolean; isSupplier: boolean; isProspect?: boolean }): CustomFieldUse[] {
+  return [
+    ...(draft.isCustomer || draft.isProspect ? (["customer"] as const) : []),
+    ...(draft.isSupplier ? (["supplier"] as const) : []),
+  ];
 }
 
 /**
@@ -71,8 +80,11 @@ function valuesToSave(setup: CustomFieldSetup | null | undefined, draft: Draft, 
 }
 
 function kind(contact: Contact): string {
-  if (contact.isCustomer && contact.isSupplier) return "Customer and supplier";
-  return contact.isCustomer ? "Customer" : "Supplier";
+  const kinds = [contact.isCustomer ? "Customer" : null, contact.isSupplier ? "supplier" : null, contact.isProspect ? "prospect" : null].filter(
+    (entry): entry is string => entry !== null,
+  );
+  const text = kinds.length > 1 ? `${kinds.slice(0, -1).join(", ")} and ${kinds.at(-1)}` : (kinds[0] ?? "");
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function ContactForm({
@@ -80,6 +92,7 @@ function ContactForm({
   saved,
   customSetup,
   salespeople,
+  crm,
   submitLabel,
   onSubmit,
   onCancel,
@@ -89,6 +102,8 @@ function ContactForm({
   saved: CustomValues;
   customSetup: CustomFieldSetup | null | undefined;
   salespeople: SalespeopleSetup | null | undefined;
+  /** Whether the CRM is on, so a contact can be a prospect. */
+  crm: boolean;
   submitLabel: string;
   onSubmit: (draft: Draft) => Promise<void>;
   onCancel: () => void;
@@ -155,8 +170,18 @@ function ContactForm({
               />
               Supplier
             </label>
+            {crm || draft.isProspect ? (
+              <label className={ui.checkbox}>
+                <input
+                  type="checkbox"
+                  checked={draft.isProspect}
+                  onChange={(event) => setDraft({ ...draft, isProspect: event.target.checked })}
+                />
+                Prospect
+              </label>
+            ) : null}
           </span>
-          <span className={ui.fieldHint}>Tick one or both.</span>
+          <span className={ui.fieldHint}>{crm ? "Tick one or more. A prospect is someone you hope to sell to." : "Tick one or both."}</span>
         </div>
       </div>
       <div className={ui.grid3}>
@@ -240,6 +265,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const customSetup = useCustomFields(organisationId);
   const salespeople = useSalespeople(organisationId);
+  const crm = useModules(organisationId)?.crm ?? false;
   // Customers or suppliers only, from the Contacts menu (?type=).
   const type = useSearchParams().get("type");
   const columns = listColumns(customSetup.data, "contact", type === "customers" ? ["customer"] : type === "suppliers" ? ["supplier"] : ["customer", "supplier"]);
@@ -278,6 +304,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
             saved={{}}
             customSetup={customSetup.data}
             salespeople={salespeople.data}
+            crm={crm}
             submitLabel="Add contact"
             onCancel={() => setCreateKey(null)}
             onSubmit={async (draft) => {
@@ -300,6 +327,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
             saved={editing.customFields}
             customSetup={customSetup.data}
             salespeople={salespeople.data}
+            crm={crm}
             submitLabel="Save changes"
             onCancel={() => setEditing(null)}
             onSubmit={async (draft) => {
