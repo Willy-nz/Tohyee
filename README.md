@@ -1,83 +1,94 @@
 <p align="center">
-  <img src="assets/favicon.svg" alt="Tohyee" width="96" height="96" />
+  <img src="assets/logo.svg" alt="Tohyee" width="112" height="112" />
 </p>
 
 <h1 align="center">Tohyee</h1>
 
 <p align="center">
-  Self-hosted, open-source accounting for New Zealand organisations.
+  Free, open-source accounting for New Zealand that runs on your own computer.
 </p>
 
 <p align="center">
+  <a href="https://github.com/Willy-nz/Tohyee/releases/latest"><img src="https://img.shields.io/github/v/release/Willy-nz/Tohyee?label=download" alt="Latest release" /></a>
   <a href="https://github.com/Willy-nz/Tohyee/actions/workflows/ci.yml"><img src="https://github.com/Willy-nz/Tohyee/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-AGPL--3.0-blue" alt="Licence: AGPL-3.0" /></a>
 </p>
 
-One Tohyee server hosts many organisations, and **each organisation gets its
-own PostgreSQL database**, so each can be backed up, restored or moved on its
-own.
+<p align="center">
+  <a href="https://willy-nz.github.io/Tohyee/"><strong>Website</strong></a> ·
+  <a href="https://github.com/Willy-nz/Tohyee/releases/latest"><strong>Download</strong></a> ·
+  <a href="docs/FEATURES.md">Features</a> ·
+  <a href="https://github.com/Willy-nz/Tohyee/issues">Report a problem</a>
+</p>
 
-> **Status: early development.** The features below work and are covered by
-> tests, but Tohyee isn't ready for real bookkeeping yet. See
-> [docs/FEATURES.md](docs/FEATURES.md) for what's built and what's next.
+Tohyee keeps your books on a computer you control, like a media server at
+home, with no monthly fee. One Tohyee server can hold many organisations, and
+**each organisation gets its own PostgreSQL database**, so each can be backed
+up, restored or moved on its own.
+
+> **Status: early.** Everything listed below works and is covered by tests,
+> but Tohyee is new. Try it on a test organisation before you put real books
+> in it, and check your GST returns and reports before you rely on them.
+> Tohyee is free software provided as is, with no warranty (see the
+> [licence](LICENSE)).
+
+**Just want to use it?** Download `TohyeeSetup` from the
+[latest release](https://github.com/Willy-nz/Tohyee/releases/latest) and see
+[Running on a server](#running-on-a-server). Everything else here is for
+people working on the code.
 
 <p align="center">
   <img src="docs/screenshots/journal-editor.png" alt="Posting a journal in Tohyee" width="720" />
 </p>
 
-## What works today
+## What it does
 
-- **Organisations**, each in its own PostgreSQL database, created and repaired
-  by server admins.
-- **Logins and roles**: owner, admin, bookkeeper and viewer per organisation;
-  first-time setup, lockout after repeated failed sign-ins, and an admin CLI
-  for recovery.
-- **General ledger**: a starting NZ chart of accounts, manual journals,
-  corrections by reversal and replacement, and period locks. The database
-  itself refuses unbalanced journals and edits to posted history.
-- **Contacts**: customers and suppliers, archived rather than deleted.
-- **Sales invoices** with GST worked out per line (tax exclusive, tax
-  inclusive or no tax): drafts, approval that numbers the invoice
-  (`INV-0001`, …) and posts it to the ledger, and voiding that reverses it.
-- **Customer payments** against an approved invoice, into a bank account:
-  each one posts to the ledger, part payments are fine, and the invoice shows
-  what's still due. Paying more than what's due keeps the rest as an
-  overpayment, credit for the customer to apply to other invoices or refund.
-- **Sales credit notes**: drafts, approval that numbers them (`CN-0001`, …)
-  and posts them, credit applied to one or more of the customer's invoices,
-  unused credit kept on the credit note or refunded from a bank account, and
-  voiding.
-- **Supplier payments** against an approved bill, from a bank account: each
-  one posts to the ledger, part payments are fine, and the bill shows what's
-  still due.
-- **Supplier credit notes**: drafts carrying the supplier's credit note
-  number, approval that posts them, credit applied to one or more of the
-  supplier's bills, unused credit kept on the credit note or refunded by the
-  supplier into a bank account, and voiding.
-- **Bank accounts and credit cards** with reconciliation: import statements
-  (CSV, Excel, OFX, QIF, CAMT.053, MT940) or bring them in with an Akahu bank
-  feed (NZ banks, with history from a start date you choose), then reconcile
-  each line by matching, paying invoices or bills, spend or receive money
-  with GST, or a transfer. Bank rules fill in the usual ones.
-- **Stock**: receipts, sales, returns, stocktake adjustments and landed cost,
-  with weighted-average costing to the cent.
-- **Notes, files and history** on journals, invoices, bills, credit notes and
-  contacts: attach receipts and statements (stored in the organisation's own
-  database, so backups include them) and see who did what and when.
-- **Menus** like Xero's: Home, Sales, Purchases, Reporting, Accounting, Tax
-  and Contacts, and a ☰ menu on phones. **Home** shows each bank account
-  with what's left to reconcile, money owed to you, bills to pay and the next
-  GST return.
-- **Foreign-currency revaluation** of foreign-currency bank, asset and
-  liability accounts, reversed automatically the next day.
-- **Reports**: trial balance, profit and loss, balance sheet and stock
-  valuation, with a financial year end you choose (31 March by default).
-- **GST return** (GST101A, boxes 5-15) on the invoice, payments or hybrid
-  basis for 1, 2 or 6 months, worked out from documents (on the payments
-  basis, when they're paid, credited or refunded, split in proportion), with
-  the lines in each box, Box 9 and 13 adjustments, the IR546 adjustment
-  suggested after a change of basis, and "Mark as filed", which stores the
-  figures for good and shows if they've changed since.
+**Sales**
+- Quotes, invoices and credit notes, with GST worked out per line (tax
+  exclusive, inclusive or no tax); numbered on approval with no gaps, and
+  voided rather than deleted.
+- Repeating invoices, payment terms, customer payments (one or several
+  invoices at once), overpayments and refunds, and customer statements.
+- Products and services, price levels, salespeople, and print or save as PDF.
+
+**Purchases**
+- Bills, supplier credit notes, purchase orders billed in parts, paying one or
+  several bills at once, and expense claims.
+
+**Bank**
+- Bank and credit card accounts. Import statements (CSV, Excel, OFX, QIF,
+  CAMT.053, MT940) or use an Akahu bank feed for NZ banks. Reconcile each line by
+  matching, paying invoices or bills, spend or receive money, or a transfer.
+  Bank rules fill in the usual ones.
+
+**GST and reports**
+- GST return (GST101A, boxes 5-15) on the invoice, payments or hybrid basis,
+  with a GST audit report listing the documents behind every box.
+- Trial balance, profit and loss, balance sheet, account transactions, journal
+  report, aged receivables and payables, budgets with budget vs actual, and
+  custom reports with your own layout.
+
+**Accounting**
+- A starting NZ chart of accounts, manual journals, corrections by reversal,
+  and period locks. The database itself refuses unbalanced journals and edits
+  to posted history.
+- Stock at weighted-average cost per location, with transfers, stocktakes and
+  landed cost. A fixed asset register with depreciation runs and disposals.
+  Foreign-currency revaluation.
+- Departments, classes and locations on every line, custom fields and custom
+  segments, and projects with time tracking.
+
+**Everything else**
+- A built-in CRM (companies, people, a pipeline, tasks) with Gmail and
+  Microsoft 365 email and calendar sync.
+- Notes, files and history on transactions and contacts.
+- Logins with roles (owner, admin, bookkeeper, viewer) and two-step sign-in
+  for everyone.
+- Nightly encrypted backups, restore as a copy, and remote access.
+- Works on phones: a ☰ menu and line editors that stack.
+
+See [docs/FEATURES.md](docs/FEATURES.md) for the full list, what's
+deliberately not built, and what's next.
 
 <p align="center">
   <img src="docs/screenshots/balance-sheet.png" alt="Balance sheet report" width="620" />
@@ -263,4 +274,4 @@ four checks above must pass.
 
 ## Licence
 
-[GNU AGPL v3](LICENSE). The Tohyee icon is `assets/favicon.svg`.
+[GNU AGPL v3](LICENSE). The Tohyee logo (a Japanese Spitz) is `assets/logo.svg`.
