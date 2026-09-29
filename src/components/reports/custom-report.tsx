@@ -11,7 +11,7 @@ import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import { ACCOUNT_TYPES, type AccountType } from "@/lib/accounts/types";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import type { CustomReport, CustomReportView } from "@/lib/reports/custom";
 import {
   type ComputedBlock,
@@ -126,7 +126,7 @@ export function CustomReportList({ organisationId, view }: { organisationId: str
                   </td>
                   <td>{CUSTOM_REPORT_BASES[report.base]}</td>
                   <td>
-                    {formatDateTime(report.publishedAt ?? report.updatedAt)} · {report.publishedByEmail ?? report.updatedByEmail ?? ""}
+                    {formatDateTime(report.publishedAt ?? report.updatedAt)} · {personName(report, "publishedBy") ?? personName(report, "updatedBy") ?? ""}
                   </td>
                   {view === "archived" ? <td>{report.kind === "published" ? <Badge tone="blue">Published</Badge> : <Badge>Draft</Badge>}</td> : null}
                 </tr>
@@ -845,7 +845,7 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
       {report.kind === "published" ? (
         <div data-print="hide">
           <Notice tone="info">
-            A frozen copy, published {formatDateTime(report.publishedAt)} by {report.publishedByEmail}. Its figures are as they were then and never change.
+            A frozen copy, published {formatDateTime(report.publishedAt)} by {personName(report, "publishedBy")}. Its figures are as they were then and never change.
             {report.publishedFromId ? (
               <>
                 {" "}

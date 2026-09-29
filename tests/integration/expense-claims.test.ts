@@ -66,7 +66,7 @@ describeWithDatabase("expense claims", () => {
     server = await startTestServer();
     owner = await createTestUser("ec-jess@example.com", { serverAdmin: true });
     aroha = await createTestUser("ec-aroha@example.com");
-    sam = await createTestUser("ec-sam@example.com");
+    sam = await createTestUser("ec-sam@example.com", { displayName: "Sam Rewi" });
     viewer = await createTestUser("ec-viewer@example.com");
   });
 
@@ -141,8 +141,8 @@ describeWithDatabase("expense claims", () => {
     await expect(one({ taxCode: "NOPE" })).rejects.toThrow("no tax code NOPE");
     await expect(one({ supplierName: "" })).rejects.toThrow("supplier is required");
     // Only the claimant changes or deletes their draft.
-    await expect(w.asAroha((tx) => updateExpenseClaim(tx, claim.id, { description: "Mine now" }))).rejects.toThrow(`Only ${sam.email}`);
-    await expect(w.asAroha((tx) => deleteExpenseClaim(tx, claim.id))).rejects.toThrow(`Only ${sam.email}`);
+    await expect(w.asAroha((tx) => updateExpenseClaim(tx, claim.id, { description: "Mine now" }))).rejects.toThrow("Only Sam Rewi, who made this claim");
+    await expect(w.asAroha((tx) => deleteExpenseClaim(tx, claim.id))).rejects.toThrow("Only Sam Rewi, who made this claim");
     const edited = await w.asSam((tx) => updateExpenseClaim(tx, claim.id, { receipts: RECEIPTS.slice(0, 2) }));
     expect([edited.total, edited.taxTotal]).toEqual(["92.00", "12.00"]);
     await w.asSam((tx) => deleteExpenseClaim(tx, claim.id));
@@ -178,6 +178,9 @@ describeWithDatabase("expense claims", () => {
     expect([done.status, done.claimDate, done.approvedByEmail, done.amountDue, done.paidStatus]).toEqual(["approved", "2026-06-10", aroha.email, "100.00", "unpaid"]);
     const posted = await w.as((tx) => getJournal(tx, done.approvalJournalId!));
     expect([posted.postingDate, posted.reference, posted.origin]).toEqual(["2026-06-10", `CLAIM-${claim.id}`, "expense_claim"]);
+    // The claimant is named, not shown by email.
+    expect(posted.description).toBe(`Expense claim CLAIM-${claim.id} from Sam Rewi`);
+    expect(posted.lines.map((line) => line.description)).toEqual(["Sam Rewi", "Sam Rewi", "Sam Rewi", "GST", "Sam Rewi"]);
     expect(await w.journal(done.approvalJournalId!)).toEqual([
       ["6120", "60.00", "0.00"],
       ["6140", "20.00", "0.00"],
@@ -205,6 +208,7 @@ describeWithDatabase("expense claims", () => {
       ["2010", "100.00", "0.00"],
       ["1000", "0.00", "100.00"],
     ]);
+    expect((await w.as((tx) => getJournal(tx, payment.journalId))).description).toBe(`Payment of expense claim CLAIM-${claim.id} to Sam Rewi`);
     const payable = await w.as((tx) =>
       tx.query<{ balance: string }>(
         "select coalesce(sum(l.credit_amount - l.debit_amount), 0)::text as balance from ledger_journal_lines l join accounts a on a.id = l.account_id where a.code = '2010'",
@@ -351,16 +355,16 @@ describeWithDatabase("expense claims", () => {
     expect([invoiceBasis.boxes.box11, invoiceBasis.boxes.box12]).toEqual(["92.00", "12.00"]);
     const counted = invoiceBasis.lines.filter((line) => line.documentType === "expense_claim");
     expect(counted.map((line) => [line.eventType, line.description, line.amount, line.gst, line.boxes, line.contactId, line.contactName])).toEqual([
-      ["expense_claim_approved", "Z Energy: Fuel to Dunedin market", "69.00", "9.00", ["11"], null, sam.email],
-      ["expense_claim_approved", "Paper Plus: Printer paper", "23.00", "3.00", ["11"], null, sam.email],
-      ["expense_claim_approved", "Farmers market: Parking", "8.00", "0.00", [], null, sam.email],
+      ["expense_claim_approved", "Z Energy: Fuel to Dunedin market", "69.00", "9.00", ["11"], null, "Sam Rewi"],
+      ["expense_claim_approved", "Paper Plus: Printer paper", "23.00", "3.00", ["11"], null, "Sam Rewi"],
+      ["expense_claim_approved", "Farmers market: Parking", "8.00", "0.00", [], null, "Sam Rewi"],
     ]);
     // Filed, its counted lines keep the claimant and no contact.
     const filed = await w.as((tx) => fileGstReturn(tx, { idempotencyKey: key("file"), ...june }));
     const stored = await w.as((tx) => getGstReturn(tx, filed.gstReturn.id));
     expect(stored.lines.filter((line) => line.documentType === "expense_claim").map((line) => [line.amount, line.contactId, line.contactName])).toEqual([
-      ["69.00", null, sam.email],
-      ["23.00", null, sam.email],
+      ["69.00", null, "Sam Rewi"],
+      ["23.00", null, "Sam Rewi"],
     ]);
     const july = { periodStart: "2026-07-01", periodEnd: "2026-07-31" };
     await w.as((tx) => updateOrganisationSettings(tx, { gstBasis: "payments" }));

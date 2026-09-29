@@ -10,7 +10,7 @@ import { useWorkspace } from "@/components/workspace";
 import { BUDGET_LIMITS, fillSameAmount, QUICK_FILL_METHODS, type QuickFillMethod } from "@/lib/budgets/fill";
 import type { Budget, BudgetGrid } from "@/lib/budgets/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import type { BudgetVsActual, BudgetVsActualGroup, VarianceFigures } from "@/lib/reports/budget-vs-actual";
 
 /**
@@ -95,7 +95,7 @@ export function BudgetList({ organisationId }: { organisationId: string }) {
                     <td data-label="For">{budget.trackingLabel ?? "Everything"}</td>
                     <td data-label="Last changed" className={ui.muted}>
                       {formatDateTime(budget.updatedAt)}
-                      {budget.updatedByEmail ? ` by ${budget.updatedByEmail}` : ""}
+                      {personName(budget, "updatedBy") ? ` by ${personName(budget, "updatedBy")}` : ""}
                     </td>
                   </tr>
                 ))}
@@ -308,7 +308,7 @@ export function BudgetEditor({ organisationId, budgetId }: { organisationId: str
       <Card
         title={`${budget.name}${trackingSuffix(budget)}`}
         description={`Amounts in ${data.currencyCode}, in each account's natural direction: income and costs both as positive amounts.${
-          budget.archivedAt ? ` Archived ${formatDateTime(budget.archivedAt)} by ${budget.archivedByEmail}.` : ""
+          budget.archivedAt ? ` Archived ${formatDateTime(budget.archivedAt)} by ${personName(budget, "archivedBy")}.` : ""
         }`}
         actions={
           <div className={ui.inlineForm}>
@@ -400,7 +400,7 @@ export function BudgetEditor({ organisationId, budgetId }: { organisationId: str
         ) : null}
         <p className={ui.muted}>
           Last changed {formatDateTime(budget.updatedAt)}
-          {budget.updatedByEmail ? ` by ${budget.updatedByEmail}` : ""}. Every change is kept in the history with the amounts before and after.{" "}
+          {personName(budget, "updatedBy") ? ` by ${personName(budget, "updatedBy")}` : ""}. Every change is kept in the history with the amounts before and after.{" "}
           <Link href={`/operations/reports?report=budget&budget=${budget.id}`}>Budget vs actual</Link>
         </p>
       </Card>

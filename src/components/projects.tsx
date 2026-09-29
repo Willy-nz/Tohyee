@@ -9,7 +9,7 @@ import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/component
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
-import { formatDate, todayInBrowser } from "@/lib/format";
+import { formatDate, todayInBrowser, personName } from "@/lib/format";
 import { CHARGE_TYPE_LABELS, CHARGE_TYPES, type ChargeType, formatMinutes, minutesAsHours, timeAmount } from "@/lib/projects/amounts";
 import type {
   BilledOn,
@@ -467,7 +467,7 @@ function TimeCard({ organisationId, project, onChanged }: { organisationId: stri
               {entries.map((entry) => (
                 <tr key={entry.id}>
                   <td data-label="Date">{formatDate(entry.entryDate)}</td>
-                  <td data-label="Who">{entry.userEmail}</td>
+                  <td data-label="Who">{personName(entry, "user")}</td>
                   <td data-label="Task">{entry.taskName}</td>
                   <td data-label="Description" className={ui.muted}>
                     {entry.description}
@@ -716,7 +716,7 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
               return row(
                 `time:${entry.id}`,
                 `${entry.taskName}: ${formatMinutes(entry.minutes)}`,
-                `${formatDate(entry.entryDate)} · ${entry.userEmail} · ${minutesAsHours(entry.minutes)} h at ${task?.rate ?? ""}`,
+                `${formatDate(entry.entryDate)} · ${personName(entry, "user")} · ${minutesAsHours(entry.minutes)} h at ${task?.rate ?? ""}`,
                 timeAmount(entry.minutes, task?.rate ?? "0"),
               );
             })}
@@ -1181,7 +1181,7 @@ export function TimeReportView({ organisationId }: { organisationId: string }) {
                 {data.entries.map((entry) => (
                   <tr key={entry.id}>
                     <td data-label="Date">{formatDate(entry.entryDate)}</td>
-                    <td data-label="Who">{entry.userEmail}</td>
+                    <td data-label="Who">{personName(entry, "user")}</td>
                     <td data-label="Project">
                       <Link href={`/operations/projects/${entry.projectId}`}>{entry.projectName}</Link>
                     </td>

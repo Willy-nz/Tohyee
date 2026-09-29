@@ -11,7 +11,7 @@ import { STATEMENT_FORMAT_LABELS } from "@/lib/bank/formats/common";
 import { LAYOUT_FIELD_LABELS, LAYOUT_FIELDS, type TableLayout } from "@/lib/bank/formats/table";
 import type { ImportPreview, StatementImport } from "@/lib/bank/imports";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, personName } from "@/lib/format";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = ".csv,.txt,.xlsx,.ofx,.qfx,.qbo,.qif,.xml,.sta,.mt940,.940";
@@ -196,7 +196,7 @@ function ImportHistory({
               <tr key={entry.id}>
                 <td>
                   {formatDateTime(entry.createdAt)}
-                  <div className={ui.muted}>{entry.createdByEmail}</div>
+                  <div className={ui.muted}>{personName(entry, "createdBy")}</div>
                 </td>
                 <td>
                   {entry.fileName ?? STATEMENT_FORMAT_LABELS[entry.fileFormat]}

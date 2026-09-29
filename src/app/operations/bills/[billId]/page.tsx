@@ -14,7 +14,7 @@ import { Badge, Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "
 import { useWorkspace } from "@/components/workspace";
 import type { Bill } from "@/lib/bills/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser, personName } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { SupplierCreditNoteApplication } from "@/lib/supplier-credit-notes/applications";
 import type { SupplierCreditNoteSummary } from "@/lib/supplier-credit-notes/service";
@@ -349,18 +349,18 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           ) : null}
         </div>
         <p className={ui.muted}>
-          Bill #{bill.id}, saved by {bill.createdByEmail ?? "unknown"} on {formatDateTime(bill.createdAt)}.
+          Bill #{bill.id}, saved by {personName(bill, "createdBy") ?? "unknown"} on {formatDateTime(bill.createdAt)}.
           {bill.approvalJournalId ? (
             <>
               {" "}
-              Approved by {bill.approvedByEmail ?? "unknown"} on {formatDateTime(bill.approvedAt)} and posted as{" "}
+              Approved by {personName(bill, "approvedBy") ?? "unknown"} on {formatDateTime(bill.approvedAt)} and posted as{" "}
               <Link href={journalHref(bill.approvalJournalId)}>journal #{bill.approvalJournalId}</Link>.
             </>
           ) : null}
           {bill.voidJournalId ? (
             <>
               {" "}
-              Voided by {bill.voidedByEmail ?? "unknown"} on {formatDateTime(bill.voidedAt)}, reversed on{" "}
+              Voided by {personName(bill, "voidedBy") ?? "unknown"} on {formatDateTime(bill.voidedAt)}, reversed on{" "}
               {formatDate(bill.voidDate)} by <Link href={journalHref(bill.voidJournalId)}>journal #{bill.voidJournalId}</Link>.
             </>
           ) : null}

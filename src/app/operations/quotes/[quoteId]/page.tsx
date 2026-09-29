@@ -11,7 +11,7 @@ import { QuoteStatusBadge } from "@/components/quotes/quote-editor";
 import { Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import type { Invoice } from "@/lib/invoices/service";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { Quote } from "@/lib/quotes/service";
@@ -214,9 +214,9 @@ function QuoteView({ organisationId, quoteId }: { organisationId: string; quoteI
         <CustomValuesText setup={customSetup.data} values={quote.customFields} />
         <SalesLinesTable organisationId={organisationId} document={quote} />
         <p className={ui.muted}>
-          Saved by {quote.createdByEmail ?? "unknown"} on {formatDateTime(quote.createdAt)}.
-          {quote.finalisedAt ? ` Finalised by ${quote.finalisedByEmail ?? "unknown"} on ${formatDateTime(quote.finalisedAt)}.` : ""}
-          {quote.closedAt ? ` ${quote.status === "accepted" ? "Accepted" : "Declined"} by ${quote.closedByEmail ?? "unknown"} on ${formatDateTime(quote.closedAt)}.` : ""}
+          Saved by {personName(quote, "createdBy") ?? "unknown"} on {formatDateTime(quote.createdAt)}.
+          {quote.finalisedAt ? ` Finalised by ${personName(quote, "finalisedBy") ?? "unknown"} on ${formatDateTime(quote.finalisedAt)}.` : ""}
+          {quote.closedAt ? ` ${quote.status === "accepted" ? "Accepted" : "Declined"} by ${personName(quote, "closedBy") ?? "unknown"} on ${formatDateTime(quote.closedAt)}.` : ""}
         </p>
       </Card>
       {can("bookkeeper") ? <QuoteActions key={quote.status} organisationId={organisationId} quote={quote} onChanged={onChanged} /> : null}

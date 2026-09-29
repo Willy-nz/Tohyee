@@ -13,7 +13,7 @@ import { useWorkspace } from "@/components/workspace";
 import type { BankAccount, StatementLine } from "@/lib/bank/accounts";
 import type { BankTransaction, BankTransfer } from "@/lib/bank/transactions";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 
 const PAGE_SIZE = 100;
 
@@ -183,7 +183,7 @@ export function StatementLinesPanel({
                             </span>
                           ))}
                           <span className={ui.muted}>
-                            {line.reconciliation.createdByEmail ?? "Someone"}, {formatDateTime(line.reconciliation.createdAt)}
+                            {personName(line.reconciliation, "createdBy") ?? "Someone"}, {formatDateTime(line.reconciliation.createdAt)}
                           </span>
                         </div>
                       ) : null}

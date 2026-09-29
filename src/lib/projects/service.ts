@@ -9,6 +9,7 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { createInvoice, getInvoice, type Invoice } from "@/lib/invoices/service";
 import { add, cmp, dec, parseDecimalInput, sub, toFixedString, toPlainString, ZERO_DECIMAL, type Decimal } from "@/lib/money/decimal";
 import { listMembers } from "@/lib/organisations/members";
+import { personName } from "@/lib/people/names";
 import {
   CHARGE_TYPES,
   chargeWithMarkup,
@@ -328,19 +329,28 @@ type InvoiceRow = {
   created_at: string;
 };
 
+/**
+ * A source line's document, e.g. "Bill PS-300", or "Expense claim CLAIM-3
+ * (Aroha Ngata)" with the claimant's name (their email if they can't be found).
+ */
+function sourceLabel(tx: OrgTx, row: { document_label: string; person_email: string | null }): string {
+  return row.person_email ? `${row.document_label} (${personName(tx, row.person_email)})` : row.document_label;
+}
+
 /** Every line that can be (or is) a project expense, with its document. */
 const SOURCES = `(
   select 'bill_line'::text as source_type, l.id as line_id, b.id as document_id,
          'Bill ' || b.supplier_invoice_number as document_label, c.name as contact_name, b.bill_date as date,
-         l.description, a.code as account_code, a.account_type, l.net_amount, b.status = 'approved' as usable
+         l.description, a.code as account_code, a.account_type, l.net_amount, b.status = 'approved' as usable,
+         null::text as person_email
     from bill_lines l join bills b on b.id = l.bill_id join contacts c on c.id = b.contact_id join accounts a on a.id = l.account_id
   union all
-  select 'expense_claim_receipt', r.id, x.id, 'Expense claim CLAIM-' || x.id || ' (' || x.claimant_email || ')', r.supplier_name,
-         r.receipt_date, r.description, a.code, a.account_type, r.net_amount, x.status = 'approved'
+  select 'expense_claim_receipt', r.id, x.id, 'Expense claim CLAIM-' || x.id, r.supplier_name,
+         r.receipt_date, r.description, a.code, a.account_type, r.net_amount, x.status = 'approved', x.claimant_email
     from expense_claim_receipts r join expense_claims x on x.id = r.claim_id join accounts a on a.id = r.account_id
   union all
   select 'bank_transaction_line', l.id, t.id, 'Spend money' || coalesce(' ' || t.reference, ''), c.name, t.transaction_date,
-         l.description, a.code, a.account_type, l.net_amount, t.kind = 'spend' and t.status = 'posted'
+         l.description, a.code, a.account_type, l.net_amount, t.kind = 'spend' and t.status = 'posted', null
     from bank_transaction_lines l join bank_transactions t on t.id = l.bank_transaction_id
     join contacts c on c.id = t.contact_id join accounts a on a.id = l.account_id
 )`;
@@ -369,8 +379,8 @@ async function loadEntries(tx: OrgTx, where: string, values: unknown[]): Promise
 }
 
 async function loadExpenses(tx: OrgTx, projectIds: string[]): Promise<ExpenseRow[]> {
-  const result = await tx.query<ExpenseRow>(
-    `select x.id::text, x.project_id::text, x.source_type, src.line_id::text, src.document_id::text, src.document_label, src.contact_name,
+  const result = await tx.query<ExpenseRow & { person_email: string | null }>(
+    `select x.id::text, x.project_id::text, x.source_type, src.line_id::text, src.document_id::text, src.document_label, src.person_email, src.contact_name,
             src.date, src.description, src.account_code, x.cost, x.chargeable, x.markup_percent, x.status, x.written_off_at,
             ${BILLED_COLUMNS("expense", "x.id")}
        from project_expenses x
@@ -380,7 +390,7 @@ async function loadExpenses(tx: OrgTx, projectIds: string[]): Promise<ExpenseRow
       order by x.id`,
     [projectIds],
   );
-  return result.rows;
+  return result.rows.map(({ person_email, ...row }) => ({ ...row, document_label: sourceLabel(tx, { document_label: row.document_label, person_email }) }));
 }
 
 async function loadInvoices(tx: OrgTx, projectIds: string[]): Promise<InvoiceRow[]> {
@@ -906,7 +916,7 @@ async function lockEntryForChange(tx: OrgTx, role: Role, idInput: unknown): Prom
   const project = await lockProject(tx, found.rows[0].project_id);
   const entry = await getTimeEntry(tx, id);
   if (entry.userId !== tx.actor.userId && !roleAtLeast(role, "admin")) {
-    throw new ForbiddenError(`Only ${entry.userEmail} or an admin can change this time entry.`);
+    throw new ForbiddenError(`Only ${personName(tx, entry.userEmail)} or an admin can change this time entry.`);
   }
   assertOpen(project);
   if (entry.status === "removed") throw new ConflictError("This time entry has been removed.");
@@ -975,20 +985,21 @@ export async function listExpenseSources(tx: OrgTx, filters: { search?: unknown 
     line_id: string;
     document_id: string;
     document_label: string;
+    person_email: string | null;
     contact_name: string;
     date: string;
     description: string;
     account_code: string;
     net_amount: string;
   }>(
-    `select src.source_type, src.line_id::text, src.document_id::text, src.document_label, src.contact_name, src.date, src.description,
+    `select src.source_type, src.line_id::text, src.document_id::text, src.document_label, src.person_email, src.contact_name, src.date, src.description,
             src.account_code, src.net_amount
        from ${SOURCES} src
       where src.usable and src.account_type <> 'inventory' and src.net_amount > 0
         and not exists (select 1 from project_expenses x where x.status = 'active' and x.source_type = src.source_type
                           and coalesce(x.bill_line_id, x.expense_claim_receipt_id, x.bank_transaction_line_id) = src.line_id)
         and ($1::text is null or src.description ilike '%' || $1 || '%' or src.contact_name ilike '%' || $1 || '%'
-             or src.document_label ilike '%' || $1 || '%')
+             or src.document_label ilike '%' || $1 || '%' or src.person_email ilike '%' || $1 || '%')
       order by src.date desc, src.line_id desc
       limit 200`,
     [search],
@@ -997,7 +1008,7 @@ export async function listExpenseSources(tx: OrgTx, filters: { search?: unknown 
     sourceType: row.source_type,
     lineId: row.line_id,
     documentId: row.document_id,
-    documentLabel: row.document_label,
+    documentLabel: sourceLabel(tx, row),
     contactName: row.contact_name,
     date: row.date,
     description: row.description,
@@ -1385,7 +1396,7 @@ export async function timeReport(tx: OrgTx, filters: { from?: unknown; to?: unkn
     from,
     to,
     entries,
-    byPerson: group((entry) => entry.userId, (entry) => entry.userEmail),
+    byPerson: group((entry) => entry.userId, (entry) => personName(tx, entry.userEmail)),
     byProject: group((entry) => entry.projectId, (entry) => entry.projectName),
     byTask: group((entry) => entry.taskId, (entry) => `${entry.projectName} › ${entry.taskName}`),
     totalMinutes: entries.reduce((total, entry) => total + entry.minutes, 0),

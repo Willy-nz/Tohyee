@@ -10,7 +10,7 @@ import { useWorkspace } from "@/components/workspace";
 import type { BankAccount } from "@/lib/bank/accounts";
 import type { AkahuSettings } from "@/lib/bank/akahu/settings";
 import { api, errorMessage } from "@/lib/client/api";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, personName } from "@/lib/format";
 
 function AddAccountForm({ organisationId, onAdded }: { organisationId: string; onAdded: () => void }) {
   const [code, setCode] = useState("");
@@ -141,7 +141,7 @@ function AkahuSettingsCard({ organisationId }: { organisationId: string }) {
           <span className={ui.muted}>
             {" "}
             · saved {formatDateTime(akahu.createdAt)}
-            {akahu.createdByEmail ? ` by ${akahu.createdByEmail}` : ""}
+            {personName(akahu, "createdBy") ? ` by ${personName(akahu, "createdBy")}` : ""}
           </span>
         </p>
       ) : (

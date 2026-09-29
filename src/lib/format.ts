@@ -77,3 +77,16 @@ export function formatGstNumber(value: string | null | undefined): string {
   const match = /^(\d{2,3})(\d{3})(\d{3})$/.exec(value);
   return match ? `${match[1]}-${match[2]}-${match[3]}` : value;
 }
+
+/**
+ * Who did something, for screens: `personName(bill, "createdBy")` gives
+ * `createdByName` (the person's name, which the server adds beside every
+ * person's email) or, failing that, `createdByEmail`.
+ */
+export function personName<P extends string>(record: { [K in `${P}Email`]?: string | null }, prefix: P): string | null {
+  const values = record as Record<string, unknown>;
+  const name = values[`${prefix}Name`];
+  if (typeof name === "string" && name) return name;
+  const email = values[`${prefix}Email`];
+  return typeof email === "string" ? email : null;
+}

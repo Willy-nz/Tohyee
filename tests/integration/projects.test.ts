@@ -63,8 +63,8 @@ describeWithDatabase("projects and time tracking", () => {
 
   beforeAll(async () => {
     server = await startTestServer();
-    jess = await createTestUser("pj-jess@example.com", { serverAdmin: true });
-    aroha = await createTestUser("pj-aroha@example.com");
+    jess = await createTestUser("pj-jess@example.com", { serverAdmin: true, displayName: "Jess Kelly" });
+    aroha = await createTestUser("pj-aroha@example.com", { displayName: "Aroha Ngata" });
     sam = await createTestUser("pj-sam@example.com");
     viewer = await createTestUser("pj-viewer@example.com");
     stranger = await createTestUser("pj-stranger@example.com");
@@ -246,7 +246,7 @@ describeWithDatabase("projects and time tracking", () => {
     await expect(w.as((tx) => tx.query("update project_time_entries set task_id = $2 where id = $1", [t1.id, otherTask]))).rejects.toThrow("isn't on this project");
     // Someone else's time: admins only, and only for members.
     await expect(bad("1", "0", { userId: jess.id })).rejects.toThrow("Only admins");
-    await expect(w.asAroha((tx) => updateTimeEntry(tx, "bookkeeper", t1.id, { minutes: "10", hours: "0" }))).rejects.toThrow(`Only ${jess.email}`);
+    await expect(w.asAroha((tx) => updateTimeEntry(tx, "bookkeeper", t1.id, { minutes: "10", hours: "0" }))).rejects.toThrow("Only Jess Kelly or an admin");
     await expect(w.asAroha((tx) => setStaffRate(tx, "bookkeeper", { userId: aroha.id, costRate: "99" }))).rejects.toThrow("Only admins");
     const forAroha = (await w.as((tx) => createTimeEntry(tx, "owner", w.project.id, { idempotencyKey: key("t"), userId: aroha.id, taskId: w.design, entryDate: "2026-07-05", hours: "1", minutes: "0" }))).entry;
     expect([forAroha.userEmail, forAroha.cost, forAroha.createdByEmail]).toEqual([aroha.email, "30.00", jess.email]);
@@ -537,8 +537,8 @@ describeWithDatabase("projects and time tracking", () => {
     await w.asSam((tx) => removeTimeEntry(tx, "bookkeeper", removed.id));
     const july = await w.as((tx) => timeReport(tx, { from: "2026-07-01", to: "2026-07-31" }));
     expect(july.byPerson.map((g) => [g.label, g.minutes, g.cost])).toEqual([
-      [aroha.email, 315, "157.50"],
-      [jess.email, 195, "130.00"],
+      ["Aroha Ngata", 315, "157.50"],
+      ["Jess Kelly", 195, "130.00"],
     ]);
     expect(july.byTask.map((g) => [g.label, g.minutes])).toEqual([
       ["Cafe rebrand › Admin", 45],

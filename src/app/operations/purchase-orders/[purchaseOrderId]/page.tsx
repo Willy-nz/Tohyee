@@ -14,7 +14,7 @@ import { Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/compo
 import { useWorkspace } from "@/components/workspace";
 import type { Bill } from "@/lib/bills/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, formatQuantity, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, formatQuantity, todayInBrowser, personName } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import { dec, isPositive } from "@/lib/money/decimal";
 import type { PurchaseOrder } from "@/lib/purchase-orders/service";
@@ -282,9 +282,9 @@ function PurchaseOrderView({ organisationId, purchaseOrderId }: { organisationId
           </div>
         ) : null}
         <p className={ui.muted}>
-          Saved by {purchaseOrder.createdByEmail ?? "unknown"} on {formatDateTime(purchaseOrder.createdAt)}.
-          {purchaseOrder.approvedAt ? ` Approved by ${purchaseOrder.approvedByEmail ?? "unknown"} on ${formatDateTime(purchaseOrder.approvedAt)}.` : ""}
-          {purchaseOrder.cancelledAt ? ` Cancelled by ${purchaseOrder.cancelledByEmail ?? "unknown"} on ${formatDateTime(purchaseOrder.cancelledAt)}.` : ""}
+          Saved by {personName(purchaseOrder, "createdBy") ?? "unknown"} on {formatDateTime(purchaseOrder.createdAt)}.
+          {purchaseOrder.approvedAt ? ` Approved by ${personName(purchaseOrder, "approvedBy") ?? "unknown"} on ${formatDateTime(purchaseOrder.approvedAt)}.` : ""}
+          {purchaseOrder.cancelledAt ? ` Cancelled by ${personName(purchaseOrder, "cancelledBy") ?? "unknown"} on ${formatDateTime(purchaseOrder.cancelledAt)}.` : ""}
         </p>
       </Card>
       {can("bookkeeper") ? (

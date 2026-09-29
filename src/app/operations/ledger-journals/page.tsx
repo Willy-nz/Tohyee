@@ -11,7 +11,7 @@ import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, personName } from "@/lib/format";
 import type { Journal, JournalWithLines } from "@/lib/ledger/journals";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 
@@ -93,7 +93,7 @@ function JournalDetail({
   return (
     <Card
       title={`Journal #${journal.id} · ${journal.reference}`}
-      description={`${formatDate(journal.postingDate)} · posted by ${journal.createdByEmail ?? "unknown"} on ${formatDateTime(journal.createdAt)}`}
+      description={`${formatDate(journal.postingDate)} · posted by ${personName(journal, "createdBy") ?? "unknown"} on ${formatDateTime(journal.createdAt)}`}
       actions={
         canCorrect && can("bookkeeper") ? (
           <Button variant="secondary" onClick={() => onCorrect(journal)}>

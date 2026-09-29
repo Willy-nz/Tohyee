@@ -230,6 +230,19 @@ People who aren't members get "not found", so organisation IDs can't be
 probed. Every audit record stores the signed-in user, never a name typed into
 a form.
 
+Organisation databases record who did something by email (`created_by_email`
+and so on), since users live in the core database. Screens show people by
+name: `withOrganisation()` loads the organisation's members' names once per
+request (before the transaction) and, after it, adds a name beside every
+person's email in the result (`createdByEmail` gets `createdByName`), looking
+up anyone who has left in one more query; someone who can't be found (a
+deleted user, `cli`, a scheduled job) shows as the email recorded
+(`src/lib/people/names.ts`). Names are looked up when read rather than
+copied into organisation databases, so a renamed person shows their current
+name and posted history is never rewritten. Text written once, like a new
+journal's description, uses the name from `tx.people`; journals posted
+before this change keep the email they were posted with.
+
 ## Financial integrity
 
 Enforced by the database itself, not just the app:
@@ -608,7 +621,7 @@ Enforced by the app (and covered by tests):
   date, like aged receivables, sharing the ageing maths in `ageing.ts`.
   Account transactions and the journal report read `ledger_journal_lines`
   and find each journal's source from the documents' journal columns
-  (`journal-sources.ts`); who posted a journal is its `created_by_email`.
+  (`journal-sources.ts`); who posted a journal is its `created_by_email`, shown by name.
   The GST audit report (`gst-audit.ts`) only groups the GST return's own
   counted lines (`calculateGstReturn`, or a filed return's stored lines),
   so it can't disagree with the return.

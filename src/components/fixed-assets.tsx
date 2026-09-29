@@ -16,7 +16,7 @@ import { addMonths, DEPRECIATION_METHOD_LABELS, type DepreciationMethod, isMonth
 import type { FixedAssetRegister } from "@/lib/fixed-assets/register";
 import type { DepreciationRun, DisposalPreview, JournalPreviewLine, RunPreview } from "@/lib/fixed-assets/runs";
 import type { AssetBillLine, FixedAsset, FixedAssetSettings, FixedAssetStatus, FixedAssetSummary, FixedAssetType } from "@/lib/fixed-assets/service";
-import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import { add, dec, toFixedString } from "@/lib/money/decimal";
 import type { TrackingTags } from "@/lib/tracking/service";
 
@@ -569,10 +569,10 @@ export function FixedAssetView({ organisationId, assetId }: { organisationId: st
             {entry.undoJournalId ? (
               <>
                 {" "}
-                · <Link href={`/operations/ledger-journals?journal=${entry.undoJournalId}`}>Undo journal</Link> ({entry.undoneByEmail}, {formatDateTime(entry.undoneAt)})
+                · <Link href={`/operations/ledger-journals?journal=${entry.undoJournalId}`}>Undo journal</Link> ({personName(entry, "undoneBy")}, {formatDateTime(entry.undoneAt)})
               </>
             ) : (
-              <> · by {entry.createdByEmail}</>
+              <> · by {personName(entry, "createdBy")}</>
             )}
           </p>
           {entry.status === "active" && can("bookkeeper") ? (
@@ -724,7 +724,7 @@ export function DepreciationRuns({ organisationId }: { organisationId: string })
                       {formatDate(run.periodEnd)}
                     </td>
                     <td data-label="Status">{run.status === "active" ? <Badge tone="green">Posted</Badge> : <Badge tone="neutral">Rolled back</Badge>}</td>
-                    <td data-label="By">{run.status === "active" ? run.createdByEmail : run.rolledBackByEmail}</td>
+                    <td data-label="By">{run.status === "active" ? personName(run, "createdBy") : personName(run, "rolledBackBy")}</td>
                     <td data-label="Total" className={ui.num}>
                       <Money value={run.total} />
                     </td>

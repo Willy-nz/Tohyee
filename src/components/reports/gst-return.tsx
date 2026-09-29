@@ -6,7 +6,7 @@ import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import {
   GST_BOX_KEYS,
   GST_BOX_LABELS,
@@ -369,7 +369,7 @@ function FiledReturnDetail({ organisationId, gstReturnId }: { organisationId: st
       title={filed ? `Filed return ${formatDate(filed.periodStart)} to ${formatDate(filed.periodEnd)}` : "Filed return"}
       description={
         filed
-          ? `Filed ${formatDateTime(filed.filedAt)} by ${filed.filedByEmail}. These are the figures as filed (${filed.currencyCode}, ${GST_BASIS_LABELS[filed.basis].toLowerCase()}).`
+          ? `Filed ${formatDateTime(filed.filedAt)} by ${personName(filed, "filedBy")}. These are the figures as filed (${filed.currencyCode}, ${GST_BASIS_LABELS[filed.basis].toLowerCase()}).`
           : undefined
       }
     >
@@ -726,7 +726,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
                         <Money value={entry.boxes.box15} />
                       </td>
                       <td className={ui.muted}>
-                        {formatDateTime(entry.filedAt)} · {entry.filedByEmail}
+                        {formatDateTime(entry.filedAt)} · {personName(entry, "filedBy")}
                       </td>
                     </tr>
                   ))}

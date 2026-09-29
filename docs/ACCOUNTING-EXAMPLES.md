@@ -3140,6 +3140,11 @@ and Sam (bookkeepers) and a viewer. Sam's claim "June market trip":
   refused. A retry with the same key returns the same claim; the same key
   with another date is refused. The database refuses changing an approved
   claim.
+  The journal's description is "Expense claim CLAIM-n from Sam" and its
+  expense and 2010 lines say "Sam": the claimant's **name**, not their
+  email (the email only if they can't be found); paying is "Payment of
+  expense claim CLAIM-n to Sam". Journals posted before this was changed
+  keep the email they were posted with (posted history isn't rewritten).
 - **EC4** Paying **100.00** from 1000 on 15 Jun 2026 posts Dr 2010
   **100.00** / Cr 1000 **100.00**: due **0.00**, **paid**, 2010 back to
   **0.00**. A statement line of -100.00 on 15 Jun matches that bank line
