@@ -46,11 +46,14 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/purchase-orders.test.ts` (PO1-PO9) and
   `tests/integration/stock-transfers.test.ts` (TR1-TR6) and
   `tests/integration/budgets.test.ts` (BU1-BU8) and
-  `tests/integration/expense-claims.test.ts` (EC1-EC12), all against
+  `tests/integration/expense-claims.test.ts` (EC1-EC12) and
+  `tests/integration/fixed-assets.test.ts` (FA1-FA14), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
-  a printed document is headed and shows (QT5, PD3-PD7)
+  a printed document is headed and shows (QT5, PD3-PD7), and
+  `tests/unit/fixed-asset-depreciation.test.ts` the depreciation and
+  disposal maths (FA3, FA4, FA6-FA10)
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -3198,3 +3201,254 @@ and Sam (bookkeepers) and a viewer. Sam's claim "June market trip":
   go to accounts payable (2000) as Xero's newer expenses do?
 - Should the claim date default to the approval date (as built) or the
   latest receipt's date?
+
+## Fixed assets (examples not yet approved by Jess)
+
+Written overnight from Xero's fixed asset register and NZ practice; Jess
+hasn't approved them yet. **Tohyee has no built-in IRD depreciation rates,
+asset classes, low-value thresholds, pool or building rules.** The
+organisation types the method and annual rate for each asset type (and can
+change them per asset); check IRD's current rates and rules before entering
+them. The rates below are just the example's.
+
+- **Asset types** (admins) say which accounts an asset uses: its **asset
+  account** (cost) and **accumulated depreciation account** (fixed or
+  non-current asset accounts, not the same one), and its **depreciation
+  expense account** (an expense account), with a default method and rate.
+  Types are archived, never deleted, and their accounts can't change once
+  they have assets. The starting chart already has 1600-1650 and 6300
+  Depreciation; new system accounts **7030 Gain or loss on disposal of fixed
+  assets** and **7040 Capital gains on disposal of fixed assets** (other
+  income) are the default for disposals (existing organisations get them at
+  that code or the next free one).
+- **Registering an asset posts nothing**: its cost is already in the ledger
+  from the bill, bank transaction or opening journal that bought it. An
+  asset can name the **approved bill line** it came from (on its type's
+  asset account); the cost defaults to what's left of the line excluding GST,
+  and assets from one line never cost more than it. A bill with a registered
+  asset can't be voided until the asset is archived. Numbers are
+  `FA-0001`, with no gaps. An asset brought in from another register has an
+  **opening balance date** (a month end) and the **accumulated depreciation**
+  at that date; depreciation starts the month after.
+- **Methods**, charged in whole months: **diminishing value (DV)** is the
+  book value at the start of the financial year (or when the asset's
+  depreciation started, if later) x rate x months / 12; **straight line
+  (SL)** is cost x rate x months / 12; **no depreciation** (e.g. land) charges
+  nothing. Neither takes the book value below the **residual value** (0
+  unless set). Each financial year's figure so far is rounded once, half
+  away from zero, and a run charges it less what's already been charged that
+  year, so monthly runs add up exactly to one run for the year (a run
+  spanning two financial years rounds once for each).
+- **Part months** are a setting (admins). The month an asset is bought
+  **counts as a whole month** (the default: our understanding of IRD's
+  guidance is that the month of purchase counts in full, but check it) or
+  isn't depreciated. The month it's disposed of **isn't depreciated** (the
+  default) or counts as a whole month. Changing them affects only
+  depreciation worked out afterwards.
+- A **depreciation run** (bookkeepers) to a month end charges each
+  registered asset for the months since it was last charged (so an asset
+  registered late catches up) and posts **one journal** on the month end,
+  reference `DEP-YYYY-MM`: Dr depreciation expense / Cr accumulated
+  depreciation, one pair per asset type (and set of tracking tags, from the
+  asset), types in name order. Runs go forward: each is after the last
+  active run; none in a locked period. The **latest** run can be **rolled
+  back** (the exact reversal on its own date, which must be open), then run
+  again. Idempotent.
+- A **disposal** (bookkeepers) of a registered asset, dated after the last
+  run (roll the run back to dispose earlier), posts on the disposal date:
+  depreciation for the months since it was last charged (by the disposal
+  month setting), Dr accumulated depreciation / Cr cost to take it off, Dr
+  the **proceeds** excluding GST out of the account the sale was coded to
+  (any account but bank, card, receivables, payables, GST, expense claims
+  payable and stock), and the difference: proceeds above book value up to
+  cost are **depreciation recovered** (Cr the gain or loss account), above
+  cost a **capital gain** (Cr the capital gain account), below book value a
+  **loss** (Dr the gain or loss account). A write-off has no proceeds. An
+  asset is disposed of once; the disposal can be **undone** (the exact
+  reversal on the disposal date), and a run it was worked out from can't be
+  rolled back until it is.
+- After depreciation or a disposal, only an asset's name, description and
+  tracking change; before, anything can, and an asset registered by mistake
+  is archived (never deleted). Runs, disposals and their journals can't be
+  corrected in the ledger.
+- The **register** as at a date lists each asset held with cost,
+  accumulated depreciation, book value and this financial year's
+  depreciation, grouped by type with totals; assets disposed of this year
+  apart with their gain or loss; and, per asset and accumulated depreciation
+  account, the register beside the ledger balance and the difference
+  (e.g. from a manual journal to one of them).
+
+Setup: the starting chart, 31 March year end, tax code GST (15%), Jess
+(owner) and Aroha (bookkeeper). Asset types:
+
+| Type | Asset | Accumulated | Expense | Default |
+| --- | --- | --- | --- | --- |
+| Computer equipment | 1620 | 1630 | 6300 | DV 50% |
+| Motor vehicles | 1640 | 1650 | 6300 | DV 30% |
+| Office equipment | 1600 | 1610 | 6300 | SL 20% |
+
+Assets:
+
+| Asset | Bought | Cost | Method | How the cost got to the ledger |
+| --- | --- | ---: | --- | --- |
+| FA-0001 Laptop | 10 May 2026 | 2,000.00 | DV 50% | PB Tech bill PB-7781, 2,300.00 incl. GST to 1620 |
+| FA-0002 Desk | 1 Apr 2026 | 1,200.00 | SL 20% | journal Dr 1600 / Cr 1000 |
+| FA-0003 Printer | 1 Jul 2023 | 1,500.00 | DV 40% (not the type's) | opening journal 31 Mar 2026: Dr 1600 1,500.00 / Cr 1610 900.00 / Cr 3000 600.00; opening accumulated depreciation 900.00 at 31 Mar 2026 |
+| FA-0004 Ute | 20 Jun 2026 | 30,000.00 | DV 30% | journal Dr 1640 / Cr 2800, registered after the May run |
+
+- **FA1** Types as above; also Land (no depreciation, no rate). Refused: an
+  asset account that isn't a fixed asset account (6070), the same account
+  for cost and accumulated depreciation, an expense account that isn't an
+  expense (1000), a rate of 0 or 101, no rate for DV, a rate for no
+  depreciation, a second active "Motor vehicles". A bookkeeper can't add
+  types (403); a viewer can list them. Types can't be deleted (archived). A
+  new organisation has 7030 and 7040; an existing one whose 7030 is taken
+  gets 7031 and 7040, and the settings default to "whole month" and "not
+  depreciated".
+- **FA2** Registering the laptop from its bill line: cost **2,000.00** (the
+  line excluding GST), bought **10 May 2026** (the bill date), DV 50% (the
+  type's), `FA-0001`, book value **2,000.00**; no journal is posted and 1620
+  stays **2,000.00**. Refused: a cost of 2,000.01 from that line, the line
+  for a Motor vehicles asset (it's on 1620), and once registered any more
+  from the line (the database refuses too). Voiding the bill is refused
+  ("registered as fixed asset FA-0001"); after archiving the asset it can
+  be voided. Typed in, refused: no cost, no purchase date, a residual value
+  above the cost, opening depreciation with no date, an opening date that
+  isn't a month end or is before the purchase, opening depreciation above
+  the cost, DV/SL with no rate. The desk is `FA-0002` (no gap), a section of
+  land with no depreciation `FA-0003`. A retry with the same key returns the
+  same asset.
+- **FA3** Run to **31 May 2026**: laptop May **83.33** (2,000.00 x 50% x
+  1/12 = 83.333...), desk Apr-May **40.00** (1,200.00 x 20% x 2/12), printer
+  Apr-May **40.00** (600.00 book value x 40% x 2/12). Journal `DEP-2026-05`
+  on 31 May: Dr 6300 **83.33** / Cr 1630 **83.33** / Dr 6300 **80.00** / Cr
+  1610 **80.00**, total **163.33**. Laptop book value **1,916.67**; printer
+  accumulated **940.00**. A run to 15 Jun is refused (not a month end). In
+  the maths: a printer run straight to 30 Apr 2027 charges **240.00** for
+  the year to 31 Mar 2027 and **12.00** for April 2027 (360.00 x 40% x
+  1/12); a tool costing 1,000.00, residual 400.00, SL 50%, charges 500.00,
+  then 83.33, then **16.67** (not 41.67), then 0.00.
+- **FA4** After registering the ute, run to **30 Jun 2026**: laptop
+  **83.34** (2 months so far 166.67, less 83.33), desk **20.00**, printer
+  **20.00**, ute **750.00** (30,000.00 x 30% x 1/12; June counts in full).
+  Journal: Dr 6300 **83.34** / Cr 1630 / Dr 6300 **750.00** / Cr 1650 / Dr
+  6300 **40.00** / Cr 1610, total **873.34**. A retry returns the same run;
+  the key for another date is refused. Refused: another run to 30 Jun or 31
+  May (the database refuses an earlier run too), deleting a run, changing
+  its lines, and a run to 31 Jul once July is locked.
+- **FA5** Rolling back May while June stands is refused. Rolling back June
+  posts `VOID-DEP-2026-06` on **30 Jun**: the exact reversal (Dr 1630
+  **83.34** / Cr 6300, Dr 1650 **750.00** / Cr 6300, Dr 1610 **40.00** / Cr
+  6300); 1650 is **0.00**; a second rollback is refused; running June again
+  gives **873.34**. With June locked, rolling that run back is refused.
+- **FA6** A **monitor** (FA-0005, Computer equipment, 600.00, bought 20 May
+  2026) registered after the June run. Run to **31 Aug 2026** (two months):
+  laptop **166.66** (4 months 333.33 less 166.67; the same as 83.33 +
+  83.33 monthly), desk **40.00**, printer **40.00**, ute **1,500.00**,
+  monitor May-Aug **100.00** (catching up). Journal: Dr 6300 **266.66** / Cr
+  1630, Dr 6300 **1,500.00** / Cr 1650, Dr 6300 **80.00** / Cr 1610, total
+  **1,846.66**.
+- **FA7** With "the month an asset is bought isn't depreciated": the ute
+  gets nothing in June (a run with nothing to post posts no journal) and
+  **750.00** in July. Either run can be rolled back.
+- **FA8** After runs to 31 May, 30 Jun and 31 Aug (no monitor), the ute's
+  accumulated depreciation is **2,250.00** (750.00 + 1,500.00). It's sold on
+  **15 Sep 2026** for 28,750.00 incl. GST, invoiced (here journalled) to 4100
+  Other revenue: proceeds **25,000.00** excluding GST, cleared from 4100.
+  September isn't depreciated (the default). Book value **27,750.00**, loss
+  **2,750.00**. Journal `FA-0004` on 15 Sep: Dr 1650 **2,250.00** / Cr 1640
+  **30,000.00** / Dr 4100 **25,000.00** / Dr 7030 **2,750.00**; 1640, 1650
+  and 4100 are back to **0.00**. Refused: a disposal dated 31 Aug (on or
+  before the last run: roll it back first), proceeds with no account, 1000
+  or 1100 as the proceeds account, 1600 as the gain or loss account, a
+  proceeds account with no proceeds, disposing of it again. The September
+  run leaves it out, and the register at 30 Sep lists it as disposed on 15
+  Sep, proceeds **25,000.00**, gain (loss) **-2,750.00**, depreciation this
+  year **2,250.00**, with 1640 and 1650 at **0.00** on both sides. With
+  "the disposal month counts" instead, September's **750.00** is charged
+  first: Dr 6300 **750.00** / Cr 1650 **750.00** / Dr 1650 **3,000.00** /
+  Cr 1640 **30,000.00** / Dr 4100 **25,000.00** / Dr 7030 **2,000.00**.
+- **FA9** The desk (accumulated **100.00**, book value **1,100.00**) sold
+  on 20 Sep 2026 for **1,300.00**: Dr 1610 **100.00** / Cr 1600 **1,200.00**
+  / Dr 4100 **1,300.00** / Cr 7030 **100.00** (depreciation recovered) / Cr
+  7040 **100.00** (capital gain). The printer (accumulated **1,000.00**, book
+  value **500.00**) sold for **700.00**: Dr 1610 **1,000.00** / Cr 1600
+  **1,500.00** / Dr 4100 **700.00** / Cr 7030 **200.00** (depreciation
+  recovered, no capital gain).
+- **FA10** The laptop written off on **10 Oct 2026**: September is
+  charged, **83.34** (5 months 416.67 less 333.33), so accumulated
+  **416.67**, book value **1,583.33**, all a loss. Journal "Write-off of
+  FA-0001 Laptop": Dr 6300 **83.34** / Cr 1630 **83.34** / Dr 1630 **416.67**
+  / Cr 1620 **2,000.00** / Dr 7030 **1,583.33**.
+- **FA11** With the ute sold (FA8), rolling back the August run is refused
+  ("Undo the disposal of FA-0004 first"); deleting the disposal and changing
+  the ute's cost are refused. Undoing it posts `VOID-FA-0004` on **15 Sep**
+  (Cr 1650 **2,250.00** / Dr 1640 **30,000.00** / Cr 4100 **25,000.00** / Cr
+  7030 **2,750.00**); the ute is registered again, depreciated to 31 Aug,
+  book value **27,750.00**; a second undo is refused; the September run
+  charges it **750.00**. The desk written off on 5 Oct blocks rolling back
+  September until that's undone too.
+- **FA12** With Advanced reporting on and the ute tagged Department Farm,
+  a run straight to 30 Jun posts Dr 6300 **166.67** / Cr 1630 (untagged),
+  Dr 6300 **750.00** / Cr 1650 (both tagged Farm), Dr 6300 **120.00** / Cr
+  1610 (untagged); every line of its disposal is tagged Farm.
+- **FA13** The register as at **30 Jun 2026** (after FA4), year from 1 Apr
+  2026:
+
+  | Asset | Cost | Accumulated | Book value | This year |
+  | --- | ---: | ---: | ---: | ---: |
+  | Computer equipment: FA-0001 Laptop | 2,000.00 | 166.67 | 1,833.33 | 166.67 |
+  | Motor vehicles: FA-0004 Ute | 30,000.00 | 750.00 | 29,250.00 | 750.00 |
+  | Office equipment: FA-0002 Desk | 1,200.00 | 60.00 | 1,140.00 | 60.00 |
+  | Office equipment: FA-0003 Printer | 1,500.00 | 960.00 | 540.00 | 60.00 |
+  | Office equipment total | 2,700.00 | 1,020.00 | 1,680.00 | 120.00 |
+  | **Total** | **34,700.00** | **1,936.67** | **32,763.33** | **1,036.67** |
+
+  Ledger: 1600 **2,700.00**, 1610 **1,020.00** (credit), 1620 **2,000.00**,
+  1630 **166.67**, 1640 **30,000.00**, 1650 **750.00**, each with no
+  difference. As at 31 May (no ute, no June run): cost **4,700.00**,
+  accumulated **1,063.33**. After a manual journal Dr 6130 50.00 / Cr 1600
+  50.00 on 30 Jun, 1600 shows register **2,700.00**, ledger **2,650.00**,
+  difference **-50.00**. Viewers can open it.
+- **FA14** Before any run the desk's cost and name can change; after the
+  May run, changing its cost or rate is refused ("only its name,
+  description and tracking") while its description can change; the laptop
+  can't be archived (not even directly in the database) or deleted, and the
+  type's asset account can't change. A viewer can list runs but can't run
+  depreciation (403). The run and disposal journals can't be corrected in
+  the ledger, and account transactions for 1610 show "Depreciation run
+  DEP-2026-05" (linking to the depreciation screen) and "Disposal of
+  FA-0002" (linking to the asset).
+
+### Not supported yet (refused rather than guessed)
+
+- **Built-in IRD rates, asset classes, low-value asset write-offs, pooling
+  and building rules**: the organisation enters rates and methods; a
+  low-value item is simply expensed on the bill.
+- **Tax and book depreciation side by side** (Xero's tax/book views): one
+  set of depreciation is kept.
+- Depreciating by days, or part months other than the two settings; changing
+  an asset's method or rate after it's depreciated (roll back its runs
+  first); revaluations and impairments; partial disposals and splitting an
+  asset.
+- Disposing of an asset before the last run without rolling the run back,
+  and GST on the sale (the sale is invoiced as usual; the disposal clears
+  its amount excluding GST).
+- Registering assets from bank transactions, expense claims or journals by
+  link (they're typed in with their cost).
+
+### Questions for Jess (fixed assets)
+
+- Should the month an asset is bought count as a whole month (as built,
+  the default), and the disposal month not be depreciated (the default)?
+  Please check both against IRD's current guidance and your practice.
+- IRD has its own rules for depreciation in the year an asset is disposed
+  of (please check them): should Tohyee keep a separate tax depreciation
+  figure beside the book one, or is one set enough for now?
+- Is 7030/7040 right for gains, losses and capital gains, or should
+  depreciation recovered go to its own account (it's taxable income, while
+  a capital gain usually isn't)?
+- Should low-value assets (under IRD's current threshold) be offered as an
+  immediate write-off when registering, and should pooling be built?
+- Should a run be allowed to skip a month (as built, a run covers every
+  month since the last one, so nothing is skipped), or must runs be monthly?

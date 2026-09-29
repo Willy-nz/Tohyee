@@ -32,6 +32,7 @@ const RECORD_TABLES: Record<RecordType, { table: string; label: string }> = {
   supplier_credit_note: { table: "supplier_credit_notes", label: "Supplier credit note" },
   contact: { table: "contacts", label: "Contact" },
   expense_claim: { table: "expense_claims", label: "Expense claim" },
+  fixed_asset: { table: "fixed_assets", label: "Fixed asset" },
 };
 
 /**
@@ -55,6 +56,7 @@ const RELATED_EVENTS: Record<RecordType, { entityTypes: string[]; detailKeys: st
   ledger_journal: { entityTypes: ["ledger_journal"], detailKeys: ["reversalJournalId", "replacementJournalId"] },
   contact: null,
   expense_claim: { entityTypes: ["expense_claim_payment"], detailKeys: ["claimId"] },
+  fixed_asset: null,
 };
 
 /** The record type named in a URL (e.g. "invoice"), and the record's id, which must exist (NF14). */
@@ -65,7 +67,7 @@ export async function resolveRecord(
 ): Promise<{ recordType: RecordType; recordId: string }> {
   const recordType = typeof slugInput === "string" ? recordTypeFromSlug(slugInput) : null;
   if (!recordType) {
-    throw new ValidationError("Notes and files can only be added to journals, invoices, bills, credit notes, supplier credit notes, contacts and expense claims.");
+    throw new ValidationError("Notes and files can only be added to journals, invoices, bills, credit notes, supplier credit notes, contacts, expense claims and fixed assets.");
   }
   const recordId = requireId(recordIdInput, "recordId");
   const { table, label } = RECORD_TABLES[recordType];

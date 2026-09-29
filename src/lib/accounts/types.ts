@@ -56,6 +56,8 @@ export const SYSTEM_KEYS = [
   "retained_earnings",
   "unrealised_fx_gain",
   "unrealised_fx_loss",
+  "fixed_asset_disposal",
+  "fixed_asset_capital_gain",
 ] as const;
 
 export type SystemKey = (typeof SYSTEM_KEYS)[number];

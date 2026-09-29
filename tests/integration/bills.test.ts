@@ -1045,6 +1045,9 @@ describeWithDatabase("bills", () => {
         { code: "2010", system_key: "expense_claims_payable" },
         { code: "2100", system_key: "gst" },
         { code: "6010", system_key: null },
+        // Added by migration 0029 (fixed assets, FA1).
+        { code: "7030", system_key: "fixed_asset_disposal" },
+        { code: "7040", system_key: "fixed_asset_capital_gain" },
       ]);
       expect((await client.query("select count(*)::int as count from bills")).rows).toEqual([{ count: 0 }]);
       const origin = await client.query<{ definition: string }>(
