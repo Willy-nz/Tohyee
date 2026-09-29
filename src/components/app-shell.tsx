@@ -51,6 +51,14 @@ const MENUS: Menu[] = [
           { href: "/operations/customer-payments/new", label: "Receive a payment", minRole: "bookkeeper" },
         ],
       },
+      {
+        heading: "Projects",
+        links: [
+          { href: "/operations/projects", label: "Projects" },
+          { href: "/operations/projects/new", label: "New project", minRole: "bookkeeper" },
+          { href: "/operations/projects/staff-rates", label: "Staff cost rates" },
+        ],
+      },
     ],
   },
   {
@@ -95,6 +103,8 @@ const MENUS: Menu[] = [
           { href: "/operations/reports?report=sales", label: "Sales by salesperson", module: "reporting" },
           { href: "/operations/reports?report=budget", label: "Budget vs actual" },
           { href: "/operations/fixed-assets/register", label: "Fixed asset register" },
+          { href: "/operations/project-reports/profitability", label: "Project profitability" },
+          { href: "/operations/project-reports/time", label: "Time report" },
           { href: "/operations/budgets", label: "Budgets" },
         ],
       },
@@ -192,9 +202,10 @@ const AREAS: Record<string, string[]> = {
     "/operations/repeating-invoices",
     "/operations/overpayments",
     "/operations/customer-payments",
+    "/operations/projects",
   ],
   Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/supplier-credit-notes", "/operations/supplier-payments", "/operations/expense-claims"],
-  Reporting: ["/operations/reports", "/operations/budgets"],
+  Reporting: ["/operations/reports", "/operations/budgets", "/operations/project-reports"],
   Accounting: [
     "/operations/bank-accounts",
     "/operations/bank-rules",
