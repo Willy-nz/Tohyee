@@ -477,6 +477,11 @@ function Contacts({ organisationId }: { organisationId: string }) {
                     ))}
                     <td className={ui.num}>
                       <span className={ui.actions} style={{ justifyContent: "flex-end" }}>
+                        {contact.isCustomer ? (
+                          <Link href={`/operations/customer-statements?contact=${contact.id}`} aria-label={`Statement for ${contact.name}`}>
+                            Statement
+                          </Link>
+                        ) : null}
                         {showPeople ? (
                           <Button
                             variant="secondary"

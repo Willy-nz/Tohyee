@@ -20,7 +20,7 @@ rules are well settled; then the larger scope items.
 
 | # | Gap | Why it matters | Size |
 | --- | --- | --- | --- |
-| 1 | **Reports**: aged payables, account transactions (general ledger detail), journal report, GST audit report (plan step 5), customer statements with parent roll-up | Month-end and audit work can't be done without them | Medium |
+| 1 | **Reports**: aged payables, account transactions (general ledger detail), journal report, GST audit report (plan step 5), customer statements with parent roll-up | Month-end and audit work can't be done without them | Medium. Built overnight (examples AGP, ATX, JR, GA, CST) |
 | 2 | **Sales documents**: quotes (accept to invoice), repeating invoices, printable invoice/credit note/statement PDFs | Daily sales work in Xero | Medium |
 | 3 | **Purchase orders** (approve, then turn into a bill) | Standard in Xero and NetSuite | Medium |
 | 4 | **Budgets** and the budget column in custom reports (TODO item 4) | Not-for-profits and boards report against budget | Medium |

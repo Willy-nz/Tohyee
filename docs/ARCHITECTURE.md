@@ -209,7 +209,7 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies), the GST return and filed GST returns; read notes, download files and see the history |
+| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies), the GST return, filed GST returns, the GST audit report and customer statements; read notes, download files and see the history |
 | bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add notes and files, and edit, delete or remove their own |
 | admin | + chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels and the credit limit setting), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
@@ -497,6 +497,16 @@ Enforced by the app (and covered by tests):
   lines on bills and supplier credit notes must be on the inventory account
   and nothing else can be (bills, manual journals, corrections and stock
   movements are all checked), so stock equals the account to the cent.
+- Ledger and document reports (AGP, ATX, JR, GA, CST) store nothing and
+  post nothing. Aged payables (`src/lib/reports/aged-payables.ts`) and
+  customer statements (`customer-statements.ts`) read the documents as at a
+  date, like aged receivables, sharing the ageing maths in `ageing.ts`.
+  Account transactions and the journal report read `ledger_journal_lines`
+  and find each journal's source from the documents' journal columns
+  (`journal-sources.ts`); who posted a journal is its `created_by_email`.
+  The GST audit report (`gst-audit.ts`) only groups the GST return's own
+  counted lines (`calculateGstReturn`, or a filed return's stored lines),
+  so it can't disagree with the return.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 

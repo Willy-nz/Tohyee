@@ -2,7 +2,8 @@ import { RECEIVABLES_SQL } from "@/lib/customers/service";
 import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { add, dec, type Decimal, isZero, neg, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, dec, isZero, toFixedString } from "@/lib/money/decimal";
+import { AGE_BUCKETS, type AgedAmounts, addBuckets, type Buckets, bucketFor, daysBetween, emptyBuckets, toAmounts } from "@/lib/reports/ageing";
 
 /**
  * Aged receivables (examples RC9-RC11): what each customer owes as at a date,
@@ -12,10 +13,7 @@ import { add, dec, type Decimal, isZero, neg, sum, toFixedString, ZERO_DECIMAL }
  * accounts receivable on the balance sheet as at the same date.
  */
 
-export const AGE_BUCKETS = ["current", "days1to30", "days31to60", "days61to90", "over90"] as const;
-export type AgeBucket = (typeof AGE_BUCKETS)[number];
-
-export type AgedAmounts = Record<AgeBucket, string> & { credit: string; total: string };
+export { AGE_BUCKETS, type AgeBucket, type AgedAmounts } from "@/lib/reports/ageing";
 
 export type AgedInvoice = { id: string; invoiceNumber: string | null; invoiceDate: string; dueDate: string; daysOverdue: number; amountDue: string };
 
@@ -33,37 +31,6 @@ export type AgedRow = {
 };
 
 export type AgedReceivables = { asAt: string; rollUp: boolean; currencyCode: string; rows: AgedRow[]; total: AgedAmounts };
-
-type Buckets = Record<AgeBucket | "credit", Decimal>;
-
-function emptyBuckets(): Buckets {
-  return { current: ZERO_DECIMAL, days1to30: ZERO_DECIMAL, days31to60: ZERO_DECIMAL, days61to90: ZERO_DECIMAL, over90: ZERO_DECIMAL, credit: ZERO_DECIMAL };
-}
-
-function addBuckets(left: Buckets, right: Buckets): Buckets {
-  const out = emptyBuckets();
-  for (const key of [...AGE_BUCKETS, "credit"] as const) out[key] = add(left[key], right[key]);
-  return out;
-}
-
-function toAmounts(buckets: Buckets, scale: number): AgedAmounts {
-  const total = sum([...AGE_BUCKETS.map((key) => buckets[key]), neg(buckets.credit)]);
-  const out = { credit: toFixedString(buckets.credit, scale), total: toFixedString(total, scale) } as AgedAmounts;
-  for (const key of AGE_BUCKETS) out[key] = toFixedString(buckets[key], scale);
-  return out;
-}
-
-function bucketFor(daysOverdue: number): AgeBucket {
-  if (daysOverdue <= 0) return "current";
-  if (daysOverdue <= 30) return "days1to30";
-  if (daysOverdue <= 60) return "days31to60";
-  if (daysOverdue <= 90) return "days61to90";
-  return "over90";
-}
-
-function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
-}
 
 export async function agedReceivables(tx: OrgTx, input: { asAt?: unknown; rollUp?: unknown }): Promise<AgedReceivables> {
   const asAt = parseOptionalIsoDate(input.asAt, "asAt") ?? todayIsoDate();
