@@ -1,0 +1,88 @@
+import { cmp, dec, isZero } from "@/lib/money/decimal";
+import type { AmountsMode } from "@/lib/invoices/amounts";
+
+/**
+ * What a printed invoice, credit note or quote says about tax (examples
+ * PD2-PD7), browser-safe so the page and the tests share it. Following the
+ * GST Act's taxable supply information rules (from 1 April 2023) as Xero
+ * prints them:
+ *
+ * - An approved invoice from a GST-registered organisation (a GST number in
+ *   Settings) is headed "Tax invoice" and shows the GST number, the date, a
+ *   description of each line, and either the GST as its own line (tax
+ *   exclusive) or "Total includes GST of $x" (tax inclusive).
+ * - Over $1,000 including GST, the buyer's name and an identifier must be
+ *   shown. Tohyee prints the billing address as the identifier (other
+ *   identifiers are a question for Jess), so a customer without one gets a
+ *   warning on screen (not on the
+ *   paper), rather than a tax invoice missing it being printed silently.
+ * - A draft is headed "Draft invoice" with no number (it isn't a tax invoice
+ *   until it's approved); a voided invoice is headed "Voided invoice".
+ * - "No tax" amounts, or an organisation with no GST number, print "Invoice"
+ *   with no GST lines; if the invoice has GST but the organisation has no GST
+ *   number, the screen warns to add it.
+ * - Credit notes follow the same rules headed "Credit note" (the Act's
+ *   "credit note" wording); quotes are headed "Quote" and are never tax
+ *   documents, but show GST the same way so the customer sees the total.
+ */
+export const PRINT_KINDS = ["invoice", "credit_note", "quote"] as const;
+export type PrintKind = (typeof PRINT_KINDS)[number];
+
+export const TAX_INVOICE_BUYER_THRESHOLD = "1000.00";
+
+export type TaxLabelInput = {
+  kind: PrintKind;
+  status: string;
+  amountsMode: AmountsMode;
+  total: string;
+  taxTotal: string;
+  organisationGstNumber: string | null;
+  buyerAddress: string | null;
+};
+
+export type TaxLabels = {
+  title: string;
+  /** Whether the paper is a tax invoice or tax credit note (GST number shown). */
+  isTaxDocument: boolean;
+  /** Show the GST as its own line under the subtotal (tax exclusive). */
+  gstLine: boolean;
+  /** "Total includes GST of $x" (tax inclusive). */
+  includesGstStatement: boolean;
+  /** Over $1,000: the buyer's name and address must be on it. */
+  buyerAddressRequired: boolean;
+  /** Shown on screen only, never on the paper. */
+  warnings: string[];
+};
+
+export function taxLabels(input: TaxLabelInput): TaxLabels {
+  const hasTax = input.amountsMode !== "no_tax";
+  const registered = input.organisationGstNumber !== null;
+  const draft = input.status === "draft";
+  const voided = input.status === "voided";
+  const warnings: string[] = [];
+  const isTaxDocument = input.kind !== "quote" && hasTax && registered && !draft && !voided;
+  const noun = input.kind === "invoice" ? "invoice" : input.kind === "credit_note" ? "credit note" : "quote";
+  let title: string;
+  if (input.kind === "quote") title = draft ? "Draft quote" : "Quote";
+  else if (draft) title = `Draft ${noun}`;
+  else if (voided) title = `Voided ${noun}`;
+  else if (input.kind === "invoice") title = isTaxDocument ? "Tax invoice" : "Invoice";
+  else title = "Credit note";
+  const buyerAddressRequired = isTaxDocument && cmp(dec(input.total), dec(TAX_INVOICE_BUYER_THRESHOLD)) > 0;
+  if (buyerAddressRequired && !input.buyerAddress) {
+    warnings.push(
+      `This ${noun} is over $1,000, so a tax ${noun} must identify the customer by more than their name. Tohyee prints the billing address, and this customer has none: add one to the contact, then print it again.`,
+    );
+  }
+  if (input.kind !== "quote" && hasTax && !registered && !isZero(dec(input.taxTotal))) {
+    warnings.push(`This ${noun} charges GST, but there's no GST number in Settings, so it isn't printed as a tax ${noun}. An admin can add it in Settings.`);
+  }
+  return {
+    title,
+    isTaxDocument,
+    gstLine: input.amountsMode === "exclusive",
+    includesGstStatement: input.amountsMode === "inclusive",
+    buyerAddressRequired,
+    warnings,
+  };
+}

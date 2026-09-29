@@ -8,7 +8,7 @@ import { Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { MONTH_NAMES } from "@/lib/financial-year";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatGstNumber } from "@/lib/format";
 import type { PeriodControls } from "@/lib/ledger/period-controls";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import type { OrganisationSettings } from "@/lib/organisations/settings";
@@ -25,6 +25,9 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
   const [financialYearEndMonth, setFinancialYearEndMonth] = useState(settings.financialYearEndMonth);
   const [gstBasis, setGstBasis] = useState<GstBasis>(settings.gstBasis);
   const [allowNegativeStock, setAllowNegativeStock] = useState(settings.allowNegativeStock);
+  const [postalAddress, setPostalAddress] = useState(settings.postalAddress ?? "");
+  const [gstNumber, setGstNumber] = useState(settings.gstNumber ? formatGstNumber(settings.gstNumber) : "");
+  const [paymentDetails, setPaymentDetails] = useState(settings.paymentDetails ?? "");
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -33,7 +36,16 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
     try {
       await api(`/api/organisations/${organisationId}/settings`, {
         method: "PATCH",
-        body: { displayName, baseCurrency, financialYearEndMonth, gstBasis, allowNegativeStock },
+        body: {
+          displayName,
+          baseCurrency,
+          financialYearEndMonth,
+          gstBasis,
+          allowNegativeStock,
+          postalAddress: postalAddress.trim() || null,
+          gstNumber: gstNumber.trim() || null,
+          paymentDetails: paymentDetails.trim() || null,
+        },
       });
       onSaved(
         displayName === settings.displayName
@@ -81,6 +93,18 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
               </option>
             ))}
           </select>
+        </Field>
+      </div>
+      <h3 style={{ margin: "8px 0 0" }}>On printed invoices, credit notes and quotes</h3>
+      <div className={ui.grid3}>
+        <Field label="GST number" hint="Printed on tax invoices and credit notes. Without it, invoices print as “Invoice”, not “Tax invoice”.">
+          <input value={gstNumber} onChange={(event) => setGstNumber(event.target.value)} maxLength={20} placeholder="123-456-789" />
+        </Field>
+        <Field label="Address" hint="Your postal or business address, printed under your name.">
+          <textarea value={postalAddress} onChange={(event) => setPostalAddress(event.target.value)} maxLength={500} rows={3} />
+        </Field>
+        <Field label="How to pay" hint="Printed on approved invoices, e.g. the bank account number and what to use as the reference.">
+          <textarea value={paymentDetails} onChange={(event) => setPaymentDetails(event.target.value)} maxLength={1000} rows={3} />
         </Field>
       </div>
       <label className={ui.checkbox}>

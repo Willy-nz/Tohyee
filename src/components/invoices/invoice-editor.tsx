@@ -64,7 +64,7 @@ export function formatUnitPrice(value: string): string {
   return formatMoney(value, Math.max(2, places));
 }
 
-type EditorLine = {
+export type EditorLine = {
   key: number;
   itemId: string;
   unitId: string;
@@ -83,9 +83,9 @@ function nextLineKey(): number {
   return lineKey;
 }
 
-type Defaults = { accountCode: string; taxCode: string };
+export type Defaults = { accountCode: string; taxCode: string };
 
-function blankLine(defaults: Defaults, customFields: CustomValues = {}): EditorLine {
+export function blankLine(defaults: Defaults, customFields: CustomValues = {}): EditorLine {
   return { key: nextLineKey(), itemId: "", unitId: "", description: "", quantity: "1", unitPrice: "", tracking: {}, customFields, ...defaults };
 }
 
@@ -125,7 +125,6 @@ function InvoiceForm({
   onSaved,
   onCancel,
 }: FormProps) {
-  const scale = currencyMinorUnits(baseCurrency);
   const activeTaxCodes = taxCodes.filter((taxCode) => taxCode.isActive);
   const defaults: Defaults = {
     accountCode: accounts.find((account) => account.isActive && isRevenue(account))?.code ?? "",
@@ -171,30 +170,10 @@ function InvoiceForm({
   const [busy, setBusy] = useState(false);
 
   const hasTax = amountsMode !== "no_tax";
-  const rates = new Map(taxCodes.map((taxCode) => [taxCode.code, taxCode.rate]));
-  const usable = (value: string) => isDecimalString(value) && !value.trim().startsWith("-");
-  // Live totals use the same calculation the server does when it saves.
-  const complete = lines.map(
-    (line) => usable(line.quantity) && usable(line.unitPrice) && (!hasTax || rates.has(line.taxCode)),
-  );
-  const amounts = calculateInvoice(
-    amountsMode,
-    lines.map((line, index) =>
-      complete[index]
-        ? { quantity: line.quantity, unitPrice: line.unitPrice, taxRate: hasTax ? (rates.get(line.taxCode) ?? "0") : "0" }
-        : { quantity: "0", unitPrice: "0", taxRate: "0" },
-    ),
-    scale,
-  );
-  const money = (value: string) => formatMoney(value, scale);
 
   const customerOptions = customers.filter((contact) => contact.isCustomer && !contact.isArchived);
   const savedCustomer =
     invoice && !customerOptions.some((contact) => contact.id === invoice.contactId) ? invoice : null;
-
-  function update(key: number, patch: Partial<EditorLine>) {
-    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
-  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -312,6 +291,97 @@ function InvoiceForm({
         </Field>
       </div>
       <CustomFieldInputs setup={customSetup} record="document" uses={["invoice"]} value={customFields} onChange={setCustomFields} />
+      <SalesLines
+        organisationId={organisationId}
+        items={items}
+        baseCurrency={baseCurrency}
+        accounts={accounts}
+        taxCodes={taxCodes}
+        tracking={tracking}
+        customSetup={customSetup}
+        customUse="invoice"
+        contactId={contactId}
+        amountsMode={amountsMode}
+        lines={lines}
+        setLines={setLines}
+        defaults={defaults}
+        lineDefaults={lineDefaults}
+      />
+      <div className={ui.actions}>
+        <Button type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Save draft"}
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+        <span className={ui.muted}>A draft posts nothing. Approve it to give it a number and post it to the ledger.</span>
+      </div>
+    </form>
+  );
+}
+
+
+/**
+ * The lines table and live totals shared by invoices, quotes (QT1) and
+ * repeating invoice templates (RI1): the same fields, account filter and
+ * maths as the server.
+ */
+export function SalesLines({
+  organisationId,
+  items,
+  baseCurrency,
+  accounts,
+  taxCodes,
+  tracking,
+  customSetup,
+  customUse,
+  contactId,
+  amountsMode,
+  lines,
+  setLines,
+  defaults,
+  lineDefaults,
+}: {
+  organisationId: string;
+  items: ItemList | null;
+  baseCurrency: string;
+  accounts: Account[];
+  taxCodes: TaxCode[];
+  tracking: TrackingSetup;
+  customSetup: CustomFieldSetup;
+  customUse: "invoice";
+  contactId: string;
+  amountsMode: AmountsMode;
+  lines: EditorLine[];
+  setLines: (update: (current: EditorLine[]) => EditorLine[]) => void;
+  defaults: Defaults;
+  lineDefaults: CustomValues;
+}) {
+  const scale = currencyMinorUnits(baseCurrency);
+  const hasTax = amountsMode !== "no_tax";
+  const rates = new Map(taxCodes.map((taxCode) => [taxCode.code, taxCode.rate]));
+  const usable = (value: string) => isDecimalString(value) && !value.trim().startsWith("-");
+  // Live totals use the same calculation the server does when it saves.
+  const complete = lines.map(
+    (line) => usable(line.quantity) && usable(line.unitPrice) && (!hasTax || rates.has(line.taxCode)),
+  );
+  const amounts = calculateInvoice(
+    amountsMode,
+    lines.map((line, index) =>
+      complete[index]
+        ? { quantity: line.quantity, unitPrice: line.unitPrice, taxRate: hasTax ? (rates.get(line.taxCode) ?? "0") : "0" }
+        : { quantity: "0", unitPrice: "0", taxRate: "0" },
+    ),
+    scale,
+  );
+  const money = (value: string) => formatMoney(value, scale);
+
+  function update(key: number, patch: Partial<EditorLine>) {
+    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
+  }
+
+  return (
+    <>
       <div className={ui.tableWrap}>
         <table className={`${ui.table} ${ui.stackOnPhone}`}>
           <thead>
@@ -393,7 +463,7 @@ function InvoiceForm({
                     compact
                     setup={customSetup}
                     record="line"
-                    uses={["invoice"]}
+                    uses={[customUse]}
                     labelPrefix={`Line ${index + 1}`}
                     value={line.customFields}
                     onChange={(values) => update(line.key, { customFields: values })}
@@ -450,17 +520,76 @@ function InvoiceForm({
         {hasTax ? <Stat label="GST" value={money(amounts.taxTotal)} /> : null}
         <Stat label={`Total (${baseCurrency})`} value={money(amounts.total)} />
       </div>
-      <div className={ui.actions}>
-        <Button type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Save draft"}
-        </Button>
-        <Button variant="secondary" onClick={onCancel}>
-          Cancel
-        </Button>
-        <span className={ui.muted}>A draft posts nothing. Approve it to give it a number and post it to the ledger.</span>
-      </div>
-    </form>
+    </>
   );
+}
+
+/** The data every sales document editor needs, loaded together. */
+export function useSalesEditorData(organisationId: string) {
+  const accounts = useAccounts(organisationId);
+  const items = useItems(organisationId);
+  const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
+  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const tracking = useTracking(organisationId);
+  const customSetup = useCustomFields(organisationId);
+  const salespeople = useSalespeople(organisationId);
+  const customerSetup = useCustomerSetup(organisationId);
+  const error =
+    accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error ?? salespeople.error ?? customerSetup.error;
+  const ready =
+    accounts.data && contacts.data && taxCodes.data && tracking.data && customSetup.data && salespeople.data && customerSetup.data
+      ? {
+          accounts: accounts.data.accounts,
+          items: items.data,
+          customers: contacts.data.contacts,
+          taxCodes: taxCodes.data.taxCodes,
+          tracking: tracking.data,
+          customSetup: customSetup.data,
+          salespeople: salespeople.data,
+          customerSetup: customerSetup.data,
+        }
+      : null;
+  return { error, data: ready };
+}
+
+/** Starting account and tax code for a new sales line. */
+export function salesDefaults(accounts: Account[], taxCodes: TaxCode[]): Defaults {
+  const activeTaxCodes = taxCodes.filter((taxCode) => taxCode.isActive);
+  return {
+    accountCode: accounts.find((account) => account.isActive && isRevenue(account))?.code ?? "",
+    taxCode: (activeTaxCodes.find((taxCode) => taxCode.category === "standard") ?? activeTaxCodes[0])?.code ?? "",
+  };
+}
+
+/** Saved lines as editor lines. */
+export function editorLines(saved: ReadonlyArray<{ itemId: string | null; unitId: string | null; description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null; tracking: TrackingTags; customFields: CustomValues }>, defaults: Defaults): EditorLine[] {
+  return saved.map((line) => ({
+    key: nextLineKey(),
+    itemId: line.itemId ?? "",
+    unitId: line.unitId ?? "",
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    accountCode: line.accountCode,
+    taxCode: line.taxCode ?? defaults.taxCode,
+    tracking: line.tracking ?? {},
+    customFields: line.customFields ?? {},
+  }));
+}
+
+/** Editor lines as the API takes them. */
+export function linesForApi(lines: EditorLine[], hasTax: boolean) {
+  return lines.map((line) => ({
+    itemId: line.itemId || null,
+    unitId: line.unitId || null,
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    accountCode: line.accountCode,
+    taxCode: hasTax ? line.taxCode || null : null,
+    tracking: line.tracking,
+    customFields: line.customFields,
+  }));
 }
 
 /**

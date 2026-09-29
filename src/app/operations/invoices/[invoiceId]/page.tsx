@@ -282,6 +282,8 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
     invoice: Invoice;
     creditApplied: CreditNoteApplication[];
     overpaymentCreditApplied: OverpaymentApplication[];
+    fromQuote: { id: string; quoteNumber: string } | null;
+    fromRepeating: { id: string; scheduledDate: string } | null;
   }>(
     `/api/invoices/${encodeURIComponent(invoiceId)}`,
     { organisationId },
@@ -306,7 +308,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
   }
   const invoice = updated ?? details.data.invoice;
   const hasTax = invoice.amountsMode !== "no_tax";
-  const { creditApplied, overpaymentCreditApplied } = details.data;
+  const { creditApplied, overpaymentCreditApplied, fromQuote, fromRepeating } = details.data;
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
@@ -321,6 +323,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           <>
             <InvoiceStatusBadge status={invoice.status} />
             {invoice.paidStatus ? <PaidStatusBadge status={invoice.paidStatus} /> : null}
+            <Link href={`/operations/invoices/${invoice.id}/print`}>Print or save as PDF</Link>
             {invoice.status === "approved" && can("bookkeeper") ? (
               <Button
                 size="small"
@@ -340,6 +343,17 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           <Stat label="Customer" value={invoice.contactName} />
         </div>
         {invoice.salespersonName ? <div className={ui.muted}>Salesperson: {invoice.salespersonName}</div> : null}
+        {fromQuote ? (
+          <div className={ui.muted}>
+            Made by accepting quote <Link href={`/operations/quotes/${fromQuote.id}`}>{fromQuote.quoteNumber}</Link>.
+          </div>
+        ) : null}
+        {fromRepeating ? (
+          <div className={ui.muted}>
+            Made by a <Link href={`/operations/repeating-invoices/${fromRepeating.id}`}>repeating invoice</Link> for{" "}
+            {formatDate(fromRepeating.scheduledDate)}.
+          </div>
+        ) : null}
         <CustomValuesText setup={customSetup.data} values={invoice.customFields} />
         <div className={ui.tableWrap}>
           <table className={ui.table}>

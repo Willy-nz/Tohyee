@@ -36,6 +36,8 @@ const MENUS: Menu[] = [
           { href: "/operations/invoices?show=awaiting", label: "Awaiting payment" },
           { href: "/operations/customer-payments", label: "Payments for several invoices" },
           { href: "/operations/credit-notes", label: "Credit notes" },
+          { href: "/operations/quotes", label: "Quotes" },
+          { href: "/operations/repeating-invoices", label: "Repeating invoices" },
           { href: "/operations/items", label: "Products and services" },
           { href: "/operations/overpayments", label: "Overpayments" },
         ],
@@ -44,6 +46,7 @@ const MENUS: Menu[] = [
         heading: "Create",
         links: [
           { href: "/operations/invoices/new", label: "New invoice", minRole: "bookkeeper" },
+          { href: "/operations/quotes/new", label: "New quote", minRole: "bookkeeper" },
           { href: "/operations/credit-notes/new", label: "New credit note", minRole: "bookkeeper" },
           { href: "/operations/customer-payments/new", label: "Receive a payment", minRole: "bookkeeper" },
         ],
@@ -170,7 +173,16 @@ const MENUS: Menu[] = [
 /** The paths a menu covers, so its button shows as the current area. */
 const AREAS: Record<string, string[]> = {
   Home: ["/operations"],
-  Sales: ["/operations/sales", "/operations/items", "/operations/invoices", "/operations/credit-notes", "/operations/overpayments", "/operations/customer-payments"],
+  Sales: [
+    "/operations/sales",
+    "/operations/items",
+    "/operations/invoices",
+    "/operations/credit-notes",
+    "/operations/quotes",
+    "/operations/repeating-invoices",
+    "/operations/overpayments",
+    "/operations/customer-payments",
+  ],
   Purchases: ["/operations/purchases", "/operations/bills", "/operations/supplier-credit-notes", "/operations/supplier-payments"],
   Reporting: ["/operations/reports"],
   Accounting: [

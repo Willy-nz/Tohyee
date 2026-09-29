@@ -39,9 +39,14 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
   `tests/integration/reports-ledger.test.ts` (AGP1-AGP3, ATX1-ATX5,
   JR1-JR3) and `tests/integration/gst-audit.test.ts` (GA1-GA4) and
-  `tests/integration/customer-statements.test.ts` (CST1-CST5), all against
+  `tests/integration/customer-statements.test.ts` (CST1-CST5) and
+  `tests/integration/quotes.test.ts` (QT1-QT8) and
+  `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
+  `tests/integration/printed-documents.test.ts` (PD1-PD8), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
-  ageing maths (AGP1, CST1)
+  ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
+  repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
+  a printed document is headed and shows (QT5, PD3-PD7)
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -2460,3 +2465,239 @@ on 25 Jun (**10.00** of it an overpayment); **11.50** of CN-0001 refunded on
 - Foreign-currency statements (invoices are in the base currency).
 - Showing credit and overpayments applied to invoices as lines (they don't
   change the balance, so they're left out, as in Xero's activity statement).
+
+## Quotes (examples not yet approved by Jess)
+
+Written overnight from Xero's quotes; Jess hasn't approved them yet. A quote
+has the same lines as an invoice (items, units, price levels, tracking,
+custom fields, tax exclusive, inclusive or no tax) and the same line maths
+(I1-I6), plus an optional expiry date and terms. Quotes **post nothing**.
+
+- A **draft** can be edited, copied and deleted.
+- **Finalising** checks it again, gives it the next number (`QU-0001`,
+  `QU-0002`, ...) from its own counter, with no gaps, and locks it: the
+  database refuses changing a finalised quote or its lines, or deleting it.
+- A finalised quote is then **accepted** or **declined**, once.
+  **Accepting** is the step that makes the invoice: a draft invoice for the
+  same customer carrying the quote's lines, amounts, custom fields and
+  salesperson, dated the day chosen, due on the date given or else the
+  customer's payment terms, with the quote's reference (or its number). The
+  quote and invoice are linked both ways. **Declining** closes it.
+- **Expired** isn't stored: a finalised quote past its expiry date shows as
+  expired (and in its own list). It can still be accepted, as in Xero.
+- There's no "sent" status: nothing sends quotes yet. Printing is
+  "Print or save as PDF" (PD8).
+
+Setup (GST 15%): customer Kobe Cafe with payment terms "20th of the
+following month" and billing address "12 George St, Dunedin 9016".
+
+- **QT1** Draft quote to Kobe Cafe dated 15 Jul 2026, expiring 14 Aug 2026,
+  tax exclusive: 2 x Paw print pendant at **120.00** (GST) and 1 x Engraving
+  at **35.00** (GST). Net **275.00**, GST **41.25**, total **316.25**. No
+  journal is posted and it has no number.
+- **QT2** Finalising QT1 makes it **QU-0001**; its lines and totals can't be
+  changed (refused, and the database refuses too), and it can't be deleted.
+  A second draft whose customer has since been archived is refused on
+  finalising and stays a draft; the next quote finalised is **QU-0002** (no
+  gap).
+- **QT3** Accepting QU-0001 with invoice date 20 Jul 2026 makes a draft
+  invoice to Kobe Cafe dated **20 Jul 2026**, due **20 Aug 2026** (terms),
+  reference **QU-0001**, with the same two lines and total **316.25**. The
+  quote is accepted and points to the invoice; the invoice points back to
+  QU-0001. Accepting again with the same key returns the same invoice.
+  Approving that invoice posts INV-0001: Dr 1100 **316.25** / Cr 4000
+  **275.00** / Cr 2100 **41.25**, the same as any invoice.
+- **QT4** Declining QU-0002 closes it; accepting it is then refused ("already
+  declined"), and so is declining QU-0001 once accepted.
+- **QT5** Expired: a finalised quote expiring 31 Jul 2026 shows as expired on
+  1 Aug 2026 but not on 31 Jul; accepted or declined quotes, drafts and
+  quotes without an expiry date never do.
+- **QT6** Copying QU-0001 (quote date 15 Jul, expiry 14 Aug, 30 days) to
+  1 Sep 2026 makes a new draft dated **1 Sep 2026** expiring **1 Oct
+  2026**, with the same customer, lines and total **316.25**, no number, and
+  "copied from" QU-0001. A copy is checked like a new quote: once Kobe Cafe
+  is archived, copying QU-0001 again is refused.
+- **QT7** The draft invoice made by accepting QU-0001 can't be deleted (so
+  the quote keeps its invoice); it can be edited or approved and voided.
+- **QT8** Refused: accepting or declining a draft, finalising twice, a quote
+  with no lines, an expiry date before the quote date. A viewer can see and
+  print quotes but not save them.
+
+### Not supported yet (refused rather than guessed)
+
+- Sending or emailing quotes (so no "sent" status), customer online
+  acceptance, and quote templates or themes.
+- Accepting part of a quote, or invoicing a quote in stages (deposits,
+  progress invoicing): accepting makes one invoice for the whole quote.
+- Linking a quote to a CRM opportunity. A won opportunity still makes its
+  own invoice (CRM5).
+- Foreign-currency quotes.
+
+## Repeating invoices (examples not yet approved by Jess)
+
+Written overnight from Xero's repeating invoices; Jess hasn't approved them
+yet. A **template** holds a customer, invoice lines (as on an invoice), how
+often (every N weeks or months), a start date, an optional end date, the due
+date (the customer's payment terms, or N days after the invoice date) and
+whether each invoice is **saved as a draft** or **approved**. Templates post
+nothing.
+
+- **Dates**: every N weeks is the start date plus 7 x N days each time.
+  Every N months keeps the start date's day; a day the month doesn't have
+  falls on the month's last day, and later months go back to the day (each
+  date is worked out from the start date, not the date before).
+- **The job** runs every hour on the server (and "Run now" on a template):
+  for each active template it makes every scheduled date up to today that
+  hasn't been made yet, oldest first. Each date gets one invoice dated that
+  day, recorded in the template's history with a database key on (template,
+  date), so running twice, or two runs at once, never makes two.
+- **Approve automatically** approves each invoice as a person would: period
+  locks, required tracking and custom fields and the credit limit apply. A
+  refused approval leaves the draft and records why in the template's
+  history. If the invoice can't be made at all (say the customer is
+  archived), the template shows the error and tries that date again next
+  run.
+- **Pause** stops the job making invoices; **resume** carries on from the
+  resume date (dates while it was paused aren't made). **End** is final.
+  A template past its end date with every date made ends itself.
+
+Setup (GST 15%): customer Kobe Cafe; each template has one line, 1 x
+Monthly retainer at **100.00** tax exclusive (GST) to 4000, so each invoice
+is **115.00**.
+
+- **RI1** Monthly from 31 Jan 2026 falls on **31 Jan, 28 Feb, 31 Mar,
+  30 Apr, 31 May** 2026. Saving the template posts nothing and makes no
+  invoice.
+- **RI2** Saved as drafts, due 20 days after: the job run on 5 Mar 2026
+  makes two draft invoices, dated **31 Jan** (due 20 Feb) and **28 Feb** (due
+  20 Mar), in that order, each 115.00, and the history lists both. Nothing
+  is posted. The next date is **31 Mar 2026**.
+- **RI3** Running again on 5 Mar 2026 makes nothing more; running on 31 Mar
+  makes just the 31 Mar invoice, even when two runs start at once. The
+  hourly job runs each template in its own transaction: with a second
+  template for Paw Walkers (since archived), the job run on 5 Mar makes
+  Kobe Cafe's two invoices and records "Paw Walkers is archived..." on the
+  other template; running it again makes nothing more.
+- **RI4** Approve automatically: the job run on 5 Mar 2026 makes and
+  approves **INV-0001** (31 Jan) and **INV-0002** (28 Feb), each posting Dr
+  1100 **115.00** / Cr 4000 **100.00** / Cr 2100 **15.00** on its own date.
+- **RI5** Every 2 weeks from Monday 5 Jan 2026 ending 2 Feb 2026: **5 Jan,
+  19 Jan, 2 Feb**. Run on 10 Feb it makes those three and the template
+  ends itself.
+- **RI6** Every 3 months from 31 Aug 2026: **31 Aug, 30 Nov** 2026, **28 Feb
+  2027**, **31 May 2027**. Every month from 29 Jan 2028 (a leap year):
+  **29 Jan, 29 Feb, 29 Mar**.
+- **RI7** The RI2 template paused on 5 Mar: a run on 5 May makes nothing.
+  Resumed on 10 May: the 31 Mar and 30 Apr dates are never made, and the
+  next is **31 May 2026**. Ended: nothing more is made, and changing or
+  resuming it is refused.
+- **RI8** Changing the template's unit price to 120.00 on 5 Mar makes the
+  31 Mar invoice **138.00**; the 31 Jan and 28 Feb invoices keep 115.00.
+- **RI9** Approve automatically with the period locked to 31 Jan 2026: run on
+  5 Mar, the 31 Jan invoice is **left as a draft** with "Left as a draft:
+  2026-01-31 is in a locked period..." in the history, and 28 Feb is approved
+  as **INV-0001**. With Advanced reporting, a credit limit of **150.00** set
+  to block: the 31 Jan invoice is approved (115.00) and the 28 Feb one is
+  left as a draft with the credit limit message. With Kobe Cafe archived,
+  nothing is made, the template shows "Kobe Cafe is archived..." and the
+  next run tries 31 Jan again.
+- **RI10** Deleting the 31 Jan draft that RI2 made keeps the history line
+  (shown as deleted), and later runs don't make 31 Jan again.
+
+### Not supported yet (refused rather than guessed)
+
+- Emailing each invoice (Xero's "approve for sending"): server email is only
+  set up for security messages.
+- Daily, yearly or "end of month" schedules (Xero has these); weeks and
+  months cover them except daily.
+- Placeholders in descriptions (Xero's [Month] [Year]).
+- Foreign-currency templates.
+
+## Printed invoices, credit notes and quotes (examples not yet approved by Jess)
+
+Written overnight from Xero's invoice PDFs and IRD's taxable supply
+information rules (in force from 1 April 2023); Jess hasn't approved them
+yet. Each invoice, credit note and quote has a print page with "Print or
+save as PDF" (the browser's print, as for statements). It stores and posts
+nothing, and anyone who can see the document can print it. Settings has
+three new fields for it: the organisation's **postal address**, **GST
+number** and **payment details** (e.g. the bank account to pay into).
+
+What appears when:
+
+| Document | Heading | GST number | GST shown |
+| --- | --- | --- | --- |
+| Approved invoice, organisation has a GST number, amounts have tax | **Tax invoice** | Yes | Exclusive: a GST line; inclusive: "Total includes GST of $x" |
+| Approved invoice, no GST number in Settings, or no-tax amounts | **Invoice** | No | None (no-tax), or as above |
+| Draft invoice | **Draft invoice** (no number) | No | As above |
+| Voided invoice | **Voided invoice** | No | As above |
+| Approved credit note (same rules) | **Credit note** | When a tax credit note | As above |
+| Quote | **Quote** (**Draft quote** before finalising) | No (not a tax document) | As above |
+
+Every printed document shows the organisation's name and address, the
+customer's name and billing address, the date, each line's description,
+quantity, unit price, GST rate and amount, the subtotal, GST and total.
+Invoices add the due date, and once approved, what's been paid or credited,
+the amount due and the payment details. Quotes add the expiry date and
+terms. Over **$1,000** including GST, a tax invoice or credit note must
+identify the buyer by more than their name. Tohyee prints the customer's
+billing address for this; if the customer has none the screen says so (the
+paper can still be printed). Whether an email address, phone number or NZBN
+should be printed instead is a question for Jess. If an invoice charges GST
+but Settings has no GST number, the screen warns that it isn't a tax
+invoice.
+
+Setup: the organisation "Glimmers" with postal address "PO Box 5, Dunedin",
+GST number **123-456-789** and payment details "Pay into 12-3456-7890123-00
+with your invoice number"; customer Kobe Cafe with billing address "12
+George St, Dunedin 9016"; customer Paw Walkers with no address; GST 15%.
+
+- **PD1** INV-0001 (QT3's invoice, 316.25, approved): heading **Tax
+  invoice**, number INV-0001, date 20 Jul 2026, due 20 Aug 2026, Glimmers,
+  PO Box 5, GST number **123-456-789**, Kobe Cafe and its address, the two
+  lines, subtotal **275.00**, GST **41.25**, total **316.25**, paid
+  **0.00**, amount due **316.25**, and the payment details.
+- **PD2** After a payment of 100.00 on INV-0001: paid **100.00**, amount
+  due **216.25**.
+- **PD3** An approved tax-inclusive invoice to Kobe Cafe for 1 x
+  **1,150.00**: **Tax invoice**, total **1,150.00**, "Total includes GST of
+  **150.00**", no separate GST line; over $1,000 so the buyer's address is
+  required, and Kobe Cafe has one, so no warning.
+- **PD4** The same invoice to Paw Walkers: the screen warns that a tax
+  invoice over $1,000 needs the customer's address. At **1,000.00** exactly
+  (1 x 1,000.00 tax inclusive, GST 130.43) there's no warning.
+- **PD5** A draft invoice prints **Draft invoice** with no number, no GST
+  number and no payment details; a voided invoice prints **Voided invoice**.
+- **PD6** With no GST number in Settings, INV-0001 prints **Invoice**, no
+  GST number, and the screen warns it isn't a tax invoice. A no-tax invoice
+  prints **Invoice** with no GST lines and no warning.
+- **PD7** An approved credit note CN-0001 to Kobe Cafe for 1 x 35.00
+  exclusive: **Credit note**, GST number shown, subtotal 35.00, GST 5.25,
+  total **40.25**, no due date and no payment details.
+- **PD8** QU-0001: **Quote**, expiry 14 Aug 2026, terms, GST **41.25** and
+  total **316.25**, no GST number and no payment details. A viewer can print
+  it. Printing never posts a journal.
+
+### Not supported yet (refused rather than guessed)
+
+- Emailing documents, a logo and custom layouts (themes), and server-made
+  PDF files: the browser's print makes the PDF.
+- Printing several documents at once.
+- Printing bills and supplier credit notes (they're the supplier's papers).
+
+### Questions for Jess (quotes, repeating invoices and printed documents)
+
+- Tax invoices over $1,000: Tohyee treats the billing address as the
+  buyer's identifier and warns when there isn't one. Should an email
+  address, phone number or NZBN count instead (and be printed)?
+- Should approved invoices keep the heading **Tax invoice** (as Xero
+  prints), or just **Invoice** with the GST number? The heading isn't
+  relied on for anything else.
+- Quotes have no "sent" status because nothing sends them. When emailing
+  is built, should sending be what moves a quote on (as in Xero), and
+  should finalising stay a separate step?
+- Repeating invoices: should changing how often or the first date on a
+  template that has already made invoices start the new schedule from
+  today (as built), or ask?
+- Should a repeating invoice run that's left as a draft (approval refused)
+  notify someone, e.g. by email to the organisation's admins?

@@ -1,0 +1,203 @@
+"use client";
+
+import Link from "next/link";
+import { Money } from "@/components/books";
+import { useApiData } from "@/components/hooks";
+import { formatRate, formatUnitPrice } from "@/components/invoices/invoice-editor";
+import { PrintButton } from "@/components/reports/ledger-reports";
+import { Card, Notice, ui } from "@/components/ui";
+import type { PrintedDocument } from "@/lib/documents/print";
+import type { PrintKind } from "@/lib/documents/tax-invoice";
+import { formatDate, formatGstNumber, formatMoney, formatQuantity } from "@/lib/format";
+
+const BACK: Record<PrintKind, (id: string) => string> = {
+  invoice: (id) => `/operations/invoices/${id}`,
+  credit_note: (id) => `/operations/credit-notes/${id}`,
+  quote: (id) => `/operations/quotes/${id}`,
+};
+
+/**
+ * A printable invoice, credit note or quote (examples PD1-PD8): the page
+ * as it will print, with "Print or save as PDF" (the browser's print, as for
+ * statements). Warnings (PD4, PD6) show on screen only.
+ */
+export function PrintedDocumentView({ organisationId, kind, id }: { organisationId: string; kind: PrintKind; id: string }) {
+  const loaded = useApiData<{ document: PrintedDocument }>("/api/documents/print", { organisationId, kind, id });
+  if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
+  if (!loaded.data) return <p className={ui.muted}>Loading…</p>;
+  const doc = loaded.data.document;
+  const { labels } = doc;
+  const hasTax = doc.amountsMode !== "no_tax";
+  const money = (value: string) => formatMoney(value);
+  return (
+    <>
+      <div data-print="hide">
+      <Card
+        title={`${labels.title}${doc.number ? ` ${doc.number}` : ""}`}
+        description="This is the page as it prints. Use your browser's print to save it as a PDF."
+        actions={
+          <>
+            <PrintButton />
+            <span data-print="hide">
+              <Link href={BACK[kind](id)}>Back</Link>
+            </span>
+          </>
+        }
+      >
+        {labels.warnings.map((warning) => (
+          <Notice key={warning} tone="warning">
+            {warning}
+          </Notice>
+        ))}
+      </Card>
+      </div>
+      <article className={ui.reportPaper}>
+        <header className={ui.reportPaperHeader} style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <div>
+            <h2 className={ui.reportPaperTitle}>{labels.title}</h2>
+            <p style={{ margin: 0, whiteSpace: "pre-line" }}>
+              <strong>{doc.customer.name}</strong>
+              {doc.customer.billingAddress ? `\n${doc.customer.billingAddress}` : ""}
+            </p>
+          </div>
+          <div style={{ whiteSpace: "pre-line" }}>
+            <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto 1fr", gap: "2px 12px" }}>
+              {doc.number ? (
+                <>
+                  <dt>{kind === "quote" ? "Quote number" : kind === "credit_note" ? "Credit note number" : "Invoice number"}</dt>
+                  <dd style={{ margin: 0 }}>{doc.number}</dd>
+                </>
+              ) : null}
+              <dt>{kind === "quote" ? "Quote date" : "Date"}</dt>
+              <dd style={{ margin: 0 }}>{formatDate(doc.date)}</dd>
+              {doc.dueDate ? (
+                <>
+                  <dt>Due date</dt>
+                  <dd style={{ margin: 0 }}>{formatDate(doc.dueDate)}</dd>
+                </>
+              ) : null}
+              {doc.expiryDate ? (
+                <>
+                  <dt>Expires</dt>
+                  <dd style={{ margin: 0 }}>{formatDate(doc.expiryDate)}</dd>
+                </>
+              ) : null}
+              {doc.reference ? (
+                <>
+                  <dt>Reference</dt>
+                  <dd style={{ margin: 0 }}>{doc.reference}</dd>
+                </>
+              ) : null}
+              {doc.organisation.gstNumber ? (
+                <>
+                  <dt>GST number</dt>
+                  <dd style={{ margin: 0 }}>{formatGstNumber(doc.organisation.gstNumber)}</dd>
+                </>
+              ) : null}
+            </dl>
+          </div>
+          <div style={{ whiteSpace: "pre-line" }}>
+            <strong>{doc.organisation.name}</strong>
+            {doc.organisation.postalAddress ? `\n${doc.organisation.postalAddress}` : ""}
+          </div>
+        </header>
+        <div className={ui.tableWrap}>
+          <table className={`${ui.table} ${ui.stackOnPhone}`}>
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th className={ui.num}>Quantity</th>
+                <th className={ui.num}>Unit price</th>
+                {hasTax ? <th className={ui.num}>GST</th> : null}
+                <th className={ui.num}>
+                  Amount {doc.amountsMode === "inclusive" ? "(incl. GST)" : doc.amountsMode === "exclusive" ? "(excl. GST)" : ""} ({doc.currencyCode})
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {doc.lines.map((line) => (
+                <tr key={line.lineOrder}>
+                  <td data-label="Description">{line.description}</td>
+                  <td data-label="Quantity" className={ui.num}>
+                    {formatQuantity(line.quantity)}
+                    {line.unitName ? ` ${line.unitName}` : ""}
+                  </td>
+                  <td data-label="Unit price" className={ui.num}>
+                    {formatUnitPrice(line.unitPrice)}
+                  </td>
+                  {hasTax ? (
+                    <td data-label="GST" className={ui.num}>
+                      {formatRate(line.taxRate)}
+                    </td>
+                  ) : null}
+                  <td data-label="Amount" className={ui.num}>
+                    <Money value={line.lineAmount} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              {labels.gstLine ? (
+                <>
+                  <tr>
+                    <td colSpan={hasTax ? 4 : 3}>Subtotal</td>
+                    <td className={ui.num}>
+                      <Money value={doc.subtotal} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={4}>Total GST</td>
+                    <td className={ui.num}>
+                      <Money value={doc.taxTotal} />
+                    </td>
+                  </tr>
+                </>
+              ) : null}
+              <tr>
+                <td colSpan={hasTax ? 4 : 3}>
+                  <strong>Total {doc.currencyCode}</strong>
+                </td>
+                <td className={ui.num}>
+                  <strong>
+                    <Money value={doc.total} />
+                  </strong>
+                </td>
+              </tr>
+              {doc.amountDue !== null && doc.amountPaid !== null ? (
+                <>
+                  <tr>
+                    <td colSpan={hasTax ? 4 : 3}>Paid or credited</td>
+                    <td className={ui.num}>
+                      <Money value={doc.amountPaid} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={hasTax ? 4 : 3}>
+                      <strong>Amount due {doc.currencyCode}</strong>
+                    </td>
+                    <td className={ui.num}>
+                      <strong>
+                        <Money value={doc.amountDue} />
+                      </strong>
+                    </td>
+                  </tr>
+                </>
+              ) : null}
+            </tfoot>
+          </table>
+        </div>
+        {labels.includesGstStatement ? <p>Total includes GST of ${money(doc.taxTotal)}.</p> : null}
+        {doc.terms ? <p style={{ whiteSpace: "pre-line" }}>{doc.terms}</p> : null}
+        {doc.paymentDetails ? (
+          <section className={ui.reportPaperBlock}>
+            <strong>How to pay</strong>
+            <p style={{ margin: 0, whiteSpace: "pre-line" }}>
+              {doc.dueDate ? `Due ${formatDate(doc.dueDate)}. ` : ""}
+              {doc.paymentDetails}
+            </p>
+          </section>
+        ) : null}
+      </article>
+    </>
+  );
+}

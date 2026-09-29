@@ -27,6 +27,9 @@ export const PATCH = route<Context>(async (request, context) => {
       advancedFeatures: body.advancedFeatures,
       crmEnabled: body.crmEnabled,
       allowNegativeStock: body.allowNegativeStock,
+      postalAddress: body.postalAddress,
+      gstNumber: body.gstNumber,
+      paymentDetails: body.paymentDetails,
     }),
   );
   await syncOrganisationRegistry(settings);

@@ -16,6 +16,9 @@
  * And the CRM mail sync, which syncs connected Gmail and Microsoft 365
  * mailboxes every 15 minutes (off with TOHYEE_MAIL_SYNC_SCHEDULER=off).
  *
+ * And the repeating invoices job, which makes due invoices every hour
+ * (off with TOHYEE_REPEATING_INVOICES_SCHEDULER=off).
+ *
  * And the backup scheduler, which backs up every organisation each night
  * (off with TOHYEE_BACKUP_SCHEDULER=off; the time and folder are server settings).
  *
@@ -68,6 +71,11 @@ export async function register() {
   if (process.env.TOHYEE_MAIL_SYNC_SCHEDULER !== "off") {
     const { startMailScheduler } = await import("@/lib/crm/mail/service");
     startMailScheduler();
+  }
+
+  if (process.env.TOHYEE_REPEATING_INVOICES_SCHEDULER !== "off") {
+    const { startRepeatingInvoiceScheduler } = await import("@/lib/repeating/scheduler");
+    startRepeatingInvoiceScheduler();
   }
 
   if (process.env.TOHYEE_BACKUP_SCHEDULER !== "off") {
