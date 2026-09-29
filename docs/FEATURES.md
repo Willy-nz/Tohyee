@@ -53,8 +53,12 @@ that something happened.
   the purchase price, and the bill that fills the shortfall tops up cost of
   sales. Stock always equals the inventory account (the database and the
   app keep anything else off it), and the **stock on hand** report shows it
-  by item and location beside the ledger. Transfers between locations
-  aren't built yet.
+  by item and location beside the ledger. **Transfers between locations**
+  (Stock screen; TR1-TR6, not yet approved by Jess) move a quantity at the
+  from-location's average cost (the whole remaining value when all of it
+  goes) with a journal moving the value between the locations on the
+  inventory account, whose total never changes; the negative stock
+  setting, backdating and period locks are respected.
 - **Reports**: trial balance, profit and loss, balance sheet, stock valuation,
   aged receivables and payables, account transactions, the journal report,
   customer statements, the GST return and GST audit report (below).
@@ -144,6 +148,19 @@ that something happened.
   invoices and quotes say so. The screen warns when a tax invoice over $1,000
   has no customer address, or GST is charged with no GST number in Settings.
   Emailing isn't built.
+- **Purchase orders** (Purchases; PO1-PO9, not yet approved by Jess): drafts
+  to a supplier with the same lines as a bill (items fill the supplier's
+  price), a delivery date, address and instructions; approving numbers them
+  (`PO-0001`, no gaps) and locks them (the database refuses changes). They
+  post nothing. **Copy to bill** makes a draft bill with what's still to
+  bill on each line, linked back line by line; a purchase order can be
+  billed in parts, shows what's billed and on draft bills per line, and is
+  **billed** once approved bills cover it, worked out from the bills
+  (voiding or deleting a bill puts its quantities back). Linked bill lines
+  keep their item, the bill keeps its supplier, and bills can't add up to
+  more than was ordered (the database refuses too). An approved purchase
+  order with no bills can be cancelled. Stock comes in on the bill (ST1).
+  "Print or save as PDF" like quotes. Emailing isn't built.
 - **Customer payments** against one approved sales invoice at a time:
   recording a payment posts Dr the bank account / Cr accounts receivable on
   the payment date, and voiding it posts the exact reversal on the void date.
@@ -360,7 +377,8 @@ isn't acceptable, because people would trust it:
 - amending a filed GST return, imported goods (Customs GST), GST rates other
   than 15%, recording the GST payment or refund to IRD, and filing to IRD
   electronically
-- stock "recomputation", and transfers between locations
+- stock "recomputation" (transfers between locations are built; editing or
+  voiding a transfer, and transfers in transit, aren't)
 
 ## Next, in rough order
 
@@ -370,7 +388,7 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    on them). Emailing invoices, credit notes, quotes and statements comes
    with or after these (they print already).
 2. Backdated stock movements with proper re-costing.
-3. Stock depth: transfers between locations, bins, lots and serial
+3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
 4. NZ payroll, fixed assets, projects and time tracking.

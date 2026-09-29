@@ -282,6 +282,11 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           <Stat label="Supplier's invoice number" value={bill.supplierInvoiceNumber} />
           <Stat label="Supplier" value={bill.contactName} />
         </div>
+        {bill.purchaseOrderId ? (
+          <div>
+            From purchase order <Link href={`/operations/purchase-orders/${bill.purchaseOrderId}`}>{bill.purchaseOrderNumber}</Link>.
+          </div>
+        ) : null}
         <CustomValuesText setup={customSetup.data} values={bill.customFields} />
         <div className={ui.tableWrap}>
           <table className={ui.table}>

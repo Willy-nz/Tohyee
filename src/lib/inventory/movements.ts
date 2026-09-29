@@ -26,8 +26,8 @@ export const MOVEMENT_TYPES = [
   "landed_cost",
 ] as const;
 
-/** What can be entered here; documents also post "reversal" movements when they're voided (ST4). */
-export type MovementType = (typeof MOVEMENT_TYPES)[number] | "reversal";
+/** What can be entered here; documents also post "reversal" movements when they're voided (ST4), and transfers "transfer_out" and "transfer_in" (TR1). */
+export type MovementType = (typeof MOVEMENT_TYPES)[number] | "reversal" | "transfer_out" | "transfer_in";
 
 /** Quantities allow up to 4 decimal places (e.g. 2.5 kg); unit costs up to 6. */
 export const QUANTITY_SCALE = 4;

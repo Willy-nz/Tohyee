@@ -24,10 +24,12 @@ import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import {
   add,
+  cmp,
   dec,
   isZero,
   parseDecimalInput,
   toFixedString,
+  sub,
   toPlainString,
   ZERO_DECIMAL,
   type Decimal,
@@ -77,6 +79,8 @@ export type BillLine = LineItemFields & {
   /** Tracking categories (TC4, TC10): category id -> value id. */
   tracking: TrackingTags;
   customFields: CustomValues;
+  /** The purchase order line this line was billed against (PO3-PO6), or null. */
+  purchaseOrderLineId: string | null;
 };
 
 export type BillSummary = {
@@ -111,6 +115,9 @@ export type BillSummary = {
   createdByEmail: string | null;
   /** Custom field values (CF4), field id -> value. */
   customFields: CustomValues;
+  /** The purchase order the bill was copied from (PO3), or null. */
+  purchaseOrderId: string | null;
+  purchaseOrderNumber: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -156,6 +163,8 @@ type BillRow = {
   voided_by_email: string | null;
   created_by_email: string | null;
   custom_fields: CustomValues;
+  purchase_order_id: string | null;
+  po_number: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -163,11 +172,12 @@ type BillRow = {
 const SUMMARY_COLUMNS = `b.id, b.status, b.contact_id, c.name as contact_name, b.bill_date, b.due_date,
   b.supplier_invoice_number, b.amounts_mode, b.currency_code, b.subtotal, b.tax_total, b.total,
   paid.amount_paid, credited.amount_credited, b.approval_journal_id, b.approved_at, b.approved_by_email, b.void_date, b.void_journal_id, b.voided_at,
-  b.voided_by_email, b.created_by_email, b.created_at, b.updated_at, b.custom_fields`;
+  b.voided_by_email, b.created_by_email, b.created_at, b.updated_at, b.custom_fields, b.purchase_order_id, po.po_number`;
 
 /** Bills with their supplier and the sums of their active payments and supplier credit applied. */
 const SUMMARY_FROM = `bills b
   join contacts c on c.id = b.contact_id
+  left join purchase_orders po on po.id = b.purchase_order_id
   cross join lateral (
     select coalesce(sum(p.amount), 0) as amount_paid
       from supplier_payments p
@@ -195,6 +205,7 @@ type LineRow = LineItemRow & {
   tax_amount: string;
   tracking: TrackingTags;
   custom_fields: CustomValues;
+  purchase_order_line_id?: string | null;
 };
 
 function toSummary(row: BillRow): BillSummary {
@@ -227,6 +238,8 @@ function toSummary(row: BillRow): BillSummary {
     voidedByEmail: row.voided_by_email,
     createdByEmail: row.created_by_email,
     customFields: row.custom_fields ?? {},
+    purchaseOrderId: row.purchase_order_id,
+    purchaseOrderNumber: row.po_number,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -250,32 +263,38 @@ function toLine(row: LineRow): BillLine {
     taxAmount: row.tax_amount,
     tracking: row.tracking ?? {},
     customFields: row.custom_fields ?? {},
+    purchaseOrderLineId: row.purchase_order_line_id ?? null,
   };
 }
 
+/** A purchase line as entered (bills and purchase orders). */
+export type PurchaseLineInput = {
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  accountCode: string;
+  taxCode: string | null;
+  tracking: TrackingTags;
+  customFields: Record<string, unknown> | undefined;
+  itemId: string | null;
+  unitId: string | null;
+  /** Bills only: the purchase order line it's billed against (PO3-PO6). */
+  purchaseOrderLineId: string | null;
+};
+
 /** A draft as entered, validated but not yet checked against the organisation's data. */
-type DraftDetails = {
+export type DraftDetails = {
   contactId: string;
   billDate: string;
   dueDate: string;
   supplierInvoiceNumber: string;
   amountsMode: AmountsMode;
-  lines: Array<{
-    description: string;
-    quantity: string;
-    unitPrice: string;
-    accountCode: string;
-    taxCode: string | null;
-    tracking: TrackingTags;
-    customFields: Record<string, unknown> | undefined;
-    itemId: string | null;
-    unitId: string | null;
-  }>;
+  lines: PurchaseLineInput[];
   customInput: Record<string, unknown> | undefined;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
-type ResolvedDraft = DraftDetails & {
+export type ResolvedDraft = DraftDetails & {
   contactName: string;
   currencyCode: string;
   subtotal: string;
@@ -297,6 +316,7 @@ type ResolvedDraft = DraftDetails & {
     tracking: TrackingTags;
     accountClass: AccountClass;
     customFields: CustomValues;
+    purchaseOrderLineId: string | null;
   }>;
 };
 
@@ -311,11 +331,26 @@ function parseDraft(input: BillInput): DraftDetails {
     maxLength: 100,
   });
   const amountsMode = requireOneOf(input.amountsMode, "amountsMode", AMOUNTS_MODES);
-  const rawLines = requireArray(input.lines, "lines", MAX_LINES);
+  const lines = parsePurchaseLines(input.lines, amountsMode, "A bill", { purchaseOrderLinks: true });
+  return { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines, customInput: parseCustomInput(input.customFields, "") };
+}
+
+/**
+ * Parses purchase lines (bills and purchase orders): each needs a
+ * description, quantity, unit price and account unless an item fills them,
+ * and a tax code unless the amounts have no tax.
+ */
+export function parsePurchaseLines(
+  input: unknown,
+  amountsMode: AmountsMode,
+  noun: string,
+  options: { purchaseOrderLinks?: boolean } = {},
+): PurchaseLineInput[] {
+  const rawLines = requireArray(input, "lines", MAX_LINES);
   if (rawLines.length === 0) {
-    throw new ValidationError("A bill needs at least one line.");
+    throw new ValidationError(`${noun} needs at least one line.`);
   }
-  const lines = rawLines.map((raw, index) => {
+  return rawLines.map((raw, index) => {
     const label = `Line ${index + 1}`;
     const line = asRecord(raw, label);
     // A line with an item can leave these blank: the item fills them (IT2).
@@ -324,7 +359,7 @@ function parseDraft(input: BillInput): DraftDetails {
     const taxCode = optionalString(line.taxCode, `${label} tax code`, { maxLength: 20 })?.toUpperCase() ?? null;
     if (amountsMode === "no_tax" && taxCode !== null) {
       throw new ValidationError(
-        `${label} has a tax code, but the bill's amounts have no tax. Remove the tax code or change the amounts to tax exclusive or inclusive.`,
+        `${label} has a tax code, but ${noun.replace(/^An? /, "the ")}'s amounts have no tax. Remove the tax code or change the amounts to tax exclusive or inclusive.`,
       );
     }
     if (amountsMode !== "no_tax" && taxCode === null && !fillable) {
@@ -341,9 +376,9 @@ function parseDraft(input: BillInput): DraftDetails {
       taxCode,
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
       customFields: parseCustomInput(line.customFields, `${label}: `),
+      purchaseOrderLineId: options.purchaseOrderLinks ? optionalId(line.purchaseOrderLineId, `${label} purchase order line`) : null,
     };
   });
-  return { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines, customInput: parseCustomInput(input.customFields, "") };
 }
 
 /** Normalised content for the idempotency fingerprint. */
@@ -354,10 +389,18 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     dueDate: draft.dueDate,
     supplierInvoiceNumber: draft.supplierInvoiceNumber,
     amountsMode: draft.amountsMode,
-    lines: draft.lines.map((line) => hashableLine(lineForHash({ ...line, accountCode: line.accountCode.toLowerCase() }))),
+    lines: hashPurchaseLines(draft.lines),
     // Values that weren't sent stay out, so older requests hash the same.
     ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
   };
+}
+
+/** Purchase lines for an idempotency hash; a purchase order link only when there is one, so older requests hash the same. */
+export function hashPurchaseLines(lines: readonly PurchaseLineInput[]): unknown[] {
+  return lines.map(({ purchaseOrderLineId, ...line }) => ({
+    ...hashableLine(lineForHash({ ...line, accountCode: line.accountCode.toLowerCase() })),
+    ...(purchaseOrderLineId ? { purchaseOrderLineId } : {}),
+  }));
 }
 
 /**
@@ -367,7 +410,7 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
  * account that can take bill lines (`billLineAccountProblem`), and each tax
  * code active and in effect on the bill date.
  */
-async function resolveDraft(
+export async function resolveDraft(
   tx: OrgTx,
   sent: DraftDetails,
   kept: ReadonlySet<string> = new Set(),
@@ -499,6 +542,7 @@ async function resolveDraft(
       tracking: line.tracking,
       accountClass: line.accountClass,
       customFields: custom.lines[index],
+      purchaseOrderLineId: line.purchaseOrderLineId,
     })),
   };
 }
@@ -566,6 +610,7 @@ type StoredLine = {
   taxAmount: string;
   tracking: TrackingTags;
   customFields: CustomValues;
+  purchaseOrderLineId?: string | null;
 };
 
 type StoredHeader = {
@@ -599,7 +644,7 @@ function headerState(bill: StoredHeader): string {
   ]);
 }
 
-function linesState(lines: readonly StoredLine[]): string {
+export function linesState(lines: readonly StoredLine[]): string {
   return JSON.stringify(
     lines.map((line) => [
       line.description,
@@ -615,6 +660,7 @@ function linesState(lines: readonly StoredLine[]): string {
       customValuesKey(line.customFields),
       line.itemId ?? null,
       line.unitId ?? null,
+      line.purchaseOrderLineId ?? null,
     ]),
   );
 }
@@ -644,16 +690,28 @@ function draftOf(bill: Bill): DraftDetails {
       customFields: line.customFields,
       itemId: line.itemId,
       unitId: line.unitId,
+      purchaseOrderLineId: line.purchaseOrderLineId,
     })),
     customInput: bill.customFields,
   };
 }
 
-async function insertLines(tx: OrgTx, billId: string, lines: ResolvedDraft["resolvedLines"]): Promise<void> {
+/**
+ * Saves purchase lines: a bill's (with any purchase order links) or a
+ * purchase order's, which have the same columns otherwise.
+ */
+export async function insertPurchaseLines(
+  tx: OrgTx,
+  table: "bill_lines" | "purchase_order_lines",
+  parentId: string,
+  lines: ResolvedDraft["resolvedLines"],
+): Promise<void> {
+  const bill = table === "bill_lines";
+  const width = bill ? 17 : 16;
   const values: unknown[] = [];
   const tuples = lines.map((line, index) => {
     values.push(
-      billId,
+      parentId,
       index + 1,
       line.description,
       line.quantity,
@@ -670,16 +728,39 @@ async function insertLines(tx: OrgTx, billId: string, lines: ResolvedDraft["reso
       line.unitId,
       line.baseQuantity,
     );
-    const base = index * 16;
+    if (bill) values.push(line.purchaseOrderLineId);
+    const base = index * width;
     const p = (offset: number) => `$${base + offset}`;
-    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric)`;
+    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric${bill ? `, ${p(17)}` : ""})`;
   });
   await tx.query(
-    `insert into bill_lines (bill_id, line_order, description, quantity, unit_price, account_id,
-                             tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity)
+    `insert into ${table} (${bill ? "bill_id" : "purchase_order_id"}, line_order, description, quantity, unit_price, account_id,
+                             tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity${bill ? ", purchase_order_line_id" : ""})
      values ${tuples.join(", ")}`,
     values,
   );
+}
+
+async function insertLines(tx: OrgTx, billId: string, lines: ResolvedDraft["resolvedLines"]): Promise<void> {
+  await insertPurchaseLines(tx, "bill_lines", billId, lines);
+}
+
+/** A bill's or purchase order's lines, in order. */
+export async function loadPurchaseLines(tx: OrgTx, table: "bill_lines" | "purchase_order_lines", parentId: string): Promise<BillLine[]> {
+  const bill = table === "bill_lines";
+  const lines = await tx.query<LineRow & { id: string }>(
+    `select l.id, l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
+            a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
+            l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS}${bill ? ", l.purchase_order_line_id" : ""}
+       from ${table} l
+       join accounts a on a.id = l.account_id
+       left join tax_codes t on t.id = l.tax_code_id
+       ${LINE_ITEM_JOINS}
+      where l.${bill ? "bill_id" : "purchase_order_id"} = $1
+      order by l.line_order`,
+    [parentId],
+  );
+  return lines.rows.map(toLine);
 }
 
 const KEY_COLUMNS = {
@@ -718,19 +799,7 @@ export async function getBill(tx: OrgTx, billIdInput: unknown): Promise<Bill> {
   if (!row) {
     throw new NotFoundError("Bill not found.");
   }
-  const lines = await tx.query<LineRow>(
-    `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
-            a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
-            l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS}
-       from bill_lines l
-       join accounts a on a.id = l.account_id
-       left join tax_codes t on t.id = l.tax_code_id
-       ${LINE_ITEM_JOINS}
-      where l.bill_id = $1
-      order by l.line_order`,
-    [billId],
-  );
-  return { ...toSummary(row), lines: lines.rows.map(toLine) };
+  return { ...toSummary(row), lines: await loadPurchaseLines(tx, "bill_lines", billId) };
 }
 
 /** Loads a bill and locks it until the transaction ends. */
@@ -782,15 +851,79 @@ export async function listBills(
   };
 }
 
-/** Saves a new draft (examples B1-B5, B8). Drafts post nothing. */
+/**
+ * Lines billed against a purchase order (PO3-PO6): the bill must be from
+ * that purchase order (approved, same supplier), each linked line keeps its
+ * purchase order line's item and unit, and the bills that aren't voided
+ * never add up to more than was ordered on a line. Locks the purchase order
+ * so two bills can't both take what's left. The database checks the same.
+ */
+async function checkPurchaseOrderLinks(
+  tx: OrgTx,
+  purchaseOrderId: string | null,
+  draft: ResolvedDraft,
+  exceptBillId: string | null,
+): Promise<void> {
+  const linked = draft.resolvedLines.flatMap((line, index) => (line.purchaseOrderLineId ? [{ line, index }] : []));
+  if (purchaseOrderId === null) {
+    if (linked.length > 0) {
+      throw new ValidationError(`Line ${linked[0].index + 1} is from a purchase order line, but this bill wasn't made from a purchase order.`);
+    }
+    return;
+  }
+  const po = await tx.query<{ status: string; contact_id: string; po_number: string | null }>(
+    "select status, contact_id, po_number from purchase_orders where id = $1 for update",
+    [purchaseOrderId],
+  );
+  const order = po.rows[0];
+  if (!order) throw new NotFoundError("Purchase order not found.");
+  if (order.status !== "approved") {
+    throw new ConflictError(`Purchase order ${order.po_number ?? `#${purchaseOrderId}`} is ${order.status}, so it can't be billed.`);
+  }
+  if (order.contact_id !== draft.contactId) {
+    throw new ValidationError(`This bill is from purchase order ${order.po_number}, so its supplier can't change.`);
+  }
+  if (linked.length === 0) return;
+  const poLines = await tx.query<{ id: string; line_order: number; quantity: string; item_id: string | null; unit_id: string | null; other_bills: string }>(
+    `select l.id, l.line_order, l.quantity::text, l.item_id, l.unit_id,
+            coalesce((select sum(bl.quantity) from bill_lines bl join bills b on b.id = bl.bill_id
+                       where bl.purchase_order_line_id = l.id and b.status <> 'voided'
+                         and ($2::bigint is null or b.id <> $2)), 0)::text as other_bills
+       from purchase_order_lines l where l.purchase_order_id = $1`,
+    [purchaseOrderId, exceptBillId],
+  );
+  const byId = new Map(poLines.rows.map((row) => [row.id, row]));
+  const onThisBill = new Map<string, Decimal>();
+  for (const { line, index } of linked) {
+    const label = `Line ${index + 1}`;
+    const poLine = byId.get(line.purchaseOrderLineId!);
+    if (!poLine) throw new ValidationError(`${label} isn't from ${order.po_number}'s lines.`);
+    if ((line.itemId ?? null) !== poLine.item_id || (line.unitId ?? null) !== poLine.unit_id) {
+      throw new ValidationError(
+        `${label} is from ${order.po_number} line ${poLine.line_order}, so it keeps that line's item and unit. Remove the line and add a new one for something else.`,
+      );
+    }
+    const total = add(onThisBill.get(poLine.id) ?? ZERO_DECIMAL, dec(line.quantity));
+    onThisBill.set(poLine.id, total);
+    const left = sub(dec(poLine.quantity), dec(poLine.other_bills));
+    if (cmp(total, left) > 0) {
+      throw new ValidationError(
+        `${label}: ${order.po_number} line ${poLine.line_order} ordered ${toPlainString(dec(poLine.quantity))}, and ${toPlainString(dec(poLine.other_bills))} of it is on other bills, so at most ${toPlainString(left)} can be billed here. Put anything extra on a line of its own.`,
+      );
+    }
+  }
+}
+
+/** Saves a new draft (examples B1-B5, B8). Drafts post nothing. `purchaseOrderId` is for copying a purchase order to a bill (PO3). */
 export async function createBill(
   tx: OrgTx,
   input: BillInput & { source?: unknown; idempotencyKey: unknown },
+  link: { purchaseOrderId: string } | null = null,
 ): Promise<{ created: boolean; bill: Bill }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const draft = parseDraft(input);
-  const hash = requestHash("bill", hashPayload(draft));
+  const hash = requestHash("bill", { ...hashPayload(draft), ...(link ? { purchaseOrderId: link.purchaseOrderId } : {}) });
 
   const existing = await findByKey(tx, "create", source, idempotencyKey);
   if (existing) {
@@ -799,14 +932,15 @@ export async function createBill(
   }
 
   const resolved = await resolveDraft(tx, draft);
+  await checkPurchaseOrderLinks(tx, link?.purchaseOrderId ?? null, resolved, null);
   await assertNumberFree(tx, resolved, null);
   const inserted = await savingNumber(
     resolved,
     tx.query<{ id: string }>(
       `insert into bills (command_source, idempotency_key, request_hash, contact_id, bill_date, due_date,
                           supplier_invoice_number, amounts_mode, currency_code, subtotal, tax_total, total,
-                          created_by_user_id, created_by_email)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14)
+                          created_by_user_id, created_by_email, purchase_order_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14, $15)
        on conflict (command_source, idempotency_key) do nothing
        returning id`,
       [
@@ -824,6 +958,7 @@ export async function createBill(
         resolved.total,
         tx.actor.userId,
         tx.actor.email,
+        link?.purchaseOrderId ?? null,
       ],
     ),
   );
@@ -850,6 +985,7 @@ export async function createBill(
       amountsMode: resolved.amountsMode,
       total: resolved.total,
       lines: resolved.resolvedLines.length,
+      ...(link ? { purchaseOrderId: link.purchaseOrderId } : {}),
     },
   });
   return { created: true, bill: await getBill(tx, billId) };
@@ -879,6 +1015,7 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
   if (same.header && same.lines) {
     return current;
   }
+  await checkPurchaseOrderLinks(tx, current.purchaseOrderId, resolved, current.id);
   await assertNumberFree(tx, resolved, current.id);
 
   const changed: string[] = (

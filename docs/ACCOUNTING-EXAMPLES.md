@@ -42,7 +42,9 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/customer-statements.test.ts` (CST1-CST5) and
   `tests/integration/quotes.test.ts` (QT1-QT8) and
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
-  `tests/integration/printed-documents.test.ts` (PD1-PD8), all against
+  `tests/integration/printed-documents.test.ts` (PD1-PD8) and
+  `tests/integration/purchase-orders.test.ts` (PO1-PO9) and
+  `tests/integration/stock-transfers.test.ts` (TR1-TR6), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -163,14 +165,13 @@ sales, 5000 cost of goods sold.
   supplier credit note for 2 Widgets @ 8.00 + GST posts Dr 2000 **18.40** /
   Cr 1400 **16.00** / Cr 2100 **2.40**, and Dr 1400 **3.00** / Cr 5000
   **3.00** (they were carried at 6.50 each), leaving 10 worth 65.00.
-- **Transfers between locations** aren't built yet (see below).
+- **Transfers between locations**: see "Stock transfers between locations"
+  (TR1-TR6, not yet approved by Jess).
 - **Stock equals the ledger**: across ST1-ST11 the stock report's total
   equals account 1400 on the trial balance, to the cent (tested).
 
 ### Not supported yet (refused rather than guessed)
 
-- **Transfers between locations**: not built. Move stock with a stocktake
-  adjustment out of one location and into another, at a cost you give.
 - **Voiding a bill or sales credit note whose stock has moved since**:
   refused (it needs later movements re-costed).
 - **Credit notes returning stock without the invoice it was sold on**:
@@ -2701,3 +2702,220 @@ George St, Dunedin 9016"; customer Paw Walkers with no address; GST 15%.
   today (as built), or ask?
 - Should a repeating invoice run that's left as a draft (approval refused)
   notify someone, e.g. by email to the organisation's admins?
+
+## Purchase orders (examples not yet approved by Jess)
+
+Written overnight from Xero's purchase orders (draft, approve, copy to bill,
+billed) and NetSuite's billing of purchase orders in parts; Jess hasn't
+approved them yet. A purchase order goes to a **supplier** and has the same
+lines as a bill (items, units, tracking, custom fields, tax exclusive,
+inclusive or no tax) with the same line rules and maths (B1-B4): picking an
+item fills the supplier's price (IT6), stock items go to the inventory
+account (ST1). It also has an optional **delivery date**, **delivery
+address** and **delivery instructions**, and a reference. Purchase orders
+**post nothing** to the ledger.
+
+- A **draft** can be edited and deleted.
+- **Approving** checks it again as a bill would be checked (an active
+  supplier, accounts, tax codes, items, required tracking and custom
+  fields), gives it the next number (`PO-0001`, `PO-0002`, ...) from its own
+  counter, with no gaps, and **locks** it: the database refuses changing an
+  approved purchase order or its lines, or deleting it.
+- **Copy to bill** makes a **draft bill** from the same supplier with what's
+  left to bill on each line (ordered less what's on bills that aren't
+  voided, drafts included), carrying the line's description, price,
+  account, tax code, item, unit, tracking and custom fields. Each bill line
+  points back to its purchase order line and the bill to its purchase
+  order. The supplier's invoice number and due date are typed, as on every
+  bill (suppliers have no payment terms in Tohyee). The draft bill can then
+  be edited like any bill (fewer items delivered, a different price), and
+  approving it posts the bill's journal as usual. **Stock comes in on the
+  bill** (ST1); there's no separate goods received step.
+- **Billed** is worked out from the linked bills, never stored or typed:
+  per line, what's on **approved** bills is billed and what's on **draft**
+  bills is shown separately. A purchase order is **billed** once approved
+  bills cover every line. Voiding a bill, or deleting a draft one, puts its
+  quantities back.
+- A linked bill line keeps its purchase order line's **item and unit**, the
+  bill keeps its **supplier**, and the bills that aren't voided never add
+  up to **more than was ordered** on a line (anything extra goes on a line
+  of its own). The database refuses all three too.
+- **Cancelling** an approved purchase order is allowed only while it has no
+  bills other than voided ones; it's then closed. Drafts are deleted, not
+  cancelled.
+- Printing is "Print or save as PDF", like quotes.
+
+Setup (GST 15%): organisation Glimmers, postal address "PO Box 5, Dunedin";
+supplier **Paw Supplies**, address "4 Wharf St, Port Chalmers"; item
+**WIDGET** (stock, purchase price **5.00**, account 1400, GST) and item
+**GIFTBOX** "Gift box" (non-stock, purchase price **2.00**, account 5100,
+GST). No locations.
+
+- **PO1** A draft purchase order to Paw Supplies dated 1 Jul 2026, delivery
+  date 10 Jul 2026 to "12 Stuart St, Dunedin 9016", tax exclusive, with
+  lines of only WIDGET x 10 and GIFTBOX x 100, is filled in as "Widget" 10 x
+  **5.00** to 1400 (50.00) and "Gift box" 100 x **2.00** to 5100 (200.00):
+  net **250.00**, GST **37.50**, total **287.50**. No journal is posted and
+  it has no number. A delivery date before the order date is refused. With
+  Advanced reporting on and Paw's own price of 4.80 for WIDGET (IT6), WIDGET
+  fills at **4.80**.
+- **PO2** Approving PO1 makes it **PO-0001**; editing it is refused (and the
+  database refuses changing it or its lines), and so is deleting it. Still
+  no journal. A second draft to a supplier that has since been archived is
+  refused on approval and stays a draft; the next one approved is
+  **PO-0002** (no gap).
+- **PO3** Copying PO-0001 to a bill dated 12 Jul 2026, due 20 Aug 2026,
+  supplier invoice **PS-101**, makes a draft bill from Paw Supplies with 10
+  Widget @ 5.00 to 1400 and 100 Gift box @ 2.00 to 5100, total **287.50**,
+  from PO-0001, each line linked to its purchase order line. PO-0001 shows
+  10 and 100 on draft bills, 0 billed, nothing left, and is still
+  **approved**; copying it again is refused ("already on bills"). The same
+  copy retried with the same key returns the same bill. Approving the bill
+  posts Dr 1400 **50.00** / Dr 5100 **200.00** / Dr 2100 **37.50** / Cr
+  2000 **287.50** and brings in 10 Widgets worth 50.00 (ST1); PO-0001 then
+  shows 10 and 100 billed and is **billed**.
+- **PO4** Billing in parts: PO-0001 copied to bill PS-201, edited to 6
+  Widgets and 40 Gift boxes (a part delivery) and approved, posts Dr 1400
+  **30.00** / Dr 5100 **80.00** / Dr 2100 **16.50** / Cr 2000 **126.50**.
+  PO-0001 shows 6 of 10 and 40 of 100 billed, 4 and 60 left, and is still
+  approved. Copying again (PS-202) makes a draft with 4 Widgets (20.00) and
+  60 Gift boxes (120.00): net **140.00**, GST **21.00**, total **161.00**.
+  Once that's approved PO-0001 is **billed** (126.50 + 161.00 = 287.50).
+- **PO5** Voiding PS-202 (after PO4) puts its 4 and 60 back: PO-0001 is
+  approved again with 4 and 60 left, and copying again makes a new draft
+  for them. Deleting that draft puts them back too.
+- **PO6** On PS-201's draft, 11 Widgets is refused (only 10 were ordered);
+  on PS-202's draft after PS-201 was approved with 6, 5 Widgets is refused
+  ("at most 4"). Changing a linked line's item, changing the bill's
+  supplier, and a bill line naming a purchase order line on a bill that
+  wasn't copied from that purchase order are all refused (the database
+  refuses them too). A line of its own, Freight 15.00 to 6010, can be
+  added to the bill, and a linked line's price can be changed to 5.20 (the
+  bill posts 5.20; the purchase order keeps 5.00, since billed counts
+  quantities).
+- **PO7** Cancelling: an approved purchase order with no bills is
+  cancelled and can't then be copied to a bill. A draft can't be cancelled
+  (it's deleted instead). A purchase order with a draft bill can't be
+  cancelled (refused, and the database refuses too); after the draft bill
+  is deleted it can.
+- **PO8** Printing PO-0001: headed **Purchase order**, order number
+  PO-0001, order date 1 Jul 2026, delivery date 10 Jul 2026, "Deliver to 12
+  Stuart St, Dunedin 9016", Paw Supplies and its address, Glimmers and PO
+  Box 5, the two lines, subtotal **250.00**, GST **37.50**, total
+  **287.50**, and no GST number or payment details (it isn't a tax
+  document). A draft prints **Draft purchase order** with no number; a
+  cancelled one **Cancelled purchase order**. A viewer can print it.
+  Printing never posts a journal.
+- **PO9** Saving, approving, copying to a bill and cancelling each return
+  the original when retried with the same key, and are refused (409) with
+  the same key and different content. A viewer can list and open purchase
+  orders but not save them. Across PO1-PO8 the only journals are the
+  bills'.
+
+### Not supported yet (refused rather than guessed)
+
+- Emailing purchase orders (so no "sent" status), and Xero's separate
+  "awaiting approval" step: a bookkeeper saves and approves.
+- Changing an approved purchase order (Xero allows editing): cancel it, if
+  it has no bills, and make a new one.
+- Closing a part-billed purchase order when the rest will never come (Xero's
+  "mark as billed"): it stays approved with what's left shown. Billing more
+  than was ordered on a line (put the extra on a line of its own).
+- Receiving goods without a bill (goods received notes, NetSuite's item
+  receipts): stock comes in when the bill is approved (ST1).
+- Copying a purchase order to a new purchase order, making one from a sales
+  invoice or quote, and foreign-currency purchase orders.
+
+### Questions for Jess (purchase orders)
+
+- A part-billed purchase order whose rest will never arrive stays
+  "approved" with what's left showing. Should there be a way to close it
+  (Xero's "mark as billed"), and should that be allowed only when nothing is
+  on a draft bill?
+- Should approved purchase orders be editable (Xero allows it) as long as
+  nothing has been billed, rather than cancel and make a new one?
+- Should a bill be allowed to take more than was ordered on a purchase order
+  line (the supplier sent extra), or is a separate line right, as built?
+- New purchase orders start with the organisation's postal address as the
+  delivery address. Would a separate "delivery address" setting (a shop or
+  warehouse) be better?
+
+## Stock transfers between locations (examples not yet approved by Jess)
+
+Written overnight from NetSuite's inventory transfers and the weighted
+average rules already approved (W1-W12, ST1-ST12); Jess hasn't approved
+them yet. A transfer moves a quantity of a **stock item** (in its base
+unit) from one location to another on a date:
+
+- It leaves the **from** location at that location's weighted average,
+  exactly as stock going out does (W1-W4): quantity x value / quantity on
+  hand, rounded once to cents, and the **whole remaining value** when
+  everything left there is moved. It arrives at the **to** location at that
+  same value, so the to-location's average becomes a mix of the two.
+- The inventory account's **total never changes**, and nothing goes to cost
+  of sales. Because bills tag their inventory lines with the line's
+  Location (ST1), the inventory account does carry Location tags, so a
+  transfer posts one journal on its date that moves the value between the
+  locations: **Dr 1400 tagged with the to-location / Cr 1400 tagged with the
+  from-location**. Its two stock movements ("transferred out" and
+  "transferred in") point at that journal and at the transfer. (Cost of
+  sales lines on 1400 aren't tagged, ST2, so 1400 by Location in the ledger
+  doesn't yet equal stock by location; that's a question for Jess below.)
+- The **negative stock** setting applies to the from-location as it does to
+  sales (ST9-ST11). Stock can't come into a location that's **below zero**
+  by transfer, since only a bill costs a shortfall (ST10).
+- Transfers are never changed or deleted (the database refuses); a
+  transfer back undoes one. The period lock applies to the date.
+
+Setup: Advanced reporting on, Location values Dunedin, Auckland and
+Christchurch; WIDGET (stock, purchase price 5.00); negative stock off.
+
+- **TR1** After a bill of 10 WIDGET @ 5.00 into Dunedin (ST1: Dunedin 10
+  worth 50.00), transferring **4** from Dunedin to Auckland on 15 Jun 2026
+  moves **20.00**: journal on 15 Jun Dr 1400 [Auckland] **20.00** / Cr 1400
+  [Dunedin] **20.00**. Dunedin **6 worth 30.00**, Auckland **4 worth
+  20.00**; 1400 still **50.00**; no cost of sales. The movements show
+  Dunedin -4 (-20.00) and Auckland +4 (+20.00), both with that journal.
+- **TR2** A bill of 3 @ 3.3333 into Dunedin (10.00): transferring 1 moves
+  **3.33**, then transferring the other 2 moves the remaining **6.67**
+  (W3, W4). Dunedin 0 worth 0.00; Auckland 3 worth **10.00**.
+- **TR3** Dunedin 10 worth 50.00 and Auckland 10 worth 70.00: transferring
+  4 from Dunedin makes Auckland **14 worth 90.00**; selling 1 from Auckland
+  then costs **6.43** (90.00 / 14), leaving Auckland 13 worth 83.57.
+  Dunedin stays 6 worth 30.00.
+- **TR4** Dunedin 2 worth 10.00, negative stock off: transferring 3 is
+  **refused** ("Only 2 on hand"). With negative stock on it moves **15.00**
+  (3 at the 5.00 average), leaving Dunedin **-1 worth -5.00** and Auckland
+  3 worth 15.00; a transfer back into Dunedin while it's below zero is
+  refused.
+- **TR5** Refused, with nothing moved: the same location at both ends, a
+  quantity of 0, a non-stock item, a date before the item's latest
+  movement at either location (backdating, as W's rules), an archived
+  destination, a date in a locked period, and an organisation with no
+  locations set up.
+- **TR6** A retry with the same key returns the same transfer; the same
+  key with a different quantity is refused (409). After TR1's transfer the
+  bill into Dunedin can't be voided (its stock has moved since, ST4's
+  rule). A viewer can list transfers but not make one. Across TR1-TR6
+  stock equals account 1400 to the cent (tested).
+
+### Not supported yet (refused rather than guessed)
+
+- Voiding or editing a transfer: make a transfer back.
+- Transfers in transit (NetSuite's transfer orders with a ship and receive
+  step), several items in one transfer, and transfers in a unit other than
+  the item's base unit.
+- Backdated transfers (as for every stock movement).
+
+### Questions for Jess (stock transfers)
+
+- Transfers post a journal between locations on 1400 (Dr to-location / Cr
+  from-location) because bills tag 1400 by Location. Cost of sales lines
+  on 1400 aren't tagged by location (ST2), so 1400 filtered by Location in
+  the ledger won't equal the stock report by location. Should all 1400
+  lines carry the location (a change to ST2's journals), or should
+  transfers post nothing and stock by location live only in the stock
+  report?
+- Should a transfer into a location that's below zero be allowed (filling
+  the shortfall at the transferred cost, with the difference to cost of
+  sales like ST10), rather than refused?
