@@ -19,7 +19,6 @@ import {
 } from "@/lib/repeating/service";
 import { runOrganisationRepeatingInvoices } from "@/lib/repeating/scheduler";
 import { getOrganisation } from "@/lib/organisations/registry";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -57,9 +56,6 @@ describeWithDatabase("repeating invoices", () => {
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
     const job = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: null, email: "repeating-invoices@tohyee" }, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     const kobe = (await as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Kobe Cafe", isCustomer: true }))).contact;
     const template = async (extra: Record<string, unknown> = {}) =>
       (

@@ -30,7 +30,6 @@ import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { addAttachment, getRecordExtras } from "@/lib/records/extras";
 import { accountTransactions } from "@/lib/reports/account-transactions";
 import { calculateGstReturn, fileGstReturn, getGstReturn } from "@/lib/reports/gst-return";
-import { createTaxCode } from "@/lib/tax/codes";
 import { createTrackingValue, getTrackingSetup, updateTrackingCategory } from "@/lib/tracking/service";
 import {
   apiRequest,
@@ -96,9 +95,6 @@ describeWithDatabase("expense claims", () => {
     const as = asUser(owner);
     const asSam = asUser(sam);
     const asAroha = asUser(aroha);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     const draft = async (receipts: unknown[] = RECEIPTS, idempotencyKey = key("claim")) =>
       (await asSam((tx) => createExpenseClaim(tx, { idempotencyKey, description: "June market trip", receipts }))).claim;
     const submitted = async (receipts: unknown[] = RECEIPTS) => {

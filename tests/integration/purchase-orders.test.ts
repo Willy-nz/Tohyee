@@ -21,7 +21,6 @@ import {
   updatePurchaseOrder,
 } from "@/lib/purchase-orders/service";
 import { inventoryValuation } from "@/lib/reports/financial";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -59,9 +58,6 @@ describeWithDatabase("purchase orders", () => {
     await createTestOrganisation(owner, org);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     await as((tx) => updateOrganisationSettings(tx, { displayName: "Glimmers", postalAddress: "PO Box 5, Dunedin", ...(options.advanced ? { advancedFeatures: true } : {}) }));
     const contact = async (name: string, extra: Record<string, unknown> = {}): Promise<Contact> =>
       (await as((tx) => createContact(tx, { idempotencyKey: key("c"), name, isSupplier: true, ...extra }))).contact;

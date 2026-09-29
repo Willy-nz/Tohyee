@@ -125,7 +125,8 @@ Creating an organisation (server admins only):
    a member,
 2. runs `CREATE DATABASE` (outside any transaction),
 3. applies the tenant migrations,
-4. seeds `organisation_settings` and a starting NZ chart of accounts,
+4. seeds `organisation_settings`, a starting NZ chart of accounts and the
+   standard NZ GST codes (each only if there are none yet),
 5. marks it `ready`.
 
 Every step is idempotent. If any step fails the organisation is marked

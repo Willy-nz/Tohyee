@@ -17,7 +17,6 @@ import { recordPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, deleteInvoice } from "@/lib/invoices/service";
 import { postJournal } from "@/lib/ledger/journals";
 import type { RecordExtras, RecordNote } from "@/lib/records/types";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -88,9 +87,6 @@ describeWithDatabase("notes, files and history", () => {
     }
     const as = <T>(user: SessionUser, work: Parameters<typeof inOrganisation<T>>[2]) =>
       inOrganisation(org, { userId: user.id, email: user.email }, work);
-    await as(owner, (tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     const kobe = (await as(jess, (tx) => createContact(tx, { idempotencyKey: key("c"), name: "Kobe Ltd", isCustomer: true }))).contact;
     const paw = (await as(jess, (tx) => createContact(tx, { idempotencyKey: key("c"), name: "Paw Supplies", isSupplier: true }))).contact;
     const draftInvoice = async () =>

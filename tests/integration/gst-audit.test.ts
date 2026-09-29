@@ -14,7 +14,6 @@ import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { entriesTotal, type GstAuditReport, gstAuditReport } from "@/lib/reports/gst-audit";
 import { calculateGstReturn, fileGstReturn } from "@/lib/reports/gst-return";
 import { approveSupplierCreditNote, createSupplierCreditNote } from "@/lib/supplier-credit-notes/service";
-import { createTaxCode } from "@/lib/tax/codes";
 import type { GstBasis } from "@/lib/tax/categories";
 import {
   apiRequest,
@@ -58,12 +57,6 @@ describeWithDatabase("GST audit report", () => {
     await createTestOrganisation(owner, org);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    for (const [code, category, rate] of [
-      ["GST", "standard", "0.15"],
-      ["ZERO", "zero_rated", "0"],
-    ]) {
-      await as((tx) => createTaxCode(tx, { idempotencyKey: key("tax"), code, label: code, category, rate, effectiveFrom: "2026-01-01" }));
-    }
     await as((tx) => updateOrganisationSettings(tx, { gstBasis: basis }));
     const contact = async (name: string, fields: Record<string, unknown>): Promise<Contact> =>
       (await as((tx) => createContact(tx, { idempotencyKey: key("contact"), name, ...fields }))).contact;

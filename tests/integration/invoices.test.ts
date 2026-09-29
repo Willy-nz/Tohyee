@@ -127,24 +127,6 @@ describeWithDatabase("sales invoices", () => {
         role,
       ]);
     }
-    await asUser(owner, async (tx) => {
-      await createTaxCode(tx, {
-        idempotencyKey: key("tax"),
-        code: "GST",
-        label: "GST on income (15%)",
-        category: "standard",
-        rate: "0.15",
-        effectiveFrom: "2026-01-01",
-      });
-      await createTaxCode(tx, {
-        idempotencyKey: key("tax"),
-        code: "ZERO",
-        label: "Zero-rated exports",
-        category: "zero_rated",
-        rate: "0",
-        effectiveFrom: "2026-01-01",
-      });
-    });
     customer = (
       await asUser(bookkeeper, (tx) =>
         createContact(tx, { idempotencyKey: key("contact"), name: "Aroha Café Ltd", isCustomer: true }),
@@ -490,14 +472,6 @@ describeWithDatabase("sales invoices", () => {
     const otherCustomer = await asUser(
       bookkeeper,
       async (tx) => {
-        await createTaxCode(tx, {
-          idempotencyKey: key("tax"),
-          code: "GST",
-          label: "GST",
-          category: "standard",
-          rate: "0.15",
-          effectiveFrom: "2026-01-01",
-        });
         return (await createContact(tx, { idempotencyKey: key("contact"), name: "Tūī Traders", isCustomer: true }))
           .contact;
       },
@@ -615,7 +589,7 @@ describeWithDatabase("sales invoices", () => {
       [{ lines: [line("1", "10", null)] }, /Line 1 needs a tax code/],
       [{ lines: [line("1", "10", "NOPE")] }, "Line 1: there's no tax code NOPE."],
       [{ amountsMode: "no_tax", lines: [line("1", "10", "GST")] }, /Line 1 has a tax code, but the invoice's amounts have no tax/],
-      [{ invoiceDate: "2025-12-31" }, /tax code GST isn't in effect on 2025-12-31 \(it applies from 2026-01-01\)/],
+      [{ invoiceDate: "2010-09-30" }, /tax code GST isn't in effect on 2010-09-30 \(it applies from 2010-10-01\)/],
       [{ lines: [line("1.00001", "10")] }, "Line 1 quantity can have at most 4 decimal places."],
       [{ lines: [line("1", "10.12345")] }, "Line 1 unit price can have at most 4 decimal places."],
       [{ lines: [line("0", "10")] }, "Line 1 quantity must not be zero."],

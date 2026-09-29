@@ -14,7 +14,6 @@ import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { dec, sub, toFixedString } from "@/lib/money/decimal";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { inventoryValuation, trialBalance } from "@/lib/reports/financial";
-import { createTaxCode } from "@/lib/tax/codes";
 import { createTrackingValue, getTrackingSetup, updateTrackingValue } from "@/lib/tracking/service";
 import {
   apiRequest,
@@ -53,9 +52,6 @@ describeWithDatabase("stock transfers", () => {
     await createTestOrganisation(owner, org);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     await as((tx) => updateOrganisationSettings(tx, { advancedFeatures: true }));
     const loc: Record<string, string> = {};
     const category = (await as((tx) => getTrackingSetup(tx))).categories.find((c) => c.kind === "location")!.id;

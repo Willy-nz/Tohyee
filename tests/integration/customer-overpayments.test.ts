@@ -34,7 +34,6 @@ import { approveInvoice, createInvoice, getInvoice, type Invoice, voidInvoice } 
 import { correctJournal, getJournal, getJournalDetails, listJournals } from "@/lib/ledger/journals";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { calculateGstReturn } from "@/lib/reports/gst-return";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -101,16 +100,6 @@ describeWithDatabase("customer overpayments", () => {
     }
     const asUser = <T>(user: SessionUser, work: (tx: OrgTx) => Promise<T>) =>
       inOrganisation(org, { userId: user.id, email: user.email }, work);
-    await asUser(owner, (tx) =>
-      createTaxCode(tx, {
-        idempotencyKey: key("tax"),
-        code: "GST",
-        label: "GST on income (15%)",
-        category: "standard",
-        rate: "0.15",
-        effectiveFrom: "2026-01-01",
-      }),
-    );
     const newCustomer = async (name: string): Promise<Contact> =>
       (await asUser(bookkeeper, (tx) => createContact(tx, { idempotencyKey: key("contact"), name, isCustomer: true })))
         .contact;

@@ -37,7 +37,6 @@ import {
   updateTask,
   updateTimeEntry,
 } from "@/lib/projects/service";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -90,9 +89,6 @@ describeWithDatabase("projects and time tracking", () => {
     const as = asUser(jess);
     const asAroha = asUser(aroha);
     const asSam = asUser(sam);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     const terms = (await as((tx) => getCustomerSetup(tx))).paymentTerms;
     const twentieth = terms.find((term) => term.name === "20th of the following month")!.id;
     const harbour = (await as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Harbour Cafe", isCustomer: true, paymentTermId: twentieth }))).contact;

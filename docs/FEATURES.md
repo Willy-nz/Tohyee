@@ -128,7 +128,9 @@ that something happened.
   out, grouped from the GST return's own lines so each list adds up to its
   box to the cent. Each of these five reports has "Print or save as PDF".
 - **Tax codes** as settings. Sales invoices and bills apply them; manual
-  journals don't.
+  journals don't. A new organisation starts with the standard NZ codes
+  (GST 15%, Zero rated, Exempt, No GST, from 1 Oct 2010); existing
+  organisations with no codes at all were given them by migration 0031.
 - **Sales invoices** in the base currency: drafts that can be edited and
   deleted, tax-exclusive, tax-inclusive or no-tax amounts, GST worked out and
   rounded per line, approval that numbers the invoice (`INV-0001`, with no

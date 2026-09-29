@@ -108,20 +108,6 @@ describeWithDatabase("GST return", () => {
     }
     const asUser = <T>(user: SessionUser, work: (tx: OrgTx) => Promise<T>) =>
       inOrganisation(org, { userId: user.id, email: user.email }, work);
-    const taxCode = (code: string, category: string, rate: string) =>
-      asUser(owner, (tx) =>
-        createTaxCode(tx, {
-          idempotencyKey: key("tax"),
-          code,
-          label: code,
-          category,
-          rate,
-          effectiveFrom: "2026-01-01",
-        }),
-      );
-    await taxCode("GST", "standard", "0.15");
-    await taxCode("ZERO", "zero_rated", "0");
-    await taxCode("EXEMPT", "exempt", "0");
     const contact = async (name: string, fields: Record<string, unknown>): Promise<Contact> =>
       (
         await asUser(bookkeeper, (tx) =>

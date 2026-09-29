@@ -257,6 +257,15 @@ An invoice's amounts are tax **exclusive** (GST is added on top), tax
   its net amount, Cr GST (2100) for the GST. There's no GST line when the GST
   is 0.00.
 - Numbers `INV-0001`, `INV-0002`, ... are given on approval, with no gaps.
+- Tax codes: every organisation starts with the standard NZ codes, like
+  Xero: **GST** "GST (15%)" (standard, 0.15), **ZERO** "Zero rated"
+  (zero rated, 0), **EXEMPT** "Exempt" (exempt, 0) and **NONE** "No GST"
+  (out of scope, 0), all in effect from **1 Oct 2010** (when GST became
+  15%). So a document dated 30 Sep 2010 with GST is refused ("isn't in
+  effect"). Organisations made before this change that had no tax codes at
+  all were given the same four (migration 0031); one that already had any
+  codes was left alone (`tests/integration/provisioning.test.ts`). The
+  examples in this document use these seeded codes.
 
 | ID | Invoice | Result |
 | --- | --- | --- |

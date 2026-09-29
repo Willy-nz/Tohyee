@@ -56,12 +56,6 @@ describeWithDatabase("Home", () => {
     await createTestOrganisation(owner, org);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const as = <T>(work: Parameters<typeof inOrganisation<T>>[2]) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    for (const [code, category, rate] of [
-      ["GST", "standard", "0.15"],
-      ["EXEMPT", "exempt", "0"],
-    ]) {
-      await as((tx) => createTaxCode(tx, { idempotencyKey: key("tax"), code, label: code, category, rate, effectiveFrom: "2026-01-01" }));
-    }
     const kobe = (await as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Kobe Ltd", isCustomer: true }))).contact;
     const paw = (await as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Paw Supplies", isSupplier: true }))).contact;
     const invoice = async (invoiceDate: string, dueDate: string, unitPrice: string, approve = true) => {
