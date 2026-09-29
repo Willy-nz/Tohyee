@@ -44,7 +44,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
   `tests/integration/printed-documents.test.ts` (PD1-PD8) and
   `tests/integration/purchase-orders.test.ts` (PO1-PO9) and
-  `tests/integration/stock-transfers.test.ts` (TR1-TR6), all against
+  `tests/integration/stock-transfers.test.ts` (TR1-TR6) and
+  `tests/integration/budgets.test.ts` (BU1-BU8), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -1040,7 +1041,8 @@ totals as the standard reports, worked out when it's opened.
   as a percentage rounded to 1 decimal place, halves away from zero; blank
   when the second column is 0.00), and for profit and loss only a **year to
   date** column (from the start of the financial year that the first
-  column's period ends in). A budget column comes later, with budgets.
+  column's period ends in). A profit and loss can also have a budget
+  column and an actual less budget column (see "Budgets", BU7).
 - **Rows** belong to a table. A **group** lists accounts, chosen by account
   type or by account code, each in its natural direction as on the standard
   reports (income as credits, costs as debits), with a total; it can show
@@ -2919,3 +2921,137 @@ Christchurch; WIDGET (stock, purchase price 5.00); negative stock off.
 - Should a transfer into a location that's below zero be allowed (filling
   the shortfall at the transferred cost, with the difference to cost of
   sales like ST10), rather than refused?
+
+## Budgets (examples not yet approved by Jess)
+
+Written overnight from Xero's budget manager; Jess hasn't approved them yet.
+Every organisation has an **overall budget**, which can't be archived, and
+can add **named budgets**, each optionally for **one tracking value** (a
+Department, or a not-for-profit's grant or segment as a custom segment). A
+budget holds an **amount per profit and loss account per month**, in the
+account's natural direction (income as credits, costs as debits, so both are
+typed as positive amounts), with at most the currency's decimal places.
+Budgets **post nothing** and never change a ledger figure.
+
+- Amounts are typed, or **quick filled** for chosen accounts over chosen
+  months: the **same amount each month**, optionally changing by a % each
+  month (worked out exactly and rounded once per month, so rounding never
+  compounds, like Xero's "adjust by % each month"), or **last year's
+  actuals** for the same months (filtered to the budget's tracking value
+  when it has one), optionally changed by a % (each month rounded once,
+  halves away from zero). A quick fill replaces those months' amounts.
+- Only **profit and loss accounts** (revenue, other income, direct costs,
+  expenses, depreciation) take budget amounts; the database refuses others.
+- Budgets are **archived**, never deleted (the database refuses deleting a
+  budget or an amount; an amount is set to 0.00 instead). An archived budget
+  can't change until it's brought back. Names are unique among budgets that
+  aren't archived, ignoring case. A budget's tracking value never changes.
+- Every change of amounts is in the history with the amounts before and
+  after, and who changed them. Budgets are saved against the version that was
+  loaded, so two people can't overwrite each other's changes.
+- **Budget vs actual** (Reporting): for whole months, each profit and loss
+  account's actual (from the ledger, like the profit and loss, and only lines
+  tagged with the budget's value or one under it when it has one), budget,
+  **variance** (actual less budget) and **variance %** (variance / budget,
+  1 decimal place, halves away from zero, blank when the budget is 0.00),
+  with section totals, gross profit and net profit. A positive variance on a
+  cost means it's **over** budget.
+- **Budget column in custom reports** (TODO item 4): a profit and loss custom
+  report can show a chosen budget for its first period, and an **actual less
+  budget** column. A published copy keeps the budget figures as they were.
+
+Setup: the starting chart, a 31 March year end, Advanced reporting on,
+Department values Retail and Wholesale, and these journals (through 1000;
+the 4000 lines tagged as shown, everything else untagged):
+
+| Date | Journal |
+| --- | --- |
+| 1 Apr, 1 May, 1 Jun 2025 | Dr 6150 Rent 500.00 / Cr 1000 (each) |
+| 10 Apr 2025 | Dr 1000 1,000.00 / Cr 4000 700.00 (Retail) / Cr 4000 300.00 (Wholesale) |
+| 12 May 2025 | Dr 1000 1,200.00 / Cr 4000 1,200.00 (Retail) |
+| 9 Jun 2025 | Dr 1000 800.00 / Cr 4000 800.00 (Wholesale) |
+| 1 Apr, 1 May, 1 Jun 2026 | Dr 6150 500.00 / Cr 1000 (each) |
+| 10 Apr 2026 | Dr 1000 1,100.00 / Cr 4000 800.00 (Retail) / Cr 4000 300.00 (Wholesale) |
+| 12 May 2026 | Dr 1000 1,000.00 / Cr 4000 1,000.00 (Retail) |
+| 8 Jun 2026 | Dr 1000 1,300.00 / Cr 4000 1,000.00 (Retail) / Cr 4000 300.00 (Wholesale) |
+| 20 Jun 2026 | Dr 6010 Accounting fees 250.00 / Cr 1000 |
+
+- **BU1** A new organisation has one budget, **Overall budget**, which
+  can't be archived (the database refuses too). A named budget "Retail
+  plan" for Department: Retail is added; a second "retail plan" is refused
+  while the first isn't archived. With Advanced reporting off a budget can't
+  have a tracking value, and an archived value can't be chosen. Archiving
+  Retail plan moves it to the archived list; while archived its amounts
+  can't change; bringing it back works. The database refuses deleting a
+  budget and changing its tracking value. No journals are posted.
+- **BU2** Typing the overall budget's amounts: 4000 Apr 2026 **1,000.00**,
+  May **1,000.00**, Jun **1,200.00**; 6150 **500.00** for each of Apr-Jun
+  2026; 6010 Jun 2026 **200.00**. The grid for 12 months from Apr 2026 shows
+  4000's total **3,200.00** and a total for Apr of **1,500.00**. The history
+  shows each amount changed from 0.00. Refused, with nothing saved: account
+  1000 (not a profit and loss account; the database refuses too), 10.005
+  (three decimal places), a month "2026-13", the same account and month
+  twice, and a save against an older version. The database refuses deleting
+  an amount.
+- **BU3** Quick fill, same amount: 6150 at **500.00** for 12 months from
+  Apr 2026 makes every month 500.00 (total **6,000.00**). With **+2%** each
+  month the first six months are **500.00, 510.00, 520.20, 530.60, 541.22,
+  552.04** (500.00 x 1.02^n, each rounded once).
+- **BU4** Quick fill, last year's actuals, Apr-Jun 2026 on the overall
+  budget: 4000 becomes **1,000.00, 1,200.00, 800.00**; with **+10%**,
+  **1,100.00, 1,320.00, 880.00**; 6150 with **-5%**, **475.00** each month.
+  On Retail plan (Department: Retail) 4000 becomes **700.00, 1,200.00,
+  0.00**, only last year's Retail lines.
+- **BU5** Budget vs actual, the overall budget (BU2), Apr-Jun 2026:
+
+  | Row | Actual | Budget | Variance | % |
+  | --- | ---: | ---: | ---: | ---: |
+  | 4000 Sales | 3,400.00 | 3,200.00 | 200.00 | 6.3 |
+  | Gross profit | 3,400.00 | 3,200.00 | 200.00 | 6.3 |
+  | 6010 Accounting fees | 250.00 | 200.00 | 50.00 | 25.0 |
+  | 6150 Rent | 1,500.00 | 1,500.00 | 0.00 | 0.0 |
+  | Expenses | 1,750.00 | 1,700.00 | 50.00 | 2.9 |
+  | Net profit | 1,650.00 | 1,500.00 | 150.00 | 10.0 |
+
+  For June alone: Sales **1,300.00 / 1,200.00 / 100.00 / 8.3**, Expenses
+  **750.00 / 700.00 / 50.00 / 7.1**, Net profit **550.00 / 500.00 / 50.00 /
+  10.0**. An account with actuals and no budget shows a blank %. A 'from'
+  month after the 'to' month is refused.
+- **BU6** Budget vs actual for Retail plan with 4000 at **900.00** for each
+  of Apr-Jun 2026: actual **2,800.00** (Retail lines only: 800.00 + 1,000.00
+  + 1,000.00), budget **2,700.00**, variance **100.00**, **3.7**%. Rent and
+  fees aren't tagged Retail, so they aren't in it; net profit **2,800.00 /
+  2,700.00 / 100.00 / 3.7**.
+- **BU7** A custom profit and loss (CR1) for June 2026 with a budget column
+  (the overall budget, BU2) and actual less budget: Revenue **1,300.00 |
+  1,200.00 | 100.00**, Expenses **750.00 | 700.00 | 50.00**, Net profit
+  **550.00 | 500.00 | 50.00**. With one quarterly column (Apr-Jun 2026) the
+  budget column is the three months: Revenue budget **3,200.00**, Net profit
+  **1,650.00 | 1,500.00 | 150.00**. Publishing keeps the figures: after June's
+  4000 budget changes to 1,250.00 the draft's Revenue budget is **1,250.00**
+  and the published copy's still **1,200.00**. Refused: a budget column on a
+  balance sheet, an actual less budget column without a budget column, and a
+  budget that doesn't exist.
+- **BU8** Viewers can list and open budgets and budget vs actual; only
+  bookkeepers and admins can add, change, fill and archive them. Across
+  BU1-BU8 budgets post no journals.
+
+### Not supported yet (refused rather than guessed)
+
+- **Balance sheet budgets** (Xero has them): budgets hold profit and loss
+  accounts only, and the database refuses others.
+- A budget for **more than one tracking value** (Xero allows two
+  categories): one value per budget.
+- Importing and exporting budgets (Xero's CSV), and budget columns on the
+  standard profit and loss (they're on custom reports and budget vs actual).
+- A budget column for a period other than the custom report's first column,
+  and a year to date budget column.
+
+### Questions for Jess (budgets)
+
+- Variance is actual less budget for every row, so on costs a positive
+  variance is over budget. Would you rather costs show budget less actual
+  (so positive is always good), as some reports do?
+- Should budgets also cover balance sheet accounts, as Xero's do?
+- Is one tracking value per budget enough for grants and segments, or do
+  you need a budget for a combination (e.g. a Department and a Grant)?

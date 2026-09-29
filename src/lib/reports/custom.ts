@@ -29,6 +29,7 @@ import {
   templateLayout,
 } from "@/lib/reports/custom-layout";
 import { accountTotals, type AccountTotalsRow, earningsOf, financialYearEndMonth, naturalAmount, type TrackingFilter } from "@/lib/reports/financial";
+import { budgetTotals } from "@/lib/budgets/service";
 import { valueWithDescendants } from "@/lib/tracking/service";
 import { optionalSource, requireId, requireIdempotencyKey } from "@/lib/validation";
 
@@ -91,7 +92,20 @@ function parseColumns(base: CustomReportBase, input: unknown): ReportColumnsSett
   if (difference && periodCount < 2) throw new ValidationError("A difference column needs at least two period columns.");
   if (percent && !difference) throw new ValidationError("A % column needs the difference column.");
   if (yearToDate && base === "balance_sheet") throw new ValidationError("A balance sheet has no year to date column: each column is already as at a date.");
-  return { periodEnd, periodLength: periodLength as PeriodLength, periodCount, difference, percent, yearToDate };
+  // A budget column (BU7): profit and loss only, since budgets hold income and expense accounts.
+  const budgetId = raw.budgetId == null || raw.budgetId === "" ? null : requireId(raw.budgetId, "budgetId");
+  const budgetDifference = bool(raw.budgetDifference, "budgetDifference");
+  if (budgetId && base === "balance_sheet") throw new ValidationError("A balance sheet has no budget column: budgets hold profit and loss accounts only.");
+  if (budgetDifference && !budgetId) throw new ValidationError("A difference to budget column needs a budget column.");
+  return {
+    periodEnd,
+    periodLength: periodLength as PeriodLength,
+    periodCount,
+    difference,
+    percent,
+    yearToDate,
+    ...(budgetId ? { budgetId, budgetDifference } : {}),
+  };
 }
 
 function parseRow(base: CustomReportBase, input: unknown, ids: Set<string>): ReportRow {
@@ -192,6 +206,10 @@ export async function parseLayout(tx: OrgTx, base: CustomReportBase, input: unkn
     const unknown = [...codes].filter((code) => !known.has(code));
     if (unknown.length > 0) throw new ValidationError(`There's no account ${unknown.join(", ")}.`);
   }
+  if (columns.budgetId) {
+    const budget = await tx.query("select 1 from budgets where id = $1", [columns.budgetId]);
+    if (budget.rowCount === 0) throw new ValidationError("There's no such budget.");
+  }
   let filter: CustomReportLayout["filter"] = null;
   if (raw.filter != null) {
     const f = record(raw.filter, "The filter");
@@ -239,9 +257,19 @@ export async function computeCustomReport(tx: OrgTx, base: CustomReportBase, lay
     const from = financialYearStart(setting.periodEnd, yearEndMonth);
     amountColumns.push({ key: "ytd", kind: "year_to_date", label: "Year to date", from, to: setting.periodEnd });
   }
+  // The budget for the first period (BU7).
+  let budgetAmounts: Map<string, Decimal> | null = null;
+  if (setting.budgetId && base === "profit_and_loss") {
+    const first = amountColumns[0];
+    const found = await tx.query<{ name: string }>("select name from budgets where id = $1", [setting.budgetId]);
+    budgetAmounts = await budgetTotals(tx, setting.budgetId, first.from!, first.to!);
+    amountColumns.push({ key: "bud", kind: "budget", label: `Budget (${found.rows[0]?.name ?? `#${setting.budgetId}`})`, from: first.from, to: first.to });
+  }
   const columns: ReportColumn[] = [...amountColumns.filter((c) => c.kind === "period")];
   if (setting.difference) columns.push({ key: "diff", kind: "difference", label: "Difference", from: null, to: null });
   if (setting.percent) columns.push({ key: "pct", kind: "percent", label: "%", from: null, to: null });
+  columns.push(...amountColumns.filter((c) => c.kind === "budget"));
+  if (budgetAmounts && setting.budgetDifference) columns.push({ key: "bdiff", kind: "budget_difference", label: "Actual less budget", from: null, to: null });
   columns.push(...amountColumns.filter((c) => c.kind === "year_to_date"));
 
   const accountsResult = await tx.query<{ id: string; code: string; name: string; account_class: AccountClass; account_type: AccountType }>(
@@ -259,6 +287,10 @@ export async function computeCustomReport(tx: OrgTx, base: CustomReportBase, lay
   const amounts = new Map<string, Map<string, Decimal>>();
   const earnings = new Map<string, { previous: Decimal; current: Decimal }>();
   for (const column of amountColumns) {
+    if (column.kind === "budget") {
+      amounts.set(column.key, budgetAmounts ?? new Map());
+      continue;
+    }
     const totals: AccountTotalsRow[] = await accountTotals(tx, column.from, column.to!, trackingFilter);
     const byAccount = new Map<string, Decimal>();
     for (const row of totals) byAccount.set(row.id, naturalAmount(row));
@@ -282,6 +314,9 @@ export async function computeCustomReport(tx: OrgTx, base: CustomReportBase, lay
       if (setting.percent) {
         out.pct = isZero(second) ? null : toFixedString(divide(mul(difference, dec("100")), abs(second), 1), 1);
       }
+    }
+    if (budgetAmounts && setting.budgetDifference) {
+      out.bdiff = money(sub(values.get("p0") ?? ZERO_DECIMAL, values.get("bud") ?? ZERO_DECIMAL));
     }
     return out;
   };

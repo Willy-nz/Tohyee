@@ -91,6 +91,8 @@ const MENUS: Menu[] = [
           { href: "/operations/reports?report=transactions", label: "Account transactions" },
           { href: "/operations/reports?report=journals", label: "Journal report" },
           { href: "/operations/reports?report=sales", label: "Sales by salesperson", module: "reporting" },
+          { href: "/operations/reports?report=budget", label: "Budget vs actual" },
+          { href: "/operations/budgets", label: "Budgets" },
         ],
       },
       {
@@ -186,7 +188,7 @@ const AREAS: Record<string, string[]> = {
     "/operations/customer-payments",
   ],
   Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/supplier-credit-notes", "/operations/supplier-payments"],
-  Reporting: ["/operations/reports"],
+  Reporting: ["/operations/reports", "/operations/budgets"],
   Accounting: [
     "/operations/bank-accounts",
     "/operations/bank-rules",

@@ -41,6 +41,10 @@ export type ReportColumnsSetting = {
   percent: boolean;
   /** Profit and loss only: from the start of the financial year to `periodEnd`. */
   yearToDate: boolean;
+  /** Profit and loss only: a column with this budget for the first period (BU7). Left out when there's none. */
+  budgetId?: string;
+  /** The first period less the budget (needs `budgetId`). */
+  budgetDifference?: boolean;
 };
 
 export type FormulaTerm = { rowId: string; sign: 1 | -1 };
@@ -74,7 +78,7 @@ export type CustomReportLayout = {
   filter?: ReportTrackingFilter | null;
 };
 
-export type ReportColumnKind = "period" | "difference" | "percent" | "year_to_date";
+export type ReportColumnKind = "period" | "difference" | "percent" | "budget" | "budget_difference" | "year_to_date";
 
 export type ReportColumn = {
   key: string;

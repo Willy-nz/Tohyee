@@ -48,6 +48,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ supplier_payments      money paid against bills
 ├─ customer_payment_batches, supplier_payment_batches   one payment for several invoices or bills (its parts are customer or supplier payments)
 ├─ custom_reports         custom report drafts, and published frozen copies with their figures
+├─ budgets, budget_amounts   budgets (post nothing; archived, never deleted) and their amounts per account and month
 ├─ sales_credit_notes, sales_credit_note_lines, sales_credit_note_numbering
 ├─ sales_credit_note_applications   credit applied to sales invoices
 ├─ sales_credit_note_refunds        credit paid back to customers
@@ -214,8 +215,8 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices and purchase orders; print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices; add notes and files, and edit, delete or remove their own |
+| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices and purchase orders; print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
+| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices; add notes and files, and edit, delete or remove their own |
 | admin | + chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -288,6 +289,15 @@ Enforced by the database itself, not just the app:
   opened. Publishing inserts a new row holding the layout and the figures
   worked out at that moment; the database refuses any change to a published
   row except archiving it or bringing it back, and refuses deleting it.
+- Budgets (BU1-BU8): every organisation has one overall budget (a unique
+  index), which can't be archived. `budgets` and `budget_amounts` refuse
+  `DELETE` and `TRUNCATE` (a budget is archived, an amount set to 0.00); a
+  budget's tracking value and whether it's the overall one never change;
+  amounts are only for revenue and expense accounts and can't change while
+  their budget is archived (triggers). Budgets post nothing; budget vs
+  actual (`src/lib/reports/budget-vs-actual.ts`) and the custom report
+  budget column read them beside the same account totals as the profit and
+  loss.
 - Purchase orders (PO1-PO9): only drafts can be changed or deleted. An
   approved one can only become cancelled (and then only its cancel details
   change), and only while no bill that isn't voided names it; its lines are
