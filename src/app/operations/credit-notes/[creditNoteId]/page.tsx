@@ -207,6 +207,7 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
           <Stat label="Reference" value={creditNote.reference ?? "—"} />
           <Stat label="Customer" value={creditNote.contactName} />
         </div>
+        {creditNote.salespersonName ? <div className={ui.muted}>Salesperson: {creditNote.salespersonName}</div> : null}
         <CustomValuesText setup={customSetup.data} values={creditNote.customFields} />
         <div className={ui.tableWrap}>
           <table className={ui.table}>

@@ -27,6 +27,7 @@ export const POST = route(async (request) => {
       postalAddress: body.postalAddress,
       gstNumber: body.gstNumber,
       customFields: body.customFields,
+      defaultSalespersonId: body.defaultSalespersonId,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

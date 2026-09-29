@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
+import { customerDefault, SalespersonField, useSalespeople } from "@/components/salespeople";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { Badge, Button, Field, Notice, Stat, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
@@ -23,6 +24,7 @@ import type { Invoice, InvoiceStatus } from "@/lib/invoices/service";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { dec, isDecimalString, mul, toPlainString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
+import type { SalespeopleSetup } from "@/lib/salespeople/service";
 import { type CustomFieldSetup, type CustomValues } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
@@ -94,12 +96,13 @@ type FormProps = {
   taxCodes: TaxCode[];
   tracking: TrackingSetup;
   customSetup: CustomFieldSetup;
+  salespeople: SalespeopleSetup;
   invoice?: Invoice;
   onSaved: (invoice: Invoice) => void;
   onCancel: () => void;
 };
 
-function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCodes, tracking, customSetup, invoice, onSaved, onCancel }: FormProps) {
+function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCodes, tracking, customSetup, salespeople, invoice, onSaved, onCancel }: FormProps) {
   const scale = currencyMinorUnits(baseCurrency);
   const activeTaxCodes = taxCodes.filter((taxCode) => taxCode.isActive);
   const defaults: Defaults = {
@@ -111,6 +114,8 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
   const [dueDate, setDueDate] = useState(invoice?.dueDate ?? "");
   const [reference, setReference] = useState(invoice?.reference ?? "");
   const [amountsMode, setAmountsMode] = useState<AmountsMode>(invoice?.amountsMode ?? "exclusive");
+  // A new document takes the customer's default salesperson when the customer is chosen (SR1).
+  const [salespersonId, setSalespersonId] = useState<string>(invoice?.salespersonId ?? "");
   const lineDefaults = startingValues(customSetup, "line", ["invoice"]);
   const [customFields, setCustomFields] = useState<CustomValues>(
     () => invoice?.customFields ?? startingValues(customSetup, "document", ["invoice"]),
@@ -180,6 +185,7 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
         customFields: line.customFields,
       })),
       customFields,
+      salespersonId: salespersonId || null,
     };
     try {
       const result = invoice
@@ -214,7 +220,15 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
       ) : null}
       <div className={ui.grid3}>
         <Field label="Customer">
-          <select value={contactId} onChange={(event) => setContactId(event.target.value)} required>
+          <select value={contactId} onChange={(event) => {
+              setContactId(event.target.value);
+              if (!invoice) {
+                const chosen = customers.find((contact) => contact.id === event.target.value);
+                setSalespersonId(customerDefault(salespeople, chosen?.defaultSalespersonId));
+              }
+            }}
+            required
+          >
             <option value="">Choose a customer</option>
             {savedCustomer ? (
               <option value={savedCustomer.contactId}>{savedCustomer.contactName} (archived or not a customer)</option>
@@ -238,6 +252,7 @@ function InvoiceForm({ organisationId, baseCurrency, accounts, customers, taxCod
             required
           />
         </Field>
+        <SalespersonField setup={salespeople} value={salespersonId} onChange={setSalespersonId} />
         <Field label="Reference" hint="Optional, like the customer's order number.">
           <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
         </Field>
@@ -415,11 +430,12 @@ export function InvoiceEditor({
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
-  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error;
+  const salespeople = useSalespeople(organisationId);
+  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error ?? salespeople.error;
   if (error) {
     return <Notice tone="error">{error}</Notice>;
   }
-  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data || !customSetup.data) {
+  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data || !customSetup.data || !salespeople.data) {
     return <p className={ui.muted}>Loading…</p>;
   }
   return (
@@ -431,6 +447,7 @@ export function InvoiceEditor({
       taxCodes={taxCodes.data.taxCodes}
       tracking={tracking.data}
       customSetup={customSetup.data}
+      salespeople={salespeople.data}
       invoice={invoice}
       onSaved={onSaved}
       onCancel={onCancel}

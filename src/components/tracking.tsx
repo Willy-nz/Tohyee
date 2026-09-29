@@ -115,7 +115,7 @@ export function AdvancedFeaturesCard({ organisationId }: { organisationId: strin
   return (
     <Card
       title="Advanced (ERP) features"
-      description="For bigger organisations: tracking categories (Department, Class, Location and segments of your own) on every invoice, bill, credit note, spend and receive money and journal line, with profit and loss split and filtered by them, and custom fields on contacts, documents and lines. Off, the extra fields are hidden; anything already filled in is kept."
+      description="For bigger organisations: tracking categories (Department, Class, Location and segments of your own) on every invoice, bill, credit note, spend and receive money and journal line, with profit and loss split and filtered by them, custom fields on contacts, documents and lines, and salespeople on invoices and credit notes with sales by salesperson. Off, the extra fields are hidden; anything already filled in is kept."
       actions={on ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -126,6 +126,7 @@ export function AdvancedFeaturesCard({ organisationId }: { organisationId: strin
         </Button>
         {on ? <Link href="/operations/settings/tracking">Tracking categories and segments</Link> : null}
         {on ? <Link href="/operations/settings/custom-fields">Custom fields</Link> : null}
+        {on ? <Link href="/operations/settings/salespeople">Salespeople</Link> : null}
       </div>
     </Card>
   );

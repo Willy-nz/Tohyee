@@ -208,7 +208,11 @@ that something happened.
   date, check box, list, multiple select, email, phone and web address, each
   optionally required, with a default and shown as a column in lists.
   Fields and list options are archived, never deleted, and never reach the
-  ledger (CF1-CF10). Salespeople, richer customers and items and a GST audit
+  ledger (CF1-CF10). **Salespeople** (like NetSuite's sales reps): a default
+  per customer and one on each sales invoice and credit note, and a **sales
+  by salesperson** report (excluding GST, voids on their void date, each row
+  opening to its documents) that ties to income (SR1-SR8). Team selling and
+  commissions aren't built. Richer customers and items and a GST audit
   report come next.
 - **Two-step sign-in** for everyone: an authenticator app (QR code set-up)
   plus 10 one-use backup codes; wrong-code limits and lockout; lost-phone
