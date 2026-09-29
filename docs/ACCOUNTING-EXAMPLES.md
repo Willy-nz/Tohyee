@@ -42,7 +42,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/customer-statements.test.ts` (CST1-CST5) and
   `tests/integration/quotes.test.ts` (QT1-QT8) and
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
-  `tests/integration/printed-documents.test.ts` (PD1-PD8), all against
+  `tests/integration/printed-documents.test.ts` (PD1-PD8) and
+  `tests/integration/purchase-orders.test.ts` (PO1-PO9), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -2701,3 +2702,140 @@ George St, Dunedin 9016"; customer Paw Walkers with no address; GST 15%.
   today (as built), or ask?
 - Should a repeating invoice run that's left as a draft (approval refused)
   notify someone, e.g. by email to the organisation's admins?
+
+## Purchase orders (examples not yet approved by Jess)
+
+Written overnight from Xero's purchase orders (draft, approve, copy to bill,
+billed) and NetSuite's billing of purchase orders in parts; Jess hasn't
+approved them yet. A purchase order goes to a **supplier** and has the same
+lines as a bill (items, units, tracking, custom fields, tax exclusive,
+inclusive or no tax) with the same line rules and maths (B1-B4): picking an
+item fills the supplier's price (IT6), stock items go to the inventory
+account (ST1). It also has an optional **delivery date**, **delivery
+address** and **delivery instructions**, and a reference. Purchase orders
+**post nothing** to the ledger.
+
+- A **draft** can be edited and deleted.
+- **Approving** checks it again as a bill would be checked (an active
+  supplier, accounts, tax codes, items, required tracking and custom
+  fields), gives it the next number (`PO-0001`, `PO-0002`, ...) from its own
+  counter, with no gaps, and **locks** it: the database refuses changing an
+  approved purchase order or its lines, or deleting it.
+- **Copy to bill** makes a **draft bill** from the same supplier with what's
+  left to bill on each line (ordered less what's on bills that aren't
+  voided, drafts included), carrying the line's description, price,
+  account, tax code, item, unit, tracking and custom fields. Each bill line
+  points back to its purchase order line and the bill to its purchase
+  order. The supplier's invoice number and due date are typed, as on every
+  bill (suppliers have no payment terms in Tohyee). The draft bill can then
+  be edited like any bill (fewer items delivered, a different price), and
+  approving it posts the bill's journal as usual. **Stock comes in on the
+  bill** (ST1); there's no separate goods received step.
+- **Billed** is worked out from the linked bills, never stored or typed:
+  per line, what's on **approved** bills is billed and what's on **draft**
+  bills is shown separately. A purchase order is **billed** once approved
+  bills cover every line. Voiding a bill, or deleting a draft one, puts its
+  quantities back.
+- A linked bill line keeps its purchase order line's **item and unit**, the
+  bill keeps its **supplier**, and the bills that aren't voided never add
+  up to **more than was ordered** on a line (anything extra goes on a line
+  of its own). The database refuses all three too.
+- **Cancelling** an approved purchase order is allowed only while it has no
+  bills other than voided ones; it's then closed. Drafts are deleted, not
+  cancelled.
+- Printing is "Print or save as PDF", like quotes.
+
+Setup (GST 15%): organisation Glimmers, postal address "PO Box 5, Dunedin";
+supplier **Paw Supplies**, address "4 Wharf St, Port Chalmers"; item
+**WIDGET** (stock, purchase price **5.00**, account 1400, GST) and item
+**GIFTBOX** "Gift box" (non-stock, purchase price **2.00**, account 5100,
+GST). No locations.
+
+- **PO1** A draft purchase order to Paw Supplies dated 1 Jul 2026, delivery
+  date 10 Jul 2026 to "12 Stuart St, Dunedin 9016", tax exclusive, with
+  lines of only WIDGET x 10 and GIFTBOX x 100, is filled in as "Widget" 10 x
+  **5.00** to 1400 (50.00) and "Gift box" 100 x **2.00** to 5100 (200.00):
+  net **250.00**, GST **37.50**, total **287.50**. No journal is posted and
+  it has no number. A delivery date before the order date is refused. With
+  Advanced reporting on and Paw's own price of 4.80 for WIDGET (IT6), WIDGET
+  fills at **4.80**.
+- **PO2** Approving PO1 makes it **PO-0001**; editing it is refused (and the
+  database refuses changing it or its lines), and so is deleting it. Still
+  no journal. A second draft to a supplier that has since been archived is
+  refused on approval and stays a draft; the next one approved is
+  **PO-0002** (no gap).
+- **PO3** Copying PO-0001 to a bill dated 12 Jul 2026, due 20 Aug 2026,
+  supplier invoice **PS-101**, makes a draft bill from Paw Supplies with 10
+  Widget @ 5.00 to 1400 and 100 Gift box @ 2.00 to 5100, total **287.50**,
+  from PO-0001, each line linked to its purchase order line. PO-0001 shows
+  10 and 100 on draft bills, 0 billed, nothing left, and is still
+  **approved**; copying it again is refused ("already on bills"). The same
+  copy retried with the same key returns the same bill. Approving the bill
+  posts Dr 1400 **50.00** / Dr 5100 **200.00** / Dr 2100 **37.50** / Cr
+  2000 **287.50** and brings in 10 Widgets worth 50.00 (ST1); PO-0001 then
+  shows 10 and 100 billed and is **billed**.
+- **PO4** Billing in parts: PO-0001 copied to bill PS-201, edited to 6
+  Widgets and 40 Gift boxes (a part delivery) and approved, posts Dr 1400
+  **30.00** / Dr 5100 **80.00** / Dr 2100 **16.50** / Cr 2000 **126.50**.
+  PO-0001 shows 6 of 10 and 40 of 100 billed, 4 and 60 left, and is still
+  approved. Copying again (PS-202) makes a draft with 4 Widgets (20.00) and
+  60 Gift boxes (120.00): net **140.00**, GST **21.00**, total **161.00**.
+  Once that's approved PO-0001 is **billed** (126.50 + 161.00 = 287.50).
+- **PO5** Voiding PS-202 (after PO4) puts its 4 and 60 back: PO-0001 is
+  approved again with 4 and 60 left, and copying again makes a new draft
+  for them. Deleting that draft puts them back too.
+- **PO6** On PS-201's draft, 11 Widgets is refused (only 10 were ordered);
+  on PS-202's draft after PS-201 was approved with 6, 5 Widgets is refused
+  ("at most 4"). Changing a linked line's item, changing the bill's
+  supplier, and a bill line naming a purchase order line on a bill that
+  wasn't copied from that purchase order are all refused (the database
+  refuses them too). A line of its own, Freight 15.00 to 6010, can be
+  added to the bill, and a linked line's price can be changed to 5.20 (the
+  bill posts 5.20; the purchase order keeps 5.00, since billed counts
+  quantities).
+- **PO7** Cancelling: an approved purchase order with no bills is
+  cancelled and can't then be copied to a bill. A draft can't be cancelled
+  (it's deleted instead). A purchase order with a draft bill can't be
+  cancelled (refused, and the database refuses too); after the draft bill
+  is deleted it can.
+- **PO8** Printing PO-0001: headed **Purchase order**, order number
+  PO-0001, order date 1 Jul 2026, delivery date 10 Jul 2026, "Deliver to 12
+  Stuart St, Dunedin 9016", Paw Supplies and its address, Glimmers and PO
+  Box 5, the two lines, subtotal **250.00**, GST **37.50**, total
+  **287.50**, and no GST number or payment details (it isn't a tax
+  document). A draft prints **Draft purchase order** with no number; a
+  cancelled one **Cancelled purchase order**. A viewer can print it.
+  Printing never posts a journal.
+- **PO9** Saving, approving, copying to a bill and cancelling each return
+  the original when retried with the same key, and are refused (409) with
+  the same key and different content. A viewer can list and open purchase
+  orders but not save them. Across PO1-PO8 the only journals are the
+  bills'.
+
+### Not supported yet (refused rather than guessed)
+
+- Emailing purchase orders (so no "sent" status), and Xero's separate
+  "awaiting approval" step: a bookkeeper saves and approves.
+- Changing an approved purchase order (Xero allows editing): cancel it, if
+  it has no bills, and make a new one.
+- Closing a part-billed purchase order when the rest will never come (Xero's
+  "mark as billed"): it stays approved with what's left shown. Billing more
+  than was ordered on a line (put the extra on a line of its own).
+- Receiving goods without a bill (goods received notes, NetSuite's item
+  receipts): stock comes in when the bill is approved (ST1).
+- Copying a purchase order to a new purchase order, making one from a sales
+  invoice or quote, and foreign-currency purchase orders.
+
+### Questions for Jess (purchase orders)
+
+- A part-billed purchase order whose rest will never arrive stays
+  "approved" with what's left showing. Should there be a way to close it
+  (Xero's "mark as billed"), and should that be allowed only when nothing is
+  on a draft bill?
+- Should approved purchase orders be editable (Xero allows it) as long as
+  nothing has been billed, rather than cancel and make a new one?
+- Should a bill be allowed to take more than was ordered on a purchase order
+  line (the supplier sent extra), or is a separate line right, as built?
+- New purchase orders start with the organisation's postal address as the
+  delivery address. Would a separate "delivery address" setting (a shop or
+  warehouse) be better?

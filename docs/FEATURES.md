@@ -144,6 +144,19 @@ that something happened.
   invoices and quotes say so. The screen warns when a tax invoice over $1,000
   has no customer address, or GST is charged with no GST number in Settings.
   Emailing isn't built.
+- **Purchase orders** (Purchases; PO1-PO9, not yet approved by Jess): drafts
+  to a supplier with the same lines as a bill (items fill the supplier's
+  price), a delivery date, address and instructions; approving numbers them
+  (`PO-0001`, no gaps) and locks them (the database refuses changes). They
+  post nothing. **Copy to bill** makes a draft bill with what's still to
+  bill on each line, linked back line by line; a purchase order can be
+  billed in parts, shows what's billed and on draft bills per line, and is
+  **billed** once approved bills cover it, worked out from the bills
+  (voiding or deleting a bill puts its quantities back). Linked bill lines
+  keep their item, the bill keeps its supplier, and bills can't add up to
+  more than was ordered (the database refuses too). An approved purchase
+  order with no bills can be cancelled. Stock comes in on the bill (ST1).
+  "Print or save as PDF" like quotes. Emailing isn't built.
 - **Customer payments** against one approved sales invoice at a time:
   recording a payment posts Dr the bank account / Cr accounts receivable on
   the payment date, and voiding it posts the exact reversal on the void date.

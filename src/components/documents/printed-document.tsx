@@ -14,10 +14,19 @@ const BACK: Record<PrintKind, (id: string) => string> = {
   invoice: (id) => `/operations/invoices/${id}`,
   credit_note: (id) => `/operations/credit-notes/${id}`,
   quote: (id) => `/operations/quotes/${id}`,
+  purchase_order: (id) => `/operations/purchase-orders/${id}`,
+};
+
+const NUMBER_LABELS: Record<PrintKind, string> = {
+  invoice: "Invoice number",
+  credit_note: "Credit note number",
+  quote: "Quote number",
+  purchase_order: "Order number",
 };
 
 /**
- * A printable invoice, credit note or quote (examples PD1-PD8): the page
+ * A printable invoice, credit note, quote or purchase order (examples
+ * PD1-PD8, PO8): the page
  * as it will print, with "Print or save as PDF" (the browser's print, as for
  * statements). Warnings (PD4, PD6) show on screen only.
  */
@@ -64,16 +73,22 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
             <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto 1fr", gap: "2px 12px" }}>
               {doc.number ? (
                 <>
-                  <dt>{kind === "quote" ? "Quote number" : kind === "credit_note" ? "Credit note number" : "Invoice number"}</dt>
+                  <dt>{NUMBER_LABELS[kind]}</dt>
                   <dd style={{ margin: 0 }}>{doc.number}</dd>
                 </>
               ) : null}
-              <dt>{kind === "quote" ? "Quote date" : "Date"}</dt>
+              <dt>{kind === "quote" ? "Quote date" : kind === "purchase_order" ? "Order date" : "Date"}</dt>
               <dd style={{ margin: 0 }}>{formatDate(doc.date)}</dd>
               {doc.dueDate ? (
                 <>
                   <dt>Due date</dt>
                   <dd style={{ margin: 0 }}>{formatDate(doc.dueDate)}</dd>
+                </>
+              ) : null}
+              {doc.deliveryDate ? (
+                <>
+                  <dt>Delivery date</dt>
+                  <dd style={{ margin: 0 }}>{formatDate(doc.deliveryDate)}</dd>
                 </>
               ) : null}
               {doc.expiryDate ? (
@@ -187,6 +202,15 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
           </table>
         </div>
         {labels.includesGstStatement ? <p>Total includes GST of ${money(doc.taxTotal)}.</p> : null}
+        {doc.deliveryAddress || doc.deliveryInstructions ? (
+          <section className={ui.reportPaperBlock}>
+            <strong>Deliver to</strong>
+            <p style={{ margin: 0, whiteSpace: "pre-line" }}>
+              {doc.deliveryAddress ?? ""}
+              {doc.deliveryInstructions ? `${doc.deliveryAddress ? "\n" : ""}${doc.deliveryInstructions}` : ""}
+            </p>
+          </section>
+        ) : null}
         {doc.terms ? <p style={{ whiteSpace: "pre-line" }}>{doc.terms}</p> : null}
         {doc.paymentDetails ? (
           <section className={ui.reportPaperBlock}>

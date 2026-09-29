@@ -5,16 +5,17 @@ import type { AmountsMode } from "@/lib/invoices/amounts";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, dec, toFixedString } from "@/lib/money/decimal";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
+import { getPurchaseOrder } from "@/lib/purchase-orders/service";
 import { getQuote } from "@/lib/quotes/service";
 import { type PrintKind, PRINT_KINDS, type TaxLabels, taxLabels } from "@/lib/documents/tax-invoice";
 import { requireOneOf } from "@/lib/validation";
 
 /**
- * Everything a printed invoice, credit note or quote shows (examples
- * PD1-PD8): the organisation's name, address, GST number and payment
- * details, the customer's name and billing address, the lines, GST and
- * totals, and the dates. Worked out from the stored document; nothing is
- * stored or posted.
+ * Everything a printed invoice, credit note, quote or purchase order shows
+ * (examples PD1-PD8, PO8): the organisation's name, address, GST number and
+ * payment details, the customer's (or, on a purchase order, the supplier's)
+ * name and billing address, the lines, GST and totals, and the dates. Worked
+ * out from the stored document; nothing is stored or posted.
  */
 export type PrintedLine = Pick<InvoiceLine, "lineOrder" | "description" | "quantity" | "unitPrice" | "taxRate" | "lineAmount" | "taxAmount"> & {
   unitName: string | null;
@@ -44,9 +45,15 @@ export type PrintedDocument = {
   amountDue: string | null;
   /** Printed on approved invoices only (not credit notes or quotes). */
   paymentDetails: string | null;
+  /** Purchase orders only (PO8): where and when to deliver. */
+  deliveryDate: string | null;
+  deliveryAddress: string | null;
+  deliveryInstructions: string | null;
 };
 
-function printedLines(lines: InvoiceLine[]): PrintedLine[] {
+const NO_DELIVERY = { deliveryDate: null, deliveryAddress: null, deliveryInstructions: null };
+
+function printedLines(lines: Array<Pick<InvoiceLine, "lineOrder" | "description" | "quantity" | "unitPrice" | "unitName" | "taxRate" | "lineAmount" | "taxAmount">>): PrintedLine[] {
   return lines.map((line) => ({
     lineOrder: line.lineOrder,
     description: line.description,
@@ -67,7 +74,9 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
       ? { kind, document: await getInvoice(tx, id) }
       : kind === "credit_note"
         ? { kind, document: await getCreditNote(tx, id) }
-        : { kind, document: await getQuote(tx, id) };
+        : kind === "quote"
+          ? { kind, document: await getQuote(tx, id) }
+          : { kind, document: await getPurchaseOrder(tx, id) };
   const { document } = loaded;
   const contact = await tx.query<{ name: string; postal_address: string | null }>("select name, postal_address from contacts where id = $1", [
     document.contactId,
@@ -109,6 +118,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
       amountPaid: approved ? paidAndCredited(invoice.amountPaid, invoice.amountCredited, invoice.currencyCode) : null,
       amountDue: approved ? invoice.amountDue : null,
       paymentDetails: approved ? settings.paymentDetails : null,
+      ...NO_DELIVERY,
     };
   }
   if (loaded.kind === "credit_note") {
@@ -122,6 +132,24 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
       amountPaid: null,
       amountDue: null,
       paymentDetails: null,
+      ...NO_DELIVERY,
+    };
+  }
+  if (loaded.kind === "purchase_order") {
+    const order = loaded.document;
+    return {
+      ...base,
+      number: order.poNumber,
+      date: order.orderDate,
+      dueDate: null,
+      expiryDate: null,
+      terms: null,
+      amountPaid: null,
+      amountDue: null,
+      paymentDetails: null,
+      deliveryDate: order.deliveryDate,
+      deliveryAddress: order.deliveryAddress,
+      deliveryInstructions: order.deliveryInstructions,
     };
   }
   const quote = loaded.document;
@@ -135,6 +163,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
     amountPaid: null,
     amountDue: null,
     paymentDetails: null,
+    ...NO_DELIVERY,
   };
 }
 

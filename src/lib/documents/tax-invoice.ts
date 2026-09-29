@@ -24,8 +24,11 @@ import type { AmountsMode } from "@/lib/invoices/amounts";
  * - Credit notes follow the same rules headed "Credit note" (the Act's
  *   "credit note" wording); quotes are headed "Quote" and are never tax
  *   documents, but show GST the same way so the customer sees the total.
+ * - Purchase orders (PO8) go to a supplier: headed "Purchase order" ("Draft
+ *   purchase order", "Cancelled purchase order"), never a tax document, and
+ *   with no warnings (the supplier's tax invoice is theirs to issue).
  */
-export const PRINT_KINDS = ["invoice", "credit_note", "quote"] as const;
+export const PRINT_KINDS = ["invoice", "credit_note", "quote", "purchase_order"] as const;
 export type PrintKind = (typeof PRINT_KINDS)[number];
 
 export const TAX_INVOICE_BUYER_THRESHOLD = "1000.00";
@@ -60,6 +63,16 @@ export function taxLabels(input: TaxLabelInput): TaxLabels {
   const draft = input.status === "draft";
   const voided = input.status === "voided";
   const warnings: string[] = [];
+  if (input.kind === "purchase_order") {
+    return {
+      title: draft ? "Draft purchase order" : input.status === "cancelled" ? "Cancelled purchase order" : "Purchase order",
+      isTaxDocument: false,
+      gstLine: input.amountsMode === "exclusive",
+      includesGstStatement: input.amountsMode === "inclusive",
+      buyerAddressRequired: false,
+      warnings: [],
+    };
+  }
   const isTaxDocument = input.kind !== "quote" && hasTax && registered && !draft && !voided;
   const noun = input.kind === "invoice" ? "invoice" : input.kind === "credit_note" ? "credit note" : "quote";
   let title: string;

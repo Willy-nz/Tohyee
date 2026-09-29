@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useState } from "react";
+import { type Dispatch, type FormEvent, type SetStateAction, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { LineItemPicker, useItems } from "@/components/items";
 import type { ItemList } from "@/lib/items/service";
@@ -28,7 +28,7 @@ export function BillStatusBadge({ status }: { status: BillStatus }) {
   return <InvoiceStatusBadge status={status} />;
 }
 
-type EditorLine = {
+export type EditorLine = {
   key: number;
   itemId: string;
   unitId: string;
@@ -39,6 +39,8 @@ type EditorLine = {
   taxCode: string;
   tracking: TrackingTags;
   customFields: CustomValues;
+  /** A bill line copied from a purchase order line (PO3) keeps its link when edited. */
+  purchaseOrderLineId: string;
 };
 
 let lineKey = 0;
@@ -48,8 +50,47 @@ function nextLineKey(): number {
 }
 
 /** New lines have no account, so each cost is put somewhere on purpose. */
-function blankLine(taxCode: string, customFields: CustomValues = {}): EditorLine {
-  return { key: nextLineKey(), itemId: "", unitId: "", description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {}, customFields };
+export function blankLine(taxCode: string, customFields: CustomValues = {}): EditorLine {
+  return { key: nextLineKey(), itemId: "", unitId: "", description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {}, customFields, purchaseOrderLineId: "" };
+}
+
+/** Saved purchase lines (a bill's or a purchase order's) as editor lines. */
+export function editorLines(lines: Bill["lines"], defaultTaxCode: string): EditorLine[] {
+  return lines.map((line) => ({
+    key: nextLineKey(),
+    itemId: line.itemId ?? "",
+    unitId: line.unitId ?? "",
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    accountCode: line.accountCode,
+    taxCode: line.taxCode ?? defaultTaxCode,
+    tracking: line.tracking ?? {},
+    customFields: line.customFields ?? {},
+    purchaseOrderLineId: line.purchaseOrderLineId ?? "",
+  }));
+}
+
+/** Editor lines as the API takes them. */
+export function linesForApi(lines: EditorLine[], hasTax: boolean) {
+  return lines.map((line) => ({
+    itemId: line.itemId || null,
+    unitId: line.unitId || null,
+    description: line.description,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    accountCode: line.accountCode,
+    taxCode: hasTax ? line.taxCode || null : null,
+    tracking: line.tracking,
+    customFields: line.customFields,
+    ...(line.purchaseOrderLineId ? { purchaseOrderLineId: line.purchaseOrderLineId } : {}),
+  }));
+}
+
+/** The tax code new lines start with: the first active standard-rated one. */
+export function defaultPurchaseTaxCode(taxCodes: TaxCode[]): string {
+  const active = taxCodes.filter((taxCode) => taxCode.isActive);
+  return (active.find((taxCode) => taxCode.category === "standard") ?? active[0])?.code ?? "";
 }
 
 /** The accounts bill lines can go to, the same rule the server checks. */
@@ -72,9 +113,8 @@ type FormProps = {
 };
 
 function BillForm({ organisationId, items, baseCurrency, accounts, contacts, taxCodes, tracking, customSetup, bill, onSaved, onCancel }: FormProps) {
-  const scale = currencyMinorUnits(baseCurrency);
   const activeTaxCodes = taxCodes.filter((taxCode) => taxCode.isActive);
-  const defaultTaxCode = (activeTaxCodes.find((taxCode) => taxCode.category === "standard") ?? activeTaxCodes[0])?.code ?? "";
+  const defaultTaxCode = defaultPurchaseTaxCode(taxCodes);
   const [contactId, setContactId] = useState(bill?.contactId ?? "");
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState(bill?.supplierInvoiceNumber ?? "");
   const [billDate, setBillDate] = useState(bill?.billDate ?? todayInBrowser());
@@ -84,51 +124,15 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
   const [customFields, setCustomFields] = useState<CustomValues>(
     () => bill?.customFields ?? startingValues(customSetup, "document", ["bill"]),
   );
-  const [lines, setLines] = useState<EditorLine[]>(() =>
-    bill
-      ? bill.lines.map((line) => ({
-          key: nextLineKey(),
-          itemId: line.itemId ?? "",
-          unitId: line.unitId ?? "",
-          description: line.description,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          accountCode: line.accountCode,
-          taxCode: line.taxCode ?? defaultTaxCode,
-          tracking: line.tracking ?? {},
-          customFields: line.customFields ?? {},
-        }))
-      : [blankLine(defaultTaxCode, lineDefaults)],
-  );
+  const [lines, setLines] = useState<EditorLine[]>(() => (bill ? editorLines(bill.lines, defaultTaxCode) : [blankLine(defaultTaxCode, lineDefaults)]));
   // One key per new bill, so a double click or a retry can't save it twice.
   const [idempotencyKey] = useState(() => newIdempotencyKey("bill"));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const hasTax = amountsMode !== "no_tax";
-  const rates = new Map(taxCodes.map((taxCode) => [taxCode.code, taxCode.rate]));
-  const usable = (value: string) => isDecimalString(value) && !value.trim().startsWith("-");
-  // Live totals use the same calculation the server does when it saves.
-  const complete = lines.map(
-    (line) => usable(line.quantity) && usable(line.unitPrice) && (!hasTax || rates.has(line.taxCode)),
-  );
-  const amounts = calculateInvoice(
-    amountsMode,
-    lines.map((line, index) =>
-      complete[index]
-        ? { quantity: line.quantity, unitPrice: line.unitPrice, taxRate: hasTax ? (rates.get(line.taxCode) ?? "0") : "0" }
-        : { quantity: "0", unitPrice: "0", taxRate: "0" },
-    ),
-    scale,
-  );
-  const money = (value: string) => formatMoney(value, scale);
-
   const supplierOptions = contacts.filter((contact) => contact.isSupplier && !contact.isArchived);
   const savedSupplier = bill && !supplierOptions.some((contact) => contact.id === bill.contactId) ? bill : null;
-
-  function update(key: number, patch: Partial<EditorLine>) {
-    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
-  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -140,17 +144,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
       billDate,
       dueDate,
       amountsMode,
-      lines: lines.map((line) => ({
-        itemId: line.itemId || null,
-        unitId: line.unitId || null,
-        description: line.description,
-        quantity: line.quantity,
-        unitPrice: line.unitPrice,
-        accountCode: line.accountCode,
-        taxCode: hasTax ? line.taxCode || null : null,
-        tracking: line.tracking,
-        customFields: line.customFields,
-      })),
+      lines: linesForApi(lines, hasTax),
       customFields,
     };
     try {
@@ -232,6 +226,104 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
         </Field>
       </div>
       <CustomFieldInputs setup={customSetup} record="document" uses={["bill"]} value={customFields} onChange={setCustomFields} />
+      {bill?.purchaseOrderId ? (
+        <Notice tone="info">
+          From purchase order{" "}
+          <Link href={`/operations/purchase-orders/${bill.purchaseOrderId}`}>{bill.purchaseOrderNumber}</Link>. Lines marked
+          &quot;from the purchase order&quot; keep their item and can&apos;t add up to more than was ordered; add a line of
+          your own for anything extra.
+        </Notice>
+      ) : null}
+      <PurchaseLines
+        organisationId={organisationId}
+        items={items}
+        baseCurrency={baseCurrency}
+        accounts={accounts}
+        taxCodes={taxCodes}
+        tracking={tracking}
+        customSetup={customSetup}
+        customUse="bill"
+        contactId={contactId}
+        amountsMode={amountsMode}
+        lines={lines}
+        setLines={setLines}
+        defaultTaxCode={defaultTaxCode}
+        lineDefaults={lineDefaults}
+      />
+      <div className={ui.actions}>
+        <Button type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Save draft"}
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+        <span className={ui.muted}>A draft posts nothing. Approve it to post it to the ledger.</span>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * The lines table and live totals for purchase documents (bills and
+ * purchase orders): items fill the supplier's price (IT6), accounts are the
+ * ones bill lines can take, and totals use the same maths as the server.
+ */
+export function PurchaseLines({
+  organisationId,
+  items,
+  baseCurrency,
+  accounts,
+  taxCodes,
+  tracking,
+  customSetup,
+  customUse,
+  contactId,
+  amountsMode,
+  lines,
+  setLines,
+  defaultTaxCode,
+  lineDefaults,
+}: {
+  organisationId: string;
+  items: ItemList | null;
+  baseCurrency: string;
+  accounts: Account[];
+  taxCodes: TaxCode[];
+  tracking: TrackingSetup;
+  customSetup: CustomFieldSetup;
+  customUse: "bill";
+  contactId: string;
+  amountsMode: AmountsMode;
+  lines: EditorLine[];
+  setLines: Dispatch<SetStateAction<EditorLine[]>>;
+  defaultTaxCode: string;
+  lineDefaults: CustomValues;
+}) {
+  const scale = currencyMinorUnits(baseCurrency);
+  const hasTax = amountsMode !== "no_tax";
+  const rates = new Map(taxCodes.map((taxCode) => [taxCode.code, taxCode.rate]));
+  const usable = (value: string) => isDecimalString(value) && !value.trim().startsWith("-");
+  // Live totals use the same calculation the server does when it saves.
+  const complete = lines.map(
+    (line) => usable(line.quantity) && usable(line.unitPrice) && (!hasTax || rates.has(line.taxCode)),
+  );
+  const amounts = calculateInvoice(
+    amountsMode,
+    lines.map((line, index) =>
+      complete[index]
+        ? { quantity: line.quantity, unitPrice: line.unitPrice, taxRate: hasTax ? (rates.get(line.taxCode) ?? "0") : "0" }
+        : { quantity: "0", unitPrice: "0", taxRate: "0" },
+    ),
+    scale,
+  );
+  const money = (value: string) => formatMoney(value, scale);
+
+  function update(key: number, patch: Partial<EditorLine>) {
+    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
+  }
+
+  return (
+    <>
       <div className={ui.tableWrap}>
         <table className={`${ui.table} ${ui.stackOnPhone}`}>
           <thead>
@@ -263,16 +355,20 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
                     maxLength={500}
                     required
                   />
-                  <LineItemPicker
-                    organisationId={organisationId}
-                    items={items}
-                    side="purchase"
-                    contactId={contactId}
-                    itemId={line.itemId}
-                    unitId={line.unitId}
-                    labelPrefix={`Line ${index + 1}`}
-                    onPick={(patch) => update(line.key, patch)}
-                  />
+                  {line.purchaseOrderLineId ? (
+                    <div className={ui.muted}>From the purchase order (keeps its item)</div>
+                  ) : (
+                    <LineItemPicker
+                      organisationId={organisationId}
+                      items={items}
+                      side="purchase"
+                      contactId={contactId}
+                      itemId={line.itemId}
+                      unitId={line.unitId}
+                      labelPrefix={`Line ${index + 1}`}
+                      onPick={(patch) => update(line.key, patch)}
+                    />
+                  )}
                 </td>
                 <td data-label="Quantity">
                   <input
@@ -313,7 +409,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
                     compact
                     setup={customSetup}
                     record="line"
-                    uses={["bill"]}
+                    uses={[customUse]}
                     labelPrefix={`Line ${index + 1}`}
                     value={line.customFields}
                     onChange={(values) => update(line.key, { customFields: values })}
@@ -374,16 +470,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
         {hasTax ? <Stat label="GST" value={money(amounts.taxTotal)} /> : null}
         <Stat label={`Total (${baseCurrency})`} value={money(amounts.total)} />
       </div>
-      <div className={ui.actions}>
-        <Button type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Save draft"}
-        </Button>
-        <Button variant="secondary" onClick={onCancel}>
-          Cancel
-        </Button>
-        <span className={ui.muted}>A draft posts nothing. Approve it to post it to the ledger.</span>
-      </div>
-    </form>
+    </>
   );
 }
 
