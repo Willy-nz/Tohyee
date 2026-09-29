@@ -199,6 +199,7 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
           <>
             <CreditNoteStatusBadge status={creditNote.status} />
             {creditNote.creditStatus ? <CreditStatusBadge status={creditNote.creditStatus} /> : null}
+            <Link href={`/operations/credit-notes/${creditNote.id}/print`}>Print or save as PDF</Link>
           </>
         }
       >

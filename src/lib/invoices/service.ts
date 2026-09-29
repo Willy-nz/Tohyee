@@ -269,6 +269,7 @@ function toLine(row: LineRow): InvoiceLine {
 }
 
 /** A draft as entered, validated but not yet checked against the organisation's data. */
+export type SalesDraft = DraftDetails;
 type DraftDetails = {
   contactId: string;
   invoiceDate: string;
@@ -320,22 +321,20 @@ type ResolvedDraft = DraftDetails & {
   }>;
 };
 
-function parseDraft(input: InvoiceInput, options: { dueFromTerms?: boolean } = {}): DraftDetails {
-  const contactId = requireId(input.contactId, "contactId");
-  const invoiceDate = parseIsoDate(input.invoiceDate, "invoiceDate");
-  const dueFromTerms = options.dueFromTerms === true && (input.dueDate == null || (typeof input.dueDate === "string" && !input.dueDate.trim()));
-  // Filled in from the customer's terms once the idempotency key has been checked.
-  const dueDate = dueFromTerms ? invoiceDate : parseIsoDate(input.dueDate, "dueDate");
-  if (dueDate < invoiceDate) {
-    throw new ValidationError("The due date can't be before the invoice date.");
-  }
-  const reference = optionalString(input.reference, "reference", { maxLength: 100 });
-  const amountsMode = requireOneOf(input.amountsMode, "amountsMode", AMOUNTS_MODES);
-  const rawLines = requireArray(input.lines, "lines", MAX_LINES);
+export type SalesLineDraft = DraftDetails["lines"][number];
+
+/**
+ * Parses sales document lines as sent, the same way for invoices, quotes
+ * (QT1) and repeating invoice templates (RI2). `noun` names the document in
+ * the "needs at least one line" message.
+ */
+export function parseSalesLines(input: unknown, amountsMode: AmountsMode, noun = "An invoice"): SalesLineDraft[] {
+  const rawLines = requireArray(input, "lines", MAX_LINES);
   if (rawLines.length === 0) {
-    throw new ValidationError("An invoice needs at least one line.");
+    throw new ValidationError(`${noun} needs at least one line.`);
   }
-  const lines = rawLines.map((raw, index) => {
+  const documentName = noun.replace(/^An? /, "").toLowerCase();
+  return rawLines.map((raw, index) => {
     const label = `Line ${index + 1}`;
     const line = asRecord(raw, label);
     // A line with an item can leave these blank: the item fills them (IT2).
@@ -344,7 +343,7 @@ function parseDraft(input: InvoiceInput, options: { dueFromTerms?: boolean } = {
     const taxCode = optionalString(line.taxCode, `${label} tax code`, { maxLength: 20 })?.toUpperCase() ?? null;
     if (amountsMode === "no_tax" && taxCode !== null) {
       throw new ValidationError(
-        `${label} has a tax code, but the invoice's amounts have no tax. Remove the tax code or change the amounts to tax exclusive or inclusive.`,
+        `${label} has a tax code, but the ${documentName}'s amounts have no tax. Remove the tax code or change the amounts to tax exclusive or inclusive.`,
       );
     }
     if (amountsMode !== "no_tax" && taxCode === null && !fillable) {
@@ -361,6 +360,25 @@ function parseDraft(input: InvoiceInput, options: { dueFromTerms?: boolean } = {
       customFields: parseCustomInput(line.customFields, `${label}: `),
     };
   });
+}
+
+/** Lines for an idempotency fingerprint, normalised the way invoices hash them. */
+export function hashSalesLines(lines: readonly SalesLineDraft[]): unknown[] {
+  return lines.map((line) => hashableLine(lineForHash({ ...line, accountCode: line.accountCode.toLowerCase() })));
+}
+
+function parseDraft(input: InvoiceInput, options: { dueFromTerms?: boolean } = {}): DraftDetails {
+  const contactId = requireId(input.contactId, "contactId");
+  const invoiceDate = parseIsoDate(input.invoiceDate, "invoiceDate");
+  const dueFromTerms = options.dueFromTerms === true && (input.dueDate == null || (typeof input.dueDate === "string" && !input.dueDate.trim()));
+  // Filled in from the customer's terms once the idempotency key has been checked.
+  const dueDate = dueFromTerms ? invoiceDate : parseIsoDate(input.dueDate, "dueDate");
+  if (dueDate < invoiceDate) {
+    throw new ValidationError("The due date can't be before the invoice date.");
+  }
+  const reference = optionalString(input.reference, "reference", { maxLength: 100 });
+  const amountsMode = requireOneOf(input.amountsMode, "amountsMode", AMOUNTS_MODES);
+  const lines = parseSalesLines(input.lines, amountsMode);
   return {
     contactId,
     invoiceDate,
@@ -383,7 +401,7 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     dueDate: draft.dueFromTerms ? null : draft.dueDate,
     reference: draft.reference,
     amountsMode: draft.amountsMode,
-    lines: draft.lines.map((line) => hashableLine(lineForHash({ ...line, accountCode: line.accountCode.toLowerCase() }))),
+    lines: hashSalesLines(draft.lines),
     // Values that weren't sent stay out, so older requests hash the same.
     ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
     ...(draft.salespersonInput !== undefined ? { salespersonId: draft.salespersonInput } : {}),
@@ -396,6 +414,19 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
  * an active contact marked as a customer, each line's account an active
  * revenue account, and each tax code active and in effect on the invoice date.
  */
+export type ResolvedSalesDraft = ResolvedDraft;
+
+export async function resolveSalesDraft(
+  tx: OrgTx,
+  sent: DraftDetails,
+  kept: ReadonlySet<string> = new Set(),
+  keptFields: ReadonlySet<string> = new Set(),
+  keptSalesperson: string | null = null,
+  keptItems: ReadonlyArray<LineItemRef> = [],
+): Promise<ResolvedDraft> {
+  return resolveDraft(tx, sent, kept, keptFields, keptSalesperson, keptItems);
+}
+
 async function resolveDraft(
   tx: OrgTx,
   sent: DraftDetails,
@@ -568,7 +599,7 @@ function headerState(invoice: StoredHeader): string {
   ]);
 }
 
-function linesState(lines: readonly StoredLine[]): string {
+export function linesState(lines: readonly StoredLine[]): string {
   return JSON.stringify(
     lines.map((line) => [
       line.description,
@@ -593,6 +624,21 @@ function sameAsStored(resolved: ResolvedDraft, current: Invoice): { header: bool
     header: headerState(resolved) === headerState(current),
     lines: linesState(resolved.resolvedLines) === linesState(current.lines),
   };
+}
+
+/** Saved lines, in the shape a person would send them. */
+export function linesAsSent(lines: readonly InvoiceLine[]): SalesLineDraft[] {
+  return lines.map((line) => ({
+    description: line.description,
+    quantity: toPlainString(dec(line.quantity)),
+    unitPrice: toPlainString(dec(line.unitPrice)),
+    accountCode: line.accountCode,
+    taxCode: line.taxCode,
+    tracking: line.tracking,
+    customFields: line.customFields,
+    itemId: line.itemId,
+    unitId: line.unitId,
+  }));
 }
 
 /** The saved draft, in the shape a person would send it. */
@@ -620,10 +666,28 @@ function draftOf(invoice: Invoice): DraftDetails {
 }
 
 async function insertLines(tx: OrgTx, invoiceId: string, lines: ResolvedDraft["resolvedLines"]): Promise<void> {
+  await insertSalesLines(tx, "sales_invoice_lines", invoiceId, lines);
+}
+
+/** The line tables that hold sales lines: invoices, quotes (QT1) and repeating invoice templates (RI2). */
+export type SalesLineTable = "sales_invoice_lines" | "quote_lines" | "repeating_invoice_lines";
+const SALES_LINE_PARENT: Record<SalesLineTable, string> = {
+  sales_invoice_lines: "invoice_id",
+  quote_lines: "quote_id",
+  repeating_invoice_lines: "repeating_invoice_id",
+};
+
+export async function insertSalesLines(
+  tx: OrgTx,
+  table: SalesLineTable,
+  parentId: string,
+  lines: ResolvedDraft["resolvedLines"],
+): Promise<void> {
+  const parentColumn = SALES_LINE_PARENT[table];
   const values: unknown[] = [];
   const tuples = lines.map((line, index) => {
     values.push(
-      invoiceId,
+      parentId,
       index + 1,
       line.description,
       line.quantity,
@@ -645,7 +709,7 @@ async function insertLines(tx: OrgTx, invoiceId: string, lines: ResolvedDraft["r
     return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric)`;
   });
   await tx.query(
-    `insert into sales_invoice_lines (invoice_id, line_order, description, quantity, unit_price, account_id,
+    `insert into ${table} (${parentColumn}, line_order, description, quantity, unit_price, account_id,
                                       tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity)
      values ${tuples.join(", ")}`,
     values,
@@ -690,19 +754,24 @@ export async function getInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise<In
   if (!row) {
     throw new NotFoundError("Invoice not found.");
   }
+  return { ...toSummary(row), lines: await loadSalesLines(tx, "sales_invoice_lines", invoiceId) };
+}
+
+/** A sales document's lines, in order. */
+export async function loadSalesLines(tx: OrgTx, table: SalesLineTable, parentId: string): Promise<InvoiceLine[]> {
   const lines = await tx.query<LineRow>(
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
             l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS}
-       from sales_invoice_lines l
+       from ${table} l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
        ${LINE_ITEM_JOINS}
-      where l.invoice_id = $1
+      where l.${SALES_LINE_PARENT[table]} = $1
       order by l.line_order`,
-    [invoiceId],
+    [parentId],
   );
-  return { ...toSummary(row), lines: lines.rows.map(toLine) };
+  return lines.rows.map(toLine);
 }
 
 /** Loads an invoice and locks it until the transaction ends. */
@@ -916,6 +985,13 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
 export async function deleteInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise<void> {
   const current = await lockInvoice(tx, requireId(invoiceIdInput, "invoiceId"));
   assertDraft(current, "deleted");
+  // QT7: the invoice an accepted quote made stays, so the quote keeps its invoice.
+  const fromQuote = await tx.query<{ quote_number: string }>("select quote_number from quotes where invoice_id = $1", [current.id]);
+  if (fromQuote.rows[0]) {
+    throw new ConflictError(
+      `This draft was made by accepting quote ${fromQuote.rows[0].quote_number}, so it can't be deleted. Edit it, or approve it and void it.`,
+    );
+  }
   // Its notes and files go with it (NF12).
   await removeRecordExtras(tx, "sales_invoice", current.id);
   await tx.query("delete from sales_invoice_lines where invoice_id = $1", [current.id]);

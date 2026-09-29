@@ -36,6 +36,9 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ payment_terms, customer_groups, price_levels   lists for customers (archived, never deleted)
 ├─ items, item_units, item_level_prices, item_suppliers, kit_components   products and services
 ├─ sales_invoices, sales_invoice_lines, sales_invoice_numbering
+├─ quotes, quote_lines, quote_numbering   quotes (post nothing; accepting makes a draft invoice)
+├─ repeating_invoices, repeating_invoice_lines   repeating invoice templates (post nothing)
+├─ repeating_invoice_runs   one row per scheduled date made (unique), so a date is never made twice
 ├─ customer_payments      money received against sales invoices (with any overpayment)
 ├─ customer_overpayment_applications   overpayments applied to other sales invoices
 ├─ customer_overpayment_refunds        overpayments paid back to customers
@@ -209,9 +212,9 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies), the GST return, filed GST returns, the GST audit report and customer statements; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add notes and files, and edit, delete or remove their own |
-| admin | + chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels and the credit limit setting), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
+| viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies), the GST return, filed GST returns, the GST audit report and customer statements, quotes and repeating invoices; print invoices, credit notes and quotes; read notes, download files and see the history |
+| bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; save, finalise, accept, decline, copy and delete draft quotes; save, change, run, pause, resume and end repeating invoices; add notes and files, and edit, delete or remove their own |
+| admin | + chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
 People who aren't members get "not found", so organisation IDs can't be
@@ -538,6 +541,16 @@ last few hours (the organisation's "sync every" setting) and syncs them one at a
 account and shown on its Bank feed tab, and the next run tries again. It makes
 no network calls inside a database transaction and re-resolves each
 organisation from the registry.
+
+The repeating invoices job (`src/lib/repeating/scheduler.ts`, started from
+`src/instrumentation.ts`; `TOHYEE_REPEATING_INVOICES_SCHEDULER=off` stops
+it) runs two minutes after start-up and then hourly: for each ready
+organisation, each active template runs in its own transaction and makes
+every scheduled date up to today not yet made (examples RI1-RI10). Each date
+made is a row in `repeating_invoice_runs`, unique on (template, date), and
+the template row is locked while it runs, so overlapping runs, restarts or
+a second server process never make a date twice. An error is kept on the
+template and that date is tried again next run. No network calls.
 
 Still to come for other jobs: a transactional outbox and bounded retries.
 

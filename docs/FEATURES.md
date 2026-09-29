@@ -118,6 +118,32 @@ that something happened.
   gaps) and posts its journal on the invoice date, and voiding that posts the
   exact reversal on the void date. Period locks apply to both; approving and
   voiding are idempotent. See examples I1-I9.
+- **Quotes** (Sales; QT1-QT8, not yet approved by Jess): drafts with the
+  same lines as an invoice and an optional expiry date and terms; finalising
+  numbers them (`QU-0001`, no gaps) and locks them (the database refuses
+  changes); accepting makes a draft invoice with the same lines, due by the
+  customer's payment terms or a date given, linked both ways; declining
+  closes it; a finalised quote past its expiry date shows as expired;
+  copying makes a new draft. Quotes post nothing. There's no "sent" status,
+  because nothing sends quotes yet.
+- **Repeating invoices** (Sales; RI1-RI10, not yet approved): a template
+  with invoice lines, every N weeks or months from a start date to an
+  optional end date, due by payment terms or N days, and each invoice saved
+  as a draft or approved. A background job (hourly, and "Run now") makes each
+  date's invoice once, catching up missed dates in order; the database key
+  on (template, date) means two runs never make two. A refused approval
+  (locked period, credit limit, required field) leaves the draft with the
+  reason in the template's history. Pause, resume (paused dates are
+  skipped) and end.
+- **Printed invoices, credit notes and quotes** (PD1-PD8, not yet
+  approved): "Print or save as PDF" with the browser's print, showing the
+  organisation's name, address and GST number (set in Settings), the
+  customer and billing address, the lines with GST, the totals, and on
+  approved invoices what's paid, what's due and how to pay. Approved invoices
+  from a GST-registered organisation print as **Tax invoice**; drafts, voided
+  invoices and quotes say so. The screen warns when a tax invoice over $1,000
+  has no customer address, or GST is charged with no GST number in Settings.
+  Emailing isn't built.
 - **Customer payments** against one approved sales invoice at a time:
   recording a payment posts Dr the bank account / Cr accounts receivable on
   the payment date, and voiding it posts the exact reversal on the void date.
@@ -341,8 +367,8 @@ isn't acceptable, because people would trust it:
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
 1. Supplier overpayments and prepayments (once the owner has decided how GST works
-   on them). Invoice and credit note PDFs and emailing come with or after
-   these.
+   on them). Emailing invoices, credit notes, quotes and statements comes
+   with or after these (they print already).
 2. Backdated stock movements with proper re-costing.
 3. Stock depth: transfers between locations, bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and

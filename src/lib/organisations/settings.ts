@@ -5,7 +5,18 @@ import { ValidationError } from "@/lib/errors";
 import { isFinancialYearEndMonth } from "@/lib/financial-year";
 import { parseCurrencyCode } from "@/lib/money/currency";
 import { GST_BASES, type GstBasis } from "@/lib/tax/categories";
-import { requireOneOf, requireString } from "@/lib/validation";
+import { optionalString, requireOneOf, requireString } from "@/lib/validation";
+
+/** A GST number as digits (8 or 9), the same check as contacts'. */
+function parseGstNumber(input: unknown): string | null {
+  const value = optionalString(input, "GST number", { maxLength: 20 });
+  if (value === null) return null;
+  const digits = value.replace(/[ -]/g, "");
+  if (!/^[0-9 -]+$/.test(value) || !/^[0-9]{8,9}$/.test(digits)) {
+    throw new ValidationError("GST number must have 8 or 9 digits, like 123-456-789.");
+  }
+  return digits;
+}
 
 export type OrganisationSettings = {
   organisationId: string;
@@ -21,6 +32,12 @@ export type OrganisationSettings = {
   crmEnabled: boolean;
   /** Whether stock may go below zero (ST9-ST12); off by default. */
   allowNegativeStock: boolean;
+  /** Shown on printed invoices, credit notes and quotes (PD1). */
+  postalAddress: string | null;
+  /** The organisation's GST number, as digits (PD1); shown on tax invoices. */
+  gstNumber: string | null;
+  /** How customers pay, e.g. the bank account number (PD1); shown on printed invoices. */
+  paymentDetails: string | null;
   hasPostings: boolean;
 };
 
@@ -34,9 +51,13 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     advanced_features: boolean;
     crm_enabled: boolean;
     allow_negative_stock: boolean;
+    postal_address: string | null;
+    gst_number: string | null;
+    payment_details: string | null;
     has_postings: boolean;
   }>(
     `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, advanced_features, crm_enabled, allow_negative_stock,
+            postal_address, gst_number, payment_details,
             exists (select 1 from ledger_journals) as has_postings
        from organisation_settings where id = true`,
   );
@@ -50,6 +71,9 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     advancedFeatures: row.advanced_features,
     crmEnabled: row.crm_enabled,
     allowNegativeStock: row.allow_negative_stock,
+    postalAddress: row.postal_address,
+    gstNumber: row.gst_number,
+    paymentDetails: row.payment_details,
     hasPostings: row.has_postings,
   };
 }
@@ -78,6 +102,9 @@ export async function updateOrganisationSettings(
     advancedFeatures?: unknown;
     crmEnabled?: unknown;
     allowNegativeStock?: unknown;
+    postalAddress?: unknown;
+    gstNumber?: unknown;
+    paymentDetails?: unknown;
   },
 ): Promise<OrganisationSettings> {
   const current = await getOrganisationSettings(tx);
@@ -119,6 +146,12 @@ export async function updateOrganisationSettings(
     }
   }
 
+  const postalAddress =
+    input.postalAddress === undefined ? current.postalAddress : optionalString(input.postalAddress, "postalAddress", { maxLength: 500 });
+  const gstNumber = input.gstNumber === undefined ? current.gstNumber : parseGstNumber(input.gstNumber);
+  const paymentDetails =
+    input.paymentDetails === undefined ? current.paymentDetails : optionalString(input.paymentDetails, "paymentDetails", { maxLength: 1000 });
+
   if (baseCurrency !== current.baseCurrency && current.hasPostings) {
     throw new ValidationError(
       "The base currency can't change once journals have been posted.",
@@ -128,17 +161,18 @@ export async function updateOrganisationSettings(
   await tx.query(
     `update organisation_settings
         set display_name = $1, base_currency = $2, financial_year_end_month = $3, gst_basis = $4,
-            advanced_features = $5, crm_enabled = $6, allow_negative_stock = $7, updated_at = now()
+            advanced_features = $5, crm_enabled = $6, allow_negative_stock = $7, postal_address = $8, gst_number = $9,
+            payment_details = $10, updated_at = now()
       where id = true`,
-    [displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled, allowNegativeStock],
+    [displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled, allowNegativeStock, postalAddress, gstNumber, paymentDetails],
   );
   await writeAuditEvent(tx, {
     eventType: "organisation.settings_updated",
     entityType: "organisation_settings",
     entityId: tx.organisationId,
-    details: { displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled, allowNegativeStock },
+    details: { displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled, allowNegativeStock, postalAddress, gstNumber, paymentDetails },
   });
-  return { ...current, displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled, allowNegativeStock };
+  return { ...current, displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled, allowNegativeStock, postalAddress, gstNumber, paymentDetails };
 }
 
 /**
