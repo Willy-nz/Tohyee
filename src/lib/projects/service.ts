@@ -1,4 +1,5 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
+import { ACCOUNT_TYPES, type AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
 import { dueDateFromTerms } from "@/lib/customers/service";
@@ -21,7 +22,7 @@ import {
 import { optionalBoolean, optionalId, optionalSource, optionalString, requireArray, requireId, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
 
 /**
- * Projects and time tracking (examples PJ1-PJ12), like Xero Projects. A
+ * Projects and time tracking (examples PJ1-PJ13), like Xero Projects. A
  * project is work for one customer, with tasks (hourly, fixed price or
  * non-chargeable), time entries in whole minutes and expenses linked from
  * approved bill lines, expense claim receipts and spend money lines. None of
@@ -341,16 +342,17 @@ function sourceLabel(tx: OrgTx, row: { document_label: string; person_email: str
 const SOURCES = `(
   select 'bill_line'::text as source_type, l.id as line_id, b.id as document_id,
          'Bill ' || b.supplier_invoice_number as document_label, c.name as contact_name, b.bill_date as date,
-         l.description, a.code as account_code, a.account_type, l.net_amount, b.status = 'approved' as usable,
+         l.description, a.code as account_code, a.name as account_name, a.account_type, a.account_class, l.net_amount,
+         b.status = 'approved' as usable,
          null::text as person_email
     from bill_lines l join bills b on b.id = l.bill_id join contacts c on c.id = b.contact_id join accounts a on a.id = l.account_id
   union all
   select 'expense_claim_receipt', r.id, x.id, 'Expense claim CLAIM-' || x.id, r.supplier_name,
-         r.receipt_date, r.description, a.code, a.account_type, r.net_amount, x.status = 'approved', x.claimant_email
+         r.receipt_date, r.description, a.code, a.name, a.account_type, a.account_class, r.net_amount, x.status = 'approved', x.claimant_email
     from expense_claim_receipts r join expense_claims x on x.id = r.claim_id join accounts a on a.id = r.account_id
   union all
   select 'bank_transaction_line', l.id, t.id, 'Spend money' || coalesce(' ' || t.reference, ''), c.name, t.transaction_date,
-         l.description, a.code, a.account_type, l.net_amount, t.kind = 'spend' and t.status = 'posted', null
+         l.description, a.code, a.name, a.account_type, a.account_class, l.net_amount, t.kind = 'spend' and t.status = 'posted', null
     from bank_transaction_lines l join bank_transactions t on t.id = l.bank_transaction_id
     join contacts c on c.id = t.contact_id join accounts a on a.id = l.account_id
 )`;
@@ -977,7 +979,10 @@ export async function removeTimeEntry(tx: OrgTx, role: Role, idInput: unknown): 
 // ---------------------------------------------------------------------------
 // Expenses (PJ4)
 
-/** Lines that can go on a project: approved bills and claims, posted spend money, not stock, not already on a project. */
+/**
+ * Lines that can go on a project: approved bills and claims, posted spend
+ * money, coded to a profit and loss cost account (PJ13), not already on a project.
+ */
 export async function listExpenseSources(tx: OrgTx, filters: { search?: unknown } = {}): Promise<ExpenseSource[]> {
   const search = optionalString(filters.search, "search", { maxLength: 100 });
   const result = await tx.query<{
@@ -995,7 +1000,7 @@ export async function listExpenseSources(tx: OrgTx, filters: { search?: unknown 
     `select src.source_type, src.line_id::text, src.document_id::text, src.document_label, src.person_email, src.contact_name, src.date, src.description,
             src.account_code, src.net_amount
        from ${SOURCES} src
-      where src.usable and src.account_type <> 'inventory' and src.net_amount > 0
+      where src.usable and src.account_class = 'expense' and src.net_amount > 0
         and not exists (select 1 from project_expenses x where x.status = 'active' and x.source_type = src.source_type
                           and coalesce(x.bill_line_id, x.expense_claim_receipt_id, x.bank_transaction_line_id) = src.line_id)
         and ($1::text is null or src.description ilike '%' || $1 || '%' or src.contact_name ilike '%' || $1 || '%'
@@ -1028,7 +1033,8 @@ function parseMarkup(input: unknown): string {
  * Links a line to a project (PJ4) at its amount excluding GST, chargeable or
  * not, with an optional markup. The line isn't re-posted: its document keeps
  * its journal. Refused for lines of drafts, voided documents, receive money,
- * stock, and lines already on a project.
+ * stock, balance sheet accounts (only expense-class accounts are project
+ * costs, PJ13), and lines already on a project.
  */
 export async function linkProjectExpense(
   tx: OrgTx,
@@ -1056,8 +1062,17 @@ export async function linkProjectExpense(
   }
   assertOpen(project);
   const line = (
-    await tx.query<{ usable: boolean; account_type: string; account_code: string; net_amount: string; document_label: string }>(
-      `select usable, account_type, account_code, net_amount, document_label from ${SOURCES} src where src.source_type = $1 and src.line_id = $2`,
+    await tx.query<{
+      usable: boolean;
+      account_type: AccountType;
+      account_class: string;
+      account_code: string;
+      account_name: string;
+      net_amount: string;
+      document_label: string;
+    }>(
+      `select usable, account_type, account_class, account_code, account_name, net_amount, document_label
+         from ${SOURCES} src where src.source_type = $1 and src.line_id = $2`,
       [sourceType, lineId],
     )
   ).rows[0];
@@ -1070,6 +1085,14 @@ export async function linkProjectExpense(
     );
   }
   if (line.account_type === "inventory") throw new ValidationError(`That line is stock (account ${line.account_code}); stock is costed when it's sold, so it can't go on a project.`);
+  if (line.account_class !== "expense") {
+    // A project's costs are profit and loss costs (PJ13): a fixed asset bought, a prepayment or a
+    // liability paid isn't an expense of the project.
+    throw new ValidationError(
+      `That line is coded to ${line.account_code} ${line.account_name}, a ${ACCOUNT_TYPES[line.account_type].label.toLowerCase()} account, not an expense. ` +
+        "Only lines coded to expense or direct cost accounts can go on a project.",
+    );
+  }
   if (cmp(dec(line.net_amount), ZERO_DECIMAL) <= 0) throw new ValidationError("That line has no amount excluding GST.");
   const taken = await tx.query<{ name: string }>(
     `select p.name from project_expenses x join projects p on p.id = x.project_id

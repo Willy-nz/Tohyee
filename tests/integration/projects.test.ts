@@ -51,7 +51,7 @@ import {
 
 const noContext = undefined as unknown;
 
-/** Examples PJ1-PJ12 in docs/ACCOUNTING-EXAMPLES.md ("Projects and time tracking"). Each test gets its own organisation. */
+/** Examples PJ1-PJ13 in docs/ACCOUNTING-EXAMPLES.md ("Projects and time tracking"). Each test gets its own organisation. */
 describeWithDatabase("projects and time tracking", () => {
   let server: TestServer;
   let jess: SessionUser;
@@ -551,6 +551,56 @@ describeWithDatabase("projects and time tracking", () => {
     expect((await w.as((tx) => timeReport(tx, { from: "2026-07-01", to: "2026-07-31", userId: aroha.id }))).totalMinutes).toBe(315);
     expect((await w.as((tx) => timeReport(tx, { from: "2026-07-01", to: "2026-07-31", taskId: w.design }))).totalMinutes).toBe(225);
     await expect(w.as((tx) => timeReport(tx, { from: "2026-07-31", to: "2026-07-01" }))).rejects.toThrow("can't be before");
+  });
+
+  it("PJ13: only lines coded to expense or direct cost accounts are project expenses; balance sheet lines are refused", async () => {
+    const w = await setup();
+    const { bill } = await w.as((tx) =>
+      createBill(tx, {
+        idempotencyKey: key("bill"),
+        contactId: w.paw.id,
+        billDate: "2026-07-08",
+        dueDate: "2026-07-20",
+        supplierInvoiceNumber: "PS-302",
+        amountsMode: "exclusive",
+        lines: [
+          { description: "Laptop for design work", quantity: "1", unitPrice: "1500.00", accountCode: "1620", taxCode: "GST" },
+          { description: "Design software", quantity: "1", unitPrice: "50.00", accountCode: "6040", taxCode: "GST" },
+          { description: "Courier for proofs", quantity: "1", unitPrice: "30.00", accountCode: "5100", taxCode: "GST" },
+        ],
+      }),
+    );
+    await w.as((tx) => approveBill(tx, bill.id, { idempotencyKey: key("approve") }));
+    await w.as((tx) =>
+      createBankTransaction(tx, {
+        idempotencyKey: key("spend"),
+        kind: "spend",
+        accountId: w.bank,
+        contactId: w.paw.id,
+        date: "2026-07-08",
+        amountsMode: "inclusive",
+        lines: [{ description: "Insurance paid ahead", accountCode: "1200", taxCode: "GST", amount: "115.00" }],
+      }),
+    );
+    const lines = (await w.as((tx) => tx.query<{ id: string; description: string }>("select id::text, description from bill_lines where bill_id = $1 order by line_order", [bill.id]))).rows;
+    const prepaid = (await w.as((tx) => tx.query<{ id: string }>("select id::text from bank_transaction_lines where description = 'Insurance paid ahead'"))).rows[0];
+    // Only the software (6040 expense) and the courier (5100 direct costs) are offered.
+    expect((await w.sources()).map((source) => [source.description, source.accountCode]).sort()).toEqual([
+      ["Courier for proofs", "5100"],
+      ["Design software", "6040"],
+    ]);
+    // Asking for the others anyway is refused, with the reason.
+    await expect(w.link(lines[0].id, "bill_line", true)).rejects.toThrow(
+      "That line is coded to 1620 Computer equipment, a fixed asset account, not an expense. Only lines coded to expense or direct cost accounts can go on a project.",
+    );
+    await expect(w.link(prepaid.id, "bank_transaction_line", true)).rejects.toThrow("1200 Prepayments, a current asset account, not an expense");
+    expect((await w.get()).expenses).toEqual([]);
+    await w.link(lines[1].id, "bill_line", true);
+    await w.link(lines[2].id, "bill_line", false);
+    expect((await w.get()).expenses.map((x) => [x.description, x.accountCode, x.cost])).toEqual([
+      ["Design software", "6040", "50.00"],
+      ["Courier for proofs", "5100", "30.00"],
+    ]);
   });
 
   it("PJ12: viewers read projects and reports but change nothing; only documents post journals", async () => {

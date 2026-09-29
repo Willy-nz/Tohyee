@@ -355,13 +355,14 @@ Enforced by the database itself, not just the app:
   existing organisations them at those codes or the next free ones) are the
   default gain, loss and capital gain accounts. The register
   (`src/lib/fixed-assets/register.ts`) ties to the ledger per account.
-- Projects (PJ1-PJ12) post nothing; only the invoices made from them do.
+- Projects (PJ1-PJ13) post nothing; only the invoices made from them do.
   `projects`, `project_tasks`, `project_time_entries` and
   `project_expenses` refuse `DELETE` and `TRUNCATE` (tasks are archived,
   time and expense links removed). Time is whole minutes (1 to 1440) with
   the member's staff cost rate copied on. An expense link is an approved
   bill's line, an approved expense claim's receipt or a posted spend money
-  line at its net amount, one active link per line (unique indexes), and
+  line at its net amount, coded to an expense-class account (the service
+  refuses balance sheet lines, PJ13), one active link per line (unique indexes), and
   that bill, claim or spend money can't be voided while linked. Invoicing
   inserts `project_invoices` (one per sales invoice, deleted with its draft
   by `on delete cascade`, otherwise never changed) and

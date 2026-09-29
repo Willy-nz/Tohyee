@@ -26,7 +26,7 @@ import type {
 import type { TaxCode } from "@/lib/tax/codes";
 
 /**
- * Projects and time tracking (examples PJ1-PJ12): projects for a customer,
+ * Projects and time tracking (examples PJ1-PJ13): projects for a customer,
  * their tasks, time and linked expenses, invoicing what's unbilled, closing
  * and reopening, and the profitability and time reports.
  */

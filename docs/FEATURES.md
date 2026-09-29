@@ -211,7 +211,7 @@ that something happened.
   year's depreciation by type, disposals this year, and ties to the ledger
   account by account. Tax depreciation beside book, pooling and low-value
   write-offs aren't built.
-- **Projects and time tracking** (Sales; PJ1-PJ12, not yet approved by
+- **Projects and time tracking** (Sales; PJ1-PJ13, not yet approved by
   Jess), like Xero Projects: a **project** for a customer with an optional
   estimate and deadline, **In progress** or **Closed** (only by closing and
   reopening). **Tasks** are hourly (a rate), fixed price or non-chargeable,
@@ -220,7 +220,8 @@ that something happened.
   for themselves (admins can enter it for another member); admins set each
   member's **staff cost rate**, copied onto their time as its cost.
   **Expenses** are linked from approved bill lines, expense claim receipts
-  and spend money lines at cost excluding GST (never re-posted), chargeable
+  and spend money lines coded to expense or direct cost accounts (PJ13) at
+  cost excluding GST (never re-posted), chargeable
   or not, with an optional markup; while linked, their document can't be
   voided. **Invoice** makes a draft sales invoice from the ticked unbilled
   items (time grouped per task at its rate, fixed prices, expenses with
