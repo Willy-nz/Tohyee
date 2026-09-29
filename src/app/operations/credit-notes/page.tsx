@@ -7,6 +7,7 @@ import { Money, RequireOrganisation } from "@/components/books";
 import { CreditNoteStatusBadge, CreditStatusBadge } from "@/components/credit-notes/credit-note-editor";
 import { CustomValueCell, listColumns, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
+import { useSalespeople } from "@/components/salespeople";
 import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
@@ -34,6 +35,8 @@ function CreditNoteList({ organisationId, filter }: { organisationId: string; fi
   const { status } = filter;
   const hasRemainingCredit = filter.hasRemainingCredit ? "true" : null;
   const list = useApiData<CreditNotePage>("/api/credit-notes", { organisationId, status, hasRemainingCredit });
+  // The salesperson column shows while advanced features are on (SR1).
+  const showSalesperson = useSalespeople(organisationId).data?.advancedFeatures ?? false;
   const columns = listColumns(useCustomFields(organisationId).data, "document", ["credit_note"]);
   const [more, setMore] = useState<CreditNotePage | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
@@ -76,6 +79,7 @@ function CreditNoteList({ organisationId, filter }: { organisationId: string; fi
               <th>Customer</th>
               <th>Date</th>
               <th>Reference</th>
+              {showSalesperson ? <th>Salesperson</th> : null}
               {columns.map((field) => (
                 <th key={field.id}>{field.label}</th>
               ))}
@@ -96,6 +100,7 @@ function CreditNoteList({ organisationId, filter }: { organisationId: string; fi
                 <td>{creditNote.contactName}</td>
                 <td>{formatDate(creditNote.creditNoteDate)}</td>
                 <td className={ui.muted}>{creditNote.reference}</td>
+                {showSalesperson ? <td>{creditNote.salespersonName ?? ""}</td> : null}
                 {columns.map((field) => (
                   <CustomValueCell key={field.id} field={field} values={creditNote.customFields} />
                 ))}

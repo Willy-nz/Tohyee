@@ -6,10 +6,12 @@ import { type FormEvent, Suspense, useId, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { CustomFieldInputs, CustomValueCell, listColumns, startingValues, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
+import { SalespersonField, useSalespeople } from "@/components/salespeople";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
+import type { SalespeopleSetup } from "@/lib/salespeople/service";
 import { type CustomFieldSetup, type CustomFieldUse, type CustomValues, fieldsFor } from "@/lib/custom-fields/values";
 import { formatGstNumber } from "@/lib/format";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
@@ -23,6 +25,8 @@ type Draft = {
   gstNumber: string;
   postalAddress: string;
   customFields: CustomValues;
+  /** "" for none. */
+  defaultSalespersonId: string;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -34,6 +38,7 @@ const EMPTY_DRAFT: Draft = {
   gstNumber: "",
   postalAddress: "",
   customFields: {},
+  defaultSalespersonId: "",
 };
 
 function draftFrom(contact: Contact): Draft {
@@ -46,6 +51,7 @@ function draftFrom(contact: Contact): Draft {
     gstNumber: formatGstNumber(contact.gstNumber),
     postalAddress: contact.postalAddress ?? "",
     customFields: contact.customFields,
+    defaultSalespersonId: contact.defaultSalespersonId ?? "",
   };
 }
 
@@ -73,6 +79,7 @@ function ContactForm({
   initial,
   saved,
   customSetup,
+  salespeople,
   submitLabel,
   onSubmit,
   onCancel,
@@ -81,6 +88,7 @@ function ContactForm({
   /** The contact's stored custom field values ({} for a new one). */
   saved: CustomValues;
   customSetup: CustomFieldSetup | null | undefined;
+  salespeople: SalespeopleSetup | null | undefined;
   submitLabel: string;
   onSubmit: (draft: Draft) => Promise<void>;
   onCancel: () => void;
@@ -100,7 +108,12 @@ function ContactForm({
     setBusy(true);
     setError(null);
     try {
-      await onSubmit({ ...draft, customFields: valuesToSave(customSetup, draft, saved) });
+      await onSubmit({
+        ...draft,
+        customFields: valuesToSave(customSetup, draft, saved),
+        // Only customers have a default salesperson (SR1).
+        defaultSalespersonId: draft.isCustomer ? draft.defaultSalespersonId : initial.defaultSalespersonId,
+      });
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -179,6 +192,17 @@ function ContactForm({
           maxLength={500}
         />
       </Field>
+      {draft.isCustomer ? (
+        <div className={ui.grid3}>
+          <SalespersonField
+            setup={salespeople}
+            label="Default salesperson"
+            hint="Put on this customer's new invoices and credit notes."
+            value={draft.defaultSalespersonId}
+            onChange={(id) => setDraft({ ...draft, defaultSalespersonId: id })}
+          />
+        </div>
+      ) : null}
       <CustomFieldInputs
         setup={customSetup}
         record="contact"
@@ -215,6 +239,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
   const [viewing, setViewing] = useState<Contact | null>(null);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const customSetup = useCustomFields(organisationId);
+  const salespeople = useSalespeople(organisationId);
   // Customers or suppliers only, from the Contacts menu (?type=).
   const type = useSearchParams().get("type");
   const columns = listColumns(customSetup.data, "contact", type === "customers" ? ["customer"] : type === "suppliers" ? ["supplier"] : ["customer", "supplier"]);
@@ -252,6 +277,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
             initial={{ ...EMPTY_DRAFT, customFields: startingValues(customSetup.data, "contact", ["customer", "supplier"]) }}
             saved={{}}
             customSetup={customSetup.data}
+            salespeople={salespeople.data}
             submitLabel="Add contact"
             onCancel={() => setCreateKey(null)}
             onSubmit={async (draft) => {
@@ -273,6 +299,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
             initial={draftFrom(editing)}
             saved={editing.customFields}
             customSetup={customSetup.data}
+            salespeople={salespeople.data}
             submitLabel="Save changes"
             onCancel={() => setEditing(null)}
             onSubmit={async (draft) => {

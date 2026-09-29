@@ -124,7 +124,8 @@ export type SupplierCreditNoteInput = {
   supplierCreditNoteNumber?: unknown;
   reference?: unknown;
   amountsMode?: unknown;
-  lines?: unknown;  customFields?: unknown;
+  lines?: unknown;
+  customFields?: unknown;
 };
 
 const MAX_LINES = 200;

@@ -427,6 +427,11 @@ Enforced by the app (and covered by tests):
   (manual journals only); a trigger checks every key is a field for that
   kind of record, and `src/lib/custom-fields/` checks types, options and
   required fields. They never reach posting, reports or the GST return.
+- Salespeople: `salespeople` (never deleted), `contacts.default_salesperson_id`
+  and `salesperson_id` on `sales_invoices` and `sales_credit_notes`, fixed
+  with the rest of the document once approved. Sales by salesperson reads
+  the documents (subtotals excluding GST), not the ledger. The rules are in
+  `src/lib/salespeople/service.ts` and `src/lib/reports/sales-by-salesperson.ts`.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 

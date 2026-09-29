@@ -23,6 +23,7 @@ export const PATCH = route<Context>(async (request, context) => {
       amountsMode: body.amountsMode,
       lines: body.lines,
       customFields: body.customFields,
+      salespersonId: body.salespersonId,
     }),
   );
   return json({ creditNote });
