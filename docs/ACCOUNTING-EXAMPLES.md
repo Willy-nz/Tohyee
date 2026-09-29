@@ -47,13 +47,15 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/stock-transfers.test.ts` (TR1-TR6) and
   `tests/integration/budgets.test.ts` (BU1-BU8) and
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
-  `tests/integration/fixed-assets.test.ts` (FA1-FA14), all against
+  `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
+  `tests/integration/projects.test.ts` (PJ1-PJ12), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
   a printed document is headed and shows (QT5, PD3-PD7), and
   `tests/unit/fixed-asset-depreciation.test.ts` the depreciation and
-  disposal maths (FA3, FA4, FA6-FA10)
+  disposal maths (FA3, FA4, FA6-FA10), and `tests/unit/project-amounts.test.ts`
+  the project time and markup maths (PJ3-PJ7)
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -3452,3 +3454,198 @@ Assets:
   immediate write-off when registering, and should pooling be built?
 - Should a run be allowed to skip a month (as built, a run covers every
   month since the last one, so nothing is skipped), or must runs be monthly?
+
+## Projects and time tracking (examples not yet approved by Jess)
+
+Written overnight from Xero Projects; Jess hasn't approved them yet. A
+**project** is work for one **customer**: a name, an optional **estimate**
+(money, excluding GST) and an optional **deadline**. It is **In progress**
+or **Closed**, and only the Close and Reopen actions change that. Projects,
+their tasks, time and expenses **post nothing**; only the invoices made
+from them do (as ordinary invoices, I1-I9).
+
+- **Tasks** have a **charge type**: **hourly** (a rate per hour), **fixed
+  price** (billed once, whole) or **non-chargeable** (never billed), and an
+  optional estimate in hours and minutes. Tasks are archived, never deleted.
+  A task's charge type, and a fixed task's price, can't change once
+  something on it has been invoiced (an hourly rate can: what's invoiced
+  keeps its amount).
+- **Time entries**: a member, a date, a task, a **duration stored as whole
+  minutes** (entered as hours and minutes, 1 minute to 24 hours) and a
+  description. Bookkeepers enter their own time; admins and owners can also
+  enter and change time for another member of the organisation.
+- **Staff cost rates** (admins set them, per member, per hour, 0.00 if not
+  set) give each entry its **cost**: minutes x cost rate / 60, rounded to
+  the cent (half away from zero) per entry. The rate is copied onto the
+  entry when it's entered, so a later change of rate doesn't change earlier
+  entries. Costs are for profitability only and never post to the ledger.
+- **Expenses** are **linked, not re-posted**: an approved bill's line, an
+  approved expense claim's receipt or a spend money line is linked to a
+  project with its cost **excluding GST** (the line's net amount), a
+  **chargeable** flag and an optional **markup %**. A line can be on one
+  project at a time. Its **charge** is cost x (100 + markup) / 100, rounded
+  to the cent. Stock lines (the inventory account) aren't linked: stock is
+  costed when it's sold. While linked, the bill, claim or spend money can't
+  be voided (the database refuses); remove the link first (only while it
+  isn't invoiced).
+- **Unbilled** means: time on hourly tasks, fixed price tasks (not archived)
+  and chargeable expenses that aren't on an invoice that isn't voided, and
+  haven't been written off.
+- **Invoice**: the chosen unbilled items become one **draft sales
+  invoice** for the project's customer, to one revenue account and tax code
+  chosen when invoicing (tax exclusive; no tax code means no tax), due by the
+  customer's payment terms unless a due date is given. Lines, in this
+  order: per hourly task, its chosen time at the task's current rate (the
+  quantity is the hours when they're exact to 4 decimal places, else 1 at
+  the amount, minutes x rate / 60 rounded to the cent); per fixed task, 1 at
+  its price; per expense, 1 at its charge. Each item is linked to the
+  invoice so it can't be invoiced twice (the database refuses). **Voiding**
+  the invoice, or **deleting** the draft, makes its items unbilled again.
+  The draft can be edited like any invoice; its items stay linked to it.
+- **Closing** is refused while anything is unbilled or a project invoice is
+  still a draft, unless the unbilled items are **written off** as part of
+  closing (they're then never billed, and stay written off if the project
+  is reopened). A closed project takes no new tasks, time, expenses or
+  invoices, and its invoices can't be voided or deleted until it's reopened
+  (the database refuses all of these).
+- **Profitability** per project: **invoiced** (the approved project
+  invoices' totals excluding GST), **costs** (linked expenses at cost plus
+  time at cost), **profit** (invoiced less costs), what's **on draft
+  invoices**, **unbilled** time, fixed prices and expenses, **written off**,
+  and the **estimate** against invoiced plus unbilled; per task, estimated
+  against actual hours. The **time report** lists entries in a date range,
+  by person, project and task, with hours and cost.
+
+Setup (GST 15%): customer **Harbour Cafe** (payment terms 20th of the
+following month), supplier **Paw Supplies**; members Jess (owner), Aroha
+and Sam (bookkeepers) and a viewer. Jess sets **staff cost rates**: Jess
+**40.00**, Aroha **30.00** an hour (Sam none). Project **Cafe rebrand** for
+Harbour Cafe, estimate **2,000.00**, deadline 31 Aug 2026, with tasks
+**Design** (hourly, **90.00**, estimate 10 h), **Photography** (fixed price
+**600.00**) and **Admin** (non-chargeable).
+
+| Date | Who | Task | Time | Minutes | Cost |
+| --- | --- | --- | --- | ---: | ---: |
+| 1 Jul 2026 | Jess | Design | 2 h 30 min | 150 | 100.00 |
+| 2 Jul 2026 | Aroha | Design | 1 h 15 min | 75 | 37.50 |
+| 3 Jul 2026 | Jess | Admin | 45 min | 45 | 30.00 |
+| 3 Jul 2026 | Aroha | Photography | 4 h | 240 | 120.00 |
+
+| Expense | Account | Net (cost) | Chargeable | Markup | Charge |
+| --- | --- | ---: | --- | ---: | ---: |
+| Bill PS-300, 4 Jul, "Printing of menus" 200.00 + GST | 6140 | 200.00 | yes | 10% | 220.00 |
+| Aroha's claim, 5 Jul, Z Energy "Fuel to shoot" 69.00 incl. GST | 6120 | 60.00 | no | | |
+| Spend money, 6 Jul, "Props" 46.00 incl. GST | 6070 | 40.00 | yes | 0% | 40.00 |
+
+- **PJ1** Creating Cafe rebrand posts nothing; it's **In progress** and
+  listed under Harbour Cafe. Refused: a contact that isn't a customer, an
+  archived customer, no name, an estimate of -1.00 or 1.005, a status
+  typed in (there's no such field; only Close and Reopen change it). A
+  retry with the same key returns the same project; the same key with a
+  different name is refused. Projects can't be deleted (the database
+  refuses).
+- **PJ2** Tasks: Design stores rate 90.00 and an estimate of **600**
+  minutes (10 h). Refused: an hourly task with no rate, a non-chargeable
+  task with a rate, a fixed price of 600.005 or 0.00. Archiving Admin keeps
+  it (deleting is refused by the database) and new time on it is then
+  refused; its existing time still counts.
+- **PJ3** Time: Jess's 2 h 30 min is stored as **150** minutes with cost
+  rate 40.00 and cost **100.00**; Aroha's 1 h 15 min, **75** minutes, cost
+  **37.50**. Refused: 0 minutes, 24 h 1 min, 1.5 minutes, a date that isn't
+  a date, a task from another project. Aroha (bookkeeper) can't enter or
+  change time for Jess, or set cost rates; Jess (owner) can enter time for
+  Aroha, but not for someone who isn't a member. Sam's time costs **0.00**
+  (no rate). After Jess changes her rate to 50.00, her earlier entry still
+  costs 100.00 and a new 1 h entry costs 50.00. No journal is posted.
+- **PJ4** Expenses: linking the bill line, the receipt and the spend money
+  line gives costs **200.00**, **60.00** and **40.00** (excluding GST) and
+  charges **220.00** (10% markup) and **40.00**; the fuel isn't chargeable.
+  Refused: a line of a draft bill, the same line on a second project (the
+  database refuses too), a receive money line, a stock line (1400), a markup
+  of -5 or 10.001. Voiding bill PS-300 while it's linked is refused (the
+  database refuses); after removing the link it can be voided. Linking
+  posts nothing.
+- **PJ5** Unbilled after PJ3 and PJ4: Design 225 minutes (3 h 45 min) x
+  90.00 / 60 = **337.50**, Photography **600.00**, expenses **260.00**
+  (220.00 + 40.00): **1,197.50** in all. The Admin time and the fuel are
+  costs only.
+- **PJ6** Invoicing everything unbilled on 10 Jul 2026 to 4000 with GST
+  makes a **draft invoice** for Harbour Cafe, due **20 Aug 2026** (its
+  terms), with lines "Design (3 h 45 min)" 3.75 x **90.00** = **337.50**,
+  "Photography" 1 x **600.00**, "Printing of menus" 1 x **220.00**, "Props"
+  1 x **40.00**: subtotal **1,197.50**, GST **179.63** (50.63 + 90.00 + 33.00
+  + 6.00, per line), total **1,377.13**. Nothing is posted until it's
+  approved, which posts Dr 1100 **1,377.13** / Cr 4000 **1,197.50** / Cr
+  2100 **179.63** as for any invoice. Unbilled is then **0.00**; invoicing
+  any of those items again is refused ("already on invoice"), and the
+  database refuses linking them twice. The same request retried with the
+  same key returns the same invoice; the same key with other items is
+  refused. Invoicing nothing, a non-chargeable task's time, or a fixed
+  price task's time (the price is billed, not the time) is refused.
+- **PJ7** Durations that aren't exact hours to 4 decimal places: 10 minutes
+  of Design is invoiced as "Design (10 min)" 1 x **15.00** (10 x 90.00 /
+  60); 12 minutes as 0.2 x 90.00 = **18.00**.
+- **PJ8** Deleting PJ6's draft invoice makes all **1,197.50** unbilled
+  again. Invoiced again, approved and then voided on 15 Jul, the items are
+  unbilled again and can be invoiced a third time. While on an invoice that
+  isn't voided, a time entry can't be changed or removed and an expense's
+  markup, chargeable flag or link can't be changed (the database refuses
+  them too); after the void they can.
+- **PJ9** Profitability. Before invoicing: invoiced **0.00**, costs
+  **587.50** (time **287.50** + expenses **300.00**), profit **-587.50**,
+  unbilled **1,197.50**. With PJ6's draft: **1,197.50** on draft invoices,
+  invoiced still 0.00. Once approved: invoiced **1,197.50**, profit
+  **610.00**, unbilled **0.00**; estimate **2,000.00** against invoiced plus
+  unbilled 1,197.50, **802.50** left. Design: estimated 10 h, actual **3 h 45
+  min**.
+- **PJ10** Closing: refused while 1,197.50 is unbilled, and while the
+  project invoice is a draft; once it's approved the project closes. A
+  closed project refuses new tasks, time, expenses and invoicing, and
+  voiding its invoice is refused until it's reopened (the database refuses
+  all of these). Reopened, 30 minutes more Design (**45.00**) is entered;
+  closing is refused, then closing **with write-off** closes it and marks
+  that entry written off: unbilled **0.00**, written off **45.00**, its cost
+  (15.00 at Aroha's rate) still counts. Reopened again, the entry stays
+  written off and invoicing it is refused.
+- **PJ11** Time report for July 2026: Jess **3 h 15 min** (195 minutes,
+  cost 130.00), Aroha **5 h 15 min** (315 minutes, cost 157.50); by task
+  Design 3 h 45 min, Photography 4 h, Admin 45 min; total **8 h 30 min**,
+  cost **287.50**. For 1-2 Jul only: 3 h 45 min. Filtered to Aroha: 5 h 15
+  min. A removed entry isn't listed.
+- **PJ12** A viewer can list and open projects and run both reports but
+  can't create, change or invoice anything (403). Every command that creates
+  something is idempotent. Across PJ1-PJ11 the only journals are the bill's,
+  the claim's, the spend money's and the approved invoices' (and their
+  voids).
+
+### Not supported yet (refused rather than guessed)
+
+- **Deposits and progress billing**, invoicing part of a fixed price, and
+  invoicing time at a per-person rate (the task's rate is used).
+- A **start/stop timer**: time is entered as hours and minutes.
+- Undoing a **write-off**, or writing items off other than when closing.
+- Linking **draft bills**, supplier credit notes, purchase orders, manual
+  journals, receive money or stock lines to projects; foreign-currency
+  projects.
+- **Tracking the project in the ledger**: a project isn't a tracking or
+  custom segment value, and linking an expense doesn't change its posted
+  lines (posted history is append-only). Organisations that want the
+  ledger split by project can add a "Project" custom segment (CS1) and tag
+  lines themselves.
+- Notes and files on projects; time entries for people who aren't members
+  of the organisation (e.g. contractors without a login).
+
+### Questions for Jess (projects)
+
+- Invoice lines for time: the quantity is the hours when they're exact to 4
+  decimal places, else 1 line at the amount (PJ7). Would you rather Tohyee
+  round time to 6 or 15 minutes when invoicing, as some firms do?
+- Should staff who only record time (no bookkeeping) get a "time only"
+  role? As built, entering time needs a bookkeeper.
+- Is closing with write-off the right way to finish a project with
+  unbilled work, and should a write-off be undoable when it's reopened?
+- Should invoiced income include credit notes against project invoices
+  (not linked yet), and should profitability be for a date range rather
+  than the project's life?
+- Should a project automatically tag its invoice lines with a "Project"
+  custom segment value, so the profit and loss can be split by project?

@@ -49,6 +49,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ expense_claims, expense_claim_receipts, expense_claim_payments   staff expense claims, their receipts and payments
 ├─ fixed_asset_types, fixed_assets, fixed_asset_numbering   the fixed asset register (archived, never deleted)
 ├─ fixed_asset_depreciation_runs, fixed_asset_disposals, fixed_asset_depreciation_lines   depreciation runs and disposals, and the months each charged
+├─ projects, project_tasks, project_time_entries, project_expenses   projects, their tasks, time (whole minutes) and linked expense lines (post nothing; never deleted)
+├─ project_invoices, project_invoice_items, project_staff_rates   what each project invoice billed, and staff cost rates per member
 ├─ customer_payment_batches, supplier_payment_batches   one payment for several invoices or bills (its parts are customer or supplier payments)
 ├─ custom_reports         custom report drafts, and published frozen copies with their figures
 ├─ budgets, budget_amounts   budgets (post nothing; archived, never deleted) and their amounts per account and month
@@ -218,9 +220,9 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices and purchase orders; print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices; add notes and files, and edit, delete or remove their own |
-| admin | + approve their own expense claims; fixed asset types and the part-month settings; chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
+| viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices and purchase orders, projects (with profitability, the time report and staff cost rates); print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
+| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add notes and files, and edit, delete or remove their own |
+| admin | + approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
 People who aren't members get "not found", so organisation IDs can't be
@@ -339,6 +341,29 @@ Enforced by the database itself, not just the app:
   existing organisations them at those codes or the next free ones) are the
   default gain, loss and capital gain accounts. The register
   (`src/lib/fixed-assets/register.ts`) ties to the ledger per account.
+- Projects (PJ1-PJ12) post nothing; only the invoices made from them do.
+  `projects`, `project_tasks`, `project_time_entries` and
+  `project_expenses` refuse `DELETE` and `TRUNCATE` (tasks are archived,
+  time and expense links removed). Time is whole minutes (1 to 1440) with
+  the member's staff cost rate copied on. An expense link is an approved
+  bill's line, an approved expense claim's receipt or a posted spend money
+  line at its net amount, one active link per line (unique indexes), and
+  that bill, claim or spend money can't be voided while linked. Invoicing
+  inserts `project_invoices` (one per sales invoice, deleted with its draft
+  by `on delete cascade`, otherwise never changed) and
+  `project_invoice_items`; an item is billed while it's on an invoice that
+  isn't voided (`tohyee_project_item_invoice`), and a trigger refuses billing
+  it twice, billing time on a task that isn't hourly, and billing anything
+  removed, written off or not chargeable. Billed time and expenses can't
+  change; a task's charge type and fixed price can't change once it's
+  billed; a write-off is never undone. Only closing and reopening change a
+  project's status, and closing is refused while
+  `tohyee_project_open_item` finds a draft project invoice or anything
+  unbilled; a closed project takes no new tasks, time, expenses or
+  invoices, and its invoices can't be voided or deleted. Figures and the
+  time report are worked out in `src/lib/projects/service.ts` (maths in
+  the browser-safe `amounts.ts`): time cost and charges are minutes x rate
+  / 60 rounded to the cent, markups cost x (100 + %) / 100.
 - Purchase orders (PO1-PO9): only drafts can be changed or deleted. An
   approved one can only become cancelled (and then only its cancel details
   change), and only while no bill that isn't voided names it; its lines are

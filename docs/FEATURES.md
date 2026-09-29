@@ -209,6 +209,29 @@ that something happened.
   year's depreciation by type, disposals this year, and ties to the ledger
   account by account. Tax depreciation beside book, pooling and low-value
   write-offs aren't built.
+- **Projects and time tracking** (Sales; PJ1-PJ12, not yet approved by
+  Jess), like Xero Projects: a **project** for a customer with an optional
+  estimate and deadline, **In progress** or **Closed** (only by closing and
+  reopening). **Tasks** are hourly (a rate), fixed price or non-chargeable,
+  with an optional estimate in hours, archived never deleted. **Time** is
+  entered in hours and minutes and kept as whole minutes, by each member
+  for themselves (admins can enter it for another member); admins set each
+  member's **staff cost rate**, copied onto their time as its cost.
+  **Expenses** are linked from approved bill lines, expense claim receipts
+  and spend money lines at cost excluding GST (never re-posted), chargeable
+  or not, with an optional markup; while linked, their document can't be
+  voided. **Invoice** makes a draft sales invoice from the ticked unbilled
+  items (time grouped per task at its rate, fixed prices, expenses with
+  markup) to one income account and tax code, and links each item so it
+  can't be invoiced twice; voiding the invoice or deleting the draft makes
+  them unbilled again. **Closing** is refused while anything is unbilled or
+  on a draft invoice, unless the unbilled items are written off; a closed
+  project takes nothing new and its invoices can't be voided until it's
+  reopened. **Project profitability** (invoiced less expenses at cost and
+  time at cost, draft invoices, unbilled, written off, estimate left) and
+  the **time report** (by person, project and task for a date range) are
+  under Reporting. Projects post nothing; only their invoices do. A timer,
+  deposits and progress billing aren't built.
 - **Customer payments** against one approved sales invoice at a time:
   recording a payment posts Dr the bank account / Cr accounts receivable on
   the payment date, and voiding it posts the exact reversal on the void date.
@@ -439,7 +462,7 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll, projects and time tracking.
+4. NZ payroll.
 5. Multi-currency transactions.
 
 ## Guardrails

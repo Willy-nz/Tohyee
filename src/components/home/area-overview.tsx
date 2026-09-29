@@ -14,6 +14,7 @@ const SALES_LINKS: AreaLink[] = [
   { href: "/operations/credit-notes", label: "Credit notes", description: "Credit for customers: apply it to invoices or refund it." },
   { href: "/operations/quotes", label: "Quotes", description: "Prices offered to customers; accept one to make its invoice." },
   { href: "/operations/repeating-invoices", label: "Repeating invoices", description: "Invoices made every so many weeks or months." },
+  { href: "/operations/projects", label: "Projects", description: "Time and expenses for customer work, and invoicing what's unbilled." },
 ];
 
 const PURCHASES_LINKS: AreaLink[] = [
