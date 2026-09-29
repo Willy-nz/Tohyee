@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tohyee: free accounting you run yourself</title>
+<meta name="description" content="Tohyee is free, open-source accounting software for New Zealand, including GST returns, invoices, bills and bank reconciliation, that runs on your own computer.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #f3f5f9; --surface: #ffffff; --ink: #0f172a; --muted: #5b6474;
+    --line: #e2e8f0; --accent: #2563eb; --accent-strong: #1d4ed8; --accent-soft: #eff6ff;
+    --warn-soft: #fffbeb; --warn-line: #fde68a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1120; --surface: #111a2e; --ink: #e5e9f0; --muted: #9aa4b5;
+      --line: #22304a; --accent: #60a5fa; --accent-strong: #93c5fd; --accent-soft: #15213a;
+      --warn-soft: #231c0b; --warn-line: #5b4712;
+    }
+    .btn.primary, .btn.primary:hover { color: #0b1120; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; padding: 18px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; color: var(--ink); text-decoration: none; }
+  .brand img { width: 34px; height: 34px; }
+  nav a { margin-left: 18px; color: var(--muted); text-decoration: none; font-size: 15px; }
+  nav a:hover { color: var(--ink); }
+  .hero { padding: 56px 0 40px; display: grid; gap: 28px; }
+  .hero h1 { font-size: clamp(32px, 5vw, 50px); line-height: 1.1; margin: 0; letter-spacing: -0.02em; max-width: 16ch; }
+  .hero p.lede { font-size: 20px; color: var(--muted); margin: 0; max-width: 60ch; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn { display: inline-block; padding: 13px 22px; border-radius: 10px; font-weight: 600; text-decoration: none; }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-strong); }
+  .btn.ghost { border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
+  .small { font-size: 14px; color: var(--muted); }
+  section { padding: 36px 0; }
+  h2 { font-size: 28px; margin: 0 0 18px; letter-spacing: -0.01em; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
+  .card h3 { margin: 0 0 6px; font-size: 18px; }
+  .card p, .card ul { margin: 0; color: var(--muted); font-size: 15.5px; }
+  .card ul { padding-left: 18px; }
+  .points { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+  .point strong { display: block; font-size: 17px; margin-bottom: 2px; }
+  .point span { color: var(--muted); font-size: 15.5px; }
+  ol.steps { padding-left: 22px; margin: 0; }
+  ol.steps li { margin-bottom: 10px; }
+  .notice { background: var(--warn-soft); border: 1px solid var(--warn-line); border-radius: 14px; padding: 20px 22px; }
+  .notice h2 { font-size: 22px; }
+  .notice ul { margin: 0; padding-left: 20px; }
+  footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 14px; }
+  footer p { margin: 4px 0; }
+  @media (max-width: 560px) { nav { display: none; } .hero { padding-top: 32px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="favicon.svg" alt="">Tohyee</a>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#important">Before you start</a>
+      <a href="https://github.com/Willy-nz/Tohyee">Source code</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <h1>Accounting that runs on your own computer.</h1>
+      <p class="lede">Tohyee is free, open-source accounting software made in New Zealand. It covers GST returns, invoices, bills and bank reconciliation. Your books stay on your computer, and there's no monthly fee.</p>
+      <div class="buttons">
+        <a class="btn primary" href="https://github.com/Willy-nz/Tohyee/releases/latest">Download for Windows</a>
+        <a class="btn ghost" href="#install">How to install</a>
+      </div>
+      <p class="small">Free under the GNU AGPL v3 licence. Also available for Docker and Linux. Still early: please read <a href="#important">before you start</a>.</p>
+    </div>
+
+    <section>
+      <div class="points">
+        <div class="point"><strong>Your books, your computer</strong><span>Everything is stored on a computer you control, like a media server at home. Nobody else holds your data.</span></div>
+        <div class="point"><strong>No subscription</strong><span>It's free to use, for as many organisations and people as you like.</span></div>
+        <div class="point"><strong>Built for New Zealand</strong><span>GST on the invoice, payments or hybrid basis, and a GST return set out box by box.</span></div>
+        <div class="point"><strong>Backed up every night</strong><span>Encrypted backups of every organisation, into a folder you choose, such as OneDrive.</span></div>
+      </div>
+    </section>
+
+    <section id="features">
+      <h2>What it does</h2>
+      <div class="grid">
+        <div class="card"><h3>Sales</h3><ul><li>Quotes, invoices and credit notes</li><li>Repeating invoices</li><li>Customer payments and statements</li><li>Print or save as PDF</li></ul></div>
+        <div class="card"><h3>Purchases</h3><ul><li>Bills and supplier credit notes</li><li>Purchase orders</li><li>Paying several bills at once</li><li>Expense claims</li></ul></div>
+        <div class="card"><h3>Bank</h3><ul><li>Bank and credit card accounts</li><li>Statement import and bank rules</li><li>Bank reconciliation</li><li>NZ bank feeds through Akahu</li></ul></div>
+        <div class="card"><h3>GST and reports</h3><ul><li>GST return with an audit report behind every box</li><li>Profit and loss, balance sheet, trial balance</li><li>Aged receivables and payables</li><li>Custom reports and budgets</li></ul></div>
+        <div class="card"><h3>Stock and assets</h3><ul><li>Products and services</li><li>Stock at weighted average cost, by location</li><li>Fixed asset register and depreciation</li></ul></div>
+        <div class="card"><h3>Bigger organisations</h3><ul><li>Departments, classes and locations</li><li>Custom fields and projects with time tracking</li><li>A built-in CRM with email and calendar sync</li></ul></div>
+      </div>
+    </section>
+
+    <section id="install">
+      <h2>Install on Windows</h2>
+      <div class="card">
+        <ol class="steps">
+          <li>Download <strong>TohyeeSetup</strong> from the <a href="https://github.com/Willy-nz/Tohyee/releases/latest">latest release</a> and run it on the computer that will keep your books.</li>
+          <li>The installer's last page shows a <strong>setup token</strong>. Keep it open for the next step.</li>
+          <li>Choose <strong>Open Tohyee</strong> from the Start menu, use the setup token to create your first login, and set up your organisation.</li>
+          <li>Tohyee starts by itself whenever that computer starts, and its icon sits by the clock. <strong>Save a copy of your backup key</strong> somewhere safe.</li>
+        </ol>
+        <p class="small" style="margin-top:12px">Docker and Linux instructions are in the <a href="https://github.com/Willy-nz/Tohyee#running-on-a-server">read-me</a>.</p>
+      </div>
+    </section>
+
+    <section id="important">
+      <div class="notice">
+        <h2>Before you start</h2>
+        <ul>
+          <li>Tohyee is <strong>free software provided as is, with no warranty</strong>, as set out in its <a href="https://github.com/Willy-nz/Tohyee/blob/main/LICENSE">licence</a>.</li>
+          <li>It's still early. Try it on a test organisation before you put real books in it.</li>
+          <li>You're responsible for your own records. Check your GST returns and reports before you file or rely on them, and ask your accountant if you're unsure.</li>
+          <li>Keep your backups, and a copy of the backup key, somewhere other than the computer running Tohyee.</li>
+          <li>Tohyee isn't affiliated with, or endorsed by, Inland Revenue or any other accounting software company.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Tohyee is open source under the <a href="https://github.com/Willy-nz/Tohyee/blob/main/LICENSE">GNU AGPL v3</a>. <a href="https://github.com/Willy-nz/Tohyee">Source code and releases on GitHub</a>. Found a problem? <a href="https://github.com/Willy-nz/Tohyee/issues">Report it here</a>.</p>
+    <p>Made in Aotearoa New Zealand.</p>
+  </footer>
+</div>
+</body>
+</html>
