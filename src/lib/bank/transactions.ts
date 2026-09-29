@@ -1,5 +1,6 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
-import { isBankOrCreditCard, type AccountType } from "@/lib/accounts/types";
+import { type AccountClass, isBankOrCreditCard, type AccountType } from "@/lib/accounts/types";
+import { assertRequiredTags, checkNewTags, hashableLine, loadTrackingContext, parseTrackingInput, sortedTags, type TrackingTags } from "@/lib/tracking/service";
 import { writeAuditEvent } from "@/lib/audit";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -41,6 +42,8 @@ export type BankTransactionLine = {
   lineAmount: string;
   netAmount: string;
   taxAmount: string;
+  /** Tracking categories (TC10): category id -> value id. */
+  tracking: TrackingTags;
 };
 
 export type BankTransaction = {
@@ -99,7 +102,8 @@ const SELECT = `
          (select jsonb_agg(jsonb_build_object(
                    'lineOrder', l.line_order, 'description', l.description, 'accountCode', la.code,
                    'accountName', la.name, 'taxCode', tc.code, 'taxRate', l.tax_rate::text,
-                   'lineAmount', l.line_amount::text, 'netAmount', l.net_amount::text, 'taxAmount', l.tax_amount::text)
+                   'lineAmount', l.line_amount::text, 'netAmount', l.net_amount::text, 'taxAmount', l.tax_amount::text,
+                   'tracking', l.tracking)
                  order by l.line_order)
             from bank_transaction_lines l
             join accounts la on la.id = l.account_id
@@ -202,7 +206,7 @@ type ParsedInput = {
   date: string;
   reference: string | null;
   amountsMode: AmountsMode;
-  lines: Array<{ description: string; accountCode: string; taxCode: string | null; amount: string }>;
+  lines: Array<{ description: string; accountCode: string; taxCode: string | null; amount: string; tracking: TrackingTags }>;
 };
 
 function parseInput(tx: OrgTx, input: BankTransactionInput): ParsedInput {
@@ -226,6 +230,7 @@ function parseInput(tx: OrgTx, input: BankTransactionInput): ParsedInput {
         accountCode: parseAccountCodeInput(entry.accountCode, `${label} accountCode`),
         taxCode: amountsMode === "no_tax" ? null : taxCode,
         amount: parseDecimalInput(entry.amount, `${label} amount`, { maxScale: scale }),
+        tracking: sortedTags(parseTrackingInput(entry.tracking, label)),
       };
     }),
   };
@@ -246,6 +251,8 @@ type Resolved = ParsedInput & {
     lineAmount: string;
     netAmount: string;
     taxAmount: string;
+    tracking: TrackingTags;
+    accountClass: AccountClass;
   }>;
 };
 
@@ -272,12 +279,13 @@ async function resolveInput(tx: OrgTx, input: ParsedInput): Promise<Resolved> {
     id: string;
     code: string;
     name: string;
+    account_class: AccountClass;
     account_type: string;
     system_key: string | null;
     currency_code: string | null;
     is_active: boolean;
   }>(
-    "select id, code, name, account_type, system_key, currency_code, is_active from accounts where lower(code) = any($1::text[])",
+    "select id, code, name, account_class, account_type, system_key, currency_code, is_active from accounts where lower(code) = any($1::text[])",
     [[...new Set(input.lines.map((line) => line.accountCode.toLowerCase()))]],
   );
   const byCode = new Map(accounts.rows.map((row) => [row.code.toLowerCase(), row]));
@@ -309,7 +317,7 @@ async function resolveInput(tx: OrgTx, input: ParsedInput): Promise<Resolved> {
       taxCodeId = taxCode.id;
       taxRate = toPlainString(dec(taxCode.rate));
     }
-    return { ...line, accountId: target.id, accountCode: target.code, taxCodeId, taxRate };
+    return { ...line, accountId: target.id, accountCode: target.code, accountClass: target.account_class, taxCodeId, taxRate };
   });
   const scale = currencyMinorUnits(tx.baseCurrency);
   const amounts = calculateInvoice(
@@ -331,6 +339,8 @@ async function resolveInput(tx: OrgTx, input: ParsedInput): Promise<Resolved> {
       taxCodeId: line.taxCodeId,
       taxRate: line.taxRate,
       ...amounts.lines[index],
+      tracking: line.tracking,
+      accountClass: line.accountClass,
     })),
   };
 }
@@ -352,7 +362,7 @@ export async function createBankTransaction(
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const parsed = parseInput(tx, input);
-  const hash = requestHash("bank_transaction", { ...parsed });
+  const hash = requestHash("bank_transaction", { ...parsed, lines: parsed.lines.map(hashableLine) });
   const earlier = await tx.query<{ id: string; request_hash: string }>(
     "select id, request_hash from bank_transactions where command_source = $1 and idempotency_key = $2",
     [source, idempotencyKey],
@@ -362,6 +372,12 @@ export async function createBankTransaction(
     return { created: false, bankTransaction: await getBankTransaction(tx, earlier.rows[0].id) };
   }
   const resolved = await resolveInput(tx, parsed);
+  const tracking = await loadTrackingContext(tx);
+  resolved.resolvedLines.forEach((line, index) => checkNewTags(tracking, line.tracking, `Line ${index + 1}`));
+  assertRequiredTags(
+    tracking,
+    resolved.resolvedLines.map((line) => ({ tags: line.tracking, accountClass: line.accountClass })),
+  );
   if (options.expectedTotal !== undefined && toFixedString(dec(options.expectedTotal), 2) !== resolved.total) {
     throw new ValidationError(
       `The bank transaction comes to ${resolved.total}, but the statement line is ${toFixedString(dec(options.expectedTotal), 2)}.`,
@@ -375,7 +391,12 @@ export async function createBankTransaction(
   const opposite = (amount: string) => (spend ? { debitAmount: "0", creditAmount: amount } : { debitAmount: amount, creditAmount: "0" });
   const journalLines = resolved.resolvedLines
     .filter((line) => !isZero(dec(line.netAmount)))
-    .map((line) => ({ accountCode: line.accountCode, ...side(line.netAmount), description: line.description }));
+    .map((line): { accountCode: string; debitAmount: string; creditAmount: string; description: string; tracking?: TrackingTags } => ({
+      accountCode: line.accountCode,
+      ...side(line.netAmount),
+      description: line.description,
+      tracking: line.tracking,
+    }));
   if (gst) journalLines.push({ accountCode: gst, ...side(resolved.taxTotal), description: "GST" });
   journalLines.push({ accountCode: resolved.account.code, ...opposite(resolved.total), description: resolved.contactName });
   const posted = await postJournalBody(
@@ -419,9 +440,9 @@ export async function createBankTransaction(
     await tx.query(
       `insert into bank_transaction_lines (
          bank_transaction_id, line_order, description, quantity, unit_price, account_id, tax_code_id, tax_rate,
-         line_amount, net_amount, tax_amount
-       ) values ($1, $2, $3, 1, $4::numeric, $5, $6, $7::numeric, $4::numeric, $8::numeric, $9::numeric)`,
-      [id, index + 1, line.description, line.lineAmount, line.accountId, line.taxCodeId, line.taxRate, line.netAmount, line.taxAmount],
+         line_amount, net_amount, tax_amount, tracking
+       ) values ($1, $2, $3, 1, $4::numeric, $5, $6, $7::numeric, $4::numeric, $8::numeric, $9::numeric, $10::jsonb)`,
+      [id, index + 1, line.description, line.lineAmount, line.accountId, line.taxCodeId, line.taxRate, line.netAmount, line.taxAmount, JSON.stringify(line.tracking)],
     );
   }
   await writeAuditEvent(tx, {
@@ -492,6 +513,7 @@ export async function voidBankTransaction(
         debitAmount: line.creditAmount,
         creditAmount: line.debitAmount,
         description: line.description,
+        tracking: line.tracking,
       })),
     }),
     { origin: "bank_transaction", relatedJournalId: original.id, correctionKind: "reversal" },
@@ -699,6 +721,7 @@ export async function voidTransfer(
         debitAmount: line.creditAmount,
         creditAmount: line.debitAmount,
         description: line.description,
+        tracking: line.tracking,
       })),
     }),
     { origin: "bank_transfer", relatedJournalId: original.id, correctionKind: "reversal" },

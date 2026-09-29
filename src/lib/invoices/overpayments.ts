@@ -848,6 +848,7 @@ export async function voidOverpaymentRefund(
         debitAmount: line.creditAmount,
         creditAmount: line.debitAmount,
         description: line.description,
+        tracking: line.tracking,
       })),
     }),
     { origin: "customer_overpayment_refund", relatedJournalId: original.id, correctionKind: "reversal" },

@@ -189,6 +189,19 @@ that something happened.
   line. Each organisation sets up its own Akahu personal app (with its own
   bank logins) and an organisation admin enters its tokens, which are checked
   with Akahu and stored encrypted. See examples BK1-BK16.
+- **Advanced (ERP) features** (an organisation setting, off by default) with
+  **tracking categories**: Department, Class and Location, each a tree of
+  values (Otago › Dunedin) that admins can rename, move and archive (never
+  delete), and each optionally required on income and expense lines before
+  approving or posting. Lines of invoices, bills, sales and supplier credit
+  notes, spend and receive money and manual journals take one value per
+  category; the tags go onto the posted journal lines and are copied onto
+  voids and corrections. The profit and loss can be **split by** a category
+  (a column per top-level value, "Not set" and the total), and a custom
+  profit and loss can be **filtered** to one value and everything under it.
+  Tags never change an amount, an account or a GST box. See examples
+  TC1-TC10. Custom fields, salespeople, richer customers and items and a GST
+  audit report come next.
 - **Two-step sign-in** for everyone: an authenticator app (QR code set-up)
   plus 10 one-use backup codes; wrong-code limits and lockout; lost-phone
   reset by emailed link, by a server admin, or from the command line; new

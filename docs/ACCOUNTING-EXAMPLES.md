@@ -26,7 +26,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/gst-bases.test.ts` (G10-G22) and
   `tests/integration/record-extras.test.ts` (NF1-NF14) and
   `tests/integration/home.test.ts` (H1-H4) and
-  `tests/integration/custom-reports.test.ts` (CR1-CR10), all against a real
+  `tests/integration/custom-reports.test.ts` (CR1-CR10) and
+  `tests/integration/tracking.test.ts` (TC1-TC10), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -1338,6 +1339,98 @@ the first return filed in Tohyee aren't known to it.
 - **Filing to IRD electronically**: "Mark as filed" records that you filed the
   return yourself (through myIR), with the figures it had at the time.
 - **Other GST rates**: standard-rated lines must be at 15%.
+
+## Tracking categories (advanced features)
+
+For bigger organisations (decided with the owner, 29 Sep 2026, after looking
+at NetSuite's classifications): an organisation setting, **Advanced (ERP)
+features**, off by default, turns on **tracking categories**: Department,
+Class and Location to begin with (more of the organisation's own come
+later). Each category holds a **tree of values** (e.g. Location: Otago >
+Dunedin). Lines of sales invoices, bills, sales and supplier credit notes,
+spend and receive money, and manual journals can be tagged with one value per
+category, and the posted journal lines keep the tags, so reports can split
+or filter by them. Tags only describe lines; they never change an amount,
+an account or a GST box.
+
+- Only lines that users write are tagged: each document line's income,
+  expense or other account line in the journal carries that document line's
+  tags. Accounts receivable, accounts payable, GST and bank lines are never
+  tagged. When an invoice (bill, credit note, spend or receive money) has
+  several lines on the same account, they're posted as one journal line only
+  if their tags are the same.
+- A category can be **required**: then every line on an income or expense
+  account needs a value from it before it can be approved or posted (drafts
+  can still be saved without). Lines on balance sheet accounts never need
+  one.
+- Values are renamed, moved under another value, or archived, never deleted.
+  An archived value can't be chosen for a new line but stays on old ones.
+  Names are unique among a value's siblings (ignoring case), and a value can't
+  sit under itself or its own children.
+- Voiding and corrections copy the tags onto the reversing lines, so a voided
+  document nets to zero in every column.
+- Turning the setting off hides the fields, the categories page and the
+  split and filter options; tags already on lines are kept, and come back
+  when it's turned on again.
+
+Setup: advanced features on; Department values Retail and Wholesale; Class
+values Jewellery and Kits; Location values Otago (with Dunedin and
+Queenstown under it) and Canterbury (with Christchurch under it). Tax code
+GST (15%); dates in June 2026.
+
+- **TC1** A new organisation has advanced features off, and the categories
+  Department, Class and Location with no values. With the setting off, a
+  line's tags are refused ("Advanced features are off"). Turning it on and
+  off is recorded in the history. A draft tagged while it was on can still
+  be edited and approved with the switch off: the tags it already had are
+  kept, but no new ones can be added.
+- **TC2** Values: "Dunedin" can be added under Otago and under Canterbury
+  (different parents), but a second "dunedin" under Otago is refused; moving
+  Otago under Dunedin is refused (it's its own child); a value can't be
+  deleted, only archived; an archived value is refused on a new line
+  ("Queenstown is archived") and still shows on lines that already have it.
+- **TC3** Invoice (tax exclusive) with 100.00 to 4000 tagged Retail /
+  Jewellery / Dunedin and 50.00 to 4000 tagged Wholesale / Kits /
+  Christchurch posts Dr 1100 **172.50** / Cr 4000 **100.00** (Retail,
+  Jewellery, Dunedin) / Cr 4000 **50.00** (Wholesale, Kits, Christchurch) /
+  Cr 2100 **22.50** (no tags). Two lines of 30.00 and 20.00 to 4000 with the
+  same tags are posted as one 50.00 line. The GST return is the same as
+  without tags.
+- **TC4** Bill (tax exclusive) with 40.00 to 6010 tagged Retail / Dunedin
+  and 60.00 to 6010 with no tags posts Dr 6010 **40.00** (Retail, Dunedin) /
+  Dr 6010 **60.00** / Dr 2100 **15.00** / Cr 2000 **115.00**. Voiding it
+  posts the same lines the other way round, with the same tags.
+- **TC5** A manual journal Dr 6010 25.00 (Retail) / Cr 1000 25.00 posts
+  with the tag on the 6010 line. A tag with a value from the wrong category
+  (Department: Dunedin) is refused. A correction's reversal keeps the
+  original tags; its replacement can have different ones, and can keep a
+  value the original had even if that value has since been archived.
+- **TC6** With Department required: approving the TC3 invoice with its
+  second line untagged is refused ("Line 2 needs a Department"), but the
+  draft saves; the TC4 bill's 60.00 line is refused the same way; a manual
+  journal line to 6010 without a Department is refused, while its 1000 line
+  (a bank account) needs nothing. With the requirement off again, all of
+  them work.
+- **TC7** Profit and loss for June 2026 with TC3's invoice and TC4's bill,
+  **split by Department**: Revenue Retail **100.00**, Wholesale **50.00**,
+  Not set **0.00**, Total **150.00**; Expenses Retail **40.00**, Wholesale
+  **0.00**, Not set **60.00**, Total **100.00**; Net profit Retail **60.00**,
+  Wholesale **50.00**, Not set **-60.00**, Total **50.00** (the same as the
+  profit and loss without a split). **Split by Location**, values under a
+  top-level value count in its column: Revenue Otago **100.00**, Canterbury
+  **50.00**; Expenses Otago **40.00**, Not set **60.00**; Net profit Otago
+  **60.00**, Canterbury **50.00**, Not set **-60.00**.
+- **TC8** A custom report (CR1) **filtered** to Location Otago counts only
+  lines tagged Otago or a value under it: June Revenue **100.00**, Expenses
+  **40.00**, Net profit **60.00**. The filter is shown on the report and kept
+  in a published copy. A balance sheet can't be filtered (its AR, AP, GST
+  and bank lines aren't tagged).
+- **TC9** Voiding the TC3 invoice in June: split by Department, Revenue is
+  **0.00** in every column.
+- **TC10** A sales credit note, a supplier credit note and spend and receive
+  money carry line tags the same way as TC3 and TC4 (credit note 20.00 to
+  4000 tagged Retail posts Dr 4000 **20.00** (Retail)); payments, refunds,
+  transfers and bank reconciliation never add tags.
 
 ## Notes, files and history
 

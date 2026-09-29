@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate } from "@/components/invoices/invoice-editor";
 import { Button, Field, Notice, Stat, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
@@ -16,6 +17,7 @@ import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { SupplierCreditNote } from "@/lib/supplier-credit-notes/service";
 import type { TaxCode } from "@/lib/tax/codes";
+import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 type EditorLine = {
   key: number;
@@ -24,6 +26,7 @@ type EditorLine = {
   unitPrice: string;
   accountCode: string;
   taxCode: string;
+  tracking: TrackingTags;
 };
 
 let lineKey = 0;
@@ -34,7 +37,7 @@ function nextLineKey(): number {
 
 /** New lines have no account, so each credit is put somewhere on purpose. */
 function blankLine(taxCode: string): EditorLine {
-  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode };
+  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {} };
 }
 
 /** The accounts supplier credit note lines can go to: the bill line rule the server checks. */
@@ -47,7 +50,7 @@ export type SupplierCreditNoteStart = {
   contactId: string;
   reference: string | null;
   amountsMode: AmountsMode;
-  lines: Array<{ description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null }>;
+  lines: Array<{ description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null; tracking?: TrackingTags }>;
 };
 
 type FormProps = {
@@ -56,6 +59,7 @@ type FormProps = {
   accounts: Account[];
   suppliers: Contact[];
   taxCodes: TaxCode[];
+  tracking: TrackingSetup;
   creditNote?: SupplierCreditNote;
   start?: SupplierCreditNoteStart;
   onSaved: (creditNote: SupplierCreditNote) => void;
@@ -68,6 +72,7 @@ function SupplierCreditNoteForm({
   accounts,
   suppliers,
   taxCodes,
+  tracking,
   creditNote,
   start,
   onSaved,
@@ -94,6 +99,7 @@ function SupplierCreditNoteForm({
           unitPrice: line.unitPrice,
           accountCode: line.accountCode,
           taxCode: line.taxCode ?? defaultTaxCode,
+          tracking: line.tracking ?? {},
         }))
       : [blankLine(defaultTaxCode)],
   );
@@ -144,6 +150,7 @@ function SupplierCreditNoteForm({
         unitPrice: line.unitPrice,
         accountCode: line.accountCode,
         taxCode: hasTax ? line.taxCode || null : null,
+        tracking: line.tracking,
       })),
     };
     try {
@@ -279,6 +286,12 @@ function SupplierCreditNoteForm({
                     onChange={(code) => update(line.key, { accountCode: code })}
                     required
                   />
+                  <TrackingSelects
+                    setup={tracking}
+                    labelPrefix={`Line ${index + 1}`}
+                    value={line.tracking}
+                    onChange={(tags) => update(line.key, { tracking: tags })}
+                  />
                 </td>
                 {hasTax ? (
                   <td>
@@ -367,11 +380,12 @@ export function SupplierCreditNoteEditor({
   const accounts = useAccounts(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
-  const error = accounts.error ?? contacts.error ?? taxCodes.error;
+  const tracking = useTracking(organisationId);
+  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error;
   if (error) {
     return <Notice tone="error">{error}</Notice>;
   }
-  if (!accounts.data || !contacts.data || !taxCodes.data) {
+  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data) {
     return <p className={ui.muted}>Loading…</p>;
   }
   return (
@@ -381,6 +395,7 @@ export function SupplierCreditNoteEditor({
       accounts={accounts.data.accounts}
       suppliers={contacts.data.contacts}
       taxCodes={taxCodes.data.taxCodes}
+      tracking={tracking.data}
       creditNote={creditNote}
       start={start}
       onSaved={onSaved}

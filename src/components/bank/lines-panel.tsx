@@ -6,6 +6,7 @@ import { InOutCells, journalHref, LineDetails, LineStatusBadge, originLabel } fr
 import { Pager } from "@/components/bank/reconcile-panel";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { BankAccount, StatementLine } from "@/lib/bank/accounts";
@@ -258,6 +259,7 @@ export function TransactionsPanel({ organisationId, account }: { organisationId:
     limit: 200,
   });
   const transfers = useApiData<{ transfers: BankTransfer[] }>("/api/bank-transfers", { organisationId, accountId: account.id, limit: 200 });
+  const tracking = useTracking(organisationId);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -295,6 +297,7 @@ export function TransactionsPanel({ organisationId, account }: { organisationId:
                     {transaction.lines.map((line) => (
                       <div key={line.lineOrder}>
                         {line.description} <span className={ui.muted}>({line.accountCode})</span>
+                        <TrackingTagsText setup={tracking.data} tags={line.tracking} />
                       </div>
                     ))}
                   </td>

@@ -7,7 +7,9 @@ import { formatMoney, todayInBrowser } from "@/lib/format";
 import type { JournalWithLines } from "@/lib/ledger/journals";
 import { add, cmp, dec, isDecimalString, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { AccountSelect } from "@/components/books";
+import { TrackingSelects, useTracking } from "@/components/tracking";
 import { Button, Field, Notice, ui } from "@/components/ui";
+import type { TrackingTags } from "@/lib/tracking/service";
 
 type EditorLine = {
   key: number;
@@ -15,12 +17,13 @@ type EditorLine = {
   description: string;
   debit: string;
   credit: string;
+  tracking: TrackingTags;
 };
 
 let lineKey = 0;
 function blankLine(): EditorLine {
   lineKey += 1;
-  return { key: lineKey, accountCode: "", description: "", debit: "", credit: "" };
+  return { key: lineKey, accountCode: "", description: "", debit: "", credit: "", tracking: {} };
 }
 
 function total(lines: EditorLine[], side: "debit" | "credit") {
@@ -49,6 +52,7 @@ export type JournalEditorProps = {
  * post the same journal twice.
  */
 export function JournalEditor({ organisationId, accounts, mode, original, onDone, onCancel }: JournalEditorProps) {
+  const tracking = useTracking(organisationId);
   const [postingDate, setPostingDate] = useState(todayInBrowser);
   const [reference, setReference] = useState(original?.reference ?? "");
   const [description, setDescription] = useState(original?.description ?? "");
@@ -62,6 +66,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
             description: line.description ?? "",
             debit: /^0*(\.0*)?$/.test(line.debitAmount) ? "" : line.debitAmount,
             credit: /^0*(\.0*)?$/.test(line.creditAmount) ? "" : line.creditAmount,
+            tracking: line.tracking ?? {},
           };
         })
       : [blankLine(), blankLine()],
@@ -89,6 +94,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
         description: line.description || null,
         debitAmount: line.debit || null,
         creditAmount: line.credit || null,
+        tracking: line.tracking,
       }));
     try {
       if (mode === "new") {
@@ -168,6 +174,12 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
                     accounts={accounts}
                     value={line.accountCode}
                     onChange={(code) => update(line.key, { accountCode: code })}
+                  />
+                  <TrackingSelects
+                    setup={tracking.data}
+                    labelPrefix={`Line ${index + 1}`}
+                    value={line.tracking}
+                    onChange={(tags) => update(line.key, { tracking: tags })}
                   />
                 </td>
                 <td data-label="Line description">

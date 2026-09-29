@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate } from "@/components/invoices/invoice-editor";
 import { Badge, Button, Field, Notice, Stat, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
@@ -22,6 +23,7 @@ import {
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
+import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 const STATUS_BADGES: Record<CreditNoteStatus, { label: string; tone: "neutral" | "green" | "red" }> = {
   draft: { label: "Draft", tone: "neutral" },
@@ -51,6 +53,7 @@ type EditorLine = {
   unitPrice: string;
   accountCode: string;
   taxCode: string;
+  tracking: TrackingTags;
 };
 
 let lineKey = 0;
@@ -62,7 +65,7 @@ function nextLineKey(): number {
 type Defaults = { accountCode: string; taxCode: string };
 
 function blankLine(defaults: Defaults): EditorLine {
-  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", ...defaults };
+  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", tracking: {}, ...defaults };
 }
 
 /** Credit note lines go to revenue accounts, the same rule the server checks. */
@@ -75,7 +78,7 @@ export type CreditNoteStart = {
   contactId: string;
   reference: string | null;
   amountsMode: AmountsMode;
-  lines: Array<{ description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null }>;
+  lines: Array<{ description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null; tracking?: TrackingTags }>;
 };
 
 type FormProps = {
@@ -84,6 +87,7 @@ type FormProps = {
   accounts: Account[];
   customers: Contact[];
   taxCodes: TaxCode[];
+  tracking: TrackingSetup;
   creditNote?: CreditNote;
   start?: CreditNoteStart;
   onSaved: (creditNote: CreditNote) => void;
@@ -96,6 +100,7 @@ function CreditNoteForm({
   accounts,
   customers,
   taxCodes,
+  tracking,
   creditNote,
   start,
   onSaved,
@@ -121,6 +126,7 @@ function CreditNoteForm({
           unitPrice: line.unitPrice,
           accountCode: line.accountCode,
           taxCode: line.taxCode ?? defaults.taxCode,
+          tracking: line.tracking ?? {},
         }))
       : [blankLine(defaults)],
   );
@@ -170,6 +176,7 @@ function CreditNoteForm({
         unitPrice: line.unitPrice,
         accountCode: line.accountCode,
         taxCode: hasTax ? line.taxCode || null : null,
+        tracking: line.tracking,
       })),
     };
     try {
@@ -294,6 +301,12 @@ function CreditNoteForm({
                     onChange={(code) => update(line.key, { accountCode: code })}
                     required
                   />
+                  <TrackingSelects
+                    setup={tracking}
+                    labelPrefix={`Line ${index + 1}`}
+                    value={line.tracking}
+                    onChange={(tags) => update(line.key, { tracking: tags })}
+                  />
                 </td>
                 {hasTax ? (
                   <td data-label="Tax code">
@@ -382,11 +395,12 @@ export function CreditNoteEditor({
   const accounts = useAccounts(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
-  const error = accounts.error ?? contacts.error ?? taxCodes.error;
+  const tracking = useTracking(organisationId);
+  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error;
   if (error) {
     return <Notice tone="error">{error}</Notice>;
   }
-  if (!accounts.data || !contacts.data || !taxCodes.data) {
+  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data) {
     return <p className={ui.muted}>Loading…</p>;
   }
   return (
@@ -396,6 +410,7 @@ export function CreditNoteEditor({
       accounts={accounts.data.accounts}
       customers={contacts.data.contacts}
       taxCodes={taxCodes.data.taxCodes}
+      tracking={tracking.data}
       creditNote={creditNote}
       start={start}
       onSaved={onSaved}

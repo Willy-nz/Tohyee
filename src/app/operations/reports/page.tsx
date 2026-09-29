@@ -6,8 +6,10 @@ import { Fragment, Suspense, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { CustomReportList, StartCustomReport } from "@/components/reports/custom-report";
+import { activeCategories, useTracking } from "@/components/tracking";
 import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
+import type { ProfitAndLossSplit, SplitColumn, SplitGroup } from "@/lib/reports/financial";
 
 type Line = { accountId: string; code: string; name: string; amount: string };
 type Section = { key: string; label: string; lines: Line[]; total: string };
@@ -92,6 +94,100 @@ function GroupRows({ title, group, totalLabel }: { title: string; group: Group; 
   );
 }
 
+function SplitGroupRows({ title, group, columns, totalLabel }: { title: string; group: SplitGroup; columns: SplitColumn[]; totalLabel: string }) {
+  const span = columns.length + 1;
+  return (
+    <>
+      <tr className={ui.reportHeading}>
+        <td colSpan={span}>{title}</td>
+      </tr>
+      {group.sections.length === 0 ? (
+        <tr>
+          <td className={ui.muted} colSpan={span}>
+            Nothing in this period.
+          </td>
+        </tr>
+      ) : null}
+      {group.sections.map((section) => (
+        <Fragment key={section.key}>
+          {group.sections.length > 1 ? (
+            <tr>
+              <td className={ui.muted} colSpan={span}>
+                {section.label}
+              </td>
+            </tr>
+          ) : null}
+          {section.lines.map((line) => (
+            <tr key={line.accountId} className={ui.reportSection}>
+              <td>
+                {line.code} · {line.name}
+              </td>
+              {columns.map((column) => (
+                <td key={column.key} className={ui.num}>
+                  <Money value={line.amounts[column.key]} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </Fragment>
+      ))}
+      <tr className={ui.reportTotal}>
+        <td>{totalLabel}</td>
+        {columns.map((column) => (
+          <td key={column.key} className={ui.num}>
+            <Money value={group.totals[column.key]} />
+          </td>
+        ))}
+      </tr>
+    </>
+  );
+}
+
+/** Profit and loss with one column per top-level value of a tracking category (TC7). */
+function SplitProfitAndLoss({ report }: { report: ProfitAndLossSplit }) {
+  const { columns } = report;
+  return (
+    <div className={ui.tableWrap}>
+      <table className={ui.table}>
+        <thead>
+          <tr>
+            <th>{report.category.name}</th>
+            {columns.map((column) => (
+              <th key={column.key} className={ui.num}>
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <SplitGroupRows title="Trading income" group={report.revenue} columns={columns} totalLabel="Total trading income" />
+          <SplitGroupRows title="Cost of sales" group={report.costOfSales} columns={columns} totalLabel="Total cost of sales" />
+          <tr className={ui.reportTotal}>
+            <td>Gross profit</td>
+            {columns.map((column) => (
+              <td key={column.key} className={ui.num}>
+                <Money value={report.grossProfit[column.key]} />
+              </td>
+            ))}
+          </tr>
+          <SplitGroupRows title="Other income" group={report.otherIncome} columns={columns} totalLabel="Total other income" />
+          <SplitGroupRows title="Operating expenses" group={report.expenses} columns={columns} totalLabel="Total operating expenses" />
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Net profit ({report.currencyCode})</td>
+            {columns.map((column) => (
+              <td key={column.key} className={ui.num}>
+                <Money value={report.netProfit[column.key]} />
+              </td>
+            ))}
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 function TrialBalanceReport({ organisationId }: { organisationId: string }) {
   const [asAt, setAsAt] = useState(todayInBrowser);
   const report = useApiData<TrialBalance>("/api/reports/trial-balance", { organisationId, asAt });
@@ -154,7 +250,12 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
   // from the organisation's year end).
   const [from, setFrom] = useState<string | null>(null);
   const [to, setTo] = useState(todayInBrowser);
-  const report = useApiData<ProfitAndLoss>("/api/reports/profit-and-loss", { organisationId, from, to });
+  const [splitBy, setSplitBy] = useState("");
+  const categories = activeCategories(useTracking(organisationId).data);
+  const splitting = categories.some((category) => category.id === splitBy) ? splitBy : "";
+  const report = useApiData<ProfitAndLoss>(splitting ? null : "/api/reports/profit-and-loss", { organisationId, from, to });
+  const split = useApiData<ProfitAndLossSplit>(splitting ? "/api/reports/profit-and-loss" : null, { organisationId, from, to, splitBy: splitting });
+  const shown = splitting ? split : report;
   return (
     <Card
       title="Profit and loss"
@@ -163,19 +264,32 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
           <Field label="From">
             <input
               type="date"
-              value={from ?? report.data?.from ?? ""}
+              value={from ?? shown.data?.from ?? ""}
               onChange={(event) => setFrom(event.target.value || null)}
             />
           </Field>
           <Field label="To">
             <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           </Field>
+          {categories.length > 0 ? (
+            <Field label="Split by">
+              <select value={splitting} onChange={(event) => setSplitBy(event.target.value)}>
+                <option value="">No split</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
         </div>
       }
     >
-      {report.error ? <Notice tone="error">{report.error}</Notice> : null}
-      {report.loading ? <p className={ui.muted}>Loading…</p> : null}
-      {report.data ? (
+      {shown.error ? <Notice tone="error">{shown.error}</Notice> : null}
+      {shown.loading ? <p className={ui.muted}>Loading…</p> : null}
+      {splitting && split.data ? <SplitProfitAndLoss report={split.data} /> : null}
+      {!splitting && report.data ? (
         <div className={ui.tableWrap}>
           <table className={ui.table}>
             <tbody>

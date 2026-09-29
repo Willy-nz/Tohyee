@@ -408,6 +408,17 @@ Enforced by the app (and covered by tests):
   a second. Feed lines carry Akahu's transaction id, so a line is never added
   twice; lines that match a file line on date and amount are flagged as
   possible duplicates rather than skipped.
+- Tracking categories (advanced features): `tracking_categories` and a tree
+  of `tracking_values` per organisation. Lines store their tags as a jsonb
+  map `{categoryId: valueId}` (`tracking` on document lines and
+  `ledger_journal_lines`); a trigger checks every value exists and belongs to
+  its category, and values can't be deleted or put under their own children.
+  Posting groups document lines into journal lines by account and tags, so
+  AR, AP, GST and bank lines are never tagged. Empty tags are left out of
+  idempotency hashes, so requests from before tracking hash the same.
+  Required categories are checked when approving or posting (not on drafts),
+  and only on income and expense lines. The rules are in
+  `src/lib/tracking/service.ts`.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 

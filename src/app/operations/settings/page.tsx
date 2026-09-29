@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
+import { AdvancedFeaturesCard } from "@/components/tracking";
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -190,6 +191,7 @@ function Settings({ organisationId }: { organisationId: string }) {
           />
         ) : null}
       </Card>
+      <AdvancedFeaturesCard organisationId={organisationId} />
     </>
   );
 }

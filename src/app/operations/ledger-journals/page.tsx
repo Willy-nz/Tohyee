@@ -6,6 +6,7 @@ import { Suspense, useState } from "react";
 import { Money, RequireOrganisation, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { JournalEditor } from "@/components/journals/journal-editor";
+import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
@@ -75,6 +76,7 @@ function JournalDetail({
 }) {
   const { can } = useWorkspace();
   const details = useApiData<JournalDetails>(`/api/ledger/journals/${journalId}`, { organisationId });
+  const tracking = useTracking(organisationId);
   if (details.error) return <Notice tone="error">{details.error}</Notice>;
   if (!details.data) return <p className={ui.muted}>Loading journal #{journalId}…</p>;
   const { journal, parentJournal, correctionJournals, canCorrect } = details.data;
@@ -281,6 +283,7 @@ function JournalDetail({
               <tr key={line.lineOrder}>
                 <td>
                   {line.accountCode} · {line.accountName}
+                  <TrackingTagsText setup={tracking.data} tags={line.tracking} />
                 </td>
                 <td className={ui.muted}>{line.description}</td>
                 <td className={ui.num}>

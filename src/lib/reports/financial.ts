@@ -49,7 +49,15 @@ export async function financialYearEndMonth(tx: OrgTx): Promise<number> {
   return result.rows[0].financial_year_end_month;
 }
 
-export async function accountTotals(tx: OrgTx, from: string | null, to: string): Promise<AccountTotalsRow[]> {
+/** Only lines tagged with one of these values of a tracking category (TC8). */
+export type TrackingFilter = { categoryId: string; valueIds: string[] };
+
+export async function accountTotals(
+  tx: OrgTx,
+  from: string | null,
+  to: string,
+  filter: TrackingFilter | null = null,
+): Promise<AccountTotalsRow[]> {
   const result = await tx.query<AccountTotalsRow>(
     `select a.id, a.code, a.name, a.account_class, a.account_type,
             coalesce(sum(l.debit_amount), 0)::text as debits,
@@ -59,9 +67,10 @@ export async function accountTotals(tx: OrgTx, from: string | null, to: string):
        join ledger_journals j on j.id = l.journal_id
       where j.posting_date <= $2
         and ($1::date is null or j.posting_date >= $1)
+        and ($3::text is null or (l.tracking ->> $3::text) = any($4::text[]))
       group by a.id
       order by a.code`,
-    [from, to],
+    [from, to, filter?.categoryId ?? null, filter?.valueIds ?? []],
   );
   return result.rows;
 }
@@ -263,4 +272,104 @@ export async function inventoryValuation(tx: OrgTx) {
     };
   });
   return { currencyCode: tx.baseCurrency, items, totalValue: money(total) };
+}
+
+export type SplitColumn = { key: string; label: string; valueId: string | null };
+export type SplitLine = { accountId: string; code: string; name: string; amounts: Record<string, string> };
+export type SplitSection = { key: string; label: string; lines: SplitLine[]; totals: Record<string, string> };
+export type SplitGroup = { sections: SplitSection[]; totals: Record<string, string> };
+export type ProfitAndLossSplit = Awaited<ReturnType<typeof profitAndLossSplit>>;
+
+/**
+ * Profit and loss split by a tracking category (TC7): one column per
+ * top-level value (values under it count in its column), "Not set" for
+ * untagged lines, and the total, which equals the profit and loss.
+ */
+export async function profitAndLossSplit(tx: OrgTx, input: { from?: unknown; to?: unknown; categoryId: unknown }) {
+  const categoryId = typeof input.categoryId === "string" && /^[1-9]\d{0,17}$/.test(input.categoryId) ? input.categoryId : null;
+  if (!categoryId) throw new ValidationError("Choose a tracking category to split by.");
+  const category = await tx.query<{ name: string }>("select name from tracking_categories where id = $1", [categoryId]);
+  if (!category.rows[0]) throw new ValidationError("There's no such tracking category.");
+  const plain = await profitAndLoss(tx, { from: input.from, to: input.to });
+  const money = moneyFormatter(tx);
+  const rows = await tx.query<AccountTotalsRow & { bucket: string | null }>(
+    `with recursive roots as (
+       select id, id as root_id from tracking_values where category_id = $3 and parent_id is null
+       union all
+       select v.id, r.root_id from tracking_values v join roots r on v.parent_id = r.id
+     )
+     select a.id, a.code, a.name, a.account_class, a.account_type, r.root_id::text as bucket,
+            coalesce(sum(l.debit_amount), 0)::text as debits,
+            coalesce(sum(l.credit_amount), 0)::text as credits
+       from accounts a
+       join ledger_journal_lines l on l.account_id = a.id
+       join ledger_journals j on j.id = l.journal_id
+       left join roots r on r.id::text = (l.tracking ->> $3::text)
+      where j.posting_date between $1 and $2
+        and a.account_class in ('revenue', 'expense')
+      group by a.id, r.root_id
+      order by a.code`,
+    [plain.from, plain.to, categoryId],
+  );
+  const tops = await tx.query<{ id: string; name: string; is_active: boolean }>(
+    "select id::text, name, is_active from tracking_values where category_id = $1 and parent_id is null order by lower(name), id",
+    [categoryId],
+  );
+  const used = new Set(rows.rows.map((row) => row.bucket));
+  const columns: SplitColumn[] = [
+    ...tops.rows.filter((row) => row.is_active || used.has(row.id)).map((row) => ({ key: row.id, label: row.name, valueId: row.id })),
+    { key: "none", label: "Not set", valueId: null },
+    { key: "total", label: "Total", valueId: null },
+  ];
+  const keyOf = (bucket: string | null) => bucket ?? "none";
+  const zeroTotals = () => Object.fromEntries(columns.map((c) => [c.key, ZERO_DECIMAL])) as Record<string, Decimal>;
+  const format = (totals: Record<string, Decimal>) => Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, money(v)]));
+
+  const group = (types: readonly AccountType[]) => {
+    const groupTotals = zeroTotals();
+    const sections: SplitSection[] = [];
+    for (const type of types) {
+      const byAccount = new Map<string, { row: AccountTotalsRow; amounts: Record<string, Decimal> }>();
+      for (const row of rows.rows.filter((r) => r.account_type === type)) {
+        const entry = byAccount.get(row.id) ?? { row, amounts: zeroTotals() };
+        const amount = naturalAmount(row);
+        entry.amounts[keyOf(row.bucket)] = add(entry.amounts[keyOf(row.bucket)], amount);
+        entry.amounts.total = add(entry.amounts.total, amount);
+        byAccount.set(row.id, entry);
+      }
+      const lines = [...byAccount.values()].filter((entry) => !isZero(entry.amounts.total) || Object.values(entry.amounts).some((v) => !isZero(v)));
+      if (lines.length === 0) continue;
+      const totals = zeroTotals();
+      for (const entry of lines) for (const column of columns) totals[column.key] = add(totals[column.key], entry.amounts[column.key]);
+      for (const column of columns) groupTotals[column.key] = add(groupTotals[column.key], totals[column.key]);
+      sections.push({
+        key: type,
+        label: ACCOUNT_TYPES[type].label,
+        lines: lines.map((entry) => ({ accountId: entry.row.id, code: entry.row.code, name: entry.row.name, amounts: format(entry.amounts) })),
+        totals: format(totals),
+      });
+    }
+    return { sections, totals: groupTotals };
+  };
+  const revenue = group(["revenue"]);
+  const costOfSales = group(["direct_costs"]);
+  const otherIncome = group(["other_income"]);
+  const expenses = group(["expense", "depreciation"]);
+  const combine = (fn: (key: string) => Decimal) => Object.fromEntries(columns.map((c) => [c.key, fn(c.key)])) as Record<string, Decimal>;
+  const grossProfit = combine((k) => sub(revenue.totals[k], costOfSales.totals[k]));
+  const netProfit = combine((k) => sub(add(grossProfit[k], otherIncome.totals[k]), expenses.totals[k]));
+  const asGroup = (g: { sections: SplitSection[]; totals: Record<string, Decimal> }): SplitGroup => ({ sections: g.sections, totals: format(g.totals) });
+  return {
+    from: plain.from,
+    to: plain.to,
+    currencyCode: tx.baseCurrency,
+    category: { id: categoryId, name: category.rows[0].name },
+    columns,
+    revenue: asGroup(revenue),
+    costOfSales: asGroup(costOfSales),
+    grossProfit: format(grossProfit),
+    otherIncome: asGroup(otherIncome),
+    expenses: asGroup(expenses),
+    netProfit: format(netProfit),
+  };
 }

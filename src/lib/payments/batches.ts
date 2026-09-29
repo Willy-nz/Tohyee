@@ -516,6 +516,7 @@ export async function voidPaymentBatch(
         debitAmount: line.creditAmount,
         creditAmount: line.debitAmount,
         description: line.description,
+        tracking: line.tracking,
       })),
     }),
     { origin: k.origin, relatedJournalId: original.id, correctionKind: "reversal" },

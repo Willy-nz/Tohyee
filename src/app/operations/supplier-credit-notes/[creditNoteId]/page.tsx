@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { CreditNoteStatusBadge, CreditStatusBadge } from "@/components/credit-notes/credit-note-editor";
 import { useApiData } from "@/components/hooks";
+import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { formatRate, formatUnitPrice } from "@/components/invoices/invoice-editor";
 import {
   SupplierCreditNoteApplications,
@@ -163,6 +164,7 @@ function CreditNoteActions({
 }
 
 function CreditNoteView({ organisationId, creditNoteId }: { organisationId: string; creditNoteId: string }) {
+  const trackingSetup = useTracking(organisationId);
   const { can } = useWorkspace();
   const details = useApiData<{ creditNote: CreditNote }>(
     `/api/supplier-credit-notes/${encodeURIComponent(creditNoteId)}`,
@@ -236,6 +238,7 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
                   <td className={ui.num}>{formatUnitPrice(line.unitPrice)}</td>
                   <td>
                     {line.accountCode} · {line.accountName}
+                    <TrackingTagsText setup={trackingSetup.data} tags={line.tracking} />
                   </td>
                   {hasTax ? (
                     <td>
