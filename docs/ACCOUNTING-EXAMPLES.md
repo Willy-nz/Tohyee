@@ -27,7 +27,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/record-extras.test.ts` (NF1-NF14) and
   `tests/integration/home.test.ts` (H1-H4) and
   `tests/integration/custom-reports.test.ts` (CR1-CR10) and
-  `tests/integration/tracking.test.ts` (TC1-TC10), all against a real
+  `tests/integration/tracking.test.ts` (TC1-TC10) and
+  `tests/integration/custom-fields.test.ts` (CS1-CS3, CF1-CF10), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -1431,6 +1432,136 @@ GST (15%); dates in June 2026.
   money carry line tags the same way as TC3 and TC4 (credit note 20.00 to
   4000 tagged Retail posts Dr 4000 **20.00** (Retail)); payments, refunds,
   transfers and bank reconciliation never add tags.
+
+## Custom segments and custom fields (advanced features)
+
+The owner asked (29 Sep 2026) for these to work the way NetSuite's custom
+segments and custom fields do
+([custom segments](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4732448748.html),
+[custom field types](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N2842731.html)),
+and like tracking categories they only show while **Advanced (ERP)
+features** is on.
+
+**Custom segments** are tracking categories an admin adds alongside
+Department, Class and Location (for example "Grant" or "Project"). They
+behave exactly like those three (TC1-TC10): a tree of values, optional or
+required, on every line, posted onto the journal lines, and used to split and
+filter the profit and loss. Like NetSuite's segments with "GL impact" they
+always reach the ledger. A segment is never deleted: it can be archived,
+which hides it from new lines (lines that already have it keep it, and
+reports still show them), and brought back. Up to 20 segments of the
+organisation's own.
+
+**Custom fields** hold extra information that never reaches the ledger or
+the GST return: they change no amount, account, tag or box, and the
+profit and loss is the same with or without them. Each field has:
+
+- a **label** (unique among fields for the same kind of record, ignoring
+  case) and optional **help text**;
+- **what it's on**, fixed once created, one of: **contacts** (customers,
+  suppliers or both, like NetSuite's entity fields), **documents** (the top
+  of an invoice, bill, sales or supplier credit note, spend or receive money
+  or a manual journal, like its transaction body fields), or **lines**
+  (each line of those, like its transaction column fields). A document or
+  line field says which of those six it's used on;
+- a **type**, fixed once created: text (up to 300 characters), long text (up
+  to 4,000), whole number, decimal number (up to 6 decimal places), money
+  (2 decimal places), percent (0 to 100, up to 2 decimal places), date,
+  check box, list (one of its options), multiple select (any of its
+  options), email address, phone number or web address (http or https). Up to
+  15 digits before the point. Lists keep their options, which can be added,
+  renamed and archived, never deleted;
+- **required** (not for check boxes), a **default value** filled in on new
+  records, and **show in list** (shown as a column on the list of those
+  records);
+- it can be **archived** (hidden from new records; values already saved stay
+  and still show) and brought back, never deleted. Up to 100 fields.
+
+Rules for values:
+
+- Values are checked against the field's type, and a list or multiple
+  select value must be one of its options (an archived option only if the
+  record already had it). Blank means "not set": an empty text, no number,
+  no date, an unticked check box and no options are all not set.
+- A required contact field is needed whenever the contact is saved. A
+  required document or line field is needed when the document is approved
+  or posted (drafts still save), the same as required segments; a required
+  line field is only needed on lines to income and expense accounts.
+- Values are part of a draft, so they can be changed until it's approved;
+  after that they're fixed with the rest of the document. A contact's
+  values can be changed at any time, and the change is in its history.
+- A new record starts with each active field's default. Leaving the values
+  out when saving an existing record keeps what it had.
+- With the setting off, fields are hidden; a record keeps the values it
+  had and can still be saved with them, but can't be given new ones.
+- A sales credit note started from an invoice (and a supplier credit note
+  from a bill) copies the values of fields that are used on both; a
+  correction of a manual journal starts with the original's values.
+  Reversals and voids don't carry custom fields (they never reach the
+  ledger).
+
+Setup: advanced features on. Fields: contact field "Pet name" (text, on
+customers); contact field "Channel" (list: Shopify, Market, Wholesale; on
+customers, required, shown in the list); document field "Engraving
+proof sent" (check box, on invoices); document field "Grant code" (text, on
+bills and spend money, default "GEN"); document field "Approved by" (text,
+on journals); line field "Engraving text" (text, on invoice and credit note
+lines, required); line field "Hours" (decimal number, on bill and journal
+lines).
+
+- **CS1** Adding a segment "Grant" with values "Lotteries" and "Council" puts a fourth select on every line.
+  An invoice with 100.00 to 4000 tagged Grant: Lotteries posts Cr 4000
+  **100.00** tagged with it, and the profit and loss split by Grant shows
+  Lotteries **100.00**. A second segment called "grant" is refused (names
+  are unique ignoring case, across all categories).
+- **CS2** Archiving "Grant": new lines can't be tagged with it ("Grant is
+  archived"), the CS1 invoice keeps its tag, the split by Grant still shows
+  **100.00**, and a draft that already had it can still be approved.
+  Bringing it back makes it usable again. Department, Class and Location
+  can't be archived, and a segment can't be deleted.
+- **CS3** A 21st segment of the organisation's own is refused.
+- **CF1** Field set-up: a second field labelled "pet name" on contacts is
+  refused, but "Pet name" on lines is fine; a field's type and what it's on
+  can't be changed; a required check box is refused; a list needs at least
+  one option; a default must be a valid value ("GEN" is fine for text, "abc"
+  isn't for a decimal number); a field can't be deleted, only archived.
+- **CF2** Values by type: text over 300 characters, "12.5" for a whole
+  number, "1.1234567" for a decimal (7 places), "12.345" for money, "101"
+  for a percent, "2026-02-30" for a date, "Etsy" for Channel, "not an email"
+  for an email and "ftp://x" for a web address are each refused, naming the
+  field ("Channel: choose one of its options."). "1,234.50" is refused for
+  money (no thousands separators). Valid values are stored as typed: money
+  "12.50", decimal "3.25", whole number "12", percent "12.5", check box
+  true.
+- **CF3** Contacts: a new customer gets Channel's default if it has one;
+  saving a customer without Channel is refused ("Channel is required"),
+  while a supplier-only contact doesn't need it (Channel is on customers
+  only) and can't be given "Pet name". The customer list shows a Channel
+  column; changing Kobe Ltd's Channel from Market to Shopify is recorded in
+  its history.
+- **CF4** Invoice: a draft with "Engraving proof sent" ticked and line 1
+  "Engraving text" = "Kobe" but line 2 blank saves; approving it is refused
+  ("Line 2 needs Engraving text"); filling it in lets it approve. The posted
+  journal is Dr 1100 / Cr 4000 / Cr 2100 exactly as without fields, with no
+  custom fields on the journal lines. After approval the values can't be
+  changed.
+- **CF5** Bill: a new bill gets "Grant code" = "GEN" by default; a line with
+  "Hours" = 2.5 saves; "Engraving text" (not used on bills) is refused on a
+  bill line ("Engraving text isn't used on bill lines").
+- **CF6** Credit note from the CF4 invoice copies "Engraving text" (used on
+  credit note lines) but not "Engraving proof sent" (invoices only).
+- **CF7** Archiving "Pet name": it's hidden from new contacts and the
+  contact editor, but Kobe Ltd still shows and keeps "Pet name: Rex", and
+  can be saved with it. Archiving the "Market" option: Kobe Ltd (Market)
+  keeps it; a new customer can't choose it.
+- **CF8** With the setting off, saving Kobe Ltd with its existing values
+  works; giving it a new "Pet name" is refused.
+- **CF9** Manual journal: "Approved by" and a line's "Hours" are stored
+  with the journal; a correction starts with the original's values and the
+  replacement keeps what was entered; the reversal has none.
+- **CF10** Spend money reconciled from a bank line with "Grant code" =
+  "LOT-22" keeps it; a receive-money transaction doesn't get "Grant code"
+  (it's on spend money only).
 
 ## Notes, files and history
 

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { CreditNoteStatusBadge, CreditStatusBadge } from "@/components/credit-notes/credit-note-editor";
 import { useApiData } from "@/components/hooks";
+import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { formatRate, formatUnitPrice } from "@/components/invoices/invoice-editor";
 import {
@@ -165,6 +166,7 @@ function CreditNoteActions({
 
 function CreditNoteView({ organisationId, creditNoteId }: { organisationId: string; creditNoteId: string }) {
   const trackingSetup = useTracking(organisationId);
+  const customSetup = useCustomFields(organisationId);
   const { can } = useWorkspace();
   const details = useApiData<{ creditNote: CreditNote }>(
     `/api/supplier-credit-notes/${encodeURIComponent(creditNoteId)}`,
@@ -211,6 +213,7 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
           <Stat label="Reference" value={creditNote.reference ?? "—"} />
           <Stat label="Supplier" value={creditNote.contactName} />
         </div>
+        <CustomValuesText setup={customSetup.data} values={creditNote.customFields} />
         <div className={ui.tableWrap}>
           <table className={ui.table}>
             <thead>
@@ -239,6 +242,7 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
                   <td>
                     {line.accountCode} · {line.accountName}
                     <TrackingTagsText setup={trackingSetup.data} tags={line.tracking} />
+                    <CustomValuesText setup={customSetup.data} values={line.customFields} />
                   </td>
                   {hasTax ? (
                     <td>

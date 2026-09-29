@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 import { Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { activeCategories, useTracking } from "@/components/tracking";
+import { reportCategories, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
@@ -578,7 +578,7 @@ function ColumnsEditor({
   const [filter, setFilter] = useState(initialFilter ? `${initialFilter.categoryId}:${initialFilter.valueId}` : "");
   const [error, setError] = useState<string | null>(null);
   // Only a profit and loss can be filtered: balance sheet lines (AR, AP, GST, bank) aren't tagged (TC8).
-  const categories = base === "profit_and_loss" ? activeCategories(tracking) : [];
+  const categories = base === "profit_and_loss" ? reportCategories(tracking) : [];
   function save() {
     if (setting.difference && setting.periodCount < 2) return setError("A difference needs at least two period columns.");
     const [categoryId, valueId] = filter.split(":");

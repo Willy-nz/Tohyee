@@ -17,8 +17,13 @@ export function useTracking(organisationId: string | null) {
   return useApiData<TrackingSetup>(organisationId ? "/api/tracking" : null, { organisationId });
 }
 
-/** The categories to show on a line: none unless advanced features are on. */
+/** The categories to choose from on a new line: none unless advanced features are on, and no archived segments. */
 export function activeCategories(setup: TrackingSetup | null | undefined): TrackingCategory[] {
+  return setup?.advancedFeatures ? setup.categories.filter((category) => category.isActive) : [];
+}
+
+/** Categories reports can split or filter by, archived segments included (CS2). */
+export function reportCategories(setup: TrackingSetup | null | undefined): TrackingCategory[] {
   return setup?.advancedFeatures ? setup.categories : [];
 }
 
@@ -36,7 +41,8 @@ export function TrackingSelects({
   disabled?: boolean;
   labelPrefix?: string;
 }) {
-  const categories = activeCategories(setup);
+  // An archived segment still shows on a line that already has it (CS2).
+  const categories = setup?.advancedFeatures ? setup.categories.filter((category) => category.isActive || value[category.id]) : [];
   if (categories.length === 0) return null;
   return (
     <div className={ui.trackingSelects}>
@@ -109,7 +115,7 @@ export function AdvancedFeaturesCard({ organisationId }: { organisationId: strin
   return (
     <Card
       title="Advanced (ERP) features"
-      description="For bigger organisations: tracking categories (Department, Class and Location) on every invoice, bill, credit note, spend and receive money and journal line, with profit and loss split and filtered by them. Off, the extra fields are hidden; anything already tagged is kept."
+      description="For bigger organisations: tracking categories (Department, Class, Location and segments of your own) on every invoice, bill, credit note, spend and receive money and journal line, with profit and loss split and filtered by them, and custom fields on contacts, documents and lines. Off, the extra fields are hidden; anything already filled in is kept."
       actions={on ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -118,7 +124,8 @@ export function AdvancedFeaturesCard({ organisationId }: { organisationId: strin
         <Button variant={on ? "secondary" : "primary"} disabled={busy || !setup.data} onClick={() => void toggle()}>
           {busy ? "Saving…" : on ? "Turn off" : "Turn on"}
         </Button>
-        {on ? <Link href="/operations/settings/tracking">Tracking categories and their values</Link> : null}
+        {on ? <Link href="/operations/settings/tracking">Tracking categories and segments</Link> : null}
+        {on ? <Link href="/operations/settings/custom-fields">Custom fields</Link> : null}
       </div>
     </Card>
   );
@@ -177,26 +184,52 @@ function CategoryCard({ organisationId, category, onChanged }: { organisationId:
 
   return (
     <Card
-      title={category.name}
-      description={category.isRequired ? "Required on every income and expense line before it's approved or posted." : "Optional on lines."}
+      title={`${category.name}${category.isActive ? "" : " (archived)"}`}
+      description={
+        !category.isActive
+          ? "Archived: hidden from new lines. Lines that already have it keep it, and reports still show it."
+          : category.isRequired
+            ? "Required on every income and expense line before it's approved or posted."
+            : "Optional on lines."
+      }
       actions={
-        <label className={ui.checkbox}>
-          <input
-            type="checkbox"
-            checked={category.isRequired}
-            disabled={busy}
-            onChange={(event) =>
-              void run(async () => ({
-                setup: await api<TrackingSetup>(`/api/tracking/categories/${category.id}`, {
-                  method: "PATCH",
-                  body: { organisationId, isRequired: event.target.checked },
-                }),
-                message: event.target.checked ? `${category.name} is now required.` : `${category.name} is now optional.`,
-              }))
-            }
-          />{" "}
-          Required
-        </label>
+        <span className={ui.actions}>
+          {category.kind === "custom" ? (
+            <Button
+              size="small"
+              variant="secondary"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => ({
+                  setup: await api<TrackingSetup>(`/api/tracking/categories/${category.id}`, {
+                    method: "PATCH",
+                    body: { organisationId, isActive: !category.isActive },
+                  }),
+                  message: category.isActive ? `Archived ${category.name}.` : `Restored ${category.name}.`,
+                }))
+              }
+            >
+              {category.isActive ? "Archive segment" : "Restore segment"}
+            </Button>
+          ) : null}
+          <label className={ui.checkbox}>
+            <input
+              type="checkbox"
+              checked={category.isRequired}
+              disabled={busy}
+              onChange={(event) =>
+                void run(async () => ({
+                  setup: await api<TrackingSetup>(`/api/tracking/categories/${category.id}`, {
+                    method: "PATCH",
+                    body: { organisationId, isRequired: event.target.checked },
+                  }),
+                  message: event.target.checked ? `${category.name} is now required.` : `${category.name} is now optional.`,
+                }))
+              }
+            />{" "}
+            Required
+          </label>
+        </span>
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -306,7 +339,44 @@ function CategoryCard({ organisationId, category, onChanged }: { organisationId:
   );
 }
 
-/** Settings › Tracking categories (TC2, TC6). */
+/** Adds a custom segment, e.g. "Grant" or "Project" (CS1). */
+function NewSegmentForm({ organisationId, onChanged }: { organisationId: string; onChanged: (setup: TrackingSetup, message: string) => void }) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const setup = await api<TrackingSetup>("/api/tracking/categories", { method: "POST", body: { organisationId, name } });
+      onChanged(setup, `Added the segment ${name.trim()}.`);
+      setName("");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card
+      title="Add a segment"
+      description="A category of your own, like Grant or Project. It works like Department, Class and Location: a tree of values on every line, and reports split and filter by it. Up to 20."
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <form className={ui.actions} onSubmit={(event) => void submit(event)}>
+        <Field label="Name">
+          <input value={name} maxLength={60} onChange={(event) => setName(event.target.value)} required />
+        </Field>
+        <Button type="submit" disabled={busy || !name.trim()}>
+          {busy ? "Adding…" : "Add segment"}
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+/** Settings › Tracking categories (TC2, TC6, CS1, CS2). */
 export function TrackingManager({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const setup = useTracking(organisationId);
@@ -341,6 +411,13 @@ export function TrackingManager({ organisationId }: { organisationId: string }) 
           }}
         />
       ))}
+      <NewSegmentForm
+        organisationId={organisationId}
+        onChanged={(next, text) => {
+          setCurrent(next);
+          setMessage(text);
+        }}
+      />
     </>
   );
 }

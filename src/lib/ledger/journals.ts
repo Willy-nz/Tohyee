@@ -1,4 +1,6 @@
 import { parseAccountCodeInput, resolveAccountsByCode } from "@/lib/accounts/service";
+import { assertRequiredFields, keptCustom, parseCustomInput, resolveDocumentCustom } from "@/lib/custom-fields/service";
+import type { CustomValues } from "@/lib/custom-fields/values";
 import { writeAuditEvent } from "@/lib/audit";
 import { parseIsoDate, parseOptionalIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -58,6 +60,8 @@ export type JournalLine = {
   creditAmount: string;
   /** Tracking categories (TC3-TC5): category id -> value id. */
   tracking: TrackingTags;
+  /** Custom field values on a manual journal's lines (CF9). */
+  customFields: CustomValues;
 };
 
 export type Journal = {
@@ -75,6 +79,8 @@ export type Journal = {
   correctionKind: CorrectionKind | null;
   createdByEmail: string | null;
   createdAt: string;
+  /** Custom field values on a manual journal (CF9). */
+  customFields: CustomValues;
 };
 
 export type JournalWithLines = Journal & { lines: JournalLine[] };
@@ -95,11 +101,12 @@ type JournalRow = {
   correction_kind: CorrectionKind | null;
   created_by_email: string | null;
   created_at: string;
+  custom_fields: CustomValues;
 };
 
 const JOURNAL_COLUMNS = `id, command_source, idempotency_key, request_hash, origin, posting_date,
   reference, description, currency_code, total_debit, total_credit, related_journal_id,
-  correction_kind, created_by_email, created_at`;
+  correction_kind, created_by_email, created_at, custom_fields`;
 
 function toJournal(row: JournalRow): Journal {
   return {
@@ -117,6 +124,7 @@ function toJournal(row: JournalRow): Journal {
     correctionKind: row.correction_kind,
     createdByEmail: row.created_by_email,
     createdAt: row.created_at,
+    customFields: row.custom_fields ?? {},
   };
 }
 
@@ -131,8 +139,14 @@ export type JournalBody = {
     credit: string;
     description: string | null;
     tracking: TrackingTags;
+    /** As sent; checked for manual journals only. */
+    customInput: Record<string, unknown> | undefined;
+    /** Checked values (CF9); system journals have none. */
+    customFields?: CustomValues;
   }>;
   total: string;
+  customInput: Record<string, unknown> | undefined;
+  customFields?: CustomValues;
 };
 
 const MAX_LINES = 500;
@@ -151,6 +165,7 @@ export function parseJournalBody(
     description?: unknown;
     currencyCode?: unknown;
     lines: unknown;
+    customFields?: unknown;
   },
 ): JournalBody {
   const postingDate = parseIsoDate(input.postingDate, "postingDate");
@@ -200,6 +215,7 @@ export function parseJournalBody(
       credit: toFixedString(dec(credit), scale),
       description: optionalString(line.description, `${label} description`, { maxLength: 200 }),
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
+      customInput: parseCustomInput(line.customFields, `${label}: `),
     };
   });
 
@@ -216,6 +232,7 @@ export function parseJournalBody(
     currencyCode,
     lines,
     total: toFixedString(debitTotal, scale),
+    customInput: parseCustomInput(input.customFields, ""),
   };
 }
 
@@ -238,7 +255,9 @@ function journalHash(body: JournalBody, options: PostOptions): string {
       description: line.description,
       // Only when tagged, so journals from before tracking keep their hashes.
       ...(Object.keys(line.tracking).length > 0 ? { tracking: line.tracking } : {}),
+      ...(line.customFields && Object.keys(line.customFields).length > 0 ? { customFields: line.customFields } : {}),
     })),
+    ...(body.customFields && Object.keys(body.customFields).length > 0 ? { customFields: body.customFields } : {}),
     origin: options.origin,
     relatedJournalId: options.relatedJournalId ?? null,
     correctionKind: options.correctionKind ?? null,
@@ -276,8 +295,9 @@ export async function getJournal(tx: OrgTx, journalId: string): Promise<JournalW
     debit_amount: string;
     credit_amount: string;
     tracking: TrackingTags;
+    custom_fields: CustomValues;
   }>(
-    `select l.line_order, l.account_id, a.code, a.name, l.description, l.debit_amount, l.credit_amount, l.tracking
+    `select l.line_order, l.account_id, a.code, a.name, l.description, l.debit_amount, l.credit_amount, l.tracking, l.custom_fields
        from ledger_journal_lines l
        join accounts a on a.id = l.account_id
       where l.journal_id = $1
@@ -295,6 +315,7 @@ export async function getJournal(tx: OrgTx, journalId: string): Promise<JournalW
       debitAmount: line.debit_amount,
       creditAmount: line.credit_amount,
       tracking: line.tracking ?? {},
+      customFields: line.custom_fields ?? {},
     })),
   };
 }
@@ -331,9 +352,9 @@ export async function postJournalBody(
     `insert into ledger_journals (
        command_source, idempotency_key, request_hash, origin, posting_date, reference,
        description, currency_code, total_debit, total_credit, related_journal_id,
-       correction_kind, created_by_user_id, created_by_email
+       correction_kind, created_by_user_id, created_by_email, custom_fields
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $9::numeric, $10, $11, $12, $13)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $9::numeric, $10, $11, $12, $13, $14::jsonb)
      on conflict (command_source, idempotency_key) do nothing
      returning id`,
     [
@@ -350,6 +371,7 @@ export async function postJournalBody(
       options.correctionKind ?? null,
       tx.actor.userId,
       tx.actor.email,
+      JSON.stringify(body.customFields ?? {}),
     ],
   );
   const journalId = inserted.rows[0]?.id;
@@ -366,12 +388,21 @@ export async function postJournalBody(
   const values: unknown[] = [];
   const tuples = body.lines.map((line, index) => {
     const account = accounts.get(line.accountCode)!;
-    values.push(journalId, index + 1, account.id, line.description, line.debit, line.credit, JSON.stringify(line.tracking ?? {}));
-    const base = index * 7;
-    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}::numeric, $${base + 6}::numeric, $${base + 7}::jsonb)`;
+    values.push(
+      journalId,
+      index + 1,
+      account.id,
+      line.description,
+      line.debit,
+      line.credit,
+      JSON.stringify(line.tracking ?? {}),
+      JSON.stringify(line.customFields ?? {}),
+    );
+    const base = index * 8;
+    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}::numeric, $${base + 6}::numeric, $${base + 7}::jsonb, $${base + 8}::jsonb)`;
   });
   await tx.query(
-    `insert into ledger_journal_lines (journal_id, line_order, account_id, description, debit_amount, credit_amount, tracking)
+    `insert into ledger_journal_lines (journal_id, line_order, account_id, description, debit_amount, credit_amount, tracking, custom_fields)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -404,6 +435,7 @@ export async function postJournal(
     description?: unknown;
     currencyCode?: unknown;
     lines: unknown;
+    customFields?: unknown;
   },
 ): Promise<PostResult> {
   const source = optionalSource(command.source);
@@ -413,10 +445,24 @@ export async function postJournal(
   return postJournalBody(tx, source, idempotencyKey, body, { origin: "manual" });
 }
 
-/** Tags typed on a manual journal (or a correction's replacement): usable, and required ones present (TC5, TC6). */
-async function checkManualTags(tx: OrgTx, body: JournalBody, kept: ReadonlySet<string> = new Set()): Promise<void> {
+/**
+ * Tags and custom field values typed on a manual journal (or a correction's
+ * replacement): usable, and required ones present (TC5, TC6, CF9). Sets the
+ * checked custom field values on the body.
+ */
+async function checkManualTags(
+  tx: OrgTx,
+  body: JournalBody,
+  kept: ReadonlySet<string> = new Set(),
+  keptFields: ReadonlySet<string> = new Set(),
+): Promise<void> {
   const ctx = await loadTrackingContext(tx);
   body.lines.forEach((line, index) => checkNewTags(ctx, line.tracking, `Line ${index + 1}`, kept));
+  const custom = await resolveDocumentCustom(tx, "journal", body.customInput, body.lines.map((line) => line.customInput), keptFields);
+  body.customFields = custom.body;
+  body.lines.forEach((line, index) => {
+    line.customFields = custom.lines[index];
+  });
   if (!ctx.advancedFeatures) return;
   const accounts = await resolveAccountsByCode(
     tx,
@@ -425,6 +471,12 @@ async function checkManualTags(tx: OrgTx, body: JournalBody, kept: ReadonlySet<s
   assertRequiredTags(
     ctx,
     body.lines.map((line) => ({ tags: line.tracking, accountClass: accounts.get(line.accountCode)!.accountClass })),
+  );
+  assertRequiredFields(
+    custom.ctx,
+    "journal",
+    custom.body,
+    body.lines.map((line, index) => ({ values: custom.lines[index], accountClass: accounts.get(line.accountCode)!.accountClass })),
   );
 }
 
@@ -574,6 +626,7 @@ export async function correctJournal(
     reference: unknown;
     description?: unknown;
     lines: unknown;
+    customFields?: unknown;
   },
 ) {
   const source = optionalSource(command.source);
@@ -693,9 +746,15 @@ export async function correctJournal(
     description: command.description,
     currencyCode: original.currencyCode,
     lines: command.lines,
+    customFields: command.customFields,
   });
 
-  await checkManualTags(tx, replacementBody, keptValues(original.lines));
+  await checkManualTags(
+    tx,
+    replacementBody,
+    keptValues(original.lines),
+    keptCustom(original.customFields, ...original.lines.map((line) => line.customFields)),
+  );
   const reversal = await postJournalBody(tx, commandSource, reversalKey, reversalBody, {
     origin: "correction",
     relatedJournalId: originalId,

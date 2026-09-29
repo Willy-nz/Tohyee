@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate } from "@/components/invoices/invoice-editor";
 import { Button, Field, Notice, Stat, ui } from "@/components/ui";
@@ -17,6 +18,7 @@ import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { SupplierCreditNote } from "@/lib/supplier-credit-notes/service";
 import type { TaxCode } from "@/lib/tax/codes";
+import { type CustomFieldSetup, type CustomValues, copyableValuesFor } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 type EditorLine = {
@@ -27,6 +29,7 @@ type EditorLine = {
   accountCode: string;
   taxCode: string;
   tracking: TrackingTags;
+  customFields: CustomValues;
 };
 
 let lineKey = 0;
@@ -36,8 +39,8 @@ function nextLineKey(): number {
 }
 
 /** New lines have no account, so each credit is put somewhere on purpose. */
-function blankLine(taxCode: string): EditorLine {
-  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {} };
+function blankLine(taxCode: string, customFields: CustomValues = {}): EditorLine {
+  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {}, customFields };
 }
 
 /** The accounts supplier credit note lines can go to: the bill line rule the server checks. */
@@ -50,7 +53,8 @@ export type SupplierCreditNoteStart = {
   contactId: string;
   reference: string | null;
   amountsMode: AmountsMode;
-  lines: Array<{ description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null; tracking?: TrackingTags }>;
+  lines: Array<{ description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null; tracking?: TrackingTags; customFields?: CustomValues }>;
+  customFields?: CustomValues;
 };
 
 type FormProps = {
@@ -60,6 +64,7 @@ type FormProps = {
   suppliers: Contact[];
   taxCodes: TaxCode[];
   tracking: TrackingSetup;
+  customSetup: CustomFieldSetup;
   creditNote?: SupplierCreditNote;
   start?: SupplierCreditNoteStart;
   onSaved: (creditNote: SupplierCreditNote) => void;
@@ -73,6 +78,7 @@ function SupplierCreditNoteForm({
   suppliers,
   taxCodes,
   tracking,
+  customSetup,
   creditNote,
   start,
   onSaved,
@@ -90,6 +96,13 @@ function SupplierCreditNoteForm({
   );
   const [reference, setReference] = useState(initial?.reference ?? "");
   const [amountsMode, setAmountsMode] = useState<AmountsMode>(initial?.amountsMode ?? "exclusive");
+  const lineDefaults = startingValues(customSetup, "line", ["supplier_credit_note"]);
+  // A copy from an invoice or bill keeps the values of fields also used here (CF6).
+  const [customFields, setCustomFields] = useState<CustomValues>(
+    () =>
+      creditNote?.customFields ??
+      (start ? copyableValuesFor(customSetup.fields, start.customFields, "document", "supplier_credit_note") : startingValues(customSetup, "document", ["supplier_credit_note"])),
+  );
   const [lines, setLines] = useState<EditorLine[]>(() =>
     initial && initial.lines.length > 0
       ? initial.lines.map((line) => ({
@@ -100,8 +113,9 @@ function SupplierCreditNoteForm({
           accountCode: line.accountCode,
           taxCode: line.taxCode ?? defaultTaxCode,
           tracking: line.tracking ?? {},
+          customFields: creditNote ? (line.customFields ?? {}) : copyableValuesFor(customSetup.fields, line.customFields, "line", "supplier_credit_note"),
         }))
-      : [blankLine(defaultTaxCode)],
+      : [blankLine(defaultTaxCode, lineDefaults)],
   );
   // One key per new credit note, so a double click or a retry can't save it twice.
   const [idempotencyKey] = useState(() => newIdempotencyKey("supplier-credit-note"));
@@ -151,7 +165,9 @@ function SupplierCreditNoteForm({
         accountCode: line.accountCode,
         taxCode: hasTax ? line.taxCode || null : null,
         tracking: line.tracking,
+        customFields: line.customFields,
       })),
+      customFields,
     };
     try {
       const result = creditNote
@@ -225,6 +241,7 @@ function SupplierCreditNoteForm({
           </select>
         </Field>
       </div>
+      <CustomFieldInputs setup={customSetup} record="document" uses={["supplier_credit_note"]} value={customFields} onChange={setCustomFields} />
       <div className={ui.tableWrap}>
         <table className={ui.table}>
           <thead>
@@ -292,6 +309,15 @@ function SupplierCreditNoteForm({
                     value={line.tracking}
                     onChange={(tags) => update(line.key, { tracking: tags })}
                   />
+                  <CustomFieldInputs
+                    compact
+                    setup={customSetup}
+                    record="line"
+                    uses={["supplier_credit_note"]}
+                    labelPrefix={`Line ${index + 1}`}
+                    value={line.customFields}
+                    onChange={(values) => update(line.key, { customFields: values })}
+                  />
                 </td>
                 {hasTax ? (
                   <td>
@@ -331,7 +357,7 @@ function SupplierCreditNoteForm({
           <tfoot>
             <tr>
               <td colSpan={hasTax ? 8 : 6}>
-                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaultTaxCode)])}>
+                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaultTaxCode, lineDefaults)])}>
                   Add line
                 </Button>
               </td>
@@ -381,11 +407,12 @@ export function SupplierCreditNoteEditor({
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
   const tracking = useTracking(organisationId);
-  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error;
+  const customSetup = useCustomFields(organisationId);
+  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error;
   if (error) {
     return <Notice tone="error">{error}</Notice>;
   }
-  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data) {
+  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data || !customSetup.data) {
     return <p className={ui.muted}>Loading…</p>;
   }
   return (
@@ -396,6 +423,7 @@ export function SupplierCreditNoteEditor({
       suppliers={contacts.data.contacts}
       taxCodes={taxCodes.data.taxCodes}
       tracking={tracking.data}
+      customSetup={customSetup.data}
       creditNote={creditNote}
       start={start}
       onSaved={onSaved}

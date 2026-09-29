@@ -1,4 +1,6 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
+import { assertRequiredFields, type CustomFieldContext, keptCustom, parseCustomInput, resolveDocumentCustom } from "@/lib/custom-fields/service";
+import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
@@ -72,6 +74,7 @@ export type BillLine = {
   taxAmount: string;
   /** Tracking categories (TC4, TC10): category id -> value id. */
   tracking: TrackingTags;
+  customFields: CustomValues;
 };
 
 export type BillSummary = {
@@ -104,6 +107,8 @@ export type BillSummary = {
   voidedAt: string | null;
   voidedByEmail: string | null;
   createdByEmail: string | null;
+  /** Custom field values (CF4), field id -> value. */
+  customFields: CustomValues;
   createdAt: string;
   updatedAt: string;
 };
@@ -117,7 +122,7 @@ export type BillInput = {
   dueDate?: unknown;
   supplierInvoiceNumber?: unknown;
   amountsMode?: unknown;
-  lines?: unknown;
+  lines?: unknown;  customFields?: unknown;
 };
 
 const MAX_LINES = 200;
@@ -147,6 +152,7 @@ type BillRow = {
   voided_at: string | null;
   voided_by_email: string | null;
   created_by_email: string | null;
+  custom_fields: CustomValues;
   created_at: string;
   updated_at: string;
 };
@@ -154,7 +160,7 @@ type BillRow = {
 const SUMMARY_COLUMNS = `b.id, b.status, b.contact_id, c.name as contact_name, b.bill_date, b.due_date,
   b.supplier_invoice_number, b.amounts_mode, b.currency_code, b.subtotal, b.tax_total, b.total,
   paid.amount_paid, credited.amount_credited, b.approval_journal_id, b.approved_at, b.approved_by_email, b.void_date, b.void_journal_id, b.voided_at,
-  b.voided_by_email, b.created_by_email, b.created_at, b.updated_at`;
+  b.voided_by_email, b.created_by_email, b.created_at, b.updated_at, b.custom_fields`;
 
 /** Bills with their supplier and the sums of their active payments and supplier credit applied. */
 const SUMMARY_FROM = `bills b
@@ -185,6 +191,7 @@ type LineRow = {
   net_amount: string;
   tax_amount: string;
   tracking: TrackingTags;
+  custom_fields: CustomValues;
 };
 
 function toSummary(row: BillRow): BillSummary {
@@ -216,6 +223,7 @@ function toSummary(row: BillRow): BillSummary {
     voidedAt: row.voided_at,
     voidedByEmail: row.voided_by_email,
     createdByEmail: row.created_by_email,
+    customFields: row.custom_fields ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -237,6 +245,7 @@ function toLine(row: LineRow): BillLine {
     netAmount: row.net_amount,
     taxAmount: row.tax_amount,
     tracking: row.tracking ?? {},
+    customFields: row.custom_fields ?? {},
   };
 }
 
@@ -254,7 +263,9 @@ type DraftDetails = {
     accountCode: string;
     taxCode: string | null;
     tracking: TrackingTags;
+    customFields: Record<string, unknown> | undefined;
   }>;
+  customInput: Record<string, unknown> | undefined;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -264,6 +275,8 @@ type ResolvedDraft = DraftDetails & {
   subtotal: string;
   taxTotal: string;
   total: string;
+  customFields: CustomValues;
+  customCtx: CustomFieldContext;
   resolvedLines: Array<{
     description: string;
     quantity: string;
@@ -277,6 +290,7 @@ type ResolvedDraft = DraftDetails & {
     taxAmount: string;
     tracking: TrackingTags;
     accountClass: AccountClass;
+    customFields: CustomValues;
   }>;
 };
 
@@ -316,9 +330,10 @@ function parseDraft(input: BillInput): DraftDetails {
       accountCode: parseAccountCodeInput(line.accountCode, `${label} account`),
       taxCode,
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
+      customFields: parseCustomInput(line.customFields, `${label}: `),
     };
   });
-  return { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines };
+  return { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines, customInput: parseCustomInput(input.customFields, "") };
 }
 
 /** Normalised content for the idempotency fingerprint. */
@@ -330,6 +345,8 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     supplierInvoiceNumber: draft.supplierInvoiceNumber,
     amountsMode: draft.amountsMode,
     lines: draft.lines.map((line) => hashableLine({ ...line, accountCode: line.accountCode.toLowerCase() })),
+    // Values that weren't sent stay out, so older requests hash the same.
+    ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
   };
 }
 
@@ -340,7 +357,13 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
  * account that can take bill lines (`billLineAccountProblem`), and each tax
  * code active and in effect on the bill date.
  */
-async function resolveDraft(tx: OrgTx, draft: DraftDetails, kept: ReadonlySet<string> = new Set()): Promise<ResolvedDraft> {
+async function resolveDraft(
+  tx: OrgTx,
+  draft: DraftDetails,
+  kept: ReadonlySet<string> = new Set(),
+  keptFields: ReadonlySet<string> = new Set(),
+): Promise<ResolvedDraft> {
+  const custom = await resolveDocumentCustom(tx, "bill", draft.customInput, draft.lines.map((line) => line.customFields), keptFields);
   const tracking = await loadTrackingContext(tx);
   draft.lines.forEach((line, index) => checkNewTags(tracking, line.tracking, `Line ${index + 1}`, kept));
   const contact = await tx.query<{ name: string; is_supplier: boolean; is_archived: boolean }>(
@@ -440,6 +463,8 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails, kept: ReadonlySet<st
 
   return {
     ...draft,
+    customFields: custom.body,
+    customCtx: custom.ctx,
     contactName: supplier.name,
     currencyCode: tx.baseCurrency,
     subtotal: amounts.subtotal,
@@ -456,6 +481,7 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails, kept: ReadonlySet<st
       ...amounts.lines[index],
       tracking: line.tracking,
       accountClass: line.accountClass,
+      customFields: custom.lines[index],
     })),
   };
 }
@@ -520,6 +546,7 @@ type StoredLine = {
   netAmount: string;
   taxAmount: string;
   tracking: TrackingTags;
+  customFields: CustomValues;
 };
 
 type StoredHeader = {
@@ -532,6 +559,7 @@ type StoredHeader = {
   subtotal: string;
   taxTotal: string;
   total: string;
+  customFields: CustomValues;
 };
 
 const plain = (value: string) => toPlainString(dec(value));
@@ -548,6 +576,7 @@ function headerState(bill: StoredHeader): string {
     plain(bill.subtotal),
     plain(bill.taxTotal),
     plain(bill.total),
+    customValuesKey(bill.customFields),
   ]);
 }
 
@@ -564,6 +593,7 @@ function linesState(lines: readonly StoredLine[]): string {
       plain(line.netAmount),
       plain(line.taxAmount),
       trackingKey(line.tracking),
+      customValuesKey(line.customFields),
     ]),
   );
 }
@@ -590,7 +620,9 @@ function draftOf(bill: Bill): DraftDetails {
       accountCode: line.accountCode,
       taxCode: line.taxCode,
       tracking: line.tracking,
+      customFields: line.customFields,
     })),
+    customInput: bill.customFields,
   };
 }
 
@@ -610,14 +642,15 @@ async function insertLines(tx: OrgTx, billId: string, lines: ResolvedDraft["reso
       line.netAmount,
       line.taxAmount,
       JSON.stringify(line.tracking),
+      JSON.stringify(line.customFields),
     );
-    const base = index * 12;
+    const base = index * 13;
     const p = (offset: number) => `$${base + offset}`;
-    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb)`;
+    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb)`;
   });
   await tx.query(
     `insert into bill_lines (bill_id, line_order, description, quantity, unit_price, account_id,
-                             tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking)
+                             tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -662,7 +695,7 @@ export async function getBill(tx: OrgTx, billIdInput: unknown): Promise<Bill> {
   const lines = await tx.query<LineRow>(
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
-            l.net_amount, l.tax_amount, l.tracking
+            l.net_amount, l.tax_amount, l.tracking, l.custom_fields
        from bill_lines l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
@@ -778,6 +811,7 @@ export async function createBill(
     return { created: false, bill: await getBill(tx, winner.id) };
   }
   await insertLines(tx, billId, resolved.resolvedLines);
+  await tx.query("update bills set custom_fields = $2::jsonb where id = $1", [billId, JSON.stringify(resolved.customFields)]);
   await writeAuditEvent(tx, {
     eventType: "bill.created",
     entityType: "bill",
@@ -811,8 +845,9 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
       input.supplierInvoiceNumber === undefined ? saved.supplierInvoiceNumber : input.supplierInvoiceNumber,
     amountsMode: input.amountsMode === undefined ? saved.amountsMode : input.amountsMode,
     lines: input.lines === undefined ? saved.lines : input.lines,
+    customFields: input.customFields === undefined ? saved.customInput : input.customFields,
   });
-  const resolved = await resolveDraft(tx, draft, keptValues(current.lines));
+  const resolved = await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)));
   const same = sameAsStored(resolved, current);
   if (same.header && same.lines) {
     return current;
@@ -824,6 +859,9 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
   ).filter((field) => resolved[field] !== current[field]);
   if (!same.lines) {
     changed.push("lines");
+  }
+  if (customValuesKey(resolved.customFields) !== customValuesKey(current.customFields)) {
+    changed.push("customFields");
   }
   await savingNumber(
     resolved,
@@ -849,6 +887,7 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
   );
   await tx.query("delete from bill_lines where bill_id = $1", [current.id]);
   await insertLines(tx, current.id, resolved.resolvedLines);
+  await tx.query("update bills set custom_fields = $2::jsonb where id = $1", [current.id, JSON.stringify(resolved.customFields)]);
   await writeAuditEvent(tx, {
     eventType: "bill.updated",
     entityType: "bill",
@@ -938,7 +977,7 @@ export async function approveBill(
     );
   }
 
-  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines));
+  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)));
   const same = sameAsStored(resolved, current);
   if (!same.header || !same.lines) {
     throw new ConflictError(
@@ -948,6 +987,12 @@ export async function approveBill(
   assertRequiredTags(
     await loadTrackingContext(tx),
     resolved.resolvedLines.map((line) => ({ tags: line.tracking, accountClass: line.accountClass })),
+  );
+  assertRequiredFields(
+    resolved.customCtx,
+    "bill",
+    resolved.customFields,
+    resolved.resolvedLines.map((line) => ({ values: line.customFields, accountClass: line.accountClass })),
   );
   const accounts = await billControlAccounts(tx);
   await assertPostingDateAllowed(tx, current.billDate);

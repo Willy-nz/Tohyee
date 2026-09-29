@@ -7,6 +7,7 @@ import { BillStatusBadge } from "@/components/bills/bill-editor";
 import { BillPayments } from "@/components/bills/bill-payments";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { formatRate, formatUnitPrice, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
@@ -223,6 +224,7 @@ function UnusedCredit({ organisationId, bill }: { organisationId: string; bill: 
 
 function BillView({ organisationId, billId }: { organisationId: string; billId: string }) {
   const trackingSetup = useTracking(organisationId);
+  const customSetup = useCustomFields(organisationId);
   const { can } = useWorkspace();
   const router = useRouter();
   const details = useApiData<{ bill: Bill; creditApplied: SupplierCreditNoteApplication[] }>(
@@ -280,6 +282,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           <Stat label="Supplier's invoice number" value={bill.supplierInvoiceNumber} />
           <Stat label="Supplier" value={bill.contactName} />
         </div>
+        <CustomValuesText setup={customSetup.data} values={bill.customFields} />
         <div className={ui.tableWrap}>
           <table className={ui.table}>
             <thead>
@@ -308,6 +311,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
                   <td>
                     {line.accountCode} · {line.accountName}
                     <TrackingTagsText setup={trackingSetup.data} tags={line.tracking} />
+                    <CustomValuesText setup={customSetup.data} values={line.customFields} />
                   </td>
                   {hasTax ? (
                     <td>

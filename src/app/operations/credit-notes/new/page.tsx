@@ -23,7 +23,9 @@ function fromInvoice(invoice: Invoice): CreditNoteStart {
       accountCode: line.accountCode,
       taxCode: line.taxCode,
       tracking: line.tracking,
+      customFields: line.customFields,
     })),
+    customFields: invoice.customFields,
   };
 }
 

@@ -200,8 +200,16 @@ that something happened.
   (a column per top-level value, "Not set" and the total), and a custom
   profit and loss can be **filtered** to one value and everything under it.
   Tags never change an amount, an account or a GST box. See examples
-  TC1-TC10. Custom fields, salespeople, richer customers and items and a GST
-  audit report come next.
+  TC1-TC10. Admins can add up to 20 **custom segments** of their own (like
+  Grant or Project) that work the same way and can be archived (CS1-CS3).
+  **Custom fields** (like NetSuite's) add the organisation's own fields to
+  contacts (customers, suppliers or both), to the top of documents, or to
+  their lines: text, long text, whole and decimal numbers, money, percent,
+  date, check box, list, multiple select, email, phone and web address, each
+  optionally required, with a default and shown as a column in lists.
+  Fields and list options are archived, never deleted, and never reach the
+  ledger (CF1-CF10). Salespeople, richer customers and items and a GST audit
+  report come next.
 - **Two-step sign-in** for everyone: an authenticator app (QR code set-up)
   plus 10 one-use backup codes; wrong-code limits and lockout; lost-phone
   reset by emailed link, by a server admin, or from the command line; new

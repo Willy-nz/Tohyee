@@ -34,6 +34,7 @@ export const POST = route(async (request) => {
       reference: body.reference,
       amountsMode: body.amountsMode,
       lines: body.lines,
+      customFields: body.customFields,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

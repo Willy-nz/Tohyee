@@ -181,6 +181,7 @@ export async function reconcileStatementLine(
         reference: command.reference ?? (line.reference ?? line.particulars ?? undefined),
         amountsMode: command.amountsMode,
         lines: command.lines,
+        customFields: command.customFields,
       },
       { expectedTotal: unsigned },
     );

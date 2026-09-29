@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { BillStatusBadge } from "@/components/bills/bill-editor";
 import { Money, RequireOrganisation } from "@/components/books";
+import { CustomValueCell, listColumns, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
 import { PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { Button, Card, Empty, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -29,6 +30,7 @@ function BillList({ organisationId, filter }: { organisationId: string; filter: 
   const { status } = filter;
   const awaitingPayment = filter.awaitingPayment ? "true" : null;
   const list = useApiData<BillPage>("/api/bills", { organisationId, status, awaitingPayment });
+  const columns = listColumns(useCustomFields(organisationId).data, "document", ["bill"]);
   const [more, setMore] = useState<BillPage | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
 
@@ -67,6 +69,9 @@ function BillList({ organisationId, filter }: { organisationId: string; filter: 
               <th>Supplier</th>
               <th>Date</th>
               <th>Due</th>
+              {columns.map((field) => (
+                <th key={field.id}>{field.label}</th>
+              ))}
               <th>Status</th>
               <th>Payment</th>
               <th className={ui.num}>Total</th>
@@ -82,6 +87,9 @@ function BillList({ organisationId, filter }: { organisationId: string; filter: 
                 <td>{bill.contactName}</td>
                 <td>{formatDate(bill.billDate)}</td>
                 <td>{formatDate(bill.dueDate)}</td>
+                {columns.map((field) => (
+                  <CustomValueCell key={field.id} field={field} values={bill.customFields} />
+                ))}
                 <td>
                   <BillStatusBadge status={bill.status} />
                 </td>
