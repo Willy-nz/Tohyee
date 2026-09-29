@@ -64,6 +64,7 @@ const MENUS: Menu[] = [
           { href: "/operations/purchase-orders", label: "Purchase orders" },
           { href: "/operations/supplier-credit-notes", label: "Supplier credit notes" },
           { href: "/operations/supplier-payments", label: "Payments for several bills" },
+          { href: "/operations/expense-claims", label: "Expense claims" },
         ],
       },
       {
@@ -73,6 +74,7 @@ const MENUS: Menu[] = [
           { href: "/operations/purchase-orders/new", label: "New purchase order", minRole: "bookkeeper" },
           { href: "/operations/supplier-credit-notes/new", label: "New supplier credit note", minRole: "bookkeeper" },
           { href: "/operations/supplier-payments/new", label: "Pay bills", minRole: "bookkeeper" },
+          { href: "/operations/expense-claims/new", label: "New expense claim", minRole: "bookkeeper" },
         ],
       },
     ],
@@ -187,7 +189,7 @@ const AREAS: Record<string, string[]> = {
     "/operations/overpayments",
     "/operations/customer-payments",
   ],
-  Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/supplier-credit-notes", "/operations/supplier-payments"],
+  Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/supplier-credit-notes", "/operations/supplier-payments", "/operations/expense-claims"],
   Reporting: ["/operations/reports", "/operations/budgets"],
   Accounting: [
     "/operations/bank-accounts",

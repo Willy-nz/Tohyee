@@ -74,6 +74,10 @@ const EVENT_LABELS: Record<GstEventType, string> = {
   supplier_credit_note_application_removed: "Supplier credit removed",
   supplier_credit_note_refunded: "Supplier refund received",
   supplier_credit_note_refund_voided: "Supplier refund voided",
+  expense_claim_approved: "Expense claim approved",
+  expense_claim_voided: "Expense claim voided",
+  expense_claim_payment: "Expense claim paid",
+  expense_claim_payment_voided: "Expense claim payment voided",
 };
 
 const CATEGORY_LABELS: Record<TaxCategory, string> = {

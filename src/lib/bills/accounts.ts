@@ -9,11 +9,12 @@ export type BillLineAccount = {
 };
 
 export const BILL_LINE_ACCOUNT_RULE =
-  "Bill lines go to expense, direct costs or asset accounts, but not bank, accounts receivable, accounts payable or GST.";
+  "Bill lines go to expense, direct costs or asset accounts, but not bank, accounts receivable, accounts payable, expense claims payable or GST.";
 
 const CONTROL_ACCOUNTS: Record<string, string> = {
   accounts_receivable: "the accounts receivable account",
   accounts_payable: "the accounts payable account",
+  expense_claims_payable: "the expense claims payable account",
   gst: "the GST account",
 };
 

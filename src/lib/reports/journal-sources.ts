@@ -20,6 +20,8 @@ export type JournalSourceType =
   | "supplier_credit_note_refund"
   | "bank_transaction"
   | "bank_transfer"
+  | "expense_claim"
+  | "expense_claim_payment"
   | "journal";
 
 export type JournalSource = {
@@ -83,6 +85,12 @@ sources (journal_id, source_type, link_id, number, contact_id) as (
   union all
   select j, 'bank_transfer', t.from_account_id, t.reference, null::bigint
     from bank_transfers t cross join lateral (values (t.journal_id), (t.void_journal_id)) v(j) where j is not null
+  union all
+  select j, 'expense_claim', x.id, 'CLAIM-' || x.id, null::bigint
+    from expense_claims x cross join lateral (values (x.approval_journal_id), (x.void_journal_id)) v(j) where j is not null
+  union all
+  select j, 'expense_claim_payment', p.claim_id, 'CLAIM-' || p.claim_id, null::bigint
+    from expense_claim_payments p cross join lateral (values (p.journal_id), (p.void_journal_id)) v(j) where j is not null
 )`;
 
 /** Columns to select alongside a journal `j` joined to `sources s` and `contacts sc` (all left joins). */
@@ -115,6 +123,8 @@ const NAMES: Record<Exclude<JournalSourceType, "journal">, { label: string; href
   supplier_credit_note_refund: { label: "refund of supplier credit note", href: (id) => `/operations/supplier-credit-notes/${id}` },
   bank_transaction: { label: "bank transaction", href: (id) => `/operations/bank-accounts/${id}` },
   bank_transfer: { label: "transfer", href: (id) => `/operations/bank-accounts/${id}` },
+  expense_claim: { label: "expense claim", href: (id) => `/operations/expense-claims/${id}` },
+  expense_claim_payment: { label: "payment of expense claim", href: (id) => `/operations/expense-claims/${id}` },
 };
 
 const ORIGIN_NAMES: Record<string, string> = {

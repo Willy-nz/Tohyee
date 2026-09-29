@@ -174,6 +174,19 @@ that something happened.
   more than was ordered (the database refuses too). An approved purchase
   order with no bills can be cancelled. Stock comes in on the bill (ST1).
   "Print or save as PDF" like quotes. Emailing isn't built.
+- **Expense claims** (Purchases; EC1-EC12, not yet approved by Jess), like
+  Xero's older expense claims: a member enters the receipts they paid for
+  themselves (date, supplier, description, account, tax code, amount
+  including GST, optional tracking) and attaches the receipts as files;
+  submits the claim; a bookkeeper or admin approves it (not their own,
+  unless they're an admin or owner), which posts Dr each expense account
+  and GST / Cr **Expense claims payable** (2010, a new system account) on
+  the claim date, or declines it back with a reason. Paying it (in full or
+  in parts, from a bank account) clears the liability and matches in bank
+  reconciliation; payments and unpaid approved claims can be voided (exact
+  reversals). Locked periods apply. The GST return counts claims like
+  bills (receipts with no tax code are left out). Mileage, batch payments
+  and a submit-only role aren't built.
 - **Customer payments** against one approved sales invoice at a time:
   recording a payment posts Dr the bank account / Cr accounts receivable on
   the payment date, and voiding it posts the exact reversal on the void date.

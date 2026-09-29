@@ -219,7 +219,7 @@ describeWithDatabase("inventory and FX revaluation", () => {
   it("F6/F7: a USD payable worth more in NZD is a loss; base-currency accounts can't be revalued", async () => {
     await inOrg(async (tx) => {
       await tx.query(
-        "insert into accounts (code, name, account_class, account_type, currency_code) values ('2010', 'USD suppliers', 'liability', 'current_liability', 'USD')",
+        "insert into accounts (code, name, account_class, account_type, currency_code) values ('2020', 'USD suppliers', 'liability', 'current_liability', 'USD')",
       );
     });
     // Owe USD 500, booked at NZD 800.
@@ -230,7 +230,7 @@ describeWithDatabase("inventory and FX revaluation", () => {
         reference: "USD-BILL",
         lines: [
           { accountCode: "6070", debitAmount: "800" },
-          { accountCode: "2010", creditAmount: "800" },
+          { accountCode: "2020", creditAmount: "800" },
         ],
       }),
     );
@@ -244,14 +244,14 @@ describeWithDatabase("inventory and FX revaluation", () => {
         rateSource: "RBNZ close",
         unrealisedGainAccountCode: "7000",
         unrealisedLossAccountCode: "7010",
-        balances: [{ accountCode: "2010", foreignAmount: "500", closingRate: "1.70" }],
+        balances: [{ accountCode: "2020", foreignAmount: "500", closingRate: "1.70" }],
       }),
     );
     // Now worth NZD 850: we owe 50 more, which is a loss.
     expect(result.run.items[0]).toMatchObject({ carryingAmount: "800.00", revaluedAmount: "850.00", deltaAmount: "50.00" });
     const journal = await inOrg((tx) => getJournal(tx, result.run.revaluationJournalId));
     expect(journal.lines.map((line) => [line.accountCode, line.debitAmount, line.creditAmount])).toEqual([
-      ["2010", "0.00", "50.00"],
+      ["2020", "0.00", "50.00"],
       ["7010", "50.00", "0.00"],
     ]);
 
