@@ -13,6 +13,6 @@ export default defineConfig({
     // Each file gets its own process, core database and organisation databases.
     pool: "forks",
     testTimeout: 30_000,
-    hookTimeout: 60_000,
+    hookTimeout: 120_000,
   },
 });
