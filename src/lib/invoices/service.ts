@@ -1,4 +1,6 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
+import { checkCreditLimit, dueDateFromTerms } from "@/lib/customers/service";
+import { parseSalespersonInput, resolveSalesperson } from "@/lib/salespeople/service";
 import { assertRequiredFields, type CustomFieldContext, keptCustom, parseCustomInput, resolveDocumentCustom } from "@/lib/custom-fields/service";
 import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import type { AccountClass } from "@/lib/accounts/types";
@@ -105,6 +107,9 @@ export type InvoiceSummary = {
   createdByEmail: string | null;
   /** Custom field values (CF4), field id -> value. */
   customFields: CustomValues;
+  /** The salesperson (SR1), or null. */
+  salespersonId: string | null;
+  salespersonName: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -118,7 +123,9 @@ export type InvoiceInput = {
   dueDate?: unknown;
   reference?: unknown;
   amountsMode?: unknown;
-  lines?: unknown;  customFields?: unknown;
+  lines?: unknown;
+  customFields?: unknown;
+  salespersonId?: unknown;
 };
 
 const MAX_LINES = 200;
@@ -150,6 +157,8 @@ type InvoiceRow = {
   voided_by_email: string | null;
   created_by_email: string | null;
   custom_fields: CustomValues;
+  salesperson_id: string | null;
+  salesperson_name: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -157,7 +166,8 @@ type InvoiceRow = {
 const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name as contact_name, i.invoice_date,
   i.due_date, i.reference, i.amounts_mode, i.currency_code, i.subtotal, i.tax_total, i.total,
   paid.amount_paid, credited.amount_credited, i.approval_journal_id, i.approved_at, i.approved_by_email, i.void_date, i.void_journal_id,
-  i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at, i.custom_fields`;
+  i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at, i.custom_fields,
+  i.salesperson_id, sp.name as salesperson_name`;
 
 /**
  * Invoices with their customer, what their active payments paid on them (a
@@ -166,6 +176,7 @@ const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name 
  */
 const SUMMARY_FROM = `sales_invoices i
   join contacts c on c.id = i.contact_id
+  left join salespeople sp on sp.id = i.salesperson_id
   cross join lateral (
     select coalesce(sum(p.amount - p.overpayment_amount), 0) as amount_paid
       from customer_payments p
@@ -227,6 +238,8 @@ function toSummary(row: InvoiceRow): InvoiceSummary {
     voidedByEmail: row.voided_by_email,
     createdByEmail: row.created_by_email,
     customFields: row.custom_fields ?? {},
+    salespersonId: row.salesperson_id,
+    salespersonName: row.salesperson_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -257,6 +270,8 @@ type DraftDetails = {
   contactId: string;
   invoiceDate: string;
   dueDate: string;
+  /** A new invoice sent without a due date takes it from the customer's payment terms (RC1). */
+  dueFromTerms?: boolean;
   reference: string | null;
   amountsMode: AmountsMode;
   lines: Array<{
@@ -269,6 +284,8 @@ type DraftDetails = {
     customFields: Record<string, unknown> | undefined;
   }>;
   customInput: Record<string, unknown> | undefined;
+  /** As sent: undefined when not sent (the customer's default applies), null for none. */
+  salespersonInput: string | null | undefined;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -280,6 +297,7 @@ type ResolvedDraft = DraftDetails & {
   total: string;
   customFields: CustomValues;
   customCtx: CustomFieldContext;
+  salespersonId: string | null;
   resolvedLines: Array<{
     description: string;
     quantity: string;
@@ -297,10 +315,12 @@ type ResolvedDraft = DraftDetails & {
   }>;
 };
 
-function parseDraft(input: InvoiceInput): DraftDetails {
+function parseDraft(input: InvoiceInput, options: { dueFromTerms?: boolean } = {}): DraftDetails {
   const contactId = requireId(input.contactId, "contactId");
   const invoiceDate = parseIsoDate(input.invoiceDate, "invoiceDate");
-  const dueDate = parseIsoDate(input.dueDate, "dueDate");
+  const dueFromTerms = options.dueFromTerms === true && (input.dueDate == null || (typeof input.dueDate === "string" && !input.dueDate.trim()));
+  // Filled in from the customer's terms once the idempotency key has been checked.
+  const dueDate = dueFromTerms ? invoiceDate : parseIsoDate(input.dueDate, "dueDate");
   if (dueDate < invoiceDate) {
     throw new ValidationError("The due date can't be before the invoice date.");
   }
@@ -332,7 +352,17 @@ function parseDraft(input: InvoiceInput): DraftDetails {
       customFields: parseCustomInput(line.customFields, `${label}: `),
     };
   });
-  return { contactId, invoiceDate, dueDate, reference, amountsMode, lines, customInput: parseCustomInput(input.customFields, "") };
+  return {
+    contactId,
+    invoiceDate,
+    dueDate,
+    ...(dueFromTerms ? { dueFromTerms } : {}),
+    reference,
+    amountsMode,
+    lines,
+    customInput: parseCustomInput(input.customFields, ""),
+    salespersonInput: parseSalespersonInput(input.salespersonId),
+  };
 }
 
 /** Normalised content for the idempotency fingerprint. */
@@ -340,12 +370,14 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
   return {
     contactId: draft.contactId,
     invoiceDate: draft.invoiceDate,
-    dueDate: draft.dueDate,
+    // Sent without a due date: the terms decide it, so the hash says so (RC1).
+    dueDate: draft.dueFromTerms ? null : draft.dueDate,
     reference: draft.reference,
     amountsMode: draft.amountsMode,
     lines: draft.lines.map((line) => hashableLine({ ...line, accountCode: line.accountCode.toLowerCase() })),
     // Values that weren't sent stay out, so older requests hash the same.
     ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
+    ...(draft.salespersonInput !== undefined ? { salespersonId: draft.salespersonInput } : {}),
   };
 }
 
@@ -360,7 +392,9 @@ async function resolveDraft(
   draft: DraftDetails,
   kept: ReadonlySet<string> = new Set(),
   keptFields: ReadonlySet<string> = new Set(),
+  keptSalesperson: string | null = null,
 ): Promise<ResolvedDraft> {
+  const salesperson = await resolveSalesperson(tx, draft.salespersonInput, { contactId: draft.contactId, kept: keptSalesperson });
   const custom = await resolveDocumentCustom(tx, "invoice", draft.customInput, draft.lines.map((line) => line.customFields), keptFields);
   const tracking = await loadTrackingContext(tx);
   draft.lines.forEach((line, index) => checkNewTags(tracking, line.tracking, `Line ${index + 1}`, kept));
@@ -449,6 +483,7 @@ async function resolveDraft(
     ...draft,
     customFields: custom.body,
     customCtx: custom.ctx,
+    salespersonId: salesperson.id,
     contactName: customer.name,
     currencyCode: tx.baseCurrency,
     subtotal: amounts.subtotal,
@@ -495,6 +530,7 @@ type StoredHeader = {
   taxTotal: string;
   total: string;
   customFields: CustomValues;
+  salespersonId: string | null;
 };
 
 const plain = (value: string) => toPlainString(dec(value));
@@ -512,6 +548,7 @@ function headerState(invoice: StoredHeader): string {
     plain(invoice.taxTotal),
     plain(invoice.total),
     customValuesKey(invoice.customFields),
+    invoice.salespersonId,
   ]);
 }
 
@@ -558,6 +595,7 @@ function draftOf(invoice: Invoice): DraftDetails {
       customFields: line.customFields,
     })),
     customInput: invoice.customFields,
+    salespersonInput: invoice.salespersonId,
   };
 }
 
@@ -699,13 +737,20 @@ export async function createInvoice(
 ): Promise<{ created: boolean; invoice: Invoice }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
-  const draft = parseDraft(input);
+  const draft = parseDraft(input, { dueFromTerms: true });
   const hash = requestHash("sales_invoice", hashPayload(draft));
 
   const existing = await findByKey(tx, "create", source, idempotencyKey);
   if (existing) {
     assertSameRequest(existing.hash, hash, "invoice");
     return { created: false, invoice: await getInvoice(tx, existing.id) };
+  }
+  if (draft.dueFromTerms) {
+    const fromTerms = await dueDateFromTerms(tx, draft.contactId, draft.invoiceDate);
+    if (fromTerms === null) {
+      throw new ValidationError("dueDate is required (YYYY-MM-DD): this customer has no payment terms to work it out from.");
+    }
+    draft.dueDate = fromTerms;
   }
 
   const resolved = await resolveDraft(tx, draft);
@@ -744,7 +789,11 @@ export async function createInvoice(
     return { created: false, invoice: await getInvoice(tx, winner.id) };
   }
   await insertLines(tx, invoiceId, resolved.resolvedLines);
-  await tx.query("update sales_invoices set custom_fields = $2::jsonb where id = $1", [invoiceId, JSON.stringify(resolved.customFields)]);
+  await tx.query("update sales_invoices set custom_fields = $2::jsonb, salesperson_id = $3 where id = $1", [
+    invoiceId,
+    JSON.stringify(resolved.customFields),
+    resolved.salespersonId,
+  ]);
   await writeAuditEvent(tx, {
     eventType: "invoice.created",
     entityType: "sales_invoice",
@@ -777,8 +826,15 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
     amountsMode: input.amountsMode === undefined ? saved.amountsMode : input.amountsMode,
     lines: input.lines === undefined ? saved.lines : input.lines,
     customFields: input.customFields === undefined ? saved.customInput : input.customFields,
+    salespersonId: input.salespersonId === undefined ? saved.salespersonInput : input.salespersonId,
   });
-  const resolved = await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)));
+  const resolved = await resolveDraft(
+    tx,
+    draft,
+    keptValues(current.lines),
+    keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)),
+    current.salespersonId,
+  );
   const same = sameAsStored(resolved, current);
   if (same.header && same.lines) {
     return current;
@@ -792,6 +848,9 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
   }
   if (customValuesKey(resolved.customFields) !== customValuesKey(current.customFields)) {
     changed.push("customFields");
+  }
+  if (resolved.salespersonId !== current.salespersonId) {
+    changed.push("salespersonId");
   }
   await tx.query(
     `update sales_invoices
@@ -814,7 +873,11 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
   );
   await tx.query("delete from sales_invoice_lines where invoice_id = $1", [current.id]);
   await insertLines(tx, current.id, resolved.resolvedLines);
-  await tx.query("update sales_invoices set custom_fields = $2::jsonb where id = $1", [current.id, JSON.stringify(resolved.customFields)]);
+  await tx.query("update sales_invoices set custom_fields = $2::jsonb, salesperson_id = $3 where id = $1", [
+    current.id,
+    JSON.stringify(resolved.customFields),
+    resolved.salespersonId,
+  ]);
   await writeAuditEvent(tx, {
     eventType: "invoice.updated",
     entityType: "sales_invoice",
@@ -918,7 +981,7 @@ export async function approveInvoice(
   tx: OrgTx,
   invoiceIdInput: unknown,
   command: { source?: unknown; idempotencyKey: unknown },
-): Promise<{ created: boolean; invoice: Invoice }> {
+): Promise<{ created: boolean; invoice: Invoice; creditWarning?: string }> {
   const invoiceId = requireId(invoiceIdInput, "invoiceId");
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
@@ -951,7 +1014,13 @@ export async function approveInvoice(
     );
   }
 
-  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)));
+  const resolved = await resolveDraft(
+    tx,
+    draftOf(current),
+    keptValues(current.lines),
+    keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)),
+    current.salespersonId,
+  );
   const same = sameAsStored(resolved, current);
   if (!same.header || !same.lines) {
     throw new ConflictError(
@@ -970,6 +1039,8 @@ export async function approveInvoice(
   );
   const accounts = await invoiceControlAccounts(tx);
   await assertPostingDateAllowed(tx, current.invoiceDate);
+  // Over the customer's credit limit: refused when set to block, else approved with a warning (RC3-RC5).
+  const creditWarning = await checkCreditLimit(tx, { contactId: current.contactId, contactName: resolved.contactName, total: resolved.total });
 
   const { sequence, invoiceNumber } = await takeInvoiceNumber(tx);
   const scale = currencyMinorUnits(tx.baseCurrency);
@@ -1032,9 +1103,15 @@ export async function approveInvoice(
     eventType: "invoice.approved",
     entityType: "sales_invoice",
     entityId: invoiceId,
-    details: { invoiceNumber, journalId: posted.journal.id, invoiceDate: current.invoiceDate, total: resolved.total },
+    details: {
+      invoiceNumber,
+      journalId: posted.journal.id,
+      invoiceDate: current.invoiceDate,
+      total: resolved.total,
+      ...(creditWarning ? { creditLimitWarning: creditWarning } : {}),
+    },
   });
-  return { created: true, invoice: await getInvoice(tx, invoiceId) };
+  return { created: true, invoice: await getInvoice(tx, invoiceId), ...(creditWarning ? { creditWarning } : {}) };
 }
 
 /**

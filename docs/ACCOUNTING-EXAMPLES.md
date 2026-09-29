@@ -28,7 +28,10 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/home.test.ts` (H1-H4) and
   `tests/integration/custom-reports.test.ts` (CR1-CR10) and
   `tests/integration/tracking.test.ts` (TC1-TC10) and
-  `tests/integration/custom-fields.test.ts` (CS1-CS3, CF1-CF10), all against a real
+  `tests/integration/custom-fields.test.ts` (CS1-CS3, CF1-CF10) and
+  `tests/integration/salespeople.test.ts` (SR1-SR8) and
+  `tests/integration/crm.test.ts` (MOD1, CRM1-CRM9) and
+  `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9), all against a real
   PostgreSQL database
 
 If you change behaviour, change the example, the test and the code together.
@@ -1562,6 +1565,368 @@ lines).
 - **CF10** Spend money reconciled from a bank line with "Grant code" =
   "LOT-22" keeps it; a receive-money transaction doesn't get "Grant code"
   (it's on spend money only).
+
+## Salespeople (advanced features)
+
+The owner asked (29 Sep 2026) for salespeople to work the way NetSuite's
+sales reps do
+([marking a sales rep](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1039206.html),
+[Sales by Sales Rep Summary](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1117863.html)).
+NetSuite's help doesn't say how every detail works, so where it's silent the
+rules below are our choice. Like tracking categories, salespeople only show
+while **Advanced (ERP) features** is on.
+
+- A **salesperson** has a name (unique, ignoring case) and an optional
+  email. Salespeople are archived, never deleted. (In NetSuite they're
+  employees ticked as sales reps; Tohyee has no employee records yet.)
+- A **customer** can have a default salesperson. A **sales invoice** and a
+  **sales credit note** each have one salesperson (or none). A new invoice
+  or credit note gets the customer's default when none is sent; a credit
+  note started from an invoice gets the invoice's salesperson. It can be
+  changed while the document is a draft and is fixed once approved.
+  Changing a customer's default doesn't change documents already saved.
+- The salesperson never changes an amount, an account or a GST box. Team
+  selling (splitting a sale between several salespeople) and commissions
+  aren't built.
+- An archived salesperson can't be chosen for a new document, and an
+  archived default isn't applied; a draft that already has them keeps them
+  and can be approved. With the setting off, documents keep their
+  salesperson but can't be given a new one.
+- **Sales by salesperson** (a report for a date range), one row per
+  salesperson plus "Not set", amounts excluding GST: **Invoices** is how
+  many invoices are dated in the range (approved, including ones voided
+  later); **Sales** is those invoices' amounts excluding GST, less invoices
+  voided in the range (on their void date); **Credit notes** is the same for
+  sales credit notes; **Net sales** is Sales less Credit notes. Drafts never
+  count. Each row opens to the documents behind it. The total net sales
+  equals the income that invoices and credit notes posted in the range.
+
+Setup: advanced features on; salespeople Aroha and Ben; customer Kobe Ltd
+with default salesperson Aroha; customer Rata Ltd with none; GST 15%.
+
+- **SR1** A new invoice for Kobe Ltd with no salesperson sent gets Aroha;
+  one sent with Ben keeps Ben; one for Rata Ltd has none. A second
+  salesperson called "aroha" is refused, and a salesperson can't be
+  deleted.
+- **SR2** Kobe's invoice for 100.00 (tax exclusive) with Aroha posts
+  Dr 1100 **115.00** / Cr 4000 **100.00** / Cr 2100 **15.00**, exactly as
+  without a salesperson. After approval its salesperson can't be changed.
+- **SR3** June 2026: invoice 1 Kobe/Aroha 100.00, invoice 2 Kobe/Ben
+  200.00, invoice 3 Rata/none 50.00 (all tax exclusive), a credit note from
+  invoice 1 for 20.00 (it gets Aroha), and a draft invoice for 999.00 with
+  Ben. Sales by salesperson for June: Aroha invoices **1**, sales
+  **100.00**, credit notes **20.00**, net **80.00**; Ben **1**, **200.00**,
+  **0.00**, **200.00**; Not set **1**, **50.00**, **0.00**, **50.00**; total
+  **3**, **350.00**, **20.00**, **330.00**, the same as June's income on
+  4000.
+- **SR4** Voiding invoice 2 on 5 July 2026: June is unchanged; July shows
+  Ben invoices **0**, sales **-200.00**, net **-200.00**.
+- **SR5** A tax inclusive invoice for 115.00 with Aroha counts **100.00**.
+- **SR6** Archiving Ben: a new invoice with Ben is refused ("Ben is
+  archived"); the draft that already had Ben keeps him and can be approved.
+  Archiving Aroha: a new invoice for Kobe gets no salesperson. Changing
+  Kobe's default to Ben (restored) doesn't change invoice 1.
+- **SR7** With the setting off, a new invoice for Kobe gets no salesperson,
+  and one sent with Aroha is refused; a draft that already had Aroha keeps
+  her.
+- **SR8** The June report's Aroha row lists invoice 1 (100.00) and the
+  credit note (20.00).
+
+## Richer customers (advanced features)
+
+The owner asked (29 Sep 2026) for richer customers, step 4 of the
+NetSuite-style plan, choosing all five parts below. They follow NetSuite's
+customer record
+([terms](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1418163.html),
+[credit limits](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1415896.html),
+[customer categories, price levels](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1412993.html),
+[sub-customers](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1413598.html))
+and, for payment terms, Xero's. Where they're silent the rules below are our
+choice.
+
+- **Payment terms are for everyone** (Xero has them for every
+  organisation), not only with **Advanced (ERP) features** on. Each term is
+  one of: N days after the invoice date, N days after the end of the
+  invoice's month, or day N of the following month (NetSuite's date-driven
+  terms; a day the month doesn't have becomes its last day). A new
+  organisation starts with Due on receipt, 7 days, 14 days, 30 days, 20th of
+  the following month, and 30 days after the end of the month. A customer
+  has a default term; a new invoice sent without a due date gets it from the
+  term. The due date can still be changed while the invoice is a draft.
+  Changing or archiving a term, or a customer's term, never changes a saved
+  invoice.
+- The **billing address** is the old postal address (nothing moves); a
+  customer also has a **delivery address**. Both are for everyone.
+- **Contact people** are the CRM's people at the company (there's one list,
+  not two): name, job title (their role), email and phone, and one of them
+  can be the **primary contact** for invoices. They can be managed while the
+  CRM or Advanced reporting is on.
+- With Advanced reporting on, a customer can have a **credit limit**, a
+  **customer group** (NetSuite's customer categories), a default **price
+  level** and a **parent customer**. Groups and price levels are lists that
+  are archived, never deleted. A price level is a percent on (a markup) or
+  off (a discount) the base price; nothing is priced from it until items
+  arrive, so invoices don't change.
+- **Credit limit check**: when an invoice is approved, the customer's
+  balance (their approved invoices' amounts due, less credit notes and
+  overpayments not yet used or refunded) plus the invoice's total is compared
+  with their limit. Going over it is either a **warning** (the default: the
+  invoice is approved and the warning is shown and kept in its history) or
+  **blocked** (refused with a message; the draft stays as it was and no
+  number is used), set per organisation. Exactly at the limit is fine. No
+  limit means no check, and with Advanced reporting off nothing is checked.
+  The limit is the customer's own, not shared with its parent or subs.
+- **Parent customers**: both must be customers, a customer can't be its own
+  parent or under one of its own subs, and a tree is at most 4 levels deep
+  (the database refuses otherwise). A customer with subs must stay a
+  customer.
+- **Aged receivables** (a new report, for everyone): what each customer owes
+  as at a date, by days past each invoice's due date (current, 1-30, 31-60,
+  61-90, over 90), less credit not yet used, worked out from the documents
+  as they stood on that date. Its total equals accounts receivable on the
+  balance sheet on that date. With **roll-up**, a parent shows the total of
+  itself and everything under it, with its subs indented beneath. Customer
+  statements don't exist yet, so there's no statement roll-up.
+
+Setup: Advanced reporting on; GST 15%; the six starting payment terms.
+
+- **RC1** Customer Kobe Ltd has "20th of the following month". A new invoice
+  dated 15 June 2026 sent without a due date is due **20 July 2026**; one
+  dated 31 December 2026 is due **20 January 2027**; one sent with a due
+  date of 30 June 2026 keeps it, and the draft's due date can be changed to
+  1 August 2026. With "30 days" the 15 June invoice is due **15 July 2026**,
+  with "30 days after the end of the month" **30 July 2026**, and with "Due
+  on receipt" **15 June 2026**. A term "31st of the following month" on an
+  invoice dated 10 January 2026 gives **28 February 2026**. For a customer
+  with no terms the due date is still required. This works with Advanced
+  reporting off.
+- **RC2** A second term called "30 DAYS" is refused, and terms can't be
+  deleted. Archiving "30 days": it can't be chosen for a customer, and a
+  customer already on it keeps it but new invoices need a due date typed.
+  Changing Kobe's term to "7 days" doesn't change its saved invoices.
+- **RC3** (warn) Kobe has a credit limit of **1,000.00**. Invoice A for
+  500.00 + GST = **575.00** is approved and unpaid. Approving invoice B for
+  400.00 + GST = **460.00** takes Kobe to **1,035.00**: B is approved (and
+  posts Dr 1100 460.00 / Cr 4000 400.00 / Cr 2100 60.00 as usual) with the
+  warning "Kobe Ltd owes 575.00, so this invoice for 460.00 takes them to
+  1035.00, 35.00 over their credit limit of 1000.00."
+- **RC4** (block) The same with the setting on block: approving B is
+  refused with that message, B stays a draft and INV-0002 is still unused.
+  After a payment of **100.00** on A, Kobe owes **475.00**; 475.00 + 460.00
+  = **935.00**, so B is approved as INV-0002.
+- **RC5** Credit counts: with A (575.00) approved, a credit note for
+  100.00 + GST = **115.00** not yet applied, and a payment of 690.00 on a
+  third invoice of 575.00 (an overpayment of **115.00** left), Kobe owes
+  575.00 - 115.00 - 115.00 = **345.00**, so B (460.00) takes them to
+  **805.00**, under 1,000.00. With a limit of exactly 805.00 B is approved
+  with no warning; at 804.99 it's over by 0.01. With no limit, or with
+  Advanced reporting off, nothing is checked.
+- **RC6** A contact saved with a postal address keeps it as its billing
+  address; a delivery address "12 Wharf St, Dunedin 9016" is saved beside
+  it. People Aroha (primary) and Ben work at Kobe Ltd: Kobe's primary
+  contact is Aroha. Making Ben primary takes it from Aroha. An archived
+  person, or someone at no company, can't be primary; archiving the primary
+  person leaves the company with none. People can be added with only
+  Advanced reporting on, and are refused with both it and the CRM off.
+- **RC7** Customer groups Retail and Wholesale; price levels "Wholesale"
+  **-10** (10% off) and "Trade plus" **5** (5% on). Kobe is in Wholesale
+  with price level Wholesale; its invoices' amounts are unchanged. A price
+  level of -100 or 1000.01 is refused, names are unique ignoring case, an
+  archived group or level can't be chosen (a customer already on it keeps
+  it), and neither can be deleted.
+- **RC8** Kobe Group Ltd is the parent of Kobe Auckland and Kobe Dunedin,
+  and Kobe Dunedin of Kobe Mosgiel (3 levels). Making Kobe Group Ltd a sub
+  of Kobe Mosgiel is refused (a loop), as is a customer as its own parent
+  and a supplier-only parent. Kobe Mosgiel can have a sub, Kobe Mosgiel
+  North (4 levels), but a sub of that is refused (5 levels). Kobe Group Ltd
+  can't stop being a customer while it has subs.
+- **RC9** Aged receivables as at **31 July 2026**: Rata Ltd's invoice of
+  460.00 due 31 March 2026 with 60.00 paid (**400.00**, 122 days, over 90);
+  Kobe Auckland's invoice of **345.00** due 15 May 2026 (77 days, 61-90) and
+  its unused credit note of **23.00**; Kobe Dunedin's invoice of **115.00**
+  due 20 July 2026 (11 days, 1-30) and **230.00** due 20 August 2026
+  (current). Kobe Mosgiel's invoice dated 5 August 2026, and Kobe
+  Auckland's invoice voided on 10 May 2026, don't count. Totals: current **230.00**, 1-30 **115.00**, 31-60 **0.00**, 61-90
+  **345.00**, over 90 **400.00**, credit **23.00**, total **1,067.00**, the
+  same as account 1100 on the balance sheet at 31 July 2026. Rows: Kobe
+  Auckland **322.00**, Kobe Dunedin **345.00**, Rata Ltd **400.00**.
+- **RC10** With roll-up (the tree from RC8): Kobe Group Ltd (nothing of its
+  own) shows current 230.00, 1-30 115.00, 61-90 345.00, credit 23.00, total
+  **667.00**, with Kobe Auckland (322.00) and Kobe Dunedin (345.00) beneath
+  it; Kobe Mosgiel owes nothing and isn't shown; Rata Ltd **400.00**. The
+  grand total is still **1,067.00**.
+- **RC11** As at **30 June 2026** (the same documents): Kobe Dunedin's
+  first invoice is current (115.00), Kobe Auckland's is 46 days overdue
+  (31-60, 345.00), Rata's 91 days (over 90, 400.00), credit 23.00, total
+  **837.00**. Voiding Rata's payment on 10 August 2026 doesn't change the
+  report as at 31 July; as at 10 August Rata owes **460.00**.
+- **RC12** With Advanced reporting off: customers keep their credit limit,
+  group, price level and parent, but new ones can't be set ("Advanced
+  reporting is off"), and approving over a limit is neither warned nor
+  blocked. Payment terms and delivery addresses still work.
+
+### Not supported yet (refused rather than guessed)
+
+- Prices from price levels (they come with items), and credit limits
+  shared across a parent and its subs (each customer's limit is its own).
+- Holding orders over the limit (there are no sales orders yet) or
+  checking the limit when a draft is saved (only approving is checked).
+- Customer statements (and so their roll-up); only aged receivables rolls
+  up.
+- Terms with early-payment discounts (NetSuite's "2% 10 Net 30").
+
+## Modules and the CRM
+
+Decided with the owner (29 Sep 2026): Tohyee has four modules: **Accounting**
+and **Tax** (always on), **CRM** and **Advanced reporting** (each switched on
+per organisation in Settings). Advanced reporting is the existing
+"advanced features" switch: tracking categories and segments, custom fields,
+salespeople and their reports. The CRM follows
+[Twenty](https://github.com/twentyhq/twenty) (AGPL-3.0, the same licence as
+Tohyee): its companies, people, opportunities, tasks, notes and timeline,
+built into Tohyee rather than run alongside it.
+
+- **MOD1** A new organisation has the CRM and Advanced reporting off. Turning
+  either on or off is recorded in the history. With the CRM off its menu and
+  screens are hidden and its commands are refused ("The CRM is off"); what
+  was entered is kept.
+
+**Companies** are Tohyee's contacts, so the CRM and the accounts share one
+list. As well as customer and supplier, a contact can be a **prospect**
+(someone you hope to sell to). A contact must be at least one of the three;
+a prospect-only contact can't be put on an invoice, bill or credit note
+until it's marked as a customer, and only the CRM can make one.
+
+**People** work at a company (or at none): first and last name, job title,
+email and phone. People are archived, never deleted.
+
+**Opportunities** (deals) have a name, a company, a point of contact (one of
+its people), an owner (a member of the organisation), an amount excluding
+GST, an expected close date and a **stage**: New, Screening, Meeting,
+Proposal, Won or Lost (Twenty's stages, with its "Customer" called Won, and
+Lost added). Stages change freely until an opportunity has made an invoice.
+A **won opportunity can make a draft invoice** for its company: one line with
+the opportunity's name and amount, the first active revenue account and the
+standard GST code, dated today and due on the customer's payment terms (in
+20 days if they have none, RC1), which is then edited and
+approved like any other. Making it marks a prospect as a customer too. An
+opportunity makes at most one invoice.
+
+**Tasks** have a title, optional details, a due date, an assignee (a
+member), a status (To do, In progress, Done) and can be about a company, a
+person or an opportunity. **Activities** record a call, a meeting or a note
+on a company, person or opportunity, with when it happened. Tasks and
+activities are edited but never deleted (a task is marked done; an activity
+can be corrected, and the change is in the history).
+
+A company's **timeline** lists, newest first: its activities, tasks,
+opportunities (created and stage changes), and its approved invoices, credit
+notes, customer payments, bills and supplier payments, each linking to it.
+
+None of the CRM posts anything except the draft invoice, which posts only
+when approved.
+
+- **CRM1** Adding Mānuka Vets as a prospect (not a customer or supplier)
+  works with the CRM on and is refused with it off; a draft invoice for it is
+  refused ("isn't marked as a customer"). A contact that's none of the three
+  is refused.
+- **CRM2** People: Aroha Ngata (Practice manager, aroha@manukavets.nz) at
+  Mānuka Vets. A person's company must be an existing contact; an email must
+  look like one. A person can't be deleted, only archived.
+- **CRM3** Opportunity "Memorial paw prints 2027" for Mānuka Vets, 2,400.00,
+  closing 2026-12-15, point of contact Aroha, owner Jess, stage New. The
+  point of contact must work at that company. The amount can't be negative.
+- **CRM4** Moving it New → Proposal → Lost → Proposal works and each move is
+  in the history (the timeline shows "Proposal → Lost").
+- **CRM5** Marking it Won and making the invoice: a draft invoice for Mānuka
+  Vets dated today, one line "Memorial paw prints 2027" 1 × 2,400.00 to 4000
+  with GST (15%), total **2,760.00**; Mānuka Vets is now a customer (still a
+  prospect too); nothing is posted until the draft is approved. Making the
+  invoice again returns the same invoice; an opportunity that isn't Won
+  can't make one; once it has an invoice its stage can't change.
+- **CRM6** Tasks: "Send sample kit" due 2026-10-01 for Jess about the
+  opportunity, To do → Done. The assignee must be a member of the
+  organisation. A task can't be deleted.
+- **CRM7** Activities: a call with Aroha on 2026-09-28 10:00 ("Talked about
+  pricing"), a meeting and a note on Mānuka Vets. An activity must be about
+  something (a company, person or opportunity).
+- **CRM8** Mānuka Vets' timeline after CRM3-CRM7 and approving the CRM5
+  invoice lists, newest first, the approved invoice, the task, the
+  activities and the opportunity's events, and the company's list shows 1
+  open task and the open pipeline total **0.00** (the only opportunity is
+  won; open means not Won or Lost).
+- **CRM9** The pipeline board groups open and closed opportunities by stage
+  with a total per stage (amounts excluding GST).
+
+## CRM email and calendar sync
+
+The owner asked (29 Sep 2026) for email and calendar sync in the first round of
+the CRM; the details follow Twenty's connected accounts:
+each member of an organisation can connect their own **Gmail** or
+**Microsoft 365** mailbox and calendar, and emails and meetings with people
+the CRM knows show on those people's and companies' timelines. Like Akahu,
+each organisation uses its own Google or Microsoft app: an admin enters its
+client ID and secret (stored encrypted, never shown again), and the page
+shows the redirect address to register with Google or Microsoft. Tohyee asks
+for read-only access (Gmail and Google Calendar read-only; Microsoft
+Mail.Read and Calendars.Read, plus offline access), never sends or changes
+anything, and needs TOHYEE_SECRET_KEY to store the tokens.
+
+- Only emails and meetings with at least one **known participant** are
+  kept: someone whose address is a CRM person's email or a contact's email
+  (ignoring case), other than the mailbox's owner. Everything else is never
+  stored. A participant counts once however many times they appear.
+- Each kept email records who it was from and to, when, whether it was
+  sent or received, its subject and a short preview (at most 300
+  characters); never the full body or attachments. Each kept meeting
+  records its title, start, end, location and attendees.
+- Each connected account chooses what the rest of the team sees:
+  **subject and preview** (the default) or **only that it happened** (who
+  and when, with "(private)" for the subject and no preview). The owner of
+  the account always sees everything that was kept.
+- Syncs run every 15 minutes, or on "Sync now". The first sync looks back
+  30 days (emails) and 30 days either side of today (meetings); later syncs
+  fetch what's new since the last one. An email or meeting already kept is
+  never kept twice (it's matched by the provider's id); a changed meeting is
+  updated.
+- Disconnecting deletes the account's tokens and everything it synced (the
+  copies in Tohyee, never the mailbox). A failed sync is recorded with its
+  error and retried next time; three failures in a row pause the account
+  until it's reconnected.
+- The CRM must be on to connect or sync.
+
+Setup: CRM on; company Mānuka Vets (hello@manukavets.nz) with person Aroha
+Ngata (aroha@manukavets.nz); Jess connects jess@glimmers.nz.
+
+- **MAIL1** Settings: saving a Google client ID and secret stores the secret
+  encrypted and shows it only as "saved"; without TOHYEE_SECRET_KEY saving is
+  refused. Only admins can change it; the redirect address shown ends in
+  /api/crm/mail/callback.
+- **MAIL2** Connecting: the Google sign-in address carries the client ID,
+  the redirect address, read-only scopes, offline access and a one-time
+  state; the callback with that state stores the account (jess@glimmers.nz,
+  Google) with encrypted tokens. A callback with an unknown, used or
+  expired (over 15 minutes) state, or from another signed-in user, is
+  refused.
+- **MAIL3** First sync of Gmail with three emails: from
+  aroha@manukavets.nz to Jess ("Paw print order"), from Jess to
+  hello@manukavets.nz ("Quote"), and from newsletter@shop.example to Jess.
+  The first two are kept (received and sent), linked to Aroha and to
+  Mānuka Vets; the newsletter isn't stored at all.
+- **MAIL4** Syncing again with the same emails keeps nothing new; a fourth
+  email to aroha@manukavets.nz is added.
+- **MAIL5** Calendar: a meeting "Clinic visit" with aroha@manukavets.nz is
+  kept and linked to Aroha and Mānuka Vets; a meeting with only Jess isn't;
+  moving the clinic visit an hour later updates it.
+- **MAIL6** Mānuka Vets' timeline shows the two emails and the meeting,
+  with subject and preview, newest first, among its other entries.
+- **MAIL7** Setting Jess's account to "only that it happened": other
+  members see "(private)" and no preview; Jess still sees the subject.
+- **MAIL8** Microsoft 365 works the same way (Graph messages and calendar
+  view), matched and linked the same.
+- **MAIL9** Disconnecting removes the account and its synced emails and
+  meetings from the timeline. Three failed syncs in a row pause it with the
+  last error shown.
 
 ## Notes, files and history
 

@@ -6,10 +6,23 @@ import { type FormEvent, Suspense, useId, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { CustomFieldInputs, CustomValueCell, listColumns, startingValues, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
+import {
+  ContactPeople,
+  customerBody,
+  type CustomerDraft,
+  customerDraftFrom,
+  CustomerFields,
+  EMPTY_CUSTOMER_DRAFT,
+  useCustomerSetup,
+} from "@/components/customers";
+import { useModules } from "@/components/modules";
+import { SalespersonField, useSalespeople } from "@/components/salespeople";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
+import type { CustomerSetup } from "@/lib/customers/service";
+import type { SalespeopleSetup } from "@/lib/salespeople/service";
 import { type CustomFieldSetup, type CustomFieldUse, type CustomValues, fieldsFor } from "@/lib/custom-fields/values";
 import { formatGstNumber } from "@/lib/format";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
@@ -23,6 +36,12 @@ type Draft = {
   gstNumber: string;
   postalAddress: string;
   customFields: CustomValues;
+  /** "" for none. */
+  defaultSalespersonId: string;
+  /** Only the CRM makes prospects (CRM1). */
+  isProspect: boolean;
+  /** Terms, delivery address, credit limit and so on (RC1-RC8). */
+  customer: CustomerDraft;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -34,6 +53,9 @@ const EMPTY_DRAFT: Draft = {
   gstNumber: "",
   postalAddress: "",
   customFields: {},
+  defaultSalespersonId: "",
+  isProspect: false,
+  customer: EMPTY_CUSTOMER_DRAFT,
 };
 
 function draftFrom(contact: Contact): Draft {
@@ -46,11 +68,24 @@ function draftFrom(contact: Contact): Draft {
     gstNumber: formatGstNumber(contact.gstNumber),
     postalAddress: contact.postalAddress ?? "",
     customFields: contact.customFields,
+    defaultSalespersonId: contact.defaultSalespersonId ?? "",
+    isProspect: contact.isProspect,
+    customer: customerDraftFrom(contact),
   };
 }
 
-function rolesOf(draft: { isCustomer: boolean; isSupplier: boolean }): CustomFieldUse[] {
-  return [...(draft.isCustomer ? (["customer"] as const) : []), ...(draft.isSupplier ? (["supplier"] as const) : [])];
+/** What's sent: the customer details only for customers (the server keeps a former customer's). */
+function bodyFrom(draft: Draft): Record<string, unknown> {
+  const { customer, ...rest } = draft;
+  return draft.isCustomer ? { ...rest, ...customerBody(customer) } : rest;
+}
+
+/** A prospect uses the customer fields, as on the server. */
+function rolesOf(draft: { isCustomer: boolean; isSupplier: boolean; isProspect?: boolean }): CustomFieldUse[] {
+  return [
+    ...(draft.isCustomer || draft.isProspect ? (["customer"] as const) : []),
+    ...(draft.isSupplier ? (["supplier"] as const) : []),
+  ];
 }
 
 /**
@@ -65,14 +100,22 @@ function valuesToSave(setup: CustomFieldSetup | null | undefined, draft: Draft, 
 }
 
 function kind(contact: Contact): string {
-  if (contact.isCustomer && contact.isSupplier) return "Customer and supplier";
-  return contact.isCustomer ? "Customer" : "Supplier";
+  const kinds = [contact.isCustomer ? "Customer" : null, contact.isSupplier ? "supplier" : null, contact.isProspect ? "prospect" : null].filter(
+    (entry): entry is string => entry !== null,
+  );
+  const text = kinds.length > 1 ? `${kinds.slice(0, -1).join(", ")} and ${kinds.at(-1)}` : (kinds[0] ?? "");
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function ContactForm({
   initial,
   saved,
   customSetup,
+  salespeople,
+  customerSetup,
+  customers,
+  contactId,
+  crm,
   submitLabel,
   onSubmit,
   onCancel,
@@ -81,6 +124,13 @@ function ContactForm({
   /** The contact's stored custom field values ({} for a new one). */
   saved: CustomValues;
   customSetup: CustomFieldSetup | null | undefined;
+  salespeople: SalespeopleSetup | null | undefined;
+  customerSetup: CustomerSetup | null | undefined;
+  /** Every contact, for the parent customer select. */
+  customers: Contact[];
+  contactId: string | null;
+  /** Whether the CRM is on, so a contact can be a prospect. */
+  crm: boolean;
   submitLabel: string;
   onSubmit: (draft: Draft) => Promise<void>;
   onCancel: () => void;
@@ -100,7 +150,12 @@ function ContactForm({
     setBusy(true);
     setError(null);
     try {
-      await onSubmit({ ...draft, customFields: valuesToSave(customSetup, draft, saved) });
+      await onSubmit({
+        ...draft,
+        customFields: valuesToSave(customSetup, draft, saved),
+        // Only customers have a default salesperson (SR1).
+        defaultSalespersonId: draft.isCustomer ? draft.defaultSalespersonId : initial.defaultSalespersonId,
+      });
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -142,8 +197,18 @@ function ContactForm({
               />
               Supplier
             </label>
+            {crm || draft.isProspect ? (
+              <label className={ui.checkbox}>
+                <input
+                  type="checkbox"
+                  checked={draft.isProspect}
+                  onChange={(event) => setDraft({ ...draft, isProspect: event.target.checked })}
+                />
+                Prospect
+              </label>
+            ) : null}
           </span>
-          <span className={ui.fieldHint}>Tick one or both.</span>
+          <span className={ui.fieldHint}>{crm ? "Tick one or more. A prospect is someone you hope to sell to." : "Tick one or both."}</span>
         </div>
       </div>
       <div className={ui.grid3}>
@@ -171,7 +236,7 @@ function ContactForm({
           />
         </Field>
       </div>
-      <Field label="Postal address">
+      <Field label={draft.isCustomer ? "Billing address" : "Postal address"}>
         <textarea
           value={draft.postalAddress}
           onChange={(event) => setDraft({ ...draft, postalAddress: event.target.value })}
@@ -179,6 +244,23 @@ function ContactForm({
           maxLength={500}
         />
       </Field>
+      {draft.isCustomer ? (
+        <CustomerFields
+          setup={customerSetup}
+          draft={draft.customer}
+          onChange={(customer) => setDraft({ ...draft, customer })}
+          customers={customers}
+          contactId={contactId}
+        >
+          <SalespersonField
+            setup={salespeople}
+            label="Default salesperson"
+            hint="Put on this customer's new invoices and credit notes."
+            value={draft.defaultSalespersonId}
+            onChange={(id) => setDraft({ ...draft, defaultSalespersonId: id })}
+          />
+        </CustomerFields>
+      ) : null}
       <CustomFieldInputs
         setup={customSetup}
         record="contact"
@@ -213,8 +295,19 @@ function Contacts({ organisationId }: { organisationId: string }) {
   const [createKey, setCreateKey] = useState<string | null>(null);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [viewing, setViewing] = useState<Contact | null>(null);
+  const [peopleOf, setPeopleOf] = useState<Contact | null>(null);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const customSetup = useCustomFields(organisationId);
+  const salespeople = useSalespeople(organisationId);
+  const modules = useModules(organisationId);
+  const crm = modules?.crm ?? false;
+  // Contact people are the CRM's people, shown with either module on (RC6).
+  const showPeople = Boolean(modules?.crm || modules?.reporting);
+  const customerSetup = useCustomerSetup(organisationId);
+  // Every contact (archived too), for parent names and the parent select.
+  const everyone = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId, includeArchived: "true" });
+  const allContacts = everyone.data?.contacts ?? [];
+  const nameOf = (id: string | null) => allContacts.find((contact) => contact.id === id)?.name ?? null;
   // Customers or suppliers only, from the Contacts menu (?type=).
   const type = useSearchParams().get("type");
   const columns = listColumns(customSetup.data, "contact", type === "customers" ? ["customer"] : type === "suppliers" ? ["supplier"] : ["customer", "supplier"]);
@@ -252,16 +345,22 @@ function Contacts({ organisationId }: { organisationId: string }) {
             initial={{ ...EMPTY_DRAFT, customFields: startingValues(customSetup.data, "contact", ["customer", "supplier"]) }}
             saved={{}}
             customSetup={customSetup.data}
+            salespeople={salespeople.data}
+            customerSetup={customerSetup.data}
+            customers={allContacts}
+            contactId={null}
+            crm={crm}
             submitLabel="Add contact"
             onCancel={() => setCreateKey(null)}
             onSubmit={async (draft) => {
               const result = await api<{ contact: Contact }>("/api/contacts", {
                 method: "POST",
-                body: { organisationId, idempotencyKey: createKey, source: "ui", ...draft },
+                body: { organisationId, idempotencyKey: createKey, source: "ui", ...bodyFrom(draft) },
               });
               setCreateKey(null);
               setStatus({ tone: "success", text: `Added ${result.contact.name}.` });
               contacts.reload();
+              everyone.reload();
             }}
           />
         </Card>
@@ -273,16 +372,22 @@ function Contacts({ organisationId }: { organisationId: string }) {
             initial={draftFrom(editing)}
             saved={editing.customFields}
             customSetup={customSetup.data}
+            salespeople={salespeople.data}
+            customerSetup={customerSetup.data}
+            customers={allContacts}
+            contactId={editing.id}
+            crm={crm}
             submitLabel="Save changes"
             onCancel={() => setEditing(null)}
             onSubmit={async (draft) => {
               const result = await api<{ contact: Contact }>(`/api/contacts/${editing.id}`, {
                 method: "PATCH",
-                body: { organisationId, ...draft },
+                body: { organisationId, ...bodyFrom(draft) },
               });
               setEditing(null);
               setStatus({ tone: "success", text: `Saved ${result.contact.name}.` });
               contacts.reload();
+              everyone.reload();
             }}
           />
         </Card>
@@ -355,11 +460,13 @@ function Contacts({ organisationId }: { organisationId: string }) {
                   <tr key={contact.id}>
                     <td>
                       {contact.name} {contact.isArchived ? <Badge>Archived</Badge> : null}
+                      {contact.parentContactId ? <div className={ui.muted}>Part of {nameOf(contact.parentContactId) ?? `#${contact.parentContactId}`}</div> : null}
                       {contact.postalAddress ? (
                         <div className={ui.muted} style={{ whiteSpace: "pre-line" }}>
                           {contact.postalAddress}
                         </div>
                       ) : null}
+                      {contact.primaryPerson ? <div className={ui.muted}>Attention: {contact.primaryPerson.name}</div> : null}
                     </td>
                     <td>{kind(contact)}</td>
                     <td>{contact.email ?? ""}</td>
@@ -370,6 +477,16 @@ function Contacts({ organisationId }: { organisationId: string }) {
                     ))}
                     <td className={ui.num}>
                       <span className={ui.actions} style={{ justifyContent: "flex-end" }}>
+                        {showPeople ? (
+                          <Button
+                            variant="secondary"
+                            size="small"
+                            aria-label={`Contact people at ${contact.name}`}
+                            onClick={() => setPeopleOf(peopleOf?.id === contact.id ? null : contact)}
+                          >
+                            People
+                          </Button>
+                        ) : null}
                         <Button
                           variant="secondary"
                           size="small"
@@ -411,6 +528,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
           </div>
         )}
       </Card>
+      {peopleOf && showPeople ? <ContactPeople key={peopleOf.id} organisationId={organisationId} contact={peopleOf} /> : null}
       {viewing ? (
         <RecordExtrasPanel
           key={viewing.id}

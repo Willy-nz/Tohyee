@@ -32,7 +32,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ ledger_fx_revaluation_runs / _items
 ├─ inventory_item_balances, inventory_movements
 ├─ tax_codes, accounting_period_controls
-├─ contacts               customers and suppliers
+├─ contacts               customers and suppliers (with terms, credit limit, group, price level, parent)
+├─ payment_terms, customer_groups, price_levels   lists for customers (archived, never deleted)
 ├─ sales_invoices, sales_invoice_lines, sales_invoice_numbering
 ├─ customer_payments      money received against sales invoices (with any overpayment)
 ├─ customer_overpayment_applications   overpayments applied to other sales invoices
@@ -209,7 +210,7 @@ Per organisation (lowest to highest):
 | --- | --- |
 | viewer | read journals, stock, contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies), the GST return and filed GST returns; read notes, download files and see the history |
 | bookkeeper | + post journals, corrections, stock movements, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add notes and files, and edit, delete or remove their own |
-| admin | + chart of accounts, tax codes, period locks, settings, people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
+| admin | + chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels and the credit limit setting), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
 People who aren't members get "not found", so organisation IDs can't be
@@ -427,6 +428,43 @@ Enforced by the app (and covered by tests):
   (manual journals only); a trigger checks every key is a field for that
   kind of record, and `src/lib/custom-fields/` checks types, options and
   required fields. They never reach posting, reports or the GST return.
+- Modules: `organisation_settings.crm_enabled` and `advanced_features`
+  (Advanced reporting). The CRM's tables are `crm_people`,
+  `crm_opportunities`, `crm_tasks` and `crm_activities` (none deletable);
+  companies are `contacts`, which can be prospects (`is_prospect`). Owners
+  and assignees are user ids from the core database, checked against the
+  organisation's members when set. An opportunity's `invoice_id` is set once
+  and a trigger keeps it won from then on. The rules are in
+  `src/lib/crm/service.ts`; only the invoice it makes ever reaches the ledger.
+- CRM mail sync: the organisation's Google/Microsoft app is in
+  `crm_mail_settings` (secrets encrypted with TOHYEE_SECRET_KEY); each
+  member's mailbox in `crm_connected_accounts` (tokens encrypted). OAuth uses
+  a one-time state (`<organisation>.<random>`, 15 minutes, tied to the
+  signed-in user) and the address the request came in on for the redirect.
+  A sync reads what's due in one short transaction, calls Google or
+  Microsoft Graph with nothing open, then writes in a second: only messages
+  and events with a known participant go into `crm_messages` /
+  `crm_calendar_events`, linked through `crm_participant_links`.
+  Disconnecting deletes those rows. Every 15 minutes, off with
+  TOHYEE_MAIL_SYNC_SCHEDULER=off. The code is in `src/lib/crm/mail/`.
+- Salespeople: `salespeople` (never deleted), `contacts.default_salesperson_id`
+  and `salesperson_id` on `sales_invoices` and `sales_credit_notes`, fixed
+  with the rest of the document once approved. Sales by salesperson reads
+  the documents (subtotals excluding GST), not the ledger. The rules are in
+  `src/lib/salespeople/service.ts` and `src/lib/reports/sales-by-salesperson.ts`.
+- Richer customers (RC1-RC12): `payment_terms` (for every organisation),
+  `customer_groups` and `price_levels` (none deletable), and on `contacts`
+  `delivery_address`, `payment_term_id`, `credit_limit`, `customer_group_id`,
+  `price_level_id` and `parent_contact_id`; `postal_address` is the billing
+  address. A trigger keeps parent customers loop-free, at most 4 levels, and
+  both sides customers. Contact people are `crm_people` (one `is_primary` per
+  company, a unique index). A new invoice without a due date gets it from
+  the customer's terms (`src/lib/customers/terms.ts`, shared with the
+  editor). Approving an invoice locks the customer and compares their
+  receivables balance, worked out from the documents, plus the invoice with
+  the credit limit (`organisation_settings.credit_limit_action`: warn or
+  block). Aged receivables reads the same documents as at a date
+  (`src/lib/reports/aged-receivables.ts`), never the ledger, and ties to it.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 

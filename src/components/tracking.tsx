@@ -94,43 +94,6 @@ export function TrackingTagsText({ setup, tags }: { setup: TrackingSetup | null 
   return text ? <div className={ui.muted}>{text}</div> : null;
 }
 
-/** Settings: the Advanced (ERP) features switch (TC1). */
-export function AdvancedFeaturesCard({ organisationId }: { organisationId: string }) {
-  const setup = useTracking(organisationId);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const on = setup.data?.advancedFeatures ?? false;
-  async function toggle() {
-    setBusy(true);
-    setError(null);
-    try {
-      await api(`/api/organisations/${organisationId}/settings`, { method: "PATCH", body: { advancedFeatures: !on } });
-      setup.reload();
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Card
-      title="Advanced (ERP) features"
-      description="For bigger organisations: tracking categories (Department, Class, Location and segments of your own) on every invoice, bill, credit note, spend and receive money and journal line, with profit and loss split and filtered by them, and custom fields on contacts, documents and lines. Off, the extra fields are hidden; anything already filled in is kept."
-      actions={on ? <Badge tone="green">On</Badge> : <Badge>Off</Badge>}
-    >
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      {setup.error ? <Notice tone="error">{setup.error}</Notice> : null}
-      <div className={ui.actions}>
-        <Button variant={on ? "secondary" : "primary"} disabled={busy || !setup.data} onClick={() => void toggle()}>
-          {busy ? "Saving…" : on ? "Turn off" : "Turn on"}
-        </Button>
-        {on ? <Link href="/operations/settings/tracking">Tracking categories and segments</Link> : null}
-        {on ? <Link href="/operations/settings/custom-fields">Custom fields</Link> : null}
-      </div>
-    </Card>
-  );
-}
-
 function CategoryCard({ organisationId, category, onChanged }: { organisationId: string; category: TrackingCategory; onChanged: (setup: TrackingSetup, message: string) => void }) {
   const [name, setName] = useState("");
   const [parentId, setParentId] = useState("");
@@ -388,7 +351,7 @@ export function TrackingManager({ organisationId }: { organisationId: string }) 
   if (!data.advancedFeatures) {
     return (
       <Notice tone="info">
-        Advanced features are off. Turn them on in <Link href="/operations/settings">Settings</Link> to use tracking categories.
+        Advanced reporting is off. Turn it on in <Link href="/operations/settings">Settings</Link> to use tracking categories.
       </Notice>
     );
   }

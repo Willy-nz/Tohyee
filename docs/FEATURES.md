@@ -60,9 +60,18 @@ that something happened.
   deleted. "Print or save as PDF" prints just the report. Budget columns
   come with budgets. See examples CR1-CR10.
 - **Contacts**: customers and suppliers with optional email, phone, postal
-  address and GST number (format-checked only); search by name or email;
-  archiving instead of deleting. Customers are used by sales invoices and
-  suppliers by bills.
+  (billing) address and GST number (format-checked only); search by name or
+  email; archiving instead of deleting. Customers are used by sales invoices
+  and suppliers by bills. Customers also have a delivery address and
+  **payment terms** (N days after the invoice, N days after the end of the
+  month, or day N of the following month; six NZ defaults to start, archived
+  never deleted), and a new invoice's due date comes from them (still
+  editable on the draft). See examples RC1, RC2.
+- **Aged receivables** (Reporting): what each customer owes as at a date,
+  by days past due (current, 1-30, 31-60, 61-90, over 90) less unused
+  credit, each row opening to its invoices, and totalling to accounts
+  receivable; with "Roll up sub-customers" a parent shows itself and its
+  subs (RC9-RC11). Customer statements aren't built yet.
 - **Tax codes** as settings. Sales invoices and bills apply them; manual
   journals don't.
 - **Sales invoices** in the base currency: drafts that can be edited and
@@ -189,7 +198,25 @@ that something happened.
   line. Each organisation sets up its own Akahu personal app (with its own
   bank logins) and an organisation admin enters its tokens, which are checked
   with Akahu and stored encrypted. See examples BK1-BK16.
-- **Advanced (ERP) features** (an organisation setting, off by default) with
+- **Modules**: Accounting and Tax are always on; the **CRM** and
+  **Advanced reporting** are switched on per organisation in Settings, and
+  their menus and screens show only while on (MOD1).
+- **CRM** (after [Twenty](https://github.com/twentyhq/twenty), built in):
+  companies are the contacts, which can now also be **prospects**; **people**
+  at each company; **opportunities** with Twenty's stages (plus Lost) on a
+  drag-and-drop pipeline board, where a won one makes its draft invoice in
+  one click (and makes a prospect a customer); **tasks** with due dates and
+  assignees; logged **calls, meetings and notes**; and a **timeline** per
+  company that also shows its invoices, credit notes, bills and payments.
+  People, opportunities, tasks and activities are never deleted (CRM1-CRM9).
+  **Email and calendar sync**: each member connects their own Gmail or
+  Microsoft 365 mailbox (read-only, through the organisation's own Google or
+  Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
+  emails and meetings with known people and companies (subject and a short
+  preview, never full bodies or attachments) and shows them on timelines,
+  with each mailbox choosing whether the team sees subjects or only that
+  something happened (MAIL1-MAIL9).
+- **Advanced reporting** (formerly "Advanced (ERP) features") with
   **tracking categories**: Department, Class and Location, each a tree of
   values (Otago › Dunedin) that admins can rename, move and archive (never
   delete), and each optionally required on income and expense lines before
@@ -208,8 +235,20 @@ that something happened.
   date, check box, list, multiple select, email, phone and web address, each
   optionally required, with a default and shown as a column in lists.
   Fields and list options are archived, never deleted, and never reach the
-  ledger (CF1-CF10). Salespeople, richer customers and items and a GST audit
-  report come next.
+  ledger (CF1-CF10). **Salespeople** (like NetSuite's sales reps): a default
+  per customer and one on each sales invoice and credit note, and a **sales
+  by salesperson** report (excluding GST, voids on their void date, each row
+  opening to its documents) that ties to income (SR1-SR8). Team selling and
+  commissions aren't built. **Richer customers** (like NetSuite's): a
+  **credit limit** per customer, checked when an invoice is approved against
+  their balance (unpaid invoices less unused credit notes and overpayments)
+  plus the invoice, either warning (the default; approved and said so) or
+  blocking, per organisation; **contact people**, the CRM's people at the
+  company, one of them the primary contact for invoices (also with only this
+  module on); **customer groups**; **price levels** (a percent on or off the
+  base price, used once items arrive); and **parent customers** (no loops,
+  at most 4 levels) with aged receivables rolled up (RC3-RC12). Items and a
+  GST audit report come next.
 - **Two-step sign-in** for everyone: an authenticator app (QR code set-up)
   plus 10 one-use backup codes; wrong-code limits and lockout; lost-phone
   reset by emailed link, by a server admin, or from the command line; new

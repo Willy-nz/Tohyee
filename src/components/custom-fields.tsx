@@ -577,7 +577,7 @@ export function CustomFieldsManager({ organisationId }: { organisationId: string
   if (!loaded.data) return <p className={ui.muted}>Loading…</p>;
   const setup = current ?? loaded.data;
   if (!setup.advancedFeatures) {
-    return <Notice tone="info">Advanced features are off. Turn them on in Settings to use custom fields.</Notice>;
+    return <Notice tone="info">Advanced reporting is off. Turn it on in Settings › Modules to use custom fields.</Notice>;
   }
   if (!can("admin")) return <Notice tone="warning">Only organisation admins and owners can change custom fields.</Notice>;
   const saved = (next: CustomFieldSetup, text: string) => {

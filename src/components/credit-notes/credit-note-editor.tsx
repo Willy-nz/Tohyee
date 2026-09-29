@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
+import { customerDefault, SalespersonField, useSalespeople } from "@/components/salespeople";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate } from "@/components/invoices/invoice-editor";
 import { Badge, Button, Field, Notice, Stat, ui } from "@/components/ui";
@@ -24,6 +25,7 @@ import {
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
+import type { SalespeopleSetup } from "@/lib/salespeople/service";
 import { type CustomFieldSetup, type CustomValues, copyableValuesFor } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
@@ -81,8 +83,18 @@ export type CreditNoteStart = {
   contactId: string;
   reference: string | null;
   amountsMode: AmountsMode;
-  lines: Array<{ description: string; quantity: string; unitPrice: string; accountCode: string; taxCode: string | null; tracking?: TrackingTags; customFields?: CustomValues }>;
+  lines: Array<{
+    description: string;
+    quantity: string;
+    unitPrice: string;
+    accountCode: string;
+    taxCode: string | null;
+    tracking?: TrackingTags;
+    customFields?: CustomValues;
+  }>;
   customFields?: CustomValues;
+  /** The invoice's salesperson (SR3). */
+  salespersonId?: string | null;
 };
 
 type FormProps = {
@@ -93,6 +105,7 @@ type FormProps = {
   taxCodes: TaxCode[];
   tracking: TrackingSetup;
   customSetup: CustomFieldSetup;
+  salespeople: SalespeopleSetup;
   creditNote?: CreditNote;
   start?: CreditNoteStart;
   onSaved: (creditNote: CreditNote) => void;
@@ -107,6 +120,7 @@ function CreditNoteForm({
   taxCodes,
   tracking,
   customSetup,
+  salespeople,
   creditNote,
   start,
   onSaved,
@@ -123,6 +137,8 @@ function CreditNoteForm({
   const [creditNoteDate, setCreditNoteDate] = useState(creditNote?.creditNoteDate ?? todayInBrowser());
   const [reference, setReference] = useState(initial?.reference ?? "");
   const [amountsMode, setAmountsMode] = useState<AmountsMode>(initial?.amountsMode ?? "exclusive");
+  // A new document takes the customer's default salesperson when the customer is chosen (SR1).
+  const [salespersonId, setSalespersonId] = useState<string>(creditNote?.salespersonId ?? (start ? (start.salespersonId ?? "") : ""));
   const lineDefaults = startingValues(customSetup, "line", ["credit_note"]);
   // A copy from an invoice or bill keeps the values of fields also used here (CF6).
   const [customFields, setCustomFields] = useState<CustomValues>(
@@ -194,6 +210,7 @@ function CreditNoteForm({
         customFields: line.customFields,
       })),
       customFields,
+      salespersonId: salespersonId || null,
     };
     try {
       const result = creditNote
@@ -228,7 +245,15 @@ function CreditNoteForm({
       ) : null}
       <div className={ui.grid3}>
         <Field label="Customer">
-          <select value={contactId} onChange={(event) => setContactId(event.target.value)} required>
+          <select value={contactId} onChange={(event) => {
+              setContactId(event.target.value);
+              if (!creditNote) {
+                const chosen = customers.find((contact) => contact.id === event.target.value);
+                setSalespersonId(customerDefault(salespeople, chosen?.defaultSalespersonId));
+              }
+            }}
+            required
+          >
             <option value="">Choose a customer</option>
             {savedCustomer ? (
               <option value={savedCustomer.contactId}>{savedCustomer.contactName} (archived or not a customer)</option>
@@ -243,6 +268,7 @@ function CreditNoteForm({
         <Field label="Credit note date" hint="Approving posts the credit note on this date.">
           <input type="date" value={creditNoteDate} onChange={(event) => setCreditNoteDate(event.target.value)} required />
         </Field>
+        <SalespersonField setup={salespeople} value={salespersonId} onChange={setSalespersonId} />
         <Field label="Reference" hint="Optional, like the invoice it credits.">
           <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
         </Field>
@@ -423,11 +449,12 @@ export function CreditNoteEditor({
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
-  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error;
+  const salespeople = useSalespeople(organisationId);
+  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error ?? salespeople.error;
   if (error) {
     return <Notice tone="error">{error}</Notice>;
   }
-  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data || !customSetup.data) {
+  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data || !customSetup.data || !salespeople.data) {
     return <p className={ui.muted}>Loading…</p>;
   }
   return (
@@ -439,6 +466,7 @@ export function CreditNoteEditor({
       taxCodes={taxCodes.data.taxCodes}
       tracking={tracking.data}
       customSetup={customSetup.data}
+      salespeople={salespeople.data}
       creditNote={creditNote}
       start={start}
       onSaved={onSaved}
