@@ -6,6 +6,7 @@ import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import type { AccountClass } from "@/lib/accounts/types";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import { writeAuditEvent } from "@/lib/audit";
+import { planDocumentStock, planDocumentVoid } from "@/lib/inventory/stock";
 import { fillLinesFromItems, isBlank, LINE_ITEM_COLUMNS, LINE_ITEM_JOINS, lineForHash, lineItemFields, type LineItemFields, type LineItemRef, type LineItemRow, parseLineItem, resolveLineItems, type ResolvedLineItem } from "@/lib/items/lines";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -1093,6 +1094,15 @@ export async function approveInvoice(
       ? []
       : [{ accountCode: accounts.gst, debitAmount: "0", creditAmount: resolved.taxTotal, description: "GST" }]),
   ];
+  // Stock items move stock and post cost of sales in the same journal (ST1-ST11).
+  const stock = await planDocumentStock(
+    tx,
+    "invoice",
+    { id: invoiceId, date: current.invoiceDate, reference: invoiceNumber, contactId: current.contactId },
+    resolved.resolvedLines,
+    `Cost of sales, invoice ${invoiceNumber}`,
+  );
+  if (stock) journalLines.push(...stock.journalLines);
   const posted = await postJournalBody(
     tx,
     "invoice:approval",
@@ -1105,6 +1115,7 @@ export async function approveInvoice(
     }),
     { origin: "invoice" },
   );
+  await stock?.planner.record(posted.journal.id);
 
   try {
     await tx.query(
@@ -1202,6 +1213,13 @@ export async function voidInvoice(
   }
 
   const original = await getJournal(tx, current.approvalJournalId!);
+  const voidStock = await planDocumentVoid(
+    tx,
+    "invoice",
+    { id: invoiceId, date: voidDate, reference: `VOID-${original.reference}`.slice(0, 100) },
+    (lineIndex) => current.lines[lineIndex]?.tracking ?? {},
+    `Stock back on void of ${original.reference}`,
+  );
   const posted = await postJournalBody(
     tx,
     "invoice:void",
@@ -1210,16 +1228,20 @@ export async function voidInvoice(
       postingDate: voidDate,
       reference: `VOID-${current.invoiceNumber}`,
       description: `Void of invoice ${current.invoiceNumber}`,
-      lines: original.lines.map((line) => ({
-        accountCode: line.accountCode,
-        debitAmount: line.creditAmount,
-        creditAmount: line.debitAmount,
-        description: line.description,
-        tracking: line.tracking,
-      })),
+      lines: [
+        ...original.lines.map((line) => ({
+          accountCode: line.accountCode,
+          debitAmount: line.creditAmount,
+          creditAmount: line.debitAmount,
+          description: line.description,
+          tracking: line.tracking,
+        })),
+        ...(voidStock?.journalLines ?? []),
+      ],
     }),
     { origin: "invoice", relatedJournalId: original.id, correctionKind: "reversal" },
   );
+  await voidStock?.planner.record(posted.journal.id);
 
   try {
     await tx.query(

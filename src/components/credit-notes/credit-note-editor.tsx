@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { LineItemPicker, useItems } from "@/components/items";
 import type { ItemList } from "@/lib/items/service";
+import type { InvoiceSummary } from "@/lib/invoices/service";
 import { useApiData } from "@/components/hooks";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { customerDefault, SalespersonField, useSalespeople } from "@/components/salespeople";
@@ -99,6 +100,8 @@ export type CreditNoteStart = {
     unitId?: string | null;
   }>;
   customFields?: CustomValues;
+  /** The invoice stock is returned from (ST5), when starting from an invoice. */
+  returnInvoiceId?: string | null;
   /** The invoice's salesperson (SR3). */
   salespersonId?: string | null;
 };
@@ -144,6 +147,14 @@ function CreditNoteForm({
   const [contactId, setContactId] = useState(initial?.contactId ?? "");
   const [creditNoteDate, setCreditNoteDate] = useState(creditNote?.creditNoteDate ?? todayInBrowser());
   const [reference, setReference] = useState(initial?.reference ?? "");
+  // Stock items on the credit note go back at the cost of their sale on this invoice (ST5).
+  const [returnInvoiceId, setReturnInvoiceId] = useState(creditNote?.returnInvoiceId ?? start?.returnInvoiceId ?? "");
+  const customerInvoices = useApiData<{ invoices: InvoiceSummary[] }>(contactId ? "/api/invoices" : null, {
+    organisationId,
+    contactId,
+    status: "approved",
+    limit: 200,
+  });
   const [amountsMode, setAmountsMode] = useState<AmountsMode>(initial?.amountsMode ?? "exclusive");
   // A new document takes the customer's default salesperson when the customer is chosen (SR1).
   const [salespersonId, setSalespersonId] = useState<string>(creditNote?.salespersonId ?? (start ? (start.salespersonId ?? "") : ""));
@@ -223,6 +234,7 @@ function CreditNoteForm({
       })),
       customFields,
       salespersonId: salespersonId || null,
+      returnInvoiceId: returnInvoiceId || null,
     };
     try {
       const result = creditNote
@@ -283,6 +295,18 @@ function CreditNoteForm({
         <SalespersonField setup={salespeople} value={salespersonId} onChange={setSalespersonId} />
         <Field label="Reference" hint="Optional, like the invoice it credits.">
           <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
+        </Field>
+        <Field label="Stock returned from" hint="For stock items: the invoice they were sold on, so they go back into stock at that sale's cost.">
+          <select value={returnInvoiceId} onChange={(event) => setReturnInvoiceId(event.target.value)}>
+            <option value="">No stock returned</option>
+            {(customerInvoices.data?.invoices ?? [])
+              .filter((invoice) => invoice.status === "approved" || invoice.id === returnInvoiceId)
+              .map((invoice) => (
+                <option key={invoice.id} value={invoice.id}>
+                  {invoice.invoiceNumber} · {invoice.invoiceDate}
+                </option>
+              ))}
+          </select>
         </Field>
         <Field label="Amounts are">
           <select value={amountsMode} onChange={(event) => setAmountsMode(event.target.value as AmountsMode)}>

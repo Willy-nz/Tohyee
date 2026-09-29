@@ -24,6 +24,7 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
   const [baseCurrency, setBaseCurrency] = useState(settings.baseCurrency);
   const [financialYearEndMonth, setFinancialYearEndMonth] = useState(settings.financialYearEndMonth);
   const [gstBasis, setGstBasis] = useState<GstBasis>(settings.gstBasis);
+  const [allowNegativeStock, setAllowNegativeStock] = useState(settings.allowNegativeStock);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -32,7 +33,7 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
     try {
       await api(`/api/organisations/${organisationId}/settings`, {
         method: "PATCH",
-        body: { displayName, baseCurrency, financialYearEndMonth, gstBasis },
+        body: { displayName, baseCurrency, financialYearEndMonth, gstBasis, allowNegativeStock },
       });
       onSaved(
         displayName === settings.displayName
@@ -82,6 +83,12 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
           </select>
         </Field>
       </div>
+      <label className={ui.checkbox}>
+        <input type="checkbox" checked={allowNegativeStock} onChange={(event) => setAllowNegativeStock(event.target.checked)} />
+        Allow negative stock: sell stock items before their bill is in. The sale is costed at the average (or the last or purchase
+        cost); the bill that fills the shortfall puts any difference to cost of sales. It can&apos;t be turned off while anything is
+        below zero.
+      </label>
       <div>
         <Button type="submit">Save settings</Button>
       </div>

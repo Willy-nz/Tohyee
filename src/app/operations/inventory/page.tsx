@@ -4,14 +4,16 @@ import Link from "next/link";
 import { type FormEvent, useMemo, useState } from "react";
 import { AccountSelect, Money, RequireOrganisation, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
 import type { Movement, MovementType } from "@/lib/inventory/movements";
+import type { TrackingCategory } from "@/lib/tracking/service";
 
-const TYPES: Array<{ value: MovementType; label: string; help: string }> = [
+const TYPES: Array<{ value: Exclude<MovementType, "reversal">; label: string; help: string }> = [
   { value: "receipt", label: "Stock received", help: "Stock bought in. Other account is usually accounts payable or the bank." },
   { value: "issue", label: "Stock sold or used", help: "Valued at the current average cost. Other account is usually cost of goods sold." },
   { value: "adjustment", label: "Stocktake adjustment", help: "Negative to write stock off (at average cost); positive to add found stock at a cost you give." },
@@ -20,7 +22,21 @@ const TYPES: Array<{ value: MovementType; label: string; help: string }> = [
   { value: "landed_cost", label: "Landed cost", help: "Freight or duty added to the value of the stock on hand." },
 ];
 
-const TYPE_LABELS = Object.fromEntries(TYPES.map((type) => [type.value, type.label])) as Record<MovementType, string>;
+const TYPE_LABELS = {
+  ...Object.fromEntries(TYPES.map((type) => [type.value, type.label])),
+  reversal: "Void (reversed)",
+} as Record<MovementType, string>;
+
+const SOURCE_LINKS: Record<string, { label: string; href: (id: string) => string }> = {
+  invoice: { label: "Invoice", href: (id) => `/operations/invoices/${id}` },
+  invoice_void: { label: "Invoice void", href: (id) => `/operations/invoices/${id}` },
+  bill: { label: "Bill", href: (id) => `/operations/bills/${id}` },
+  bill_void: { label: "Bill void", href: (id) => `/operations/bills/${id}` },
+  credit_note: { label: "Credit note", href: (id) => `/operations/credit-notes/${id}` },
+  credit_note_void: { label: "Credit note void", href: (id) => `/operations/credit-notes/${id}` },
+  supplier_credit_note: { label: "Supplier credit note", href: (id) => `/operations/supplier-credit-notes/${id}` },
+  supplier_credit_note_void: { label: "Supplier credit note void", href: (id) => `/operations/supplier-credit-notes/${id}` },
+};
 
 function defaultOffset(type: MovementType, accounts: Account[]): string {
   const bySystem = (key: string) => accounts.find((account) => account.systemKey === key)?.code ?? "";
@@ -34,15 +50,17 @@ function MovementForm({
   organisationId,
   accounts,
   recentIssues,
+  locations,
   onPosted,
 }: {
   organisationId: string;
   accounts: Account[];
   recentIssues: Movement[];
+  locations: TrackingCategory | null;
   onPosted: (movement: Movement) => void;
 }) {
   const inventoryDefault = accounts.find((account) => account.systemKey === "inventory")?.code ?? "";
-  const [type, setType] = useState<MovementType>("receipt");
+  const [type, setType] = useState<Exclude<MovementType, "reversal">>("receipt");
   const [fields, setFields] = useState({
     movementDate: todayInBrowser(),
     itemCode: "",
@@ -52,6 +70,7 @@ function MovementForm({
     reference: "",
     description: "",
     originalMovementId: "",
+    locationValueId: "",
   });
   const [inventoryAccount, setInventoryAccount] = useState(inventoryDefault);
   const [offsetAccount, setOffsetAccount] = useState(() => defaultOffset("receipt", accounts));
@@ -85,6 +104,7 @@ function MovementForm({
           reference: fields.reference,
           description: fields.description || undefined,
           originalMovementId: type === "customer_return" ? fields.originalMovementId : undefined,
+          locationValueId: fields.locationValueId || undefined,
           inventoryAccountCode: inventoryAccount,
           offsetAccountCode: offsetAccount,
         },
@@ -109,7 +129,7 @@ function MovementForm({
           <select
             value={type}
             onChange={(event) => {
-              const next = event.target.value as MovementType;
+              const next = event.target.value as Exclude<MovementType, "reversal">;
               setType(next);
               setOffsetAccount(defaultOffset(next, accounts));
             }}
@@ -124,9 +144,23 @@ function MovementForm({
         <Field label="Date">
           <input type="date" value={fields.movementDate} onChange={(event) => set("movementDate", event.target.value)} required />
         </Field>
-        <Field label="Item code">
+        <Field label="Item code" hint="A stock item's code shares its stock with invoices and bills.">
           <input value={fields.itemCode} onChange={(event) => set("itemCode", event.target.value)} maxLength={50} required />
         </Field>
+        {locations && locations.values.length > 0 ? (
+          <Field label="Location" hint="Stock is kept, and averaged, per location.">
+            <select value={fields.locationValueId} onChange={(event) => set("locationValueId", event.target.value)} required>
+              <option value="">Choose a location</option>
+              {locations.values
+                .filter((value) => value.isActive || value.id === fields.locationValueId)
+                .map((value) => (
+                  <option key={value.id} value={value.id}>
+                    {value.path}
+                  </option>
+                ))}
+            </select>
+          </Field>
+        ) : null}
       </div>
       <div className={ui.grid4}>
         {type !== "landed_cost" ? (
@@ -148,7 +182,7 @@ function MovementForm({
             <select value={fields.originalMovementId} onChange={(event) => set("originalMovementId", event.target.value)} required>
               <option value="">Choose the sale</option>
               {recentIssues
-                .filter((issue) => !fields.itemCode || issue.itemCode === fields.itemCode)
+                .filter((issue) => (!fields.itemCode || issue.itemCode.toLowerCase() === fields.itemCode.toLowerCase()) && (issue.locationValueId ?? "") === fields.locationValueId)
                 .map((issue) => (
                   <option key={issue.id} value={issue.id}>
                     #{issue.id} · {formatDate(issue.movementDate)} · {issue.itemCode} × {formatQuantity(issue.quantityDelta.replace("-", ""))}
@@ -192,6 +226,8 @@ function Inventory({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const accounts = useAccounts(organisationId);
   const movements = useApiData<{ movements: Movement[] }>("/api/inventory/movements", { organisationId });
+  const tracking = useTracking(organisationId);
+  const locations = tracking.data?.categories.find((category) => category.kind === "location") ?? null;
   const [message, setMessage] = useState<string | null>(null);
   const recentIssues = useMemo(
     () => (movements.data?.movements ?? []).filter((movement) => movement.movementType === "issue"),
@@ -201,8 +237,10 @@ function Inventory({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Notice tone="info">
-        Stock is costed at weighted average and always matches the inventory account to the cent. Movements dated before an
-        item&apos;s latest movement aren&apos;t accepted yet, because every later sale would need re-costing.
+        Stock is costed at weighted average per item and location and always matches the inventory account to the cent. Stock
+        items on bills, invoices and credit notes move stock on their own; record other movements (stocktakes, landed cost)
+        here. Movements dated before an item&apos;s latest movement aren&apos;t accepted yet, because every later sale would need
+        re-costing.
       </Notice>
       {message ? <Notice tone="success">{message}</Notice> : null}
       {can("bookkeeper") ? (
@@ -212,6 +250,7 @@ function Inventory({ organisationId }: { organisationId: string }) {
               organisationId={organisationId}
               accounts={accounts.data.accounts}
               recentIssues={recentIssues}
+              locations={locations}
               onPosted={(movement) => {
                 setMessage(
                   `Posted ${TYPE_LABELS[movement.movementType].toLowerCase()} for ${movement.itemCode}: ${formatMoney(movement.valueDelta)} (journal #${movement.ledgerJournalId}).`,
@@ -236,6 +275,7 @@ function Inventory({ organisationId }: { organisationId: string }) {
                   <th>#</th>
                   <th>Date</th>
                   <th>Item</th>
+                  <th>Location</th>
                   <th>What</th>
                   <th className={ui.num}>Qty</th>
                   <th className={ui.num}>Unit cost</th>
@@ -250,8 +290,15 @@ function Inventory({ organisationId }: { organisationId: string }) {
                     <td>{movement.id}</td>
                     <td>{formatDate(movement.movementDate)}</td>
                     <td>{movement.itemCode}</td>
+                    <td>{movement.locationName ?? ""}</td>
                     <td>
-                      <Badge tone={movement.valueDelta.startsWith("-") ? "amber" : "green"}>{TYPE_LABELS[movement.movementType]}</Badge>
+                      <Badge tone={movement.quantityDelta.startsWith("-") ? "amber" : "green"}>{TYPE_LABELS[movement.movementType]}</Badge>
+                      {movement.sourceType && movement.sourceId && SOURCE_LINKS[movement.sourceType] ? (
+                        <>
+                          {" "}
+                          <Link href={SOURCE_LINKS[movement.sourceType].href(movement.sourceId)}>{SOURCE_LINKS[movement.sourceType].label}</Link>
+                        </>
+                      ) : null}
                     </td>
                     <td className={ui.num}>{formatQuantity(movement.quantityDelta)}</td>
                     <td className={ui.num}>{movement.unitCost ? formatMoney(movement.unitCost, 4) : ""}</td>

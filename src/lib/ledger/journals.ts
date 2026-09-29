@@ -456,6 +456,14 @@ async function checkManualTags(
   kept: ReadonlySet<string> = new Set(),
   keptFields: ReadonlySet<string> = new Set(),
 ): Promise<void> {
+  // The inventory account only moves with stock, so it always equals the stock's value (ST1-ST12).
+  const inventory = await tx.query<{ code: string }>("select code from accounts where system_key = 'inventory'");
+  const inventoryCode = inventory.rows[0]?.code.toLowerCase();
+  if (inventoryCode && body.lines.some((line) => line.accountCode.toLowerCase() === inventoryCode)) {
+    throw new ValidationError(
+      `Account ${inventory.rows[0].code} is the inventory account, which only moves with stock (so it always matches the stock's value). Use a stock movement or a bill for a stock item instead.`,
+    );
+  }
   const ctx = await loadTrackingContext(tx);
   body.lines.forEach((line, index) => checkNewTags(ctx, line.tracking, `Line ${index + 1}`, kept));
   const custom = await resolveDocumentCustom(tx, "journal", body.customInput, body.lines.map((line) => line.customInput), keptFields);

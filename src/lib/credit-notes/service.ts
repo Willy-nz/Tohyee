@@ -5,6 +5,7 @@ import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import type { AccountClass } from "@/lib/accounts/types";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import { writeAuditEvent } from "@/lib/audit";
+import { planDocumentStock, planDocumentVoid } from "@/lib/inventory/stock";
 import { fillLinesFromItems, isBlank, LINE_ITEM_COLUMNS, LINE_ITEM_JOINS, lineForHash, lineItemFields, type LineItemFields, type LineItemRef, type LineItemRow, parseLineItem, resolveLineItems, type ResolvedLineItem } from "@/lib/items/lines";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -111,6 +112,8 @@ export type CreditNoteSummary = {
   /** The salesperson (SR1), or null. */
   salespersonId: string | null;
   salespersonName: string | null;
+  /** The approved invoice stock on this credit note came from (ST5), restocked at that sale's cost. */
+  returnInvoiceId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -126,6 +129,7 @@ export type CreditNoteInput = {
   lines?: unknown;
   customFields?: unknown;
   salespersonId?: unknown;
+  returnInvoiceId?: unknown;
 };
 
 const MAX_LINES = 200;
@@ -157,6 +161,7 @@ type CreditNoteRow = {
   created_by_email: string | null;
   custom_fields: CustomValues;
   salesperson_id: string | null;
+  return_invoice_id: string | null;
   salesperson_name: string | null;
   created_at: string;
   updated_at: string;
@@ -166,7 +171,7 @@ const SUMMARY_COLUMNS = `n.id, n.status, n.credit_note_number, n.contact_id, c.n
   n.reference, n.amounts_mode, n.currency_code, n.subtotal, n.tax_total, n.total, applied.amount_applied,
   refunded.amount_refunded, n.approval_journal_id, n.approved_at, n.approved_by_email, n.void_date, n.void_journal_id,
   n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at, n.custom_fields,
-  n.salesperson_id, sp.name as salesperson_name`;
+  n.salesperson_id, sp.name as salesperson_name, n.return_invoice_id`;
 
 /** Credit notes with their customer and the sums of their active applications and refunds. */
 const SUMMARY_FROM = `sales_credit_notes n
@@ -236,6 +241,7 @@ function toSummary(row: CreditNoteRow): CreditNoteSummary {
     createdByEmail: row.created_by_email,
     customFields: row.custom_fields ?? {},
     salespersonId: row.salesperson_id,
+    returnInvoiceId: row.return_invoice_id,
     salespersonName: row.salesperson_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -283,6 +289,7 @@ type DraftDetails = {
   customInput: Record<string, unknown> | undefined;
   /** As sent: undefined when not sent (the customer's default applies), null for none. */
   salespersonInput: string | null | undefined;
+  returnInvoiceId: string | null;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -347,7 +354,7 @@ function parseDraft(input: CreditNoteInput): DraftDetails {
       customFields: parseCustomInput(line.customFields, `${label}: `),
     };
   });
-  return { contactId, creditNoteDate, reference, amountsMode, lines, customInput: parseCustomInput(input.customFields, ""), salespersonInput: parseSalespersonInput(input.salespersonId) };
+  return { contactId, creditNoteDate, reference, amountsMode, lines, customInput: parseCustomInput(input.customFields, ""), salespersonInput: parseSalespersonInput(input.salespersonId), returnInvoiceId: optionalId(input.returnInvoiceId, "returnInvoiceId") };
 }
 
 /** Normalised content for the idempotency fingerprint. */
@@ -361,6 +368,7 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     // Values that weren't sent stay out, so older requests hash the same.
     ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
     ...(draft.salespersonInput !== undefined ? { salespersonId: draft.salespersonInput } : {}),
+    ...(draft.returnInvoiceId !== null ? { returnInvoiceId: draft.returnInvoiceId } : {}),
   };
 }
 
@@ -524,6 +532,7 @@ type StoredHeader = {
   total: string;
   customFields: CustomValues;
   salespersonId: string | null;
+  returnInvoiceId: string | null;
 };
 
 const plain = (value: string) => toPlainString(dec(value));
@@ -541,6 +550,7 @@ function headerState(creditNote: StoredHeader): string {
     plain(creditNote.total),
     customValuesKey(creditNote.customFields),
     creditNote.salespersonId,
+    creditNote.returnInvoiceId,
   ]);
 }
 
@@ -591,6 +601,7 @@ function draftOf(creditNote: CreditNote): DraftDetails {
     })),
     customInput: creditNote.customFields,
     salespersonInput: creditNote.salespersonId,
+    returnInvoiceId: creditNote.returnInvoiceId,
   };
 }
 
@@ -790,10 +801,11 @@ export async function createCreditNote(
     return { created: false, creditNote: await getCreditNote(tx, winner.id) };
   }
   await insertLines(tx, creditNoteId, resolved.resolvedLines);
-  await tx.query("update sales_credit_notes set custom_fields = $2::jsonb, salesperson_id = $3 where id = $1", [
+  await tx.query("update sales_credit_notes set custom_fields = $2::jsonb, salesperson_id = $3, return_invoice_id = $4 where id = $1", [
     creditNoteId,
     JSON.stringify(resolved.customFields),
     resolved.salespersonId,
+    resolved.returnInvoiceId,
   ]);
   await writeAuditEvent(tx, {
     eventType: "credit_note.created",
@@ -831,6 +843,7 @@ export async function updateCreditNote(
     lines: input.lines === undefined ? saved.lines : input.lines,
     customFields: input.customFields === undefined ? saved.customInput : input.customFields,
     salespersonId: input.salespersonId === undefined ? saved.salespersonInput : input.salespersonId,
+    returnInvoiceId: input.returnInvoiceId === undefined ? saved.returnInvoiceId : input.returnInvoiceId,
   });
   const resolved = await resolveDraft(
     tx,
@@ -853,6 +866,9 @@ export async function updateCreditNote(
   }
   if (customValuesKey(resolved.customFields) !== customValuesKey(current.customFields)) {
     changed.push("customFields");
+  }
+  if (resolved.returnInvoiceId !== current.returnInvoiceId) {
+    changed.push("returnInvoiceId");
   }
   if (resolved.salespersonId !== current.salespersonId) {
     changed.push("salespersonId");
@@ -877,10 +893,11 @@ export async function updateCreditNote(
   );
   await tx.query("delete from sales_credit_note_lines where credit_note_id = $1", [current.id]);
   await insertLines(tx, current.id, resolved.resolvedLines);
-  await tx.query("update sales_credit_notes set custom_fields = $2::jsonb, salesperson_id = $3 where id = $1", [
+  await tx.query("update sales_credit_notes set custom_fields = $2::jsonb, salesperson_id = $3, return_invoice_id = $4 where id = $1", [
     current.id,
     JSON.stringify(resolved.customFields),
     resolved.salespersonId,
+    resolved.returnInvoiceId,
   ]);
   await writeAuditEvent(tx, {
     eventType: "credit_note.updated",
@@ -1033,6 +1050,15 @@ export async function approveCreditNote(
       : [{ accountCode: accounts.gst, debitAmount: resolved.taxTotal, creditAmount: "0", description: "GST" }]),
     { accountCode: accounts.receivable, debitAmount: "0", creditAmount: resolved.total, description: customer },
   ];
+  // Stock items move stock and post cost of sales in the same journal (ST1-ST11).
+  const stock = await planDocumentStock(
+    tx,
+    "credit_note",
+    { id: creditNoteId, date: current.creditNoteDate, reference: creditNoteNumber, contactId: current.contactId, returnInvoiceId: current.returnInvoiceId },
+    resolved.resolvedLines,
+    `Stock returned, credit note ${creditNoteNumber}`,
+  );
+  if (stock) journalLines.push(...stock.journalLines);
   const posted = await postJournalBody(
     tx,
     "sales_credit_note:approval",
@@ -1045,6 +1071,7 @@ export async function approveCreditNote(
     }),
     { origin: "sales_credit_note" },
   );
+  await stock?.planner.record(posted.journal.id);
 
   try {
     await tx.query(
@@ -1140,6 +1167,13 @@ export async function voidCreditNote(
   }
 
   const original = await getJournal(tx, current.approvalJournalId!);
+  const voidStock = await planDocumentVoid(
+    tx,
+    "credit_note",
+    { id: creditNoteId, date: voidDate, reference: `VOID-${original.reference}`.slice(0, 100) },
+    (lineIndex) => current.lines[lineIndex]?.tracking ?? {},
+    `Stock back on void of ${original.reference}`,
+  );
   const posted = await postJournalBody(
     tx,
     "sales_credit_note:void",
@@ -1148,16 +1182,20 @@ export async function voidCreditNote(
       postingDate: voidDate,
       reference: `VOID-${current.creditNoteNumber}`,
       description: `Void of credit note ${current.creditNoteNumber}`,
-      lines: original.lines.map((line) => ({
-        accountCode: line.accountCode,
-        debitAmount: line.creditAmount,
-        creditAmount: line.debitAmount,
-        description: line.description,
-        tracking: line.tracking,
-      })),
+      lines: [
+        ...original.lines.map((line) => ({
+          accountCode: line.accountCode,
+          debitAmount: line.creditAmount,
+          creditAmount: line.debitAmount,
+          description: line.description,
+          tracking: line.tracking,
+        })),
+        ...(voidStock?.journalLines ?? []),
+      ],
     }),
     { origin: "sales_credit_note", relatedJournalId: original.id, correctionKind: "reversal" },
   );
+  await voidStock?.planner.record(posted.journal.id);
 
   try {
     await tx.query(

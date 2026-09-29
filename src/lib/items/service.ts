@@ -557,6 +557,16 @@ export async function createItem(
     throw new ValidationError("Add the item first, then its units, then choose its sale and purchase units.");
   }
   assertAdvancedExtras(parsed, null, await advancedFeaturesOn(tx));
+  if (parsed.itemType === "stock") {
+    // Stock entered on the Stock screen before the item existed is kept under the code as it was typed.
+    const earlier = await tx.query<{ item_code: string }>(
+      "select item_code from inventory_movements where lower(item_code) = lower($1) and item_code <> $1 limit 1",
+      [parsed.code],
+    );
+    if (earlier.rows[0]) {
+      throw new ValidationError(`There's already stock recorded as ${earlier.rows[0].item_code}. Use that code exactly, so the item shares that stock.`);
+    }
+  }
   const refs: ResolvedRefs = {
     incomeAccountId: await resolveAccount(tx, parsed.incomeAccountCode, "income", null),
     purchaseAccountId: await resolveAccount(tx, parsed.purchaseAccountCode, "purchase", null),
@@ -615,7 +625,7 @@ export async function updateItem(tx: OrgTx, itemIdInput: unknown, input: ItemInp
   const current = await getItem(tx, itemId);
   const parsed = parseItem(input, current);
   assertAdvancedExtras(parsed, current, await advancedFeaturesOn(tx));
-  await assertTypeChangeAllowed(tx, current, parsed.itemType);
+  await assertTypeChangeAllowed(tx, current, parsed.itemType, parsed.code);
   await checkUnits(tx, itemId, parsed, current);
   const kept = await currentRefs(tx, itemId);
   const refs: ResolvedRefs = {
@@ -666,7 +676,14 @@ export async function updateItem(tx: OrgTx, itemIdInput: unknown, input: ItemInp
  * meant, so it's refused once any document line uses it (IT1). Hook for
  * stock tracking to add its own rule.
  */
-async function assertTypeChangeAllowed(tx: OrgTx, current: Item, nextType: ItemType): Promise<void> {
+async function assertTypeChangeAllowed(tx: OrgTx, current: Item, nextType: ItemType, nextCode: string): Promise<void> {
+  // Stock is kept by item code (ST1-ST3), so a stock item with stock movements keeps its code and type.
+  if (current.itemType === "stock" && (nextType !== "stock" || nextCode !== current.code)) {
+    const moved = await tx.query("select 1 from inventory_movements where item_code = $1 limit 1", [current.code]);
+    if (moved.rowCount !== 0) {
+      throw new ConflictError(`${current.code} has stock movements, so its code and type can't change. Archive it and add a new item.`);
+    }
+  }
   if (current.itemType === nextType) return;
   const used = await tx.query(
     `select 1 from sales_invoice_lines where item_id = $1

@@ -5,7 +5,7 @@ has real numbers and a matching automated test, so "approved" means "a test
 proves it". Test names start with the example IDs they cover:
 
 - `tests/unit/decimal.test.ts` (R1, R3), `tests/unit/costing.test.ts`
-  (W1-W12, pure costing maths) and `tests/unit/invoice-amounts.test.ts`
+  (W1-W12 and ST10, ST11, pure costing maths) and `tests/unit/invoice-amounts.test.ts`
   (I1-I6 and B1-B4, pure invoice and bill maths; CP1, CP2 and CP4 paid
   status; CN2, CN10 credit note maths and CN2-CN4, CN6-CN8 credit and paid
   status) and `tests/unit/gst-return.test.ts` (G1, G2, G5-G9, G11, G12,
@@ -34,6 +34,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/salespeople.test.ts` (SR1-SR8) and
   `tests/integration/customers.test.ts` (RC1-RC12) and
   `tests/integration/items.test.ts` (IT1-IT9) and
+  `tests/integration/stock.test.ts` (ST1-ST12) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM9) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9), all against a real
   PostgreSQL database
@@ -87,10 +88,89 @@ Quantities allow up to 4 decimal places, unit costs up to 6.
 - **Backdating**: a stock movement dated before the item's latest movement is
   refused with a clear message. Supporting it means re-costing every later
   movement and adjusting their journals; that is designed but not built.
-- **Negative stock**: always refused. Migrated negative balances aren't
-  supported.
+- **Negative stock**: refused unless the organisation allows it (ST9-ST12).
 - **Late landed cost allocated partly to already-sold stock**: landed cost is
   added to the stock currently on hand only.
+
+## Stock tracking (items on documents)
+
+Approved by the owner (30 Sep 2026) as ST1-ST12. Stock items (IT1) on bills,
+invoices and credit notes move stock, costed at weighted average (W1-W12),
+in the same transaction as the document's journal. GST 15%. Accounts: 1100
+accounts receivable, 1400 inventory, 2000 accounts payable, 2100 GST, 4000
+sales, 5000 cost of goods sold.
+
+- **Per location**: the weighted average is kept per item and **location**.
+  A location is a value of the Location tracking category (TC1); a stock
+  line's location is its Location tag. Once the Location category has any
+  values, every stock line needs one to be approved; until then (or in an
+  organisation that never uses locations) each item has **one default
+  pool**. Stock entered on the Stock screen can name a location too.
+- **Stock lines on bills and supplier credit notes** go to the inventory
+  account (1400), and nothing else can: a stock item on another account, or
+  a non-stock line on 1400, is refused, and so are manual journals and
+  corrections that touch 1400, and stock movements to any other account. So
+  stock always equals account 1400 to the cent.
+- **Cost of sales** is posted when the invoice is approved, dated the
+  invoice date (there are no sales orders or fulfilment yet), in the
+  invoice's own journal: Dr 5000 / Cr 1400, the 5000 line tagged like the
+  invoice line.
+- **Units** (IT5): stock is kept in the item's base unit. **Kits** (IT7):
+  selling a kit takes each stock item in it out of stock; its income goes to
+  the kit's income account.
+- **Voiding** puts stock back exactly: an invoice's stock comes back at the
+  value it went out at, and a bill's goes back out at the value it came in
+  at. A bill (or sales credit note) whose stock has moved since can't be
+  voided yet (that needs re-costing later movements). Backdating is refused
+  as before.
+- **Negative stock** is a setting per organisation, **off** by default.
+
+| ID | What happens | Journal |
+| --- | --- | --- |
+| ST1 | Bill: 10 Widgets @ 5.00 + GST into Dunedin | Dr 1400 **50.00** / Dr 2100 **7.50** / Cr 2000 **57.50**. Dunedin holds 10 worth **50.00** |
+| ST2 | After ST1, invoice: 4 Widgets @ 12.00 + GST from Dunedin | Dr 1100 **55.20** / Cr 4000 **48.00** / Cr 2100 **7.20**, and Dr 5000 **20.00** / Cr 1400 **20.00**, all on the invoice date. Dunedin: 6 worth 30.00 |
+| ST3 | Dunedin 10 @ 5.00 and Auckland 10 @ 7.00; invoice 1 Widget @ 12.00 from Auckland | Cost of sales **7.00** (not 6.00): Dr 5000 7.00 / Cr 1400 7.00. Auckland 9 worth 63.00; Dunedin unchanged |
+| ST4 | Void ST2's invoice | Dr 4000 48.00 / Dr 2100 7.20 / Cr 1100 55.20 and Dr 1400 **20.00** / Cr 5000 **20.00** on the void date. Dunedin back to 10 worth 50.00 |
+| ST5 | After ST2, bill 6 more @ 8.00 (Dunedin 12 worth 78.00, average 6.50); credit note returning 1 of ST2's 4, from that invoice, @ 12.00 + GST | Dr 4000 12.00 / Dr 2100 1.80 / Cr 1100 13.80 and Dr 1400 **5.00** / Cr 5000 **5.00** (the original 5.00, not 6.50). Dunedin 13 worth 83.00. Returning 4 more from that invoice is refused (only 3 left); the invoice can't be voided until the credit note is; voiding the credit note takes the unit out again at 5.00 |
+| ST6 | Invoice and bill lines for a service and a non-stock item | No 1400 or 5000 lines; no stock moves |
+| ST7 | Widget has "Box of 12"; after a bill of 30 each @ 5.00, invoice 2 Box of 12 | 24 each leave stock: Dr 5000 **120.00** / Cr 1400 **120.00**; 6 left worth 30.00 |
+| ST8 | Gift set = 1 Widget + 2 Candles (Widget 5.00, Candle 2.00 each on hand); invoice 1 Gift set @ 30.00 + GST | Dr 1100 34.50 / Cr 4100 **30.00** (the kit's income account) / Cr 2100 4.50, and Dr 5000 **9.00** / Cr 1400 **9.00**; 1 Widget and 2 Candles leave stock |
+| ST9 | Negative stock off; 2 on hand; invoice 3 | Approval **refused** ("Stock can't go negative"); the draft stays a draft and no number is used |
+| ST10 | Negative stock on; 2 on hand worth 10.00; invoice 3, then bill 4 @ 6.00 | Invoice: Dr 5000 **15.00** / Cr 1400 **15.00**, leaving **-1 worth -5.00**. Bill: Dr 1400 24.00 / Dr 2100 3.60 / Cr 2000 27.60 and Dr 5000 **1.00** / Cr 1400 **1.00** on the bill date, leaving **3 worth 18.00** |
+| ST11 | Negative stock on; item never received here, purchase price 4.00; invoice 2 | Costed at 4.00: Dr 5000 **8.00** / Cr 1400 **8.00**, leaving -2 worth -8.00. With no purchase price it's **refused** ("no cost to use for it") |
+| ST12 | After ST10's invoice (before the bill) turn negative stock off | **Refused** while anything is below zero; allowed once the bill has brought it back to 3 |
+
+- **ST10 rule**: stock coming in while below zero first fills the shortfall;
+  the filled units' share of what came in, less the value they went out at,
+  goes to cost of sales on the receipt's date. If it doesn't fill the whole
+  shortfall, the stock value moves by the issued value of the units filled
+  and the rest goes to cost of sales. With nothing on hand, stock going out
+  is costed at the last cost it came in at there, else the item's purchase
+  price (ST11); already below zero, at the current average.
+- **Supplier credit notes** returning stock take it out at the location's
+  average (W's supplier return); the line's net amount is credited to 1400,
+  and any difference between it and the stock's value goes to cost of
+  sales. After ST5 (the credit note voided, Dunedin 12 worth 78.00), a
+  supplier credit note for 2 Widgets @ 8.00 + GST posts Dr 2000 **18.40** /
+  Cr 1400 **16.00** / Cr 2100 **2.40**, and Dr 1400 **3.00** / Cr 5000
+  **3.00** (they were carried at 6.50 each), leaving 10 worth 65.00.
+- **Transfers between locations** aren't built yet (see below).
+- **Stock equals the ledger**: across ST1-ST11 the stock report's total
+  equals account 1400 on the trial balance, to the cent (tested).
+
+### Not supported yet (refused rather than guessed)
+
+- **Transfers between locations**: not built. Move stock with a stocktake
+  adjustment out of one location and into another, at a cost you give.
+- **Voiding a bill or sales credit note whose stock has moved since**:
+  refused (it needs later movements re-costed).
+- **Credit notes returning stock without the invoice it was sold on**:
+  refused; the credit note names the invoice (to restock at the sale's
+  cost). A price adjustment is a line without the item.
+- **Returning a kit on a credit note**: its parts come back at their sale's
+  cost, from the same invoice.
+- **Bins, lots and serial numbers, assemblies**, and receiving stock without
+  a bill (use a stock movement).
 
 ## Locked periods
 
@@ -422,7 +502,9 @@ code (`src/lib/invoices/amounts.ts`, see "Sales invoices").
   that aren't voided with the same number, ignoring case and spaces.
 - Line accounts are active, base-currency accounts of type expense or direct
   costs, or asset accounts, but not bank, accounts receivable, accounts
-  payable or GST. Tax codes come from the same list as invoices.
+  payable or GST. The inventory account (1400) takes only stock item lines,
+  and stock item lines only go there (ST1). Tax codes come from the same list
+  as invoices.
 - Drafts post nothing. Approving posts one journal dated the bill date: Dr
   each line's account for its net amount, Dr GST (2100) for the GST, Cr
   accounts payable (2000) for the total. There's no GST line when the GST is
@@ -1846,7 +1928,7 @@ Item **WIDGET** "Widget", stock, sale price **12.00**, purchase price
 - **IT2** An invoice to Kobe with a line of only WIDGET and quantity **4**
   is filled in as "Widget", 4 x **12.00** to 4000 with GST. Approving posts
   Dr 1100 **55.20** / Cr 4000 **48.00** / Cr 2100 **7.20**, as any invoice
-  line does. On a draft the price can be changed to 11.50 (net 46.00) and is
+  line does (and, since stock tracking, its cost of sales, ST2). On a draft the price can be changed to 11.50 (net 46.00) and is
   kept. A line without an item still works. A sales credit note filled from
   WIDGET works the same way.
 - **IT3** A bill from Paw Supplies with a line of only "Gift box" (purchase

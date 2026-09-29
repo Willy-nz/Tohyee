@@ -42,7 +42,19 @@ that something happened.
   carrying amounts taken from the ledger and automatic next-day reversal.
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
-  posts its journal in the same transaction.
+  posts its journal in the same transaction. **Stock tracking** (ST1-ST12):
+  stock items on bills, invoices and credit notes move stock with the
+  document's journal, at weighted average **per location** (the line's
+  Location tag; one pool without locations). Bills put stock lines on the
+  inventory account; approving an invoice posts its cost of sales; credit
+  notes restock at the original sale's cost; voids put stock back exactly;
+  units and kits move the right stock. **Negative stock** is a setting (off
+  by default): sales below zero are costed at the average, the last cost or
+  the purchase price, and the bill that fills the shortfall tops up cost of
+  sales. Stock always equals the inventory account (the database and the
+  app keep anything else off it), and the **stock on hand** report shows it
+  by item and location beside the ledger. Transfers between locations
+  aren't built yet.
 - **Reports**: trial balance, profit and loss, balance sheet, stock valuation
   and the GST return (below).
   The financial year end is a setting (default 31 March); the balance sheet
@@ -262,7 +274,8 @@ that something happened.
   pricing items (the level's percent, rounded to cents, or the item's own
   price for that level) from the customer's default level, **supplier
   prices** (one preferred) filling bills, and **kits** (bundles of other
-  items; no kits in kits). See examples IT1-IT9.
+  items; no kits in kits). Stock items move stock (ST1-ST12, above). See
+  examples IT1-IT9.
 - **Two-step sign-in** for everyone: an authenticator app (QR code set-up)
   plus 10 one-use backup codes; wrong-code limits and lockout; lost-phone
   reset by emailed link, by a server admin, or from the command line; new
@@ -295,7 +308,7 @@ isn't acceptable, because people would trust it:
 - amending a filed GST return, imported goods (Customs GST), GST rates other
   than 15%, recording the GST payment or refund to IRD, and filing to IRD
   electronically
-- stock "recomputation"
+- stock "recomputation", and transfers between locations
 
 ## Next, in rough order
 
@@ -305,8 +318,9 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    on them). Invoice and credit note PDFs and emailing come with or after
    these.
 2. Backdated stock movements with proper re-costing.
-3. Stock depth: an item list, locations/bins, lots and serial numbers,
-   variants, assemblies/bundles, stock takes.
+3. Stock depth: transfers between locations, bins, lots and serial
+   numbers, variants, assemblies, stock takes (the item list, locations and
+   kits are built).
 4. NZ payroll, fixed assets, projects and time tracking.
 5. Multi-currency transactions.
 

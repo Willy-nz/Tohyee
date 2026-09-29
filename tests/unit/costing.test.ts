@@ -163,3 +163,46 @@ describe("weighted average costing (worked examples)", () => {
     expect(() => run([{ type: "receipt", quantity: "0.001", unitCost: "1" }])).toThrow(/rounds to zero/);
   });
 });
+
+describe("negative stock and receipts at a value (ST10, ST11)", () => {
+  const allow = { allowNegative: true };
+
+  it("ST10: selling below zero at the average, then a receipt fills the shortfall and tops up cost of sales", () => {
+    const sale = applyMovement({ quantity: "2", value: "10" }, { type: "issue", quantity: "3" }, 2, allow);
+    expect(sale).toMatchObject({ valueDelta: "-15", quantityAfter: "-1", valueAfter: "-5", costAdjustment: "0" });
+    const bill = applyMovement({ quantity: "-1", value: "-5" }, { type: "receipt", quantity: "4", value: "24" }, 2, allow);
+    expect(bill).toMatchObject({ valueDelta: "23", costAdjustment: "1", quantityAfter: "3", valueAfter: "18" });
+    // Exactly filling the shortfall.
+    expect(applyMovement({ quantity: "-1", value: "-5" }, { type: "receipt", quantity: "1", value: "6" }, 2, allow)).toMatchObject({
+      valueDelta: "5",
+      costAdjustment: "1",
+      quantityAfter: "0",
+      valueAfter: "0",
+    });
+    // Filling only part of it: the value moves by the issued value of the units filled.
+    expect(applyMovement({ quantity: "-3", value: "-15" }, { type: "receipt", quantity: "1", value: "6" }, 2, allow)).toMatchObject({
+      valueDelta: "5",
+      costAdjustment: "1",
+      quantityAfter: "-2",
+      valueAfter: "-10",
+    });
+    // Without the setting it's refused (W7, ST9).
+    expect(() => applyMovement({ quantity: "2", value: "10" }, { type: "issue", quantity: "3" }, 2)).toThrow(/Stock can't go negative/);
+  });
+
+  it("ST11: nothing on hand is costed at the fallback cost; with none it's refused", () => {
+    expect(
+      applyMovement({ quantity: "0", value: "0" }, { type: "issue", quantity: "2" }, 2, { allowNegative: true, fallbackUnitCost: "4" }),
+    ).toMatchObject({ valueDelta: "-8", quantityAfter: "-2", valueAfter: "-8" });
+    expect(() => applyMovement({ quantity: "0", value: "0" }, { type: "issue", quantity: "2" }, 2, { allowNegative: true, fallbackUnitCost: null })).toThrow(
+      /no cost to use for it/,
+    );
+  });
+
+  it("ST1, ST4: a receipt at a line's value, and an exact reversal", () => {
+    const receipt = applyMovement({ quantity: "0", value: "0" }, { type: "receipt", quantity: "3", value: "10" }, 2);
+    expect(receipt).toMatchObject({ valueDelta: "10", unitCost: "3.333333", quantityAfter: "3", valueAfter: "10" });
+    const undo = applyMovement({ quantity: "3", value: "10" }, { type: "reversal", quantityDelta: "3", valueDelta: "10", costAdjustment: "0" }, 2);
+    expect(undo).toMatchObject({ quantityAfter: "0", valueAfter: "0" });
+  });
+});
