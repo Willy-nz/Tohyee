@@ -36,8 +36,12 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/items.test.ts` (IT1-IT9) and
   `tests/integration/stock.test.ts` (ST1-ST12) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM9) and
-  `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9), all against a real
-  PostgreSQL database
+  `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
+  `tests/integration/reports-ledger.test.ts` (AGP1-AGP3, ATX1-ATX5,
+  JR1-JR3) and `tests/integration/gst-audit.test.ts` (GA1-GA4) and
+  `tests/integration/customer-statements.test.ts` (CST1-CST5), all against
+  a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
+  ageing maths (AGP1, CST1)
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -2192,3 +2196,267 @@ Ana as an admin and Vic as a viewer.
   Ltd, and a file on journal #1 (e.g. the signed board minute behind it).
 - **NF14** A note or file for a record that doesn't exist (e.g. invoice
   999999) is refused as not found, and an unknown record type is refused.
+
+## Aged payables (examples not yet approved by Jess)
+
+Written overnight from Xero's aged payables and NZ practice, as the mirror of
+aged receivables (RC9-RC11); Jess hasn't approved them yet. What the
+organisation owes each supplier as at a date: each approved bill's amount
+due (its total less supplier payments and supplier credit applied on or
+before the date, not voided or removed by then), put in a bucket by days
+past its **due date** (current, 1-30, 31-60, 61-90, over 90; a bill due on
+the date is current), less supplier credit notes not yet applied or
+refunded. Bills dated after the date, or voided on or before it, don't
+count. Supplier overpayments and prepayments aren't built, so supplier
+credit notes are the only credit. The total equals accounts payable (2000)
+on the balance sheet at the date; the report shows the ledger balance
+beside it and any difference. Viewers can see it. Suppliers have no parents,
+so there's no roll-up.
+
+Setup: GST 15%. Paw Supplies: bill PS-101, 200.00 + GST = **230.00**, dated
+1 Mar 2026, due 31 Mar, with **30.00** paid on 10 Apr. Kiwi Freight: bill
+KF-1, 300.00 + GST = **345.00**, dated 1 May, due 15 May; bill KF-2,
+100.00 + GST = 115.00, dated 1 May, due 15 May, voided 10 May; supplier
+credit note KF-CR1, 20.00 + GST = **23.00**, dated 1 Jun, not applied.
+Rata Print: bill RP-1, 100.00 + GST = **115.00**, dated 20 Jun, due 20 Jul;
+RP-2, 200.00 + GST = **230.00**, dated 21 Jul, due 20 Aug; RP-3 dated
+5 Aug.
+
+- **AGP1** As at **31 July 2026**: PS-101 **200.00** (122 days, over 90);
+  KF-1 **345.00** (77 days, 61-90) and KF-CR1 credit **23.00**; RP-1
+  **115.00** (11 days, 1-30); RP-2 **230.00** (current). KF-2 (voided) and
+  RP-3 (dated later) don't count. Totals: current **230.00**, 1-30
+  **115.00**, 31-60 **0.00**, 61-90 **345.00**, over 90 **200.00**, credit
+  **23.00**, total **867.00**, the same as account 2000 on the balance sheet
+  at 31 July 2026 (difference **0.00**). Rows by name: Kiwi Freight
+  **322.00**, Paw Supplies **200.00**, Rata Print **345.00**; each opens to
+  its bills and credit.
+- **AGP2** As at **30 June 2026**: RP-1 is current (**115.00**), KF-1 is 46
+  days overdue (31-60, **345.00**), PS-101 91 days (over 90, **200.00**),
+  credit **23.00**, total **637.00** (= 2000 at 30 June).
+- **AGP3** Later changes don't rewrite an earlier date: KF-CR1's 23.00
+  applied to KF-1 on 5 Aug leaves Kiwi Freight at **322.00** as at 31 July
+  (345.00 due, 23.00 credit) and at 5 Aug (**322.00** due, no credit).
+  Voiding PS-101's payment on 10 Aug leaves Paw Supplies at **200.00** as
+  at 31 July; as at 10 Aug it's **230.00**.
+
+### Not supported yet (refused rather than guessed)
+
+- Ageing by bill date instead of due date (Xero offers both; this uses the
+  due date, like aged receivables).
+- Supplier overpayments and prepayments (not built, waiting on Jess's GST
+  decision), and parent suppliers.
+
+## Account transactions (examples not yet approved by Jess)
+
+Written overnight from Xero's account transactions report (general ledger
+detail); Jess hasn't approved them yet. For one account, or every account,
+and a date range: the **opening balance** (every posting before the start
+date), each **posted journal line** in the range in date order (date, the
+source with a link to it, description, contact, debit, credit and the
+running balance), and the **closing balance**. Balances are debits less
+credits, so a credit balance is negative (shown as "Cr" on screen); each
+account's closing balance is its trial balance line at the end date, and
+its debits less credits are the trial balance's movement over the range.
+Voids and corrections are their own lines on their own dates; nothing is
+netted off. Without a start date the range starts at the beginning of the
+end date's financial year. With Advanced reporting's tracking on, a
+**tracking filter** (a value and everything under it, like the custom
+profit and loss, TC8) keeps only lines tagged with it, opening balance
+included. With every account, accounts with no balance and no lines are left
+out. Viewers can see it.
+
+Setup (31 March year end, GST 15%): a manual journal OPEN on 15 Mar 2026,
+Dr 1000 **5,000.00** / Cr 3000 **5,000.00**. INV-0001 to Kobe Ltd, 100.00 +
+GST = **115.00**, dated 10 Apr; paid **115.00** into 1000 on 20 Apr. Bill
+PS-101 from Paw Supplies, 200.00 + GST = **230.00** to 6010, dated 25 Apr
+(approved by a bookkeeper); paid **230.00** from 1000 on 15 May. INV-0002 to
+Kobe Ltd, 50.00 + GST = **57.50**, dated 30 Apr, voided 5 May.
+
+- **ATX1** Account 1000, 1 Apr - 31 May 2026: opening **5,000.00**; 20 Apr
+  "Payment on invoice INV-0001", Kobe Ltd, debit **115.00**, balance
+  **5,115.00**; 15 May "Payment of bill PS-101", Paw Supplies, credit
+  **230.00**, balance **4,885.00**; closing **4,885.00**, debits **115.00**,
+  credits **230.00**. The trial balance at 31 May has 1000 at a debit of
+  4,885.00, and 5,000.00 + 115.00 - 230.00 = 4,885.00. Each line links to
+  its invoice or bill.
+- **ATX2** Account 4000, same range: opening **0.00**; 10 Apr "Invoice
+  INV-0001" credit **100.00**, balance **-100.00**; 30 Apr "Invoice
+  INV-0002" credit **50.00**, balance **-150.00**; 5 May "Void of invoice
+  INV-0002" debit **50.00**, balance **-100.00**; closing **-100.00** (the
+  trial balance's credit of 100.00).
+- **ATX3** Every account, to 31 May with no start date (so from **1 Apr
+  2026**): 1000 **4,885.00**, 1100 **0.00** (four lines), 2000 **0.00**,
+  2100 **15.00** (Cr 15.00, Dr 30.00, Cr 7.50, Dr 7.50), 3000
+  **-5,000.00** (opening only, no lines), 4000 **-100.00**, 6010
+  **200.00**; nothing else is listed. Debits and credits in the range are
+  both **805.00** (the six journals' totals), and every closing balance
+  matches the trial balance at 31 May.
+- **ATX4** Tracking (Advanced reporting on; Location Otago > Dunedin, and
+  Canterbury): INV-0001 of 12 May has a line of 100.00 tagged Dunedin and a
+  line of 40.00 tagged Canterbury, both to 4000. Account 4000 filtered to
+  Location: **Otago**: one line, credit **100.00**, closing **-100.00**;
+  filtered to Canterbury: credit **40.00**; unfiltered: both lines,
+  closing **-140.00**. A value from another category is refused.
+- **ATX5** Corrections: a manual journal "Fees" on 1 May, Dr 6010 **80.00** /
+  Cr 1000 80.00, corrected on 10 May to 6100. Account 6010 for May: opening
+  **200.00** (PS-101); 1 May "Manual journal Fees" debit **80.00**
+  (**280.00**); 10 May "Reversal REV-Fees" credit **80.00** (**200.00**);
+  closing **200.00**. Account 6100: 10 May "Replacement Fees" debit
+  **80.00**. Each links to its journal.
+
+### Not supported yet (refused rather than guessed)
+
+- Filtering by contact or by source type, and exporting to CSV or Excel
+  (the browser's print works).
+- Foreign-currency amounts (journals are in the base currency).
+
+## Journal report (examples not yet approved by Jess)
+
+Written overnight from Xero's journal report; Jess hasn't approved it yet.
+Every journal posted in a date range, oldest first (by date, then the order
+they were posted), each with its lines (account, description, debit,
+credit, tracking), where it came from (the document, payment, refund or
+bank transaction, with a link, or the journal itself), and who posted it
+and when. "Who" is the signed-in user stored on the journal when it's
+posted, the same person as its `ledger.journal_posted` audit event; for a
+document that's whoever approved, paid, voided or refunded it. Each journal
+balances, so the report's debits equal its credits. At most 2,000 journals
+are listed; the report says when there are more and asks for a shorter
+range. Viewers can see it.
+
+Setup: the account transactions setup (ATX).
+
+- **JR1** 1 Apr - 31 May 2026: six journals, in order: 10 Apr "Invoice
+  INV-0001" (Dr 1100 115.00 / Cr 4000 100.00 / Cr 2100 15.00); 20 Apr
+  "Payment on invoice INV-0001" (Dr 1000 / Cr 1100 115.00); 25 Apr "Bill
+  PS-101" (Dr 6010 200.00 / Dr 2100 30.00 / Cr 2000 230.00), posted by the
+  **bookkeeper** who approved it; 30 Apr "Invoice INV-0002" (57.50); 5 May
+  "Void of invoice INV-0002" (57.50 the other way); 15 May "Payment of bill
+  PS-101" (230.00). Debits and credits both **805.00**. Each journal's
+  "posted by" is the same user as its audit event.
+- **JR2** From 1 Mar 2026 the OPEN journal (15 Mar, **5,000.00**, "Manual
+  journal OPEN") comes first and the totals are **5,805.00**. 1-30 June has
+  no journals (totals **0.00**). A start date after the end date is refused.
+- **JR3** Corrections list the reversal and the replacement as their own
+  journals (ATX5): 1 May "Manual journal Fees", 10 May "Reversal REV-Fees"
+  and "Replacement Fees".
+
+## GST audit report (examples not yet approved by Jess)
+
+Step 5 of the NetSuite-style plan (TODO item 8), written overnight from
+NetSuite's GST audit trail and IRD's record-keeping rules (records must show
+how each return was worked out); Jess hasn't approved it yet. For a GST
+period on the organisation's basis (or a filed return, as it was filed), it
+lists every document and amount behind Box 5, Box 6 and Box 11, the Box 9
+and Box 13 adjustments, and the boxes worked out from them (7, 8, 10, 12, 14,
+15). It doesn't count anything itself: it groups the GST return's own counted
+lines (G1-G22) into one entry per document per event (approved, voided, or
+each payment, credit or refund on the payments and hybrid bases, with what
+was settled of the document's total), so each box's list adds up to the box
+to the cent. Lines left out of every box (no tax, exempt, out of scope,
+zero-rated purchases) are listed separately. Viewers can see it.
+
+Setup (invoice basis, Apr-May 2026; GST 15% and zero rated): INV-0001
+(I1, **115.00**) 10 Apr; INV-0002 (I5: 100.00 standard + 50.00 zero rated,
+**165.00**) 12 Apr; INV-0003 (no tax, **80.00**) 14 Apr; INV-0004
+(**115.00**) 20 Apr, voided 15 May; CN-0001 (**23.00**) 5 May; spend money
+**57.50** including GST (petrol) 3 Apr; bill S-1 (B1, **230.00**) 12 Apr;
+supplier credit note CR-7 (**46.00**) 16 Apr.
+
+- **GA1** Box 5 **257.00**: INV-0001 115.00, INV-0002 165.00 (2 lines),
+  INV-0004 115.00 (approved 20 Apr) and **-115.00** (voided 15 May),
+  CN-0001 **-23.00**. Box 6 **50.00**: INV-0002 50.00. Box 7 **207.00**,
+  Box 8 **27.00**. Box 11 **241.50**: the spend money 57.50, S-1 230.00,
+  CR-7 **-46.00**; Box 12 **31.50**. Box 15 **-4.50**. Left out: INV-0003
+  **80.00**. Every figure equals the GST return for the same period.
+- **GA2** With a Box 9 adjustment "Bad debt recovered" **3.00** and a Box 13
+  "Change of use" **1.50**: both listed; Box 10 **30.00**, Box 14
+  **33.00**, Box 15 **-3.00**, the same as the return with them.
+- **GA3** Payments basis (G11): I5 dated 10 Apr and paid **82.50** on
+  15 Apr; B1 paid **115.00** on 20 May. Box 5 **82.50**: one entry
+  "Customer payment" of 82.50 settled of 165.00; Box 6 **25.00**; Box 11
+  **115.00** ("Supplier payment", 115.00 of 230.00); Box 15 **-7.50**. On
+  the hybrid basis the same documents give Box 5 **165.00** (INV-0001
+  approved), Box 6 **50.00**, Box 11 **115.00**, Box 15 **0.00**.
+- **GA4** A filed return is audited as it was filed: with I1 and B1 filed
+  for Apr-May, a bill for **115.00** dated 10 May approved afterwards isn't
+  in the filed return's Box 11 list (**230.00**, one entry), but is in the
+  list worked out now (**345.00**, two entries).
+
+### Not supported yet (refused rather than guessed)
+
+- Adjustments are listed as typed (description and amount); there's no
+  document behind them to link to.
+- Exporting the audit report to a file (the browser's print works).
+
+## Customer statements (examples not yet approved by Jess)
+
+Written overnight from Xero's customer statements; Jess hasn't approved them
+yet. Two kinds, for one customer:
+
+- **Activity**, for a date range: the balance owed the day before the start
+  (the same figure aged receivables gives at that date), each invoice,
+  credit note, payment, refund and their voids in the range in date order,
+  what each adds to or takes off the balance, and the closing balance.
+  Payments are the whole amount received (an overpayment is part of it); a
+  payment for several invoices is one line. Applying credit or an
+  overpayment to an invoice moves nothing between the customer and the
+  organisation, so it isn't a line.
+- **Outstanding**, as at a date: each invoice still owed (its total and
+  what's left), and each credit note or overpayment with credit not yet
+  used (as a negative amount), and the balance.
+
+Both end with the balance **aged** as at the statement's (end) date by each
+invoice's due date (current, 1-30, 31-60, 61-90, over 90), less unused
+credit, the same buckets as aged receivables. With **include
+sub-customers**, a parent's statement covers it and every customer under it
+(RC8), each line naming its customer. A contact that isn't a customer is
+refused. Statements are printed (or saved as PDF) with the browser's print;
+emailing them isn't built. Viewers can see them.
+
+Setup (GST 15%): Kobe Group Ltd is the parent of Kobe Auckland and Kobe
+Dunedin. Kobe Auckland: INV-0001 **230.00** dated 15 May 2026, due 15 Jun;
+INV-0002 **115.00** dated 1 Jun, due 1 Jul; a payment of **100.00** on
+INV-0001 on 10 Jun; CN-0001 **23.00** on 12 Jun (not applied); INV-0003
+**57.50** dated 15 Jun, voided 20 Jun; a payment of **125.00** on INV-0002
+on 25 Jun (**10.00** of it an overpayment); **11.50** of CN-0001 refunded on
+28 Jun. Kobe Dunedin: INV-0004 **115.00** dated 20 Jun, due 20 Jul.
+
+- **CST1** Kobe Auckland's activity statement, 1-30 June 2026: opening
+  **230.00**; 1 Jun Invoice INV-0002 +115.00 (**345.00**); 10 Jun Payment
+  on INV-0001 -100.00 (**245.00**); 12 Jun Credit note CN-0001 -23.00
+  (**222.00**); 15 Jun Invoice INV-0003 +57.50 (**279.50**); 20 Jun Invoice
+  INV-0003 voided -57.50 (**222.00**); 25 Jun Payment on INV-0002 -125.00
+  (**97.00**); 28 Jun Refund of credit note CN-0001 +11.50 (**108.50**).
+  Added **184.00**, taken off **305.50**, closing **108.50**. Ageing at
+  30 June: 1-30 **130.00** (INV-0001, 15 days), credit **21.50**, total
+  **108.50**, the same as Kobe Auckland on aged receivables at 30 June.
+- **CST2** Kobe Auckland's outstanding statement as at 30 June 2026:
+  INV-0001 (230.00, **130.00** left, 15 days overdue); CN-0001 (23.00,
+  **-11.50**); overpayment on INV-0002 (10.00, **-10.00**); balance
+  **108.50**, with the same ageing.
+- **CST3** Kobe Group Ltd with sub-customers, 1-30 June: opening **230.00**
+  (Kobe Auckland's); the CST1 lines plus 20 Jun Invoice INV-0004 +115.00
+  (Kobe Dunedin); closing **223.50**; ageing current **115.00**, 1-30
+  **130.00**, credit **21.50**, total **223.50**, the same as Kobe Group
+  Ltd's rolled-up total on aged receivables at 30 June. Without
+  sub-customers, Kobe Group Ltd's own statement is opening **0.00**, no
+  lines, closing **0.00**.
+- **CST4** Kobe Dunedin, 1-31 July: INV-0005 **57.50** dated 1 Jul, due
+  31 Jul; one payment of **172.50** for INV-0004 and INV-0005 on 5 Jul,
+  voided 8 Jul. Opening **115.00**; 1 Jul Invoice INV-0005 +57.50
+  (**172.50**); 5 Jul Payment -172.50 (**0.00**); 8 Jul Payment voided
+  +172.50 (**172.50**); closing **172.50**; ageing at 31 July: current
+  **57.50**, 1-30 **115.00** (11 days), total **172.50**.
+- **CST5** Refused: a statement for Paw Supplies (a supplier only: "isn't a
+  customer"), and a start date after the end date. A viewer can open both
+  kinds.
+
+### Not supported yet (refused rather than guessed)
+
+- Emailing statements (server email is only set up for security messages;
+  needs Jess's decision), and statements for several customers at once.
+- Foreign-currency statements (invoices are in the base currency).
+- Showing credit and overpayments applied to invoices as lines (they don't
+  change the balance, so they're left out, as in Xero's activity statement).

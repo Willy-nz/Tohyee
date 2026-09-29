@@ -82,6 +82,9 @@ const MENUS: Menu[] = [
           { href: "/operations/reports?report=tb", label: "Trial balance" },
           { href: "/operations/reports?report=stock", label: "Stock valuation" },
           { href: "/operations/reports?report=aged", label: "Aged receivables" },
+          { href: "/operations/reports?report=payables", label: "Aged payables" },
+          { href: "/operations/reports?report=transactions", label: "Account transactions" },
+          { href: "/operations/reports?report=journals", label: "Journal report" },
           { href: "/operations/reports?report=sales", label: "Sales by salesperson", module: "reporting" },
         ],
       },
@@ -128,6 +131,7 @@ const MENUS: Menu[] = [
       {
         links: [
           { href: "/operations/gst-return", label: "GST return" },
+          { href: "/operations/gst-audit", label: "GST audit report" },
           { href: "/operations/tax", label: "Tax codes" },
         ],
       },
@@ -141,6 +145,7 @@ const MENUS: Menu[] = [
           { href: "/operations/contacts", label: "All contacts" },
           { href: "/operations/contacts?type=customers", label: "Customers" },
           { href: "/operations/contacts?type=suppliers", label: "Suppliers" },
+          { href: "/operations/customer-statements", label: "Customer statements" },
         ],
       },
     ],
@@ -178,8 +183,8 @@ const AREAS: Record<string, string[]> = {
     "/operations/settings",
     "/operations/members",
   ],
-  Tax: ["/operations/gst-return", "/operations/tax"],
-  Contacts: ["/operations/contacts"],
+  Tax: ["/operations/gst-return", "/operations/gst-audit", "/operations/tax"],
+  Contacts: ["/operations/contacts", "/operations/customer-statements"],
   CRM: ["/operations/crm"],
 };
 

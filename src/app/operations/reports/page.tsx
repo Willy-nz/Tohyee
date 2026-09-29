@@ -6,6 +6,7 @@ import { Fragment, Suspense, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { AgedReceivablesReport } from "@/components/customers";
+import { AccountTransactionsReport, AgedPayablesReport, JournalReportView } from "@/components/reports/ledger-reports";
 import { CustomReportList, StartCustomReport } from "@/components/reports/custom-report";
 import { SalesBySalespersonReport, useSalespeople } from "@/components/salespeople";
 import { reportCategories, useTracking } from "@/components/tracking";
@@ -472,6 +473,9 @@ const TABS = [
   { key: "tb", label: "Trial balance" },
   { key: "stock", label: "Stock valuation" },
   { key: "aged", label: "Aged receivables" },
+  { key: "payables", label: "Aged payables" },
+  { key: "transactions", label: "Account transactions" },
+  { key: "journals", label: "Journal report" },
   { key: "sales", label: "Sales by salesperson" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
@@ -485,7 +489,7 @@ function StandardReports({ organisationId }: { organisationId: string }) {
   const advanced = useSalespeople(organisationId).data?.advancedFeatures ?? false;
   return (
     <>
-      <div className={ui.tabs} role="tablist" aria-label="Standard reports">
+      <div className={ui.tabs} role="tablist" aria-label="Standard reports" data-print="hide">
         {TABS.filter((entry) => entry.key !== "sales" || advanced || tab === "sales").map((entry) => (
           <button
             key={entry.key}
@@ -504,9 +508,13 @@ function StandardReports({ organisationId }: { organisationId: string }) {
       {tab === "tb" ? <TrialBalanceReport organisationId={organisationId} /> : null}
       {tab === "stock" ? <StockReport organisationId={organisationId} /> : null}
       {tab === "aged" ? <AgedReceivablesReport organisationId={organisationId} /> : null}
+      {tab === "payables" ? <AgedPayablesReport organisationId={organisationId} /> : null}
+      {tab === "transactions" ? <AccountTransactionsReport organisationId={organisationId} /> : null}
+      {tab === "journals" ? <JournalReportView organisationId={organisationId} /> : null}
       {tab === "sales" ? <SalesBySalespersonReport organisationId={organisationId} /> : null}
-      <p className={ui.muted}>
-        The GST return is under <Link href="/operations/gst-return">Tax</Link>.
+      <p className={ui.muted} data-print="hide">
+        The GST return and GST audit report are under <Link href="/operations/gst-return">Tax</Link>; customer statements are under{" "}
+        <Link href="/operations/customer-statements">Contacts</Link>.
       </p>
     </>
   );
@@ -528,7 +536,7 @@ function Reports({ organisationId }: { organisationId: string }) {
   const view: ViewKey = VIEWS.find((entry) => entry.key === params.get("view"))?.key ?? "home";
   return (
     <>
-      <div className={ui.tabs} role="tablist" aria-label="Reports">
+      <div className={ui.tabs} role="tablist" aria-label="Reports" data-print="hide">
         {VIEWS.map((entry) => (
           <button
             key={entry.key}

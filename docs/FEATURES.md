@@ -55,8 +55,9 @@ that something happened.
   app keep anything else off it), and the **stock on hand** report shows it
   by item and location beside the ledger. Transfers between locations
   aren't built yet.
-- **Reports**: trial balance, profit and loss, balance sheet, stock valuation
-  and the GST return (below).
+- **Reports**: trial balance, profit and loss, balance sheet, stock valuation,
+  aged receivables and payables, account transactions, the journal report,
+  customer statements, the GST return and GST audit report (below).
   The financial year end is a setting (default 31 March); the balance sheet
   splits earnings into this year and previous years.
 - **Custom reports** (Reporting, tabs Home, Custom, Drafts, Published and
@@ -83,7 +84,32 @@ that something happened.
   by days past due (current, 1-30, 31-60, 61-90, over 90) less unused
   credit, each row opening to its invoices, and totalling to accounts
   receivable; with "Roll up sub-customers" a parent shows itself and its
-  subs (RC9-RC11). Customer statements aren't built yet.
+  subs (RC9-RC11).
+- **Aged payables** (Reporting; examples AGP1-AGP3, not yet approved by
+  Jess): the same for suppliers, what's owed on each bill as at a date by
+  days past its due date, less supplier credit not yet used, each row
+  opening to its bills and credit, totalling to accounts payable (the
+  ledger's figure is shown beside it).
+- **Account transactions** (Reporting; ATX1-ATX5, not yet approved): the
+  general ledger detail for one account or all of them over a date range:
+  opening balance, every posted line (date, source with a link, description,
+  contact, debit, credit, running balance) and closing balance, tying to the
+  trial balance; voids and corrections are their own lines; with Advanced
+  reporting, only lines tagged with a tracking value (and those under it).
+- **Journal report** (Reporting; JR1-JR3, not yet approved): every journal
+  posted in a date range with its lines, where it came from and who posted
+  it and when.
+- **Customer statements** (Contacts; CST1-CST5, not yet approved): an
+  activity statement for a date range (opening balance, invoices, credit
+  notes, payments, refunds and their voids, closing balance) or an
+  outstanding statement as at a date, both aged by due date at the foot; a
+  parent customer can include its sub-customers. Printed or saved as PDF
+  with the browser's print; emailing them isn't built.
+- **GST audit report** (Tax; GA1-GA4, not yet approved): for a GST period
+  on the organisation's basis, or a filed return as filed, every document
+  behind Box 5, 6 and 11, the Box 9 and 13 adjustments and the lines left
+  out, grouped from the GST return's own lines so each list adds up to its
+  box to the cent. Each of these five reports has "Print or save as PDF".
 - **Tax codes** as settings. Sales invoices and bills apply them; manual
   journals don't.
 - **Sales invoices** in the base currency: drafts that can be edited and
@@ -259,9 +285,9 @@ that something happened.
   company, one of them the primary contact for invoices (also with only this
   module on); **customer groups**; **price levels** (a percent on or off the
   base price, used once items arrive); and **parent customers** (no loops,
-  at most 4 levels) with aged receivables rolled up (RC3-RC12). With it
-  on, items also get NetSuite's extras (below). A GST audit report comes
-  next.
+  at most 4 levels) with aged receivables and customer statements rolled
+  up (RC3-RC12, CST3). With it on, items also get NetSuite's extras
+  (below). The **GST audit report** (step 5, above) is for everyone.
 - **Products and services** (Sales, like Xero's items, for everyone): a
   code (unique ignoring case), name, description, sale and purchase prices,
   income and purchase accounts and sales and purchase tax codes; service,
