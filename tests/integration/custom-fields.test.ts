@@ -371,7 +371,7 @@ describeWithDatabase("custom segments and custom fields", () => {
     expect(saved.customFields).toEqual({ [w.petName.id]: "Rex", [w.channel.id]: w.opt("Market") });
     await w.as((tx) => updateContact(tx, w.kobe.id, { customFields: { [w.petName.id]: "Rex", [w.channel.id]: w.opt("Market") } }));
     await expect(w.as((tx) => updateContact(tx, w.kobe.id, { customFields: { [w.petName.id]: "Max", [w.channel.id]: w.opt("Market") } }))).rejects.toThrow(
-      "advanced features are off, so Pet name can't be set.",
+      "advanced reporting is off, so Pet name can't be set.",
     );
     // Required fields aren't asked for while it's off.
     await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Plain", isCustomer: true }));

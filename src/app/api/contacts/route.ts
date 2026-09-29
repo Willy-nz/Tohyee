@@ -28,6 +28,7 @@ export const POST = route(async (request) => {
       gstNumber: body.gstNumber,
       customFields: body.customFields,
       defaultSalespersonId: body.defaultSalespersonId,
+      isProspect: body.isProspect,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

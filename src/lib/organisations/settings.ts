@@ -15,8 +15,10 @@ export type OrganisationSettings = {
   financialYearEndMonth: number;
   /** For the GST return; nothing else uses it. */
   gstBasis: GstBasis;
-  /** Advanced (ERP) features: tracking categories on lines (examples TC1-TC10). */
+  /** The Advanced reporting module: tracking categories, custom fields and salespeople (TC1-TC10, CF1-CF10, SR1-SR8). */
   advancedFeatures: boolean;
+  /** The CRM module (MOD1, CRM1-CRM9). */
+  crmEnabled: boolean;
   hasPostings: boolean;
 };
 
@@ -28,9 +30,10 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     financial_year_end_month: number;
     gst_basis: GstBasis;
     advanced_features: boolean;
+    crm_enabled: boolean;
     has_postings: boolean;
   }>(
-    `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, advanced_features,
+    `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, advanced_features, crm_enabled,
             exists (select 1 from ledger_journals) as has_postings
        from organisation_settings where id = true`,
   );
@@ -42,6 +45,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     financialYearEndMonth: row.financial_year_end_month,
     gstBasis: row.gst_basis,
     advancedFeatures: row.advanced_features,
+    crmEnabled: row.crm_enabled,
     hasPostings: row.has_postings,
   };
 }
@@ -62,7 +66,7 @@ function parseFinancialYearEndMonth(input: unknown): number {
  */
 export async function updateOrganisationSettings(
   tx: OrgTx,
-  input: { displayName?: unknown; baseCurrency?: unknown; financialYearEndMonth?: unknown; gstBasis?: unknown; advancedFeatures?: unknown },
+  input: { displayName?: unknown; baseCurrency?: unknown; financialYearEndMonth?: unknown; gstBasis?: unknown; advancedFeatures?: unknown; crmEnabled?: unknown },
 ): Promise<OrganisationSettings> {
   const current = await getOrganisationSettings(tx);
   const displayName =
@@ -83,6 +87,10 @@ export async function updateOrganisationSettings(
     throw new ValidationError("advancedFeatures must be true or false.");
   }
   const advancedFeatures = input.advancedFeatures === undefined ? current.advancedFeatures : input.advancedFeatures;
+  if (input.crmEnabled !== undefined && typeof input.crmEnabled !== "boolean") {
+    throw new ValidationError("crmEnabled must be true or false.");
+  }
+  const crmEnabled = input.crmEnabled === undefined ? current.crmEnabled : input.crmEnabled;
 
   if (baseCurrency !== current.baseCurrency && current.hasPostings) {
     throw new ValidationError(
@@ -93,17 +101,17 @@ export async function updateOrganisationSettings(
   await tx.query(
     `update organisation_settings
         set display_name = $1, base_currency = $2, financial_year_end_month = $3, gst_basis = $4,
-            advanced_features = $5, updated_at = now()
+            advanced_features = $5, crm_enabled = $6, updated_at = now()
       where id = true`,
-    [displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures],
+    [displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled],
   );
   await writeAuditEvent(tx, {
     eventType: "organisation.settings_updated",
     entityType: "organisation_settings",
     entityId: tx.organisationId,
-    details: { displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures },
+    details: { displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled },
   });
-  return { ...current, displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures };
+  return { ...current, displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled };
 }
 
 /**

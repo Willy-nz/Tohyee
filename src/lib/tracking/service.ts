@@ -84,7 +84,7 @@ export async function getTrackingSetup(tx: OrgTx): Promise<TrackingSetup> {
 
 async function requireAdvanced(tx: OrgTx): Promise<void> {
   if (!(await advancedFeaturesOn(tx))) {
-    throw new ConflictError("Advanced features are off. Turn them on in Settings first.");
+    throw new ConflictError("Advanced reporting is off. Turn it on in Settings › Modules first.");
   }
 }
 
@@ -312,7 +312,7 @@ export function checkNewTags(ctx: TrackingContext, tags: TrackingTags, label: st
   if (keys.length === 0) return;
   // With the switch off, a document can keep the tags it already had (TC1), but gets no new ones.
   if (!ctx.advancedFeatures && keys.some((key) => !kept.has(tags[key]))) {
-    throw new ValidationError(`${label}: advanced features are off, so lines can't have tracking categories.`);
+    throw new ValidationError(`${label}: advanced reporting is off, so lines can't have tracking categories.`);
   }
   for (const categoryId of keys) {
     const category = ctx.categories.get(categoryId);

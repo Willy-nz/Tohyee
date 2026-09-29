@@ -38,6 +38,8 @@ export type Contact = {
   customFields: CustomValues;
   /** Put on this customer's new invoices and credit notes (SR1). */
   defaultSalespersonId: string | null;
+  /** Someone you hope to sell to (the CRM, CRM1). Can't be invoiced until marked as a customer. */
+  isProspect: boolean;
   isArchived: boolean;
 };
 
@@ -52,9 +54,10 @@ export type ContactInput = {
   gstNumber?: unknown;
   customFields?: unknown;
   defaultSalespersonId?: unknown;
+  isProspect?: unknown;
 };
 
-type ContactDetails = Omit<Contact, "id" | "isArchived" | "customFields" | "defaultSalespersonId">;
+type ContactDetails = Omit<Contact, "id" | "isArchived" | "customFields" | "defaultSalespersonId" | "isProspect">;
 
 const DETAIL_FIELDS = ["name", "isCustomer", "isSupplier", "email", "phone", "postalAddress", "gstNumber"] as const;
 
@@ -70,11 +73,12 @@ type ContactRow = {
   gst_number: string | null;
   custom_fields: CustomValues;
   default_salesperson_id: string | null;
+  is_prospect: boolean;
   is_archived: boolean;
 };
 
 const COLUMNS =
-  "id, request_hash, name, is_customer, is_supplier, email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_archived";
+  "id, request_hash, name, is_customer, is_supplier, email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect, is_archived";
 
 function toContact(row: ContactRow): Contact {
   return {
@@ -88,12 +92,37 @@ function toContact(row: ContactRow): Contact {
     gstNumber: row.gst_number,
     customFields: row.custom_fields ?? {},
     defaultSalespersonId: row.default_salesperson_id,
+    isProspect: row.is_prospect,
     isArchived: row.is_archived,
   };
 }
 
-function rolesOf(details: { isCustomer: boolean; isSupplier: boolean }): CustomFieldUse[] {
-  return [...(details.isCustomer ? (["customer"] as const) : []), ...(details.isSupplier ? (["supplier"] as const) : [])];
+/** A prospect uses the customer fields: it's a customer-to-be. */
+function rolesOf(details: { isCustomer: boolean; isSupplier: boolean; isProspect?: boolean }): CustomFieldUse[] {
+  return [
+    ...(details.isCustomer || details.isProspect ? (["customer"] as const) : []),
+    ...(details.isSupplier ? (["supplier"] as const) : []),
+  ];
+}
+
+async function crmOn(tx: OrgTx): Promise<boolean> {
+  const result = await tx.query<{ crm_enabled: boolean }>("select crm_enabled from organisation_settings where id = true");
+  return result.rows[0]?.crm_enabled === true;
+}
+
+/**
+ * Whether the contact is a prospect (CRM1): only the CRM can make one, but
+ * one that already is stays one with the CRM off. A contact must be a
+ * customer, a supplier or a prospect.
+ */
+async function prospectFlag(tx: OrgTx, input: unknown, details: ContactDetails, current: boolean): Promise<boolean> {
+  const wanted = optionalBoolean(input, "isProspect") ?? current;
+  const crm = wanted !== current || (!details.isCustomer && !details.isSupplier && !wanted) ? await crmOn(tx) : false;
+  if (wanted && !current && !crm) throw new ValidationError("The CRM is off, so a contact can't be made a prospect.");
+  if (!details.isCustomer && !details.isSupplier && !wanted) {
+    throw new ValidationError(crm ? "A contact must be a customer, a supplier or a prospect." : "A contact must be a customer, a supplier or both.");
+  }
+  return wanted;
 }
 
 /**
@@ -104,7 +133,7 @@ function rolesOf(details: { isCustomer: boolean; isSupplier: boolean }): CustomF
 async function contactCustomValues(
   tx: OrgTx,
   raw: Record<string, unknown> | undefined,
-  details: ContactDetails,
+  details: ContactDetails & { isProspect?: boolean },
   saved: CustomValues | null,
 ): Promise<CustomValues> {
   const ctx = await loadCustomFieldContext(tx);
@@ -169,12 +198,6 @@ function parseGstNumber(input: unknown): string | null {
   return digits;
 }
 
-function assertCustomerOrSupplier(details: ContactDetails): ContactDetails {
-  if (!details.isCustomer && !details.isSupplier) {
-    throw new ValidationError("A contact must be a customer, a supplier or both.");
-  }
-  return details;
-}
 
 function nameTaken(name: string): ConflictError {
   return new ConflictError(
@@ -215,6 +238,15 @@ function isUniqueViolation(error: unknown): boolean {
   return (error as { code?: string }).code === "23505";
 }
 
+export async function getContact(tx: OrgTx, contactIdInput: unknown): Promise<Contact> {
+  const contactId = requireId(contactIdInput, "contactId");
+  const result = await tx.query<ContactRow>(`select ${COLUMNS} from contacts where id = $1`, [contactId]);
+  if (!result.rows[0]) {
+    throw new NotFoundError("Contact not found.");
+  }
+  return toContact(result.rows[0]);
+}
+
 /** Contacts in name order, searched by name or email. Archived ones only if asked for. */
 export async function listContacts(
   tx: OrgTx,
@@ -238,7 +270,7 @@ export async function createContact(
 ): Promise<{ created: boolean; contact: Contact }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
-  const details = assertCustomerOrSupplier({
+  const details: ContactDetails = {
     name: parseName(input.name),
     isCustomer: optionalBoolean(input.isCustomer, "isCustomer") ?? false,
     isSupplier: optionalBoolean(input.isSupplier, "isSupplier") ?? false,
@@ -246,7 +278,8 @@ export async function createContact(
     phone: parsePhone(input.phone),
     postalAddress: parsePostalAddress(input.postalAddress),
     gstNumber: parseGstNumber(input.gstNumber),
-  });
+  };
+  const isProspect = await prospectFlag(tx, input.isProspect, details, false);
   const rawCustom = parseCustomInput(input.customFields, "");
   const rawSalesperson = input.defaultSalespersonId === undefined || input.defaultSalespersonId === null || input.defaultSalespersonId === "" ? null : String(input.defaultSalespersonId);
 
@@ -255,6 +288,7 @@ export async function createContact(
     ...details,
     ...(rawCustom === undefined ? {} : { customFields: rawCustom }),
     ...(rawSalesperson === null ? {} : { defaultSalespersonId: rawSalesperson }),
+    ...(isProspect ? { isProspect } : {}),
   });
   const existing = await findByKey(tx, source, idempotencyKey);
   if (existing) {
@@ -262,7 +296,7 @@ export async function createContact(
     return { created: false, contact: toContact(existing) };
   }
 
-  const customFields = await contactCustomValues(tx, rawCustom, details, null);
+  const customFields = await contactCustomValues(tx, rawCustom, { ...details, isProspect }, null);
   const defaultSalespersonId = (await resolveDefaultSalesperson(tx, input.defaultSalespersonId, null)) ?? null;
 
   // No separate name check first: the original of a retry could commit between
@@ -270,8 +304,8 @@ export async function createContact(
   // checked again before a name clash is reported.
   const inserted = await tx.query<ContactRow>(
     `insert into contacts (command_source, idempotency_key, request_hash, name, is_customer, is_supplier,
-                           email, phone, postal_address, gst_number, custom_fields, default_salesperson_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+                           email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)
      on conflict do nothing
      returning ${COLUMNS}`,
     [
@@ -287,6 +321,7 @@ export async function createContact(
       details.gstNumber,
       JSON.stringify(customFields),
       defaultSalespersonId,
+      isProspect,
     ],
   );
   const row = inserted.rows[0];
@@ -308,6 +343,7 @@ export async function createContact(
       ...details,
       ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
       ...(defaultSalespersonId ? { defaultSalespersonId } : {}),
+      ...(isProspect ? { isProspect } : {}),
     },
   });
   return { created: true, contact: toContact(row) };
@@ -320,7 +356,7 @@ export async function createContact(
 export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: ContactInput): Promise<Contact> {
   const current = await lockContact(tx, contactIdInput);
   const before = detailsOf(current);
-  const after = assertCustomerOrSupplier({
+  const after: ContactDetails = {
     name: input.name === undefined ? before.name : parseName(input.name),
     isCustomer: optionalBoolean(input.isCustomer, "isCustomer") ?? before.isCustomer,
     isSupplier: optionalBoolean(input.isSupplier, "isSupplier") ?? before.isSupplier,
@@ -329,8 +365,9 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
     postalAddress:
       input.postalAddress === undefined ? before.postalAddress : parsePostalAddress(input.postalAddress),
     gstNumber: input.gstNumber === undefined ? before.gstNumber : parseGstNumber(input.gstNumber),
-  });
-  const customFields = await contactCustomValues(tx, parseCustomInput(input.customFields, ""), after, current.customFields);
+  };
+  const isProspect = await prospectFlag(tx, input.isProspect, after, current.isProspect);
+  const customFields = await contactCustomValues(tx, parseCustomInput(input.customFields, ""), { ...after, isProspect }, current.customFields);
   const sentSalesperson = await resolveDefaultSalesperson(tx, input.defaultSalespersonId, current.defaultSalespersonId);
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
@@ -344,6 +381,9 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
     changes.customFields = { from: current.customFields, to: customFields };
   }
   const nextSalesperson = sentSalesperson === undefined ? current.defaultSalespersonId : sentSalesperson;
+  if (isProspect !== current.isProspect) {
+    changes.isProspect = { from: current.isProspect, to: isProspect };
+  }
   if (nextSalesperson !== current.defaultSalespersonId) {
     changes.defaultSalespersonId = { from: current.defaultSalespersonId, to: nextSalesperson };
   }
@@ -362,7 +402,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
     const updated = await tx.query<ContactRow>(
       `update contacts
           set name = $2, is_customer = $3, is_supplier = $4, email = $5, phone = $6,
-              postal_address = $7, gst_number = $8, custom_fields = $9::jsonb, default_salesperson_id = $10, updated_at = now()
+              postal_address = $7, gst_number = $8, custom_fields = $9::jsonb, default_salesperson_id = $10, is_prospect = $11, updated_at = now()
         where id = $1
         returning ${COLUMNS}`,
       [
@@ -376,6 +416,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
         after.gstNumber,
         JSON.stringify(customFields),
         nextSalesperson,
+        isProspect,
       ],
     );
     row = updated.rows[0];

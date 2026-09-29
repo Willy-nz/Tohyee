@@ -45,7 +45,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 async function requireAdvanced(tx: OrgTx): Promise<void> {
-  if (!(await advancedFeaturesOn(tx))) throw new ConflictError("Advanced features are off. Turn them on in Settings first.");
+  if (!(await advancedFeaturesOn(tx))) throw new ConflictError("Advanced reporting is off. Turn it on in Settings › Modules first.");
 }
 
 /** Adds a salesperson (SR1). */
@@ -127,7 +127,7 @@ export async function resolveSalesperson(
   const salesperson = found.rows[0];
   if (!salesperson) throw new ValidationError(`There's no salesperson #${id}.`);
   if (id !== options.kept) {
-    if (!advanced) throw new ValidationError("Advanced features are off, so a salesperson can't be chosen.");
+    if (!advanced) throw new ValidationError("Advanced reporting is off, so a salesperson can't be chosen.");
     if (!salesperson.is_active) throw new ValidationError(`${salesperson.name} is archived.`);
   }
   return { id, name: salesperson.name };
@@ -140,7 +140,7 @@ export async function resolveDefaultSalesperson(tx: OrgTx, sent: unknown, kept: 
   const found = await tx.query<{ name: string; is_active: boolean }>("select name, is_active from salespeople where id = $1", [id]);
   const salesperson = found.rows[0];
   if (!salesperson) throw new ValidationError(`There's no salesperson #${id}.`);
-  if (!(await advancedFeaturesOn(tx))) throw new ValidationError("Advanced features are off, so a salesperson can't be chosen.");
+  if (!(await advancedFeaturesOn(tx))) throw new ValidationError("Advanced reporting is off, so a salesperson can't be chosen.");
   if (!salesperson.is_active) throw new ValidationError(`${salesperson.name} is archived.`);
   return id;
 }

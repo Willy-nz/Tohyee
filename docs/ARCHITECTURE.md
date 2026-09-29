@@ -427,6 +427,14 @@ Enforced by the app (and covered by tests):
   (manual journals only); a trigger checks every key is a field for that
   kind of record, and `src/lib/custom-fields/` checks types, options and
   required fields. They never reach posting, reports or the GST return.
+- Modules: `organisation_settings.crm_enabled` and `advanced_features`
+  (Advanced reporting). The CRM's tables are `crm_people`,
+  `crm_opportunities`, `crm_tasks` and `crm_activities` (none deletable);
+  companies are `contacts`, which can be prospects (`is_prospect`). Owners
+  and assignees are user ids from the core database, checked against the
+  organisation's members when set. An opportunity's `invoice_id` is set once
+  and a trigger keeps it won from then on. The rules are in
+  `src/lib/crm/service.ts`; only the invoice it makes ever reaches the ledger.
 - Salespeople: `salespeople` (never deleted), `contacts.default_salesperson_id`
   and `salesperson_id` on `sales_invoices` and `sales_credit_notes`, fixed
   with the rest of the document once approved. Sales by salesperson reads

@@ -25,6 +25,7 @@ export const PATCH = route<Context>(async (request, context) => {
       financialYearEndMonth: body.financialYearEndMonth,
       gstBasis: body.gstBasis,
       advancedFeatures: body.advancedFeatures,
+      crmEnabled: body.crmEnabled,
     }),
   );
   await syncOrganisationRegistry(settings);
