@@ -26,6 +26,13 @@ export type OrgTx = DbClient & {
   people: PeopleNames;
 };
 
+/**
+ * Runs `work` in its own transaction on one organisation's database, as one
+ * signed-in person. Bulk commands (e.g. "OK all confident matches") take one
+ * so each item commits or fails on its own.
+ */
+export type OrgRunner = <T>(work: (tx: OrgTx) => Promise<T>) => Promise<T>;
+
 export function assertOrganisationUsable(organisation: OrganisationRecord): void {
   if (!organisation.isActive) {
     throw new NotFoundError("Organisation not found.");

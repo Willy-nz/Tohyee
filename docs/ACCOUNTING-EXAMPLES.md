@@ -48,7 +48,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/budgets.test.ts` (BU1-BU8) and
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
-  `tests/integration/projects.test.ts` (PJ1-PJ13), all against
+  `tests/integration/projects.test.ts` (PJ1-PJ13) and
+  `tests/integration/bank-quick.test.ts` (BK17-BK19), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -1016,6 +1017,59 @@ history to bring in.
   possible duplicate of the feed line.
 - **BK16** Akahu's balance for the account is kept as the statement balance
   with its date, shown next to the ledger balance.
+
+### One-click matching ("OK") (examples not yet approved by Jess)
+
+Like Xero's "OK" button. For each unreconciled line, Tohyee looks for
+**candidates with the line's exact amount**:
+
+- a posted journal line on the line's account, on the same side (money in is
+  a debit), not reconciled, dated within 60 days of the line, and not a
+  reversal or reversed (a voided payment's lines never count); and
+- for money in, an approved invoice whose amount due is exactly the line's
+  amount; for money out, an approved bill whose amount due is exactly the
+  line's amount (without its minus sign). The invoice or bill must be dated on
+  or before the line, since a payment can't be dated before it.
+
+The suggestion is **confident**, and shown highlighted with an **OK** button,
+when the line has exactly one candidate and no other unreconciled line on the
+same account has that candidate too. When a line has no candidates at all, a
+bank rule that applies (BK10) is a confident suggestion. Anything else shows
+no OK button: two or more candidates (a tie) are listed on the line to choose
+from, and two lines competing for one candidate are left for a person to
+decide. OK posts exactly what choosing the suggestion by hand posts (BK4, BK5,
+BK10), through the same reconcile command.
+
+- **BK17** After BK1: the +115.00 line has one candidate, INV-0001 (115.00
+  due, dated 10 May): confident, "Pay INV-0001". The -46.00 line has no
+  candidates and no rule: no suggestion; with the BK10 rule it's confident
+  (spend money to Z Energy, 6120). The -500.00 line has none. Then:
+  - a second approved invoice to Kobe Ltd for 115.00 (INV-0002, 12 May) makes
+    the +115.00 line a **tie** (2 candidates): no OK;
+  - instead, a second +115.00 line on 25 May makes both lines **compete** for
+    INV-0001: neither has an OK;
+  - a customer payment of 115.00 into 1000 on 19 May (INV-0001 is then paid)
+    makes the payment's journal line the one candidate: confident "match";
+    once that payment is voided it's no longer a candidate;
+  - with the BK10 rule, a spend money of 46.00 to Z Energy already posted on
+    21 May wins over the rule: the suggestion is to match it, so nothing is
+    posted twice;
+  - an invoice for 115.00 dated 21 May (after the 20 May line) is not a
+    candidate.
+- **BK18** OK on the +115.00 line, shown as "Pay INV-0001", records a
+  customer payment of 115.00 dated 20 May into 1000 (Dr 1000 115.00 / Cr 1100
+  115.00) and reconciles the line; INV-0001 is paid. OK on the -46.00 line
+  with the BK10 rule posts Dr 6120 40.00 / Dr 2100 6.00 / Cr 1000 46.00. If
+  the suggestion shown has changed (e.g. INV-0001 was paid meanwhile), OK is
+  refused (409) and nothing is posted. Retrying with the same key returns the
+  same reconciled line. Viewers can't OK (403).
+- **BK19** "OK all confident matches" on 1000 after BK1 with the BK10 rule and
+  the period locked up to 20 May: the -46.00 line is reconciled (succeeded);
+  the +115.00 line is refused with "2026-05-20 is in a locked period (locked
+  up to 2026-05-20)…" (failed); the -500.00 line isn't included (not
+  confident). The result is **1 succeeded, 1 failed**, each line in its own
+  transaction, so the failure doesn't undo the success. Retrying the same
+  request returns the -46.00 line as already done and posts nothing more.
 
 ### Not supported yet (refused rather than guessed)
 

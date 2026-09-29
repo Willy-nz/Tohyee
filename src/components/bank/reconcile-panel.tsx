@@ -12,6 +12,7 @@ import {
   takesBankTransactionLines,
   toCents,
 } from "@/components/bank/common";
+import { OkAllBar, SuggestionBox } from "@/components/bank/confident";
 import { AccountSelect, Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
@@ -21,6 +22,7 @@ import { Badge, Button, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import type { BankAccount, StatementLine } from "@/lib/bank/accounts";
+import type { LineConfidence } from "@/lib/bank/confident";
 import type { LineSuggestions } from "@/lib/bank/reconcile";
 import type { BillSummary } from "@/lib/bills/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -775,6 +777,9 @@ export function ReconcilePanel({
     limit: PAGE_SIZE,
     offset,
   });
+  const confident = useApiData<{ lines: LineConfidence[]; confidentCount: number }>(`/api/bank-accounts/${account.id}/confident-matches`, {
+    organisationId,
+  });
   const accounts = useApiData<{ accounts: Account[] }>("/api/accounts", { organisationId });
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
@@ -795,6 +800,7 @@ export function ReconcilePanel({
   function finished() {
     setOpen(null);
     list.reload();
+    confident.reload();
     onChanged();
   }
 
@@ -805,12 +811,18 @@ export function ReconcilePanel({
   if (total === 0) {
     return <Empty>Everything is reconciled. Import a statement or sync the bank feed to bring in new lines.</Empty>;
   }
+  const confidence = new Map((confident.data?.lines ?? []).map((entry) => [entry.lineId, entry]));
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <p className={ui.muted}>
         {total} {total === 1 ? "line" : "lines"} to reconcile, oldest first. Reconciling says what each line is: something already
-        posted, a payment of invoices or bills, a new bank transaction, or a transfer.
+        posted, a payment of invoices or bills, a new bank transaction, or a transfer. A highlighted suggestion is the only match with
+        the exact amount; <strong>OK</strong> reconciles it in one click.
       </p>
+      {confident.error ? <Notice tone="error">{confident.error}</Notice> : null}
+      {can("bookkeeper") && confident.data ? (
+        <OkAllBar organisationId={organisationId} accountId={account.id} confidences={confident.data.lines} lines={lines} onDone={finished} />
+      ) : null}
       <div className={ui.tableWrap}>
         <table className={ui.table}>
           <thead>
@@ -830,6 +842,15 @@ export function ReconcilePanel({
                 open={open === line.id}
                 canReconcile={can("bookkeeper")}
                 onToggle={() => setOpen((current) => (current === line.id ? null : line.id))}
+                suggestion={
+                  <SuggestionBox
+                    key={confidence.get(line.id)?.suggestion?.key ?? "none"}
+                    organisationId={organisationId}
+                    confidence={confidence.get(line.id)}
+                    canReconcile={can("bookkeeper")}
+                    onDone={finished}
+                  />
+                }
               >
                 {lookups ? (
                   <LineReconciler organisationId={organisationId} account={account} line={line} lookups={lookups} onDone={finished} />
@@ -851,12 +872,14 @@ function LineRow({
   open,
   canReconcile,
   onToggle,
+  suggestion,
   children,
 }: {
   line: StatementLine;
   open: boolean;
   canReconcile: boolean;
   onToggle: () => void;
+  suggestion?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -872,6 +895,7 @@ function LineRow({
             </>
           ) : null}
           <LineDetails line={line} />
+          {open ? null : suggestion}
         </td>
         <InOutCells amount={line.amount} />
         <td style={{ textAlign: "right" }}>

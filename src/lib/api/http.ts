@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertSameOrigin, authenticate, type AuthContext, requireOrganisationRole } from "@/lib/auth/guard";
 import type { Role } from "@/lib/auth/roles";
-import { type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
+import { type OrgRunner, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { HttpError, ValidationError } from "@/lib/errors";
 import type { Membership } from "@/lib/organisations/registry";
 import { parseOrganisationId } from "@/lib/organisations/registry";
@@ -100,4 +100,25 @@ export async function withOrganisation<T>(
     { people },
   );
   return addPersonNames(result, people);
+}
+
+/**
+ * Like `withOrganisation`, but for bulk commands: authenticates and checks
+ * the role once, then hands `work` a runner that opens a new transaction on
+ * the organisation's database each time it's called, so one item failing
+ * doesn't undo the others.
+ */
+export async function withOrganisationRunner<T>(
+  request: Request,
+  organisationIdInput: unknown,
+  minimumRole: Role,
+  work: (run: OrgRunner) => Promise<T>,
+): Promise<T> {
+  const auth = await requireAuth(request);
+  const organisationId = parseOrganisationId(organisationIdInput);
+  const membership = await requireOrganisationRole(auth, organisationId, minimumRole);
+  const people = await loadMemberNames(membership.organisation.id);
+  const actor = { userId: auth.user.id, email: auth.user.email };
+  const run: OrgRunner = (each) => withOrganisationTransaction(membership.organisation, actor, each, { people });
+  return addPersonNames(await work(run), people);
 }

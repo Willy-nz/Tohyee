@@ -352,7 +352,13 @@ that something happened.
   deleted. **Bank rules** fill in spend or receive money from text in the
   line. Each organisation sets up its own Akahu personal app (with its own
   bank logins) and an organisation admin enters its tokens, which are checked
-  with Akahu and stored encrypted. See examples BK1-BK16.
+  with Akahu and stored encrypted. See examples BK1-BK16. **One-click
+  matching** (like Xero's OK): a line whose only exact-amount candidate (a
+  posted transaction on the account, or an invoice or bill due) isn't wanted
+  by another line, or that only a bank rule fits, shows the suggestion
+  highlighted with an **OK** button, and **OK all confident matches** does
+  them all, each line on its own, reporting what failed and why (examples
+  BK17-BK19, not yet approved by Jess).
 - **Modules**: Accounting and Tax are always on; the **CRM** and
   **Advanced reporting** are switched on per organisation in Settings, and
   their menus and screens show only while on (MOD1).
