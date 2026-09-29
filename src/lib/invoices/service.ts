@@ -6,6 +6,7 @@ import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import type { AccountClass } from "@/lib/accounts/types";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import { writeAuditEvent } from "@/lib/audit";
+import { fillLinesFromItems, isBlank, LINE_ITEM_COLUMNS, LINE_ITEM_JOINS, lineForHash, lineItemFields, type LineItemFields, type LineItemRef, type LineItemRow, parseLineItem, resolveLineItems, type ResolvedLineItem } from "@/lib/items/lines";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -55,7 +56,7 @@ import { removeRecordExtras } from "@/lib/records/extras";
 export const INVOICE_STATUSES = ["draft", "approved", "voided"] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 
-export type InvoiceLine = {
+export type InvoiceLine = LineItemFields & {
   lineOrder: number;
   description: string;
   quantity: string;
@@ -189,7 +190,7 @@ const SUMMARY_FROM = `sales_invoices i
                       where o.invoice_id = i.id and o.status = 'active'), 0) as amount_credited
   ) credited`;
 
-type LineRow = {
+type LineRow = LineItemRow & {
   line_order: number;
   description: string;
   quantity: string;
@@ -247,6 +248,7 @@ function toSummary(row: InvoiceRow): InvoiceSummary {
 
 function toLine(row: LineRow): InvoiceLine {
   return {
+    ...lineItemFields(row),
     lineOrder: row.line_order,
     description: row.description,
     quantity: row.quantity,
@@ -282,6 +284,8 @@ type DraftDetails = {
     taxCode: string | null;
     tracking: TrackingTags;
     customFields: Record<string, unknown> | undefined;
+    itemId: string | null;
+    unitId: string | null;
   }>;
   customInput: Record<string, unknown> | undefined;
   /** As sent: undefined when not sent (the customer's default applies), null for none. */
@@ -298,7 +302,7 @@ type ResolvedDraft = DraftDetails & {
   customFields: CustomValues;
   customCtx: CustomFieldContext;
   salespersonId: string | null;
-  resolvedLines: Array<{
+  resolvedLines: Array<ResolvedLineItem & {
     description: string;
     quantity: string;
     unitPrice: string;
@@ -333,20 +337,24 @@ function parseDraft(input: InvoiceInput, options: { dueFromTerms?: boolean } = {
   const lines = rawLines.map((raw, index) => {
     const label = `Line ${index + 1}`;
     const line = asRecord(raw, label);
+    // A line with an item can leave these blank: the item fills them (IT2).
+    const item = parseLineItem(line, label);
+    const fillable = item.itemId !== null;
     const taxCode = optionalString(line.taxCode, `${label} tax code`, { maxLength: 20 })?.toUpperCase() ?? null;
     if (amountsMode === "no_tax" && taxCode !== null) {
       throw new ValidationError(
         `${label} has a tax code, but the invoice's amounts have no tax. Remove the tax code or change the amounts to tax exclusive or inclusive.`,
       );
     }
-    if (amountsMode !== "no_tax" && taxCode === null) {
+    if (amountsMode !== "no_tax" && taxCode === null && !fillable) {
       throw new ValidationError(`${label} needs a tax code (use a zero-rated code for sales without GST).`);
     }
     return {
-      description: requireString(line.description, `${label} description`, { maxLength: 500 }),
+      description: fillable && isBlank(line.description) ? "" : requireString(line.description, `${label} description`, { maxLength: 500 }),
       quantity: parseDecimalInput(line.quantity, `${label} quantity`, { maxScale: LINE_INPUT_SCALE }),
-      unitPrice: parseDecimalInput(line.unitPrice, `${label} unit price`, { maxScale: LINE_INPUT_SCALE }),
-      accountCode: parseAccountCodeInput(line.accountCode, `${label} account`),
+      unitPrice: fillable && isBlank(line.unitPrice) ? "" : parseDecimalInput(line.unitPrice, `${label} unit price`, { maxScale: LINE_INPUT_SCALE }),
+      accountCode: fillable && isBlank(line.accountCode) ? "" : parseAccountCodeInput(line.accountCode, `${label} account`),
+      ...item,
       taxCode,
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
       customFields: parseCustomInput(line.customFields, `${label}: `),
@@ -374,7 +382,7 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     dueDate: draft.dueFromTerms ? null : draft.dueDate,
     reference: draft.reference,
     amountsMode: draft.amountsMode,
-    lines: draft.lines.map((line) => hashableLine({ ...line, accountCode: line.accountCode.toLowerCase() })),
+    lines: draft.lines.map((line) => hashableLine(lineForHash({ ...line, accountCode: line.accountCode.toLowerCase() }))),
     // Values that weren't sent stay out, so older requests hash the same.
     ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
     ...(draft.salespersonInput !== undefined ? { salespersonId: draft.salespersonInput } : {}),
@@ -389,11 +397,14 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
  */
 async function resolveDraft(
   tx: OrgTx,
-  draft: DraftDetails,
+  sent: DraftDetails,
   kept: ReadonlySet<string> = new Set(),
   keptFields: ReadonlySet<string> = new Set(),
   keptSalesperson: string | null = null,
+  keptItems: ReadonlyArray<LineItemRef> = [],
 ): Promise<ResolvedDraft> {
+  // Blanks on item lines are filled from the item (IT2); what was sent is kept.
+  const draft: DraftDetails = { ...sent, lines: await fillLinesFromItems(tx, sent.lines, { side: "sale", contactId: sent.contactId, noTax: sent.amountsMode === "no_tax" }) };
   const salesperson = await resolveSalesperson(tx, draft.salespersonInput, { contactId: draft.contactId, kept: keptSalesperson });
   const custom = await resolveDocumentCustom(tx, "invoice", draft.customInput, draft.lines.map((line) => line.customFields), keptFields);
   const tracking = await loadTrackingContext(tx);
@@ -469,6 +480,7 @@ async function resolveDraft(
     return { ...line, accountId: account.id, accountCode: account.code, accountClass: account.account_class as AccountClass, taxCodeId, taxRate };
   });
 
+  const lineItems = await resolveLineItems(tx, draft.lines, "sale", keptItems);
   const scale = currencyMinorUnits(tx.baseCurrency);
   const amounts = calculateInvoice(draft.amountsMode, lines, scale);
   amounts.lines.forEach((line, index) => {
@@ -498,6 +510,7 @@ async function resolveDraft(
       taxCodeId: line.taxCodeId,
       taxRate: line.taxRate,
       ...amounts.lines[index],
+      ...lineItems[index],
       tracking: line.tracking,
       accountClass: line.accountClass,
       customFields: custom.lines[index],
@@ -506,6 +519,8 @@ async function resolveDraft(
 }
 
 type StoredLine = {
+  itemId: string | null;
+  unitId: string | null;
   description: string;
   quantity: string;
   unitPrice: string;
@@ -566,6 +581,8 @@ function linesState(lines: readonly StoredLine[]): string {
       plain(line.taxAmount),
       trackingKey(line.tracking),
       customValuesKey(line.customFields),
+      line.itemId ?? null,
+      line.unitId ?? null,
     ]),
   );
 }
@@ -593,6 +610,8 @@ function draftOf(invoice: Invoice): DraftDetails {
       taxCode: line.taxCode,
       tracking: line.tracking,
       customFields: line.customFields,
+      itemId: line.itemId,
+      unitId: line.unitId,
     })),
     customInput: invoice.customFields,
     salespersonInput: invoice.salespersonId,
@@ -616,14 +635,17 @@ async function insertLines(tx: OrgTx, invoiceId: string, lines: ResolvedDraft["r
       line.taxAmount,
       JSON.stringify(line.tracking),
       JSON.stringify(line.customFields),
+      line.itemId,
+      line.unitId,
+      line.baseQuantity,
     );
-    const base = index * 13;
+    const base = index * 16;
     const p = (offset: number) => `$${base + offset}`;
-    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb)`;
+    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric)`;
   });
   await tx.query(
     `insert into sales_invoice_lines (invoice_id, line_order, description, quantity, unit_price, account_id,
-                                      tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields)
+                                      tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -670,10 +692,11 @@ export async function getInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise<In
   const lines = await tx.query<LineRow>(
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
-            l.net_amount, l.tax_amount, l.tracking, l.custom_fields
+            l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS}
        from sales_invoice_lines l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
+       ${LINE_ITEM_JOINS}
       where l.invoice_id = $1
       order by l.line_order`,
     [invoiceId],
@@ -834,6 +857,7 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
     keptValues(current.lines),
     keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)),
     current.salespersonId,
+    current.lines,
   );
   const same = sameAsStored(resolved, current);
   if (same.header && same.lines) {
@@ -1020,6 +1044,7 @@ export async function approveInvoice(
     keptValues(current.lines),
     keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)),
     current.salespersonId,
+    current.lines,
   );
   const same = sameAsStored(resolved, current);
   if (!same.header || !same.lines) {

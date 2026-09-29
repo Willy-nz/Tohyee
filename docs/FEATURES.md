@@ -247,8 +247,22 @@ that something happened.
   company, one of them the primary contact for invoices (also with only this
   module on); **customer groups**; **price levels** (a percent on or off the
   base price, used once items arrive); and **parent customers** (no loops,
-  at most 4 levels) with aged receivables rolled up (RC3-RC12). Items and a
-  GST audit report come next.
+  at most 4 levels) with aged receivables rolled up (RC3-RC12). With it
+  on, items also get NetSuite's extras (below). A GST audit report comes
+  next.
+- **Products and services** (Sales, like Xero's items, for everyone): a
+  code (unique ignoring case), name, description, sale and purchase prices,
+  income and purchase accounts and sales and purchase tax codes; service,
+  non-stock and stock types; archived, never deleted. Picking an item on an
+  invoice, bill or credit note line fills its description, price, account
+  and tax code, all still editable on a draft; lines without an item work as
+  before. With **Advanced reporting** on, NetSuite's extras: **units of
+  measure** (a base unit and fixed multiples like "Box of 12"; lines keep
+  the unit and the exact quantity in the base unit), **price levels**
+  pricing items (the level's percent, rounded to cents, or the item's own
+  price for that level) from the customer's default level, **supplier
+  prices** (one preferred) filling bills, and **kits** (bundles of other
+  items; no kits in kits). See examples IT1-IT9.
 - **Two-step sign-in** for everyone: an authenticator app (QR code set-up)
   plus 10 one-use backup codes; wrong-code limits and lockout; lost-phone
   reset by emailed link, by a server admin, or from the command line; new

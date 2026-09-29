@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
+import { LineItemPicker, useItems } from "@/components/items";
+import type { ItemList } from "@/lib/items/service";
 import { useApiData } from "@/components/hooks";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { dueFromTerms, useCustomerSetup } from "@/components/customers";
@@ -64,6 +66,8 @@ export function formatUnitPrice(value: string): string {
 
 type EditorLine = {
   key: number;
+  itemId: string;
+  unitId: string;
   description: string;
   quantity: string;
   unitPrice: string;
@@ -82,7 +86,7 @@ function nextLineKey(): number {
 type Defaults = { accountCode: string; taxCode: string };
 
 function blankLine(defaults: Defaults, customFields: CustomValues = {}): EditorLine {
-  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", tracking: {}, customFields, ...defaults };
+  return { key: nextLineKey(), itemId: "", unitId: "", description: "", quantity: "1", unitPrice: "", tracking: {}, customFields, ...defaults };
 }
 
 /** Invoice lines go to revenue accounts, the same rule the server checks. */
@@ -92,6 +96,7 @@ function isRevenue(account: Account): boolean {
 
 type FormProps = {
   organisationId: string;
+  items: ItemList | null;
   baseCurrency: string;
   accounts: Account[];
   customers: Contact[];
@@ -107,6 +112,7 @@ type FormProps = {
 
 function InvoiceForm({
   organisationId,
+  items,
   baseCurrency,
   accounts,
   customers,
@@ -147,6 +153,8 @@ function InvoiceForm({
     invoice
       ? invoice.lines.map((line) => ({
           key: nextLineKey(),
+          itemId: line.itemId ?? "",
+          unitId: line.unitId ?? "",
           description: line.description,
           quantity: line.quantity,
           unitPrice: line.unitPrice,
@@ -199,6 +207,8 @@ function InvoiceForm({
       reference: reference.trim() || null,
       amountsMode,
       lines: lines.map((line) => ({
+        itemId: line.itemId || null,
+        unitId: line.unitId || null,
         description: line.description,
         quantity: line.quantity,
         unitPrice: line.unitPrice,
@@ -333,6 +343,16 @@ function InvoiceForm({
                     maxLength={500}
                     required
                   />
+                  <LineItemPicker
+                    organisationId={organisationId}
+                    items={items}
+                    side="sale"
+                    contactId={contactId}
+                    itemId={line.itemId}
+                    unitId={line.unitId}
+                    labelPrefix={`Line ${index + 1}`}
+                    onPick={(patch) => update(line.key, patch)}
+                  />
                 </td>
                 <td data-label="Quantity">
                   <input
@@ -461,6 +481,7 @@ export function InvoiceEditor({
   onCancel: () => void;
 }) {
   const accounts = useAccounts(organisationId);
+  const items = useItems(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
   const tracking = useTracking(organisationId);
@@ -480,6 +501,7 @@ export function InvoiceEditor({
       organisationId={organisationId}
       baseCurrency={baseCurrency}
       accounts={accounts.data.accounts}
+      items={items.data}
       customers={contacts.data.contacts}
       taxCodes={taxCodes.data.taxCodes}
       tracking={tracking.data}

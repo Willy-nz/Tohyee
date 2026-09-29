@@ -15,7 +15,7 @@
 - Code that runs in the browser may import **types** from server modules, but
   **values** only from browser-safe modules (`money/decimal`, `money/currency`,
   `accounts/types`, `auth/roles`, `tax/categories`, `invoices/amounts`,
-  `bills/accounts`, `customers/terms`, `financial-year`, `format`, `errors`).
+  `bills/accounts`, `customers/terms`, `items/pricing`, `financial-year`, `format`, `errors`).
 
 ## Organisation data
 
