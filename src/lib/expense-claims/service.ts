@@ -14,6 +14,7 @@ import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/jour
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, cmp, dec, type Decimal, isZero, parseDecimalInput, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { personName } from "@/lib/people/names";
 import { removeRecordExtras } from "@/lib/records/extras";
 import {
   assertRequiredTags,
@@ -464,7 +465,7 @@ function isClaimant(tx: OrgTx, claim: ExpenseClaimSummary): boolean {
 
 function assertOwnDraft(tx: OrgTx, claim: ExpenseClaim, action: string): void {
   if (!isClaimant(tx, claim)) {
-    throw new ForbiddenError(`Only ${claim.claimantEmail}, who made this claim, can ${action} it.`);
+    throw new ForbiddenError(`Only ${personName(tx, claim.claimantEmail)}, who made this claim, can ${action} it.`);
   }
   if (claim.status !== "draft") {
     throw new ConflictError(`${claimReference(claim.id)} is ${claim.status}, so it can't be ${action === "delete" ? "deleted" : "changed"}.`);
@@ -694,7 +695,7 @@ export async function approveExpenseClaim(
     entry.amount = add(entry.amount, dec(receipt.netAmount));
     costs.set(key, entry);
   }
-  const who = current.claimantEmail;
+  const who = personName(tx, current.claimantEmail);
   const reference = claimReference(id);
   const posted = await postJournalBody(
     tx,
@@ -773,7 +774,7 @@ export async function voidExpenseClaim(
     parseJournalBody(tx, {
       postingDate: voidDate,
       reference: `VOID-${original.reference}`.slice(0, 100),
-      description: `Void of expense claim ${claimReference(id)} from ${current.claimantEmail}`,
+      description: `Void of expense claim ${claimReference(id)} from ${personName(tx, current.claimantEmail)}`,
       lines: original.lines.map((line) => ({
         accountCode: line.accountCode,
         debitAmount: line.creditAmount,
@@ -867,6 +868,7 @@ export async function recordExpenseClaimPayment(
   const next = await tx.query<{ id: string }>("select nextval(pg_get_serial_sequence('expense_claim_payments', 'id'))::text as id");
   const paymentId = next.rows[0].id;
   const fixed = toFixedString(amount, scale);
+  const claimant = personName(tx, claim.claimantEmail);
   const posted = await postJournalBody(
     tx,
     "expense_claim_payment:record",
@@ -874,10 +876,10 @@ export async function recordExpenseClaimPayment(
     parseJournalBody(tx, {
       postingDate: paymentDate,
       reference: reference ?? claimReference(id),
-      description: `Payment of expense claim ${claimReference(id)} to ${claim.claimantEmail}`,
+      description: `Payment of expense claim ${claimReference(id)} to ${claimant}`,
       lines: [
-        { accountCode: payable, debitAmount: fixed, creditAmount: "0", description: claim.claimantEmail },
-        { accountCode: bank.code, debitAmount: "0", creditAmount: fixed, description: claim.claimantEmail },
+        { accountCode: payable, debitAmount: fixed, creditAmount: "0", description: claimant },
+        { accountCode: bank.code, debitAmount: "0", creditAmount: fixed, description: claimant },
       ],
     }),
     { origin: "expense_claim_payment" },

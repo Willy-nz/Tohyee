@@ -6,7 +6,7 @@ import { useApiData } from "@/components/hooks";
 import { Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
+import { formatDate, formatMoney, todayInBrowser, personName } from "@/lib/format";
 import type { FxRevaluationRun } from "@/lib/ledger/fx-revaluation";
 
 type BalanceDraft = { key: number; accountCode: string; foreignAmount: string; closingRate: string };
@@ -227,7 +227,7 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
               <thead>
                 <tr>
                   <th colSpan={6}>
-                    {run.reference} · {formatDate(run.revaluationDate)} · {run.rateSource} · by {run.operatorEmail}
+                    {run.reference} · {formatDate(run.revaluationDate)} · {run.rateSource} · by {personName(run, "operator")}
                   </th>
                 </tr>
                 <tr>

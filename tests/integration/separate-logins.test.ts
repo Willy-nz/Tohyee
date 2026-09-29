@@ -36,7 +36,6 @@ import {
   updateSupplierCreditNote,
   voidSupplierCreditNote,
 } from "@/lib/supplier-credit-notes/service";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   createTestLogin,
   createTestOrganisation,
@@ -114,14 +113,6 @@ describeWithDatabase("separate admin and runtime logins (DATABASE_ADMIN_URL)", (
 
   it("sales invoices can be drafted, edited, deleted, approved and voided as the runtime login", async () => {
     const invoice = await inOrganisation(ORG, actor, async (tx) => {
-      await createTaxCode(tx, {
-        idempotencyKey: key("tax"),
-        code: "GST",
-        label: "GST",
-        category: "standard",
-        rate: "0.15",
-        effectiveFrom: "2026-01-01",
-      });
       const { contact } = await createContact(tx, { idempotencyKey: key("c"), name: "Hardened Customer", isCustomer: true });
       const draft = (quantity: string) =>
         createInvoice(tx, {

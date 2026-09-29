@@ -13,7 +13,7 @@ import type { Account } from "@/lib/accounts/service";
 import { billLineAccountProblem } from "@/lib/bills/accounts";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { ExpenseClaim, ExpenseClaimStatus, ExpenseClaimSummary } from "@/lib/expense-claims/service";
-import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import { calculateInvoice, PAID_STATUS_LABELS } from "@/lib/invoices/amounts";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
@@ -272,7 +272,7 @@ export function ExpenseClaimList({ organisationId }: { organisationId: string })
                   <td data-label="Claim">
                     <Link href={`/operations/expense-claims/${claim.id}`}>{claim.reference}</Link>
                   </td>
-                  <td data-label="Who">{claim.claimantEmail}</td>
+                  <td data-label="Who">{personName(claim, "claimant")}</td>
                   <td data-label="For" className={ui.muted}>
                     {claim.description ?? `${claim.receiptCount} receipt${claim.receiptCount === 1 ? "" : "s"}`}
                   </td>
@@ -364,7 +364,7 @@ function ClaimActions({ organisationId, claim, onChanged }: { organisationId: st
           </Button>
         </div>
       ) : null}
-      {claim.status === "draft" && !mine ? <p className={ui.muted}>Only {claim.claimantEmail} can change or submit this draft.</p> : null}
+      {claim.status === "draft" && !mine ? <p className={ui.muted}>Only {personName(claim, "claimant")} can change or submit this draft.</p> : null}
       {claim.status === "submitted" && can("bookkeeper") ? (
         <>
           {canApprove ? (
@@ -513,16 +513,16 @@ export function ExpenseClaimView({ organisationId, claimId }: { organisationId: 
       {message ? <Notice tone="success">{message}</Notice> : null}
       {claim.status === "draft" && claim.declineReason ? (
         <Notice tone="warning">
-          Declined by {claim.declinedByEmail} on {formatDateTime(claim.declinedAt)}: {claim.declineReason}
+          Declined by {personName(claim, "declinedBy")} on {formatDateTime(claim.declinedAt)}: {claim.declineReason}
         </Notice>
       ) : null}
       <Card title={`${claim.reference}${claim.description ? ` · ${claim.description}` : ""}`} actions={<ClaimStatusBadge claim={claim} />}>
         <div className={ui.grid3}>
-          <Stat label="Claimed by" value={claim.claimantEmail} />
+          <Stat label="Claimed by" value={personName(claim, "claimant")} />
           <Stat label="Total" value={<Money value={claim.total} />} />
           <Stat label="GST" value={<Money value={claim.taxTotal} />} />
           {claim.claimDate ? <Stat label="Claim date" value={formatDate(claim.claimDate)} /> : null}
-          {claim.approvedByEmail ? <Stat label="Approved by" value={claim.approvedByEmail} /> : null}
+          {personName(claim, "approvedBy") ? <Stat label="Approved by" value={personName(claim, "approvedBy")} /> : null}
           {claim.amountDue ? <Stat label="Due" value={<Money value={claim.amountDue} />} /> : null}
         </div>
         <div className={ui.tableWrap}>

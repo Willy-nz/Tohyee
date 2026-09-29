@@ -14,7 +14,7 @@ import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { CreditNoteApplication } from "@/lib/credit-notes/applications";
 import type { CreditNoteSummary } from "@/lib/credit-notes/service";
-import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser, personName } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { OverpaymentApplication } from "@/lib/invoices/overpayments";
 import type { CustomerPayment } from "@/lib/invoices/payments";
@@ -416,18 +416,18 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           ) : null}
         </div>
         <p className={ui.muted}>
-          Saved by {invoice.createdByEmail ?? "unknown"} on {formatDateTime(invoice.createdAt)}.
+          Saved by {personName(invoice, "createdBy") ?? "unknown"} on {formatDateTime(invoice.createdAt)}.
           {invoice.approvalJournalId ? (
             <>
               {" "}
-              Approved by {invoice.approvedByEmail ?? "unknown"} on {formatDateTime(invoice.approvedAt)} and posted as{" "}
+              Approved by {personName(invoice, "approvedBy") ?? "unknown"} on {formatDateTime(invoice.approvedAt)} and posted as{" "}
               <Link href={journalHref(invoice.approvalJournalId)}>journal #{invoice.approvalJournalId}</Link>.
             </>
           ) : null}
           {invoice.voidJournalId ? (
             <>
               {" "}
-              Voided by {invoice.voidedByEmail ?? "unknown"} on {formatDateTime(invoice.voidedAt)}, reversed on{" "}
+              Voided by {personName(invoice, "voidedBy") ?? "unknown"} on {formatDateTime(invoice.voidedAt)}, reversed on{" "}
               {formatDate(invoice.voidDate)} by <Link href={journalHref(invoice.voidJournalId)}>journal #{invoice.voidJournalId}</Link>.
             </>
           ) : null}

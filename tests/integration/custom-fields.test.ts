@@ -20,7 +20,6 @@ import { approveInvoice, createInvoice, getInvoice, updateInvoice } from "@/lib/
 import { correctJournal, getJournal, postJournal } from "@/lib/ledger/journals";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { profitAndLossSplit } from "@/lib/reports/financial";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   createTrackingCategory,
   createTrackingValue,
@@ -68,9 +67,6 @@ describeWithDatabase("custom segments and custom fields", () => {
     await createTestOrganisation(owner, org);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     await as((tx) => updateOrganisationSettings(tx, { advancedFeatures: true }));
     const field = async (input: Parameters<typeof createCustomField>[1]) => {
       const s = await as((tx) => createCustomField(tx, input));

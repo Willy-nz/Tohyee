@@ -19,7 +19,6 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { correctJournal, getJournal, getJournalDetails, listJournals } from "@/lib/ledger/journals";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -140,16 +139,6 @@ describeWithDatabase("supplier payments", () => {
         role,
       ]);
     }
-    await asUser(owner, (tx) =>
-      createTaxCode(tx, {
-        idempotencyKey: key("tax"),
-        code: "GST",
-        label: "GST on expenses (15%)",
-        category: "standard",
-        rate: "0.15",
-        effectiveFrom: "2026-01-01",
-      }),
-    );
     supplier = (
       await asUser(bookkeeper, (tx) =>
         createContact(tx, { idempotencyKey: key("contact"), name: "Kauri Supplies", isSupplier: true }),

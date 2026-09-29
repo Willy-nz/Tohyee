@@ -6,7 +6,7 @@ import { Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { reportCategories, TrackingTagsText, useTracking } from "@/components/tracking";
 import { Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
-import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import type { AccountTransactions } from "@/lib/reports/account-transactions";
 import type { AgedPayables } from "@/lib/reports/aged-payables";
 import type { AgeBucket, AgedAmounts } from "@/lib/reports/ageing";
@@ -384,7 +384,7 @@ export function JournalReportView({ organisationId }: { organisationId: string }
                       {journal.source.contactName ? ` · ${journal.source.contactName}` : ""}
                       <div className={ui.muted} style={{ fontWeight: 400 }}>
                         Journal #{journal.journalId}
-                        {journal.description ? ` · ${journal.description}` : ""} · posted by {journal.postedByEmail ?? "unknown"} on{" "}
+                        {journal.description ? ` · ${journal.description}` : ""} · posted by {personName(journal, "postedBy") ?? "unknown"} on{" "}
                         {formatDateTime(journal.postedAt)}
                       </div>
                     </td>

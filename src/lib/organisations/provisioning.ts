@@ -6,6 +6,7 @@ import { connectAsAdmin, getAdminPool } from "@/lib/db/pools";
 import { quoteSqlIdentifier } from "@/lib/db/sql";
 import { coreQuery, wrapClient } from "@/lib/db/transactions";
 import { NotFoundError } from "@/lib/errors";
+import { defaultTaxCodeKey, NZ_DEFAULT_TAX_CODES } from "@/lib/tax/default-codes";
 
 type ProvisioningRow = {
   id: string;
@@ -25,7 +26,8 @@ async function databaseExists(databaseName: string): Promise<boolean> {
 
 /**
  * Creates (or finishes creating) an organisation's own database:
- * CREATE DATABASE, tenant migrations, settings, default chart of accounts.
+ * CREATE DATABASE, tenant migrations, settings, default chart of accounts
+ * and standard GST codes.
  * Safe to run again after a failure; every step is idempotent.
  */
 export async function provisionOrganisation(organisationId: string): Promise<void> {
@@ -106,6 +108,21 @@ async function seedOrganisationDatabase(organisation: ProvisioningRow): Promise<
           `insert into accounts (code, name, account_class, account_type, system_key)
            values ($1, $2, $3, $4, $5)`,
           [account.code, account.name, classOfType(account.type), account.type, account.systemKey ?? null],
+        );
+      }
+    }
+
+    // Standard GST codes, only for an organisation that has none (so Repair
+    // never duplicates or clashes with codes people made themselves).
+    const hasTaxCodes = await client.query<{ exists: boolean }>(
+      "select exists (select 1 from tax_codes) as exists",
+    );
+    if (!hasTaxCodes.rows[0]?.exists) {
+      for (const taxCode of NZ_DEFAULT_TAX_CODES) {
+        await client.query(
+          `insert into tax_codes (command_source, idempotency_key, request_hash, code, label, category, rate, effective_from)
+           values ('system', $1, 'nz-default-tax-code', $2, $3, $4, $5::numeric, $6)`,
+          [defaultTaxCodeKey(taxCode.code), taxCode.code, taxCode.label, taxCode.category, taxCode.rate, taxCode.effectiveFrom],
         );
       }
     }

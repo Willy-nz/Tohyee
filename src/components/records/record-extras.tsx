@@ -4,7 +4,7 @@ import { type ChangeEvent, type FormEvent, useId, useRef, useState } from "react
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, ApiError, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, personName } from "@/lib/format";
 import { ALLOWED_EXTENSIONS, fileTypeLabel, formatFileSize, MAX_ATTACHMENT_BYTES } from "@/lib/records/file-types";
 import { RECORD_TYPE_SLUGS, type RecordExtras, type RecordNote, type RecordType } from "@/lib/records/types";
 
@@ -82,8 +82,8 @@ function NoteItem({
       )}
       <div className={ui.muted} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
         <span>
-          {note.createdByEmail} · {formatDateTime(note.createdAt)}
-          {note.updatedAt ? ` · edited by ${note.updatedByEmail} ${formatDateTime(note.updatedAt)}` : ""}
+          {personName(note, "createdBy")} · {formatDateTime(note.createdAt)}
+          {note.updatedAt ? ` · edited by ${personName(note, "updatedBy")} ${formatDateTime(note.updatedAt)}` : ""}
         </span>
         {note.canChange && !editing ? (
           <>
@@ -273,7 +273,7 @@ export function RecordExtrasPanel({
                         <td>{fileTypeLabel(file.contentType)}</td>
                         <td className={ui.num}>{formatFileSize(file.byteSize)}</td>
                         <td className={ui.muted}>
-                          {file.createdByEmail} · {formatDateTime(file.createdAt)}
+                          {personName(file, "createdBy")} · {formatDateTime(file.createdAt)}
                         </td>
                         <td className={ui.num}>
                           <span className={ui.actions} style={{ justifyContent: "flex-end" }}>
@@ -333,7 +333,7 @@ export function RecordExtrasPanel({
                 {data.history.map((entry) => (
                   <tr key={entry.id}>
                     <td className={ui.muted}>{formatDateTime(entry.at)}</td>
-                    <td>{entry.actorEmail ?? "System"}</td>
+                    <td>{personName(entry, "actor") ?? "System"}</td>
                     <td>
                       {entry.summary}
                       {entry.eventType === "note.edited" ? (

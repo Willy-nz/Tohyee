@@ -18,7 +18,6 @@ import { balanceSheet, trialBalance } from "@/lib/reports/financial";
 import { journalReport } from "@/lib/reports/journal-report";
 import { applySupplierCreditNote } from "@/lib/supplier-credit-notes/applications";
 import { approveSupplierCreditNote, createSupplierCreditNote } from "@/lib/supplier-credit-notes/service";
-import { createTaxCode } from "@/lib/tax/codes";
 import { createTrackingValue, getTrackingSetup, type TrackingSetup } from "@/lib/tracking/service";
 import {
   apiRequest,
@@ -69,9 +68,6 @@ describeWithDatabase("ledger reports", () => {
     }
     const asUser = <T>(user: SessionUser, work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: user.id, email: user.email }, work);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => asUser(owner, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     const contact = async (name: string, flags: Record<string, unknown>): Promise<Contact> =>
       (await as((tx) => createContact(tx, { idempotencyKey: key("contact"), name, ...flags }))).contact;
     const line = (amount: string, accountCode: string, extra: Record<string, unknown> = {}) => ({

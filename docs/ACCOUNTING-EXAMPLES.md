@@ -48,7 +48,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/budgets.test.ts` (BU1-BU8) and
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
-  `tests/integration/projects.test.ts` (PJ1-PJ12), all against
+  `tests/integration/projects.test.ts` (PJ1-PJ13), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -257,6 +257,15 @@ An invoice's amounts are tax **exclusive** (GST is added on top), tax
   its net amount, Cr GST (2100) for the GST. There's no GST line when the GST
   is 0.00.
 - Numbers `INV-0001`, `INV-0002`, ... are given on approval, with no gaps.
+- Tax codes: every organisation starts with the standard NZ codes, like
+  Xero: **GST** "GST (15%)" (standard, 0.15), **ZERO** "Zero rated"
+  (zero rated, 0), **EXEMPT** "Exempt" (exempt, 0) and **NONE** "No GST"
+  (out of scope, 0), all in effect from **1 Oct 2010** (when GST became
+  15%). So a document dated 30 Sep 2010 with GST is refused ("isn't in
+  effect"). Organisations made before this change that had no tax codes at
+  all were given the same four (migration 0031); one that already had any
+  codes was left alone (`tests/integration/provisioning.test.ts`). The
+  examples in this document use these seeded codes.
 
 | ID | Invoice | Result |
 | --- | --- | --- |
@@ -3131,6 +3140,11 @@ and Sam (bookkeepers) and a viewer. Sam's claim "June market trip":
   refused. A retry with the same key returns the same claim; the same key
   with another date is refused. The database refuses changing an approved
   claim.
+  The journal's description is "Expense claim CLAIM-n from Sam" and its
+  expense and 2010 lines say "Sam": the claimant's **name**, not their
+  email (the email only if they can't be found); paying is "Payment of
+  expense claim CLAIM-n to Sam". Journals posted before this was changed
+  keep the email they were posted with (posted history isn't rewritten).
 - **EC4** Paying **100.00** from 1000 on 15 Jun 2026 posts Dr 2010
   **100.00** / Cr 1000 **100.00**: due **0.00**, **paid**, 2010 back to
   **0.00**. A statement line of -100.00 on 15 Jun matches that bank line
@@ -3482,7 +3496,9 @@ from them do (as ordinary invoices, I1-I9).
 - **Expenses** are **linked, not re-posted**: an approved bill's line, an
   approved expense claim's receipt or a spend money line is linked to a
   project with its cost **excluding GST** (the line's net amount), a
-  **chargeable** flag and an optional **markup %**. A line can be on one
+  **chargeable** flag and an optional **markup %**. Only lines coded to
+  expense or direct cost accounts count (PJ13); a fixed asset bought or a
+  prepayment isn't a project cost. A line can be on one
   project at a time. Its **charge** is cost x (100 + markup) / 100, rounded
   to the cent. Stock lines (the inventory account) aren't linked: stock is
   costed when it's sold. While linked, the bill, claim or spend money can't
@@ -3617,6 +3633,21 @@ Harbour Cafe, estimate **2,000.00**, deadline 31 Aug 2026, with tasks
   something is idempotent. Across PJ1-PJ11 the only journals are the bill's,
   the claim's, the spend money's and the approved invoices' (and their
   voids).
+- **PJ13** Only lines coded to a **profit and loss cost account** (the
+  expense class: expense, direct costs and depreciation types) are project
+  expenses. Bill PS-302 from Paw Supplies on 8 Jul 2026 (approved) has
+  "Laptop for design work" **1,500.00** + GST to **1620 Computer
+  equipment** (a fixed asset), "Design software" **50.00** + GST to 6040
+  and "Courier for proofs" **30.00** + GST to 5100 (direct costs); spend
+  money on 8 Jul pays "Insurance paid ahead" 115.00 incl. GST to **1200
+  Prepayments**. "Add to project" offers only the software and the courier.
+  Linking the laptop is refused ("That line is coded to 1620 Computer
+  equipment, a fixed asset account, not an expense. Only lines coded to
+  expense or direct cost accounts can go on a project.") and so is the
+  prepayment (1200, a current asset); nothing is linked. The software then
+  links at cost **50.00** and the courier at **30.00**. (Stock on 1400 is
+  refused with its own reason, PJ4; GST, bank and accounts payable can't be
+  on these lines at all.) Lines already linked before this rule stay linked.
 
 ### Not supported yet (refused rather than guessed)
 

@@ -128,7 +128,9 @@ that something happened.
   out, grouped from the GST return's own lines so each list adds up to its
   box to the cent. Each of these five reports has "Print or save as PDF".
 - **Tax codes** as settings. Sales invoices and bills apply them; manual
-  journals don't.
+  journals don't. A new organisation starts with the standard NZ codes
+  (GST 15%, Zero rated, Exempt, No GST, from 1 Oct 2010); existing
+  organisations with no codes at all were given them by migration 0031.
 - **Sales invoices** in the base currency: drafts that can be edited and
   deleted, tax-exclusive, tax-inclusive or no-tax amounts, GST worked out and
   rounded per line, approval that numbers the invoice (`INV-0001`, with no
@@ -209,7 +211,7 @@ that something happened.
   year's depreciation by type, disposals this year, and ties to the ledger
   account by account. Tax depreciation beside book, pooling and low-value
   write-offs aren't built.
-- **Projects and time tracking** (Sales; PJ1-PJ12, not yet approved by
+- **Projects and time tracking** (Sales; PJ1-PJ13, not yet approved by
   Jess), like Xero Projects: a **project** for a customer with an optional
   estimate and deadline, **In progress** or **Closed** (only by closing and
   reopening). **Tasks** are hourly (a rate), fixed price or non-chargeable,
@@ -218,7 +220,8 @@ that something happened.
   for themselves (admins can enter it for another member); admins set each
   member's **staff cost rate**, copied onto their time as its cost.
   **Expenses** are linked from approved bill lines, expense claim receipts
-  and spend money lines at cost excluding GST (never re-posted), chargeable
+  and spend money lines coded to expense or direct cost accounts (PJ13) at
+  cost excluding GST (never re-posted), chargeable
   or not, with an optional markup; while linked, their document can't be
   voided. **Invoice** makes a draft sales invoice from the ticked unbilled
   items (time grouped per task at its rate, fixed prices, expenses with

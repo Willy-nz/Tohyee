@@ -5,6 +5,7 @@ import { type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transactio
 import { HttpError, ValidationError } from "@/lib/errors";
 import type { Membership } from "@/lib/organisations/registry";
 import { parseOrganisationId } from "@/lib/organisations/registry";
+import { addPersonNames, loadMemberNames } from "@/lib/people/names";
 
 export function json(data: unknown, init: { status?: number; headers?: HeadersInit } = {}) {
   return NextResponse.json(data, {
@@ -77,7 +78,10 @@ export async function requireAuth(request: Request): Promise<AuthContext> {
 
 /**
  * Authenticates, checks the caller's role in the organisation, then runs
- * `work` inside one transaction on that organisation's own database.
+ * `work` inside one transaction on that organisation's own database. After
+ * the transaction, every person's email in the result gets their name beside
+ * it (`createdByEmail` -> `createdByName`), from one lookup of the
+ * organisation's members.
  */
 export async function withOrganisation<T>(
   request: Request,
@@ -88,9 +92,12 @@ export async function withOrganisation<T>(
   const auth = await requireAuth(request);
   const organisationId = parseOrganisationId(organisationIdInput);
   const membership = await requireOrganisationRole(auth, organisationId, minimumRole);
-  return withOrganisationTransaction(
+  const people = await loadMemberNames(membership.organisation.id);
+  const result = await withOrganisationTransaction(
     membership.organisation,
     { userId: auth.user.id, email: auth.user.email },
     (tx) => work(tx, { auth, membership }),
+    { people },
   );
+  return addPersonNames(result, people);
 }

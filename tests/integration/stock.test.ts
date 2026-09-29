@@ -12,7 +12,6 @@ import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { inventoryValuation, trialBalance } from "@/lib/reports/financial";
 import { approveSupplierCreditNote, createSupplierCreditNote } from "@/lib/supplier-credit-notes/service";
 import { dec, sub, toFixedString } from "@/lib/money/decimal";
-import { createTaxCode } from "@/lib/tax/codes";
 import { createTrackingValue, getTrackingSetup } from "@/lib/tracking/service";
 import {
   createTestOrganisation,
@@ -44,9 +43,6 @@ describeWithDatabase("stock tracking", () => {
     const org = `stock-${organisations}-co`;
     await createTestOrganisation(owner, org);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     const loc: Record<string, string> = {};
     let locationCategory = "";
     if (options.locations) {

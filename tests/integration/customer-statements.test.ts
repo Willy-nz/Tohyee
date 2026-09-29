@@ -12,7 +12,6 @@ import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { recordPaymentBatch, voidPaymentBatch } from "@/lib/payments/batches";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
 import { type ActivityStatement, activityStatement, type OutstandingStatement, outstandingStatement } from "@/lib/reports/customer-statements";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -51,9 +50,6 @@ describeWithDatabase("customer statements", () => {
     await createTestOrganisation(owner, org);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     await as((tx) => updateOrganisationSettings(tx, { advancedFeatures: true }));
     const contact = async (name: string, fields: Record<string, unknown>): Promise<Contact> =>
       (await as((tx) => createContact(tx, { idempotencyKey: key("c"), name, ...fields }))).contact;

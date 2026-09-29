@@ -19,7 +19,6 @@ import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { recordPaymentBatch, voidPaymentBatch } from "@/lib/payments/batches";
 import { calculateGstReturn } from "@/lib/reports/gst-return";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -65,12 +64,6 @@ describeWithDatabase("payments for several invoices and bills", () => {
     await createTestOrganisation(owner, org);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "EXEMPT", label: "Exempt", category: "exempt", rate: "0", effectiveFrom: "2026-01-01" }),
-    );
     const contact = async (name: string, flags: Record<string, unknown>): Promise<Contact> =>
       (await as((tx) => createContact(tx, { idempotencyKey: key("contact"), name, ...flags }))).contact;
     const kobe = await contact("Kobe Ltd", { isCustomer: true });

@@ -22,7 +22,6 @@ import {
   createSupplierCreditNote,
   type SupplierCreditNote,
 } from "@/lib/supplier-credit-notes/service";
-import { createTaxCode } from "@/lib/tax/codes";
 import type { GstBasis } from "@/lib/tax/categories";
 import {
   createTestOrganisation,
@@ -65,12 +64,6 @@ describeWithDatabase("GST return on the payments and hybrid bases", () => {
     const org = `gst-basis-${organisations}-co`;
     await createTestOrganisation(owner, org);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    for (const [code, category, rate] of [
-      ["GST", "standard", "0.15"],
-      ["ZERO", "zero_rated", "0"],
-    ]) {
-      await as((tx) => createTaxCode(tx, { idempotencyKey: key("tax"), code, label: code, category, rate, effectiveFrom: "2026-01-01" }));
-    }
     const setBasis = (gstBasis: GstBasis) => as((tx) => updateOrganisationSettings(tx, { gstBasis }));
     await setBasis(basis);
     const contact = async (name: string, fields: Record<string, unknown>): Promise<Contact> =>

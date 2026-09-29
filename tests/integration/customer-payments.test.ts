@@ -22,7 +22,6 @@ import {
 } from "@/lib/invoices/service";
 import { correctJournal, getJournal, getJournalDetails, listJournals } from "@/lib/ledger/journals";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -123,16 +122,6 @@ describeWithDatabase("customer payments", () => {
         role,
       ]);
     }
-    await asUser(owner, (tx) =>
-      createTaxCode(tx, {
-        idempotencyKey: key("tax"),
-        code: "GST",
-        label: "GST on income (15%)",
-        category: "standard",
-        rate: "0.15",
-        effectiveFrom: "2026-01-01",
-      }),
-    );
     customer = (
       await asUser(bookkeeper, (tx) =>
         createContact(tx, { idempotencyKey: key("contact"), name: "Aroha Café Ltd", isCustomer: true }),

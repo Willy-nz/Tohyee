@@ -34,7 +34,6 @@ import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { getOrganisation } from "@/lib/organisations/registry";
 import { calculateGstReturn } from "@/lib/reports/gst-return";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -103,9 +102,6 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
     }
     const asUser = <T>(user: SessionUser, work: (tx: OrgTx) => Promise<T>) =>
       inOrganisation(org, { userId: user.id, email: user.email }, work);
-    await asUser(owner, (tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     const contact = async (name: string, flags: { isCustomer?: boolean; isSupplier?: boolean }): Promise<Contact> =>
       (await asUser(bookkeeper, (tx) => createContact(tx, { idempotencyKey: key("contact"), name, ...flags }))).contact;
     const kobe = await contact("Kobe Ltd", { isCustomer: true });

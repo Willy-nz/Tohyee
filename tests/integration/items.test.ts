@@ -14,7 +14,6 @@ import { addItemUnit, createItem, type Item, listItems, updateItem, updateItemUn
 import { getJournal } from "@/lib/ledger/journals";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { approveSupplierCreditNote, createSupplierCreditNote } from "@/lib/supplier-credit-notes/service";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -52,9 +51,6 @@ describeWithDatabase("products and services", () => {
     await createTestOrganisation(owner, org);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     if (options.advanced) await as((tx) => updateOrganisationSettings(tx, { advancedFeatures: true }));
     const contact = async (name: string, extra: Record<string, unknown>): Promise<Contact> =>
       (await as((tx) => createContact(tx, { idempotencyKey: key("c"), name, ...extra }))).contact;

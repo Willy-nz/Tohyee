@@ -11,7 +11,7 @@ import { RepeatingStatusBadge } from "@/components/repeating/repeating-editor";
 import { Button, Card, Empty, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, personName } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import { describeSchedule } from "@/lib/repeating/schedule";
 import type { RepeatingInvoice, RepeatingRun, RunResult } from "@/lib/repeating/service";
@@ -164,7 +164,7 @@ function RepeatingView({ organisationId, id }: { organisationId: string; id: str
         <CustomValuesText setup={customSetup.data} values={template.customFields} />
         <SalesLinesTable organisationId={organisationId} document={template} />
         <p className={ui.muted}>
-          Saved by {template.createdByEmail ?? "unknown"} on {formatDateTime(template.createdAt)}.
+          Saved by {personName(template, "createdBy") ?? "unknown"} on {formatDateTime(template.createdAt)}.
         </p>
       </Card>
       {can("bookkeeper") ? (
@@ -208,7 +208,7 @@ function RepeatingView({ organisationId, id }: { organisationId: string; id: str
                       {run.message ? <div className={ui.muted}>{run.message}</div> : null}
                     </td>
                     <td data-label="Made">
-                      {formatDateTime(run.createdAt)} by {run.createdByEmail ?? "unknown"}
+                      {formatDateTime(run.createdAt)} by {personName(run, "createdBy") ?? "unknown"}
                     </td>
                   </tr>
                 ))}

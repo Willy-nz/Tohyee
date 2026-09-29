@@ -125,7 +125,8 @@ Creating an organisation (server admins only):
    a member,
 2. runs `CREATE DATABASE` (outside any transaction),
 3. applies the tenant migrations,
-4. seeds `organisation_settings` and a starting NZ chart of accounts,
+4. seeds `organisation_settings`, a starting NZ chart of accounts and the
+   standard NZ GST codes (each only if there are none yet),
 5. marks it `ready`.
 
 Every step is idempotent. If any step fails the organisation is marked
@@ -228,6 +229,19 @@ Per organisation (lowest to highest):
 People who aren't members get "not found", so organisation IDs can't be
 probed. Every audit record stores the signed-in user, never a name typed into
 a form.
+
+Organisation databases record who did something by email (`created_by_email`
+and so on), since users live in the core database. Screens show people by
+name: `withOrganisation()` loads the organisation's members' names once per
+request (before the transaction) and, after it, adds a name beside every
+person's email in the result (`createdByEmail` gets `createdByName`), looking
+up anyone who has left in one more query; someone who can't be found (a
+deleted user, `cli`, a scheduled job) shows as the email recorded
+(`src/lib/people/names.ts`). Names are looked up when read rather than
+copied into organisation databases, so a renamed person shows their current
+name and posted history is never rewritten. Text written once, like a new
+journal's description, uses the name from `tx.people`; journals posted
+before this change keep the email they were posted with.
 
 ## Financial integrity
 
@@ -341,13 +355,14 @@ Enforced by the database itself, not just the app:
   existing organisations them at those codes or the next free ones) are the
   default gain, loss and capital gain accounts. The register
   (`src/lib/fixed-assets/register.ts`) ties to the ledger per account.
-- Projects (PJ1-PJ12) post nothing; only the invoices made from them do.
+- Projects (PJ1-PJ13) post nothing; only the invoices made from them do.
   `projects`, `project_tasks`, `project_time_entries` and
   `project_expenses` refuse `DELETE` and `TRUNCATE` (tasks are archived,
   time and expense links removed). Time is whole minutes (1 to 1440) with
   the member's staff cost rate copied on. An expense link is an approved
   bill's line, an approved expense claim's receipt or a posted spend money
-  line at its net amount, one active link per line (unique indexes), and
+  line at its net amount, coded to an expense-class account (the service
+  refuses balance sheet lines, PJ13), one active link per line (unique indexes), and
   that bill, claim or spend money can't be voided while linked. Invoicing
   inserts `project_invoices` (one per sales invoice, deleted with its draft
   by `on delete cascade`, otherwise never changed) and
@@ -607,7 +622,7 @@ Enforced by the app (and covered by tests):
   date, like aged receivables, sharing the ageing maths in `ageing.ts`.
   Account transactions and the journal report read `ledger_journal_lines`
   and find each journal's source from the documents' journal columns
-  (`journal-sources.ts`); who posted a journal is its `created_by_email`.
+  (`journal-sources.ts`); who posted a journal is its `created_by_email`, shown by name.
   The GST audit report (`gst-audit.ts`) only groups the GST return's own
   counted lines (`calculateGstReturn`, or a filed return's stored lines),
   so it can't disagree with the return.

@@ -2,16 +2,28 @@ import pg from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { databaseNameOf, getDatabaseUrl, withDatabaseName } from "@/lib/db/connection";
 import { migrateAllOrganisations, migrateCoreDatabase } from "@/lib/db/migrations";
+import { applyMigrations } from "@/lib/db/migrations/runner";
 import { tenantMigrations } from "@/lib/db/migrations/tenant";
 import { getOrganisation } from "@/lib/organisations/registry";
+import { NZ_DEFAULT_TAX_CODES } from "@/lib/tax/default-codes";
 import {
   createTestOrganisation,
   createTestUser,
   describeWithDatabase,
   inOrganisation,
   startTestServer,
+  testDatabaseUrl,
   type TestServer,
+  withDb,
 } from "../helpers/test-server";
+
+const STANDARD_CODES = [
+  { code: "EXEMPT", label: "Exempt", category: "exempt", rate: "0", effective_from: "2010-10-01" },
+  { code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effective_from: "2010-10-01" },
+  { code: "NONE", label: "No GST", category: "out_of_scope", rate: "0", effective_from: "2010-10-01" },
+  { code: "ZERO", label: "Zero rated", category: "zero_rated", rate: "0", effective_from: "2010-10-01" },
+];
+const TAX_CODES_SQL = "select code, label, category, rate::text as rate, effective_from::text as effective_from from tax_codes order by code";
 
 describeWithDatabase("one database per organisation", () => {
   let server: TestServer;
@@ -40,9 +52,14 @@ describeWithDatabase("one database per organisation", () => {
     );
     expect(accounts.rows.map((row) => row.code)).toContain("1400");
 
+    // And the standard NZ GST codes, so GST invoices and bills work straight away.
+    const taxCodes = await inOrganisation("alpha", actor, (tx) => tx.query(TAX_CODES_SQL));
+    expect(taxCodes.rows).toEqual(STANDARD_CODES);
+    expect(NZ_DEFAULT_TAX_CODES.map((c) => c.code).sort()).toEqual(STANDARD_CODES.map((c) => c.code));
+
     // The databases really are separate: rows written to alpha don't exist in beta.
     await inOrganisation("alpha", actor, (tx) =>
-      tx.query("insert into tax_codes (command_source, idempotency_key, request_hash, code, label, category, rate, effective_from) values ('t', 'only-in-alpha', 'h', 'GST', 'GST', 'standard', 0.15, '2026-01-01')"),
+      tx.query("insert into tax_codes (command_source, idempotency_key, request_hash, code, label, category, rate, effective_from) values ('t', 'only-in-alpha', 'h', 'ALPHA', 'GST', 'standard', 0.15, '2026-01-01')"),
     );
     const inBeta = await inOrganisation("beta", actor, (tx) =>
       tx.query("select 1 from tax_codes where idempotency_key = 'only-in-alpha'"),
@@ -54,6 +71,46 @@ describeWithDatabase("one database per organisation", () => {
       tx.query<{ organisation_id: string }>("select organisation_id from organisation_settings"),
     );
     expect(settings.rows[0].organisation_id).toBe("beta");
+  });
+
+  it("migration 0031 gives existing organisations with no tax codes the standard ones, and leaves the rest alone", async () => {
+    const before = tenantMigrations.filter((migration) => migration.version < "0031");
+    const upgrade = async (name: string, setup: (client: pg.Client) => Promise<void>) => {
+      const databaseName = `${server.coreDatabase}_org_${name}`;
+      const admin = new pg.Client({ connectionString: testDatabaseUrl! });
+      await admin.connect();
+      await admin.query(`create database "${databaseName}"`);
+      await admin.end();
+      const client = new pg.Client({ connectionString: withDb(testDatabaseUrl!, databaseName) });
+      await client.connect();
+      try {
+        await applyMigrations(client, before, "test:0031");
+        await setup(client);
+        expect((await applyMigrations(client, tenantMigrations, "test:0031")).applied).toContain("0031");
+        return (await client.query(TAX_CODES_SQL)).rows;
+      } finally {
+        await client.end();
+      }
+    };
+    const settings = (client: pg.Client, id: string) =>
+      client.query("insert into organisation_settings (id, organisation_id, display_name, base_currency) values (true, $1, $1, 'NZD')", [id]);
+
+    // An existing organisation with no tax codes gets the four.
+    expect(await upgrade("none", (client) => settings(client, "none").then(() => undefined))).toEqual(STANDARD_CODES);
+
+    // One that already has any code (even a single one of its own) is left alone.
+    expect(
+      await upgrade("own", async (client) => {
+        await settings(client, "own");
+        await client.query(
+          `insert into tax_codes (command_source, idempotency_key, request_hash, code, label, category, rate, effective_from)
+           values ('api', 'mine', 'h', 'GST15', 'My GST', 'standard', 0.15, '2024-04-01')`,
+        );
+      }),
+    ).toEqual([{ code: "GST15", label: "My GST", category: "standard", rate: "0.15", effective_from: "2024-04-01" }]);
+
+    // A brand-new database (not yet provisioned) gets its codes from provisioning, not the migration.
+    expect(await upgrade("fresh", async () => undefined)).toEqual([]);
   });
 
   it("re-running migrations is a no-op", async () => {

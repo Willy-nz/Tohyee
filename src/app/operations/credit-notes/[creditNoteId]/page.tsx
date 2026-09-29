@@ -14,7 +14,7 @@ import { Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/compo
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { CreditNote } from "@/lib/credit-notes/service";
-import { formatDate, formatDateTime, formatQuantity, todayInBrowser } from "@/lib/format";
+import { formatDate, formatDateTime, formatQuantity, todayInBrowser, personName } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 
@@ -271,18 +271,18 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
           ) : null}
         </div>
         <p className={ui.muted}>
-          Saved by {creditNote.createdByEmail ?? "unknown"} on {formatDateTime(creditNote.createdAt)}.
+          Saved by {personName(creditNote, "createdBy") ?? "unknown"} on {formatDateTime(creditNote.createdAt)}.
           {creditNote.approvalJournalId ? (
             <>
               {" "}
-              Approved by {creditNote.approvedByEmail ?? "unknown"} on {formatDateTime(creditNote.approvedAt)} and posted as{" "}
+              Approved by {personName(creditNote, "approvedBy") ?? "unknown"} on {formatDateTime(creditNote.approvedAt)} and posted as{" "}
               <Link href={journalHref(creditNote.approvalJournalId)}>journal #{creditNote.approvalJournalId}</Link>.
             </>
           ) : null}
           {creditNote.voidJournalId ? (
             <>
               {" "}
-              Voided by {creditNote.voidedByEmail ?? "unknown"} on {formatDateTime(creditNote.voidedAt)}, reversed on{" "}
+              Voided by {personName(creditNote, "voidedBy") ?? "unknown"} on {formatDateTime(creditNote.voidedAt)}, reversed on{" "}
               {formatDate(creditNote.voidDate)} by{" "}
               <Link href={journalHref(creditNote.voidJournalId)}>journal #{creditNote.voidJournalId}</Link>.
             </>

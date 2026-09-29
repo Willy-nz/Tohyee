@@ -3,6 +3,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { add, cmp, dec, neg, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { personName } from "@/lib/people/names";
 import {
   basisChangeAdjustment,
   calculateGstBoxes,
@@ -483,7 +484,10 @@ async function workOut(
     countsWhenSettled(basis, "sales"),
     countsWhenSettled(basis, "purchases"),
   ]);
-  const lines = eventLines(result.rows);
+  // Expense claims have no contact; their lines show the claimant, by name.
+  const lines = eventLines(
+    result.rows.map((row) => (row.document_type === "expense_claim" && row.contact_id === null ? { ...row, contact_name: personName(tx, row.contact_name) } : row)),
+  );
   const otherRates = new Map<string, string>();
   for (const line of lines) {
     if (line.category === "standard" && cmp(dec(line.taxRate), dec(GST_STANDARD_RATE)) !== 0) {

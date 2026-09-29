@@ -36,7 +36,6 @@ import { getJournal, getJournalDetails, postJournal } from "@/lib/ledger/journal
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { accountTransactions } from "@/lib/reports/account-transactions";
-import { createTaxCode } from "@/lib/tax/codes";
 import { createTrackingValue, getTrackingSetup } from "@/lib/tracking/service";
 import {
   apiRequest,
@@ -85,9 +84,6 @@ describeWithDatabase("fixed assets", () => {
     }
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
     const asAroha = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: aroha.id, email: aroha.email }, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     const type = async (name: string, asset: string, accumulated: string, method: string, rate: string | null) =>
       (
         await as((tx) =>

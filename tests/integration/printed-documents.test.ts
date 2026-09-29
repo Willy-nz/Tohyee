@@ -10,7 +10,6 @@ import { recordPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, voidInvoice } from "@/lib/invoices/service";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { acceptQuote, createQuote, finaliseQuote } from "@/lib/quotes/service";
-import { createTaxCode } from "@/lib/tax/codes";
 import {
   apiRequest,
   createTestOrganisation,
@@ -48,9 +47,6 @@ describeWithDatabase("printed documents", () => {
     await createTestOrganisation(owner, org);
     await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [org, viewer.id]);
     const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
-    await as((tx) =>
-      createTaxCode(tx, { idempotencyKey: key("tax"), code: "GST", label: "GST (15%)", category: "standard", rate: "0.15", effectiveFrom: "2026-01-01" }),
-    );
     const settings = await as((tx) =>
       updateOrganisationSettings(tx, {
         displayName: "Glimmers",

@@ -2,6 +2,7 @@ import { NotFoundError, UnavailableError } from "@/lib/errors";
 import { getOrganisationPool } from "@/lib/db/pools";
 import { type DbClient, withTransaction } from "@/lib/db/transactions";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
+import { loadMemberNames, type PeopleNames } from "@/lib/people/names";
 
 export type Actor = {
   userId: string | null;
@@ -17,6 +18,12 @@ export type OrgTx = DbClient & {
   databaseName: string;
   baseCurrency: string;
   actor: Actor;
+  /**
+   * The organisation's members' names by email, loaded before the
+   * transaction opens (see `personName` in `@/lib/people/names`), for text
+   * that names someone, e.g. a new journal's description.
+   */
+  people: PeopleNames;
 };
 
 export function assertOrganisationUsable(organisation: OrganisationRecord): void {
@@ -48,8 +55,11 @@ export async function withOrganisationTransaction<T>(
   organisation: OrganisationRecord,
   actor: Actor,
   work: (tx: OrgTx) => Promise<T>,
+  options: { people?: PeopleNames } = {},
 ): Promise<T> {
   assertOrganisationUsable(organisation);
+  // A core database read, done before the organisation's transaction opens.
+  const people = options.people ?? (await loadMemberNames(organisation.id));
   const pool = getOrganisationPool(organisation.databaseName);
   return withTransaction(pool, async (client) => {
     const settings = await client.query<{ base_currency: string; organisation_id: string }>(
@@ -70,6 +80,7 @@ export async function withOrganisationTransaction<T>(
       databaseName: organisation.databaseName,
       baseCurrency: row.base_currency,
       actor,
+      people,
     });
   });
 }
