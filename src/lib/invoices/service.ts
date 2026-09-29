@@ -1,4 +1,6 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
+import { assertRequiredFields, type CustomFieldContext, keptCustom, parseCustomInput, resolveDocumentCustom } from "@/lib/custom-fields/service";
+import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import type { AccountClass } from "@/lib/accounts/types";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import { writeAuditEvent } from "@/lib/audit";
@@ -68,6 +70,7 @@ export type InvoiceLine = {
   taxAmount: string;
   /** Tracking categories (TC3): category id -> value id. */
   tracking: TrackingTags;
+  customFields: CustomValues;
 };
 
 export type InvoiceSummary = {
@@ -100,6 +103,8 @@ export type InvoiceSummary = {
   voidedAt: string | null;
   voidedByEmail: string | null;
   createdByEmail: string | null;
+  /** Custom field values (CF4), field id -> value. */
+  customFields: CustomValues;
   createdAt: string;
   updatedAt: string;
 };
@@ -113,7 +118,7 @@ export type InvoiceInput = {
   dueDate?: unknown;
   reference?: unknown;
   amountsMode?: unknown;
-  lines?: unknown;
+  lines?: unknown;  customFields?: unknown;
 };
 
 const MAX_LINES = 200;
@@ -144,6 +149,7 @@ type InvoiceRow = {
   voided_at: string | null;
   voided_by_email: string | null;
   created_by_email: string | null;
+  custom_fields: CustomValues;
   created_at: string;
   updated_at: string;
 };
@@ -151,7 +157,7 @@ type InvoiceRow = {
 const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name as contact_name, i.invoice_date,
   i.due_date, i.reference, i.amounts_mode, i.currency_code, i.subtotal, i.tax_total, i.total,
   paid.amount_paid, credited.amount_credited, i.approval_journal_id, i.approved_at, i.approved_by_email, i.void_date, i.void_journal_id,
-  i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at`;
+  i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at, i.custom_fields`;
 
 /**
  * Invoices with their customer, what their active payments paid on them (a
@@ -187,6 +193,7 @@ type LineRow = {
   net_amount: string;
   tax_amount: string;
   tracking: TrackingTags;
+  custom_fields: CustomValues;
 };
 
 function toSummary(row: InvoiceRow): InvoiceSummary {
@@ -219,6 +226,7 @@ function toSummary(row: InvoiceRow): InvoiceSummary {
     voidedAt: row.voided_at,
     voidedByEmail: row.voided_by_email,
     createdByEmail: row.created_by_email,
+    customFields: row.custom_fields ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -240,6 +248,7 @@ function toLine(row: LineRow): InvoiceLine {
     netAmount: row.net_amount,
     taxAmount: row.tax_amount,
     tracking: row.tracking ?? {},
+    customFields: row.custom_fields ?? {},
   };
 }
 
@@ -257,7 +266,9 @@ type DraftDetails = {
     accountCode: string;
     taxCode: string | null;
     tracking: TrackingTags;
+    customFields: Record<string, unknown> | undefined;
   }>;
+  customInput: Record<string, unknown> | undefined;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -267,6 +278,8 @@ type ResolvedDraft = DraftDetails & {
   subtotal: string;
   taxTotal: string;
   total: string;
+  customFields: CustomValues;
+  customCtx: CustomFieldContext;
   resolvedLines: Array<{
     description: string;
     quantity: string;
@@ -280,6 +293,7 @@ type ResolvedDraft = DraftDetails & {
     taxAmount: string;
     tracking: TrackingTags;
     accountClass: AccountClass;
+    customFields: CustomValues;
   }>;
 };
 
@@ -315,9 +329,10 @@ function parseDraft(input: InvoiceInput): DraftDetails {
       accountCode: parseAccountCodeInput(line.accountCode, `${label} account`),
       taxCode,
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
+      customFields: parseCustomInput(line.customFields, `${label}: `),
     };
   });
-  return { contactId, invoiceDate, dueDate, reference, amountsMode, lines };
+  return { contactId, invoiceDate, dueDate, reference, amountsMode, lines, customInput: parseCustomInput(input.customFields, "") };
 }
 
 /** Normalised content for the idempotency fingerprint. */
@@ -329,6 +344,8 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     reference: draft.reference,
     amountsMode: draft.amountsMode,
     lines: draft.lines.map((line) => hashableLine({ ...line, accountCode: line.accountCode.toLowerCase() })),
+    // Values that weren't sent stay out, so older requests hash the same.
+    ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
   };
 }
 
@@ -338,7 +355,13 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
  * an active contact marked as a customer, each line's account an active
  * revenue account, and each tax code active and in effect on the invoice date.
  */
-async function resolveDraft(tx: OrgTx, draft: DraftDetails, kept: ReadonlySet<string> = new Set()): Promise<ResolvedDraft> {
+async function resolveDraft(
+  tx: OrgTx,
+  draft: DraftDetails,
+  kept: ReadonlySet<string> = new Set(),
+  keptFields: ReadonlySet<string> = new Set(),
+): Promise<ResolvedDraft> {
+  const custom = await resolveDocumentCustom(tx, "invoice", draft.customInput, draft.lines.map((line) => line.customFields), keptFields);
   const tracking = await loadTrackingContext(tx);
   draft.lines.forEach((line, index) => checkNewTags(tracking, line.tracking, `Line ${index + 1}`, kept));
   const contact = await tx.query<{ name: string; is_customer: boolean; is_archived: boolean }>(
@@ -424,6 +447,8 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails, kept: ReadonlySet<st
 
   return {
     ...draft,
+    customFields: custom.body,
+    customCtx: custom.ctx,
     contactName: customer.name,
     currencyCode: tx.baseCurrency,
     subtotal: amounts.subtotal,
@@ -440,6 +465,7 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails, kept: ReadonlySet<st
       ...amounts.lines[index],
       tracking: line.tracking,
       accountClass: line.accountClass,
+      customFields: custom.lines[index],
     })),
   };
 }
@@ -455,6 +481,7 @@ type StoredLine = {
   netAmount: string;
   taxAmount: string;
   tracking: TrackingTags;
+  customFields: CustomValues;
 };
 
 type StoredHeader = {
@@ -467,6 +494,7 @@ type StoredHeader = {
   subtotal: string;
   taxTotal: string;
   total: string;
+  customFields: CustomValues;
 };
 
 const plain = (value: string) => toPlainString(dec(value));
@@ -483,6 +511,7 @@ function headerState(invoice: StoredHeader): string {
     plain(invoice.subtotal),
     plain(invoice.taxTotal),
     plain(invoice.total),
+    customValuesKey(invoice.customFields),
   ]);
 }
 
@@ -499,6 +528,7 @@ function linesState(lines: readonly StoredLine[]): string {
       plain(line.netAmount),
       plain(line.taxAmount),
       trackingKey(line.tracking),
+      customValuesKey(line.customFields),
     ]),
   );
 }
@@ -525,7 +555,9 @@ function draftOf(invoice: Invoice): DraftDetails {
       accountCode: line.accountCode,
       taxCode: line.taxCode,
       tracking: line.tracking,
+      customFields: line.customFields,
     })),
+    customInput: invoice.customFields,
   };
 }
 
@@ -545,14 +577,15 @@ async function insertLines(tx: OrgTx, invoiceId: string, lines: ResolvedDraft["r
       line.netAmount,
       line.taxAmount,
       JSON.stringify(line.tracking),
+      JSON.stringify(line.customFields),
     );
-    const base = index * 12;
+    const base = index * 13;
     const p = (offset: number) => `$${base + offset}`;
-    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb)`;
+    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb)`;
   });
   await tx.query(
     `insert into sales_invoice_lines (invoice_id, line_order, description, quantity, unit_price, account_id,
-                                      tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking)
+                                      tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -599,7 +632,7 @@ export async function getInvoice(tx: OrgTx, invoiceIdInput: unknown): Promise<In
   const lines = await tx.query<LineRow>(
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
-            l.net_amount, l.tax_amount, l.tracking
+            l.net_amount, l.tax_amount, l.tracking, l.custom_fields
        from sales_invoice_lines l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
@@ -711,6 +744,7 @@ export async function createInvoice(
     return { created: false, invoice: await getInvoice(tx, winner.id) };
   }
   await insertLines(tx, invoiceId, resolved.resolvedLines);
+  await tx.query("update sales_invoices set custom_fields = $2::jsonb where id = $1", [invoiceId, JSON.stringify(resolved.customFields)]);
   await writeAuditEvent(tx, {
     eventType: "invoice.created",
     entityType: "sales_invoice",
@@ -742,8 +776,9 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
     reference: input.reference === undefined ? saved.reference : input.reference,
     amountsMode: input.amountsMode === undefined ? saved.amountsMode : input.amountsMode,
     lines: input.lines === undefined ? saved.lines : input.lines,
+    customFields: input.customFields === undefined ? saved.customInput : input.customFields,
   });
-  const resolved = await resolveDraft(tx, draft, keptValues(current.lines));
+  const resolved = await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)));
   const same = sameAsStored(resolved, current);
   if (same.header && same.lines) {
     return current;
@@ -754,6 +789,9 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
   );
   if (!same.lines) {
     changed.push("lines");
+  }
+  if (customValuesKey(resolved.customFields) !== customValuesKey(current.customFields)) {
+    changed.push("customFields");
   }
   await tx.query(
     `update sales_invoices
@@ -776,6 +814,7 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
   );
   await tx.query("delete from sales_invoice_lines where invoice_id = $1", [current.id]);
   await insertLines(tx, current.id, resolved.resolvedLines);
+  await tx.query("update sales_invoices set custom_fields = $2::jsonb where id = $1", [current.id, JSON.stringify(resolved.customFields)]);
   await writeAuditEvent(tx, {
     eventType: "invoice.updated",
     entityType: "sales_invoice",
@@ -912,7 +951,7 @@ export async function approveInvoice(
     );
   }
 
-  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines));
+  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)));
   const same = sameAsStored(resolved, current);
   if (!same.header || !same.lines) {
     throw new ConflictError(
@@ -922,6 +961,12 @@ export async function approveInvoice(
   assertRequiredTags(
     await loadTrackingContext(tx),
     resolved.resolvedLines.map((line) => ({ tags: line.tracking, accountClass: line.accountClass })),
+  );
+  assertRequiredFields(
+    resolved.customCtx,
+    "invoice",
+    resolved.customFields,
+    resolved.resolvedLines.map((line) => ({ values: line.customFields, accountClass: line.accountClass })),
   );
   const accounts = await invoiceControlAccounts(tx);
   await assertPostingDateAllowed(tx, current.invoiceDate);

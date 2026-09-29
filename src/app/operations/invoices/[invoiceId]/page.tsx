@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { formatRate, formatUnitPrice, InvoiceStatusBadge, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { InvoicePayments } from "@/components/invoices/invoice-payments";
@@ -273,6 +274,7 @@ function UnusedCredit({ organisationId, invoice }: { organisationId: string; inv
 
 function InvoiceView({ organisationId, invoiceId }: { organisationId: string; invoiceId: string }) {
   const trackingSetup = useTracking(organisationId);
+  const customSetup = useCustomFields(organisationId);
   const { can } = useWorkspace();
   const router = useRouter();
   const details = useApiData<{
@@ -334,6 +336,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           <Stat label="Reference" value={invoice.reference ?? "—"} />
           <Stat label="Customer" value={invoice.contactName} />
         </div>
+        <CustomValuesText setup={customSetup.data} values={invoice.customFields} />
         <div className={ui.tableWrap}>
           <table className={ui.table}>
             <thead>
@@ -362,6 +365,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
                   <td>
                     {line.accountCode} · {line.accountName}
                     <TrackingTagsText setup={trackingSetup.data} tags={line.tracking} />
+                    <CustomValuesText setup={customSetup.data} values={line.customFields} />
                   </td>
                   {hasTax ? (
                     <td>

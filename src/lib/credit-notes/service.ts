@@ -1,4 +1,6 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
+import { assertRequiredFields, type CustomFieldContext, keptCustom, parseCustomInput, resolveDocumentCustom } from "@/lib/custom-fields/service";
+import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import type { AccountClass } from "@/lib/accounts/types";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import { writeAuditEvent } from "@/lib/audit";
@@ -70,6 +72,7 @@ export type CreditNoteLine = {
   taxAmount: string;
   /** Tracking categories (TC4, TC10): category id -> value id. */
   tracking: TrackingTags;
+  customFields: CustomValues;
 };
 
 export type CreditNoteSummary = {
@@ -101,6 +104,8 @@ export type CreditNoteSummary = {
   voidedAt: string | null;
   voidedByEmail: string | null;
   createdByEmail: string | null;
+  /** Custom field values (CF4), field id -> value. */
+  customFields: CustomValues;
   createdAt: string;
   updatedAt: string;
 };
@@ -113,7 +118,7 @@ export type CreditNoteInput = {
   creditNoteDate?: unknown;
   reference?: unknown;
   amountsMode?: unknown;
-  lines?: unknown;
+  lines?: unknown;  customFields?: unknown;
 };
 
 const MAX_LINES = 200;
@@ -143,6 +148,7 @@ type CreditNoteRow = {
   voided_at: string | null;
   voided_by_email: string | null;
   created_by_email: string | null;
+  custom_fields: CustomValues;
   created_at: string;
   updated_at: string;
 };
@@ -150,7 +156,7 @@ type CreditNoteRow = {
 const SUMMARY_COLUMNS = `n.id, n.status, n.credit_note_number, n.contact_id, c.name as contact_name, n.credit_note_date,
   n.reference, n.amounts_mode, n.currency_code, n.subtotal, n.tax_total, n.total, applied.amount_applied,
   refunded.amount_refunded, n.approval_journal_id, n.approved_at, n.approved_by_email, n.void_date, n.void_journal_id,
-  n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at`;
+  n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at, n.custom_fields`;
 
 /** Credit notes with their customer and the sums of their active applications and refunds. */
 const SUMMARY_FROM = `sales_credit_notes n
@@ -181,6 +187,7 @@ type LineRow = {
   net_amount: string;
   tax_amount: string;
   tracking: TrackingTags;
+  custom_fields: CustomValues;
 };
 
 function toSummary(row: CreditNoteRow): CreditNoteSummary {
@@ -216,6 +223,7 @@ function toSummary(row: CreditNoteRow): CreditNoteSummary {
     voidedAt: row.voided_at,
     voidedByEmail: row.voided_by_email,
     createdByEmail: row.created_by_email,
+    customFields: row.custom_fields ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -237,6 +245,7 @@ function toLine(row: LineRow): CreditNoteLine {
     netAmount: row.net_amount,
     taxAmount: row.tax_amount,
     tracking: row.tracking ?? {},
+    customFields: row.custom_fields ?? {},
   };
 }
 
@@ -253,7 +262,9 @@ type DraftDetails = {
     accountCode: string;
     taxCode: string | null;
     tracking: TrackingTags;
+    customFields: Record<string, unknown> | undefined;
   }>;
+  customInput: Record<string, unknown> | undefined;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -263,6 +274,8 @@ type ResolvedDraft = DraftDetails & {
   subtotal: string;
   taxTotal: string;
   total: string;
+  customFields: CustomValues;
+  customCtx: CustomFieldContext;
   resolvedLines: Array<{
     description: string;
     quantity: string;
@@ -276,6 +289,7 @@ type ResolvedDraft = DraftDetails & {
     taxAmount: string;
     tracking: TrackingTags;
     accountClass: AccountClass;
+    customFields: CustomValues;
   }>;
 };
 
@@ -307,9 +321,10 @@ function parseDraft(input: CreditNoteInput): DraftDetails {
       accountCode: parseAccountCodeInput(line.accountCode, `${label} account`),
       taxCode,
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
+      customFields: parseCustomInput(line.customFields, `${label}: `),
     };
   });
-  return { contactId, creditNoteDate, reference, amountsMode, lines };
+  return { contactId, creditNoteDate, reference, amountsMode, lines, customInput: parseCustomInput(input.customFields, "") };
 }
 
 /** Normalised content for the idempotency fingerprint. */
@@ -320,6 +335,8 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     reference: draft.reference,
     amountsMode: draft.amountsMode,
     lines: draft.lines.map((line) => hashableLine({ ...line, accountCode: line.accountCode.toLowerCase() })),
+    // Values that weren't sent stay out, so older requests hash the same.
+    ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
   };
 }
 
@@ -330,7 +347,13 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
  * customer, each line's account an active revenue account, and each tax code
  * active and in effect on the credit note date.
  */
-async function resolveDraft(tx: OrgTx, draft: DraftDetails, kept: ReadonlySet<string> = new Set()): Promise<ResolvedDraft> {
+async function resolveDraft(
+  tx: OrgTx,
+  draft: DraftDetails,
+  kept: ReadonlySet<string> = new Set(),
+  keptFields: ReadonlySet<string> = new Set(),
+): Promise<ResolvedDraft> {
+  const custom = await resolveDocumentCustom(tx, "credit_note", draft.customInput, draft.lines.map((line) => line.customFields), keptFields);
   const tracking = await loadTrackingContext(tx);
   draft.lines.forEach((line, index) => checkNewTags(tracking, line.tracking, `Line ${index + 1}`, kept));
   const contact = await tx.query<{ name: string; is_customer: boolean; is_archived: boolean }>(
@@ -419,6 +442,8 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails, kept: ReadonlySet<st
 
   return {
     ...draft,
+    customFields: custom.body,
+    customCtx: custom.ctx,
     contactName: customer.name,
     currencyCode: tx.baseCurrency,
     subtotal: amounts.subtotal,
@@ -435,6 +460,7 @@ async function resolveDraft(tx: OrgTx, draft: DraftDetails, kept: ReadonlySet<st
       ...amounts.lines[index],
       tracking: line.tracking,
       accountClass: line.accountClass,
+      customFields: custom.lines[index],
     })),
   };
 }
@@ -450,6 +476,7 @@ type StoredLine = {
   netAmount: string;
   taxAmount: string;
   tracking: TrackingTags;
+  customFields: CustomValues;
 };
 
 type StoredHeader = {
@@ -461,6 +488,7 @@ type StoredHeader = {
   subtotal: string;
   taxTotal: string;
   total: string;
+  customFields: CustomValues;
 };
 
 const plain = (value: string) => toPlainString(dec(value));
@@ -476,6 +504,7 @@ function headerState(creditNote: StoredHeader): string {
     plain(creditNote.subtotal),
     plain(creditNote.taxTotal),
     plain(creditNote.total),
+    customValuesKey(creditNote.customFields),
   ]);
 }
 
@@ -492,6 +521,7 @@ function linesState(lines: readonly StoredLine[]): string {
       plain(line.netAmount),
       plain(line.taxAmount),
       trackingKey(line.tracking),
+      customValuesKey(line.customFields),
     ]),
   );
 }
@@ -517,7 +547,9 @@ function draftOf(creditNote: CreditNote): DraftDetails {
       accountCode: line.accountCode,
       taxCode: line.taxCode,
       tracking: line.tracking,
+      customFields: line.customFields,
     })),
+    customInput: creditNote.customFields,
   };
 }
 
@@ -537,14 +569,15 @@ async function insertLines(tx: OrgTx, creditNoteId: string, lines: ResolvedDraft
       line.netAmount,
       line.taxAmount,
       JSON.stringify(line.tracking),
+      JSON.stringify(line.customFields),
     );
-    const base = index * 12;
+    const base = index * 13;
     const p = (offset: number) => `$${base + offset}`;
-    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb)`;
+    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb)`;
   });
   await tx.query(
     `insert into sales_credit_note_lines (credit_note_id, line_order, description, quantity, unit_price, account_id,
-                                          tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking)
+                                          tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -590,7 +623,7 @@ export async function getCreditNote(tx: OrgTx, creditNoteIdInput: unknown): Prom
   const lines = await tx.query<LineRow>(
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
-            l.net_amount, l.tax_amount, l.tracking
+            l.net_amount, l.tax_amount, l.tracking, l.custom_fields
        from sales_credit_note_lines l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
@@ -712,6 +745,7 @@ export async function createCreditNote(
     return { created: false, creditNote: await getCreditNote(tx, winner.id) };
   }
   await insertLines(tx, creditNoteId, resolved.resolvedLines);
+  await tx.query("update sales_credit_notes set custom_fields = $2::jsonb where id = $1", [creditNoteId, JSON.stringify(resolved.customFields)]);
   await writeAuditEvent(tx, {
     eventType: "credit_note.created",
     entityType: "sales_credit_note",
@@ -746,8 +780,9 @@ export async function updateCreditNote(
     reference: input.reference === undefined ? saved.reference : input.reference,
     amountsMode: input.amountsMode === undefined ? saved.amountsMode : input.amountsMode,
     lines: input.lines === undefined ? saved.lines : input.lines,
+    customFields: input.customFields === undefined ? saved.customInput : input.customFields,
   });
-  const resolved = await resolveDraft(tx, draft, keptValues(current.lines));
+  const resolved = await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)));
   const same = sameAsStored(resolved, current);
   if (same.header && same.lines) {
     return current;
@@ -758,6 +793,9 @@ export async function updateCreditNote(
   );
   if (!same.lines) {
     changed.push("lines");
+  }
+  if (customValuesKey(resolved.customFields) !== customValuesKey(current.customFields)) {
+    changed.push("customFields");
   }
   await tx.query(
     `update sales_credit_notes
@@ -779,6 +817,7 @@ export async function updateCreditNote(
   );
   await tx.query("delete from sales_credit_note_lines where credit_note_id = $1", [current.id]);
   await insertLines(tx, current.id, resolved.resolvedLines);
+  await tx.query("update sales_credit_notes set custom_fields = $2::jsonb where id = $1", [current.id, JSON.stringify(resolved.customFields)]);
   await writeAuditEvent(tx, {
     eventType: "credit_note.updated",
     entityType: "sales_credit_note",
@@ -877,7 +916,7 @@ export async function approveCreditNote(
     );
   }
 
-  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines));
+  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)));
   const same = sameAsStored(resolved, current);
   if (!same.header || !same.lines) {
     throw new ConflictError(
@@ -887,6 +926,12 @@ export async function approveCreditNote(
   assertRequiredTags(
     await loadTrackingContext(tx),
     resolved.resolvedLines.map((line) => ({ tags: line.tracking, accountClass: line.accountClass })),
+  );
+  assertRequiredFields(
+    resolved.customCtx,
+    "credit_note",
+    resolved.customFields,
+    resolved.resolvedLines.map((line) => ({ values: line.customFields, accountClass: line.accountClass })),
   );
   const accounts = await creditNoteControlAccounts(tx);
   await assertPostingDateAllowed(tx, current.creditNoteDate);

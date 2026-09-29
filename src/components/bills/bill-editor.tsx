@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate, InvoiceStatusBadge } from "@/components/invoices/invoice-editor";
 import { Button, Field, Notice, Stat, ui } from "@/components/ui";
@@ -17,6 +18,7 @@ import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode, calculateInvoice 
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
+import { type CustomFieldSetup, type CustomValues } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 /** Bills have the same statuses as invoices: draft, approved and voided. */
@@ -32,6 +34,7 @@ type EditorLine = {
   accountCode: string;
   taxCode: string;
   tracking: TrackingTags;
+  customFields: CustomValues;
 };
 
 let lineKey = 0;
@@ -41,8 +44,8 @@ function nextLineKey(): number {
 }
 
 /** New lines have no account, so each cost is put somewhere on purpose. */
-function blankLine(taxCode: string): EditorLine {
-  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {} };
+function blankLine(taxCode: string, customFields: CustomValues = {}): EditorLine {
+  return { key: nextLineKey(), description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {}, customFields };
 }
 
 /** The accounts bill lines can go to, the same rule the server checks. */
@@ -57,12 +60,13 @@ type FormProps = {
   contacts: Contact[];
   taxCodes: TaxCode[];
   tracking: TrackingSetup;
+  customSetup: CustomFieldSetup;
   bill?: Bill;
   onSaved: (bill: Bill) => void;
   onCancel: () => void;
 };
 
-function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, tracking, bill, onSaved, onCancel }: FormProps) {
+function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, tracking, customSetup, bill, onSaved, onCancel }: FormProps) {
   const scale = currencyMinorUnits(baseCurrency);
   const activeTaxCodes = taxCodes.filter((taxCode) => taxCode.isActive);
   const defaultTaxCode = (activeTaxCodes.find((taxCode) => taxCode.category === "standard") ?? activeTaxCodes[0])?.code ?? "";
@@ -71,6 +75,10 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
   const [billDate, setBillDate] = useState(bill?.billDate ?? todayInBrowser());
   const [dueDate, setDueDate] = useState(bill?.dueDate ?? "");
   const [amountsMode, setAmountsMode] = useState<AmountsMode>(bill?.amountsMode ?? "exclusive");
+  const lineDefaults = startingValues(customSetup, "line", ["bill"]);
+  const [customFields, setCustomFields] = useState<CustomValues>(
+    () => bill?.customFields ?? startingValues(customSetup, "document", ["bill"]),
+  );
   const [lines, setLines] = useState<EditorLine[]>(() =>
     bill
       ? bill.lines.map((line) => ({
@@ -81,8 +89,9 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
           accountCode: line.accountCode,
           taxCode: line.taxCode ?? defaultTaxCode,
           tracking: line.tracking ?? {},
+          customFields: line.customFields ?? {},
         }))
-      : [blankLine(defaultTaxCode)],
+      : [blankLine(defaultTaxCode, lineDefaults)],
   );
   // One key per new bill, so a double click or a retry can't save it twice.
   const [idempotencyKey] = useState(() => newIdempotencyKey("bill"));
@@ -131,7 +140,9 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
         accountCode: line.accountCode,
         taxCode: hasTax ? line.taxCode || null : null,
         tracking: line.tracking,
+        customFields: line.customFields,
       })),
+      customFields,
     };
     try {
       const result = bill
@@ -211,6 +222,7 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
           />
         </Field>
       </div>
+      <CustomFieldInputs setup={customSetup} record="document" uses={["bill"]} value={customFields} onChange={setCustomFields} />
       <div className={ui.tableWrap}>
         <table className={`${ui.table} ${ui.stackOnPhone}`}>
           <thead>
@@ -278,6 +290,15 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
                     value={line.tracking}
                     onChange={(tags) => update(line.key, { tracking: tags })}
                   />
+                  <CustomFieldInputs
+                    compact
+                    setup={customSetup}
+                    record="line"
+                    uses={["bill"]}
+                    labelPrefix={`Line ${index + 1}`}
+                    value={line.customFields}
+                    onChange={(values) => update(line.key, { customFields: values })}
+                  />
                 </td>
                 {hasTax ? (
                   <td data-label="Tax code">
@@ -320,7 +341,7 @@ function BillForm({ organisationId, baseCurrency, accounts, contacts, taxCodes, 
                 <Button
                   variant="secondary"
                   size="small"
-                  onClick={() => setLines((current) => [...current, blankLine(defaultTaxCode)])}
+                  onClick={() => setLines((current) => [...current, blankLine(defaultTaxCode, lineDefaults)])}
                 >
                   Add line
                 </Button>
@@ -368,11 +389,12 @@ export function BillEditor({
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
   const tracking = useTracking(organisationId);
-  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error;
+  const customSetup = useCustomFields(organisationId);
+  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error;
   if (error) {
     return <Notice tone="error">{error}</Notice>;
   }
-  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data) {
+  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data || !customSetup.data) {
     return <p className={ui.muted}>Loading…</p>;
   }
   return (
@@ -383,6 +405,7 @@ export function BillEditor({
       contacts={contacts.data.contacts}
       taxCodes={taxCodes.data.taxCodes}
       tracking={tracking.data}
+      customSetup={customSetup.data}
       bill={bill}
       onSaved={onSaved}
       onCancel={onCancel}

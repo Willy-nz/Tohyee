@@ -418,7 +418,15 @@ Enforced by the app (and covered by tests):
   idempotency hashes, so requests from before tracking hash the same.
   Required categories are checked when approving or posting (not on drafts),
   and only on income and expense lines. The rules are in
-  `src/lib/tracking/service.ts`.
+  `src/lib/tracking/service.ts`. Custom segments are tracking categories of
+  kind `custom`; only they can be archived.
+- Custom fields: `custom_fields` (type and what it's on fixed by a trigger)
+  and `custom_field_options`, neither deletable. Values are a jsonb map
+  `{fieldId: value}` in a `custom_fields` column on contacts, the document
+  tables, their line tables and `ledger_journals`/`ledger_journal_lines`
+  (manual journals only); a trigger checks every key is a field for that
+  kind of record, and `src/lib/custom-fields/` checks types, options and
+  required fields. They never reach posting, reports or the GST return.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 
