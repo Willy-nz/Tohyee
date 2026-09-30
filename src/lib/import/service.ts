@@ -280,7 +280,7 @@ async function contactsApplier(tx: OrgTx, options: ImportOptions, idempotencyKey
     const supplierText = given(values, "isSupplier");
     if (customerText !== undefined) input.isCustomer = yesNo(customerText, "Customer");
     if (supplierText !== undefined) input.isSupplier = yesNo(supplierText, "Supplier");
-    for (const field of ["email", "phone", "postalAddress", "deliveryAddress", "gstNumber"] as const) {
+    for (const field of ["email", "phone", "postalAddress", "deliveryAddress", "gstNumber", "billingCountry", "deliveryCountry"] as const) {
       const text = given(values, field);
       if (text !== undefined) input[field] = text;
     }
@@ -492,7 +492,7 @@ export async function exportCsv(tx: OrgTx, kindInput: unknown): Promise<{ fileNa
     };
   }
   if (kind === "contacts") {
-    const keys = ["name", "isCustomer", "isSupplier", "email", "phone", "postalAddress", "deliveryAddress", "gstNumber", "paymentTerms"];
+    const keys = ["name", "isCustomer", "isSupplier", "email", "phone", "postalAddress", "deliveryAddress", "gstNumber", "paymentTerms", "billingCountry", "deliveryCountry"];
     const contacts: Contact[] = await listContacts(tx);
     const terms = await tx.query<{ id: string; name: string }>("select id, name from payment_terms");
     const termName = new Map(terms.rows.map((row) => [row.id, row.name]));
@@ -510,6 +510,8 @@ export async function exportCsv(tx: OrgTx, kindInput: unknown): Promise<{ fileNa
           contact.deliveryAddress,
           contact.gstNumber,
           contact.paymentTermId ? termName.get(contact.paymentTermId) : null,
+          contact.billingCountry,
+          contact.deliveryCountry,
         ]),
       ]),
     };

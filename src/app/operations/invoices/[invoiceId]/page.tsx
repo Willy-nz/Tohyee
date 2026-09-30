@@ -5,6 +5,7 @@ import { EmailDocumentPanel, pdfHref } from "@/components/documents/email-docume
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
+import { DocumentExportFlags } from "@/components/exports";
 import { useApiData } from "@/components/hooks";
 import { ForeignTotals } from "@/components/fx-totals";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
@@ -349,6 +350,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           <Stat label="Customer" value={invoice.contactName} />
         </div>
         {invoice.salespersonName ? <div className={ui.muted}>Salesperson: {invoice.salespersonName}</div> : null}
+        <DocumentExportFlags organisationId={organisationId} contactId={invoice.contactId} lineTaxCodes={invoice.lines.map((line) => line.taxCode)} />
         {fromQuote ? (
           <div className={ui.muted}>
             Made by accepting quote <Link href={`/operations/quotes/${fromQuote.id}`}>{fromQuote.quoteNumber}</Link>.

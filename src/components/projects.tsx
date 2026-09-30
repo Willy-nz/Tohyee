@@ -25,6 +25,8 @@ import type {
   TimeReport,
 } from "@/lib/projects/service";
 import type { TaxCode } from "@/lib/tax/codes";
+import { useExportSettings } from "@/components/exports";
+import { contactSalesTaxCode } from "@/lib/tax/exports";
 
 /**
  * Projects and time tracking (examples PJ1-PJ13): projects for a customer,
@@ -723,11 +725,19 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
   const foreign = project.currencyCode !== baseCurrency;
   const [typedRate, setTypedRate] = useState<string | null>(null);
   const suggestedRate = useLastRate(organisationId, project.currencyCode, baseCurrency, invoiceDate);
+  // The customer's own default sales tax code, or the tax code for exports (EX15).
+  const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId, includeArchived: "true" });
+  const exportSettings = useExportSettings(organisationId);
   if (project.status !== "in_progress" || !can("bookkeeper") || all.length === 0) return null;
   // GST on a foreign-currency invoice works as on an NZD one (MC71).
   const activeTax = (taxCodes.data?.taxCodes ?? []).filter((code) => code.isActive);
   const account = accountCode ?? (accounts.data?.accounts ?? []).find((entry) => entry.isActive && entry.accountClass === "revenue")?.code ?? "";
-  const tax = taxCode ?? (activeTax.find((code) => code.category === "standard") ?? activeTax[0])?.code ?? "";
+  const customer = contacts.data?.contacts.find((contact) => contact.id === project.contactId);
+  const tax =
+    taxCode ??
+    contactSalesTaxCode(customer, exportSettings.data, taxCodes.data?.taxCodes ?? []) ??
+    (activeTax.find((code) => code.category === "standard") ?? activeTax[0])?.code ??
+    "";
   const ticked = (id: string) => !unticked.has(id);
   const flip = (id: string) => {
     const next = new Set(unticked);

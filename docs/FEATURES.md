@@ -445,6 +445,23 @@ that something happened.
   filed", box by box, if documents in its period were approved or voided
   afterwards. Standard-rated lines at a rate other than 15% are refused. See
   examples G1-G9.
+- **Exports and the tax code for overseas customers** (built overnight 1 Oct
+  2026 following NetSuite, examples EX1-EX15 not yet approved by Jess).
+  Contacts have a **billing country** and an optional **delivery country**
+  (ISO codes chosen by name; New Zealand unless set; in the contacts CSV
+  import and export), and customers an optional **default sales tax code**.
+  Settings › Exports (admins, audited): **Foreign trade** (off to start
+  with) and the **Tax code for exports** (ZERO to start with; only an active
+  zero-rated code, since exports are zero-rated, not exempt, and go in Box 5
+  and Box 6). A new sales line (invoices, credit notes, quotes, repeating
+  invoices, project and CRM invoices, item lines) starts with the
+  customer's own code, else, with Foreign trade on and the customer outside
+  New Zealand by delivery (else billing) country, the tax code for exports,
+  else the usual default as before. It's only a starting value: lines can be
+  changed and saved documents never change. The currency doesn't decide it.
+  Sales documents for an overseas customer show **Export (country)**, and
+  with Foreign trade on a standard-rated line shows a warning that never
+  blocks.
 - **Bank accounts and reconciliation**. Bank and credit card accounts (any
   number, any bank) with a statement balance, the balance in Tohyee and a
   count of lines to reconcile. Statements come in as files (CSV and Excel
@@ -726,6 +743,8 @@ isn't acceptable, because people would trust it:
 - amending a filed GST return, imported goods (Customs GST), GST rates other
   than 15%, recording the GST payment or refund to IRD, and filing to IRD
   electronically
+- a default purchase tax code per contact and an import tax code (exports
+  are built for sales only, EX1-EX15)
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)
 

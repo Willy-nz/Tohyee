@@ -29,6 +29,8 @@ export const PATCH = route<Context>(async (request, context) => {
       advancedFeatures: body.advancedFeatures,
       crmEnabled: body.crmEnabled,
       allowNegativeStock: body.allowNegativeStock,
+      foreignTrade: body.foreignTrade,
+      exportTaxCode: body.exportTaxCode,
       postalAddress: body.postalAddress,
       gstNumber: body.gstNumber,
       paymentDetails: body.paymentDetails,

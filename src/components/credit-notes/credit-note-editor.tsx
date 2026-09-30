@@ -13,6 +13,8 @@ import { CustomFieldInputs, startingValues, useCustomFields } from "@/components
 import { customerDefault, SalespersonField, useSalespeople } from "@/components/salespeople";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate } from "@/components/invoices/invoice-editor";
+import { ExportBadge, ExportWarning, useExportSettings } from "@/components/exports";
+import { contactSalesTaxCode, type ExportSettings, retaxLines, usualWithContact } from "@/lib/tax/exports";
 import { Badge, Button, Field, Notice, Stat, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -66,6 +68,9 @@ type EditorLine = {
   taxCode: string;
   tracking: TrackingTags;
   customFields: CustomValues;
+  /** As on invoices (EX2-EX8). */
+  usualTaxCode?: string;
+  taxTyped?: boolean;
 };
 
 let lineKey = 0;
@@ -76,8 +81,20 @@ function nextLineKey(): number {
 
 type Defaults = { accountCode: string; taxCode: string };
 
-function blankLine(defaults: Defaults, customFields: CustomValues = {}): EditorLine {
-  return { key: nextLineKey(), itemId: "", unitId: "", description: "", quantity: "1", unitPrice: "", tracking: {}, customFields, ...defaults };
+function blankLine(defaults: Defaults, customFields: CustomValues = {}, contactTaxCode: string | null = null): EditorLine {
+  return {
+    key: nextLineKey(),
+    itemId: "",
+    unitId: "",
+    description: "",
+    quantity: "1",
+    unitPrice: "",
+    tracking: {},
+    customFields,
+    ...defaults,
+    taxCode: contactTaxCode ?? defaults.taxCode,
+    usualTaxCode: defaults.taxCode,
+  };
 }
 
 /** Credit note lines go to revenue accounts, the same rule the server checks. */
@@ -118,6 +135,7 @@ type FormProps = {
   tracking: TrackingSetup;
   customSetup: CustomFieldSetup;
   salespeople: SalespeopleSetup;
+  exportSettings: ExportSettings;
   creditNote?: CreditNote;
   start?: CreditNoteStart;
   onSaved: (creditNote: CreditNote) => void;
@@ -134,6 +152,7 @@ function CreditNoteForm({
   tracking,
   customSetup,
   salespeople,
+  exportSettings,
   creditNote,
   start,
   onSaved,
@@ -180,6 +199,8 @@ function CreditNoteForm({
           taxCode: line.taxCode ?? defaults.taxCode,
           tracking: line.tracking ?? {},
           customFields: creditNote ? (line.customFields ?? {}) : copyableValuesFor(customSetup.fields, line.customFields, "line", "credit_note"),
+          // Saved lines, or an invoice's, keep their tax codes (EX8).
+          taxTyped: true,
         }))
       : [blankLine(defaults, lineDefaults)],
   );
@@ -189,6 +210,8 @@ function CreditNoteForm({
   const [busy, setBusy] = useState(false);
   // A customer in another currency gets credit notes in it, at a rate for its date (MC7).
   const chosenCustomer = customers.find((contact) => contact.id === contactId);
+  // The customer's own default sales tax code, or the tax code for exports (EX2-EX6, EX15).
+  const contactTaxCode = contactSalesTaxCode(chosenCustomer, exportSettings, taxCodes);
   const currencyCode = chosenCustomer ? (chosenCustomer.currencyCode ?? baseCurrency) : (creditNote?.currencyCode ?? baseCurrency);
   const foreign = currencyCode !== baseCurrency;
   const [typedRate, setTypedRate] = useState<string | null>(creditNote?.exchangeRate ?? null);
@@ -282,6 +305,7 @@ function CreditNoteForm({
               const next = customers.find((contact) => contact.id === event.target.value);
               if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
               setContactId(event.target.value);
+              setLines((current) => retaxLines(current, contactSalesTaxCode(next, exportSettings, taxCodes)));
               if (!creditNote) {
                 const chosen = customers.find((contact) => contact.id === event.target.value);
                 setSalespersonId(customerDefault(salespeople, chosen?.defaultSalespersonId));
@@ -299,6 +323,7 @@ function CreditNoteForm({
               </option>
             ))}
           </select>
+          <ExportBadge contact={chosenCustomer} />
         </Field>
         <Field label="Credit note date" hint="Approving posts the credit note on this date.">
           <input type="date" value={creditNoteDate} onChange={(event) => setCreditNoteDate(event.target.value)} required />
@@ -370,7 +395,10 @@ function CreditNoteForm({
                     itemId={line.itemId}
                     unitId={line.unitId}
                     labelPrefix={`Line ${index + 1}`}
-                    onPick={(patch) => update(line.key, patch)}
+                    onPick={(patch) => {
+                      const { taxCode, ...rest } = patch;
+                      update(line.key, { ...rest, ...usualWithContact(taxCode, contactTaxCode) });
+                    }}
                   />
                 </td>
                 <td data-label="Quantity">
@@ -399,7 +427,9 @@ function CreditNoteForm({
                     accounts={accounts}
                     filter={isRevenue}
                     value={line.accountCode}
-                    onChange={(code) => update(line.key, { accountCode: code, ...usualTaxCode(accounts, taxCodes, code) })}
+                    onChange={(code) =>
+                      update(line.key, { accountCode: code, ...usualWithContact(usualTaxCode(accounts, taxCodes, code).taxCode, contactTaxCode) })
+                    }
                     required
                   />
                   <TrackingSelects
@@ -423,7 +453,7 @@ function CreditNoteForm({
                     <select
                       aria-label={`Line ${index + 1} tax code`}
                       value={line.taxCode}
-                      onChange={(event) => update(line.key, { taxCode: event.target.value })}
+                      onChange={(event) => update(line.key, { taxCode: event.target.value, taxTyped: true })}
                       required
                     >
                       <option value="">Choose</option>
@@ -456,7 +486,7 @@ function CreditNoteForm({
           <tfoot>
             <tr>
               <td colSpan={hasTax ? 8 : 6}>
-                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaults, lineDefaults)])}>
+                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaults, lineDefaults, contactTaxCode)])}>
                   Add line
                 </Button>
               </td>
@@ -464,6 +494,7 @@ function CreditNoteForm({
           </tfoot>
         </table>
       </div>
+      {hasTax ? <ExportWarning contact={chosenCustomer} settings={exportSettings} lineTaxCodes={lines.map((line) => line.taxCode)} taxCodes={taxCodes} /> : null}
       <div className={ui.statRow} aria-live="polite">
         <Stat label={hasTax ? "Subtotal (excl. GST)" : "Subtotal"} value={money(amounts.subtotal)} />
         {hasTax ? <Stat label="GST" value={money(amounts.taxTotal)} /> : null}
@@ -509,11 +540,13 @@ export function CreditNoteEditor({
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const salespeople = useSalespeople(organisationId);
-  const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error ?? salespeople.error;
+  const exportSettings = useExportSettings(organisationId);
+  const error =
+    accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error ?? salespeople.error ?? exportSettings.error;
   if (error) {
     return <Notice tone="error">{error}</Notice>;
   }
-  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data || !customSetup.data || !salespeople.data) {
+  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data || !customSetup.data || !salespeople.data || !exportSettings.data) {
     return <p className={ui.muted}>Loading…</p>;
   }
   return (
@@ -527,6 +560,7 @@ export function CreditNoteEditor({
       tracking={tracking.data}
       customSetup={customSetup.data}
       salespeople={salespeople.data}
+      exportSettings={exportSettings.data}
       creditNote={creditNote}
       start={start}
       onSaved={onSaved}

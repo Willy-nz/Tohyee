@@ -27,6 +27,10 @@ import { type CustomFieldSetup, type CustomFieldUse, type CustomValues, fieldsFo
 import { formatGstNumber } from "@/lib/format";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
+import { COUNTRY_CHOICES, countryName, HOME_COUNTRY } from "@/lib/contacts/countries";
+import type { TaxCode } from "@/lib/tax/codes";
+import { formatRate } from "@/lib/documents/format";
+import { exportLabel } from "@/lib/tax/exports";
 
 type Draft = {
   name: string;
@@ -47,6 +51,11 @@ type Draft = {
   supplierPaymentTermId: string;
   /** "" for the base currency (MC1). */
   currencyCode: string;
+  /** Country codes (EX1, EX6); the delivery country "" for the billing country. */
+  billingCountry: string;
+  deliveryCountry: string;
+  /** "" for none (EX5). */
+  defaultSalesTaxCode: string;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -63,6 +72,9 @@ const EMPTY_DRAFT: Draft = {
   customer: EMPTY_CUSTOMER_DRAFT,
   supplierPaymentTermId: "",
   currencyCode: "",
+  billingCountry: HOME_COUNTRY,
+  deliveryCountry: "",
+  defaultSalesTaxCode: "",
 };
 
 function draftFrom(contact: Contact): Draft {
@@ -80,6 +92,9 @@ function draftFrom(contact: Contact): Draft {
     customer: customerDraftFrom(contact),
     supplierPaymentTermId: contact.supplierPaymentTermId ?? "",
     currencyCode: contact.currencyCode ?? "",
+    billingCountry: contact.billingCountry,
+    deliveryCountry: contact.deliveryCountry ?? "",
+    defaultSalesTaxCode: contact.defaultSalesTaxCode ?? "",
   };
 }
 
@@ -88,9 +103,11 @@ function draftFrom(contact: Contact): Draft {
  * terms only for suppliers (the server keeps a former customer's or supplier's).
  */
 function bodyFrom(draft: Draft): Record<string, unknown> {
-  const { customer, supplierPaymentTermId, ...rest } = draft;
+  const { customer, supplierPaymentTermId, deliveryCountry, defaultSalesTaxCode, ...rest } = draft;
   return {
     ...rest,
+    deliveryCountry: deliveryCountry || null,
+    defaultSalesTaxCode: defaultSalesTaxCode || null,
     ...(draft.isCustomer ? customerBody(customer) : {}),
     ...(draft.isSupplier ? { supplierPaymentTermId: supplierPaymentTermId || null } : {}),
   };
@@ -123,9 +140,24 @@ function kind(contact: Contact): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** A select of every country (EX1). */
+function CountrySelect({ value, onChange, blank }: { value: string; onChange: (code: string) => void; blank?: string }) {
+  return (
+    <select value={value} onChange={(event) => onChange(event.target.value)}>
+      {blank !== undefined ? <option value="">{blank}</option> : null}
+      {COUNTRY_CHOICES.map(([code, name]) => (
+        <option key={code} value={code}>
+          {name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function ContactForm({
   initial,
   saved,
+  taxCodes,
   customSetup,
   salespeople,
   customerSetup,
@@ -139,6 +171,7 @@ function ContactForm({
   initial: Draft;
   /** The contact's stored custom field values ({} for a new one). */
   saved: CustomValues;
+  taxCodes: TaxCode[];
   customSetup: CustomFieldSetup | null | undefined;
   salespeople: SalespeopleSetup | null | undefined;
   customerSetup: CustomerSetup | null | undefined;
@@ -273,6 +306,37 @@ function ContactForm({
           maxLength={500}
         />
       </Field>
+      <div className={ui.grid3}>
+        <Field label={draft.isCustomer ? "Billing country" : "Country"}>
+          <CountrySelect value={draft.billingCountry} onChange={(code) => setDraft({ ...draft, billingCountry: code })} />
+        </Field>
+        {draft.isCustomer ? (
+          <Field label="Delivery country" hint="Where goods are delivered, if not the billing country. It decides whether a sale is an export.">
+            <CountrySelect
+              value={draft.deliveryCountry}
+              blank={`Same as billing (${countryName(draft.billingCountry)})`}
+              onChange={(code) => setDraft({ ...draft, deliveryCountry: code })}
+            />
+          </Field>
+        ) : null}
+        {draft.isCustomer ? (
+          <Field
+            label="Default sales tax code"
+            hint="New sales lines for this customer start with it, before the tax code for exports and the usual default. Any line can be changed."
+          >
+            <select value={draft.defaultSalesTaxCode} onChange={(event) => setDraft({ ...draft, defaultSalesTaxCode: event.target.value })}>
+              <option value="">None (the usual default)</option>
+              {taxCodes
+                .filter((code) => code.isActive || code.code === draft.defaultSalesTaxCode)
+                .map((code) => (
+                  <option key={code.id} value={code.code}>
+                    {code.code} ({formatRate(code.rate)}){code.isActive ? "" : " (inactive)"}
+                  </option>
+                ))}
+            </select>
+          </Field>
+        ) : null}
+      </div>
       {draft.isCustomer ? (
         <CustomerFields
           setup={customerSetup}
@@ -350,6 +414,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
   // Contact people are the CRM's people, shown with either module on (RC6).
   const showPeople = Boolean(modules?.crm || modules?.reporting);
   const customerSetup = useCustomerSetup(organisationId);
+  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
   // Every contact (archived too), for parent names and the parent select.
   const everyone = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId, includeArchived: "true" });
   const allContacts = everyone.data?.contacts ?? [];
@@ -390,6 +455,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
           <ContactForm
             initial={{ ...EMPTY_DRAFT, customFields: startingValues(customSetup.data, "contact", ["customer", "supplier"]) }}
             saved={{}}
+            taxCodes={taxCodes.data?.taxCodes ?? []}
             customSetup={customSetup.data}
             salespeople={salespeople.data}
             customerSetup={customerSetup.data}
@@ -417,6 +483,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
             key={editing.id}
             initial={draftFrom(editing)}
             saved={editing.customFields}
+            taxCodes={taxCodes.data?.taxCodes ?? []}
             customSetup={customSetup.data}
             salespeople={salespeople.data}
             customerSetup={customerSetup.data}
@@ -517,6 +584,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
                     <td>
                       {kind(contact)}
                       {contact.currencyCode ? <div className={ui.muted}>In {contact.currencyCode}</div> : null}
+                      {exportLabel(contact) ? <div><Badge tone="blue">{exportLabel(contact)}</Badge></div> : null}
                     </td>
                     <td>{contact.email ?? ""}</td>
                     <td>{contact.phone ?? ""}</td>
