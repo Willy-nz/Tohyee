@@ -38,7 +38,7 @@ import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 const PAGE_SIZE = 50;
 
-type Mode = "match" | "payments" | "bank_transaction" | "transfer";
+type Mode = "match" | "split" | "payments" | "bank_transaction" | "transfer";
 
 type Lookups = { accounts: Account[]; contacts: Contact[]; taxCodes: TaxCode[]; tracking: TrackingSetup; customSetup: CustomFieldSetup };
 
@@ -261,6 +261,109 @@ function MatchForm({
       <div className={ui.actions}>
         <Button type="submit" disabled={busy || chosen.length === 0 || (needsAdjustment && (!adjustment.accountCode || !adjustment.contactId))}>
           {busy ? "Reconciling…" : needsAdjustment ? "Match with adjustment" : "Match"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * One posted transaction that the bank shows as several lines (examples
+ * BK26-BK28): pick the transaction, then the other unreconciled lines on this
+ * page that make it up with this one. They must add up to it exactly.
+ */
+function SplitForm({
+  line,
+  otherLines,
+  suggestions,
+  submit,
+  busy,
+}: {
+  line: StatementLine;
+  otherLines: StatementLine[];
+  suggestions: LineSuggestions;
+  submit: Submit;
+  busy: boolean;
+}) {
+  const lineCents = toCents(line.amount) ?? BigInt(0);
+  const magnitude = (value: bigint) => (value < BigInt(0) ? -value : value);
+  // Only transactions bigger than the line can be split across it and others.
+  const bigger = suggestions.matches.filter((match) => magnitude(toCents(match.amount) ?? BigInt(0)) > magnitude(lineCents));
+  const sameWay = otherLines.filter((other) => other.id !== line.id && other.amount.startsWith("-") === line.amount.startsWith("-"));
+  const [journalLineId, setJournalLineId] = useState(bigger[0]?.journalLineId ?? "");
+  const [chosen, setChosen] = useState<string[]>([]);
+  if (bigger.length === 0) {
+    return (
+      <Empty>
+        Nothing posted on this account within 60 days of the line is bigger than it, so there&apos;s nothing to split across several
+        lines. Match it instead.
+      </Empty>
+    );
+  }
+  const target = bigger.find((match) => match.journalLineId === journalLineId);
+  const total = sameWay.filter((other) => chosen.includes(other.id)).reduce((sum, other) => sum + (toCents(other.amount) ?? BigInt(0)), lineCents);
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit({ kind: "split", journalLineId, otherLineIds: chosen });
+      }}
+      style={{ display: "grid", gap: 10 }}
+    >
+      <p className={ui.muted}>
+        When the bank shows one transaction as several lines. Choose the transaction, then tick the other lines that make it up with
+        this one. Nothing is posted, and the lines are unreconciled together.
+      </p>
+      <Field label="Transaction">
+        <select value={journalLineId} onChange={(event) => setJournalLineId(event.target.value)} required>
+          {bigger.map((match) => (
+            <option key={match.journalLineId} value={match.journalLineId}>
+              {formatDate(match.postingDate)} · {originLabel(match.origin)} #{match.journalId} · {match.reference} · {formatMoney(match.amount)}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {sameWay.length === 0 ? (
+        <Empty>No other unreconciled lines on this page go the same way as this one.</Empty>
+      ) : (
+        <div className={ui.tableWrap}>
+          <table className={ui.table}>
+            <thead>
+              <tr>
+                <th style={{ width: 36 }} />
+                <th>Date</th>
+                <th>Description</th>
+                <th className={ui.num}>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sameWay.map((other) => (
+                <tr key={other.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`Include ${formatDate(other.date)} ${other.description}`}
+                      checked={chosen.includes(other.id)}
+                      onChange={(event) =>
+                        setChosen((current) => (event.target.checked ? [...current, other.id] : current.filter((id) => id !== other.id)))
+                      }
+                    />
+                  </td>
+                  <td>{formatDate(other.date)}</td>
+                  <td>{other.description}</td>
+                  <td className={ui.num}>
+                    <Money value={other.amount} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {target ? <TotalCheck total={total} target={target.amount} /> : null}
+      <div className={ui.actions}>
+        <Button type="submit" disabled={busy || chosen.length === 0 || !target || toCents(target.amount) !== total}>
+          {busy ? "Reconciling…" : "Reconcile these lines together"}
         </Button>
       </div>
     </form>
@@ -785,12 +888,15 @@ function LineReconciler({
   organisationId,
   account,
   line,
+  otherLines,
   lookups,
   onDone,
 }: {
   organisationId: string;
   account: BankAccount;
   line: StatementLine;
+  /** The other unreconciled lines shown, for a split. */
+  otherLines: StatementLine[];
   lookups: Lookups;
   onDone: () => void;
 }) {
@@ -825,6 +931,7 @@ function LineReconciler({
             : "bank_transaction");
   const modes: Array<{ mode: Mode; label: string }> = [
     { mode: "match", label: `Match${suggestions.matches.length ? ` (${suggestions.matches.length})` : ""}` },
+    { mode: "split", label: "Part of one transaction" },
     { mode: "payments", label: moneyIn ? "Customer payment" : "Pay bills" },
     { mode: "bank_transaction", label: moneyIn ? "Receive money" : "Spend money" },
     { mode: "transfer", label: "Transfer" },
@@ -853,6 +960,7 @@ function LineReconciler({
         ))}
       </div>
       {mode === "match" ? <MatchForm line={line} suggestions={suggestions} lookups={lookups} submit={submit} busy={busy} /> : null}
+      {mode === "split" ? <SplitForm line={line} otherLines={otherLines} suggestions={suggestions} submit={submit} busy={busy} /> : null}
       {mode === "payments" ? (
         <PaymentsForm
           organisationId={organisationId}
@@ -1032,7 +1140,14 @@ export function ReconcilePanel({
                 }
               >
                 {lookups ? (
-                  <LineReconciler organisationId={organisationId} account={account} line={line} lookups={lookups} onDone={finished} />
+                  <LineReconciler
+                    organisationId={organisationId}
+                    account={account}
+                    line={line}
+                    otherLines={lines}
+                    lookups={lookups}
+                    onDone={finished}
+                  />
                 ) : (
                   <p className={ui.muted}>Loading…</p>
                 )}

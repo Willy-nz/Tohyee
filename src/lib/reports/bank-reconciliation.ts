@@ -13,7 +13,9 @@ import { add, dec, isZero, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/
  *   journal lines dated after the date.
  * - **In Tohyee, not in the bank**: journal lines on the account dated on or
  *   before the date that aren't reconciled to a statement line dated on or
- *   before it (unpresented payments, deposits not yet cleared). A journal
+ *   before it (unpresented payments, deposits not yet cleared); for a
+ *   journal line split across several statement lines (BK28), the part
+ *   that's not on lines dated on or before the date. A journal
  *   and its reversal (a void), both dated on or before the date and neither
  *   reconciled, are left out, since they cancel out.
  *
@@ -195,19 +197,24 @@ export async function bankReconciliationReport(
     journal_reconciled: boolean;
   }>(
     `select l.id, l.journal_id, j.posting_date::text, j.origin, j.reference, coalesce(l.description, j.description) as description,
-            (l.debit_amount - l.credit_amount)::text as amount, rec.line_date::text as reconciled_on,
+            (l.debit_amount - l.credit_amount - rec.on_statement)::text as amount, rec.reconciled_on::text as reconciled_on,
             j.correction_kind, j.related_journal_id,
             exists (select 1 from bank_reconciliation_items ri join ledger_journal_lines rl on rl.id = ri.journal_line_id
                      where ri.active and rl.journal_id = j.id and rl.account_id = $1) as journal_reconciled
        from ledger_journal_lines l
        join ledger_journals j on j.id = l.journal_id
-       left join lateral (
-         select b.line_date from bank_reconciliation_items i
+       cross join lateral (
+         -- The part of the journal line on statement lines dated on or before
+         -- the date (all of it, or for a split (BK28) some of it), and the
+         -- latest date of a line after it that has the rest.
+         select coalesce(sum(i.amount) filter (where b.line_date <= $2), 0) as on_statement,
+                max(b.line_date) filter (where b.line_date > $2) as reconciled_on
+           from bank_reconciliation_items i
            join bank_reconciliations r on r.id = i.reconciliation_id
            join bank_statement_lines b on b.id = r.statement_line_id
           where i.journal_line_id = l.id and i.active
-       ) rec on true
-      where l.account_id = $1 and j.posting_date <= $2 and (rec.line_date is null or rec.line_date > $2)
+       ) rec
+      where l.account_id = $1 and j.posting_date <= $2 and l.debit_amount - l.credit_amount <> rec.on_statement
       order by j.posting_date, l.id`,
     [account.id, asAt],
   );

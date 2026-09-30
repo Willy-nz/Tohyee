@@ -377,6 +377,13 @@ that something happened.
   optional GST code: spend or receive money for the difference, reconciled
   with the payment or match so the line ties exactly, while the invoice or
   bill is still paid in full (examples BK24, BK25, not yet approved by Jess).
+  **One transaction on several lines**: when the bank shows one posted
+  payment or deposit as two or more lines, the lines can be reconciled
+  together against it ("Part of one transaction"), each to its part; they
+  must add up to it exactly (no adjustment), nothing is posted, and
+  unreconciling any of them unreconciles them all. One-click OK never
+  suggests one, and the reconciliation report counts only the part on lines
+  by its date (examples BK26-BK28, not yet approved by Jess).
 - **Modules**: Accounting and Tax are always on; the **CRM** and
   **Advanced reporting** are switched on per organisation in Settings, and
   their menus and screens show only while on (MOD1).
@@ -468,8 +475,8 @@ isn't acceptable, because people would trust it:
 - AI suggestions
 - import staging (other than bank statements)
 - bank feeds from providers other than Akahu, foreign-currency bank
-  accounts, splitting one posted transaction across several statement
-  lines, and old Excel (.xls) files
+  accounts, an adjustment when splitting one posted transaction across
+  several statement lines, and old Excel (.xls) files
 - GST: deferred-payment supplies of $225,000 or more on the payments basis
   (section 19D), checking payments-basis eligibility, and bad debt write-offs
 - amending a filed GST return, imported goods (Customs GST), GST rates other

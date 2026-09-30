@@ -49,7 +49,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
   `tests/integration/projects.test.ts` (PJ1-PJ13) and
-  `tests/integration/bank-quick.test.ts` (BK17-BK25), all against
+  `tests/integration/bank-quick.test.ts` (BK17-BK25) and
+  `tests/integration/bank-split.test.ts` (BK26-BK28), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -1284,10 +1285,91 @@ Setup as above (INV-0001 115.00 due, B1 230.00 due, both 10 May 2026).
   account is refused (409). Unreconciling it leaves the payment and the
   spend money; after that the spend money can be voided on its own.
 
+### One transaction on several statement lines (examples not yet approved by Jess)
+
+Sometimes the bank shows one payment or deposit as two or more lines (a
+customer's payment split into two transfers, a deposit the bank credited in
+parts). **Splitting** reconciles several statement lines together against
+**one** posted journal line on the account. (The other way round, one
+statement line for several posted transactions, such as a deposit of several
+cheques, is ordinary matching, BK4.)
+
+- The lines must be unreconciled, on the same account, all money in or all
+  money out, each dated within 60 days of the journal line, and add up to it
+  **exactly**. The journal line must not be reconciled already. Nothing is
+  posted.
+- Each line is reconciled to **its part** of the journal line (its own
+  amount). The lines stay tied together: unreconciling any one of them
+  unreconciles all of them, posting nothing, and is refused if any of them
+  is in a locked period.
+- There's **no adjustment** (BK24) when splitting: if the lines don't add up
+  to the transaction exactly, it's refused. Record the difference as its own
+  bank transaction first, or match instead.
+- One-click OK (BK17) never suggests a split: a line that's only part of a
+  transaction has no candidate with its exact amount, so it's never
+  confident, and a journal line in a split is no longer a candidate for
+  anything. Bulk coding (BK22) refuses a line in a split as already
+  reconciled.
+
+Setup as above, plus receive money of **300.00** from Kobe Ltd on 20 May,
+4000 Sales, no GST: Dr 1000 300.00 / Cr 4000 300.00 (journal line **J**
+on 1000), and this statement imported into 1000:
+
+```
+Date,Amount,Payee,Particulars,Code,Reference,Balance
+20/05/2026,200.00,KOBE LTD,PART 1,,,200.00
+03/06/2026,100.00,KOBE LTD,PART 2,,,300.00
+```
+
+- **BK26** Splitting J across the 20 May +200.00 line and the 3 June
+  +100.00 line posts nothing and reconciles both lines: the 20 May line to
+  **200.00** of J and the 3 June line to **100.00** of J, each showing the
+  split (J's 300.00 and both lines). 1000's "reconcile" count is **0**.
+  The receive money can't be voided while they're reconciled ("unreconcile
+  it first"). Retrying with the same idempotency key returns the same
+  result and posts nothing; the same key with a different journal line is
+  refused (409).
+- **BK27** Refused, with nothing reconciled:
+  - lines of +200.00 and +50.00 against J: "The chosen statement lines add
+    up to 250.00, but the transaction is 300.00. They must add up to it
+    exactly.";
+  - only one line: "Choose at least two statement lines…" (match it
+    instead);
+  - a money-in line with a money-out line: "…all money in or all money
+    out.";
+  - a line on 1010, or one already reconciled, or J already reconciled;
+  - a line dated more than 60 days from J;
+  - with an adjustment: "An adjustment isn't available when splitting…";
+  - with the period locked up to 20 May: refused ("2026-05-20 is in a
+    locked period…"), and the 3 June line isn't reconciled either.
+- **BK28** After BK26:
+  - **Unreconciling** the 3 June line unreconciles the 20 May line too:
+    both are unreconciled, nothing is posted, the receive money stays and
+    can then be voided. With the period locked up to 20 May, unreconciling
+    the 3 June line is refused (the 20 May line is in the locked period)
+    and both stay reconciled. Retrying with the same key returns the same
+    result.
+  - **One-click OK**: with both lines unreconciled and J posted, neither
+    line has a candidate (neither is 300.00), so neither is confident.
+    After BK26, a new +300.00 line on 25 May has no candidate either (J is
+    reconciled).
+  - **Bulk coding** the 20 May line after BK26 is refused: "This line is
+    already reconciled."
+  - **Bank reconciliation report** (BK20) as at 31 May: balance in Tohyee
+    **300.00**; in the bank, not in Tohyee: nothing; in Tohyee, not on the
+    statement: the **100.00** of J that's on the 3 June line (shown with
+    that date). Explained: 300.00 - 100.00 = **200.00**, the running balance
+    on the 20 May line: fully explained. As at 30 June: nothing outstanding,
+    statement and Tohyee both **300.00**. If J were dated 2 June instead (and
+    the lines 30 May and 3 June), as at 31 May the 30 May line's **200.00**
+    is in the bank, not in Tohyee (matched to a journal dated after the
+    date).
+
 ### Not supported yet (refused rather than guessed)
 
 - **Foreign-currency bank accounts** can't take statement lines.
-- **Splitting a journal line** across several statement lines.
+- **Splitting with an adjustment**: the statement lines must add up to the
+  transaction exactly (BK27).
 - **Older Excel files** (.xls): save them as .xlsx or CSV.
 
 ## Reports

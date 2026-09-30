@@ -4,7 +4,7 @@ import { listBankRules, ruleMatches, type BankRule } from "@/lib/bank/rules";
 import { createBankTransaction, createTransfer } from "@/lib/bank/transactions";
 import { recordSupplierPayment } from "@/lib/bills/payments";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { ConflictError, ValidationError } from "@/lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { recordPayment } from "@/lib/invoices/payments";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
@@ -162,7 +162,10 @@ async function loadJournalLines(tx: OrgTx, ids: string[]): Promise<CandidateRow[
  * - "match": `journalLineIds` already posted on the line's account (BK4);
  * - "payments": `allocations` of `{ invoiceId | billId, amount }` paid from the line (BK5);
  * - "bank_transaction": a spend or receive money for the line (BK6, BK7, BK9);
- * - "transfer": `otherAccountCode`, the other bank or credit card account (BK8, BK9).
+ * - "transfer": `otherAccountCode`, the other bank or credit card account (BK8, BK9);
+ * - "split": `journalLineId`, one posted journal line, and `otherLineIds`, the
+ *   other unreconciled statement lines that together with this one make it up
+ *   (BK26-BK28; see reconcileSplit).
  *
  * For "match" and "payments", an `adjustment` (`accountCode`, optional
  * `taxCode`, `contactId`, `description`, `tracking`) records a difference
@@ -174,6 +177,7 @@ export async function reconcileStatementLine(
   lineIdInput: unknown,
   command: Record<string, unknown>,
 ): Promise<ReconcileResult> {
+  if (command.kind === "split") return reconcileSplit(tx, lineIdInput, command);
   const lineId = requireId(lineIdInput, "lineId");
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
@@ -188,7 +192,10 @@ export async function reconcileStatementLine(
       "select statement_line_id, request_hash from bank_reconciliations where command_source = $1 and idempotency_key = $2",
       [source, idempotencyKey],
     );
-    if (!earlier.rows[0]) return null;
+    if (!earlier.rows[0]) {
+      await assertKeyNotUsedForSplit(tx, source, idempotencyKey);
+      return null;
+    }
     assertSameRequest(earlier.rows[0].request_hash, hash, "reconciliation");
     return { created: false, line: await getStatementLine(tx, earlier.rows[0].statement_line_id) };
   };
@@ -342,9 +349,200 @@ export async function reconcileStatementLine(
   return { created: true, line: await getStatementLine(tx, lineId) };
 }
 
+async function assertKeyNotUsedForSplit(tx: OrgTx, source: string, idempotencyKey: string): Promise<void> {
+  const used = await tx.query("select 1 from bank_reconciliation_splits where command_source = $1 and idempotency_key = $2", [
+    source,
+    idempotencyKey,
+  ]);
+  if ((used.rowCount ?? 0) > 0) {
+    throw new ConflictError("That idempotency key was already used for a different reconciliation. Use a new key for a new reconciliation.");
+  }
+}
+
+/** Locks statement lines in id order (so two requests can't deadlock), returning them in the order given. */
+async function lockStatementLines(tx: OrgTx, lineIds: string[]): Promise<StatementLine[]> {
+  const locked = await tx.query<{ id: string }>("select id from bank_statement_lines where id = any($1::bigint[]) order by id for update", [lineIds]);
+  if (locked.rows.length !== lineIds.length) throw new NotFoundError("One of the chosen statement lines doesn't exist.");
+  const lines: StatementLine[] = [];
+  for (const id of lineIds) lines.push(await getStatementLine(tx, id));
+  return lines;
+}
+
+/**
+ * Reconciles several statement lines together against one posted journal
+ * line (examples BK26-BK28): a payment or bank transaction the bank shows as
+ * two or more lines. The lines must be unreconciled, on the same account, all
+ * money in or all money out, each within 60 days of the journal line, and add
+ * up to it exactly; nothing is posted. Each line gets its own reconciliation
+ * for its part of the journal line, tied together by one split, so they're
+ * only ever unreconciled together. No adjustment: a difference is refused.
+ * `lineIdInput` is one of the lines, `command.otherLineIds` the rest.
+ */
+async function reconcileSplit(tx: OrgTx, lineIdInput: unknown, command: Record<string, unknown>): Promise<ReconcileResult> {
+  const lineId = requireId(lineIdInput, "lineId");
+  const source = optionalSource(command.source);
+  const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
+  if (command.adjustment != null) {
+    throw new ValidationError(
+      "An adjustment isn't available when splitting one transaction across several statement lines. The lines must add up to it exactly.",
+    );
+  }
+  const journalLineId = requireId(command.journalLineId, "journalLineId");
+  const others = requireArray(command.otherLineIds, "otherLineIds", 49).map((id, index) => requireId(id, `otherLineIds[${index}]`));
+  const lineIds = [lineId, ...others.filter((id) => id !== lineId)].filter((id, index, all) => all.indexOf(id) === index);
+  if (lineIds.length < 2) {
+    throw new ValidationError("Choose at least two statement lines to split a transaction across. For one line, match it instead.");
+  }
+  const hash = requestHash("bank_reconciliation_split", { lineId, lineIds: [...lineIds].sort((a, b) => Number(a) - Number(b)), journalLineId });
+  const replay = async (): Promise<ReconcileResult | null> => {
+    const earlier = await tx.query<{ request_hash: string }>(
+      "select request_hash from bank_reconciliation_splits where command_source = $1 and idempotency_key = $2",
+      [source, idempotencyKey],
+    );
+    if (!earlier.rows[0]) return null;
+    assertSameRequest(earlier.rows[0].request_hash, hash, "reconciliation");
+    return { created: false, line: await getStatementLine(tx, lineId) };
+  };
+  const earlier = await replay();
+  if (earlier) return earlier;
+  const usedForOne = await tx.query("select 1 from bank_reconciliations where command_source = $1 and idempotency_key = $2", [source, idempotencyKey]);
+  if ((usedForOne.rowCount ?? 0) > 0) {
+    throw new ConflictError("That idempotency key was already used for a different reconciliation. Use a new key for a new reconciliation.");
+  }
+  const lines = await lockStatementLines(tx, lineIds);
+  const committedMeanwhile = await replay();
+  if (committedMeanwhile) return committedMeanwhile;
+  const [first] = lines;
+  for (const line of lines) {
+    const label = `The ${line.date} line (${line.amount})`;
+    if (line.accountId !== first.accountId) throw new ValidationError(`${label} is on another account. Split lines must all be on one account.`);
+    if (line.status === "reconciled") throw new ConflictError(`${label} is already reconciled.`);
+    if (line.status === "excluded") throw new ConflictError(`${label} is excluded. Include it again before reconciling it.`);
+    if (line.status === "deleted") throw new ConflictError(`${label}'s import was deleted.`);
+    if (line.amount.startsWith("-") !== first.amount.startsWith("-")) {
+      throw new ValidationError("Split lines must all be money in or all money out.");
+    }
+  }
+  for (const date of [...new Set(lines.map((line) => line.date))].sort()) await assertPostingDateAllowed(tx, date);
+  const [journalLine] = await loadJournalLines(tx, [journalLineId]);
+  if (!journalLine) throw new ValidationError("The chosen transaction doesn't exist.");
+  if (journalLine.account_id !== first.accountId) throw new ValidationError(`Journal #${journalLine.journal_id} isn't on this account.`);
+  if (journalLine.reconciled) {
+    throw new ConflictError(`Journal #${journalLine.journal_id} is already reconciled with another statement line.`);
+  }
+  for (const line of lines) {
+    if (daysBetween(journalLine.posting_date, line.date) > MATCH_WINDOW_DAYS) {
+      throw new ValidationError(
+        `Journal #${journalLine.journal_id} (${journalLine.posting_date}) is more than ${MATCH_WINDOW_DAYS} days from the ${line.date} line.`,
+      );
+    }
+  }
+  const total = lines.reduce((sum, line) => sum + cents(line.amount), BigInt(0));
+  if (total !== cents(journalLine.amount)) {
+    throw new ValidationError(
+      `The chosen statement lines add up to ${formatCents(total)}, but the transaction is ${formatCents(cents(journalLine.amount))}. They must add up to it exactly.`,
+    );
+  }
+
+  let split;
+  try {
+    split = await tx.query<{ id: string }>(
+      `insert into bank_reconciliation_splits (command_source, idempotency_key, request_hash, account_id, journal_line_id,
+                                               created_by_user_id, created_by_email)
+       values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+      [source, idempotencyKey, hash, first.accountId, journalLineId, tx.actor.userId, tx.actor.email],
+    );
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") {
+      throw new ConflictError("That idempotency key was already used for a different reconciliation.");
+    }
+    throw error;
+  }
+  const splitId = split.rows[0].id;
+  for (const line of lines) {
+    const inserted = await tx.query<{ id: string }>(
+      `insert into bank_reconciliations (command_source, idempotency_key, request_hash, statement_line_id, kind, split_id,
+                                         created_by_user_id, created_by_email)
+       values ($1, $2, $3, $4, 'split', $5, $6, $7) returning id`,
+      [source, `${idempotencyKey}:split:${line.id}`, hash, line.id, splitId, tx.actor.userId, tx.actor.email],
+    );
+    await tx.query("insert into bank_reconciliation_items (reconciliation_id, journal_line_id, amount, split_id) values ($1, $2, $3, $4)", [
+      inserted.rows[0].id,
+      journalLineId,
+      line.amount,
+      splitId,
+    ]);
+    await tx.query("update bank_statement_lines set status = 'reconciled', updated_at = now() where id = $1", [line.id]);
+    await writeAuditEvent(tx, {
+      eventType: "statement_line.reconciled",
+      entityType: "bank_statement_line",
+      entityId: line.id,
+      details: {
+        kind: "split",
+        reconciliationId: inserted.rows[0].id,
+        splitId,
+        journalLineIds: [journalLineId],
+        splitLineIds: lineIds,
+        amount: line.amount,
+        date: line.date,
+        adjusted: false,
+      },
+    });
+  }
+  return { created: true, line: await getStatementLine(tx, lineId) };
+}
+
+/**
+ * Unreconciles every line of a split together (example BK28), posting
+ * nothing. Refused when any of the lines is in a locked period. The line the
+ * request names keeps the request's key; the others get it with ":split:"
+ * and their id, so a retry finds the same result.
+ */
+async function unreconcileSplit(
+  tx: OrgTx,
+  line: StatementLine,
+  command: { source: string; idempotencyKey: string; hash: string },
+): Promise<ReconcileResult> {
+  const members = await tx.query<{ id: string; statement_line_id: string }>(
+    "select id, statement_line_id from bank_reconciliations where split_id = $1 and status = 'active' order by statement_line_id",
+    [line.reconciliation!.split!.id],
+  );
+  const lines = await lockStatementLines(
+    tx,
+    members.rows.map((row) => row.statement_line_id),
+  );
+  for (const date of [...new Set(lines.map((entry) => entry.date))].sort()) await assertPostingDateAllowed(tx, date);
+  for (const member of members.rows) {
+    const removalKey = member.statement_line_id === line.id ? command.idempotencyKey : `${command.idempotencyKey}:split:${member.statement_line_id}`;
+    try {
+      await tx.query(
+        `update bank_reconciliations
+            set status = 'removed', removal_command_source = $2, removal_idempotency_key = $3, removal_request_hash = $4,
+                removed_by_user_id = $5, removed_by_email = $6, removed_at = now()
+          where id = $1`,
+        [member.id, command.source, removalKey, command.hash, tx.actor.userId, tx.actor.email],
+      );
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new ConflictError("That idempotency key was already used for a different unreconciliation.");
+      }
+      throw error;
+    }
+    await tx.query("update bank_statement_lines set status = 'unreconciled', updated_at = now() where id = $1", [member.statement_line_id]);
+    await writeAuditEvent(tx, {
+      eventType: "statement_line.unreconciled",
+      entityType: "bank_statement_line",
+      entityId: member.statement_line_id,
+      details: { reconciliationId: member.id, splitId: line.reconciliation!.split!.id },
+    });
+  }
+  return { created: true, line: await getStatementLine(tx, line.id) };
+}
+
 /**
  * Unreconciles a line (example BK11): the line is unreconciled again and
- * nothing is posted or voided. Refused in a locked period (BK13).
+ * nothing is posted or voided. Refused in a locked period (BK13). A line of
+ * a split is unreconciled with the rest of its split (BK28).
  */
 export async function unreconcileStatementLine(
   tx: OrgTx,
@@ -370,6 +568,7 @@ export async function unreconcileStatementLine(
   const committedMeanwhile = await replay();
   if (committedMeanwhile) return committedMeanwhile;
   if (line.status !== "reconciled" || !line.reconciliation) throw new ConflictError("This line isn't reconciled.");
+  if (line.reconciliation.split) return unreconcileSplit(tx, line, { source, idempotencyKey, hash });
   await assertPostingDateAllowed(tx, line.date);
   try {
     await tx.query(

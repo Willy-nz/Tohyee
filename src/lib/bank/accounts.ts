@@ -332,7 +332,15 @@ export type StatementLine = {
   status: StatementLineStatus;
   possibleDuplicateOf: string | null;
   source: "file" | "akahu";
-  reconciliation: { id: string; kind: string; createdAt: string; createdByEmail: string | null; items: ReconciledItem[] } | null;
+  reconciliation: {
+    id: string;
+    kind: string;
+    createdAt: string;
+    createdByEmail: string | null;
+    items: ReconciledItem[];
+    /** For a line reconciled with others against one journal line (BK26): the split and all its lines. */
+    split: { id: string; journalAmount: string; lines: Array<{ id: string; date: string; amount: string }> } | null;
+  } | null;
 };
 
 type StatementLineRow = {
@@ -366,7 +374,16 @@ const LINE_SELECT = `
                                from bank_reconciliation_items ri
                                join ledger_journal_lines jl on jl.id = ri.journal_line_id
                                join ledger_journals j on j.id = jl.journal_id
-                              where ri.reconciliation_id = r.id))
+                              where ri.reconciliation_id = r.id),
+                   'split', (select jsonb_build_object(
+                               'id', s.id::text,
+                               'journalAmount', (sj.debit_amount - sj.credit_amount)::text,
+                               'lines', (select jsonb_agg(jsonb_build_object('id', sb.id::text, 'date', sb.line_date::text, 'amount', sb.amount::text)
+                                                          order by sb.line_date, sb.id)
+                                           from bank_reconciliations sr join bank_statement_lines sb on sb.id = sr.statement_line_id
+                                          where sr.split_id = s.id and sr.status = r.status))
+                               from bank_reconciliation_splits s join ledger_journal_lines sj on sj.id = s.journal_line_id
+                              where s.id = r.split_id))
             from bank_reconciliations r where r.statement_line_id = b.id and r.status = 'active') as reconciliation
     from bank_statement_lines b
     join bank_statement_imports i on i.id = b.import_id`;
@@ -390,7 +407,17 @@ function toStatementLine(row: StatementLineRow): StatementLine {
     possibleDuplicateOf: row.possible_duplicate_of,
     source: row.source,
     reconciliation: row.reconciliation
-      ? { ...row.reconciliation, items: row.reconciliation.items.map((item) => ({ ...item, amount: money(item.amount) })) }
+      ? {
+          ...row.reconciliation,
+          items: row.reconciliation.items.map((item) => ({ ...item, amount: money(item.amount) })),
+          split: row.reconciliation.split
+            ? {
+                id: row.reconciliation.split.id,
+                journalAmount: money(row.reconciliation.split.journalAmount),
+                lines: row.reconciliation.split.lines.map((entry) => ({ ...entry, amount: money(entry.amount) })),
+              }
+            : null,
+        }
       : null,
   };
 }

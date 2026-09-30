@@ -65,6 +65,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ akahu_connections      the organisation's own Akahu personal app (tokens encrypted)
 ├─ bank_statement_imports, bank_statement_lines   statement files and bank feed syncs
 ├─ bank_reconciliations, bank_reconciliation_items   which journal lines each statement line is
+├─ bank_reconciliation_splits   one journal line reconciled across several statement lines
 ├─ bank_transactions, bank_transaction_lines   spend and receive money
 ├─ bank_transfers         money moved between bank and card accounts
 ├─ bank_rules             text to look for, and the bank transaction to suggest
@@ -513,6 +514,11 @@ Enforced by the app (and covered by tests):
   same account that add up to it exactly (checked at commit by a deferred
   trigger); a journal line can be in only one active reconciliation, and a
   reconciled journal can't be voided or reversed until it's unreconciled.
+  The one exception is a split (BK26-BK28, `bank_reconciliation_splits`):
+  several statement lines each reconciled to part of one journal line (same
+  sign, smaller), the parts adding up to it exactly with nothing else on
+  it, and the split's reconciliations all active or all removed (checked at
+  commit), so its lines are only ever reconciled and unreconciled together.
   Spend and receive money (`bank_transactions`) post like a bill or an
   invoice without the payable or receivable, and count in the GST return on
   their date (spend as purchases, receive as sales). Transfers post
