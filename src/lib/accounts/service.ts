@@ -258,6 +258,8 @@ export type ResolvedAccount = {
   name: string;
   accountClass: AccountClass;
   currencyCode: string | null;
+  /** Set on accounts Tohyee uses itself (e.g. accounts_receivable). */
+  systemKey: string | null;
 };
 
 /**
@@ -275,9 +277,10 @@ export async function resolveAccountsByCode(
     name: string;
     account_class: AccountClass;
     currency_code: string | null;
+    system_key: string | null;
     is_active: boolean;
   }>(
-    `select id, code, name, account_class, currency_code, is_active
+    `select id, code, name, account_class, currency_code, system_key, is_active
        from accounts where lower(code) = any($1::text[])`,
     [wanted],
   );
@@ -297,6 +300,7 @@ export async function resolveAccountsByCode(
       name: row.name,
       accountClass: row.account_class,
       currencyCode: row.currency_code,
+      systemKey: row.system_key,
     });
   }
   return resolved;

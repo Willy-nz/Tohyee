@@ -6,7 +6,10 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { add, cmp, dec, parseDecimalInput, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, isZero, parseDecimalInput, significantScale, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { payableAccountCode } from "@/lib/bills/service";
+import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
+import { clearedBase, openBase, realisedFxAccountCode, realisedLines } from "@/lib/fx/documents";
 import {
   getSupplierCreditNote,
   lockSupplierCreditNote,
@@ -25,7 +28,9 @@ import {
  * Credit from an approved supplier credit note applied to approved bills of
  * the same supplier and currency (examples SCN3-SCN7, SCN12). Applying posts
  * no journal, because both sides are accounts payable; it only lowers the
- * bill's amount due and the credit note's remaining credit. One command can
+ * bill's amount due and the credit note's remaining credit. In a foreign
+ * currency (MC12) each side is cleared at its own carrying value, and a
+ * difference is a realised gain or loss in a journal of its own. One command can
  * apply credit to several bills, all or nothing. An application can be
  * removed once, which fills in its removal details; rows are never deleted.
  * Period locks still apply by date.
@@ -48,6 +53,11 @@ export type SupplierCreditNoteApplication = {
   removalDate: string | null;
   removedByEmail: string | null;
   removedAt: string | null;
+  /** In a foreign currency (MC12): the base value cleared from the bill and from the credit note, the realised gain (a loss is negative) and its journal. */
+  billBase: string | null;
+  creditNoteBase: string | null;
+  realisedGain: string | null;
+  journalId: string | null;
 };
 
 type ApplicationRow = {
@@ -65,6 +75,10 @@ type ApplicationRow = {
   removal_date: string | null;
   removed_by_email: string | null;
   removed_at: string | null;
+  bill_base: string | null;
+  credit_note_base: string | null;
+  realised_gain: string | null;
+  journal_id: string | null;
 };
 
 /** The most bills one command can apply credit to. */
@@ -72,7 +86,7 @@ const MAX_APPLICATIONS = 100;
 
 const APPLICATION_SELECT = `select a.id, a.credit_note_id, n.supplier_credit_note_number, a.bill_id, b.supplier_invoice_number,
        a.status, a.application_date, a.amount, a.currency_code, a.created_by_email, a.created_at, a.removal_date,
-       a.removed_by_email, a.removed_at
+       a.removed_by_email, a.removed_at, a.bill_base::text, a.credit_note_base::text, a.realised_gain::text, a.journal_id::text
   from supplier_credit_note_applications a
   join supplier_credit_notes n on n.id = a.credit_note_id
   join bills b on b.id = a.bill_id`;
@@ -93,6 +107,10 @@ function toApplication(row: ApplicationRow): SupplierCreditNoteApplication {
     removalDate: row.removal_date,
     removedByEmail: row.removed_by_email,
     removedAt: row.removed_at,
+    billBase: row.bill_base === null ? null : toFixedString(dec(row.bill_base), 2),
+    creditNoteBase: row.credit_note_base === null ? null : toFixedString(dec(row.credit_note_base), 2),
+    realisedGain: row.realised_gain === null ? null : toFixedString(dec(row.realised_gain), 2),
+    journalId: row.journal_id,
   };
 }
 
@@ -163,8 +181,7 @@ export async function applySupplierCreditNote(
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const applicationDate = parseIsoDate(command.applicationDate, "applicationDate");
-  // Approved credit notes are always in the base currency: it can't change once anything is posted.
-  const scale = currencyMinorUnits(tx.baseCurrency);
+  // In the credit note's currency (MC12): checked against it once the credit note is loaded.
   const rawApplications = requireArray(command.applications, "applications", MAX_APPLICATIONS);
   if (rawApplications.length === 0) {
     throw new ValidationError("Apply credit to at least one bill.");
@@ -178,7 +195,7 @@ export async function applySupplierCreditNote(
       throw new ValidationError(`${label} is for bill #${billId} again. Apply credit to each bill once.`);
     }
     seen.add(billId);
-    const amount = dec(parseDecimalInput(entry.amount, `${label} amount`, { maxScale: scale }));
+    const amount = dec(parseDecimalInput(entry.amount, `${label} amount`, { maxScale: 4 }));
     return { label, billId, amount };
   });
   const hash = requestHash("supplier_credit_note_application", {
@@ -226,6 +243,12 @@ export async function applySupplierCreditNote(
     throw new ValidationError(
       `The application date can't be before the credit note date (${creditNote.creditNoteDate}).`,
     );
+  }
+  const scale = currencyMinorUnits(creditNote.currencyCode);
+  for (const entry of wanted) {
+    if (significantScale(entry.amount) > scale) {
+      throw new ValidationError(`${entry.label} amount can have at most ${scale} decimal places.`);
+    }
   }
 
   const sorted = [...wanted].sort((a, b) => cmp(dec(a.billId), dec(b.billId)));
@@ -282,17 +305,72 @@ export async function applySupplierCreditNote(
   }
   await assertPostingDateAllowed(tx, applicationDate);
 
+  // A foreign-currency credit note (MC12): what's still open on it, in its currency and at its carrying value.
+  const foreignCurrency = creditNote.exchangeRate !== null;
+  let creditOpen = foreignCurrency ? { amount: creditNote.remainingCredit!, base: await openBase(tx, "supplier_credit_note", creditNoteId) } : null;
+  const payable = foreignCurrency ? await payableAccountCode(tx) : null;
   const ids: string[] = [];
   for (const entry of sorted) {
     const amount = toFixedString(entry.amount, scale);
+    const bill = bills.get(entry.billId)!;
+    let fx: { billBase: string; creditNoteBase: string; gain: string; journalId: string | null } | null = null;
+    const next = await tx.query<{ id: string }>(
+      "select nextval(pg_get_serial_sequence('supplier_credit_note_applications', 'id'))::text as id",
+    );
+    const nextId = next.rows[0].id;
+    if (creditOpen) {
+      const creditNoteBase = clearedBase(creditOpen, amount);
+      const billBase = clearedBase({ amount: bill.amountDue!, base: await openBase(tx, "bill", bill.id) }, amount);
+      creditOpen = { amount: toFixedString(sub(dec(creditOpen.amount), dec(amount)), scale), base: toFixedString(sub(dec(creditOpen.base), dec(creditNoteBase)), 2) };
+      // The bill (a liability) carried at more than the credit that settles it is a gain.
+      const gain = toFixedString(sub(dec(billBase), dec(creditNoteBase)), 2);
+      let journalId: string | null = null;
+      if (!isZero(dec(gain))) {
+        const currency = creditNote.currencyCode;
+        const posted = await postJournalBody(
+          tx,
+          "supplier_credit_note_application:apply",
+          nextId,
+          parseJournalBody(
+            tx,
+            {
+              postingDate: applicationDate,
+              reference: `${creditNote.supplierCreditNoteNumber} to ${bill.supplierInvoiceNumber}`.slice(0, 100),
+              description: `Supplier credit note ${creditNote.supplierCreditNoteNumber} applied to bill ${bill.supplierInvoiceNumber} (${currency} ${amount})`,
+              lines: [
+                {
+                  accountCode: payable!,
+                  debitAmount: billBase,
+                  creditAmount: "0",
+                  description: `Bill ${bill.supplierInvoiceNumber} credited`,
+                  foreign: { currencyCode: currency, amount, rate: bill.exchangeRate!, kind: "carrying_value" as const },
+                },
+                {
+                  accountCode: payable!,
+                  debitAmount: "0",
+                  creditAmount: creditNoteBase,
+                  description: `${creditNote.supplierCreditNoteNumber} used`,
+                  foreign: { currencyCode: currency, amount, rate: creditNote.exchangeRate!, kind: "carrying_value" as const },
+                },
+                ...realisedLines(await realisedFxAccountCode(tx), gain, `${creditNote.supplierCreditNoteNumber} applied to bill ${bill.supplierInvoiceNumber}`),
+              ],
+            },
+            { internal: true },
+          ),
+          { origin: "supplier_credit_note" },
+        );
+        journalId = posted.journal.id;
+      }
+      fx = { billBase, creditNoteBase, gain, journalId };
+    }
     let inserted;
     try {
       inserted = await tx.query<{ id: string }>(
         `insert into supplier_credit_note_applications (
-           command_source, idempotency_key, request_hash, credit_note_id, bill_id, application_date, amount,
-           currency_code, created_by_user_id, created_by_email
+           id, command_source, idempotency_key, request_hash, credit_note_id, bill_id, application_date, amount,
+           currency_code, created_by_user_id, created_by_email, bill_base, credit_note_base, realised_gain, journal_id
          )
-         values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10)
+         values ($11, $1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $12::numeric, $13::numeric, $14::numeric, $15)
          returning id`,
         [
           source,
@@ -305,6 +383,11 @@ export async function applySupplierCreditNote(
           creditNote.currencyCode,
           tx.actor.userId,
           tx.actor.email,
+          nextId,
+          fx?.billBase ?? null,
+          fx?.creditNoteBase ?? null,
+          fx?.gain ?? null,
+          fx?.journalId ?? null,
         ],
       );
     } catch (error) {
@@ -318,7 +401,6 @@ export async function applySupplierCreditNote(
     }
     const applicationId = inserted.rows[0].id;
     ids.push(applicationId);
-    const bill = bills.get(entry.billId)!;
     await writeAuditEvent(tx, {
       eventType: "supplier_credit_note.applied",
       entityType: "supplier_credit_note_application",
@@ -330,6 +412,7 @@ export async function applySupplierCreditNote(
         supplierInvoiceNumber: bill.supplierInvoiceNumber,
         applicationDate,
         amount,
+        ...(fx ? { billBase: fx.billBase, creditNoteBase: fx.creditNoteBase, realisedGain: fx.gain, journalId: fx.journalId } : {}),
       },
     });
   }
@@ -404,6 +487,32 @@ export async function removeSupplierCreditNoteApplication(
     );
   }
   await assertPostingDateAllowed(tx, removalDate);
+  // A realised gain or loss posted when it was applied (MC12) is reversed on the removal date.
+  if (application.journalId) {
+    const original = await getJournal(tx, application.journalId);
+    await postJournalBody(
+      tx,
+      "supplier_credit_note_application:removal",
+      applicationId,
+      parseJournalBody(
+        tx,
+        {
+          postingDate: removalDate,
+          reference: `REV-${original.reference}`.slice(0, 100),
+          description: `Removal of ${original.description ?? original.reference}`.slice(0, 500),
+          lines: original.lines.map((line) => ({
+            accountCode: line.accountCode,
+            debitAmount: line.creditAmount,
+            creditAmount: line.debitAmount,
+            description: line.description,
+            ...sameForeign(line),
+          })),
+        },
+        { internal: true },
+      ),
+      { origin: "supplier_credit_note", relatedJournalId: original.id, correctionKind: "reversal" },
+    );
+  }
 
   try {
     await tx.query(

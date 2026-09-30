@@ -16,6 +16,7 @@ import {
   NO_CUSTOMER_DETAILS,
   resolveCustomerDetails,
 } from "@/lib/customers/service";
+import { parseCurrencyCode } from "@/lib/money/currency";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { resolveDefaultSalesperson } from "@/lib/salespeople/service";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -53,6 +54,11 @@ export type Contact = {
   isArchived: boolean;
   /** The primary contact person for invoices (RC6), from the CRM's people. */
   primaryPerson: { id: string; name: string; email: string | null } | null;
+  /**
+   * The contact's currency, like a NetSuite customer's or vendor's primary currency (MC1): its
+   * invoices, bills and credit notes are in it. Null is the base currency. Fixed once it has any.
+   */
+  currencyCode: string | null;
 } & CustomerDetails;
 
 /** The details a person enters. An edit leaves out anything it doesn't change. */
@@ -67,6 +73,8 @@ export type ContactInput = {
   customFields?: unknown;
   defaultSalespersonId?: unknown;
   isProspect?: unknown;
+  /** A currency code; blank or the base currency for the base currency (MC1). */
+  currencyCode?: unknown;
 } & CustomerDetailsInput;
 
 type ContactDetails = Pick<Contact, "name" | "isCustomer" | "isSupplier" | "email" | "phone" | "postalAddress" | "gstNumber">;
@@ -96,11 +104,12 @@ type ContactRow = {
   primary_person_id: string | null;
   primary_person_name: string | null;
   primary_person_email: string | null;
+  currency_code: string | null;
 };
 
 const OWN_COLUMNS =
   "id, request_hash, name, is_customer, is_supplier, email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect, is_archived, " +
-  "delivery_address, payment_term_id, credit_limit::text, customer_group_id, price_level_id, parent_contact_id";
+  "delivery_address, payment_term_id, credit_limit::text, customer_group_id, price_level_id, parent_contact_id, currency_code";
 
 /** The primary contact person (RC6), looked up for each contact. */
 const PRIMARY_PERSON = `(select p.id from crm_people p where p.contact_id = contacts.id and p.is_primary) as primary_person_id,
@@ -132,7 +141,30 @@ function toContact(row: ContactRow): Contact {
     customerGroupId: row.customer_group_id,
     priceLevelId: row.price_level_id,
     parentContactId: row.parent_contact_id,
+    currencyCode: row.currency_code,
   };
+}
+
+/** A contact's currency as sent (MC1): undefined when not sent; null for the base currency. */
+function parseContactCurrency(tx: OrgTx, input: unknown): string | null | undefined {
+  if (input === undefined) return undefined;
+  if (input === null || (typeof input === "string" && input.trim() === "")) return null;
+  const code = parseCurrencyCode(input, "currencyCode");
+  return code === tx.baseCurrency ? null : code;
+}
+
+/** Refuses changing the currency of a contact that has invoices, bills or credit notes (MC1). The database refuses it too. */
+async function assertCurrencyCanChange(tx: OrgTx, contact: { id: string; name: string; currencyCode: string | null }): Promise<void> {
+  const used = await tx.query(
+    `select 1 where exists (select 1 from sales_invoices where contact_id = $1) or exists (select 1 from bills where contact_id = $1)
+        or exists (select 1 from sales_credit_notes where contact_id = $1) or exists (select 1 from supplier_credit_notes where contact_id = $1)`,
+    [contact.id],
+  );
+  if ((used.rowCount ?? 0) > 0) {
+    throw new ConflictError(
+      `${contact.name} has invoices, bills or credit notes in ${contact.currencyCode ?? tx.baseCurrency}, so its currency can't change. Add a new contact for the other currency.`,
+    );
+  }
 }
 
 function customerDetailsOf(contact: Contact): CustomerDetails {
@@ -337,10 +369,12 @@ export async function createContact(
   const isProspect = await prospectFlag(tx, input.isProspect, details, false);
   const rawCustom = parseCustomInput(input.customFields, "");
   const rawSalesperson = input.defaultSalespersonId === undefined || input.defaultSalespersonId === null || input.defaultSalespersonId === "" ? null : String(input.defaultSalespersonId);
+  const currencyCode = parseContactCurrency(tx, input.currencyCode) ?? null;
 
   // Values that weren't sent stay out of the hash, so older requests hash the same.
   const hash = requestHash("contact", {
     ...details,
+    ...(currencyCode === null ? {} : { currencyCode }),
     ...(rawCustom === undefined ? {} : { customFields: rawCustom }),
     ...(rawSalesperson === null ? {} : { defaultSalespersonId: rawSalesperson }),
     ...(isProspect ? { isProspect } : {}),
@@ -363,8 +397,9 @@ export async function createContact(
     tx,
     `insert into contacts (command_source, idempotency_key, request_hash, name, is_customer, is_supplier,
                            email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect,
-                           delivery_address, payment_term_id, credit_limit, customer_group_id, price_level_id, parent_contact_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16::numeric, $17, $18, $19)
+                           delivery_address, payment_term_id, credit_limit, customer_group_id, price_level_id, parent_contact_id,
+                           currency_code)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16::numeric, $17, $18, $19, $20)
      on conflict do nothing
      returning ${OWN_COLUMNS}`,
     [
@@ -387,6 +422,7 @@ export async function createContact(
       customer.customerGroupId,
       customer.priceLevelId,
       customer.parentContactId,
+      currencyCode,
     ],
   );
   const row = inserted.rows[0] ? await readRow(tx, inserted.rows[0].id) : undefined;
@@ -409,6 +445,7 @@ export async function createContact(
       ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
       ...(defaultSalespersonId ? { defaultSalespersonId } : {}),
       ...(isProspect ? { isProspect } : {}),
+      ...(currencyCode ? { currencyCode } : {}),
       ...Object.fromEntries(Object.entries(customer).filter(([, value]) => value !== null)),
     },
   });
@@ -460,6 +497,12 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
       changes[field] = { from: beforeCustomer[field], to: customer[field] };
     }
   }
+  const sentCurrency = parseContactCurrency(tx, input.currencyCode);
+  const nextCurrency = sentCurrency === undefined ? current.currencyCode : sentCurrency;
+  if (nextCurrency !== current.currencyCode) {
+    await assertCurrencyCanChange(tx, current);
+    changes.currencyCode = { from: current.currencyCode ?? tx.baseCurrency, to: nextCurrency ?? tx.baseCurrency };
+  }
   if (Object.keys(changes).length === 0) {
     return current;
   }
@@ -477,7 +520,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
           set name = $2, is_customer = $3, is_supplier = $4, email = $5, phone = $6,
               postal_address = $7, gst_number = $8, custom_fields = $9::jsonb, default_salesperson_id = $10, is_prospect = $11,
               delivery_address = $12, payment_term_id = $13, credit_limit = $14::numeric, customer_group_id = $15,
-              price_level_id = $16, parent_contact_id = $17, updated_at = now()
+              price_level_id = $16, parent_contact_id = $17, currency_code = $18, updated_at = now()
         where id = $1`,
       [
         current.id,
@@ -497,6 +540,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
         customer.customerGroupId,
         customer.priceLevelId,
         customer.parentContactId,
+        nextCurrency,
       ],
     );
     row = await readRow(tx, current.id);

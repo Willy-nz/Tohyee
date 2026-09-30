@@ -15,11 +15,12 @@ import { formatDate, formatDateTime, formatMoney, personName } from "@/lib/forma
 import type { Journal, JournalWithLines } from "@/lib/ledger/journals";
 
 /** How a foreign-currency line's base amount came about (FXB1-FXB11). */
-const FX_KIND_TEXT: Record<"rate" | "implied" | "carrying_value" | "revaluation", string> = {
+const FX_KIND_TEXT: Record<"rate" | "implied" | "carrying_value" | "revaluation" | "document", string> = {
   rate: "at",
   implied: "arrived; rate",
-  carrying_value: "left at its carrying value; rate",
+  carrying_value: "at its carrying value; rate",
   revaluation: "(revaluation) at",
+  document: "(document) at",
 };
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 

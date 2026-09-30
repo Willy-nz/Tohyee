@@ -6,10 +6,12 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { getInvoice, lockInvoice, receivableAccountCode, type Invoice } from "@/lib/invoices/service";
-import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
+import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
+import { clearedBase, exchangeRateFor, openBase, parseRateInput, realisedFxAccountCode, realisedLines } from "@/lib/fx/documents";
+import { convertAtRate } from "@/lib/money/fx";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { creditNoteCreditStatus, type CreditStatus } from "@/lib/invoices/amounts";
-import { add, cmp, dec, isPositive, isZero, parseDecimalInput, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, isPositive, isZero, parseDecimalInput, significantScale, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { optionalSource, optionalString, requireId, requireIdempotencyKey } from "@/lib/validation";
 
 /**
@@ -60,6 +62,15 @@ export type CustomerPayment = {
   voidedAt: string | null;
   /** Set when it's one invoice's part of a payment for several invoices (MP1-MP10), which is voided as a whole. */
   batchId: string | null;
+  /**
+   * For a foreign-currency invoice (MC5, MC6): the payment's rate, the base amount that moved in the bank
+   * account, the base amount it cleared from accounts receivable (at the invoice's rate) and the
+   * realised gain (negative for a loss). Null otherwise.
+   */
+  exchangeRate: string | null;
+  baseAmount: string | null;
+  baseCleared: string | null;
+  realisedGain: string | null;
 };
 
 type PaymentRow = {
@@ -87,13 +98,17 @@ type PaymentRow = {
   voided_by_email: string | null;
   voided_at: string | null;
   batch_id: string | null;
+  exchange_rate: string | null;
+  base_amount: string | null;
+  base_cleared: string | null;
+  realised_gain: string | null;
 };
 
 export const PAYMENT_SELECT = `select p.id, p.invoice_id, i.invoice_number, i.contact_id, c.name as contact_name, p.status,
        p.payment_date, p.amount, p.overpayment_amount, used.overpayment_applied, used.overpayment_refunded,
        p.currency_code, p.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, p.reference,
        p.journal_id, p.created_by_email, p.created_at, p.void_date, p.void_journal_id, p.voided_by_email, p.voided_at,
-       p.batch_id
+       p.batch_id, p.exchange_rate::text, p.base_amount::text, p.base_cleared::text, p.realised_gain::text
   from customer_payments p
   join sales_invoices i on i.id = p.invoice_id
   join contacts c on c.id = i.contact_id
@@ -139,6 +154,10 @@ export function toPayment(row: PaymentRow): CustomerPayment {
     voidedByEmail: row.voided_by_email,
     voidedAt: row.voided_at,
     batchId: row.batch_id,
+    exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    baseAmount: row.base_amount === null ? null : toFixedString(dec(row.base_amount), 2),
+    baseCleared: row.base_cleared === null ? null : toFixedString(dec(row.base_cleared), 2),
+    realisedGain: row.realised_gain === null ? null : toFixedString(dec(row.realised_gain), 2),
   };
 }
 
@@ -192,12 +211,14 @@ function isUniqueViolation(error: unknown): boolean {
 
 /**
  * The account a payment goes into (example CP8): an active bank account in
- * the base currency.
+ * the base currency, or, for a foreign-currency invoice (MC5), in the
+ * invoice's currency (`currency`).
  */
 export async function resolveBankAccount(
   tx: OrgTx,
   code: string,
-): Promise<{ id: string; code: string; name: string }> {
+  currency: string | null = null,
+): Promise<{ id: string; code: string; name: string; currencyCode: string | null }> {
   const result = await tx.query<{
     id: string;
     code: string;
@@ -219,12 +240,15 @@ export async function resolveBankAccount(
   if (!isBankOrCreditCard(row.account_type)) {
     throw new ValidationError(`${label} isn't a bank account, so payments can't go into it. Choose a bank or credit card account.`);
   }
-  if (row.currency_code !== null) {
+  const accountCurrency = row.currency_code === tx.baseCurrency ? null : row.currency_code;
+  if (accountCurrency !== null && accountCurrency !== currency) {
     throw new ValidationError(
-      `${label} is in ${row.currency_code}. Payments go into bank accounts in the base currency (${tx.baseCurrency}) only.`,
+      currency
+        ? `${label} is in ${accountCurrency}. A ${currency} invoice is paid into a ${currency} or ${tx.baseCurrency} bank account (a payment in one currency into an account in another isn't supported yet).`
+        : `${label} is in ${accountCurrency}. Payments go into bank accounts in the base currency (${tx.baseCurrency}) only.`,
     );
   }
-  return { id: row.id, code: row.code, name: row.name };
+  return { id: row.id, code: row.code, name: row.name, currencyCode: accountCurrency };
 }
 
 /**
@@ -245,23 +269,27 @@ export async function recordPayment(
     amount: unknown;
     bankAccountCode: unknown;
     reference?: unknown;
+    /** For a foreign-currency invoice (MC5, MC6): base currency per 1 unit on the payment date; left out, the last rate used. */
+    exchangeRate?: unknown;
   },
 ): Promise<PaymentResult> {
   const invoiceId = requireId(invoiceIdInput, "invoiceId");
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const paymentDate = parseIsoDate(command.paymentDate, "paymentDate");
-  // Approved invoices are always in the base currency: it can't change once anything is posted.
-  const scale = currencyMinorUnits(tx.baseCurrency);
-  const amount = dec(parseDecimalInput(command.amount, "amount", { maxScale: scale }));
+  // In the invoice's currency (MC5): checked against it once the invoice is loaded.
+  const amount = dec(parseDecimalInput(command.amount, "amount", { maxScale: 4 }));
   const bankAccountCode = parseAccountCodeInput(command.bankAccountCode, "bankAccountCode");
   const reference = optionalString(command.reference, "reference", { maxLength: 100 });
+  const typedRate = parseRateInput(command.exchangeRate);
   const hash = requestHash("customer_payment", {
     invoiceId,
     paymentDate,
     amount: toPlainString(amount),
     bankAccountCode: bankAccountCode.toLowerCase(),
     reference,
+    // Only when sent, so earlier payments hash the same.
+    ...(typedRate != null ? { exchangeRate: typedRate } : {}),
   });
   const replay = async (): Promise<PaymentResult | null> => {
     const earlier = await findByKey(tx, "record", source, idempotencyKey);
@@ -292,6 +320,16 @@ export async function recordPayment(
     throw new ValidationError(
       `The payment date can't be before the invoice date (${invoice.invoiceDate}). Prepayments aren't supported yet: raise the invoice first.`,
     );
+  }
+  const scale = currencyMinorUnits(invoice.currencyCode);
+  if (significantScale(amount) > scale) {
+    throw new ValidationError(scale === 0 ? "amount must be a whole number." : `amount can have at most ${scale} decimal places.`);
+  }
+  if (invoice.exchangeRate !== null) {
+    return recordForeignPayment(tx, invoice, { source, idempotencyKey, hash, paymentDate, amount: toFixedString(amount, scale), bankAccountCode, reference, typedRate });
+  }
+  if (typedRate != null) {
+    throw new ValidationError(`Invoice ${invoice.invoiceNumber} is in ${tx.baseCurrency}, so its payments have no exchange rate.`);
   }
   // Examples OP1 and OP4: whatever is paid beyond the amount due is the payment's overpayment. A
   // payment for an invoice that's already paid (e.g. the customer paid twice) is all overpayment:
@@ -376,6 +414,135 @@ export async function recordPayment(
 }
 
 /**
+ * A payment of a foreign-currency invoice (examples MC5, MC6), in the
+ * invoice's currency, into a bank account in that currency or the base
+ * currency, at the payment's own rate (typed, or the last rate used on or
+ * before the payment date). The bank account gets amount x rate, rounded
+ * once; accounts receivable is cleared at the invoice's carrying value of
+ * what's paid (all that's left when it pays the rest); the difference is a
+ * realised gain or loss on 7020, like NetSuite's realized gain/loss.
+ * Overpaying is refused (not supported yet).
+ */
+async function recordForeignPayment(
+  tx: OrgTx,
+  invoice: Invoice,
+  input: {
+    source: string;
+    idempotencyKey: string;
+    hash: string;
+    paymentDate: string;
+    amount: string;
+    bankAccountCode: string;
+    reference: string | null;
+    typedRate: string | null | undefined;
+  },
+): Promise<PaymentResult> {
+  const currency = invoice.currencyCode;
+  const due = invoice.amountDue!;
+  if (cmp(dec(input.amount), dec(due)) > 0) {
+    throw new ValidationError(
+      `Invoice ${invoice.invoiceNumber} has ${currency} ${due} due. Overpaying a foreign-currency invoice isn't supported yet (refused rather than guessed): record no more than what's due.`,
+    );
+  }
+  const bank = await resolveBankAccount(tx, input.bankAccountCode, currency);
+  const rate = (await exchangeRateFor(tx, { currencyCode: currency, date: input.paymentDate, typed: input.typedRate, what: "payment" }))!;
+  const receivable = await receivableAccountCode(tx);
+  const baseAmount = convertAtRate(input.amount, rate);
+  const cleared = clearedBase({ amount: due, base: await openBase(tx, "invoice", invoice.id) }, input.amount);
+  const gain = toFixedString(sub(dec(baseAmount), dec(cleared)), 2);
+  const gainLines = isZero(dec(gain)) ? [] : realisedLines(await realisedFxAccountCode(tx), gain, `${invoice.invoiceNumber} paid at ${rate}`);
+
+  const next = await tx.query<{ id: string }>("select nextval(pg_get_serial_sequence('customer_payments', 'id'))::text as id");
+  const paymentId = next.rows[0].id;
+  const customer = invoice.contactName;
+  const posted = await postJournalBody(
+    tx,
+    "customer_payment:record",
+    paymentId,
+    parseJournalBody(
+      tx,
+      {
+        postingDate: input.paymentDate,
+        reference: input.reference ?? invoice.invoiceNumber,
+        description: `Payment from ${customer} for ${invoice.invoiceNumber} (${currency} ${input.amount} at ${rate})`,
+        lines: [
+          {
+            accountCode: bank.code,
+            debitAmount: baseAmount,
+            creditAmount: "0",
+            description: customer,
+            ...(bank.currencyCode ? { foreign: { currencyCode: currency, amount: input.amount, rate, kind: "rate" as const } } : {}),
+          },
+          {
+            accountCode: receivable,
+            debitAmount: "0",
+            creditAmount: cleared,
+            description: customer,
+            foreign: { currencyCode: currency, amount: input.amount, rate: invoice.exchangeRate!, kind: "carrying_value" as const },
+          },
+          ...gainLines,
+        ],
+      },
+      { internal: true },
+    ),
+    { origin: "customer_payment" },
+  );
+  try {
+    await tx.query(
+      `insert into customer_payments (
+         id, command_source, idempotency_key, request_hash, invoice_id, payment_date, amount, overpayment_amount,
+         currency_code, bank_account_id, reference, journal_id, created_by_user_id, created_by_email,
+         exchange_rate, base_amount, base_cleared, realised_gain
+       )
+       values ($1, $2, $3, $4, $5, $6, $7::numeric, 0, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric)`,
+      [
+        paymentId,
+        input.source,
+        input.idempotencyKey,
+        input.hash,
+        invoice.id,
+        input.paymentDate,
+        input.amount,
+        currency,
+        bank.id,
+        input.reference,
+        posted.journal.id,
+        tx.actor.userId,
+        tx.actor.email,
+        rate,
+        baseAmount,
+        cleared,
+        gain,
+      ],
+    );
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ConflictError("That idempotency key was already used for a different payment. Use a new key for a new payment.");
+    }
+    throw error;
+  }
+  await writeAuditEvent(tx, {
+    eventType: "customer_payment.recorded",
+    entityType: "customer_payment",
+    entityId: paymentId,
+    details: {
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      paymentDate: input.paymentDate,
+      amount: input.amount,
+      currencyCode: currency,
+      exchangeRate: rate,
+      baseAmount,
+      baseCleared: cleared,
+      realisedGain: gain,
+      bankAccountCode: bank.code,
+      journalId: posted.journal.id,
+    },
+  });
+  return { created: true, payment: await getPayment(tx, paymentId), invoice: await getInvoice(tx, invoice.id) };
+}
+
+/**
  * Voids a payment (examples CP4 and OP8): posts the exact reversal of its
  * journal on the void date, which must be in an open period and not before the
  * payment. The amount is due again. A payment can only be voided once, and
@@ -453,8 +620,9 @@ export async function voidPayment(
         creditAmount: line.debitAmount,
         description: line.description,
         tracking: line.tracking,
+        ...sameForeign(line),
       })),
-    }),
+    }, { internal: true }),
     { origin: "customer_payment", relatedJournalId: original.id, correctionKind: "reversal" },
   );
 

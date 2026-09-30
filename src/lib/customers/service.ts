@@ -418,15 +418,24 @@ live_op_apps as (
   select a.* from customer_overpayment_applications a, params
    where a.application_date <= params.as_at and (a.removal_date is null or a.removal_date > params.as_at)
 ),
-invoices as (
-  select i.id, i.contact_id, i.invoice_number, i.invoice_date, i.due_date,
+invoices_open as (
+  select i.id, i.contact_id, i.invoice_number, i.invoice_date, i.due_date, i.currency_code, i.base_total,
          i.total
          - coalesce((select sum(p.amount - p.overpayment_amount) from live_payments p where p.invoice_id = i.id), 0)
          - coalesce((select sum(a.amount) from live_cn_apps a where a.invoice_id = i.id), 0)
-         - coalesce((select sum(a.amount) from live_op_apps a where a.invoice_id = i.id), 0) as amount_due
+         - coalesce((select sum(a.amount) from live_op_apps a where a.invoice_id = i.id), 0) as amount_due,
+         -- A foreign-currency invoice's open base value at its own rate (MC9).
+         i.base_total
+         - coalesce((select sum(p.base_cleared) from live_payments p where p.invoice_id = i.id), 0)
+         - coalesce((select sum(a.invoice_base) from live_cn_apps a where a.invoice_id = i.id), 0) as base_due
     from sales_invoices i, params
    where i.status in ('approved', 'voided') and i.invoice_date <= params.as_at
      and (i.void_date is null or i.void_date > params.as_at)
+),
+invoices as (
+  select id, contact_id, invoice_number, invoice_date, due_date, currency_code, amount_due,
+         case when base_total is null then amount_due else base_due end as amount_due_base
+    from invoices_open
 ),
 credit as (
   select n.contact_id,
@@ -434,12 +443,23 @@ credit as (
          - coalesce((select sum(a.amount) from live_cn_apps a where a.credit_note_id = n.id), 0)
          - coalesce((select sum(r.amount) from sales_credit_note_refunds r, params
                       where r.credit_note_id = n.id and r.refund_date <= params.as_at
-                        and (r.void_date is null or r.void_date > params.as_at)), 0) as unused
+                        and (r.void_date is null or r.void_date > params.as_at)), 0) as unused,
+         coalesce(n.base_total - coalesce((select sum(a.credit_note_base) from live_cn_apps a where a.credit_note_id = n.id), 0),
+                  n.total
+                  - coalesce((select sum(a.amount) from live_cn_apps a where a.credit_note_id = n.id), 0)
+                  - coalesce((select sum(r.amount) from sales_credit_note_refunds r, params
+                               where r.credit_note_id = n.id and r.refund_date <= params.as_at
+                                 and (r.void_date is null or r.void_date > params.as_at)), 0)) as unused_base
     from sales_credit_notes n, params
    where n.status in ('approved', 'voided') and n.credit_note_date <= params.as_at
      and (n.void_date is null or n.void_date > params.as_at)
   union all
   select i.contact_id,
+         p.overpayment_amount
+         - coalesce((select sum(a.amount) from live_op_apps a where a.payment_id = p.id), 0)
+         - coalesce((select sum(r.amount) from customer_overpayment_refunds r, params
+                      where r.payment_id = p.id and r.refund_date <= params.as_at
+                        and (r.void_date is null or r.void_date > params.as_at)), 0),
          p.overpayment_amount
          - coalesce((select sum(a.amount) from live_op_apps a where a.payment_id = p.id), 0)
          - coalesce((select sum(r.amount) from customer_overpayment_refunds r, params

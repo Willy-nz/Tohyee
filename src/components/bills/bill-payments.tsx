@@ -11,6 +11,8 @@ import type { SupplierPayment } from "@/lib/bills/payments";
 import type { Bill } from "@/lib/bills/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
+import { convertAtRate, isRateText } from "@/lib/money/fx";
+import { ExchangeRateField, effectiveRate, useLastRate } from "@/components/fx";
 
 type PaymentResult = { payment: SupplierPayment; bill: Bill };
 
@@ -18,9 +20,14 @@ function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
 }
 
-/** Payments are made from active bank accounts in the base currency (example SP8). */
-function isPaymentAccount(account: Account): boolean {
-  return (account.accountType === "bank" || account.accountType === "credit_card") && account.currencyCode === null;
+/**
+ * Payments are made from active bank accounts in the base currency (example
+ * SP8), or for a foreign-currency bill also from one in its currency (MC10).
+ */
+function paymentAccountFilter(currencyCode: string | null) {
+  return (account: Account): boolean =>
+    (account.accountType === "bank" || account.accountType === "credit_card") &&
+    (account.currencyCode === null || (currencyCode !== null && account.currencyCode === currencyCode));
 }
 
 function RecordPaymentForm({
@@ -40,6 +47,13 @@ function RecordPaymentForm({
   const [chosenAccount, setChosenAccount] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A foreign-currency bill is paid in its currency at the payment's own rate (MC10).
+  const foreign = bill.exchangeRate !== null;
+  const baseCurrency = useWorkspace().current?.baseCurrency ?? "NZD";
+  const [typedRate, setTypedRate] = useState<string | null>(null);
+  const suggestedRate = useLastRate(organisationId, bill.currencyCode, baseCurrency, fields.paymentDate);
+  const rate = effectiveRate(typedRate, suggestedRate);
+  const isPaymentAccount = paymentAccountFilter(foreign ? bill.currencyCode : null);
 
   const bankAccounts = (accounts.data?.accounts ?? []).filter((account) => account.isActive && isPaymentAccount(account));
   const defaultAccount = bankAccounts.find((account) => account.systemKey === "bank") ?? bankAccounts[0];
@@ -64,6 +78,7 @@ function RecordPaymentForm({
           amount: fields.amount,
           bankAccountCode,
           reference: fields.reference,
+          ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}),
         },
       });
       setKey(newIdempotencyKey("payment"));
@@ -100,9 +115,19 @@ function RecordPaymentForm({
             required
           />
         </Field>
-        <Field label={`Amount (${bill.currencyCode})`} hint={`${formatMoney(bill.amountDue)} is due.`}>
+        <Field
+          label={`Amount (${bill.currencyCode})`}
+          hint={
+            foreign
+              ? `${bill.currencyCode} ${formatMoney(bill.amountDue)} is due (${baseCurrency} ${formatMoney(bill.amountDueBase)} at the bill's rate).`
+              : `${formatMoney(bill.amountDue)} is due.`
+          }
+        >
           <input inputMode="decimal" value={fields.amount} onChange={(event) => set("amount", event.target.value)} required />
         </Field>
+        {foreign ? (
+          <ExchangeRateField currencyCode={bill.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
+        ) : null}
         <Field label="Bank account">
           <AccountSelect
             accounts={accounts.data?.accounts ?? []}
@@ -122,7 +147,13 @@ function RecordPaymentForm({
           {busy ? "Recording…" : "Record payment"}
         </Button>
         <span className={ui.muted}>
-          Posts the payment on its date: debit accounts payable, credit the bank account.
+          {foreign
+            ? `${
+                isRateText(rate) && /^\d+(\.\d+)?$/.test(fields.amount.trim())
+                  ? `${bill.currencyCode} ${formatMoney(fields.amount)} at ${rate} is ${baseCurrency} ${formatMoney(convertAtRate(fields.amount.trim(), rate))}. `
+                  : ""
+              }Accounts payable is cleared at the bill's rate; the difference is a realised currency gain or loss.`
+            : "Posts the payment on its date: debit accounts payable, credit the bank account."}
         </span>
       </div>
     </form>

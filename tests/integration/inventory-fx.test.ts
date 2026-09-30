@@ -267,7 +267,7 @@ describeWithDatabase("inventory and FX revaluation", () => {
           rateSource: "RBNZ close",
           unrealisedGainAccountCode: "7000",
           unrealisedLossAccountCode: "7010",
-          balances: [{ accountCode: "2000", foreignAmount: "10", closingRate: "1.6" }],
+          balances: [{ accountCode: "2800", foreignAmount: "10", closingRate: "1.6" }],
         }),
       ),
     ).rejects.toThrow(/NZD account/);

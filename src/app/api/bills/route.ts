@@ -34,7 +34,8 @@ export const POST = route(async (request) => {
       amountsMode: body.amountsMode,
       lines: body.lines,
       customFields: body.customFields,
-    }),
+      exchangeRate: body.exchangeRate,
+    }, null, { foreignCurrency: true }),
   );
   return json(result, { status: result.created ? 201 : 200 });
 });

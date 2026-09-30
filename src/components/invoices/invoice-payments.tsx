@@ -12,6 +12,8 @@ import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import type { CustomerPayment } from "@/lib/invoices/payments";
 import type { Invoice } from "@/lib/invoices/service";
 import { dec, isPositive, sub, toPlainString } from "@/lib/money/decimal";
+import { convertAtRate, isRateText } from "@/lib/money/fx";
+import { ExchangeRateField, effectiveRate, useLastRate } from "@/components/fx";
 
 type PaymentResult = { payment: CustomerPayment; invoice: Invoice };
 
@@ -34,9 +36,14 @@ function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
 }
 
-/** Payments go into active bank accounts in the base currency (example CP8). */
-function isPaymentAccount(account: Account): boolean {
-  return (account.accountType === "bank" || account.accountType === "credit_card") && account.currencyCode === null;
+/**
+ * Payments go into active bank accounts in the base currency (example CP8),
+ * or for a foreign-currency invoice also into one in its currency (MC5).
+ */
+function paymentAccountFilter(currencyCode: string | null) {
+  return (account: Account): boolean =>
+    (account.accountType === "bank" || account.accountType === "credit_card") &&
+    (account.currencyCode === null || (currencyCode !== null && account.currencyCode === currencyCode));
 }
 
 function RecordPaymentForm({
@@ -56,6 +63,13 @@ function RecordPaymentForm({
   const [chosenAccount, setChosenAccount] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A foreign-currency invoice is paid in its currency at the payment's own rate (MC5, MC6).
+  const foreign = invoice.exchangeRate !== null;
+  const baseCurrency = useWorkspace().current?.baseCurrency ?? "NZD";
+  const [typedRate, setTypedRate] = useState<string | null>(null);
+  const suggestedRate = useLastRate(organisationId, invoice.currencyCode, baseCurrency, fields.paymentDate);
+  const rate = effectiveRate(typedRate, suggestedRate);
+  const isPaymentAccount = paymentAccountFilter(foreign ? invoice.currencyCode : null);
 
   const bankAccounts = (accounts.data?.accounts ?? []).filter((account) => account.isActive && isPaymentAccount(account));
   const defaultAccount = bankAccounts.find((account) => account.systemKey === "bank") ?? bankAccounts[0];
@@ -69,6 +83,7 @@ function RecordPaymentForm({
     event.preventDefault();
     const extra = amountBeyondDue(fields.amount, invoice.amountDue ?? "0");
     if (
+      !foreign &&
       extra !== null &&
       !window.confirm(
         invoice.paidStatus === "paid"
@@ -91,6 +106,7 @@ function RecordPaymentForm({
           amount: fields.amount,
           bankAccountCode,
           reference: fields.reference,
+          ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}),
         },
       });
       setKey(newIdempotencyKey("payment"));
@@ -129,10 +145,17 @@ function RecordPaymentForm({
         </Field>
         <Field
           label={`Amount (${invoice.currencyCode})`}
-          hint={`${formatMoney(invoice.amountDue)} is due. Anything more is kept as an overpayment: credit for ${invoice.contactName}.`}
+          hint={
+            foreign
+              ? `${invoice.currencyCode} ${formatMoney(invoice.amountDue)} is due (${baseCurrency} ${formatMoney(invoice.amountDueBase)} at the invoice's rate).`
+              : `${formatMoney(invoice.amountDue)} is due. Anything more is kept as an overpayment: credit for ${invoice.contactName}.`
+          }
         >
           <input inputMode="decimal" value={fields.amount} onChange={(event) => set("amount", event.target.value)} required />
         </Field>
+        {foreign ? (
+          <ExchangeRateField currencyCode={invoice.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
+        ) : null}
         <Field label="Bank account">
           <AccountSelect
             accounts={accounts.data?.accounts ?? []}
@@ -152,7 +175,13 @@ function RecordPaymentForm({
           {busy ? "Recording…" : "Record payment"}
         </Button>
         <span className={ui.muted}>
-          Posts the whole payment on its date: debit the bank account, credit accounts receivable.
+          {foreign
+            ? `${
+                isRateText(rate) && /^\d+(\.\d+)?$/.test(fields.amount.trim())
+                  ? `${invoice.currencyCode} ${formatMoney(fields.amount)} at ${rate} is ${baseCurrency} ${formatMoney(convertAtRate(fields.amount.trim(), rate))}. `
+                  : ""
+              }Accounts receivable is cleared at the invoice's rate; the difference is a realised currency gain or loss.`
+            : "Posts the whole payment on its date: debit the bank account, credit accounts receivable."}
         </span>
       </div>
     </form>
@@ -304,6 +333,11 @@ export function InvoicePayments({
                   </td>
                   <td className={ui.num}>
                     <Money value={payment.amount} />
+                    {payment.exchangeRate ? (
+                      <div className={ui.muted}>
+                        at {payment.exchangeRate} = {formatMoney(payment.baseAmount)}; realised {payment.realisedGain?.startsWith("-") ? `loss ${formatMoney(payment.realisedGain.slice(1))}` : `gain ${formatMoney(payment.realisedGain)}`}
+                      </div>
+                    ) : null}
                     {payment.batchId ? (
                       <div className={ui.muted}>
                         <Link href={`/operations/customer-payments/${payment.batchId}`}>part of a payment for several invoices</Link>

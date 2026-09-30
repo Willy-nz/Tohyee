@@ -28,6 +28,7 @@ export const POST = route<Context>(async (request, context) => {
       amount: body.amount,
       bankAccountCode: body.bankAccountCode,
       reference: body.reference,
+      exchangeRate: body.exchangeRate,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

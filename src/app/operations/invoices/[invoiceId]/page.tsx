@@ -277,7 +277,8 @@ function UnusedCredit({ organisationId, invoice }: { organisationId: string; inv
 function InvoiceView({ organisationId, invoiceId }: { organisationId: string; invoiceId: string }) {
   const trackingSetup = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
-  const { can } = useWorkspace();
+  const { can, current } = useWorkspace();
+  const baseCurrency = current?.baseCurrency ?? "NZD";
   const router = useRouter();
   const details = useApiData<{
     invoice: Invoice;
@@ -416,6 +417,13 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
               <Stat label="Paid" value={<Money value={invoice.amountPaid} />} />
               <Stat label="Credited" value={<Money value={invoice.amountCredited} />} />
               <Stat label="Amount due" value={<Money value={invoice.amountDue} />} />
+            </>
+          ) : null}
+          {invoice.exchangeRate ? (
+            <>
+              <Stat label="Exchange rate" value={invoice.exchangeRate} />
+              <Stat label={`Total (${baseCurrency})`} value={<Money value={invoice.baseTotal} />} />
+              {invoice.amountDueBase !== null ? <Stat label={`Due (${baseCurrency}, at this rate)`} value={<Money value={invoice.amountDueBase} />} /> : null}
             </>
           ) : null}
         </div>

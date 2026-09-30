@@ -59,7 +59,14 @@ function toDue(row: DueRow): AmountsDue {
  */
 const OWED_SQL = `
 with due as (
-  select i.due_date, i.total - tohyee_invoice_settled(i.id) as amount_due
+  -- In the base currency: a foreign-currency invoice at its own rate (MC9).
+  select i.due_date,
+         case when i.base_total is null then i.total - tohyee_invoice_settled(i.id)
+              when i.total = tohyee_invoice_settled(i.id) then 0
+              else i.base_total
+                   - coalesce((select sum(p.base_cleared) from customer_payments p where p.invoice_id = i.id and p.status = 'active'), 0)
+                   - coalesce((select sum(a.invoice_base) from sales_credit_note_applications a
+                                where a.invoice_id = i.id and a.status = 'active'), 0) end as amount_due
     from sales_invoices i
    where i.status = 'approved'
 )
@@ -72,10 +79,11 @@ select coalesce(sum(amount_due), 0)::text as total, count(*)::integer as count,
 /** Approved bills with something still to pay (H3): less active supplier payments and supplier credit applied. */
 const BILLS_SQL = `
 with due as (
+  -- In the base currency: a foreign-currency bill at its own rate (MC9).
   select b.due_date,
-         b.total
-         - coalesce((select sum(p.amount) from supplier_payments p where p.bill_id = b.id and p.status = 'active'), 0)
-         - coalesce((select sum(a.amount) from supplier_credit_note_applications a
+         coalesce(b.base_total, b.total)
+         - coalesce((select sum(coalesce(p.base_cleared, p.amount)) from supplier_payments p where p.bill_id = b.id and p.status = 'active'), 0)
+         - coalesce((select sum(coalesce(a.bill_base, a.amount)) from supplier_credit_note_applications a
                       where a.bill_id = b.id and a.status = 'active'), 0) as amount_due
     from bills b
    where b.status = 'approved'

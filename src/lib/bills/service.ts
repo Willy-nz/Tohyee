@@ -19,8 +19,10 @@ import {
   type AmountsMode,
   type PaidStatus,
 } from "@/lib/invoices/amounts";
-import { controlAccountCode, GST_ACCOUNT, type ControlAccount } from "@/lib/invoices/service";
-import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
+import { controlAccountCode, GST_ACCOUNT, setBaseLineAmounts, type ControlAccount, type ForeignOption } from "@/lib/invoices/service";
+import { assertForeignLinesSupported, contactCurrency, convertDocumentLines, exchangeRateFor, parseRateInput } from "@/lib/fx/documents";
+import type { TaxCategory } from "@/lib/tax/categories";
+import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import {
@@ -82,6 +84,9 @@ export type BillLine = LineItemFields & {
   customFields: CustomValues;
   /** The purchase order line this line was billed against (PO3-PO6), or null. */
   purchaseOrderLineId: string | null;
+  /** On a foreign-currency bill: the net amount and GST in the base currency (MC10); null otherwise. */
+  baseNetAmount: string | null;
+  baseTaxAmount: string | null;
 };
 
 export type BillSummary = {
@@ -98,6 +103,14 @@ export type BillSummary = {
   subtotal: string;
   taxTotal: string;
   total: string;
+  /** Base currency per 1 unit of the bill's currency; null for a base-currency bill (MC10). */
+  exchangeRate: string | null;
+  /** The base-currency amounts of a foreign-currency bill (its lines converted one by one); null otherwise. */
+  baseSubtotal: string | null;
+  baseTaxTotal: string | null;
+  baseTotal: string | null;
+  /** On an approved foreign-currency bill: the base value of what's still due, at the bill's rate. */
+  amountDueBase: string | null;
   /** The sum of the bill's active payments (examples SP1-SP4). */
   amountPaid: string;
   /** The sum of the supplier credit applied to the bill (examples SCN3, SCN4). */
@@ -136,6 +149,8 @@ export type BillInput = {
   amountsMode?: unknown;
   lines?: unknown;
   customFields?: unknown;
+  /** For a supplier in another currency: base currency per 1 unit (MC10). Left out, the last rate used is taken. */
+  exchangeRate?: unknown;
 };
 
 const MAX_LINES = 200;
@@ -157,6 +172,11 @@ type BillRow = {
   total: string;
   amount_paid: string;
   amount_credited: string;
+  exchange_rate: string | null;
+  base_subtotal: string | null;
+  base_tax_total: string | null;
+  base_total: string | null;
+  base_settled: string;
   approval_journal_id: string | null;
   approved_at: string | null;
   approved_by_email: string | null;
@@ -177,7 +197,8 @@ const SUMMARY_COLUMNS = `b.id, b.status, b.contact_id, c.name as contact_name, b
   b.supplier_invoice_number, b.amounts_mode, b.currency_code, b.subtotal, b.tax_total, b.total,
   paid.amount_paid, credited.amount_credited, b.approval_journal_id, b.approved_at, b.approved_by_email, b.void_date, b.void_journal_id, b.voided_at,
   b.voided_by_email, b.created_by_email, b.created_at, b.updated_at, b.custom_fields, b.purchase_order_id, po.po_number,
-  b.is_opening_balance`;
+  b.is_opening_balance, b.exchange_rate::text, b.base_subtotal::text, b.base_tax_total::text, b.base_total::text,
+  base_settled.base_settled::text`;
 
 /** Bills with their supplier and the sums of their active payments and supplier credit applied. */
 const SUMMARY_FROM = `bills b
@@ -192,7 +213,12 @@ const SUMMARY_FROM = `bills b
     select coalesce(sum(a.amount), 0) as amount_credited
       from supplier_credit_note_applications a
      where a.bill_id = b.id and a.status = 'active'
-  ) credited`;
+  ) credited
+  cross join lateral (
+    select coalesce((select sum(p.base_cleared) from supplier_payments p where p.bill_id = b.id and p.status = 'active'), 0)
+         + coalesce((select sum(a.bill_base) from supplier_credit_note_applications a
+                      where a.bill_id = b.id and a.status = 'active'), 0) as base_settled
+  ) base_settled`;
 
 type LineRow = LineItemRow & {
   line_order: number;
@@ -211,7 +237,11 @@ type LineRow = LineItemRow & {
   tracking: TrackingTags;
   custom_fields: CustomValues;
   purchase_order_line_id?: string | null;
+  base_net_amount?: string | null;
+  base_tax_amount?: string | null;
 };
+
+const baseMoney = (value: string | null | undefined) => (value == null ? null : toFixedString(dec(value), 2));
 
 function toSummary(row: BillRow): BillSummary {
   const scale = currencyMinorUnits(row.currency_code);
@@ -230,6 +260,11 @@ function toSummary(row: BillRow): BillSummary {
     subtotal: row.subtotal,
     taxTotal: row.tax_total,
     total: row.total,
+    exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    baseSubtotal: baseMoney(row.base_subtotal),
+    baseTaxTotal: baseMoney(row.base_tax_total),
+    baseTotal: baseMoney(row.base_total),
+    amountDueBase: approved && row.base_total !== null ? toFixedString(sub(dec(row.base_total), dec(row.base_settled)), 2) : null,
     amountPaid: payment.amountPaid,
     amountCredited: toFixedString(dec(row.amount_credited), scale),
     amountDue: approved ? payment.amountDue : null,
@@ -270,6 +305,8 @@ function toLine(row: LineRow): BillLine {
     tracking: row.tracking ?? {},
     customFields: row.custom_fields ?? {},
     purchaseOrderLineId: row.purchase_order_line_id ?? null,
+    baseNetAmount: baseMoney(row.base_net_amount),
+    baseTaxAmount: baseMoney(row.base_tax_amount),
   };
 }
 
@@ -297,6 +334,8 @@ export type DraftDetails = {
   amountsMode: AmountsMode;
   lines: PurchaseLineInput[];
   customInput: Record<string, unknown> | undefined;
+  /** As sent: undefined or null when not given (a foreign-currency bill then takes the last rate used). */
+  exchangeRateInput?: string | null;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -306,6 +345,10 @@ export type ResolvedDraft = DraftDetails & {
   subtotal: string;
   taxTotal: string;
   total: string;
+  exchangeRate: string | null;
+  baseSubtotal: string | null;
+  baseTaxTotal: string | null;
+  baseTotal: string | null;
   customFields: CustomValues;
   customCtx: CustomFieldContext;
   resolvedLines: Array<ResolvedLineItem & {
@@ -323,6 +366,8 @@ export type ResolvedDraft = DraftDetails & {
     accountClass: AccountClass;
     customFields: CustomValues;
     purchaseOrderLineId: string | null;
+    baseNetAmount: string | null;
+    baseTaxAmount: string | null;
   }>;
 };
 
@@ -338,7 +383,16 @@ function parseDraft(input: BillInput): DraftDetails {
   });
   const amountsMode = requireOneOf(input.amountsMode, "amountsMode", AMOUNTS_MODES);
   const lines = parsePurchaseLines(input.lines, amountsMode, "A bill", { purchaseOrderLinks: true });
-  return { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines, customInput: parseCustomInput(input.customFields, "") };
+  return {
+    contactId,
+    billDate,
+    dueDate,
+    supplierInvoiceNumber,
+    amountsMode,
+    lines,
+    customInput: parseCustomInput(input.customFields, ""),
+    exchangeRateInput: parseRateInput(input.exchangeRate),
+  };
 }
 
 /**
@@ -398,6 +452,7 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     lines: hashPurchaseLines(draft.lines),
     // Values that weren't sent stay out, so older requests hash the same.
     ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
+    ...(draft.exchangeRateInput != null ? { exchangeRate: draft.exchangeRateInput } : {}),
   };
 }
 
@@ -422,7 +477,19 @@ export async function resolveDraft(
   kept: ReadonlySet<string> = new Set(),
   keptFields: ReadonlySet<string> = new Set(),
   keptItems: ReadonlyArray<LineItemRef> = [],
+  foreign: ForeignOption = {},
 ): Promise<ResolvedDraft> {
+  // A supplier in another currency gets bills in it (MC1), entered directly only (MC11).
+  const currencyCode = await contactCurrency(tx, sent.contactId);
+  if (currencyCode !== tx.baseCurrency) {
+    if (!foreign.foreignCurrency) {
+      const name = (await tx.query<{ name: string }>("select name from contacts where id = $1", [sent.contactId])).rows[0]?.name ?? "This supplier";
+      throw new ValidationError(
+        `${name} is in ${currencyCode}. ${foreign.feature ?? "This"} for suppliers in a currency other than ${tx.baseCurrency} isn't supported yet (refused rather than guessed): enter a ${currencyCode} bill directly instead.`,
+      );
+    }
+    assertForeignLinesSupported("bill", currencyCode, tx.baseCurrency, [], sent.lines);
+  }
   // Blanks on item lines are filled from the item (IT2); what was sent is kept.
   const draft: DraftDetails = { ...sent, lines: await fillLinesFromItems(tx, sent.lines, { side: "purchase", contactId: sent.contactId, noTax: sent.amountsMode === "no_tax" }) };
   const custom = await resolveDocumentCustom(tx, "bill", draft.customInput, draft.lines.map((line) => line.customFields), keptFields);
@@ -464,10 +531,11 @@ export async function resolveDraft(
     id: string;
     code: string;
     rate: string;
+    category: TaxCategory;
     is_active: boolean;
     effective_from: string;
     effective_to: string | null;
-  }>("select id, code, rate, is_active, effective_from, effective_to from tax_codes where code = any($1::text[])", [
+  }>("select id, code, rate, category, is_active, effective_from, effective_to from tax_codes where code = any($1::text[])", [
     wantedTaxCodes,
   ]);
   const taxCodesByCode = new Map(taxCodes.rows.map((row) => [row.code, row]));
@@ -492,6 +560,7 @@ export async function resolveDraft(
     }
     let taxCodeId: string | null = null;
     let taxRate = "0";
+    let taxCategory: TaxCategory | null = null;
     if (line.taxCode !== null) {
       const taxCode = taxCodesByCode.get(line.taxCode);
       if (!taxCode) {
@@ -509,32 +578,51 @@ export async function resolveDraft(
       }
       taxCodeId = taxCode.id;
       taxRate = toPlainString(dec(taxCode.rate));
+      taxCategory = taxCode.category;
     }
-    return { ...line, accountId: account.id, accountCode: account.code, accountClass: account.account_class as AccountClass, accountSystemKey: account.system_key, taxCodeId, taxRate };
+    return { ...line, accountId: account.id, accountCode: account.code, accountClass: account.account_class as AccountClass, accountSystemKey: account.system_key, taxCodeId, taxRate, taxCategory };
   });
 
   const lineItems = await resolveLineItems(tx, draft.lines, "purchase", keptItems);
   // Stock items go to the inventory account, and only they do (ST1, ST6).
   assertInventoryLines(lines.map((line, index) => ({ ...lineItems[index], accountSystemKey: line.accountSystemKey, accountCode: line.accountCode })));
-  const scale = currencyMinorUnits(tx.baseCurrency);
+  const scale = currencyMinorUnits(currencyCode);
   const amounts = calculateInvoice(draft.amountsMode, lines, scale);
   amounts.lines.forEach((line, index) => {
     if (isZero(dec(line.lineAmount))) {
       throw new ValidationError(
-        `Line ${index + 1} comes to ${line.lineAmount} once rounded to ${tx.baseCurrency}. Check its quantity and unit price.`,
+        `Line ${index + 1} comes to ${line.lineAmount} once rounded to ${currencyCode}. Check its quantity and unit price.`,
       );
     }
   });
+  // A foreign-currency bill (MC10): no standard-rated GST or stock yet; a rate for its date; each line converted.
+  let exchangeRate: string | null = null;
+  let base: ReturnType<typeof convertDocumentLines> | null = null;
+  if (currencyCode !== tx.baseCurrency) {
+    assertForeignLinesSupported(
+      "bill",
+      currencyCode,
+      tx.baseCurrency,
+      lines.map((line, index) => ({ taxCategory: line.taxCategory, itemType: lineItems[index].itemType })),
+      [],
+    );
+    exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.billDate, typed: draft.exchangeRateInput, what: "bill" });
+    base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+  }
 
   return {
     ...draft,
     customFields: custom.body,
     customCtx: custom.ctx,
     contactName: supplier.name,
-    currencyCode: tx.baseCurrency,
+    currencyCode,
     subtotal: amounts.subtotal,
     taxTotal: amounts.taxTotal,
     total: amounts.total,
+    exchangeRate,
+    baseSubtotal: base?.baseSubtotal ?? null,
+    baseTaxTotal: base?.baseTaxTotal ?? null,
+    baseTotal: base?.baseTotal ?? null,
     resolvedLines: lines.map((line, index) => ({
       description: line.description,
       quantity: line.quantity,
@@ -549,6 +637,8 @@ export async function resolveDraft(
       accountClass: line.accountClass,
       customFields: custom.lines[index],
       purchaseOrderLineId: line.purchaseOrderLineId,
+      baseNetAmount: base?.lines[index].baseNetAmount ?? null,
+      baseTaxAmount: base?.lines[index].baseTaxAmount ?? null,
     })),
   };
 }
@@ -630,6 +720,8 @@ type StoredHeader = {
   taxTotal: string;
   total: string;
   customFields: CustomValues;
+  exchangeRate: string | null;
+  baseTotal: string | null;
 };
 
 const plain = (value: string) => toPlainString(dec(value));
@@ -647,6 +739,8 @@ function headerState(bill: StoredHeader): string {
     plain(bill.taxTotal),
     plain(bill.total),
     customValuesKey(bill.customFields),
+    bill.exchangeRate === null ? null : plain(bill.exchangeRate),
+    bill.baseTotal === null ? null : plain(bill.baseTotal),
   ]);
 }
 
@@ -699,6 +793,7 @@ function draftOf(bill: Bill): DraftDetails {
       purchaseOrderLineId: line.purchaseOrderLineId,
     })),
     customInput: bill.customFields,
+    exchangeRateInput: bill.exchangeRate,
   };
 }
 
@@ -758,6 +853,7 @@ export async function insertPurchaseLines(
 
 async function insertLines(tx: OrgTx, billId: string, lines: ResolvedDraft["resolvedLines"]): Promise<void> {
   await insertPurchaseLines(tx, "bill_lines", billId, lines);
+  await setBaseLineAmounts(tx, "bill_lines", "bill_id", billId, lines);
 }
 
 /** A bill's, purchase order's or repeating bill template's lines, in order. */
@@ -766,7 +862,9 @@ export async function loadPurchaseLines(tx: OrgTx, table: PurchaseLineTable, par
   const lines = await tx.query<LineRow & { id: string }>(
     `select l.id, l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
-            l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS}${bill ? ", l.purchase_order_line_id" : ""}
+            l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS}${
+              bill ? ", l.purchase_order_line_id, l.base_net_amount::text, l.base_tax_amount::text" : ""
+            }
        from ${table} l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
@@ -934,6 +1032,7 @@ export async function createBill(
   tx: OrgTx,
   input: BillInput & { source?: unknown; idempotencyKey: unknown },
   link: { purchaseOrderId: string } | null = null,
+  foreign: ForeignOption = {},
 ): Promise<{ created: boolean; bill: Bill }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
@@ -946,7 +1045,7 @@ export async function createBill(
     return { created: false, bill: await getBill(tx, existing.id) };
   }
 
-  const resolved = await resolveDraft(tx, draft);
+  const resolved = await resolveDraft(tx, draft, new Set(), new Set(), [], foreign);
   await checkPurchaseOrderLinks(tx, link?.purchaseOrderId ?? null, resolved, null);
   await assertNumberFree(tx, resolved, null);
   const inserted = await savingNumber(
@@ -954,8 +1053,10 @@ export async function createBill(
     tx.query<{ id: string }>(
       `insert into bills (command_source, idempotency_key, request_hash, contact_id, bill_date, due_date,
                           supplier_invoice_number, amounts_mode, currency_code, subtotal, tax_total, total,
-                          created_by_user_id, created_by_email, purchase_order_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14, $15)
+                          created_by_user_id, created_by_email, purchase_order_id,
+                          exchange_rate, base_subtotal, base_tax_total, base_total)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14, $15,
+               $16::numeric, $17::numeric, $18::numeric, $19::numeric)
        on conflict (command_source, idempotency_key) do nothing
        returning id`,
       [
@@ -974,6 +1075,10 @@ export async function createBill(
         tx.actor.userId,
         tx.actor.email,
         link?.purchaseOrderId ?? null,
+        resolved.exchangeRate,
+        resolved.baseSubtotal,
+        resolved.baseTaxTotal,
+        resolved.baseTotal,
       ],
     ),
   );
@@ -1024,8 +1129,15 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
     amountsMode: input.amountsMode === undefined ? saved.amountsMode : input.amountsMode,
     lines: input.lines === undefined ? saved.lines : input.lines,
     customFields: input.customFields === undefined ? saved.customInput : input.customFields,
+    // Not sent: the saved rate stays while the supplier does.
+    exchangeRate:
+      input.exchangeRate !== undefined
+        ? input.exchangeRate
+        : input.contactId === undefined || String(input.contactId) === saved.contactId
+          ? saved.exchangeRateInput
+          : undefined,
   });
-  const resolved = await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines);
+  const resolved = await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines, { foreignCurrency: true });
   const same = sameAsStored(resolved, current);
   if (same.header && same.lines) {
     return current;
@@ -1034,7 +1146,7 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
   await assertNumberFree(tx, resolved, current.id);
 
   const changed: string[] = (
-    ["contactId", "billDate", "dueDate", "supplierInvoiceNumber", "amountsMode"] as const
+    ["contactId", "billDate", "dueDate", "supplierInvoiceNumber", "amountsMode", "exchangeRate"] as const
   ).filter((field) => resolved[field] !== current[field]);
   if (!same.lines) {
     changed.push("lines");
@@ -1048,6 +1160,7 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
       `update bills
           set contact_id = $2, bill_date = $3, due_date = $4, supplier_invoice_number = $5, amounts_mode = $6,
               currency_code = $7, subtotal = $8::numeric, tax_total = $9::numeric, total = $10::numeric,
+              exchange_rate = $11::numeric, base_subtotal = $12::numeric, base_tax_total = $13::numeric, base_total = $14::numeric,
               updated_at = now()
         where id = $1`,
       [
@@ -1061,6 +1174,10 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
         resolved.subtotal,
         resolved.taxTotal,
         resolved.total,
+        resolved.exchangeRate,
+        resolved.baseSubtotal,
+        resolved.baseTaxTotal,
+        resolved.baseTotal,
       ],
     ),
   );
@@ -1150,13 +1267,7 @@ export async function approveBill(
   if (current.status !== "draft") {
     throw new ConflictError(`${billLabel(current)} is already ${current.status}.`);
   }
-  if (current.currencyCode !== tx.baseCurrency) {
-    throw new ValidationError(
-      `This draft was saved in ${current.currencyCode}, but the base currency is now ${tx.baseCurrency}. Open it and save it again first.`,
-    );
-  }
-
-  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines);
+  const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines, { foreignCurrency: true });
   const same = sameAsStored(resolved, current);
   if (!same.header || !same.lines) {
     throw new ConflictError(
@@ -1177,15 +1288,18 @@ export async function approveBill(
   await assertPostingDateAllowed(tx, current.billDate);
 
   const scale = currencyMinorUnits(tx.baseCurrency);
+  // A foreign-currency bill posts its base amounts, with its foreign amount on accounts payable (MC10).
+  const foreignCurrency = resolved.exchangeRate !== null;
   // One line per account and set of tracking tags (TC4, TC10).
   const costs = new Map<string, { code: string; amount: Decimal; tracking: TrackingTags }>();
   for (const line of resolved.resolvedLines) {
     const key = `${line.accountId}|${trackingKey(line.tracking)}`;
     const entry = costs.get(key) ?? { code: line.accountCode, amount: ZERO_DECIMAL, tracking: line.tracking };
-    entry.amount = add(entry.amount, dec(line.netAmount));
+    entry.amount = add(entry.amount, dec(foreignCurrency ? line.baseNetAmount! : line.netAmount));
     costs.set(key, entry);
   }
   const supplier = resolved.contactName;
+  const taxTotal = foreignCurrency ? resolved.baseTaxTotal! : resolved.taxTotal;
   const journalLines = [
     ...[...costs.values()]
       .filter((entry) => !isZero(entry.amount))
@@ -1196,10 +1310,16 @@ export async function approveBill(
         description: supplier,
         tracking: entry.tracking,
       })),
-    ...(isZero(dec(resolved.taxTotal))
-      ? []
-      : [{ accountCode: accounts.gst, debitAmount: resolved.taxTotal, creditAmount: "0", description: "GST" }]),
-    { accountCode: accounts.payable, debitAmount: "0", creditAmount: resolved.total, description: supplier },
+    ...(isZero(dec(taxTotal)) ? [] : [{ accountCode: accounts.gst, debitAmount: taxTotal, creditAmount: "0", description: "GST" }]),
+    {
+      accountCode: accounts.payable,
+      debitAmount: "0",
+      creditAmount: foreignCurrency ? resolved.baseTotal! : resolved.total,
+      description: supplier,
+      ...(foreignCurrency
+        ? { foreign: { currencyCode: resolved.currencyCode, amount: resolved.total, rate: resolved.exchangeRate!, kind: "document" as const } }
+        : {}),
+    },
   ];
   // Stock items move stock and post cost of sales in the same journal (ST1-ST11).
   const stock = await planDocumentStock(
@@ -1214,12 +1334,16 @@ export async function approveBill(
     tx,
     "bill:approval",
     billId,
-    parseJournalBody(tx, {
-      postingDate: current.billDate,
-      reference: current.supplierInvoiceNumber,
-      description: `Bill ${current.supplierInvoiceNumber} from ${supplier}`,
-      lines: journalLines,
-    }),
+    parseJournalBody(
+      tx,
+      {
+        postingDate: current.billDate,
+        reference: current.supplierInvoiceNumber,
+        description: `Bill ${current.supplierInvoiceNumber} from ${supplier}`,
+        lines: journalLines,
+      },
+      { internal: true },
+    ),
     { origin: "bill" },
   );
   await stock?.planner.record(posted.journal.id);
@@ -1334,10 +1458,11 @@ export async function voidBill(
           creditAmount: line.debitAmount,
           description: line.description,
           tracking: line.tracking,
+          ...sameForeign(line),
         })),
         ...(voidStock?.journalLines ?? []),
       ],
-    }),
+    }, { internal: true }),
     { origin: "bill", relatedJournalId: original.id, correctionKind: "reversal" },
   );
   await voidStock?.planner.record(posted.journal.id);

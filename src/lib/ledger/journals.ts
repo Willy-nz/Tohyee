@@ -66,9 +66,15 @@ export type CorrectionKind = "reversal" | "replacement";
  *   account); the rate is base / foreign, for information;
  * - "carrying_value": money leaving a foreign account at its carrying value
  *   (a transfer out); the rate is for information;
- * - "revaluation": an FX revaluation line, foreign amount 0 at the closing rate.
+ * - "revaluation": an FX revaluation line, foreign amount 0 at the closing rate;
+ * - "document": a foreign-currency invoice's, bill's or credit note's own line
+ *   on accounts receivable or payable (MC2): base = the document's lines
+ *   converted one by one (as NetSuite does); the rate is the document's.
+ * On accounts receivable and payable (base-currency accounts), a payment or
+ * credit clearing a foreign-currency document is "carrying_value": the
+ * document's carrying value of what's cleared (MC5-MC7).
  */
-export type FxKind = "rate" | "implied" | "carrying_value" | "revaluation";
+export type FxKind = "rate" | "implied" | "carrying_value" | "revaluation" | "document";
 
 /** A journal line's foreign-currency side, on the same side (debit or credit) as its base amount. */
 export type ForeignAmount = {
@@ -533,7 +539,7 @@ export async function postJournalBody(
 async function checkForeignLines(
   tx: OrgTx,
   body: JournalBody,
-  accounts: Map<string, { id: string; code: string; name: string; currencyCode: string | null }>,
+  accounts: Map<string, { id: string; code: string; name: string; currencyCode: string | null; systemKey: string | null }>,
 ): Promise<Array<ForeignAmount | null>> {
   const baseScale = currencyMinorUnits(tx.baseCurrency);
   const checked = new Set<string>();
@@ -545,7 +551,20 @@ async function checkForeignLines(
     const currency = account.currencyCode && account.currencyCode !== tx.baseCurrency ? account.currencyCode : null;
     if (!currency) {
       if (line.foreign) {
-        throw new ValidationError(`${label}: ${accountLabel} is in ${tx.baseCurrency}, so it takes no foreign amount or exchange rate.`);
+        // Accounts receivable and payable hold foreign-currency documents (MC2-MC8), from Tohyee itself only.
+        const control = account.systemKey === "accounts_receivable" || account.systemKey === "accounts_payable";
+        const kind = line.foreign.kind;
+        const currencyCode = line.foreign.currencyCode;
+        if (!control || !currencyCode || currencyCode === tx.baseCurrency || !(kind === "document" || kind === "carrying_value" || kind === "revaluation")) {
+          throw new ValidationError(`${label}: ${accountLabel} is in ${tx.baseCurrency}, so it takes no foreign amount or exchange rate.`);
+        }
+        const scale = currencyMinorUnits(currencyCode);
+        const amount = dec(line.foreign.amount);
+        if (significantScale(amount) > scale || (kind === "revaluation") !== isZero(amount)) {
+          throw new ValidationError(`${label}: the ${currencyCode} amount ${line.foreign.amount} isn't valid here.`);
+        }
+        sides.push({ currencyCode, amount: toFixedString(amount, scale), rate: toPlainString(dec(line.foreign.rate)), kind });
+        continue;
       }
       sides.push(null);
       continue;

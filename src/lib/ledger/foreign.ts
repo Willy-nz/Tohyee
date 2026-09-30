@@ -217,8 +217,9 @@ export type RateUsed = {
 
 /**
  * The rates used for each currency, newest first (D4): rates posted lines were
- * converted at ("rate" and "implied" lines, any account) and revaluations'
- * closing rates. Money leaving at its carrying value isn't a market rate and
+ * converted at ("rate" and "implied" lines, any account, and foreign-currency
+ * invoices', bills' and credit notes' own rates, MC3), payments' rates and
+ * revaluations' closing rates. Money leaving at its carrying value isn't a market rate and
  * isn't included.
  */
 export async function ratesUsed(tx: OrgTx, currencies: readonly string[]): Promise<Map<string, RateUsed[]>> {
@@ -230,7 +231,16 @@ export async function ratesUsed(tx: OrgTx, currencies: readonly string[]): Promi
        select l.foreign_currency_code as currency_code, l.exchange_rate::text as rate, j.posting_date::text as rate_date,
               'posted' as source, j.created_at, l.id as ord
          from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id
-        where l.foreign_currency_code = any($1::text[]) and l.fx_kind in ('rate', 'implied') and j.correction_kind is distinct from 'reversal'
+        where l.foreign_currency_code = any($1::text[]) and l.fx_kind in ('rate', 'implied', 'document') and j.correction_kind is distinct from 'reversal'
+       union all
+       -- Payments of foreign-currency invoices and bills at their own rate (MC3), whichever bank account they used.
+       select i.currency_code, p.exchange_rate::text, p.payment_date::text, 'posted', p.created_at, -p.id
+         from customer_payments p join sales_invoices i on i.id = p.invoice_id
+        where p.exchange_rate is not null and p.status = 'active' and i.currency_code = any($1::text[])
+       union all
+       select b.currency_code, p.exchange_rate::text, p.payment_date::text, 'posted', p.created_at, -p.id
+         from supplier_payments p join bills b on b.id = p.bill_id
+        where p.exchange_rate is not null and p.status = 'active' and b.currency_code = any($1::text[])
        union all
        select i.currency_code, i.closing_rate::text, i.revaluation_date::text, 'revaluation', r.created_at, i.id
          from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id

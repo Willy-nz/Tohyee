@@ -2,7 +2,7 @@ import { RECEIVABLES_SQL } from "@/lib/customers/service";
 import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { add, dec, isZero, toFixedString } from "@/lib/money/decimal";
+import { add, type Decimal, dec, isZero, neg, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { AGE_BUCKETS, type AgedAmounts, addBuckets, type Buckets, bucketFor, daysBetween, emptyBuckets, toAmounts } from "@/lib/reports/ageing";
 
 /**
@@ -15,7 +15,18 @@ import { AGE_BUCKETS, type AgedAmounts, addBuckets, type Buckets, bucketFor, day
 
 export { AGE_BUCKETS, type AgeBucket, type AgedAmounts } from "@/lib/reports/ageing";
 
-export type AgedInvoice = { id: string; invoiceNumber: string | null; invoiceDate: string; dueDate: string; daysOverdue: number; amountDue: string };
+export type AgedInvoice = {
+  id: string;
+  invoiceNumber: string | null;
+  invoiceDate: string;
+  dueDate: string;
+  daysOverdue: number;
+  /** In the invoice's currency. */
+  amountDue: string;
+  currencyCode: string;
+  /** In the base currency, at the invoice's own rate (MC9); the same as amountDue for a base-currency invoice. */
+  amountDueBase: string;
+};
 
 export type AgedRow = {
   contactId: string;
@@ -28,9 +39,23 @@ export type AgedRow = {
   /** With roll-up, this customer and everything under it; null when it has no subs with a balance. */
   rolledUp: AgedAmounts | null;
   invoices: AgedInvoice[];
+  /** A customer in another currency (MC9): its currency and what it owes in it (invoices less unused credit); null otherwise. */
+  foreign: { currencyCode: string; total: string } | null;
 };
 
-export type AgedReceivables = { asAt: string; rollUp: boolean; currencyCode: string; rows: AgedRow[]; total: AgedAmounts };
+export type AgedReceivables = {
+  asAt: string;
+  rollUp: boolean;
+  /** The base currency: every bucket and total is in it, foreign-currency documents at their own rates (MC9). */
+  currencyCode: string;
+  rows: AgedRow[];
+  total: AgedAmounts;
+  /**
+   * An unrealised FX revaluation of open foreign-currency invoices on accounts receivable on the date (MC8,
+   * reversed the next day): the documents' total plus it is the ledger balance. 0.00 on other dates.
+   */
+  revaluation: string;
+};
 
 export async function agedReceivables(tx: OrgTx, input: { asAt?: unknown; rollUp?: unknown }): Promise<AgedReceivables> {
   const asAt = parseOptionalIsoDate(input.asAt, "asAt") ?? todayIsoDate();
@@ -43,26 +68,30 @@ export async function agedReceivables(tx: OrgTx, input: { asAt?: unknown; rollUp
     invoice_date: string;
     due_date: string;
     amount_due: string;
+    currency_code: string;
+    amount_due_base: string;
   }>(
     `${RECEIVABLES_SQL}
-     select id, contact_id, invoice_number, invoice_date, due_date, amount_due::text from invoices
-      where amount_due <> 0 order by due_date, id`,
+     select id, contact_id, invoice_number, invoice_date, due_date, amount_due::text, currency_code, amount_due_base::text from invoices
+      where amount_due <> 0 or amount_due_base <> 0 order by due_date, id`,
     [asAt],
   );
-  const creditRows = await tx.query<{ contact_id: string; unused: string }>(
+  const creditRows = await tx.query<{ contact_id: string; unused: string; unused_base: string }>(
     `${RECEIVABLES_SQL}
-     select contact_id, sum(unused)::text as unused from credit where unused <> 0 group by contact_id`,
+     select contact_id, sum(unused)::text as unused, sum(unused_base)::text as unused_base from credit
+      where unused <> 0 or unused_base <> 0 group by contact_id`,
     [asAt],
   );
-  const contactRows = await tx.query<{ id: string; name: string; parent_contact_id: string | null }>(
-    "select id, name, parent_contact_id from contacts",
+  const contactRows = await tx.query<{ id: string; name: string; parent_contact_id: string | null; currency_code: string | null }>(
+    "select id, name, parent_contact_id, currency_code from contacts",
   );
 
-  const own = new Map<string, { buckets: Buckets; invoices: AgedInvoice[] }>();
+  // Buckets are in the base currency; a foreign-currency customer's own-currency total is kept beside them (MC9).
+  const own = new Map<string, { buckets: Buckets; invoices: AgedInvoice[]; foreign: Decimal }>();
   const entry = (id: string) => {
     let found = own.get(id);
     if (!found) {
-      found = { buckets: emptyBuckets(), invoices: [] };
+      found = { buckets: emptyBuckets(), invoices: [], foreign: ZERO_DECIMAL };
       own.set(id, found);
     }
     return found;
@@ -71,22 +100,32 @@ export async function agedReceivables(tx: OrgTx, input: { asAt?: unknown; rollUp
     const daysOverdue = daysBetween(row.due_date, asAt);
     const target = entry(row.contact_id);
     const bucket = bucketFor(daysOverdue);
-    target.buckets[bucket] = add(target.buckets[bucket], dec(row.amount_due));
+    target.buckets[bucket] = add(target.buckets[bucket], dec(row.amount_due_base));
+    target.foreign = add(target.foreign, dec(row.amount_due));
     target.invoices.push({
       id: row.id,
       invoiceNumber: row.invoice_number,
       invoiceDate: row.invoice_date,
       dueDate: row.due_date,
       daysOverdue: Math.max(daysOverdue, 0),
-      amountDue: toFixedString(dec(row.amount_due), scale),
+      amountDue: toFixedString(dec(row.amount_due), currencyMinorUnits(row.currency_code)),
+      currencyCode: row.currency_code,
+      amountDueBase: toFixedString(dec(row.amount_due_base), scale),
     });
   }
   for (const row of creditRows.rows) {
     const target = entry(row.contact_id);
-    target.buckets.credit = add(target.buckets.credit, dec(row.unused));
+    target.buckets.credit = add(target.buckets.credit, dec(row.unused_base));
+    target.foreign = sub(target.foreign, dec(row.unused));
   }
 
   const contacts = new Map(contactRows.rows.map((row) => [row.id, row]));
+  const foreignOf = (id: string) => {
+    const currency = contacts.get(id)?.currency_code;
+    return currency && currency !== tx.baseCurrency
+      ? { currencyCode: currency, total: toFixedString(own.get(id)?.foreign ?? ZERO_DECIMAL, currencyMinorUnits(currency)) }
+      : null;
+  };
   const byName = (a: string, b: string) => (contacts.get(a)?.name ?? "").localeCompare(contacts.get(b)?.name ?? "", "en-NZ", { sensitivity: "base" }) || Number(a) - Number(b);
   const hasBalance = (id: string) => {
     const found = own.get(id);
@@ -100,6 +139,7 @@ export async function agedReceivables(tx: OrgTx, input: { asAt?: unknown; rollUp
     amounts: toAmounts(own.get(id)?.buckets ?? emptyBuckets(), scale),
     rolledUp: rolled ? toAmounts(rolled, scale) : null,
     invoices: own.get(id)?.invoices ?? [],
+    foreign: foreignOf(id),
   });
 
   const rows: AgedRow[] = [];
@@ -130,5 +170,31 @@ export async function agedReceivables(tx: OrgTx, input: { asAt?: unknown; rollUp
   }
 
   const grand = [...own.values()].reduce((acc, value) => addBuckets(acc, value.buckets), emptyBuckets());
-  return { asAt, rollUp, currencyCode: tx.baseCurrency, rows, total: toAmounts(grand, scale) };
+  return {
+    asAt,
+    rollUp,
+    currencyCode: tx.baseCurrency,
+    rows,
+    total: toAmounts(grand, scale),
+    revaluation: await controlRevaluation(tx, "accounts_receivable", asAt),
+  };
+}
+
+/**
+ * What FX revaluations of open foreign-currency documents add to accounts
+ * receivable or payable as at a date (MC8, MC9), in the account's normal
+ * direction: each is reversed the next day, so it's 0.00 except on a
+ * revaluation date.
+ */
+export async function controlRevaluation(tx: OrgTx, systemKey: "accounts_receivable" | "accounts_payable", asAt: string): Promise<string> {
+  const row = (
+    await tx.query<{ amount: string }>(
+      `select coalesce(sum(l.debit_amount - l.credit_amount), 0)::text as amount
+         from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id join accounts a on a.id = l.account_id
+        where a.system_key = $1 and l.fx_kind = 'revaluation' and j.posting_date <= $2`,
+      [systemKey, asAt],
+    )
+  ).rows[0];
+  const amount = dec(row.amount);
+  return toFixedString(systemKey === "accounts_receivable" ? amount : neg(amount), currencyMinorUnits(tx.baseCurrency));
 }

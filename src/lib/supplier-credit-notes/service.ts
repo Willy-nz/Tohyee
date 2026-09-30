@@ -19,14 +19,17 @@ import {
   type AmountsMode,
   type CreditStatus,
 } from "@/lib/invoices/amounts";
-import { controlAccountCode, GST_ACCOUNT } from "@/lib/invoices/service";
-import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
+import { controlAccountCode, GST_ACCOUNT, setBaseLineAmounts } from "@/lib/invoices/service";
+import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
+import { assertForeignLinesSupported, contactCurrency, convertDocumentLines, exchangeRateFor, parseRateInput } from "@/lib/fx/documents";
+import type { TaxCategory } from "@/lib/tax/categories";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import {
   add,
   dec,
   isZero,
+  sub,
   parseDecimalInput,
   toFixedString,
   toPlainString,
@@ -79,6 +82,9 @@ export type SupplierCreditNoteLine = LineItemFields & {
   /** Tracking categories (TC4, TC10): category id -> value id. */
   tracking: TrackingTags;
   customFields: CustomValues;
+  /** On a foreign-currency supplier credit note: the net amount and GST in the base currency (MC12); null otherwise. */
+  baseNetAmount: string | null;
+  baseTaxAmount: string | null;
 };
 
 export type SupplierCreditNoteSummary = {
@@ -95,6 +101,13 @@ export type SupplierCreditNoteSummary = {
   subtotal: string;
   taxTotal: string;
   total: string;
+  /** Base currency per 1 unit of the credit note's currency; null for a base-currency one (MC12). */
+  exchangeRate: string | null;
+  baseSubtotal: string | null;
+  baseTaxTotal: string | null;
+  baseTotal: string | null;
+  /** On an approved foreign-currency supplier credit note: the base value of the credit left, at its rate. */
+  remainingCreditBase: string | null;
   /** The sum of the credit note's active applications to bills. */
   amountApplied: string;
   /** The sum of the credit note's active refunds received. */
@@ -128,6 +141,8 @@ export type SupplierCreditNoteInput = {
   amountsMode?: unknown;
   lines?: unknown;
   customFields?: unknown;
+  /** For a supplier in another currency: base currency per 1 unit (MC12). Left out, the last rate used is taken. */
+  exchangeRate?: unknown;
 };
 
 const MAX_LINES = 200;
@@ -149,6 +164,11 @@ type CreditNoteRow = {
   total: string;
   amount_applied: string;
   amount_refunded: string;
+  exchange_rate: string | null;
+  base_subtotal: string | null;
+  base_tax_total: string | null;
+  base_total: string | null;
+  base_applied: string;
   approval_journal_id: string | null;
   approved_at: string | null;
   approved_by_email: string | null;
@@ -165,13 +185,14 @@ type CreditNoteRow = {
 const SUMMARY_COLUMNS = `n.id, n.status, n.supplier_credit_note_number, n.contact_id, c.name as contact_name, n.credit_note_date,
   n.reference, n.amounts_mode, n.currency_code, n.subtotal, n.tax_total, n.total, applied.amount_applied,
   refunded.amount_refunded, n.approval_journal_id, n.approved_at, n.approved_by_email, n.void_date, n.void_journal_id,
-  n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at, n.custom_fields`;
+  n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at, n.custom_fields,
+  n.exchange_rate::text, n.base_subtotal::text, n.base_tax_total::text, n.base_total::text, applied.base_applied::text`;
 
 /** Supplier credit notes with their supplier and the sums of their active applications and refunds. */
 const SUMMARY_FROM = `supplier_credit_notes n
   join contacts c on c.id = n.contact_id
   cross join lateral (
-    select coalesce(sum(a.amount), 0) as amount_applied
+    select coalesce(sum(a.amount), 0) as amount_applied, coalesce(sum(a.credit_note_base), 0) as base_applied
       from supplier_credit_note_applications a
      where a.credit_note_id = n.id and a.status = 'active'
   ) applied
@@ -197,7 +218,11 @@ type LineRow = LineItemRow & {
   tax_amount: string;
   tracking: TrackingTags;
   custom_fields: CustomValues;
+  base_net_amount: string | null;
+  base_tax_amount: string | null;
 };
+
+const baseMoney = (value: string | null) => (value === null ? null : toFixedString(dec(value), 2));
 
 function toSummary(row: CreditNoteRow): SupplierCreditNoteSummary {
   const credit = creditNoteCreditStatus(
@@ -220,6 +245,11 @@ function toSummary(row: CreditNoteRow): SupplierCreditNoteSummary {
     subtotal: row.subtotal,
     taxTotal: row.tax_total,
     total: row.total,
+    exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    baseSubtotal: baseMoney(row.base_subtotal),
+    baseTaxTotal: baseMoney(row.base_tax_total),
+    baseTotal: baseMoney(row.base_total),
+    remainingCreditBase: approved && row.base_total !== null ? toFixedString(sub(dec(row.base_total), dec(row.base_applied)), 2) : null,
     amountApplied: credit.amountApplied,
     amountRefunded: credit.amountRefunded,
     remainingCredit: approved ? credit.remainingCredit : null,
@@ -256,6 +286,8 @@ function toLine(row: LineRow): SupplierCreditNoteLine {
     taxAmount: row.tax_amount,
     tracking: row.tracking ?? {},
     customFields: row.custom_fields ?? {},
+    baseNetAmount: baseMoney(row.base_net_amount),
+    baseTaxAmount: baseMoney(row.base_tax_amount),
   };
 }
 
@@ -278,6 +310,8 @@ type DraftDetails = {
     unitId: string | null;
   }>;
   customInput: Record<string, unknown> | undefined;
+  /** As sent: undefined or null when not given (a foreign-currency one then takes the last rate used). */
+  exchangeRateInput?: string | null;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -287,6 +321,10 @@ type ResolvedDraft = DraftDetails & {
   subtotal: string;
   taxTotal: string;
   total: string;
+  exchangeRate: string | null;
+  baseSubtotal: string | null;
+  baseTaxTotal: string | null;
+  baseTotal: string | null;
   customFields: CustomValues;
   customCtx: CustomFieldContext;
   resolvedLines: Array<ResolvedLineItem & {
@@ -303,6 +341,8 @@ type ResolvedDraft = DraftDetails & {
     tracking: TrackingTags;
     accountClass: AccountClass;
     customFields: CustomValues;
+    baseNetAmount: string | null;
+    baseTaxAmount: string | null;
   }>;
 };
 
@@ -346,7 +386,16 @@ function parseDraft(input: SupplierCreditNoteInput): DraftDetails {
       customFields: parseCustomInput(line.customFields, `${label}: `),
     };
   });
-  return { contactId, creditNoteDate, supplierCreditNoteNumber, reference, amountsMode, lines, customInput: parseCustomInput(input.customFields, "") };
+  return {
+    contactId,
+    creditNoteDate,
+    supplierCreditNoteNumber,
+    reference,
+    amountsMode,
+    lines,
+    customInput: parseCustomInput(input.customFields, ""),
+    exchangeRateInput: parseRateInput(input.exchangeRate),
+  };
 }
 
 /** Normalised content for the idempotency fingerprint. */
@@ -360,6 +409,7 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     lines: draft.lines.map((line) => hashableLine(lineForHash({ ...line, accountCode: line.accountCode.toLowerCase() }))),
     // Values that weren't sent stay out, so older requests hash the same.
     ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
+    ...(draft.exchangeRateInput != null ? { exchangeRate: draft.exchangeRateInput } : {}),
   };
 }
 
@@ -378,6 +428,11 @@ async function resolveDraft(
   keptFields: ReadonlySet<string> = new Set(),
   keptItems: ReadonlyArray<LineItemRef> = [],
 ): Promise<ResolvedDraft> {
+  // A supplier in another currency gets credit notes in it (MC12).
+  const currencyCode = await contactCurrency(tx, sent.contactId);
+  if (currencyCode !== tx.baseCurrency) {
+    assertForeignLinesSupported("supplier_credit_note", currencyCode, tx.baseCurrency, [], sent.lines);
+  }
   // Blanks on item lines are filled from the item (IT2); what was sent is kept.
   const draft: DraftDetails = { ...sent, lines: await fillLinesFromItems(tx, sent.lines, { side: "purchase", contactId: sent.contactId, noTax: sent.amountsMode === "no_tax" }) };
   const custom = await resolveDocumentCustom(tx, "supplier_credit_note", draft.customInput, draft.lines.map((line) => line.customFields), keptFields);
@@ -419,10 +474,11 @@ async function resolveDraft(
     id: string;
     code: string;
     rate: string;
+    category: TaxCategory;
     is_active: boolean;
     effective_from: string;
     effective_to: string | null;
-  }>("select id, code, rate, is_active, effective_from, effective_to from tax_codes where code = any($1::text[])", [
+  }>("select id, code, rate, category, is_active, effective_from, effective_to from tax_codes where code = any($1::text[])", [
     wantedTaxCodes,
   ]);
   const taxCodesByCode = new Map(taxCodes.rows.map((row) => [row.code, row]));
@@ -447,6 +503,7 @@ async function resolveDraft(
     }
     let taxCodeId: string | null = null;
     let taxRate = "0";
+    let taxCategory: TaxCategory | null = null;
     if (line.taxCode !== null) {
       const taxCode = taxCodesByCode.get(line.taxCode);
       if (!taxCode) {
@@ -467,32 +524,51 @@ async function resolveDraft(
       }
       taxCodeId = taxCode.id;
       taxRate = toPlainString(dec(taxCode.rate));
+      taxCategory = taxCode.category;
     }
-    return { ...line, accountId: account.id, accountCode: account.code, accountClass: account.account_class as AccountClass, accountSystemKey: account.system_key, taxCodeId, taxRate };
+    return { ...line, accountId: account.id, accountCode: account.code, accountClass: account.account_class as AccountClass, accountSystemKey: account.system_key, taxCodeId, taxRate, taxCategory };
   });
 
   const lineItems = await resolveLineItems(tx, draft.lines, "purchase", keptItems);
   // Stock items go to the inventory account, and only they do (ST1, ST6).
   assertInventoryLines(lines.map((line, index) => ({ ...lineItems[index], accountSystemKey: line.accountSystemKey, accountCode: line.accountCode })));
-  const scale = currencyMinorUnits(tx.baseCurrency);
+  const scale = currencyMinorUnits(currencyCode);
   const amounts = calculateInvoice(draft.amountsMode, lines, scale);
   amounts.lines.forEach((line, index) => {
     if (isZero(dec(line.lineAmount))) {
       throw new ValidationError(
-        `Line ${index + 1} comes to ${line.lineAmount} once rounded to ${tx.baseCurrency}. Check its quantity and unit price.`,
+        `Line ${index + 1} comes to ${line.lineAmount} once rounded to ${currencyCode}. Check its quantity and unit price.`,
       );
     }
   });
+  // A foreign-currency supplier credit note (MC12): as a foreign-currency bill.
+  let exchangeRate: string | null = null;
+  let base: ReturnType<typeof convertDocumentLines> | null = null;
+  if (currencyCode !== tx.baseCurrency) {
+    assertForeignLinesSupported(
+      "supplier_credit_note",
+      currencyCode,
+      tx.baseCurrency,
+      lines.map((line, index) => ({ taxCategory: line.taxCategory, itemType: lineItems[index].itemType })),
+      [],
+    );
+    exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.creditNoteDate, typed: draft.exchangeRateInput, what: "supplier credit note" });
+    base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+  }
 
   return {
     ...draft,
     customFields: custom.body,
     customCtx: custom.ctx,
     contactName: supplier.name,
-    currencyCode: tx.baseCurrency,
+    currencyCode,
     subtotal: amounts.subtotal,
     taxTotal: amounts.taxTotal,
     total: amounts.total,
+    exchangeRate,
+    baseSubtotal: base?.baseSubtotal ?? null,
+    baseTaxTotal: base?.baseTaxTotal ?? null,
+    baseTotal: base?.baseTotal ?? null,
     resolvedLines: lines.map((line, index) => ({
       description: line.description,
       quantity: line.quantity,
@@ -506,6 +582,8 @@ async function resolveDraft(
       tracking: line.tracking,
       accountClass: line.accountClass,
       customFields: custom.lines[index],
+      baseNetAmount: base?.lines[index].baseNetAmount ?? null,
+      baseTaxAmount: base?.lines[index].baseTaxAmount ?? null,
     })),
   };
 }
@@ -591,6 +669,8 @@ type StoredHeader = {
   taxTotal: string;
   total: string;
   customFields: CustomValues;
+  exchangeRate: string | null;
+  baseTotal: string | null;
 };
 
 const plain = (value: string) => toPlainString(dec(value));
@@ -608,6 +688,8 @@ function headerState(creditNote: StoredHeader): string {
     plain(creditNote.taxTotal),
     plain(creditNote.total),
     customValuesKey(creditNote.customFields),
+    creditNote.exchangeRate === null ? null : plain(creditNote.exchangeRate),
+    creditNote.baseTotal === null ? null : plain(creditNote.baseTotal),
   ]);
 }
 
@@ -658,6 +740,7 @@ function draftOf(creditNote: SupplierCreditNote): DraftDetails {
       unitId: line.unitId,
     })),
     customInput: creditNote.customFields,
+    exchangeRateInput: creditNote.exchangeRate,
   };
 }
 
@@ -692,6 +775,7 @@ async function insertLines(tx: OrgTx, creditNoteId: string, lines: ResolvedDraft
      values ${tuples.join(", ")}`,
     values,
   );
+  await setBaseLineAmounts(tx, "supplier_credit_note_lines", "credit_note_id", creditNoteId, lines);
 }
 
 const KEY_COLUMNS = {
@@ -735,7 +819,8 @@ export async function getSupplierCreditNote(tx: OrgTx, creditNoteIdInput: unknow
   const lines = await tx.query<LineRow>(
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
-            l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS}
+            l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS},
+            l.base_net_amount::text, l.base_tax_amount::text
        from supplier_credit_note_lines l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
@@ -830,8 +915,10 @@ export async function createSupplierCreditNote(
     tx.query<{ id: string }>(
       `insert into supplier_credit_notes (command_source, idempotency_key, request_hash, contact_id, credit_note_date,
                                           supplier_credit_note_number, reference, amounts_mode, currency_code,
-                                          subtotal, tax_total, total, created_by_user_id, created_by_email)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14)
+                                          subtotal, tax_total, total, created_by_user_id, created_by_email,
+                                          exchange_rate, base_subtotal, base_tax_total, base_total)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14,
+               $15::numeric, $16::numeric, $17::numeric, $18::numeric)
        on conflict (command_source, idempotency_key) do nothing
        returning id`,
       [
@@ -849,6 +936,10 @@ export async function createSupplierCreditNote(
         resolved.total,
         tx.actor.userId,
         tx.actor.email,
+        resolved.exchangeRate,
+        resolved.baseSubtotal,
+        resolved.baseTaxTotal,
+        resolved.baseTotal,
       ],
     ),
   );
@@ -902,6 +993,13 @@ export async function updateSupplierCreditNote(
     amountsMode: input.amountsMode === undefined ? saved.amountsMode : input.amountsMode,
     lines: input.lines === undefined ? saved.lines : input.lines,
     customFields: input.customFields === undefined ? saved.customInput : input.customFields,
+    // Not sent: the saved rate stays while the supplier does.
+    exchangeRate:
+      input.exchangeRate !== undefined
+        ? input.exchangeRate
+        : input.contactId === undefined || String(input.contactId) === saved.contactId
+          ? saved.exchangeRateInput
+          : undefined,
   });
   const resolved = await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines);
   const same = sameAsStored(resolved, current);
@@ -911,7 +1009,7 @@ export async function updateSupplierCreditNote(
   await assertNumberFree(tx, resolved, current.id);
 
   const changed: string[] = (
-    ["contactId", "creditNoteDate", "supplierCreditNoteNumber", "reference", "amountsMode"] as const
+    ["contactId", "creditNoteDate", "supplierCreditNoteNumber", "reference", "amountsMode", "exchangeRate"] as const
   ).filter((field) => resolved[field] !== current[field]);
   if (!same.lines) {
     changed.push("lines");
@@ -925,7 +1023,8 @@ export async function updateSupplierCreditNote(
       `update supplier_credit_notes
           set contact_id = $2, credit_note_date = $3, supplier_credit_note_number = $4, reference = $5,
               amounts_mode = $6, currency_code = $7, subtotal = $8::numeric, tax_total = $9::numeric,
-              total = $10::numeric, updated_at = now()
+              total = $10::numeric, exchange_rate = $11::numeric, base_subtotal = $12::numeric,
+              base_tax_total = $13::numeric, base_total = $14::numeric, updated_at = now()
         where id = $1`,
       [
         current.id,
@@ -938,6 +1037,10 @@ export async function updateSupplierCreditNote(
         resolved.subtotal,
         resolved.taxTotal,
         resolved.total,
+        resolved.exchangeRate,
+        resolved.baseSubtotal,
+        resolved.baseTaxTotal,
+        resolved.baseTotal,
       ],
     ),
   );
@@ -1020,12 +1123,6 @@ export async function approveSupplierCreditNote(
   if (current.status !== "draft") {
     throw new ConflictError(`${supplierCreditNoteLabel(current)} is already ${current.status}.`);
   }
-  if (current.currencyCode !== tx.baseCurrency) {
-    throw new ValidationError(
-      `This draft was saved in ${current.currencyCode}, but the base currency is now ${tx.baseCurrency}. Open it and save it again first.`,
-    );
-  }
-
   const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines);
   const same = sameAsStored(resolved, current);
   if (!same.header || !same.lines) {
@@ -1047,18 +1144,29 @@ export async function approveSupplierCreditNote(
   await assertPostingDateAllowed(tx, current.creditNoteDate);
 
   const scale = currencyMinorUnits(tx.baseCurrency);
+  // A foreign-currency supplier credit note posts its base amounts, with its foreign amount on accounts payable (MC12).
+  const foreignCurrency = resolved.exchangeRate !== null;
   // One line per account and set of tracking tags (TC4, TC10).
   const credited = new Map<string, { code: string; amount: Decimal; tracking: TrackingTags }>();
   for (const line of resolved.resolvedLines) {
     const key = `${line.accountId}|${trackingKey(line.tracking)}`;
     const entry = credited.get(key) ?? { code: line.accountCode, amount: ZERO_DECIMAL, tracking: line.tracking };
-    entry.amount = add(entry.amount, dec(line.netAmount));
+    entry.amount = add(entry.amount, dec(foreignCurrency ? line.baseNetAmount! : line.netAmount));
     credited.set(key, entry);
   }
   const supplier = resolved.contactName;
   const number = current.supplierCreditNoteNumber;
+  const taxTotal = foreignCurrency ? resolved.baseTaxTotal! : resolved.taxTotal;
   const journalLines = [
-    { accountCode: accounts.payable, debitAmount: resolved.total, creditAmount: "0", description: supplier },
+    {
+      accountCode: accounts.payable,
+      debitAmount: foreignCurrency ? resolved.baseTotal! : resolved.total,
+      creditAmount: "0",
+      description: supplier,
+      ...(foreignCurrency
+        ? { foreign: { currencyCode: resolved.currencyCode, amount: resolved.total, rate: resolved.exchangeRate!, kind: "document" as const } }
+        : {}),
+    },
     ...[...credited.values()]
       .filter((entry) => !isZero(entry.amount))
       .map((entry) => ({
@@ -1068,9 +1176,7 @@ export async function approveSupplierCreditNote(
         description: supplier,
         tracking: entry.tracking,
       })),
-    ...(isZero(dec(resolved.taxTotal))
-      ? []
-      : [{ accountCode: accounts.gst, debitAmount: "0", creditAmount: resolved.taxTotal, description: "GST" }]),
+    ...(isZero(dec(taxTotal)) ? [] : [{ accountCode: accounts.gst, debitAmount: "0", creditAmount: taxTotal, description: "GST" }]),
   ];
   // Stock items move stock and post cost of sales in the same journal (ST1-ST11).
   const stock = await planDocumentStock(
@@ -1085,12 +1191,16 @@ export async function approveSupplierCreditNote(
     tx,
     "supplier_credit_note:approval",
     creditNoteId,
-    parseJournalBody(tx, {
-      postingDate: current.creditNoteDate,
-      reference: number,
-      description: `Supplier credit note ${number} from ${supplier}`,
-      lines: journalLines,
-    }),
+    parseJournalBody(
+      tx,
+      {
+        postingDate: current.creditNoteDate,
+        reference: number,
+        description: `Supplier credit note ${number} from ${supplier}`,
+        lines: journalLines,
+      },
+      { internal: true },
+    ),
     { origin: "supplier_credit_note" },
   );
   await stock?.planner.record(posted.journal.id);
@@ -1202,10 +1312,11 @@ export async function voidSupplierCreditNote(
           creditAmount: line.debitAmount,
           description: line.description,
           tracking: line.tracking,
+          ...sameForeign(line),
         })),
         ...(voidStock?.journalLines ?? []),
       ],
-    }),
+    }, { internal: true }),
     { origin: "supplier_credit_note", relatedJournalId: original.id, correctionKind: "reversal" },
   );
   await voidStock?.planner.record(posted.journal.id);
