@@ -12,7 +12,8 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { controlAccountCode, RECEIVABLE_ACCOUNT } from "@/lib/invoices/service";
-import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
+import { foreignRefund, foreignRefundFields, openBase, parseRateInput } from "@/lib/fx/documents";
+import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { cmp, dec, isZero, parseDecimalInput, toFixedString, toPlainString } from "@/lib/money/decimal";
 import { optionalSource, optionalString, requireId, requireIdempotencyKey } from "@/lib/validation";
@@ -45,6 +46,11 @@ export type CreditNoteRefund = {
   voidJournalId: string | null;
   voidedByEmail: string | null;
   voidedAt: string | null;
+  /** For a foreign-currency credit note (MC17): the refund's rate, what moved in the bank, the credit's carrying value refunded and the realised gain (a loss is negative). */
+  exchangeRate: string | null;
+  baseAmount: string | null;
+  baseCleared: string | null;
+  realisedGain: string | null;
 };
 
 type RefundRow = {
@@ -66,11 +72,16 @@ type RefundRow = {
   void_journal_id: string | null;
   voided_by_email: string | null;
   voided_at: string | null;
+  exchange_rate: string | null;
+  base_amount: string | null;
+  base_cleared: string | null;
+  realised_gain: string | null;
 };
 
 const REFUND_SELECT = `select r.id, r.credit_note_id, n.credit_note_number, r.status, r.refund_date, r.amount, r.currency_code,
        r.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, r.reference, r.journal_id,
-       r.created_by_email, r.created_at, r.void_date, r.void_journal_id, r.voided_by_email, r.voided_at
+       r.created_by_email, r.created_at, r.void_date, r.void_journal_id, r.voided_by_email, r.voided_at,
+       r.exchange_rate::text, r.base_amount::text, r.base_cleared::text, r.realised_gain::text
   from sales_credit_note_refunds r
   join sales_credit_notes n on n.id = r.credit_note_id
   join accounts a on a.id = r.bank_account_id`;
@@ -95,6 +106,7 @@ function toRefund(row: RefundRow): CreditNoteRefund {
     voidJournalId: row.void_journal_id,
     voidedByEmail: row.voided_by_email,
     voidedAt: row.voided_at,
+    ...foreignRefundFields(row),
   };
 }
 
@@ -198,6 +210,8 @@ export async function refundCreditNote(
     amount: unknown;
     bankAccountCode: unknown;
     reference?: unknown;
+    /** For a foreign-currency credit note (MC17): base currency per 1 unit on the refund date; left out, the last rate used. */
+    exchangeRate?: unknown;
   },
 ): Promise<RefundResult> {
   const creditNoteId = requireId(creditNoteIdInput, "creditNoteId");
@@ -209,12 +223,15 @@ export async function refundCreditNote(
   const amount = dec(parseDecimalInput(command.amount, "amount", { maxScale: scale }));
   const bankAccountCode = parseAccountCodeInput(command.bankAccountCode, "bankAccountCode");
   const reference = optionalString(command.reference, "reference", { maxLength: 100 });
+  const typedRate = parseRateInput(command.exchangeRate);
   const hash = requestHash("credit_note_refund", {
     creditNoteId,
     refundDate,
     amount: toPlainString(amount),
     bankAccountCode: bankAccountCode.toLowerCase(),
     reference,
+    // Only when sent, so earlier refunds hash the same.
+    ...(typedRate != null ? { exchangeRate: typedRate } : {}),
   });
   const replay = async (): Promise<RefundResult | null> => {
     const earlier = await findByKey(tx, "record", source, idempotencyKey);
@@ -245,12 +262,6 @@ export async function refundCreditNote(
   if (creditNote.status === "voided") {
     throw new ConflictError(`${creditNoteLabel(creditNote)} has been voided, so it can't be refunded.`);
   }
-  if (creditNote.exchangeRate !== null) {
-    // MC11: refunds in a foreign currency need the refund's own rate and a realised gain or loss; not built yet.
-    throw new ValidationError(
-      `${creditNoteLabel(creditNote)} is in ${creditNote.currencyCode}. Refunding a foreign-currency credit note isn't supported yet (refused rather than guessed): apply its credit to the contact's ${creditNote.currencyCode} documents instead.`,
-    );
-  }
   if (refundDate < creditNote.creditNoteDate) {
     throw new ValidationError(`The refund date can't be before the credit note date (${creditNote.creditNoteDate}).`);
   }
@@ -263,29 +274,59 @@ export async function refundCreditNote(
       `The refund of ${toFixedString(amount, scale)} is more than the remaining credit (${creditNote.remainingCredit}).`,
     );
   }
-  const bank = await resolveBankAccount(tx, bankAccountCode);
   const receivable = await controlAccountCode(tx, RECEIVABLE_ACCOUNT, "refunds can't be recorded");
+  const fixedAmount = toFixedString(amount, scale);
+  const customer = creditNote.contactName;
+  // A foreign-currency credit note (MC17) is refunded in its currency at the refund's rate; the difference
+  // from its carrying value is a realised gain or loss.
+  const fx =
+    creditNote.exchangeRate !== null
+      ? await foreignRefund(tx, {
+          side: "customer",
+          currency: creditNote.currencyCode,
+          amount: fixedAmount,
+          open: { amount: creditNote.remainingCredit!, base: await openBase(tx, "credit_note", creditNoteId) },
+          date: refundDate,
+          typedRate,
+          bankAccountCode,
+          controlAccountCode: receivable,
+          creditRate: creditNote.exchangeRate,
+          document: "credit note",
+          label: creditNote.creditNoteNumber ?? `#${creditNoteId}`,
+          description: customer,
+        })
+      : null;
+  if (!fx && typedRate != null) {
+    throw new ValidationError(`${creditNoteLabel(creditNote)} is in ${tx.baseCurrency}, so its refunds have no exchange rate.`);
+  }
+  const bank = fx ? fx.bank : await resolveBankAccount(tx, bankAccountCode);
 
   // The journal is keyed by the refund's id, so it's taken first.
   const next = await tx.query<{ id: string }>(
     "select nextval(pg_get_serial_sequence('sales_credit_note_refunds', 'id'))::text as id",
   );
   const refundId = next.rows[0].id;
-  const fixedAmount = toFixedString(amount, scale);
-  const customer = creditNote.contactName;
   const posted = await postJournalBody(
     tx,
     "sales_credit_note_refund:record",
     refundId,
-    parseJournalBody(tx, {
-      postingDate: refundDate,
-      reference: reference ?? creditNote.creditNoteNumber,
-      description: `Refund to ${customer} for ${creditNote.creditNoteNumber}`,
-      lines: [
-        { accountCode: receivable, debitAmount: fixedAmount, creditAmount: "0", description: customer },
-        { accountCode: bank.code, debitAmount: "0", creditAmount: fixedAmount, description: customer },
-      ],
-    }),
+    parseJournalBody(
+      tx,
+      {
+        postingDate: refundDate,
+        reference: reference ?? creditNote.creditNoteNumber,
+        description: fx
+          ? `Refund to ${customer} for ${creditNote.creditNoteNumber} (${creditNote.currencyCode} ${fixedAmount} at ${fx.rate})`
+          : `Refund to ${customer} for ${creditNote.creditNoteNumber}`,
+        lines: fx
+          ? fx.lines
+          : [
+              { accountCode: receivable, debitAmount: fixedAmount, creditAmount: "0", description: customer },
+              { accountCode: bank.code, debitAmount: "0", creditAmount: fixedAmount, description: customer },
+            ],
+      },
+      { internal: true },
+    ),
     { origin: "sales_credit_note_refund" },
   );
 
@@ -293,9 +334,10 @@ export async function refundCreditNote(
     await tx.query(
       `insert into sales_credit_note_refunds (
          id, command_source, idempotency_key, request_hash, credit_note_id, refund_date, amount, currency_code,
-         bank_account_id, reference, journal_id, created_by_user_id, created_by_email
+         bank_account_id, reference, journal_id, created_by_user_id, created_by_email,
+         exchange_rate, base_amount, base_cleared, realised_gain
        )
-       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13)`,
+       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric)`,
       [
         refundId,
         source,
@@ -310,6 +352,10 @@ export async function refundCreditNote(
         posted.journal.id,
         tx.actor.userId,
         tx.actor.email,
+        fx?.rate ?? null,
+        fx?.baseAmount ?? null,
+        fx?.baseCleared ?? null,
+        fx?.gain ?? null,
       ],
     );
   } catch (error) {
@@ -329,6 +375,7 @@ export async function refundCreditNote(
       amount: fixedAmount,
       bankAccountCode: bank.code,
       journalId: posted.journal.id,
+      ...(fx ? { exchangeRate: fx.rate, baseAmount: fx.baseAmount, baseCleared: fx.baseCleared, realisedGain: fx.gain } : {}),
     },
   });
   return { created: true, refund: await getRefund(tx, refundId), creditNote: await getCreditNote(tx, creditNoteId) };
@@ -393,18 +440,23 @@ export async function voidRefund(
     tx,
     "sales_credit_note_refund:void",
     refundId,
-    parseJournalBody(tx, {
-      postingDate: voidDate,
-      reference: `VOID-${original.reference}`.slice(0, 100),
-      description: `Void of refund to ${creditNote.contactName} for ${creditNote.creditNoteNumber}`,
-      lines: original.lines.map((line) => ({
-        accountCode: line.accountCode,
-        debitAmount: line.creditAmount,
-        creditAmount: line.debitAmount,
-        description: line.description,
-        tracking: line.tracking,
-      })),
-    }),
+    parseJournalBody(
+      tx,
+      {
+        postingDate: voidDate,
+        reference: `VOID-${original.reference}`.slice(0, 100),
+        description: `Void of refund to ${creditNote.contactName} for ${creditNote.creditNoteNumber}`,
+        lines: original.lines.map((line) => ({
+          accountCode: line.accountCode,
+          debitAmount: line.creditAmount,
+          creditAmount: line.debitAmount,
+          description: line.description,
+          tracking: line.tracking,
+          ...sameForeign(line),
+        })),
+      },
+      { internal: true },
+    ),
     { origin: "sales_credit_note_refund", relatedJournalId: original.id, correctionKind: "reversal" },
   );
 

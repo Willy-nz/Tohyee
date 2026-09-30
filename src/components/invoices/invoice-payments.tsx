@@ -147,7 +147,7 @@ function RecordPaymentForm({
           label={`Amount (${invoice.currencyCode})`}
           hint={
             foreign
-              ? `${invoice.currencyCode} ${formatMoney(invoice.amountDue)} is due (${baseCurrency} ${formatMoney(invoice.amountDueBase)} at the invoice's rate).`
+              ? `${invoice.currencyCode} ${formatMoney(invoice.amountDue)} is due (${baseCurrency} ${formatMoney(invoice.amountDueBase)} at the invoice's rate). Anything more is kept as an overpayment in ${invoice.currencyCode}: credit for ${invoice.contactName}.`
               : `${formatMoney(invoice.amountDue)} is due. Anything more is kept as an overpayment: credit for ${invoice.contactName}.`
           }
         >

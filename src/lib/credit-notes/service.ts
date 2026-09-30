@@ -206,7 +206,8 @@ const SUMMARY_FROM = `sales_credit_notes n
   join contacts c on c.id = n.contact_id
   left join salespeople sp on sp.id = n.salesperson_id
   cross join lateral (
-    select coalesce(sum(a.amount), 0) as amount_applied, coalesce(sum(a.credit_note_base), 0) as base_applied
+    -- The base value used includes refunds' (MC17).
+    select coalesce(sum(a.amount), 0) as amount_applied, tohyee_credit_note_base_used(n.id) as base_applied
       from sales_credit_note_applications a
      where a.credit_note_id = n.id and a.status = 'active'
   ) applied

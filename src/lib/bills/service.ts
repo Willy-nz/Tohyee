@@ -5,7 +5,7 @@ import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
-import { assertInventoryLines, planDocumentStock, planDocumentVoid } from "@/lib/inventory/stock";
+import { assertInventoryLines, planDocumentStock, planDocumentVoid, stockLinesAtBase } from "@/lib/inventory/stock";
 import { fillLinesFromItems, isBlank, LINE_ITEM_COLUMNS, LINE_ITEM_JOINS, lineForHash, lineItemFields, type LineItemFields, type LineItemRef, type LineItemRow, parseLineItem, resolveLineItems, type ResolvedLineItem } from "@/lib/items/lines";
 import { billLineAccountProblem } from "@/lib/bills/accounts";
 import { dueDateFromSupplierTerms } from "@/lib/customers/service";
@@ -220,9 +220,7 @@ const SUMMARY_FROM = `bills b
      where a.bill_id = b.id and a.status = 'active'
   ) credited
   cross join lateral (
-    select coalesce((select sum(p.base_cleared) from supplier_payments p where p.bill_id = b.id and p.status = 'active'), 0)
-         + coalesce((select sum(a.bill_base) from supplier_credit_note_applications a
-                      where a.bill_id = b.id and a.status = 'active'), 0) as base_settled
+    select tohyee_bill_base_settled(b.id) as base_settled
   ) base_settled`;
 
 type LineRow = LineItemRow & {
@@ -628,8 +626,11 @@ export async function resolveDraft(
       lines.map((line, index) => ({ taxCategory: line.taxCategory, itemType: lineItems[index].itemType })),
       [],
     );
-    exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.billDate, typed: draft.exchangeRateInput, what: "bill" });
-    base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+    // A purchase order or repeating bill (MC27, MC28) has no rate: the bill made from it takes one for its date.
+    if (!foreign.template) {
+      exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.billDate, typed: draft.exchangeRateInput, what: "bill" });
+      base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+    }
   }
 
   return {
@@ -1368,7 +1369,8 @@ export async function approveBill(
     tx,
     "bill",
     { id: billId, date: current.billDate, reference: number, contactId: current.contactId },
-    resolved.resolvedLines,
+    // Stock is valued in the base currency (MC29): a foreign-currency line's stock is its base net amount.
+    stockLinesAtBase(resolved.resolvedLines),
     `Stock received, bill ${number}`,
   );
   if (stock) journalLines.push(...stock.journalLines);

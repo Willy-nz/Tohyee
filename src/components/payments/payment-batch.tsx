@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useMemo, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
+import { ExchangeRateField, useLastRate } from "@/components/fx";
 import { useApiData } from "@/components/hooks";
+
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
@@ -60,8 +62,15 @@ export const WORDS: Record<BatchKind, Words> = {
 
 type Due = { id: string; number: string; date: string; dueDate: string; total: string; amountDue: string };
 
-function isPaymentAccount(account: Account): boolean {
-  return (account.accountType === "bank" || account.accountType === "credit_card") && account.currencyCode === null;
+/**
+ * Bank accounts a payment can go through: the base currency's, or, for a
+ * contact in another currency, that currency's (MC20-MC24; a third currency is
+ * refused, MC30).
+ */
+function paymentAccountFilter(currencyCode: string | null) {
+  return (account: Account): boolean =>
+    (account.accountType === "bank" || account.accountType === "credit_card") &&
+    (account.currencyCode === null || (currencyCode !== null && account.currencyCode === currencyCode));
 }
 
 function money(value: string): string {
@@ -118,6 +127,13 @@ export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; org
   const [error, setError] = useState<string | null>(null);
 
   const people = (contacts.data?.contacts ?? []).filter((c) => !c.isArchived && (kind === "customer" ? c.isCustomer : c.isSupplier));
+  // A contact in another currency is paid in it, at the payment's one rate (MC20-MC24).
+  const baseCurrency = useWorkspace().current?.baseCurrency ?? "NZD";
+  const currency = people.find((c) => c.id === contactId)?.currencyCode ?? baseCurrency;
+  const foreign = currency !== baseCurrency;
+  const [typedRate, setTypedRate] = useState<string | null>(null);
+  const suggestedRate = useLastRate(organisationId, currency, baseCurrency, fields.paymentDate);
+  const isPaymentAccount = paymentAccountFilter(foreign ? currency : null);
   const bankAccounts = (accounts.data?.accounts ?? []).filter((account) => account.isActive && isPaymentAccount(account));
   const bankAccountCode = chosenAccount ?? (bankAccounts.find((a) => a.systemKey === "bank") ?? bankAccounts[0])?.code ?? "";
   const ticked = documents.filter((document) => amounts[document.id] !== undefined);
@@ -131,6 +147,8 @@ export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; org
     setContactId(id);
     setAmounts({});
     setReceived(null);
+    setChosenAccount(null);
+    setTypedRate(null);
     setError(null);
   }
   function toggle(document: Due) {
@@ -167,6 +185,7 @@ export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; org
           amount,
           bankAccountCode,
           reference: fields.reference,
+          ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}),
           // In the order they're listed (oldest first); any overpayment is kept on the last one.
           documents: ticked.map((document) => ({ id: document.id, amount: amounts[document.id] })),
         },
@@ -275,7 +294,7 @@ export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; org
               <input type="date" value={fields.paymentDate} onChange={(event) => setFields((f) => ({ ...f, paymentDate: event.target.value }))} required />
             </Field>
             <Field
-              label={`Amount ${words.money}`}
+              label={`Amount ${words.money} (${currency})`}
               hint={
                 kind === "customer"
                   ? "The amounts above add up to this. If every invoice is paid in full, anything more is kept as an overpayment."
@@ -284,6 +303,9 @@ export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; org
             >
               <input inputMode="decimal" value={amount} onChange={(event) => setReceived(event.target.value)} required />
             </Field>
+            {foreign ? (
+              <ExchangeRateField currencyCode={currency} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
+            ) : null}
             <Field label="Bank account">
               <AccountSelect
                 accounts={accounts.data.accounts}
@@ -314,7 +336,8 @@ export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; org
               {busy ? "Recording…" : "Record payment"}
             </Button>
             <span className={ui.muted}>
-              Posts one journal on the date: one bank line for the whole amount, and one line for each {words.document}.
+              Posts one journal on the date: one bank line for the whole amount, and one line for each {words.document}
+              {foreign ? `, each with its own realised currency gain or loss (${baseCurrency} at the payment's rate less its value at the ${words.document}'s)` : ""}.
             </span>
           </div>
         </Card>
@@ -373,9 +396,10 @@ export function PaymentBatchView({ kind, organisationId, batchId, recorded }: { 
       >
         <div className={ui.grid4}>
           <Stat label="Date" value={formatDate(batch.paymentDate)} />
-          <Stat label={`Amount ${words.money}`} value={<Money value={batch.amount} />} />
+          <Stat label={`Amount ${words.money}`} value={<>{batch.exchangeRate ? `${batch.currencyCode} ` : null}<Money value={batch.amount} /></>} />
           <Stat label="Bank account" value={`${batch.bankAccountCode} · ${batch.bankAccountName}`} />
           <Stat label="Reference" value={batch.reference ?? "—"} />
+          {batch.exchangeRate ? <Stat label="Exchange rate" value={`${batch.exchangeRate} = ${formatMoney(batch.baseAmount)}`} /> : null}
         </div>
         <p className={ui.muted}>
           Journal <Link href={journalHref(batch.journalId)}>#{batch.journalId}</Link>
@@ -393,6 +417,7 @@ export function PaymentBatchView({ kind, organisationId, batchId, recorded }: { 
                 <th>{kind === "customer" ? "Invoice" : "Bill"}</th>
                 <th className={ui.num}>Paid</th>
                 {kind === "customer" ? <th>Overpayment</th> : null}
+                {batch.exchangeRate ? <th className={ui.num}>Realised gain (loss)</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -409,6 +434,11 @@ export function PaymentBatchView({ kind, organisationId, batchId, recorded }: { 
                       {cmp(dec(part.overpaymentAmount), ZERO_DECIMAL) > 0 ? (
                         <Link href={`/operations/overpayments/${part.paymentId}`}>{formatMoney(part.overpaymentAmount)}</Link>
                       ) : null}
+                    </td>
+                  ) : null}
+                  {batch.exchangeRate ? (
+                    <td className={ui.num}>
+                      <Money value={part.realisedGain ?? "0.00"} />
                     </td>
                   ) : null}
                 </tr>

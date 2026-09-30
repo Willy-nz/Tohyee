@@ -14,8 +14,8 @@ import { formatDateTime, personName } from "@/lib/format";
 /**
  * Settings › Email (admins): the organisation's own email account, which
  * invoices, quotes, credit notes, purchase orders and statements are sent
- * from (a Microsoft 365 / Outlook mailbox an admin signs in to, or any SMTP
- * account), and the templates each email starts with.
+ * from (a Microsoft 365 / Outlook or Gmail / Google Workspace mailbox an admin
+ * signs in to, or any SMTP account), and the templates each email starts with.
  */
 
 type Preset = "gmail" | "microsoft" | "other";
@@ -41,7 +41,8 @@ function PresetHelp({ preset }: { preset: Preset }) {
   if (preset === "gmail") {
     return (
       <Notice tone="info">
-        <strong>Gmail and Google Workspace:</strong> Google doesn&apos;t let other apps use your normal password. Turn on 2-Step Verification for the
+        <strong>Gmail and Google Workspace with an app password:</strong> <strong>Google / Gmail (sign in)</strong> above avoids passwords, if you
+        set up a Google app for it. Otherwise: Google doesn&apos;t let other apps use your normal password. Turn on 2-Step Verification for the
         Google account, then make an <strong>app password</strong> at{" "}
         <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">
           myaccount.google.com/apppasswords
@@ -72,7 +73,8 @@ function PresetHelp({ preset }: { preset: Preset }) {
 
 function AccountForm({ organisationId, settings, onSaved }: { organisationId: string; settings: OrganisationEmailSettings; onSaved: (message: string) => void }) {
   const [preset, setPreset] = useState<Preset>(presetOf(settings.host));
-  const replacesMicrosoft = settings.sendingMethod === "microsoft" && settings.microsoft !== null;
+  const replacesMailbox =
+    settings.sendingMethod === "microsoft" ? settings.microsoft?.email : settings.sendingMethod === "google" ? settings.google?.email : undefined;
   const [fromName, setFromName] = useState(settings.fromName ?? "");
   const [fromAddress, setFromAddress] = useState(settings.fromAddress ?? "");
   const [replyTo, setReplyTo] = useState(settings.replyTo ?? "");
@@ -127,8 +129,11 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
       {!settings.secretsAvailable ? (
         <Notice tone="error">This server has no TOHYEE_SECRET_KEY, so it can&apos;t keep an email password safely. A server admin needs to set it first.</Notice>
       ) : null}
-      {replacesMicrosoft ? (
-        <Notice tone="info">Documents are sent from the Microsoft mailbox {settings.microsoft?.email} now. Saving SMTP details here switches to SMTP.</Notice>
+      {replacesMailbox ? (
+        <Notice tone="info">
+          Documents are sent from the {settings.sendingMethod === "google" ? "Google" : "Microsoft"} mailbox {replacesMailbox} now. Saving SMTP details here
+          switches to SMTP.
+        </Notice>
       ) : null}
       {settings.hasPassword && !settings.passwordReadable ? (
         <Notice tone="warning">The saved password can&apos;t be read on this server any more (was the server&apos;s key changed?). Enter it again.</Notice>
@@ -146,7 +151,7 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
           <input value={fromName} onChange={(event) => setFromName(event.target.value)} maxLength={100} required />
         </Field>
         <Field label="From address" hint="Blank uses the username.">
-          <input type="email" value={settings.sendingMethod === "microsoft" && fromAddress === settings.microsoft?.email ? "" : fromAddress} onChange={(event) => setFromAddress(event.target.value)} maxLength={254} placeholder={username} />
+          <input type="email" value={replacesMailbox && fromAddress === replacesMailbox ? "" : fromAddress} onChange={(event) => setFromAddress(event.target.value)} maxLength={254} placeholder={username} />
         </Field>
         <Field label="Reply-to address" hint="Optional. Where replies go, if not the from address.">
           <input type="email" value={replyTo} onChange={(event) => setReplyTo(event.target.value)} maxLength={254} />
@@ -184,7 +189,7 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
         <Button type="submit" disabled={busy || !settings.secretsAvailable}>
           Save
         </Button>
-        {settings.hasPassword || settings.microsoft ? (
+        {settings.hasPassword || settings.microsoft || settings.google ? (
           <Button variant="danger" onClick={() => void remove()}>
             Remove everything
           </Button>
@@ -196,8 +201,11 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
 
 const METHOD_LABELS: Record<SendingMethod, string> = {
   microsoft: "Microsoft 365 / Outlook (sign in)",
+  google: "Google / Gmail (sign in)",
   smtp: "SMTP: Gmail, or any email provider, with a password",
 };
+
+const METHOD_BADGES: Record<SendingMethod, string> = { microsoft: "Microsoft", google: "Google", smtp: "SMTP" };
 
 /** The organisation's Microsoft app (shared with the CRM's mail sync), which the mailbox signs in through. */
 function MicrosoftAppForm({ organisationId, settings, onSaved }: { organisationId: string; settings: OrganisationEmailSettings; onSaved: (message: string) => void }) {
@@ -247,19 +255,98 @@ function MicrosoftAppForm({ organisationId, settings, onSaved }: { organisationI
   );
 }
 
+/** The organisation's Google app (shared with the CRM's mail sync), which the Gmail or Google Workspace mailbox signs in through. */
+function GoogleAppForm({ organisationId, settings, onSaved }: { organisationId: string; settings: OrganisationEmailSettings; onSaved: (message: string) => void }) {
+  const [clientId, setClientId] = useState(settings.googleApp.clientId ?? "");
+  const [secret, setSecret] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await api("/api/crm/mail/settings", { method: "PUT", body: { organisationId, googleClientId: clientId, googleClientSecret: secret } });
+      onSaved("Google app saved. Now connect the mailbox.");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+  return (
+    <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
+      <Notice tone="info">
+        <strong>1. The organisation&apos;s Google app.</strong> Tohyee signs in through an app you set up once in your own Google Cloud project, so no
+        one else&apos;s app ever has access. In the Google Cloud console (console.cloud.google.com): pick or create a project; under APIs &amp; Services ›
+        Library turn on the <strong>Gmail API</strong>; set up the OAuth consent screen with the permission{" "}
+        <code>https://www.googleapis.com/auth/gmail.send</code>; then create an OAuth client of type <strong>Web application</strong> with the authorised
+        redirect URI <code>{origin}/api/email/google/callback</code>, and paste its client ID and secret below. The CRM&apos;s email sync uses the same app
+        (add its redirect URI <code>{origin}/api/crm/mail/callback</code> too if you use it).
+      </Notice>
+      <Notice tone="warning">
+        <strong>&ldquo;Google hasn&apos;t verified this app&rdquo;:</strong> sending email is a permission Google treats with extra care, so when you sign
+        in Google may warn that the app isn&apos;t verified, because it&apos;s your organisation&apos;s own app rather than a published one. For a Google
+        Workspace account, set the app&apos;s audience to <strong>Internal</strong>: only your organisation&apos;s accounts can use it, and it
+        shouldn&apos;t need Google&apos;s review. For a personal Gmail account, leave the app in <strong>Testing</strong>, add the Gmail address as a{" "}
+        <strong>test user</strong>, and continue past the warning; while the app is in testing Google may make you connect again after about a week.
+        These notes haven&apos;t been checked against Google&apos;s current documentation yet.
+      </Notice>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <div className={ui.grid2}>
+        <Field label="Client ID" hint="Ends in .apps.googleusercontent.com.">
+          <input value={clientId} onChange={(event) => setClientId(event.target.value)} maxLength={300} autoComplete="off" />
+        </Field>
+        <Field label="Client secret" hint={settings.googleApp.secretSaved ? "Saved, and never shown again. Leave blank to keep it." : "Stored encrypted on this server."}>
+          <input type="password" value={secret} onChange={(event) => setSecret(event.target.value)} maxLength={500} autoComplete="new-password" />
+        </Field>
+      </div>
+      <div className={ui.actions}>
+        <Button type="submit" variant="secondary" disabled={!settings.secretsAvailable}>
+          Save Google app
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+const MAILBOX_TEXT = {
+  microsoft: {
+    name: "Microsoft",
+    intro: "Tohyee can then only send as it (Mail.Send); it can't read it. Sent emails also appear in its Sent Items.",
+    connect: "Connect Microsoft account",
+    fromNameHint: "Microsoft shows the mailbox's own display name; this is used in Tohyee's emails and history.",
+  },
+  google: {
+    name: "Google",
+    intro: "Tohyee can then only send as it (gmail.send); it can't read it. Sent emails also appear in its Sent folder.",
+    connect: "Connect Google account",
+    fromNameHint: "The name customers see next to the address.",
+  },
+} as const;
+
 /** Step 2: signing in to the mailbox, its from name and reply-to, and disconnecting. */
-function MicrosoftMailbox({ organisationId, settings, onSaved }: { organisationId: string; settings: OrganisationEmailSettings; onSaved: (message: string) => void }) {
+function Mailbox({
+  provider,
+  organisationId,
+  settings,
+  onSaved,
+}: {
+  provider: "microsoft" | "google";
+  organisationId: string;
+  settings: OrganisationEmailSettings;
+  onSaved: (message: string) => void;
+}) {
   const [fromName, setFromName] = useState(settings.fromName ?? "");
   const [replyTo, setReplyTo] = useState(settings.replyTo ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const appReady = Boolean(settings.microsoftApp.clientId) && settings.microsoftApp.secretSaved;
-  const mailbox = settings.microsoft;
+  const text = MAILBOX_TEXT[provider];
+  const app = provider === "microsoft" ? settings.microsoftApp : settings.googleApp;
+  const appReady = Boolean(app.clientId) && app.secretSaved;
+  const mailbox = provider === "microsoft" ? settings.microsoft : settings.google;
   async function connect() {
     setBusy(true);
     setError(null);
     try {
-      const { url } = await api<{ url: string }>("/api/email/microsoft/connect", { method: "POST", body: { organisationId } });
+      const { url } = await api<{ url: string }>(`/api/email/${provider}/connect`, { method: "POST", body: { organisationId } });
       window.location.assign(url);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -270,8 +357,8 @@ function MicrosoftMailbox({ organisationId, settings, onSaved }: { organisationI
     if (!window.confirm(`Disconnect ${mailbox?.email}? Documents can't be emailed through it until it's connected again.`)) return;
     setError(null);
     try {
-      await api("/api/email/microsoft/disconnect", { method: "POST", body: { organisationId } });
-      onSaved(settings.smtpSaved ? "Disconnected. Documents are sent by SMTP again." : "Disconnected.");
+      const { settings: after } = await api<{ settings: OrganisationEmailSettings }>(`/api/email/${provider}/disconnect`, { method: "POST", body: { organisationId } });
+      onSaved(after.updatedAt ? `Disconnected. Documents are sent by ${METHOD_BADGES[after.sendingMethod]} now.` : "Disconnected.");
     } catch (caught) {
       setError(errorMessage(caught));
     }
@@ -280,8 +367,8 @@ function MicrosoftMailbox({ organisationId, settings, onSaved }: { organisationI
     event.preventDefault();
     setError(null);
     try {
-      await api("/api/email/settings", { method: "PUT", body: { organisationId, sendingMethod: "microsoft", fromName, replyTo } });
-      onSaved(settings.sendingMethod === "microsoft" ? "Saved." : `Documents are now sent from ${mailbox?.email}.`);
+      await api("/api/email/settings", { method: "PUT", body: { organisationId, sendingMethod: provider, fromName, replyTo } });
+      onSaved(settings.sendingMethod === provider ? "Saved." : `Documents are now sent from ${mailbox?.email}.`);
     } catch (caught) {
       setError(errorMessage(caught));
     }
@@ -289,8 +376,7 @@ function MicrosoftMailbox({ organisationId, settings, onSaved }: { organisationI
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <Notice tone="info">
-        <strong>2. The mailbox.</strong> An admin signs in to the mailbox documents should come from, once. Tohyee can then only send as it (Mail.Send);
-        it can&apos;t read it. Sent emails also appear in its Sent Items.
+        <strong>2. The mailbox.</strong> An admin signs in to the mailbox documents should come from, once. {text.intro}
       </Notice>
       {error ? <Notice tone="error">{error}</Notice> : null}
       {mailbox ? (
@@ -304,7 +390,7 @@ function MicrosoftMailbox({ organisationId, settings, onSaved }: { organisationI
           {!mailbox.tokensReadable ? <Notice tone="warning">The mailbox&apos;s sign-in can&apos;t be read on this server any more. Connect it again.</Notice> : null}
           <form onSubmit={(event) => void use(event)} style={{ display: "grid", gap: 12 }}>
             <div className={ui.grid2}>
-              <Field label="From name" hint="Microsoft shows the mailbox's own display name; this is used in Tohyee's emails and history.">
+              <Field label="From name" hint={text.fromNameHint}>
                 <input value={fromName} onChange={(event) => setFromName(event.target.value)} maxLength={100} required />
               </Field>
               <Field label="Reply-to address" hint="Optional. Where replies go, if not the mailbox.">
@@ -312,7 +398,7 @@ function MicrosoftMailbox({ organisationId, settings, onSaved }: { organisationI
               </Field>
             </div>
             <div className={ui.actions}>
-              <Button type="submit">{settings.sendingMethod === "microsoft" ? "Save" : "Send from this mailbox"}</Button>
+              <Button type="submit">{settings.sendingMethod === provider ? "Save" : "Send from this mailbox"}</Button>
               <Button variant="secondary" onClick={() => void connect()} disabled={busy || !appReady}>
                 Connect another mailbox
               </Button>
@@ -325,9 +411,9 @@ function MicrosoftMailbox({ organisationId, settings, onSaved }: { organisationI
       ) : (
         <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
           <Button onClick={() => void connect()} disabled={busy || !appReady || !settings.secretsAvailable}>
-            Connect Microsoft account
+            {text.connect}
           </Button>
-          {!appReady ? <span className={ui.muted}>Save the Microsoft app first.</span> : null}
+          {!appReady ? <span className={ui.muted}>Save the {text.name} app first.</span> : null}
         </div>
       )}
     </div>
@@ -418,7 +504,7 @@ function EmailSettings({ organisationId }: { organisationId: string }) {
   const loaded = useApiData<{ settings: OrganisationEmailSettings; templates: EmailTemplate[] }>("/api/email/settings", { organisationId });
   const [message, setMessage] = useState<string | null>(null);
   const [choice, setChoice] = useState<SendingMethod | null>(null);
-  // Coming back from Microsoft's sign-in (?connected= or ?error=).
+  // Coming back from Microsoft's or Google's sign-in (?connected= or ?error=).
   const params = useSearchParams();
   const connected = params.get("connected");
   const problem = message ? null : params.get("error");
@@ -438,7 +524,7 @@ function EmailSettings({ organisationId }: { organisationId: string }) {
       <Card
         title="Email account"
         description="Invoices, quotes, credit notes, purchase orders and statements are emailed from this account, so they come from your address and replies come back to you."
-        actions={settings.configured ? <Badge tone="green">Sending with {settings.sendingMethod === "microsoft" ? "Microsoft" : "SMTP"}</Badge> : <Badge tone="amber">Not set up</Badge>}
+        actions={settings.configured ? <Badge tone="green">Sending with {METHOD_BADGES[settings.sendingMethod]}</Badge> : <Badge tone="amber">Not set up</Badge>}
       >
         {settings.updatedAt ? (
           <p className={ui.muted} style={{ margin: 0 }}>
@@ -457,10 +543,12 @@ function EmailSettings({ organisationId }: { organisationId: string }) {
         {method === "microsoft" ? (
           <div style={{ display: "grid", gap: 16 }}>
             <MicrosoftAppForm key={`app:${settings.microsoftApp.clientId ?? ""}:${settings.microsoftApp.tenant}`} organisationId={organisationId} settings={settings} onSaved={saved} />
-            <MicrosoftMailbox key={`mailbox:${settings.updatedAt ?? "new"}`} organisationId={organisationId} settings={settings} onSaved={saved} />
-            <p className={ui.muted} style={{ margin: 0 }}>
-              Google accounts can&apos;t sign in this way yet: use SMTP with an app password for Gmail.
-            </p>
+            <Mailbox key={`mailbox:${settings.updatedAt ?? "new"}`} provider="microsoft" organisationId={organisationId} settings={settings} onSaved={saved} />
+          </div>
+        ) : method === "google" ? (
+          <div style={{ display: "grid", gap: 16 }}>
+            <GoogleAppForm key={`google-app:${settings.googleApp.clientId ?? ""}`} organisationId={organisationId} settings={settings} onSaved={saved} />
+            <Mailbox key={`google-mailbox:${settings.updatedAt ?? "new"}`} provider="google" organisationId={organisationId} settings={settings} onSaved={saved} />
           </div>
         ) : (
           <AccountForm key={settings.updatedAt ?? "new"} organisationId={organisationId} settings={settings} onSaved={saved} />

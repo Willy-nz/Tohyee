@@ -8,7 +8,7 @@ export const POST = route<Context>(async (request, context) => {
   const { quoteId } = await context.params;
   const body = await readJson(request);
   const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
-    acceptQuote(tx, quoteId, { source: body.source, idempotencyKey: body.idempotencyKey, invoiceDate: body.invoiceDate, dueDate: body.dueDate }),
+    acceptQuote(tx, quoteId, { source: body.source, idempotencyKey: body.idempotencyKey, invoiceDate: body.invoiceDate, dueDate: body.dueDate, exchangeRate: body.exchangeRate }),
   );
   return json(result, { status: result.created ? 201 : 200 });
 });

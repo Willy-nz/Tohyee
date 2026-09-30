@@ -59,9 +59,17 @@ that something happened.
   document's currency into or from a bank account in that currency or NZD, at
   their own rate, with the realised gain or loss on 7020; credit notes applied
   at another rate realise the difference; aged receivables and payables and
-  customer statements show the document currency and NZD. Zero-rated,
-  exempt and no-GST codes only; refunds, overpayments and batch payments in a
-  foreign currency are refused for now.
+  customer statements show the document currency and NZD; overpayments,
+  applying them, and refunds of overpayments, credit notes and supplier
+  credit notes are in the document's currency at their own rate, realising
+  the difference on 7020 (MC14-MC19); one payment can pay several of a
+  contact's foreign documents at one rate, each with its own gain or loss
+  (MC20-MC24); quotes, repeating invoices and bills and purchase orders are
+  in the contact's currency with no rate, and the invoice or bill made from
+  them takes a rate for its own date (MC25-MC28; repeating ones save
+  drafts); stock items on foreign-currency documents are valued in NZD at
+  the document's rate, and cost of sales is the NZD average (MC29).
+  Zero-rated, exempt and no-GST codes only.
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
   posts its journal in the same transaction. **Stock tracking** (ST1-ST12):
@@ -568,7 +576,18 @@ that something happened.
   Microsoft app once (shared with the CRM's mail sync), an admin clicks
   **Connect Microsoft account** and signs in to the mailbox, which then sends
   for the organisation through Microsoft Graph with the Mail.Send permission,
-  showing the connected address, with Disconnect; or **SMTP**: Gmail or
+  showing the connected address, with Disconnect; **Google / Gmail (sign
+  in)** (1 Oct 2026), the same for a Gmail or Google Workspace mailbox: the
+  organisation's own Google OAuth client (shared with the CRM's mail sync),
+  **Connect Google account**, only the gmail.send permission (plus the
+  account's address), the message written by the same composer as SMTP and
+  sent through the Gmail API (35 MB at most; bigger is refused with a plain
+  message), with plain-English errors for access withdrawn, the permission
+  unticked, a Workspace admin blocking the app and Gmail's daily limit; the
+  settings help explains Google's "unverified app" screen (Internal apps for
+  Workspace, Testing with test users for personal Gmail; **TO VERIFY**
+  against Google's current documentation, not yet checked, nor tried with a
+  real Google app); or **SMTP**: Gmail or
   Google Workspace with an app password, Microsoft 365 with Authenticated
   SMTP, or any SMTP server; from name, from address, reply-to; the password
   and tokens encrypted with TOHYEE_SECRET_KEY and never sent back to the
@@ -600,8 +619,7 @@ that something happened.
   organisation. Addresses are plain `name@domain` only and line breaks are
   taken out of subjects, so nothing typed can add a header; the only
   attachment is the document's own PDF; internal notes are never included.
-  Not built: signing in with Google to send (a possible follow-up; Gmail
-  uses an app password for now), attachments over 3 MB through Microsoft
+  Not built: attachments over 3 MB through Microsoft
   (Graph's upload sessions), and tracking whether the email was opened
   (never: no tracking pixels).
 - **Phone access (remote access)**, three ways, one on at a time (switching
@@ -659,10 +677,10 @@ isn't acceptable, because people would trust it:
   foreign-currency accounts (Akahu's transactions don't say their currency),
   an adjustment when splitting one posted transaction across several
   statement lines, and old Excel (.xls) files
-- on foreign-currency documents (MC11): standard-rated GST, overpayments,
-  refunds, payments for several documents, payments through a bank account
-  in a third currency, stock items, quotes, repeating documents and
-  purchase orders, and sales on the payments GST basis; also paying NZD
+- on foreign-currency documents (MC11): standard-rated GST, supplier
+  overpayments, payments through a bank account in a third currency (as
+  NetSuite, MC30), project and CRM invoices, approving repeating ones
+  automatically, and sales on the payments GST basis; also paying NZD
   documents from a foreign-currency statement line, standard-rated GST on
   foreign-currency spend and receive money, adjustments on foreign-currency
   lines, and transfers between two foreign-currency accounts
@@ -685,8 +703,12 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
 4. NZ payroll.
-5. The rest of foreign-currency documents (MC11): foreign-currency bank
-   accounts, invoices, bills, credit notes and payments are built.
+5. The rest of foreign-currency documents (MC11): standard-rated GST on
+   them, the payments basis, and project and CRM invoices. Foreign-currency
+   bank accounts, invoices, bills, credit notes, payments, overpayments,
+   refunds, batch payments, quotes, repeating documents, purchase orders and
+   stock are built (MC1-MC29); a bank account in a third currency stays
+   refused, as in NetSuite (MC30).
 
 ## Guardrails
 

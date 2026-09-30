@@ -8,7 +8,7 @@ import {
   type EmailDocumentKind,
   type EmailTemplate,
 } from "@/lib/email/templates";
-import { microsoftApp } from "@/lib/crm/mail/service";
+import { googleApp, microsoftApp } from "@/lib/crm/mail/service";
 import type { ProviderApp } from "@/lib/crm/mail/providers";
 import { UnavailableError, ValidationError } from "@/lib/errors";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
@@ -17,8 +17,8 @@ import { optionalString, requireOneOf, requireString } from "@/lib/validation";
 /**
  * An organisation's own email account for sending its documents (Settings >
  * Email, admins only), kept in the organisation's database: an SMTP account
- * with a password, or a Microsoft 365 / Outlook mailbox an admin signed in
- * to (`microsoft.ts`). The password and tokens are encrypted with
+ * with a password, or a Microsoft 365 / Outlook mailbox (`microsoft.ts`) or
+ * a Gmail / Google Workspace mailbox (`google.ts`) an admin signed in to. The password and tokens are encrypted with
  * TOHYEE_SECRET_KEY like the server's other secrets, only decrypted to send,
  * and never returned to the browser: screens only learn whether one is saved.
  */
@@ -29,8 +29,8 @@ export type SmtpSecurity = (typeof SMTP_SECURITY)[number];
 /** Plain connections (no TLS) are only allowed to a mail relay on the server computer itself. */
 export const LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1"];
 
-/** How documents are sent: SMTP (with a password), or a Microsoft 365 / Outlook mailbox an admin signed in to. */
-export const SENDING_METHODS = ["smtp", "microsoft"] as const;
+/** How documents are sent: SMTP (with a password), or a Microsoft 365 / Outlook or Gmail / Google Workspace mailbox an admin signed in to. */
+export const SENDING_METHODS = ["smtp", "microsoft", "google"] as const;
 export type SendingMethod = (typeof SENDING_METHODS)[number];
 
 export type OrganisationEmailSettings = {
@@ -49,6 +49,16 @@ export type OrganisationEmailSettings = {
   } | null;
   /** The organisation's Microsoft app (shared with the CRM's mail sync). */
   microsoftApp: { clientId: string | null; secretSaved: boolean; tenant: string };
+  /** The Gmail or Google Workspace mailbox connected for sending, if any (tokens are never returned). */
+  google: {
+    email: string;
+    connectedAt: string;
+    connectedByEmail: string | null;
+    /** False when the saved tokens can't be decrypted (the server's key changed): connect again. */
+    tokensReadable: boolean;
+  } | null;
+  /** The organisation's Google app (shared with the CRM's mail sync). */
+  googleApp: { clientId: string | null; secretSaved: boolean };
   fromName: string | null;
   fromAddress: string | null;
   replyTo: string | null;
@@ -82,6 +92,12 @@ type SettingsRow = {
   microsoft_access_token_expires_at: string | Date | null;
   microsoft_connected_by_email: string | null;
   microsoft_connected_at: string | Date | null;
+  google_email: string | null;
+  google_refresh_token_ciphertext: string | null;
+  google_access_token_ciphertext: string | null;
+  google_access_token_expires_at: string | Date | null;
+  google_connected_by_email: string | null;
+  google_connected_at: string | Date | null;
   updated_by_email: string;
   updated_at: string;
   last_test_at: string | null;
@@ -94,12 +110,22 @@ async function readRow(tx: OrgTx): Promise<SettingsRow | null> {
   return result.rows[0] ?? null;
 }
 
-async function microsoftAppSettings(tx: OrgTx): Promise<OrganisationEmailSettings["microsoftApp"]> {
-  const result = await tx.query<{ microsoft_client_id: string | null; microsoft_client_secret_ciphertext: string | null; microsoft_tenant: string }>(
-    "select microsoft_client_id, microsoft_client_secret_ciphertext, microsoft_tenant from crm_mail_settings where id = true",
+async function appSettings(tx: OrgTx): Promise<Pick<OrganisationEmailSettings, "microsoftApp" | "googleApp">> {
+  const result = await tx.query<{
+    microsoft_client_id: string | null;
+    microsoft_client_secret_ciphertext: string | null;
+    microsoft_tenant: string;
+    google_client_id: string | null;
+    google_client_secret_ciphertext: string | null;
+  }>(
+    `select microsoft_client_id, microsoft_client_secret_ciphertext, microsoft_tenant, google_client_id, google_client_secret_ciphertext
+       from crm_mail_settings where id = true`,
   );
   const row = result.rows[0];
-  return { clientId: row?.microsoft_client_id ?? null, secretSaved: Boolean(row?.microsoft_client_secret_ciphertext), tenant: row?.microsoft_tenant ?? "common" };
+  return {
+    microsoftApp: { clientId: row?.microsoft_client_id ?? null, secretSaved: Boolean(row?.microsoft_client_secret_ciphertext), tenant: row?.microsoft_tenant ?? "common" },
+    googleApp: { clientId: row?.google_client_id ?? null, secretSaved: Boolean(row?.google_client_secret_ciphertext) },
+  };
 }
 
 function passwordReadable(ciphertext: string | null): boolean {
@@ -114,7 +140,7 @@ function passwordReadable(ciphertext: string | null): boolean {
 
 export async function getOrganisationEmailSettings(tx: OrgTx): Promise<OrganisationEmailSettings> {
   const row = await readRow(tx);
-  const microsoftApp = await microsoftAppSettings(tx);
+  const { microsoftApp, googleApp } = await appSettings(tx);
   if (!row) {
     return {
       configured: false,
@@ -122,6 +148,8 @@ export async function getOrganisationEmailSettings(tx: OrgTx): Promise<Organisat
       smtpSaved: false,
       microsoft: null,
       microsoftApp,
+      google: null,
+      googleApp,
       fromName: null,
       fromAddress: null,
       replyTo: null,
@@ -140,8 +168,10 @@ export async function getOrganisationEmailSettings(tx: OrgTx): Promise<Organisat
   const readable = passwordReadable(row.smtp_password_ciphertext);
   const tokensReadable = passwordReadable(row.microsoft_refresh_token_ciphertext);
   const microsoftReady = tokensReadable && Boolean(microsoftApp.clientId) && microsoftApp.secretSaved;
+  const googleTokensReadable = passwordReadable(row.google_refresh_token_ciphertext);
+  const googleReady = googleTokensReadable && Boolean(googleApp.clientId) && googleApp.secretSaved;
   return {
-    configured: row.sending_method === "microsoft" ? microsoftReady : readable,
+    configured: row.sending_method === "microsoft" ? microsoftReady : row.sending_method === "google" ? googleReady : readable,
     sendingMethod: row.sending_method,
     smtpSaved: row.smtp_host !== null,
     microsoft:
@@ -154,8 +184,23 @@ export async function getOrganisationEmailSettings(tx: OrgTx): Promise<Organisat
           }
         : null,
     microsoftApp,
+    google:
+      row.google_email && row.google_connected_at
+        ? {
+            email: row.google_email,
+            connectedAt: new Date(row.google_connected_at).toISOString(),
+            connectedByEmail: row.google_connected_by_email,
+            tokensReadable: googleTokensReadable,
+          }
+        : null,
+    googleApp,
     fromName: row.from_name,
-    fromAddress: row.sending_method === "microsoft" && row.microsoft_email ? row.microsoft_email : row.from_address,
+    fromAddress:
+      row.sending_method === "microsoft" && row.microsoft_email
+        ? row.microsoft_email
+        : row.sending_method === "google" && row.google_email
+          ? row.google_email
+          : row.from_address,
     replyTo: row.reply_to,
     host: row.smtp_host,
     port: row.smtp_port,
@@ -211,10 +256,11 @@ export async function updateOrganisationEmailSettings(
     return getOrganisationEmailSettings(tx);
   }
   if (input.sendingMethod !== undefined) {
-    // Switching between the saved SMTP account and the connected Microsoft mailbox (and the from name and reply-to they share).
+    // Switching between the saved SMTP account and the connected Microsoft or Google mailbox (and the from name and reply-to they share).
     const method = requireOneOf(input.sendingMethod, "sending method", SENDING_METHODS);
     const current = await readRow(tx);
     if (method === "microsoft" && !current?.microsoft_email) throw new ValidationError("Connect a Microsoft 365 or Outlook mailbox first.");
+    if (method === "google" && !current?.google_email) throw new ValidationError("Connect a Gmail or Google Workspace mailbox first.");
     if (method === "smtp" && !current?.smtp_host) throw new ValidationError("Save the SMTP account's details first.");
     const fromName = input.fromName === undefined ? current!.from_name : headerText(requireString(input.fromName, "from name", { maxLength: 100 }).replace(/["<>]/g, ""), 100);
     if (!fromName) throw new ValidationError("Enter the from name, usually the organisation's name.");
@@ -302,7 +348,19 @@ export type MicrosoftAccount = {
   app: ProviderApp;
 };
 
-export type SendingAccount = SmtpAccount | MicrosoftAccount;
+export type GoogleAccount = {
+  method: "google";
+  fromName: string;
+  /** The connected Gmail or Google Workspace mailbox: Google sends from it. */
+  fromAddress: string;
+  replyTo: string | null;
+  refreshToken: string;
+  accessToken: string | null;
+  accessTokenExpiresAt: string | null;
+  app: ProviderApp;
+};
+
+export type SendingAccount = SmtpAccount | MicrosoftAccount | GoogleAccount;
 
 export const NOT_SET_UP =
   "Email isn't set up for this organisation yet. An admin can set it up in Settings > Email with the organisation's own Gmail, Microsoft 365 or other email account.";
@@ -333,6 +391,32 @@ export async function readSendingAccount(tx: OrgTx): Promise<SendingAccount> {
       refreshToken,
       accessToken,
       accessTokenExpiresAt: row.microsoft_access_token_expires_at ? new Date(row.microsoft_access_token_expires_at).toISOString() : null,
+      app,
+    };
+  }
+  if (row.sending_method === "google") {
+    let refreshToken: string;
+    let accessToken: string | null;
+    try {
+      refreshToken = decryptSecret(row.google_refresh_token_ciphertext!);
+      accessToken = row.google_access_token_ciphertext ? decryptSecret(row.google_access_token_ciphertext) : null;
+    } catch {
+      throw new UnavailableError("The Google mailbox's sign-in can't be read on this server (was TOHYEE_SECRET_KEY changed?). An admin needs to connect it again in Settings > Email.");
+    }
+    let app: ProviderApp;
+    try {
+      app = await googleApp(tx);
+    } catch {
+      throw new UnavailableError("The organisation's Google app isn't set up (or its secret can't be read). An admin needs to enter it in Settings > Email.");
+    }
+    return {
+      method: "google",
+      fromName: row.from_name,
+      fromAddress: row.google_email!,
+      replyTo: row.reply_to,
+      refreshToken,
+      accessToken,
+      accessTokenExpiresAt: row.google_access_token_expires_at ? new Date(row.google_access_token_expires_at).toISOString() : null,
       app,
     };
   }

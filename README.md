@@ -52,8 +52,8 @@ people working on the code.
 - Products and services, price levels, salespeople, and print or save as PDF.
 - Email invoices, quotes, credit notes, purchase orders and statements (as
   PDFs, in HTML emails with the organisation's logo) from the organisation's
-  own Microsoft 365 or Outlook mailbox (signed in once), Gmail or other
-  email account.
+  own Microsoft 365, Outlook, Gmail or Google Workspace mailbox (signed in
+  once), or any other email account.
 
 **Purchases**
 - Bills (due dates from each supplier's payment terms), repeating bills,

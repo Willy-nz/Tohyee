@@ -4,8 +4,8 @@ import { UnavailableError, ValidationError } from "@/lib/errors";
  * Google (Gmail and Google Calendar) and Microsoft 365 (Graph) for CRM email
  * and calendar sync (examples MAIL1-MAIL9). Read-only: nothing here sends,
  * changes or deletes anything in a mailbox or calendar (sending documents
- * through Microsoft Graph is in `src/lib/email/microsoft.ts`, with its own
- * sign-in and scopes). Every call has a
+ * through Microsoft Graph or the Gmail API is in `src/lib/email/microsoft.ts`
+ * and `src/lib/email/google.ts`, with their own sign-in and scopes). Every call has a
  * timeout, and none is made inside a database transaction.
  */
 export const MAIL_PROVIDERS = ["google", "microsoft"] as const;
@@ -26,9 +26,20 @@ export const MICROSOFT_SCOPES = ["offline_access", "User.Read", "Mail.Read", "Ca
  * mailbox, never read it.
  */
 export const MICROSOFT_SEND_SCOPES = ["offline_access", "User.Read", "Mail.Send"];
+/**
+ * Sending documents from a Gmail or Google Workspace mailbox: gmail.send
+ * ("Send email on your behalf" in Google's Gmail API discovery document; it
+ * can't read the mailbox) and the address, which the Gmail profile can't give
+ * with gmail.send alone, so it comes from Google's userinfo (openid and
+ * userinfo.email, the scopes Google's OAuth2 v2 discovery document lists for
+ * it).
+ */
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+export const GOOGLE_SEND_SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email", GMAIL_SEND_SCOPE];
 
 export type ProviderApp = { clientId: string; clientSecret: string; tenant?: string };
-export type Tokens = { accessToken: string; refreshToken: string | null; expiresInSeconds: number };
+/** `scope`: the scopes actually granted, when the provider says (Google does; people can untick some). */
+export type Tokens = { accessToken: string; refreshToken: string | null; expiresInSeconds: number; scope?: string | null };
 
 export type Participant = { email: string; name: string | null };
 export type ProviderMessage = {
@@ -62,9 +73,12 @@ export function providerFetch(input: string, init?: RequestInit): Promise<Respon
 
 export class ProviderError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  /** The OAuth error code when there was one, such as `invalid_grant` or `admin_policy_enforced`. */
+  readonly code: string | null;
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -91,7 +105,8 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
       (typeof (body as { error?: unknown } | null)?.error === "string"
         ? ((body as { error: string }).error)
         : ((body as { error?: { message?: string } } | null)?.error?.message ?? text.slice(0, 200)));
-    throw new ProviderError(response.status, `${new URL(url).host} said ${response.status}: ${detail || "no details"}`);
+    const code = typeof (body as { error?: unknown } | null)?.error === "string" ? (body as { error: string }).error : null;
+    throw new ProviderError(response.status, `${new URL(url).host} said ${response.status}: ${detail || "no details"}`, code);
   }
   return body as T;
 }
@@ -103,16 +118,21 @@ function bearer(token: string): RequestInit {
 // ---------------------------------------------------------------------------
 // Signing in (OAuth 2.0 authorization code flow)
 
-export function authorisationUrl(provider: MailProvider, app: ProviderApp, redirectUri: string, state: string, microsoftScopes: readonly string[] = MICROSOFT_SCOPES): string {
+/**
+ * The provider's sign-in address. `scopes` defaults to the CRM's read-only
+ * ones; sending documents asks for its own (and, for Google, only those: no
+ * `include_granted_scopes`, so the sending token can't read the mailbox).
+ */
+export function authorisationUrl(provider: MailProvider, app: ProviderApp, redirectUri: string, state: string, scopes?: readonly string[]): string {
   if (provider === "google") {
     const params = new URLSearchParams({
       client_id: app.clientId,
       redirect_uri: redirectUri,
       response_type: "code",
-      scope: GOOGLE_SCOPES.join(" "),
+      scope: (scopes ?? GOOGLE_SCOPES).join(" "),
       access_type: "offline",
       prompt: "consent",
-      include_granted_scopes: "true",
+      ...(scopes ? {} : { include_granted_scopes: "true" }),
       state,
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
@@ -122,7 +142,7 @@ export function authorisationUrl(provider: MailProvider, app: ProviderApp, redir
     redirect_uri: redirectUri,
     response_type: "code",
     response_mode: "query",
-    scope: microsoftScopes.join(" "),
+    scope: (scopes ?? MICROSOFT_SCOPES).join(" "),
     state,
   });
   return `https://login.microsoftonline.com/${encodeURIComponent(app.tenant || "common")}/oauth2/v2.0/authorize?${params}`;
@@ -137,13 +157,13 @@ function tokenUrl(provider: MailProvider, app: ProviderApp): string {
 async function tokenRequest(provider: MailProvider, app: ProviderApp, fields: Record<string, string>, microsoftScopes: readonly string[]): Promise<Tokens> {
   const body = new URLSearchParams({ client_id: app.clientId, client_secret: app.clientSecret, ...fields });
   if (provider === "microsoft") body.set("scope", microsoftScopes.join(" "));
-  const result = await request<{ access_token?: string; refresh_token?: string; expires_in?: number }>(tokenUrl(provider, app), {
+  const result = await request<{ access_token?: string; refresh_token?: string; expires_in?: number; scope?: string }>(tokenUrl(provider, app), {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: body.toString(),
   });
   if (!result?.access_token) throw new ValidationError("The sign-in didn't return an access token.");
-  return { accessToken: result.access_token, refreshToken: result.refresh_token ?? null, expiresInSeconds: result.expires_in ?? 3600 };
+  return { accessToken: result.access_token, refreshToken: result.refresh_token ?? null, expiresInSeconds: result.expires_in ?? 3600, scope: result.scope ?? null };
 }
 
 export function exchangeCode(
@@ -158,6 +178,18 @@ export function exchangeCode(
 
 export function refreshAccess(provider: MailProvider, app: ProviderApp, refreshToken: string, microsoftScopes: readonly string[] = MICROSOFT_SCOPES): Promise<Tokens> {
   return tokenRequest(provider, app, { grant_type: "refresh_token", refresh_token: refreshToken }, microsoftScopes);
+}
+
+/**
+ * The Google account's address from Google's userinfo (OAuth2 v2
+ * `userinfo.get`), for a sign-in that only has gmail.send, which the Gmail
+ * profile doesn't accept.
+ */
+export async function googleAccountAddress(accessToken: string): Promise<string> {
+  const info = await request<{ email?: string; verified_email?: boolean }>("https://www.googleapis.com/oauth2/v2/userinfo", bearer(accessToken));
+  if (!info?.email) throw new ValidationError("Google didn't say which account this is.");
+  if (info.verified_email === false) throw new ValidationError("Google says this account's email address isn't verified, so Tohyee can't send from it.");
+  return info.email;
 }
 
 /** The mailbox's own address. */

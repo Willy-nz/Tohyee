@@ -17,9 +17,6 @@ import { postFxRevaluation } from "@/lib/ledger/fx-revaluation";
 import { getJournal, postJournal } from "@/lib/ledger/journals";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { recordPaymentBatch } from "@/lib/payments/batches";
-import { createPurchaseOrder } from "@/lib/purchase-orders/service";
-import { createQuote } from "@/lib/quotes/service";
-import { createRepeatingInvoice } from "@/lib/repeating/service";
 import { agedPayables } from "@/lib/reports/aged-payables";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
 import { activityStatement, outstandingStatement } from "@/lib/reports/customer-statements";
@@ -234,9 +231,7 @@ describeWithDatabase("multi-currency invoices and bills", () => {
       ["7020", "0.00", "9.14"],
     ]);
     expect(first.invoice).toMatchObject({ paidStatus: "part_paid", amountDue: "300.00", amountDueBase: "496.29" });
-    await expect(pay(invoices["INV-0002"], "2026-07-28", "300.01", "1000", "1.60")).rejects.toThrow(
-      /Overpaying a foreign-currency invoice isn't supported yet \(refused rather than guessed\)/,
-    );
+    // Overpaying (USD 300.01) is MC14; a bank account in a third currency stays refused (MC30).
     await expect(pay(invoices["INV-0002"], "2026-07-28", "300.00", "1040", "1.60")).rejects.toThrow(/Account 1040 \(EUR account\) is in EUR/);
     const second = await pay(invoices["INV-0002"], "2026-07-28", "300.00", "1000", "1.60");
     expect(second.payment).toMatchObject({ baseAmount: "480.00", baseCleared: "496.29", realisedGain: "-16.29" });
@@ -293,8 +288,8 @@ describeWithDatabase("multi-currency invoices and bills", () => {
     ]);
     expect((await apply()).applications[0].realisedGain).toBe("3.00");
     await expect(
-      run((tx) => refundCreditNote(tx, creditNoteId, { idempotencyKey: key("refund"), refundDate: "2026-07-30", amount: "1.00", bankAccountCode: "1000" })),
-    ).rejects.toThrow(/Refunding a foreign-currency credit note isn't supported yet/);
+      run((tx) => refundCreditNote(tx, creditNoteId, { idempotencyKey: key("refund"), refundDate: "2026-07-30", amount: "1.00", bankAccountCode: "1040" })),
+    ).rejects.toThrow(/Credit note CN-0001 has no credit left to refund/);
   });
 
   it("MC10: a USD bill and a supplier credit note applied at another rate; a payment at the bill's rate has no gain", async () => {
@@ -362,40 +357,8 @@ describeWithDatabase("multi-currency invoices and bills", () => {
 
   it("MC11: what's refused rather than guessed", async () => {
     const refusedFor = /for customers in a currency other than NZD isn't supported yet \(refused rather than guessed\)/;
-    await expect(
-      run((tx) =>
-        createQuote(tx, { idempotencyKey: key("quote"), contactId: acme.id, quoteDate: "2026-07-15", expiryDate: "2026-08-14", amountsMode: "exclusive", lines: [line("Quote", "10.00")] }),
-      ),
-    ).rejects.toThrow(refusedFor);
-    await expect(
-      run((tx) =>
-        createRepeatingInvoice(tx, {
-          idempotencyKey: key("ri"),
-          contactId: acme.id,
-          amountsMode: "exclusive",
-          lines: [line("Monthly", "10.00")],
-          period: "month",
-          every: 1,
-          startDate: "2026-07-31",
-          dueRule: "days_after",
-          dueDays: 20,
-          saveAs: "draft",
-        }),
-      ),
-    ).rejects.toThrow(refusedFor);
-    await expect(
-      run((tx) =>
-        createPurchaseOrder(tx, {
-          idempotencyKey: key("po"),
-          contactId: aws.id,
-          orderDate: "2026-07-01",
-          deliveryDate: "2026-07-10",
-          amountsMode: "no_tax",
-          lines: [{ description: "Hosting", quantity: "1", unitPrice: "50.00", accountCode: "6040" }],
-        }),
-      ),
-    ).rejects.toThrow(/for suppliers in a currency other than NZD isn't supported yet \(refused rather than guessed\)/);
-    // An invoice for a USD customer made by anything but entering it directly (e.g. accepting a quote) is refused the same way.
+    // Quotes, repeating documents and purchase orders for USD contacts are built (MC25-MC28). An invoice for a USD
+    // customer made any other way but entering it directly (a project's or the CRM's) is still refused.
     await expect(
       run((tx) =>
         createInvoice(tx, { idempotencyKey: key("inv"), contactId: acme.id, invoiceDate: "2026-07-30", dueDate: "2026-08-20", amountsMode: "exclusive", lines: [line("X", "1.00")], exchangeRate: "1.6" }),
@@ -407,11 +370,11 @@ describeWithDatabase("multi-currency invoices and bills", () => {
           idempotencyKey: key("batch"),
           paymentDate: "2026-07-30",
           amount: "1.00",
-          bankAccountCode: "1000",
+          bankAccountCode: "1040",
           documents: [{ id: invoices["INV-0005"], amount: "1.00" }],
         }),
       ),
-    ).rejects.toThrow(/Invoice INV-0005 is in USD. One payment for several invoices is in NZD only/);
+    ).rejects.toThrow(/Account 1040 \(EUR account\) is in EUR, but this invoice is in USD/);
     await expect(
       run((tx) =>
         postJournal(tx, {

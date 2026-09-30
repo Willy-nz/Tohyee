@@ -539,6 +539,17 @@ export type DocumentKind = "invoice" | "bill" | "credit_note" | "supplier_credit
 
 export type StockDocumentLine = DocumentLine & { netAmount: string };
 
+/**
+ * A document's lines for stock (MC29): stock is valued in the base currency,
+ * as NetSuite values inventory in the base currency at the receipt's rate, so
+ * a foreign-currency line's net amount is its base net amount (the line
+ * converted at the document's rate, which the document also posts to
+ * inventory). Base-currency lines are unchanged.
+ */
+export function stockLinesAtBase<T extends { netAmount: string; baseNetAmount?: string | null }>(lines: readonly T[]): T[] {
+  return lines.map((line) => (line.baseNetAmount == null ? line : { ...line, netAmount: line.baseNetAmount }));
+}
+
 export type StockPlan = {
   planner: StockPlanner;
   journalLines: ReturnType<typeof stockJournalLines>;

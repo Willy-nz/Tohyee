@@ -156,8 +156,13 @@ export type InvoiceInput = {
   exchangeRate?: unknown;
 };
 
-/** Whether a path may make documents in a currency other than the base (only ones entered directly; MC11). */
-export type ForeignOption = { foreignCurrency?: boolean; feature?: string };
+/**
+ * Whether a path may make documents in a currency other than the base (MC11).
+ * `template`: a quote, repeating template or purchase order (MC25-MC28), in
+ * the contact's currency but with no rate: it posts nothing, and the
+ * invoice or bill made from it takes a rate for its own date.
+ */
+export type ForeignOption = { foreignCurrency?: boolean; feature?: string; template?: boolean };
 
 const MAX_LINES = 200;
 /** Quantities and unit prices allow up to 4 decimal places. */
@@ -227,10 +232,7 @@ const SUMMARY_FROM = `sales_invoices i
                       where o.invoice_id = i.id and o.status = 'active'), 0) as amount_credited
   ) credited
   cross join lateral (
-    select coalesce((select sum(p.base_cleared) from customer_payments p
-                      where p.invoice_id = i.id and p.status = 'active'), 0)
-         + coalesce((select sum(a.invoice_base) from sales_credit_note_applications a
-                      where a.invoice_id = i.id and a.status = 'active'), 0) as base_settled
+    select tohyee_invoice_base_settled(i.id) as base_settled
   ) base_settled`;
 
 type LineRow = LineItemRow & {
@@ -615,8 +617,10 @@ async function resolveDraft(
       [],
     );
     await assertForeignSalesBasis(tx, "invoice", currencyCode);
-    exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.invoiceDate, typed: draft.exchangeRateInput, what: "invoice" });
-    base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+    if (!foreign.template) {
+      exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.invoiceDate, typed: draft.exchangeRateInput, what: "invoice" });
+      base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+    }
   }
 
   return {

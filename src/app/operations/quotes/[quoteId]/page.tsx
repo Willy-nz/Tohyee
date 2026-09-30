@@ -7,6 +7,7 @@ import { useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { SalesLinesTable } from "@/components/documents/lines-table";
+import { ExchangeRateField, useLastRate } from "@/components/fx";
 import { useApiData } from "@/components/hooks";
 import { QuoteStatusBadge } from "@/components/quotes/quote-editor";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
@@ -36,6 +37,10 @@ function QuoteActions({
   const [invoiceDate, setInvoiceDate] = useState(today < quote.quoteDate ? quote.quoteDate : today);
   const [dueDate, setDueDate] = useState("");
   const [copyDate, setCopyDate] = useState(today);
+  // A quote in another currency (MC25) makes an invoice at a rate for the invoice date.
+  const baseCurrency = useWorkspace().current?.baseCurrency ?? "NZD";
+  const [typedRate, setTypedRate] = useState<string | null>(null);
+  const suggestedRate = useLastRate(organisationId, quote.currencyCode, baseCurrency, invoiceDate);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +72,14 @@ function QuoteActions({
     void run(async () => {
       const result = await api<{ quote: Quote; invoice: Invoice }>(`/api/quotes/${quote.id}/accept`, {
         method: "POST",
-        body: { organisationId, source: "ui", idempotencyKey: acceptKey, invoiceDate, dueDate: dueDate || null },
+        body: {
+          organisationId,
+          source: "ui",
+          idempotencyKey: acceptKey,
+          invoiceDate,
+          dueDate: dueDate || null,
+          ...(quote.currencyCode !== baseCurrency && typedRate !== null ? { exchangeRate: typedRate } : {}),
+        },
       });
       router.push(`/operations/invoices/${result.invoice.id}`);
     });
@@ -136,6 +148,7 @@ function QuoteActions({
             <Field label="Due date" hint="Blank: the customer's payment terms.">
               <input type="date" value={dueDate} min={invoiceDate || undefined} onChange={(event) => setDueDate(event.target.value)} />
             </Field>
+            <ExchangeRateField currencyCode={quote.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
             <Button onClick={accept} disabled={busy || !invoiceDate}>
               {busy ? "Working…" : "Accept and make the invoice"}
             </Button>

@@ -157,6 +157,15 @@ export async function microsoftApp(tx: OrgTx): Promise<ProviderApp> {
   return providerApp(tx, "microsoft");
 }
 
+/**
+ * The organisation's Google app, for sending documents from a Gmail or
+ * Google Workspace mailbox (Settings > Email): the same OAuth client as the
+ * CRM's mail sync, without needing the CRM on.
+ */
+export async function googleApp(tx: OrgTx): Promise<ProviderApp> {
+  return providerApp(tx, "google");
+}
+
 // ---------------------------------------------------------------------------
 // Connecting (MAIL2)
 

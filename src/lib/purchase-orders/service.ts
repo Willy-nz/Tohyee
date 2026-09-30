@@ -255,11 +255,20 @@ function asSent(order: PurchaseOrder): PurchaseOrderInput {
   };
 }
 
+/**
+ * A purchase order for a supplier in another currency (MC28) is in that
+ * currency (NetSuite: "When you convert a purchase transaction to another
+ * transaction in the purchase process, the currency from the original
+ * transaction is maintained"), with no rate: it posts nothing. The bill made
+ * from it takes a rate for its own date.
+ */
+const ORDER_FOREIGN = { foreignCurrency: true, template: true, feature: "Purchase orders" } as const;
+
 async function resolveFor(tx: OrgTx, draft: DraftDetails, current?: PurchaseOrder): Promise<ResolvedDraft> {
   // Purchase orders use the bill's custom fields and tracking, since their lines become a bill's (PO3).
   return current
-    ? resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines)
-    : resolveDraft(tx, draft);
+    ? resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines, ORDER_FOREIGN)
+    : resolveDraft(tx, draft, undefined, undefined, undefined, ORDER_FOREIGN);
 }
 
 /** A purchase order's lines with what's been billed on each, from its bills (PO3-PO5). */
@@ -610,12 +619,13 @@ const COPY_SOURCE = "purchase_order";
  * from then on; it can be edited (less, or a different price) before it's
  * approved. The supplier's invoice number is given; the due date is given
  * or, left out, comes from the supplier's payment terms (SPT4), as on any
- * new bill.
+ * new bill. An order in another currency (MC28) makes a bill in it at a rate
+ * for the bill date: `exchangeRate`, or else the last rate used (MC3).
  */
 export async function copyPurchaseOrderToBill(
   tx: OrgTx,
   idInput: unknown,
-  input: { source?: unknown; idempotencyKey: unknown; billDate: unknown; dueDate?: unknown; supplierInvoiceNumber: unknown },
+  input: { source?: unknown; idempotencyKey: unknown; billDate: unknown; dueDate?: unknown; supplierInvoiceNumber: unknown; exchangeRate?: unknown },
 ): Promise<{ created: boolean; purchaseOrder: PurchaseOrder; bill: Bill }> {
   const id = requireId(idInput, "purchaseOrderId");
   const source = optionalSource(input.source);
@@ -673,8 +683,10 @@ export async function copyPurchaseOrderToBill(
         purchaseOrderLineId: line.id,
       })),
       customFields: current.customFields,
+      ...(input.exchangeRate != null && input.exchangeRate !== "" ? { exchangeRate: input.exchangeRate } : {}),
     },
     { purchaseOrderId: current.id },
+    { foreignCurrency: true, feature: "Purchase orders" },
   );
   await writeAuditEvent(tx, {
     eventType: "purchase_order.copied_to_bill",

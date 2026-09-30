@@ -61,28 +61,39 @@ export async function startMicrosoftSending(tx: OrgTx, origin: string): Promise<
     throw new UnavailableError("This server has no TOHYEE_SECRET_KEY, so it can't keep the mailbox's sign-in safely. A server admin needs to set it first.");
   }
   const app = await microsoftApp(tx);
-  const state = `${tx.organisationId}.${randomBytes(24).toString("base64url")}`;
-  await tx.query("delete from email_oauth_states where created_at < now() - interval '1 day'");
-  await tx.query("insert into email_oauth_states (state, user_id) values ($1, $2)", [state, tx.actor.userId]);
+  const state = await newSendingState(tx, "microsoft");
   return { url: authorisationUrl("microsoft", app, redirectUri(origin), state, MICROSOFT_SEND_SCOPES) };
 }
 
+/** A one-time sign-in state for connecting the sending mailbox, tied to this admin, organisation and provider. */
+export async function newSendingState(tx: OrgTx, provider: "microsoft" | "google"): Promise<string> {
+  if (!tx.actor.userId) throw new ForbiddenError("Sign in to connect a mailbox.");
+  const state = `${tx.organisationId}.${randomBytes(24).toString("base64url")}`;
+  await tx.query("delete from email_oauth_states where created_at < now() - interval '1 day'");
+  await tx.query("insert into email_oauth_states (state, user_id, provider) values ($1, $2, $3)", [state, tx.actor.userId, provider]);
+  return state;
+}
+
 /**
- * Checks the state (unused, under 15 minutes old, the same signed-in user)
- * and marks it used, before the code is exchanged; returns the app to
- * exchange it with.
+ * Checks the state (unused, under 15 minutes old, the same signed-in user,
+ * made for this provider) and marks it used, before the code is exchanged.
  */
-export async function claimSendingState(tx: OrgTx, state: string): Promise<ProviderApp> {
-  const found = await tx.query<{ user_id: string; fresh: boolean; used_at: string | null }>(
-    `select user_id, created_at > now() - make_interval(mins => $2) as fresh, used_at
+export async function claimProviderState(tx: OrgTx, state: string, provider: "microsoft" | "google"): Promise<void> {
+  const found = await tx.query<{ user_id: string; provider: string; fresh: boolean; used_at: string | null }>(
+    `select user_id, provider, created_at > now() - make_interval(mins => $2) as fresh, used_at
        from email_oauth_states where state = $1 for update`,
     [state, STATE_MINUTES],
   );
   const row = found.rows[0];
-  if (!row || row.used_at || !row.fresh || row.user_id !== tx.actor.userId) {
+  if (!row || row.used_at || !row.fresh || row.user_id !== tx.actor.userId || row.provider !== provider) {
     throw new ValidationError("That sign-in link has expired or was already used. Start connecting again.");
   }
   await tx.query("update email_oauth_states set used_at = now() where state = $1", [state]);
+}
+
+/** Claims a Microsoft sign-in state and returns the app to exchange the code with. */
+export async function claimSendingState(tx: OrgTx, state: string): Promise<ProviderApp> {
+  await claimProviderState(tx, state, "microsoft");
   return microsoftApp(tx);
 }
 
@@ -130,24 +141,41 @@ export async function saveSendingConnection(tx: OrgTx, connection: SendingConnec
 }
 
 /**
+ * The method to fall back to when one is disconnected: the current one if
+ * it's another, then SMTP, then the other signed-in mailbox; null when
+ * nothing else is saved.
+ */
+export function fallbackMethod(
+  row: { sending_method: string; smtp_host: string | null; microsoft_email: string | null; google_email: string | null },
+  leaving: "microsoft" | "google",
+): "smtp" | "microsoft" | "google" | null {
+  const saved = { smtp: Boolean(row.smtp_host), microsoft: Boolean(row.microsoft_email), google: Boolean(row.google_email) };
+  saved[leaving] = false;
+  if (row.sending_method !== leaving && saved[row.sending_method as keyof typeof saved]) return row.sending_method as "smtp" | "microsoft" | "google";
+  return (["smtp", "microsoft", "google"] as const).find((method) => saved[method]) ?? null;
+}
+
+/**
  * Forgets the mailbox's sign-in (Microsoft still lists Tohyee under the
  * account's app permissions until someone removes it there). If SMTP
- * details are saved they're used again; otherwise nothing is set up.
+ * details or a Google mailbox are saved they're used instead; otherwise
+ * nothing is set up.
  */
 export async function disconnectMicrosoftSending(tx: OrgTx): Promise<void> {
-  const current = await tx.query<{ microsoft_email: string | null; smtp_host: string | null }>(
-    "select microsoft_email, smtp_host from organisation_email_settings where id = true",
+  const current = await tx.query<{ sending_method: string; microsoft_email: string | null; smtp_host: string | null; google_email: string | null }>(
+    "select sending_method, microsoft_email, smtp_host, google_email from organisation_email_settings where id = true",
   );
   const row = current.rows[0];
   if (!row?.microsoft_email) return;
-  if (row.smtp_host) {
+  const next = fallbackMethod(row, "microsoft");
+  if (next) {
     await tx.query(
       `update organisation_email_settings
-          set sending_method = 'smtp', microsoft_email = null, microsoft_refresh_token_ciphertext = null, microsoft_access_token_ciphertext = null,
+          set sending_method = $2, microsoft_email = null, microsoft_refresh_token_ciphertext = null, microsoft_access_token_ciphertext = null,
               microsoft_access_token_expires_at = null, microsoft_connected_by_email = null, microsoft_connected_at = null,
               updated_by_email = $1, updated_at = now(), last_test_at = null, last_test_ok = null, last_test_error = null
         where id = true`,
-      [tx.actor.email],
+      [tx.actor.email, next],
     );
   } else {
     await tx.query("delete from organisation_email_settings");
