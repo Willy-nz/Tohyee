@@ -1,16 +1,18 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { writeAuditEvent } from "@/lib/audit";
-import { getBill, lockBill, payableAccountCode } from "@/lib/bills/service";
+import { type Bill, getBill, lockBill, payableAccountCode } from "@/lib/bills/service";
 import { resolveBankAccount as resolveSupplierBankAccount } from "@/lib/bills/payments";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { resolveBankAccount as resolveCustomerBankAccount } from "@/lib/invoices/payments";
-import { getInvoice, lockInvoice, receivableAccountCode } from "@/lib/invoices/service";
-import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
+import { clearedBase, exchangeRateFor, openBase, parseRateInput, realisedFxAccountCode, realisedLines } from "@/lib/fx/documents";
+import { foreignReceivableLines, resolveBankAccount as resolveCustomerBankAccount, splitForeignPayment } from "@/lib/invoices/payments";
+import { getInvoice, type Invoice, lockInvoice, receivableAccountCode } from "@/lib/invoices/service";
+import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { add, cmp, dec, type Decimal, isPositive, parseDecimalInput, sub, sum, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { convertAtRate } from "@/lib/money/fx";
+import { add, cmp, dec, type Decimal, isPositive, isZero, parseDecimalInput, sub, sum, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { optionalSource, optionalString, requireId, requireIdempotencyKey } from "@/lib/validation";
 
 /**
@@ -21,6 +23,16 @@ import { optionalSource, optionalString, requireId, requireIdempotencyKey } from
  * line per document. Each document's part is kept as an ordinary customer
  * (supplier) payment with batch_id set, sharing the journal, so amounts due,
  * overpayments and the GST return need nothing new. It's voided as a whole.
+ *
+ * Documents in a foreign currency (MC20-MC24) are paid in that currency, all
+ * at the payment's one rate, into (or from) a bank account in that currency
+ * or the base currency. The bank line is the whole amount x rate, rounded
+ * once; each document's part is its amount x rate, rounded once, except the
+ * last, which takes what's left of the bank line, so the parts add up to it.
+ * Each document is cleared at its own carrying value and has its own
+ * realised gain or loss on 7020 (NetSuite: "For payments or credits applied
+ * to multiple transactions, NetSuite calculates and records a gain or loss
+ * for each transaction").
  */
 export type BatchKind = "customer" | "supplier";
 
@@ -32,6 +44,10 @@ export type PaymentBatchPart = {
   amount: string;
   /** Only ever on a customer batch's last part, when every invoice was paid in full. */
   overpaymentAmount: string;
+  /** In a foreign currency (MC20-MC24): the part's share of the bank line, what it cleared, and its realised gain (a loss is negative). */
+  baseAmount: string | null;
+  baseCleared: string | null;
+  realisedGain: string | null;
 };
 
 export type PaymentBatch = {
@@ -56,6 +72,9 @@ export type PaymentBatch = {
   voidedAt: string | null;
   parts: PaymentBatchPart[];
   overpaymentAmount: string;
+  /** In a foreign currency (MC20-MC24): the payment's rate and the base amount that moved in the bank account. */
+  exchangeRate: string | null;
+  baseAmount: string | null;
 };
 
 type Kind = {
@@ -121,6 +140,8 @@ type BatchRow = {
   void_journal_id: string | null;
   voided_by_email: string | null;
   voided_at: string | null;
+  exchange_rate: string | null;
+  base_amount: string | null;
 };
 
 export async function getPaymentBatch(tx: OrgTx, kind: BatchKind, batchIdInput: unknown): Promise<PaymentBatch> {
@@ -129,7 +150,8 @@ export async function getPaymentBatch(tx: OrgTx, kind: BatchKind, batchIdInput: 
   const found = await tx.query<BatchRow>(
     `select b.id, b.status, b.contact_id, c.name as contact_name, b.payment_date, b.amount, b.currency_code,
             b.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, b.reference, b.journal_id,
-            b.created_by_email, b.created_at, b.void_date, b.void_journal_id, b.voided_by_email, b.voided_at
+            b.created_by_email, b.created_at, b.void_date, b.void_journal_id, b.voided_by_email, b.voided_at,
+            b.exchange_rate::text, b.base_amount::text
        from ${k.batches} b join contacts c on c.id = b.contact_id join accounts a on a.id = b.bank_account_id
       where b.id = $1`,
     [batchId],
@@ -137,9 +159,19 @@ export async function getPaymentBatch(tx: OrgTx, kind: BatchKind, batchIdInput: 
   const row = found.rows[0];
   if (!row) throw new NotFoundError("Payment not found.");
   const scale = currencyMinorUnits(row.currency_code);
-  const parts = await tx.query<{ id: string; document_id: string; document_number: string; amount: string; overpayment: string }>(
+  const parts = await tx.query<{
+    id: string;
+    document_id: string;
+    document_number: string;
+    amount: string;
+    overpayment: string;
+    base_amount: string | null;
+    base_cleared: string | null;
+    realised_gain: string | null;
+  }>(
     `select p.id, p.${k.documentColumn} as document_id, d.${k.documentNumberColumn} as document_number, p.amount,
-            ${kind === "customer" ? "p.overpayment_amount" : "0::numeric"} as overpayment
+            ${kind === "customer" ? "p.overpayment_amount" : "0::numeric"} as overpayment,
+            p.base_amount::text, p.base_cleared::text, p.realised_gain::text
        from ${k.payments} p join ${k.documentTable} d on d.id = p.${k.documentColumn}
       where p.batch_id = $1 order by p.id`,
     [batchId],
@@ -170,8 +202,13 @@ export async function getPaymentBatch(tx: OrgTx, kind: BatchKind, batchIdInput: 
       documentNumber: part.document_number,
       amount: toFixedString(dec(part.amount), scale),
       overpaymentAmount: toFixedString(dec(part.overpayment), scale),
+      baseAmount: baseMoney(part.base_amount),
+      baseCleared: baseMoney(part.base_cleared),
+      realisedGain: baseMoney(part.realised_gain),
     })),
     overpaymentAmount: toFixedString(sum(parts.rows.map((part) => dec(part.overpayment))), scale),
+    exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    baseAmount: baseMoney(row.base_amount),
   };
 }
 
@@ -188,7 +225,21 @@ export async function listPaymentBatches(tx: OrgTx, kind: BatchKind, filters: { 
   return batches;
 }
 
-type Document = { id: string; number: string; contactId: string; contactName: string; date: string; status: string; amountDue: Decimal | null; currencyCode: string };
+const baseMoney = (value: string | null) => (value === null ? null : toFixedString(dec(value), 2));
+
+type Document = {
+  id: string;
+  number: string;
+  contactId: string;
+  contactName: string;
+  date: string;
+  status: string;
+  amountDue: Decimal | null;
+  currencyCode: string;
+  /** The document itself, for a foreign-currency payment's carrying values. */
+  invoice?: Invoice;
+  bill?: Bill;
+};
 
 async function lockDocument(tx: OrgTx, kind: BatchKind, id: string): Promise<Document> {
   if (kind === "customer") {
@@ -202,6 +253,7 @@ async function lockDocument(tx: OrgTx, kind: BatchKind, id: string): Promise<Doc
       status: invoice.status,
       amountDue: invoice.amountDue === null ? null : dec(invoice.amountDue),
       currencyCode: invoice.currencyCode,
+      invoice,
     };
   }
   const bill = await lockBill(tx, id);
@@ -214,6 +266,7 @@ async function lockDocument(tx: OrgTx, kind: BatchKind, id: string): Promise<Doc
     status: bill.status,
     amountDue: bill.amountDue === null ? null : dec(bill.amountDue),
     currencyCode: bill.currencyCode,
+    bill,
   };
 }
 
@@ -254,6 +307,8 @@ export async function recordPaymentBatch(
     bankAccountCode: unknown;
     reference?: unknown;
     documents: unknown;
+    /** For documents in a foreign currency (MC20): base currency per 1 unit on the payment date; left out, the last rate used. */
+    exchangeRate?: unknown;
   },
 ): Promise<PaymentBatchResult> {
   const k = KINDS[kind];
@@ -264,6 +319,7 @@ export async function recordPaymentBatch(
   const received = dec(parseDecimalInput(command.amount, "amount", { maxScale: scale }));
   const bankAccountCode = parseAccountCodeInput(command.bankAccountCode, "bankAccountCode");
   const reference = optionalString(command.reference, "reference", { maxLength: 100 });
+  const typedRate = parseRateInput(command.exchangeRate);
   if (!Array.isArray(command.documents) || command.documents.length === 0) {
     throw new ValidationError(`Choose at least one ${k.document} to pay.`);
   }
@@ -287,6 +343,8 @@ export async function recordPaymentBatch(
     bankAccountCode: bankAccountCode.toLowerCase(),
     reference,
     documents: lines.map((line) => ({ id: line.id, amount: toPlainString(line.amount) })),
+    // Only when sent, so earlier payments hash the same.
+    ...(typedRate != null ? { exchangeRate: typedRate } : {}),
   });
   const replay = async (): Promise<PaymentBatchResult | null> => {
     const earlier = await findByKey(tx, kind, "record", source, idempotencyKey);
@@ -318,10 +376,10 @@ export async function recordPaymentBatch(
     if (document.contactId !== contactId) {
       throw new ValidationError(`One payment can only pay ${k.documents} of one ${k.contact}: ${document.number} is ${document.contactName}'s.`);
     }
-    if (document.currencyCode !== tx.baseCurrency) {
-      // MC11: each foreign-currency document is paid on its own, at the payment's rate.
+    if (document.currencyCode !== documents[0].document.currencyCode) {
+      // One payment is in one currency (MC23), like NetSuite's: the documents it pays are all in it.
       throw new ValidationError(
-        `${capital(k.document)} ${document.number} is in ${document.currencyCode}. One payment for several ${k.documents} is in ${tx.baseCurrency} only, so this isn't supported yet (refused rather than guessed): pay it on its own.`,
+        `One payment is in one currency: ${k.document} ${document.number} is in ${document.currencyCode}, but ${documents[0].document.number} is in ${documents[0].document.currencyCode}.`,
       );
     }
     if (paymentDate < document.date) {
@@ -357,37 +415,102 @@ export async function recordPaymentBatch(
     }
     overpayment = sub(received, allocated);
   }
-  const bank = kind === "customer" ? await resolveCustomerBankAccount(tx, bankAccountCode) : await resolveSupplierBankAccount(tx, bankAccountCode);
+  const currency = documents[0].document.currencyCode;
+  const foreign = currency !== tx.baseCurrency;
+  if (!foreign && typedRate != null) {
+    throw new ValidationError(`These ${k.documents} are in ${tx.baseCurrency}, so the payment has no exchange rate.`);
+  }
+  const bank =
+    kind === "customer"
+      ? await resolveCustomerBankAccount(tx, bankAccountCode, foreign ? currency : null)
+      : await resolveSupplierBankAccount(tx, bankAccountCode, foreign ? currency : null);
   const control = kind === "customer" ? await receivableAccountCode(tx) : await payableAccountCode(tx);
+  const rate = foreign ? (await exchangeRateFor(tx, { currencyCode: currency, date: paymentDate, typed: typedRate, what: "payment" }))! : null;
 
   const next = await tx.query<{ id: string }>(`select nextval(pg_get_serial_sequence('${k.batches}', 'id'))::text as id`);
   const batchId = next.rows[0].id;
   const fixed = (value: Decimal) => toFixedString(value, scale);
   const partAmounts = documents.map((line, index) => (index === documents.length - 1 ? add(line.amount, overpayment) : line.amount));
   const numbers = documents.map((line) => line.document.number);
-  const described = `${kind === "customer" ? "Payment from" : "Payment to"} ${contactName} for ${numbers.join(", ")}`.slice(0, 500);
-  const controlLines = documents.map((line, index) => ({
-    accountCode: control,
-    debitAmount: kind === "customer" ? "0" : fixed(partAmounts[index]),
-    creditAmount: kind === "customer" ? fixed(partAmounts[index]) : "0",
-    description: `${contactName} · ${line.document.number}`.slice(0, 500),
-  }));
+  const described = `${kind === "customer" ? "Payment from" : "Payment to"} ${contactName} for ${numbers.join(", ")}${rate ? ` (${currency} ${fixed(received)} at ${rate})` : ""}`.slice(0, 500);
+  const bankBase = rate ? convertAtRate(fixed(received), rate) : fixed(received);
+  // A foreign-currency payment (MC20-MC24): each part's share of the bank line, what it clears and its gain.
+  const fx: Array<{ baseAmount: string; cleared: string; gain: string; baseOverpayment: string; lines: Array<Record<string, unknown>> }> = [];
+  if (rate) {
+    const gainAccount = await realisedFxAccountCode(tx);
+    let allotted = ZERO_DECIMAL;
+    for (const [index, line] of documents.entries()) {
+      const partAmount = fixed(partAmounts[index]);
+      const baseAmount = index === documents.length - 1 ? toFixedString(sub(dec(bankBase), allotted), 2) : convertAtRate(partAmount, rate);
+      allotted = add(allotted, dec(baseAmount));
+      const description = `${contactName} · ${line.document.number}`.slice(0, 200);
+      const gainLabel = `${line.document.number} paid at ${rate}`;
+      if (kind === "customer") {
+        const invoice = line.document.invoice!;
+        const split = await splitForeignPayment(tx, invoice, partAmount, rate, baseAmount);
+        const invoicePart = fixed(sub(partAmounts[index], dec(split.overpayment)));
+        fx.push({
+          baseAmount,
+          cleared: split.cleared,
+          gain: split.gain,
+          baseOverpayment: split.baseOverpayment,
+          lines: [
+            ...foreignReceivableLines(control, description, currency, invoice.exchangeRate!, rate, split, invoicePart),
+            ...(isZero(dec(split.gain)) ? [] : realisedLines(gainAccount, split.gain, gainLabel)),
+          ],
+        });
+      } else {
+        const bill = line.document.bill!;
+        const cleared = clearedBase({ amount: bill.amountDue!, base: await openBase(tx, "bill", bill.id) }, partAmount);
+        const gain = toFixedString(sub(dec(cleared), dec(baseAmount)), 2);
+        fx.push({
+          baseAmount,
+          cleared,
+          gain,
+          baseOverpayment: "0.00",
+          lines: [
+            {
+              accountCode: control,
+              debitAmount: cleared,
+              creditAmount: "0",
+              description,
+              foreign: { currencyCode: currency, amount: partAmount, rate: bill.exchangeRate!, kind: "carrying_value" as const },
+            },
+            ...(isZero(dec(gain)) ? [] : realisedLines(gainAccount, gain, gainLabel)),
+          ],
+        });
+      }
+    }
+  }
+  const controlLines = rate
+    ? fx.flatMap((part) => part.lines)
+    : documents.map((line, index) => ({
+        accountCode: control,
+        debitAmount: kind === "customer" ? "0" : fixed(partAmounts[index]),
+        creditAmount: kind === "customer" ? fixed(partAmounts[index]) : "0",
+        description: `${contactName} · ${line.document.number}`.slice(0, 500),
+      }));
   const bankLine = {
     accountCode: bank.code,
-    debitAmount: kind === "customer" ? fixed(received) : "0",
-    creditAmount: kind === "customer" ? "0" : fixed(received),
+    debitAmount: kind === "customer" ? bankBase : "0",
+    creditAmount: kind === "customer" ? "0" : bankBase,
     description: contactName,
+    ...(rate && bank.currencyCode ? { foreign: { currencyCode: currency, amount: fixed(received), rate, kind: "rate" as const } } : {}),
   };
   const posted = await postJournalBody(
     tx,
     `${k.origin}:record`,
     batchId,
-    parseJournalBody(tx, {
-      postingDate: paymentDate,
-      reference: reference ?? numbers.join(", ").slice(0, 100),
-      description: described,
-      lines: kind === "customer" ? [bankLine, ...controlLines] : [...controlLines, bankLine],
-    }),
+    parseJournalBody(
+      tx,
+      {
+        postingDate: paymentDate,
+        reference: reference ?? numbers.join(", ").slice(0, 100),
+        description: described,
+        lines: kind === "customer" ? [bankLine, ...controlLines] : [...controlLines, bankLine],
+      },
+      { internal: true },
+    ),
     { origin: k.origin },
   );
 
@@ -395,9 +518,25 @@ export async function recordPaymentBatch(
     await tx.query(
       `insert into ${k.batches} (
          id, command_source, idempotency_key, request_hash, contact_id, payment_date, amount, currency_code,
-         bank_account_id, reference, journal_id, created_by_user_id, created_by_email
-       ) values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13)`,
-      [batchId, source, idempotencyKey, hash, contactId, paymentDate, fixed(received), tx.baseCurrency, bank.id, reference, posted.journal.id, tx.actor.userId, tx.actor.email],
+         bank_account_id, reference, journal_id, created_by_user_id, created_by_email, exchange_rate, base_amount
+       ) values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric)`,
+      [
+        batchId,
+        source,
+        idempotencyKey,
+        hash,
+        contactId,
+        paymentDate,
+        fixed(received),
+        currency,
+        bank.id,
+        reference,
+        posted.journal.id,
+        tx.actor.userId,
+        tx.actor.email,
+        rate,
+        rate ? bankBase : null,
+      ],
     );
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -414,28 +553,35 @@ export async function recordPaymentBatch(
       line.id,
       paymentDate,
       fixed(partAmounts[index]),
-      tx.baseCurrency,
+      currency,
       bank.id,
       reference,
       posted.journal.id,
       tx.actor.userId,
       tx.actor.email,
       batchId,
+      rate,
+      fx[index]?.baseAmount ?? null,
+      fx[index]?.cleared ?? null,
+      fx[index]?.gain ?? null,
     ];
     if (kind === "customer") {
       await tx.query(
         `insert into customer_payments (
            command_source, idempotency_key, request_hash, invoice_id, payment_date, amount, currency_code,
-           bank_account_id, reference, journal_id, created_by_user_id, created_by_email, batch_id, overpayment_amount
-         ) values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9, $10, $11, $12, $13, $14::numeric)`,
-        [...values, fixed(partOverpayment)],
+           bank_account_id, reference, journal_id, created_by_user_id, created_by_email, batch_id,
+           exchange_rate, base_amount, base_cleared, realised_gain, overpayment_amount, base_overpayment
+         ) values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric,
+                   $17::numeric, $18::numeric, $19::numeric)`,
+        [...values, fixed(partOverpayment), fx[index] ? fx[index].baseOverpayment : null],
       );
     } else {
       await tx.query(
         `insert into supplier_payments (
            command_source, idempotency_key, request_hash, bill_id, payment_date, amount, currency_code,
-           bank_account_id, reference, journal_id, created_by_user_id, created_by_email, batch_id
-         ) values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9, $10, $11, $12, $13)`,
+           bank_account_id, reference, journal_id, created_by_user_id, created_by_email, batch_id,
+           exchange_rate, base_amount, base_cleared, realised_gain
+         ) values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric)`,
         values,
       );
     }
@@ -451,7 +597,13 @@ export async function recordPaymentBatch(
       overpaymentAmount: fixed(overpayment),
       bankAccountCode: bank.code,
       journalId: posted.journal.id,
-      documents: documents.map((line, index) => ({ id: line.id, number: line.document.number, amount: fixed(partAmounts[index]) })),
+      ...(rate ? { currencyCode: currency, exchangeRate: rate, baseAmount: bankBase } : {}),
+      documents: documents.map((line, index) => ({
+        id: line.id,
+        number: line.document.number,
+        amount: fixed(partAmounts[index]),
+        ...(fx[index] ? { baseAmount: fx[index].baseAmount, baseCleared: fx[index].cleared, realisedGain: fx[index].gain } : {}),
+      })),
     },
   });
   return { created: true, batch: await getPaymentBatch(tx, kind, batchId) };
@@ -513,18 +665,24 @@ export async function voidPaymentBatch(
     tx,
     `${k.origin}:void`,
     batchId,
-    parseJournalBody(tx, {
-      postingDate: voidDate,
-      reference: `VOID-${original.reference}`.slice(0, 100),
-      description: `Void of ${original.description ?? "payment"}`.slice(0, 500),
-      lines: original.lines.map((line) => ({
-        accountCode: line.accountCode,
-        debitAmount: line.creditAmount,
-        creditAmount: line.debitAmount,
-        description: line.description,
-        tracking: line.tracking,
-      })),
-    }),
+    parseJournalBody(
+      tx,
+      {
+        postingDate: voidDate,
+        reference: `VOID-${original.reference}`.slice(0, 100),
+        description: `Void of ${original.description ?? "payment"}`.slice(0, 500),
+        lines: original.lines.map((line) => ({
+          accountCode: line.accountCode,
+          debitAmount: line.creditAmount,
+          creditAmount: line.debitAmount,
+          description: line.description,
+          tracking: line.tracking,
+          ...sameForeign(line),
+        })),
+      },
+      { internal: true },
+    ),
+
     { origin: k.origin, relatedJournalId: original.id, correctionKind: "reversal" },
   );
   try {

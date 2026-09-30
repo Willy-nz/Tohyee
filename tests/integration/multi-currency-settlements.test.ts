@@ -8,6 +8,8 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { applyOverpayment, refundOverpayment, removeOverpaymentApplication, voidOverpaymentRefund } from "@/lib/invoices/overpayments";
 import { getPayment, recordPayment, voidPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, getInvoice } from "@/lib/invoices/service";
+import { approveBill, createBill, getBill } from "@/lib/bills/service";
+import { recordPaymentBatch, voidPaymentBatch } from "@/lib/payments/batches";
 import { postFxRevaluation } from "@/lib/ledger/fx-revaluation";
 import { getJournal } from "@/lib/ledger/journals";
 import { periodChecklist } from "@/lib/ledger/period-close";
@@ -36,6 +38,8 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
   const invoices: Record<string, string> = {};
   let overpaymentId: string;
   let creditNoteId: string;
+  const batches: Record<string, string> = {};
+
 
   const as = <T>(user: SessionUser, work: (tx: OrgTx) => Promise<T>) => inOrganisation(ORG, { userId: user.id, email: user.email }, work);
   const run = <T>(work: (tx: OrgTx) => Promise<T>) => as(bookkeeper, work);
@@ -294,5 +298,148 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
     expect((await run((tx) => agedReceivables(tx, { asAt: "2026-07-31" }))).revaluation).toBe("-41.90");
     const checks = (await run((tx) => periodChecklist(tx, { periodEnd: "2026-07-31" }))).checks;
     expect(checks.filter((entry) => entry.key === "receivables" || entry.key === "payables").map((entry) => entry.status)).toEqual(["pass", "pass"]);
+  });
+
+  const batch = (kind: "customer" | "supplier", paymentDate: string, amount: string, bankAccountCode: string, documents: Array<{ id: string; amount: string }>, exchangeRate?: string) =>
+    run((tx) => recordPaymentBatch(tx, kind, { idempotencyKey: key("batch"), paymentDate, amount, bankAccountCode, documents, exchangeRate }));
+
+  it("MC20: one USD payment for two USD invoices: one bank line, each invoice's own gain; the parts add up to the bank line", async () => {
+    const third = await invoice("INV-0003", "2026-08-03", "100.01", "1.60");
+    const fourth = await invoice("INV-0004", "2026-08-04", "100.01", "1.62");
+    expect([third.baseTotal, fourth.baseTotal]).toEqual(["160.02", "162.02"]);
+    const { batch: paid } = await batch("customer", "2026-08-10", "200.02", "1000", [
+      { id: third.id, amount: "100.01" },
+      { id: fourth.id, amount: "100.01" },
+    ], "1.65");
+    // 200.02 x 1.65 = 330.033 -> 330.03 in the bank; 100.01 x 1.65 = 165.0165 -> 165.02 for the first, the other 165.01 for the last.
+    expect(paid).toMatchObject({ currencyCode: "USD", amount: "200.02", exchangeRate: "1.65", baseAmount: "330.03" });
+    expect(paid.parts.map((part) => [part.documentNumber, part.amount, part.baseAmount, part.baseCleared, part.realisedGain])).toEqual([
+      ["INV-0003", "100.01", "165.02", "160.02", "5.00"],
+      ["INV-0004", "100.01", "165.01", "162.02", "2.99"],
+    ]);
+    expect(await posted(paid.journalId)).toEqual([
+      ["1000", "330.03", "0.00"],
+      ["1100", "0.00", "160.02", "USD 100.01 carrying_value"],
+      ["7020", "0.00", "5.00"],
+      ["1100", "0.00", "162.02", "USD 100.01 carrying_value"],
+      ["7020", "0.00", "2.99"],
+    ]);
+    for (const id of [third.id, fourth.id]) {
+      expect(await run((tx) => getInvoice(tx, id))).toMatchObject({ paidStatus: "paid", amountDue: "0.00", amountDueBase: "0.00" });
+    }
+  });
+
+  it("MC21: a USD payment for several invoices can overpay them when all are paid in full; the extra is USD credit on the last", async () => {
+    const fifth = await invoice("INV-0005", "2026-08-05", "50.00", "1.60");
+    const sixth = await invoice("INV-0006", "2026-08-05", "50.00", "1.60");
+    const documents = [
+      { id: fifth.id, amount: "50.00" },
+      { id: sixth.id, amount: "50.00" },
+    ];
+    await expect(batch("customer", "2026-08-12", "110.00", "1030", [{ id: fifth.id, amount: "40.00" }, documents[1]], "1.70")).rejects.toThrow(
+      /Pay every invoice in full before keeping the extra as an overpayment/,
+    );
+    const { batch: paid } = await batch("customer", "2026-08-12", "110.00", "1030", documents, "1.70");
+    expect(paid).toMatchObject({ baseAmount: "187.00", overpaymentAmount: "10.00" });
+    expect(paid.parts.map((part) => [part.documentNumber, part.amount, part.overpaymentAmount, part.baseAmount, part.baseCleared, part.realisedGain])).toEqual([
+      ["INV-0005", "50.00", "0.00", "85.00", "80.00", "5.00"],
+      ["INV-0006", "60.00", "10.00", "102.00", "80.00", "5.00"],
+    ]);
+    expect(await posted(paid.journalId)).toEqual([
+      ["1030", "187.00", "0.00", "USD 110.00 rate"],
+      ["1100", "0.00", "80.00", "USD 50.00 carrying_value"],
+      ["7020", "0.00", "5.00"],
+      ["1100", "0.00", "80.00", "USD 50.00 carrying_value"],
+      ["1100", "0.00", "17.00", "USD 10.00 document"],
+      ["7020", "0.00", "5.00"],
+    ]);
+    const overpayment = await run((tx) => getPayment(tx, paid.parts[1].paymentId));
+    expect(overpayment).toMatchObject({ overpaymentRemaining: "10.00", baseOverpayment: "17.00", overpaymentRemainingBase: "17.00" });
+    batches.mc21 = paid.id;
+  });
+
+  it("MC22: one USD payment to AWS for two USD bills from the USD account: each bill's own gain", async () => {
+    const bill = async (number: string, billDate: string, amount: string, exchangeRate: string) => {
+      const draft = await run((tx) =>
+        createBill(
+          tx,
+          {
+            idempotencyKey: key("bill"),
+            contactId: aws.id,
+            billDate,
+            dueDate: "2026-08-31",
+            supplierInvoiceNumber: number,
+            amountsMode: "no_tax",
+            lines: [{ description: "Hosting", quantity: "1", unitPrice: amount, accountCode: "6040" }],
+            exchangeRate,
+          },
+          null,
+          { foreignCurrency: true },
+        ),
+      );
+      return (await run((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("approve") }))).bill;
+    };
+    const first = await bill("AWS-1", "2026-08-01", "50.00", "1.66");
+    const second = await bill("AWS-2", "2026-08-02", "30.00", "1.70");
+    expect([first.baseTotal, second.baseTotal]).toEqual(["83.00", "51.00"]);
+    const documents = [
+      { id: first.id, amount: "50.00" },
+      { id: second.id, amount: "30.00" },
+    ];
+    await expect(batch("supplier", "2026-08-15", "80.01", "1030", documents, "1.60")).rejects.toThrow(/Payments to suppliers can't be more than their bills' amounts due/);
+    await expect(batch("supplier", "2026-08-15", "80.00", "1040", documents, "1.60")).rejects.toThrow(/Account 1040 \(EUR account\) is in EUR, but this bill is in USD/);
+    const { batch: paid } = await batch("supplier", "2026-08-15", "80.00", "1030", documents, "1.60");
+    expect(paid.parts.map((part) => [part.documentNumber, part.baseAmount, part.baseCleared, part.realisedGain])).toEqual([
+      ["AWS-1", "80.00", "83.00", "3.00"],
+      ["AWS-2", "48.00", "51.00", "3.00"],
+    ]);
+    expect(await posted(paid.journalId)).toEqual([
+      ["2000", "83.00", "0.00", "USD 50.00 carrying_value"],
+      ["7020", "0.00", "3.00"],
+      ["2000", "51.00", "0.00", "USD 30.00 carrying_value"],
+      ["7020", "0.00", "3.00"],
+      ["1030", "0.00", "128.00", "USD 80.00 rate"],
+    ]);
+    expect(await run((tx) => getBill(tx, second.id))).toMatchObject({ paidStatus: "paid", amountDueBase: "0.00" });
+  });
+
+  it("MC23: one payment is in one currency, and a base-currency one has no rate", async () => {
+    const kobe = (await run((tx) => createContact(tx, { idempotencyKey: key("contact"), name: "Kobe Ltd", isCustomer: true }))).contact;
+    const draft = await run((tx) =>
+      createInvoice(tx, {
+        idempotencyKey: key("inv"),
+        contactId: kobe.id,
+        invoiceDate: "2026-08-05",
+        dueDate: "2026-08-20",
+        amountsMode: "no_tax",
+        lines: [{ description: "Walks", quantity: "1", unitPrice: "80.00", accountCode: "4000" }],
+      }),
+    );
+    const nzd = (await run((tx) => approveInvoice(tx, draft.invoice.id, { idempotencyKey: key("approve") }))).invoice;
+    await expect(batch("customer", "2026-08-12", "80.00", "1000", [{ id: nzd.id, amount: "80.00" }], "1.65")).rejects.toThrow(
+      /These invoices are in NZD, so the payment has no exchange rate/,
+    );
+    await expect(batch("customer", "2026-08-12", "80.00", "1030", [{ id: nzd.id, amount: "80.00" }])).rejects.toThrow(/Account 1030 \(USD account\) is in USD/);
+    // A USD invoice with an NZD one: they're different customers (a contact has one currency), refused as MP4.
+    const fresh = await invoice("INV-0007", "2026-08-06", "10.00", "1.60");
+    await expect(
+      batch("customer", "2026-08-12", "90.00", "1000", [
+        { id: fresh.id, amount: "10.00" },
+        { id: nzd.id, amount: "80.00" },
+      ]),
+    ).rejects.toThrow(/One payment can only pay invoices of one customer/);
+  });
+
+  it("MC24: voiding a USD payment for several invoices posts its exact reversal, foreign amounts included", async () => {
+    const voided = await run((tx) => voidPaymentBatch(tx, "customer", batches.mc21, { idempotencyKey: key("void"), voidDate: "2026-08-13" }));
+    expect(await posted(voided.batch.voidJournalId!)).toEqual([
+      ["1030", "0.00", "187.00", "USD 110.00 rate"],
+      ["1100", "80.00", "0.00", "USD 50.00 carrying_value"],
+      ["7020", "5.00", "0.00"],
+      ["1100", "80.00", "0.00", "USD 50.00 carrying_value"],
+      ["1100", "17.00", "0.00", "USD 10.00 document"],
+      ["7020", "5.00", "0.00"],
+    ]);
+    expect(await run((tx) => getInvoice(tx, invoices["INV-0006"]))).toMatchObject({ amountDue: "50.00", amountDueBase: "80.00" });
   });
 });

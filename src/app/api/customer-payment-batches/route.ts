@@ -25,6 +25,7 @@ export const POST = route(async (request) => {
       amount: body.amount,
       bankAccountCode: body.bankAccountCode,
       reference: body.reference,
+      exchangeRate: body.exchangeRate,
       documents: body.documents,
     }),
   );

@@ -55,8 +55,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/bank-split.test.ts` (BK26-BK28) and
   `tests/integration/bank-foreign.test.ts` (FXB1-FXB11) and
   `tests/integration/multi-currency.test.ts` (MC1-MC13) and
-  `tests/integration/multi-currency-settlements.test.ts` (MC14-MC19) and
-
+  `tests/integration/multi-currency-settlements.test.ts` (MC14-MC24) and
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
   GP3, GP5, GP6), all against
@@ -402,6 +401,8 @@ part payment is just a smaller amount.
   ("void the whole payment"), and the payment can't be voided while its
   overpayment is applied or refunded (OP8).
 - An invoice with an active part of such a payment can't be voided (CP5).
+- **In a foreign currency** (invoices or bills of a contact in another
+  currency): see MC20-MC24.
 
 Setup: customer Kobe Ltd with INV-0001 = I1 (total 115.00) and INV-0002 =
 I6 (no tax, 80.00), customer Rex Ltd with INV-0003 (no tax, 50.00), all
@@ -1740,7 +1741,7 @@ Amazon Web Services (USD).
 | MC8 | Revaluation on 31 Jul at **1.62** (reversal 1 Aug) of 1030, 1100 USD and 2000 USD | 1030: USD 1,000.00, carrying 1,640.00, revalued 1,620.00: Dr 7010 **20.00** / Cr 1030 20.00. 1100 USD: USD **1,900.00** (INV-0005), carrying **3,040.00**, revalued **3,078.00**: Dr 1100 **38.00** (USD 0.00 at 1.62) / Cr 7000 38.00. 2000 USD: USD **50.00** (AWS-7), carrying **83.00**, revalued **81.00**: Dr 2000 **2.00** / Cr 7000 2.00. All reversed on 1 Aug. Before it, period close's FX check lists 1030, 1100 and 2000; after, it passes. Refused: 1100 without a currency ("…Say which currency…"), 1100 USD typed as 2,000.00 ("the ledger has USD 1900.00 open…"), 1100 EUR ("nothing open in EUR"), 1100 USD again on 31 Jul |
 | MC9 | Aged receivables and payables, and Acme's statement, as at 31 Jul | Acme: INV-0005 **USD 1,900.00 / NZD 3,040.00**, owes USD 1,900.00; total **NZD 3,155.00** (with Kobe's 115.00); revaluation **38.00** beside it (3,155.00 + 38.00 = 1100's 3,193.00). Payables: AWS-7 **USD 50.00 / NZD 83.00**; revaluation **-2.00**; 2000 **81.00**, difference 0.00. Period close's receivables and payables checks pass. Acme's July statement is in **USD**: closing **1,900.00**, NZD **3,040.00** beside it |
 | MC10 | Bills from AWS: AWS-7, 5 Jul, USD 50.00 at **1.66**, 6040, no tax; AWS-8, 6 Jul, the same; supplier credit note AWS-CR1, 7 Jul, USD 20.00 at **1.70**, applied to AWS-8 on 8 Jul; AWS-8's USD 30.00 paid 9 Jul from 1000 at 1.66 | AWS-7: Dr 6040 **83.00** / Cr 2000 **83.00 (USD 50.00)**; with a GST line: refused. AWS-CR1: Dr 2000 **34.00 (USD 20.00)** / Cr 6040 34.00. Applying: the bill's side 83.00 x 20 / 50 = **33.20**, the credit's **34.00**, loss **0.80**: Dr 2000 33.20 (USD 20.00) / Cr 2000 34.00 (USD 20.00) / Dr 7020 0.80. Payment: bank **49.80**, cleared **49.80**, no gain or loss (no 7020 line): Dr 2000 49.80 (USD 30.00) / Cr 1000 49.80 |
-| MC11 | Refused rather than guessed, with nothing posted | Quotes, repeating invoices, purchase orders (and repeating bills, project and CRM invoices) for a USD contact; a USD invoice made any way but entering it directly; a payment for several invoices or bills that includes a USD one; stock items or item lines without a typed price on foreign-currency documents; a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
+| MC11 | Refused rather than guessed, with nothing posted | Quotes, repeating invoices, purchase orders (and repeating bills, project and CRM invoices) for a USD contact; a USD invoice made any way but entering it directly; stock items or item lines without a typed price on foreign-currency documents; a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
 | MC12 | AWS-7 paid on 5 Aug from 1030 at **1.65** (after the 1 Aug reversal) | Dr 2000 **83.00 (USD 50.00)** / Cr 1030 **82.50 (USD 50.00 at 1.65)** / Cr 7020 **0.50** |
 | MC13 | July GST return (invoice basis) and the trial balance at 31 Aug | Box 5 **5,678.51**, Box 6 **5,563.51** (1,654.30 + 827.15 + 45.06 + 3,200.00 - 163.00 zero-rated; Kobe's 115.00 standard-rated); AWS's no-GST bills in no box. Trial balance balances: 7020 debit **18.76** (-14.30 - 0.01 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50), 7000 and 7010 nothing (reversed), 1100 **3,155.00**, 2000 nothing, 1030 **1,557.50** (USD 950.00) |
 
@@ -1798,6 +1799,50 @@ INV-0002, 2 Jul, USD 500.00 at **1.70** (NZD 850.00), both zero-rated.
 
 Tests: `tests/integration/multi-currency-settlements.test.ts` (MC14-MC19).
 
+### Payments for several foreign-currency documents (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) following NetSuite: "For payments or credits
+applied to multiple transactions, NetSuite calculates and records a gain or
+loss for each transaction" (*Variance Calculations for Realized Gain and
+Loss*), and on Pay Bills "If the account currency is different from the base
+currency, only bills that use the account currency show in the list"
+(*Paying Bills to Multiple Vendors*). A payment for several invoices (MP1-MP10)
+or bills (SMP1-SMP6) of a contact in another currency works the same way,
+plus:
+
+- It's in the documents' currency (a contact has one, so they all share it),
+  at the payment's **one rate** (typed, or the last rate used, MC3), into
+  (or from) a bank account in that currency or NZD; a third currency is
+  refused (MC30).
+- The **bank line** is the whole amount x rate, rounded once, so it matches
+  the one statement line. Each document's **part** is its amount x rate,
+  rounded once, except the last listed, which takes what's left of the bank
+  line, so the parts add up to it exactly (the last part carries any
+  rounding cent, as MC4 keeps rounding in 7020).
+- Each document is cleared at its own carrying value, and each has **its own
+  realised gain or loss** line on 7020, after its accounts receivable
+  (payable) line.
+- A customer overpayment (every invoice paid in full, the extra on the last
+  one) is USD credit at the payment's rate, as MC14. Supplier overpayments
+  stay refused (SMP3).
+- Voiding it posts the exact reversal, foreign amounts included.
+
+Setup: MC14-MC19, then (all zero-rated or no tax) INV-0003, 3 Aug 2026, USD
+100.01 at **1.60** (NZD 160.02); INV-0004, 4 Aug, USD 100.01 at **1.62**
+(NZD 162.02); INV-0005 and INV-0006, 5 Aug, USD 50.00 each at **1.60** (NZD
+80.00 each); AWS bills AWS-1, 1 Aug, USD 50.00 at **1.66** (NZD 83.00) and
+AWS-2, 2 Aug, USD 30.00 at **1.70** (NZD 51.00), 6040.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC20 | Acme pays USD **200.02** on 10 Aug into 1000 at **1.65**: USD 100.01 for INV-0003 and for INV-0004 | Bank 200.02 x 1.65 = 330.033 -> **330.03** (not 165.02 + 165.02). INV-0003's part 100.01 x 1.65 = **165.02**, clears **160.02**, gain **5.00**; INV-0004's part is the rest, **165.01**, clears **162.02**, gain **2.99** (NetSuite's 3.00 less the rounding cent). One journal: Dr 1000 330.03 / Cr 1100 160.02 (USD 100.01) / Cr 7020 5.00 / Cr 1100 162.02 (USD 100.01) / Cr 7020 2.99. Both **paid** |
+| MC21 | Acme pays USD **110.00** on 12 Aug into 1030 at **1.70** for INV-0005 and INV-0006, USD 50.00 each | Both paid in full, so the extra USD **10.00** is an overpayment on INV-0006. Bank **187.00** (USD 110.00 at 1.70); INV-0005's part 85.00 clears 80.00, gain **5.00**; INV-0006's part (the rest, 102.00) is 85.00 on the invoice, clearing 80.00, gain **5.00**, and the overpayment USD 10.00 = **17.00**: Dr 1030 187.00 / Cr 1100 80.00 (USD 50.00) / Cr 7020 5.00 / Cr 1100 80.00 (USD 50.00) / Cr 1100 17.00 (USD 10.00, the overpayment) / Cr 7020 5.00. With USD 40.00 for INV-0005 instead it's refused (MP4) |
+| MC22 | USD **80.00** paid to AWS on 15 Aug from 1030 at **1.60** for AWS-1 (50.00) and AWS-2 (30.00) | AWS-1's part **80.00** clears **83.00**, gain **3.00**; AWS-2's **48.00** clears **51.00**, gain **3.00**: Dr 2000 83.00 (USD 50.00) / Cr 7020 3.00 / Dr 2000 51.00 (USD 30.00) / Cr 7020 3.00 / Cr 1030 128.00 (USD 80.00 at 1.60). Both **paid**. USD 80.01 (a supplier overpayment) and paying from 1040 (EUR) are refused |
+| MC23 | Refused, nothing posted | A rate typed for Kobe Ltd's NZD invoice ("…in NZD, so the payment has no exchange rate"); Kobe's NZD invoice paid into 1030 (USD); a USD invoice with an NZD one (they're different customers, MP4) |
+| MC24 | Void MC21 on 13 Aug | The exact reversal: Cr 1030 187.00 (USD 110.00) / Dr 1100 80.00 / Dr 7020 5.00 / Dr 1100 80.00 / Dr 1100 17.00 / Dr 7020 5.00, with every foreign amount; INV-0006 due again **USD 50.00 = NZD 80.00** |
+
+Tests: `tests/integration/multi-currency-settlements.test.ts` (MC20-MC24).
+
 ### Not supported yet (refused rather than guessed)
 
 - **Standard-rated GST on foreign-currency invoices, bills and credit notes**
@@ -1808,7 +1853,8 @@ Tests: `tests/integration/multi-currency-settlements.test.ts` (MC14-MC19).
   hybrid basis count their share of the bill's NZD value; with no GST on them
   they're in no box.)
 - **Prepayments** of foreign-currency invoices, **supplier overpayments**
-  (as in NZD, SP3) and **payments for several documents** that include one.
+  (as in NZD, SP3). (Payments for several foreign documents are built:
+  MC20-MC24.)
   (Foreign overpayments and refunds are built: MC14-MC19.)
 - **Paying in one currency into (or from) a bank account in a third
   currency** (a USD invoice from the EUR account), paying NZD documents from a

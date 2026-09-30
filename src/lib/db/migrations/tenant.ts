@@ -7991,7 +7991,7 @@ alter table ledger_fx_revaluation_run_items add constraint ledger_fx_revaluation
 -- invoice part clears the invoice at its carrying value (0 when it's all
 -- overpayment), and the realised gain is on the invoice part only. Foreign
 -- payments from before have no overpayment (null counts as 0). Parts of a
--- payment for several documents can be in a foreign currency now (MC21).
+-- payment for several documents can be in a foreign currency now (MC20).
 alter table customer_payments add column base_overpayment numeric;
 alter table customer_payments drop constraint customer_payments_base_check;
 alter table customer_payments add constraint customer_payments_base_check check (
@@ -8069,7 +8069,7 @@ language sql stable as $$
        + coalesce((select sum(base_cleared) from customer_overpayment_refunds where payment_id = payment and status = 'active'), 0)
 $$;
 
--- A payment for several foreign-currency documents (MC21-MC24) keeps its
+-- A payment for several foreign-currency documents (MC20-MC24) keeps its
 -- rate and the base amount that moved in the bank account; its parts have
 -- the same rate and their base amounts add up to it.
 alter table customer_payment_batches

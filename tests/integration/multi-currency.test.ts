@@ -405,11 +405,11 @@ describeWithDatabase("multi-currency invoices and bills", () => {
           idempotencyKey: key("batch"),
           paymentDate: "2026-07-30",
           amount: "1.00",
-          bankAccountCode: "1000",
+          bankAccountCode: "1040",
           documents: [{ id: invoices["INV-0005"], amount: "1.00" }],
         }),
       ),
-    ).rejects.toThrow(/Invoice INV-0005 is in USD. One payment for several invoices is in NZD only/);
+    ).rejects.toThrow(/Account 1040 \(EUR account\) is in EUR, but this invoice is in USD/);
     await expect(
       run((tx) =>
         postJournal(tx, {

@@ -7,7 +7,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
-import { clearedBase, exchangeRateFor, openBase, parseRateInput, realisedFxAccountCode, realisedLines } from "@/lib/fx/documents";
+import { clearedBase, exchangeRateFor, openBase, parseRateInput, realisedFxAccountCode, realisedLines, thirdCurrencyMessage } from "@/lib/fx/documents";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { cmp, dec, isZero, parseDecimalInput, significantScale, sub, toFixedString, toPlainString } from "@/lib/money/decimal";
 import { convertAtRate } from "@/lib/money/fx";
@@ -204,7 +204,7 @@ export async function resolveBankAccount(
   if (accountCurrency !== null && accountCurrency !== currency) {
     throw new ValidationError(
       currency
-        ? `${label} is in ${accountCurrency}. A ${currency} bill is paid from a ${currency} or ${tx.baseCurrency} bank account (a payment in one currency from an account in another isn't supported yet).`
+        ? thirdCurrencyMessage(label, accountCurrency, currency, "bill", tx.baseCurrency)
         : `${label} is in ${accountCurrency}. Payments are made from bank accounts in the base currency (${tx.baseCurrency}) only.`,
     );
   }
