@@ -53,6 +53,8 @@ export type SupplierCreditNoteRefund = {
   baseAmount: string | null;
   baseCleared: string | null;
   realisedGain: string | null;
+  /** Rounding on 7050 (MC31): 0.00 when none. */
+  roundingGain: string | null;
 };
 
 type RefundRow = {
@@ -78,12 +80,13 @@ type RefundRow = {
   base_amount: string | null;
   base_cleared: string | null;
   realised_gain: string | null;
+  rounding_gain: string | null;
 };
 
 const REFUND_SELECT = `select r.id, r.credit_note_id, n.supplier_credit_note_number, r.status, r.refund_date, r.amount, r.currency_code,
        r.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, r.reference, r.journal_id,
        r.created_by_email, r.created_at, r.void_date, r.void_journal_id, r.voided_by_email, r.voided_at,
-       r.exchange_rate::text, r.base_amount::text, r.base_cleared::text, r.realised_gain::text
+       r.exchange_rate::text, r.base_amount::text, r.base_cleared::text, r.realised_gain::text, r.rounding_gain::text
   from supplier_credit_note_refunds r
   join supplier_credit_notes n on n.id = r.credit_note_id
   join accounts a on a.id = r.bank_account_id`;
@@ -340,9 +343,9 @@ export async function refundSupplierCreditNote(
       `insert into supplier_credit_note_refunds (
          id, command_source, idempotency_key, request_hash, credit_note_id, refund_date, amount, currency_code,
          bank_account_id, reference, journal_id, created_by_user_id, created_by_email,
-         exchange_rate, base_amount, base_cleared, realised_gain
+         exchange_rate, base_amount, base_cleared, realised_gain, rounding_gain
        )
-       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric)`,
+       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric, $18::numeric)`,
       [
         refundId,
         source,
@@ -360,7 +363,8 @@ export async function refundSupplierCreditNote(
         fx?.rate ?? null,
         fx?.baseAmount ?? null,
         fx?.baseCleared ?? null,
-        fx?.gain ?? null,
+        fx?.realised ?? null,
+        fx?.rounding ?? null,
       ],
     );
   } catch (error) {
@@ -380,7 +384,7 @@ export async function refundSupplierCreditNote(
       amount: fixedAmount,
       bankAccountCode: bank.code,
       journalId: posted.journal.id,
-      ...(fx ? { exchangeRate: fx.rate, baseAmount: fx.baseAmount, baseCleared: fx.baseCleared, realisedGain: fx.gain } : {}),
+      ...(fx ? { exchangeRate: fx.rate, baseAmount: fx.baseAmount, baseCleared: fx.baseCleared, realisedGain: fx.realised, roundingGain: fx.rounding } : {}),
     },
   });
   return { created: true, refund: await getRefund(tx, refundId), creditNote: await getSupplierCreditNote(tx, creditNoteId) };

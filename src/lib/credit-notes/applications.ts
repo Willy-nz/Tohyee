@@ -12,7 +12,7 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { lockInvoice, receivableAccountCode } from "@/lib/invoices/service";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
-import { clearedBase, openBase, realisedFxAccountCode, realisedLines } from "@/lib/fx/documents";
+import { clearedBase, openBase, roundingField, settlementGainLines, splitGain } from "@/lib/fx/documents";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, cmp, dec, isZero, parseDecimalInput, significantScale, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import {
@@ -57,6 +57,8 @@ export type CreditNoteApplication = {
   invoiceBase: string | null;
   creditNoteBase: string | null;
   realisedGain: string | null;
+  /** Rounding on 7050 (MC31): 0.00 when none. */
+  roundingGain: string | null;
   journalId: string | null;
 };
 
@@ -78,6 +80,7 @@ type ApplicationRow = {
   invoice_base: string | null;
   credit_note_base: string | null;
   realised_gain: string | null;
+  rounding_gain: string | null;
   journal_id: string | null;
 };
 
@@ -86,7 +89,7 @@ const MAX_APPLICATIONS = 100;
 
 const APPLICATION_SELECT = `select a.id, a.credit_note_id, n.credit_note_number, a.invoice_id, i.invoice_number, a.status,
        a.application_date, a.amount, a.currency_code, a.created_by_email, a.created_at, a.removal_date,
-       a.removed_by_email, a.removed_at, a.invoice_base::text, a.credit_note_base::text, a.realised_gain::text, a.journal_id::text
+       a.removed_by_email, a.removed_at, a.invoice_base::text, a.credit_note_base::text, a.realised_gain::text, a.rounding_gain::text, a.journal_id::text
   from sales_credit_note_applications a
   join sales_credit_notes n on n.id = a.credit_note_id
   join sales_invoices i on i.id = a.invoice_id`;
@@ -110,6 +113,7 @@ function toApplication(row: ApplicationRow): CreditNoteApplication {
     invoiceBase: row.invoice_base === null ? null : toFixedString(dec(row.invoice_base), 2),
     creditNoteBase: row.credit_note_base === null ? null : toFixedString(dec(row.credit_note_base), 2),
     realisedGain: row.realised_gain === null ? null : toFixedString(dec(row.realised_gain), 2),
+    roundingGain: roundingField(row),
     journalId: row.journal_id,
   };
 }
@@ -309,7 +313,7 @@ export async function applyCreditNote(
   for (const entry of sorted) {
     const amount = toFixedString(entry.amount, scale);
     const invoice = invoices.get(entry.invoiceId)!;
-    let fx: { invoiceBase: string; creditNoteBase: string; gain: string; journalId: string | null } | null = null;
+    let fx: { invoiceBase: string; creditNoteBase: string; gain: string; rounding: string; journalId: string | null } | null = null;
     const next = await tx.query<{ id: string }>(
       "select nextval(pg_get_serial_sequence('sales_credit_note_applications', 'id'))::text as id",
     );
@@ -319,8 +323,10 @@ export async function applyCreditNote(
       const invoiceBase = clearedBase({ amount: invoice.amountDue!, base: await openBase(tx, "invoice", invoice.id) }, amount);
       creditOpen = { amount: toFixedString(sub(dec(creditOpen.amount), dec(amount)), scale), base: toFixedString(sub(dec(creditOpen.base), dec(creditNoteBase)), 2) };
       const gain = toFixedString(sub(dec(creditNoteBase), dec(invoiceBase)), 2);
+      // NetSuite's realised gain on 7020, any rounding on 7050 (MC31).
+      const split = splitGain(gain, amount, creditNote.exchangeRate!, invoice.exchangeRate!);
       let journalId: string | null = null;
-      if (!isZero(dec(gain))) {
+      if (!isZero(dec(split.realised)) || !isZero(dec(split.rounding))) {
         const currency = creditNote.currencyCode;
         const posted = await postJournalBody(
           tx,
@@ -347,7 +353,7 @@ export async function applyCreditNote(
                   description: `${invoice.invoiceNumber} credited`,
                   foreign: { currencyCode: currency, amount, rate: invoice.exchangeRate!, kind: "carrying_value" as const },
                 },
-                ...realisedLines(await realisedFxAccountCode(tx), gain, `${creditNote.creditNoteNumber} applied to ${invoice.invoiceNumber}`),
+                ...(await settlementGainLines(tx, split, `${creditNote.creditNoteNumber} applied to ${invoice.invoiceNumber}`)),
               ],
             },
             { internal: true },
@@ -356,16 +362,17 @@ export async function applyCreditNote(
         );
         journalId = posted.journal.id;
       }
-      fx = { invoiceBase, creditNoteBase, gain, journalId };
+      fx = { invoiceBase, creditNoteBase, gain: split.realised, rounding: split.rounding, journalId };
     }
     let inserted;
     try {
       inserted = await tx.query<{ id: string }>(
         `insert into sales_credit_note_applications (
            id, command_source, idempotency_key, request_hash, credit_note_id, invoice_id, application_date, amount,
-           currency_code, created_by_user_id, created_by_email, invoice_base, credit_note_base, realised_gain, journal_id
+           currency_code, created_by_user_id, created_by_email, invoice_base, credit_note_base, realised_gain, journal_id,
+           rounding_gain
          )
-         values ($11, $1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $12::numeric, $13::numeric, $14::numeric, $15)
+         values ($11, $1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $12::numeric, $13::numeric, $14::numeric, $15, $16::numeric)
          returning id`,
         [
           source,
@@ -383,6 +390,7 @@ export async function applyCreditNote(
           fx?.creditNoteBase ?? null,
           fx?.gain ?? null,
           fx?.journalId ?? null,
+          fx?.rounding ?? null,
         ],
       );
     } catch (error) {
@@ -407,7 +415,7 @@ export async function applyCreditNote(
         invoiceNumber: invoice.invoiceNumber,
         applicationDate,
         amount,
-        ...(fx ? { invoiceBase: fx.invoiceBase, creditNoteBase: fx.creditNoteBase, realisedGain: fx.gain, journalId: fx.journalId } : {}),
+        ...(fx ? { invoiceBase: fx.invoiceBase, creditNoteBase: fx.creditNoteBase, realisedGain: fx.gain, roundingGain: fx.rounding, journalId: fx.journalId } : {}),
       },
     });
   }

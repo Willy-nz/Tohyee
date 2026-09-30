@@ -336,6 +336,9 @@ export function InvoicePayments({
                     {payment.exchangeRate ? (
                       <div className={ui.muted}>
                         at {payment.exchangeRate} = {formatMoney(payment.baseAmount)}; realised {payment.realisedGain?.startsWith("-") ? `loss ${formatMoney(payment.realisedGain.slice(1))}` : `gain ${formatMoney(payment.realisedGain)}`}
+                        {payment.roundingGain && payment.roundingGain !== "0.00"
+                          ? `; rounding ${payment.roundingGain.startsWith("-") ? `loss ${formatMoney(payment.roundingGain.slice(1))}` : `gain ${formatMoney(payment.roundingGain)}`}`
+                          : ""}
                       </div>
                     ) : null}
                     {payment.batchId ? (

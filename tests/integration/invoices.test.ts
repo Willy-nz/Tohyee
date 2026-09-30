@@ -925,6 +925,8 @@ describeWithDatabase("sales invoices", () => {
         // Added by migration 0029 (fixed assets, FA1).
         { code: "7030", system_key: "fixed_asset_disposal" },
         { code: "7040", system_key: "fixed_asset_capital_gain" },
+        // Added by migration 0045 (rounding gains and losses, MC31).
+        { code: "7050", system_key: "fx_rounding" },
       ]);
       expect((await client.query("select last_number from sales_invoice_numbering")).rows).toEqual([{ last_number: 0 }]);
       const origin = await client.query<{ definition: string }>(

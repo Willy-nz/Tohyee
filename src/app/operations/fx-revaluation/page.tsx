@@ -1,13 +1,13 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, Fragment, useState } from "react";
 import { AccountSelect, Money, RequireOrganisation, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, todayInBrowser, personName } from "@/lib/format";
-import type { FxRevaluationRun } from "@/lib/ledger/fx-revaluation";
+import type { FxRevaluationDocument, FxRevaluationRun, OpenForeignDocument } from "@/lib/ledger/fx-revaluation";
 
 type BalanceDraft = { key: number; accountCode: string; foreignAmount: string; closingRate: string };
 
@@ -23,7 +23,32 @@ function nextDay(date: string): string {
   return next.toISOString().slice(0, 10);
 }
 
-type OpenBalance = { accountId: string; accountCode: string; accountName: string; currencyCode: string; foreign: string; base: string };
+type OpenBalance = {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  currencyCode: string;
+  foreign: string;
+  base: string;
+  documents: OpenForeignDocument[];
+};
+
+/** A document's revaluation as a gain (positive) or loss (negative): on payables, a larger amount owed is a loss. */
+function asGain(delta: string, balanceType: "asset" | "liability"): string {
+  if (balanceType === "asset") return delta;
+  return delta.startsWith("-") ? delta.slice(1) : delta === "0.00" ? delta : `-${delta}`;
+}
+
+function documentLabel(document: { kind: string; documentNumber: string | null; documentId: string }): string {
+  const nouns: Record<string, string> = {
+    invoice: "Invoice",
+    credit_note: "Credit note",
+    overpayment: "",
+    bill: "Bill",
+    supplier_credit_note: "Supplier credit note",
+  };
+  return [nouns[document.kind], document.documentNumber ?? `#${document.documentId}`].filter(Boolean).join(" ");
+}
 
 function RevaluationForm({
   organisationId,
@@ -218,7 +243,8 @@ function RevaluationForm({
             </thead>
             <tbody>
               {openBalances.map((balance) => (
-                <tr key={openKey(balance)}>
+                <Fragment key={openKey(balance)}>
+                <tr>
                   <td>
                     {balance.accountCode} · {balance.accountName} · {balance.currencyCode}
                   </td>
@@ -239,6 +265,22 @@ function RevaluationForm({
                     />
                   </td>
                 </tr>
+                {/* Each open document is revalued on its own (MC39), like NetSuite's Open Receivables and Open Payables. */}
+                {balance.documents.map((document) => (
+                  <tr key={`${document.kind}-${document.documentId}`} className={ui.muted}>
+                    <td>
+                      {documentLabel(document)} · {formatDate(document.documentDate)} · at {document.rate}
+                    </td>
+                    <td className={ui.num}>
+                      {balance.currencyCode} {formatMoney(document.foreign)}
+                    </td>
+                    <td className={ui.num}>
+                      <Money value={document.base} />
+                    </td>
+                    <td />
+                  </tr>
+                ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -307,7 +349,8 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
               </thead>
               <tbody>
                 {run.items.map((item) => (
-                  <tr key={item.lineOrder}>
+                  <Fragment key={item.lineOrder}>
+                  <tr>
                     <td>
                       {item.accountCode} · {item.accountName}
                       {item.currencyCode && !accountsHaveCurrency(item.accountCode) ? ` · ${item.currencyCode}` : ""}
@@ -323,9 +366,28 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
                       <Money value={item.revaluedAmount} />
                     </td>
                     <td className={ui.num}>
-                      <Money value={item.balanceType === "asset" ? item.deltaAmount : item.deltaAmount.startsWith("-") ? item.deltaAmount.slice(1) : `-${item.deltaAmount}`} />
+                      <Money value={asGain(item.deltaAmount, item.balanceType)} />
                     </td>
                   </tr>
+                  {item.documents.map((document: FxRevaluationDocument) => (
+                    <tr key={`${document.kind}-${document.documentId}`} className={ui.muted}>
+                      <td>
+                        {documentLabel(document)} · at {document.documentRate}
+                      </td>
+                      <td className={ui.num}>
+                        {document.currencyCode} {formatMoney(document.foreignAmount)}
+                      </td>
+                      <td className={ui.num}>{document.closingRate}</td>
+                      <td className={ui.num}>
+                        <Money value={document.carryingAmount} />
+                      </td>
+                      <td />
+                      <td className={ui.num}>
+                        <Money value={asGain(document.deltaAmount, item.balanceType)} />
+                      </td>
+                    </tr>
+                  ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

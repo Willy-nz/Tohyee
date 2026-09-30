@@ -29,7 +29,7 @@ tohyee                  core database (DATABASE_URL)
 tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ organisation_settings  (records which organisation owns this database)
 ├─ accounts, ledger_journals, ledger_journal_lines
-├─ ledger_fx_revaluation_runs / _items
+├─ ledger_fx_revaluation_runs / _items / _documents   revaluations, per account and currency, and the open documents they revalued (MC39)
 ├─ ledger_foreign_opening_balances   a foreign-currency account's foreign balance as at a date, entered once (FXB1)
 ├─ inventory_item_balances, inventory_movements   stock by item code and location (a Location tracking value)
 ├─ stock_transfers        stock moved between locations (append-only; its two movements and journal point at it)
@@ -315,6 +315,17 @@ Enforced by the database itself, not just the app:
   quotes, repeating templates and purchase orders in their contact's
   currency (they have no rate). Stock is valued in the base currency: a
   foreign line's stock value is its base net amount (`stockLinesAtBase`).
+  Migration 0045 (examples MC31-MC43, not yet approved) adds, following
+  NetSuite: the system account `fx_rounding` (7050 Rounding gains and
+  losses) and a `rounding_gain` on every foreign settlement (payments,
+  applications, refunds), whose checks become `realised_gain +
+  rounding_gain` = the difference; `realised_gain` is (rate debited - rate
+  credited) x amount, rounded once, and the rest is rounding
+  (`splitGain` in `src/lib/fx/documents.ts`). It also adds
+  `ledger_fx_revaluation_documents` (append-only): a revaluation of
+  receivables or payables in a currency revalues each open document at its
+  own rate, and the database checks each row's unrealised amount is
+  (closing rate - its rate) x its open foreign amount, rounded.
 - Posted history is append-only: `ledger_journals`, `ledger_journal_lines`,
   `inventory_movements`, `stock_transfers`, FX revaluation runs and `audit_events` reject
   `UPDATE`, `DELETE` and `TRUNCATE`. Corrections are new rows.

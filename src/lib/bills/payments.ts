@@ -7,7 +7,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
-import { clearedBase, exchangeRateFor, openBase, parseRateInput, realisedFxAccountCode, realisedLines, thirdCurrencyMessage } from "@/lib/fx/documents";
+import { clearedBase, exchangeRateFor, openBase, parseRateInput, roundingField, settlementGainLines, splitGain, thirdCurrencyMessage } from "@/lib/fx/documents";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { cmp, dec, isZero, parseDecimalInput, significantScale, sub, toFixedString, toPlainString } from "@/lib/money/decimal";
 import { convertAtRate } from "@/lib/money/fx";
@@ -54,6 +54,8 @@ export type SupplierPayment = {
   baseAmount: string | null;
   baseCleared: string | null;
   realisedGain: string | null;
+  /** Rounding on 7050 (MC31): what's left of the difference after the realised gain; 0.00 when none. */
+  roundingGain: string | null;
 };
 
 type PaymentRow = {
@@ -80,12 +82,13 @@ type PaymentRow = {
   base_amount: string | null;
   base_cleared: string | null;
   realised_gain: string | null;
+  rounding_gain: string | null;
 };
 
 const PAYMENT_SELECT = `select p.id, p.bill_id, b.supplier_invoice_number, p.status, p.payment_date, p.amount,
        p.currency_code, p.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, p.reference,
        p.journal_id, p.created_by_email, p.created_at, p.void_date, p.void_journal_id, p.voided_by_email, p.voided_at,
-       p.batch_id, p.exchange_rate::text, p.base_amount::text, p.base_cleared::text, p.realised_gain::text
+       p.batch_id, p.exchange_rate::text, p.base_amount::text, p.base_cleared::text, p.realised_gain::text, p.rounding_gain::text
   from supplier_payments p
   join bills b on b.id = p.bill_id
   join accounts a on a.id = p.bank_account_id`;
@@ -115,6 +118,7 @@ function toPayment(row: PaymentRow): SupplierPayment {
     baseAmount: row.base_amount === null ? null : toFixedString(dec(row.base_amount), 2),
     baseCleared: row.base_cleared === null ? null : toFixedString(dec(row.base_cleared), 2),
     realisedGain: row.realised_gain === null ? null : toFixedString(dec(row.realised_gain), 2),
+    roundingGain: roundingField(row),
   };
 }
 
@@ -410,7 +414,9 @@ async function recordForeignSupplierPayment(
   const baseAmount = convertAtRate(input.amount, rate);
   const cleared = clearedBase({ amount: bill.amountDue!, base: await openBase(tx, "bill", bill.id) }, input.amount);
   const gain = toFixedString(sub(dec(cleared), dec(baseAmount)), 2);
-  const gainLines = isZero(dec(gain)) ? [] : realisedLines(await realisedFxAccountCode(tx), gain, `bill ${bill.supplierInvoiceNumber} paid at ${rate}`);
+  // Accounts payable is debited at the bill's rate and the bank credited at the payment's (MC31).
+  const split = splitGain(gain, input.amount, bill.exchangeRate!, rate);
+  const gainLines = await settlementGainLines(tx, split, `bill ${bill.supplierInvoiceNumber} paid at ${rate}`);
 
   const next = await tx.query<{ id: string }>("select nextval(pg_get_serial_sequence('supplier_payments', 'id'))::text as id");
   const paymentId = next.rows[0].id;
@@ -452,9 +458,9 @@ async function recordForeignSupplierPayment(
       `insert into supplier_payments (
          id, command_source, idempotency_key, request_hash, bill_id, payment_date, amount, currency_code,
          bank_account_id, reference, journal_id, created_by_user_id, created_by_email,
-         exchange_rate, base_amount, base_cleared, realised_gain
+         exchange_rate, base_amount, base_cleared, realised_gain, rounding_gain
        )
-       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric)`,
+       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric, $18::numeric)`,
       [
         paymentId,
         input.source,
@@ -472,7 +478,8 @@ async function recordForeignSupplierPayment(
         rate,
         baseAmount,
         cleared,
-        gain,
+        split.realised,
+        split.rounding,
       ],
     );
   } catch (error) {
@@ -494,7 +501,8 @@ async function recordForeignSupplierPayment(
       exchangeRate: rate,
       baseAmount,
       baseCleared: cleared,
-      realisedGain: gain,
+      realisedGain: split.realised,
+      roundingGain: split.rounding,
       bankAccountCode: bank.code,
       journalId: posted.journal.id,
     },

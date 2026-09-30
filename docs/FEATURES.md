@@ -48,8 +48,10 @@ that something happened.
 - **FX revaluation** of foreign-currency asset and liability accounts, with
   carrying amounts and (where Tohyee has them) foreign balances taken from
   the ledger, and automatic next-day reversal; also the open
-  foreign-currency invoices, bills and credit notes on accounts receivable
-  and payable, one currency at a time (MC8).
+  foreign-currency invoices, bills, credit notes and overpayments on
+  accounts receivable and payable, one currency at a time and, like
+  NetSuite, each document on its own at its own rate, listed on the
+  revaluation (MC8, MC39-MC43).
 - **Multi-currency invoices, bills, credit notes and payments** (built
   overnight 1 Oct 2026 following NetSuite, examples MC1-MC13 not yet approved
   by Jess): a contact has a currency (like NetSuite's primary currency); its
@@ -68,7 +70,10 @@ that something happened.
   in the contact's currency with no rate, and the invoice or bill made from
   them takes a rate for its own date (MC25-MC28; repeating ones save
   drafts); stock items on foreign-currency documents are valued in NZD at
-  the document's rate, and cost of sales is the NZD average (MC29).
+  the document's rate, and cost of sales is the NZD average (MC29); like
+  NetSuite, the cent or two left by rounding when a payment, credit or
+  refund settles a foreign document goes to 7050 Rounding gains and losses,
+  apart from the realised gain or loss on 7020 (MC31-MC38).
   Zero-rated, exempt and no-GST codes only.
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
@@ -707,8 +712,9 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    them, the payments basis, and project and CRM invoices. Foreign-currency
    bank accounts, invoices, bills, credit notes, payments, overpayments,
    refunds, batch payments, quotes, repeating documents, purchase orders and
-   stock are built (MC1-MC29); a bank account in a third currency stays
-   refused, as in NetSuite (MC30).
+   stock are built (MC1-MC29), with rounding on its own account and
+   revaluation per open document (MC31-MC43); a bank account in a third
+   currency stays refused, as in NetSuite (MC30).
 
 ## Guardrails
 

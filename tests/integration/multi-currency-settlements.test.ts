@@ -305,6 +305,17 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
     expect(fx.items.map((item) => [item.accountCode, item.foreignAmount, item.carryingAmount, item.revaluedAmount, item.deltaAmount])).toEqual([
       ["1100", "370.00", "633.90", "592.00", "-41.90"],
     ]);
+    // One by one (MC39): INV-0002 (1.60 - 1.70) x 440.00 = -44.00; CN-0001 (1.60 - 1.63) x -70.00 = +2.10.
+    expect(fx.items[0].documents.map((doc) => [doc.kind, doc.documentNumber, doc.foreignAmount, doc.carryingAmount, doc.deltaAmount])).toEqual([
+      ["invoice", "INV-0002", "440.00", "748.00", "-44.00"],
+      ["credit_note", "CN-0001", "-70.00", "-114.10", "2.10"],
+    ]);
+    expect(await posted(fx.revaluationJournalId)).toEqual([
+      ["1100", "0.00", "44.00", "USD 0.00 revaluation"],
+      ["7010", "44.00", "0.00"],
+      ["1100", "2.10", "0.00", "USD 0.00 revaluation"],
+      ["7000", "0.00", "2.10"],
+    ]);
     expect((await run((tx) => agedReceivables(tx, { asAt: "2026-07-31" }))).revaluation).toBe("-41.90");
     const checks = (await run((tx) => periodChecklist(tx, { periodEnd: "2026-07-31" }))).checks;
     expect(checks.filter((entry) => entry.key === "receivables" || entry.key === "payables").map((entry) => entry.status)).toEqual(["pass", "pass"]);
@@ -313,7 +324,7 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
   const batch = (kind: "customer" | "supplier", paymentDate: string, amount: string, bankAccountCode: string, documents: Array<{ id: string; amount: string }>, exchangeRate?: string) =>
     run((tx) => recordPaymentBatch(tx, kind, { idempotencyKey: key("batch"), paymentDate, amount, bankAccountCode, documents, exchangeRate }));
 
-  it("MC20: one USD payment for two USD invoices: one bank line, each invoice's own gain; the parts add up to the bank line", async () => {
+  it("MC20: one USD payment for two USD invoices: one bank line, each invoice's own gain; the rounding cent goes to 7050", async () => {
     const third = await invoice("INV-0003", "2026-08-03", "100.01", "1.60");
     const fourth = await invoice("INV-0004", "2026-08-04", "100.01", "1.62");
     expect([third.baseTotal, fourth.baseTotal]).toEqual(["160.02", "162.02"]);
@@ -323,16 +334,18 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
     ], "1.65");
     // 200.02 x 1.65 = 330.033 -> 330.03 in the bank; 100.01 x 1.65 = 165.0165 -> 165.02 for the first, the other 165.01 for the last.
     expect(paid).toMatchObject({ currencyCode: "USD", amount: "200.02", exchangeRate: "1.65", baseAmount: "330.03" });
-    expect(paid.parts.map((part) => [part.documentNumber, part.amount, part.baseAmount, part.baseCleared, part.realisedGain])).toEqual([
-      ["INV-0003", "100.01", "165.02", "160.02", "5.00"],
-      ["INV-0004", "100.01", "165.01", "162.02", "2.99"],
+    // Each gain is (1.65 - its rate) x 100.01, rounded: 5.00 and 3.00; the last part's cent short is rounding (MC31).
+    expect(paid.parts.map((part) => [part.documentNumber, part.amount, part.baseAmount, part.baseCleared, part.realisedGain, part.roundingGain])).toEqual([
+      ["INV-0003", "100.01", "165.02", "160.02", "5.00", "0.00"],
+      ["INV-0004", "100.01", "165.01", "162.02", "3.00", "-0.01"],
     ]);
     expect(await posted(paid.journalId)).toEqual([
       ["1000", "330.03", "0.00"],
       ["1100", "0.00", "160.02", "USD 100.01 carrying_value"],
       ["7020", "0.00", "5.00"],
       ["1100", "0.00", "162.02", "USD 100.01 carrying_value"],
-      ["7020", "0.00", "2.99"],
+      ["7020", "0.00", "3.00"],
+      ["7050", "0.01", "0.00"],
     ]);
     for (const id of [third.id, fourth.id]) {
       expect(await run((tx) => getInvoice(tx, id))).toMatchObject({ paidStatus: "paid", amountDue: "0.00", amountDueBase: "0.00" });

@@ -5,7 +5,7 @@ import { openCurrencyBalances } from "@/lib/ledger/fx-revaluation";
 /**
  * GET: open foreign-currency invoices, bills and credit notes on accounts
  * receivable and payable as at `asAt`, one row per account and currency
- * (MC8), for the FX revaluation screen.
+ * (MC8) with its open documents (MC40), for the FX revaluation screen.
  */
 export const GET = route(async (request) => {
   const params = searchParams(request);

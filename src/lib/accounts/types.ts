@@ -59,6 +59,7 @@ export const SYSTEM_KEYS = [
   "fixed_asset_disposal",
   "fixed_asset_capital_gain",
   "realised_fx",
+  "fx_rounding",
   "conversion_clearing",
 ] as const;
 

@@ -418,6 +418,7 @@ export function PaymentBatchView({ kind, organisationId, batchId, recorded }: { 
                 <th className={ui.num}>Paid</th>
                 {kind === "customer" ? <th>Overpayment</th> : null}
                 {batch.exchangeRate ? <th className={ui.num}>Realised gain (loss)</th> : null}
+                {batch.exchangeRate ? <th className={ui.num}>Rounding</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -439,6 +440,11 @@ export function PaymentBatchView({ kind, organisationId, batchId, recorded }: { 
                   {batch.exchangeRate ? (
                     <td className={ui.num}>
                       <Money value={part.realisedGain ?? "0.00"} />
+                    </td>
+                  ) : null}
+                  {batch.exchangeRate ? (
+                    <td className={ui.num}>
+                      <Money value={part.roundingGain ?? "0.00"} />
                     </td>
                   ) : null}
                 </tr>
