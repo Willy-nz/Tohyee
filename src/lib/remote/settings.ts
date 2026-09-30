@@ -9,17 +9,29 @@ import { optionalString } from "@/lib/validation";
 import { mainServerTarget } from "@/lib/server-admin/listener";
 
 /**
- * Remote access through a Cloudflare Tunnel (use Tohyee from anywhere). A
- * server admin creates the tunnel in Cloudflare's dashboard, points its public
- * hostname at this server, and pastes the tunnel token here. The token is
- * encrypted with TOHYEE_SECRET_KEY. Turning remote access on needs two-step
- * sign-in to be in force, so nobody can reach the server from the internet
- * with a password alone.
+ * Remote access (use Tohyee from anywhere), one of two ways:
+ *
+ * - "tailscale" (the easy way, set up by the Windows server app): Tailscale
+ *   Funnel runs in Tailscale's own Windows service and forwards
+ *   https://<computer>.<tailnet>.ts.net to this server's main port. Tohyee
+ *   doesn't run anything for it; this records that it's on and its address,
+ *   so emailed links use it. The server app turns Funnel on only after this
+ *   has been saved, so the two-step sign-in check below applies to it too.
+ * - "cloudflare" (the advanced way, your own domain): a server admin creates a
+ *   Cloudflare Tunnel, points its public hostname at this server, and pastes
+ *   the tunnel token here. Tohyee runs Cloudflare's connector. The token is
+ *   encrypted with TOHYEE_SECRET_KEY.
+ *
+ * Turning remote access on needs two-step sign-in to be in force, so nobody
+ * can reach the server from the internet with a password alone.
  */
-type RemoteValue = { enabled: boolean; publicUrl: string | null };
+export type RemoteMethod = "cloudflare" | "tailscale";
+type RemoteValue = { enabled: boolean; publicUrl: string | null; method?: RemoteMethod };
 type RemoteSecrets = { tunnelToken: string };
 
 export type RemoteAccess = {
+  /** How it reaches this server: Tailscale Funnel (the server app sets it up) or a Cloudflare Tunnel. */
+  method: RemoteMethod;
   enabled: boolean;
   publicUrl: string | null;
   hasToken: boolean;
@@ -62,6 +74,17 @@ export function parseTunnelToken(input: string): { token: string; tunnelId: stri
   return { token: match[0], tunnelId: decoded.t };
 }
 
+function parseMethod(input: unknown): RemoteMethod {
+  if (input === undefined || input === null || input === "cloudflare") return "cloudflare";
+  if (input === "tailscale") return "tailscale";
+  throw new ValidationError("The remote access method is cloudflare or tailscale.");
+}
+
+/** Tailscale Funnel addresses are https://<computer>.<tailnet>.ts.net. */
+function isTailscaleAddress(publicUrl: string): boolean {
+  return /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.ts\.net$/i.test(publicUrl);
+}
+
 function parsePublicUrl(input: unknown): string | null {
   const text = optionalString(input, "publicUrl", { maxLength: 300 });
   if (!text) return null;
@@ -87,6 +110,7 @@ export async function getRemoteAccess(): Promise<RemoteAccess> {
     }
   }
   return {
+    method: stored.value.method ?? "cloudflare",
     enabled: stored.value.enabled ?? false,
     publicUrl: stored.value.publicUrl ?? null,
     hasToken: Boolean(stored.secrets.tunnelToken),
@@ -104,17 +128,23 @@ export async function getRemoteAccess(): Promise<RemoteAccess> {
 /** Starts or stops the tunnel to match the saved settings (on start-up and after a change). */
 export async function applyRemoteAccess(): Promise<void> {
   const stored = await readServerSetting<RemoteValue, RemoteSecrets>("remote_access");
-  if (stored.value.enabled && stored.secrets.tunnelToken && twoStepRequired()) {
+  const cloudflare = (stored.value.method ?? "cloudflare") === "cloudflare";
+  if (cloudflare && stored.value.enabled && stored.secrets.tunnelToken && twoStepRequired()) {
     startTunnel(stored.secrets.tunnelToken);
   } else {
     stopTunnel();
   }
 }
 
-/** Saves remote access (server admins only): `enabled`, `tunnelToken` (blank keeps it), `publicUrl`; `clear: true` removes it. */
+/**
+ * Saves remote access (server admins only): `method` ("cloudflare", the
+ * default, or "tailscale"), `enabled`, `tunnelToken` (blank keeps it),
+ * `publicUrl`; `clear: true` removes it. Switching to Tailscale stops the
+ * Cloudflare connector but keeps its token, so switching back is easy.
+ */
 export async function updateRemoteAccess(
   auth: ServerAdminAuth,
-  input: { enabled?: unknown; tunnelToken?: unknown; publicUrl?: unknown; clear?: unknown },
+  input: { method?: unknown; enabled?: unknown; tunnelToken?: unknown; publicUrl?: unknown; clear?: unknown },
   options: { apply?: boolean } = {},
 ): Promise<RemoteAccess> {
   // The running server starts or stops the tunnel. The command-line tool is a
@@ -134,17 +164,21 @@ export async function updateRemoteAccess(
   if (!secretsAvailable()) {
     throw new UnavailableError("Set TOHYEE_SECRET_KEY on the server first: it turns on two-step sign-in and lets the tunnel token be stored encrypted.");
   }
+  const method = parseMethod(input.method);
   const enabled = input.enabled === true;
   const stored = await readServerSetting<RemoteValue, RemoteSecrets>("remote_access");
   const typed = optionalString(input.tunnelToken, "tunnelToken", { maxLength: 4000 });
   const tunnelToken = typed ? parseTunnelToken(typed).token : stored.secrets.tunnelToken;
-  if (enabled && !tunnelToken) throw new ValidationError("Paste the tunnel token from Cloudflare first.");
+  if (method === "cloudflare" && enabled && !tunnelToken) throw new ValidationError("Paste the tunnel token from Cloudflare first.");
   const publicUrl = input.publicUrl === undefined ? (stored.value.publicUrl ?? null) : parsePublicUrl(input.publicUrl);
+  if (method === "tailscale" && enabled && (!publicUrl || !isTailscaleAddress(publicUrl))) {
+    throw new ValidationError("The Tailscale Funnel address looks like https://computer.tailnet.ts.net.");
+  }
   await withCoreTransaction(async (client) => {
     await writeServerSetting<RemoteValue, Partial<RemoteSecrets>>(
       client,
       "remote_access",
-      { enabled, publicUrl },
+      { enabled, publicUrl, method },
       tunnelToken ? { tunnelToken } : {},
       auth.user.email,
     );
@@ -152,7 +186,7 @@ export async function updateRemoteAccess(
       eventType: "server.remote_access_updated",
       entityType: "server_setting",
       entityId: "remote_access",
-      details: { enabled, publicUrl, tokenChanged: Boolean(typed) },
+      details: { method, enabled, publicUrl, tokenChanged: Boolean(typed) },
     });
   });
   if (apply) await applyRemoteAccess();

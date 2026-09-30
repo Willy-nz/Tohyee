@@ -1,7 +1,9 @@
 import path from "node:path";
-import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import * as remoteRoute from "@/app/api/admin/remote-access/route";
 import { publicOrigin } from "@/lib/auth/origin";
+import { assertSameOrigin } from "@/lib/auth/guard";
+import { sessionCookieHeader } from "@/lib/auth/sessions";
 import { parseTunnelToken } from "@/lib/remote/settings";
 import { setTunnelCommandForTests, stopTunnel } from "@/lib/remote/tunnel";
 import { coreQuery } from "@/lib/db/transactions";
@@ -33,6 +35,7 @@ describeWithDatabase("remote access through a Cloudflare Tunnel", () => {
       hasToken: boolean;
       tunnelId: string | null;
       publicUrl: string | null;
+      method: string;
       tunnel: { status: string; message: string | null; log: string[] };
     };
 
@@ -93,5 +96,69 @@ describeWithDatabase("remote access through a Cloudflare Tunnel", () => {
     const cleared = await put(adminCookie, { clear: true });
     expect(cleared.status).toBe(200);
     expect(await read()).toMatchObject({ enabled: false, hasToken: false, publicUrl: null });
+  });
+
+  describe("the easy way: Tailscale Funnel (set up by the Windows server app)", () => {
+    const address = "https://tohyee-pc.tail1a2b3c.ts.net";
+
+    /** What Tailscale Funnel sends on to 127.0.0.1:<port> (ipn/ipnlocal/serve.go keeps Host and adds X-Forwarded-*). */
+    function throughFunnel(path: string, init: { method?: string; origin?: string } = {}): Request {
+      const headers: Record<string, string> = {
+        host: "tohyee-pc.tail1a2b3c.ts.net",
+        "x-forwarded-host": "tohyee-pc.tail1a2b3c.ts.net",
+        "x-forwarded-proto": "https",
+        "x-forwarded-for": "203.0.113.9",
+      };
+      if (init.origin) headers.origin = init.origin;
+      return new Request(`http://127.0.0.1:3000${path}`, { method: init.method ?? "GET", headers });
+    }
+
+    it("needs two-step sign-in in force and a ts.net address, but no Cloudflare token", async () => {
+      delete process.env.TOHYEE_SECRET_KEY;
+      expect((await put(adminCookie, { method: "tailscale", enabled: true, publicUrl: address })).status).toBe(503);
+      process.env.TOHYEE_SECRET_KEY = "remote-access-test-key-0123456789abcdef";
+      expect((await put(bookkeeperCookie, { method: "tailscale", enabled: true, publicUrl: address })).status).toBe(403);
+      expect((await put(adminCookie, { method: "tailscale", enabled: true, publicUrl: "https://books.example.nz" })).status).toBe(400);
+      expect((await put(adminCookie, { method: "tailscale", enabled: true })).status).toBe(400);
+      expect((await put(adminCookie, { method: "carrier-pigeon", enabled: true, publicUrl: address })).status).toBe(400);
+
+      const saved = await put(adminCookie, { method: "tailscale", enabled: true, publicUrl: address });
+      expect(saved.status).toBe(200);
+      expect(await read()).toMatchObject({ method: "tailscale", enabled: true, publicUrl: address, hasToken: false });
+      // Emailed links use the Funnel address.
+      expect(await publicOrigin(apiRequest("/x", { origin: "https://evil.example" }))).toBe(address);
+    });
+
+    it("doesn't run the Cloudflare connector, and keeps a saved token for switching back", async () => {
+      await put(adminCookie, { enabled: true, tunnelToken: token("c2VjcmV0"), publicUrl: "books.example.nz" });
+      await vi.waitFor(async () => expect((await read()).tunnel.status).toBe("connected"), { timeout: 5000, interval: 100 });
+      await put(adminCookie, { method: "tailscale", enabled: true, publicUrl: address });
+      const state = await read();
+      expect(state).toMatchObject({ method: "tailscale", enabled: true, hasToken: true, publicUrl: address });
+      expect(state.tunnel.status).toBe("off");
+      // Saving the Cloudflare form (no method) switches back and restarts the connector.
+      await put(adminCookie, { enabled: true, publicUrl: "books.example.nz" });
+      await vi.waitFor(async () => expect((await read()).tunnel.status).toBe("connected"), { timeout: 5000, interval: 100 });
+      expect((await read()).method).toBe("cloudflare");
+      // Turning phone access off forgets the Funnel address.
+      await put(adminCookie, { method: "tailscale", enabled: false, publicUrl: "" });
+      expect(await read()).toMatchObject({ method: "tailscale", enabled: false, publicUrl: null });
+      expect((await read()).tunnel.status).toBe("off");
+      await put(adminCookie, { clear: true });
+    });
+
+    it("accepts sign-ins arriving through Funnel on the ts.net address over https", () => {
+      expect(() => assertSameOrigin(throughFunnel("/api/auth/login", { method: "POST", origin: address }))).not.toThrow();
+      expect(() => assertSameOrigin(throughFunnel("/api/auth/login", { method: "POST", origin: "https://evil.example" }))).toThrow(
+        /Cross-site/,
+      );
+      expect(sessionCookieHeader(throughFunnel("/api/auth/login", { method: "POST", origin: address }), "abc")).toMatch(/; Secure$/);
+    });
+
+    it("never lets server settings through Funnel (it connects to the main port, without the local-only secret)", async () => {
+      const request = throughFunnel("/api/admin/remote-access");
+      request.headers.set("cookie", adminCookie);
+      expect((await remoteRoute.GET(request, noContext)).status).toBe(403);
+    });
   });
 });

@@ -348,7 +348,7 @@ async function remoteAccess(command: string | undefined, args: string[]) {
     // The tunnel itself runs inside the Tohyee server, not this command, so
     // its live state isn't known here.
     show(args, { ...remote, tunnel: undefined }, () => {
-      console.log(`Remote access: ${remote.enabled ? "on" : "off"}`);
+      console.log(`Remote access: ${remote.enabled ? "on" : "off"} (${remote.method === "tailscale" ? "Tailscale Funnel, set up in the Windows server app" : "Cloudflare Tunnel"})`);
       console.log(`Public address: ${remote.publicUrl ?? "(not set)"}`);
       console.log(`Tunnel token: ${remote.hasToken ? `saved (tunnel ${remote.tunnelId ?? "unknown"})` : "not saved"}`);
       console.log(`Give Cloudflare this service address: ${remote.localService}`);

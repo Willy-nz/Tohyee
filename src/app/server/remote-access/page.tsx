@@ -171,6 +171,15 @@ export default function RemoteAccessPage() {
       {!remote && !error ? <p className={ui.muted}>Loading…</p> : null}
       {remote ? (
         <>
+          {remote.method === "tailscale" ? (
+            <Notice tone="info">
+              {remote.enabled
+                ? `Phone access is on through Tailscale Funnel${remote.publicUrl ? ` at ${remote.publicUrl}` : ""}. `
+                : "Phone access through Tailscale Funnel is off. "}
+              It&apos;s set up in the Tohyee server app on the server computer (Phone access). Saving a Cloudflare Tunnel below switches
+              to Cloudflare instead.
+            </Notice>
+          ) : null}
           {!remote.twoStepRequired ? (
             <Notice tone="error">
               Remote access can&apos;t be turned on until two-step sign-in is in force, and that needs TOHYEE_SECRET_KEY set on the server.
