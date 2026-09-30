@@ -12,6 +12,7 @@ import {
   takesBankTransactionLines,
   toCents,
 } from "@/components/bank/common";
+import { CashCodingForm } from "@/components/bank/cash-coding";
 import { OkAllBar, SuggestionBox } from "@/components/bank/confident";
 import { AccountSelect, Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -771,6 +772,8 @@ export function ReconcilePanel({
   const { can } = useWorkspace();
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
+  const [ticked, setTicked] = useState<string[]>([]);
+  const [coded, setCoded] = useState<number | null>(null);
   const list = useApiData<{ lines: StatementLine[]; total: number }>(`/api/bank-accounts/${account.id}/statement-lines`, {
     organisationId,
     status: "unreconciled",
@@ -804,6 +807,12 @@ export function ReconcilePanel({
     onChanged();
   }
 
+  function cashCoded(reconciledIds: string[]) {
+    setTicked((current) => current.filter((id) => !reconciledIds.includes(id)));
+    setCoded(reconciledIds.length);
+    if (reconciledIds.length > 0) finished();
+  }
+
   if (list.error) return <Notice tone="error">{list.error}</Notice>;
   if (lookupError) return <Notice tone="error">{lookupError}</Notice>;
   if (!list.data) return <p className={ui.muted}>Loading…</p>;
@@ -812,21 +821,60 @@ export function ReconcilePanel({
     return <Empty>Everything is reconciled. Import a statement or sync the bank feed to bring in new lines.</Empty>;
   }
   const confidence = new Map((confident.data?.lines ?? []).map((entry) => [entry.lineId, entry]));
+  const canReconcile = can("bookkeeper");
+  const tickedLines = lines.filter((line) => ticked.includes(line.id));
+  const allTicked = lines.length > 0 && tickedLines.length === lines.length;
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <p className={ui.muted}>
         {total} {total === 1 ? "line" : "lines"} to reconcile, oldest first. Reconciling says what each line is: something already
         posted, a payment of invoices or bills, a new bank transaction, or a transfer. A highlighted suggestion is the only match with
-        the exact amount; <strong>OK</strong> reconciles it in one click.
+        the exact amount; <strong>OK</strong> reconciles it in one click. Tick several lines to code them to an account all at once.
       </p>
       {confident.error ? <Notice tone="error">{confident.error}</Notice> : null}
       {can("bookkeeper") && confident.data ? (
         <OkAllBar organisationId={organisationId} accountId={account.id} confidences={confident.data.lines} lines={lines} onDone={finished} />
       ) : null}
+      {canReconcile && coded !== null && tickedLines.length === 0 ? (
+        <Notice tone="success">
+          {coded} {coded === 1 ? "line" : "lines"} coded and reconciled.
+        </Notice>
+      ) : null}
+      {canReconcile && tickedLines.length > 0 ? (
+        <div className={ui.suggestion} style={{ display: "grid", gap: 8 }}>
+          <strong>
+            Bulk code {tickedLines.length} ticked {tickedLines.length === 1 ? "line" : "lines"}
+          </strong>
+          {lookups ? (
+            <CashCodingForm
+              organisationId={organisationId}
+              accountId={account.id}
+              lines={tickedLines}
+              lookups={lookups}
+              onDone={cashCoded}
+            />
+          ) : (
+            <p className={ui.muted}>Loading…</p>
+          )}
+        </div>
+      ) : null}
       <div className={ui.tableWrap}>
         <table className={ui.table}>
           <thead>
             <tr>
+              {canReconcile ? (
+                <th style={{ width: 36 }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Tick every line on this page to bulk code"
+                    checked={allTicked}
+                    onChange={(event) => {
+                      setCoded(null);
+                      setTicked(event.target.checked ? lines.map((line) => line.id) : []);
+                    }}
+                  />
+                </th>
+              ) : null}
               <th>Date</th>
               <th>Description</th>
               <th className={ui.num}>Money in</th>
@@ -840,14 +888,19 @@ export function ReconcilePanel({
                 key={line.id}
                 line={line}
                 open={open === line.id}
-                canReconcile={can("bookkeeper")}
+                canReconcile={canReconcile}
+                ticked={ticked.includes(line.id)}
+                onTick={(on) => {
+                  setCoded(null);
+                  setTicked((current) => (on ? [...current, line.id] : current.filter((id) => id !== line.id)));
+                }}
                 onToggle={() => setOpen((current) => (current === line.id ? null : line.id))}
                 suggestion={
                   <SuggestionBox
                     key={confidence.get(line.id)?.suggestion?.key ?? "none"}
                     organisationId={organisationId}
                     confidence={confidence.get(line.id)}
-                    canReconcile={can("bookkeeper")}
+                    canReconcile={canReconcile}
                     onDone={finished}
                   />
                 }
@@ -862,7 +915,15 @@ export function ReconcilePanel({
           </tbody>
         </table>
       </div>
-      <Pager offset={offset} pageSize={PAGE_SIZE} total={total} onChange={setOffset} />
+      <Pager
+        offset={offset}
+        pageSize={PAGE_SIZE}
+        total={total}
+        onChange={(next) => {
+          setTicked([]);
+          setOffset(next);
+        }}
+      />
     </div>
   );
 }
@@ -871,6 +932,8 @@ function LineRow({
   line,
   open,
   canReconcile,
+  ticked,
+  onTick,
   onToggle,
   suggestion,
   children,
@@ -878,6 +941,8 @@ function LineRow({
   line: StatementLine;
   open: boolean;
   canReconcile: boolean;
+  ticked: boolean;
+  onTick: (ticked: boolean) => void;
   onToggle: () => void;
   suggestion?: ReactNode;
   children: ReactNode;
@@ -885,6 +950,16 @@ function LineRow({
   return (
     <>
       <tr>
+        {canReconcile ? (
+          <td>
+            <input
+              type="checkbox"
+              aria-label={`Tick ${formatDate(line.date)} ${line.description} to bulk code`}
+              checked={ticked}
+              onChange={(event) => onTick(event.target.checked)}
+            />
+          </td>
+        ) : null}
         <td style={{ whiteSpace: "nowrap" }}>{formatDate(line.date)}</td>
         <td>
           {line.description}
@@ -908,7 +983,7 @@ function LineRow({
       </tr>
       {open ? (
         <tr>
-          <td colSpan={5}>{children}</td>
+          <td colSpan={canReconcile ? 6 : 5}>{children}</td>
         </tr>
       ) : null}
     </>

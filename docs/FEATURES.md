@@ -364,7 +364,13 @@ that something happened.
   balance), the balance in Tohyee, statement lines not yet in Tohyee and
   transactions in Tohyee not yet on the statement, with the arithmetic and a
   warning when they don't fully explain the difference; it prints or saves as
-  PDF (examples BK20, BK21, not yet approved by Jess).
+  PDF (examples BK20, BK21, not yet approved by Jess). **Bulk coding**
+  ("cash coding"): tick several lines to reconcile and give them an account,
+  GST code and optionally a contact, description and tracking, for all of
+  them or line by line; each becomes its own spend or receive money
+  reconciled to its line, exactly as if done one at a time, each in its own
+  transaction, and the result says which lines were done and why any weren't
+  (examples BK22, BK23, not yet approved by Jess).
 - **Modules**: Accounting and Tax are always on; the **CRM** and
   **Advanced reporting** are switched on per organisation in Settings, and
   their menus and screens show only while on (MOD1).

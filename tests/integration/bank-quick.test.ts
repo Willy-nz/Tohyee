@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as confidentRoute from "@/app/api/bank-accounts/[accountId]/confident-matches/route";
 import * as okRoute from "@/app/api/statement-lines/[lineId]/ok/route";
+import * as cashCodingRoute from "@/app/api/bank-accounts/[accountId]/cash-coding/route";
+import { cashCodeStatementLines } from "@/lib/bank/cash-coding";
 import type { SessionUser } from "@/lib/auth/sessions";
 import * as bankRecReportRoute from "@/app/api/reports/bank-reconciliation/route";
 import { createBankAccount, listBankAccounts, listStatementLines, setStatementLineExcluded } from "@/lib/bank/accounts";
@@ -8,7 +10,7 @@ import { importStatementFile } from "@/lib/bank/imports";
 import { confidentMatches, okConfidentMatches, okStatementLine } from "@/lib/bank/confident";
 import { reconcileStatementLine } from "@/lib/bank/reconcile";
 import { createBankRule } from "@/lib/bank/rules";
-import { createBankTransaction, voidBankTransaction } from "@/lib/bank/transactions";
+import { createBankTransaction, getBankTransaction, voidBankTransaction } from "@/lib/bank/transactions";
 import { recordSupplierPayment } from "@/lib/bills/payments";
 import { approveBill, createBill } from "@/lib/bills/service";
 import { type Contact, createContact } from "@/lib/contacts/service";
@@ -18,6 +20,8 @@ import { recordPayment, voidPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, getInvoice } from "@/lib/invoices/service";
 import { getJournal, postJournal } from "@/lib/ledger/journals";
 import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
+import { calculateGstReturn } from "@/lib/reports/gst-return";
+import { dec, sub, toFixedString } from "@/lib/money/decimal";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import {
   apiRequest,
@@ -512,5 +516,160 @@ describeWithDatabase("quicker bank reconciliation", () => {
       notExplained: "-12.00",
       explained: false,
     });
+  });
+
+  const CASH_CSV = `Date,Amount,Payee,Particulars,Code,Reference
+21/05/2026,-46.00,Z ENERGY,,,
+24/05/2026,-11.50,Z ENERGY,,,
+26/05/2026,-69.00,Z ENERGY,,,
+28/05/2026,-12.00,MONTHLY FEE,,,
+`;
+
+  async function cashWorld() {
+    const world = await setup();
+    const anz = (await world.asUser(bookkeeper, (tx) => createContact(tx, { idempotencyKey: key("contact"), name: "ANZ", isSupplier: true }))).contact;
+    await world.importFile(CASH_CSV);
+    const [fuel21, fuel24, fuel26, fee] = await Promise.all(["-46.00", "-11.50", "-69.00", "-12.00"].map((amount) => world.lineOn(amount)));
+    const code = (input: Record<string, unknown>) => cashCodeStatementLines(world.run, world.bank.id, input);
+    const bankTransactionFor = async (lineId: string) => {
+      const line = (await world.lines()).find((entry) => entry.id === lineId)!;
+      const journalId = line.reconciliation!.items[0].journalId;
+      const row = (await world.sql("select id::text from bank_transactions where journal_id = $1", [journalId])).rows[0];
+      return { journalId, bankTransaction: await world.asUser(viewer, (tx) => getBankTransaction(tx, row.id)) };
+    };
+    const gst = () => world.asUser(viewer, (tx) => calculateGstReturn(tx, { periodStart: "2026-05-01", periodEnd: "2026-05-31" }));
+    return { ...world, anz, fuel21, fuel24, fuel26, fee, code, bankTransactionFor, gst };
+  }
+
+  it("BK22: cash coding four lines, one with its own account, GST, contact and description: four spend money, each reconciled", async () => {
+    const world = await cashWorld();
+    const before = await world.gst();
+    const journals = await world.journalCount();
+    const result = await world.code({
+      idempotencyKey: key("cash"),
+      accountCode: "6120",
+      taxCode: "GST",
+      description: "Fuel",
+      lines: [
+        { lineId: world.fuel21.id },
+        { lineId: world.fuel24.id },
+        { lineId: world.fuel26.id },
+        { lineId: world.fee.id, accountCode: "6020", taxCode: null, contactId: world.anz.id, description: "Account fee" },
+      ],
+    });
+    expect(result).toMatchObject({ succeeded: 4, failed: 0 });
+    expect(result.results.map((entry) => [entry.lineId, entry.ok])).toEqual([
+      [world.fuel21.id, true],
+      [world.fuel24.id, true],
+      [world.fuel26.id, true],
+      [world.fee.id, true],
+    ]);
+    expect(await world.journalCount()).toBe(journals + 4);
+    const expected: Array<[string, string, string, string, string[][]]> = [
+      [world.fuel21.id, "2026-05-21", "Z Energy", "Fuel", [["6120", "40.00", "0.00"], ["2100", "6.00", "0.00"], ["1000", "0.00", "46.00"]]],
+      [world.fuel24.id, "2026-05-24", "Z Energy", "Fuel", [["6120", "10.00", "0.00"], ["2100", "1.50", "0.00"], ["1000", "0.00", "11.50"]]],
+      [world.fuel26.id, "2026-05-26", "Z Energy", "Fuel", [["6120", "60.00", "0.00"], ["2100", "9.00", "0.00"], ["1000", "0.00", "69.00"]]],
+      [world.fee.id, "2026-05-28", "ANZ", "Account fee", [["6020", "12.00", "0.00"], ["1000", "0.00", "12.00"]]],
+    ];
+    for (const [lineId, date, contactName, description, posted] of expected) {
+      const { journalId, bankTransaction } = await world.bankTransactionFor(lineId);
+      expect(bankTransaction).toMatchObject({ kind: "spend", date, contactName, status: "posted" });
+      expect(bankTransaction.lines.map((line) => line.description)).toEqual([description]);
+      expect(await world.postedLines(journalId)).toEqual(posted);
+    }
+    expect(await world.lines("unreconciled")).toEqual([]);
+    const after = await world.gst();
+    expect(toFixedString(sub(dec(after.boxes.box11), dec(before.boxes.box11)), 2)).toBe("126.50");
+    expect(toFixedString(sub(dec(after.gstOnTransactions.purchases), dec(before.gstOnTransactions.purchases)), 2)).toBe("16.50");
+  });
+
+  it("BK23: cash coding does each line on its own: a locked period and a missing contact fail, the rest post; retries post nothing", async () => {
+    const world = await cashWorld();
+    await world.lock("2026-05-21");
+    const cashKey = key("cash");
+    const all = [world.fuel21, world.fuel24, world.fuel26, world.fee].map((line) => ({ lineId: line.id }));
+    const journals = await world.journalCount();
+    const result = await world.code({ idempotencyKey: cashKey, accountCode: "6120", taxCode: "GST", lines: all });
+    expect(result).toMatchObject({ succeeded: 2, failed: 2 });
+    expect(result.results).toEqual([
+      {
+        lineId: world.fuel21.id,
+        ok: false,
+        error: "2026-05-21 is in a locked period (locked up to 2026-05-21). Use a later date, or ask an admin to open an unlock window.",
+      },
+      expect.objectContaining({ lineId: world.fuel24.id, ok: true, created: true }),
+      expect.objectContaining({ lineId: world.fuel26.id, ok: true, created: true }),
+      { lineId: world.fee.id, ok: false, error: "No contact was chosen, and there's no contact called “MONTHLY FEE”. Choose a contact for this line." },
+    ]);
+    expect(await world.journalCount()).toBe(journals + 2);
+    const { journalId, bankTransaction } = await world.bankTransactionFor(world.fuel24.id);
+    expect(bankTransaction.lines.map((line) => line.description)).toEqual([world.fuel24.description]);
+    expect(await world.postedLines(journalId)).toEqual([
+      ["6120", "10.00", "0.00"],
+      ["2100", "1.50", "0.00"],
+      ["1000", "0.00", "11.50"],
+    ]);
+
+    // Retrying the same request posts nothing more.
+    const again = await world.code({ idempotencyKey: cashKey, accountCode: "6120", taxCode: "GST", lines: all });
+    expect(again.results.map((entry) => [entry.lineId, entry.ok, entry.ok ? entry.created : null])).toEqual([
+      [world.fuel21.id, false, null],
+      [world.fuel24.id, true, false],
+      [world.fuel26.id, true, false],
+      [world.fee.id, false, null],
+    ]);
+    // The same key with different content is refused for the lines done.
+    const changed = await world.code({ idempotencyKey: cashKey, accountCode: "6130", taxCode: "GST", lines: all });
+    expect(changed.results.filter((entry) => entry.ok)).toEqual([]);
+    expect(changed.results[1]).toMatchObject({ ok: false, error: expect.stringMatching(/idempotency key/i) });
+    expect(await world.journalCount()).toBe(journals + 2);
+
+    // Unlocked, the other two go through.
+    await world.lock(null);
+    const rest = await world.code({
+      idempotencyKey: key("cash"),
+      accountCode: "6120",
+      taxCode: "GST",
+      lines: [{ lineId: world.fuel21.id }, { lineId: world.fee.id, accountCode: "6020", taxCode: "", contactId: world.anz.id }],
+    });
+    expect(rest).toMatchObject({ succeeded: 2, failed: 0 });
+    expect(await world.postedLines((await world.bankTransactionFor(world.fee.id)).journalId)).toEqual([
+      ["6020", "12.00", "0.00"],
+      ["1000", "0.00", "12.00"],
+    ]);
+    expect(await world.lines("unreconciled")).toEqual([]);
+
+    // No account, a line already reconciled, and a line on another account.
+    const savings = (await world.asUser(viewer, (tx) => listBankAccounts(tx))).find((account) => account.code === "1010")!;
+    await world.importFile("Date,Amount,Payee\n29/05/2026,-5.00,Z ENERGY\n", savings.id);
+    const other = (await world.lines("all", savings.id))[0];
+    const refused = await world.code({
+      idempotencyKey: key("cash"),
+      taxCode: "GST",
+      lines: [{ lineId: world.fuel21.id, accountCode: "6120" }, { lineId: other.id }, { lineId: world.fee.id, accountCode: "" }],
+    });
+    expect(refused.results).toEqual([
+      { lineId: world.fuel21.id, ok: false, error: "This line is already reconciled." },
+      { lineId: other.id, ok: false, error: "This line is on another account." },
+      { lineId: world.fee.id, ok: false, error: "Choose an account for this line." },
+    ]);
+
+    // Over HTTP: viewers can't cash code; bookkeepers can.
+    await world.importFile("Date,Amount,Payee\n29/05/2026,-23.00,Z ENERGY\n");
+    const line = await world.lineOn("-23.00");
+    const [bookkeeperCookie, viewerCookie] = await Promise.all([bookkeeper, viewer].map((user) => sessionCookieFor(user)));
+    const post = (cookie: string) =>
+      cashCodingRoute.POST(
+        apiRequest(`/api/bank-accounts/${world.bank.id}/cash-coding`, {
+          method: "POST",
+          cookie,
+          body: { organisationId: world.org, idempotencyKey: key("http"), accountCode: "6120", taxCode: "GST", lines: [{ lineId: line.id }] },
+        }),
+        params({ accountId: world.bank.id }),
+      );
+    expect((await post(viewerCookie)).status).toBe(403);
+    const response = await post(bookkeeperCookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ succeeded: 1, failed: 0 });
   });
 });

@@ -49,7 +49,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
   `tests/integration/projects.test.ts` (PJ1-PJ13) and
-  `tests/integration/bank-quick.test.ts` (BK17-BK21), all against
+  `tests/integration/bank-quick.test.ts` (BK17-BK23), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -1148,6 +1148,74 @@ isn't reconciled.
   - In BK20, excluding the 28 May fee line (as if it were a duplicate): as at
     31 May the items explain **1,069.00** but the statement balance is still
     1,057.00, so **-12.00 is not explained** and the report says so.
+
+### Bulk coding ("cash coding") (examples not yet approved by Jess)
+
+Like Xero's cash coding. On one bank or credit card account, tick several
+unreconciled lines and give them an account, a GST code (or no GST), and
+optionally a contact, a description and tracking, either for all the ticked
+lines at once or line by line (a line's own value wins). Saving does each line
+exactly as if it were reconciled on its own as a bank transaction (BK6, BK7):
+spend money for money out, receive money for money in, for the line's full
+amount, dated the line date, one line to the chosen account, reconciled to
+the statement line.
+
+- With a GST code the line's amount includes GST (tax inclusive); with none
+  there's no GST.
+- With no contact chosen, the line's contact is the active contact whose
+  name is the line's payee (or, with no payee, its description), ignoring
+  case and extra spaces. With no such contact the line is refused.
+- With no description, each transaction line is described as the statement
+  line is.
+- Each line is done in its own database transaction, so a line that's refused
+  (a locked period, no account, no contact, already reconciled, on another
+  account) doesn't stop the others. The result lists every line with what
+  happened or why it was refused.
+- Retrying the same request (same idempotency key) returns the lines already
+  done without posting them again; the same key with different content is
+  refused for those lines (409).
+
+Setup as above, plus the contact ANZ, and this statement imported into 1000:
+
+```
+Date,Amount,Payee,Particulars,Code,Reference
+21/05/2026,-46.00,Z ENERGY,,,
+24/05/2026,-11.50,Z ENERGY,,,
+26/05/2026,-69.00,Z ENERGY,,,
+28/05/2026,-12.00,MONTHLY FEE,,,
+```
+
+- **BK22** Tick the three Z ENERGY lines and the MONTHLY FEE line. For all:
+  6120 Motor vehicle expenses, GST, no contact, description "Fuel". For the
+  MONTHLY FEE line only: 6020 Bank fees, no GST, contact ANZ, description
+  "Account fee". Saving posts four spend money transactions, each reconciled
+  to its line (4 succeeded, 0 failed):
+  - 21 May, Z Energy, Fuel: Dr 6120 40.00 / Dr 2100 6.00 / Cr 1000 46.00;
+  - 24 May, Z Energy, Fuel: Dr 6120 10.00 / Dr 2100 1.50 / Cr 1000 11.50;
+  - 26 May, Z Energy, Fuel: Dr 6120 60.00 / Dr 2100 9.00 / Cr 1000 69.00;
+  - 28 May, ANZ, Account fee: Dr 6020 12.00 / Cr 1000 12.00.
+
+  They add **126.50** to the May GST return's Box 11 and **16.50** to its
+  purchases GST, as four separate BK6s would. 1000's "reconcile" count is
+  **0**.
+- **BK23** One bad line doesn't stop the others. With the period locked up
+  to 21 May, tick all four lines with 6120, GST and no contact for all:
+  - 21 May: refused, "2026-05-21 is in a locked period (locked up to
+    2026-05-21)…";
+  - 24 May and 26 May: spend money as in BK22 (described "Z ENERGY", the
+    line's own description), reconciled;
+  - 28 May: refused, "No contact was chosen, and there's no contact called
+    “MONTHLY FEE”…".
+
+  The result is **2 succeeded, 2 failed**, and exactly 2 journals are
+  posted. Retrying the same request posts nothing more: the 24 and 26 May
+  lines come back as already done, the other two are refused again. The same
+  key with 6130 instead of 6120 is refused (409) for the 24 and 26 May lines.
+  After unlocking, a new request for the 21 May line (6120, GST, no
+  contact) and the 28 May line (6020, no GST, contact ANZ) reconciles both.
+  A line with no account, for all or its own, is refused with "Choose an
+  account for this line"; a line on another account or already reconciled is
+  refused; viewers can't cash code (403).
 
 ### Not supported yet (refused rather than guessed)
 
