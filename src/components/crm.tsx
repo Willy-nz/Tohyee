@@ -8,6 +8,7 @@ import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
+import { ExchangeRateField, useLastRate } from "@/components/fx";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
 import type {
@@ -26,12 +27,27 @@ import { formatDate, formatDateTime, formatMoney, todayInBrowser } from "@/lib/f
 import type { Invoice } from "@/lib/invoices/service";
 import { add, dec, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 
-/** The total of some opportunities' amounts, exactly (never floating point). */
-function sumAmounts(opportunities: readonly Opportunity[]): string {
-  return toFixedString(
-    opportunities.reduce((sum, opportunity) => add(sum, dec(opportunity.amount)), ZERO_DECIMAL),
-    2,
-  );
+/**
+ * The total of some opportunities' amounts, exactly (never floating point),
+ * per currency (MC68): "2,400.00" when all are in the base currency, else
+ * like "NZD 1,000.00 + USD 2,400.00". Amounts in different currencies are
+ * never added together.
+ */
+function totalAmounts(opportunities: readonly Opportunity[], base: string): string {
+  const sums = new Map<string, ReturnType<typeof dec>>();
+  for (const opportunity of opportunities) sums.set(opportunity.currencyCode, add(sums.get(opportunity.currencyCode) ?? ZERO_DECIMAL, dec(opportunity.amount)));
+  const codes = [...sums.keys()].sort((a, b) => (a === base ? -1 : b === base ? 1 : a.localeCompare(b)));
+  if (codes.length === 0 || (codes.length === 1 && codes[0] === base)) return formatMoney(toFixedString(sums.get(base) ?? ZERO_DECIMAL, 2));
+  return codes.map((code) => `${code} ${formatMoney(toFixedString(sums.get(code)!, 2))}`).join(" + ");
+}
+
+/** An amount in a currency: prefixed with it unless it's the base currency. */
+function amountIn(amount: string, currency: string, base: string): string {
+  return currency === base ? formatMoney(amount) : `${currency} ${formatMoney(amount)}`;
+}
+
+function useBaseCurrency(): string {
+  return useWorkspace().current?.baseCurrency ?? "NZD";
 }
 
 /**
@@ -160,6 +176,7 @@ function NewProspectForm({ organisationId, onSaved }: { organisationId: string; 
 
 export function CompaniesPage({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
+  const baseCurrency = useBaseCurrency();
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
@@ -213,7 +230,11 @@ export function CompaniesPage({ organisationId }: { organisationId: string }) {
                     <td className={ui.num}>{company.people}</td>
                     <td className={ui.num}>{company.openTasks}</td>
                     <td className={ui.num}>
-                      <Money value={company.openPipeline} blankZero />
+                      {company.currencyCode !== baseCurrency && company.openPipeline !== "0.00" ? (
+                        <span className={ui.num}>{amountIn(company.openPipeline, company.currencyCode, baseCurrency)}</span>
+                      ) : (
+                        <Money value={company.openPipeline} blankZero />
+                      )}
                     </td>
                     <td>{company.lastActivityAt ? formatDateTime(company.lastActivityAt) : ""}</td>
                   </tr>
@@ -477,16 +498,20 @@ function OpportunityForm({
   organisationId,
   opportunity,
   fixedContactId,
+  fixedCurrency,
   onSaved,
   onCancel,
 }: {
   organisationId: string;
   opportunity?: Opportunity;
   fixedContactId?: string;
+  /** The fixed company's currency, when there's one. */
+  fixedCurrency?: string;
   onSaved: (opportunity: Opportunity) => void;
   onCancel?: () => void;
 }) {
   const { user } = useWorkspace();
+  const baseCurrency = useBaseCurrency();
   const team = useTeam(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>(fixedContactId ? null : "/api/contacts", { organisationId });
   const [draft, setDraft] = useState<OpportunityDraft>({
@@ -501,6 +526,9 @@ function OpportunityForm({
   const people = useApiData<{ people: Person[] }>(draft.contactId ? "/api/crm/people" : null, { organisationId, contactId: draft.contactId });
   const { busy, error, run } = useBusy();
   const set = (patch: Partial<OpportunityDraft>) => setDraft({ ...draft, ...patch });
+  // The amount is in the company's currency (MC68).
+  const chosen = contacts.data?.contacts.find((contact) => contact.id === draft.contactId);
+  const amountCurrency = chosen ? (chosen.currencyCode ?? baseCurrency) : draft.contactId === opportunity?.contactId ? opportunity?.currencyCode : fixedCurrency;
   return (
     <form
       style={{ display: "grid", gap: 10 }}
@@ -551,7 +579,7 @@ function OpportunityForm({
             ))}
           </select>
         </Field>
-        <Field label="Amount (excl. GST)">
+        <Field label={`Amount (excl. GST${amountCurrency && amountCurrency !== baseCurrency ? `, ${amountCurrency}` : ""})`} hint="In the company's currency.">
           <input inputMode="decimal" className={ui.num} value={draft.amount} onChange={(event) => set({ amount: event.target.value })} />
         </Field>
         <Field label="Expected close date">
@@ -596,28 +624,33 @@ function InvoiceAction({ organisationId, opportunity, onChanged }: { organisatio
   const { can } = useWorkspace();
   const router = useRouter();
   const { busy, error, run } = useBusy();
+  // A company in another currency gets an invoice in it, at a rate for today (MC69).
+  const baseCurrency = useBaseCurrency();
+  const foreign = opportunity.currencyCode !== baseCurrency;
+  const [askingRate, setAskingRate] = useState(false);
+  const [typedRate, setTypedRate] = useState<string | null>(null);
+  const suggestedRate = useLastRate(organisationId, opportunity.currencyCode, baseCurrency, askingRate ? todayInBrowser() : "");
   if (opportunity.invoiceId) {
     return <Link href={`/operations/invoices/${opportunity.invoiceId}`}>{opportunity.invoiceNumber ?? "Draft invoice"}</Link>;
   }
   if (opportunity.stage !== "won" || !can("bookkeeper")) return null;
+  const make = () =>
+    void run(async () => {
+      const result = await api<{ invoice: Invoice }>(`/api/crm/opportunities/${opportunity.id}/invoice`, {
+        method: "POST",
+        body: { organisationId, ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}) },
+      });
+      onChanged();
+      router.push(`/operations/invoices/${result.invoice.id}`);
+    });
   return (
     <>
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <Button
-        size="small"
-        disabled={busy}
-        onClick={() =>
-          void run(async () => {
-            const result = await api<{ invoice: Invoice }>(`/api/crm/opportunities/${opportunity.id}/invoice`, {
-              method: "POST",
-              body: { organisationId },
-            });
-            onChanged();
-            router.push(`/operations/invoices/${result.invoice.id}`);
-          })
-        }
-      >
-        {busy ? "Making…" : "Make invoice"}
+      {foreign && askingRate ? (
+        <ExchangeRateField currencyCode={opportunity.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
+      ) : null}
+      <Button size="small" disabled={busy} onClick={() => (foreign && !askingRate ? setAskingRate(true) : make())}>
+        {busy ? "Making…" : foreign && !askingRate ? `Make ${opportunity.currencyCode} invoice` : "Make invoice"}
       </Button>
     </>
   );
@@ -637,6 +670,7 @@ function OpportunityCard({
   onDragStart?: () => void;
 }) {
   const { can } = useWorkspace();
+  const baseCurrency = useBaseCurrency();
   const [editing, setEditing] = useState(false);
   const { error, run } = useBusy();
   const editable = can("bookkeeper");
@@ -670,7 +704,7 @@ function OpportunityCard({
         {opportunity.pointOfContactName ? <span className={ui.muted}> · {opportunity.pointOfContactName}</span> : null}
       </div>
       <div className={ui.muted}>
-        {formatMoney(opportunity.amount)}
+        {amountIn(opportunity.amount, opportunity.currencyCode, baseCurrency)}
         {opportunity.closeDate ? ` · closes ${formatDate(opportunity.closeDate)}` : ""}
         {opportunity.ownerUserId ? ` · ${memberName(team, opportunity.ownerUserId)}` : ""}
       </div>
@@ -716,7 +750,8 @@ export function PipelinePage({ organisationId }: { organisationId: string }) {
   const team = useTeam(organisationId);
   const { error, run } = useBusy();
   const all = opportunities.data?.opportunities ?? [];
-  const total = (stage: OpportunityStage) => formatMoney(sumAmounts(all.filter((o) => o.stage === stage)));
+  const baseCurrency = useBaseCurrency();
+  const total = (stage: OpportunityStage) => totalAmounts(all.filter((o) => o.stage === stage), baseCurrency);
   function drop(stage: OpportunityStage, id: string) {
     const card = all.find((o) => o.id === id);
     setOver(null);
@@ -1123,6 +1158,7 @@ function ActivityForm({ organisationId, contactId, people, opportunities, onSave
 export function CompanyPage({ organisationId, contactId }: { organisationId: string; contactId: string }) {
   const { can } = useWorkspace();
   const data = useApiData<CompanyData>(`/api/crm/companies/${contactId}`, { organisationId });
+  const baseCurrency = useBaseCurrency();
   const team = useTeam(organisationId);
   const [adding, setAdding] = useState<"person" | "opportunity" | "task" | null>(null);
   const { busy, error, run } = useBusy();
@@ -1168,7 +1204,7 @@ export function CompanyPage({ organisationId, contactId }: { organisationId: str
           </div>
           <div>
             <span className={ui.muted}>Open opportunities</span> <strong>{openPipeline.length}</strong>{" "}
-            <span className={ui.muted}>({formatMoney(sumAmounts(openPipeline))})</span>
+            <span className={ui.muted}>({totalAmounts(openPipeline, baseCurrency)})</span>
           </div>
           <div>
             <span className={ui.muted}>Open tasks</span> <strong>{tasks.filter((t) => t.status !== "done").length}</strong>
@@ -1220,6 +1256,7 @@ export function CompanyPage({ organisationId, contactId }: { organisationId: str
           <OpportunityForm
             organisationId={organisationId}
             fixedContactId={contact.id}
+            fixedCurrency={contact.currencyCode ?? baseCurrency}
             onSaved={() => {
               setAdding(null);
               data.reload();

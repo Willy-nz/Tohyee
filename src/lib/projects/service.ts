@@ -7,7 +7,9 @@ import { parseIsoDate, parseOptionalIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
+import { parseRateInput } from "@/lib/fx/documents";
 import { createInvoice, getInvoice, type Invoice } from "@/lib/invoices/service";
+import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, cmp, dec, parseDecimalInput, sub, toFixedString, toPlainString, ZERO_DECIMAL, type Decimal } from "@/lib/money/decimal";
 import { listMembers } from "@/lib/organisations/members";
 import { personName } from "@/lib/people/names";
@@ -31,6 +33,12 @@ import { optionalBoolean, optionalId, optionalSource, optionalString, requireArr
  * voiding the invoice or deleting the draft makes them unbilled again (the
  * database keeps all of this, see migration 0030). Profitability and the time
  * report are worked out from these tables whenever they're read.
+ *
+ * A project is in its customer's currency (MC61-MC70, following NetSuite:
+ * "Projects and their associated transactions must share a single
+ * currency"): its rates, fixed prices, estimate and invoices are in it.
+ * Staff costs and expense costs stay in the base currency, so profit is the
+ * invoices' base-currency value less costs.
  */
 
 export const PROJECT_STATUSES = ["in_progress", "closed"] as const;
@@ -48,8 +56,10 @@ export type ProjectFigures = {
   timeCost: string;
   expenseCost: string;
   costs: string;
-  /** Approved project invoices' totals excluding GST. */
+  /** Approved project invoices' totals excluding GST, in the project's currency. */
   invoiced: string;
+  /** The same in the base currency, at each invoice's rate (MC66). Costs and profit are in the base currency. */
+  invoicedBase: string;
   onDraftInvoices: string;
   profit: string;
   unbilledTime: string;
@@ -68,6 +78,8 @@ export type ProjectSummary = {
   name: string;
   contactId: string;
   contactName: string;
+  /** The customer's currency (MC61): rates, fixed prices, the estimate and invoices are in it. */
+  currencyCode: string;
   estimate: string | null;
   deadline: string | null;
   status: ProjectStatus;
@@ -145,6 +157,9 @@ export type ProjectInvoice = {
   invoiceDate: string;
   subtotal: string;
   total: string;
+  /** The subtotal in the base currency (its own rate), or the subtotal for a base-currency invoice. */
+  baseSubtotal: string;
+  exchangeRate: string | null;
   createdByEmail: string | null;
   createdAt: string;
 };
@@ -245,6 +260,7 @@ type ProjectRow = {
   name: string;
   contact_id: string;
   contact_name: string;
+  currency_code: string;
   estimate: string | null;
   deadline: string | null;
   status: ProjectStatus;
@@ -255,7 +271,7 @@ type ProjectRow = {
   updated_at: string;
 };
 
-const PROJECT_COLUMNS = `p.id::text, p.name, p.contact_id::text, c.name as contact_name, p.estimate, p.deadline, p.status,
+const PROJECT_COLUMNS = `p.id::text, p.name, p.contact_id::text, c.name as contact_name, p.currency_code, p.estimate, p.deadline, p.status,
   p.closed_at, p.closed_by_email, p.created_by_email, p.created_at, p.updated_at`;
 
 const BILLED_COLUMNS = (kind: string, id: string) => `(select s.id::text from sales_invoices s where s.id = tohyee_project_item_invoice('${kind}', ${id})) as billed_invoice_id,
@@ -326,6 +342,8 @@ type InvoiceRow = {
   invoice_date: string;
   subtotal: string;
   total: string;
+  base_subtotal: string;
+  exchange_rate: string | null;
   created_by_email: string | null;
   created_at: string;
 };
@@ -399,7 +417,7 @@ async function loadExpenses(tx: OrgTx, projectIds: string[]): Promise<ExpenseRow
 async function loadInvoices(tx: OrgTx, projectIds: string[]): Promise<InvoiceRow[]> {
   const result = await tx.query<InvoiceRow>(
     `select pi.project_id::text, s.id::text as invoice_id, s.invoice_number, s.status, s.invoice_date, s.subtotal, s.total,
-            pi.created_by_email, pi.created_at
+            coalesce(s.base_subtotal, s.subtotal)::text as base_subtotal, s.exchange_rate::text, pi.created_by_email, pi.created_at
        from project_invoices pi join sales_invoices s on s.id = pi.invoice_id
       where pi.project_id = any($1::bigint[])
       order by s.id`,
@@ -470,6 +488,7 @@ function figuresFor(
   const liveExpenses = expenses.filter((expense) => expense.status === "active");
   const expenseCost = sumOf(liveExpenses.map((expense) => expense.cost));
   const invoiced = sumOf(invoices.filter((invoice) => invoice.status === "approved").map((invoice) => invoice.subtotal));
+  const invoicedBase = sumOf(invoices.filter((invoice) => invoice.status === "approved").map((invoice) => invoice.base_subtotal));
   const onDraft = sumOf(invoices.filter((invoice) => invoice.status === "draft").map((invoice) => invoice.subtotal));
 
   let unbilledTime = ZERO_DECIMAL;
@@ -526,8 +545,10 @@ function figuresFor(
       expenseCost: money(expenseCost),
       costs: money(costs),
       invoiced: money(invoiced),
+      invoicedBase: money(invoicedBase),
       onDraftInvoices: money(onDraft),
-      profit: money(sub(invoiced, costs)),
+      // Costs are in the base currency, so profit is the invoices' base value less them (MC66).
+      profit: money(sub(invoicedBase, costs)),
       unbilledTime: money(unbilledTime),
       unbilledFixed: money(unbilledFixed),
       unbilledExpenses: money(unbilledExpenses),
@@ -546,6 +567,7 @@ function toSummary(row: ProjectRow, figures: ProjectFigures): ProjectSummary {
     name: row.name,
     contactId: row.contact_id,
     contactName: row.contact_name,
+    currencyCode: row.currency_code,
     estimate: row.estimate === null ? null : money(dec(row.estimate)),
     deadline: row.deadline,
     status: row.status,
@@ -601,6 +623,8 @@ export async function getProject(tx: OrgTx, idInput: unknown): Promise<Project> 
       invoiceDate: invoice.invoice_date,
       subtotal: invoice.subtotal,
       total: invoice.total,
+      baseSubtotal: money(dec(invoice.base_subtotal)),
+      exchangeRate: invoice.exchange_rate === null ? null : plain(invoice.exchange_rate),
       createdByEmail: invoice.created_by_email,
       createdAt: invoice.created_at,
     })),
@@ -608,9 +632,9 @@ export async function getProject(tx: OrgTx, idInput: unknown): Promise<Project> 
 }
 
 /** Locks a project row until the transaction ends, so commands on one project run one at a time. */
-async function lockProject(tx: OrgTx, id: string): Promise<{ id: string; name: string; status: ProjectStatus; contact_id: string }> {
-  const result = await tx.query<{ id: string; name: string; status: ProjectStatus; contact_id: string }>(
-    "select id::text, name, status, contact_id::text from projects where id = $1 for update",
+async function lockProject(tx: OrgTx, id: string): Promise<{ id: string; name: string; status: ProjectStatus; contact_id: string; currency_code: string }> {
+  const result = await tx.query<{ id: string; name: string; status: ProjectStatus; contact_id: string; currency_code: string }>(
+    "select id::text, name, status, contact_id::text, currency_code from projects where id = $1 for update",
     [id],
   );
   if (!result.rows[0]) throw new NotFoundError("Project not found.");
@@ -639,12 +663,28 @@ function parseProject(input: { name?: unknown; contactId?: unknown; estimate?: u
   };
 }
 
-async function requireCustomer(tx: OrgTx, contactId: string): Promise<string> {
-  const contact = (await tx.query<{ name: string; is_customer: boolean; is_archived: boolean }>("select name, is_customer, is_archived from contacts where id = $1", [contactId])).rows[0];
+/**
+ * The project's customer and its currency, which the project takes (MC61). A
+ * currency without cents (JPY, XPF) is refused rather than guessed: time and
+ * markups are worked out to the cent (MC70).
+ */
+async function requireCustomer(tx: OrgTx, contactId: string): Promise<{ name: string; currencyCode: string }> {
+  const contact = (
+    await tx.query<{ name: string; is_customer: boolean; is_archived: boolean; currency_code: string | null }>(
+      "select name, is_customer, is_archived, currency_code from contacts where id = $1",
+      [contactId],
+    )
+  ).rows[0];
   if (!contact) throw new ValidationError(`There's no contact #${contactId}.`);
   if (contact.is_archived) throw new ValidationError(`${contact.name} is archived. Unarchive them first, or pick another customer.`);
   if (!contact.is_customer) throw new ValidationError(`${contact.name} isn't marked as a customer. Edit the contact first, or pick another one.`);
-  return contact.name;
+  const currencyCode = contact.currency_code ?? tx.baseCurrency;
+  if (currencyMinorUnits(currencyCode) !== 2) {
+    throw new ValidationError(
+      `${contact.name} is in ${currencyCode}, which has no cents. Projects in ${currencyCode} aren't supported yet (refused rather than guessed): time and markups are worked out to the cent.`,
+    );
+  }
+  return { name: contact.name, currencyCode };
 }
 
 /** Starts a project for a customer (PJ1). It posts nothing and starts in progress. */
@@ -663,12 +703,13 @@ export async function createProject(
     assertSameRequest(existing.request_hash, hash, "project");
     return { created: false, project: await getProject(tx, existing.id) };
   }
-  await requireCustomer(tx, details.contactId);
+  // The project is in its customer's currency (MC61).
+  const customer = await requireCustomer(tx, details.contactId);
   const inserted = await tx.query<{ id: string }>(
-    `insert into projects (command_source, idempotency_key, request_hash, contact_id, name, estimate, deadline, created_by_user_id, created_by_email)
-     values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9)
+    `insert into projects (command_source, idempotency_key, request_hash, contact_id, currency_code, name, estimate, deadline, created_by_user_id, created_by_email)
+     values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10)
      on conflict (command_source, idempotency_key) do nothing returning id::text`,
-    [source, idempotencyKey, hash, details.contactId, details.name, details.estimate, details.deadline, tx.actor.userId, tx.actor.email],
+    [source, idempotencyKey, hash, details.contactId, customer.currencyCode, details.name, details.estimate, details.deadline, tx.actor.userId, tx.actor.email],
   );
   const id = inserted.rows[0]?.id;
   if (!id) {
@@ -677,7 +718,7 @@ export async function createProject(
     assertSameRequest(winner.request_hash, hash, "project");
     return { created: false, project: await getProject(tx, winner.id) };
   }
-  await writeAuditEvent(tx, { eventType: "project.created", entityType: "project", entityId: id, details: { ...details } });
+  await writeAuditEvent(tx, { eventType: "project.created", entityType: "project", entityId: id, details: { ...details, currencyCode: customer.currencyCode } });
   return { created: true, project: await getProject(tx, id) };
 }
 
@@ -697,21 +738,34 @@ export async function updateProject(
     estimate: input.estimate === undefined ? current.estimate : input.estimate,
     deadline: input.deadline === undefined ? current.deadline : input.deadline,
   });
+  let currencyCode = current.currencyCode;
   if (details.contactId !== current.contactId) {
     if (current.invoices.length > 0) throw new ConflictError(`Project ${current.name} has invoices, so its customer can't change.`);
-    await requireCustomer(tx, details.contactId);
+    currencyCode = (await requireCustomer(tx, details.contactId)).currencyCode;
+    // Its rates, prices and costs are in its currency, so that's fixed once there are any (MC67). The database refuses it too.
+    if (currencyCode !== current.currencyCode && (current.tasks.length > 0 || current.timeEntries.length > 0 || current.expenses.length > 0)) {
+      throw new ConflictError(
+        `Project ${current.name} has tasks, time or expenses in ${current.currencyCode}, so it can't move to a customer in ${currencyCode}. Start a new project for them.`,
+      );
+    }
   }
   const before = { name: current.name, contactId: current.contactId, estimate: current.estimate, deadline: current.deadline };
   const after = { ...details, estimate: details.estimate === null ? null : money(dec(details.estimate)) };
   if (JSON.stringify(before) === JSON.stringify(after)) return current;
-  await tx.query("update projects set name = $2, contact_id = $3, estimate = $4::numeric, deadline = $5, updated_at = now() where id = $1", [
+  await tx.query("update projects set name = $2, contact_id = $3, estimate = $4::numeric, deadline = $5, currency_code = $6, updated_at = now() where id = $1", [
     id,
     details.name,
     details.contactId,
     details.estimate,
     details.deadline,
+    currencyCode,
   ]);
-  await writeAuditEvent(tx, { eventType: "project.updated", entityType: "project", entityId: id, details: { before, after } });
+  await writeAuditEvent(tx, {
+    eventType: "project.updated",
+    entityType: "project",
+    entityId: id,
+    details: { before, after, ...(currencyCode !== current.currencyCode ? { currencyCode: { from: current.currencyCode, to: currencyCode } } : {}) },
+  });
   return getProject(tx, id);
 }
 
@@ -1095,6 +1149,7 @@ export async function linkProjectExpense(
     );
   }
   if (cmp(dec(line.net_amount), ZERO_DECIMAL) <= 0) throw new ValidationError("That line has no amount excluding GST.");
+  if (chargeable) assertChargeableCurrency(tx, project);
   const taken = await tx.query<{ name: string }>(
     `select p.name from project_expenses x join projects p on p.id = x.project_id
       where x.status = 'active' and x.source_type = $1 and coalesce(x.bill_line_id, x.expense_claim_receipt_id, x.bank_transaction_line_id) = $2`,
@@ -1133,10 +1188,28 @@ async function lockExpenseForChange(tx: OrgTx, idInput: unknown): Promise<{ expe
   return { expense, projectId: project.id };
 }
 
+/**
+ * Expenses on a project in another currency are costs only (MC63), refused
+ * rather than guessed: an expense's cost is in the base currency, and which
+ * rate would turn it into the project's currency for the invoice (the
+ * bill's, the invoice's or another) isn't settled. The database refuses it too.
+ */
+function assertChargeableCurrency(tx: OrgTx, project: { name: string; currency_code: string }): void {
+  if (project.currency_code === tx.baseCurrency) return;
+  throw new ValidationError(
+    `Project ${project.name} is in ${project.currency_code}, and expense costs are in ${tx.baseCurrency}. Charging an expense on a ${project.currency_code} project ` +
+      `isn't supported yet (refused rather than guessed): link it as not chargeable (a cost only), and add what you'll charge as a fixed price task in ${project.currency_code}.`,
+  );
+}
+
 /** Changes whether an unbilled expense is chargeable, and its markup (PJ8). */
 export async function updateProjectExpense(tx: OrgTx, idInput: unknown, input: { chargeable?: unknown; markupPercent?: unknown }): Promise<Project> {
   const { expense, projectId } = await lockExpenseForChange(tx, idInput);
   const chargeable = input.chargeable === undefined ? expense.chargeable : (optionalBoolean(input.chargeable, "chargeable") ?? expense.chargeable);
+  if (chargeable && !expense.chargeable) {
+    const project = (await tx.query<{ name: string; currency_code: string }>("select name, currency_code from projects where id = $1", [projectId])).rows[0];
+    assertChargeableCurrency(tx, project);
+  }
   const markupPercent = chargeable ? parseMarkup(input.markupPercent === undefined ? expense.markupPercent : input.markupPercent) : "0";
   if (chargeable === expense.chargeable && plain(markupPercent) === plain(expense.markupPercent)) return getProject(tx, projectId);
   await tx.query("update project_expenses set chargeable = $2, markup_percent = $3::numeric, updated_at = now() where id = $1", [expense.id, chargeable, markupPercent]);
@@ -1177,6 +1250,8 @@ function parseIds(input: unknown, field: string): string[] {
  * chargeable expenses with their markup, to one revenue account and tax code
  * (none for no tax). Each item is linked to the invoice so it can't be billed
  * again; voiding the invoice or deleting the draft makes them unbilled again.
+ * A project in another currency makes an invoice in it (MC64), at the rate
+ * typed or else the one a new invoice for that date starts with (MC65).
  */
 export async function invoiceProject(
   tx: OrgTx,
@@ -1191,6 +1266,8 @@ export async function invoiceProject(
     timeEntryIds?: unknown;
     taskIds?: unknown;
     expenseIds?: unknown;
+    /** For a project in another currency: base currency per 1 unit. Left out, the invoice's usual starting rate (MC65). */
+    exchangeRate?: unknown;
   },
 ): Promise<{ created: boolean; invoice: Invoice; project: Project }> {
   const projectId = requireId(projectIdInput, "projectId");
@@ -1204,7 +1281,19 @@ export async function invoiceProject(
   const timeEntryIds = parseIds(input.timeEntryIds, "timeEntryIds");
   const taskIds = parseIds(input.taskIds, "taskIds");
   const expenseIds = parseIds(input.expenseIds, "expenseIds");
-  const hash = requestHash("project_invoice", { projectId, invoiceDate, dueDate: sentDue, accountCode: accountCode.toLowerCase(), taxCode, timeEntryIds, taskIds, expenseIds });
+  const typedRate = parseRateInput(input.exchangeRate);
+  const hash = requestHash("project_invoice", {
+    projectId,
+    invoiceDate,
+    dueDate: sentDue,
+    accountCode: accountCode.toLowerCase(),
+    taxCode,
+    timeEntryIds,
+    taskIds,
+    expenseIds,
+    // Only when sent, so earlier requests hash the same.
+    ...(typedRate != null ? { exchangeRate: typedRate } : {}),
+  });
   const replay = async () => {
     const earlier = (
       await tx.query<{ request_hash: string; invoice_id: string }>(
@@ -1273,16 +1362,25 @@ export async function invoiceProject(
 
   const dueDate = sentDue ?? (await dueDateFromTerms(tx, project.contactId, invoiceDate));
   if (dueDate === null) throw new ValidationError("dueDate is required (YYYY-MM-DD): this customer has no payment terms to work it out from.");
-  const { invoice } = await createInvoice(tx, {
-    source: "project",
-    idempotencyKey: `project-${requestHash("project_invoice_key", { source, idempotencyKey }).slice(0, 48)}`,
-    contactId: project.contactId,
-    invoiceDate,
-    dueDate,
-    reference: project.name.slice(0, 100),
-    amountsMode: taxCode ? "exclusive" : "no_tax",
-    lines: lines.map((line) => ({ description: line.description, quantity: line.quantity, unitPrice: line.unitPrice, accountCode, taxCode })),
-  });
+  // In the project's currency, which is its customer's (MC64); GST on it follows foreign-currency invoices' rules (MC2).
+  const { invoice } = await createInvoice(
+    tx,
+    {
+      source: "project",
+      idempotencyKey: `project-${requestHash("project_invoice_key", { source, idempotencyKey }).slice(0, 48)}`,
+      contactId: project.contactId,
+      invoiceDate,
+      dueDate,
+      reference: project.name.slice(0, 100),
+      amountsMode: taxCode ? "exclusive" : "no_tax",
+      lines: lines.map((line) => ({ description: line.description, quantity: line.quantity, unitPrice: line.unitPrice, accountCode, taxCode })),
+      ...(typedRate != null ? { exchangeRate: typedRate } : {}),
+    },
+    { foreignCurrency: true, feature: "Project invoices" },
+  );
+  if (invoice.currencyCode !== project.currencyCode) {
+    throw new ConflictError(`Project ${project.name} is in ${project.currencyCode}, but ${project.contactName}'s invoices are in ${invoice.currencyCode}.`);
+  }
   const projectInvoice = await tx.query<{ id: string }>(
     `insert into project_invoices (command_source, idempotency_key, request_hash, project_id, invoice_id, created_by_user_id, created_by_email)
      values ($1, $2, $3, $4, $5, $6, $7) returning id::text`,
@@ -1428,13 +1526,34 @@ export async function timeReport(tx: OrgTx, filters: { from?: unknown; to?: unkn
   };
 }
 
-export type ProfitabilityReport = { projects: ProjectSummary[]; totals: Omit<ProjectFigures, "estimateLeft" | "minutes"> & { minutes: number } };
+type MoneyFigure = keyof Omit<ProjectFigures, "estimateLeft" | "minutes">;
+
+/** Figures in a project's own currency: what's charged. The rest (costs, invoicedBase, profit) are in the base currency. */
+const CHARGE_FIGURES = ["invoiced", "onDraftInvoices", "unbilledTime", "unbilledFixed", "unbilledExpenses", "unbilled", "writtenOff", "toDate"] as const;
+type ChargeFigure = (typeof CHARGE_FIGURES)[number];
+
+export type ProfitabilityReport = {
+  baseCurrency: string;
+  projects: ProjectSummary[];
+  /**
+   * Totals in the base currency. Minutes, costs, invoicedBase and profit are
+   * of every project; the charge figures (invoiced, unbilled and so on) are
+   * of the base-currency projects only (MC66).
+   */
+  totals: Omit<ProjectFigures, "estimateLeft" | "minutes"> & { minutes: number };
+  /** The charge figures of projects in other currencies, one row per currency (MC66). */
+  otherCurrencies: Array<{ currencyCode: string } & Record<ChargeFigure, string>>;
+};
 
 /** Every project's figures (PJ9), with totals; `status` keeps only in progress or closed ones. */
 export async function projectProfitability(tx: OrgTx, filters: { status?: unknown } = {}): Promise<ProfitabilityReport> {
   const projects = await listProjects(tx, { status: filters.status });
-  const total = (field: keyof Omit<ProjectFigures, "estimateLeft" | "minutes">) => money(sumOf(projects.map((project) => project.figures[field])));
+  const inBase = projects.filter((project) => project.currencyCode === tx.baseCurrency);
+  const total = (field: MoneyFigure) =>
+    money(sumOf(((CHARGE_FIGURES as readonly string[]).includes(field) ? inBase : projects).map((project) => project.figures[field])));
+  const currencies = [...new Set(projects.map((project) => project.currencyCode).filter((code) => code !== tx.baseCurrency))].sort();
   return {
+    baseCurrency: tx.baseCurrency,
     projects,
     totals: {
       minutes: projects.reduce((sum, project) => sum + project.figures.minutes, 0),
@@ -1442,6 +1561,7 @@ export async function projectProfitability(tx: OrgTx, filters: { status?: unknow
       expenseCost: total("expenseCost"),
       costs: total("costs"),
       invoiced: total("invoiced"),
+      invoicedBase: total("invoicedBase"),
       onDraftInvoices: total("onDraftInvoices"),
       profit: total("profit"),
       unbilledTime: total("unbilledTime"),
@@ -1451,5 +1571,11 @@ export async function projectProfitability(tx: OrgTx, filters: { status?: unknow
       writtenOff: total("writtenOff"),
       toDate: total("toDate"),
     },
+    otherCurrencies: currencies.map((currencyCode) => {
+      const inCurrency = projects.filter((project) => project.currencyCode === currencyCode);
+      const row = { currencyCode } as { currencyCode: string } & Record<ChargeFigure, string>;
+      for (const field of CHARGE_FIGURES) row[field] = money(sumOf(inCurrency.map((project) => project.figures[field])));
+      return row;
+    }),
   };
 }

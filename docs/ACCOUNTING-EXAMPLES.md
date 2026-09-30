@@ -1743,7 +1743,7 @@ Amazon Web Services (USD).
 | MC8 | Revaluation on 31 Jul at **1.62** (reversal 1 Aug) of 1030, 1100 USD and 2000 USD | 1030: USD 1,000.00, carrying 1,640.00, revalued 1,620.00: Dr 7010 **20.00** / Cr 1030 20.00. 1100 USD: USD **1,900.00** (INV-0005, its only open document: (1.62 - 1.60) x 1,900.00), carrying **3,040.00**, revalued **3,078.00**: Dr 1100 **38.00** (USD 0.00 at 1.62) / Cr 7000 38.00. 2000 USD: USD **50.00** (AWS-7: (1.62 - 1.66) x 50.00), carrying **83.00**, revalued **81.00**: Dr 2000 **2.00** / Cr 7000 2.00. All reversed on 1 Aug. Before it, period close's FX check lists 1030, 1100 and 2000; after, it passes. Refused: 1100 without a currency ("…Say which currency…"), 1100 USD typed as 2,000.00 ("the ledger has USD 1900.00 open…"), 1100 EUR ("nothing open in EUR"), 1100 USD again on 31 Jul |
 | MC9 | Aged receivables and payables, and Acme's statement, as at 31 Jul | Acme: INV-0005 **USD 1,900.00 / NZD 3,040.00**, owes USD 1,900.00; total **NZD 3,155.00** (with Kobe's 115.00); revaluation **38.00** beside it (3,155.00 + 38.00 = 1100's 3,193.00). Payables: AWS-7 **USD 50.00 / NZD 83.00**; revaluation **-2.00**; 2000 **81.00**, difference 0.00. Period close's receivables and payables checks pass. Acme's July statement is in **USD**: closing **1,900.00**, NZD **3,040.00** beside it |
 | MC10 | Bills from AWS: AWS-7, 5 Jul, USD 50.00 at **1.66**, 6040, no tax; AWS-8, 6 Jul, the same; supplier credit note AWS-CR1, 7 Jul, USD 20.00 at **1.70**, applied to AWS-8 on 8 Jul; AWS-8's USD 30.00 paid 9 Jul from 1000 at 1.66 | AWS-7: Dr 6040 **83.00** / Cr 2000 **83.00 (USD 50.00)**; with a GST line: refused. AWS-CR1: Dr 2000 **34.00 (USD 20.00)** / Cr 6040 34.00. Applying: the bill's side 83.00 x 20 / 50 = **33.20**, the credit's **34.00**, loss **0.80**: Dr 2000 33.20 (USD 20.00) / Cr 2000 34.00 (USD 20.00) / Dr 7020 0.80. Payment: bank **49.80**, cleared **49.80**, no gain or loss (no 7020 line): Dr 2000 49.80 (USD 30.00) / Cr 1000 49.80 |
-| MC11 | Refused rather than guessed, with nothing posted | Project and CRM invoices for a USD contact (a USD invoice made any way but entering it directly, from a quote, MC25, or from a repeating invoice, MC26); item lines without a typed price on foreign-currency documents (stock items are MC29); a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
+| MC11 | Refused rather than guessed, with nothing posted | A USD invoice made any way but entering it directly, from a quote (MC25), a repeating invoice (MC26), a project (MC64) or a CRM opportunity (MC69); item lines without a typed price on foreign-currency documents (stock items are MC29); a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
 | MC12 | AWS-7 paid on 5 Aug from 1030 at **1.65** (after the 1 Aug reversal) | Dr 2000 **83.00 (USD 50.00)** / Cr 1030 **82.50 (USD 50.00 at 1.65)** / Cr 7020 **0.50** |
 | MC13 | July GST return (invoice basis) and the trial balance at 31 Aug | Box 5 **5,678.51**, Box 6 **5,563.51** (1,654.30 + 827.15 + 45.06 + 3,200.00 - 163.00 zero-rated; Kobe's 115.00 standard-rated); AWS's no-GST bills in no box. Trial balance balances: 7020 debit **18.75** (-14.30 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50), 7050 debit **0.01** (MC4), 7000 and 7010 nothing (reversed), 1100 **3,155.00**, 2000 nothing, 1030 **1,557.50** (USD 950.00) |
 
@@ -2108,6 +2108,72 @@ nothing posted before; all zero-rated or no tax.
 Tests: `tests/integration/fx-rate-table.test.ts` (MC46-MC53),
 `tests/unit/fx-rate-text.test.ts` (MC48, MC53).
 
+### Projects and CRM opportunities in a foreign currency (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) following NetSuite, as Jess asked. In NetSuite
+a new transaction starts in the customer's currency, and "Projects and their
+associated transactions must share a single currency" (NetSuite help,
+docs.oracle.com/en/cloud/saas/netsuite/ns-online-help, bridgehead_N1398658,
+section_N1404249, section_4369706980 and section_3752834264): a project for a customer in
+another currency is in that currency, its billing rates (time, fixed fees)
+are set in it, and the invoices made from it are in it, so nothing charged
+is converted from NZD. Staff costs stay in the base currency. So, in Tohyee:
+
+- **A project is in its customer's currency** (PJ1): taken from the customer
+  when it's created, never typed (the database checks). Its hourly rates,
+  fixed prices and estimate are in it. Existing projects are in their
+  customer's currency (NZD for NZD customers).
+- A project's currency **can't change once it has tasks, time, expenses or
+  invoices** (moving it to a customer in another currency is refused before
+  then too: its customer can't change once it has invoices, PJ); a
+  customer's currency can't change once it has projects or opportunities
+  (as MC1 for documents). The database refuses both.
+- **Staff cost rates and costs stay NZD** (PJ3), and so do expense costs
+  (the line's NZD net amount, PJ4).
+- **Invoicing a foreign project** (PJ6) makes a draft invoice in its
+  currency, like any foreign-currency invoice (MC2): the rate typed, or else
+  the one a new invoice for that date starts with (MC3); GST zero-rated,
+  exempt or none; nothing posts until it's approved.
+- **Profitability** (PJ9): invoiced, on draft invoices, unbilled, written
+  off and the estimate are in the project's currency; **invoiced (NZD)** is
+  the approved invoices' NZD subtotals at their own rates (what the ledger
+  has in 4000); costs and **profit (invoiced NZD less costs)** are NZD. The
+  report's totals are NZD: invoiced (NZD), costs and profit of every
+  project, and what's still to invoice of the NZD projects, with a line per
+  other currency for its projects' amounts (never added to NZD).
+- **Chargeable expenses on a foreign project are refused** (smallest safe
+  choice): the cost is NZD and which rate would turn it into USD for the
+  invoice isn't settled. Link it as not chargeable (a cost only) and charge
+  for it as a fixed price task. The database refuses it too.
+- **CRM**: an opportunity is in its company's currency (its amount too),
+  following its company if that changes, until it has made its invoice. The
+  pipeline totals each currency on its own; a company's open pipeline is in
+  its currency. A **won opportunity's invoice** (CRM5) is a draft in that
+  currency at the rate typed or else the usual starting rate; its line is
+  **zero-rated** (ZERO) rather than standard-rated GST, since only
+  zero-rated, exempt or no GST can be on a foreign-currency invoice (MC2),
+  or has no tax if there's no zero-rated code. It's checked before it's
+  approved.
+
+Setup: GST on the invoice basis; 1000, 1100, 4000, 6040; customers **Acme
+Inc (USD)** and **Harbour Cafe** (NZD), supplier Paw Supplies (NZD); Jess's
+staff cost rate **NZD 40.00** an hour; no USD rate used yet.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC61 | Projects: "Website build" for Acme, estimate 3,000.00; "Cafe menu" for Harbour Cafe | Website build is **USD** (estimate **USD 3,000.00**), Cafe menu **NZD**; nothing posts. Changing Acme's currency is now refused ("Acme Inc has projects or CRM opportunities in USD, so its currency can't change…"), by the database too; so is setting Website build's currency to NZD in the database ("This contact's documents are in USD, not NZD"). A project for Yamato KK (JPY) is refused: MC70 |
+| MC62 | Tasks: Development, hourly **USD 120.00**; Setup, fixed **USD 500.00**. Jess records 2 h 30 min of Development on 1 Jul 2026; on Cafe menu, Design hourly 90.00 and 1 h of Jess's time on 2 Jul | Jess's entry costs **NZD 100.00** (150 x 40.00 / 60, her NZD cost rate). Website build unbilled **USD 800.00** (300.00 time + 500.00 fixed); Cafe menu unbilled **90.00** (NZD), cost 40.00 |
+| MC63 | Bill PS-1 from Paw Supplies, 3 Jul, "Hosting" 50.00 + GST to 6040, approved; linked to Website build | Chargeable: refused ("Project Website build is in USD, and expense costs are in NZD. Charging an expense on a USD project isn't supported yet…"), and by the database. Not chargeable: linked at cost **NZD 50.00**; making it chargeable later is refused. Nothing posts |
+| MC64 | Invoice everything unbilled on Website build, 10 Jul, to 4000 | With GST (standard): refused ("GST on foreign-currency invoices…"). ZERO with no rate typed (no USD rate used yet): refused ("Type the exchange rate…"); nothing is linked. ZERO at **1.60**: a **draft USD invoice** for Acme: "Development (2 h 30 min)" 2.5 x **120.00** = **300.00**, "Setup" 1 x **500.00**: **USD 800.00**, no GST, NZD **1,280.00** (480.00 + 800.00); unbilled USD 0.00. Approved: Dr 1100 **1,280.00 (USD 800.00)** / Cr 4000 **1,280.00** |
+| MC65 | 1 h more Development on 12 Jul, invoiced on 20 Jul (ZERO) with no rate typed, and approved | Takes **1.60**, the rate a new USD invoice dated 20 Jul starts with (MC3; MC64's): "Development (1 h)" **USD 120.00** = NZD **192.00**: Dr 1100 192.00 (USD 120.00) / Cr 4000 192.00 |
+| MC66 | Project profitability and the time report for July 2026 | Website build: invoiced **USD 920.00**, invoiced (NZD) **1,472.00**; costs **NZD 190.00** (time 3 h 30 min, 140.00, plus hosting 50.00); profit **NZD 1,282.00**; unbilled **USD 0.00**; estimate USD 3,000.00, **USD 2,080.00** left. Cafe menu: costs 40.00, profit **-40.00**, unbilled **90.00**. Totals (NZD): invoiced **1,472.00**, costs **230.00**, profit **1,242.00**, unbilled **90.00** (NZD projects); USD projects: invoiced USD 920.00, unbilled USD 0.00. 4000 on the trial balance is 1,472.00. Time report: Jess 4 h 30 min, cost **NZD 180.00** |
+| MC67 | Currency locks | Website build can't move to Harbour Cafe (it has invoices). "Discovery" for Acme with a task Workshop (fixed USD 200.00) can't move to Harbour Cafe ("…has tasks, time or expenses in USD, so it can't move to a customer in NZD…"); the database refuses its currency changing too. "Scoping" for Acme, with nothing on it, moves to Harbour Cafe and is then **NZD** |
+| MC68 | CRM on. Opportunities "Annual retainer" for Acme 2,000.00 and "Menu reprint" for Harbour Cafe 500.00, both New | Annual retainer is **USD 2,000.00**, Menu reprint **NZD 500.00**; the New column totals **NZD 500.00 + USD 2,000.00** (never added together); Acme's open pipeline **USD 2,000.00**. Moved to Acme, Menu reprint is USD 500.00; moved back, NZD 500.00. For Yamato KK (JPY) 1000.50 is refused ("…no cents…"), 1000 works |
+| MC69 | Annual retainer and Menu reprint marked Won and invoiced (today); "Logo licence" for Acme, USD 100.00, Won, invoiced with the rate **1.58** typed | Annual retainer: a **draft USD invoice**, 1 x USD 2,000.00 to 4000, **ZERO**, at **1.60** (the last USD rate used, MC65's): NZD **3,200.00**; nothing posts; again returns the same invoice; its company can't change now (the database refuses too). Logo licence: USD 100.00 at 1.58 = NZD **158.00**. Menu reprint: NZD with GST, as CRM5 (575.00); a rate typed for it is refused ("…in NZD, so its invoice has no exchange rate"). In an organisation with no USD rate used, a USD opportunity's invoice without a rate is refused ("Type the exchange rate…") |
+| MC70 | Refused rather than guessed, nothing posted | A project for Yamato KK (JPY: "…which has no cents. Projects in JPY aren't supported yet…"); chargeable expenses on a USD project (MC63); standard-rated GST on a foreign project's invoice (MC64); invoicing a USD project, or a USD opportunity, while sales count for GST when paid (the payments basis, as MC11) |
+
+Tests: `tests/integration/multi-currency-projects.test.ts` (MC61-MC70).
+
 ### Not supported yet (refused rather than guessed)
 
 - **Standard-rated GST on foreign-currency invoices, bills and credit notes**
@@ -2129,10 +2195,6 @@ Tests: `tests/integration/fx-rate-table.test.ts` (MC46-MC53),
   it has documents.
 - Item lines whose price would come from the item on foreign-currency
   documents (item prices are NZD). (Stock items are built: MC29.)
-- **Project and CRM invoices** for contacts in another currency. (Quotes,
-  repeating invoices and bills and purchase orders are built: MC25-MC28;
-  repeating ones are approved only at a rate from the exchange rates list,
-  MC52.)
 - **Revaluing receivables or payables again before an earlier revaluation of
   them is reversed** (NetSuite would revalue from that revaluation's rate;
   Tohyee's reverse the next day), and revaluing a currency whose open
@@ -2140,6 +2202,9 @@ Tests: `tests/integration/fx-rate-table.test.ts` (MC46-MC53),
 - **An automatic daily rate feed** (NetSuite's Currency Exchange Rate
   Integration uses paid providers); rates are typed or pasted into the list
   (MC46, MC53). A question below.
+- **Chargeable expenses on a project in another currency** (MC63), and
+  projects in a currency without cents (JPY, XPF; MC70). (Projects and CRM
+  opportunities in another currency are built: MC61-MC70.)
 
 ### Questions for Jess (multi-currency)
 
@@ -2193,8 +2258,10 @@ Tests: `tests/integration/fx-rate-table.test.ts` (MC46-MC53),
     when the bill is paid at another rate (MC29; the difference is realised
     on 7020). NetSuite's "bill exchange rate variance" only arises between an
     item receipt and a later bill, which Tohyee doesn't have. OK?
-12. Project and CRM invoices for foreign contacts are still refused. Build
-    them next (the invoice would take the last rate, like MC25)?
+12. (Answered overnight 1 Oct 2026 by following NetSuite: a project and a
+    CRM opportunity are in their customer's currency, and so are their
+    invoices, MC61-MC70. Please check the examples; what's still open about
+    them is under "Questions for Jess (projects)".)
 
 ## Reports
 
@@ -3281,7 +3348,9 @@ the opportunity's name and amount, the first active revenue account and the
 standard GST code, dated today and due on the customer's payment terms (in
 20 days if they have none, RC1), which is then edited and
 approved like any other. Making it marks a prospect as a customer too. An
-opportunity makes at most one invoice.
+opportunity makes at most one invoice. An opportunity for a company in
+another currency is in that currency, amount and invoice (zero-rated, at a
+rate for its date), following NetSuite (MC68, MC69).
 
 **Tasks** have a title, optional details, a due date, an assignee (a
 member), a status (To do, In progress, Done) and can be about a company, a
@@ -4926,6 +4995,9 @@ from them do (as ordinary invoices, I1-I9).
   and the **estimate** against invoiced plus unbilled; per task, estimated
   against actual hours. The **time report** lists entries in a date range,
   by person, project and task, with hours and cost.
+- A project is in its **customer's currency**: for a customer in another
+  currency, its rates, prices, estimate and invoices are in it, while costs
+  and profit stay NZD (MC61-MC70).
 
 Setup (GST 15%): customer **Harbour Cafe** (payment terms 20th of the
 following month), supplier **Paw Supplies**; members Jess (owner), Aroha
@@ -5051,8 +5123,9 @@ Harbour Cafe, estimate **2,000.00**, deadline 31 Aug 2026, with tasks
 - A **start/stop timer**: time is entered as hours and minutes.
 - Undoing a **write-off**, or writing items off other than when closing.
 - Linking **draft bills**, supplier credit notes, purchase orders, manual
-  journals, receive money or stock lines to projects; foreign-currency
-  projects.
+  journals, receive money or stock lines to projects. (Projects in a
+  customer's other currency are built, MC61-MC70, but their expenses are
+  costs only, MC63, and currencies without cents are refused, MC70.)
 - **Tracking the project in the ledger**: a project isn't a tracking or
   custom segment value, and linking an expense doesn't change its posted
   lines (posted history is append-only). Organisations that want the
@@ -5075,6 +5148,19 @@ Harbour Cafe, estimate **2,000.00**, deadline 31 Aug 2026, with tasks
   than the project's life?
 - Should a project automatically tag its invoice lines with a "Project"
   custom segment value, so the profit and loss can be split by project?
+- Projects and opportunities in another currency (MC61-MC70, following
+  NetSuite): should expenses be chargeable on a USD project, and if so
+  converted at which rate (the bill's, the invoice's, or a fixed one)? As
+  built they're costs only (MC63).
+- A won opportunity for a company in another currency makes a zero-rated
+  (ZERO) draft invoice (MC69), since standard-rated GST isn't built for
+  foreign-currency documents (multi-currency question 1). Right for your
+  overseas customers, or would you rather it had no GST code until someone
+  picks one?
+- A customer's currency can't change once it has any project or
+  opportunity, even a lost one or an empty project (MC61, as quotes do,
+  MC25). Should it be allowed while they have nothing on them?
+- Projects in currencies without cents (JPY, XPF) are refused (MC70). Needed?
 
 ## Bringing in existing books (examples not yet approved by Jess)
 

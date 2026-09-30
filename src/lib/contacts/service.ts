@@ -174,6 +174,16 @@ async function assertCurrencyCanChange(tx: OrgTx, contact: { id: string; name: s
       `${contact.name} has invoices, bills or credit notes in ${contact.currencyCode ?? tx.baseCurrency}, so its currency can't change (quotes, repeating documents and purchase orders count too). Add a new contact for the other currency.`,
     );
   }
+  // A project's rates and estimate, and an opportunity's amount, are in the contact's currency too (MC61, MC68).
+  const projects = await tx.query(
+    "select 1 where exists (select 1 from projects where contact_id = $1) or exists (select 1 from crm_opportunities where contact_id = $1)",
+    [contact.id],
+  );
+  if ((projects.rowCount ?? 0) > 0) {
+    throw new ConflictError(
+      `${contact.name} has projects or CRM opportunities in ${contact.currencyCode ?? tx.baseCurrency}, so its currency can't change (their rates, estimates and amounts are in it). Add a new contact for the other currency.`,
+    );
+  }
 }
 
 function customerDetailsOf(contact: Contact): CustomerDetails {
