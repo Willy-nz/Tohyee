@@ -10,7 +10,11 @@ export const GET = route(async (request) => {
   return json({ transfers });
 });
 
-/** Moves money between two bank or credit card accounts: Dr to / Cr from on `date`. */
+/**
+ * Moves money between two bank or credit card accounts: Dr to / Cr from on
+ * `date`. `amount` is in the from account's currency; between a base-currency
+ * and a foreign-currency account, `toAmount` is what arrived (FXB5, FXB6).
+ */
 export const POST = route(async (request) => {
   const body = await readJson(request);
   const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
@@ -21,6 +25,7 @@ export const POST = route(async (request) => {
       toAccountCode: body.toAccountCode,
       date: body.date,
       amount: body.amount,
+      toAmount: body.toAmount,
       reference: body.reference,
     }),
   );

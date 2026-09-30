@@ -102,6 +102,7 @@ export function FeedPanel({ organisationId, account, onChanged }: { organisation
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SyncResult | null>(null);
   const feed = account.feed;
+  const foreign = account.isForeign;
 
   async function sync() {
     setBusy(true);
@@ -140,7 +141,16 @@ export function FeedPanel({ organisationId, account, onChanged }: { organisation
   }
 
   if (!feed.active) {
+    if (foreign && !feed.active) {
     return (
+      <Notice tone="info">
+        Akahu bank feeds can&apos;t be used for {account.currencyCode} accounts yet: Akahu&apos;s transactions don&apos;t say their
+        currency, so Tohyee can&apos;t tell {account.currencyCode} from NZD. Import statement files from your bank instead (the Import a
+        statement tab).
+      </Notice>
+    );
+  }
+  return (
       <div style={{ display: "grid", gap: 12 }}>
         <p className={ui.muted}>
           A bank feed brings in this account&apos;s settled transactions every few hours through Akahu, so you don&apos;t have to import

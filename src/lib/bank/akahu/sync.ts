@@ -80,7 +80,7 @@ export async function syncBankFeedAccount(
     // Akahu reports a credit card's balance as what's owed; statement lines count what's owed as negative.
     const isCard = akahuAccount?.type === "CREDITCARD";
     return await withOrganisationTransaction(organisation, actor, async (tx) => {
-      await lockStatementAccount(tx, accountId);
+      await lockStatementAccount(tx, accountId, "feed");
       const counts = await addStatementLines(tx, accountId, null, lines, { dryRun: true });
       if (counts.added > 0) {
         const inserted = await tx.query<{ id: string }>(

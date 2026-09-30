@@ -6,6 +6,7 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatMoney, todayInBrowser } from "@/lib/format";
 import type { JournalWithLines } from "@/lib/ledger/journals";
 import { add, cmp, dec, isDecimalString, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { convertAtRate, isRateText } from "@/lib/money/fx";
 import { AccountSelect } from "@/components/books";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { TrackingSelects, useTracking } from "@/components/tracking";
@@ -22,12 +23,15 @@ type EditorLine = {
   tracking: TrackingTags;
   /** Undefined until the custom field set-up loads, then the line's values. */
   customFields?: CustomValues;
+  /** On a foreign-currency account (FXB1-FXB11): the foreign amount and rate. */
+  foreignAmount: string;
+  exchangeRate: string;
 };
 
 let lineKey = 0;
 function blankLine(): EditorLine {
   lineKey += 1;
-  return { key: lineKey, accountCode: "", description: "", debit: "", credit: "", tracking: {} };
+  return { key: lineKey, accountCode: "", description: "", debit: "", credit: "", tracking: {}, foreignAmount: "", exchangeRate: "" };
 }
 
 function total(lines: EditorLine[], side: "debit" | "credit") {
@@ -77,6 +81,8 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
             credit: /^0*(\.0*)?$/.test(line.creditAmount) ? "" : line.creditAmount,
             tracking: line.tracking ?? {},
             customFields: line.customFields ?? {},
+            foreignAmount: line.foreign?.amount ?? "",
+            exchangeRate: line.foreign?.rate ?? "",
           };
         })
       : [blankLine(), blankLine()],
@@ -93,6 +99,19 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   }
 
+  const currencyOf = (code: string) => accounts.find((account) => account.code === code)?.currencyCode ?? null;
+
+  /** A foreign amount or rate changed: the NZD amount is foreign x rate, rounded once (D2). */
+  function updateForeign(line: EditorLine, patch: Pick<Partial<EditorLine>, "foreignAmount" | "exchangeRate">) {
+    const next = { ...line, ...patch };
+    if (isDecimalString(next.foreignAmount.trim()) && isRateText(next.exchangeRate)) {
+      const base = convertAtRate(next.foreignAmount.trim(), next.exchangeRate.trim());
+      update(line.key, line.credit ? { ...patch, credit: base } : { ...patch, debit: base });
+    } else {
+      update(line.key, patch);
+    }
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -106,6 +125,7 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
         creditAmount: line.credit || null,
         tracking: line.tracking,
         customFields: lineValues(line),
+        ...(currencyOf(line.accountCode) ? { foreignAmount: line.foreignAmount.trim() || null, exchangeRate: line.exchangeRate.trim() || null } : {}),
       }));
     try {
       if (mode === "new") {
@@ -189,6 +209,28 @@ export function JournalEditor({ organisationId, accounts, mode, original, onDone
                     value={line.accountCode}
                     onChange={(code) => update(line.key, { accountCode: code })}
                   />
+                  {currencyOf(line.accountCode) ? (
+                    <div className={ui.inlineForm} style={{ marginTop: 6 }}>
+                      <input
+                        aria-label={`Line ${index + 1} ${currencyOf(line.accountCode)} amount`}
+                        placeholder={`${currencyOf(line.accountCode)} amount`}
+                        inputMode="decimal"
+                        className={ui.num}
+                        value={line.foreignAmount}
+                        onChange={(event) => updateForeign(line, { foreignAmount: event.target.value })}
+                        required
+                      />
+                      <input
+                        aria-label={`Line ${index + 1} exchange rate`}
+                        placeholder="Rate (NZD per 1)"
+                        inputMode="decimal"
+                        className={ui.num}
+                        value={line.exchangeRate}
+                        onChange={(event) => updateForeign(line, { exchangeRate: event.target.value })}
+                        required
+                      />
+                    </div>
+                  ) : null}
                   <TrackingSelects
                     setup={tracking.data}
                     labelPrefix={`Line ${index + 1}`}

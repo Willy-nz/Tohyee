@@ -26,7 +26,7 @@ export function suggestionText(suggestion: ConfidentSuggestion): string {
   }
   return `Rule “${suggestion.ruleName}”: ${suggestion.contactName}, ${suggestion.accountCode} ${suggestion.accountName}${
     suggestion.taxCode ? `, ${suggestion.taxCode}` : ", no GST"
-  }`;
+  }${suggestion.exchangeRate ? `, at ${suggestion.exchangeRate}` : ""}`;
 }
 
 /** The highlighted suggestion under a line, or why there's none. */

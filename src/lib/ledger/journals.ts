@@ -14,7 +14,11 @@ import {
   cmp,
   dec,
   isPositive,
+  isZero,
+  mul,
   parseDecimalInput,
+  roundHalfUp,
+  significantScale,
   toFixedString,
   toPlainString,
   ZERO_DECIMAL,
@@ -54,6 +58,30 @@ export type JournalOrigin =
   | "fixed_asset_disposal";
 export type CorrectionKind = "reversal" | "replacement";
 
+/**
+ * How a foreign-currency line's base amount was worked out (examples FXB1-FXB11):
+ * - "rate": base = foreign amount x rate, rounded once (the database checks it);
+ * - "implied": the base amount is what moved (a transfer into a foreign
+ *   account); the rate is base / foreign, for information;
+ * - "carrying_value": money leaving a foreign account at its carrying value
+ *   (a transfer out); the rate is for information;
+ * - "revaluation": an FX revaluation line, foreign amount 0 at the closing rate.
+ */
+export type FxKind = "rate" | "implied" | "carrying_value" | "revaluation";
+
+/** A journal line's foreign-currency side, on the same side (debit or credit) as its base amount. */
+export type ForeignAmount = {
+  currencyCode: string;
+  amount: string;
+  rate: string;
+  kind: FxKind;
+};
+
+/** As parsed, before the account (and so the currency) is known. */
+export type ForeignInput = Omit<ForeignAmount, "currencyCode"> & { currencyCode: string | null };
+
+export const MAX_RATE_SCALE = 8;
+
 export type JournalLine = {
   lineOrder: number;
   accountId: string;
@@ -66,6 +94,8 @@ export type JournalLine = {
   tracking: TrackingTags;
   /** Custom field values on a manual journal's lines (CF9). */
   customFields: CustomValues;
+  /** On a foreign-currency account: the foreign amount and rate (FXB1-FXB11). Null otherwise. */
+  foreign: ForeignAmount | null;
 };
 
 export type Journal = {
@@ -147,6 +177,8 @@ export type JournalBody = {
     customInput: Record<string, unknown> | undefined;
     /** Checked values (CF9); system journals have none. */
     customFields?: CustomValues;
+    /** The foreign amount and rate, for a line on a foreign-currency account. */
+    foreign: ForeignInput | null;
   }>;
   total: string;
   customInput: Record<string, unknown> | undefined;
@@ -171,6 +203,7 @@ export function parseJournalBody(
     lines: unknown;
     customFields?: unknown;
   },
+  options: { internal?: boolean } = {},
 ): JournalBody {
   const postingDate = parseIsoDate(input.postingDate, "postingDate");
   const reference = requireString(input.reference, "reference", { maxLength: 100 });
@@ -220,6 +253,7 @@ export function parseJournalBody(
       description: optionalString(line.description, `${label} description`, { maxLength: 200 }),
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
       customInput: parseCustomInput(line.customFields, `${label}: `),
+      foreign: options.internal ? internalForeign(line.foreign) : parseForeignInput(line, label),
     };
   });
 
@@ -238,6 +272,41 @@ export function parseJournalBody(
     total: toFixedString(debitTotal, scale),
     customInput: parseCustomInput(input.customFields, ""),
   };
+}
+
+/**
+ * A foreign amount and rate typed on a manual journal line (`foreignAmount`,
+ * `exchangeRate`): posted at that rate, so the base amount must be the
+ * foreign amount x rate, rounded once (checked when the account is known).
+ */
+function parseForeignInput(line: Record<string, unknown>, label: string): ForeignInput | null {
+  const blank = (value: unknown) => value == null || value === "";
+  if (blank(line.foreignAmount) && blank(line.exchangeRate)) return null;
+  if (blank(line.foreignAmount)) throw new ValidationError(`${label} has an exchange rate but no foreign amount.`);
+  if (blank(line.exchangeRate)) throw new ValidationError(`${label} has a foreign amount but no exchange rate.`);
+  return {
+    currencyCode: null,
+    amount: parseDecimalInput(line.foreignAmount, `${label} foreign amount`, { maxScale: 4 }),
+    rate: parseExchangeRate(line.exchangeRate, `${label} exchange rate`),
+    kind: "rate",
+  };
+}
+
+/** An exchange rate: base currency per 1 unit of foreign currency, more than 0, up to 8 decimal places (D2). */
+export function parseExchangeRate(input: unknown, fieldName = "exchangeRate"): string {
+  return parseDecimalInput(input, fieldName, { maxScale: MAX_RATE_SCALE });
+}
+
+/** A foreign side built by Tohyee itself (bank transactions, transfers, revaluations, reversals). */
+function internalForeign(input: unknown): ForeignInput | null {
+  if (input == null) return null;
+  const value = input as ForeignAmount;
+  return { currencyCode: value.currencyCode, amount: value.amount, rate: value.rate, kind: value.kind };
+}
+
+/** A line's foreign side reversed (same amount and rate; the debit and credit swap around it). */
+export function sameForeign(line: { foreign: ForeignAmount | null }): { foreign?: ForeignAmount } {
+  return line.foreign ? { foreign: line.foreign } : {};
 }
 
 type PostOptions = {
@@ -260,6 +329,8 @@ function journalHash(body: JournalBody, options: PostOptions): string {
       // Only when tagged, so journals from before tracking keep their hashes.
       ...(Object.keys(line.tracking).length > 0 ? { tracking: line.tracking } : {}),
       ...(line.customFields && Object.keys(line.customFields).length > 0 ? { customFields: line.customFields } : {}),
+      // Only for foreign-currency lines, so other journals keep their hashes.
+      ...(line.foreign ? { foreign: line.foreign } : {}),
     })),
     ...(body.customFields && Object.keys(body.customFields).length > 0 ? { customFields: body.customFields } : {}),
     origin: options.origin,
@@ -300,8 +371,13 @@ export async function getJournal(tx: OrgTx, journalId: string): Promise<JournalW
     credit_amount: string;
     tracking: TrackingTags;
     custom_fields: CustomValues;
+    foreign_currency_code: string | null;
+    foreign_amount: string | null;
+    exchange_rate: string | null;
+    fx_kind: FxKind | null;
   }>(
-    `select l.line_order, l.account_id, a.code, a.name, l.description, l.debit_amount, l.credit_amount, l.tracking, l.custom_fields
+    `select l.line_order, l.account_id, a.code, a.name, l.description, l.debit_amount, l.credit_amount, l.tracking, l.custom_fields,
+            l.foreign_currency_code, l.foreign_amount::text, l.exchange_rate::text, l.fx_kind
        from ledger_journal_lines l
        join accounts a on a.id = l.account_id
       where l.journal_id = $1
@@ -320,6 +396,15 @@ export async function getJournal(tx: OrgTx, journalId: string): Promise<JournalW
       creditAmount: line.credit_amount,
       tracking: line.tracking ?? {},
       customFields: line.custom_fields ?? {},
+      foreign:
+        line.foreign_currency_code && line.foreign_amount !== null && line.exchange_rate !== null && line.fx_kind
+          ? {
+              currencyCode: line.foreign_currency_code,
+              amount: toFixedString(dec(line.foreign_amount), currencyMinorUnits(line.foreign_currency_code)),
+              rate: toPlainString(dec(line.exchange_rate)),
+              kind: line.fx_kind,
+            }
+          : null,
     })),
   };
 }
@@ -351,6 +436,7 @@ export async function postJournalBody(
     body.lines.map((line) => line.accountCode),
   );
   await assertPostingDateAllowed(tx, body.postingDate);
+  const foreignSides = await checkForeignLines(tx, body, accounts);
 
   const inserted = await tx.query<{ id: string }>(
     `insert into ledger_journals (
@@ -392,6 +478,7 @@ export async function postJournalBody(
   const values: unknown[] = [];
   const tuples = body.lines.map((line, index) => {
     const account = accounts.get(line.accountCode)!;
+    const foreign = foreignSides[index];
     values.push(
       journalId,
       index + 1,
@@ -401,12 +488,17 @@ export async function postJournalBody(
       line.credit,
       JSON.stringify(line.tracking ?? {}),
       JSON.stringify(line.customFields ?? {}),
+      foreign?.currencyCode ?? null,
+      foreign?.amount ?? null,
+      foreign?.rate ?? null,
+      foreign?.kind ?? null,
     );
-    const base = index * 8;
-    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}::numeric, $${base + 6}::numeric, $${base + 7}::jsonb, $${base + 8}::jsonb)`;
+    const base = index * 12;
+    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}::numeric, $${base + 6}::numeric, $${base + 7}::jsonb, $${base + 8}::jsonb, $${base + 9}, $${base + 10}::numeric, $${base + 11}::numeric, $${base + 12})`;
   });
   await tx.query(
-    `insert into ledger_journal_lines (journal_id, line_order, account_id, description, debit_amount, credit_amount, tracking, custom_fields)
+    `insert into ledger_journal_lines (journal_id, line_order, account_id, description, debit_amount, credit_amount, tracking, custom_fields,
+                                       foreign_currency_code, foreign_amount, exchange_rate, fx_kind)
      values ${tuples.join(", ")}`,
     values,
   );
@@ -426,6 +518,100 @@ export async function postJournalBody(
   });
 
   return { created: true, journal: await getJournal(tx, journalId) };
+}
+
+/**
+ * Checks each line's foreign side against its account (examples FXB1-FXB11):
+ * a line on a foreign-currency account needs one, in the account's
+ * currency; a line on a base-currency account can't have one. A line at a
+ * rate must have base = foreign x rate, rounded once. An account with
+ * postings from before Tohyee kept foreign amounts needs its opening foreign
+ * balance first, and then takes nothing dated on or before it. The database
+ * checks all of this again.
+ */
+async function checkForeignLines(
+  tx: OrgTx,
+  body: JournalBody,
+  accounts: Map<string, { id: string; code: string; name: string; currencyCode: string | null }>,
+): Promise<Array<ForeignAmount | null>> {
+  const baseScale = currencyMinorUnits(tx.baseCurrency);
+  const checked = new Set<string>();
+  const sides: Array<ForeignAmount | null> = [];
+  for (const [index, line] of body.lines.entries()) {
+    const label = `Line ${index + 1}`;
+    const account = accounts.get(line.accountCode)!;
+    const accountLabel = `account ${account.code} (${account.name})`;
+    const currency = account.currencyCode && account.currencyCode !== tx.baseCurrency ? account.currencyCode : null;
+    if (!currency) {
+      if (line.foreign) {
+        throw new ValidationError(`${label}: ${accountLabel} is in ${tx.baseCurrency}, so it takes no foreign amount or exchange rate.`);
+      }
+      sides.push(null);
+      continue;
+    }
+    if (!line.foreign) {
+      throw new ValidationError(
+        `${label}: ${accountLabel} is in ${currency}. Give the ${currency} amount and the exchange rate as well as the ${tx.baseCurrency} amount.`,
+      );
+    }
+    if (line.foreign.currencyCode && line.foreign.currencyCode !== currency) {
+      throw new ValidationError(`${label}: ${accountLabel} is in ${currency}, not ${line.foreign.currencyCode}.`);
+    }
+    const scale = currencyMinorUnits(currency);
+    const amount = dec(line.foreign.amount);
+    if (significantScale(amount) > scale) {
+      throw new ValidationError(`${label}: the ${currency} amount can have at most ${scale} decimal places.`);
+    }
+    const base = add(dec(line.debit), dec(line.credit));
+    if (line.foreign.kind === "rate") {
+      const expected = roundHalfUp(mul(amount, dec(line.foreign.rate)), baseScale);
+      if (cmp(expected, base) !== 0) {
+        throw new ValidationError(
+          `${label}: ${currency} ${toFixedString(amount, scale)} at ${toPlainString(dec(line.foreign.rate))} is ${tx.baseCurrency} ${toFixedString(expected, baseScale)}, not ${toFixedString(base, baseScale)}.`,
+        );
+      }
+    }
+    if ((line.foreign.kind === "revaluation") !== isZero(amount)) {
+      throw new ValidationError(`${label}: the ${currency} amount must not be zero.`);
+    }
+    if (!checked.has(account.id)) {
+      checked.add(account.id);
+      await assertForeignPostingAllowed(tx, account, currency, body.postingDate, line.foreign.kind);
+    }
+    sides.push({ currencyCode: currency, amount: toFixedString(amount, scale), rate: toPlainString(dec(line.foreign.rate)), kind: line.foreign.kind });
+  }
+  return sides;
+}
+
+/** The opening foreign balance rules (FXB1), with the messages people see. */
+async function assertForeignPostingAllowed(
+  tx: OrgTx,
+  account: { id: string; code: string; name: string },
+  currency: string,
+  postingDate: string,
+  kind: FxKind,
+): Promise<void> {
+  const label = `Account ${account.code} (${account.name})`;
+  const opening = await tx.query<{ as_at_date: string }>(
+    "select as_at_date::text from ledger_foreign_opening_balances where account_id = $1",
+    [account.id],
+  );
+  if (opening.rows[0]) {
+    if (postingDate <= opening.rows[0].as_at_date) {
+      throw new ValidationError(
+        `${label} has an opening foreign balance as at ${opening.rows[0].as_at_date}, so nothing can be posted to it dated on or before then.`,
+      );
+    }
+    return;
+  }
+  // A revaluation only changes the base amount, so it doesn't need the opening foreign balance (its foreign balance is typed).
+  if (kind === "revaluation") return;
+  const baseOnly = await tx.query("select 1 from ledger_journal_lines where account_id = $1 and foreign_amount is null limit 1", [account.id]);
+  if ((baseOnly.rowCount ?? 0) > 0) {
+    throw new ValidationError(
+      `${label} has postings from before Tohyee kept foreign amounts. Enter its ${currency} balance as at a date (its opening foreign balance) first.`,
+    );
+  }
 }
 
 /** Manual journal from the API. */
@@ -754,8 +940,9 @@ export async function correctJournal(
       creditAmount: line.debitAmount,
       description: line.description,
       tracking: line.tracking,
+      ...sameForeign(line),
     })),
-  });
+  }, { internal: true });
   const replacementBody = parseJournalBody(tx, {
     postingDate: command.postingDate,
     reference: command.reference,

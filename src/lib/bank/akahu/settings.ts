@@ -192,7 +192,7 @@ export async function linkBankFeed(
   const akahuAccountId = requireString(input.akahuAccountId, "akahuAccountId", { maxLength: 100 });
   if (!/^acc_[A-Za-z0-9]+$/.test(akahuAccountId)) throw new ValidationError("That isn't an Akahu account id.");
   const startDate = parseIsoDate(input.startDate, "startDate");
-  const account = await lockStatementAccount(tx, accountId);
+  const account = await lockStatementAccount(tx, accountId, "feed");
   const taken = await tx.query<{ account_id: string }>(
     "select account_id from bank_account_settings where akahu_account_id = $1 and account_id <> $2",
     [akahuAccountId, accountId],

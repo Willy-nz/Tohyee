@@ -4,7 +4,8 @@ import { parseIsoDate, parseOptionalIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { type JournalBody, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
+import { foreignAccountState } from "@/lib/ledger/foreign";
+import { type ForeignAmount, type JournalBody, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { currencyMinorUnits, parseCurrencyCode } from "@/lib/money/currency";
 import {
   abs,
@@ -16,6 +17,7 @@ import {
   roundHalfUp,
   sub,
   toFixedString,
+  toPlainString,
 } from "@/lib/money/decimal";
 import {
   asRecord,
@@ -149,6 +151,38 @@ async function loadRuns(tx: OrgTx, where: string, values: unknown[], limit = 50)
   }));
 }
 
+/**
+ * The foreign balance to revalue, in the account's normal direction: the
+ * ledger's (FXB7) when it's known, and then a typed one must agree; otherwise
+ * the typed one (F1-F7 for accounts with postings from before Tohyee kept
+ * foreign amounts and no opening foreign balance).
+ */
+async function revaluedForeignAmount(
+  tx: OrgTx,
+  account: { id: string; code: string; accountClass: string; currencyCode: string | null },
+  typed: string | null,
+  revaluationDate: string,
+): Promise<string> {
+  const state = await foreignAccountState(tx, account.id, revaluationDate);
+  const scale = currencyMinorUnits(account.currencyCode!);
+  if (state.foreignBalance === null) {
+    if (typed === null) {
+      throw new ValidationError(
+        `Account ${account.code} has postings from before Tohyee kept foreign amounts, so type its ${account.currencyCode} balance on ${revaluationDate} (or enter its opening foreign balance on the bank account first).`,
+      );
+    }
+    return typed;
+  }
+  const signed = dec(state.foreignBalance);
+  const normal = toFixedString(account.accountClass === "asset" ? signed : { units: -signed.units, scale: signed.scale }, scale);
+  if (typed !== null && toFixedString(dec(typed), scale) !== normal) {
+    throw new ValidationError(
+      `Account ${account.code}: the ledger has ${account.currencyCode} ${normal} on ${revaluationDate}, not ${toFixedString(dec(typed), scale)}. Leave the foreign amount blank to use the ledger's.`,
+    );
+  }
+  return normal;
+}
+
 export async function listFxRevaluations(
   tx: OrgTx,
   filters: { revaluationDateFrom?: unknown; revaluationDateTo?: unknown } = {},
@@ -260,10 +294,14 @@ export async function postFxRevaluation(
     if (balance.claimedCurrency && balance.claimedCurrency !== account.currencyCode) {
       throw new ValidationError(`Account ${account.code} is in ${account.currencyCode}, not ${balance.claimedCurrency}.`);
     }
-    const foreignAmount = parseDecimalInput(balance.foreignAmountRaw, `${account.code} foreign amount`, {
-      maxScale: currencyMinorUnits(account.currencyCode),
-    });
-    return { balance, account, foreignAmount };
+    // With a known foreign balance (FXB7) it needn't be typed; otherwise it must be.
+    const typed =
+      balance.foreignAmountRaw == null || balance.foreignAmountRaw === ""
+        ? null
+        : parseDecimalInput(balance.foreignAmountRaw, `${account.code} foreign amount`, {
+            maxScale: currencyMinorUnits(account.currencyCode),
+          });
+    return { balance, account, typed };
   });
 
   const hash = requestHash("fx_revaluation", {
@@ -277,7 +315,7 @@ export async function postFxRevaluation(
     loss: lossCode.toLowerCase(),
     balances: prepared.map((item) => ({
       account: item.balance.accountCode.toLowerCase(),
-      foreignAmount: item.foreignAmount,
+      foreignAmount: item.typed,
       closingRate: item.balance.closingRate,
       description: item.balance.description,
     })),
@@ -324,17 +362,19 @@ export async function postFxRevaluation(
         `Account ${item.account.code} has a ${item.account.accountClass === "asset" ? "credit" : "debit"} balance on ${revaluationDate}, which this revaluation can't handle. Post the adjustment as a manual journal.`,
       );
     }
-    const revalued = roundHalfUp(mul(dec(item.foreignAmount), dec(item.balance.closingRate)), baseScale);
+    const foreignAmount = await revaluedForeignAmount(tx, item.account, item.typed, revaluationDate);
+    const revalued = roundHalfUp(mul(dec(foreignAmount), dec(item.balance.closingRate)), baseScale);
     const delta = sub(revalued, carrying);
     computed.push({
       ...item,
+      foreignAmount,
       carrying: toFixedString(carrying, baseScale),
       revalued: toFixedString(revalued, baseScale),
       delta,
     });
   }
 
-  const lines: Array<{ accountCode: string; debitAmount: string; creditAmount: string; description: string }> = [];
+  const lines: Array<{ accountCode: string; debitAmount: string; creditAmount: string; description: string; foreign?: ForeignAmount }> = [];
   for (const item of computed) {
     if (isZero(item.delta)) continue;
     const amount = toFixedString(abs(item.delta), baseScale);
@@ -348,6 +388,13 @@ export async function postFxRevaluation(
       debitAmount: accountSide ? amount : "0",
       creditAmount: accountSide ? "0" : amount,
       description: `FX revaluation ${label}`,
+      // Only the base value changes: a foreign amount of 0 at the closing rate (FXB7).
+      foreign: {
+        currencyCode: item.account.currencyCode!,
+        amount: toFixedString(dec("0"), currencyMinorUnits(item.account.currencyCode!)),
+        rate: toPlainString(dec(item.balance.closingRate)),
+        kind: "revaluation",
+      },
     });
     lines.push({
       accountCode: isGain ? gain.code : loss.code,
@@ -360,12 +407,16 @@ export async function postFxRevaluation(
     throw new ValidationError("Nothing to revalue: every balance already matches the closing rate.");
   }
 
-  const revaluationBody: JournalBody = parseJournalBody(tx, {
-    postingDate: revaluationDate,
-    reference,
-    description: description ?? `FX revaluation ${reference}`,
-    lines,
-  });
+  const revaluationBody: JournalBody = parseJournalBody(
+    tx,
+    {
+      postingDate: revaluationDate,
+      reference,
+      description: description ?? `FX revaluation ${reference}`,
+      lines,
+    },
+    { internal: true },
+  );
   const reversalBody: JournalBody = parseJournalBody(tx, {
     postingDate: reversalPostingDate,
     reference: `REV-${reference}`.slice(0, 100),
@@ -375,8 +426,9 @@ export async function postFxRevaluation(
       debitAmount: line.creditAmount,
       creditAmount: line.debitAmount,
       description: line.description,
+      foreign: line.foreign,
     })),
-  });
+  }, { internal: true });
 
   const revaluationJournal = await postJournalBody(tx, commandSource, `${idempotencyKey}:journal`, revaluationBody, {
     origin: "fx_revaluation",

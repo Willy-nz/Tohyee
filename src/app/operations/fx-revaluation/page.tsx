@@ -73,7 +73,8 @@ function RevaluationForm({
           unrealisedLossAccountCode: loss,
           balances: rows.map((row) => ({
             accountCode: row.accountCode,
-            foreignAmount: row.foreignAmount,
+            // Blank: the ledger's foreign balance (FXB7).
+            foreignAmount: row.foreignAmount.trim() || undefined,
             closingRate: row.closingRate,
           })),
         },
@@ -128,7 +129,12 @@ function RevaluationForm({
           <thead>
             <tr>
               <th>Foreign-currency account</th>
-              <th className={ui.num}>Balance in that currency</th>
+              <th className={ui.num}>
+                Balance in that currency
+                <div className={ui.muted} style={{ fontWeight: "normal" }}>
+                  Blank: the ledger&apos;s
+                </div>
+              </th>
               <th className={ui.num}>Closing rate (base per 1)</th>
               <th />
             </tr>
@@ -154,7 +160,7 @@ function RevaluationForm({
                     onChange={(event) =>
                       setRows((current) => current.map((entry) => (entry.key === row.key ? { ...entry, foreignAmount: event.target.value } : entry)))
                     }
-                    required
+                    placeholder="From the ledger"
                   />
                 </td>
                 <td>
@@ -191,7 +197,7 @@ function RevaluationForm({
         <Button type="submit" disabled={busy}>
           {busy ? "Posting…" : "Post revaluation"}
         </Button>
-        <span className={ui.muted}>The carrying amount comes from the ledger; you only give the foreign balance and the rate.</span>
+        <span className={ui.muted}>The carrying amount comes from the ledger; you give the closing rate (and the foreign balance only when the ledger doesn&apos;t have it).</span>
       </div>
     </form>
   );
@@ -205,6 +211,11 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
       <Card title="Revalue foreign-currency balances">
+        <p className={ui.muted}>
+          Tohyee keeps the foreign amount of everything posted to a foreign-currency account, so leave the balance blank to use the
+          ledger&apos;s. Type it only for an account with postings from before Tohyee kept foreign amounts and no opening foreign
+          balance yet; if you type it for another account, it must agree with the ledger.
+        </p>
         {accounts.data ? (
           <RevaluationForm
             organisationId={organisationId}

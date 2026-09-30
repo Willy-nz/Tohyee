@@ -190,8 +190,9 @@ export async function previewImport(
 ): Promise<ImportPreview> {
   const accountId = requireId(accountIdInput, "accountId");
   const upload = parseUpload(input);
-  await lockStatementAccount(tx, accountId);
+  const account = await lockStatementAccount(tx, accountId);
   const file = input.layout == null ? readWithSavedLayout(upload, await savedLayout(tx, accountId)) : readFile(upload, input.layout);
+  assertFileCurrency(file, account);
   const counts: AddLinesResult = await addStatementLines(tx, accountId, null, file.lines, { dryRun: true });
   const dates = file.lines.map((line) => line.date).sort();
   return {
@@ -209,6 +210,19 @@ export async function previewImport(
     table: file.table,
     sample: file.lines.slice(0, 20),
   };
+}
+
+/**
+ * A file that says it's in another currency than the account is refused
+ * (FXB10); a file that doesn't say is taken to be in the account's currency.
+ */
+function assertFileCurrency(file: StatementFile, account: { code: string; name: string; currencyCode: string }): void {
+  const others = file.currencies.filter((code) => code !== account.currencyCode);
+  if (others.length > 0) {
+    throw new ValidationError(
+      `This file is in ${file.currencies.join(" and ")}, but ${account.code} (${account.name}) is in ${account.currencyCode}. Nothing was imported.`,
+    );
+  }
 }
 
 type ImportResult = { created: boolean; import: StatementImport };
@@ -265,6 +279,7 @@ export async function importStatementFile(
   }
   if (file.lines.length === 0) throw new ValidationError("The file has no transactions to import.");
   const account = await lockStatementAccount(tx, accountId);
+  assertFileCurrency(file, account);
   const committedMeanwhile = await findImportByKey(tx, source, idempotencyKey);
   if (committedMeanwhile) {
     assertSameRequest(committedMeanwhile.request_hash, hash, "statement import");
@@ -329,7 +344,7 @@ export async function importStatementFile(
 export async function deleteImport(tx: OrgTx, importIdInput: unknown): Promise<StatementImport> {
   const importId = requireId(importIdInput, "importId");
   const current = await getImport(tx, importId);
-  await lockStatementAccount(tx, current.accountId);
+  await lockStatementAccount(tx, current.accountId, "delete");
   const statement = await getImport(tx, importId);
   if (statement.status === "deleted") return statement;
   if (statement.reconciledCount > 0) {

@@ -3,6 +3,7 @@ import { getStatementLine } from "@/lib/bank/accounts";
 import { assertBulkKey, type BulkResult, eachLine } from "@/lib/bank/bulk";
 import { reconcileStatementLine } from "@/lib/bank/reconcile";
 import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
+import { parseExchangeRate } from "@/lib/ledger/journals";
 import { ConflictError, ValidationError } from "@/lib/errors";
 import { parseTrackingInput, sortedTags, type TrackingTags } from "@/lib/tracking/service";
 import { asRecord, optionalId, optionalSource, optionalString, requireArray, requireId, requireIdempotencyKey } from "@/lib/validation";
@@ -31,6 +32,8 @@ export type CashCodingValues = {
   taxCode?: unknown;
   description?: unknown;
   tracking?: unknown;
+  /** Foreign-currency lines: the rate (otherwise each line's last rate used, D4). */
+  exchangeRate?: unknown;
 };
 
 export type CashCodingInput = CashCodingValues & {
@@ -46,6 +49,7 @@ type Values = {
   taxCode?: string | null;
   description?: string | null;
   tracking?: TrackingTags;
+  exchangeRate?: string | null;
 };
 
 /** Only the values given are kept, so a line's own value (even "no GST") can be told apart from "use the value for all". */
@@ -62,6 +66,10 @@ function parseValues(input: Record<string, unknown>, label: string): Values {
   if (has("taxCode")) values.taxCode = optionalString(input.taxCode, `${label}taxCode`, { maxLength: 20 }) || null;
   if (has("description")) values.description = optionalString(input.description, `${label}description`, { maxLength: 500 })?.trim() || null;
   if (has("tracking")) values.tracking = sortedTags(parseTrackingInput(input.tracking, label.trim() || "All lines"));
+  if (has("exchangeRate")) {
+    values.exchangeRate =
+      input.exchangeRate === null || input.exchangeRate === "" ? null : parseExchangeRate(input.exchangeRate, `${label}exchangeRate`);
+  }
   return values;
 }
 
@@ -107,6 +115,7 @@ export async function cashCodeStatementLines(run: OrgRunner, accountIdInput: unk
       source,
       idempotencyKey: `${idempotencyKey}:${lineId}`,
       kind: "bank_transaction",
+      ...(pick("exchangeRate") ? { exchangeRate: pick("exchangeRate") } : {}),
       contactId,
       amountsMode: taxCode ? "inclusive" : "no_tax",
       lines: [

@@ -5,8 +5,9 @@ import { writeAuditEvent } from "@/lib/audit";
 import type { ParsedStatementLine } from "@/lib/bank/formats/common";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
+import { convertAtRate, foreignAccountState, type ForeignOpeningBalance, lastRateOnOrBefore, ratesUsed, type RateUsed } from "@/lib/ledger/foreign";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { dec, toFixedString } from "@/lib/money/decimal";
+import { add, dec, mulDiv, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { optionalString, requireId, requireOneOf } from "@/lib/validation";
 
 /**
@@ -32,8 +33,17 @@ export type BankAccount = {
   accountType: "bank" | "credit_card";
   currencyCode: string | null;
   isActive: boolean;
-  /** Debits less credits, signed like statement lines: a card's negative balance is owed. */
+  /** The currency its statement lines are in: its own, or the base currency (FXB1-FXB11). */
+  statementCurrency: string;
+  /** In a currency other than the base currency. */
+  isForeign: boolean;
+  /** Debits less credits in the base currency, signed like statement lines: a card's negative balance is owed. */
   ledgerBalance: string;
+  /** For a foreign-currency account, its balance in that currency (null until it's known, FXB1). */
+  foreignBalance: string | null;
+  /** A foreign-currency account with postings from before Tohyee kept foreign amounts and no opening foreign balance yet. */
+  needsOpeningBalance: boolean;
+  openingBalance: ForeignOpeningBalance | null;
   statementBalance: string | null;
   statementBalanceAt: string | null;
   unreconciledCount: number;
@@ -80,7 +90,9 @@ const BANK_ACCOUNT_SELECT = `
     left join bank_account_settings s on s.account_id = a.id
    where a.account_type in ('bank', 'credit_card')`;
 
-function toBankAccount(row: BankAccountRow, scale: number): BankAccount {
+function toBankAccount(row: BankAccountRow, scale: number, baseCurrency: string): BankAccount {
+  const foreign = row.currency_code !== null && row.currency_code !== baseCurrency;
+  const statementScale = foreign ? currencyMinorUnits(row.currency_code!) : scale;
   return {
     id: row.id,
     code: row.code,
@@ -88,8 +100,13 @@ function toBankAccount(row: BankAccountRow, scale: number): BankAccount {
     accountType: row.account_type,
     currencyCode: row.currency_code,
     isActive: row.is_active,
+    statementCurrency: foreign ? row.currency_code! : baseCurrency,
+    isForeign: foreign,
     ledgerBalance: toFixedString(dec(row.ledger_balance), scale),
-    statementBalance: row.statement_balance === null ? null : toFixedString(dec(row.statement_balance), scale),
+    foreignBalance: null,
+    needsOpeningBalance: false,
+    openingBalance: null,
+    statementBalance: row.statement_balance === null ? null : toFixedString(dec(row.statement_balance), statementScale),
     statementBalanceAt: row.statement_balance_at,
     unreconciledCount: Number(row.unreconciled_count),
     lastLineDate: row.last_line_date,
@@ -114,7 +131,18 @@ export async function listBankAccounts(tx: OrgTx, options: { includeArchived?: b
     [options.includeArchived ?? false],
   );
   const scale = currencyMinorUnits(tx.baseCurrency);
-  return result.rows.map((row) => toBankAccount(row, scale));
+  const accounts = result.rows.map((row) => toBankAccount(row, scale, tx.baseCurrency));
+  for (const account of accounts) await addForeignState(tx, account);
+  return accounts;
+}
+
+/** A foreign-currency account's balance in its currency and its opening foreign balance (FXB1). */
+async function addForeignState(tx: OrgTx, account: BankAccount): Promise<void> {
+  if (account.statementCurrency === tx.baseCurrency) return;
+  const state = await foreignAccountState(tx, account.id);
+  account.foreignBalance = state.foreignBalance;
+  account.needsOpeningBalance = state.needsOpeningBalance;
+  account.openingBalance = state.opening;
 }
 
 export async function getBankAccount(tx: OrgTx, accountIdInput: unknown): Promise<BankAccount> {
@@ -124,18 +152,24 @@ export async function getBankAccount(tx: OrgTx, accountIdInput: unknown): Promis
   if (!row) {
     throw new NotFoundError("Bank or credit card account not found.");
   }
-  return toBankAccount(row, currencyMinorUnits(tx.baseCurrency));
+  const account = toBankAccount(row, currencyMinorUnits(tx.baseCurrency), tx.baseCurrency);
+  await addForeignState(tx, account);
+  return account;
 }
 
 /**
  * Locks a bank or credit card account for statement changes (imports, feed
  * syncs, deleting imports) until the transaction ends, so two imports into
- * one account take turns. Statement lines need an active base-currency account.
+ * one account take turns. Statement lines need an active account; a
+ * foreign-currency one needs its opening foreign balance if it had postings
+ * from before Tohyee kept foreign amounts (FXB1), and can't have an Akahu
+ * feed, since Akahu's transactions don't say their currency (FXB10).
  */
 export async function lockStatementAccount(
   tx: OrgTx,
   accountId: string,
-): Promise<{ id: string; code: string; name: string; accountType: AccountType }> {
+  purpose: "lines" | "feed" | "delete" = "lines",
+): Promise<{ id: string; code: string; name: string; accountType: AccountType; currencyCode: string }> {
   const result = await tx.query<{
     id: string;
     code: string;
@@ -151,17 +185,31 @@ export async function lockStatementAccount(
     throw new ValidationError(`${label} isn't a bank or credit card account, so it can't hold statement lines.`);
   }
   if (!row.is_active) throw new ValidationError(`${label} is archived.`);
-  if (row.currency_code !== null && row.currency_code !== tx.baseCurrency) {
-    throw new ValidationError(`${label} is in ${row.currency_code}. Foreign-currency bank accounts can't take statement lines yet.`);
+  const foreign = row.currency_code !== null && row.currency_code !== tx.baseCurrency;
+  if (foreign && purpose === "feed") {
+    throw new ValidationError(
+      `${label} is in ${row.currency_code}. Akahu bank feeds can't be used for foreign-currency accounts yet: Akahu's transactions don't say their currency. Import statement files instead.`,
+    );
+  }
+  if (foreign && purpose === "lines" && (await foreignAccountState(tx, row.id)).needsOpeningBalance) {
+    throw new ValidationError(
+      `${label} has postings from before Tohyee kept foreign amounts. Enter its ${row.currency_code} balance as at a date (its opening foreign balance) first.`,
+    );
   }
   await tx.query("insert into bank_account_settings (account_id) values ($1) on conflict do nothing", [row.id]);
-  return { id: row.id, code: row.code, name: row.name, accountType: row.account_type };
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    accountType: row.account_type,
+    currencyCode: foreign ? row.currency_code! : tx.baseCurrency,
+  };
 }
 
 /** Adds a bank or credit card account to the chart of accounts. */
 export async function createBankAccount(
   tx: OrgTx,
-  input: { code: unknown; name: unknown; accountType: unknown; description?: unknown },
+  input: { code: unknown; name: unknown; accountType: unknown; description?: unknown; currencyCode?: unknown },
 ): Promise<BankAccount> {
   const accountType = requireOneOf(input.accountType, "accountType", ["bank", "credit_card"] as const);
   const account = await createAccount(tx, {
@@ -169,6 +217,8 @@ export async function createBankAccount(
     name: input.name,
     accountType,
     description: optionalString(input.description, "description", { maxLength: 500 }),
+    // A foreign-currency account (FXB1-FXB11); blank for the base currency.
+    currencyCode: input.currencyCode,
   });
   await tx.query("insert into bank_account_settings (account_id) values ($1) on conflict do nothing", [account.id]);
   return getBankAccount(tx, account.id);
@@ -266,13 +316,20 @@ export async function addStatementLines(
   const possibleDuplicates = toAdd.filter((line) => line.possibleDuplicateOf).length;
   if (!options.dryRun && toAdd.length > 0) {
     if (!importId) throw new Error("addStatementLines needs an import id to add lines.");
+    // Each line is in the account's currency (checked by the database too): FXB10.
+    const currency = (
+      await tx.query<{ currency: string }>("select coalesce(currency_code, $2) as currency from accounts where id = $1", [
+        accountId,
+        tx.baseCurrency,
+      ])
+    ).rows[0].currency;
     await tx.query(
       `insert into bank_statement_lines (
          account_id, import_id, line_date, amount, description, payee, particulars, code, reference, balance,
-         external_id, match_key, possible_duplicate_of
+         external_id, match_key, possible_duplicate_of, currency_code
        )
        select $1, $2, x.line_date, x.amount, x.description, x.payee, x.particulars, x.code, x.reference, x.balance,
-              x.external_id, x.match_key, x.possible_duplicate_of
+              x.external_id, x.match_key, x.possible_duplicate_of, $4
          from jsonb_to_recordset($3::jsonb) as x(
            ord integer, line_date date, amount numeric, description text, payee text, particulars text, code text,
            reference text, balance numeric, external_id text, match_key text, possible_duplicate_of bigint
@@ -297,6 +354,7 @@ export async function addStatementLines(
             possible_duplicate_of: line.possibleDuplicateOf,
           })),
         ),
+        currency,
       ],
     );
   }
@@ -309,7 +367,10 @@ export type StatementLineStatus = (typeof STATEMENT_LINE_STATUSES)[number];
 export type ReconciledItem = {
   journalId: string;
   journalLineId: string;
+  /** In the statement line's currency. */
   amount: string;
+  /** The journal line's base-currency amount, signed the same way. */
+  baseAmount: string;
   postingDate: string;
   origin: string;
   reference: string;
@@ -332,6 +393,15 @@ export type StatementLine = {
   status: StatementLineStatus;
   possibleDuplicateOf: string | null;
   source: "file" | "akahu";
+  /** The line's currency (the account's). */
+  currencyCode: string;
+  /**
+   * For a line in a foreign currency: the last rate used for that currency on
+   * or before its date (D4), to fill in, and its base value at that rate
+   * (reconciled lines: what they were reconciled at). Null otherwise.
+   */
+  suggestedRate: RateUsed | null;
+  baseAmount: string | null;
   reconciliation: {
     id: string;
     kind: string;
@@ -359,16 +429,18 @@ type StatementLineRow = {
   status: StatementLineStatus;
   possible_duplicate_of: string | null;
   source: "file" | "akahu";
+  currency_code: string | null;
   reconciliation: StatementLine["reconciliation"];
 };
 
 const LINE_SELECT = `
   select b.id, b.account_id, b.import_id, b.line_date::text, b.amount::text, b.description, b.payee, b.particulars,
-         b.code, b.reference, b.balance::text, b.external_id, b.status, b.possible_duplicate_of, i.source,
+         b.code, b.reference, b.balance::text, b.external_id, b.status, b.possible_duplicate_of, i.source, b.currency_code,
          (select jsonb_build_object(
                    'id', r.id::text, 'kind', r.kind, 'createdAt', r.created_at, 'createdByEmail', r.created_by_email,
                    'items', (select coalesce(jsonb_agg(jsonb_build_object(
                                 'journalId', j.id::text, 'journalLineId', jl.id::text, 'amount', ri.amount::text,
+                                'baseAmount', (jl.debit_amount - jl.credit_amount)::text,
                                 'postingDate', j.posting_date::text, 'origin', j.origin, 'reference', j.reference,
                                 'description', j.description) order by jl.id), '[]'::jsonb)
                                from bank_reconciliation_items ri
@@ -377,7 +449,7 @@ const LINE_SELECT = `
                               where ri.reconciliation_id = r.id),
                    'split', (select jsonb_build_object(
                                'id', s.id::text,
-                               'journalAmount', (sj.debit_amount - sj.credit_amount)::text,
+                               'journalAmount', sj.account_amount::text,
                                'lines', (select jsonb_agg(jsonb_build_object('id', sb.id::text, 'date', sb.line_date::text, 'amount', sb.amount::text)
                                                           order by sb.line_date, sb.id)
                                            from bank_reconciliations sr join bank_statement_lines sb on sb.id = sr.statement_line_id
@@ -388,8 +460,9 @@ const LINE_SELECT = `
     from bank_statement_lines b
     join bank_statement_imports i on i.id = b.import_id`;
 
-function toStatementLine(row: StatementLineRow): StatementLine {
+function toStatementLine(row: StatementLineRow, baseCurrency: string): StatementLine {
   const money = (value: string) => toFixedString(dec(value), 2);
+  const currencyCode = row.currency_code ?? baseCurrency;
   return {
     id: row.id,
     accountId: row.account_id,
@@ -406,10 +479,13 @@ function toStatementLine(row: StatementLineRow): StatementLine {
     status: row.status,
     possibleDuplicateOf: row.possible_duplicate_of,
     source: row.source,
+    currencyCode,
+    suggestedRate: null,
+    baseAmount: null,
     reconciliation: row.reconciliation
       ? {
           ...row.reconciliation,
-          items: row.reconciliation.items.map((item) => ({ ...item, amount: money(item.amount) })),
+          items: row.reconciliation.items.map((item) => ({ ...item, amount: money(item.amount), baseAmount: money(item.baseAmount) })),
           split: row.reconciliation.split
             ? {
                 id: row.reconciliation.split.id,
@@ -422,11 +498,37 @@ function toStatementLine(row: StatementLineRow): StatementLine {
   };
 }
 
+/**
+ * Foreign-currency lines (D4): an unreconciled line gets the last rate used
+ * for its currency on or before its date and its base value at that rate; a
+ * reconciled one, the base value of what it was reconciled with (a split
+ * line, its share at the journal line's own rate).
+ */
+async function withBaseAmounts(tx: OrgTx, lines: StatementLine[]): Promise<StatementLine[]> {
+  const foreign = lines.filter((line) => line.currencyCode !== tx.baseCurrency);
+  if (foreign.length === 0) return lines;
+  const rates = await ratesUsed(tx, foreign.map((line) => line.currencyCode));
+  const baseScale = currencyMinorUnits(tx.baseCurrency);
+  for (const line of foreign) {
+    line.suggestedRate = lastRateOnOrBefore(rates.get(line.currencyCode), line.date);
+    const items = line.reconciliation?.items ?? [];
+    if (line.reconciliation && !line.reconciliation.split && items.length > 0) {
+      line.baseAmount = toFixedString(items.reduce((total, item) => add(total, dec(item.baseAmount)), ZERO_DECIMAL), baseScale);
+    } else if (line.reconciliation?.split && items[0]) {
+      const whole = dec(line.reconciliation.split.journalAmount);
+      line.baseAmount = toFixedString(mulDiv(dec(items[0].baseAmount), dec(line.amount), whole, baseScale), baseScale);
+    } else if (line.suggestedRate) {
+      line.baseAmount = convertAtRate(line.amount, line.suggestedRate.rate, baseScale);
+    }
+  }
+  return lines;
+}
+
 export async function getStatementLine(tx: OrgTx, lineIdInput: unknown): Promise<StatementLine> {
   const lineId = requireId(lineIdInput, "lineId");
   const result = await tx.query<StatementLineRow>(`${LINE_SELECT} where b.id = $1`, [lineId]);
   if (!result.rows[0]) throw new NotFoundError("Statement line not found.");
-  return toStatementLine(result.rows[0]);
+  return (await withBaseAmounts(tx, [toStatementLine(result.rows[0], tx.baseCurrency)]))[0];
 }
 
 /**
@@ -465,7 +567,13 @@ export async function listStatementLines(
       search,
     ]),
   ]);
-  return { lines: rows.rows.map(toStatementLine), total: Number(count.rows[0].count) };
+  return {
+    lines: await withBaseAmounts(
+      tx,
+      rows.rows.map((row) => toStatementLine(row, tx.baseCurrency)),
+    ),
+    total: Number(count.rows[0].count),
+  };
 }
 
 /** Locks a statement line until the transaction ends. */

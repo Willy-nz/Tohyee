@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CurrencyMoney } from "@/components/bank/foreign";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Notice, ui } from "@/components/ui";
@@ -138,7 +139,15 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
                 <div className={styles.row}>
                   <span>Balance in Tohyee</span>
                   <span>
-                    <Money value={account.ledgerBalance} />
+                    {account.isForeign ? (
+                      <>
+                        <CurrencyMoney currency={account.statementCurrency} value={account.foreignBalance} />
+                        {" · "}
+                        <CurrencyMoney currency={summary.currencyCode} value={account.ledgerBalance} />
+                      </>
+                    ) : (
+                      <Money value={account.ledgerBalance} />
+                    )}
                   </span>
                 </div>
                 <div className={styles.row}>
@@ -146,7 +155,15 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
                     Statement balance
                     {account.statementBalanceAt ? ` (${formatDate(account.statementBalanceAt)})` : ""}
                   </span>
-                  <span>{account.statementBalance !== null ? <Money value={account.statementBalance} /> : "—"}</span>
+                  <span>
+                    {account.statementBalance === null ? (
+                      "—"
+                    ) : account.isForeign ? (
+                      <CurrencyMoney currency={account.statementCurrency} value={account.statementBalance} />
+                    ) : (
+                      <Money value={account.statementBalance} />
+                    )}
+                  </span>
                 </div>
               </div>
               {account.unreconciledCount > 0 ? (

@@ -13,6 +13,7 @@ import {
   toCents,
 } from "@/components/bank/common";
 import { CashCodingForm } from "@/components/bank/cash-coding";
+import { LineBaseValue, RateField } from "@/components/bank/foreign";
 import { OkAllBar, SuggestionBox } from "@/components/bank/confident";
 import { AccountSelect, Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -32,6 +33,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode, calculateInvoice } from "@/lib/invoices/amounts";
 import type { InvoiceSummary } from "@/lib/invoices/service";
 import { isDecimalString } from "@/lib/money/decimal";
+import { isRateText } from "@/lib/money/fx";
 import type { TaxCode } from "@/lib/tax/codes";
 import type { CustomFieldSetup, CustomValues } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
@@ -40,7 +42,15 @@ const PAGE_SIZE = 50;
 
 type Mode = "match" | "split" | "payments" | "bank_transaction" | "transfer";
 
-type Lookups = { accounts: Account[]; contacts: Contact[]; taxCodes: TaxCode[]; tracking: TrackingSetup; customSetup: CustomFieldSetup };
+type Lookups = {
+  accounts: Account[];
+  contacts: Contact[];
+  taxCodes: TaxCode[];
+  tracking: TrackingSetup;
+  customSetup: CustomFieldSetup;
+  /** The organisation's base currency: lines in another currency are a foreign-currency account's (FXB1-FXB11). */
+  baseCurrency: string;
+};
 
 type Submit = (command: Record<string, unknown>) => Promise<void>;
 
@@ -207,6 +217,7 @@ function MatchForm({
   const lineCents = toCents(line.amount);
   const difference = chosen.length > 0 && lineCents !== null ? lineCents - total : null;
   const needsAdjustment = difference !== null && difference !== BigInt(0);
+  const foreign = line.currencyCode !== lookups.baseCurrency;
   return (
     <form
       onSubmit={(event) => {
@@ -258,9 +269,19 @@ function MatchForm({
         </table>
       </div>
       <TotalCheck total={total} target={line.amount} />
-      {needsAdjustment ? <AdjustmentFields difference={difference} value={adjustment} onChange={setAdjustment} lookups={lookups} /> : null}
+      {needsAdjustment && foreign ? (
+        <Notice tone="warning">
+          Adjustments aren&apos;t available on {line.currencyCode} lines yet. Record the difference as its own spend or receive money
+          first, then match both.
+        </Notice>
+      ) : needsAdjustment ? (
+        <AdjustmentFields difference={difference} value={adjustment} onChange={setAdjustment} lookups={lookups} />
+      ) : null}
       <div className={ui.actions}>
-        <Button type="submit" disabled={busy || chosen.length === 0 || (needsAdjustment && (!adjustment.accountCode || !adjustment.contactId))}>
+        <Button
+          type="submit"
+          disabled={busy || chosen.length === 0 || (needsAdjustment && (foreign || !adjustment.accountCode || !adjustment.contactId))}
+        >
           {busy ? "Reconciling…" : needsAdjustment ? "Match with adjustment" : "Match"}
         </Button>
       </div>
@@ -582,11 +603,15 @@ function BankTransactionForm({
   const moneyIn = !line.amount.startsWith("-");
   const unsigned = line.amount.replace(/^-/, "");
   const rule = suggestions.rule;
-  const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive);
+  // A foreign-currency line (FXB2-FXB4): converted at a rate, and only zero-rated, exempt or no-GST codes.
+  const foreign = line.currencyCode !== lookups.baseCurrency;
+  const usableTaxCode = (taxCode: TaxCode) => !foreign || taxCode.category !== "standard";
+  const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive && usableTaxCode(taxCode));
   const defaultTaxCode = (activeTaxCodes.find((taxCode) => taxCode.category === "standard") ?? activeTaxCodes[0])?.code ?? "";
   const [contactId, setContactId] = useState(rule?.contactId ?? "");
   const [reference, setReference] = useState(line.reference ?? line.particulars ?? "");
-  const [amountsMode, setAmountsMode] = useState<AmountsMode>(rule?.amountsMode ?? "inclusive");
+  const [amountsMode, setAmountsMode] = useState<AmountsMode>(rule?.amountsMode ?? (foreign ? "no_tax" : "inclusive"));
+  const [rate, setRate] = useState(line.suggestedRate?.rate ?? "");
   const kind = moneyIn ? "receive" : "spend";
   const lineDefaults = startingValues(lookups.customSetup, "line", [kind]);
   const [customFields, setCustomFields] = useState<CustomValues>(() => startingValues(lookups.customSetup, "document", [kind]));
@@ -629,6 +654,7 @@ function BankTransactionForm({
     setRuleError(null);
     await submit({
       kind: "bank_transaction",
+      ...(foreign ? { exchangeRate: rate.trim() } : {}),
       contactId,
       reference: reference || undefined,
       amountsMode,
@@ -701,6 +727,22 @@ function BankTransactionForm({
           </select>
         </Field>
       </div>
+      {foreign ? (
+        <RateField
+          currency={line.currencyCode}
+          baseCurrency={lookups.baseCurrency}
+          rate={rate}
+          onChange={setRate}
+          amount={unsigned}
+          suggested={line.suggestedRate}
+        />
+      ) : null}
+      {foreign ? (
+        <p className={ui.muted}>
+          Amounts are in {line.currencyCode}. GST on {line.currencyCode} transactions isn&apos;t supported yet, so only zero-rated,
+          exempt and no-GST codes are listed.
+        </p>
+      ) : null}
       <CustomFieldInputs setup={lookups.customSetup} record="document" uses={[kind]} value={customFields} onChange={setCustomFields} />
       <div className={ui.tableWrap}>
         <table className={ui.table}>
@@ -763,7 +805,7 @@ function BankTransactionForm({
                     >
                       <option value="">Choose</option>
                       {lookups.taxCodes
-                        .filter((taxCode) => taxCode.isActive || taxCode.code === entry.taxCode)
+                        .filter((taxCode) => (taxCode.isActive && usableTaxCode(taxCode)) || taxCode.code === entry.taxCode)
                         .map((taxCode) => (
                           <option key={taxCode.id} value={taxCode.code}>
                             {taxCode.code} ({formatRate(taxCode.rate)})
@@ -827,7 +869,7 @@ function BankTransactionForm({
         </div>
       ) : null}
       <div className={ui.actions}>
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || (foreign && !isRateText(rate))}>
           {busy ? "Reconciling…" : `Save ${moneyIn ? "receive" : "spend"} money and reconcile`}
         </Button>
       </div>
@@ -839,23 +881,37 @@ function TransferForm({
   account,
   line,
   accounts,
+  baseCurrency,
   submit,
   busy,
 }: {
   account: BankAccount;
   line: StatementLine;
   accounts: Account[];
+  baseCurrency: string;
   submit: Submit;
   busy: boolean;
 }) {
   const moneyIn = !line.amount.startsWith("-");
+  const unsigned = line.amount.replace(/^-/, "");
   const [other, setOther] = useState("");
+  const [otherAmount, setOtherAmount] = useState("");
   const [reference, setReference] = useState(line.reference ?? "");
+  const currencyOf = (candidate: Account) => candidate.currencyCode ?? baseCurrency;
+  const otherAccount = accounts.find((candidate) => candidate.code === other);
+  // Across currencies (FXB5, FXB6) both amounts are given: the base side is what really moved.
+  const otherCurrency = otherAccount ? currencyOf(otherAccount) : null;
+  const across = otherCurrency !== null && otherCurrency !== line.currencyCode;
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        void submit({ kind: "transfer", otherAccountCode: other, reference: reference || undefined });
+        void submit({
+          kind: "transfer",
+          otherAccountCode: other,
+          ...(across ? { otherAmount: otherAmount.trim() } : {}),
+          reference: reference || undefined,
+        });
       }}
       style={{ display: "grid", gap: 12 }}
       autoComplete="off"
@@ -868,7 +924,10 @@ function TransferForm({
         <Field label={moneyIn ? "From account" : "To account"}>
           <AccountSelect
             accounts={accounts}
-            filter={(candidate) => isStatementAccount(candidate) && candidate.id !== account.id && candidate.currencyCode === null}
+            // Between two foreign-currency accounts isn't supported yet.
+            filter={(candidate) =>
+              isStatementAccount(candidate) && candidate.id !== account.id && (currencyOf(candidate) === baseCurrency || line.currencyCode === baseCurrency)
+            }
             value={other}
             onChange={setOther}
             required
@@ -878,8 +937,22 @@ function TransferForm({
           <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
         </Field>
       </div>
+      {across ? (
+        <Field
+          label={`${otherCurrency} amount ${moneyIn ? "that left" : "that arrived in"} ${other}`}
+          hint={
+            line.currencyCode !== baseCurrency && !moneyIn
+              ? `The ${line.currencyCode} ${unsigned} leaves this account at its carrying value (its ${baseCurrency} balance x ${unsigned} / its ${line.currencyCode} balance); the difference from the ${baseCurrency} that arrived is a realised currency gain or loss.`
+              : line.currencyCode !== baseCurrency
+                ? `This account is booked at the ${baseCurrency} that left.`
+                : `The ${otherCurrency} account is booked at this line's ${baseCurrency} ${unsigned}.`
+          }
+        >
+          <input inputMode="decimal" value={otherAmount} onChange={(event) => setOtherAmount(event.target.value)} required />
+        </Field>
+      ) : null}
       <div className={ui.actions}>
-        <Button type="submit" disabled={busy || !other}>
+        <Button type="submit" disabled={busy || !other || (across && !isDecimalString(otherAmount.trim()))}>
           {busy ? "Reconciling…" : "Save transfer and reconcile"}
         </Button>
       </div>
@@ -964,7 +1037,12 @@ function LineReconciler({
       </div>
       {mode === "match" ? <MatchForm line={line} suggestions={suggestions} lookups={lookups} submit={submit} busy={busy} /> : null}
       {mode === "split" ? <SplitForm line={line} otherLines={otherLines} suggestions={suggestions} submit={submit} busy={busy} /> : null}
-      {mode === "payments" ? (
+      {mode === "payments" && line.currencyCode !== lookups.baseCurrency ? (
+        <Notice tone="info">
+          Invoices and bills are in {lookups.baseCurrency}, so they can&apos;t be paid from a {line.currencyCode} statement line yet.
+          Record the payment from a {lookups.baseCurrency} account, or code this line as {moneyIn ? "receive" : "spend"} money.
+        </Notice>
+      ) : mode === "payments" ? (
         <PaymentsForm
           organisationId={organisationId}
           line={line}
@@ -985,7 +1063,9 @@ function LineReconciler({
           busy={busy}
         />
       ) : null}
-      {mode === "transfer" ? <TransferForm account={account} line={line} accounts={lookups.accounts} submit={submit} busy={busy} /> : null}
+      {mode === "transfer" ? (
+        <TransferForm account={account} line={line} accounts={lookups.accounts} baseCurrency={lookups.baseCurrency} submit={submit} busy={busy} />
+      ) : null}
       <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
         <Button variant="secondary" size="small" onClick={() => void exclude()} disabled={busy}>
           Exclude this line
@@ -1006,7 +1086,7 @@ export function ReconcilePanel({
   account: BankAccount;
   onChanged: () => void;
 }) {
-  const { can } = useWorkspace();
+  const { can, current } = useWorkspace();
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
   const [ticked, setTicked] = useState<string[]>([]);
@@ -1034,6 +1114,7 @@ export function ReconcilePanel({
           taxCodes: taxCodes.data.taxCodes,
           tracking: tracking.data,
           customSetup: customSetup.data,
+          baseCurrency: current?.baseCurrency ?? "NZD",
         }
       : null;
 
@@ -1114,8 +1195,8 @@ export function ReconcilePanel({
               ) : null}
               <th>Date</th>
               <th>Description</th>
-              <th className={ui.num}>Money in</th>
-              <th className={ui.num}>Money out</th>
+              <th className={ui.num}>Money in{account.isForeign ? ` (${account.statementCurrency})` : ""}</th>
+              <th className={ui.num}>Money out{account.isForeign ? ` (${account.statementCurrency})` : ""}</th>
               <th />
             </tr>
           </thead>
@@ -1124,6 +1205,7 @@ export function ReconcilePanel({
               <LineRow
                 key={line.id}
                 line={line}
+                baseCurrency={current?.baseCurrency}
                 open={open === line.id}
                 canReconcile={canReconcile}
                 ticked={ticked.includes(line.id)}
@@ -1180,6 +1262,7 @@ function LineRow({
   onToggle,
   suggestion,
   children,
+  baseCurrency,
 }: {
   line: StatementLine;
   open: boolean;
@@ -1189,6 +1272,7 @@ function LineRow({
   onToggle: () => void;
   suggestion?: ReactNode;
   children: ReactNode;
+  baseCurrency?: string;
 }) {
   return (
     <>
@@ -1213,6 +1297,7 @@ function LineRow({
             </>
           ) : null}
           <LineDetails line={line} />
+          {baseCurrency ? <LineBaseValue line={line} baseCurrency={baseCurrency} /> : null}
           {open ? null : suggestion}
         </td>
         <InOutCells amount={line.amount} />

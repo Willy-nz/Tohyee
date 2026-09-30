@@ -64,7 +64,7 @@ export const NZ_DEFAULT_CHART: readonly ChartTemplateAccount[] = [
   { code: "6300", name: "Depreciation", type: "depreciation" },
   { code: "7000", name: "Unrealised currency gains", type: "other_income", systemKey: "unrealised_fx_gain" },
   { code: "7010", name: "Unrealised currency losses", type: "expense", systemKey: "unrealised_fx_loss" },
-  { code: "7020", name: "Realised currency gains and losses", type: "other_income" },
+  { code: "7020", name: "Realised currency gains and losses", type: "other_income", systemKey: "realised_fx" },
   { code: "7030", name: "Gain or loss on disposal of fixed assets", type: "other_income", systemKey: "fixed_asset_disposal" },
   { code: "7040", name: "Capital gains on disposal of fixed assets", type: "other_income", systemKey: "fixed_asset_capital_gain" },
 ];

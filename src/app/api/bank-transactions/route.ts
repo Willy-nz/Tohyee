@@ -10,7 +10,7 @@ export const GET = route(async (request) => {
   return json({ bankTransactions });
 });
 
-/** Posts spend or receive money (`kind`) on a bank or credit card account. */
+/** Posts spend or receive money (`kind`) on a bank or credit card account; on a foreign-currency one, at `exchangeRate` (FXB2, FXB3). */
 export const POST = route(async (request) => {
   const body = await readJson(request);
   const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
@@ -25,6 +25,7 @@ export const POST = route(async (request) => {
       amountsMode: body.amountsMode,
       lines: body.lines,
       customFields: body.customFields,
+      exchangeRate: body.exchangeRate,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

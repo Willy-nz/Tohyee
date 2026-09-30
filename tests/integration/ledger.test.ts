@@ -130,6 +130,7 @@ describeWithDatabase("ledger", () => {
       [
         "audit_events",
         "inventory_movements",
+        "ledger_foreign_opening_balances",
         "ledger_fx_revaluation_run_items",
         "ledger_fx_revaluation_runs",
         "ledger_journal_lines",

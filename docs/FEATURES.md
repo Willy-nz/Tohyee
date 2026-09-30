@@ -35,11 +35,13 @@ that something happened.
   sign-in lockout; admin CLI for recovery.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
-- **General ledger**: manual journals in the base currency, corrections by
+- **General ledger**: manual journals in the base currency (lines on
+  foreign-currency accounts also carry the foreign amount and rate), corrections by
   reversal and replacement, period locks with unlock windows, idempotent
   posting, database-enforced balancing and append-only history.
 - **FX revaluation** of foreign-currency asset and liability accounts, with
-  carrying amounts taken from the ledger and automatic next-day reversal.
+  carrying amounts and (where Tohyee has them) foreign balances taken from
+  the ledger, and automatic next-day reversal.
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
   posts its journal in the same transaction. **Stock tracking** (ST1-ST12):
@@ -384,6 +386,18 @@ that something happened.
   unreconciling any of them unreconciles them all. One-click OK never
   suggests one, and the reconciliation report counts only the part on lines
   by its date (examples BK26-BK28, not yet approved by Jess).
+  **Foreign-currency bank and card accounts** (following NetSuite, as Jess
+  decided): every posting keeps the foreign amount, the NZD amount and the
+  rate; statement files are imported in the account's currency (a file in
+  another currency is refused); each line shows its NZD value at the last
+  rate used for that currency (filled in, changeable); spend and receive
+  money (zero-rated, exempt or no GST), matching, one-click OK, bulk coding
+  and the reconciliation report work in the account's currency with NZD
+  beside it; transfers to and from NZD accounts take both amounts, money
+  leaving at its carrying value with the difference a realised gain or loss
+  (7020); an account with postings from before gets its foreign balance
+  entered once as at a date; revaluation uses the stored foreign balance
+  (examples FXB1-FXB11, not yet approved by Jess).
 - **Modules**: Accounting and Tax are always on; the **CRM** and
   **Advanced reporting** are switched on per organisation in Settings, and
   their menus and screens show only while on (MOD1).
@@ -474,9 +488,14 @@ isn't acceptable, because people would trust it:
 - job executions
 - AI suggestions
 - import staging (other than bank statements)
-- bank feeds from providers other than Akahu, foreign-currency bank
-  accounts, an adjustment when splitting one posted transaction across
-  several statement lines, and old Excel (.xls) files
+- bank feeds from providers other than Akahu, Akahu feeds for
+  foreign-currency accounts (Akahu's transactions don't say their currency),
+  an adjustment when splitting one posted transaction across several
+  statement lines, and old Excel (.xls) files
+- foreign-currency invoices, bills and payments (and paying NZD ones from a
+  foreign-currency statement line), standard-rated GST on foreign-currency
+  spend and receive money, adjustments on foreign-currency lines, and
+  transfers between two foreign-currency accounts
 - GST: deferred-payment supplies of $225,000 or more on the payments basis
   (section 19D), checking payments-basis eligibility, and bad debt write-offs
 - amending a filed GST return, imported goods (Customs GST), GST rates other
@@ -497,7 +516,8 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
 4. NZ payroll.
-5. Multi-currency transactions.
+5. Foreign-currency invoices, bills and payments (foreign-currency bank
+   accounts are built).
 
 ## Guardrails
 

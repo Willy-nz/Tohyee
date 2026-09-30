@@ -6,6 +6,7 @@ import {
   parseBankDate,
   RowError,
 } from "@/lib/bank/formats/common";
+import { isSupportedCurrency } from "@/lib/money/currency";
 
 /**
  * Statements that arrive as a table (CSV or Excel): which row holds the
@@ -26,6 +27,7 @@ export const LAYOUT_FIELDS = [
   "type",
   "balance",
   "id",
+  "currency",
 ] as const;
 export type LayoutField = (typeof LAYOUT_FIELDS)[number];
 
@@ -42,6 +44,7 @@ export const LAYOUT_FIELD_LABELS: Readonly<Record<LayoutField, string>> = {
   type: "Transaction type",
   balance: "Balance",
   id: "Transaction id",
+  currency: "Currency",
 };
 
 export type TableLayout = {
@@ -59,6 +62,8 @@ export type TableReadResult = {
   layout: TableLayout;
   lines: ParsedStatementLine[];
   errors: string[];
+  /** Currencies the file says it's in (a currency column, or an amount heading like "Amount (USD)"). */
+  currencies: string[];
 };
 
 const HEADER_NAMES: Record<LayoutField, string[]> = {
@@ -74,7 +79,17 @@ const HEADER_NAMES: Record<LayoutField, string[]> = {
   type: ["type", "transaction type", "tran type", "trans type"],
   balance: ["balance", "running balance", "closing balance", "account balance"],
   id: ["unique id", "transaction id", "id", "fitid", "tran id", "transaction reference number"],
+  currency: ["currency", "ccy", "currency code", "curr"],
 };
+
+/** A currency named in an amount heading: "Amount (USD)", "USD amount", "Amount NZD". */
+function headingCurrency(header: string | undefined): string | null {
+  if (!header) return null;
+  const text = normalise(header);
+  const match = /\(([a-z]{3})\)/.exec(text) ?? /^([a-z]{3}) (?:amount|debit|credit)$/.exec(text) ?? /^(?:amount|debit|credit) ([a-z]{3})$/.exec(text);
+  const code = match?.[1].toUpperCase();
+  return code && isSupportedCurrency(code) ? code : null;
+}
 
 function normalise(header: string): string {
   return header.replace(/\s+/g, " ").trim().toLowerCase();
@@ -96,7 +111,13 @@ function matchHeaders(headers: string[]): Partial<Record<LayoutField, string>> {
   const columns: Partial<Record<LayoutField, string>> = {};
   const used = new Set<string>();
   for (const field of LAYOUT_FIELDS) {
-    const found = headers.find((header) => !used.has(header) && HEADER_NAMES[field].includes(normalise(header)));
+    const found = headers.find(
+      (header) =>
+        !used.has(header) &&
+        (HEADER_NAMES[field].includes(normalise(header)) ||
+          // "Amount (USD)", "USD amount": an amount heading that names its currency (FXB10).
+          (field === "amount" && /amount/.test(normalise(header)) && headingCurrency(header) !== null)),
+    );
     if (found) {
       columns[field] = found;
       used.add(found);
@@ -202,7 +223,12 @@ export function readTable(rows: string[][], layoutInput?: TableLayout | null): T
   if (index.date < 0) errors.push("Choose the date column.");
   if (index.amount < 0 && index.debit < 0 && index.credit < 0) errors.push("Choose the amount column, or the money in and out columns.");
   const lines: ParsedStatementLine[] = [];
-  if (errors.length > 0) return { headers, layout, lines, errors };
+  const currencies = new Set<string>();
+  if (errors.length > 0) return { headers, layout, lines, errors, currencies: [] };
+  for (const field of ["amount", "debit", "credit"] as const) {
+    const code = headingCurrency(layout.columns[field]);
+    if (code) currencies.add(code);
+  }
 
   const cell = (row: string[], field: LayoutField) => (index[field] >= 0 ? (row[index[field]] ?? "").trim() : "");
   rows.forEach((row, rowIndex) => {
@@ -235,6 +261,11 @@ export function readTable(rows: string[][], layoutInput?: TableLayout | null): T
       if (amount === null) throw new RowError("has no amount.");
       if (/^-?0\.00$/.test(amount)) return;
       if (layout.invertAmounts) amount = negate(amount);
+      const currencyText = cell(row, "currency").toUpperCase();
+      if (currencyText) {
+        if (!/^[A-Z]{3}$/.test(currencyText)) throw new RowError(`"${cell(row, "currency")}" isn't a currency code.`);
+        currencies.add(currencyText);
+      }
       const balanceText = cell(row, "balance");
       lines.push(
         makeLine({
@@ -258,7 +289,7 @@ export function readTable(rows: string[][], layoutInput?: TableLayout | null): T
       throw error;
     }
   });
-  return { headers, layout, lines, errors };
+  return { headers, layout, lines, errors, currencies: [...currencies].sort() };
 }
 
 /** Splits CSV (or semicolon, tab or pipe separated) text into rows, following RFC 4180 quoting. */

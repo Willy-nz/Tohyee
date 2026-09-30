@@ -18,7 +18,13 @@ export type StatementReadResult = {
   errors: string[];
   closingBalance: { amount: string; date: string | null } | null;
   accountNumber: string | null;
+  /** Currencies the file says it's in (OFX CURDEF, CAMT.053 Ccy, MT940 balances); empty when it doesn't say. */
+  currencies: string[];
 };
+
+function codes(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.flatMap((value) => (value && /^[A-Za-z]{3}$/.test(value.trim()) ? [value.trim().toUpperCase()] : [])))].sort();
+}
 
 function tag(block: string, name: string): string | null {
   const match = new RegExp(`<${name}>([^<\\r\\n]*)`, "i").exec(block);
@@ -70,7 +76,13 @@ export function readOfx(text: string): StatementReadResult {
     }
   }
   if (blocks.length === 0) errors.push("The OFX file has no transactions.");
-  return { lines, errors, closingBalance, accountNumber: tag(text, "ACCTID") };
+  return {
+    lines,
+    errors,
+    closingBalance,
+    accountNumber: tag(text, "ACCTID"),
+    currencies: codes([...text.matchAll(/<CURDEF>\s*([A-Za-z]{3})/gi)].map((match) => match[1])),
+  };
 }
 
 /**
@@ -133,7 +145,7 @@ export function readQif(text: string, dateOrder?: DateOrder): StatementReadResul
     }
   });
   if (records.length === 0) errors.push("The QIF file has no transactions.");
-  return { lines, errors, closingBalance: null, accountNumber: null };
+  return { lines, errors, closingBalance: null, accountNumber: null, currencies: [] };
 }
 
 function xmlValue(xml: string, path: string[]): string | null {
@@ -204,7 +216,16 @@ export function readCamt053(text: string): StatementReadResult {
     }
   }
   if (entries.length === 0) errors.push("The CAMT.053 file has no entries.");
-  return { lines, errors, closingBalance, accountNumber: xmlValue(text, ["Acct", "Id", "Othr", "Id"]) ?? xmlValue(text, ["Acct", "Id", "IBAN"]) };
+  return {
+    lines,
+    errors,
+    closingBalance,
+    accountNumber: xmlValue(text, ["Acct", "Id", "Othr", "Id"]) ?? xmlValue(text, ["Acct", "Id", "IBAN"]),
+    currencies: codes([
+      ...[...text.matchAll(/<(?:\w+:)?Amt\b[^>]*\bCcy="([A-Za-z]{3})"/g)].map((match) => match[1]),
+      xmlValue(text, ["Acct", "Ccy"]),
+    ]),
+  };
 }
 
 /** SWIFT MT940: :61: statement lines with their :86: details, and the :62F: closing balance. */
@@ -262,5 +283,8 @@ export function readMt940(text: string): StatementReadResult {
     }
   });
   if (!fields.some((field) => field.tag === "61")) errors.push("The MT940 file has no statement lines.");
-  return { lines, errors, closingBalance, accountNumber };
+  const currencies = codes(
+    fields.filter((field) => /^6[02][FM]$|^64$|^65$/.test(field.tag)).map((field) => /^[CD]\d{6}([A-Z]{3})/.exec(field.value.trim())?.[1]),
+  );
+  return { lines, errors, closingBalance, accountNumber, currencies };
 }
