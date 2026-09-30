@@ -576,7 +576,18 @@ that something happened.
   Microsoft app once (shared with the CRM's mail sync), an admin clicks
   **Connect Microsoft account** and signs in to the mailbox, which then sends
   for the organisation through Microsoft Graph with the Mail.Send permission,
-  showing the connected address, with Disconnect; or **SMTP**: Gmail or
+  showing the connected address, with Disconnect; **Google / Gmail (sign
+  in)** (1 Oct 2026), the same for a Gmail or Google Workspace mailbox: the
+  organisation's own Google OAuth client (shared with the CRM's mail sync),
+  **Connect Google account**, only the gmail.send permission (plus the
+  account's address), the message written by the same composer as SMTP and
+  sent through the Gmail API (35 MB at most; bigger is refused with a plain
+  message), with plain-English errors for access withdrawn, the permission
+  unticked, a Workspace admin blocking the app and Gmail's daily limit; the
+  settings help explains Google's "unverified app" screen (Internal apps for
+  Workspace, Testing with test users for personal Gmail; **TO VERIFY**
+  against Google's current documentation, not yet checked, nor tried with a
+  real Google app); or **SMTP**: Gmail or
   Google Workspace with an app password, Microsoft 365 with Authenticated
   SMTP, or any SMTP server; from name, from address, reply-to; the password
   and tokens encrypted with TOHYEE_SECRET_KEY and never sent back to the
@@ -608,8 +619,7 @@ that something happened.
   organisation. Addresses are plain `name@domain` only and line breaks are
   taken out of subjects, so nothing typed can add a header; the only
   attachment is the document's own PDF; internal notes are never included.
-  Not built: signing in with Google to send (a possible follow-up; Gmail
-  uses an app password for now), attachments over 3 MB through Microsoft
+  Not built: attachments over 3 MB through Microsoft
   (Graph's upload sessions), and tracking whether the email was opened
   (never: no tracking pixels).
 - **Phone access (remote access)**, three ways, one on at a time (switching

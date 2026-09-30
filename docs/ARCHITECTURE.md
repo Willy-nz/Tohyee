@@ -74,8 +74,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ record_notes, record_attachments   notes and files on journals, documents and contacts
 ├─ conversion_balances, conversion_balance_lines   opening balances as brought in, once (IM1-IM21)
 ├─ import_mappings        the column mapping last used for each kind of import file
-├─ organisation_email_settings, email_templates   the organisation's own email account (SMTP password or Microsoft tokens encrypted) and templates
-├─ email_oauth_states     one-time states for signing in to the Microsoft mailbox documents are sent from
+├─ organisation_email_settings, email_templates   the organisation's own email account (SMTP password or Microsoft or Google tokens encrypted) and templates
+├─ email_oauth_states     one-time states for signing in to the Microsoft or Google mailbox documents are sent from
 ├─ organisation_logo      the organisation's logo (PNG or JPEG, 512 KB at most), on emails, PDFs and print pages
 ├─ document_emails, document_email_batches   each email of a document or statement: queued, then sent or failed by the job
 └─ audit_events
@@ -842,6 +842,19 @@ refresh token is stored encrypted and replaced whenever Microsoft issues a
 new one, the access token is renewed outside any transaction, and emails go
 through Microsoft Graph's `POST /me/sendMail` (202 is "sent"; attachments
 over 3 MB in all are refused, since larger ones need an upload session).
+A Gmail or Google Workspace mailbox (`google.ts`, migration 0044) works the
+same way with the organisation's own Google OAuth client (also in
+`crm_mail_settings`), asking only for `gmail.send` plus `openid` and
+`userinfo.email` (the Gmail profile doesn't accept gmail.send, so the address
+comes from OAuth2 v2 userinfo); a sign-in whose granted scopes lack gmail.send
+is refused. The message is written by nodemailer's own composer from the same
+options as SMTP (`composeRawMessage`, stream transport) and uploaded as
+`message/rfc822` to the Gmail API's `users.messages.send` media endpoint
+(`uploadType=media`, 36,700,160 bytes at most per Google's discovery
+document; bigger is refused before sending); 200 with the message id is
+"sent". Each sign-in state records its provider, so one can't be finished at
+the other's callback. Disconnecting a mailbox falls back to the method in use,
+then SMTP, then the other mailbox.
 `sender.ts` hides which it is from the job and the test email. Every email
 has an HTML part (`html.ts`: escaped text, a summary box, the contact
 details, and the logo as an inline `cid:` attachment, no remote images)

@@ -3,8 +3,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { EMAIL_HISTORY_ENTITY, loadEmailSubject, type StatementOptions } from "@/lib/email/documents";
 import { emailSummary, renderEmailHtml } from "@/lib/email/html";
-import { saveRefreshedTokens } from "@/lib/email/microsoft";
-import { explainOpenError, openSender, type Sender } from "@/lib/email/sender";
+import { explainOpenError, openSender, saveSenderTokens, type Sender, type SendingVia } from "@/lib/email/sender";
 import { readSendingAccount, type SendingAccount } from "@/lib/email/settings";
 import { type InlineImage, newMessageId } from "@/lib/email/smtp";
 import type { EmailDocumentKind } from "@/lib/email/templates";
@@ -115,7 +114,7 @@ async function claim(tx: OrgTx, now: Date): Promise<ClaimedRow[]> {
 }
 
 type Outcome =
-  | { kind: "sent"; via: "smtp" | "microsoft"; messageId: string; response: string; rejected: string[]; sha256: string; bytes: number }
+  | { kind: "sent"; via: SendingVia; messageId: string; response: string; rejected: string[]; sha256: string; bytes: number }
   | { kind: "failed"; error: string; retryable: boolean };
 
 async function record(tx: OrgTx, row: ClaimedRow, outcome: Outcome, now: Date): Promise<"sent" | "failed" | "retrying"> {
@@ -257,13 +256,13 @@ export async function processOrganisationOutbox(organisation: OrganisationRecord
       { people },
     );
     if (rows.length === 0) break;
-    // Opening a Microsoft sender may renew its sign-in (network, outside any transaction; the new tokens are saved in one of their own).
+    // Opening a Microsoft or Google sender may renew its sign-in (network, outside any transaction; the new tokens are saved in one of their own).
     let sender: Sender | null = null;
     let openError: { message: string; retryable: boolean } | null = accountError ? { message: `It wasn't sent: ${accountError}`, retryable: false } : null;
     if (account) {
       try {
         sender = await openSender(account, (tokens) =>
-          withOrganisationTransaction(organisation, JOB_ACTOR, (tx) => saveRefreshedTokens(tx, account.fromAddress, tokens), { people }),
+          withOrganisationTransaction(organisation, JOB_ACTOR, (tx) => saveSenderTokens(tx, account, tokens), { people }),
         );
       } catch (error) {
         openError = explainOpenError(account, error);
