@@ -15,6 +15,9 @@ import * as templatesRoute from "@/app/api/email/templates/route";
 import * as msCallbackRoute from "@/app/api/email/microsoft/callback/route";
 import * as msConnectRoute from "@/app/api/email/microsoft/connect/route";
 import * as msDisconnectRoute from "@/app/api/email/microsoft/disconnect/route";
+import * as googleCallbackRoute from "@/app/api/email/google/callback/route";
+import * as googleConnectRoute from "@/app/api/email/google/connect/route";
+import * as googleDisconnectRoute from "@/app/api/email/google/disconnect/route";
 import * as logoRoute from "@/app/api/organisations/[organisationId]/logo/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createContact } from "@/lib/contacts/service";
@@ -805,6 +808,228 @@ describeWithDatabase("emailing documents", () => {
       expect(disconnected.json.settings).toMatchObject({ sendingMethod: "smtp", configured: true, microsoft: null });
       const tokensLeft = await w.as((tx) => tx.query("select 1 from organisation_email_settings where microsoft_refresh_token_ciphertext is not null"));
       expect(tokensLeft.rowCount).toBe(0);
+    } finally {
+      setMailFetchForTests(null);
+    }
+  });
+
+  // ------------------------------------------------------------------ Google / Gmail (sign in)
+
+  type GmailState = {
+    sent: Array<{ mail: ParsedMail; raw: Buffer; token: string; contentType: string | null }>;
+    tokenRequests: URLSearchParams[];
+    sendStatus: number;
+    sendReason: string;
+    tokens: number;
+    /** What the token endpoint does with a refresh: renew, renew with a new refresh token, or say access was withdrawn. */
+    refresh: "ok" | "rotate" | "revoked";
+    grantedScope: string;
+  };
+
+  /** A fake Google sign-in server, userinfo and Gmail API (the media upload of users.messages.send). */
+  function fakeGoogle(state: GmailState) {
+    return async (url: string, init?: RequestInit): Promise<Response> => {
+      const target = new URL(url);
+      if (target.host === "oauth2.googleapis.com" && target.pathname === "/token" && init?.method === "POST") {
+        const form = new URLSearchParams(String(init.body ?? ""));
+        state.tokenRequests.push(form);
+        if (form.get("grant_type") === "refresh_token" && state.refresh === "revoked") {
+          return Response.json({ error: "invalid_grant", error_description: "Token has been expired or revoked." }, { status: 400 });
+        }
+        state.tokens += 1;
+        const first = form.get("grant_type") === "authorization_code";
+        return Response.json({
+          access_token: `g-access-${state.tokens}`,
+          expires_in: 3599,
+          scope: state.grantedScope,
+          token_type: "Bearer",
+          ...(first || state.refresh === "rotate" ? { refresh_token: `g-refresh-${state.tokens}` } : {}),
+        });
+      }
+      if (target.host === "www.googleapis.com" && target.pathname === "/oauth2/v2/userinfo") {
+        return Response.json({ id: "1", email: "Accounts@Glimmers.co.nz", verified_email: true });
+      }
+      if (target.host === "gmail.googleapis.com" && target.pathname === "/upload/gmail/v1/users/me/messages/send" && init?.method === "POST") {
+        expect(target.searchParams.get("uploadType")).toBe("media");
+        const headers = new Headers(init.headers);
+        if (state.sendStatus !== 200) {
+          return Response.json(
+            { error: { code: state.sendStatus, message: "Nope", status: "PERMISSION_DENIED", errors: [{ reason: state.sendReason, domain: "global", message: "Nope" }] } },
+            { status: state.sendStatus },
+          );
+        }
+        const raw = Buffer.from(init.body as Uint8Array);
+        state.sent.push({ mail: await simpleParser(raw, { keepCidLinks: true }), raw, token: String(headers.get("authorization")).replace("Bearer ", ""), contentType: headers.get("content-type") });
+        return Response.json({ id: `gm-${state.sent.length}`, threadId: `th-${state.sent.length}`, labelIds: ["SENT"] });
+      }
+      return new Response("not found", { status: 404 });
+    };
+  }
+
+  const ALL_SCOPES = "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.send";
+
+  it("sends through a Gmail or Google Workspace mailbox an admin signed in to, with the Gmail API", async () => {
+    const w = await setup({ emailSetUp: false });
+    await uploadLogo(w.org, tinyPng());
+    await w.as((tx) => saveMailSettings(tx, { googleClientId: "g-client.apps.googleusercontent.com", googleClientSecret: "g-secret" }));
+    const google: GmailState = { sent: [], tokenRequests: [], sendStatus: 200, sendReason: "", tokens: 0, refresh: "ok", grantedScope: ALL_SCOPES };
+    setMailFetchForTests(fakeGoogle(google));
+    const connect = async () => {
+      const started = await call(googleConnectRoute.POST, "/api/email/google/connect", { method: "POST", body: { organisationId: w.org } });
+      return new URL(started.json.url as string);
+    };
+    const finish = (query: string) => googleCallbackRoute.GET(apiRequest(`/api/email/google/callback?${query}`, { cookie: ownerCookie }));
+    try {
+      // Connecting: admins only; Google's sign-in asks only for gmail.send and the address, offline, and comes back to the email settings.
+      expect((await call(googleConnectRoute.POST, "/api/email/google/connect", { method: "POST", cookie: bookkeeperCookie, body: { organisationId: w.org } })).status).toBe(403);
+      const signIn = await connect();
+      expect(signIn.host + signIn.pathname).toBe("accounts.google.com/o/oauth2/v2/auth");
+      expect(signIn.searchParams.get("client_id")).toBe("g-client.apps.googleusercontent.com");
+      expect(signIn.searchParams.get("scope")).toBe(ALL_SCOPES);
+      expect(signIn.searchParams.get("access_type")).toBe("offline");
+      expect(signIn.searchParams.get("prompt")).toBe("consent");
+      expect(signIn.searchParams.has("include_granted_scopes")).toBe(false);
+      expect(signIn.searchParams.get("redirect_uri")).toBe("http://tohyee.test/api/email/google/callback");
+      const state = signIn.searchParams.get("state")!;
+      // A Google sign-in can't be finished at the Microsoft callback (and isn't used up by trying).
+      const wrong = await msCallbackRoute.GET(apiRequest(`/api/email/microsoft/callback?code=code-1&state=${encodeURIComponent(state)}`, { cookie: ownerCookie }));
+      expect(new URL(wrong.headers.get("location")!).searchParams.get("error")).toBe("That sign-in link has expired or was already used. Start connecting again.");
+      expect(google.tokenRequests).toHaveLength(0);
+      const back = await finish(`code=code-1&state=${encodeURIComponent(state)}`);
+      expect(back.status).toBe(303);
+      expect(back.headers.get("location")).toBe("http://tohyee.test/operations/settings/email?connected=accounts%40glimmers.co.nz");
+      expect(google.tokenRequests[0].get("grant_type")).toBe("authorization_code");
+      expect(google.tokenRequests[0].get("redirect_uri")).toBe("http://tohyee.test/api/email/google/callback");
+      expect(google.tokenRequests[0].get("client_secret")).toBe("g-secret");
+      const again = await finish(`code=code-1&state=${encodeURIComponent(state)}`);
+      expect(new URL(again.headers.get("location")!).searchParams.get("error")).toBe("That sign-in link has expired or was already used. Start connecting again.");
+
+      const read = await call(settingsRoute.GET, `/api/email/settings?organisationId=${w.org}`);
+      expect(read.json.settings).toMatchObject({
+        configured: true,
+        sendingMethod: "google",
+        fromName: "Glimmers",
+        fromAddress: "accounts@glimmers.co.nz",
+        google: { email: "accounts@glimmers.co.nz", connectedByEmail: owner.email, tokensReadable: true },
+        googleApp: { clientId: "g-client.apps.googleusercontent.com", secretSaved: true },
+        microsoft: null,
+      });
+      expect(read.text).not.toContain("g-refresh-1");
+      expect(read.text).not.toContain("g-access-1");
+      expect(read.text).not.toContain("g-secret");
+      const stored = await w.as((tx) => tx.query<{ google_refresh_token_ciphertext: string }>("select google_refresh_token_ciphertext from organisation_email_settings"));
+      expect(stored.rows[0].google_refresh_token_ciphertext).toMatch(/^v1:/);
+
+      // Sending an invoice: Gmail gets the whole message nodemailer wrote, the same as SMTP's.
+      const invoice = await w.invoice();
+      const prepared = await call(prepareRoute.GET, `/api/email/prepare?organisationId=${w.org}&kind=invoice&id=${invoice.id}`, { cookie: bookkeeperCookie });
+      expect(prepared.json.email).toMatchObject({ configured: true, from: "Glimmers <accounts@glimmers.co.nz>", replyTo: "accounts@glimmers.co.nz" });
+      await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", cc: "jess@glimmers.test", subject: "Invoice INV-0001 from Glimmers", body: "Hi Kobe Cafe,\n\nHere's invoice INV-0001." });
+      expect(await w.send()).toMatchObject({ sent: 1, failed: 0 });
+      expect(received).toHaveLength(0);
+      expect(google.sent).toHaveLength(1);
+      const [first] = google.sent;
+      expect(first.token).toBe("g-access-1");
+      expect(first.contentType).toBe("message/rfc822");
+      const mail = first.mail;
+      expect(mail.from?.value).toEqual([{ address: "accounts@glimmers.co.nz", name: "Glimmers" }]);
+      expect(mail.to && !Array.isArray(mail.to) ? mail.to.value.map((to) => to.address) : null).toEqual(["accounts@kobe.test"]);
+      expect(mail.cc && !Array.isArray(mail.cc) ? mail.cc.value.map((cc) => cc.address) : null).toEqual(["jess@glimmers.test"]);
+      expect(mail.replyTo?.value[0].address).toBe("accounts@glimmers.co.nz");
+      expect(mail.subject).toBe("Invoice INV-0001 from Glimmers");
+      expect(mail.text?.trim()).toBe("Hi Kobe Cafe,\n\nHere's invoice INV-0001.");
+      const html = String(mail.html);
+      expect(html).toContain("Here&#39;s invoice INV-0001.");
+      expect(html).toMatch(/Total<\/td>\s*<td[^>]*>\$316\.25<\/td>/);
+      const logoSource = [...html.matchAll(/src="cid:([^"]+)"/g)].map((match) => match[1]);
+      expect(logoSource).toHaveLength(1);
+      expect(mail.attachments.find((file) => file.contentDisposition === "inline")).toMatchObject({ contentType: "image/png", cid: logoSource[0], related: true });
+      const pdf = mail.attachments.find((file) => file.contentType === "application/pdf")!;
+      expect(pdf.filename).toBe("Invoice INV-0001.pdf");
+      expect(await pdfText(pdf.content)).toContain("316.25");
+      const [sent] = await emailsFor(w.org, "invoice", invoice.id);
+      expect(sent).toMatchObject({ status: "sent", sentVia: "google", messageId: "gmail:gm-1" });
+      expect(sent.smtpResponse).toBe("Accepted by the Gmail API (200), message gm-1");
+
+      // An expired access token is renewed with the refresh token; Google usually keeps the same refresh token, and a new one replaces it.
+      const expire = () => w.as((tx) => tx.query("update organisation_email_settings set google_access_token_expires_at = now() - interval '1 minute'"));
+      const refreshToken = async () =>
+        decryptSecret((await w.as((tx) => tx.query<{ google_refresh_token_ciphertext: string }>("select google_refresh_token_ciphertext from organisation_email_settings"))).rows[0].google_refresh_token_ciphertext);
+      await expire();
+      await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Again", body: "Again" });
+      expect(await w.send()).toMatchObject({ sent: 1 });
+      expect(google.tokenRequests[1].get("grant_type")).toBe("refresh_token");
+      expect(google.tokenRequests[1].get("refresh_token")).toBe("g-refresh-1");
+      expect(google.sent[1].token).toBe("g-access-2");
+      expect(await refreshToken()).toBe("g-refresh-1");
+      google.refresh = "rotate";
+      await expire();
+      await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Rotated", body: "Rotated" });
+      expect(await w.send()).toMatchObject({ sent: 1 });
+      expect(await refreshToken()).toBe("g-refresh-3");
+
+      // Busy: tried again later. Missing permission: failed, saying to connect again.
+      google.sendStatus = 429;
+      google.sendReason = "rateLimitExceeded";
+      await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Busy", body: "Busy" });
+      expect(await w.send()).toMatchObject({ retrying: 1 });
+      google.sendStatus = 403;
+      google.sendReason = "insufficientPermissions";
+      await w.as((tx) => tx.query("update document_emails set next_attempt_at = now() where status = 'queued'"));
+      expect(await w.send()).toMatchObject({ failed: 1 });
+      const denied = (await emailsFor(w.org, "invoice", invoice.id)).find((email) => email.subject === "Busy")!;
+      expect(denied.lastError).toMatch(/^Google didn't give Tohyee permission to send from this mailbox\. An admin needs to connect it again in Settings > Email/);
+
+      // Access withdrawn (Google says invalid_grant on the refresh): failed straight away, not retried.
+      google.sendStatus = 200;
+      google.refresh = "revoked";
+      await expire();
+      await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Revoked", body: "Revoked" });
+      expect(await w.send()).toMatchObject({ failed: 1, retrying: 0 });
+      const revoked = (await emailsFor(w.org, "invoice", invoice.id)).find((email) => email.subject === "Revoked")!;
+      expect(revoked.lastError).toBe(
+        "The Google mailbox's sign-in has expired or access was removed. An admin needs to connect it again in Settings > Email. (oauth2.googleapis.com said 400: Token has been expired or revoked.)",
+      );
+      const tested = await call(testRoute.POST, "/api/email/settings/test", { method: "POST", body: { organisationId: w.org } });
+      expect(tested.json).toMatchObject({ ok: false, error: expect.stringMatching(/^The Google mailbox's sign-in has expired or access was removed\./) });
+
+      // Connecting again, when someone unticks "Send email on your behalf" or cancels, says so.
+      google.refresh = "ok";
+      google.grantedScope = "openid https://www.googleapis.com/auth/userinfo.email";
+      const unticked = await finish(`code=code-2&state=${encodeURIComponent((await connect()).searchParams.get("state")!)}`);
+      expect(new URL(unticked.headers.get("location")!).searchParams.get("error")).toBe(
+        'Google didn\'t give Tohyee permission to send email from this account. Connect again and tick "Send email on your behalf".',
+      );
+      const cancelled = await finish(`error=access_denied&state=${encodeURIComponent((await connect()).searchParams.get("state")!)}`);
+      expect(new URL(cancelled.headers.get("location")!).searchParams.get("error")).toMatch(/^Google didn't give Tohyee access/);
+      google.grantedScope = ALL_SCOPES;
+      expect(new URL((await finish(`code=code-3&state=${encodeURIComponent((await connect()).searchParams.get("state")!)}`)).headers.get("location")!).searchParams.get("connected")).toBe(
+        "accounts@glimmers.co.nz",
+      );
+
+      // The test email goes the same way.
+      const retested = await call(testRoute.POST, "/api/email/settings/test", { method: "POST", body: { organisationId: w.org } });
+      expect(retested.json).toMatchObject({ ok: true, to: owner.email });
+      expect(google.sent.at(-1)!.mail.subject).toBe("Test email from Tohyee for Glimmers");
+      expect(google.sent.at(-1)!.mail.text).toContain("It was sent from the Google mailbox accounts@glimmers.co.nz");
+
+      // SMTP details can be saved as well (switching to SMTP), and switched back.
+      const smtp = await call(settingsRoute.PUT, "/api/email/settings", {
+        method: "PUT",
+        body: { organisationId: w.org, fromName: "Glimmers", fromAddress: SMTP_USER, host: "127.0.0.1", port: smtpPort, security: "none", username: SMTP_USER, password: SMTP_PASSWORD },
+      });
+      expect(smtp.json.settings).toMatchObject({ sendingMethod: "smtp", configured: true, google: { email: "accounts@glimmers.co.nz" } });
+      const switched = await call(settingsRoute.PUT, "/api/email/settings", { method: "PUT", body: { organisationId: w.org, sendingMethod: "google", replyTo: "jess@glimmers.test" } });
+      expect(switched.json.settings).toMatchObject({ sendingMethod: "google", replyTo: "jess@glimmers.test", fromAddress: "accounts@glimmers.co.nz" });
+
+      // Disconnecting forgets the sign-in; the saved SMTP account is used again.
+      expect((await call(googleDisconnectRoute.POST, "/api/email/google/disconnect", { method: "POST", cookie: bookkeeperCookie, body: { organisationId: w.org } })).status).toBe(403);
+      const disconnected = await call(googleDisconnectRoute.POST, "/api/email/google/disconnect", { method: "POST", body: { organisationId: w.org } });
+      expect(disconnected.json.settings).toMatchObject({ sendingMethod: "smtp", configured: true, google: null });
+      const tokensLeft = await w.as((tx) => tx.query("select 1 from organisation_email_settings where google_refresh_token_ciphertext is not null or google_access_token_ciphertext is not null"));
+      expect(tokensLeft.rowCount).toBe(0);
+      const history = await w.as((tx) => tx.query<{ sent_via: string }>("select distinct sent_via from document_emails where sent_via is not null"));
+      expect(history.rows.map((row) => row.sent_via)).toEqual(["google"]);
     } finally {
       setMailFetchForTests(null);
     }

@@ -219,7 +219,11 @@ export async function prepareDocumentEmail(tx: OrgTx, input: { kind?: unknown; i
         ? account.microsoft?.tokensReadable
           ? "The organisation's Microsoft app isn't set up. An admin needs to enter it in Settings > Email."
           : "The Microsoft mailbox's sign-in can't be read on this server any more (was TOHYEE_SECRET_KEY changed?). An admin needs to connect it again in Settings > Email."
-        : account.hasPassword
+        : account.sendingMethod === "google"
+          ? account.google?.tokensReadable
+            ? "The organisation's Google app isn't set up. An admin needs to enter it in Settings > Email."
+            : "The Google mailbox's sign-in can't be read on this server any more (was TOHYEE_SECRET_KEY changed?). An admin needs to connect it again in Settings > Email."
+          : account.hasPassword
           ? "The saved email password can't be read on this server any more (was TOHYEE_SECRET_KEY changed?). An admin needs to enter it again in Settings > Email."
           : NOT_SET_UP,
     from: account.configured ? `${account.fromName} <${account.fromAddress}>` : null,
@@ -252,7 +256,7 @@ export type DocumentEmail = {
   messageId: string | null;
   smtpResponse: string | null;
   /** How it was sent: through SMTP or the Microsoft mailbox (null until sent). */
-  sentVia: "smtp" | "microsoft" | null;
+  sentVia: "smtp" | "microsoft" | "google" | null;
   requestedByEmail: string;
   createdAt: string;
   finishedAt: string | null;
@@ -275,7 +279,7 @@ type EmailRow = {
   last_error: string | null;
   message_id: string | null;
   smtp_response: string | null;
-  sent_via: "smtp" | "microsoft" | null;
+  sent_via: "smtp" | "microsoft" | "google" | null;
   requested_by_email: string;
   created_at: string;
   finished_at: string | null;

@@ -1,8 +1,7 @@
 import { json, readJson, route, withOrganisationRunner } from "@/lib/api/http";
 import { optionalAddress } from "@/lib/email/addresses";
 import { renderEmailHtml } from "@/lib/email/html";
-import { saveRefreshedTokens } from "@/lib/email/microsoft";
-import { explainOpenError, openSender } from "@/lib/email/sender";
+import { explainOpenError, openSender, saveSenderTokens } from "@/lib/email/sender";
 import { readSendingAccount, recordTestResult } from "@/lib/email/settings";
 import { newMessageId } from "@/lib/email/smtp";
 import { formatGstNumber } from "@/lib/format";
@@ -12,7 +11,7 @@ import { getOrganisationSettings } from "@/lib/organisations/settings";
 /**
  * Sends a test email from the organisation's account (admins), to `to` or
  * the signed-in admin, and records the result: through SMTP or the
- * connected Microsoft mailbox, as HTML with the logo and as plain text. The
+ * connected Microsoft or Google mailbox, as HTML with the logo and as plain text. The
  * account is read in one transaction, the email sent with none open, and the
  * result saved in another.
  */
@@ -28,14 +27,19 @@ export const POST = route(async (request) => {
     }));
     const organisationName = settings.displayName;
     const to = optionalAddress(body.to, "The test address") ?? me;
-    const through = account.method === "microsoft" ? `the Microsoft mailbox ${account.fromAddress}` : `${account.fromAddress} through ${account.host}`;
+    const through =
+      account.method === "microsoft"
+        ? `the Microsoft mailbox ${account.fromAddress}`
+        : account.method === "google"
+          ? `the Google mailbox ${account.fromAddress}`
+          : `${account.fromAddress} through ${account.host}`;
     const text = `This is a test email from Tohyee.\n\nIt was sent from ${through}, so ${organisationName}'s invoices, quotes, credit notes, purchase orders and statements can be emailed from this account. Replies go to ${account.replyTo ?? account.fromAddress}.`;
     const image = emailLogo(logo);
     const subject = `Test email from Tohyee for ${organisationName}`;
     let error: string | null = null;
     let sender: Awaited<ReturnType<typeof openSender>> | null = null;
     try {
-      sender = await openSender(account, (tokens) => run((tx) => saveRefreshedTokens(tx, account.fromAddress, tokens)));
+      sender = await openSender(account, (tokens) => run((tx) => saveSenderTokens(tx, account, tokens)));
     } catch (caught) {
       error = explainOpenError(account, caught).message;
     }

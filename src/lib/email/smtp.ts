@@ -58,8 +58,13 @@ export function newMessageId(account: Pick<SendingAccount, "fromAddress">, organ
   return `<tohyee.${organisationId.replace(/[^A-Za-z0-9-]/g, "")}.${emailId}.${Date.now().toString(36)}${random}@${domain}>`;
 }
 
-export async function sendMessage(transport: AccountTransport, account: SmtpAccount, message: OutgoingMessage): Promise<SendResult> {
-  const info = await transport.sendMail({
+/**
+ * What nodemailer composes the email from: the same for SMTP and for the
+ * Gmail API (which is given the finished message), so both send identical
+ * HTML, plain text, inline logo and PDF.
+ */
+export function mailOptions(account: Pick<SendingAccount, "fromName" | "fromAddress" | "replyTo">, message: OutgoingMessage) {
+  return {
     from: fromHeader(account),
     sender: account.fromAddress,
     replyTo: account.replyTo ?? account.fromAddress,
@@ -85,9 +90,24 @@ export async function sendMessage(transport: AccountTransport, account: SmtpAcco
           }))
         : []),
     ],
-  });
+  };
+}
+
+export async function sendMessage(transport: AccountTransport, account: SmtpAccount, message: OutgoingMessage): Promise<SendResult> {
+  const info = await transport.sendMail(mailOptions(account, message));
   const rejected = ((info.rejected ?? []) as Array<string | { address: string }>).map((entry) => (typeof entry === "string" ? entry : entry.address));
   return { messageId: info.messageId ?? message.messageId, response: String(info.response ?? ""), rejected };
+}
+
+/**
+ * The finished RFC 822 message (CRLF line endings), built by nodemailer's
+ * own composer from the same options as SMTP, for the Gmail API. No
+ * network: nodemailer's stream transport only writes the message.
+ */
+export async function composeRawMessage(account: Pick<SendingAccount, "fromName" | "fromAddress" | "replyTo">, message: OutgoingMessage): Promise<Buffer> {
+  const composer = nodemailer.createTransport({ streamTransport: true, buffer: true, newline: "windows", disableFileAccess: true, disableUrlAccess: true });
+  const info = await composer.sendMail(mailOptions(account, message));
+  return info.message as Buffer;
 }
 
 type SmtpError = Error & { code?: string; responseCode?: number; response?: string; command?: string; rejected?: unknown[] };

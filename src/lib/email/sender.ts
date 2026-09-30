@@ -1,17 +1,22 @@
 import type { Tokens } from "@/lib/crm/mail/providers";
-import { explainGraphError, microsoftAccessToken, sendViaGraph } from "@/lib/email/microsoft";
+import type { OrgTx } from "@/lib/db/org-transaction";
+import { explainGmailError, googleAccessToken, saveGoogleRefreshedTokens, sendViaGmail } from "@/lib/email/google";
+import { explainGraphError, microsoftAccessToken, saveRefreshedTokens, sendViaGraph } from "@/lib/email/microsoft";
 import type { SendingAccount } from "@/lib/email/settings";
 import { createAccountTransport, explainSmtpError, type OutgoingMessage, sendMessage, type SendResult } from "@/lib/email/smtp";
 
 /**
  * One way of sending for the outbox and the test email, whichever the
- * organisation chose: its SMTP account, or its Microsoft mailbox through
- * Graph. Opening a Microsoft sender may refresh the access token (network),
- * so it's never called inside a database transaction; `saveTokens` stores
- * what Microsoft issued, in a transaction of its own.
+ * organisation chose: its SMTP account, its Microsoft mailbox through
+ * Graph, or its Google mailbox through the Gmail API. Opening a Microsoft or
+ * Google sender may refresh the access token (network), so it's never called
+ * inside a database transaction; `saveTokens` stores what the provider
+ * issued, in a transaction of its own.
  */
+export type SendingVia = "smtp" | "microsoft" | "google";
+
 export type Sender = {
-  via: "smtp" | "microsoft";
+  via: SendingVia;
   send(message: OutgoingMessage): Promise<SendResult>;
   explain(error: unknown): { message: string; retryable: boolean };
   close(): void;
@@ -27,6 +32,15 @@ export async function openSender(account: SendingAccount, saveTokens: (tokens: T
       close: () => undefined,
     };
   }
+  if (account.method === "google") {
+    const accessToken = await googleAccessToken(account, saveTokens);
+    return {
+      via: "google",
+      send: (message) => sendViaGmail(accessToken, account, message),
+      explain: explainGmailError,
+      close: () => undefined,
+    };
+  }
   const transport = createAccountTransport(account);
   return {
     via: "smtp",
@@ -36,7 +50,15 @@ export async function openSender(account: SendingAccount, saveTokens: (tokens: T
   };
 }
 
-/** Why a sender couldn't be opened (a Microsoft sign-in that needs renewing, or Microsoft unreachable). */
+/** Stores tokens a Microsoft or Google sign-in renewed, for the mailbox the account was read for. */
+export async function saveSenderTokens(tx: OrgTx, account: SendingAccount, tokens: Tokens): Promise<void> {
+  if (account.method === "microsoft") await saveRefreshedTokens(tx, account.fromAddress, tokens);
+  else if (account.method === "google") await saveGoogleRefreshedTokens(tx, account.fromAddress, tokens);
+}
+
+/** Why a sender couldn't be opened (a sign-in that needs renewing, or the provider unreachable). */
 export function explainOpenError(account: SendingAccount, error: unknown): { message: string; retryable: boolean } {
-  return account.method === "microsoft" ? explainGraphError(error) : explainSmtpError(error, account);
+  if (account.method === "microsoft") return explainGraphError(error);
+  if (account.method === "google") return explainGmailError(error);
+  return explainSmtpError(error, account);
 }
