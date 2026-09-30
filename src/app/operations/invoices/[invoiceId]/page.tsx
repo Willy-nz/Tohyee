@@ -350,7 +350,9 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           <Stat label="Customer" value={invoice.contactName} />
         </div>
         {invoice.salespersonName ? <div className={ui.muted}>Salesperson: {invoice.salespersonName}</div> : null}
-        <DocumentExportFlags organisationId={organisationId} contactId={invoice.contactId} lineTaxCodes={invoice.lines.map((line) => line.taxCode)} />
+        <DocumentExportFlags organisationId={organisationId} contactId={invoice.contactId} lineTaxCodes={invoice.lines.map((line) => line.taxCode)}
+          editable={invoice.status === "draft"}
+        />
         {fromQuote ? (
           <div className={ui.muted}>
             Made by accepting quote <Link href={`/operations/quotes/${fromQuote.id}`}>{fromQuote.quoteNumber}</Link>.

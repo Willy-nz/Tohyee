@@ -215,7 +215,9 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
           <Stat label="Customer" value={creditNote.contactName} />
         </div>
         {creditNote.salespersonName ? <div className={ui.muted}>Salesperson: {creditNote.salespersonName}</div> : null}
-        <DocumentExportFlags organisationId={organisationId} contactId={creditNote.contactId} lineTaxCodes={creditNote.lines.map((line) => line.taxCode)} />
+        <DocumentExportFlags organisationId={organisationId} contactId={creditNote.contactId} lineTaxCodes={creditNote.lines.map((line) => line.taxCode)}
+          editable={creditNote.status === "draft"}
+        />
         <CustomValuesText setup={customSetup.data} values={creditNote.customFields} />
         <div className={ui.tableWrap}>
           <table className={ui.table}>

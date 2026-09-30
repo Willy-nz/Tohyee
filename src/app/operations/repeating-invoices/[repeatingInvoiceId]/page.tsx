@@ -161,7 +161,9 @@ function RepeatingView({ organisationId, id }: { organisationId: string; id: str
           <Stat label="Each invoice is" value={template.saveAs === "approve" ? "Approved" : "Saved as a draft"} />
           <Stat label="Reference" value={template.reference ?? "—"} />
         </div>
-        <DocumentExportFlags organisationId={organisationId} contactId={template.contactId} lineTaxCodes={template.lines.map((line) => line.taxCode)} />
+        <DocumentExportFlags organisationId={organisationId} contactId={template.contactId} lineTaxCodes={template.lines.map((line) => line.taxCode)}
+          editable={template.status !== "ended"}
+        />
         {template.resumedFrom ? <div className={ui.muted}>Dates before {formatDate(template.resumedFrom)} that weren&apos;t made are skipped.</div> : null}
         <CustomValuesText setup={customSetup.data} values={template.customFields} />
         <SalesLinesTable organisationId={organisationId} document={template} />

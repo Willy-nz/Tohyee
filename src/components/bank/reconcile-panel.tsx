@@ -35,6 +35,8 @@ import type { InvoiceSummary } from "@/lib/invoices/service";
 import { isDecimalString } from "@/lib/money/decimal";
 import { isRateText } from "@/lib/money/fx";
 import type { TaxCode } from "@/lib/tax/codes";
+import { retaxLines } from "@/lib/tax/exports";
+import { contactPurchaseTaxCode } from "@/lib/tax/purchase-defaults";
 import type { CustomFieldSetup, CustomValues } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
@@ -596,6 +598,10 @@ type EditorLine = {
   amount: string;
   tracking: TrackingTags;
   customFields: CustomValues;
+  /** The organisation's usual code, before the contact's default purchase tax code (EX23). */
+  usualTaxCode?: string;
+  /** Chosen by hand or by a bank rule: the contact's default leaves it alone. */
+  taxTyped?: boolean;
 };
 let lineKey = 0;
 
@@ -625,6 +631,9 @@ function BankTransactionForm({
   const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive && usableTaxCode(taxCode));
   const defaultTaxCode = (activeTaxCodes.find((taxCode) => taxCode.category === "standard") ?? activeTaxCodes[0])?.code ?? "";
   const [contactId, setContactId] = useState(rule?.contactId ?? "");
+  // Spend money starts with the contact's default purchase tax code, if it's one the line can take (EX23).
+  const contactTaxCode = (id: string) =>
+    moneyIn ? null : contactPurchaseTaxCode(lookups.contacts.find((contact) => contact.id === id), activeTaxCodes);
   const [reference, setReference] = useState(line.reference ?? line.particulars ?? "");
   const [amountsMode, setAmountsMode] = useState<AmountsMode>(rule?.amountsMode ?? (foreign ? "no_tax" : "inclusive"));
   const [rate, setRate] = useState(line.suggestedRate?.rate ?? "");
@@ -636,7 +645,9 @@ function BankTransactionForm({
       key: ++lineKey,
       description: rule?.suggestedLine.description ?? line.description,
       accountCode: rule?.suggestedLine.accountCode ?? "",
-      taxCode: rule?.suggestedLine.taxCode ?? defaultTaxCode,
+      taxCode: rule?.suggestedLine.taxCode ?? contactTaxCode(rule?.contactId ?? "") ?? defaultTaxCode,
+      usualTaxCode: defaultTaxCode,
+      taxTyped: Boolean(rule?.suggestedLine.taxCode),
       amount: unsigned,
       tracking: {},
       customFields: lineDefaults,
@@ -721,7 +732,14 @@ function BankTransactionForm({
       </p>
       <div className={ui.grid3}>
         <Field label={moneyIn ? "Received from" : "Paid to"}>
-          <select value={contactId} onChange={(event) => setContactId(event.target.value)} required>
+          <select
+            value={contactId}
+            onChange={(event) => {
+              setContactId(event.target.value);
+              setLines((current) => retaxLines(current, contactTaxCode(event.target.value)));
+            }}
+            required
+          >
             <option value="">Choose a contact</option>
             {contacts.map((contact) => (
               <option key={contact.id} value={contact.id}>
@@ -816,7 +834,7 @@ function BankTransactionForm({
                     <select
                       aria-label={`Line ${index + 1} tax code`}
                       value={entry.taxCode}
-                      onChange={(event) => update(entry.key, { taxCode: event.target.value })}
+                      onChange={(event) => update(entry.key, { taxCode: event.target.value, taxTyped: true })}
                       required
                     >
                       <option value="">Choose</option>
@@ -863,7 +881,19 @@ function BankTransactionForm({
           variant="secondary"
           size="small"
           onClick={() =>
-            setLines((current) => [...current, { key: ++lineKey, description: line.description, accountCode: "", taxCode: defaultTaxCode, amount: "", tracking: {}, customFields: lineDefaults }])
+            setLines((current) => [
+              ...current,
+              {
+                key: ++lineKey,
+                description: line.description,
+                accountCode: "",
+                taxCode: contactTaxCode(contactId) ?? defaultTaxCode,
+                usualTaxCode: defaultTaxCode,
+                amount: "",
+                tracking: {},
+                customFields: lineDefaults,
+              },
+            ])
           }
         >
           Add a line

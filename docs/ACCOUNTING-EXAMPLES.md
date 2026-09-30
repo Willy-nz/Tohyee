@@ -2407,13 +2407,17 @@ zero-rated. So:
   and on the document; with Foreign trade on, a standard-rated line for that
   customer shows a gentle warning, "This customer is overseas; exports are
   usually zero-rated." It never blocks saving: a service consumed in New
-  Zealand can be standard-rated.
+  Zealand can be standard-rated. The warning shows only where the lines can
+  still be changed: in the editors, and on a draft invoice, credit note or
+  quote or a repeating invoice that hasn't ended; not on an approved or
+  finalised document (decided 1 Oct 2026; neither NetSuite nor Xero has
+  such a warning, so this is Tohyee's own choice; EX25).
 - **GST return**: nothing new. Zero-rated lines were already in Box 5 and
   Box 6, and exempt and no-GST lines in no box (EX11).
-- **Purchases (imports)** aren't covered: suppliers have a country, but
-  there's no default purchase tax code per contact and no import tax code
-  (imported goods' GST is collected by Customs and imported services are
-  under the reverse charge, neither built).
+- **Purchases**: suppliers have a country and their own default purchase
+  tax code (EX16-EX25, below); there's no import tax code (imported goods'
+  GST is collected by Customs, and imported services are under the reverse
+  charge, neither built).
 
 Setup: invoice basis, GST 15%; tax codes GST (standard, 15%), ZERO (zero
 rated), EXEMPT (exempt), NONE (no GST); 1100 Accounts receivable, 2100 GST,
@@ -2439,7 +2443,7 @@ rent). Amounts exclusive of GST.
 | EX9 | Foreign trade on. An invoice for Tui Traders (New Zealand, in USD): 1 x USD 1,000.00 at **1.60** | The currency doesn't decide the tax: the line starts with **GST**. USD 1,000.00 + GST **150.00** = **1,150.00**; NZD 1,600.00 + GST **240.00** = **1,840.00** (as MC71). No export flag |
 | EX10 | Foreign trade on. An invoice for Paws LLC (United States, in NZD): 1 x 800.00 | The line starts with **ZERO**: GST **0.00**, total **800.00** NZD. It shows **Export (United States)** |
 | EX11 | Foreign trade on. July 2026, approved: Kobe 1 x 100.00 GST (115.00); Wombat 1 x 500.00 ZERO; Paws 1 x 800.00 ZERO; Rata Rentals 1 x 400.00 EXEMPT. The July GST return (invoice basis) | Box 5 **1,415.00** (115.00 + 500.00 + 800.00), Box 6 **1,300.00** (the exports), Box 7 **115.00**, Box 8 **15.00**. The exempt 400.00 is in **no box** (exempt sales are left out; zero-rated ones aren't) |
-| EX12 | The flag and warning for Foreign trade on or off, for Wombat, Kobe and Sydney Visitors, with lines coded GST, ZERO, EXEMPT or NONE | **Export (Australia)** by Wombat whatever the setting; nothing by Kobe or Sydney Visitors (delivered in New Zealand). The warning "This customer is overseas; exports are usually zero-rated." only with Foreign trade on, for Wombat, when a line is standard-rated (GST); not for ZERO, EXEMPT or NONE lines |
+| EX12 | The flag and warning for Foreign trade on or off, for Wombat, Kobe and Sydney Visitors, with lines coded GST, ZERO, EXEMPT or NONE, in the editor | **Export (Australia)** by Wombat whatever the setting; nothing by Kobe or Sydney Visitors (delivered in New Zealand). The warning "This customer is overseas; exports are usually zero-rated." only with Foreign trade on, for Wombat, when a line is standard-rated (GST); not for ZERO, EXEMPT or NONE lines. On an approved invoice the flag shows but the warning doesn't (EX25) |
 | EX13 | An admin sets the tax code for exports to EXEMPT, GST, NONE, an inactive zero-rated code, then a new zero-rated code EXPORT | EXEMPT is refused: "The tax code for exports must be zero-rated (like ZERO): exports are zero-rated, not exempt, so they count in Box 5 and Box 6 of the GST return. EXEMPT is exempt." GST and NONE likewise, and the inactive code ("…is inactive…"). EXPORT is accepted and audited. The database refuses a non-zero-rated code too |
 | EX14 | Countries: a contact's billing country "XX", "Australia" and "au"; a contacts CSV with Country "Australia", "US" and blank, and Delivery country "AU" | "XX" is refused ("Billing country "XX" isn't a country…"); "Australia" and "au" are both **AU**. The import gives **AU**, **US** and **NZ**, and the delivery country **AU**; the export writes the codes back |
 | EX15 | Foreign trade on. A won CRM opportunity's invoice for Wombat, for Harbour Tours and for Kobe; a credit note, quote, repeating invoice and project invoice for Wombat | The CRM invoices' lines are **ZERO** (Wombat), **GST** (Harbour Tours' own code) and **GST** (Kobe). The other documents' new lines start with **ZERO** in their editors, the same rule |
@@ -2448,11 +2452,75 @@ Tests: `tests/integration/exports.test.ts` (EX1-EX11, EX13-EX15) and
 `tests/unit/exports.test.ts` (the editors' starting code, the flag and
 warning, and countries: EX2-EX7, EX9, EX10, EX12, EX14).
 
+### A supplier's default purchase tax code (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) after Jess asked us to settle the open export
+questions by checking NetSuite and Xero. **Xero**: a contact's "Purchase
+defaults" include a tax rate, used for new bill and spend money lines for
+that contact. **NetSuite**: its per-nexus "Tax Code for Imports" is for
+reverse-charge reporting, which isn't in New Zealand's list of NetSuite tax
+features. IRD's reverse charge on imported services applies only in limited
+cases, so Tohyee doesn't guess at it. So, matching the customer's default
+sales tax code (EX5):
+
+- **A contact's own default purchase tax code** (optional): any active tax
+  code, matched ignoring case; an inactive (archived) one is refused, and
+  one that became inactive after it was set can be kept but isn't used.
+  Tohyee's tax codes aren't split into sales and purchase codes (unlike
+  NetSuite's "Available on"), so any active code will do; the sales and
+  purchase defaults are separate and each is used only on its own side.
+  Changes are in the contact's history (contact.created, contact.updated).
+  It's set in the contact screen for suppliers. Not in the contacts CSV
+  import and export (the default sales tax code isn't either).
+- **A new purchase line starts with** the contact's default purchase tax
+  code if it has an active one, beating the item's purchase tax code and
+  the account's usual code; else Tohyee's usual default exactly as before
+  (the item's, the account's, or the first active standard-rated code). On
+  bills, supplier credit notes, purchase orders, repeating bills and spend
+  money (only codes the line can take: a foreign-currency bank line has no
+  standard-rated codes). Receive money doesn't use it. Expense claims don't:
+  their receipts' suppliers are typed names, not contacts.
+- **Only a starting value**: any line can be changed and saves as chosen; a
+  code chosen by hand, filled in by a bank rule, or on a saved or copied
+  line stays when the supplier changes; saved documents never change when
+  the contact's default does.
+- Migration 0049 adds it; existing contacts have none, so nothing changes.
+
+Setup as above (1000 bank, 2000 Accounts payable, 2100 GST, 6010 an expense
+account whose usual code is GST; an item SERVER whose purchase tax code is
+GST). Suppliers, all in NZD: **Cloud Apps Inc** (United States, default
+purchase tax code NONE: an overseas software subscription with no New
+Zealand GST charged), **Kauri Supplies** (New Zealand, no default) and
+**Rata Rentals** (New Zealand, a customer and supplier: default sales tax
+code EXEMPT, default purchase tax code GST). Amounts exclusive of GST unless
+stated.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| EX16 | Migration 0049 on an organisation with existing contacts; a new organisation; Cloud Apps added with default "none" | Existing contacts: **no** default purchase tax code. Cloud Apps' is **NONE**, in the contact.created history. Foreign trade stays **off** for new organisations (decided 1 Oct 2026, as NetSuite's Foreign Trade box is off until ticked) |
+| EX17 | A new bill for Cloud Apps: 1 x 50.00 to 6010 | The line starts with **NONE** (not GST): GST **0.00**, total **50.00**. Approved: Dr 6010 50.00 / Cr 2000 50.00 |
+| EX18 | A new bill for Kauri Supplies: 1 x 200.00 to 6010 | No default: the line starts with **GST** as before: GST **30.00**, total **230.00** |
+| EX19 | On Cloud Apps' bill, account 6010 (usual code GST) and then the item SERVER (purchase code GST) are picked; the supplier is then changed to Kauri Supplies | The line stays **NONE** (the contact's default beats the account's and the item's). Changed to Kauri Supplies, it goes back to the usual **GST** |
+| EX20 | On a bill for Cloud Apps, the line is changed by hand to GST (local support charged with GST): 1 x 100.00; the supplier is changed and back | Saves with **GST**: GST **15.00**, total **115.00**. A code chosen by hand stays when the supplier changes |
+| EX21 | Cloud Apps' draft bill (1 x 50.00 NONE) is saved; its default is changed to GST; the draft is saved again and approved | The change is in the history (contact.updated, defaultPurchaseTaxCode NONE to GST). The draft keeps **NONE** and approves with GST **0.00**, total **50.00**. Only new lines start with **GST**. Clearing the default (blank) and setting NONE again over the API works |
+| EX22 | Setting OLD (inactive), NOPE (no such code) and ZERO as Kauri Supplies' default; a new contact with OLD; Rata Rentals' sales and purchase lines | OLD is refused: "Tax code OLD is inactive, so it can't be a contact's default purchase tax code." (on a new contact too); NOPE: "There's no tax code NOPE."; **ZERO** is accepted (codes aren't split into sales and purchase ones). A default that later became inactive can be kept but isn't used. Rata Rentals' sales lines start **EXEMPT**, its purchase lines **GST**; Cloud Apps' sales lines aren't affected by its purchase default |
+| EX23 | Spend money to Cloud Apps from 1000: 50.00 inclusive, to 6010 | The line starts with **NONE**: GST **0.00**, total **50.00**: Dr 6010 50.00 / Cr 1000 50.00. On a foreign-currency bank line a standard-rated default (e.g. Rata Rentals' GST) isn't used, as those lines can't take it |
+| EX24 | A supplier credit note (1 x 10.00), purchase order (1 x 600.00) and repeating bill (1 x 50.00 a month) for Cloud Apps | Their new lines start with **NONE** in the editors (the same rule) and save it: GST **0.00**, totals **10.00** and **600.00**, and the repeating bill's line **NONE** |
+| EX25 | Foreign trade on. Wombat's invoice with a GST line: in the editor, as a draft, then approved | The warning shows in the editor and on the draft, but **not** on the approved invoice; **Export (Australia)** shows on all three (decided 1 Oct 2026) |
+
+Tests: `tests/integration/supplier-tax.test.ts` (EX16-EX18, EX20-EX24) and
+`tests/unit/supplier-tax.test.ts` (the purchase editors' starting code and
+the warning: EX17-EX23, EX25; EX12 in `tests/unit/exports.test.ts` too).
+
 ### Not supported yet (refused rather than guessed)
 
-- **Imports and overseas suppliers**: no default purchase tax code per
-  contact, no import tax code, and no reverse charge on imported services.
-  Suppliers' countries are recorded but don't change bills.
+- **Imports**: no import tax code (NetSuite's "Tax Code for Imports" is for
+  reverse-charge reporting, not in New Zealand's list), no reverse charge on
+  imported services (IRD applies it only in limited cases), and no Customs
+  GST on imported goods. Put the right code on the line by hand.
+- **A default purchase tax code on expense claims, cash coding and bank
+  rules**: expense claim receipts name their supplier as text, not a
+  contact, and cash coding and bank rules keep the code they're given.
 - **Deciding which services to non-residents are zero-rated**: IR375 has
   exceptions (e.g. services to a non-resident who's in New Zealand when they
   receive them). Tohyee only suggests the tax code for exports by country and
@@ -2464,15 +2532,26 @@ warning, and countries: EX2-EX7, EX9, EX10, EX12, EX14).
 
 ### Questions for Jess (exports)
 
-1. Foreign trade is off for every organisation to start with, new ones too.
-   Would you rather new organisations start with it on?
-2. The delivery country beats the billing country (as NetSuite's lookup uses
-   the shipping address). A customer with no delivery country uses the
-   billing country. Right for your clients?
-3. Should suppliers get a default purchase tax code too (e.g. NONE for
-   overseas software subscriptions), and an import code? Not built.
-4. The warning shows on approved documents as well as drafts (it can't
-   change them). Keep it, or only on drafts?
+1. Decided 1 Oct 2026 (following NetSuite, whose Foreign Trade box is off
+   until ticked): Foreign trade stays **off** for every organisation to
+   start with, new ones too.
+2. Decided 1 Oct 2026 (following NetSuite, whose tax lookup uses the
+   shipping address): the **delivery country beats the billing country**; a
+   customer with no delivery country uses the billing country.
+3. Decided 1 Oct 2026 (following Xero's contact "Purchase defaults" tax
+   rate): suppliers get a **default purchase tax code** (EX16-EX24). **No
+   import or reverse-charge code**: NetSuite's Tax Code for Imports is for
+   reverse-charge reporting, which isn't in New Zealand's list, and IRD's
+   reverse charge on imported services applies only in limited cases, so
+   it's refused rather than guessed.
+4. Decided 1 Oct 2026 (neither NetSuite nor Xero has such a warning, so
+   this is Tohyee's choice): the warning shows **only where lines can still
+   be changed** (editors and drafts), not on approved documents; the
+   Export (country) flag stays everywhere (EX25).
+5. Tax codes aren't split into sales and purchase codes, so a contact's
+   default purchase tax code can be any active code (ZERO included). Would
+   you like codes marked as sales only or purchases only, as NetSuite's
+   "Available on" does?
 
 ## Reports
 

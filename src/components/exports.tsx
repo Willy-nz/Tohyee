@@ -36,28 +36,35 @@ export function ExportWarning({
   settings,
   lineTaxCodes,
   taxCodes,
+  editable = true,
 }: {
   contact: ExportContact | null | undefined;
   settings: ExportSettings | null | undefined;
   lineTaxCodes: ReadonlyArray<string | null>;
   taxCodes: ReadonlyArray<TaxCode>;
+  /** False on an approved or finalised document: the warning only shows where lines can change (EX25). */
+  editable?: boolean;
 }) {
-  const warning = exportWarning(contact, settings, lineTaxCodes, taxCodes);
+  const warning = exportWarning(contact, settings, lineTaxCodes, taxCodes, { editable });
   return warning ? <Notice tone="warning">{warning} Check the tax codes (a service used in New Zealand can still be standard-rated).</Notice> : null;
 }
 
 /**
- * The badge and warning on a saved sales document's page (EX12), loading the
- * contact, the settings and the tax codes.
+ * The badge on a saved sales document's page (EX12), and the warning while
+ * its lines can still be changed (a draft; EX25), loading the contact, the
+ * settings and the tax codes.
  */
 export function DocumentExportFlags({
   organisationId,
   contactId,
   lineTaxCodes,
+  editable,
 }: {
   organisationId: string;
   contactId: string;
   lineTaxCodes: ReadonlyArray<string | null>;
+  /** Whether the document's lines can still be changed. */
+  editable: boolean;
 }) {
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId, includeArchived: "true" });
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
@@ -67,7 +74,13 @@ export function DocumentExportFlags({
   return (
     <>
       <ExportBadge contact={contact} />
-      <ExportWarning contact={contact} settings={settings.data} lineTaxCodes={lineTaxCodes} taxCodes={taxCodes.data?.taxCodes ?? []} />
+      <ExportWarning
+        contact={contact}
+        settings={settings.data}
+        lineTaxCodes={lineTaxCodes}
+        taxCodes={taxCodes.data?.taxCodes ?? []}
+        editable={editable}
+      />
     </>
   );
 }

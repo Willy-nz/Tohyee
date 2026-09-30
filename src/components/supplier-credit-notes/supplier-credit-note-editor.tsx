@@ -22,6 +22,8 @@ import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { SupplierCreditNote } from "@/lib/supplier-credit-notes/service";
 import type { TaxCode } from "@/lib/tax/codes";
+import { retaxLines, usualWithContact } from "@/lib/tax/exports";
+import { contactPurchaseTaxCode } from "@/lib/tax/purchase-defaults";
 import { type CustomFieldSetup, type CustomValues, copyableValuesFor } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
@@ -36,6 +38,10 @@ type EditorLine = {
   taxCode: string;
   tracking: TrackingTags;
   customFields: CustomValues;
+  /** The code Tohyee's usual default gave, before the supplier's (EX17-EX19). */
+  usualTaxCode?: string;
+  /** Chosen by hand, saved or copied: the supplier's default leaves it alone (EX20, EX21). */
+  taxTyped?: boolean;
 };
 
 let lineKey = 0;
@@ -44,9 +50,24 @@ function nextLineKey(): number {
   return lineKey;
 }
 
-/** New lines have no account, so each credit is put somewhere on purpose. */
-function blankLine(taxCode: string, customFields: CustomValues = {}): EditorLine {
-  return { key: nextLineKey(), itemId: "", unitId: "", description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {}, customFields };
+/**
+ * New lines have no account, so each credit is put somewhere on purpose. They
+ * start with the supplier's default purchase tax code, if any (EX17).
+ */
+function blankLine(taxCode: string, customFields: CustomValues = {}, contactTaxCode: string | null = null): EditorLine {
+  return {
+    key: nextLineKey(),
+    itemId: "",
+    unitId: "",
+    description: "",
+    quantity: "1",
+    unitPrice: "",
+    accountCode: "",
+    taxCode: contactTaxCode ?? taxCode,
+    usualTaxCode: taxCode,
+    tracking: {},
+    customFields,
+  };
 }
 
 /** The accounts supplier credit note lines can go to: the bill line rule the server checks. */
@@ -124,8 +145,18 @@ function SupplierCreditNoteForm({
           taxCode: line.taxCode ?? defaultTaxCode,
           tracking: line.tracking ?? {},
           customFields: creditNote ? (line.customFields ?? {}) : copyableValuesFor(customSetup.fields, line.customFields, "line", "supplier_credit_note"),
+          taxTyped: true,
         }))
-      : [blankLine(defaultTaxCode, lineDefaults)],
+      : [
+          blankLine(
+            defaultTaxCode,
+            lineDefaults,
+            contactPurchaseTaxCode(
+              suppliers.find((contact) => contact.id === initial?.contactId),
+              taxCodes,
+            ),
+          ),
+        ],
   );
   // One key per new credit note, so a double click or a retry can't save it twice.
   const [idempotencyKey] = useState(() => newIdempotencyKey("supplier-credit-note"));
@@ -137,6 +168,7 @@ function SupplierCreditNoteForm({
   const foreign = currencyCode !== baseCurrency;
   const [typedRate, setTypedRate] = useState<string | null>(creditNote?.exchangeRate ?? null);
   const suggestedRate = useLastRate(organisationId, currencyCode, baseCurrency, creditNoteDate);
+  const contactTaxCode = contactPurchaseTaxCode(chosenSupplier, taxCodes);
 
   const hasTax = amountsMode !== "no_tax";
   const rates = new Map(taxCodes.map((taxCode) => [taxCode.code, taxCode.rate]));
@@ -227,6 +259,7 @@ function SupplierCreditNoteForm({
               const next = suppliers.find((contact) => contact.id === event.target.value);
               if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
               setContactId(event.target.value);
+              setLines((current) => retaxLines(current, contactPurchaseTaxCode(next, taxCodes)));
             }}
             required
           >
@@ -309,7 +342,10 @@ function SupplierCreditNoteForm({
                     itemId={line.itemId}
                     unitId={line.unitId}
                     labelPrefix={`Line ${index + 1}`}
-                    onPick={(patch) => update(line.key, patch)}
+                    onPick={(patch) => {
+                      const { taxCode, ...rest } = patch;
+                      update(line.key, { ...rest, ...usualWithContact(taxCode, contactTaxCode) });
+                    }}
                   />
                 </td>
                 <td>
@@ -338,7 +374,9 @@ function SupplierCreditNoteForm({
                     accounts={accounts}
                     filter={takesBillLines}
                     value={line.accountCode}
-                    onChange={(code) => update(line.key, { accountCode: code, ...usualTaxCode(accounts, taxCodes, code) })}
+                    onChange={(code) =>
+                      update(line.key, { accountCode: code, ...usualWithContact(usualTaxCode(accounts, taxCodes, code).taxCode, contactTaxCode) })
+                    }
                     required
                   />
                   <TrackingSelects
@@ -362,7 +400,7 @@ function SupplierCreditNoteForm({
                     <select
                       aria-label={`Line ${index + 1} tax code`}
                       value={line.taxCode}
-                      onChange={(event) => update(line.key, { taxCode: event.target.value })}
+                      onChange={(event) => update(line.key, { taxCode: event.target.value, taxTyped: true })}
                       required
                     >
                       <option value="">Choose</option>
@@ -395,7 +433,7 @@ function SupplierCreditNoteForm({
           <tfoot>
             <tr>
               <td colSpan={hasTax ? 8 : 6}>
-                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaultTaxCode, lineDefaults)])}>
+                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaultTaxCode, lineDefaults, contactTaxCode)])}>
                   Add line
                 </Button>
               </td>

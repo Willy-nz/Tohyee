@@ -220,7 +220,9 @@ function QuoteView({ organisationId, quoteId }: { organisationId: string; quoteI
           <Stat label="Reference" value={quote.reference ?? "—"} />
         </div>
         {quote.salespersonName ? <div className={ui.muted}>Salesperson: {quote.salespersonName}</div> : null}
-        <DocumentExportFlags organisationId={organisationId} contactId={quote.contactId} lineTaxCodes={quote.lines.map((line) => line.taxCode)} />
+        <DocumentExportFlags organisationId={organisationId} contactId={quote.contactId} lineTaxCodes={quote.lines.map((line) => line.taxCode)}
+          editable={quote.status === "draft"}
+        />
         {quote.invoiceId ? (
           <div>
             Accepted: made invoice{" "}
