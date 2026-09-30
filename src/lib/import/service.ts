@@ -176,7 +176,7 @@ const ROLE_LABELS: Partial<Record<SystemKey, string>> = {
   gst: "GST",
   inventory: "inventory",
   retained_earnings: "retained earnings",
-  conversion_clearing: "historical adjustment",
+  conversion_clearing: "opening balance",
 };
 
 function accountsApplier(tx: OrgTx, accounts: Account[], taxCodes: TaxCodeFinder): Applier {
@@ -209,7 +209,7 @@ function accountsApplier(tx: OrgTx, accounts: Account[], taxCodes: TaxCodeFinder
       }
     }
     if (existing) {
-      // Another system's historical adjustment account is often a current liability (Xero's 840); Tohyee's stays equity (IM1).
+      // Another system's opening balance or historical adjustment account is often a current liability (Xero's 840); Tohyee's stays equity (IM1).
       const keepsType = existing.systemKey === "conversion_clearing" && type !== undefined && type !== existing.accountType;
       if (existing.systemKey && type && type !== existing.accountType && !keepsType) {
         throw new ValidationError(

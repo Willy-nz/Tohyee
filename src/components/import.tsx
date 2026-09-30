@@ -568,7 +568,7 @@ function ConversionStep({
                               </td>
                               <td>
                                 {line.postedTo}
-                                {line.heldBy ? <span className={ui.muted}> (historical adjustment; held by the {line.heldBy})</span> : null}
+                                {line.heldBy ? <span className={ui.muted}> (opening balance account; held by the {line.heldBy})</span> : null}
                               </td>
                               <td className={ui.num}>
                                 <Money value={line.debit} blankZero />

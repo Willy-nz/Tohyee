@@ -173,11 +173,11 @@ describeWithDatabase("bringing in existing books", () => {
     return { org, asUser, contacts, conversion, master, tb, journalLines, count };
   }
 
-  it("IM1, IM6: opening balances post through 3900 Historical adjustment: the opening journal, invoices, bill and stock", async () => {
+  it("IM1, IM6: opening balances post through 3900 Opening balance: the opening journal, invoices, bill and stock", async () => {
     const world = await setup();
     // IM1: it's in the starting chart, equity.
     const clearing = (await world.asUser(admin, (tx) => listAccounts(tx))).find((account) => account.code === "3900")!;
-    expect(clearing).toMatchObject({ name: "Historical adjustment", accountType: "equity", accountClass: "equity", systemKey: "conversion_clearing" });
+    expect(clearing).toMatchObject({ name: "Opening balance", accountType: "equity", accountClass: "equity", systemKey: "conversion_clearing" });
     const check = await world.conversion({}, false);
     expect(check).toMatchObject({ ok: true, committed: false, problems: [] });
     expect(check.plan.clearingAccountCode).toBe("3900");
@@ -665,7 +665,7 @@ Harbour Cafe,INV-0112,28/03/2026,20/04/2026,805.00,105.00,575.00,Delivery`,
     expect((await world.asUser(admin, (tx) => conversionStatus(tx))).gst).toMatchObject({ openBills: "30.00", fromReturns: "1185.00" });
   });
 
-  it("IM21: an older organisation's 2990 Conversion clearing becomes 3900 Historical adjustment if nothing is posted to it", async () => {
+  it("IM21: an older organisation's 2990 Conversion clearing becomes 3900 Opening balance if nothing is posted to it", async () => {
     const world = await setup();
     const changeOver = tenantMigrations.find((migration) => migration.version === "0036")!.sql;
     const section = changeOver.slice(changeOver.indexOf("update accounts a"));
@@ -683,6 +683,16 @@ Harbour Cafe,INV-0112,28/03/2026,20/04/2026,805.00,105.00,575.00,Delivery`,
       name: "Historical adjustment",
       accountType: "equity",
     });
+    // Migration 0038 then gives it NetSuite's name, "Opening balance".
+    const rename = tenantMigrations.find((migration) => migration.version === "0038")!.sql;
+    await world.asUser(owner, async (tx) => {
+      await tx.query(rename);
+    });
+    expect((await world.asUser(admin, (tx) => listAccounts(tx))).find((account) => account.systemKey === "conversion_clearing")).toMatchObject({
+      code: "3900",
+      name: "Opening balance",
+      accountType: "equity",
+    });
     // With something posted to it, it's left as it is (its class is fixed once it has postings), and still used.
     const posted = await setup();
     await posted.asUser(owner, asBefore);
@@ -698,7 +708,7 @@ Harbour Cafe,INV-0112,28/03/2026,20/04/2026,805.00,105.00,575.00,Delivery`,
     const other = await setup({ people: false, items: false });
     const result = await other.master("accounts", "*Code,*Name,*Type\n840,Historical Adjustment,Current Liability");
     expect(result.problems).toEqual([]);
-    expect(result.outcomes[0]).toMatchObject({ action: "update", detail: "Tohyee's historical adjustment account, re-coded from 3900 (it stays Equity, not Current liability)" });
+    expect(result.outcomes[0]).toMatchObject({ action: "update", detail: "Tohyee's opening balance account, re-coded from 3900 (it stays Equity, not Current liability)" });
     expect((await other.asUser(admin, (tx) => listAccounts(tx))).find((account) => account.code === "840")).toMatchObject({
       name: "Historical Adjustment",
       accountType: "equity",

@@ -687,7 +687,7 @@ Enforced by the app (and covered by tests):
   (`importConversion`): the trial balance posts as one journal of origin
   `opening_balance` (not correctable in the ledger) with its accounts
   receivable, accounts payable and inventory lines on the account with
-  system key `conversion_clearing` (3900 Historical adjustment, equity, in
+  system key `conversion_clearing` (3900 Opening balance, equity, in
   the starting chart; migration 0036 changed an unused 2990 Conversion
   clearing over); open invoices and bills are approved documents flagged
   `is_opening_balance` (their own number, no INV sequence; migration 0034),

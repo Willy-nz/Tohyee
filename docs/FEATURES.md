@@ -468,7 +468,7 @@ that something happened.
   GST number, payment terms and custom fields), products and services (by
   code), then opening balances as at a conversion date: the trial balance,
   stock on hand, and open invoices and bills, posted together once through
-  3900 Historical adjustment (equity, like Xero's and NetSuite's opening
+  3900 Opening balance (equity, like NetSuite's and Xero's opening
   balance accounts, decided with Jess 30 Sep 2026) so accounts receivable,
   payable and inventory equal their documents and stock; open invoices keep
   their numbers and stay out of sales reports. Open invoices and bills carry

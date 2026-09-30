@@ -310,8 +310,8 @@ export function parseAccountCodeInput(input: unknown, fieldName: string): string
  * The account opening balances are cleared through (IM1): the accounts
  * receivable, accounts payable and inventory lines of the trial balance go
  * here instead, and the open invoices, open bills and opening stock post
- * against it, so it ends at 0.00. It's equity, "Historical adjustment" (like
- * Xero's Historical Adjustment and NetSuite's Opening Balance), 3900 in the
+ * against it, so it ends at 0.00. It's equity, "Opening balance" (like NetSuite's
+ * Opening Balance account and Xero's Historical Adjustment), 3900 in the
  * starting chart; an organisation without one gets it at 3900 or the next
  * free code up to 3999 the first time it's needed.
  */
@@ -322,7 +322,7 @@ export async function conversionClearingAccount(tx: OrgTx): Promise<{ id: string
   if (existing.rows[0]) return existing.rows[0];
   const inserted = await tx.query<{ id: string; code: string; name: string }>(
     `insert into accounts (code, name, account_class, account_type, system_key, description)
-     select c::text, 'Historical adjustment', 'equity', 'equity', 'conversion_clearing',
+     select c::text, 'Opening balance', 'equity', 'equity', 'conversion_clearing',
             'Opening balances from invoices, bills and stock clear through here; it should always be 0.00.'
        from generate_series(3900, 3999) c
       where not exists (select 1 from accounts where lower(code) = c::text)
@@ -332,7 +332,7 @@ export async function conversionClearingAccount(tx: OrgTx): Promise<{ id: string
   const row = inserted.rows[0];
   if (!row) {
     throw new ValidationError(
-      "Codes 3900 to 3999 are all taken, so there's nowhere to put the Historical adjustment account opening balances clear through. Free one of them first.",
+      "Codes 3900 to 3999 are all taken, so there's nowhere to put the Opening balance account opening balances clear through. Free one of them first.",
     );
   }
   await writeAuditEvent(tx, {
