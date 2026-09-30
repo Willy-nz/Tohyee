@@ -603,6 +603,8 @@ export type MatchCandidate = {
   reference: string;
   description: string | null;
   exact: boolean;
+  /** A voided transaction or the reversal that voided it: listed (a dishonoured payment can be on the statement) but never picked first. */
+  voided: boolean;
 };
 
 export type LineSuggestions = {
@@ -619,15 +621,17 @@ export type LineSuggestions = {
 export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?: BankRule[]): Promise<LineSuggestions> {
   const line = await getStatementLine(tx, lineIdInput);
   const moneyIn = !line.amount.startsWith("-");
-  const candidates = await tx.query<CandidateRow>(
+  const candidates = await tx.query<CandidateRow & { voided: boolean }>(
     `select l.id, l.journal_id, l.account_id, (l.debit_amount - l.credit_amount)::text as amount, j.posting_date::text,
-            j.origin, j.reference, j.description, l.description as line_description, false as reconciled
+            j.origin, j.reference, j.description, l.description as line_description, false as reconciled,
+            (j.correction_kind is not distinct from 'reversal'
+              or exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal')) as voided
        from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id
       where l.account_id = $1
         and ((l.debit_amount > 0) = $2)
         and j.posting_date between $3::date - $4::integer and $3::date + $4::integer
         and not exists (select 1 from bank_reconciliation_items i where i.journal_line_id = l.id and i.active)
-      order by (l.debit_amount - l.credit_amount) = $5::numeric desc, abs(j.posting_date - $3::date), l.id
+      order by (l.debit_amount - l.credit_amount) = $5::numeric desc, voided, abs(j.posting_date - $3::date), l.id
       limit 25`,
     [line.accountId, moneyIn, line.date, MATCH_WINDOW_DAYS, line.amount],
   );
@@ -673,6 +677,7 @@ export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?
       reference: row.reference,
       description: row.line_description ?? row.description,
       exact: toFixedString(dec(row.amount), 2) === line.amount,
+      voided: row.voided === true,
     })),
     documents: exactDocuments,
     rule: rule

@@ -190,7 +190,7 @@ function MatchForm({
 }) {
   const [adjustment, setAdjustment] = useState<AdjustmentValue>(NO_ADJUSTMENT);
   const [chosen, setChosen] = useState<string[]>(() => {
-    const exact = suggestions.matches.find((match) => match.exact);
+    const exact = suggestions.matches.find((match) => match.exact && !match.voided);
     return exact ? [exact.journalLineId] : [];
   });
   if (suggestions.matches.length === 0) {
@@ -245,6 +245,7 @@ function MatchForm({
                 <td>{formatDate(match.postingDate)}</td>
                 <td>
                   {originLabel(match.origin)} <Link href={journalHref(match.journalId)}>#{match.journalId}</Link>
+                  {match.voided ? <> <Badge tone="amber">Voided</Badge></> : null}
                   {match.description ? <div className={ui.muted}>{match.description}</div> : null}
                 </td>
                 <td>{match.reference}</td>
@@ -290,7 +291,7 @@ function SplitForm({
   // Only transactions bigger than the line can be split across it and others.
   const bigger = suggestions.matches.filter((match) => magnitude(toCents(match.amount) ?? BigInt(0)) > magnitude(lineCents));
   const sameWay = otherLines.filter((other) => other.id !== line.id && other.amount.startsWith("-") === line.amount.startsWith("-"));
-  const [journalLineId, setJournalLineId] = useState(bigger[0]?.journalLineId ?? "");
+  const [journalLineId, setJournalLineId] = useState(bigger.find((match) => !match.voided)?.journalLineId ?? "");
   const [chosen, setChosen] = useState<string[]>([]);
   if (bigger.length === 0) {
     return (
@@ -316,9 +317,11 @@ function SplitForm({
       </p>
       <Field label="Transaction">
         <select value={journalLineId} onChange={(event) => setJournalLineId(event.target.value)} required>
+          <option value="">Choose the transaction</option>
           {bigger.map((match) => (
             <option key={match.journalLineId} value={match.journalLineId}>
               {formatDate(match.postingDate)} · {originLabel(match.origin)} #{match.journalId} · {match.reference} · {formatMoney(match.amount)}
+              {match.voided ? " · voided" : ""}
             </option>
           ))}
         </select>
@@ -920,7 +923,7 @@ function LineReconciler({
   const suggestions = detail.data.suggestions;
   const mode: Mode =
     chosenMode ??
-    (suggestions.matches.some((match) => match.exact)
+    (suggestions.matches.some((match) => match.exact && !match.voided)
       ? "match"
       : suggestions.documents.length > 0
         ? "payments"
@@ -1131,7 +1134,6 @@ export function ReconcilePanel({
                 onToggle={() => setOpen((current) => (current === line.id ? null : line.id))}
                 suggestion={
                   <SuggestionBox
-                    key={confidence.get(line.id)?.suggestion?.key ?? "none"}
                     organisationId={organisationId}
                     confidence={confidence.get(line.id)}
                     canReconcile={canReconcile}

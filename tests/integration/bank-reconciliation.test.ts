@@ -288,6 +288,32 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
     );
   });
 
+  it("BK4: a voided payment and its reversal can still be matched, but are flagged and listed after live transactions", async () => {
+    const world = await afterBk1();
+    const { payment: voidedPayment } = await world.asUser(bookkeeper, (tx) =>
+      recordPayment(tx, world.i1.id, { idempotencyKey: key("pay-1"), paymentDate: "2026-05-20", amount: "115.00", bankAccountCode: "1000" }),
+    );
+    const paymentId = (await world.sql("select id from customer_payments where journal_id = $1", [voidedPayment.journalId])).rows[0].id as string;
+    const { payment: voidJournal } = await world.asUser(bookkeeper, (tx) =>
+      voidPayment(tx, world.i1.id, paymentId, { idempotencyKey: key("void-pay"), voidDate: "2026-05-20" }),
+    );
+    const { payment: live } = await world.asUser(bookkeeper, (tx) =>
+      recordPayment(tx, world.i1.id, { idempotencyKey: key("pay-2"), paymentDate: "2026-05-20", amount: "115.00", bankAccountCode: "1000" }),
+    );
+    const moneyIn = await world.lineOn(world.bank.id, "115.00");
+    const { matches } = await world.asUser(viewer, (tx) => suggestionsForLine(tx, moneyIn.id));
+    expect(matches.map((match) => [match.journalId, match.exact, match.voided])).toEqual([
+      [live.journalId, true, false],
+      [voidedPayment.journalId, true, true],
+    ]);
+    // The reversal (money out of 1000) is listed for money-out lines, flagged too.
+    const moneyOut = await world.lineOn(world.bank.id, "-46.00");
+    const reversal = (await world.asUser(viewer, (tx) => suggestionsForLine(tx, moneyOut.id))).matches.find(
+      (match) => match.journalId === voidJournal.voidJournalId,
+    );
+    expect(reversal).toMatchObject({ amount: "-115.00", voided: true });
+  });
+
   it("BK5: paying INV-0001 and B1 from lines records the payments dated the line date and reconciles", async () => {
     const world = await afterBk1();
     const line = await world.lineOn(world.bank.id, "115.00");

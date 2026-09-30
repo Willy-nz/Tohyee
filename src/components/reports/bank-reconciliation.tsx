@@ -8,7 +8,7 @@ import { useApiData } from "@/components/hooks";
 import { PrintButton } from "@/components/reports/ledger-reports";
 import { Badge, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import type { BankAccount } from "@/lib/bank/accounts";
-import { formatDate, todayInBrowser } from "@/lib/format";
+import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import type { BankReconciliationReport as Report } from "@/lib/reports/bank-reconciliation";
 
 /** How the statement balance was worked out, in words. */
@@ -19,11 +19,11 @@ function sourceText(report: Report): string {
   }
   const from =
     source.kind === "line_balance"
-      ? `the bank's running balance of ${source.balance} on the ${formatDate(source.date)} statement line`
-      : `the bank feed's balance of ${source.balance} on ${formatDate(source.date)}`;
+      ? `the bank's running balance of ${formatMoney(source.balance)} on the ${formatDate(source.date)} statement line`
+      : `the bank feed's balance of ${formatMoney(source.balance)} on ${formatDate(source.date)}`;
   return source.linesAfter === 0
     ? `From ${from}.`
-    : `From ${from}, plus ${source.linesAfter} statement ${source.linesAfter === 1 ? "line" : "lines"} after it (${source.linesAfterTotal}).`;
+    : `From ${from}, plus ${source.linesAfter} statement ${source.linesAfter === 1 ? "line" : "lines"} after it (${formatMoney(source.linesAfterTotal)}).`;
 }
 
 /**

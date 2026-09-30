@@ -41,23 +41,40 @@ export function SuggestionBox({
   canReconcile: boolean;
   onDone: () => void;
 }) {
-  const [key, setKey] = useState(() => newIdempotencyKey("ok"));
+  // One idempotency key per suggestion shown: a new suggestion (after the
+  // list is refreshed) or a refusal gets a fresh one.
+  const [idempotency, setIdempotency] = useState<{ suggestionKey: string; key: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!confidence) return null;
+  const refused = error ? <Notice tone="error">{error}</Notice> : null;
   if (!confidence.suggestion) {
-    if (confidence.competing) return <div className={ui.muted}><Badge tone="amber">Another line has the same match</Badge> Open to choose.</div>;
-    if (confidence.candidateCount > 1) {
+    if (confidence.competing) {
       return (
-        <div className={ui.muted}>
-          <Badge tone="amber">{confidence.candidateCount} possible matches</Badge> Open to choose.
-        </div>
+        <>
+          <div className={ui.muted}>
+            <Badge tone="amber">Another line has the same match</Badge> Open to choose.
+          </div>
+          {refused}
+        </>
       );
     }
-    return null;
+    if (confidence.candidateCount > 1) {
+      return (
+        <>
+          <div className={ui.muted}>
+            <Badge tone="amber">{confidence.candidateCount} possible matches</Badge> Open to choose.
+          </div>
+          {refused}
+        </>
+      );
+    }
+    return refused;
   }
   const suggestion = confidence.suggestion;
   async function ok() {
+    const key = idempotency?.suggestionKey === suggestion.key ? idempotency.key : newIdempotencyKey("ok");
+    setIdempotency({ suggestionKey: suggestion.key, key });
     setBusy(true);
     setError(null);
     try {
@@ -68,7 +85,10 @@ export function SuggestionBox({
       onDone();
     } catch (caught) {
       setError(errorMessage(caught));
-      setKey(newIdempotencyKey("ok"));
+      setIdempotency(null);
+      // The suggestion may have changed (e.g. the invoice was paid meanwhile):
+      // show what's suggested now, and keep the reason on this line.
+      onDone();
     } finally {
       setBusy(false);
     }
@@ -83,7 +103,7 @@ export function SuggestionBox({
           </Button>
         ) : null}
       </div>
-      {error ? <Notice tone="error">{error}</Notice> : null}
+      {refused}
     </>
   );
 }
