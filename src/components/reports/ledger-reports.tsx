@@ -172,10 +172,18 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
   );
 }
 
-export function AccountTransactionsReport({ organisationId }: { organisationId: string }) {
-  const [accountId, setAccountId] = useState("");
+export function AccountTransactionsReport({
+  organisationId,
+  initialAccountId,
+  initialTo,
+}: {
+  organisationId: string;
+  initialAccountId?: string | null;
+  initialTo?: string | null;
+}) {
+  const [accountId, setAccountId] = useState(() => (initialAccountId && /^\d+$/.test(initialAccountId) ? initialAccountId : ""));
   const [from, setFrom] = useState<string | null>(null);
-  const [to, setTo] = useState(todayInBrowser);
+  const [to, setTo] = useState(() => (initialTo && /^\d{4}-\d{2}-\d{2}$/.test(initialTo) ? initialTo : todayInBrowser()));
   const [filter, setFilter] = useState<{ categoryId: string; valueId: string }>({ categoryId: "", valueId: "" });
   const accounts = useAccounts(organisationId, true);
   const tracking = useTracking(organisationId);

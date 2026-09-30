@@ -43,7 +43,7 @@ that something happened.
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
   foreign-currency accounts also carry the foreign amount and rate), corrections by
-  reversal and replacement, period locks with unlock windows, idempotent
+  reversal and replacement, period close (below), idempotent
   posting, database-enforced balancing and append-only history.
 - **FX revaluation** of foreign-currency asset and liability accounts, with
   carrying amounts and (where Tohyee has them) foreign balances taken from
@@ -71,7 +71,23 @@ that something happened.
   aged receivables and payables, account transactions, the journal report,
   customer statements, the GST return and GST audit report (below).
   The financial year end is a setting (default 31 March); the balance sheet
-  splits earnings into this year and previous years.
+  shows current year earnings and retained earnings (the retained earnings
+  account plus all earlier years' profit), with no closing journals, like
+  NetSuite (YE1-YE4, not yet approved by Jess).
+- **Period close** (Accounting; PC1-PC12, not yet approved by Jess), like
+  NetSuite's period close checklist: each financial year and its months,
+  Open or Closed; for a month, checks Tohyee works out itself (bank accounts
+  reconciled to the month end, no drafts dated in it, depreciation run,
+  foreign-currency balances revalued, stock equals 1400 and nothing below
+  zero, receivables and payables equal their control accounts, GST returns
+  filed, the opening balance account at 0.00), each with a link to fix it.
+  Closing locks everything up to the month end (the database refuses
+  journals dated in it); months are closed in order. Bookkeepers close
+  when every check passes; with warnings only owners and admins, after
+  confirming. Owners and admins reopen with a reason, which reopens every
+  later month; closes, reopens, reasons and accepted warnings are in the
+  audit log. It replaces the old lock date and unlock window on Settings.
+  The financial year end can't change while a year is closed.
 - **Custom reports** (Reporting, tabs Home, Custom, Drafts, Published and
   Archived): start from the profit and loss or balance sheet, then change the
   title, the columns (1-12 months, quarters or years, a difference and %
@@ -163,6 +179,19 @@ that something happened.
   (locked period, credit limit, required field) leaves the draft with the
   reason in the template's history. Pause, resume (paused dates are
   skipped) and end.
+- **Repeating bills** (Purchases; RB1-RB10, not yet approved by Jess), like
+  Xero's repeating bills and made by the same scheduler as repeating
+  invoices: a template with a supplier and bill lines (items fill the
+  supplier's price; stock items need a Location once locations are in use),
+  a supplier invoice number pattern with {date}, {month} or {n} so each
+  bill's number is its own, a due date rule (N days after the bill date, N
+  days after the end of its month, or day N of the following month, since
+  suppliers have no payment terms), every N weeks or months, and each bill
+  saved as a draft or approved. The hourly job and "Run now" make each
+  date's bill once, catching up missed dates; a number the supplier already
+  has stops the template at that date with the reason. Pause, resume and
+  end; a history of the bills made, linked both ways. Nothing is paid
+  automatically.
 - **Printed invoices, credit notes and quotes** (PD1-PD8, not yet
   approved): "Print or save as PDF" with the browser's print, showing the
   organisation's name, address and GST number (set in Settings), the

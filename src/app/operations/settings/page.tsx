@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { ModulesCard } from "@/components/modules";
@@ -77,7 +78,7 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
             ))}
           </select>
         </Field>
-        <Field label="Financial year ends" hint="On the last day of this month. Sets report defaults and the balance sheet's current year.">
+        <Field label="Financial year ends" hint="On the last day of this month. Sets report defaults and the balance sheet's current year. It can't change while a financial year is closed.">
           <select value={financialYearEndMonth} onChange={(event) => setFinancialYearEndMonth(Number(event.target.value))}>
             {MONTH_NAMES.map((name, index) => (
               <option key={name} value={index + 1}>
@@ -121,73 +122,11 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
   );
 }
 
-function LocksForm({ organisationId, controls, onSaved }: { organisationId: string; controls: PeriodControls; onSaved: SavedHandler }) {
-  const [lockDate, setLockDate] = useState(controls.lockDate ?? "");
-  const [unlockStart, setUnlockStart] = useState(controls.unlockStart ?? "");
-  const [unlockEnd, setUnlockEnd] = useState(controls.unlockEnd ?? "");
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    try {
-      await api("/api/ledger/period-controls", {
-        method: "PATCH",
-        body: {
-          organisationId,
-          lockDate: lockDate || null,
-          unlockStart: unlockStart || null,
-          unlockEnd: unlockEnd || null,
-        },
-      });
-      onSaved("Period locks saved.");
-    } catch (caught) {
-      setError(errorMessage(caught));
-    }
-  }
-
-  return (
-    <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      <p className={ui.muted}>
-        {controls.lockDate
-          ? `Nothing can be posted on or before ${formatDate(controls.lockDate)}${
-              controls.unlockStart ? `, except between ${formatDate(controls.unlockStart)} and ${formatDate(controls.unlockEnd)}` : ""
-            }.`
-          : "No lock date is set, so any date can be posted to."}
-      </p>
-      <div className={ui.grid3}>
-        <Field label="Lock date" hint="Usually the end of the last filed GST or financial period.">
-          <input type="date" value={lockDate} onChange={(event) => setLockDate(event.target.value)} />
-        </Field>
-        <Field label="Unlock window from" hint="Optional: temporarily reopen part of a locked period.">
-          <input type="date" value={unlockStart} onChange={(event) => setUnlockStart(event.target.value)} />
-        </Field>
-        <Field label="Unlock window to">
-          <input type="date" value={unlockEnd} onChange={(event) => setUnlockEnd(event.target.value)} />
-        </Field>
-      </div>
-      <div className={ui.actions}>
-        <Button type="submit">Save locks</Button>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setUnlockStart("");
-            setUnlockEnd("");
-          }}
-        >
-          Clear unlock window
-        </Button>
-      </div>
-    </form>
-  );
-}
-
 function Settings({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const settings = useApiData<{ settings: OrganisationSettings }>(`/api/organisations/${organisationId}/settings`);
   const controls = useApiData<{ controls: PeriodControls }>("/api/ledger/period-controls", { organisationId });
-  const [saved, setSaved] = useState<{ settings: string | null; locks: string | null }>({ settings: null, locks: null });
+  const [saved, setSaved] = useState<{ settings: string | null }>({ settings: null });
   if (!can("admin")) {
     return <Notice tone="warning">Only organisation admins and owners can change settings.</Notice>;
   }
@@ -209,19 +148,15 @@ function Settings({ organisationId }: { organisationId: string }) {
         ) : null}
       </Card>
       <LogoCard organisationId={organisationId} />
-      <Card title="Period locks" description="Protects filed periods from new postings. Corrections go into an open period instead.">
+      <Card title="Period locks" description="Months are closed, and reopened, on Accounting › Period close. Nothing can be posted in a closed month.">
         {controls.error ? <Notice tone="error">{controls.error}</Notice> : null}
-        {saved.locks ? <Notice tone="success">{saved.locks}</Notice> : null}
         {controls.data ? (
-          <LocksForm
-            key={controls.data.controls.updatedAt}
-            organisationId={organisationId}
-            controls={controls.data.controls}
-            onSaved={(message) => {
-              setSaved((current) => ({ ...current, locks: message }));
-              controls.reload();
-            }}
-          />
+          <p className={ui.muted}>
+            {controls.data.controls.lockDate
+              ? `Closed up to ${formatDate(controls.data.controls.lockDate)}: nothing can be posted on or before it.`
+              : "Nothing is closed yet, so any date can be posted to."}{" "}
+            <Link href="/operations/period-close">Period close</Link>
+          </p>
         ) : null}
       </Card>
       <ModulesCard organisationId={organisationId} />
@@ -232,7 +167,7 @@ function Settings({ organisationId }: { organisationId: string }) {
 export default function SettingsPage() {
   return (
     <Page>
-      <PageHeader title="Settings and locks" />
+      <PageHeader title="Settings" />
       <RequireOrganisation>{(organisationId) => <Settings key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );

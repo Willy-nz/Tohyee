@@ -11,7 +11,8 @@ import type { InvoiceLine } from "@/lib/invoices/service";
 
 /**
  * A saved sales document's lines and totals, read only: quotes (QT1) and
- * repeating invoice templates (RI1) show them the way an invoice does.
+ * repeating invoice templates (RI1) show them the way an invoice does, and
+ * repeating bill templates (RB1), whose lines have the same fields.
  */
 export function SalesLinesTable({
   organisationId,

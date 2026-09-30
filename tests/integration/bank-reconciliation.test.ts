@@ -150,7 +150,7 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
       Number((await asUser(owner, (tx) => tx.query<{ count: string }>("select count(*)::text as count from ledger_journals"))).rows[0].count);
     const gst = () => asUser(viewer, (tx) => calculateGstReturn(tx, APR_MAY));
     const spendLine = { description: "Petrol", accountCode: "6120", taxCode: "GST", amount: "46.00" };
-    const lock = (lockDate: string | null) => asUser(owner, (tx) => updatePeriodControls(tx, { lockDate }));
+    const lock = (lockDate: string | null) => asUser(owner, (tx) => updatePeriodControls(tx, { lockDate, reason: "Test set-up" }));
     const sql = (text: string, values: unknown[] = []) => asUser(owner, (tx) => tx.query(text, values));
     return {
       org, asUser, kobe, kauri, zEnergy, bank, savings, card, i1, b1, importFile, lines, lineOn, reconcile, unreconcile,

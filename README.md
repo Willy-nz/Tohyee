@@ -56,7 +56,7 @@ people working on the code.
   email account.
 
 **Purchases**
-- Bills, supplier credit notes, purchase orders billed in parts, paying one or
+- Bills, repeating bills, supplier credit notes, purchase orders billed in parts, paying one or
   several bills at once, and expense claims.
 
 **Bank**
@@ -74,7 +74,7 @@ people working on the code.
 
 **Accounting**
 - A starting NZ chart of accounts, manual journals, corrections by reversal,
-  and period locks. The database itself refuses unbalanced journals and edits
+  and month-end and year-end close with a checklist (no closing journals). The database itself refuses unbalanced journals and edits
   to posted history.
 - Stock at weighted-average cost per location, with transfers, stocktakes and
   landed cost. A fixed asset register with depreciation runs and disposals.

@@ -334,7 +334,7 @@ describeWithDatabase("sales invoices", () => {
       expect(invoice).toMatchObject({ status: "voided", voidDate: "2026-06-01" });
       expect((await journal(invoice.voidJournalId!)).postingDate).toBe("2026-06-01");
     } finally {
-      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     }
   });
 
@@ -354,7 +354,7 @@ describeWithDatabase("sales invoices", () => {
       const next = (await approve((await draft()).id)).invoice;
       expect(sequenceOf(next)).toBe(sequenceOf(before) + 1);
     } finally {
-      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     }
     // Once the period is open again it can be approved.
     expect((await approve(locked.id)).invoice).toMatchObject({ status: "approved", invoiceDate: "2026-03-15" });
@@ -410,7 +410,7 @@ describeWithDatabase("sales invoices", () => {
       await expect(voidIt(approved.id, "2026-05-20")).rejects.toThrow(/2026-05-20 is in a locked period/);
       expect(await journalCount()).toBe(journalsBefore);
     } finally {
-      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     }
   });
 

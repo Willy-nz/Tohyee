@@ -22,6 +22,7 @@ const PURCHASES_LINKS: AreaLink[] = [
   { href: "/operations/bills?show=drafts", label: "Draft bills", description: "Bills not approved yet." },
   { href: "/operations/bills?show=awaiting", label: "Awaiting payment", description: "Approved bills with something still to pay." },
   { href: "/operations/purchase-orders", label: "Purchase orders", description: "Orders to suppliers; copy one to a bill when their invoice arrives." },
+  { href: "/operations/repeating-bills", label: "Repeating bills", description: "Bills made every so many weeks or months, such as rent." },
   { href: "/operations/supplier-credit-notes", label: "Supplier credit notes", description: "Credit from suppliers: apply it to bills or record a refund." },
   { href: "/operations/expense-claims", label: "Expense claims", description: "Receipts people paid for themselves: approve and pay them back." },
 ];

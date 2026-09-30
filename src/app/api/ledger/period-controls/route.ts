@@ -8,17 +8,19 @@ export const GET = route(async (request) => {
   return json({ controls });
 });
 
-/** Lock date and unlock window. Admins only. Send null to clear a date. */
+/**
+ * Moves the lock date (admins), e.g. the import's lock up to the conversion
+ * date. Moving it earlier or clearing it (null) reopens periods and needs a
+ * `reason`. Months are closed and reopened on Period close.
+ */
 export const PATCH = route(async (request) => {
   const body = await readJson(request);
   const input: Record<string, unknown> = {};
-  for (const key of ["lockDate", "unlockStart", "unlockEnd"]) {
+  for (const key of ["lockDate", "reason"]) {
     if (Object.prototype.hasOwnProperty.call(body, key)) {
       input[key] = body[key];
     }
   }
-  const controls = await withOrganisation(request, body.organisationId, "admin", (tx) =>
-    updatePeriodControls(tx, input),
-  );
+  const controls = await withOrganisation(request, body.organisationId, "admin", (tx) => updatePeriodControls(tx, input));
   return json({ controls });
 });

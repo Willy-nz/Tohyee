@@ -212,7 +212,7 @@ describeWithDatabase("sales credit notes", () => {
           )
         ).rows[0].last_number,
       );
-    const lock = (lockDate: string | null) => asUser(owner, (tx) => updatePeriodControls(tx, { lockDate }));
+    const lock = (lockDate: string | null) => asUser(owner, (tx) => updatePeriodControls(tx, { lockDate, reason: "Test set-up" }));
     const sql = (text: string, values: unknown[] = []) => asUser(owner, (tx) => tx.query(text, values));
 
     return {

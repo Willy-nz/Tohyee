@@ -390,7 +390,7 @@ describeWithDatabase("supplier payments", () => {
       expect((await journal(voided.voidJournalId!)).postingDate).toBe("2026-06-01");
       expect(await journalCount()).toBe(journalsBefore + 2);
     } finally {
-      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     }
   });
 

@@ -45,7 +45,11 @@ type BalanceSheet = {
   currencyCode: string;
   assets: Group;
   liabilities: Group;
-  equity: Group & { previousYearsEarnings: string; currentYearEarnings: string };
+  equity: Group & {
+    retainedEarnings: { account: { id: string; code: string; name: string } | null; accountBalance: string; previousYearsEarnings: string; total: string };
+    previousYearsEarnings: string;
+    currentYearEarnings: string;
+  };
   liabilitiesAndEquity: string;
   balanced: boolean;
 };
@@ -365,9 +369,14 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
                 )),
               )}
               <tr className={ui.reportSection}>
-                <td>Earnings from previous years</td>
+                <td>
+                  {report.data.equity.retainedEarnings.account
+                    ? `${report.data.equity.retainedEarnings.account.code} · ${report.data.equity.retainedEarnings.account.name}`
+                    : "Retained earnings"}
+                  <div className={ui.muted}>Profit before {formatDate(report.data.financialYearStart)}, with anything posted to the account</div>
+                </td>
                 <td className={ui.num}>
-                  <Money value={report.data.equity.previousYearsEarnings} />
+                  <Money value={report.data.equity.retainedEarnings.total} />
                 </td>
               </tr>
               <tr className={ui.reportSection}>
@@ -513,8 +522,10 @@ function StandardReports({ organisationId }: { organisationId: string }) {
       {tab === "stock" ? <StockReport organisationId={organisationId} /> : null}
       {tab === "aged" ? <AgedReceivablesReport organisationId={organisationId} /> : null}
       {tab === "payables" ? <AgedPayablesReport organisationId={organisationId} /> : null}
-      {tab === "transactions" ? <AccountTransactionsReport organisationId={organisationId} /> : null}
-      {tab === "bankrec" ? <BankReconciliationReportView organisationId={organisationId} initialAccountId={params.get("account")} /> : null}
+      {tab === "transactions" ? <AccountTransactionsReport organisationId={organisationId} initialAccountId={params.get("account")} initialTo={params.get("to")} /> : null}
+      {tab === "bankrec" ? (
+        <BankReconciliationReportView organisationId={organisationId} initialAccountId={params.get("account")} initialAsAt={params.get("asAt")} />
+      ) : null}
       {tab === "journals" ? <JournalReportView organisationId={organisationId} /> : null}
       {tab === "sales" ? <SalesBySalespersonReport organisationId={organisationId} /> : null}
       {tab === "budget" ? <BudgetVsActualReport organisationId={organisationId} initialBudgetId={params.get("budget")} /> : null}

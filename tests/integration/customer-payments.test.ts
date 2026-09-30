@@ -325,7 +325,7 @@ describeWithDatabase("customer payments", () => {
       expect((await journal(voided.voidJournalId!)).postingDate).toBe("2026-06-01");
       expect(after).toMatchObject({ amountPaid: "0.00", amountDue: "115.00", paidStatus: "unpaid" });
     } finally {
-      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     }
   });
 
@@ -370,7 +370,7 @@ describeWithDatabase("customer payments", () => {
       expect((await journal(payment.journalId)).postingDate).toBe("2026-06-01");
       expect(await journalCount()).toBe(journalsBefore + 1);
     } finally {
-      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     }
   });
 
@@ -390,7 +390,7 @@ describeWithDatabase("customer payments", () => {
       });
       expect(await journalCount()).toBe(journalsBefore);
     } finally {
-      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null }));
+      await asUser(owner, (tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     }
   });
 
