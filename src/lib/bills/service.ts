@@ -702,13 +702,22 @@ function draftOf(bill: Bill): DraftDetails {
   };
 }
 
+/** The tables that hold purchase lines, and the column naming each line's parent. */
+export type PurchaseLineTable = "bill_lines" | "purchase_order_lines" | "repeating_bill_lines";
+const PURCHASE_LINE_PARENT: Record<PurchaseLineTable, string> = {
+  bill_lines: "bill_id",
+  purchase_order_lines: "purchase_order_id",
+  repeating_bill_lines: "repeating_bill_id",
+};
+
 /**
- * Saves purchase lines: a bill's (with any purchase order links) or a
- * purchase order's, which have the same columns otherwise.
+ * Saves purchase lines: a bill's (with any purchase order links), a purchase
+ * order's or a repeating bill template's (RB1), which have the same columns
+ * otherwise.
  */
 export async function insertPurchaseLines(
   tx: OrgTx,
-  table: "bill_lines" | "purchase_order_lines",
+  table: PurchaseLineTable,
   parentId: string,
   lines: ResolvedDraft["resolvedLines"],
 ): Promise<void> {
@@ -740,7 +749,7 @@ export async function insertPurchaseLines(
     return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric${bill ? `, ${p(17)}` : ""})`;
   });
   await tx.query(
-    `insert into ${table} (${bill ? "bill_id" : "purchase_order_id"}, line_order, description, quantity, unit_price, account_id,
+    `insert into ${table} (${PURCHASE_LINE_PARENT[table]}, line_order, description, quantity, unit_price, account_id,
                              tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity${bill ? ", purchase_order_line_id" : ""})
      values ${tuples.join(", ")}`,
     values,
@@ -751,8 +760,8 @@ async function insertLines(tx: OrgTx, billId: string, lines: ResolvedDraft["reso
   await insertPurchaseLines(tx, "bill_lines", billId, lines);
 }
 
-/** A bill's or purchase order's lines, in order. */
-export async function loadPurchaseLines(tx: OrgTx, table: "bill_lines" | "purchase_order_lines", parentId: string): Promise<BillLine[]> {
+/** A bill's, purchase order's or repeating bill template's lines, in order. */
+export async function loadPurchaseLines(tx: OrgTx, table: PurchaseLineTable, parentId: string): Promise<BillLine[]> {
   const bill = table === "bill_lines";
   const lines = await tx.query<LineRow & { id: string }>(
     `select l.id, l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
@@ -762,7 +771,7 @@ export async function loadPurchaseLines(tx: OrgTx, table: "bill_lines" | "purcha
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
        ${LINE_ITEM_JOINS}
-      where l.${bill ? "bill_id" : "purchase_order_id"} = $1
+      where l.${PURCHASE_LINE_PARENT[table]} = $1
       order by l.line_order`,
     [parentId],
   );
