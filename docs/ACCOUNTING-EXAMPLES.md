@@ -55,7 +55,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/bank-split.test.ts` (BK26-BK28) and
   `tests/integration/bank-foreign.test.ts` (FXB1-FXB11) and
   `tests/integration/multi-currency.test.ts` (MC1-MC13) and
-  `tests/integration/multi-currency-settlements.test.ts` (MC14-MC29) and
+  `tests/integration/multi-currency-settlements.test.ts` (MC14-MC30) and
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
   GP3, GP5, GP6), all against
@@ -1922,6 +1922,28 @@ NZD 5.00) with none on hand and the NZD supplier Paw Supplies; all no tax.
 
 Tests: `tests/integration/multi-currency-settlements.test.ts` (MC29).
 
+### A bank account in a third currency (examples not yet approved by Jess)
+
+Decided overnight (1 Oct 2026) following NetSuite, which keeps this refused:
+"NetSuite expects the payment currency to match the invoice currency"
+(*Currency on Customer Transactions*), "Payment must be made in the same
+currency as the purchase order" (*Currency on Vendor Transactions*), and on
+Pay Bills "If the account currency is different from the base currency, only
+bills that use the account currency show in the list" (*Paying Bills to
+Multiple Vendors*). So money for a USD document moves in USD through a USD or
+NZD bank account only; a EUR account can't pay, receive or refund it (to use
+EUR money, transfer it to the NZD or USD account first, FXB5). The message
+says why: "Account 1040 (EUR account) is in EUR, but this bill is in USD.
+Like NetSuite, money for a USD bill moves in USD, through a USD or NZD bank
+account; paying it from an account in a third currency isn't supported.
+Transfer the money to a USD or NZD account first."
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC30 | From 1040 (EUR): paying AWS-STK (USD), receiving a payment for INV-0006 (USD), refunding CN-0001 (USD), and a EUR statement line of -45.00 on 10 Sep 2026 matched to AWS-STK | All refused with the message above (the statement line's names account 1040), and nothing is posted. (Payments for several documents and overpayment refunds are refused the same way: MC16, MC22.) |
+
+Tests: `tests/integration/multi-currency-settlements.test.ts` (MC30).
+
 ### Not supported yet (refused rather than guessed)
 
 - **Standard-rated GST on foreign-currency invoices, bills and credit notes**
@@ -1931,14 +1953,14 @@ Tests: `tests/integration/multi-currency-settlements.test.ts` (MC29).
   Hybrid and invoice bases work. (Foreign-currency bills on the payments or
   hybrid basis count their share of the bill's NZD value; with no GST on them
   they're in no box.)
-- **Prepayments** of foreign-currency invoices, **supplier overpayments**
-  (as in NZD, SP3). (Payments for several foreign documents are built:
-  MC20-MC24.)
-  (Foreign overpayments and refunds are built: MC14-MC19.)
+- **Prepayments** of foreign-currency invoices, and **supplier
+  overpayments** (as in NZD, SP3). (Foreign overpayments and refunds are
+  built, MC14-MC19, and payments for several foreign documents, MC20-MC24.)
 - **Paying in one currency into (or from) a bank account in a third
-  currency** (a USD invoice from the EUR account), paying NZD documents from a
-  foreign-currency statement line, and a foreign-currency document from an
-  NZD statement line (pay it on the document, then match the line).
+  currency** (a USD invoice from the EUR account): refused as NetSuite does
+  (MC30). Also paying NZD documents from a foreign-currency statement line,
+  and a foreign-currency document from an NZD statement line (pay it on the
+  document, then match the line).
 - **Credit applied across currencies**, and a contact's currency changing once
   it has documents.
 - Item lines whose price would come from the item on foreign-currency
@@ -1963,12 +1985,33 @@ Tests: `tests/integration/multi-currency-settlements.test.ts` (MC29).
    "Rounding gain/loss" account like NetSuite?
 4. Revaluation per currency total (built) or per open document like
    NetSuite (can differ by a cent or two)?
-5. Should foreign-currency refunds, overpayments, batch payments and
-   cross-currency payments (a USD invoice paid from the EUR account) come
-   next?
+5. (Answered overnight 1 Oct 2026 by following NetSuite: foreign refunds,
+   overpayments and batch payments are built, MC14-MC24, and a bank account
+   in a third currency stays refused, MC30. Please check the examples.)
 6. The rate source: Tohyee only uses rates already used in the books; should
    it fetch a daily rate (e.g. RBNZ) or keep a rate table like NetSuite's
    Currency Exchange Rates list?
+7. Refunds (MC16-MC18): NetSuite's help doesn't show a customer refund's
+   gain or loss in so many words; Tohyee treats a refund like a payment
+   (refund rate against the credit's own rate, difference to 7020). Is that
+   what you'd expect?
+8. Payments for several foreign documents (MC20): the last document takes the
+   rounding cent so the parts add up to the one bank line (MC20's 2.99 where
+   NetSuite would post 3.00 plus a 0.01 rounding entry). Fine, or would you
+   rather each part be rounded on its own and the cent go elsewhere?
+9. Repeating invoices and bills in a foreign currency save drafts only
+   (MC26, MC27), because each takes the last rate used, which may be stale.
+   Keep that, or allow "approve" once there's a daily rate source (question
+   6)?
+10. A quote accepted, or a purchase order copied, without a rate typed takes
+    the last rate used on or before the new document's date (MC25, MC28), as
+    for documents entered directly. OK?
+11. Stock on a foreign bill is valued at the bill's rate and never adjusted
+    when the bill is paid at another rate (MC29; the difference is realised
+    on 7020). NetSuite's "bill exchange rate variance" only arises between an
+    item receipt and a later bill, which Tohyee doesn't have. OK?
+12. Project and CRM invoices for foreign contacts are still refused. Build
+    them next (the invoice would take the last rate, like MC25)?
 
 ## Reports
 

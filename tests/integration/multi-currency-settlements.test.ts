@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { SessionUser } from "@/lib/auth/sessions";
-import { createBankAccount } from "@/lib/bank/accounts";
+import { createBankAccount, listStatementLines } from "@/lib/bank/accounts";
+import { importStatementFile } from "@/lib/bank/imports";
+import { reconcileStatementLine } from "@/lib/bank/reconcile";
+import { recordSupplierPayment } from "@/lib/bills/payments";
 import { type Contact, createContact, updateContact } from "@/lib/contacts/service";
 import { refundCreditNote, voidRefund } from "@/lib/credit-notes/refunds";
 import { approveCreditNote, createCreditNote, getCreditNote } from "@/lib/credit-notes/service";
@@ -709,5 +712,30 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
         ),
       ),
     ).rejects.toThrow(/item prices are in NZD, so type the unit price in USD/);
+  });
+
+  it("MC30: a bank account in a third currency (EUR) can't pay or refund USD documents, as in NetSuite", async () => {
+    const before = await journalCount();
+    const bill = (await run((tx) => tx.query<{ id: string }>("select id::text from bills where supplier_invoice_number = 'AWS-STK'"))).rows[0].id;
+    const third = /Account 1040 \(EUR account\) is in EUR, but this (bill|invoice|credit note) is in USD\. Like NetSuite, money for a USD \1 moves in USD, through a USD or NZD bank account/;
+    await expect(
+      run((tx) => recordSupplierPayment(tx, bill, { idempotencyKey: key("pay"), paymentDate: "2026-09-10", amount: "50.00", bankAccountCode: "1040", exchangeRate: "1.60" })),
+    ).rejects.toThrow(third);
+    await expect(
+      run((tx) => recordPayment(tx, invoices["INV-0006"], { idempotencyKey: key("pay"), paymentDate: "2026-09-10", amount: "50.00", bankAccountCode: "1040", exchangeRate: "1.60" })),
+    ).rejects.toThrow(third);
+    await expect(
+      run((tx) => refundCreditNote(tx, creditNoteId, { idempotencyKey: key("refund"), refundDate: "2026-09-10", amount: "10.00", bankAccountCode: "1040", exchangeRate: "1.60" })),
+    ).rejects.toThrow(third);
+    // A EUR statement line can't pay a USD bill either.
+    const eur = (await run((tx) => tx.query<{ id: string }>("select id::text from accounts where code = '1040'"))).rows[0].id;
+    await run((tx) =>
+      importStatementFile(tx, eur, { idempotencyKey: key("import"), fileName: "eur.csv", fileBase64: Buffer.from("Date,Amount,Payee\n10/09/2026,-45.00,AMAZON WEB SERVICES\n").toString("base64") }),
+    );
+    const line = (await run((tx) => listStatementLines(tx, eur, { status: "all" }))).lines[0];
+    await expect(
+      run((tx) => reconcileStatementLine(tx, line.id, { idempotencyKey: key("rec"), kind: "payments", allocations: [{ billId: bill, amount: "45.00" }], exchangeRate: "1.80" })),
+    ).rejects.toThrow(/Account 1040 is in EUR, but this bill is in USD\. Like NetSuite/);
+    expect(await journalCount()).toBe(before);
   });
 });

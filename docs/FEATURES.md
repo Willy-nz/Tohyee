@@ -668,9 +668,9 @@ isn't acceptable, because people would trust it:
   an adjustment when splitting one posted transaction across several
   statement lines, and old Excel (.xls) files
 - on foreign-currency documents (MC11): standard-rated GST, supplier
-  overpayments, payments through a bank account in a third currency,
-  project and CRM invoices, approving repeating ones automatically,
-  and sales on the payments GST basis; also paying NZD
+  overpayments, payments through a bank account in a third currency (as
+  NetSuite, MC30), project and CRM invoices, approving repeating ones
+  automatically, and sales on the payments GST basis; also paying NZD
   documents from a foreign-currency statement line, standard-rated GST on
   foreign-currency spend and receive money, adjustments on foreign-currency
   lines, and transfers between two foreign-currency accounts
@@ -693,8 +693,12 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
 4. NZ payroll.
-5. The rest of foreign-currency documents (MC11): foreign-currency bank
-   accounts, invoices, bills, credit notes and payments are built.
+5. The rest of foreign-currency documents (MC11): standard-rated GST on
+   them, the payments basis, and project and CRM invoices. Foreign-currency
+   bank accounts, invoices, bills, credit notes, payments, overpayments,
+   refunds, batch payments, quotes, repeating documents, purchase orders and
+   stock are built (MC1-MC29); a bank account in a third currency stays
+   refused, as in NetSuite (MC30).
 
 ## Guardrails
 

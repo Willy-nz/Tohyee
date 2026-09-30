@@ -304,6 +304,17 @@ Enforced by the database itself, not just the app:
   its active settlements' base cleared (`src/lib/fx/documents.ts`).
   Revaluation items are unique per account, currency and date, so accounts
   receivable and payable revalue each currency's open balance.
+  Migration 0043 (examples MC14-MC30, not yet approved) adds: a foreign
+  payment's `base_overpayment` (its overpayment at the payment's rate,
+  `fx_kind` `document` on accounts receivable); the base values and gain of
+  overpayment applications (with their own journal) and of refunds
+  (`exchange_rate`, `base_amount`, `base_cleared`, `realised_gain`); the
+  rate and bank base amount on payments for several documents, whose parts
+  must add up to it; SQL helpers for what's open on a foreign document or
+  credit (`tohyee_invoice_base_settled` and friends); and a trigger keeping
+  quotes, repeating templates and purchase orders in their contact's
+  currency (they have no rate). Stock is valued in the base currency: a
+  foreign line's stock value is its base net amount (`stockLinesAtBase`).
 - Posted history is append-only: `ledger_journals`, `ledger_journal_lines`,
   `inventory_movements`, `stock_transfers`, FX revaluation runs and `audit_events` reject
   `UPDATE`, `DELETE` and `TRUNCATE`. Corrections are new rows.

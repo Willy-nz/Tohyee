@@ -6,6 +6,7 @@ import { recordSupplierPayment } from "@/lib/bills/payments";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
+import { thirdCurrencyMessage } from "@/lib/fx/documents";
 import { recordPayment } from "@/lib/invoices/payments";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { dec, parseDecimalInput, toFixedString } from "@/lib/money/decimal";
@@ -265,6 +266,12 @@ export async function reconcileStatementLine(
       ).rows[0];
       if (document && document.currency_code !== line.currencyCode) {
         const noun = "invoiceId" in allocation ? "Invoice" : "Bill";
+        if (foreignLine && document.currency_code !== tx.baseCurrency) {
+          // A third currency (MC30): refused, as NetSuite only pays a transaction in its own currency.
+          throw new ValidationError(
+            thirdCurrencyMessage(`Account ${account.code}`, line.currencyCode, document.currency_code, noun.toLowerCase(), tx.baseCurrency),
+          );
+        }
         throw new ValidationError(
           foreignLine
             ? `Account ${account.code} is in ${line.currencyCode}. ${noun} ${document.number ?? ""} is in ${document.currency_code}, so it can't be paid from a ${line.currencyCode} statement line yet. Record the payment from a ${document.currency_code} account, or code this line as receive or spend money.`
