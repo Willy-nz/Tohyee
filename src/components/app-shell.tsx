@@ -143,6 +143,8 @@ const MENUS: Menu[] = [
           { href: "/operations/settings/custom-fields", label: "Custom fields", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/salespeople", label: "Salespeople", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/customers", label: "Payment terms and customers", minRole: "admin" },
+          { href: "/operations/settings/import", label: "Import and export", minRole: "admin" },
+          { href: "/operations/settings/email", label: "Email", minRole: "admin" },
           { href: "/operations/fixed-assets/types", label: "Fixed asset types", minRole: "admin" },
           { href: "/operations/members", label: "People and roles", minRole: "admin" },
         ],

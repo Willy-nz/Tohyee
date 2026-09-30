@@ -71,6 +71,12 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bank_transfers         money moved between bank and card accounts
 ├─ bank_rules             text to look for, and the bank transaction to suggest
 ├─ record_notes, record_attachments   notes and files on journals, documents and contacts
+├─ conversion_balances, conversion_balance_lines   opening balances as brought in, once (IM1-IM21)
+├─ import_mappings        the column mapping last used for each kind of import file
+├─ organisation_email_settings, email_templates   the organisation's own email account (SMTP password or Microsoft tokens encrypted) and templates
+├─ email_oauth_states     one-time states for signing in to the Microsoft mailbox documents are sent from
+├─ organisation_logo      the organisation's logo (PNG or JPEG, 512 KB at most), on emails, PDFs and print pages
+├─ document_emails, document_email_batches   each email of a document or statement: queued, then sent or failed by the job
 └─ audit_events
 ```
 
@@ -673,6 +679,32 @@ Enforced by the app (and covered by tests):
   by Location; the account's total is unchanged. `stock_transfers` is
   append-only, and a check ties `transfer_out`/`transfer_in` movements to
   source type `transfer`.
+- Bringing in existing books (IM1-IM21, `src/lib/import/`): each file's
+  rows go through the ordinary services (accounts, contacts, items, stock
+  movements) inside one savepoint per file and one per row, so every rule
+  still applies; any refused row rolls the whole file back, and a check runs
+  the same way and always rolls back. Opening balances are one command
+  (`importConversion`): the trial balance posts as one journal of origin
+  `opening_balance` (not correctable in the ledger) with its accounts
+  receivable, accounts payable and inventory lines on the account with
+  system key `conversion_clearing` (3900 Historical adjustment, equity, in
+  the starting chart; migration 0036 changed an unused 2990 Conversion
+  clearing over); open invoices and bills are approved documents flagged
+  `is_opening_balance` (their own number, no INV sequence; migration 0034),
+  carrying the GST in what's still owed on one line (two when it's less
+  than 3/23, `opening-gst.ts`; inclusive or no-GST amounts, migration 0036),
+  posting Dr AR / Cr clearing and Dr clearing / Cr AP of the amount
+  including GST (the GST is already in the trial balance's GST line), and
+  stock comes in as receipts at its value against clearing, all dated the
+  conversion date. The command refuses unless the trial balance balances and
+  AR, AP and inventory equal their documents; it leaves clearing at 0.00.
+  `conversion_balances` (one row, append-only) and its lines keep the
+  imported trial balance for the final check, which also shows how the GST
+  line splits. In the GST return, approving or voiding an opening invoice or
+  bill never counts, but its settlements do on the bases that count them
+  (the same proportional shares as any document); sales by salesperson
+  leaves them out, the invoice counter passes over INV-numbers they use, and
+  the bank reconciliation report and matching leave the opening journal out.
 - Ledger and document reports (AGP, ATX, JR, GA, CST) store nothing and
   post nothing. Aged payables (`src/lib/reports/aged-payables.ts`) and
   customer statements (`customer-statements.ts`) read the documents as at a
@@ -744,7 +776,40 @@ the template row is locked while it runs, so overlapping runs, restarts or
 a second server process never make a date twice. An error is kept on the
 template and that date is tried again next run. No network calls.
 
-Still to come for other jobs: a transactional outbox and bounded retries.
+The email job (`src/lib/email/outbox.ts`, started from
+`src/instrumentation.ts`; `TOHYEE_EMAIL_OUTBOX=off` stops it) sends the
+documents people ask to email, from each organisation's own account
+(`organisation_email_settings`): an SMTP account (password encrypted with
+TOHYEE_SECRET_KEY like other secrets), or a Microsoft 365 / Outlook mailbox
+an admin signed in to (`microsoft.ts`, migration 0037). The Microsoft
+sign-in is the OAuth 2.0 authorization code flow with the organisation's own
+Microsoft app registration (`crm_mail_settings`, shared with the CRM's mail
+sync, which doesn't need the CRM on) and the delegated Mail.Send scope; the
+refresh token is stored encrypted and replaced whenever Microsoft issues a
+new one, the access token is renewed outside any transaction, and emails go
+through Microsoft Graph's `POST /me/sendMail` (202 is "sent"; attachments
+over 3 MB in all are refused, since larger ones need an upload session).
+`sender.ts` hides which it is from the job and the test email. Every email
+has an HTML part (`html.ts`: escaped text, a summary box, the contact
+details, and the logo as an inline `cid:` attachment, no remote images)
+and the plain text as typed. Asking to send only inserts a
+`document_emails` row (the outbox) and nudges the job; each email is then
+claimed in one transaction (`for update skip locked`, so two processes
+never send the same one), its document loaded and checked in another, its
+PDF written (`src/lib/pdf`, pdf-lib with Liberation Sans, from the same
+`printedDocument` and statement functions as the print pages), sent with
+no transaction open, and the result recorded in a third: `sent` with the
+SMTP server's message id (or Graph's request id, and `sent_via`) only when
+it accepted the message; busy or
+unreachable servers are retried after 1, 5 and 30 minutes (four attempts);
+anything else fails with a plain-English reason. An email left "sending"
+for 10 minutes is marked failed, not resent, since it may have gone. Each
+organisation sends at most 100 an hour. The database refuses changes to
+what a queued email says and any change to a finished one. Every minute it
+works through organisations with emails waiting, and every 10 minutes it
+checks all of them (for retries and after a restart).
+
+Still to come for other jobs: a general transactional outbox.
 
 ## Backups and restore
 

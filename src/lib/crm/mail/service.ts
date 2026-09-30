@@ -148,6 +148,15 @@ async function providerApp(tx: OrgTx, provider: MailProvider): Promise<ProviderA
   return { clientId, clientSecret: decryptSecret(secret), tenant: row.microsoft_tenant };
 }
 
+/**
+ * The organisation's Microsoft app, for sending documents from a Microsoft
+ * 365 or Outlook mailbox (Settings > Email). The same app registration as
+ * the CRM's mail sync, but it doesn't need the CRM to be on.
+ */
+export async function microsoftApp(tx: OrgTx): Promise<ProviderApp> {
+  return providerApp(tx, "microsoft");
+}
+
 // ---------------------------------------------------------------------------
 // Connecting (MAIL2)
 

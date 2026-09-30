@@ -7111,4 +7111,388 @@ select (select min(c)::text from generate_series(7020, 7999) c where not exists 
    and not exists (select 1 from accounts where system_key = 'realised_fx');
 `,
   },
+  {
+    version: "0034",
+    name: "bringing_in_existing_books",
+    sql: `
+-- Bringing in an organisation's existing books (examples IM1-IM16).
+
+-- An account's usual GST code, offered when the account is picked on a line
+-- (like the tax code on another system's chart of accounts).
+alter table accounts add column default_tax_code_id bigint references tax_codes(id);
+
+-- Opening balances are posted by one journal of their own origin.
+alter table ledger_journals drop constraint ledger_journals_origin_check;
+alter table ledger_journals add constraint ledger_journals_origin_check
+  check (origin in ('manual', 'correction', 'inventory', 'fx_revaluation', 'invoice', 'customer_payment', 'bill',
+                    'supplier_payment', 'sales_credit_note', 'sales_credit_note_refund',
+                    'supplier_credit_note', 'supplier_credit_note_refund', 'customer_overpayment_refund',
+                    'bank_transaction', 'bank_transfer', 'customer_payment_batch', 'supplier_payment_batch',
+                    'expense_claim', 'expense_claim_payment', 'fixed_asset_depreciation', 'fixed_asset_disposal',
+                    'opening_balance'));
+
+-- Open invoices and bills at the conversion date (IM5-IM9). They keep the
+-- number they had (an opening invoice has no INV sequence of its own; new
+-- invoices skip any INV-number already taken), post Dr accounts receivable /
+-- Cr conversion clearing (bills the other way) with no GST, and never count
+-- in GST returns or sales reports.
+alter table sales_invoices add column is_opening_balance boolean not null default false;
+alter table bills add column is_opening_balance boolean not null default false;
+do $$
+declare
+  item record;
+begin
+  for item in
+    select conname from pg_constraint
+     where conrelid = 'sales_invoices'::regclass and contype = 'c'
+       and pg_get_constraintdef(oid) like '%invoice_sequence%'
+  loop
+    execute format('alter table sales_invoices drop constraint %I', item.conname);
+  end loop;
+end;
+$$;
+alter table sales_invoices add constraint sales_invoices_number_check check (
+  case when is_opening_balance
+    then invoice_sequence is null and (invoice_number is null or length(invoice_number) between 1 and 100)
+    else invoice_number is null
+      or invoice_number = 'INV-' || lpad(invoice_sequence::text, greatest(4, length(invoice_sequence::text)), '0')
+  end
+);
+alter table sales_invoices add constraint sales_invoices_status_check_fields check (
+  (status = 'draft'
+    and invoice_sequence is null and invoice_number is null and approval_journal_id is null
+    and approve_command_source is null and approve_idempotency_key is null
+    and approve_request_hash is null and approved_at is null
+    and void_date is null and void_journal_id is null and void_command_source is null
+    and void_idempotency_key is null and void_request_hash is null and voided_at is null)
+  or (status = 'approved'
+    and (is_opening_balance or invoice_sequence is not null) and invoice_number is not null and approval_journal_id is not null
+    and approve_command_source is not null and approve_idempotency_key is not null
+    and approve_request_hash is not null and approved_at is not null
+    and void_date is null and void_journal_id is null and void_command_source is null
+    and void_idempotency_key is null and void_request_hash is null and voided_at is null)
+  or (status = 'voided'
+    and (is_opening_balance or invoice_sequence is not null) and invoice_number is not null and approval_journal_id is not null
+    and approve_command_source is not null and approve_idempotency_key is not null
+    and approve_request_hash is not null and approved_at is not null
+    and void_date is not null and void_journal_id is not null and void_command_source is not null
+    and void_idempotency_key is not null and void_request_hash is not null and voided_at is not null)
+);
+alter table sales_invoices add constraint sales_invoices_opening_check
+  check (not is_opening_balance or (tax_total = 0 and amounts_mode = 'no_tax'));
+alter table bills add constraint bills_opening_check
+  check (not is_opening_balance or (tax_total = 0 and amounts_mode = 'no_tax'));
+
+-- The opening balances as brought in (IM1-IM4): once per organisation, never
+-- changed. The lines are the trial balance as imported; the journal is what
+-- was posted from it.
+create table conversion_balances (
+  id boolean primary key default true check (id),
+  command_source text not null,
+  idempotency_key text not null,
+  request_hash text not null,
+  conversion_date date not null,
+  journal_id bigint not null unique references ledger_journals(id),
+  invoice_count integer not null check (invoice_count >= 0),
+  bill_count integer not null check (bill_count >= 0),
+  stock_count integer not null check (stock_count >= 0),
+  created_by_user_id uuid,
+  created_by_email text,
+  created_at timestamptz not null default now(),
+  unique (command_source, idempotency_key)
+);
+create table conversion_balance_lines (
+  id bigserial primary key,
+  line_order integer not null unique check (line_order > 0),
+  account_id bigint not null unique references accounts(id),
+  debit_amount numeric not null check (debit_amount >= 0),
+  credit_amount numeric not null check (credit_amount >= 0),
+  check ((debit_amount > 0) <> (credit_amount > 0))
+);
+create trigger conversion_balances_append_only
+  before update or delete on conversion_balances
+  for each row execute function toeyee_forbid_mutation();
+create trigger conversion_balances_no_truncate
+  before truncate on conversion_balances
+  for each statement execute function toeyee_forbid_mutation();
+create trigger conversion_balance_lines_append_only
+  before update or delete on conversion_balance_lines
+  for each row execute function toeyee_forbid_mutation();
+create trigger conversion_balance_lines_no_truncate
+  before truncate on conversion_balance_lines
+  for each statement execute function toeyee_forbid_mutation();
+
+-- The imported trial balance balances, checked at commit.
+create function tohyee_check_conversion_lines() returns trigger
+language plpgsql as $$
+declare
+  debits numeric;
+  credits numeric;
+begin
+  select coalesce(sum(debit_amount), 0), coalesce(sum(credit_amount), 0) into debits, credits from conversion_balance_lines;
+  if debits <> credits then
+    raise exception 'The opening balances don''t balance: debits %, credits %', debits, credits using errcode = '23514';
+  end if;
+  return null;
+end;
+$$;
+create constraint trigger conversion_balance_lines_balance
+  after insert on conversion_balance_lines deferrable initially deferred
+  for each row execute function tohyee_check_conversion_lines();
+
+-- How each kind of file was last mapped (column headings per field), so the
+-- next file from the same system is read the same way.
+create table import_mappings (
+  kind text primary key check (kind in ('accounts', 'contacts', 'items', 'trial_balance', 'stock', 'open_invoices', 'open_bills')),
+  preset text not null check (preset in ('tohyee', 'other_system')),
+  columns jsonb not null,
+  options jsonb not null default '{}'::jsonb,
+  updated_by_email text,
+  updated_at timestamptz not null default now()
+);
+`,
+  },
+  {
+    version: "0035",
+    name: "document_emails",
+    sql: `
+-- Emailing invoices, credit notes, quotes, purchase orders and customer
+-- statements from the organisation's own email account (Gmail, Microsoft 365
+-- or any SMTP server). The account's password is encrypted with the server's
+-- TOHYEE_SECRET_KEY (the same encryption as other stored secrets) and is
+-- never sent back to the browser.
+create table organisation_email_settings (
+  id boolean primary key default true check (id),
+  from_name text not null check (length(from_name) between 1 and 100),
+  from_address text not null check (length(from_address) between 3 and 254),
+  reply_to text check (reply_to is null or length(reply_to) between 3 and 254),
+  smtp_host text not null check (smtp_host ~ '^[a-z0-9.-]{1,200}$' or smtp_host = '::1'),
+  smtp_port integer not null check (smtp_port between 1 and 65535),
+  smtp_security text not null check (smtp_security in ('ssl', 'starttls', 'none')),
+  smtp_username text not null check (length(smtp_username) between 1 and 254),
+  smtp_password_ciphertext text not null,
+  updated_by_email text not null,
+  updated_at timestamptz not null default now(),
+  last_test_at timestamptz,
+  last_test_ok boolean,
+  last_test_error text
+);
+
+-- The subject and message each kind of document's email starts with. No
+-- row means Tohyee's default template.
+create table email_templates (
+  document_kind text primary key
+    check (document_kind in ('invoice', 'credit_note', 'quote', 'purchase_order', 'statement')),
+  subject text not null check (length(subject) between 1 and 250),
+  body text not null check (length(body) between 1 and 10000),
+  updated_by_email text not null,
+  updated_at timestamptz not null default now()
+);
+
+-- A run of "email statements to every customer with a balance".
+create table document_email_batches (
+  id bigserial primary key,
+  command_source text not null,
+  idempotency_key text not null,
+  request_hash text not null,
+  statement jsonb not null,
+  requested_by_user_id uuid,
+  requested_by_email text not null,
+  created_at timestamptz not null default now(),
+  unique (command_source, idempotency_key)
+);
+
+-- Each email asked for: queued, then sent or failed by the background job.
+-- 'sent' is only ever set when the SMTP server accepted the message (its
+-- message id and reply are kept). What the email says and who it goes to
+-- can't change once queued, finished emails can't change at all, and none
+-- are ever deleted.
+create table document_emails (
+  id bigserial primary key,
+  command_source text not null,
+  idempotency_key text not null,
+  request_hash text not null,
+  document_kind text not null
+    check (document_kind in ('invoice', 'credit_note', 'quote', 'purchase_order', 'statement')),
+  -- The invoice, credit note, quote or purchase order; for a statement, the customer.
+  document_id bigint not null,
+  contact_id bigint not null references contacts(id),
+  statement jsonb check ((document_kind = 'statement') = (statement is not null)),
+  batch_id bigint references document_email_batches(id),
+  to_addresses text[] not null check (cardinality(to_addresses) between 1 and 20),
+  cc_addresses text[] not null default '{}' check (cardinality(cc_addresses) <= 20),
+  subject text not null check (length(subject) between 1 and 250),
+  body text not null check (length(body) between 1 and 10000),
+  attachment_name text not null,
+  status text not null default 'queued' check (status in ('queued', 'sending', 'sent', 'failed')),
+  attempts integer not null default 0 check (attempts >= 0),
+  next_attempt_at timestamptz not null default now(),
+  claimed_at timestamptz,
+  last_error text,
+  message_id text,
+  smtp_response text,
+  attachment_sha256 text,
+  attachment_bytes integer,
+  requested_by_user_id uuid,
+  requested_by_email text not null,
+  created_at timestamptz not null default now(),
+  finished_at timestamptz,
+  unique (command_source, idempotency_key),
+  check (status <> 'sent' or (message_id is not null and finished_at is not null and attachment_sha256 is not null)),
+  check (status <> 'failed' or (last_error is not null and finished_at is not null))
+);
+create index document_emails_document on document_emails (document_kind, document_id, id);
+create index document_emails_due on document_emails (next_attempt_at) where status in ('queued', 'sending');
+create index document_emails_batch on document_emails (batch_id) where batch_id is not null;
+create index document_emails_created on document_emails (created_at);
+
+create function tohyee_guard_document_email() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'DELETE' or tg_op = 'TRUNCATE' then
+    raise exception 'Emails are kept as a record of what was sent; they can''t be deleted' using errcode = 'P0001';
+  end if;
+  if old.status in ('sent', 'failed') then
+    raise exception 'Email % has finished and can''t be changed; send it again instead', old.id using errcode = 'P0001';
+  end if;
+  if new.document_kind is distinct from old.document_kind or new.document_id is distinct from old.document_id
+     or new.contact_id is distinct from old.contact_id or new.statement is distinct from old.statement
+     or new.batch_id is distinct from old.batch_id or new.to_addresses is distinct from old.to_addresses
+     or new.cc_addresses is distinct from old.cc_addresses or new.subject is distinct from old.subject
+     or new.body is distinct from old.body or new.attachment_name is distinct from old.attachment_name
+     or new.requested_by_email is distinct from old.requested_by_email
+     or new.requested_by_user_id is distinct from old.requested_by_user_id or new.created_at is distinct from old.created_at
+     or new.request_hash is distinct from old.request_hash or new.idempotency_key is distinct from old.idempotency_key then
+    raise exception 'What an email says and who it goes to can''t change once it''s queued' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger document_emails_guard
+  before update or delete on document_emails
+  for each row execute function tohyee_guard_document_email();
+create trigger document_emails_no_truncate
+  before truncate on document_emails
+  for each statement execute function tohyee_guard_document_email();
+create function tohyee_guard_document_email_batch() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'Statement runs are kept as a record of what was sent; they can''t be changed or deleted' using errcode = 'P0001';
+end;
+$$;
+create trigger document_email_batches_guard
+  before update or delete on document_email_batches
+  for each row execute function tohyee_guard_document_email_batch();
+create trigger document_email_batches_no_truncate
+  before truncate on document_email_batches
+  for each statement execute function tohyee_guard_document_email_batch();
+`,
+  },
+  {
+    version: "0036",
+    name: "opening_gst_and_historical_adjustment",
+    sql: `
+-- Open invoices and bills at the conversion date carry the GST in what's
+-- still owed (IM13, IM17-IM20), as in Xero: on the payments basis it's
+-- returned when they're paid after the conversion. Their approval journal
+-- still posts only Dr accounts receivable / Cr the conversion account (bills
+-- the other way): the GST is already in the trial balance's GST line.
+alter table sales_invoices drop constraint sales_invoices_opening_check;
+alter table sales_invoices add constraint sales_invoices_opening_check
+  check (not is_opening_balance or amounts_mode in ('no_tax', 'inclusive'));
+alter table bills drop constraint bills_opening_check;
+alter table bills add constraint bills_opening_check
+  check (not is_opening_balance or amounts_mode in ('no_tax', 'inclusive'));
+
+-- The account opening balances post through is equity, "Historical
+-- adjustment" (IM1, IM21), like Xero's Historical Adjustment and NetSuite's
+-- Opening Balance, at 3900 or the next free code up to 3999. An organisation
+-- that already has the old 2990 Conversion clearing (current liability) with
+-- nothing posted to it is changed over; one with postings is left as it is,
+-- because an account's class is fixed once it has postings.
+update accounts a
+   set account_class = 'equity',
+       account_type = 'equity',
+       name = case when a.name = 'Conversion clearing' then 'Historical adjustment' else a.name end,
+       code = case
+                when a.code ~ '^299[0-9]$'
+                  then coalesce((select min(c)::text from generate_series(3900, 3999) c
+                                  where not exists (select 1 from accounts o where lower(o.code) = c::text)), a.code)
+                else a.code
+              end,
+       description = 'Opening balances from invoices, bills and stock clear through here; it should always be 0.00.',
+       updated_at = now()
+ where a.system_key = 'conversion_clearing'
+   and a.account_class <> 'equity'
+   and not exists (select 1 from ledger_journal_lines l where l.account_id = a.id);
+insert into accounts (code, name, account_class, account_type, system_key, description)
+select (select min(c)::text from generate_series(3900, 3999) c where not exists (select 1 from accounts where lower(code) = c::text)),
+       'Historical adjustment', 'equity', 'equity', 'conversion_clearing',
+       'Opening balances from invoices, bills and stock clear through here; it should always be 0.00.'
+ where exists (select 1 from accounts)
+   and not exists (select 1 from accounts where system_key = 'conversion_clearing')
+   and exists (select 1 from generate_series(3900, 3999) c where not exists (select 1 from accounts where lower(code) = c::text));
+`,
+  },
+  {
+    version: "0037",
+    name: "microsoft_sending_and_logo",
+    sql: `
+-- Sending documents through a Microsoft 365 or Outlook mailbox the admin
+-- signs in to (OAuth 2.0 with the organisation's own Microsoft app, the one
+-- the CRM's mail sync uses, and Microsoft Graph's sendMail), as well as
+-- through SMTP. The tokens are encrypted with TOHYEE_SECRET_KEY, like the
+-- SMTP password, and never sent to the browser. SMTP details stay saved when
+-- the Microsoft mailbox is chosen, and the other way round.
+alter table organisation_email_settings
+  add column sending_method text not null default 'smtp' check (sending_method in ('smtp', 'microsoft')),
+  add column microsoft_email text check (microsoft_email is null or length(microsoft_email) between 3 and 254),
+  add column microsoft_refresh_token_ciphertext text,
+  add column microsoft_access_token_ciphertext text,
+  add column microsoft_access_token_expires_at timestamptz,
+  add column microsoft_connected_by_email text,
+  add column microsoft_connected_at timestamptz;
+alter table organisation_email_settings
+  alter column smtp_host drop not null,
+  alter column smtp_port drop not null,
+  alter column smtp_security drop not null,
+  alter column smtp_username drop not null,
+  alter column smtp_password_ciphertext drop not null;
+alter table organisation_email_settings add constraint organisation_email_settings_smtp_complete check (
+  (smtp_host is null) = (smtp_port is null) and (smtp_host is null) = (smtp_security is null)
+  and (smtp_host is null) = (smtp_username is null) and (smtp_host is null) = (smtp_password_ciphertext is null));
+alter table organisation_email_settings add constraint organisation_email_settings_microsoft_complete check (
+  (microsoft_email is null) = (microsoft_refresh_token_ciphertext is null)
+  and (microsoft_email is null) = (microsoft_connected_at is null));
+alter table organisation_email_settings add constraint organisation_email_settings_method_ready check (
+  (sending_method = 'smtp' and smtp_host is not null) or (sending_method = 'microsoft' and microsoft_email is not null));
+
+-- One-time sign-in states for connecting the sending mailbox (15 minutes, once).
+create table email_oauth_states (
+  state text primary key,
+  user_id text not null,
+  created_at timestamptz not null default now(),
+  used_at timestamptz
+);
+
+-- How each email went: through SMTP or Microsoft Graph.
+alter table document_emails add column sent_via text check (sent_via in ('smtp', 'microsoft'));
+
+-- The organisation's logo, on emails, PDFs and printed documents. Stored in
+-- the organisation's own database so its backup includes it; replacing it
+-- replaces the row.
+create table organisation_logo (
+  id boolean primary key default true check (id),
+  file_name text not null check (length(file_name) between 1 and 255),
+  content_type text not null check (content_type in ('image/png', 'image/jpeg')),
+  byte_size integer not null check (byte_size between 1 and 524288),
+  width integer not null check (width between 1 and 4000),
+  height integer not null check (height between 1 and 4000),
+  sha256 text not null check (sha256 ~ '^[0-9a-f]{64}$'),
+  content bytea not null check (octet_length(content) = byte_size),
+  uploaded_by_email text not null,
+  uploaded_at timestamptz not null default now()
+);
+`,
+  },
 ];

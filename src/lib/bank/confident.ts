@@ -120,6 +120,7 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
       where b.account_id = $1 and b.status = 'unreconciled'
         and j.posting_date between b.line_date - $2::integer and b.line_date + $2::integer
         and j.correction_kind is distinct from 'reversal'
+        and j.origin <> 'opening_balance'
         and not exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal')
         and not exists (select 1 from bank_reconciliation_items i where i.journal_line_id = l.id and i.active)
       order by b.id, j.posting_date, l.id`,

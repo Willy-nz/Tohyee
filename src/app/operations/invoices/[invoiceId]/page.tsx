@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { EmailDocumentPanel, pdfHref } from "@/components/documents/email-document";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
@@ -324,6 +325,9 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
             <InvoiceStatusBadge status={invoice.status} />
             {invoice.paidStatus ? <PaidStatusBadge status={invoice.paidStatus} /> : null}
             <Link href={`/operations/invoices/${invoice.id}/print`}>Print or save as PDF</Link>
+            <a href={pdfHref(organisationId, "invoice", invoice.id)} target="_blank" rel="noreferrer">
+              PDF
+            </a>
             {invoice.status === "approved" && can("bookkeeper") ? (
               <Button
                 size="small"
@@ -458,6 +462,12 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
           }}
         />
       ) : null}
+      <EmailDocumentPanel
+        organisationId={organisationId}
+        kind="invoice"
+        id={invoice.id}
+        unavailableReason={invoice.status === "draft" ? "Approve the invoice to email it." : invoice.status === "voided" ? "A voided invoice can't be emailed." : null}
+      />
       <RecordExtrasPanel
         key={`${invoice.status}-${message ?? ""}`}
         organisationId={organisationId}

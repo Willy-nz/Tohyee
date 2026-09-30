@@ -60,11 +60,11 @@ export async function salesBySalesperson(tx: OrgTx, input: { from?: unknown; to?
        select 'invoice' as kind, i.id::text, i.invoice_number as number, i.invoice_date::text as date, c.name as contact_name,
               i.subtotal::text as amount, i.salesperson_id::text, sp.name as salesperson_name
          from sales_invoices i join contacts c on c.id = i.contact_id left join salespeople sp on sp.id = i.salesperson_id
-        where i.status in ('approved', 'voided') and i.invoice_date between $1 and $2
+        where i.status in ('approved', 'voided') and i.invoice_date between $1 and $2 and not i.is_opening_balance
        union all
        select 'invoice_void', i.id::text, i.invoice_number, i.void_date::text, c.name, (-i.subtotal)::text, i.salesperson_id::text, sp.name
          from sales_invoices i join contacts c on c.id = i.contact_id left join salespeople sp on sp.id = i.salesperson_id
-        where i.status = 'voided' and i.void_date between $1 and $2
+        where i.status = 'voided' and i.void_date between $1 and $2 and not i.is_opening_balance
        union all
        select 'credit_note', n.id::text, n.credit_note_number, n.credit_note_date::text, c.name, n.subtotal::text, n.salesperson_id::text, sp.name
          from sales_credit_notes n join contacts c on c.id = n.contact_id left join salespeople sp on sp.id = n.salesperson_id

@@ -59,6 +59,21 @@ export const SYSTEM_KEYS = [
   "fixed_asset_disposal",
   "fixed_asset_capital_gain",
   "realised_fx",
+  "conversion_clearing",
 ] as const;
 
 export type SystemKey = (typeof SYSTEM_KEYS)[number];
+
+/**
+ * Picking an account on a line fills in its usual GST code (set on the chart
+ * of accounts, or brought in with it, IM2) when that code is active. Returns
+ * the change to make to the line.
+ */
+export function usualTaxCode(
+  accounts: ReadonlyArray<{ code: string; defaultTaxCode?: string | null }>,
+  taxCodes: ReadonlyArray<{ code: string; isActive: boolean }>,
+  accountCode: string,
+): { taxCode?: string } {
+  const usual = accounts.find((account) => account.code === accountCode)?.defaultTaxCode;
+  return usual && taxCodes.some((taxCode) => taxCode.code === usual && taxCode.isActive) ? { taxCode: usual } : {};
+}

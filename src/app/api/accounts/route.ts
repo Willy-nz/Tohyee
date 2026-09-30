@@ -19,6 +19,7 @@ export const POST = route(async (request) => {
       accountType: body.accountType,
       description: body.description,
       currencyCode: body.currencyCode,
+      defaultTaxCode: body.defaultTaxCode,
     }),
   );
   return json({ account }, { status: 201 });

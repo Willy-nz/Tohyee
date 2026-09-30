@@ -1026,6 +1026,8 @@ describeWithDatabase("bills", () => {
         // Added by migration 0028 (expense claims, EC1).
         { code: "2010", system_key: "expense_claims_payable" },
         { code: "2100", system_key: "gst" },
+        // Added by migration 0036 (the equity conversion account, IM1, IM21).
+        { code: "3900", system_key: "conversion_clearing" },
         { code: "6010", system_key: null },
         // Added by migration 0033 (foreign-currency bank accounts, FXB5).
         { code: "7020", system_key: "realised_fx" },

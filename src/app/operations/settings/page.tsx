@@ -3,6 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { ModulesCard } from "@/components/modules";
+import { LogoCard } from "@/components/organisation/logo-card";
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -207,6 +208,7 @@ function Settings({ organisationId }: { organisationId: string }) {
           />
         ) : null}
       </Card>
+      <LogoCard organisationId={organisationId} />
       <Card title="Period locks" description="Protects filed periods from new postings. Corrections go into an open period instead.">
         {controls.error ? <Notice tone="error">{controls.error}</Notice> : null}
         {saved.locks ? <Notice tone="success">{saved.locks}</Notice> : null}

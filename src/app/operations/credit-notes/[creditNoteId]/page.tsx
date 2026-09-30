@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { EmailDocumentPanel, pdfHref } from "@/components/documents/email-document";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
@@ -200,6 +201,9 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
             <CreditNoteStatusBadge status={creditNote.status} />
             {creditNote.creditStatus ? <CreditStatusBadge status={creditNote.creditStatus} /> : null}
             <Link href={`/operations/credit-notes/${creditNote.id}/print`}>Print or save as PDF</Link>
+            <a href={pdfHref(organisationId, "credit_note", creditNote.id)} target="_blank" rel="noreferrer">
+              PDF
+            </a>
           </>
         }
       >
@@ -304,6 +308,12 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
       {can("bookkeeper") ? (
         <CreditNoteActions key={creditNote.status} organisationId={organisationId} creditNote={creditNote} onChanged={onChanged} />
       ) : null}
+      <EmailDocumentPanel
+        organisationId={organisationId}
+        kind="credit_note"
+        id={creditNote.id}
+        unavailableReason={creditNote.status === "draft" ? "Approve the credit note to email it." : creditNote.status === "voided" ? "A voided credit note can't be emailed." : null}
+      />
       <RecordExtrasPanel
         key={`${creditNote.status}-${message ?? ""}`}
         organisationId={organisationId}

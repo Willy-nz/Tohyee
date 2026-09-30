@@ -20,24 +20,31 @@
     "validate:foundation": "./scripts/validate-foundation.sh"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "next": "16.3.6",
     "nodemailer": "^10.0.11",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.23.0",
     "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.9.0",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/smtp-server": "^3.5.13",
     "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "mailparser": "^3.9.32",
+    "smtp-server": "^3.19.16",
     "tsx": "^4.23.15",
     "typescript": "^5",
+    "unpdf": "^1.8.1",
     "vitest": "^4.1.11"
   },
   "engines": {

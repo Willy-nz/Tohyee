@@ -143,9 +143,11 @@ type ParsedMovement = {
   amount: string | null;
   originalMovementId: string | null;
   locationValueId: string | null;
+  /** A receipt at a value rather than a unit cost (opening stock, IM10). */
+  receiptValue: string | null;
 };
 
-function parseMovement(tx: OrgTx, input: Record<string, unknown>): ParsedMovement {
+function parseMovement(tx: OrgTx, input: Record<string, unknown>, receiptValue: string | null): ParsedMovement {
   const movementType = requireOneOf(input.movementType, "movementType", MOVEMENT_TYPES);
   const moneyScale = currencyMinorUnits(tx.baseCurrency);
   const quantityOf = (field: string) =>
@@ -171,12 +173,17 @@ function parseMovement(tx: OrgTx, input: Record<string, unknown>): ParsedMovemen
     amount: null,
     originalMovementId: null,
     locationValueId: optionalId(input.locationValueId, "locationValueId"),
+    receiptValue: null,
   };
 
   switch (movementType) {
     case "receipt":
       parsed.quantity = quantityOf("quantity");
-      parsed.unitCost = parseDecimalInput(input.unitCost, "unitCost", { maxScale: UNIT_COST_SCALE });
+      if (receiptValue !== null) {
+        parsed.receiptValue = parseDecimalInput(receiptValue, "value", { maxScale: moneyScale });
+      } else {
+        parsed.unitCost = parseDecimalInput(input.unitCost, "unitCost", { maxScale: UNIT_COST_SCALE });
+      }
       break;
     case "issue":
     case "supplier_return":
@@ -227,6 +234,7 @@ function movementHash(parsed: ParsedMovement): string {
     originalMovementId: parsed.originalMovementId,
     // Only when given, so requests from before locations hash the same.
     ...(parsed.locationValueId ? { locationValueId: parsed.locationValueId } : {}),
+    ...(parsed.receiptValue ? { receiptValue: parsed.receiptValue } : {}),
   });
 }
 
@@ -249,8 +257,9 @@ async function loadMovement(tx: OrgTx, where: string, values: unknown[]): Promis
 export async function postMovement(
   tx: OrgTx,
   input: Record<string, unknown>,
+  options: { receiptValue?: string } = {},
 ): Promise<{ created: boolean; movement: Movement }> {
-  const parsed = parseMovement(tx, input);
+  const parsed = parseMovement(tx, input, options.receiptValue ?? null);
   const hash = movementHash(parsed);
 
   const existing = await loadMovement(tx, "where m.command_source = $1 and m.idempotency_key = $2", [
@@ -331,7 +340,10 @@ export async function postMovement(
   let costingInput: CostingInput;
   switch (parsed.movementType) {
     case "receipt":
-      costingInput = { type: "receipt", quantity: parsed.quantity!, unitCost: parsed.unitCost! };
+      costingInput =
+        parsed.receiptValue !== null
+          ? { type: "receipt", quantity: parsed.quantity!, value: parsed.receiptValue }
+          : { type: "receipt", quantity: parsed.quantity!, unitCost: parsed.unitCost! };
       break;
     case "issue":
     case "supplier_return":

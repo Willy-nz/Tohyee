@@ -33,6 +33,6 @@ rules are well settled; then the larger scope items.
 | 11 | **Not-for-profit module** (funds/grants, restricted funds, PBE reporting) | In Jess's scope; tracking categories and custom segments cover part of it | Large |
 
 Also noticed, smaller: supplier overpayments and prepayments (waiting on
-Jess's GST decision), emailing documents to customers (server email is set
-up only for security messages, so this needs Jess's decision), CSV import
+Jess's GST decision), emailing documents to customers (built: sent from each
+organisation's own email account, as Jess decided on 30 Sep 2026), CSV import
 and export of contacts and items, year-end close.

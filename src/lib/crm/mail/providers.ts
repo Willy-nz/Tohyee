@@ -3,7 +3,9 @@ import { UnavailableError, ValidationError } from "@/lib/errors";
 /**
  * Google (Gmail and Google Calendar) and Microsoft 365 (Graph) for CRM email
  * and calendar sync (examples MAIL1-MAIL9). Read-only: nothing here sends,
- * changes or deletes anything in a mailbox or calendar. Every call has a
+ * changes or deletes anything in a mailbox or calendar (sending documents
+ * through Microsoft Graph is in `src/lib/email/microsoft.ts`, with its own
+ * sign-in and scopes). Every call has a
  * timeout, and none is made inside a database transaction.
  */
 export const MAIL_PROVIDERS = ["google", "microsoft"] as const;
@@ -17,6 +19,13 @@ export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
 ];
 export const MICROSOFT_SCOPES = ["offline_access", "User.Read", "Mail.Read", "Calendars.Read"];
+/**
+ * Sending documents from the organisation's mailbox (Settings > Email): only
+ * what's needed to send as the signed-in mailbox and learn its address.
+ * Mail.Send is a delegated permission, so Tohyee can only send as that one
+ * mailbox, never read it.
+ */
+export const MICROSOFT_SEND_SCOPES = ["offline_access", "User.Read", "Mail.Send"];
 
 export type ProviderApp = { clientId: string; clientSecret: string; tenant?: string };
 export type Tokens = { accessToken: string; refreshToken: string | null; expiresInSeconds: number };
@@ -45,6 +54,10 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 let fetcher: FetchLike = (input, init) => fetch(input, init);
 export function setMailFetchForTests(replacement: FetchLike | null): void {
   fetcher = replacement ?? ((input, init) => fetch(input, init));
+}
+/** The same fetch (swappable in tests), for calls that need the raw response, such as Graph's sendMail. */
+export function providerFetch(input: string, init?: RequestInit): Promise<Response> {
+  return fetcher(input, init);
 }
 
 export class ProviderError extends Error {
@@ -90,7 +103,7 @@ function bearer(token: string): RequestInit {
 // ---------------------------------------------------------------------------
 // Signing in (OAuth 2.0 authorization code flow)
 
-export function authorisationUrl(provider: MailProvider, app: ProviderApp, redirectUri: string, state: string): string {
+export function authorisationUrl(provider: MailProvider, app: ProviderApp, redirectUri: string, state: string, microsoftScopes: readonly string[] = MICROSOFT_SCOPES): string {
   if (provider === "google") {
     const params = new URLSearchParams({
       client_id: app.clientId,
@@ -109,7 +122,7 @@ export function authorisationUrl(provider: MailProvider, app: ProviderApp, redir
     redirect_uri: redirectUri,
     response_type: "code",
     response_mode: "query",
-    scope: MICROSOFT_SCOPES.join(" "),
+    scope: microsoftScopes.join(" "),
     state,
   });
   return `https://login.microsoftonline.com/${encodeURIComponent(app.tenant || "common")}/oauth2/v2.0/authorize?${params}`;
@@ -121,9 +134,9 @@ function tokenUrl(provider: MailProvider, app: ProviderApp): string {
     : `https://login.microsoftonline.com/${encodeURIComponent(app.tenant || "common")}/oauth2/v2.0/token`;
 }
 
-async function tokenRequest(provider: MailProvider, app: ProviderApp, fields: Record<string, string>): Promise<Tokens> {
+async function tokenRequest(provider: MailProvider, app: ProviderApp, fields: Record<string, string>, microsoftScopes: readonly string[]): Promise<Tokens> {
   const body = new URLSearchParams({ client_id: app.clientId, client_secret: app.clientSecret, ...fields });
-  if (provider === "microsoft") body.set("scope", MICROSOFT_SCOPES.join(" "));
+  if (provider === "microsoft") body.set("scope", microsoftScopes.join(" "));
   const result = await request<{ access_token?: string; refresh_token?: string; expires_in?: number }>(tokenUrl(provider, app), {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
@@ -133,12 +146,18 @@ async function tokenRequest(provider: MailProvider, app: ProviderApp, fields: Re
   return { accessToken: result.access_token, refreshToken: result.refresh_token ?? null, expiresInSeconds: result.expires_in ?? 3600 };
 }
 
-export function exchangeCode(provider: MailProvider, app: ProviderApp, code: string, redirectUri: string): Promise<Tokens> {
-  return tokenRequest(provider, app, { grant_type: "authorization_code", code, redirect_uri: redirectUri });
+export function exchangeCode(
+  provider: MailProvider,
+  app: ProviderApp,
+  code: string,
+  redirectUri: string,
+  microsoftScopes: readonly string[] = MICROSOFT_SCOPES,
+): Promise<Tokens> {
+  return tokenRequest(provider, app, { grant_type: "authorization_code", code, redirect_uri: redirectUri }, microsoftScopes);
 }
 
-export function refreshAccess(provider: MailProvider, app: ProviderApp, refreshToken: string): Promise<Tokens> {
-  return tokenRequest(provider, app, { grant_type: "refresh_token", refresh_token: refreshToken });
+export function refreshAccess(provider: MailProvider, app: ProviderApp, refreshToken: string, microsoftScopes: readonly string[] = MICROSOFT_SCOPES): Promise<Tokens> {
+  return tokenRequest(provider, app, { grant_type: "refresh_token", refresh_token: refreshToken }, microsoftScopes);
 }
 
 /** The mailbox's own address. */

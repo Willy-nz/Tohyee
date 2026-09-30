@@ -23,6 +23,8 @@ export type Account = {
   systemKey: SystemKey | null;
   isActive: boolean;
   hasPostings: boolean;
+  /** The GST code usually used on this account (e.g. GST for sales), or null. */
+  defaultTaxCode: string | null;
 };
 
 type AccountRow = {
@@ -36,12 +38,14 @@ type AccountRow = {
   system_key: SystemKey | null;
   is_active: boolean;
   has_postings: boolean;
+  default_tax_code: string | null;
 };
 
 const ACCOUNT_SELECT = `
   select a.id, a.code, a.name, a.account_class, a.account_type, a.description,
          a.currency_code, a.system_key, a.is_active,
-         exists (select 1 from ledger_journal_lines l where l.account_id = a.id) as has_postings
+         exists (select 1 from ledger_journal_lines l where l.account_id = a.id) as has_postings,
+         (select t.code from tax_codes t where t.id = a.default_tax_code_id) as default_tax_code
     from accounts a`;
 
 function toAccount(row: AccountRow): Account {
@@ -56,6 +60,7 @@ function toAccount(row: AccountRow): Account {
     systemKey: row.system_key,
     isActive: row.is_active,
     hasPostings: row.has_postings,
+    defaultTaxCode: row.default_tax_code,
   };
 }
 
@@ -74,6 +79,23 @@ function parseAccountType(input: unknown): AccountType {
     throw new ValidationError(`accountType must be one of: ${Object.keys(ACCOUNT_TYPES).join(", ")}.`);
   }
   return input;
+}
+
+/**
+ * An account's usual GST code: blank for none, else an active tax code
+ * (matched ignoring case). Returns its id.
+ */
+async function resolveDefaultTaxCode(tx: OrgTx, input: unknown, keptCode: string | null): Promise<string | null> {
+  const code = optionalString(input, "defaultTaxCode", { maxLength: 20 });
+  if (code === null) return null;
+  const found = await tx.query<{ id: string; code: string; is_active: boolean }>(
+    "select id, code, is_active from tax_codes where upper(code) = upper($1)",
+    [code],
+  );
+  const row = found.rows[0];
+  if (!row) throw new ValidationError(`There's no tax code ${code}.`);
+  if (!row.is_active && row.code !== keptCode) throw new ValidationError(`Tax code ${row.code} is inactive.`);
+  return row.id;
 }
 
 export async function listAccounts(
@@ -114,6 +136,7 @@ export async function createAccount(
     accountType: unknown;
     description?: unknown;
     currencyCode?: unknown;
+    defaultTaxCode?: unknown;
   },
 ): Promise<Account> {
   const code = parseAccountCode(input.code);
@@ -126,12 +149,14 @@ export async function createAccount(
     throw new ValidationError("Only asset and liability accounts can hold a foreign currency.");
   }
 
+  const defaultTaxCodeId = await resolveDefaultTaxCode(tx, input.defaultTaxCode, null);
+
   const inserted = await tx.query<{ id: string }>(
-    `insert into accounts (code, name, account_class, account_type, description, currency_code)
-     values ($1, $2, $3, $4, $5, $6)
+    `insert into accounts (code, name, account_class, account_type, description, currency_code, default_tax_code_id)
+     values ($1, $2, $3, $4, $5, $6, $7)
      on conflict do nothing
      returning id`,
-    [code, name, accountClass, accountType, description, currencyCode],
+    [code, name, accountClass, accountType, description, currencyCode, defaultTaxCodeId],
   );
   const id = inserted.rows[0]?.id;
   if (!id) {
@@ -141,7 +166,7 @@ export async function createAccount(
     eventType: "account.created",
     entityType: "account",
     entityId: id,
-    details: { code, name, accountType, currencyCode },
+    details: { code, name, accountType, currencyCode, ...(defaultTaxCodeId ? { defaultTaxCode: input.defaultTaxCode } : {}) },
   });
   return getAccountById(tx, id);
 }
@@ -162,6 +187,7 @@ export async function updateAccount(
     description?: unknown;
     currencyCode?: unknown;
     isActive?: unknown;
+    defaultTaxCode?: unknown;
   },
 ): Promise<Account> {
   const accountId = requireId(accountIdInput, "accountId");
@@ -192,6 +218,11 @@ export async function updateAccount(
   if (currencyCode && accountClass !== "asset" && accountClass !== "liability") {
     throw new ValidationError("Only asset and liability accounts can hold a foreign currency.");
   }
+  const defaultTaxCodeId = await resolveDefaultTaxCode(
+    tx,
+    input.defaultTaxCode === undefined ? existing.defaultTaxCode : input.defaultTaxCode,
+    existing.defaultTaxCode,
+  );
   if (!isActive && existing.systemKey) {
     throw new ValidationError(
       "This account is used by Tohyee for automatic postings, so it can't be archived. Rename it instead.",
@@ -202,9 +233,9 @@ export async function updateAccount(
     await tx.query(
       `update accounts
           set code = $2, name = $3, account_class = $4, account_type = $5,
-              description = $6, currency_code = $7, is_active = $8, updated_at = now()
+              description = $6, currency_code = $7, is_active = $8, default_tax_code_id = $9, updated_at = now()
         where id = $1`,
-      [accountId, code, name, accountClass, accountType, description, currencyCode, isActive],
+      [accountId, code, name, accountClass, accountType, description, currencyCode, isActive, defaultTaxCodeId],
     );
   } catch (error) {
     if ((error as { code?: string }).code === "23505") {
@@ -216,7 +247,7 @@ export async function updateAccount(
     eventType: "account.updated",
     entityType: "account",
     entityId: accountId,
-    details: { code, name, accountType, currencyCode, isActive },
+    details: { code, name, accountType, currencyCode, isActive, defaultTaxCodeId },
   });
   return getAccountById(tx, accountId);
 }
@@ -273,4 +304,42 @@ export async function resolveAccountsByCode(
 
 export function parseAccountCodeInput(input: unknown, fieldName: string): string {
   return parseAccountCode(input, fieldName);
+}
+
+/**
+ * The account opening balances are cleared through (IM1): the accounts
+ * receivable, accounts payable and inventory lines of the trial balance go
+ * here instead, and the open invoices, open bills and opening stock post
+ * against it, so it ends at 0.00. It's equity, "Historical adjustment" (like
+ * Xero's Historical Adjustment and NetSuite's Opening Balance), 3900 in the
+ * starting chart; an organisation without one gets it at 3900 or the next
+ * free code up to 3999 the first time it's needed.
+ */
+export async function conversionClearingAccount(tx: OrgTx): Promise<{ id: string; code: string; name: string }> {
+  const existing = await tx.query<{ id: string; code: string; name: string }>(
+    "select id, code, name from accounts where system_key = 'conversion_clearing'",
+  );
+  if (existing.rows[0]) return existing.rows[0];
+  const inserted = await tx.query<{ id: string; code: string; name: string }>(
+    `insert into accounts (code, name, account_class, account_type, system_key, description)
+     select c::text, 'Historical adjustment', 'equity', 'equity', 'conversion_clearing',
+            'Opening balances from invoices, bills and stock clear through here; it should always be 0.00.'
+       from generate_series(3900, 3999) c
+      where not exists (select 1 from accounts where lower(code) = c::text)
+      order by c limit 1
+     returning id, code, name`,
+  );
+  const row = inserted.rows[0];
+  if (!row) {
+    throw new ValidationError(
+      "Codes 3900 to 3999 are all taken, so there's nowhere to put the Historical adjustment account opening balances clear through. Free one of them first.",
+    );
+  }
+  await writeAuditEvent(tx, {
+    eventType: "account.created",
+    entityType: "account",
+    entityId: row.id,
+    details: { code: row.code, name: row.name, accountType: "equity", systemKey: "conversion_clearing" },
+  });
+  return row;
 }

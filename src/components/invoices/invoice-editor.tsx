@@ -1,5 +1,6 @@
 "use client";
 
+import { usualTaxCode } from "@/lib/accounts/types";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
@@ -14,6 +15,7 @@ import { Badge, Button, Field, Notice, Stat, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
+import { formatRate, formatUnitPrice } from "@/lib/documents/format";
 import { formatMoney, todayInBrowser } from "@/lib/format";
 import {
   AMOUNTS_MODE_LABELS,
@@ -25,7 +27,7 @@ import {
 } from "@/lib/invoices/amounts";
 import type { Invoice, InvoiceStatus } from "@/lib/invoices/service";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { dec, isDecimalString, mul, toPlainString } from "@/lib/money/decimal";
+import { isDecimalString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
 import type { CustomerSetup } from "@/lib/customers/service";
 import type { SalespeopleSetup } from "@/lib/salespeople/service";
@@ -53,16 +55,8 @@ export function PaidStatusBadge({ status }: { status: PaidStatus }) {
   return <Badge tone={PAID_STATUS_TONES[status]}>{PAID_STATUS_LABELS[status]}</Badge>;
 }
 
-/** 0.15 -> "15%". */
-export function formatRate(rate: string): string {
-  return `${toPlainString(mul(dec(rate), dec("100")))}%`;
-}
-
-/** Unit prices keep the places they were entered with (2 to 4): "50" -> "50.00", "3.3333" stays. */
-export function formatUnitPrice(value: string): string {
-  const places = value.split(".")[1]?.length ?? 0;
-  return formatMoney(value, Math.max(2, places));
-}
+/** 0.15 -> "15%"; unit prices keep their places. Shared with the PDF (src/lib/documents/format.ts). */
+export { formatRate, formatUnitPrice };
 
 export type EditorLine = {
   key: number;
@@ -450,7 +444,7 @@ export function SalesLines({
                     accounts={accounts}
                     filter={isRevenue}
                     value={line.accountCode}
-                    onChange={(code) => update(line.key, { accountCode: code })}
+                    onChange={(code) => update(line.key, { accountCode: code, ...usualTaxCode(accounts, taxCodes, code) })}
                     required
                   />
                   <TrackingSelects

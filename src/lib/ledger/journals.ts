@@ -55,7 +55,8 @@ export type JournalOrigin =
   | "expense_claim"
   | "expense_claim_payment"
   | "fixed_asset_depreciation"
-  | "fixed_asset_disposal";
+  | "fixed_asset_disposal"
+  | "opening_balance";
 export type CorrectionKind = "reversal" | "replacement";
 
 /**
@@ -804,7 +805,8 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
     journal.origin !== "expense_claim" &&
     journal.origin !== "expense_claim_payment" &&
     journal.origin !== "fixed_asset_depreciation" &&
-    journal.origin !== "fixed_asset_disposal"
+    journal.origin !== "fixed_asset_disposal" &&
+    journal.origin !== "opening_balance"
   );
 }
 

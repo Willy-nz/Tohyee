@@ -129,6 +129,8 @@ describeWithDatabase("ledger", () => {
     expect(covered.rows.map((row) => [row.table_name, row.events])).toEqual(
       [
         "audit_events",
+        "conversion_balance_lines",
+        "conversion_balances",
         "inventory_movements",
         "ledger_foreign_opening_balances",
         "ledger_fx_revaluation_run_items",

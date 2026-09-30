@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Money } from "@/components/books";
+import { EmailDocumentPanel, pdfHref, type StatementQuery } from "@/components/documents/email-document";
+import { StatementRunCard } from "@/components/reports/statement-emails";
 import { useApiData } from "@/components/hooks";
+import { OrganisationLogo } from "@/components/organisation/logo";
 import { Balance, BUCKET_LABELS, BUCKETS, PrintButton } from "@/components/reports/ledger-reports";
 import { Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -16,7 +19,8 @@ import type { ActivityStatement, OutstandingStatement } from "@/lib/reports/cust
  * Contacts › Customer statements (examples CST1-CST5): an activity
  * statement for a date range or an outstanding statement as at a date, for
  * one customer (optionally with its sub-customers), laid out as a page to
- * print or save as PDF with the browser's print. Emailing isn't built.
+ * print or save as PDF with the browser's print, or to email as a PDF
+ * (to one customer, or to every customer with a balance).
  */
 
 function monthStart(isoDate: string): string {
@@ -70,6 +74,7 @@ function StatementHeader({
   const { current } = useWorkspace();
   return (
     <header className={ui.reportPaperHeader}>
+      {current ? <OrganisationLogo organisationId={current.id} /> : null}
       <h2 className={ui.reportPaperTitle}>{title}</h2>
       <p className={ui.reportPaperMeta}>
         {current?.displayName}
@@ -231,12 +236,27 @@ export function CustomerStatements({ organisationId, initialContactId }: { organ
       ? { organisationId, contactId, kind, from, to, includeSubCustomers: includeSubs && hasSubs ? "true" : null }
       : { organisationId, contactId, kind, asAt, includeSubCustomers: includeSubs && hasSubs ? "true" : null },
   );
+  const emailQuery: StatementQuery =
+    kind === "activity"
+      ? { statementKind: "activity", from, to, includeSubCustomers: includeSubs && hasSubs }
+      : { statementKind: "outstanding", asAt, includeSubCustomers: includeSubs && hasSubs };
   return (
     <>
       <Card
         title="Customer statement"
         description="What a customer owes: their activity over a period, or what's outstanding on a date, aged by due date."
-        actions={statement.data ? <PrintButton /> : null}
+        actions={
+          statement.data ? (
+            <>
+              <PrintButton />
+              <span data-print="hide">
+                <a href={pdfHref(organisationId, "statement", contactId, emailQuery)} target="_blank" rel="noreferrer">
+                  PDF
+                </a>
+              </span>
+            </>
+          ) : null
+        }
       >
         <div className={ui.inlineForm} data-print="hide">
           <Field label="Customer">
@@ -284,6 +304,21 @@ export function CustomerStatements({ organisationId, initialContactId }: { organ
       </Card>
       {statement.data?.kind === "activity" ? <ActivityPaper statement={statement.data} /> : null}
       {statement.data?.kind === "outstanding" ? <OutstandingPaper statement={statement.data} /> : null}
+      {statement.data && chosen ? (
+        <div data-print="hide">
+          <EmailDocumentPanel
+            key={`${contactId}:${JSON.stringify(emailQuery)}`}
+            organisationId={organisationId}
+            kind="statement"
+            id={contactId}
+            statement={emailQuery}
+            title="Email this statement"
+          />
+        </div>
+      ) : null}
+      <div data-print="hide">
+        <StatementRunCard key={JSON.stringify(emailQuery)} organisationId={organisationId} statement={emailQuery} />
+      </div>
     </>
   );
 }
