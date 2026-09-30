@@ -358,7 +358,13 @@ that something happened.
   by another line, or that only a bank rule fits, shows the suggestion
   highlighted with an **OK** button, and **OK all confident matches** does
   them all, each line on its own, reporting what failed and why (examples
-  BK17-BK19, not yet approved by Jess).
+  BK17-BK19, not yet approved by Jess). The **bank reconciliation report**
+  (Reporting, and linked from each account) shows, as at a date, the
+  statement balance (from the bank's running balances or the feed's
+  balance), the balance in Tohyee, statement lines not yet in Tohyee and
+  transactions in Tohyee not yet on the statement, with the arithmetic and a
+  warning when they don't fully explain the difference; it prints or saves as
+  PDF (examples BK20, BK21, not yet approved by Jess).
 - **Modules**: Accounting and Tax are always on; the **CRM** and
   **Advanced reporting** are switched on per organisation in Settings, and
   their menus and screens show only while on (MOD1).

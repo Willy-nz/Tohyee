@@ -49,7 +49,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
   `tests/integration/projects.test.ts` (PJ1-PJ13) and
-  `tests/integration/bank-quick.test.ts` (BK17-BK19), all against
+  `tests/integration/bank-quick.test.ts` (BK17-BK21), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -1070,6 +1070,84 @@ BK10), through the same reconcile command.
   confident). The result is **1 succeeded, 1 failed**, each line in its own
   transaction, so the failure doesn't undo the success. Retrying the same
   request returns the -46.00 line as already done and posts nothing more.
+
+### Bank reconciliation report (examples not yet approved by Jess)
+
+For one bank or credit card account as at a date (Reporting › Bank
+reconciliation, also linked from the account). It posts nothing.
+
+- **Balance in Tohyee**: the account's journal lines dated on or before the
+  date (debits less credits).
+- **In the bank, not yet in Tohyee**: unreconciled statement lines dated on
+  or before the date, plus any part of a reconciled line (dated on or before
+  it) that was matched to a journal line dated after it.
+- **In Tohyee, not yet on the statement**: the account's journal lines dated
+  on or before the date that aren't reconciled to a statement line dated on
+  or before it (unpresented payments, deposits not yet cleared). A payment
+  reconciled to a line after the date is still listed, with that line's date.
+  A payment or bank transaction voided on or before the date isn't listed
+  when neither it nor its reversal is reconciled, since the two cancel out.
+- **Statement balance these explain** = balance in Tohyee + in the bank not
+  in Tohyee - in Tohyee not on the statement.
+- **Statement balance**: Tohyee doesn't store a statement's closing balance,
+  so it's worked out from the latest of (a) the bank's running balance on the
+  latest statement line (not deleted) dated on or before the date that has
+  one, the last brought in that day, taken as that day's closing balance, and
+  (b) the bank feed's balance (BK16), as at the end of the New Zealand day it
+  was fetched, if that's on or before the date; plus the unreconciled and
+  reconciled lines dated after it up to the date. With neither it's **not
+  known**. Excluded lines are never added (they're duplicates or not the
+  organisation's), though an excluded line's running balance still counts,
+  since it's the bank's figure.
+- **Not explained** = statement balance - the balance the items explain. The
+  report says "Fully explained" only when that's 0.00.
+
+Setup as above, with this statement imported into 1000 (it has the bank's
+running balance):
+
+```
+Date,Amount,Payee,Particulars,Code,Reference,Balance
+01/05/2026,1000.00,J KELLY,CAPITAL,,,1000.00
+20/05/2026,115.00,KOBE LTD,INV-0001,,,1115.00
+21/05/2026,-46.00,Z ENERGY,,,,1069.00
+28/05/2026,-12.00,MONTHLY FEE,,,,1057.00
+02/06/2026,-230.00,KAURI SUPPLIES,K-100,,,827.00
+```
+
+In Tohyee: a manual journal on 1 May, Dr 1000 1,000.00 / Cr 3000 1,000.00,
+matched to the 1 May line; INV-0001 paid from the 20 May line (BK5); the
+BK6 spend money from the 21 May line; a supplier payment of B1, 230.00 on
+30 May from 1000, matched to the 2 June line; and receive money of 57.50
+from Kobe Ltd on 31 May (4000, GST inclusive), not reconciled. The 28 May fee
+isn't reconciled.
+
+- **BK20** As at 31 May 2026: balance in Tohyee **896.50** (1,000.00 +
+  115.00 - 46.00 - 230.00 + 57.50). In the bank, not in Tohyee: 28 May
+  MONTHLY FEE **-12.00**. In Tohyee, not on the statement: the 30 May
+  supplier payment **-230.00** (on the statement 2 June) and the 31 May
+  receive money **57.50**, total **-172.50**. Explained: 896.50 - 12.00 +
+  172.50 = **1,057.00**. Statement balance **1,057.00**, the running balance
+  on the 28 May line: fully explained. As at 30 June 2026: statement
+  **827.00** (the 2 June line), Tohyee 896.50, in the bank -12.00, in Tohyee
+  57.50: 896.50 - 12.00 - 57.50 = 827.00, fully explained. As at 25 May:
+  statement and Tohyee both **1,069.00**, no items. A spend money of 20.00
+  (6120, no GST) on 29 May, voided on 30 May, changes nothing as at 31 May
+  (neither it nor the reversal is listed); as at 29 May it's listed: Tohyee
+  **1,049.00**, in the bank -12.00, in Tohyee -20.00, 1,049.00 - 12.00 +
+  20.00 = **1,057.00**, fully explained.
+- **BK21** Where the statement balance comes from:
+  - Only BK1's file (no running balances) and no bank feed: as at 31 May the
+    statement balance is **not known**; the items (115.00, -46.00, -500.00,
+    total -431.00) still show, explaining a statement balance of
+    **-431.00**, and the report doesn't say "Fully explained".
+  - The same with a bank feed balance of **69.00** fetched at 10:00 on
+    21 May (New Zealand time): as at 31 May the statement balance is 69.00
+    plus the one line after 21 May (-500.00) = **-431.00**, fully explained.
+    As at 20 May the feed balance is later than the date, so the balance is
+    not known.
+  - In BK20, excluding the 28 May fee line (as if it were a duplicate): as at
+    31 May the items explain **1,069.00** but the statement balance is still
+    1,057.00, so **-12.00 is not explained** and the report says so.
 
 ### Not supported yet (refused rather than guessed)
 

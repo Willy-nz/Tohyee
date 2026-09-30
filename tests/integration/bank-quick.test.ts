@@ -2,19 +2,22 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import * as confidentRoute from "@/app/api/bank-accounts/[accountId]/confident-matches/route";
 import * as okRoute from "@/app/api/statement-lines/[lineId]/ok/route";
 import type { SessionUser } from "@/lib/auth/sessions";
-import { createBankAccount, listBankAccounts, listStatementLines } from "@/lib/bank/accounts";
+import * as bankRecReportRoute from "@/app/api/reports/bank-reconciliation/route";
+import { createBankAccount, listBankAccounts, listStatementLines, setStatementLineExcluded } from "@/lib/bank/accounts";
 import { importStatementFile } from "@/lib/bank/imports";
 import { confidentMatches, okConfidentMatches, okStatementLine } from "@/lib/bank/confident";
 import { reconcileStatementLine } from "@/lib/bank/reconcile";
 import { createBankRule } from "@/lib/bank/rules";
-import { createBankTransaction } from "@/lib/bank/transactions";
+import { createBankTransaction, voidBankTransaction } from "@/lib/bank/transactions";
+import { recordSupplierPayment } from "@/lib/bills/payments";
 import { approveBill, createBill } from "@/lib/bills/service";
 import { type Contact, createContact } from "@/lib/contacts/service";
 import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { recordPayment, voidPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, getInvoice } from "@/lib/invoices/service";
-import { getJournal } from "@/lib/ledger/journals";
+import { getJournal, postJournal } from "@/lib/ledger/journals";
+import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import {
   apiRequest,
@@ -329,5 +332,185 @@ describeWithDatabase("quicker bank reconciliation", () => {
     await world.lock(null);
     const rest = await okConfidentMatches(world.run, world.bank.id, { idempotencyKey: key("bulk") });
     expect(rest).toMatchObject({ succeeded: 1, failed: 0, results: [expect.objectContaining({ lineId: income.id, ok: true })] });
+  });
+
+  const BK20_CSV = `Date,Amount,Payee,Particulars,Code,Reference,Balance
+01/05/2026,1000.00,J KELLY,CAPITAL,,,1000.00
+20/05/2026,115.00,KOBE LTD,INV-0001,,,1115.00
+21/05/2026,-46.00,Z ENERGY,,,,1069.00
+28/05/2026,-12.00,MONTHLY FEE,,,,1057.00
+02/06/2026,-230.00,KAURI SUPPLIES,K-100,,,827.00
+`;
+
+  async function bk20World() {
+    const world = await setup();
+    await world.importFile(BK20_CSV);
+    const { journal } = await world.asUser(bookkeeper, (tx) =>
+      postJournal(tx, {
+        idempotencyKey: key("capital"),
+        postingDate: "2026-05-01",
+        reference: "Capital",
+        lines: [
+          { accountCode: "1000", debitAmount: "1000.00" },
+          { accountCode: "3000", creditAmount: "1000.00" },
+        ],
+      }),
+    );
+    const capitalLine = (await world.sql("select id::text from ledger_journal_lines where journal_id = $1 and account_id = $2", [journal.id, world.bank.id]))
+      .rows[0].id as string;
+    await world.reconcile((await world.lineOn("1000.00")).id, { kind: "match", journalLineIds: [capitalLine] });
+    await world.reconcile((await world.lineOn("115.00")).id, { kind: "payments", allocations: [{ invoiceId: world.i1.id, amount: "115.00" }] });
+    await world.reconcile((await world.lineOn("-46.00")).id, {
+      kind: "bank_transaction",
+      contactId: world.zEnergy.id,
+      amountsMode: "inclusive",
+      lines: [{ description: "Petrol", accountCode: "6120", taxCode: "GST", amount: "46.00" }],
+    });
+    const { payment } = await world.asUser(bookkeeper, (tx) =>
+      recordSupplierPayment(tx, world.b1.id, { idempotencyKey: key("pay"), paymentDate: "2026-05-30", amount: "230.00", bankAccountCode: "1000" }),
+    );
+    const paymentLine = (await world.sql("select id::text from ledger_journal_lines where journal_id = $1 and account_id = $2", [payment.journalId, world.bank.id]))
+      .rows[0].id as string;
+    await world.reconcile((await world.lineOn("-230.00")).id, { kind: "match", journalLineIds: [paymentLine] });
+    const { bankTransaction } = await world.asUser(bookkeeper, (tx) =>
+      createBankTransaction(tx, {
+        idempotencyKey: key("receive"),
+        kind: "receive",
+        accountId: world.bank.id,
+        contactId: world.kobe.id,
+        date: "2026-05-31",
+        amountsMode: "inclusive",
+        lines: [{ description: "Cash sale", accountCode: "4000", taxCode: "GST", amount: "57.50" }],
+      }),
+    );
+    const report = (asAt: string) => world.asUser(viewer, (tx) => bankReconciliationReport(tx, { accountId: world.bank.id, asAt }));
+    return { ...world, payment, bankTransaction, report };
+  }
+
+  it("BK20: as at 31 May, 896.50 in Tohyee, -12.00 in the bank only, -172.50 in Tohyee only, explain the 1,057.00 statement balance", async () => {
+    const world = await bk20World();
+    const before = await world.journalCount();
+    const may = await world.report("2026-05-31");
+    expect(may).toMatchObject({
+      asAt: "2026-05-31",
+      ledgerBalance: "896.50",
+      statementBalance: "1057.00",
+      statementBalanceSource: { kind: "line_balance", date: "2026-05-28", balance: "1057.00", linesAfter: 0, linesAfterTotal: "0.00" },
+      bankNotInTohyee: { total: "-12.00" },
+      tohyeeNotInBank: { total: "-172.50" },
+      expectedStatementBalance: "1057.00",
+      notExplained: "0.00",
+      explained: true,
+    });
+    expect(may.bankNotInTohyee.items.map((item) => [item.date, item.description, item.amount, item.why])).toEqual([
+      ["2026-05-28", "MONTHLY FEE", "-12.00", "unreconciled"],
+    ]);
+    expect(may.tohyeeNotInBank.items.map((item) => [item.date, item.origin, item.amount, item.reconciledOn])).toEqual([
+      ["2026-05-30", "supplier_payment", "-230.00", "2026-06-02"],
+      ["2026-05-31", "bank_transaction", "57.50", null],
+    ]);
+    expect(await world.report("2026-06-30")).toMatchObject({
+      ledgerBalance: "896.50",
+      statementBalance: "827.00",
+      statementBalanceSource: { kind: "line_balance", date: "2026-06-02" },
+      bankNotInTohyee: { total: "-12.00" },
+      tohyeeNotInBank: { total: "57.50" },
+      expectedStatementBalance: "827.00",
+      explained: true,
+    });
+    const earlier = await world.report("2026-05-25");
+    expect(earlier).toMatchObject({ ledgerBalance: "1069.00", statementBalance: "1069.00", expectedStatementBalance: "1069.00", explained: true });
+    expect(earlier.bankNotInTohyee.items).toEqual([]);
+    expect(earlier.tohyeeNotInBank.items).toEqual([]);
+    expect(await world.journalCount()).toBe(before);
+    // Viewers can read it over HTTP.
+    const cookie = await sessionCookieFor(viewer);
+    const response = await bankRecReportRoute.GET(
+      apiRequest(`/api/reports/bank-reconciliation?organisationId=${world.org}&accountId=${world.bank.id}&asAt=2026-05-31`, { cookie }),
+      undefined,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ statementBalance: "1057.00", explained: true });
+  });
+
+  it("BK20: a statement line matched to a journal dated after the report date is still in the bank, not in Tohyee", async () => {
+    const world = await setup();
+    await world.importFile("Date,Amount,Payee,Balance\n28/05/2026,-230.00,KAURI SUPPLIES,-230.00\n");
+    const { payment } = await world.asUser(bookkeeper, (tx) =>
+      recordSupplierPayment(tx, world.b1.id, { idempotencyKey: key("pay"), paymentDate: "2026-06-01", amount: "230.00", bankAccountCode: "1000" }),
+    );
+    const paymentLine = (await world.sql("select id::text from ledger_journal_lines where journal_id = $1 and account_id = $2", [payment.journalId, world.bank.id]))
+      .rows[0].id as string;
+    await world.reconcile((await world.lineOn("-230.00")).id, { kind: "match", journalLineIds: [paymentLine] });
+    const report = await world.asUser(viewer, (tx) => bankReconciliationReport(tx, { accountId: world.bank.id, asAt: "2026-05-31" }));
+    expect(report).toMatchObject({ ledgerBalance: "0.00", statementBalance: "-230.00", expectedStatementBalance: "-230.00", explained: true });
+    expect(report.bankNotInTohyee.items).toEqual([
+      expect.objectContaining({ amount: "-230.00", why: "matched_later", matchedJournalId: payment.journalId, matchedDate: "2026-06-01" }),
+    ]);
+  });
+
+  it("BK20: a spend money voided by the date isn't listed (it and its reversal cancel out); before the void it is", async () => {
+    const world = await bk20World();
+    const { bankTransaction } = await world.asUser(bookkeeper, (tx) =>
+      createBankTransaction(tx, {
+        idempotencyKey: key("spend"),
+        kind: "spend",
+        accountId: world.bank.id,
+        contactId: world.zEnergy.id,
+        date: "2026-05-29",
+        amountsMode: "no_tax",
+        lines: [{ description: "Wrong account", accountCode: "6120", amount: "20.00" }],
+      }),
+    );
+    await world.asUser(bookkeeper, (tx) => voidBankTransaction(tx, bankTransaction.id, { idempotencyKey: key("void"), voidDate: "2026-05-30" }));
+    const may = await world.report("2026-05-31");
+    expect(may).toMatchObject({ ledgerBalance: "896.50", tohyeeNotInBank: { total: "-172.50" }, statementBalance: "1057.00", explained: true });
+    expect(may.tohyeeNotInBank.items.map((item) => item.amount)).toEqual(["-230.00", "57.50"]);
+    const before = await world.report("2026-05-29");
+    expect(before).toMatchObject({
+      ledgerBalance: "1049.00",
+      bankNotInTohyee: { total: "-12.00" },
+      tohyeeNotInBank: { total: "-20.00" },
+      statementBalance: "1057.00",
+      expectedStatementBalance: "1057.00",
+      explained: true,
+    });
+  });
+
+  it("BK21: statement balance not known, from a bank feed balance, and a difference that isn't explained", async () => {
+    const world = await setup();
+    await world.importFile(CSV);
+    const report = (asAt: string) => world.asUser(viewer, (tx) => bankReconciliationReport(tx, { accountId: world.bank.id, asAt }));
+    expect(await report("2026-05-31")).toMatchObject({
+      statementBalance: null,
+      statementBalanceSource: null,
+      ledgerBalance: "0.00",
+      bankNotInTohyee: { total: "-431.00" },
+      expectedStatementBalance: "-431.00",
+      notExplained: null,
+      explained: false,
+    });
+    // 10:00 on 21 May in New Zealand is 22:00 on 20 May UTC.
+    await world.sql("update bank_account_settings set statement_balance = 69.00, statement_balance_at = '2026-05-20T22:00:00Z' where account_id = $1", [
+      world.bank.id,
+    ]);
+    expect(await report("2026-05-31")).toMatchObject({
+      statementBalance: "-431.00",
+      statementBalanceSource: { kind: "feed_balance", date: "2026-05-21", balance: "69.00", linesAfter: 1, linesAfterTotal: "-500.00" },
+      expectedStatementBalance: "-431.00",
+      notExplained: "0.00",
+      explained: true,
+    });
+    expect(await report("2026-05-20")).toMatchObject({ statementBalance: null, explained: false });
+
+    const bk20 = await bk20World();
+    const fee = await bk20.lineOn("-12.00");
+    await bk20.asUser(bookkeeper, (tx) => setStatementLineExcluded(tx, fee.id, true));
+    expect(await bk20.report("2026-05-31")).toMatchObject({
+      statementBalance: "1057.00",
+      expectedStatementBalance: "1069.00",
+      notExplained: "-12.00",
+      explained: false,
+    });
   });
 });
