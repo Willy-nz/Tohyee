@@ -1672,10 +1672,12 @@ expressed in NZD as at the time of supply).
   the contact's currency, as NetSuite shows balances and credit limits in the
   primary currency.
 - **Exchange rate**: NZD per 1 unit, up to 8 decimal places (as NetSuite).
-  A document or payment starts with the last rate used for its currency on
-  or before its date (the same lookup as a statement line, D4: rates posted
-  lines were converted at, documents' and payments' own rates, revaluations'
-  closing rates) and it can be changed; with none, it must be typed.
+  A document or payment starts with the rate in the currency exchange rates
+  list effective on its date (MC48), or with none there, the last rate used
+  for its currency on or before its date (the same lookup as a statement
+  line, D4: rates posted lines were converted at, documents' and payments'
+  own rates, revaluations' closing rates), and it can be changed; with
+  neither, it must be typed.
 - **Converting a document**: like NetSuite, each line's net amount and GST is
   converted on its own (amount x rate, rounded once to cents, half away from
   zero) and the document's NZD total is the sum of its lines.
@@ -1862,18 +1864,18 @@ Transactions*). So:
   MC1). It has **no rate** and posts nothing, like its NZD self.
 - The **invoice or bill made from it** is an ordinary foreign-currency
   document (MC2, MC10) with a rate for **its own date**: the rate typed when
-  accepting the quote or copying the order to a bill, or else the last rate
-  used on or before that date (MC3), as for a document entered directly.
-  Nothing posts until it's approved.
+  accepting the quote or copying the order to a bill, or else the exchange
+  rates list's rate effective on that date (MC51), or else the last rate
+  used on or before it (MC3), as for a document entered directly. Nothing
+  posts until it's approved.
 - The same line rules as foreign-currency documents apply when it's saved:
   zero-rated, exempt or no-GST codes only, no stock items, and item lines
   need a typed price (MC11).
-- **Repeating invoices and bills in a foreign currency save drafts only**
-  (smallest safe choice): each takes the last rate used, which could be
-  stale, since Tohyee has no daily rate table like NetSuite's Currency
-  Exchange Rates, so a person checks the rate before approving. Saving one
-  as "approve" is refused ("Repeating invoices in USD can only be saved as
-  drafts for now…").
+- **Repeating invoices and bills in a foreign currency** can be saved as
+  "approve" (revised 1 Oct 2026, MC52): each one is approved only when the
+  exchange rates list has a rate effective on its date, which it takes.
+  With only the last rate used (which could be stale), it's left as a draft
+  and its history says why, so a person checks the rate before approving.
 
 Setup: MC14-MC24 (the last USD rate used on 25 Aug is **1.60**, MC22's
 payment).
@@ -1881,8 +1883,8 @@ payment).
 | ID | What happens | Result |
 | --- | --- | --- |
 | MC25 | A quote for Acme, 20 Aug 2026, USD 400.00 zero-rated; finalised QU-0001; accepted on 25 Aug with no rate typed | The quote is **USD 400.00** and posts nothing (with a GST line it's refused). Accepting makes a **draft** invoice in USD at **1.60** (the last USD rate used on or before 25 Aug): NZD **640.00**, still nothing posted; approved: Dr 1100 640.00 (USD 400.00) / Cr 4000 640.00. Another quote (USD 10.00) accepted on 26 Aug with the rate **1.58** typed: NZD **15.80** |
-| MC26 | A monthly repeating invoice for Acme from 31 Aug, USD 100.00 zero-rated, saved as a draft; the job runs on 31 Aug | Saving it as "approve" is refused. The template is **USD 100.00**. The job makes a **draft** invoice dated 31 Aug in USD at **1.60** (the last rate used by then; MC25's 1.58 invoice is a draft, which posts nothing, so it isn't one), NZD **160.00**; nothing posts |
-| MC27 | A monthly repeating bill from AWS from 31 Aug, "AWS-{month}", USD 40.00 no tax to 6040, a draft; the job runs on 31 Aug | "Approve" refused; the bill made is a **draft** dated 31 Aug, USD 40.00 at **1.60** = NZD **64.00** |
+| MC26 | A monthly repeating invoice for Acme from 31 Aug, USD 100.00 zero-rated, saved as "approve"; the job runs on 31 Aug; the exchange rates list is empty | The template is **USD 100.00**. The job makes an invoice dated 31 Aug in USD at **1.60** (the last rate used by then; MC25's 1.58 invoice is a draft, which posts nothing, so it isn't one), NZD **160.00**, and leaves it a **draft** (approval refused, 1 made): "Left as a draft: The exchange rates list has no USD rate effective on or before 2026-08-31, so this invoice took the last USD rate used (1.6)…"; nothing posts. (Revised 1 Oct 2026: saving it as "approve" used to be refused. With a list rate it's approved, MC52.) |
+| MC27 | A monthly repeating bill from AWS from 31 Aug, "AWS-{month}", USD 40.00 no tax to 6040, saved as "approve"; the job runs on 31 Aug | The bill made is a **draft** (approval refused, as MC26) dated 31 Aug, USD 40.00 at **1.60** = NZD **64.00** |
 | MC28 | A purchase order to AWS, 20 Aug, 3 x USD 20.00 no tax to 6040; approved; copied to a bill AWS-PO1 dated 28 Aug at **1.55** | The order is **USD 60.00** and posts nothing, approved or not. The bill is a draft, USD 60.00 at 1.55 = NZD **93.00**; approved: Dr 6040 93.00 / Cr 2000 93.00 (USD 60.00). AWS's currency can't change now |
 
 Tests: `tests/integration/multi-currency-settlements.test.ts` (MC25-MC28).
@@ -2044,6 +2046,68 @@ Tests: `tests/integration/multi-currency-rounding.test.ts` (MC31-MC43),
 `tests/unit/fx-rounding.test.ts`, and MC4, MC8, MC13, MC19 and MC20 in their
 own tests.
 
+### Currency exchange rates list (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) following NetSuite, as Jess asked. NetSuite
+keeps a **Currency Exchange Rates** list: "exchange rates for each currency
+pair" with an **effective date**, and when a transaction is entered "the
+exchange rate defaults to the rate in effect on the transaction date", which
+can be changed on the transaction (NetSuite help, *Currency Exchange Rates*,
+*Setting Exchange Rates Directly on Transactions*, *Currency Exchange Rate
+Integration*; sections N1404249, N1404429 and N564637). Its daily feed
+(Currency Exchange Rate Integration) comes from paid providers (HSBC,
+Xignite), so it isn't copied; whether to add a free feed is Jess's decision
+(question 6). In Tohyee:
+
+- **Accounting › Exchange rates**: for each foreign currency, rates with the
+  date each takes effect, **NZD per 1 unit** (the direction of every
+  document's rate), up to 8 decimal places, with an optional note (e.g.
+  "RBNZ"). Bookkeepers, admins and owners add them (the role that posts FX
+  revaluations); viewers see them. Each is audited (who and when). The base
+  currency, unknown currencies, a zero rate, more than 8 decimal places and
+  impossible dates are refused.
+- **Never changed or deleted** (the database checks): a correction is a
+  newer entry for the same date (for one date, the one added last wins) or
+  archiving the wrong one, which is kept with who archived it. Documents
+  that already took a rate keep it.
+- **Default rate**: a new foreign-currency invoice, bill, credit note,
+  supplier credit note, payment (one or several documents), refund, bank
+  statement line, accepted quote or copied purchase order starts with the
+  list's rate **in effect on its date** (the latest entry on or before it);
+  with none, the last rate used in the books on or before it (MC3, D4); with
+  neither, it must be typed (MC2). A typed rate always wins.
+- **Repeating invoices and bills** in a foreign currency are approved
+  automatically (when set to) only when the list has a rate effective on the
+  document's date, which it took; otherwise it's left as a draft at the last
+  rate used and the history says why. NetSuite's help doesn't say which rate
+  memorized transactions use; taking the rate in effect on the new
+  document's date, as for any new transaction, is the choice made
+  (question 9).
+- **Pasting several** (one command, all or nothing): one per line,
+  "currency, effective date, rate" and an optional note, with commas or tabs
+  (rows copied from a spreadsheet), dates as YYYY-MM-DD or DD/MM/YYYY, and a
+  heading line skipped.
+- **FX revaluation** starts each closing rate as the list's rate in effect on
+  the revaluation date, when there is one (it can be changed or cleared).
+
+Setup: 1000 (NZD), 1030 USD account, 1100, 2000, 4000, 6040, 7020; customer
+Acme Inc (USD); suppliers Amazon Web Services (USD) and Bristol Ltd (GBP);
+nothing posted before; all zero-rated or no tax.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC46 | A bookkeeper adds USD **1.60** effective 1 Jul 2026 (note "RBNZ"), USD **1.65** effective 1 Aug and EUR **1.80** effective 1 Jul | Added, each with an audit event (who, when). Refused: NZD ("NZD is the base currency, so it has no exchange rate"), "XYZ", a rate of 0, 1.123456789 (more than 8 places), 30 Feb. A viewer is refused (403). The same idempotency key again returns the same entry; with another rate it's refused. In effect on 15 Jul: **USD 1.60, EUR 1.80**, GBP none |
+| MC47 | USD **1.66** effective 1 Aug added later (a typo), then archived | While it's there, 15 Aug takes **1.66** (the newest for that date). Archived: 15 Aug takes **1.65** again; 1.66 stays in the list as archived by the bookkeeper; archiving it again is refused. The database refuses changing a rate, un-archiving, deleting and emptying the table, and a NZD entry |
+| MC48 | INV-0001 for Acme, 10 Jul, USD 1,000.00 at **1.70** typed; INV-0002, 15 Jul, USD 500.00 no rate typed; INV-0003, 5 Aug, USD 200.00 no rate; INV-0004, 6 Aug, USD 100.00 at **1.62** typed | INV-0001 NZD **1,700.00** (1.70 is now the last USD rate used). INV-0002 takes the list's **1.60** (effective 1 Jul), not the last used 1.70: NZD **800.00**, Dr 1100 800.00 (USD 500.00) / Cr 4000 800.00. INV-0003: **1.65**, NZD **330.00**. INV-0004: the typed **1.62**, NZD **162.00** |
+| MC49 | Bill BR-1 from Bristol (GBP), 1 Jul, GBP 100.00, no rate typed; again at **2.10**; BR-2, 20 Jul, GBP 50.00, no rate; a USD bill dated 20 Jun, no rate | BR-1 refused ("Type the exchange rate for this bill (NZD per 1 GBP): no GBP rate has been used on or before 2026-07-01 yet, and the exchange rates list … has none effective by then"); at 2.10: NZD **210.00**. BR-2 takes **2.10** (no GBP in the list, so the last rate used): NZD **105.00**. The USD bill on 20 Jun is refused (before the list's first USD entry and before any USD was used) |
+| MC50 | Acme pays INV-0002 (USD 500.00 = NZD 800.00) on 12 Aug into 1030, no rate typed; a USD statement line on 1030, 20 Aug, +100.00, matched to INV-0003 with no rate typed | Payment at **1.65**: Dr 1030 **825.00** (USD 500.00 at 1.65) / Cr 1100 800.00 (USD 500.00) / Cr 7020 **25.00**. The statement line shows **1.65** from the list (effective 1 Aug) and NZD **165.00**; matched, INV-0003 due **USD 100.00 = NZD 165.00**, no gain (its own rate) |
+| MC51 | A quote for Acme, 25 Jul, USD 400.00, accepted on 3 Aug with no rate; a purchase order to AWS, 25 Jul, 3 x USD 20.00, approved and copied to bill AWS-PO1 dated 3 Aug with no rate | Both take the rate for the new document's date, **1.65** (as NetSuite's bill made from a purchase order has its own rate): the draft invoice NZD **660.00**, the draft bill NZD **99.00** |
+| MC52 | A monthly repeating invoice for Acme from 31 Jul, USD 100.00, saved as "approve"; the job runs on 31 Aug. A monthly repeating bill from Bristol from 31 Jul, "BR-{month}", GBP 40.00 to 6040, "approve"; the job runs on 31 Jul, then GBP **2.05** effective 1 Aug is added and it runs on 31 Aug | Invoices: 31 Jul at **1.60**, approved: Dr 1100 **160.00** (USD 100.00) / Cr 4000 160.00; 31 Aug at **1.65**, approved, NZD **165.00**. Bill 31 Jul: no GBP in the list, so a **draft** at 2.10 (NZD 84.00), history: "Left as a draft: The exchange rates list has no GBP rate effective on or before 2026-07-31, so this bill took the last GBP rate used (2.1). Check its rate, then approve it; or add rates under Accounting › Exchange rates." Bill 31 Aug at **2.05**, approved: Dr 6040 **82.00** / Cr 2000 82.00 (GBP 40.00) |
+| MC53 | Pasted: "Currency,Date,Rate,Note" / "USD,31/08/2026,1.62,RBNZ month end" / (blank) / "EUR[tab]2026-08-31[tab]1.85"; and a paste whose line 2 is "USD, 2026-08-31, abc" | Two entries added: USD **1.62** and EUR **1.85**, effective 31 Aug (the heading and blank line skipped). The bad paste adds nothing ("Line 2: The rate must be a plain number…"). The revaluation on 31 Aug suggests **1.62** for USD (30 Aug would be 1.65), and a new USD document dated 31 Aug takes 1.62 |
+
+Tests: `tests/integration/fx-rate-table.test.ts` (MC46-MC53),
+`tests/unit/fx-rate-text.test.ts` (MC48, MC53).
+
 ### Not supported yet (refused rather than guessed)
 
 - **Standard-rated GST on foreign-currency invoices, bills and credit notes**
@@ -2067,11 +2131,15 @@ own tests.
   documents (item prices are NZD). (Stock items are built: MC29.)
 - **Project and CRM invoices** for contacts in another currency. (Quotes,
   repeating invoices and bills and purchase orders are built: MC25-MC28;
-  repeating ones save drafts only.)
+  repeating ones are approved only at a rate from the exchange rates list,
+  MC52.)
 - **Revaluing receivables or payables again before an earlier revaluation of
   them is reversed** (NetSuite would revalue from that revaluation's rate;
   Tohyee's reverse the next day), and revaluing a currency whose open
   documents net to 0.00 (MC42).
+- **An automatic daily rate feed** (NetSuite's Currency Exchange Rate
+  Integration uses paid providers); rates are typed or pasted into the list
+  (MC46, MC53). A question below.
 
 ### Questions for Jess (multi-currency)
 
@@ -2094,9 +2162,13 @@ own tests.
 5. (Answered overnight 1 Oct 2026 by following NetSuite: foreign refunds,
    overpayments and batch payments are built, MC14-MC24, and a bank account
    in a third currency stays refused, MC30. Please check the examples.)
-6. The rate source: Tohyee only uses rates already used in the books; should
-   it fetch a daily rate (e.g. RBNZ) or keep a rate table like NetSuite's
-   Currency Exchange Rates list?
+6. (Answered overnight 1 Oct 2026 by following NetSuite: a Currency Exchange
+   Rates list is built under Accounting › Exchange rates, MC46-MC53, and new
+   documents take its rate in effect on their date, else the last rate used.)
+   Still yours to decide: NetSuite's automatic daily feed uses paid
+   providers (HSBC, Xignite), so none is built. Should Tohyee fetch a free
+   daily rate into the list (e.g. RBNZ's published rates), or keep rates
+   typed and pasted?
 7. Refunds (MC16-MC18): NetSuite's help doesn't show a customer refund's
    gain or loss in so many words; Tohyee treats a refund like a payment
    (refund rate against the credit's own rate, difference to 7020). Is that
@@ -2105,13 +2177,18 @@ own tests.
    several has its own realised gain and the rounding cent goes to 7050
    (MC20 now posts 3.00 plus a 0.01 rounding loss; MC38). Please check the
    examples.
-9. Repeating invoices and bills in a foreign currency save drafts only
-   (MC26, MC27), because each takes the last rate used, which may be stale.
-   Keep that, or allow "approve" once there's a daily rate source (question
-   6)?
-10. A quote accepted, or a purchase order copied, without a rate typed takes
-    the last rate used on or before the new document's date (MC25, MC28), as
-    for documents entered directly. OK?
+9. (Answered overnight 1 Oct 2026 by following NetSuite, whose memorized
+   transactions can post automatically: a foreign repeating invoice or bill
+   set to "approve" is approved when the exchange rates list has a rate
+   effective on its date, and otherwise left as a draft saying why, MC52,
+   MC26, MC27.) NetSuite's help doesn't say which rate a memorized
+   transaction uses; Tohyee takes the rate in effect on the new document's
+   date, like any new transaction. Please check.
+10. (Answered overnight 1 Oct 2026 by following NetSuite, whose bill made
+    from a purchase order has its own rate: a quote accepted, or a purchase
+    order copied, without a rate typed takes the exchange rates list's rate
+    in effect on the new document's date, else the last rate used on or
+    before it, as for documents entered directly, MC51, MC25, MC28.)
 11. Stock on a foreign bill is valued at the bill's rate and never adjusted
     when the bill is paid at another rate (MC29; the difference is realised
     on 7020). NetSuite's "bill exchange rate variance" only arises between an

@@ -55,8 +55,9 @@ that something happened.
 - **Multi-currency invoices, bills, credit notes and payments** (built
   overnight 1 Oct 2026 following NetSuite, examples MC1-MC13 not yet approved
   by Jess): a contact has a currency (like NetSuite's primary currency); its
-  documents are in it at a rate for their date (the last rate used,
-  changeable), each line converted to NZD on its own; accounts receivable
+  documents are in it at a rate for their date (from the exchange rates
+  list, else the last rate used; changeable), each line converted to NZD on
+  its own; accounts receivable
   and payable carry the foreign amount beside the NZD; payments are in the
   document's currency into or from a bank account in that currency or NZD, at
   their own rate, with the realised gain or loss on 7020; credit notes applied
@@ -68,13 +69,25 @@ that something happened.
   contact's foreign documents at one rate, each with its own gain or loss
   (MC20-MC24); quotes, repeating invoices and bills and purchase orders are
   in the contact's currency with no rate, and the invoice or bill made from
-  them takes a rate for its own date (MC25-MC28; repeating ones save
-  drafts); stock items on foreign-currency documents are valued in NZD at
+  them takes a rate for its own date (MC25-MC28; repeating ones are approved
+  automatically only at a rate from the exchange rates list); stock items on foreign-currency documents are valued in NZD at
   the document's rate, and cost of sales is the NZD average (MC29); like
   NetSuite, the cent or two left by rounding when a payment, credit or
   refund settles a foreign document goes to 7050 Rounding gains and losses,
   apart from the realised gain or loss on 7020 (MC31-MC38).
   Zero-rated, exempt and no-GST codes only.
+- **Currency exchange rates list** (built overnight 1 Oct 2026 following
+  NetSuite's Currency Exchange Rates, examples MC46-MC53 not yet approved by
+  Jess): Accounting › Exchange rates keeps rates for each foreign currency
+  with the date each takes effect (NZD per 1 unit), added one at a time or
+  pasted from a spreadsheet by bookkeepers, admins and owners, audited, and
+  corrected by a newer entry or archiving (never changed or deleted). New
+  foreign-currency invoices, bills, credit notes, payments, refunds, bank
+  statement lines, accepted quotes and copied purchase orders start with the
+  rate in effect on their date (else the last rate used); foreign repeating
+  invoices and bills are approved automatically when the list has a rate for
+  their date (else left as drafts saying why); FX revaluation suggests the
+  list's closing rate. No automatic daily feed (a question for Jess).
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
   posts its journal in the same transaction. **Stock tracking** (ST1-ST12):
@@ -685,7 +698,8 @@ isn't acceptable, because people would trust it:
 - on foreign-currency documents (MC11): standard-rated GST, supplier
   overpayments, payments through a bank account in a third currency (as
   NetSuite, MC30), project and CRM invoices, approving repeating ones
-  automatically, and sales on the payments GST basis; also paying NZD
+  automatically without a rate from the exchange rates list, and sales on the
+  payments GST basis; an automatic daily exchange rate feed; also paying NZD
   documents from a foreign-currency statement line, standard-rated GST on
   foreign-currency spend and receive money, adjustments on foreign-currency
   lines, and transfers between two foreign-currency accounts
@@ -711,10 +725,11 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 5. The rest of foreign-currency documents (MC11): standard-rated GST on
    them, the payments basis, and project and CRM invoices. Foreign-currency
    bank accounts, invoices, bills, credit notes, payments, overpayments,
-   refunds, batch payments, quotes, repeating documents, purchase orders and
-   stock are built (MC1-MC29), with rounding on its own account and
-   revaluation per open document (MC31-MC43); a bank account in a third
-   currency stays refused, as in NetSuite (MC30).
+   refunds, batch payments, quotes, repeating documents, purchase orders,
+   stock and the exchange rates list are built (MC1-MC29, MC46-MC53), with
+   rounding on its own account and revaluation per open document
+   (MC31-MC43); a bank account in a third currency stays refused, as in
+   NetSuite (MC30).
 
 ## Guardrails
 

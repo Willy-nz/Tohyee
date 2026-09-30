@@ -1,6 +1,7 @@
 import { isBankOrCreditCard } from "@/lib/accounts/types";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
+import { listedRateOn } from "@/lib/fx/rates";
 import { lastRateFor } from "@/lib/ledger/foreign";
 import { parseExchangeRate } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
@@ -38,9 +39,11 @@ export async function contactCurrency(tx: OrgTx, contactId: string): Promise<str
 
 /**
  * The exchange rate for a foreign-currency document or payment (MC2, MC3):
- * the one typed, or else the last rate used for the currency on or before
- * the date (like a statement line's, D4). Null in the base currency, where
- * a typed rate is refused. With no rate to use, it must be typed.
+ * the one typed, or else the currency exchange rates list's rate effective
+ * on the date (MC48), or else the last rate used for the currency on or
+ * before the date (like a statement line's, D4; MC49). Null in the base
+ * currency, where a typed rate is refused. With no rate to use, it must be
+ * typed.
  */
 export async function exchangeRateFor(
   tx: OrgTx,
@@ -55,7 +58,7 @@ export async function exchangeRateFor(
   const last = await lastRateFor(tx, input.currencyCode, input.date);
   if (!last) {
     throw new ValidationError(
-      `Type the exchange rate for this ${input.what} (${tx.baseCurrency} per 1 ${input.currencyCode}): no ${input.currencyCode} rate has been used on or before ${input.date} yet.`,
+      `Type the exchange rate for this ${input.what} (${tx.baseCurrency} per 1 ${input.currencyCode}): no ${input.currencyCode} rate has been used on or before ${input.date} yet, and the exchange rates list (Accounting › Exchange rates) has none effective by then.`,
     );
   }
   return last.rate;
@@ -404,15 +407,22 @@ export function roundingField(row: { realised_gain: string | null; rounding_gain
 }
 
 /**
- * A repeating invoice or bill for a contact in another currency (MC26, MC27)
- * saves drafts only, refused rather than guessed: each one takes the last rate
- * used for its currency (Tohyee has no daily rate table like NetSuite's), so
- * the rate is checked before it's approved and posted.
+ * A repeating invoice or bill in another currency set to be approved (MC26,
+ * MC27, MC51) is approved only when the currency exchange rates list has a
+ * rate effective on its date, which it took: a rate someone entered for
+ * that time, like NetSuite's Currency Exchange Rates. With only the last
+ * rate used in the books (which may be stale), it's left as a draft and the
+ * reason shows in the template's history.
  */
-export function assertForeignTemplateSavesDrafts(base: string, currencyCode: string, saveAs: string, document: "invoice" | "bill"): void {
-  if (currencyCode !== base && saveAs !== "draft") {
+export async function assertListedRateForRepeating(
+  tx: OrgTx,
+  input: { currencyCode: string; date: string; exchangeRate: string | null; document: "invoice" | "bill" },
+): Promise<void> {
+  if (input.currencyCode === tx.baseCurrency) return;
+  const listed = await listedRateOn(tx, input.currencyCode, input.date);
+  if (!listed) {
     throw new ValidationError(
-      `Repeating ${document}s in ${currencyCode} can only be saved as drafts for now (refused rather than guessed): each ${document} takes the last ${currencyCode} rate used, so check its rate before approving it.`,
+      `The exchange rates list has no ${input.currencyCode} rate effective on or before ${input.date}, so this ${input.document} took the last ${input.currencyCode} rate used${input.exchangeRate ? ` (${input.exchangeRate})` : ""}. Check its rate, then approve it; or add rates under Accounting › Exchange rates.`,
     );
   }
 }

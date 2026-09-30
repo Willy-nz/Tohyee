@@ -7,6 +7,8 @@ import { Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/comp
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, todayInBrowser, personName } from "@/lib/format";
+import { rateInEffect } from "@/lib/fx/rate-text";
+import type { ExchangeRatesList } from "@/lib/fx/rates";
 import type { FxRevaluationDocument, FxRevaluationRun, OpenForeignDocument } from "@/lib/ledger/fx-revaluation";
 
 type BalanceDraft = { key: number; accountCode: string; foreignAmount: string; closingRate: string };
@@ -75,6 +77,11 @@ function RevaluationForm({
   const [openRates, setOpenRates] = useState<Record<string, string>>({});
   const openKey = (balance: OpenBalance) => `${balance.accountCode}|${balance.currencyCode}`;
   const openBalances = open.data?.balances ?? [];
+  // The exchange rates list's rate in effect on the revaluation date is suggested as the closing rate (MC53).
+  const listed = useApiData<ExchangeRatesList>("/api/fx/rates", { organisationId });
+  const listRate = (currencyCode: string | null | undefined) =>
+    currencyCode && /^\d{4}-\d{2}-\d{2}$/.test(date) ? (rateInEffect(listed.data?.rates ?? [], currencyCode, date)?.rate ?? "") : "";
+  const openRate = (balance: OpenBalance) => openRates[openKey(balance)] ?? listRate(balance.currencyCode);
 
   if (foreignAccounts.length === 0 && openBalances.length === 0) {
     return (
@@ -113,8 +120,8 @@ function RevaluationForm({
                 closingRate: row.closingRate,
               })),
             ...openBalances
-              .filter((balance) => (openRates[openKey(balance)] ?? "").trim())
-              .map((balance) => ({ accountCode: balance.accountCode, currencyCode: balance.currencyCode, closingRate: openRates[openKey(balance)].trim() })),
+              .filter((balance) => openRate(balance).trim())
+              .map((balance) => ({ accountCode: balance.accountCode, currencyCode: balance.currencyCode, closingRate: openRate(balance).trim() })),
           ],
         },
       });
@@ -187,7 +194,19 @@ function RevaluationForm({
                     ariaLabel="Account"
                     accounts={foreignAccounts}
                     value={row.accountCode}
-                    onChange={(code) => setRows((current) => current.map((entry) => (entry.key === row.key ? { ...entry, accountCode: code } : entry)))}
+                    onChange={(code) =>
+                      setRows((current) =>
+                        current.map((entry) =>
+                          entry.key === row.key
+                            ? {
+                                ...entry,
+                                accountCode: code,
+                                closingRate: entry.closingRate || listRate(foreignAccounts.find((account) => account.code === code)?.currencyCode),
+                              }
+                            : entry,
+                        ),
+                      )
+                    }
                     required={openBalances.length === 0}
                   />
                 </td>
@@ -259,7 +278,7 @@ function RevaluationForm({
                       aria-label={`Closing rate for ${balance.accountCode} ${balance.currencyCode}`}
                       className={ui.num}
                       inputMode="decimal"
-                      value={openRates[openKey(balance)] ?? ""}
+                      value={openRate(balance)}
                       onChange={(event) => setOpenRates((current) => ({ ...current, [openKey(balance)]: event.target.value }))}
                       placeholder="Leave blank to skip"
                     />
@@ -293,7 +312,10 @@ function RevaluationForm({
         <Button type="submit" disabled={busy}>
           {busy ? "Posting…" : "Post revaluation"}
         </Button>
-        <span className={ui.muted}>The carrying amount comes from the ledger; you give the closing rate (and the foreign balance only when the ledger doesn&apos;t have it).</span>
+        <span className={ui.muted}>
+          The carrying amount comes from the ledger; you give the closing rate (and the foreign balance only when the ledger doesn&apos;t have it).
+          Closing rates start as the exchange rates list&apos;s rate in effect on the revaluation date, if there is one.
+        </span>
       </div>
     </form>
   );

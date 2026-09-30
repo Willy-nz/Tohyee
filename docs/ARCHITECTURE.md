@@ -231,7 +231,7 @@ Per organisation (lowest to highest):
 | Role | Can |
 | --- | --- |
 | viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices, repeating bills and purchase orders, projects (with profitability, the time report and staff cost rates); print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add notes and files, and edit, delete or remove their own |
+| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add and archive exchange rates; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add notes and files, and edit, delete or remove their own |
 | admin | + approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, closing a month with checks that need attention (after confirming) and reopening months (with a reason) on Period close, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -326,6 +326,18 @@ Enforced by the database itself, not just the app:
   receivables or payables in a currency revalues each open document at its
   own rate, and the database checks each row's unrealised amount is
   (closing rate - its rate) x its open foreign amount, rounded.
+- The currency exchange rates list (MC46-MC53, like NetSuite's Currency
+  Exchange Rates) is `currency_exchange_rates`: currency, effective date,
+  rate (base per 1 unit) and note, one row per line of a command (one
+  idempotency key, `line_number`). A trigger refuses the base currency,
+  every change but archiving once, and deletes. `defaultRates` in
+  `src/lib/ledger/foreign.ts` is the one lookup behind every default rate
+  (documents via `exchangeRateFor`, payments, refunds, statement lines and
+  `/api/fx/last-rate`): the list's latest entry effective on or before the
+  date, then the last rate used (D4). A foreign repeating template set to
+  approve is approved only when the list has a rate for the date
+  (`assertListedRateForRepeating`); otherwise the scheduler records the
+  refused approval.
 - Posted history is append-only: `ledger_journals`, `ledger_journal_lines`,
   `inventory_movements`, `stock_transfers`, FX revaluation runs and `audit_events` reject
   `UPDATE`, `DELETE` and `TRUNCATE`. Corrections are new rows.
@@ -626,9 +638,10 @@ Enforced by the app (and covered by tests):
   trigger keeps equal to the account's; a file saying another currency is
   refused) and are reconciled against journal lines' `account_amount`
   (the trigger requires lines with foreign amounts). Each line shows its
-  base value at the last rate used for its currency on or before its date
-  (a rate or implied line, or a revaluation's closing rate; by date, then
-  the latest entered). Spend and receive money store the rate, the base
+  base value at the exchange rates list's rate in effect on its date, or
+  else the last rate used for its currency on or before its date (a rate or
+  implied line, or a revaluation's closing rate; by date, then the latest
+  entered). Spend and receive money store the rate, the base
   total and each line's base amounts (what the GST return and project
   costs count), and allow only zero-rated, exempt and no-GST codes; split
   lines must add up after each is rounded. Transfers to and from a
