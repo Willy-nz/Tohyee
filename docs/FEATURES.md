@@ -610,10 +610,12 @@ that something happened.
   sent through the Gmail API (35 MB at most; bigger is refused with a plain
   message), with plain-English errors for access withdrawn, the permission
   unticked, a Workspace admin blocking the app and Gmail's daily limit; the
-  settings help explains Google's "unverified app" screen (Internal apps for
-  Workspace, Testing with test users for personal Gmail; **TO VERIFY**
-  against Google's current documentation, not yet checked, nor tried with a
-  real Google app); or **SMTP**: Gmail or
+  settings help explains Google's "unverified app" screen (checked against
+  Google's documentation on 1 Oct 2026: gmail.send is a sensitive, not
+  restricted, permission; Internal apps for Workspace need no verification;
+  for personal Gmail, an External app published In production works
+  unverified for up to 100 people, while Testing ends the connection after 7
+  days; not yet tried with a real Google app); or **SMTP**: Gmail or
   Google Workspace with an app password, Microsoft 365 with Authenticated
   SMTP, or any SMTP server; from name, from address, reply-to; the password
   and tokens encrypted with TOHYEE_SECRET_KEY and never sent back to the

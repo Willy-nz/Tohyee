@@ -282,12 +282,13 @@ function GoogleAppForm({ organisationId, settings, onSaved }: { organisationId: 
         (add its redirect URI <code>{origin}/api/crm/mail/callback</code> too if you use it).
       </Notice>
       <Notice tone="warning">
-        <strong>&ldquo;Google hasn&apos;t verified this app&rdquo;:</strong> sending email is a permission Google treats with extra care, so when you sign
-        in Google may warn that the app isn&apos;t verified, because it&apos;s your organisation&apos;s own app rather than a published one. For a Google
-        Workspace account, set the app&apos;s audience to <strong>Internal</strong>: only your organisation&apos;s accounts can use it, and it
-        shouldn&apos;t need Google&apos;s review. For a personal Gmail account, leave the app in <strong>Testing</strong>, add the Gmail address as a{" "}
-        <strong>test user</strong>, and continue past the warning; while the app is in testing Google may make you connect again after about a week.
-        These notes haven&apos;t been checked against Google&apos;s current documentation yet.
+        <strong>&ldquo;Google hasn&apos;t verified this app&rdquo;:</strong> sending email (gmail.send) is one of Google&apos;s &ldquo;sensitive&rdquo;
+        permissions (not a &ldquo;restricted&rdquo; one, so no security assessment is needed), and your organisation&apos;s own app isn&apos;t
+        verified by Google. For a Google Workspace account, set the app&apos;s audience to <strong>Internal</strong>: only your organisation&apos;s
+        accounts can use it and Google doesn&apos;t need to verify it. For a personal Gmail account (audience <strong>External</strong>), publish the
+        app <strong>In production</strong> and continue past the warning when you sign in; an unverified app can be used by up to 100 people. Leaving it
+        in <strong>Testing</strong> also works for test users you add, but then Google ends the connection after 7 days and you&apos;d have to connect
+        again each week.
       </Notice>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid2}>
