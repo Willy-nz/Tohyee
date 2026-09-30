@@ -5,7 +5,7 @@ import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
-import { assertInventoryLines, planDocumentStock, planDocumentVoid } from "@/lib/inventory/stock";
+import { assertInventoryLines, planDocumentStock, planDocumentVoid, stockLinesAtBase } from "@/lib/inventory/stock";
 import { fillLinesFromItems, isBlank, LINE_ITEM_COLUMNS, LINE_ITEM_JOINS, lineForHash, lineItemFields, type LineItemFields, type LineItemRef, type LineItemRow, parseLineItem, resolveLineItems, type ResolvedLineItem } from "@/lib/items/lines";
 import { billLineAccountProblem } from "@/lib/bills/accounts";
 import { dueDateFromSupplierTerms } from "@/lib/customers/service";
@@ -1369,7 +1369,8 @@ export async function approveBill(
     tx,
     "bill",
     { id: billId, date: current.billDate, reference: number, contactId: current.contactId },
-    resolved.resolvedLines,
+    // Stock is valued in the base currency (MC29): a foreign-currency line's stock is its base net amount.
+    stockLinesAtBase(resolved.resolvedLines),
     `Stock received, bill ${number}`,
   );
   if (stock) journalLines.push(...stock.journalLines);

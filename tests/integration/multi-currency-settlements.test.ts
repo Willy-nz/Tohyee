@@ -10,6 +10,9 @@ import { getPayment, recordPayment, voidPayment } from "@/lib/invoices/payments"
 import { approveInvoice, createInvoice, getInvoice } from "@/lib/invoices/service";
 import { approveBill, createBill, getBill } from "@/lib/bills/service";
 import { recordPaymentBatch, voidPaymentBatch } from "@/lib/payments/batches";
+import { createItem } from "@/lib/items/service";
+import { dec, sub, toFixedString } from "@/lib/money/decimal";
+import { inventoryValuation } from "@/lib/reports/financial";
 import { approvePurchaseOrder, copyPurchaseOrderToBill, createPurchaseOrder } from "@/lib/purchase-orders/service";
 import { acceptQuote, createQuote, finaliseQuote } from "@/lib/quotes/service";
 import { createRepeatingBill, runRepeatingBills } from "@/lib/repeating/bills";
@@ -573,5 +576,138 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
     ]);
     // Its currency is fixed now it has documents (MC1): the database refuses a change too.
     await expect(run((tx) => updateContact(tx, aws.id, { currencyCode: "EUR" }))).rejects.toThrow(/currency can't change/);
+  });
+
+  it("MC29: stock on USD documents is valued in NZD at the document's rate; stock still equals 1400", async () => {
+    const widget = (
+      await run((tx) =>
+        createItem(tx, {
+          idempotencyKey: key("item"),
+          code: "WIDGET",
+          name: "Widget",
+          itemType: "stock",
+          salePrice: "12.00",
+          purchasePrice: "5.00",
+          incomeAccountCode: "4000",
+          salesTaxCode: "GST",
+          purchaseAccountCode: "1400",
+          purchaseTaxCode: "GST",
+        }),
+      )
+    ).item;
+    const paw = (await run((tx) => createContact(tx, { idempotencyKey: key("contact"), name: "Paw Supplies", isSupplier: true }))).contact;
+    const stockBill = async (contactId: string, number: string, quantity: string, unitPrice: string, exchangeRate?: string) => {
+      const draft = await run((tx) =>
+        createBill(
+          tx,
+          {
+            idempotencyKey: key("bill"),
+            contactId,
+            billDate: "2026-09-01",
+            dueDate: "2026-09-30",
+            supplierInvoiceNumber: number,
+            amountsMode: "no_tax",
+            lines: [{ itemId: widget.id, quantity, unitPrice }],
+            ...(exchangeRate ? { exchangeRate } : {}),
+          },
+          null,
+          { foreignCurrency: true },
+        ),
+      );
+      return (await run((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("approve") }))).bill;
+    };
+    const stock = async () => {
+      const report = await run((tx) => inventoryValuation(tx));
+      const tb = (await run((tx) => trialBalance(tx, { asAt: "2026-12-31" }))).rows.find((row) => row.code === "1400");
+      expect(report.inventoryAccountBalance).toBe(report.totalValue);
+      expect(tb ? toFixedString(sub(dec(tb.debit), dec(tb.credit)), 2) : "0.00").toBe(report.totalValue);
+      const row = report.items.find((entry) => entry.itemCode === "WIDGET")!;
+      return [row.quantity, row.value];
+    };
+    // A USD bill: 10 @ USD 5.00 at 1.60 = NZD 80.00 into stock.
+    const usdBill = await stockBill(aws.id, "AWS-STK", "10", "5.00", "1.60");
+    expect(await posted(usdBill.approvalJournalId!)).toEqual([
+      ["1400", "80.00", "0.00"],
+      ["2000", "0.00", "80.00", "USD 50.00 document"],
+    ]);
+    expect(await stock()).toEqual(["10", "80.00"]);
+    // An NZD bill: 10 @ 10.00. The average is (80.00 + 100.00) / 20 = 9.00 NZD.
+    await stockBill(paw.id, "PAW-1", "10", "10.00");
+    expect(await stock()).toEqual(["20", "180.00"]);
+    // A USD invoice for 4: cost of sales is the NZD weighted average, 4 x 9.00 = 36.00.
+    const draft = await run((tx) =>
+      createInvoice(
+        tx,
+        {
+          idempotencyKey: key("inv"),
+          contactId: acme.id,
+          invoiceDate: "2026-09-05",
+          dueDate: "2026-09-30",
+          amountsMode: "no_tax",
+          lines: [{ itemId: widget.id, quantity: "4", unitPrice: "20.00" }],
+          exchangeRate: "1.60",
+        },
+        { foreignCurrency: true },
+      ),
+    );
+    const sold = (await run((tx) => approveInvoice(tx, draft.invoice.id, { idempotencyKey: key("approve") }))).invoice;
+    expect(await posted(sold.approvalJournalId!)).toEqual([
+      ["1100", "128.00", "0.00", "USD 80.00 document"],
+      ["4000", "0.00", "128.00"],
+      ["5000", "36.00", "0.00"],
+      ["1400", "0.00", "36.00"],
+    ]);
+    expect(await stock()).toEqual(["16", "144.00"]);
+    // A USD credit note returning 1 of them: back at the sale's cost, 9.00.
+    const credit = await run((tx) =>
+      createCreditNote(tx, {
+        idempotencyKey: key("cn"),
+        contactId: acme.id,
+        creditNoteDate: "2026-09-06",
+        amountsMode: "no_tax",
+        lines: [{ itemId: widget.id, quantity: "1", unitPrice: "20.00" }],
+        exchangeRate: "1.60",
+        returnInvoiceId: sold.id,
+      }),
+    );
+    const returned = (await run((tx) => approveCreditNote(tx, credit.creditNote.id, { idempotencyKey: key("approve") }))).creditNote;
+    expect(await posted(returned.approvalJournalId!)).toEqual([
+      ["4000", "32.00", "0.00"],
+      ["1100", "0.00", "32.00", "USD 20.00 document"],
+      ["1400", "9.00", "0.00"],
+      ["5000", "0.00", "9.00"],
+    ]);
+    expect(await stock()).toEqual(["17", "153.00"]);
+    // A USD supplier credit note returning 2 to AWS at 1.62: 1400 is credited NZD 16.20, the stock leaves at
+    // its average 18.00, and the difference goes to cost of sales.
+    const scn = await run((tx) =>
+      createSupplierCreditNote(tx, {
+        idempotencyKey: key("scn"),
+        contactId: aws.id,
+        creditNoteDate: "2026-09-07",
+        supplierCreditNoteNumber: "AWS-RET1",
+        amountsMode: "no_tax",
+        lines: [{ itemId: widget.id, quantity: "2", unitPrice: "5.00" }],
+        exchangeRate: "1.62",
+      }),
+    );
+    const back = (await run((tx) => approveSupplierCreditNote(tx, scn.creditNote.id, { idempotencyKey: key("approve") }))).creditNote;
+    expect(await posted(back.approvalJournalId!)).toEqual([
+      ["2000", "16.20", "0.00", "USD 10.00 document"],
+      ["1400", "0.00", "16.20"],
+      ["5000", "1.80", "0.00"],
+      ["1400", "0.00", "1.80"],
+    ]);
+    expect(await stock()).toEqual(["15", "135.00"]);
+    // A typed price is still needed: item prices are NZD (MC11).
+    await expect(
+      run((tx) =>
+        createInvoice(
+          tx,
+          { idempotencyKey: key("inv"), contactId: acme.id, invoiceDate: "2026-09-08", dueDate: "2026-09-30", amountsMode: "no_tax", lines: [{ itemId: widget.id, quantity: "1" }], exchangeRate: "1.60" },
+          { foreignCurrency: true },
+        ),
+      ),
+    ).rejects.toThrow(/item prices are in NZD, so type the unit price in USD/);
   });
 });

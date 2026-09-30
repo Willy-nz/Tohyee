@@ -55,7 +55,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/bank-split.test.ts` (BK26-BK28) and
   `tests/integration/bank-foreign.test.ts` (FXB1-FXB11) and
   `tests/integration/multi-currency.test.ts` (MC1-MC13) and
-  `tests/integration/multi-currency-settlements.test.ts` (MC14-MC28) and
+  `tests/integration/multi-currency-settlements.test.ts` (MC14-MC29) and
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
   GP3, GP5, GP6), all against
@@ -191,6 +191,8 @@ sales, 5000 cost of goods sold.
   (TR1-TR6, not yet approved by Jess).
 - **Stock equals the ledger**: across ST1-ST11 the stock report's total
   equals account 1400 on the trial balance, to the cent (tested).
+- **Foreign-currency documents**: stock is valued in NZD at the document's
+  rate (MC29, not yet approved by Jess).
 
 ### Not supported yet (refused rather than guessed)
 
@@ -1741,7 +1743,7 @@ Amazon Web Services (USD).
 | MC8 | Revaluation on 31 Jul at **1.62** (reversal 1 Aug) of 1030, 1100 USD and 2000 USD | 1030: USD 1,000.00, carrying 1,640.00, revalued 1,620.00: Dr 7010 **20.00** / Cr 1030 20.00. 1100 USD: USD **1,900.00** (INV-0005), carrying **3,040.00**, revalued **3,078.00**: Dr 1100 **38.00** (USD 0.00 at 1.62) / Cr 7000 38.00. 2000 USD: USD **50.00** (AWS-7), carrying **83.00**, revalued **81.00**: Dr 2000 **2.00** / Cr 7000 2.00. All reversed on 1 Aug. Before it, period close's FX check lists 1030, 1100 and 2000; after, it passes. Refused: 1100 without a currency ("…Say which currency…"), 1100 USD typed as 2,000.00 ("the ledger has USD 1900.00 open…"), 1100 EUR ("nothing open in EUR"), 1100 USD again on 31 Jul |
 | MC9 | Aged receivables and payables, and Acme's statement, as at 31 Jul | Acme: INV-0005 **USD 1,900.00 / NZD 3,040.00**, owes USD 1,900.00; total **NZD 3,155.00** (with Kobe's 115.00); revaluation **38.00** beside it (3,155.00 + 38.00 = 1100's 3,193.00). Payables: AWS-7 **USD 50.00 / NZD 83.00**; revaluation **-2.00**; 2000 **81.00**, difference 0.00. Period close's receivables and payables checks pass. Acme's July statement is in **USD**: closing **1,900.00**, NZD **3,040.00** beside it |
 | MC10 | Bills from AWS: AWS-7, 5 Jul, USD 50.00 at **1.66**, 6040, no tax; AWS-8, 6 Jul, the same; supplier credit note AWS-CR1, 7 Jul, USD 20.00 at **1.70**, applied to AWS-8 on 8 Jul; AWS-8's USD 30.00 paid 9 Jul from 1000 at 1.66 | AWS-7: Dr 6040 **83.00** / Cr 2000 **83.00 (USD 50.00)**; with a GST line: refused. AWS-CR1: Dr 2000 **34.00 (USD 20.00)** / Cr 6040 34.00. Applying: the bill's side 83.00 x 20 / 50 = **33.20**, the credit's **34.00**, loss **0.80**: Dr 2000 33.20 (USD 20.00) / Cr 2000 34.00 (USD 20.00) / Dr 7020 0.80. Payment: bank **49.80**, cleared **49.80**, no gain or loss (no 7020 line): Dr 2000 49.80 (USD 30.00) / Cr 1000 49.80 |
-| MC11 | Refused rather than guessed, with nothing posted | Project and CRM invoices for a USD contact (a USD invoice made any way but entering it directly, from a quote, MC25, or from a repeating invoice, MC26); stock items or item lines without a typed price on foreign-currency documents; a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
+| MC11 | Refused rather than guessed, with nothing posted | Project and CRM invoices for a USD contact (a USD invoice made any way but entering it directly, from a quote, MC25, or from a repeating invoice, MC26); item lines without a typed price on foreign-currency documents (stock items are MC29); a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
 | MC12 | AWS-7 paid on 5 Aug from 1030 at **1.65** (after the 1 Aug reversal) | Dr 2000 **83.00 (USD 50.00)** / Cr 1030 **82.50 (USD 50.00 at 1.65)** / Cr 7020 **0.50** |
 | MC13 | July GST return (invoice basis) and the trial balance at 31 Aug | Box 5 **5,678.51**, Box 6 **5,563.51** (1,654.30 + 827.15 + 45.06 + 3,200.00 - 163.00 zero-rated; Kobe's 115.00 standard-rated); AWS's no-GST bills in no box. Trial balance balances: 7020 debit **18.76** (-14.30 - 0.01 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50), 7000 and 7010 nothing (reversed), 1100 **3,155.00**, 2000 nothing, 1030 **1,557.50** (USD 950.00) |
 
@@ -1885,6 +1887,41 @@ payment).
 
 Tests: `tests/integration/multi-currency-settlements.test.ts` (MC25-MC28).
 
+### Stock on foreign-currency documents (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) following NetSuite, which keeps inventory in
+the base currency: a foreign-currency receipt is valued at the base amount
+at its exchange rate, and a later bill at another rate posts an exchange
+rate variance (*Vendor Bill Variance Journals*: "Bill Exchange Rate Variance
+- A variance associated with exchange rate changes … between the time you
+receive an item and the time the vendor bills you"). Tohyee has no item
+receipts (stock comes in with the bill, ST1), so there's no such variance:
+
+- A foreign-currency **bill's stock line** adds stock at its **NZD net
+  amount**: the line converted at the bill's rate, rounded once (MC4), which
+  the bill also debits to 1400. Weighted average and everything after it is
+  in NZD, as before (W1-W12, ST1-ST12).
+- A foreign-currency **invoice's cost of sales** is the NZD weighted average,
+  exactly as for an NZD invoice (ST2); its income is at the invoice's rate.
+- A foreign-currency **credit note** restocks at the sale's NZD cost (ST5).
+- A foreign-currency **supplier credit note** credits 1400 its line's NZD
+  net amount at its own rate; the stock leaves at the NZD average and the
+  difference goes to cost of sales (as in "Stock tracking").
+- Stock still equals 1400 to the cent. Item lines still need a typed price
+  (item prices are NZD, MC11), and GST stays zero-rated, exempt or none.
+- A foreign bill's stock isn't revalued or adjusted when the bill is paid at
+  another rate: the realised gain or loss goes to 7020 (MC5), as NetSuite's
+  does.
+
+Setup: MC14-MC28, plus a stock item Widget (1400, 4000, 5000, purchase price
+NZD 5.00) with none on hand and the NZD supplier Paw Supplies; all no tax.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC29 | Bill AWS-STK, 1 Sep 2026: 10 Widgets @ USD 5.00 at **1.60**; bill PAW-1 (NZD), 1 Sep: 10 @ 10.00; invoice to Acme, 5 Sep: 4 @ USD 20.00 at 1.60; credit note to Acme, 6 Sep, returning 1 from that invoice @ USD 20.00 at 1.60; supplier credit note AWS-RET1 to AWS, 7 Sep: 2 @ USD 5.00 at **1.62** | AWS-STK: Dr 1400 **80.00** / Cr 2000 80.00 (USD 50.00); stock 10 worth **80.00**. After PAW-1: 20 worth **180.00** (average 9.00). Invoice: Dr 1100 128.00 (USD 80.00) / Cr 4000 128.00, and Dr 5000 **36.00** / Cr 1400 36.00 (4 x 9.00); 16 worth 144.00. Credit note: Dr 4000 32.00 / Cr 1100 32.00 (USD 20.00), and Dr 1400 **9.00** / Cr 5000 9.00; 17 worth 153.00. Supplier credit note: Dr 2000 16.20 (USD 10.00) / Cr 1400 **16.20**, and Dr 5000 **1.80** / Cr 1400 1.80 (2 left at 9.00 = 18.00); 15 worth **135.00**. At every step the stock report equals 1400 on the trial balance. An item line without a price on a USD invoice is refused |
+
+Tests: `tests/integration/multi-currency-settlements.test.ts` (MC29).
+
 ### Not supported yet (refused rather than guessed)
 
 - **Standard-rated GST on foreign-currency invoices, bills and credit notes**
@@ -1904,8 +1941,8 @@ Tests: `tests/integration/multi-currency-settlements.test.ts` (MC25-MC28).
   NZD statement line (pay it on the document, then match the line).
 - **Credit applied across currencies**, and a contact's currency changing once
   it has documents.
-- **Stock items** on foreign-currency documents, and item lines whose price
-  would come from the item (item prices are NZD).
+- Item lines whose price would come from the item on foreign-currency
+  documents (item prices are NZD). (Stock items are built: MC29.)
 - **Project and CRM invoices** for contacts in another currency. (Quotes,
   repeating invoices and bills and purchase orders are built: MC25-MC28;
   repeating ones save drafts only.)

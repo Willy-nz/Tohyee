@@ -4,7 +4,7 @@ import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
-import { assertInventoryLines, planDocumentStock, planDocumentVoid } from "@/lib/inventory/stock";
+import { assertInventoryLines, planDocumentStock, planDocumentVoid, stockLinesAtBase } from "@/lib/inventory/stock";
 import { fillLinesFromItems, isBlank, LINE_ITEM_COLUMNS, LINE_ITEM_JOINS, lineForHash, lineItemFields, type LineItemFields, type LineItemRef, type LineItemRow, parseLineItem, resolveLineItems, type ResolvedLineItem } from "@/lib/items/lines";
 import { billLineAccountProblem } from "@/lib/bills/accounts";
 import { PAYABLE_ACCOUNT } from "@/lib/bills/service";
@@ -1184,7 +1184,8 @@ export async function approveSupplierCreditNote(
     tx,
     "supplier_credit_note",
     { id: creditNoteId, date: current.creditNoteDate, reference: current.supplierCreditNoteNumber, contactId: current.contactId },
-    resolved.resolvedLines,
+    // Stock is valued in the base currency (MC29): a foreign-currency line's stock is its base net amount.
+    stockLinesAtBase(resolved.resolvedLines),
     `Stock returned, supplier credit note ${current.supplierCreditNoteNumber}`,
   );
   if (stock) journalLines.push(...stock.journalLines);

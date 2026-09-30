@@ -71,9 +71,9 @@ export function parseRateInput(input: unknown): string | null | undefined {
 /**
  * What can't be on a foreign-currency document yet (MC11), refused rather
  * than guessed: standard-rated GST (GST on foreign-currency supplies needs
- * the IRD rules settled first), stock items (stock is costed in the base
- * currency), and item lines with a blank price (an item's prices are in the
- * base currency).
+ * the IRD rules settled first) and item lines with a blank price (an item's
+ * prices are in the base currency). Stock items are allowed (MC29): stock is
+ * valued in the base currency, at the document's rate.
  */
 export function assertForeignLinesSupported(
   kind: DocumentKind,
@@ -94,11 +94,6 @@ export function assertForeignLinesSupported(
     if (line.taxCategory === "standard") {
       throw new ValidationError(
         `Line ${index + 1}: GST on foreign-currency invoices, bills and credit notes isn't supported yet (refused rather than guessed). Use zero-rated (ZERO), exempt (EXEMPT) or no GST (NONE), or raise it in ${base}.`,
-      );
-    }
-    if (line.itemType === "stock" || line.itemType === "kit") {
-      throw new ValidationError(
-        `Line ${index + 1}: stock items on foreign-currency ${noun}s aren't supported yet (refused rather than guessed): stock is valued in ${base}. Use a line without the item, or raise it in ${base}.`,
       );
     }
   });
