@@ -1,5 +1,6 @@
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
+import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { add, cmp, dec, neg, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
@@ -15,9 +16,12 @@ import {
   type GstBoxes,
   type GstReturnFigures,
   gstInOutstanding,
+  type GstPeriodSetting,
+  gstPeriodSetting,
   parseGstAdjustments,
   parseGstPeriod,
   settlementShares,
+  suggestedGstPeriod,
 } from "@/lib/reports/gst-boxes";
 import type { GstBasis, TaxCategory } from "@/lib/tax/categories";
 import { optionalSource, requireId, requireIdempotencyKey } from "@/lib/validation";
@@ -741,9 +745,44 @@ export async function calculateGstReturn(
   };
 }
 
-export async function listGstReturns(tx: OrgTx): Promise<{ gstReturns: FiledGstReturnSummary[] }> {
+/** The organisation's GST period setting (GP1), or null when it isn't set. */
+export async function loadGstPeriodSetting(tx: OrgTx): Promise<GstPeriodSetting | null> {
+  const found = await tx.query<{ months: number | null; end_month: number | null }>(
+    "select gst_period_months as months, gst_period_end_month as end_month from organisation_settings where id = true",
+  );
+  const row = found.rows[0];
+  return row && row.months !== null && row.end_month !== null ? gstPeriodSetting(row.months, row.end_month) : null;
+}
+
+/** The filed return with the latest period, or null. */
+export async function latestFiledGstPeriod(tx: OrgTx): Promise<{ periodStart: string; periodEnd: string } | null> {
+  const found = await tx.query<{ period_start: string; period_end: string }>(
+    "select period_start::text, period_end::text from gst_returns order by period_end desc limit 1",
+  );
+  const row = found.rows[0];
+  return row ? { periodStart: row.period_start, periodEnd: row.period_end } : null;
+}
+
+/**
+ * Filed GST returns, latest first, with the GST period setting and the
+ * period the GST return opens on (GP4).
+ */
+export async function listGstReturns(
+  tx: OrgTx,
+  input: { today?: unknown } = {},
+): Promise<{
+  gstReturns: FiledGstReturnSummary[];
+  periodSetting: GstPeriodSetting | null;
+  suggestedPeriod: { periodStart: string; periodEnd: string } | null;
+}> {
+  const today = parseOptionalIsoDate(input.today, "today") ?? todayIsoDate();
   const result = await tx.query<FiledRow>(`select ${FILED_COLUMNS} from gst_returns order by period_start desc`);
-  return { gstReturns: result.rows.map(toSummary) };
+  const periodSetting = await loadGstPeriodSetting(tx);
+  return {
+    gstReturns: result.rows.map(toSummary),
+    periodSetting,
+    suggestedPeriod: suggestedGstPeriod(periodSetting, await latestFiledGstPeriod(tx), today),
+  };
 }
 
 export type FiledGstReturn = FiledGstReturnSummary & {

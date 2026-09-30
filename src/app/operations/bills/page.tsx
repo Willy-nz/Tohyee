@@ -82,7 +82,7 @@ function BillList({ organisationId, filter }: { organisationId: string; filter: 
             {bills.map((bill) => (
               <tr key={bill.id}>
                 <td>
-                  <Link href={`/operations/bills/${bill.id}`}>{bill.supplierInvoiceNumber}</Link>
+                  <Link href={`/operations/bills/${bill.id}`}>{bill.supplierInvoiceNumber ?? "(no number yet)"}</Link>
                 </td>
                 <td>{bill.contactName}</td>
                 <td>{formatDate(bill.billDate)}</td>

@@ -17,9 +17,11 @@ import { postFxRevaluation } from "@/lib/ledger/fx-revaluation";
 import { postJournal } from "@/lib/ledger/journals";
 import { closePeriod, listPeriods, type PeriodCheck, periodChecklist, reopenPeriod } from "@/lib/ledger/period-close";
 import { getPeriodControls } from "@/lib/ledger/period-controls";
-import { updateOrganisationSettings } from "@/lib/organisations/settings";
+import { getOrganisationSettings, updateOrganisationSettings } from "@/lib/organisations/settings";
+import { getHomeSummary } from "@/lib/reports/home";
 import { balanceSheet, profitAndLoss, trialBalance } from "@/lib/reports/financial";
-import { fileGstReturn } from "@/lib/reports/gst-return";
+import { accountTransactions } from "@/lib/reports/account-transactions";
+import { fileGstReturn, listGstReturns } from "@/lib/reports/gst-return";
 import {
   apiRequest,
   createTestOrganisation,
@@ -195,14 +197,92 @@ describeWithDatabase("year end and period close", () => {
     expect([pnl.from, pnl.netProfit]).toEqual(["2026-04-01", "1000.00"]);
     const journals = await w.as((tx) => tx.query<{ n: string }>("select count(*)::text as n from ledger_journals"));
     expect(journals.rows[0].n).toBe("4");
+    // TB2: NetSuite's trial balance: last year's profit is in retained earnings.
     const tb = await w.as((tx) => trialBalance(tx, { asAt: "2026-04-30" }));
     expect(tb.rows.map((row) => [row.code, row.debit, row.credit])).toEqual([
       ["1000", "23345.67", "0.00"],
       ["3000", "0.00", "10000.00"],
+      ["3200", "0.00", "12345.67"],
+      ["4000", "0.00", "1000.00"],
+    ]);
+    expect([tb.totalDebit, tb.totalCredit, tb.balanced]).toEqual(["23345.67", "23345.67", true]);
+  });
+
+  it("TB1-TB4: the trial balance shows income and expenses for this financial year, earlier profit in retained earnings", async () => {
+    const w = await yearEnd();
+    const rowsOf = async (asAt: string) => {
+      const tb = await w.as((tx) => trialBalance(tx, { asAt }));
+      return { tb, rows: tb.rows.map((row) => [row.code, row.debit, row.credit]) };
+    };
+    // TB1: at 31 Mar 2026 the whole year is still income and expenses.
+    const march = await rowsOf("2026-03-31");
+    expect(march.rows).toEqual([
+      ["1000", "22345.67", "0.00"],
+      ["3000", "0.00", "10000.00"],
+      ["4000", "0.00", "15000.00"],
+      ["6010", "2654.33", "0.00"],
+    ]);
+    expect([march.tb.financialYearStart, march.tb.previousYearsEarnings, march.tb.totalDebit, march.tb.totalCredit]).toEqual([
+      "2025-04-01",
+      "0.00",
+      "25000.00",
+      "25000.00",
+    ]);
+    // TB2: the next day it's retained earnings (the same as the balance sheet's), and 6010 has nothing this year.
+    const april = await rowsOf("2026-04-01");
+    expect(april.rows).toEqual([
+      ["1000", "22345.67", "0.00"],
+      ["3000", "0.00", "10000.00"],
+      ["3200", "0.00", "12345.67"],
+    ]);
+    expect(april.tb.rows.find((row) => row.code === "3200")).toMatchObject({ previousYearsEarnings: "12345.67" });
+    expect((await w.as((tx) => balanceSheet(tx, { asAt: "2026-04-01" }))).equity.retainedEarnings.total).toBe("12345.67");
+    // Each income or expense line is the account's movement in account transactions since the
+    // start of the financial year (account transactions keep every posting, so 4000's balance
+    // still runs from 15,000.00 Cr to 16,000.00 Cr).
+    const sales = (await w.as((tx) => tx.query<{ id: string }>("select id::text from accounts where code = '4000'"))).rows[0].id;
+    const salesThisYear = await w.as((tx) => accountTransactions(tx, { accountId: sales, from: "2026-04-01", to: "2026-04-30" }));
+    expect([salesThisYear.accounts[0].opening, salesThisYear.accounts[0].totalDebit, salesThisYear.accounts[0].totalCredit, salesThisYear.accounts[0].closing]).toEqual([
+      "-15000.00",
+      "0.00",
+      "1000.00",
+      "-16000.00",
+    ]);
+    expect((await rowsOf("2026-04-30")).rows).toContainEqual(["4000", "0.00", "1000.00"]);
+
+    // TB3: a dividend of 500.00 out of retained earnings on 20 Apr 2026.
+    await w.journal("2026-04-20", [
+      ["3200", "500.00", ""],
+      ["1000", "", "500.00"],
+    ]);
+    const dividend = await rowsOf("2026-04-30");
+    expect(dividend.rows).toEqual([
+      ["1000", "22845.67", "0.00"],
+      ["3000", "0.00", "10000.00"],
+      ["3200", "0.00", "11845.67"],
+      ["4000", "0.00", "1000.00"],
+    ]);
+    expect([dividend.tb.totalDebit, dividend.tb.totalCredit, dividend.tb.balanced]).toEqual(["22845.67", "22845.67", true]);
+    const retained = (await w.as((tx) => tx.query<{ id: string }>("select id::text from accounts where code = '3200'"))).rows[0].id;
+    const register = await w.as((tx) => accountTransactions(tx, { accountId: retained, from: "2026-04-01", to: "2026-04-30" }));
+    expect(register.accounts[0].closing).toBe("500.00");
+
+    // TB4: with a 30 June year end the year started 1 Jul 2025, so there's nothing from previous years.
+    await w.as((tx) => updateOrganisationSettings(tx, { financialYearEndMonth: 6 }));
+    const june = await rowsOf("2026-04-30");
+    expect(june.rows).toEqual([
+      ["1000", "22845.67", "0.00"],
+      ["3000", "0.00", "10000.00"],
+      ["3200", "500.00", "0.00"],
       ["4000", "0.00", "16000.00"],
       ["6010", "2654.33", "0.00"],
     ]);
-    expect([tb.totalDebit, tb.totalCredit, tb.balanced]).toEqual(["26000.00", "26000.00", true]);
+    expect([june.tb.financialYearStart, june.tb.previousYearsEarnings, june.tb.totalDebit, june.tb.totalCredit]).toEqual([
+      "2025-07-01",
+      "0.00",
+      "26000.00",
+      "26000.00",
+    ]);
   });
 
   it("YE3: a journal to 3200 is part of retained earnings, not listed on its own", async () => {
@@ -315,7 +395,7 @@ describeWithDatabase("year end and period close", () => {
     ]);
     const bank = (await w.as((tx) => listBankAccounts(tx))).find((account) => account.code === "1000")!;
     expect((await w.check("2026-06-30", "bank")).items).toEqual([
-      { label: "1000 Business bank account", detail: "No statement balance is known at 30 Jun 2026: import the bank statement to that date.", href: `/operations/bank-accounts/${bank.id}` },
+      { label: "1000 Business bank account", detail: "No statement balance is known at 30 Jun 2026: no bank statement or feed covers that date, so Tohyee can't check this account against the bank. Import the statement to that date, or, if this account has no statements (cash, a loan or a clearing account), an owner or admin can accept this warning when closing.", href: `/operations/bank-accounts/${bank.id}` },
     ]);
     await w.asUser(bookkeeper, (tx) =>
       importStatementFile(tx, bank.id, {
@@ -501,10 +581,54 @@ describeWithDatabase("year end and period close", () => {
     await w.as((tx) => updateOrganisationSettings(tx, { gstNumber: "123-456-789" }));
     expect((await w.check("2026-06-30", "gst")).status).toBe("warning");
     await w.as((tx) => fileGstReturn(tx, { idempotencyKey: key("file"), periodStart: "2026-04-01", periodEnd: "2026-05-31" }));
-    expect(await w.check("2026-06-30", "gst")).toMatchObject({ status: "pass", summary: "Filed to 31 May 2026." });
+    expect(await w.check("2026-06-30", "gst")).toMatchObject({
+      status: "pass",
+      summary: "Filed to 31 May 2026. No GST period setting, so each period is as long as the latest filed return (set it in Settings).",
+    });
     const july = await w.check("2026-07-31", "gst");
     expect(july.status).toBe("warning");
     expect(july.items.map((item) => item.label)).toEqual(["1 Jun 2026 to 31 Jul 2026"]);
+  });
+
+  it("GP3, GP5, GP6: the GST period setting decides the next GST return on Home, the GST return and the period close", async () => {
+    const w = await setup();
+    await w.as((tx) => updateOrganisationSettings(tx, { gstNumber: "123-456-789" }));
+    // GP6: the setting (admins, in Settings); refused values change nothing.
+    expect((await w.as((tx) => getOrganisationSettings(tx))).gstPeriod).toBeNull();
+    await expect(w.as((tx) => updateOrganisationSettings(tx, { gstPeriodMonths: 3, gstPeriodEndMonth: 3 }))).rejects.toThrow("six-monthly (6)");
+    await expect(w.as((tx) => updateOrganisationSettings(tx, { gstPeriodMonths: 2, gstPeriodEndMonth: 13 }))).rejects.toThrow("from 1 to 12");
+    // With no filed return and no setting, the GST return has no suggestion (it opens on this month, as before).
+    expect((await w.as((tx) => listGstReturns(tx, { today: "2026-10-01" }))).suggestedPeriod).toBeNull();
+    // Two-monthly with a 31 March balance date: no month given, so periods end in March's months (odd).
+    const odd = await w.as((tx) => updateOrganisationSettings(tx, { gstPeriodMonths: 2 }));
+    expect(odd.gstPeriod).toEqual({ months: 2, endMonth: 1 });
+    const audit = await w.audit("organisation.settings_updated");
+    expect(audit.at(-1)?.details).toMatchObject({ gstPeriod: { months: 2, endMonth: 1 } });
+    // GP4: nothing filed, so the GST return opens on the latest period that has ended.
+    expect((await w.as((tx) => listGstReturns(tx, { today: "2026-10-01" }))).suggestedPeriod).toEqual({ periodStart: "2026-08-01", periodEnd: "2026-09-30" });
+
+    await w.as((tx) => fileGstReturn(tx, { idempotencyKey: key("file"), periodStart: "2026-04-01", periodEnd: "2026-05-31" }));
+    // GP5, odd months: June passes; July needs June-July.
+    expect(await w.check("2026-06-30", "gst")).toMatchObject({
+      status: "pass",
+      summary: "Filed to 31 May 2026. GST period setting: Two-monthly, ending in odd months (January, March, May, July, September, November).",
+    });
+    expect((await w.check("2026-07-31", "gst")).items.map((item) => item.label)).toEqual(["1 Jun 2026 to 31 Jul 2026"]);
+    // Even months: the next return is June alone (the changeover), then July-August.
+    await w.as((tx) => updateOrganisationSettings(tx, { gstPeriodMonths: 2, gstPeriodEndMonth: 8 }));
+    expect((await w.check("2026-06-30", "gst")).items.map((item) => item.label)).toEqual(["1 Jun 2026 to 30 Jun 2026"]);
+    expect((await w.check("2026-08-31", "gst")).items.map((item) => item.label)).toEqual(["1 Jun 2026 to 30 Jun 2026", "1 Jul 2026 to 31 Aug 2026"]);
+    // GP3: Home and the GST return use the same next period.
+    const home = await w.as((tx) => getHomeSummary(tx, { today: "2026-07-05" }));
+    expect(home.nextGstReturn).toMatchObject({ status: "ready", periodStart: "2026-06-01", periodEnd: "2026-06-30" });
+    expect((await w.as((tx) => listGstReturns(tx, { today: "2026-07-05" }))).suggestedPeriod).toEqual({ periodStart: "2026-06-01", periodEnd: "2026-06-30" });
+    // Monthly: June, then July.
+    await w.as((tx) => updateOrganisationSettings(tx, { gstPeriodMonths: 1 }));
+    expect((await w.check("2026-07-31", "gst")).items.map((item) => item.label)).toEqual(["1 Jun 2026 to 30 Jun 2026", "1 Jul 2026 to 31 Jul 2026"]);
+    // Cleared: back to the latest filed return's length (PC8).
+    const cleared = await w.as((tx) => updateOrganisationSettings(tx, { gstPeriodMonths: null }));
+    expect(cleared.gstPeriod).toBeNull();
+    expect((await w.check("2026-07-31", "gst")).items.map((item) => item.label)).toEqual(["1 Jun 2026 to 31 Jul 2026"]);
   });
 
   it("PC9: the opening balance account must be 0.00", async () => {

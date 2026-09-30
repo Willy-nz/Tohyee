@@ -207,7 +207,7 @@ async function lockDocument(tx: OrgTx, kind: BatchKind, id: string): Promise<Doc
   const bill = await lockBill(tx, id);
   return {
     id,
-    number: bill.supplierInvoiceNumber,
+    number: bill.supplierInvoiceNumber ?? "(no number)",
     contactId: bill.contactId,
     contactName: bill.contactName,
     date: bill.billDate,

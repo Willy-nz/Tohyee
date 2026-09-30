@@ -396,6 +396,44 @@ export async function dueDateFromTerms(tx: OrgTx, contactId: string, invoiceDate
 }
 
 // ---------------------------------------------------------------------------
+// Supplier payment terms (SPT1-SPT5), like the Terms on NetSuite's vendor record
+
+/**
+ * The due date for a new bill from its supplier's payment terms, or null
+ * when the supplier has none (or they're archived). The same terms list and
+ * maths as customers' (RC1): "20th of the following month" on a bill dated
+ * 15 June is due 20 July.
+ */
+export async function dueDateFromSupplierTerms(tx: OrgTx, contactId: string, billDate: string): Promise<string | null> {
+  const found = await tx.query<{ kind: PaymentTermKind; days: number; is_active: boolean }>(
+    `select t.kind, t.days, t.is_active from contacts c join payment_terms t on t.id = c.supplier_payment_term_id where c.id = $1`,
+    [contactId],
+  );
+  const term = found.rows[0];
+  if (!term || !term.is_active) return null;
+  return dueDateFor(billDate, term);
+}
+
+/**
+ * A supplier's payment term as sent (SPT1): blank clears it; a newly chosen
+ * term must be active, and only suppliers can be given one. A contact that
+ * stops being a supplier keeps its term (as customers keep theirs).
+ */
+export async function resolveSupplierPaymentTerm(
+  tx: OrgTx,
+  input: unknown,
+  current: string | null,
+  options: { isSupplier: boolean },
+): Promise<string | null> {
+  if (input === undefined) return current;
+  const next = blank(input) ? null : optionalId(input, "supplierPaymentTermId");
+  if (next === null || next === current) return next;
+  if (!options.isSupplier) throw new ValidationError("Only suppliers have supplier payment terms.");
+  await checkListChoice(tx, "payment_terms", next);
+  return next;
+}
+
+// ---------------------------------------------------------------------------
 // Receivables balances (RC3-RC5, RC9-RC11)
 
 /**

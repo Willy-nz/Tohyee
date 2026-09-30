@@ -21,7 +21,8 @@ import { agedPayables } from "@/lib/reports/aged-payables";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
 import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
 import { financialYearEndMonth } from "@/lib/reports/financial";
-import { gstPeriodEnd, parseGstPeriod } from "@/lib/reports/gst-boxes";
+import { describeGstPeriodSetting, gstPeriodAfter } from "@/lib/reports/gst-boxes";
+import { latestFiledGstPeriod, loadGstPeriodSetting } from "@/lib/reports/gst-return";
 import { requireString } from "@/lib/validation";
 
 /**
@@ -232,7 +233,12 @@ async function bankCheck(tx: OrgTx, periodEnd: string, money: (value: string) =>
       const report = await bankReconciliationReport(tx, { accountId: account.id, asAt: periodEnd });
       const unreconciled = report.bankNotInTohyee.items;
       if (report.statementBalance === null) {
-        items.push({ label, detail: `No statement balance is known at ${longDate(periodEnd)}: import the bank statement to that date.`, href: `/operations/bank-accounts/${account.id}` });
+        // PC3, decided 1 Oct 2026 following NetSuite (its close doesn't require bank statements): a warning, not a block.
+        items.push({
+          label,
+          detail: `No statement balance is known at ${longDate(periodEnd)}: no bank statement or feed covers that date, so Tohyee can't check this account against the bank. Import the statement to that date, or, if this account has no statements (cash, a loan or a clearing account), an owner or admin can accept this warning when closing.`,
+          href: `/operations/bank-accounts/${account.id}`,
+        });
       } else if (unreconciled.length > 0) {
         items.push({
           label,
@@ -425,13 +431,16 @@ async function ledgerCheck(
   };
 }
 
+/**
+ * Every GST period after the latest filed return that ends by the month end
+ * must be filed. The periods come from the GST period setting (GP5); without
+ * one, each is the same length as the latest filed return (PC8).
+ */
 async function gstCheck(tx: OrgTx, periodEnd: string): Promise<PeriodCheck> {
   const title = "GST returns filed";
   const fix = { href: "/operations/gst-return", label: "GST return" };
-  const returns = await tx.query<{ period_start: string; period_end: string }>(
-    "select period_start::text, period_end::text from gst_returns order by period_end desc limit 1",
-  );
-  const last = returns.rows[0];
+  const last = await latestFiledGstPeriod(tx);
+  const setting = await loadGstPeriodSetting(tx);
   if (!last) {
     const registered = (await tx.query<{ gst_number: string | null }>("select gst_number from organisation_settings where id = true")).rows[0].gst_number;
     if (!registered) return notApplicable("gst", title, "No GST number is set and no GST return has been filed in Tohyee.");
@@ -444,17 +453,17 @@ async function gstCheck(tx: OrgTx, periodEnd: string): Promise<PeriodCheck> {
       fix,
     };
   }
-  const months = parseGstPeriod(last.period_start, last.period_end).months;
   const unfiled: CheckItem[] = [];
-  for (let start = addDays(last.period_end, 1); gstPeriodEnd(start, months) <= periodEnd; start = addDays(gstPeriodEnd(start, months), 1)) {
-    unfiled.push({ label: `${longDate(start)} to ${longDate(gstPeriodEnd(start, months))}`, detail: "Not filed yet.", href: "/operations/gst-return" });
+  for (let next = gstPeriodAfter(setting, last); next.periodEnd <= periodEnd; next = gstPeriodAfter(setting, next)) {
+    unfiled.push({ label: `${longDate(next.periodStart)} to ${longDate(next.periodEnd)}`, detail: "Not filed yet.", href: "/operations/gst-return" });
   }
-  if (unfiled.length === 0) return pass("gst", title, `Filed to ${longDate(last.period_end)}.`);
+  const basis = setting ? `GST period setting: ${describeGstPeriodSetting(setting)}.` : "No GST period setting, so each period is as long as the latest filed return (set it in Settings).";
+  if (unfiled.length === 0) return pass("gst", title, `Filed to ${longDate(last.periodEnd)}. ${basis}`);
   return {
     key: "gst",
     title,
     status: "warning",
-    summary: `${unfiled.length} GST ${unfiled.length === 1 ? "return ends" : "returns end"} by ${longDate(periodEnd)} and ${unfiled.length === 1 ? "isn't" : "aren't"} filed.`,
+    summary: `${unfiled.length} GST ${unfiled.length === 1 ? "return ends" : "returns end"} by ${longDate(periodEnd)} and ${unfiled.length === 1 ? "isn't" : "aren't"} filed. ${basis}`,
     items: unfiled,
     fix,
   };

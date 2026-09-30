@@ -90,7 +90,7 @@ export type PurchaseOrderLine = BillLine & {
 export type PurchaseOrderBill = {
   id: string;
   status: Bill["status"];
-  supplierInvoiceNumber: string;
+  supplierInvoiceNumber: string | null;
   billDate: string;
   total: string;
 };
@@ -296,7 +296,7 @@ export async function getPurchaseOrder(tx: OrgTx, idInput: unknown): Promise<Pur
   const result = await tx.query<Row>(`${SUMMARY_SQL} where p.id = $1`, [id]);
   const row = result.rows[0];
   if (!row) throw new NotFoundError("Purchase order not found.");
-  const bills = await tx.query<{ id: string; status: Bill["status"]; supplier_invoice_number: string; bill_date: string; total: string }>(
+  const bills = await tx.query<{ id: string; status: Bill["status"]; supplier_invoice_number: string | null; bill_date: string; total: string }>(
     "select id, status, supplier_invoice_number, bill_date, total from bills where purchase_order_id = $1 order by id",
     [id],
   );
@@ -580,7 +580,7 @@ export async function cancelPurchaseOrder(
   const open = current.bills.filter((bill) => bill.status !== "voided");
   if (open.length > 0) {
     throw new ConflictError(
-      `${label(current)} has ${open.length === 1 ? "a bill" : `${open.length} bills`} (${open.map((bill) => bill.supplierInvoiceNumber).join(", ")}), so it can't be cancelled. Void or delete ${open.length === 1 ? "it" : "them"} first.`,
+      `${label(current)} has ${open.length === 1 ? "a bill" : `${open.length} bills`} (${open.map((bill) => bill.supplierInvoiceNumber ?? "a draft with no number yet").join(", ")}), so it can't be cancelled. Void or delete ${open.length === 1 ? "it" : "them"} first.`,
     );
   }
   try {
@@ -608,20 +608,21 @@ const COPY_SOURCE = "purchase_order";
  * purchase order line's description, price, account, tax code, item, unit,
  * tracking and custom fields, linked back to it. The bill's own rules apply
  * from then on; it can be edited (less, or a different price) before it's
- * approved. The supplier's invoice number and the due date are given, as on
- * every bill.
+ * approved. The supplier's invoice number is given; the due date is given
+ * or, left out, comes from the supplier's payment terms (SPT4), as on any
+ * new bill.
  */
 export async function copyPurchaseOrderToBill(
   tx: OrgTx,
   idInput: unknown,
-  input: { source?: unknown; idempotencyKey: unknown; billDate: unknown; dueDate: unknown; supplierInvoiceNumber: unknown },
+  input: { source?: unknown; idempotencyKey: unknown; billDate: unknown; dueDate?: unknown; supplierInvoiceNumber: unknown },
 ): Promise<{ created: boolean; purchaseOrder: PurchaseOrder; bill: Bill }> {
   const id = requireId(idInput, "purchaseOrderId");
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const billDate = parseIsoDate(input.billDate, "billDate");
-  // Suppliers have no payment terms in Tohyee (only customers do), so the due date is given, as on any bill.
-  const dueDate = parseIsoDate(input.dueDate, "dueDate");
+  // Left out, the supplier's payment terms fill it when the bill is made (SPT4).
+  const dueDate = parseOptionalIsoDate(input.dueDate, "dueDate");
   const supplierInvoiceNumber = requireString(input.supplierInvoiceNumber, "supplierInvoiceNumber", { maxLength: 100 });
   const billKey = `${id}:${source}:${idempotencyKey}`;
   const replay = async () => {
@@ -656,7 +657,7 @@ export async function copyPurchaseOrderToBill(
       idempotencyKey: billKey,
       contactId: current.contactId,
       billDate,
-      dueDate,
+      ...(dueDate === null ? {} : { dueDate }),
       supplierInvoiceNumber,
       amountsMode: current.amountsMode,
       lines: remaining.map((line) => ({

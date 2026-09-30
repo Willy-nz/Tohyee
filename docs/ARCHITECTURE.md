@@ -319,7 +319,9 @@ Enforced by the database itself, not just the app:
   approved and voided bills are frozen, and neither table can be truncated. A
   unique index stops a supplier having two bills that aren't voided (drafts
   included) with the same supplier invoice number, compared ignoring case and
-  spaces.
+  spaces. Only a draft can be without a number (B9, migration 0041); approved
+  and voided bills always have one (a check constraint), and a repeating bill
+  without a number pattern can only save drafts (RB11).
 - Supplier payments: a payment is recorded against an approved bill, in the
   bill's currency and dated on or after it, and a bill's active payments plus
   active credit applied can't add up to more than its total. Payments can't be edited, deleted or

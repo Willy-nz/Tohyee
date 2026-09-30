@@ -31,6 +31,13 @@ export function dueFromTerms(setup: CustomerSetup | null | undefined, customer: 
   return dueDateFor(invoiceDate, term);
 }
 
+/** The due date for a supplier's new bill from its supplier payment terms (SPT2), or null. */
+export function dueFromSupplierTerms(setup: CustomerSetup | null | undefined, supplier: Contact | undefined, billDate: string): string | null {
+  const term = setup?.paymentTerms.find((entry) => entry.id === supplier?.supplierPaymentTermId && entry.isActive);
+  if (!term || !/^\d{4}-\d{2}-\d{2}$/.test(billDate)) return null;
+  return dueDateFor(billDate, term);
+}
+
 export type CustomerDraft = {
   deliveryAddress: string;
   paymentTermId: string;

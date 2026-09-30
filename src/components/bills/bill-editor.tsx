@@ -7,6 +7,7 @@ import { AccountSelect, useAccounts } from "@/components/books";
 import { LineItemPicker, useItems } from "@/components/items";
 import type { ItemList } from "@/lib/items/service";
 import { useApiData } from "@/components/hooks";
+import { dueFromSupplierTerms, useCustomerSetup } from "@/components/customers";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate, InvoiceStatusBadge } from "@/components/invoices/invoice-editor";
@@ -120,6 +121,14 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState(bill?.supplierInvoiceNumber ?? "");
   const [billDate, setBillDate] = useState(bill?.billDate ?? todayInBrowser());
   const [dueDate, setDueDate] = useState(bill?.dueDate ?? "");
+  // A new bill's due date follows the supplier's payment terms until it's typed over (SPT2).
+  const termsSetup = useCustomerSetup(organisationId).data;
+  const [dueTyped, setDueTyped] = useState(Boolean(bill));
+  const refillDue = (supplierId: string, date: string) => {
+    if (dueTyped) return;
+    const fromTerms = dueFromSupplierTerms(termsSetup, contacts.find((contact) => contact.id === supplierId), date);
+    if (fromTerms) setDueDate(fromTerms);
+  };
   const [amountsMode, setAmountsMode] = useState<AmountsMode>(bill?.amountsMode ?? "exclusive");
   const lineDefaults = startingValues(customSetup, "line", ["bill"]);
   const [customFields, setCustomFields] = useState<CustomValues>(
@@ -141,7 +150,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
     setError(null);
     const fields = {
       contactId,
-      supplierInvoiceNumber,
+      supplierInvoiceNumber: supplierInvoiceNumber.trim() || null,
       billDate,
       dueDate,
       amountsMode,
@@ -181,7 +190,14 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
       ) : null}
       <div className={ui.grid3}>
         <Field label="Supplier">
-          <select value={contactId} onChange={(event) => setContactId(event.target.value)} required>
+          <select
+            value={contactId}
+            onChange={(event) => {
+              setContactId(event.target.value);
+              refillDue(event.target.value, billDate);
+            }}
+            required
+          >
             <option value="">Choose a supplier</option>
             {savedSupplier ? (
               <option value={savedSupplier.contactId}>{savedSupplier.contactName} (archived or not a supplier)</option>
@@ -195,13 +211,12 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
         </Field>
         <Field
           label="Supplier's invoice number"
-          hint="As it's shown on their invoice. A supplier can't have two bills with the same number."
+          hint="As it's shown on their invoice. A supplier can't have two bills with the same number. A draft can wait for it; approving needs it."
         >
           <input
             value={supplierInvoiceNumber}
             onChange={(event) => setSupplierInvoiceNumber(event.target.value)}
             maxLength={100}
-            required
           />
         </Field>
         <Field label="Amounts are">
@@ -214,14 +229,25 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
           </select>
         </Field>
         <Field label="Bill date" hint="The date on the supplier's invoice. Approving posts the bill on this date.">
-          <input type="date" value={billDate} onChange={(event) => setBillDate(event.target.value)} required />
+          <input
+            type="date"
+            value={billDate}
+            onChange={(event) => {
+              setBillDate(event.target.value);
+              refillDue(contactId, event.target.value);
+            }}
+            required
+          />
         </Field>
-        <Field label="Due date">
+        <Field label="Due date" hint="From the supplier's payment terms, if they have them. You can change it.">
           <input
             type="date"
             value={dueDate}
             min={billDate || undefined}
-            onChange={(event) => setDueDate(event.target.value)}
+            onChange={(event) => {
+              setDueDate(event.target.value);
+              setDueTyped(true);
+            }}
             required
           />
         </Field>

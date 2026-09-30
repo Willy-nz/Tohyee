@@ -9,7 +9,8 @@ proves it". Test names start with the example IDs they cover:
   (I1-I6 and B1-B4, pure invoice and bill maths; CP1, CP2 and CP4 paid
   status; CN2, CN10 credit note maths and CN2-CN4, CN6-CN8 credit and paid
   status) and `tests/unit/gst-return.test.ts` (G1, G2, G5-G9, G11, G12,
-  G20, G21, pure GST return maths, periods, shares and basis changes) and
+  G20, G21, pure GST return maths, periods, shares and basis changes; GP1,
+  GP2, GP4, the GST period setting) and
   `tests/unit/item-pricing.test.ts` (IT2, IT4-IT6, pure item price and
   unit maths)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
@@ -20,7 +21,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/customer-payments.test.ts` (CP1-CP8),
   `tests/integration/customer-overpayments.test.ts` (OP1-OP11),
   `tests/integration/multi-payments.test.ts` (MP1-MP10, SMP1-SMP6),
-  `tests/integration/bills.test.ts` (B1-B8, D1, D2 for bills) and
+  `tests/integration/bills.test.ts` (B1-B9, SPT1, SPT2, SPT5, D1, D2 for bills) and
   `tests/integration/supplier-payments.test.ts` (SP1-SP8) and
   `tests/integration/credit-notes.test.ts` (CN1-CN12) and
   `tests/integration/supplier-credit-notes.test.ts` (SCN1-SCN12) and
@@ -42,9 +43,9 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/customer-statements.test.ts` (CST1-CST5) and
   `tests/integration/quotes.test.ts` (QT1-QT8) and
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
-  `tests/integration/repeating-bills.test.ts` (RB1-RB10) and
+  `tests/integration/repeating-bills.test.ts` (RB1-RB12, SPT3) and
   `tests/integration/printed-documents.test.ts` (PD1-PD8) and
-  `tests/integration/purchase-orders.test.ts` (PO1-PO9) and
+  `tests/integration/purchase-orders.test.ts` (PO1-PO9, SPT4) and
   `tests/integration/stock-transfers.test.ts` (TR1-TR6) and
   `tests/integration/budgets.test.ts` (BU1-BU8) and
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
@@ -54,11 +55,12 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/bank-split.test.ts` (BK26-BK28) and
   `tests/integration/bank-foreign.test.ts` (FXB1-FXB11) and
   `tests/integration/import.test.ts` (IM1-IM16) and
-  `tests/integration/period-close.test.ts` (YE1-YE4, PC1-PC12), all against
+  `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
+  GP3, GP5, GP6), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6), `tests/unit/repeating-bill-rules.test.ts`
-  the repeating bill numbers and due dates (RB1-RB3) and `tests/unit/tax-invoice.test.ts` what
+  the repeating bill numbers and due dates (RB1-RB3, RB11, RB12) and `tests/unit/tax-invoice.test.ts` what
   a printed document is headed and shows (QT5, PD3-PD7), and
   `tests/unit/fixed-asset-depreciation.test.ts` the depreciation and
   disposal maths (FA3, FA4, FA6-FA10), and `tests/unit/project-amounts.test.ts`
@@ -542,8 +544,15 @@ tax), the same line maths and the same per-line GST rounding, from the same
 code (`src/lib/invoices/amounts.ts`, see "Sales invoices").
 
 - The supplier must be an active contact marked as a supplier. The
-  supplier's invoice number is required, and a supplier can't have two bills
-  that aren't voided with the same number, ignoring case and spaces.
+  supplier's invoice number is required to approve a bill, and a supplier
+  can't have two bills that aren't voided with the same number, ignoring
+  case and spaces. A **draft** can be saved without it (B9, decided 1 Oct
+  2026 following NetSuite, where a vendor bill's Reference No. is optional),
+  to be typed when the supplier's real invoice arrives; approved and voided
+  bills always have one (the database refuses otherwise).
+- The due date is typed, or, for a new bill sent without one, comes from
+  the supplier's payment terms (SPT1-SPT5); either way a draft's due date
+  can be changed.
 - Line accounts are active, base-currency accounts of type expense or direct
   costs, or asset accounts, but not bank, accounts receivable, accounts
   payable or GST. The inventory account (1400) takes only stock item lines,
@@ -574,6 +583,15 @@ code (`src/lib/invoices/amounts.ts`, see "Sales invoices").
 - **B8** Retrying an approval with the same idempotency key returns the same
   journal. Drafts post nothing. A contact that is only a customer, or is
   archived, can't be the supplier.
+- **B9** (example not yet approved by Jess) Two draft bills from Waiting
+  Supplies saved without a supplier's invoice number (1 x 200.00 + GST =
+  **230.00** each) are fine: no number, no clash. Approving one is refused
+  ("Add the supplier's invoice number before approving: this draft bill from
+  Waiting Supplies doesn't have one yet.") and posts nothing; the database
+  refuses an approved bill without a number too. Once **WS-8841** is typed
+  on it, approving posts B1's journal (Dr 6010 200.00 / Dr 2100 30.00 /
+  Cr 2000 230.00) with reference WS-8841. Typing "ws-8841 " on the other
+  draft is then refused (B5), and a draft's number can be cleared again.
 
 ### Not supported yet (refused rather than guessed)
 
@@ -587,6 +605,58 @@ code (`src/lib/invoices/amounts.ts`, see "Sales invoices").
   dated before the bill.
 - **Foreign-currency bills**: bills are in the base currency only, and lines
   can't go to foreign-currency accounts.
+
+### Supplier payment terms (examples not yet approved by Jess)
+
+Decided 1 Oct 2026, following NetSuite: a vendor record has a Terms field,
+and NetSuite's [Creating Terms of
+Payment](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1234186.html)
+says terms are applied "by setting default terms on customer and vendor
+records" and used on "vendor bills and other transactions"; its [Entering a
+Vendor Bill](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_161968486146.html)
+has a Terms field and an editable Due Date. So:
+
+- A supplier has a default **supplier payment term**, from the same list as
+  customers' terms (RC1, RC2: N days after the date, N days after the end
+  of the month, or day N of the following month) with the same maths. It's
+  its own field: a contact that's both a customer and a supplier can have
+  different terms each way. Only suppliers can be given one; a newly chosen
+  term must be active; a contact that stops being a supplier keeps it.
+- A **new bill sent without a due date** takes it from the supplier's terms
+  (on screen, the due date fills when the supplier or date is chosen, until
+  it's typed over). With no terms, or archived ones, the due date is
+  required. A draft's due date can always be changed.
+- **Repeating bills** can be due "by the supplier's payment terms" (RB12),
+  and **copy to bill** from a purchase order without a due date uses them
+  (SPT4).
+- Changing or archiving a term, or a supplier's term, never changes a saved
+  bill.
+
+Setup: the six starting payment terms; supplier Harbour Property Ltd;
+Paw Supplies and Sales, a customer and a supplier. Tests:
+`tests/integration/bills.test.ts` (SPT1, SPT2, SPT5),
+`tests/integration/repeating-bills.test.ts` (SPT3, as RB12) and
+`tests/integration/purchase-orders.test.ts` (SPT4).
+
+- **SPT1** Harbour gets "20th of the following month". Paw Supplies and
+  Sales has customer terms "7 days" and supplier terms "30 days". A contact
+  that's only a customer can't be given supplier terms ("Only suppliers
+  have supplier payment terms."), and an archived term can't be chosen.
+- **SPT2** A bill from Harbour dated **15 Jun 2026** sent without a due date
+  is due **20 Jul 2026**; dated **31 Dec 2026**, **20 Jan 2027**. One sent
+  with a due date of 30 Jun 2026 keeps it, and a draft's due date can be
+  changed to 1 Aug 2026. Paw Supplies and Sales' bill dated 15 Jun 2026 is
+  due **15 Jul 2026** (its supplier terms, not its customer terms). A retry
+  with the same key returns the same bill. A supplier with no terms: the due
+  date is required.
+- **SPT3** = RB12 (repeating bills due by the supplier's terms).
+- **SPT4** Copying PO-0001 (PO3) to a bill dated **12 Jul 2026** without a
+  due date is refused while Paw Supplies has no terms (nothing is made); with
+  "30 days" it's due **11 Aug 2026** (total 287.50), and a retry returns the
+  same bill.
+- **SPT5** Harbour's terms changed to "7 days": the draft keeps 1 Aug 2026,
+  and a new bill dated 15 Jun 2026 is due **22 Jun 2026**. With "7 days"
+  archived, a new bill needs a due date typed.
 
 ## Supplier payments
 
@@ -1573,6 +1643,10 @@ journals; the balance sheet works profit out when it runs (see "Year end and
 period close", YE1-YE4).
 
 - **P1** The trial balance always balances; totals of debits = credits.
+  It's NetSuite's trial balance (decided 1 Oct 2026, following NetSuite; see
+  "Trial balance" under "Year end and period close", TB1-TB4): balance sheet
+  accounts show every posting to the date, income and expense accounts only
+  this financial year's, and earlier years' profit is in retained earnings.
 - **P2** Balance sheet: assets = liabilities + equity + earnings from previous
   years + current year earnings (retained earnings is the retained earnings
   account plus earnings from previous years). With a 31 March year end, a balance sheet at
@@ -1726,7 +1800,7 @@ viewers can see it. "Today" is the date in the business time zone
   and B4 (135.00, due 20 May): **250.00** on **2** bills, **135.00** overdue
   on **1**.
 - **H4** Next GST return: the period straight after the latest filed return,
-  the same length. With Feb-Mar 2026 filed, it's **1 Apr - 31 May 2026**,
+  by the GST period setting (GP3), or without one the same length. With Feb-Mar 2026 filed (no setting), it's **1 Apr - 31 May 2026**,
   with Box 15 worked out as the GST return would on the organisation's basis,
   with no adjustments (G1 gives **-15.00**, a refund). If no GST return has
   been filed in Tohyee, Home says so and links to the GST return instead of
@@ -1820,6 +1894,73 @@ above.
   allowed; 2 Apr - 31 May, 1 Apr - 30 Jun (3 months) and 1 Apr - 15 May are
   refused. A standard-rated line at a rate other than 15% in the period is
   refused, naming its document.
+
+### GST period setting (examples not yet approved by Jess)
+
+Decided 1 Oct 2026, following NetSuite's tax periods ([Tax Periods
+Overview](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4454154841.html):
+"A tax period can be a month, a quarter, or a year, depending on the
+frequency of your tax submissions", and "you can define tax periods
+independently of your accounting periods"). IRD's [Which GST accounting
+basis and filing frequency should I
+use?](https://www.ird.govt.nz/gst/registering-for-gst/which-gst-accounting-basis-and-filing-frequency-should-i-use)
+gives the NZ choices: monthly, two-monthly, or six-monthly, and with a
+31 March balance date two-monthly filers "file for periods ending in odd
+months" and six-monthly filers "for periods ending 30 September and 31
+March". Only the calendar is used here; no thresholds or rates are checked.
+
+- An organisation setting (Settings, admins): **Not set**, **Monthly**,
+  **Two-monthly** ending in odd months (January, March, ...) or even months
+  (February, April, ...), or **Six-monthly** ending in a pair of months six
+  apart (January and July, ..., June and December). Choosing two-monthly or
+  six-monthly without a month lines the periods up with the financial year
+  end, as IRD does with the balance date. Stored as the months (1, 2 or 6)
+  and the first month of the year a period ends in; changes are audited.
+- The **GST return** opens on the period after the latest filed return;
+  with none filed, on the latest period (by the setting) that has ended. It
+  shows the setting. Periods can still be picked by hand (G9).
+- **Home**'s next GST return (H4) and the **period close** GST check
+  (PC8) take the periods after the latest filed return from the setting:
+  each runs from the day after the last one to the end of the setting's
+  period that day is in, so after a change of frequency the first one can
+  be shorter (a changeover). Without a setting they keep the old rule (the
+  same length as the latest filed return). With nothing filed, Home still
+  says so and the check still needs attention if there's a GST number.
+
+Tests: `tests/unit/gst-return.test.ts` (GP1, GP2, GP4) and
+`tests/integration/period-close.test.ts` (GP3, GP5, GP6).
+
+- **GP1** The period a date is in: 15 Jun 2026 is in **1 Jun - 31 Jul 2026**
+  (two-monthly, odd), **1 May - 30 Jun 2026** (even), **1 Apr - 30 Sep
+  2026** (six-monthly, March and September) and **1 Jun - 30 Jun 2026**
+  (monthly); 10 Dec 2026 (odd) is in 1 Dec 2026 - 31 Jan 2027; 15 Jan 2027
+  (March and September) in 1 Oct 2026 - 31 Mar 2027; 10 Feb 2028 (monthly)
+  in 1-29 Feb 2028. Two-monthly ending in September is odd months; six-monthly
+  ending in September is March and September. 3 months, or month 13, is
+  refused.
+- **GP2** After a filed return for 1 Apr - 31 May 2026: two-monthly odd,
+  **1 Jun - 31 Jul 2026**; even, **1 Jun - 30 Jun 2026** (the changeover),
+  then 1 Jul - 31 Aug; monthly, 1 Jun - 30 Jun; no setting, 1 Jun - 31 Jul
+  (as before). After 1 Oct 2025 - 31 Mar 2026 (six-monthly, March and
+  September): 1 Apr - 30 Sep 2026.
+- **GP3** Home, on 5 Jul 2026 with Apr-May filed and two-monthly even: the
+  next GST return is **1 Jun - 30 Jun 2026**, the same period the GST return
+  opens on.
+- **GP4** The GST return opens on: nothing filed, two-monthly odd, on
+  1 Oct 2026: **1 Aug - 30 Sep 2026**; on 30 Sep 2026 (that period hasn't
+  ended): 1 Jun - 31 Jul 2026; six-monthly March and September on 1 Oct 2026:
+  1 Apr - 30 Sep 2026. With Aug-Sep filed: **1 Oct - 30 Nov 2026**. With no
+  setting and nothing filed there's no suggestion (it opens on this month,
+  as before).
+- **GP5** Period close, with a GST number and Apr-May 2026 filed:
+  two-monthly odd: June passes ("Filed to 31 May 2026. GST period setting:
+  Two-monthly, ending in odd months ..."), July needs **1 Jun - 31 Jul
+  2026**. Even: June needs **1 Jun - 30 Jun 2026**; August needs that and
+  **1 Jul - 31 Aug 2026**. Monthly: July needs June and July. Cleared: July
+  needs 1 Jun - 31 Jul 2026 (PC8).
+- **GP6** Setting two-monthly with no month on a 31 March year end gives odd
+  months, recorded in the audit log; 3 months or month 13 is refused and
+  changes nothing.
 
 ### Payments and hybrid bases
 
@@ -2822,9 +2963,14 @@ and a date range: the **opening balance** (every posting before the start
 date), each **posted journal line** in the range in date order (date, the
 source with a link to it, description, contact, debit, credit and the
 running balance), and the **closing balance**. Balances are debits less
-credits, so a credit balance is negative (shown as "Cr" on screen); each
-account's closing balance is its trial balance line at the end date, and
-its debits less credits are the trial balance's movement over the range.
+credits, so a credit balance is negative (shown as "Cr" on screen). A
+balance sheet account's closing balance is its trial balance line at the
+end date; since the trial balance follows NetSuite (TB1-TB4), an income or
+expense account's trial balance line is its debits less credits from the
+first day of the financial year, and retained earnings' is its closing
+balance plus earlier years' profit (worked out, never posted, so never a
+line here). In ATX1-ATX3 nothing was posted before the financial year, so
+every closing balance is the trial balance line.
 Voids and corrections are their own lines on their own dates; nothing is
 netted off. Without a start date the range starts at the beginning of the
 end date's financial year. With Advanced reporting's tracking on, a
@@ -3188,19 +3334,23 @@ a start date, an optional end date, and whether each bill is **saved as a
 draft** or **approved**. Templates post nothing; approved bills post as in
 B1, and **nothing is ever paid automatically**.
 
-- **Supplier invoice numbers**: every bill needs one, and a supplier can't
-  have two bills that aren't voided with the same number (B5). So the
-  template holds a pattern: **{date}** becomes the bill date (2026-01-31),
+- **Supplier invoice numbers**: an approved bill needs one, and a supplier
+  can't have two bills that aren't voided with the same number (B5). So the
+  template can hold a pattern: **{date}** becomes the bill date (2026-01-31),
   **{month}** its month (2026-01) and **{n}** the bill's number in the
   template's history (1, 2, 3...; history rows are never deleted, so it
   never repeats). A pattern needs {date} or {n}, or {month} on a monthly
   schedule; otherwise it's refused. If the supplier already has a bill with
   the number (perhaps the same bill entered by hand), the bill isn't made:
-  the template shows the error and tries that date again next run.
-- **Due dates**: suppliers have no payment terms in Tohyee, so the rule is
-  one of Xero's bill rules: N days after the bill date, N days after the
-  end of the bill's month, or day N (1-31) of the following month (a day the
-  month doesn't have becomes its last day).
+  the template shows the error and tries that date again next run. Or the
+  pattern is **left empty** (RB11, decided 1 Oct 2026 following NetSuite,
+  where a vendor bill's reference number is optional): each bill is then a
+  **draft without a number**, to be completed when the supplier's real
+  invoice arrives, so such a template can't approve automatically.
+- **Due dates**: the supplier's payment terms (RB12, SPT3), or one of Xero's
+  bill rules: N days after the bill date, N days after the end of the
+  bill's month, or day N (1-31) of the following month (a day the month
+  doesn't have becomes its last day).
 - **Stock items** are allowed, as on any bill. Once locations are in use
   each stock line needs a Location, checked when the template is saved.
   Approving moves the stock in (ST1); if the approval is refused (e.g.
@@ -3269,6 +3419,23 @@ invoice number **RENT-{month}**, monthly from **31 Jan 2026**, due the
   history line (shown as deleted), 31 Jan isn't made again, and the 28 Feb
   bill is **R2**. A draft made by a template can be approved by hand like
   any other. A viewer can't run a template.
+- **RB11** The template with the number pattern **left empty**: saved, its
+  next bill has no number. Approving automatically is refused ("Bills
+  without a supplier's invoice number are saved as drafts, so give a number
+  pattern to approve them automatically, or save them as drafts."), also
+  when changing it and by the database. Run on 5 Mar 2026 it makes two
+  drafts **without a number**: 31 Jan due 20 Feb and 28 Feb due 20 Mar, each
+  **1,150.00**; nothing is posted. Approving January's is refused until the
+  number from Harbour's real invoice, **HP-10442**, is typed; then it posts
+  Dr 6150 1,000.00 / Dr 2100 150.00 / Cr 2000 1,150.00 on 31 Jan 2026. Giving
+  the template the pattern RENT-{month} afterwards makes the next one
+  **RENT-2026-03**.
+- **RB12** (SPT3) Due **by the supplier's payment terms**: refused while
+  Harbour has none ("This supplier has no payment terms, so choose a number
+  of days..."). With Harbour on "20th of the following month" the run on
+  5 Mar 2026 makes RB2's two bills (due **20 Feb** and **20 Mar**). With
+  Harbour's terms then taken away, the next run makes nothing and the
+  template shows "Harbour Property Ltd no longer has payment terms...".
 
 ### Not supported yet (refused rather than guessed)
 
@@ -3280,17 +3447,21 @@ invoice number **RENT-{month}**, monthly from **31 Jan 2026**, due the
 
 ### Questions for Jess (repeating bills)
 
-- Supplier invoice numbers: is a pattern with {date}, {month} or {n} the
-  right way to meet "one number per supplier" (Xero doesn't insist on
-  unique bill references), or should repeating bills be allowed to leave the
-  number blank on drafts, to be typed from the supplier's real invoice
-  before approving?
 - When the number is already taken by a bill entered by hand, the template
   stops at that date (it may be the same bill). Should it skip that date
   instead, or make the bill with a suffix?
-- Suppliers have no payment terms in Tohyee (only customers do), so each
-  template has its own due rule. Should suppliers get payment terms, which
-  bills and repeating bills would then use?
+
+Decided (following NetSuite, 1 Oct 2026):
+
+- Supplier invoice numbers: patterns work as built, and a template can
+  leave the pattern empty so its bills are drafts without a number, typed
+  from the supplier's real invoice before approving (RB11, B9). An approved
+  bill still needs a number that's unique for its supplier (B5), so the
+  ledger and GST audit trail are unchanged. NetSuite's Reference No. is
+  optional (it only warns about a duplicate); Tohyee keeps the stricter
+  rule for approved bills.
+- Suppliers have payment terms (NetSuite vendors have a Terms field), used
+  by bills, repeating bills and copy to bill (SPT1-SPT5, RB12).
 
 ## Printed invoices, credit notes and quotes (examples not yet approved by Jess)
 
@@ -3404,8 +3575,8 @@ address** and **delivery instructions**, and a reference. Purchase orders
   voided, drafts included), carrying the line's description, price,
   account, tax code, item, unit, tracking and custom fields. Each bill line
   points back to its purchase order line and the bill to its purchase
-  order. The supplier's invoice number and due date are typed, as on every
-  bill (suppliers have no payment terms in Tohyee). The draft bill can then
+  order. The supplier's invoice number is typed; the due date is typed or,
+  left blank, comes from the supplier's payment terms (SPT4). The draft bill can then
   be edited like any bill (fewer items delivered, a different price), and
   approving it posts the bill's journal as usual. **Stock comes in on the
   bill** (ST1); there's no separate goods received step.
@@ -4691,7 +4862,8 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
   from before the conversion date, other than what's still owed).
 - Contacts' **people**, customer groups, price levels and credit limits,
   items' units, price level prices, suppliers and kits, and payment terms
-  from another system's day-and-term columns.
+  from another system's day-and-term columns. Suppliers' payment terms
+  (SPT1) aren't imported yet: the "Payment terms" column sets a customer's.
 
 ### Questions for Jess (bringing in existing books)
 
@@ -4725,7 +4897,7 @@ earnings, "because doing so would zero the past income statements"),
 "Period Close Checklist" (lock, check, then close, period by period) and
 "Reopening a Closed Period" (a justification is required and saved, and any
 later closed periods are reopened automatically). Jess hasn't approved these
-yet. Tests: `tests/integration/period-close.test.ts` (YE1-YE4, PC1-PC12)
+yet. Tests: `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12)
 and `tests/unit/financial-year.test.ts` (the month and year dates).
 
 **Retained earnings, without a closing journal.** Nothing is posted at a
@@ -4740,12 +4912,79 @@ year end. The balance sheet works profit out when it runs (P2):
 
 So a year's profit moves from current year earnings into retained earnings
 on the first day of the next financial year. The profit and loss is
-unchanged (P3), and the **trial balance** lists each account's ledger
-balance as posted: income and expense accounts keep their balances from
-every year (there's no closing journal to clear them), so its equity lines
-plus all profit equal the balance sheet's equity. Custom reports (CR6) keep
-their "Earnings from previous years" row and 3200 in the equity accounts
-group; together they're the same retained earnings.
+unchanged (P3). Custom reports (CR6) keep their "Earnings from previous
+years" row and 3200 in the equity accounts group; together they're the same
+retained earnings.
+
+**Trial balance** (decided 1 Oct 2026, following NetSuite's [Trial Balance
+Report](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1520986.html):
+"For income statement accounts ... the Trial Balance report includes only
+transactions posted from the beginning of the ... year up to the As of
+date", and "Retained earnings are reported in the Trial Balance report as
+the sum of cumulative net income and amounts posted directly to the retained
+earnings account"). As at a date:
+
+- balance sheet accounts (assets, liabilities, equity) show every posting
+  to the date, as before;
+- income and expense accounts (revenue, other income, direct costs,
+  expenses, depreciation) show only the postings from the first day of the
+  financial year the date is in;
+- the retained earnings account (3200) shows its own postings plus the
+  profit of every earlier financial year: the same figure as the balance
+  sheet's retained earnings (P2). It's shown even when 3200 has no
+  postings of its own, and says how much of it is earlier years' profit.
+  That part is worked out, not posted (NetSuite: "a calculated reporting
+  value that's not recorded in the account register"), so it isn't in
+  3200's account transactions.
+
+So the trial balance still balances, and it matches the balance sheet and
+the profit and loss: its income and expense lines are the profit and loss
+for the financial year to date. How the other reports tie to it:
+
+- **Account transactions** (ATX) keep every posting, as NetSuite's account
+  registers do. A balance sheet account's closing balance is its trial
+  balance line; an income or expense account's trial balance line is its
+  debits less credits from the first day of the financial year (TB2);
+  3200's is its closing balance plus earlier years' profit (TB3).
+- **Custom reports**, **Home** and the **period close checks** don't use
+  the trial balance: custom reports and budgets use the same account totals
+  as the profit and loss and balance sheet (CR9), Home uses bank balances
+  and the documents, and the period close checks use balance sheet accounts
+  (bank, 1100, 2000, 1400, 3900) at the month end, which are unchanged.
+- **Bringing in existing books** (IM7): the final check compares each
+  account's balance at the conversion date (every posting to it) with the
+  imported trial balance. Nothing can be posted before the conversion date,
+  and the opening journal is dated the conversion date, so it's the only
+  posting and falls in the financial year the conversion date is in. So an
+  imported income or expense line (a conversion part way through a year,
+  with the year's profit and loss so far) shows the same on the new trial
+  balance at the conversion date as in the check, and the check still
+  compares like with like. From the first day of the next financial year it
+  moves into retained earnings, like any other year's profit.
+
+Setup for TB1-TB4: the YE setup below (31 March year end; 10,000.00 capital
+on 1 Apr 2025, sales 15,000.00 on 10 Jul 2025, fees 2,654.33 on 20 Feb 2026
+and sales 1,000.00 on 15 Apr 2026). Tests: `tests/integration/period-close.test.ts`.
+
+- **TB1** At 31 Mar 2026: 1000 **22,345.67** Dr, 3000 **10,000.00** Cr,
+  4000 **15,000.00** Cr, 6010 **2,654.33** Dr; **25,000.00** each side. No
+  retained earnings line (3200 has no postings and there's no earlier year).
+- **TB2** At 1 Apr 2026: 1000 22,345.67 Dr, 3000 10,000.00 Cr, **3200
+  Retained earnings 12,345.67 Cr** (all of it earlier years' profit, the same
+  as the balance sheet), and no 4000 or 6010 line (nothing this year);
+  22,345.67 each side. At 30 Apr 2026 (YE2): 1000 **23,345.67** Dr, 3000
+  10,000.00 Cr, 3200 **12,345.67** Cr, 4000 **1,000.00** Cr; 23,345.67 each
+  side. 4000's account transactions for 1-30 Apr 2026 still open at
+  15,000.00 Cr and close at 16,000.00 Cr; their credits in the period,
+  **1,000.00**, are its trial balance line.
+- **TB3** After YE3's dividend (Dr 3200 500.00 / Cr 1000 on 20 Apr 2026), at
+  30 Apr 2026: 1000 **22,845.67** Dr, 3000 10,000.00 Cr, 3200 **11,845.67**
+  Cr (-500.00 posted + 12,345.67 earlier years), 4000 1,000.00 Cr;
+  22,845.67 each side. 3200's account transactions close at 500.00 Dr.
+- **TB4** With the year end changed to 30 June (YE4), at 30 Apr 2026 the
+  year started 1 Jul 2025, so there's no earlier years' profit: 1000
+  22,845.67 Dr, 3000 10,000.00 Cr, 3200 **500.00 Dr**, 4000 **16,000.00**
+  Cr, 6010 **2,654.33** Dr; **26,000.00** each side.
 
 **Periods.** Periods are calendar months; financial years end on the chosen
 month (Settings). Accounting › Period close lists each financial year with
@@ -4774,7 +5013,7 @@ is **Pass**, **Needs attention** or **Not applicable**, with links to fix it:
 | No stock below zero | No item (at any location) is below zero at the month end (NetSuite's "Review negative inventory"; ST10) |
 | Receivables equal accounts receivable | Aged receivables' total at the month end equals 1100 |
 | Payables equal accounts payable | Aged payables' total at the month end equals 2000 (AGP1) |
-| GST returns filed | Every GST period after the latest filed return (the same length, H4) that ends by the month end is filed. With no return filed: needs attention if there's a GST number, otherwise not applicable |
+| GST returns filed | Every GST period after the latest filed return that ends by the month end is filed: periods by the GST period setting (GP5), or without one the same length as the latest filed return (H4). With no return filed: needs attention if there's a GST number, otherwise not applicable |
 | Opening balance account at 0.00 | 3900 Opening balance (IM1) is 0.00 at the month end |
 
 Bookkeepers can close a month whose checks all pass (or don't apply). With
@@ -4823,8 +5062,7 @@ The year ending 31 Mar 2026 made a profit of 15,000.00 - 2,654.33 =
   earnings **12,345.67**, Current year earnings **1,000.00**, 1000 and total
   equity **23,345.67**; the profit and loss to 30 Apr 2026 starts on 1 Apr
   2026 and shows **1,000.00**. No journal is posted at the year end (still
-  4). The trial balance at 30 Apr 2026: 1000 23,345.67 Dr, 6010 2,654.33
-  Dr, 3000 10,000.00 Cr, 4000 16,000.00 Cr; 26,000.00 each side.
+  4). The trial balance at 30 Apr 2026 is TB2's.
 - **YE3** After a journal on 20 Apr 2026, Dr 3200 500.00 / Cr 1000 500.00
   (a dividend out of retained earnings): at 30 Apr 2026 Retained earnings
   is **11,845.67** (-500.00 + 12,345.67), 3200 isn't listed among the equity
@@ -4866,7 +5104,15 @@ doesn't apply.
   and the bookkeeper closes June (lock 30 Jun 2026).
 - **PC3** Bank: a journal on 1 Jun 2026, Dr 1000 1,000.00 / Cr 3000. With no
   statement: needs attention ("No statement balance is known at 30 Jun
-  2026"). After importing this statement and matching the 1 Jun line to the
+  2026: no bank statement or feed covers that date, so Tohyee can't check
+  this account against the bank. Import the statement to that date, or, if
+  this account has no statements (cash, a loan or a clearing account), an
+  owner or admin can accept this warning when closing."). It stays a
+  warning, not a block (decided 1 Oct 2026, following NetSuite: its period
+  close checklist, [Closing Tasks and Their
+  Dependencies](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4317009345.html),
+  has no bank reconciliation task at all, so a missing statement never
+  stops a close). After importing this statement and matching the 1 Jun line to the
   journal:
 
   ```
@@ -4902,10 +5148,11 @@ doesn't apply.
   2026 (difference -50.00)"); a journal on 16 Jun reversing it makes it
   pass again.
 - **PC8** GST: with a GST number set and no GST return filed, it needs
-  attention; without a GST number it doesn't apply. After filing the return
-  for 1 Apr - 31 May 2026 (two months), June passes ("Filed to 31 May
-  2026": the next return, June-July, ends after 30 Jun), and July needs
-  attention: "1 Jun 2026 to 31 Jul 2026" isn't filed.
+  attention; without a GST number it doesn't apply. With no GST period
+  setting, after filing the return for 1 Apr - 31 May 2026 (two months),
+  June passes ("Filed to 31 May 2026. No GST period setting, ...": the next
+  return, June-July, ends after 30 Jun), and July needs attention: "1 Jun
+  2026 to 31 Jul 2026" isn't filed. With a setting, see GP5.
 - **PC9** Opening balance: a journal on 10 Jun 2026, Dr 6010 100.00 / Cr
   3900 100.00: needs attention ("3900 Opening balance is 100.00 Cr at 30
   Jun 2026"). After Dr 3900 100.00 / Cr 3000 100.00 on 11 Jun it passes.
@@ -4939,13 +5186,17 @@ doesn't apply.
 
 ### Questions for Jess (year end and period close)
 
-- **Trial balance**: NetSuite's trial balance shows income and expense
-  accounts for the financial year to date, with earlier profit in retained
-  earnings. Tohyee's shows each account's balance since the books began (so
-  it ties to account transactions). Should it change to NetSuite's?
 - Should a bookkeeper be able to close a month when every check passes (as
   built), or only owners and admins, like the old lock date?
-- Is "no statement imported" for a bank account a warning (as built), or
-  should accounts without statements be left out?
-- Should the GST check use a GST period setting (1, 2 or 6 months) rather
-  than the length of the latest filed return?
+
+Decided (following NetSuite, 1 Oct 2026):
+
+- **Trial balance**: NetSuite's (TB1-TB4). Income and expense accounts show
+  this financial year to date, and earlier years' profit is in retained
+  earnings, the same figure as the balance sheet's. Account transactions
+  keep every posting, as NetSuite's account registers do.
+- **No statement imported** for a bank account stays a warning that an
+  owner or admin can accept when closing (PC3), with wording that says so;
+  NetSuite's close checklist has no bank reconciliation task.
+- **GST check**: uses the GST period setting (GP1-GP6) when it's set, and
+  the latest filed return's length only when it isn't.

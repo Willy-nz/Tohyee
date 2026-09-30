@@ -8,6 +8,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import { assertInventoryLines, planDocumentStock, planDocumentVoid } from "@/lib/inventory/stock";
 import { fillLinesFromItems, isBlank, LINE_ITEM_COLUMNS, LINE_ITEM_JOINS, lineForHash, lineItemFields, type LineItemFields, type LineItemRef, type LineItemRow, parseLineItem, resolveLineItems, type ResolvedLineItem } from "@/lib/items/lines";
 import { billLineAccountProblem } from "@/lib/bills/accounts";
+import { dueDateFromSupplierTerms } from "@/lib/customers/service";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -91,8 +92,12 @@ export type BillSummary = {
   contactName: string;
   billDate: string;
   dueDate: string;
-  /** The supplier's own number for the invoice they sent, as it was typed. */
-  supplierInvoiceNumber: string;
+  /**
+   * The supplier's own number for the invoice they sent, as it was typed. A
+   * draft can be saved without one (RB11, like NetSuite's optional reference
+   * number); approving needs it, so approved and voided bills always have it.
+   */
+  supplierInvoiceNumber: string | null;
   amountsMode: AmountsMode;
   currencyCode: string;
   subtotal: string;
@@ -149,7 +154,7 @@ type BillRow = {
   contact_name: string;
   bill_date: string;
   due_date: string;
-  supplier_invoice_number: string;
+  supplier_invoice_number: string | null;
   amounts_mode: AmountsMode;
   currency_code: string;
   subtotal: string;
@@ -293,7 +298,10 @@ export type DraftDetails = {
   contactId: string;
   billDate: string;
   dueDate: string;
-  supplierInvoiceNumber: string;
+  /** A new bill sent without a due date takes it from the supplier's payment terms (SPT2). */
+  dueFromTerms?: boolean;
+  /** Null: a draft without the supplier's invoice number yet (RB11). */
+  supplierInvoiceNumber: string | null;
   amountsMode: AmountsMode;
   lines: PurchaseLineInput[];
   customInput: Record<string, unknown> | undefined;
@@ -326,19 +334,40 @@ export type ResolvedDraft = DraftDetails & {
   }>;
 };
 
-function parseDraft(input: BillInput): DraftDetails {
+function blankInput(input: unknown): boolean {
+  return input === null || input === undefined || (typeof input === "string" && input.trim() === "");
+}
+
+/**
+ * The supplier's invoice number as sent: blank is null (a draft still waiting
+ * for the supplier's invoice, RB11); approving needs one.
+ */
+export function parseSupplierInvoiceNumber(input: unknown): string | null {
+  return blankInput(input) ? null : requireString(input, "supplierInvoiceNumber", { maxLength: 100 });
+}
+
+function parseDraft(input: BillInput, options: { dueFromTerms?: boolean } = {}): DraftDetails {
   const contactId = requireId(input.contactId, "contactId");
   const billDate = parseIsoDate(input.billDate, "billDate");
-  const dueDate = parseIsoDate(input.dueDate, "dueDate");
+  const dueFromTerms = options.dueFromTerms === true && blankInput(input.dueDate);
+  // Filled in from the supplier's terms once the idempotency key has been checked (SPT2).
+  const dueDate = dueFromTerms ? billDate : parseIsoDate(input.dueDate, "dueDate");
   if (dueDate < billDate) {
     throw new ValidationError("The due date can't be before the bill date.");
   }
-  const supplierInvoiceNumber = requireString(input.supplierInvoiceNumber, "supplierInvoiceNumber", {
-    maxLength: 100,
-  });
+  const supplierInvoiceNumber = parseSupplierInvoiceNumber(input.supplierInvoiceNumber);
   const amountsMode = requireOneOf(input.amountsMode, "amountsMode", AMOUNTS_MODES);
   const lines = parsePurchaseLines(input.lines, amountsMode, "A bill", { purchaseOrderLinks: true });
-  return { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines, customInput: parseCustomInput(input.customFields, "") };
+  return {
+    contactId,
+    billDate,
+    dueDate,
+    ...(dueFromTerms ? { dueFromTerms } : {}),
+    supplierInvoiceNumber,
+    amountsMode,
+    lines,
+    customInput: parseCustomInput(input.customFields, ""),
+  };
 }
 
 /**
@@ -392,7 +421,8 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
   return {
     contactId: draft.contactId,
     billDate: draft.billDate,
-    dueDate: draft.dueDate,
+    // Sent without a due date: the supplier's terms decide it, so the hash says so (SPT2).
+    dueDate: draft.dueFromTerms ? null : draft.dueDate,
     supplierInvoiceNumber: draft.supplierInvoiceNumber,
     amountsMode: draft.amountsMode,
     lines: hashPurchaseLines(draft.lines),
@@ -557,7 +587,7 @@ export async function resolveDraft(
 const COMPARABLE_NUMBER = (column: string) => `lower(regexp_replace(${column}, '[[:space:]]', '', 'g'))`;
 const NUMBER_INDEX = "bills_supplier_invoice_number_key";
 
-function numberTaken(supplier: string, number: string, existing?: { id: string; status: BillStatus }): ConflictError {
+function numberTaken(supplier: string, number: string | null, existing?: { id: string; status: BillStatus }): ConflictError {
   return new ConflictError(
     `${supplier} already has a bill with the invoice number ${number}${
       existing ? ` (${existing.status} bill #${existing.id})` : ""
@@ -570,7 +600,12 @@ function numberTaken(supplier: string, number: string, existing?: { id: string; 
  * same invoice number, ignoring case and spaces. The database's unique index
  * refuses it too; this finds the other bill to say which one it is.
  */
-async function assertNumberFree(tx: OrgTx, draft: ResolvedDraft, exceptBillId: string | null): Promise<void> {
+async function assertNumberFree(
+  tx: OrgTx,
+  draft: { contactId: string; contactName: string; supplierInvoiceNumber: string | null },
+  exceptBillId: string | null,
+): Promise<void> {
+  if (draft.supplierInvoiceNumber === null) return;
   const clash = await tx.query<{ id: string; status: BillStatus; supplier_invoice_number: string }>(
     `select id, status, supplier_invoice_number from bills
       where contact_id = $1 and status <> 'voided'
@@ -623,7 +658,7 @@ type StoredHeader = {
   contactId: string;
   billDate: string;
   dueDate: string;
-  supplierInvoiceNumber: string;
+  supplierInvoiceNumber: string | null;
   amountsMode: AmountsMode;
   currencyCode: string;
   subtotal: string;
@@ -804,7 +839,7 @@ function isUniqueViolation(error: unknown, constraint?: string): boolean {
 }
 
 function billLabel(bill: BillSummary): string {
-  return `Bill ${bill.supplierInvoiceNumber} from ${bill.contactName}`;
+  return bill.supplierInvoiceNumber === null ? `The draft bill from ${bill.contactName}` : `Bill ${bill.supplierInvoiceNumber} from ${bill.contactName}`;
 }
 
 export async function getBill(tx: OrgTx, billIdInput: unknown): Promise<Bill> {
@@ -937,13 +972,20 @@ export async function createBill(
 ): Promise<{ created: boolean; bill: Bill }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
-  const draft = parseDraft(input);
+  const draft = parseDraft(input, { dueFromTerms: true });
   const hash = requestHash("bill", { ...hashPayload(draft), ...(link ? { purchaseOrderId: link.purchaseOrderId } : {}) });
 
   const existing = await findByKey(tx, "create", source, idempotencyKey);
   if (existing) {
     assertSameRequest(existing.hash, hash, "bill");
     return { created: false, bill: await getBill(tx, existing.id) };
+  }
+  if (draft.dueFromTerms) {
+    const fromTerms = await dueDateFromSupplierTerms(tx, draft.contactId, draft.billDate);
+    if (fromTerms === null) {
+      throw new ValidationError("dueDate is required (YYYY-MM-DD): this supplier has no payment terms to work it out from.");
+    }
+    draft.dueDate = fromTerms;
   }
 
   const resolved = await resolveDraft(tx, draft);
@@ -1155,6 +1197,13 @@ export async function approveBill(
       `This draft was saved in ${current.currencyCode}, but the base currency is now ${tx.baseCurrency}. Open it and save it again first.`,
     );
   }
+  // RB11: a draft can wait for the supplier's invoice, but an approved bill needs its number (B5). The database refuses it too.
+  const number = current.supplierInvoiceNumber;
+  if (number === null) {
+    throw new ValidationError(
+      `Add the supplier's invoice number before approving: this draft bill from ${current.contactName} doesn't have one yet. Type it from their invoice when it arrives.`,
+    );
+  }
 
   const resolved = await resolveDraft(tx, draftOf(current), keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines);
   const same = sameAsStored(resolved, current);
@@ -1205,9 +1254,9 @@ export async function approveBill(
   const stock = await planDocumentStock(
     tx,
     "bill",
-    { id: billId, date: current.billDate, reference: current.supplierInvoiceNumber, contactId: current.contactId },
+    { id: billId, date: current.billDate, reference: number, contactId: current.contactId },
     resolved.resolvedLines,
-    `Stock received, bill ${current.supplierInvoiceNumber}`,
+    `Stock received, bill ${number}`,
   );
   if (stock) journalLines.push(...stock.journalLines);
   const posted = await postJournalBody(
@@ -1216,8 +1265,8 @@ export async function approveBill(
     billId,
     parseJournalBody(tx, {
       postingDate: current.billDate,
-      reference: current.supplierInvoiceNumber,
-      description: `Bill ${current.supplierInvoiceNumber} from ${supplier}`,
+      reference: number,
+      description: `Bill ${number} from ${supplier}`,
       lines: journalLines,
     }),
     { origin: "bill" },
@@ -1247,7 +1296,7 @@ export async function approveBill(
     entityType: "bill",
     entityId: billId,
     details: {
-      supplierInvoiceNumber: current.supplierInvoiceNumber,
+      supplierInvoiceNumber: number,
       journalId: posted.journal.id,
       billDate: current.billDate,
       total: resolved.total,

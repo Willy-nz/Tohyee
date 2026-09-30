@@ -15,6 +15,7 @@ import {
   hierarchyError,
   NO_CUSTOMER_DETAILS,
   resolveCustomerDetails,
+  resolveSupplierPaymentTerm,
 } from "@/lib/customers/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { resolveDefaultSalesperson } from "@/lib/salespeople/service";
@@ -53,6 +54,8 @@ export type Contact = {
   isArchived: boolean;
   /** The primary contact person for invoices (RC6), from the CRM's people. */
   primaryPerson: { id: string; name: string; email: string | null } | null;
+  /** A supplier's default payment term (SPT1): new bills take their due date from it. */
+  supplierPaymentTermId: string | null;
 } & CustomerDetails;
 
 /** The details a person enters. An edit leaves out anything it doesn't change. */
@@ -67,6 +70,7 @@ export type ContactInput = {
   customFields?: unknown;
   defaultSalespersonId?: unknown;
   isProspect?: unknown;
+  supplierPaymentTermId?: unknown;
 } & CustomerDetailsInput;
 
 type ContactDetails = Pick<Contact, "name" | "isCustomer" | "isSupplier" | "email" | "phone" | "postalAddress" | "gstNumber">;
@@ -93,6 +97,7 @@ type ContactRow = {
   customer_group_id: string | null;
   price_level_id: string | null;
   parent_contact_id: string | null;
+  supplier_payment_term_id: string | null;
   primary_person_id: string | null;
   primary_person_name: string | null;
   primary_person_email: string | null;
@@ -100,7 +105,7 @@ type ContactRow = {
 
 const OWN_COLUMNS =
   "id, request_hash, name, is_customer, is_supplier, email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect, is_archived, " +
-  "delivery_address, payment_term_id, credit_limit::text, customer_group_id, price_level_id, parent_contact_id";
+  "delivery_address, payment_term_id, credit_limit::text, customer_group_id, price_level_id, parent_contact_id, supplier_payment_term_id";
 
 /** The primary contact person (RC6), looked up for each contact. */
 const PRIMARY_PERSON = `(select p.id from crm_people p where p.contact_id = contacts.id and p.is_primary) as primary_person_id,
@@ -132,6 +137,7 @@ function toContact(row: ContactRow): Contact {
     customerGroupId: row.customer_group_id,
     priceLevelId: row.price_level_id,
     parentContactId: row.parent_contact_id,
+    supplierPaymentTermId: row.supplier_payment_term_id,
   };
 }
 
@@ -345,6 +351,7 @@ export async function createContact(
     ...(rawSalesperson === null ? {} : { defaultSalespersonId: rawSalesperson }),
     ...(isProspect ? { isProspect } : {}),
     ...customerDetailsForHash(input),
+    ...(input.supplierPaymentTermId === undefined ? {} : { supplierPaymentTermId: input.supplierPaymentTermId === "" ? null : input.supplierPaymentTermId }),
   });
   const existing = await findByKey(tx, source, idempotencyKey);
   if (existing) {
@@ -355,6 +362,7 @@ export async function createContact(
   const customFields = await contactCustomValues(tx, rawCustom, { ...details, isProspect }, null);
   const defaultSalespersonId = (await resolveDefaultSalesperson(tx, input.defaultSalespersonId, null)) ?? null;
   const customer = await resolveCustomerDetails(tx, input, NO_CUSTOMER_DETAILS, { contactId: null, isCustomer: details.isCustomer });
+  const supplierPaymentTermId = await resolveSupplierPaymentTerm(tx, input.supplierPaymentTermId, null, { isSupplier: details.isSupplier });
 
   // No separate name check first: the original of a retry could commit between
   // it and the key check above. The unique indexes decide, and the key is
@@ -363,8 +371,9 @@ export async function createContact(
     tx,
     `insert into contacts (command_source, idempotency_key, request_hash, name, is_customer, is_supplier,
                            email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect,
-                           delivery_address, payment_term_id, credit_limit, customer_group_id, price_level_id, parent_contact_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16::numeric, $17, $18, $19)
+                           delivery_address, payment_term_id, credit_limit, customer_group_id, price_level_id, parent_contact_id,
+                           supplier_payment_term_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16::numeric, $17, $18, $19, $20)
      on conflict do nothing
      returning ${OWN_COLUMNS}`,
     [
@@ -387,6 +396,7 @@ export async function createContact(
       customer.customerGroupId,
       customer.priceLevelId,
       customer.parentContactId,
+      supplierPaymentTermId,
     ],
   );
   const row = inserted.rows[0] ? await readRow(tx, inserted.rows[0].id) : undefined;
@@ -410,6 +420,7 @@ export async function createContact(
       ...(defaultSalespersonId ? { defaultSalespersonId } : {}),
       ...(isProspect ? { isProspect } : {}),
       ...Object.fromEntries(Object.entries(customer).filter(([, value]) => value !== null)),
+      ...(supplierPaymentTermId ? { supplierPaymentTermId } : {}),
     },
   });
   return { created: true, contact: toContact(row) };
@@ -437,6 +448,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
   const sentSalesperson = await resolveDefaultSalesperson(tx, input.defaultSalespersonId, current.defaultSalespersonId);
   const beforeCustomer = customerDetailsOf(current);
   const customer = await resolveCustomerDetails(tx, input, beforeCustomer, { contactId: current.id, isCustomer: after.isCustomer });
+  const supplierPaymentTermId = await resolveSupplierPaymentTerm(tx, input.supplierPaymentTermId, current.supplierPaymentTermId, { isSupplier: after.isSupplier });
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   for (const field of DETAIL_FIELDS) {
@@ -460,6 +472,9 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
       changes[field] = { from: beforeCustomer[field], to: customer[field] };
     }
   }
+  if (supplierPaymentTermId !== current.supplierPaymentTermId) {
+    changes.supplierPaymentTermId = { from: current.supplierPaymentTermId, to: supplierPaymentTermId };
+  }
   if (Object.keys(changes).length === 0) {
     return current;
   }
@@ -477,7 +492,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
           set name = $2, is_customer = $3, is_supplier = $4, email = $5, phone = $6,
               postal_address = $7, gst_number = $8, custom_fields = $9::jsonb, default_salesperson_id = $10, is_prospect = $11,
               delivery_address = $12, payment_term_id = $13, credit_limit = $14::numeric, customer_group_id = $15,
-              price_level_id = $16, parent_contact_id = $17, updated_at = now()
+              price_level_id = $16, parent_contact_id = $17, supplier_payment_term_id = $18, updated_at = now()
         where id = $1`,
       [
         current.id,
@@ -497,6 +512,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
         customer.customerGroupId,
         customer.priceLevelId,
         customer.parentContactId,
+        supplierPaymentTermId,
       ],
     );
     row = await readRow(tx, current.id);

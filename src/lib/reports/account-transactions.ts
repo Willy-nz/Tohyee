@@ -17,9 +17,12 @@ import { optionalId } from "@/lib/validation";
  * journal line in it (with its date, source, description, contact, debit,
  * credit and running balance) and the balance at the end. Balances are
  * debits less credits (a credit balance is negative) over all postings
- * before the date, the same as the trial balance, so each account's closing
- * balance is its trial balance line and its debits less credits are the
- * trial balance's movement. Voids and corrections are their own lines. With
+ * before the date. A balance sheet account's closing balance is its trial
+ * balance line; an income or expense account's trial balance line is its
+ * debits less credits from the first day of the financial year (TB2), and
+ * retained earnings' is its closing balance plus earlier years' profit,
+ * which is worked out and never posted, so it isn't a line here (as in
+ * NetSuite's account registers). Voids and corrections are their own lines. With
  * a tracking filter only lines tagged with the value (or one under it)
  * count, opening balance included.
  */

@@ -11,8 +11,11 @@ import {
   GST_BOX_KEYS,
   GST_BOX_LABELS,
   GST_RETURN_PERIOD_MONTHS,
+  describeGstPeriodSetting,
   gstBoxNumber,
   gstPeriodEnd,
+  type GstPeriodSetting,
+  parseGstPeriod,
   type GstAdjustment,
   type GstAdjustmentBox,
   type GstBoxKey,
@@ -136,6 +139,15 @@ function selectionTitle(selection: Selection): string {
 
 function monthStart(isoDate: string): string {
   return `${isoDate.slice(0, 7)}-01`;
+}
+
+/** The period's length in months when it's one a return can cover (1, 2 or 6), else null. */
+function parseGstPeriodSafe(periodStart: string, periodEnd: string): number | null {
+  try {
+    return parseGstPeriod(periodStart, periodEnd).months;
+  } catch {
+    return null;
+  }
 }
 
 function BoxesTable({
@@ -492,7 +504,23 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [openReturn, setOpenReturn] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
-  const filed = useApiData<{ gstReturns: FiledGstReturnSummary[] }>("/api/gst-returns", { organisationId });
+  const filed = useApiData<{
+    gstReturns: FiledGstReturnSummary[];
+    periodSetting: GstPeriodSetting | null;
+    suggestedPeriod: { periodStart: string; periodEnd: string } | null;
+  }>("/api/gst-returns", { organisationId });
+  // GP4: open on the period after the latest filed return (or the latest ended one, by the GST
+  // period setting), once, unless the period has already been changed by hand.
+  const [suggestionUsed, setSuggestionUsed] = useState(false);
+  const suggested = filed.data?.suggestedPeriod ?? null;
+  if (!suggestionUsed && filed.data) {
+    setSuggestionUsed(true);
+    const length = suggested ? parseGstPeriodSafe(suggested.periodStart, suggested.periodEnd) : null;
+    if (suggested && length !== null) {
+      setStart(suggested.periodStart);
+      setMonths(length);
+    }
+  }
 
   const requestKey = JSON.stringify({ organisationId, start, periodEnd, adjustments, version });
   useEffect(() => {
@@ -517,6 +545,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
   const alreadyFiled = data ? data.filedReturns.length > 0 : false;
 
   function changePeriod(nextStart: string, nextMonths: number) {
+    setSuggestionUsed(true);
     setStart(nextStart);
     setMonths(nextMonths);
     setFileKey(newIdempotencyKey("gst"));
@@ -613,6 +642,13 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
         <p className={ui.muted}>
           {formatDate(start)} to {formatDate(periodEnd)}
           {data ? ` · ${data.currencyCode}` : ""}
+          {filed.data ? (
+            filed.data.periodSetting ? (
+              <> · Filing: {describeGstPeriodSetting(filed.data.periodSetting)}</>
+            ) : (
+              <> · No GST filing frequency set (Settings)</>
+            )
+          ) : null}
         </p>
         {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
         {current?.error ? <Notice tone="error">{current.error}</Notice> : null}

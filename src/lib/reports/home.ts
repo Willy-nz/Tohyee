@@ -3,8 +3,8 @@ import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { dec, toFixedString } from "@/lib/money/decimal";
-import { gstPeriodEnd, parseGstPeriod } from "@/lib/reports/gst-boxes";
-import { calculateGstReturn } from "@/lib/reports/gst-return";
+import { gstPeriodAfter } from "@/lib/reports/gst-boxes";
+import { calculateGstReturn, latestFiledGstPeriod, loadGstPeriodSetting } from "@/lib/reports/gst-return";
 import type { GstBasis } from "@/lib/tax/categories";
 
 /**
@@ -86,24 +86,16 @@ select coalesce(sum(amount_due), 0)::text as total, count(*)::integer as count,
   from due
  where amount_due > 0`;
 
-function monthsBetween(start: string, end: string): number {
-  return parseGstPeriod(start, end).months;
-}
-
 /**
- * The period straight after the latest filed GST return, the same length, with
- * its Box 15 so far (H4). Tohyee doesn't guess a period when none is filed.
+ * The period straight after the latest filed GST return, with its Box 15 so
+ * far (H4): to the end of the GST period setting's period (GP3), or without
+ * a setting the same length as that return. Tohyee doesn't guess a period
+ * when none is filed.
  */
 async function nextGstReturn(tx: OrgTx): Promise<NextGstReturn> {
-  const latest = await tx.query<{ period_start: string; period_end: string }>(
-    "select period_start, period_end from gst_returns order by period_end desc limit 1",
-  );
-  const last = latest.rows[0];
+  const last = await latestFiledGstPeriod(tx);
   if (!last) return { status: "none_filed" };
-  const next = new Date(`${last.period_end}T00:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  const periodStart = next.toISOString().slice(0, 10);
-  const periodEnd = gstPeriodEnd(periodStart, monthsBetween(last.period_start, last.period_end));
+  const { periodStart, periodEnd } = gstPeriodAfter(await loadGstPeriodSetting(tx), last);
   try {
     const report = await calculateGstReturn(tx, { periodStart, periodEnd });
     return { status: "ready", periodStart, periodEnd, basis: report.basis, box15: report.boxes.box15 };

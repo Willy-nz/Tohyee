@@ -70,7 +70,7 @@ function PurchaseOrderActions({
     void run(async () => {
       const result = await api<{ purchaseOrder: PurchaseOrder; bill: Bill }>(`/api/purchase-orders/${purchaseOrder.id}/bill`, {
         method: "POST",
-        body: { organisationId, source: "ui", idempotencyKey: copyKey, billDate, dueDate, supplierInvoiceNumber },
+        body: { organisationId, source: "ui", idempotencyKey: copyKey, billDate, dueDate: dueDate || null, supplierInvoiceNumber },
       });
       router.push(`/operations/bills/${result.bill.id}`);
     });
@@ -127,10 +127,10 @@ function PurchaseOrderActions({
           <Field label="Bill date">
             <input type="date" value={billDate} onChange={(event) => setBillDate(event.target.value)} required />
           </Field>
-          <Field label="Due date">
-            <input type="date" value={dueDate} min={billDate || undefined} onChange={(event) => setDueDate(event.target.value)} required />
+          <Field label="Due date" hint="Leave blank to use the supplier's payment terms.">
+            <input type="date" value={dueDate} min={billDate || undefined} onChange={(event) => setDueDate(event.target.value)} />
           </Field>
-          <Button onClick={copyToBill} disabled={busy || !supplierInvoiceNumber.trim() || !billDate || !dueDate}>
+          <Button onClick={copyToBill} disabled={busy || !supplierInvoiceNumber.trim() || !billDate}>
             {busy ? "Working…" : "Copy to bill"}
           </Button>
         </div>
@@ -278,7 +278,7 @@ function PurchaseOrderView({ organisationId, purchaseOrderId }: { organisationId
             <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
               {purchaseOrder.bills.map((bill) => (
                 <li key={bill.id}>
-                  <Link href={`/operations/bills/${bill.id}`}>{bill.supplierInvoiceNumber}</Link> · {formatDate(bill.billDate)} ·{" "}
+                  <Link href={`/operations/bills/${bill.id}`}>{bill.supplierInvoiceNumber ?? "(no number yet)"}</Link> · {formatDate(bill.billDate)} ·{" "}
                   <Money value={bill.total} /> <BillStatusBadge status={bill.status} />
                 </li>
               ))}

@@ -14,7 +14,19 @@ import { formatDate, formatGstNumber } from "@/lib/format";
 import type { PeriodControls } from "@/lib/ledger/period-controls";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import type { OrganisationSettings } from "@/lib/organisations/settings";
+import { describeGstPeriodSetting, gstPeriodSetting } from "@/lib/reports/gst-boxes";
 import { GST_BASES, GST_BASIS_LABELS, type GstBasis } from "@/lib/tax/categories";
+
+/** The GST filing frequency choices (GP1): "months:endMonth", or "" for not set. */
+const GST_PERIOD_CHOICES: Array<{ value: string; label: string }> = [
+  { value: "", label: "Not set" },
+  ...[
+    gstPeriodSetting(1, 1),
+    gstPeriodSetting(2, 1),
+    gstPeriodSetting(2, 2),
+    ...[1, 2, 3, 4, 5, 6].map((month) => gstPeriodSetting(6, month)),
+  ].map((setting) => ({ value: `${setting.months}:${setting.endMonth}`, label: describeGstPeriodSetting(setting) })),
+];
 
 // The forms below remount when their data reloads (so the fields show what
 // was saved), which would wipe their own state. Success messages therefore
@@ -26,6 +38,7 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
   const [baseCurrency, setBaseCurrency] = useState(settings.baseCurrency);
   const [financialYearEndMonth, setFinancialYearEndMonth] = useState(settings.financialYearEndMonth);
   const [gstBasis, setGstBasis] = useState<GstBasis>(settings.gstBasis);
+  const [gstPeriod, setGstPeriod] = useState(settings.gstPeriod ? `${settings.gstPeriod.months}:${settings.gstPeriod.endMonth}` : "");
   const [allowNegativeStock, setAllowNegativeStock] = useState(settings.allowNegativeStock);
   const [postalAddress, setPostalAddress] = useState(settings.postalAddress ?? "");
   const [gstNumber, setGstNumber] = useState(settings.gstNumber ? formatGstNumber(settings.gstNumber) : "");
@@ -43,6 +56,8 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
           baseCurrency,
           financialYearEndMonth,
           gstBasis,
+          gstPeriodMonths: gstPeriod === "" ? null : Number(gstPeriod.split(":")[0]),
+          gstPeriodEndMonth: gstPeriod === "" ? null : Number(gstPeriod.split(":")[1]),
           allowNegativeStock,
           postalAddress: postalAddress.trim() || null,
           gstNumber: gstNumber.trim() || null,
@@ -92,6 +107,18 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
             {GST_BASES.map((basis) => (
               <option key={basis} value={basis}>
                 {GST_BASIS_LABELS[basis]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field
+          label="GST filing frequency"
+          hint="How often you file GST with IRD, and which months periods end in (IRD lines two-monthly and six-monthly periods up with your balance date unless you asked otherwise). The GST return, Home and the period close use it."
+        >
+          <select value={gstPeriod} onChange={(event) => setGstPeriod(event.target.value)}>
+            {GST_PERIOD_CHOICES.map((choice) => (
+              <option key={choice.value} value={choice.value}>
+                {choice.label}
               </option>
             ))}
           </select>

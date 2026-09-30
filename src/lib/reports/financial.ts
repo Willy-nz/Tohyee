@@ -76,41 +76,92 @@ export async function accountTotals(
 }
 
 export type TrialBalanceRow = {
-  accountId: string;
+  /** Null only for the retained earnings line when there's no retained earnings account. */
+  accountId: string | null;
   code: string;
   name: string;
   accountClass: AccountClass;
   accountType: AccountType;
   debit: string;
   credit: string;
+  /**
+   * Only on the retained earnings line: the profit of every financial year
+   * before this one, included in its debit or credit. It's worked out, not
+   * posted, so it isn't in the account's transactions.
+   */
+  previousYearsEarnings?: string;
 };
 
-/** Every account's net balance as at a date, in debit or credit column. */
+/**
+ * The trial balance as at a date, like NetSuite's (TB1-TB4): balance sheet
+ * accounts show every posting to the date; income and expense (profit and
+ * loss) accounts show only this financial year's postings, from the first
+ * day of the financial year the date is in; and the profit of every earlier
+ * year is added to retained earnings, the same figure as the balance
+ * sheet's retained earnings (P2), so the trial balance still balances.
+ * Nothing is posted at a year end (YE1-YE4).
+ *
+ * NetSuite's Trial Balance report: for income statement accounts it
+ * "includes only transactions posted from the beginning of the ... year up
+ * to the As of date", and retained earnings is "the sum of cumulative net
+ * income and amounts posted directly to the retained earnings account".
+ */
 export async function trialBalance(tx: OrgTx, input: { asAt?: unknown }) {
   const asAt = parseOptionalIsoDate(input.asAt, "asAt") ?? todayIsoDate();
   const money = moneyFormatter(tx);
+  const yearStart = financialYearStart(asAt, await financialYearEndMonth(tx));
+  const all = await accountTotals(tx, null, asAt);
+  const thisYearRows = await accountTotals(tx, yearStart, asAt);
+  const thisYear = new Map(thisYearRows.map((row) => [row.id, row]));
+  const previousYearsEarnings = sub(earningsOf(all), earningsOf(thisYearRows));
+  const retainedAccount = (
+    await tx.query<{ id: string; code: string; name: string; account_class: AccountClass; account_type: AccountType }>(
+      "select id::text, code, name, account_class, account_type from accounts where system_key = 'retained_earnings' and account_class = 'equity'",
+    )
+  ).rows[0];
+  const netOf = (row: AccountTotalsRow | undefined) => (row ? sub(dec(row.debits), dec(row.credits)) : ZERO_DECIMAL);
+
+  type Entry = { row: Omit<AccountTotalsRow, "debits" | "credits">; net: Decimal; retained: boolean };
+  const entries: Entry[] = [];
+  for (const row of all) {
+    if (row.id === retainedAccount?.id) continue;
+    const profitAndLoss = row.account_class === "revenue" || row.account_class === "expense";
+    entries.push({ row, net: profitAndLoss ? netOf(thisYear.get(row.id)) : netOf(row), retained: false });
+  }
+  // Earnings are credits, so previous years' profit lowers the debit balance.
+  entries.push({
+    row: retainedAccount ?? { id: "", code: "", name: "Retained earnings", account_class: "equity", account_type: "equity" },
+    net: sub(netOf(all.find((row) => row.id === retainedAccount?.id)), previousYearsEarnings),
+    retained: true,
+  });
+  entries.sort((a, b) => (a.row.code < b.row.code ? -1 : a.row.code > b.row.code ? 1 : 0));
+
   const rows: TrialBalanceRow[] = [];
   let totalDebit = ZERO_DECIMAL;
   let totalCredit = ZERO_DECIMAL;
-  for (const row of await accountTotals(tx, null, asAt)) {
-    const net = sub(dec(row.debits), dec(row.credits));
+  for (const { row, net, retained } of entries) {
     if (isZero(net)) continue;
     const debit = isNegative(net) ? ZERO_DECIMAL : net;
     const credit = isNegative(net) ? neg(net) : ZERO_DECIMAL;
     totalDebit = add(totalDebit, debit);
     totalCredit = add(totalCredit, credit);
     rows.push({
-      accountId: row.id,
+      accountId: row.id === "" ? null : row.id,
       code: row.code,
       name: row.name,
       accountClass: row.account_class,
       accountType: row.account_type,
       debit: money(debit),
       credit: money(credit),
+      ...(retained ? { previousYearsEarnings: money(previousYearsEarnings) } : {}),
     });
   }
   return {
     asAt,
+    /** Income and expense accounts show postings from this day, the first of the financial year. */
+    financialYearStart: yearStart,
+    /** Profit of every financial year before this one, included in retained earnings. */
+    previousYearsEarnings: money(previousYearsEarnings),
     currencyCode: tx.baseCurrency,
     rows,
     totalDebit: money(totalDebit),

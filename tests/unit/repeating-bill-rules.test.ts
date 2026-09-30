@@ -9,7 +9,12 @@ describe("repeating bill numbers and due dates", () => {
     expect(numberPatternProblem("RENT-{month}", "week")).toMatch(/needs \{date\} or \{n\} in it/);
     expect(numberPatternProblem("W{n}", "week")).toBeNull();
     expect(numberPatternProblem("HP {date}", "week")).toBeNull();
-    expect(numberPatternProblem("  ", "month")).toBe("The supplier's invoice number is required.");
+    // RB11: no pattern is fine for drafts; approving needs a number.
+    expect(numberPatternProblem("  ", "month")).toBeNull();
+    expect(numberPatternProblem("", "month", "approve")).toMatch(/^Bills without a supplier's invoice number are saved as drafts/);
+    expect(numberPatternProblem("RENT-{month}", "month", "approve")).toBeNull();
+    expect(billNumberFor(null, "2026-01-31", 1)).toBeNull();
+    expect(describeBillDue("terms", 0)).toBe("By the supplier's payment terms");
   });
 
   it("RB2: RENT-{month}, due the 20th of the following month", () => {

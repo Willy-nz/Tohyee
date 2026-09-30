@@ -89,7 +89,7 @@ function useDocuments(kind: BatchKind, organisationId: string, contactId: string
     }
     return (list.data?.bills ?? []).map((bill) => ({
       id: bill.id,
-      number: bill.supplierInvoiceNumber,
+      number: bill.supplierInvoiceNumber ?? "",
       date: bill.billDate,
       dueDate: bill.dueDate,
       total: bill.total,

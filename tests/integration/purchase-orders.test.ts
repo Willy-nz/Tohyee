@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import * as purchaseOrdersRoute from "@/app/api/purchase-orders/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { approveBill, createBill, deleteBill, getBill, updateBill, voidBill } from "@/lib/bills/service";
-import { archiveContact, type Contact, createContact } from "@/lib/contacts/service";
+import { archiveContact, type Contact, createContact, updateContact } from "@/lib/contacts/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { printedDocument } from "@/lib/documents/print";
@@ -377,5 +377,21 @@ describeWithDatabase("purchase orders", () => {
     );
     expect(post.status).toBe(403);
     expect(await w.journals()).toBe(0);
+  });
+
+  it("SPT4: copy to bill without a due date uses the supplier's payment terms", async () => {
+    const w = await setup();
+    const order = await w.approve((await w.draft()).id);
+    const copyWithout = (idempotencyKey = key("copy")) =>
+      w.as((tx) => copyPurchaseOrderToBill(tx, order.id, { idempotencyKey, billDate: "2026-07-12", supplierInvoiceNumber: "PS-301" }));
+    // Paw Supplies has no terms yet, so the due date is needed and nothing is made.
+    await expect(copyWithout()).rejects.toThrow("this supplier has no payment terms");
+    expect((await w.as((tx) => getPurchaseOrder(tx, order.id))).bills).toEqual([]);
+    const thirty = (await w.as((tx) => tx.query<{ id: string }>("select id::text from payment_terms where name = '30 days'"))).rows[0].id;
+    await w.as((tx) => updateContact(tx, w.paw.id, { supplierPaymentTermId: thirty }));
+    const copyKey = key("copy");
+    const { bill } = await copyWithout(copyKey);
+    expect([bill.billDate, bill.dueDate, bill.supplierInvoiceNumber, bill.total]).toEqual(["2026-07-12", "2026-08-11", "PS-301", "287.50"]);
+    expect((await copyWithout(copyKey)).bill.id).toBe(bill.id);
   });
 });

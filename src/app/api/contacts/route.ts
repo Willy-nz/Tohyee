@@ -35,6 +35,7 @@ export const POST = route(async (request) => {
       customerGroupId: body.customerGroupId,
       priceLevelId: body.priceLevelId,
       parentContactId: body.parentContactId,
+      supplierPaymentTermId: body.supplierPaymentTermId,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

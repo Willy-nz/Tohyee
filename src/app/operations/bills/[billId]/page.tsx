@@ -262,7 +262,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
         <UnusedCredit organisationId={organisationId} bill={bill} />
       ) : null}
       <Card
-        title={`Bill ${bill.supplierInvoiceNumber}`}
+        title={bill.supplierInvoiceNumber === null ? "Draft bill (no number yet)" : `Bill ${bill.supplierInvoiceNumber}`}
         description={`From ${bill.contactName} · ${AMOUNTS_MODE_LABELS[bill.amountsMode]} · ${bill.currencyCode}`}
         actions={
           <>
@@ -283,7 +283,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
         <div className={ui.grid4}>
           <Stat label="Bill date" value={formatDate(bill.billDate)} />
           <Stat label="Due date" value={formatDate(bill.dueDate)} />
-          <Stat label="Supplier's invoice number" value={bill.supplierInvoiceNumber} />
+          <Stat label="Supplier's invoice number" value={bill.supplierInvoiceNumber ?? "Not yet: add it from the supplier's invoice before approving"} />
           <Stat label="Supplier" value={bill.contactName} />
         </div>
         {bill.purchaseOrderId ? (

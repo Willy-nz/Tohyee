@@ -73,14 +73,20 @@ that something happened.
   The financial year end is a setting (default 31 March); the balance sheet
   shows current year earnings and retained earnings (the retained earnings
   account plus all earlier years' profit), with no closing journals, like
-  NetSuite (YE1-YE4, not yet approved by Jess).
+  NetSuite (YE1-YE4, not yet approved by Jess). The **trial balance** is
+  NetSuite's (TB1-TB4, decided 1 Oct 2026, not yet approved): income and
+  expense accounts show this financial year to date, and earlier years'
+  profit is in retained earnings, so it matches the balance sheet and still
+  balances.
 - **Period close** (Accounting; PC1-PC12, not yet approved by Jess), like
   NetSuite's period close checklist: each financial year and its months,
   Open or Closed; for a month, checks Tohyee works out itself (bank accounts
   reconciled to the month end, no drafts dated in it, depreciation run,
   foreign-currency balances revalued, stock equals 1400 and nothing below
   zero, receivables and payables equal their control accounts, GST returns
-  filed, the opening balance account at 0.00), each with a link to fix it.
+  filed by the GST period setting, the opening balance account at 0.00),
+  each with a link to fix it. A bank account with no statement is a
+  warning an owner or admin can accept, not a block (as in NetSuite).
   Closing locks everything up to the month end (the database refuses
   journals dated in it); months are closed in order. Bookkeepers close
   when every check passes; with warnings only owners and admins, after
@@ -120,7 +126,11 @@ that something happened.
   **payment terms** (N days after the invoice, N days after the end of the
   month, or day N of the following month; six NZ defaults to start, archived
   never deleted), and a new invoice's due date comes from them (still
-  editable on the draft). See examples RC1, RC2.
+  editable on the draft). See examples RC1, RC2. **Suppliers** have their
+  own payment terms from the same list (like the Terms on NetSuite's vendor
+  record): a new bill's due date comes from them (still editable on the
+  draft), and repeating bills and copy to bill use them. See examples
+  SPT1-SPT5 (not yet approved by Jess).
 - **Aged receivables** (Reporting): what each customer owes as at a date,
   by days past due (current, 1-30, 31-60, 61-90, over 90) less unused
   credit, each row opening to its invoices, and totalling to accounts
@@ -179,15 +189,16 @@ that something happened.
   (locked period, credit limit, required field) leaves the draft with the
   reason in the template's history. Pause, resume (paused dates are
   skipped) and end.
-- **Repeating bills** (Purchases; RB1-RB10, not yet approved by Jess), like
+- **Repeating bills** (Purchases; RB1-RB12, not yet approved by Jess), like
   Xero's repeating bills and made by the same scheduler as repeating
   invoices: a template with a supplier and bill lines (items fill the
   supplier's price; stock items need a Location once locations are in use),
   a supplier invoice number pattern with {date}, {month} or {n} so each
-  bill's number is its own, a due date rule (N days after the bill date, N
-  days after the end of its month, or day N of the following month, since
-  suppliers have no payment terms), every N weeks or months, and each bill
-  saved as a draft or approved. The hourly job and "Run now" make each
+  bill's number is its own, or no pattern, so each bill is a draft without
+  a number to complete from the real invoice (RB11), a due date rule (the
+  supplier's payment terms, N days after the bill date, N days after the
+  end of its month, or day N of the following month), every N weeks or
+  months, and each bill saved as a draft or approved. The hourly job and "Run now" make each
   date's bill once, catching up missed dates; a number the supplier already
   has stops the template at that date with the reason. Pause, resume and
   end; a history of the bills made, linked both ways. Nothing is paid
@@ -300,7 +311,8 @@ that something happened.
   left), each linking to its page. See examples OP1-OP11.
 - **Bills** from suppliers in the base currency: drafts that can be edited and
   deleted, with the supplier's invoice number (a supplier can't have two bills
-  that aren't voided with the same number, ignoring case and spaces),
+  that aren't voided with the same number, ignoring case and spaces; a draft
+  can wait for it, approving needs it, B9),
   tax-exclusive, tax-inclusive or no-tax amounts and GST worked out and
   rounded per line as on sales invoices. Approving posts Dr each line's
   account and GST / Cr accounts payable on the bill date, and voiding posts
@@ -355,6 +367,10 @@ that something happened.
   including payments, credit and refunds. See examples NF1-NF14.
 - **GST basis** setting (invoice, payments or hybrid), used by the GST
   return.
+- **GST filing frequency** setting (monthly, two-monthly ending in odd or
+  even months, or six-monthly ending in a chosen pair of months), like
+  NetSuite's tax periods: the GST return opens on the next period, and Home
+  and the period close use it (GP1-GP6, not yet approved by Jess).
 - **GST return** (NZ GST101A, boxes 5-15) on the invoice, payments or hybrid
   basis, for 1, 2 or 6 whole calendar months, under Reports. Worked out from
   sales invoices, sales credit notes, bills, supplier credit notes and spend

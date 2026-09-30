@@ -42,6 +42,8 @@ type Draft = {
   isProspect: boolean;
   /** Terms, delivery address, credit limit and so on (RC1-RC8). */
   customer: CustomerDraft;
+  /** A supplier's payment terms (SPT1); "" for none. */
+  supplierPaymentTermId: string;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -56,6 +58,7 @@ const EMPTY_DRAFT: Draft = {
   defaultSalespersonId: "",
   isProspect: false,
   customer: EMPTY_CUSTOMER_DRAFT,
+  supplierPaymentTermId: "",
 };
 
 function draftFrom(contact: Contact): Draft {
@@ -71,13 +74,21 @@ function draftFrom(contact: Contact): Draft {
     defaultSalespersonId: contact.defaultSalespersonId ?? "",
     isProspect: contact.isProspect,
     customer: customerDraftFrom(contact),
+    supplierPaymentTermId: contact.supplierPaymentTermId ?? "",
   };
 }
 
-/** What's sent: the customer details only for customers (the server keeps a former customer's). */
+/**
+ * What's sent: the customer details only for customers and the supplier's
+ * terms only for suppliers (the server keeps a former customer's or supplier's).
+ */
 function bodyFrom(draft: Draft): Record<string, unknown> {
-  const { customer, ...rest } = draft;
-  return draft.isCustomer ? { ...rest, ...customerBody(customer) } : rest;
+  const { customer, supplierPaymentTermId, ...rest } = draft;
+  return {
+    ...rest,
+    ...(draft.isCustomer ? customerBody(customer) : {}),
+    ...(draft.isSupplier ? { supplierPaymentTermId: supplierPaymentTermId || null } : {}),
+  };
 }
 
 /** A prospect uses the customer fields, as on the server. */
@@ -260,6 +271,23 @@ function ContactForm({
             onChange={(id) => setDraft({ ...draft, defaultSalespersonId: id })}
           />
         </CustomerFields>
+      ) : null}
+      {draft.isSupplier ? (
+        <div className={ui.grid3}>
+          <Field label="Supplier payment terms" hint="New bills from this supplier take their due date from these.">
+            <select value={draft.supplierPaymentTermId} onChange={(event) => setDraft({ ...draft, supplierPaymentTermId: event.target.value })}>
+              <option value="">None</option>
+              {(customerSetup?.paymentTerms ?? [])
+                .filter((term) => term.isActive || term.id === draft.supplierPaymentTermId)
+                .map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.name}
+                    {term.isActive ? "" : " (archived)"}
+                  </option>
+                ))}
+            </select>
+          </Field>
+        </div>
       ) : null}
       <CustomFieldInputs
         setup={customSetup}
