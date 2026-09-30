@@ -476,20 +476,40 @@ that something happened.
   backup codes from your profile.
 - **Server email** (Gmail or other SMTP, password encrypted) for security
   alerts and two-step reset links, with a test button.
-- **Phone access (remote access)**, two ways, both needing two-step sign-in
-  to be in force:
-  - **Tailscale Funnel** (the default, Windows server app → Phone access):
-    one button installs Tailscale from Tailscale's package server if needed
+- **Phone access (remote access)**, three ways, one on at a time (switching
+  asks first and turns the other off), all needing two-step sign-in to be in
+  force (decided with Jess, 30 Sep 2026):
+  - **Tohyee address** (recommended for most; Windows server app → Phone
+    access, or `remote-access address --on`): one click, no sign-up. The
+    server asks the Tohyee address service (a Cloudflare Worker the project
+    runs; `TOHYEE_ADDRESS_SERVICE_URL`, placeholder
+    `https://relay.tohyee.example` until it's deployed) for an address and a
+    Cloudflare tunnel token, stores the token and release key encrypted (and a
+    random install id, so asking again gets the same address), and runs
+    Cloudflare's connector. Turn off keeps the address; giving it back
+    releases it. Says "The Tohyee address service isn't available yet" while
+    it can't be reached. Tested against a stand-in for the service; the real
+    service isn't built in this repository.
+  - **Your own domain (Cloudflare)** (free for businesses; needs a domain on
+    Cloudflare): the Windows server app's Connect to Cloudflare signs in to
+    Cloudflare in the browser (`cloudflared tunnel login`), asks for the name
+    and domain, makes the tunnel, adds the DNS name and hands the tunnel's
+    token to the server, which runs Cloudflare's connector pointed at
+    Tohyee's port. Pasting a tunnel token from Cloudflare's dashboard still
+    works. The cloudflared steps still need trying on a real Windows computer
+    with a real Cloudflare account.
+  - **Tailscale Funnel** (Windows server app → Phone access): the simplest
+    set-up, but Tailscale's free plan is for non-commercial use only;
+    businesses need a paid Tailscale plan (from US$8 per user a month). One
+    button installs Tailscale from Tailscale's package server if needed
     (checksum checked, unattended mode so it works before anyone signs in to
     Windows), signs in to Tailscale in the browser, records the address on
     the server (which refuses without two-step sign-in), and turns Funnel on
-    for Tohyee's port in the background so it survives restarts; then shows
-    the `https://….ts.net` address with a QR code, Copy address, and Turn
-    off. Tohyee doesn't store any Tailscale login. The server tests cover
-    requests arriving through Funnel; the Tailscale steps themselves still
-    need trying on a real Windows computer.
-  - **Cloudflare Tunnel** (advanced, your own domain): paste the tunnel
-    token, Tohyee runs Cloudflare's connector and shows its status.
+    for Tohyee's port in the background so it survives restarts. Tohyee
+    doesn't store any Tailscale login. The server tests cover requests
+    arriving through Funnel; the Tailscale steps themselves still need trying
+    on a real Windows computer.
+  Each shows the address with a QR code, Copy address, Open and Turn off.
 - **Update check** against GitHub releases.
 
 ## Not built yet, on purpose

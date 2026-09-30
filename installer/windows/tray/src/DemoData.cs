@@ -22,40 +22,66 @@ namespace Tohyee.Tray
             Directory.CreateDirectory(folder);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            var tailscale = new DemoTailscale { State = PhoneState.On };
+            var tailscale = new DemoTailscale { State = PhoneState.NotInstalled };
             var services = new AppServices
             {
                 Api = TohyeeApi.Demo("jess@example.nz", Answer),
                 Settings = TraySettings.Load(),
                 Tailscale = tailscale,
+                Cloudflare = new DemoCloudflare(),
                 News = NewsFeed.Sample(SampleNews()),
                 Server = () => new ServerInfo { State = ServerState.Running, Version = "0.2.1", Uptime = TimeSpan.FromHours(77) },
             };
+            Remote = TohyeeOn;
             using (var form = new ServerSettingsForm(services))
             {
                 form.Show();
                 Pump();
                 Save(form, folder, "0-sign-in");
                 form.ShowSettings();
-                foreach (var page in new[] { "home", "organisations", "users", "phone", "backups", "email", "updates" })
+                foreach (var page in new[] { "home", "organisations", "users", "backups", "email", "updates" })
                 {
                     form.Navigate(page);
                     Pump();
-                    Save(form, folder, Name(page) + (page == "phone" ? "-on" : ""));
+                    Save(form, folder, Name(page));
                 }
-                tailscale.State = PhoneState.NotInstalled;
-                var phone = new RemoteAccessPage(services.Api, services.Settings, tailscale);
-                form.ShowPage("phone", phone);
-                Pump();
-                Save(form, folder, Name("phone") + "-off");
-                phone.ShowCloudflareSetUpForDemo();
-                Pump();
-                Save(form, folder, Name("phone") + "-cloudflare");
+
+                // Phone access: the chooser, then each way on or part-way through.
+                Phone(form, services, folder, "1-choose", Off, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.None, true, null);
+                Phone(form, services, folder, "2-tohyee-on", TohyeeOn, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.None, true, null);
+                Phone(form, services, folder, "3-tohyee-not-available", Off, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.None, false, null);
+                Phone(form, services, folder, "4-cloudflare-sign-in", Off, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.CloudflareSignIn, true, "cloudflare");
+                Phone(form, services, folder, "5-cloudflare-address", Off, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.CloudflareChoose, true, "cloudflare");
+                Phone(form, services, folder, "6-cloudflare-on", CloudflareOn, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.None, true, "cloudflare");
+                Phone(form, services, folder, "7-tailscale-on", TailscaleOn, PhoneState.On, RemoteAccessPage.DemoStage.None, true, "tailscale");
                 form.Close();
             }
             Console.WriteLine("Saved screenshots to " + folder);
             return 0;
         }
+
+        private static void Phone(ServerSettingsForm form, AppServices services, string folder, string name, string remote, PhoneState tailscale, RemoteAccessPage.DemoStage stage, bool serviceAvailable, string scrollTo)
+        {
+            Remote = remote;
+            ServiceAvailable = serviceAvailable;
+            ((DemoTailscale)services.Tailscale).State = tailscale;
+            var phone = new RemoteAccessPage(services.Api, services.Settings, services.Tailscale, services.Cloudflare);
+            form.ShowPage("phone", phone);
+            Pump();
+            phone.ShowForDemo(stage, serviceAvailable, scrollTo);
+            Pump();
+            Save(form, folder, Name("phone") + "-" + name);
+        }
+
+        private static string Remote;
+        private static bool ServiceAvailable = true;
+
+        private const string Tunnel = "'tunnel':{'status':'connected','message':null,'log':['2026-09-30T08:12:01Z INF Registered tunnel connection connIndex=0 location=akl01 protocol=quic']}";
+        private const string Common = "'localService':'http://127.0.0.1:3000','twoStepRequired':true,'secretsAvailable':true,'addressService':'https://relay.tohyee.example'";
+        private static readonly string Off = "{'remoteAccess':{'method':'cloudflare','enabled':false,'publicUrl':null,'hasToken':false,'tunnelId':null,'tohyeeAddress':null," + Common + ",'tunnel':{'status':'off','message':null,'log':[]}}}";
+        private static readonly string TohyeeOn = "{'remoteAccess':{'method':'tohyee','enabled':true,'publicUrl':'https://k7m2q9.tohyee.example','hasToken':false,'tunnelId':null,'tohyeeAddress':'https://k7m2q9.tohyee.example'," + Common + "," + Tunnel + "}}";
+        private static readonly string CloudflareOn = "{'remoteAccess':{'method':'cloudflare','enabled':true,'publicUrl':'https://books.example.nz','hasToken':true,'tunnelId':'6ff42ae2-765d-4adf-8112-31c55c1551ef','tohyeeAddress':null," + Common + "," + Tunnel + "}}";
+        private static readonly string TailscaleOn = "{'remoteAccess':{'method':'tailscale','enabled':true,'publicUrl':'https://tohyee-pc.tail1a2b3c.ts.net','hasToken':false,'tunnelId':null,'tohyeeAddress':null," + Common + ",'tunnel':{'status':'off','message':null,'log':[]}}}";
 
         private static string Name(string page)
         {
@@ -96,7 +122,7 @@ namespace Tohyee.Tray
             return new List<NewsItem>
             {
                 new NewsItem { Kind = "release", Date = "2026-09-29", Title = "Tohyee 0.2.1", Body = "Bank reconciliation with one-click OK, bulk coding and split transactions, plus foreign-currency bank accounts.", Link = NewsFeed.ReleasesPage },
-                new NewsItem { Kind = "announcement", Date = "2026-09-20", Title = "Phone access is getting easier", Body = "The next server app sets up Tailscale Funnel for you: one button, then scan a QR code with your phone." },
+                new NewsItem { Kind = "announcement", Date = "2026-09-20", Title = "Phone access is getting easier", Body = "The next server app gives you three ways to use Tohyee from your phone, including a Tohyee address in one click. Then scan a QR code." },
                 new NewsItem { Kind = "release", Date = "2026-09-02", Title = "Tohyee 0.2.0", Body = "Encrypted nightly backups with OneDrive copies, restore as a copy, and the backup key check.", Link = NewsFeed.ReleasesPage },
                 NewsFeed.DefaultConference,
             };
@@ -155,9 +181,15 @@ namespace Tohyee.Tray
             {
                 return Parse("{'email':{'configured':true,'host':'smtp.gmail.com','port':465,'username':'tohyee.alerts@gmail.com','hasPassword':true,'fromAddress':'tohyee.alerts@gmail.com','fromName':'Tohyee','secretsAvailable':true,'updatedAt':'" + Ago(24 * 30) + "'}}");
             }
+            if (path.StartsWith("/api/admin/remote-access/tohyee-address") && method == "GET")
+            {
+                return Parse(ServiceAvailable
+                    ? "{'addressService':{'url':'https://relay.tohyee.example','available':true,'message':null}}"
+                    : "{'addressService':{'url':'https://relay.tohyee.example','available':false,'message':'" + RemoteAccessPage.NotAvailableYet.Replace("'", "\\u0027") + "'}}");
+            }
             if (path.StartsWith("/api/admin/remote-access"))
             {
-                return Parse("{'remoteAccess':{'method':'tailscale','enabled':true,'publicUrl':'https://tohyee-pc.tail1a2b3c.ts.net','hasToken':false,'tunnelId':null,'localService':'http://127.0.0.1:3000','twoStepRequired':true,'secretsAvailable':true,'tunnel':{'status':'off','message':null,'log':[]}}}");
+                return Parse(Remote);
             }
             if (path.StartsWith("/api/updates/latest-release"))
             {
@@ -186,5 +218,19 @@ namespace Tohyee.Tray
         public Task LogIn(Action<string> openUrl) { return Task.FromResult(0); }
         public Task FunnelOn(int port, Action<string> openUrl) { return Task.FromResult(0); }
         public Task FunnelOff() { return Task.FromResult(0); }
+    }
+
+    /// <summary>Cloudflare for the screenshots: nothing run.</summary>
+    internal sealed class DemoCloudflare : ICloudflare
+    {
+        public Task LogIn(Action<string, bool> onUrl, CancellationToken cancel) { return Task.FromResult(0); }
+        public Task<string> SignedInDomain() { return Task.FromResult("example.nz"); }
+
+        public Task<CloudflareTunnel> Connect(string tunnelName, string hostname, Action<string> progress, CancellationToken cancel)
+        {
+            return Task.FromResult(new CloudflareTunnel { TunnelId = "6ff42ae2-765d-4adf-8112-31c55c1551ef", Token = "eyJ…", Hostname = hostname });
+        }
+
+        public void Forget() { }
     }
 }

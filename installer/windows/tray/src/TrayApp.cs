@@ -57,6 +57,7 @@ namespace Tohyee.Tray
                 Api = _api,
                 Settings = settings,
                 Tailscale = new TailscaleCli(),
+                Cloudflare = new CloudflaredCli(settings),
                 News = NewsFeed.ForThisUser(),
                 Server = () => new ServerInfo { State = _state, Text = _stateText, Version = _version, Uptime = _uptime },
             };

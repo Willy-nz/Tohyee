@@ -11,6 +11,7 @@ namespace Tohyee.Tray
         public TohyeeApi Api;
         public TraySettings Settings;
         public ITailscale Tailscale;
+        public ICloudflare Cloudflare;
         public NewsFeed News;
         /// <summary>The server's state as the tray icon last saw it.</summary>
         public Func<ServerInfo> Server;
@@ -117,7 +118,7 @@ namespace Tohyee.Tray
                 case "home": return new HomePage(_app, Navigate);
                 case "organisations": return new OrganisationsPage(_app.Api);
                 case "users": return new UsersPage(_app.Api);
-                case "phone": return new RemoteAccessPage(_app.Api, _app.Settings, _app.Tailscale);
+                case "phone": return new RemoteAccessPage(_app.Api, _app.Settings, _app.Tailscale, _app.Cloudflare);
                 case "backups": return _backupsPage = new BackupsPage(_app.Api);
                 case "email": return new EmailPage(_app.Api);
                 case "updates": return new UpdatesPage(_app.Api);

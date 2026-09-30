@@ -142,11 +142,11 @@ namespace Tohyee.Tray
                 }
                 else if (J.Bool(remote, "enabled"))
                 {
-                    _phone.Show("Not connected", method == "tailscale" ? "Tailscale Funnel" : "Cloudflare Tunnel", Theme.Warning);
+                    _phone.Show("Not connected", method == "tailscale" ? "Tailscale Funnel" : method == "tohyee" ? "Tohyee address" : "Your own domain (Cloudflare)", Theme.Warning);
                 }
                 else
                 {
-                    _phone.Show("Off", "Set up phone access", Theme.Muted);
+                    _phone.Show("Off", "Choose a way to turn it on", Theme.Muted);
                 }
             }
             catch (ApiException)

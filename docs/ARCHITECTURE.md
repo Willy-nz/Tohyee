@@ -691,18 +691,37 @@ tested against.
 
 ## Remote access
 
-Remote access (server settings) runs Cloudflare's `cloudflared` connector as a child
-process (`src/lib/remote/tunnel.ts`) with the tunnel token a server admin
-pasted from Cloudflare's dashboard (stored encrypted). The tunnel's public
-hostname is pointed at `http://127.0.0.1:<port>` in Cloudflare, so nothing is
-opened on the router and Cloudflare provides HTTPS. Requests arrive with
-`X-Forwarded-Proto: https`, so session cookies are `Secure`. The connector is
-started at boot when remote access is on (`TOHYEE_REMOTE_ACCESS=off` stops
-that), restarted with growing waits if it stops, and its status comes from
-its own `/ready` endpoint. The Windows installer and the Docker image include
-a pinned, checksum-verified `cloudflared`; elsewhere set
-`TOHYEE_CLOUDFLARED_PATH` or put it on the `PATH`. Emailed links use the saved
-public address rather than the request's Host header.
+Remote access (use Tohyee from anywhere) has three ways, one on at a time,
+recorded in the `remote_access` server setting as its `method`:
+
+- `tohyee`: a Tohyee address. The server asks the Tohyee address service
+  (`src/lib/remote/address-service.ts`; `TOHYEE_ADDRESS_SERVICE_URL`) for an
+  address and a Cloudflare tunnel token, sending the main port, the app
+  version and a random install id kept encrypted in the `address_service`
+  setting (whoever has it can ask for the same address). The token and the
+  release key are stored encrypted. The service only hands out addresses;
+  requests go through Cloudflare's tunnel straight to this computer.
+- `cloudflare`: a tunnel on the owner's own Cloudflare account, made by the
+  Windows server app (`cloudflared tunnel login/create/route dns/token`) or
+  in Cloudflare's dashboard; the server is given its token.
+- `tailscale`: Tailscale Funnel, run by Tailscale's own Windows service; the
+  server only records that it's on and its address.
+
+For the first two the server runs Cloudflare's `cloudflared` connector as a
+child process (`src/lib/remote/tunnel.ts`):
+`cloudflared tunnel run --url http://127.0.0.1:<port>` with the token in
+`TUNNEL_TOKEN`. Tunnels made in the dashboard (or by the address service) get
+their routes from Cloudflare, which replace `--url`; a tunnel made with
+`cloudflared tunnel create` has none, so `--url` is what sends its address to
+Tohyee. Nothing is opened on the router and Cloudflare provides HTTPS.
+Requests arrive with `X-Forwarded-Proto: https`, so session cookies are
+`Secure`. The connector is started at boot when remote access is on
+(`TOHYEE_REMOTE_ACCESS=off` stops that), restarted with growing waits if it
+stops, and its status comes from its own `/ready` endpoint. The Windows
+installer and the Docker image include a pinned, checksum-verified
+`cloudflared`; elsewhere set `TOHYEE_CLOUDFLARED_PATH` or put it on the
+`PATH`. Emailed links use the saved public address rather than the request's
+Host header.
 
 ## Background work
 
