@@ -23,6 +23,8 @@ import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
 import { ExchangeRateField, useLastRate } from "@/components/fx";
 import type { TaxCode } from "@/lib/tax/codes";
+import { retaxLines, usualWithContact } from "@/lib/tax/exports";
+import { contactPurchaseTaxCode } from "@/lib/tax/purchase-defaults";
 import { type CustomFieldSetup, type CustomValues } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
@@ -44,6 +46,10 @@ export type EditorLine = {
   customFields: CustomValues;
   /** A bill line copied from a purchase order line (PO3) keeps its link when edited. */
   purchaseOrderLineId: string;
+  /** The code Tohyee's usual default gave (the item's, the account's or the organisation's), before the supplier's (EX17-EX19). */
+  usualTaxCode?: string;
+  /** Chosen by hand, or saved: the supplier's default leaves it alone (EX20, EX21). */
+  taxTyped?: boolean;
 };
 
 let lineKey = 0;
@@ -52,10 +58,29 @@ function nextLineKey(): number {
   return lineKey;
 }
 
-/** New lines have no account, so each cost is put somewhere on purpose. */
-export function blankLine(taxCode: string, customFields: CustomValues = {}): EditorLine {
-  return { key: nextLineKey(), itemId: "", unitId: "", description: "", quantity: "1", unitPrice: "", accountCode: "", taxCode, tracking: {}, customFields, purchaseOrderLineId: "" };
+/**
+ * New lines have no account, so each cost is put somewhere on purpose.
+ * `contactTaxCode` is the supplier's default purchase tax code (EX17); without
+ * one the line starts with the usual default.
+ */
+export function blankLine(taxCode: string, customFields: CustomValues = {}, contactTaxCode: string | null = null): EditorLine {
+  return {
+    key: nextLineKey(),
+    itemId: "",
+    unitId: "",
+    description: "",
+    quantity: "1",
+    unitPrice: "",
+    accountCode: "",
+    taxCode: contactTaxCode ?? taxCode,
+    usualTaxCode: taxCode,
+    tracking: {},
+    customFields,
+    purchaseOrderLineId: "",
+  };
 }
+
+export { contactPurchaseTaxCode, retaxLines };
 
 /** Saved purchase lines (a bill's or a purchase order's) as editor lines. */
 export function editorLines(lines: Bill["lines"], defaultTaxCode: string): EditorLine[] {
@@ -71,6 +96,8 @@ export function editorLines(lines: Bill["lines"], defaultTaxCode: string): Edito
     tracking: line.tracking ?? {},
     customFields: line.customFields ?? {},
     purchaseOrderLineId: line.purchaseOrderLineId ?? "",
+    // Saved lines keep their tax codes whatever the supplier's default (EX21).
+    taxTyped: true,
   }));
 }
 
@@ -205,6 +232,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
               if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
               setContactId(event.target.value);
               refillDue(event.target.value, billDate);
+              setLines((current) => retaxLines(current, contactPurchaseTaxCode(next, taxCodes)));
             }}
             required
           >
@@ -294,6 +322,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
         setLines={setLines}
         defaultTaxCode={defaultTaxCode}
         lineDefaults={lineDefaults}
+        contactTaxCode={contactPurchaseTaxCode(chosenSupplier, taxCodes)}
       />
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>
@@ -328,6 +357,7 @@ export function PurchaseLines({
   setLines,
   defaultTaxCode,
   lineDefaults,
+  contactTaxCode = null,
 }: {
   organisationId: string;
   items: ItemList | null;
@@ -343,6 +373,8 @@ export function PurchaseLines({
   setLines: Dispatch<SetStateAction<EditorLine[]>>;
   defaultTaxCode: string;
   lineDefaults: CustomValues;
+  /** The supplier's default purchase tax code, if it has an active one (EX17-EX19). */
+  contactTaxCode?: string | null;
 }) {
   const scale = currencyMinorUnits(baseCurrency);
   const hasTax = amountsMode !== "no_tax";
@@ -411,7 +443,10 @@ export function PurchaseLines({
                       itemId={line.itemId}
                       unitId={line.unitId}
                       labelPrefix={`Line ${index + 1}`}
-                      onPick={(patch) => update(line.key, patch)}
+                      onPick={(patch) => {
+                        const { taxCode, ...rest } = patch;
+                        update(line.key, { ...rest, ...usualWithContact(taxCode, contactTaxCode) });
+                      }}
                     />
                   )}
                 </td>
@@ -441,7 +476,9 @@ export function PurchaseLines({
                     accounts={accounts}
                     filter={takesBillLines}
                     value={line.accountCode}
-                    onChange={(code) => update(line.key, { accountCode: code, ...usualTaxCode(accounts, taxCodes, code) })}
+                    onChange={(code) =>
+                      update(line.key, { accountCode: code, ...usualWithContact(usualTaxCode(accounts, taxCodes, code).taxCode, contactTaxCode) })
+                    }
                     required
                   />
                   <TrackingSelects
@@ -465,7 +502,7 @@ export function PurchaseLines({
                     <select
                       aria-label={`Line ${index + 1} tax code`}
                       value={line.taxCode}
-                      onChange={(event) => update(line.key, { taxCode: event.target.value })}
+                      onChange={(event) => update(line.key, { taxCode: event.target.value, taxTyped: true })}
                       required
                     >
                       <option value="">Choose</option>
@@ -501,7 +538,7 @@ export function PurchaseLines({
                 <Button
                   variant="secondary"
                   size="small"
-                  onClick={() => setLines((current) => [...current, blankLine(defaultTaxCode, lineDefaults)])}
+                  onClick={() => setLines((current) => [...current, blankLine(defaultTaxCode, lineDefaults, contactTaxCode)])}
                 >
                   Add line
                 </Button>

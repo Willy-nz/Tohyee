@@ -100,6 +100,9 @@ describe("exports", () => {
     expect(exportWarning(wombat, OFF, ["GST"], CODES)).toBeNull();
     expect(exportWarning(kobe, ON, ["GST"], CODES)).toBeNull();
     expect(exportWarning(sydneyVisitors, ON, ["GST"], CODES)).toBeNull();
+    // Only where the lines can still be changed (decided 1 Oct 2026, EX25): not on an approved document.
+    expect(exportWarning(wombat, ON, ["GST"], CODES, { editable: false })).toBeNull();
+    expect(exportLabel(wombat)).toBe("Export (Australia)");
   });
 
   it("EX14: countries by code or name, New Zealand first in the list", () => {

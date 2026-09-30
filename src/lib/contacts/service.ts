@@ -72,6 +72,12 @@ export type Contact = {
    * tax item: new sales lines start with it, before the tax code for exports.
    */
   defaultSalesTaxCode: string | null;
+  /**
+   * The contact's own default purchase tax code (EX16), like Xero's contact
+   * "Purchase defaults" tax rate: new lines on bills, supplier credit notes,
+   * purchase orders, repeating bills and spend money start with it.
+   */
+  defaultPurchaseTaxCode: string | null;
 } & CustomerDetails;
 
 /** The details a person enters. An edit leaves out anything it doesn't change. */
@@ -95,6 +101,8 @@ export type ContactInput = {
   deliveryCountry?: unknown;
   /** A tax code; blank for none (EX5). */
   defaultSalesTaxCode?: unknown;
+  /** A tax code; blank for none (EX16). */
+  defaultPurchaseTaxCode?: unknown;
 } & CustomerDetailsInput;
 
 type ContactDetails = Pick<Contact, "name" | "isCustomer" | "isSupplier" | "email" | "phone" | "postalAddress" | "gstNumber">;
@@ -130,12 +138,14 @@ type ContactRow = {
   delivery_country: string | null;
   default_sales_tax_code_id: string | null;
   default_sales_tax_code: string | null;
+  default_purchase_tax_code_id: string | null;
+  default_purchase_tax_code: string | null;
 };
 
 const OWN_COLUMNS =
   "id, request_hash, name, is_customer, is_supplier, email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect, is_archived, " +
   "delivery_address, payment_term_id, credit_limit::text, customer_group_id, price_level_id, parent_contact_id, supplier_payment_term_id, currency_code, " +
-  "billing_country, delivery_country, default_sales_tax_code_id";
+  "billing_country, delivery_country, default_sales_tax_code_id, default_purchase_tax_code_id";
 
 /** The primary contact person (RC6), looked up for each contact. */
 const PRIMARY_PERSON = `(select p.id from crm_people p where p.contact_id = contacts.id and p.is_primary) as primary_person_id,
@@ -143,7 +153,8 @@ const PRIMARY_PERSON = `(select p.id from crm_people p where p.contact_id = cont
   (select p.email from crm_people p where p.contact_id = contacts.id and p.is_primary) as primary_person_email`;
 
 const COLUMNS = `${OWN_COLUMNS}, ${PRIMARY_PERSON},
-  (select t.code from tax_codes t where t.id = contacts.default_sales_tax_code_id) as default_sales_tax_code`;
+  (select t.code from tax_codes t where t.id = contacts.default_sales_tax_code_id) as default_sales_tax_code,
+  (select t.code from tax_codes t where t.id = contacts.default_purchase_tax_code_id) as default_purchase_tax_code`;
 
 function toContact(row: ContactRow): Contact {
   return {
@@ -173,6 +184,7 @@ function toContact(row: ContactRow): Contact {
     billingCountry: row.billing_country,
     deliveryCountry: row.delivery_country,
     defaultSalesTaxCode: row.default_sales_tax_code,
+    defaultPurchaseTaxCode: row.default_purchase_tax_code,
   };
 }
 
@@ -190,17 +202,20 @@ function parseCountry(input: unknown, label: string, blank: string | null): stri
 }
 
 /**
- * The contact's default sales tax code (EX5): blank for none, else an active
- * tax code (matched ignoring case; the one it already has may be kept
- * though inactive). Returns its id and code, or undefined when not sent.
+ * The contact's default sales tax code (EX5) or purchase tax code (EX16,
+ * EX21): blank for none, else an active tax code (matched ignoring case; the
+ * one it already has may be kept though inactive). Tohyee's tax codes aren't
+ * split into sales and purchase codes, so any active code will do on either
+ * side (EX22). Returns its id and code, or undefined when not sent.
  */
-async function resolveDefaultSalesTaxCode(
+async function resolveDefaultTaxCode(
   tx: OrgTx,
   input: unknown,
   kept: string | null,
+  side: "sales" | "purchase" = "sales",
 ): Promise<{ id: string; code: string } | null | undefined> {
   if (input === undefined) return undefined;
-  const code = optionalString(input, "defaultSalesTaxCode", { maxLength: 20 });
+  const code = optionalString(input, side === "sales" ? "defaultSalesTaxCode" : "defaultPurchaseTaxCode", { maxLength: 20 });
   if (code === null) return null;
   const found = await tx.query<{ id: string; code: string; is_active: boolean }>(
     "select id, code, is_active from tax_codes where upper(code) = upper($1)",
@@ -209,7 +224,7 @@ async function resolveDefaultSalesTaxCode(
   const row = found.rows[0];
   if (!row) throw new ValidationError(`There's no tax code ${code}.`);
   if (!row.is_active && row.code !== kept) {
-    throw new ValidationError(`Tax code ${row.code} is inactive, so it can't be a contact's default sales tax code.`);
+    throw new ValidationError(`Tax code ${row.code} is inactive, so it can't be a contact's default ${side} tax code.`);
   }
   return { id: row.id, code: row.code };
 }
@@ -455,6 +470,7 @@ export async function createContact(
   const billingCountry = parseCountry(input.billingCountry, "Billing country", HOME_COUNTRY) ?? HOME_COUNTRY;
   const deliveryCountry = parseCountry(input.deliveryCountry, "Delivery country", null) ?? null;
   const rawSalesTax = optionalString(input.defaultSalesTaxCode, "defaultSalesTaxCode", { maxLength: 20 })?.toUpperCase() ?? null;
+  const rawPurchaseTax = optionalString(input.defaultPurchaseTaxCode, "defaultPurchaseTaxCode", { maxLength: 20 })?.toUpperCase() ?? null;
 
   // Values that weren't sent stay out of the hash, so older requests hash the same.
   const hash = requestHash("contact", {
@@ -463,6 +479,7 @@ export async function createContact(
     ...(billingCountry === HOME_COUNTRY ? {} : { billingCountry }),
     ...(deliveryCountry === null ? {} : { deliveryCountry }),
     ...(rawSalesTax === null ? {} : { defaultSalesTaxCode: rawSalesTax }),
+    ...(rawPurchaseTax === null ? {} : { defaultPurchaseTaxCode: rawPurchaseTax }),
     ...(rawCustom === undefined ? {} : { customFields: rawCustom }),
     ...(rawSalesperson === null ? {} : { defaultSalespersonId: rawSalesperson }),
     ...(isProspect ? { isProspect } : {}),
@@ -479,7 +496,8 @@ export async function createContact(
   const defaultSalespersonId = (await resolveDefaultSalesperson(tx, input.defaultSalespersonId, null)) ?? null;
   const customer = await resolveCustomerDetails(tx, input, NO_CUSTOMER_DETAILS, { contactId: null, isCustomer: details.isCustomer });
   const supplierPaymentTermId = await resolveSupplierPaymentTerm(tx, input.supplierPaymentTermId, null, { isSupplier: details.isSupplier });
-  const salesTax = (await resolveDefaultSalesTaxCode(tx, rawSalesTax, null)) ?? null;
+  const salesTax = (await resolveDefaultTaxCode(tx, rawSalesTax, null)) ?? null;
+  const purchaseTax = (await resolveDefaultTaxCode(tx, rawPurchaseTax, null, "purchase")) ?? null;
 
   // No separate name check first: the original of a retry could commit between
   // it and the key check above. The unique indexes decide, and the key is
@@ -489,8 +507,9 @@ export async function createContact(
     `insert into contacts (command_source, idempotency_key, request_hash, name, is_customer, is_supplier,
                            email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect,
                            delivery_address, payment_term_id, credit_limit, customer_group_id, price_level_id, parent_contact_id,
-                           supplier_payment_term_id, currency_code, billing_country, delivery_country, default_sales_tax_code_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16::numeric, $17, $18, $19, $20, $21, $22, $23, $24)
+                           supplier_payment_term_id, currency_code, billing_country, delivery_country, default_sales_tax_code_id,
+                           default_purchase_tax_code_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16::numeric, $17, $18, $19, $20, $21, $22, $23, $24, $25)
      on conflict do nothing
      returning ${OWN_COLUMNS}`,
     [
@@ -518,6 +537,7 @@ export async function createContact(
       billingCountry,
       deliveryCountry,
       salesTax?.id ?? null,
+      purchaseTax?.id ?? null,
     ],
   );
   const row = inserted.rows[0] ? await readRow(tx, inserted.rows[0].id) : undefined;
@@ -544,6 +564,7 @@ export async function createContact(
       billingCountry,
       ...(deliveryCountry ? { deliveryCountry } : {}),
       ...(salesTax ? { defaultSalesTaxCode: salesTax.code } : {}),
+      ...(purchaseTax ? { defaultPurchaseTaxCode: purchaseTax.code } : {}),
       ...Object.fromEntries(Object.entries(customer).filter(([, value]) => value !== null)),
       ...(supplierPaymentTermId ? { supplierPaymentTermId } : {}),
     },
@@ -611,9 +632,14 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
   const sentDelivery = parseCountry(input.deliveryCountry, "Delivery country", null);
   const deliveryCountry = sentDelivery === undefined ? current.deliveryCountry : sentDelivery;
   if (deliveryCountry !== current.deliveryCountry) changes.deliveryCountry = { from: current.deliveryCountry, to: deliveryCountry };
-  const sentSalesTax = await resolveDefaultSalesTaxCode(tx, input.defaultSalesTaxCode, current.defaultSalesTaxCode);
+  const sentSalesTax = await resolveDefaultTaxCode(tx, input.defaultSalesTaxCode, current.defaultSalesTaxCode);
   const salesTaxCode = sentSalesTax === undefined ? current.defaultSalesTaxCode : (sentSalesTax?.code ?? null);
   if (salesTaxCode !== current.defaultSalesTaxCode) changes.defaultSalesTaxCode = { from: current.defaultSalesTaxCode, to: salesTaxCode };
+  const sentPurchaseTax = await resolveDefaultTaxCode(tx, input.defaultPurchaseTaxCode, current.defaultPurchaseTaxCode, "purchase");
+  const purchaseTaxCode = sentPurchaseTax === undefined ? current.defaultPurchaseTaxCode : (sentPurchaseTax?.code ?? null);
+  if (purchaseTaxCode !== current.defaultPurchaseTaxCode) {
+    changes.defaultPurchaseTaxCode = { from: current.defaultPurchaseTaxCode, to: purchaseTaxCode };
+  }
   if (Object.keys(changes).length === 0) {
     return current;
   }
@@ -633,7 +659,8 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
               delivery_address = $12, payment_term_id = $13, credit_limit = $14::numeric, customer_group_id = $15,
               price_level_id = $16, parent_contact_id = $17, supplier_payment_term_id = $18, currency_code = $19,
               billing_country = $20, delivery_country = $21,
-              default_sales_tax_code_id = case when $22::boolean then $23::bigint else default_sales_tax_code_id end, updated_at = now()
+              default_sales_tax_code_id = case when $22::boolean then $23::bigint else default_sales_tax_code_id end,
+              default_purchase_tax_code_id = case when $24::boolean then $25::bigint else default_purchase_tax_code_id end, updated_at = now()
         where id = $1`,
       [
         current.id,
@@ -659,6 +686,8 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
         deliveryCountry,
         sentSalesTax !== undefined,
         sentSalesTax?.id ?? null,
+        sentPurchaseTax !== undefined,
+        sentPurchaseTax?.id ?? null,
       ],
     );
     row = await readRow(tx, current.id);

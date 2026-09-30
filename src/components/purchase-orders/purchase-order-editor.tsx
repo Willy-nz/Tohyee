@@ -3,7 +3,16 @@
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useAccounts } from "@/components/books";
-import { blankLine, defaultPurchaseTaxCode, type EditorLine, editorLines, linesForApi, PurchaseLines } from "@/components/bills/bill-editor";
+import {
+  blankLine,
+  contactPurchaseTaxCode,
+  defaultPurchaseTaxCode,
+  type EditorLine,
+  editorLines,
+  linesForApi,
+  PurchaseLines,
+  retaxLines,
+} from "@/components/bills/bill-editor";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { useApiData } from "@/components/hooks";
 import { useItems } from "@/components/items";
@@ -162,7 +171,15 @@ function PurchaseOrderForm({
       ) : null}
       <div className={ui.grid3}>
         <Field label="Supplier">
-          <select value={contactId} onChange={(event) => setContactId(event.target.value)} required>
+          <select
+            value={contactId}
+            onChange={(event) => {
+              setContactId(event.target.value);
+              const next = data.contacts.find((contact) => contact.id === event.target.value);
+              setLines((current) => retaxLines(current, contactPurchaseTaxCode(next, data.taxCodes)));
+            }}
+            required
+          >
             <option value="">Choose a supplier</option>
             {purchaseOrder && !supplierOptions.some((contact) => contact.id === purchaseOrder.contactId) ? (
               <option value={purchaseOrder.contactId}>{purchaseOrder.contactName} (archived or not a supplier)</option>
@@ -217,6 +234,10 @@ function PurchaseOrderForm({
         setLines={setLines}
         defaultTaxCode={defaultTaxCode}
         lineDefaults={lineDefaults}
+        contactTaxCode={contactPurchaseTaxCode(
+          data.contacts.find((contact) => contact.id === contactId),
+          data.taxCodes,
+        )}
       />
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>

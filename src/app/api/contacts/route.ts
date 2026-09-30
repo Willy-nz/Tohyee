@@ -40,6 +40,7 @@ export const POST = route(async (request) => {
       billingCountry: body.billingCountry,
       deliveryCountry: body.deliveryCountry,
       defaultSalesTaxCode: body.defaultSalesTaxCode,
+      defaultPurchaseTaxCode: body.defaultPurchaseTaxCode,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

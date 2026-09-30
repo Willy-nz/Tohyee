@@ -461,7 +461,18 @@ that something happened.
   changed and saved documents never change. The currency doesn't decide it.
   Sales documents for an overseas customer show **Export (country)**, and
   with Foreign trade on a standard-rated line shows a warning that never
-  blocks.
+  blocks, only where lines can still be changed (editors and drafts; not on
+  approved documents, decided 1 Oct 2026, EX25).
+- **A supplier's default purchase tax code** (built overnight 1 Oct 2026
+  following Xero's contact "Purchase defaults", examples EX16-EX25 not yet
+  approved by Jess). Contacts have an optional **default purchase tax code**
+  (any active code; inactive ones refused; audited), separate from the
+  default sales tax code. A new line on a bill, supplier credit note,
+  purchase order, repeating bill or spend money starts with it, beating the
+  item's and the account's usual code; without one, the usual default as
+  before. Only a starting value: lines can be changed and saved documents
+  never change. No import or reverse-charge tax code (refused rather than
+  guessed).
 - **Bank accounts and reconciliation**. Bank and credit card accounts (any
   number, any bank) with a statement balance, the balance in Tohyee and a
   count of lines to reconcile. Statements come in as files (CSV and Excel
@@ -743,8 +754,9 @@ isn't acceptable, because people would trust it:
 - amending a filed GST return, imported goods (Customs GST), GST rates other
   than 15%, recording the GST payment or refund to IRD, and filing to IRD
   electronically
-- a default purchase tax code per contact and an import tax code (exports
-  are built for sales only, EX1-EX15)
+- an import or reverse-charge tax code (imported services under the
+  reverse charge, EX16-EX25), and a default purchase tax code on expense
+  claims (their suppliers aren't contacts), cash coding and bank rules
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)
 

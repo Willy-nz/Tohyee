@@ -67,15 +67,19 @@ export function contactSalesTaxCode(
 /**
  * The gentle warning (EX12): Foreign trade is on, the customer is overseas
  * and a line has a standard-rated code. Only a warning: a service consumed in
- * New Zealand can be standard-rated.
+ * New Zealand can be standard-rated. Only where the lines can still be
+ * changed (an editor, a draft, a repeating invoice that hasn't ended): not on
+ * an approved or finalised document, which the warning can't help (EX25,
+ * decided 1 Oct 2026).
  */
 export function exportWarning(
   contact: ExportContact | null | undefined,
   settings: ExportSettings | null | undefined,
   lineTaxCodes: ReadonlyArray<string | null>,
   taxCodes: ReadonlyArray<CodeChoice>,
+  { editable = true }: { editable?: boolean } = {},
 ): string | null {
-  if (!settings?.foreignTrade || !isOverseas(contact)) return null;
+  if (!editable || !settings?.foreignTrade || !isOverseas(contact)) return null;
   const standard = lineTaxCodes.some((code) => taxCodes.some((taxCode) => taxCode.code === code && taxCode.category === "standard"));
   return standard ? "This customer is overseas; exports are usually zero-rated." : null;
 }
@@ -84,6 +88,10 @@ export function exportWarning(
  * When the customer changes on a sales document (EX2-EX6): lines whose tax
  * code wasn't chosen by hand or saved start again from the new customer's
  * code, else the usual one. Saved lines never change (EX8).
+ */
+/**
+ * Purchase documents do the same with the supplier's default purchase tax
+ * code (EX17-EX21).
  */
 export function retaxLines<T extends { taxCode: string; usualTaxCode?: string; taxTyped?: boolean }>(lines: T[], contactTaxCode: string | null): T[] {
   return lines.map((line) => (line.taxTyped ? line : { ...line, taxCode: contactTaxCode ?? line.usualTaxCode ?? line.taxCode }));

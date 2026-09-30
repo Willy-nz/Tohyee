@@ -56,6 +56,8 @@ type Draft = {
   deliveryCountry: string;
   /** "" for none (EX5). */
   defaultSalesTaxCode: string;
+  /** "" for none (EX16). */
+  defaultPurchaseTaxCode: string;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -75,6 +77,7 @@ const EMPTY_DRAFT: Draft = {
   billingCountry: HOME_COUNTRY,
   deliveryCountry: "",
   defaultSalesTaxCode: "",
+  defaultPurchaseTaxCode: "",
 };
 
 function draftFrom(contact: Contact): Draft {
@@ -95,6 +98,7 @@ function draftFrom(contact: Contact): Draft {
     billingCountry: contact.billingCountry,
     deliveryCountry: contact.deliveryCountry ?? "",
     defaultSalesTaxCode: contact.defaultSalesTaxCode ?? "",
+    defaultPurchaseTaxCode: contact.defaultPurchaseTaxCode ?? "",
   };
 }
 
@@ -103,11 +107,12 @@ function draftFrom(contact: Contact): Draft {
  * terms only for suppliers (the server keeps a former customer's or supplier's).
  */
 function bodyFrom(draft: Draft): Record<string, unknown> {
-  const { customer, supplierPaymentTermId, deliveryCountry, defaultSalesTaxCode, ...rest } = draft;
+  const { customer, supplierPaymentTermId, deliveryCountry, defaultSalesTaxCode, defaultPurchaseTaxCode, ...rest } = draft;
   return {
     ...rest,
     deliveryCountry: deliveryCountry || null,
     defaultSalesTaxCode: defaultSalesTaxCode || null,
+    defaultPurchaseTaxCode: defaultPurchaseTaxCode || null,
     ...(draft.isCustomer ? customerBody(customer) : {}),
     ...(draft.isSupplier ? { supplierPaymentTermId: supplierPaymentTermId || null } : {}),
   };
@@ -365,6 +370,21 @@ function ContactForm({
                   <option key={term.id} value={term.id}>
                     {term.name}
                     {term.isActive ? "" : " (archived)"}
+                  </option>
+                ))}
+            </select>
+          </Field>
+          <Field
+            label="Default purchase tax code"
+            hint="New lines on bills, supplier credit notes, purchase orders, repeating bills and spend money for this supplier start with it (e.g. NONE for an overseas subscription). Any line can be changed."
+          >
+            <select value={draft.defaultPurchaseTaxCode} onChange={(event) => setDraft({ ...draft, defaultPurchaseTaxCode: event.target.value })}>
+              <option value="">None (the usual default)</option>
+              {taxCodes
+                .filter((code) => code.isActive || code.code === draft.defaultPurchaseTaxCode)
+                .map((code) => (
+                  <option key={code.id} value={code.code}>
+                    {code.code} ({formatRate(code.rate)}){code.isActive ? "" : " (inactive)"}
                   </option>
                 ))}
             </select>
