@@ -352,7 +352,38 @@ that something happened.
   deleted. **Bank rules** fill in spend or receive money from text in the
   line. Each organisation sets up its own Akahu personal app (with its own
   bank logins) and an organisation admin enters its tokens, which are checked
-  with Akahu and stored encrypted. See examples BK1-BK16.
+  with Akahu and stored encrypted. See examples BK1-BK16. **One-click
+  matching** (like Xero's OK): a line whose only exact-amount candidate (a
+  posted transaction on the account, or an invoice or bill due) isn't wanted
+  by another line, or that only a bank rule fits, shows the suggestion
+  highlighted with an **OK** button, and **OK all confident matches** does
+  them all, each line on its own, reporting what failed and why (examples
+  BK17-BK19, not yet approved by Jess). The **bank reconciliation report**
+  (Reporting, and linked from each account) shows, as at a date, the
+  statement balance (from the bank's running balances or the feed's
+  balance), the balance in Tohyee, statement lines not yet in Tohyee and
+  transactions in Tohyee not yet on the statement, with the arithmetic and a
+  warning when they don't fully explain the difference; it prints or saves as
+  PDF (examples BK20, BK21, not yet approved by Jess). **Bulk coding**
+  ("cash coding"): tick several lines to reconcile and give them an account,
+  GST code and optionally a contact, description and tracking, for all of
+  them or line by line; each becomes its own spend or receive money
+  reconciled to its line, exactly as if done one at a time, each in its own
+  transaction, and the result says which lines were done and why any weren't
+  (examples BK22, BK23, not yet approved by Jess). **Small differences**:
+  when matching a line or paying invoices or bills from it and the amounts
+  differ slightly (a merchant fee taken off a deposit), the difference can be
+  recorded in the same step as an adjustment to a chosen account, with an
+  optional GST code: spend or receive money for the difference, reconciled
+  with the payment or match so the line ties exactly, while the invoice or
+  bill is still paid in full (examples BK24, BK25, not yet approved by Jess).
+  **One transaction on several lines**: when the bank shows one posted
+  payment or deposit as two or more lines, the lines can be reconciled
+  together against it ("Part of one transaction"), each to its part; they
+  must add up to it exactly (no adjustment), nothing is posted, and
+  unreconciling any of them unreconciles them all. One-click OK never
+  suggests one, and the reconciliation report counts only the part on lines
+  by its date (examples BK26-BK28, not yet approved by Jess).
 - **Modules**: Accounting and Tax are always on; the **CRM** and
   **Advanced reporting** are switched on per organisation in Settings, and
   their menus and screens show only while on (MOD1).
@@ -444,8 +475,8 @@ isn't acceptable, because people would trust it:
 - AI suggestions
 - import staging (other than bank statements)
 - bank feeds from providers other than Akahu, foreign-currency bank
-  accounts, splitting one posted transaction across several statement
-  lines, and old Excel (.xls) files
+  accounts, an adjustment when splitting one posted transaction across
+  several statement lines, and old Excel (.xls) files
 - GST: deferred-payment supplies of $225,000 or more on the payments basis
   (section 19D), checking payments-basis eligibility, and bad debt write-offs
 - amending a filed GST return, imported goods (Customs GST), GST rates other

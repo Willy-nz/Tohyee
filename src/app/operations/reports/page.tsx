@@ -6,6 +6,7 @@ import { Fragment, Suspense, useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { BudgetVsActualReport } from "@/components/budgets";
+import { BankReconciliationReportView } from "@/components/reports/bank-reconciliation";
 import { AgedReceivablesReport } from "@/components/customers";
 import { AccountTransactionsReport, AgedPayablesReport, JournalReportView } from "@/components/reports/ledger-reports";
 import { CustomReportList, StartCustomReport } from "@/components/reports/custom-report";
@@ -476,6 +477,7 @@ const TABS = [
   { key: "aged", label: "Aged receivables" },
   { key: "payables", label: "Aged payables" },
   { key: "transactions", label: "Account transactions" },
+  { key: "bankrec", label: "Bank reconciliation" },
   { key: "journals", label: "Journal report" },
   { key: "sales", label: "Sales by salesperson" },
   { key: "budget", label: "Budget vs actual" },
@@ -512,6 +514,7 @@ function StandardReports({ organisationId }: { organisationId: string }) {
       {tab === "aged" ? <AgedReceivablesReport organisationId={organisationId} /> : null}
       {tab === "payables" ? <AgedPayablesReport organisationId={organisationId} /> : null}
       {tab === "transactions" ? <AccountTransactionsReport organisationId={organisationId} /> : null}
+      {tab === "bankrec" ? <BankReconciliationReportView organisationId={organisationId} initialAccountId={params.get("account")} /> : null}
       {tab === "journals" ? <JournalReportView organisationId={organisationId} /> : null}
       {tab === "sales" ? <SalesBySalespersonReport organisationId={organisationId} /> : null}
       {tab === "budget" ? <BudgetVsActualReport organisationId={organisationId} initialBudgetId={params.get("budget")} /> : null}

@@ -13,7 +13,7 @@ import { useWorkspace } from "@/components/workspace";
 import type { BankAccount, StatementLine } from "@/lib/bank/accounts";
 import type { BankTransaction, BankTransfer } from "@/lib/bank/transactions";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, todayInBrowser, personName } from "@/lib/format";
 
 const PAGE_SIZE = 100;
 
@@ -182,6 +182,16 @@ export function StatementLinesPanel({
                               <span className={ui.muted}>{item.reference}</span>
                             </span>
                           ))}
+                          {line.reconciliation.split ? (
+                            <span className={ui.muted}>
+                              {formatMoney(line.amount)} of {formatMoney(line.reconciliation.split.journalAmount)}, split with{" "}
+                              {line.reconciliation.split.lines
+                                .filter((other) => other.id !== line.id)
+                                .map((other) => `${formatDate(other.date)} (${formatMoney(other.amount)})`)
+                                .join(", ")}
+                              . Unreconciling unreconciles them all.
+                            </span>
+                          ) : null}
                           <span className={ui.muted}>
                             {personName(line.reconciliation, "createdBy") ?? "Someone"}, {formatDateTime(line.reconciliation.createdAt)}
                           </span>

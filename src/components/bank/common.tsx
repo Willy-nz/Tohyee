@@ -33,7 +33,14 @@ export function journalHref(journalId: string): string {
 
 /** Accounts a bank transaction line can use (the same rules the server checks). */
 export function takesBankTransactionLines(account: Account): boolean {
-  if (account.systemKey === "accounts_receivable" || account.systemKey === "accounts_payable" || account.systemKey === "gst") return false;
+  if (
+    account.systemKey === "accounts_receivable" ||
+    account.systemKey === "accounts_payable" ||
+    account.systemKey === "expense_claims_payable" ||
+    account.systemKey === "gst"
+  ) {
+    return false;
+  }
   if (account.accountType === "bank" || account.accountType === "credit_card" || account.accountType === "inventory") return false;
   return account.currencyCode === null;
 }

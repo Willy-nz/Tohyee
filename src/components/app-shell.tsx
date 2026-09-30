@@ -99,6 +99,7 @@ const MENUS: Menu[] = [
           { href: "/operations/reports?report=aged", label: "Aged receivables" },
           { href: "/operations/reports?report=payables", label: "Aged payables" },
           { href: "/operations/reports?report=transactions", label: "Account transactions" },
+          { href: "/operations/reports?report=bankrec", label: "Bank reconciliation" },
           { href: "/operations/reports?report=journals", label: "Journal report" },
           { href: "/operations/reports?report=sales", label: "Sales by salesperson", module: "reporting" },
           { href: "/operations/reports?report=budget", label: "Budget vs actual" },

@@ -7,6 +7,8 @@ type Context = { params: Promise<{ lineId: string }> };
  * Reconciles a line. `kind`: match (`journalLineIds`), payments (`allocations`
  * of `{ invoiceId | billId, amount }`), bank_transaction (`contactId`,
  * `amountsMode`, `lines`, `reference`) or transfer (`otherAccountCode`).
+ * Match and payments take an optional `adjustment` (`accountCode`,
+ * `taxCode`, `contactId`, `description`) for a small difference (BK24, BK25).
  */
 export const POST = route<Context>(async (request, context) => {
   const { lineId } = await context.params;

@@ -48,7 +48,9 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/budgets.test.ts` (BU1-BU8) and
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
-  `tests/integration/projects.test.ts` (PJ1-PJ13), all against
+  `tests/integration/projects.test.ts` (PJ1-PJ13) and
+  `tests/integration/bank-quick.test.ts` (BK17-BK25) and
+  `tests/integration/bank-split.test.ts` (BK26-BK28), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -1017,10 +1019,357 @@ history to bring in.
 - **BK16** Akahu's balance for the account is kept as the statement balance
   with its date, shown next to the ledger balance.
 
+### One-click matching ("OK") (examples not yet approved by Jess)
+
+Like Xero's "OK" button. For each unreconciled line, Tohyee looks for
+**candidates with the line's exact amount**:
+
+- a posted journal line on the line's account, on the same side (money in is
+  a debit), not reconciled, dated within 60 days of the line, and not a
+  reversal or reversed (a voided payment's lines never count); and
+- for money in, an approved invoice whose amount due is exactly the line's
+  amount; for money out, an approved bill whose amount due is exactly the
+  line's amount (without its minus sign). The invoice or bill must be dated on
+  or before the line, since a payment can't be dated before it.
+
+The suggestion is **confident**, and shown highlighted with an **OK** button,
+when the line has exactly one candidate and no other unreconciled line on the
+same account has that candidate too. When a line has no candidates at all, a
+bank rule that applies (BK10) is a confident suggestion. Anything else shows
+no OK button: two or more candidates (a tie) are listed on the line to choose
+from, and two lines competing for one candidate are left for a person to
+decide. OK posts exactly what choosing the suggestion by hand posts (BK4, BK5,
+BK10), through the same reconcile command.
+
+- **BK17** After BK1: the +115.00 line has one candidate, INV-0001 (115.00
+  due, dated 10 May): confident, "Pay INV-0001". The -46.00 line has no
+  candidates and no rule: no suggestion; with the BK10 rule it's confident
+  (spend money to Z Energy, 6120). The -500.00 line has none. Then:
+  - a second approved invoice to Kobe Ltd for 115.00 (INV-0002, 12 May) makes
+    the +115.00 line a **tie** (2 candidates): no OK;
+  - instead, a second +115.00 line on 25 May makes both lines **compete** for
+    INV-0001: neither has an OK;
+  - a customer payment of 115.00 into 1000 on 19 May (INV-0001 is then paid)
+    makes the payment's journal line the one candidate: confident "match";
+    once that payment is voided it's no longer a candidate;
+  - with the BK10 rule, a spend money of 46.00 to Z Energy already posted on
+    21 May wins over the rule: the suggestion is to match it, so nothing is
+    posted twice;
+  - an invoice for 115.00 dated 21 May (after the 20 May line) is not a
+    candidate.
+- **BK18** OK on the +115.00 line, shown as "Pay INV-0001", records a
+  customer payment of 115.00 dated 20 May into 1000 (Dr 1000 115.00 / Cr 1100
+  115.00) and reconciles the line; INV-0001 is paid. OK on the -46.00 line
+  with the BK10 rule posts Dr 6120 40.00 / Dr 2100 6.00 / Cr 1000 46.00. If
+  the suggestion shown has changed (e.g. INV-0001 was paid meanwhile), OK is
+  refused (409) and nothing is posted. Retrying with the same key returns the
+  same reconciled line. Viewers can't OK (403).
+- **BK19** "OK all confident matches" on 1000 after BK1 with the BK10 rule and
+  the period locked up to 20 May: the -46.00 line is reconciled (succeeded);
+  the +115.00 line is refused with "2026-05-20 is in a locked period (locked
+  up to 2026-05-20)…" (failed); the -500.00 line isn't included (not
+  confident). The result is **1 succeeded, 1 failed**, each line in its own
+  transaction, so the failure doesn't undo the success. Retrying the same
+  request returns the -46.00 line as already done and posts nothing more.
+
+### Bank reconciliation report (examples not yet approved by Jess)
+
+For one bank or credit card account as at a date (Reporting › Bank
+reconciliation, also linked from the account). It posts nothing.
+
+- **Balance in Tohyee**: the account's journal lines dated on or before the
+  date (debits less credits).
+- **In the bank, not yet in Tohyee**: unreconciled statement lines dated on
+  or before the date, plus any part of a reconciled line (dated on or before
+  it) that was matched to a journal line dated after it.
+- **In Tohyee, not yet on the statement**: the account's journal lines dated
+  on or before the date that aren't reconciled to a statement line dated on
+  or before it (unpresented payments, deposits not yet cleared). A payment
+  reconciled to a line after the date is still listed, with that line's date.
+  A payment or bank transaction voided on or before the date isn't listed
+  when neither it nor its reversal is reconciled, since the two cancel out.
+- **Statement balance these explain** = balance in Tohyee + in the bank not
+  in Tohyee - in Tohyee not on the statement.
+- **Statement balance**: Tohyee doesn't store a statement's closing balance,
+  so it's worked out from the latest of (a) the bank's running balance on the
+  latest statement line (not deleted) dated on or before the date that has
+  one, the last brought in that day, taken as that day's closing balance, and
+  (b) the bank feed's balance (BK16), as at the end of the New Zealand day it
+  was fetched, if that's on or before the date; plus the unreconciled and
+  reconciled lines dated after it up to the date. With neither it's **not
+  known**. Excluded lines are never added (they're duplicates or not the
+  organisation's), though an excluded line's running balance still counts,
+  since it's the bank's figure.
+- **Not explained** = statement balance - the balance the items explain. The
+  report says "Fully explained" only when that's 0.00.
+
+Setup as above, with this statement imported into 1000 (it has the bank's
+running balance):
+
+```
+Date,Amount,Payee,Particulars,Code,Reference,Balance
+01/05/2026,1000.00,J KELLY,CAPITAL,,,1000.00
+20/05/2026,115.00,KOBE LTD,INV-0001,,,1115.00
+21/05/2026,-46.00,Z ENERGY,,,,1069.00
+28/05/2026,-12.00,MONTHLY FEE,,,,1057.00
+02/06/2026,-230.00,KAURI SUPPLIES,K-100,,,827.00
+```
+
+In Tohyee: a manual journal on 1 May, Dr 1000 1,000.00 / Cr 3000 1,000.00,
+matched to the 1 May line; INV-0001 paid from the 20 May line (BK5); the
+BK6 spend money from the 21 May line; a supplier payment of B1, 230.00 on
+30 May from 1000, matched to the 2 June line; and receive money of 57.50
+from Kobe Ltd on 31 May (4000, GST inclusive), not reconciled. The 28 May fee
+isn't reconciled.
+
+- **BK20** As at 31 May 2026: balance in Tohyee **896.50** (1,000.00 +
+  115.00 - 46.00 - 230.00 + 57.50). In the bank, not in Tohyee: 28 May
+  MONTHLY FEE **-12.00**. In Tohyee, not on the statement: the 30 May
+  supplier payment **-230.00** (on the statement 2 June) and the 31 May
+  receive money **57.50**, total **-172.50**. Explained: 896.50 - 12.00 +
+  172.50 = **1,057.00**. Statement balance **1,057.00**, the running balance
+  on the 28 May line: fully explained. As at 30 June 2026: statement
+  **827.00** (the 2 June line), Tohyee 896.50, in the bank -12.00, in Tohyee
+  57.50: 896.50 - 12.00 - 57.50 = 827.00, fully explained. As at 25 May:
+  statement and Tohyee both **1,069.00**, no items. A spend money of 20.00
+  (6120, no GST) on 29 May, voided on 30 May, changes nothing as at 31 May
+  (neither it nor the reversal is listed); as at 29 May it's listed: Tohyee
+  **1,049.00**, in the bank -12.00, in Tohyee -20.00, 1,049.00 - 12.00 +
+  20.00 = **1,057.00**, fully explained.
+- **BK21** Where the statement balance comes from:
+  - Only BK1's file (no running balances) and no bank feed: as at 31 May the
+    statement balance is **not known**; the items (115.00, -46.00, -500.00,
+    total -431.00) still show, explaining a statement balance of
+    **-431.00**, and the report doesn't say "Fully explained".
+  - The same with a bank feed balance of **69.00** fetched at 10:00 on
+    21 May (New Zealand time): as at 31 May the statement balance is 69.00
+    plus the one line after 21 May (-500.00) = **-431.00**, fully explained.
+    As at 20 May the feed balance is later than the date, so the balance is
+    not known.
+  - In BK20, excluding the 28 May fee line (as if it were a duplicate): as at
+    31 May the items explain **1,069.00** but the statement balance is still
+    1,057.00, so **-12.00 is not explained** and the report says so.
+
+### Bulk coding ("cash coding") (examples not yet approved by Jess)
+
+Like Xero's cash coding. On one bank or credit card account, tick several
+unreconciled lines and give them an account, a GST code (or no GST), and
+optionally a contact, a description and tracking, either for all the ticked
+lines at once or line by line (a line's own value wins). Saving does each line
+exactly as if it were reconciled on its own as a bank transaction (BK6, BK7):
+spend money for money out, receive money for money in, for the line's full
+amount, dated the line date, one line to the chosen account, reconciled to
+the statement line.
+
+- With a GST code the line's amount includes GST (tax inclusive); with none
+  there's no GST.
+- With no contact chosen, the line's contact is the active contact whose
+  name is the line's payee (or, with no payee, its description), ignoring
+  case and extra spaces. With no such contact the line is refused.
+- With no description, each transaction line is described as the statement
+  line is.
+- Each line is done in its own database transaction, so a line that's refused
+  (a locked period, no account, no contact, already reconciled, on another
+  account) doesn't stop the others. The result lists every line with what
+  happened or why it was refused.
+- Retrying the same request (same idempotency key) returns the lines already
+  done without posting them again; the same key with different content is
+  refused for those lines (409).
+
+Setup as above, plus the contact ANZ, and this statement imported into 1000:
+
+```
+Date,Amount,Payee,Particulars,Code,Reference
+21/05/2026,-46.00,Z ENERGY,,,
+24/05/2026,-11.50,Z ENERGY,,,
+26/05/2026,-69.00,Z ENERGY,,,
+28/05/2026,-12.00,MONTHLY FEE,,,
+```
+
+- **BK22** Tick the three Z ENERGY lines and the MONTHLY FEE line. For all:
+  6120 Motor vehicle expenses, GST, no contact, description "Fuel". For the
+  MONTHLY FEE line only: 6020 Bank fees, no GST, contact ANZ, description
+  "Account fee". Saving posts four spend money transactions, each reconciled
+  to its line (4 succeeded, 0 failed):
+  - 21 May, Z Energy, Fuel: Dr 6120 40.00 / Dr 2100 6.00 / Cr 1000 46.00;
+  - 24 May, Z Energy, Fuel: Dr 6120 10.00 / Dr 2100 1.50 / Cr 1000 11.50;
+  - 26 May, Z Energy, Fuel: Dr 6120 60.00 / Dr 2100 9.00 / Cr 1000 69.00;
+  - 28 May, ANZ, Account fee: Dr 6020 12.00 / Cr 1000 12.00.
+
+  They add **126.50** to the May GST return's Box 11 and **16.50** to its
+  purchases GST, as four separate BK6s would. 1000's "reconcile" count is
+  **0**.
+- **BK23** One bad line doesn't stop the others. With the period locked up
+  to 21 May, tick all four lines with 6120, GST and no contact for all:
+  - 21 May: refused, "2026-05-21 is in a locked period (locked up to
+    2026-05-21)…";
+  - 24 May and 26 May: spend money as in BK22 (described "Z ENERGY", the
+    line's own description), reconciled;
+  - 28 May: refused, "No contact was chosen, and there's no contact called
+    “MONTHLY FEE”…".
+
+  The result is **2 succeeded, 2 failed**, and exactly 2 journals are
+  posted. Retrying the same request posts nothing more: the 24 and 26 May
+  lines come back as already done, the other two are refused again. The same
+  key with 6130 instead of 6120 is refused (409) for the 24 and 26 May lines.
+  After unlocking, a new request for the 21 May line (6120, GST, no
+  contact) and the 28 May line (6020, no GST, contact ANZ) reconciles both.
+  A line with no account, for all or its own, is refused with "Choose an
+  account for this line"; a line on another account or already reconciled is
+  refused; viewers can't cash code (403).
+
+### Small differences when matching (examples not yet approved by Jess)
+
+Like Xero's adjustment. When matching a line (BK4) or paying invoices or
+bills from it (BK5) and the amounts differ slightly (a merchant fee taken
+off a deposit, a customer rounding up), the difference can be recorded in
+the same step as an **adjustment** to an account the person chooses, with an
+optional GST code. There's no limit on the difference, but the account must
+be chosen.
+
+- The adjustment is a bank transaction (BK6, BK7) for the difference: spend
+  money when the line is less than what it's matched with (money in) or more
+  than it (money out), otherwise receive money; dated the line date, one line
+  to the chosen account, tax inclusive with a GST code or no GST without one,
+  described as given ("Adjustment" if not). Its contact is the one chosen, or
+  when paying, the first invoice's or bill's contact; when matching, a
+  contact must be chosen.
+- Payments are recorded for the amounts given (usually the full amount due),
+  not the line's amount. The line is reconciled to the payments or matched
+  journal lines **and** the adjustment, which together add up to it exactly.
+- It all happens in one database transaction with the reconciliation: if
+  anything is refused (a locked period, no account), nothing is posted.
+- Unreconciling (BK11) leaves the payment and the adjustment; void them
+  separately. The adjustment counts in the GST return like any bank
+  transaction.
+
+Setup as above (INV-0001 115.00 due, B1 230.00 due, both 10 May 2026).
+
+- **BK24** Recording a difference:
+  - A **+113.50** line on 20 May (INV-0001 less a 1.50 merchant fee). Pay
+    INV-0001 **115.00** with an adjustment to 6020 Bank fees, no GST,
+    "Merchant fee": a customer payment of 115.00 dated 20 May (Dr 1000
+    115.00 / Cr 1100 115.00) and spend money to Kobe Ltd dated 20 May (Dr
+    6020 1.50 / Cr 1000 1.50). The line is reconciled to both (115.00 -
+    1.50 = 113.50). INV-0001 is **paid**, amount due **0.00**. The spend
+    money is in no GST box.
+  - A **+115.50** line on 20 May instead (the customer paid 0.50 over). Pay
+    INV-0001 **115.00** with an adjustment to 4100 Other revenue, GST:
+    receive money from Kobe Ltd of 0.50, GST inclusive: Dr 1000 0.50 / Cr
+    4100 0.43 / Cr 2100 0.07. It adds **0.50** to Box 5. INV-0001 is paid
+    with no overpayment.
+  - A **-231.50** line on 21 May (B1 plus a 1.50 payment fee). Pay B1
+    **230.00** with an adjustment to 6020, no GST: a supplier payment (Dr
+    2000 230.00 / Cr 1000 230.00) and spend money to Kauri Supplies (Dr 6020
+    1.50 / Cr 1000 1.50). B1 is paid.
+  - Matching: a customer payment of 115.00 into 1000 on 19 May is already
+    recorded. The +113.50 line on 20 May is matched to it with an adjustment
+    to 6020, no GST, contact Kobe Ltd: only the spend money (Dr 6020 1.50 /
+    Cr 1000 1.50) is posted, and the line is reconciled to the payment and
+    the spend money.
+- **BK25** What's refused, with nothing posted:
+  - an adjustment with no account: "Choose the account for the 1.50
+    difference.";
+  - matching with an adjustment and no contact: "Choose a contact for the
+    1.50 adjustment.";
+  - an adjustment when the amounts already add up to the line: "…already
+    add up to the line, so there's no difference for an adjustment.";
+  - an adjustment with a bank transaction or a transfer;
+  - an adjustment to 1100 Accounts receivable (as for any bank transaction);
+  - with the period locked up to 20 May, paying INV-0001 from the +113.50
+    line with an adjustment: refused, and neither the payment nor the
+    adjustment is posted.
+
+  Retrying the BK24 payment with an adjustment with the same key returns
+  the reconciled line and posts nothing more; the same key with another
+  account is refused (409). Unreconciling it leaves the payment and the
+  spend money; after that the spend money can be voided on its own.
+
+### One transaction on several statement lines (examples not yet approved by Jess)
+
+Sometimes the bank shows one payment or deposit as two or more lines (a
+customer's payment split into two transfers, a deposit the bank credited in
+parts). **Splitting** reconciles several statement lines together against
+**one** posted journal line on the account. (The other way round, one
+statement line for several posted transactions, such as a deposit of several
+cheques, is ordinary matching, BK4.)
+
+- The lines must be unreconciled, on the same account, all money in or all
+  money out, each dated within 60 days of the journal line, and add up to it
+  **exactly**. The journal line must not be reconciled already. Nothing is
+  posted.
+- Each line is reconciled to **its part** of the journal line (its own
+  amount). The lines stay tied together: unreconciling any one of them
+  unreconciles all of them, posting nothing, and is refused if any of them
+  is in a locked period.
+- There's **no adjustment** (BK24) when splitting: if the lines don't add up
+  to the transaction exactly, it's refused. Record the difference as its own
+  bank transaction first, or match instead.
+- One-click OK (BK17) never suggests a split: a line that's only part of a
+  transaction has no candidate with its exact amount, so it's never
+  confident, and a journal line in a split is no longer a candidate for
+  anything. Bulk coding (BK22) refuses a line in a split as already
+  reconciled.
+
+Setup as above, plus receive money of **300.00** from Kobe Ltd on 20 May,
+4000 Sales, no GST: Dr 1000 300.00 / Cr 4000 300.00 (journal line **J**
+on 1000), and this statement imported into 1000:
+
+```
+Date,Amount,Payee,Particulars,Code,Reference,Balance
+20/05/2026,200.00,KOBE LTD,PART 1,,,200.00
+03/06/2026,100.00,KOBE LTD,PART 2,,,300.00
+```
+
+- **BK26** Splitting J across the 20 May +200.00 line and the 3 June
+  +100.00 line posts nothing and reconciles both lines: the 20 May line to
+  **200.00** of J and the 3 June line to **100.00** of J, each showing the
+  split (J's 300.00 and both lines). 1000's "reconcile" count is **0**.
+  The receive money can't be voided while they're reconciled ("unreconcile
+  it first"). Retrying with the same idempotency key returns the same
+  result and posts nothing; the same key with a different journal line is
+  refused (409).
+- **BK27** Refused, with nothing reconciled:
+  - lines of +200.00 and +50.00 against J: "The chosen statement lines add
+    up to 250.00, but the transaction is 300.00. They must add up to it
+    exactly.";
+  - only one line: "Choose at least two statement lines…" (match it
+    instead);
+  - a money-in line with a money-out line: "…all money in or all money
+    out.";
+  - a line on 1010, or one already reconciled, or J already reconciled;
+  - a line dated more than 60 days from J;
+  - with an adjustment: "An adjustment isn't available when splitting…";
+  - with the period locked up to 20 May: refused ("2026-05-20 is in a
+    locked period…"), and the 3 June line isn't reconciled either.
+- **BK28** After BK26:
+  - **Unreconciling** the 3 June line unreconciles the 20 May line too:
+    both are unreconciled, nothing is posted, the receive money stays and
+    can then be voided. With the period locked up to 20 May, unreconciling
+    the 3 June line is refused (the 20 May line is in the locked period)
+    and both stay reconciled. Retrying with the same key returns the same
+    result.
+  - **One-click OK**: with both lines unreconciled and J posted, neither
+    line has a candidate (neither is 300.00), so neither is confident.
+    After BK26, a new +300.00 line on 25 May has no candidate either (J is
+    reconciled).
+  - **Bulk coding** the 20 May line after BK26 is refused: "This line is
+    already reconciled."
+  - **Bank reconciliation report** (BK20) as at 31 May: balance in Tohyee
+    **300.00**; in the bank, not in Tohyee: nothing; in Tohyee, not on the
+    statement: the **100.00** of J that's on the 3 June line (shown with
+    that date). Explained: 300.00 - 100.00 = **200.00**, the running balance
+    on the 20 May line: fully explained. As at 30 June: nothing outstanding,
+    statement and Tohyee both **300.00**. If J were dated 2 June instead (and
+    the lines 30 May and 3 June), as at 31 May the 30 May line's **200.00**
+    is in the bank, not in Tohyee (matched to a journal dated after the
+    date).
+
 ### Not supported yet (refused rather than guessed)
 
 - **Foreign-currency bank accounts** can't take statement lines.
-- **Splitting a journal line** across several statement lines.
+- **Splitting with an adjustment**: the statement lines must add up to the
+  transaction exactly (BK27).
 - **Older Excel files** (.xls): save them as .xlsx or CSV.
 
 ## Reports

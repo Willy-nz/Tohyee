@@ -12,6 +12,8 @@ import {
   takesBankTransactionLines,
   toCents,
 } from "@/components/bank/common";
+import { CashCodingForm } from "@/components/bank/cash-coding";
+import { OkAllBar, SuggestionBox } from "@/components/bank/confident";
 import { AccountSelect, Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
@@ -21,6 +23,7 @@ import { Badge, Button, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import type { BankAccount, StatementLine } from "@/lib/bank/accounts";
+import type { LineConfidence } from "@/lib/bank/confident";
 import type { LineSuggestions } from "@/lib/bank/reconcile";
 import type { BillSummary } from "@/lib/bills/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -35,7 +38,7 @@ import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 const PAGE_SIZE = 50;
 
-type Mode = "match" | "payments" | "bank_transaction" | "transfer";
+type Mode = "match" | "split" | "payments" | "bank_transaction" | "transfer";
 
 type Lookups = { accounts: Account[]; contacts: Contact[]; taxCodes: TaxCode[]; tracking: TrackingSetup; customSetup: CustomFieldSetup };
 
@@ -85,9 +88,109 @@ function TotalCheck({ total, target }: { total: bigint | null; target: string })
   );
 }
 
-function MatchForm({ line, suggestions, submit, busy }: { line: StatementLine; suggestions: LineSuggestions; submit: Submit; busy: boolean }) {
+type AdjustmentValue = { accountCode: string; taxCode: string; description: string; contactId: string };
+const NO_ADJUSTMENT: AdjustmentValue = { accountCode: "", taxCode: "", description: "", contactId: "" };
+
+/**
+ * A small difference between the line and what it's matched with or pays,
+ * recorded in the same step as spend or receive money to a chosen account
+ * (examples BK24, BK25). `difference` is the line less the total, signed like
+ * the line.
+ */
+function AdjustmentFields({
+  difference,
+  value,
+  onChange,
+  lookups,
+  contactHint,
+}: {
+  difference: bigint;
+  value: AdjustmentValue;
+  onChange: (value: AdjustmentValue) => void;
+  lookups: Lookups;
+  /** Where the contact comes from when none is chosen; without it a contact is required. */
+  contactHint?: string;
+}) {
+  const unsigned = centsToText(difference < BigInt(0) ? -difference : difference);
+  const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive);
+  return (
+    <div className={ui.suggestion} style={{ display: "grid", gap: 8 }}>
+      <span>
+        Record the {formatMoney(unsigned)} difference as an adjustment: {difference < BigInt(0) ? "spend money" : "receive money"} of{" "}
+        {formatMoney(unsigned)} on the line&apos;s date, reconciled with the rest, so the line ties exactly.
+      </span>
+      <div className={ui.grid2}>
+        <Field label="Adjustment account">
+          <AccountSelect
+            accounts={lookups.accounts}
+            filter={takesBankTransactionLines}
+            value={value.accountCode}
+            onChange={(accountCode) => onChange({ ...value, accountCode })}
+            required
+          />
+        </Field>
+        <Field label="GST" hint="With a GST code the difference includes GST.">
+          <select value={value.taxCode} onChange={(event) => onChange({ ...value, taxCode: event.target.value })}>
+            <option value="">No GST</option>
+            {activeTaxCodes.map((taxCode) => (
+              <option key={taxCode.id} value={taxCode.code}>
+                {taxCode.code} ({formatRate(taxCode.rate)})
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Description">
+          <input
+            value={value.description}
+            placeholder="Adjustment"
+            onChange={(event) => onChange({ ...value, description: event.target.value })}
+            maxLength={500}
+          />
+        </Field>
+        <Field label="Contact">
+          <select value={value.contactId} onChange={(event) => onChange({ ...value, contactId: event.target.value })} required={!contactHint}>
+            <option value="">{contactHint ?? "Choose a contact"}</option>
+            {lookups.contacts
+              .filter((contact) => !contact.isArchived)
+              .map((contact) => (
+                <option key={contact.id} value={contact.id}>
+                  {contact.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+/** The adjustment to send, or undefined when there's no difference. */
+function adjustmentCommand(difference: bigint | null, value: AdjustmentValue): Record<string, unknown> | undefined {
+  if (difference === null || difference === BigInt(0)) return undefined;
+  return {
+    accountCode: value.accountCode,
+    taxCode: value.taxCode || undefined,
+    description: value.description.trim() || undefined,
+    contactId: value.contactId || undefined,
+  };
+}
+
+function MatchForm({
+  line,
+  suggestions,
+  lookups,
+  submit,
+  busy,
+}: {
+  line: StatementLine;
+  suggestions: LineSuggestions;
+  lookups: Lookups;
+  submit: Submit;
+  busy: boolean;
+}) {
+  const [adjustment, setAdjustment] = useState<AdjustmentValue>(NO_ADJUSTMENT);
   const [chosen, setChosen] = useState<string[]>(() => {
-    const exact = suggestions.matches.find((match) => match.exact);
+    const exact = suggestions.matches.find((match) => match.exact && !match.voided);
     return exact ? [exact.journalLineId] : [];
   });
   if (suggestions.matches.length === 0) {
@@ -101,11 +204,14 @@ function MatchForm({ line, suggestions, submit, busy }: { line: StatementLine; s
   const total = suggestions.matches
     .filter((match) => chosen.includes(match.journalLineId))
     .reduce((sum, match) => sum + (toCents(match.amount) ?? BigInt(0)), BigInt(0));
+  const lineCents = toCents(line.amount);
+  const difference = chosen.length > 0 && lineCents !== null ? lineCents - total : null;
+  const needsAdjustment = difference !== null && difference !== BigInt(0);
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        void submit({ kind: "match", journalLineIds: chosen });
+        void submit({ kind: "match", journalLineIds: chosen, adjustment: adjustmentCommand(difference, adjustment) });
       }}
       style={{ display: "grid", gap: 10 }}
     >
@@ -139,6 +245,7 @@ function MatchForm({ line, suggestions, submit, busy }: { line: StatementLine; s
                 <td>{formatDate(match.postingDate)}</td>
                 <td>
                   {originLabel(match.origin)} <Link href={journalHref(match.journalId)}>#{match.journalId}</Link>
+                  {match.voided ? <> <Badge tone="amber">Voided</Badge></> : null}
                   {match.description ? <div className={ui.muted}>{match.description}</div> : null}
                 </td>
                 <td>{match.reference}</td>
@@ -151,9 +258,115 @@ function MatchForm({ line, suggestions, submit, busy }: { line: StatementLine; s
         </table>
       </div>
       <TotalCheck total={total} target={line.amount} />
+      {needsAdjustment ? <AdjustmentFields difference={difference} value={adjustment} onChange={setAdjustment} lookups={lookups} /> : null}
       <div className={ui.actions}>
-        <Button type="submit" disabled={busy || chosen.length === 0}>
-          {busy ? "Reconciling…" : "Match"}
+        <Button type="submit" disabled={busy || chosen.length === 0 || (needsAdjustment && (!adjustment.accountCode || !adjustment.contactId))}>
+          {busy ? "Reconciling…" : needsAdjustment ? "Match with adjustment" : "Match"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * One posted transaction that the bank shows as several lines (examples
+ * BK26-BK28): pick the transaction, then the other unreconciled lines on this
+ * page that make it up with this one. They must add up to it exactly.
+ */
+function SplitForm({
+  line,
+  otherLines,
+  suggestions,
+  submit,
+  busy,
+}: {
+  line: StatementLine;
+  otherLines: StatementLine[];
+  suggestions: LineSuggestions;
+  submit: Submit;
+  busy: boolean;
+}) {
+  const lineCents = toCents(line.amount) ?? BigInt(0);
+  const magnitude = (value: bigint) => (value < BigInt(0) ? -value : value);
+  // Only transactions bigger than the line can be split across it and others.
+  const bigger = suggestions.matches.filter((match) => magnitude(toCents(match.amount) ?? BigInt(0)) > magnitude(lineCents));
+  const sameWay = otherLines.filter((other) => other.id !== line.id && other.amount.startsWith("-") === line.amount.startsWith("-"));
+  const [journalLineId, setJournalLineId] = useState(bigger.find((match) => !match.voided)?.journalLineId ?? "");
+  const [chosen, setChosen] = useState<string[]>([]);
+  if (bigger.length === 0) {
+    return (
+      <Empty>
+        Nothing posted on this account within 60 days of the line is bigger than it, so there&apos;s nothing to split across several
+        lines. Match it instead.
+      </Empty>
+    );
+  }
+  const target = bigger.find((match) => match.journalLineId === journalLineId);
+  const total = sameWay.filter((other) => chosen.includes(other.id)).reduce((sum, other) => sum + (toCents(other.amount) ?? BigInt(0)), lineCents);
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit({ kind: "split", journalLineId, otherLineIds: chosen });
+      }}
+      style={{ display: "grid", gap: 10 }}
+    >
+      <p className={ui.muted}>
+        When the bank shows one transaction as several lines. Choose the transaction, then tick the other lines that make it up with
+        this one. Nothing is posted, and the lines are unreconciled together.
+      </p>
+      <Field label="Transaction">
+        <select value={journalLineId} onChange={(event) => setJournalLineId(event.target.value)} required>
+          <option value="">Choose the transaction</option>
+          {bigger.map((match) => (
+            <option key={match.journalLineId} value={match.journalLineId}>
+              {formatDate(match.postingDate)} · {originLabel(match.origin)} #{match.journalId} · {match.reference} · {formatMoney(match.amount)}
+              {match.voided ? " · voided" : ""}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {sameWay.length === 0 ? (
+        <Empty>No other unreconciled lines on this page go the same way as this one.</Empty>
+      ) : (
+        <div className={ui.tableWrap}>
+          <table className={ui.table}>
+            <thead>
+              <tr>
+                <th style={{ width: 36 }} />
+                <th>Date</th>
+                <th>Description</th>
+                <th className={ui.num}>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sameWay.map((other) => (
+                <tr key={other.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`Include ${formatDate(other.date)} ${other.description}`}
+                      checked={chosen.includes(other.id)}
+                      onChange={(event) =>
+                        setChosen((current) => (event.target.checked ? [...current, other.id] : current.filter((id) => id !== other.id)))
+                      }
+                    />
+                  </td>
+                  <td>{formatDate(other.date)}</td>
+                  <td>{other.description}</td>
+                  <td className={ui.num}>
+                    <Money value={other.amount} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {target ? <TotalCheck total={total} target={target.amount} /> : null}
+      <div className={ui.actions}>
+        <Button type="submit" disabled={busy || chosen.length === 0 || !target || toCents(target.amount) !== total}>
+          {busy ? "Reconciling…" : "Reconcile these lines together"}
         </Button>
       </div>
     </form>
@@ -164,17 +377,19 @@ function PaymentsForm({
   organisationId,
   line,
   suggestions,
-  contacts,
+  lookups,
   submit,
   busy,
 }: {
   organisationId: string;
   line: StatementLine;
   suggestions: LineSuggestions;
-  contacts: Contact[];
+  lookups: Lookups;
   submit: Submit;
   busy: boolean;
 }) {
+  const contacts = lookups.contacts;
+  const [adjustment, setAdjustment] = useState<AdjustmentValue>(NO_ADJUSTMENT);
   const { current } = useWorkspace();
   const moneyIn = !line.amount.startsWith("-");
   const unsigned = line.amount.replace(/^-/, "");
@@ -209,10 +424,19 @@ function PaymentsForm({
   const allValid = entered.every(([, amount]) => toCents(amount) !== null);
   const total = allValid ? entered.reduce((sum, [, amount]) => sum + (toCents(amount) ?? BigInt(0)), BigInt(0)) : null;
   const allocation = (id: string, amount: string) => (moneyIn ? { invoiceId: id, amount } : { billId: id, amount });
+  const unsignedCents = toCents(unsigned);
+  // The line less the payments, signed like the line.
+  const difference =
+    total !== null && entered.length > 0 && unsignedCents !== null ? (moneyIn ? unsignedCents - total : total - unsignedCents) : null;
+  const needsAdjustment = difference !== null && difference !== BigInt(0);
 
   function submitChosen(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void submit({ kind: "payments", allocations: entered.map(([id, amount]) => allocation(id, amount.trim())) });
+    void submit({
+      kind: "payments",
+      allocations: entered.map(([id, amount]) => allocation(id, amount.trim())),
+      adjustment: adjustmentCommand(difference, adjustment),
+    });
   }
 
   return (
@@ -305,9 +529,20 @@ function PaymentsForm({
             </table>
           </div>
           <TotalCheck total={total} target={unsigned} />
+          {needsAdjustment ? (
+            <AdjustmentFields
+              difference={difference}
+              value={adjustment}
+              onChange={setAdjustment}
+              lookups={lookups}
+              contactHint={moneyIn ? "The invoice's customer" : "The bill's supplier"}
+            />
+          ) : null}
           <div className={ui.actions}>
-            <Button type="submit" disabled={busy || entered.length === 0}>
-              {busy ? "Reconciling…" : `Record ${entered.length === 1 ? "payment" : "payments"} and reconcile`}
+            <Button type="submit" disabled={busy || entered.length === 0 || (needsAdjustment && !adjustment.accountCode)}>
+              {busy
+                ? "Reconciling…"
+                : `Record ${entered.length === 1 ? "payment" : "payments"}${needsAdjustment ? " and adjustment" : ""} and reconcile`}
             </Button>
           </div>
         </form>
@@ -656,12 +891,15 @@ function LineReconciler({
   organisationId,
   account,
   line,
+  otherLines,
   lookups,
   onDone,
 }: {
   organisationId: string;
   account: BankAccount;
   line: StatementLine;
+  /** The other unreconciled lines shown, for a split. */
+  otherLines: StatementLine[];
   lookups: Lookups;
   onDone: () => void;
 }) {
@@ -685,7 +923,7 @@ function LineReconciler({
   const suggestions = detail.data.suggestions;
   const mode: Mode =
     chosenMode ??
-    (suggestions.matches.some((match) => match.exact)
+    (suggestions.matches.some((match) => match.exact && !match.voided)
       ? "match"
       : suggestions.documents.length > 0
         ? "payments"
@@ -696,6 +934,7 @@ function LineReconciler({
             : "bank_transaction");
   const modes: Array<{ mode: Mode; label: string }> = [
     { mode: "match", label: `Match${suggestions.matches.length ? ` (${suggestions.matches.length})` : ""}` },
+    { mode: "split", label: "Part of one transaction" },
     { mode: "payments", label: moneyIn ? "Customer payment" : "Pay bills" },
     { mode: "bank_transaction", label: moneyIn ? "Receive money" : "Spend money" },
     { mode: "transfer", label: "Transfer" },
@@ -723,13 +962,14 @@ function LineReconciler({
           </button>
         ))}
       </div>
-      {mode === "match" ? <MatchForm line={line} suggestions={suggestions} submit={submit} busy={busy} /> : null}
+      {mode === "match" ? <MatchForm line={line} suggestions={suggestions} lookups={lookups} submit={submit} busy={busy} /> : null}
+      {mode === "split" ? <SplitForm line={line} otherLines={otherLines} suggestions={suggestions} submit={submit} busy={busy} /> : null}
       {mode === "payments" ? (
         <PaymentsForm
           organisationId={organisationId}
           line={line}
           suggestions={suggestions}
-          contacts={lookups.contacts}
+          lookups={lookups}
           submit={submit}
           busy={busy}
         />
@@ -769,11 +1009,16 @@ export function ReconcilePanel({
   const { can } = useWorkspace();
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
+  const [ticked, setTicked] = useState<string[]>([]);
+  const [coded, setCoded] = useState<number | null>(null);
   const list = useApiData<{ lines: StatementLine[]; total: number }>(`/api/bank-accounts/${account.id}/statement-lines`, {
     organisationId,
     status: "unreconciled",
     limit: PAGE_SIZE,
     offset,
+  });
+  const confident = useApiData<{ lines: LineConfidence[]; confidentCount: number }>(`/api/bank-accounts/${account.id}/confident-matches`, {
+    organisationId,
   });
   const accounts = useApiData<{ accounts: Account[] }>("/api/accounts", { organisationId });
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
@@ -795,7 +1040,14 @@ export function ReconcilePanel({
   function finished() {
     setOpen(null);
     list.reload();
+    confident.reload();
     onChanged();
+  }
+
+  function cashCoded(reconciledIds: string[]) {
+    setTicked((current) => current.filter((id) => !reconciledIds.includes(id)));
+    setCoded(reconciledIds.length);
+    if (reconciledIds.length > 0) finished();
   }
 
   if (list.error) return <Notice tone="error">{list.error}</Notice>;
@@ -805,16 +1057,61 @@ export function ReconcilePanel({
   if (total === 0) {
     return <Empty>Everything is reconciled. Import a statement or sync the bank feed to bring in new lines.</Empty>;
   }
+  const confidence = new Map((confident.data?.lines ?? []).map((entry) => [entry.lineId, entry]));
+  const canReconcile = can("bookkeeper");
+  const tickedLines = lines.filter((line) => ticked.includes(line.id));
+  const allTicked = lines.length > 0 && tickedLines.length === lines.length;
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <p className={ui.muted}>
         {total} {total === 1 ? "line" : "lines"} to reconcile, oldest first. Reconciling says what each line is: something already
-        posted, a payment of invoices or bills, a new bank transaction, or a transfer.
+        posted, a payment of invoices or bills, a new bank transaction, or a transfer. A highlighted suggestion is the only match with
+        the exact amount; <strong>OK</strong> reconciles it in one click. Tick several lines to code them to an account all at once.
       </p>
+      {confident.error ? <Notice tone="error">{confident.error}</Notice> : null}
+      {can("bookkeeper") && confident.data ? (
+        <OkAllBar organisationId={organisationId} accountId={account.id} confidences={confident.data.lines} lines={lines} onDone={finished} />
+      ) : null}
+      {canReconcile && coded !== null && tickedLines.length === 0 ? (
+        <Notice tone="success">
+          {coded} {coded === 1 ? "line" : "lines"} coded and reconciled.
+        </Notice>
+      ) : null}
+      {canReconcile && tickedLines.length > 0 ? (
+        <div className={ui.suggestion} style={{ display: "grid", gap: 8 }}>
+          <strong>
+            Bulk code {tickedLines.length} ticked {tickedLines.length === 1 ? "line" : "lines"}
+          </strong>
+          {lookups ? (
+            <CashCodingForm
+              organisationId={organisationId}
+              accountId={account.id}
+              lines={tickedLines}
+              lookups={lookups}
+              onDone={cashCoded}
+            />
+          ) : (
+            <p className={ui.muted}>Loading…</p>
+          )}
+        </div>
+      ) : null}
       <div className={ui.tableWrap}>
         <table className={ui.table}>
           <thead>
             <tr>
+              {canReconcile ? (
+                <th style={{ width: 36 }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Tick every line on this page to bulk code"
+                    checked={allTicked}
+                    onChange={(event) => {
+                      setCoded(null);
+                      setTicked(event.target.checked ? lines.map((line) => line.id) : []);
+                    }}
+                  />
+                </th>
+              ) : null}
               <th>Date</th>
               <th>Description</th>
               <th className={ui.num}>Money in</th>
@@ -828,11 +1125,31 @@ export function ReconcilePanel({
                 key={line.id}
                 line={line}
                 open={open === line.id}
-                canReconcile={can("bookkeeper")}
+                canReconcile={canReconcile}
+                ticked={ticked.includes(line.id)}
+                onTick={(on) => {
+                  setCoded(null);
+                  setTicked((current) => (on ? [...current, line.id] : current.filter((id) => id !== line.id)));
+                }}
                 onToggle={() => setOpen((current) => (current === line.id ? null : line.id))}
+                suggestion={
+                  <SuggestionBox
+                    organisationId={organisationId}
+                    confidence={confidence.get(line.id)}
+                    canReconcile={canReconcile}
+                    onDone={finished}
+                  />
+                }
               >
                 {lookups ? (
-                  <LineReconciler organisationId={organisationId} account={account} line={line} lookups={lookups} onDone={finished} />
+                  <LineReconciler
+                    organisationId={organisationId}
+                    account={account}
+                    line={line}
+                    otherLines={lines}
+                    lookups={lookups}
+                    onDone={finished}
+                  />
                 ) : (
                   <p className={ui.muted}>Loading…</p>
                 )}
@@ -841,7 +1158,15 @@ export function ReconcilePanel({
           </tbody>
         </table>
       </div>
-      <Pager offset={offset} pageSize={PAGE_SIZE} total={total} onChange={setOffset} />
+      <Pager
+        offset={offset}
+        pageSize={PAGE_SIZE}
+        total={total}
+        onChange={(next) => {
+          setTicked([]);
+          setOffset(next);
+        }}
+      />
     </div>
   );
 }
@@ -850,18 +1175,34 @@ function LineRow({
   line,
   open,
   canReconcile,
+  ticked,
+  onTick,
   onToggle,
+  suggestion,
   children,
 }: {
   line: StatementLine;
   open: boolean;
   canReconcile: boolean;
+  ticked: boolean;
+  onTick: (ticked: boolean) => void;
   onToggle: () => void;
+  suggestion?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <>
       <tr>
+        {canReconcile ? (
+          <td>
+            <input
+              type="checkbox"
+              aria-label={`Tick ${formatDate(line.date)} ${line.description} to bulk code`}
+              checked={ticked}
+              onChange={(event) => onTick(event.target.checked)}
+            />
+          </td>
+        ) : null}
         <td style={{ whiteSpace: "nowrap" }}>{formatDate(line.date)}</td>
         <td>
           {line.description}
@@ -872,6 +1213,7 @@ function LineRow({
             </>
           ) : null}
           <LineDetails line={line} />
+          {open ? null : suggestion}
         </td>
         <InOutCells amount={line.amount} />
         <td style={{ textAlign: "right" }}>
@@ -884,7 +1226,7 @@ function LineRow({
       </tr>
       {open ? (
         <tr>
-          <td colSpan={5}>{children}</td>
+          <td colSpan={canReconcile ? 6 : 5}>{children}</td>
         </tr>
       ) : null}
     </>

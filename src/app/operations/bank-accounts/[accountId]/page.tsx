@@ -40,8 +40,9 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
         title={`${account.code} · ${account.name}`}
         description={`${ACCOUNT_TYPE_LABELS[account.accountType]}${account.currencyCode ? ` in ${account.currencyCode}` : ""}${account.isActive ? "" : " (archived)"}`}
       />
-      <p>
+      <p className={ui.actions} style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
         <Link href="/operations/bank-accounts">← All bank accounts</Link>
+        <Link href={`/operations/reports?report=bankrec&account=${account.id}`}>Bank reconciliation report</Link>
       </p>
       <div className={ui.statRow}>
         <Stat

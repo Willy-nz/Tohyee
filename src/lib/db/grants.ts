@@ -19,6 +19,7 @@ const APPEND_ONLY_TABLES = [
   "gst_return_adjustments",
   "gst_return_lines",
   "fixed_asset_depreciation_lines",
+  "bank_reconciliation_splits",
 ];
 
 function quoteRole(role: string): string {
