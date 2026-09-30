@@ -1,0 +1,46 @@
+// Settings for the Tohyee address Worker. See README.md for the one-time setup.
+// Change the three values marked CHANGE ME before running `npm run deploy`.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tohyee-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-15",
+  "observability": { "enabled": true },
+
+  // Where Tohyee servers reach this Worker. CHANGE ME: api.<your domain>.
+  // (Every Tohyee address is 7 characters long, so a name like "api" never clashes.)
+  "routes": [{ "pattern": "api.tohyee.example", "custom_domain": true }],
+
+  "vars": {
+    // CHANGE ME: the domain you bought and added to Cloudflare.
+    "DOMAIN": "tohyee.example",
+    // CHANGE ME: from the Cloudflare dashboard (see README, step 5).
+    "ACCOUNT_ID": "",
+    "ZONE_ID": "",
+    // Shown in error messages and at /v1/health so people can report misuse.
+    "ABUSE_CONTACT": "abuse@tohyee.example",
+    // Limits. A day runs from midnight to midnight UTC.
+    "NEW_PER_IP_PER_DAY": "3",
+    "REQUESTS_PER_IP_PER_DAY": "30",
+    "NEW_PER_DAY": "100",
+    // Cloudflare allows 1,000 tunnels per account; keep some spare for yourself.
+    "MAX_ACTIVE": "900"
+  },
+
+  // Secrets (never put these in this file):
+  //   npx wrangler secret put CF_API_TOKEN   (the API token from README step 4)
+  //   npx wrangler secret put ADMIN_TOKEN    (a long random password for the switch-off commands)
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tohyee-relay",
+      // CHANGE ME: printed by `npx wrangler d1 create tohyee-relay`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Once a day: tidy old counters and finish removing tunnels that were still connected.
+  "triggers": { "crons": ["17 14 * * *"] }
+}
