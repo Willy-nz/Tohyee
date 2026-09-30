@@ -77,7 +77,14 @@ that something happened.
   apart from the realised gain or loss on 7020 (MC31-MC38);
   projects and CRM opportunities for a customer in another currency are in
   it, and so are the invoices made from them (MC61-MC70).
-  Zero-rated, exempt and no-GST codes only.
+  Any GST code, standard-rated included (built overnight 1 Oct 2026
+  following NetSuite and IRD, examples MC71-MC83 not yet approved by Jess):
+  GST is worked out in the document's currency and each line's GST
+  converted at the document's rate, posted to 2100 in NZD and never changed
+  by payments or revaluations; the GST return and GST audit report count
+  the NZD amounts, and bills on the payments or hybrid basis their NZD share
+  at the bill's rate; the documents' screens show the NZD GST beside the NZD
+  total.
 - **Currency exchange rates list** (built overnight 1 Oct 2026 following
   NetSuite's Currency Exchange Rates, examples MC46-MC53 not yet approved by
   Jess): Accounting › Exchange rates keeps rates for each foreign currency
@@ -705,8 +712,8 @@ isn't acceptable, because people would trust it:
   foreign-currency accounts (Akahu's transactions don't say their currency),
   an adjustment when splitting one posted transaction across several
   statement lines, and old Excel (.xls) files
-- on foreign-currency documents (MC11): standard-rated GST, supplier
-  overpayments, payments through a bank account in a third currency (as
+- on foreign-currency documents (MC11): the reverse charge on imported
+  services, supplier overpayments, payments through a bank account in a third currency (as
   NetSuite, MC30), chargeable expenses on foreign-currency projects and
   projects in currencies without cents (MC70), approving repeating ones
   automatically without a rate from the exchange rates list, and sales on the
@@ -733,12 +740,13 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
 4. NZ payroll.
-5. The rest of foreign-currency documents (MC11): standard-rated GST on
-   them, the payments basis, and chargeable expenses on foreign-currency
-   projects. Foreign-currency bank accounts, invoices, bills, credit notes,
-   payments, overpayments, refunds, batch payments, quotes, repeating
-   documents, purchase orders, stock, projects, CRM opportunities and the
-   exchange rates list are built (MC1-MC29, MC46-MC53, MC61-MC70), with
+5. The rest of foreign-currency documents (MC11): sales on the payments
+   basis, and chargeable expenses on foreign-currency projects.
+   Foreign-currency bank accounts, invoices, bills, credit notes, payments,
+   overpayments, refunds, batch payments, quotes, repeating documents,
+   purchase orders, stock, projects, CRM opportunities, standard-rated GST
+   on documents and the exchange rates list are built (MC1-MC29,
+   MC46-MC53, MC61-MC70, MC71-MC83), with
    rounding on its own account and revaluation per open document
    (MC31-MC43); a bank account in a third currency stays refused, as in
    NetSuite (MC30).

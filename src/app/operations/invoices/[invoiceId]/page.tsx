@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { ForeignTotals } from "@/components/fx-totals";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { formatRate, formatUnitPrice, InvoiceStatusBadge, PaidStatusBadge } from "@/components/invoices/invoice-editor";
@@ -419,13 +420,7 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
               <Stat label="Amount due" value={<Money value={invoice.amountDue} />} />
             </>
           ) : null}
-          {invoice.exchangeRate ? (
-            <>
-              <Stat label="Exchange rate" value={invoice.exchangeRate} />
-              <Stat label={`Total (${baseCurrency})`} value={<Money value={invoice.baseTotal} />} />
-              {invoice.amountDueBase !== null ? <Stat label={`Due (${baseCurrency}, at this rate)`} value={<Money value={invoice.amountDueBase} />} /> : null}
-            </>
-          ) : null}
+          <ForeignTotals document={invoice} baseCurrency={baseCurrency} hasTax={hasTax} openLabel="Due" openBase={invoice.amountDueBase} />
         </div>
         <p className={ui.muted}>
           Saved by {personName(invoice, "createdBy") ?? "unknown"} on {formatDateTime(invoice.createdAt)}.

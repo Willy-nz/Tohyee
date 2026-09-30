@@ -7,6 +7,7 @@ import { BillStatusBadge } from "@/components/bills/bill-editor";
 import { BillPayments } from "@/components/bills/bill-payments";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { ForeignTotals } from "@/components/fx-totals";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { formatRate, formatUnitPrice, PaidStatusBadge } from "@/components/invoices/invoice-editor";
@@ -225,7 +226,7 @@ function UnusedCredit({ organisationId, bill }: { organisationId: string; bill: 
 function BillView({ organisationId, billId }: { organisationId: string; billId: string }) {
   const trackingSetup = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
-  const { can } = useWorkspace();
+  const { can, current } = useWorkspace();
   const router = useRouter();
   const details = useApiData<{
     bill: Bill;
@@ -356,6 +357,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
               <Stat label="Amount due" value={<Money value={bill.amountDue} />} />
             </>
           ) : null}
+          <ForeignTotals document={bill} baseCurrency={current?.baseCurrency ?? "NZD"} hasTax={hasTax} openLabel="Due" openBase={bill.amountDueBase} />
         </div>
         <p className={ui.muted}>
           Bill #{bill.id}, saved by {personName(bill, "createdBy") ?? "unknown"} on {formatDateTime(bill.createdAt)}.

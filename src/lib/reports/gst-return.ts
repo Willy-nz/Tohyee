@@ -545,11 +545,13 @@ async function gstBasis(tx: OrgTx, options: { lock: boolean }): Promise<GstBasis
  * What was still owed at the end of a day, with its GST (G20, G22): approved
  * documents dated on or before it and not voided by then, less what had
  * settled them by then (payments, refunds and applications not voided or
- * removed by then). Credit notes count negative.
+ * removed by then). Credit notes count negative. A foreign-currency
+ * document's owed and total are in its currency and its GST is the NZD GST
+ * (MC81), so owed x GST / total is its NZD GST's share, at its own rate.
  */
 const OUTSTANDING_SQL = `
 with outstanding as (
-  select 'sales' as side, i.total, i.tax_total, 1 as sign,
+  select 'sales' as side, i.total, coalesce(i.base_tax_total, i.tax_total) as tax_total, 1 as sign,
          i.total
          - coalesce((select sum(p.amount - p.overpayment_amount) from customer_payments p
                       where p.invoice_id = i.id and p.payment_date <= $1
@@ -563,7 +565,7 @@ with outstanding as (
     from sales_invoices i
    where i.status in ('approved', 'voided') and i.invoice_date <= $1 and (i.status = 'approved' or i.void_date > $1)
   union all
-  select 'sales', n.total, n.tax_total, -1,
+  select 'sales', n.total, coalesce(n.base_tax_total, n.tax_total), -1,
          n.total
          - coalesce((select sum(a.amount) from sales_credit_note_applications a
                       where a.credit_note_id = n.id and a.application_date <= $1
@@ -574,7 +576,7 @@ with outstanding as (
     from sales_credit_notes n
    where n.status in ('approved', 'voided') and n.credit_note_date <= $1 and (n.status = 'approved' or n.void_date > $1)
   union all
-  select 'purchases', b.total, b.tax_total, 1,
+  select 'purchases', b.total, coalesce(b.base_tax_total, b.tax_total), 1,
          b.total
          - coalesce((select sum(p.amount) from supplier_payments p
                       where p.bill_id = b.id and p.payment_date <= $1
@@ -585,7 +587,7 @@ with outstanding as (
     from bills b
    where b.status in ('approved', 'voided') and b.bill_date <= $1 and (b.status = 'approved' or b.void_date > $1)
   union all
-  select 'purchases', s.total, s.tax_total, -1,
+  select 'purchases', s.total, coalesce(s.base_tax_total, s.tax_total), -1,
          s.total
          - coalesce((select sum(a.amount) from supplier_credit_note_applications a
                       where a.credit_note_id = s.id and a.application_date <= $1

@@ -1719,8 +1719,9 @@ expressed in NZD as at the time of supply).
   customer's currency with the NZD balance beside it. The trial balance,
   balance sheet and GST return are NZD. Home (money owed, bills to pay) and
   sales by salesperson are NZD at the documents' rates.
-- **GST**: only zero-rated (ZERO), exempt (EXEMPT) and no-GST (NONE) codes,
-  or no tax, on foreign-currency documents. On the invoice basis a
+- **GST**: any GST code, standard-rated included (revised 1 Oct 2026: GST
+  is worked out in the document's currency and converted at its rate,
+  MC71-MC83; these examples use zero-rated ones). On the invoice basis a
   foreign-currency invoice counts at its lines' NZD amounts on its date (s 77,
   the time of supply being the invoice date under s 9(1)): zero-rated sales
   in Boxes 5 and 6.
@@ -1734,7 +1735,7 @@ Amazon Web Services (USD).
 | ID | What happens | Result |
 | --- | --- | --- |
 | MC1 | Contacts: Acme with currency "usd", AWS "USD", Kobe none; "NZD" typed; "XYZ" | Acme and AWS are **USD**, Kobe and "NZD" are blank (NZD); "XYZ" refused. A contact with no documents can change currency; once Acme has an invoice, changing it is refused ("…has invoices, bills or credit notes in USD, so its currency can't change"), by the database too |
-| MC2 | INV-0001 for Acme, 3 Jul 2026: 1 x USD 1,000.00, 4000, ZERO, exclusive | With no rate typed and no USD rate used yet: refused ("Type the exchange rate…"). With a GST line: refused. At **1.6543**: NZD **1,654.30**. Journal: Dr 1100 **1,654.30 (USD 1,000.00)** / Cr 4000 **1,654.30** |
+| MC2 | INV-0001 for Acme, 3 Jul 2026: 1 x USD 1,000.00, 4000, ZERO, exclusive | With no rate typed and no USD rate used yet: refused ("Type the exchange rate…"). (With a GST line it was refused; revised 1 Oct 2026, standard-rated GST is MC71.) At **1.6543**: NZD **1,654.30**. Journal: Dr 1100 **1,654.30 (USD 1,000.00)** / Cr 4000 **1,654.30** |
 | MC3 | INV-0002 for Acme, 4 Jul, USD 500.00, no rate typed | Takes **1.6543** (the last USD rate on or before 4 Jul): NZD **827.15** |
 | MC4 | INV-0003, 12 Jul, three lines of USD 10.01 at **1.5**; paid in full the same day into 1000 at 1.5 | Each line 15.015 -> **15.02**, so NZD **45.06** (not 30.03 x 1.5 = 45.05): Dr 1100 45.06 (USD 30.03) / Cr 4000 45.06. Payment: bank **45.05**, 1100 cleared **45.06**; the same rate, so no realised gain or loss ((1.5 - 1.5) x 30.03 = 0.00) and the cent is a **rounding loss** (MC31): Dr 1000 45.05 / Dr 7050 0.01 / Cr 1100 45.06 (USD 30.03) |
 | MC5 | A USD statement line on 1030, 20 Jul, +1,000.00: pay INV-0001 at **1.64** | Dr 1030 **1,640.00 (USD 1,000.00 at 1.64)** / Dr 7020 **14.30** / Cr 1100 **1,654.30 (USD 1,000.00)**; INV-0001 paid, NZD due 0.00. An NZD invoice (Kobe's INV-0004) from a USD line stays refused ("Invoice INV-0004 is in NZD, so it can't be paid from a USD statement line yet", FXB9), and a USD invoice from an NZD line is refused (record it on the invoice, then match) |
@@ -1742,7 +1743,7 @@ Amazon Web Services (USD).
 | MC7 | CN-0001 for Acme, 22 Jul, USD 100.00 at **1.63**; INV-0005, 25 Jul, USD 2,000.00 at **1.60** (NZD 3,200.00); CN-0001 applied to INV-0005 on 28 Jul | Credit note: Dr 4000 **163.00** / Cr 1100 **163.00 (USD 100.00)**. Applying: the credit note's side **163.00**, the invoice's 3,200.00 x 100 / 2,000 = **160.00**, gain **3.00** ((1.63 - 1.60) x 100): Dr 1100 163.00 (USD 100.00) / Cr 1100 160.00 (USD 100.00) / Cr 7020 3.00. INV-0005 due **USD 1,900.00 = NZD 3,040.00**. Removing it posts the exact reversal; applied again, the same. (Refunding a USD credit note: MC17.) |
 | MC8 | Revaluation on 31 Jul at **1.62** (reversal 1 Aug) of 1030, 1100 USD and 2000 USD | 1030: USD 1,000.00, carrying 1,640.00, revalued 1,620.00: Dr 7010 **20.00** / Cr 1030 20.00. 1100 USD: USD **1,900.00** (INV-0005, its only open document: (1.62 - 1.60) x 1,900.00), carrying **3,040.00**, revalued **3,078.00**: Dr 1100 **38.00** (USD 0.00 at 1.62) / Cr 7000 38.00. 2000 USD: USD **50.00** (AWS-7: (1.62 - 1.66) x 50.00), carrying **83.00**, revalued **81.00**: Dr 2000 **2.00** / Cr 7000 2.00. All reversed on 1 Aug. Before it, period close's FX check lists 1030, 1100 and 2000; after, it passes. Refused: 1100 without a currency ("…Say which currency…"), 1100 USD typed as 2,000.00 ("the ledger has USD 1900.00 open…"), 1100 EUR ("nothing open in EUR"), 1100 USD again on 31 Jul |
 | MC9 | Aged receivables and payables, and Acme's statement, as at 31 Jul | Acme: INV-0005 **USD 1,900.00 / NZD 3,040.00**, owes USD 1,900.00; total **NZD 3,155.00** (with Kobe's 115.00); revaluation **38.00** beside it (3,155.00 + 38.00 = 1100's 3,193.00). Payables: AWS-7 **USD 50.00 / NZD 83.00**; revaluation **-2.00**; 2000 **81.00**, difference 0.00. Period close's receivables and payables checks pass. Acme's July statement is in **USD**: closing **1,900.00**, NZD **3,040.00** beside it |
-| MC10 | Bills from AWS: AWS-7, 5 Jul, USD 50.00 at **1.66**, 6040, no tax; AWS-8, 6 Jul, the same; supplier credit note AWS-CR1, 7 Jul, USD 20.00 at **1.70**, applied to AWS-8 on 8 Jul; AWS-8's USD 30.00 paid 9 Jul from 1000 at 1.66 | AWS-7: Dr 6040 **83.00** / Cr 2000 **83.00 (USD 50.00)**; with a GST line: refused. AWS-CR1: Dr 2000 **34.00 (USD 20.00)** / Cr 6040 34.00. Applying: the bill's side 83.00 x 20 / 50 = **33.20**, the credit's **34.00**, loss **0.80**: Dr 2000 33.20 (USD 20.00) / Cr 2000 34.00 (USD 20.00) / Dr 7020 0.80. Payment: bank **49.80**, cleared **49.80**, no gain or loss (no 7020 line): Dr 2000 49.80 (USD 30.00) / Cr 1000 49.80 |
+| MC10 | Bills from AWS: AWS-7, 5 Jul, USD 50.00 at **1.66**, 6040, no tax; AWS-8, 6 Jul, the same; supplier credit note AWS-CR1, 7 Jul, USD 20.00 at **1.70**, applied to AWS-8 on 8 Jul; AWS-8's USD 30.00 paid 9 Jul from 1000 at 1.66 | AWS-7: Dr 6040 **83.00** / Cr 2000 **83.00 (USD 50.00)** (a USD bill with GST: MC75). AWS-CR1: Dr 2000 **34.00 (USD 20.00)** / Cr 6040 34.00. Applying: the bill's side 83.00 x 20 / 50 = **33.20**, the credit's **34.00**, loss **0.80**: Dr 2000 33.20 (USD 20.00) / Cr 2000 34.00 (USD 20.00) / Dr 7020 0.80. Payment: bank **49.80**, cleared **49.80**, no gain or loss (no 7020 line): Dr 2000 49.80 (USD 30.00) / Cr 1000 49.80 |
 | MC11 | Refused rather than guessed, with nothing posted | A USD invoice made any way but entering it directly, from a quote (MC25), a repeating invoice (MC26), a project (MC64) or a CRM opportunity (MC69); item lines without a typed price on foreign-currency documents (stock items are MC29); a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
 | MC12 | AWS-7 paid on 5 Aug from 1030 at **1.65** (after the 1 Aug reversal) | Dr 2000 **83.00 (USD 50.00)** / Cr 1030 **82.50 (USD 50.00 at 1.65)** / Cr 7020 **0.50** |
 | MC13 | July GST return (invoice basis) and the trial balance at 31 Aug | Box 5 **5,678.51**, Box 6 **5,563.51** (1,654.30 + 827.15 + 45.06 + 3,200.00 - 163.00 zero-rated; Kobe's 115.00 standard-rated); AWS's no-GST bills in no box. Trial balance balances: 7020 debit **18.75** (-14.30 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50), 7050 debit **0.01** (MC4), 7000 and 7010 nothing (reversed), 1100 **3,155.00**, 2000 nothing, 1030 **1,557.50** (USD 950.00) |
@@ -1869,8 +1870,8 @@ Transactions*). So:
   used on or before it (MC3), as for a document entered directly. Nothing
   posts until it's approved.
 - The same line rules as foreign-currency documents apply when it's saved:
-  zero-rated, exempt or no-GST codes only, no stock items, and item lines
-  need a typed price (MC11).
+  no stock items, and item lines need a typed price (MC11). Standard-rated
+  GST is allowed (revised 1 Oct 2026, MC79), worked out in its currency.
 - **Repeating invoices and bills in a foreign currency** can be saved as
   "approve" (revised 1 Oct 2026, MC52): each one is approved only when the
   exchange rates list has a rate effective on its date, which it takes.
@@ -1882,7 +1883,7 @@ payment).
 
 | ID | What happens | Result |
 | --- | --- | --- |
-| MC25 | A quote for Acme, 20 Aug 2026, USD 400.00 zero-rated; finalised QU-0001; accepted on 25 Aug with no rate typed | The quote is **USD 400.00** and posts nothing (with a GST line it's refused). Accepting makes a **draft** invoice in USD at **1.60** (the last USD rate used on or before 25 Aug): NZD **640.00**, still nothing posted; approved: Dr 1100 640.00 (USD 400.00) / Cr 4000 640.00. Another quote (USD 10.00) accepted on 26 Aug with the rate **1.58** typed: NZD **15.80** |
+| MC25 | A quote for Acme, 20 Aug 2026, USD 400.00 zero-rated; finalised QU-0001; accepted on 25 Aug with no rate typed | The quote is **USD 400.00** and posts nothing (a quote with GST: MC79). Accepting makes a **draft** invoice in USD at **1.60** (the last USD rate used on or before 25 Aug): NZD **640.00**, still nothing posted; approved: Dr 1100 640.00 (USD 400.00) / Cr 4000 640.00. Another quote (USD 10.00) accepted on 26 Aug with the rate **1.58** typed: NZD **15.80** |
 | MC26 | A monthly repeating invoice for Acme from 31 Aug, USD 100.00 zero-rated, saved as "approve"; the job runs on 31 Aug; the exchange rates list is empty | The template is **USD 100.00**. The job makes an invoice dated 31 Aug in USD at **1.60** (the last rate used by then; MC25's 1.58 invoice is a draft, which posts nothing, so it isn't one), NZD **160.00**, and leaves it a **draft** (approval refused, 1 made): "Left as a draft: The exchange rates list has no USD rate effective on or before 2026-08-31, so this invoice took the last USD rate used (1.6)…"; nothing posts. (Revised 1 Oct 2026: saving it as "approve" used to be refused. With a list rate it's approved, MC52.) |
 | MC27 | A monthly repeating bill from AWS from 31 Aug, "AWS-{month}", USD 40.00 no tax to 6040, saved as "approve"; the job runs on 31 Aug | The bill made is a **draft** (approval refused, as MC26) dated 31 Aug, USD 40.00 at **1.60** = NZD **64.00** |
 | MC28 | A purchase order to AWS, 20 Aug, 3 x USD 20.00 no tax to 6040; approved; copied to a bill AWS-PO1 dated 28 Aug at **1.55** | The order is **USD 60.00** and posts nothing, approved or not. The bill is a draft, USD 60.00 at 1.55 = NZD **93.00**; approved: Dr 6040 93.00 / Cr 2000 93.00 (USD 60.00). AWS's currency can't change now |
@@ -1910,7 +1911,8 @@ receipts (stock comes in with the bill, ST1), so there's no such variance:
   net amount at its own rate; the stock leaves at the NZD average and the
   difference goes to cost of sales (as in "Stock tracking").
 - Stock still equals 1400 to the cent. Item lines still need a typed price
-  (item prices are NZD, MC11), and GST stays zero-rated, exempt or none.
+  (item prices are NZD, MC11). GST works as on any foreign-currency
+  document (MC71); these examples have none.
 - A foreign bill's stock isn't revalued or adjusted when the bill is paid at
   another rate: the realised gain or loss goes to 7020 (MC5), as NetSuite's
   does.
@@ -2132,8 +2134,9 @@ is converted from NZD. Staff costs stay in the base currency. So, in Tohyee:
   (the line's NZD net amount, PJ4).
 - **Invoicing a foreign project** (PJ6) makes a draft invoice in its
   currency, like any foreign-currency invoice (MC2): the rate typed, or else
-  the one a new invoice for that date starts with (MC3); GST zero-rated,
-  exempt or none; nothing posts until it's approved.
+  the one a new invoice for that date starts with (MC3); any GST code, as on
+  any foreign-currency invoice (revised 1 Oct 2026, MC71); nothing posts
+  until it's approved.
 - **Profitability** (PJ9): invoiced, on draft invoices, unbilled, written
   off and the estimate are in the project's currency; **invoiced (NZD)** is
   the approved invoices' NZD subtotals at their own rates (what the ledger
@@ -2149,11 +2152,12 @@ is converted from NZD. Staff costs stay in the base currency. So, in Tohyee:
   following its company if that changes, until it has made its invoice. The
   pipeline totals each currency on its own; a company's open pipeline is in
   its currency. A **won opportunity's invoice** (CRM5) is a draft in that
-  currency at the rate typed or else the usual starting rate; its line is
-  **zero-rated** (ZERO) rather than standard-rated GST, since only
-  zero-rated, exempt or no GST can be on a foreign-currency invoice (MC2),
-  or has no tax if there's no zero-rated code. It's checked before it's
-  approved.
+  currency at the rate typed or else the usual starting rate, with the same
+  **standard GST code** as an NZD opportunity's invoice (CRM5; no tax if
+  there's none). Revised 1 Oct 2026: it used to be zero-rated, when only
+  zero-rated, exempt or no GST could be on a foreign-currency invoice; now
+  standard-rated GST works (MC71). It's a draft, so an export can be changed
+  to ZERO before it's approved.
 
 Setup: GST on the invoice basis; 1000, 1100, 4000, 6040; customers **Acme
 Inc (USD)** and **Harbour Cafe** (NZD), supplier Paw Supplies (NZD); Jess's
@@ -2164,25 +2168,116 @@ staff cost rate **NZD 40.00** an hour; no USD rate used yet.
 | MC61 | Projects: "Website build" for Acme, estimate 3,000.00; "Cafe menu" for Harbour Cafe | Website build is **USD** (estimate **USD 3,000.00**), Cafe menu **NZD**; nothing posts. Changing Acme's currency is now refused ("Acme Inc has projects or CRM opportunities in USD, so its currency can't change…"), by the database too; so is setting Website build's currency to NZD in the database ("This contact's documents are in USD, not NZD"). A project for Yamato KK (JPY) is refused: MC70 |
 | MC62 | Tasks: Development, hourly **USD 120.00**; Setup, fixed **USD 500.00**. Jess records 2 h 30 min of Development on 1 Jul 2026; on Cafe menu, Design hourly 90.00 and 1 h of Jess's time on 2 Jul | Jess's entry costs **NZD 100.00** (150 x 40.00 / 60, her NZD cost rate). Website build unbilled **USD 800.00** (300.00 time + 500.00 fixed); Cafe menu unbilled **90.00** (NZD), cost 40.00 |
 | MC63 | Bill PS-1 from Paw Supplies, 3 Jul, "Hosting" 50.00 + GST to 6040, approved; linked to Website build | Chargeable: refused ("Project Website build is in USD, and expense costs are in NZD. Charging an expense on a USD project isn't supported yet…"), and by the database. Not chargeable: linked at cost **NZD 50.00**; making it chargeable later is refused. Nothing posts |
-| MC64 | Invoice everything unbilled on Website build, 10 Jul, to 4000 | With GST (standard): refused ("GST on foreign-currency invoices…"). ZERO with no rate typed (no USD rate used yet): refused ("Type the exchange rate…"); nothing is linked. ZERO at **1.60**: a **draft USD invoice** for Acme: "Development (2 h 30 min)" 2.5 x **120.00** = **300.00**, "Setup" 1 x **500.00**: **USD 800.00**, no GST, NZD **1,280.00** (480.00 + 800.00); unbilled USD 0.00. Approved: Dr 1100 **1,280.00 (USD 800.00)** / Cr 4000 **1,280.00** |
+| MC64 | Invoice everything unbilled on Website build, 10 Jul, to 4000 | (With GST (standard) it was refused; revised 1 Oct 2026, it works as MC71.) ZERO with no rate typed (no USD rate used yet): refused ("Type the exchange rate…"); nothing is linked. ZERO at **1.60**: a **draft USD invoice** for Acme: "Development (2 h 30 min)" 2.5 x **120.00** = **300.00**, "Setup" 1 x **500.00**: **USD 800.00**, no GST, NZD **1,280.00** (480.00 + 800.00); unbilled USD 0.00. Approved: Dr 1100 **1,280.00 (USD 800.00)** / Cr 4000 **1,280.00** |
 | MC65 | 1 h more Development on 12 Jul, invoiced on 20 Jul (ZERO) with no rate typed, and approved | Takes **1.60**, the rate a new USD invoice dated 20 Jul starts with (MC3; MC64's): "Development (1 h)" **USD 120.00** = NZD **192.00**: Dr 1100 192.00 (USD 120.00) / Cr 4000 192.00 |
 | MC66 | Project profitability and the time report for July 2026 | Website build: invoiced **USD 920.00**, invoiced (NZD) **1,472.00**; costs **NZD 190.00** (time 3 h 30 min, 140.00, plus hosting 50.00); profit **NZD 1,282.00**; unbilled **USD 0.00**; estimate USD 3,000.00, **USD 2,080.00** left. Cafe menu: costs 40.00, profit **-40.00**, unbilled **90.00**. Totals (NZD): invoiced **1,472.00**, costs **230.00**, profit **1,242.00**, unbilled **90.00** (NZD projects); USD projects: invoiced USD 920.00, unbilled USD 0.00. 4000 on the trial balance is 1,472.00. Time report: Jess 4 h 30 min, cost **NZD 180.00** |
 | MC67 | Currency locks | Website build can't move to Harbour Cafe (it has invoices). "Discovery" for Acme with a task Workshop (fixed USD 200.00) can't move to Harbour Cafe ("…has tasks, time or expenses in USD, so it can't move to a customer in NZD…"); the database refuses its currency changing too. "Scoping" for Acme, with nothing on it, moves to Harbour Cafe and is then **NZD** |
 | MC68 | CRM on. Opportunities "Annual retainer" for Acme 2,000.00 and "Menu reprint" for Harbour Cafe 500.00, both New | Annual retainer is **USD 2,000.00**, Menu reprint **NZD 500.00**; the New column totals **NZD 500.00 + USD 2,000.00** (never added together); Acme's open pipeline **USD 2,000.00**. Moved to Acme, Menu reprint is USD 500.00; moved back, NZD 500.00. For Yamato KK (JPY) 1000.50 is refused ("…no cents…"), 1000 works |
-| MC69 | Annual retainer and Menu reprint marked Won and invoiced (today); "Logo licence" for Acme, USD 100.00, Won, invoiced with the rate **1.58** typed | Annual retainer: a **draft USD invoice**, 1 x USD 2,000.00 to 4000, **ZERO**, at **1.60** (the last USD rate used, MC65's): NZD **3,200.00**; nothing posts; again returns the same invoice; its company can't change now (the database refuses too). Logo licence: USD 100.00 at 1.58 = NZD **158.00**. Menu reprint: NZD with GST, as CRM5 (575.00); a rate typed for it is refused ("…in NZD, so its invoice has no exchange rate"). In an organisation with no USD rate used, a USD opportunity's invoice without a rate is refused ("Type the exchange rate…") |
-| MC70 | Refused rather than guessed, nothing posted | A project for Yamato KK (JPY: "…which has no cents. Projects in JPY aren't supported yet…"); chargeable expenses on a USD project (MC63); standard-rated GST on a foreign project's invoice (MC64); invoicing a USD project, or a USD opportunity, while sales count for GST when paid (the payments basis, as MC11) |
+| MC69 | Annual retainer and Menu reprint marked Won and invoiced (today); "Logo licence" for Acme, USD 100.00, Won, invoiced with the rate **1.58** typed | Annual retainer (revised 1 Oct 2026): a **draft USD invoice**, 1 x USD 2,000.00 to 4000, **GST** (the standard code, as CRM5), at **1.60** (the last USD rate used, MC65's): USD 2,000.00 + GST 300.00 = **USD 2,300.00**; NZD 3,200.00 + GST **480.00** = **3,680.00** (MC71); nothing posts; again returns the same invoice; its company can't change now (the database refuses too). Logo licence: USD 115.00 at 1.58 = NZD 158.00 + GST **23.70** = **181.70**. Menu reprint: NZD with GST, as CRM5 (575.00); a rate typed for it is refused ("…in NZD, so its invoice has no exchange rate"). In an organisation with no USD rate used, a USD opportunity's invoice without a rate is refused ("Type the exchange rate…") |
+| MC70 | Refused rather than guessed, nothing posted | A project for Yamato KK (JPY: "…which has no cents. Projects in JPY aren't supported yet…"); chargeable expenses on a USD project (MC63); invoicing a USD project, or a USD opportunity, while sales count for GST when paid (the payments basis, as MC11) |
 
 Tests: `tests/integration/multi-currency-projects.test.ts` (MC61-MC70).
 
+### Standard-rated GST on foreign-currency documents (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) following NetSuite and IRD, settling question 1
+below. NetSuite calculates tax on a foreign-currency transaction in the
+transaction's currency, and the base-currency tax is that tax converted at
+the transaction's own exchange rate (NetSuite help, section_1524036773 and
+section_0911063515). IRD's guidance (BR Pub 04/01, GST Act s 77, cited
+above) is that amounts in a foreign currency are converted to NZD at the
+time of supply; in Tohyee that's the document's rate, the rate for its date.
+So:
+
+- **Any GST code** can be on a foreign-currency invoice, credit note, bill or
+  supplier credit note, and on the quotes, repeating invoices and bills,
+  purchase orders, projects and CRM opportunities they're made from:
+  standard-rated (GST, and any other standard-rated code), zero-rated,
+  exempt or none.
+- **GST is worked out in the document's currency** exactly as on an NZD
+  document: per line, exclusive (line x rate) or inclusive (line x rate /
+  (1 + rate)), rounded to cents half away from zero (I1-I6).
+- **Converting to NZD** is as before (MC4): each line's net amount and its GST
+  are each x the document's rate, rounded once to cents; the NZD GST is the
+  sum of the lines' NZD GST, and the NZD total the sum of the lines. So the
+  journal balances exactly: Dr (Cr) the control account the NZD total with
+  the foreign total beside it, Cr (Dr) income or expense the NZD net, Cr (Dr)
+  **2100 GST the NZD GST, with no foreign amount**. When the lines' NZD
+  total isn't the foreign total x the rate (each line is rounded), that
+  cent stays in the document's carrying value and is **rounding** (7050)
+  when it's settled (MC73); GST is never adjusted to absorb it.
+- **GST never changes after the document**: payments, credit applied,
+  refunds, revaluations and their reversals post no GST, and realised and
+  unrealised gains and losses have none (NetSuite's are the same). GST is
+  owed to IRD in NZD, so 2100 is an NZD account and is never revalued.
+- **Revaluation** of receivables and payables (MC39) revalues each document's
+  whole open foreign amount, GST included, since what's owed is the gross
+  amount (MC78).
+- **GST return**: on the invoice basis a foreign-currency document counts its
+  NZD amounts from the document: Box 5 or 11 the NZD total including GST,
+  and its NZD GST in the GST on transactions (MC77). On the payments or
+  hybrid basis a foreign-currency bill counts its share of the bill's NZD
+  total at the bill's rate (MC11), and now its GST: its NZD GST x the share
+  (split as G12). The payment's rate doesn't matter, and the realised gain
+  or loss is in no box (MC80). The IR546 basis-change adjustment uses the
+  NZD GST share of what's still owed (MC81). Foreign-currency sales on the
+  payments basis stay refused (question 2, MC82).
+- **GST audit report**: foreign-currency documents are listed with their NZD
+  amounts and GST (MC77).
+- **Screens**: an invoice, credit note, bill or supplier credit note in
+  another currency shows its GST in its currency, and beside it the exchange
+  rate, the **GST (NZD)**, the total (NZD) and what's due or remaining (NZD,
+  at its rate).
+- **Still refused**: standard-rated GST on foreign-currency spend and receive
+  money (FXB4; they convert the total as well as each line, so their GST
+  would need its own rounding rule; MC83), the reverse charge on imported
+  services (not built in any currency), and foreign-currency sales on the
+  payments basis (MC82).
+
+Setup (A, invoice basis): 1000 (NZD), 1030 USD account, 1100, 2000, 2100 GST,
+4000, 6040, 7000, 7010, 7020, 7050; customers Acme Inc (USD) and Kobe Ltd
+(NZD); supplier Amazon Web Services (USD). All exclusive at GST 15% unless
+stated.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC71 | INV-0001 for Acme, 1 Jul 2026: 1 x USD 1,000.00, 4000, GST, at **1.60** | USD 1,000.00 + GST **150.00** = **1,150.00**. NZD: net 1,600.00, GST 150.00 x 1.60 = **240.00**, total **1,840.00**. Journal: Dr 1100 **1,840.00 (USD 1,150.00)** / Cr 4000 **1,600.00** / Cr 2100 **240.00** (NZD only) |
+| MC72 | INV-0002, 2 Jul, tax inclusive: 1 x USD 230.00, GST, at **1.65** | GST 230.00 x 0.15 / 1.15 = **30.00**, net 200.00. NZD: net **330.00**, GST **49.50**, total **379.50**: Dr 1100 379.50 (USD 230.00) / Cr 4000 330.00 / Cr 2100 49.50 |
+| MC73 | INV-0003, 3 Jul: three lines of USD 10.07, GST, at **1.5**; paid in full the same day, USD 34.74 into 1000 at 1.5 | Each line's GST 1.5105 -> **1.51**: USD 30.21 + 4.53 = **34.74**. Each line in NZD: net 15.105 -> **15.11**, GST 2.265 -> **2.27**: NZD 45.33 + GST **6.81** = **52.14** (not 34.74 x 1.5 = 52.11, and not 4.53 x 1.5 = 6.80 of GST). Journal: Dr 1100 52.14 (USD 34.74) / Cr 4000 45.33 / Cr 2100 6.81. Payment: bank **52.11**, cleared **52.14**, no realised gain (same rate), a **rounding loss of 0.03**: Dr 1000 52.11 / Cr 1100 52.14 (USD 34.74) / Dr 7050 0.03. The GST stays **6.81** |
+| MC74 | CN-0001 for Acme, 10 Jul: 1 x USD 100.00, GST, at **1.62**; applied to INV-0001 on 12 Jul | USD **115.00**; NZD 162.00 + GST **24.30** = **186.30**: Dr 4000 162.00 / Dr 2100 24.30 / Cr 1100 186.30 (USD 115.00). Applying: the credit's side **186.30**, the invoice's 1,840.00 x 115 / 1,150 = **184.00**, realised gain **2.30** ((1.62 - 1.60) x 115.00), no GST: Dr 1100 186.30 (USD 115.00) / Cr 1100 184.00 (USD 115.00) / Cr 7020 2.30. INV-0001 due **USD 1,035.00 = NZD 1,656.00** |
+| MC75 | Bill AWS-1, 5 Jul: 1 x USD 200.00 to 6040, GST, at **1.60**; paid in full on 20 Jul from 1000 at **1.70** | USD **230.00**; NZD 320.00 + GST **48.00** = **368.00**: Dr 6040 320.00 / Dr 2100 48.00 / Cr 2000 368.00 (USD 230.00). Payment: bank 230.00 x 1.70 = **391.00**, cleared **368.00**, realised loss **23.00** and no GST line: Dr 2000 368.00 (USD 230.00) / Dr 7020 23.00 / Cr 1000 391.00. The bill's GST stays **48.00** |
+| MC76 | Supplier credit note AWS-CR1, 8 Jul: 1 x USD 20.00 to 6040, GST, at 1.60 | USD **23.00**; NZD 32.00 + GST **4.80** = **36.80**: Dr 2000 36.80 (USD 23.00) / Cr 6040 32.00 / Cr 2100 4.80 |
+| MC77 | Kobe's INV-0004 (NZD), 4 Jul: 100.00 + GST; the July GST return (invoice basis) and GST audit report | Box 5 **2,200.34** (1,840.00 + 379.50 + 52.14 + 115.00 - 186.30), Box 6 0.00, Box 8 = 2,200.34 x 3 / 23 = **287.00**; Box 11 **331.20** (368.00 - 36.80), Box 12 **43.20**. GST on transactions: sales **287.01** (240.00 + 49.50 + 6.81 + 15.00 - 24.30; a cent from Box 8, as with NZD documents), purchases **43.20**. The audit report lists INV-0001 **1,840.00** (GST 240.00), INV-0002 379.50 (49.50), INV-0003 52.14 (6.81), INV-0004 115.00 (15.00), CN-0001 -186.30 (-24.30); AWS-1 368.00 (48.00), AWS-CR1 -36.80 (-4.80). Trial balance at 31 Jul balances; 2100 credit **243.81** (287.01 - 43.20) |
+| MC78 | Revaluation of 1100 USD on 31 Jul at **1.70** (reversal 1 Aug) | INV-0001's open USD 1,035.00 (GST included) at 1.60: (1.70 - 1.60) x 1,035.00 = **+103.50**; INV-0002's USD 230.00 at 1.65: **+11.50**. USD **1,265.00**, carrying **2,035.50**, revalued **2,150.50**, **+115.00**: Dr 1100 103.50 / Cr 7000 103.50; Dr 1100 11.50 / Cr 7000 11.50. No 2100 line: 2100 is still **243.81**, and the July return is unchanged (Box 5 2,200.34) |
+| MC79 | A quote for Acme, 3 Aug, 1 x USD 100.00, GST, accepted on 5 Aug at **1.70**; a purchase order to AWS, 3 Aug, 2 x USD 20.00, GST, approved and copied to bill AWS-PO1 dated 6 Aug at **1.70**; a repeating invoice for Acme, 1 x USD 100.00, GST | Quote **USD 115.00** (GST 15.00), posts nothing; its invoice NZD 170.00 + GST **25.50** = **195.50**: Dr 1100 195.50 (USD 115.00) / Cr 4000 170.00 / Cr 2100 25.50. Order **USD 46.00** (GST 6.00); the bill NZD 68.00 + GST **10.20** = **78.20**: Dr 6040 68.00 / Dr 2100 10.20 / Cr 2000 78.20 (USD 46.00). The repeating invoice saves as **USD 115.00** (GST 15.00). (A project's invoice and a CRM opportunity's are the same: MC64, MC69) |
+
+Setup (B, hybrid basis): 1000, 1030 USD account; Acme Inc (USD) and Amazon
+Web Services (USD).
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC80 | INV-0001 for Acme, 2 Aug: USD 100.00 + GST at **1.60**; bill AWS-2, 1 Aug: USD 200.00 + GST at **1.60**; USD 115.00 (half) of AWS-2 paid on 10 Aug from 1030 at **1.70**; the August return | INV-0001 NZD 160.00 + GST **24.00** = **184.00**. AWS-2 NZD 320.00 + GST 48.00 = **368.00**. Payment: bank **195.50** (USD 115.00 at 1.70), cleared 368.00 x 115 / 230 = **184.00**, realised loss **11.50**: Dr 2000 184.00 (USD 115.00) / Dr 7020 11.50 / Cr 1030 195.50 (USD 115.00 at 1.70). August: sales when approved, Box 5 **184.00**, Box 8 **24.00**; purchases when paid, AWS-2's share at the bill's rate: settled 115.00 x 368.00 / 230.00 = **184.00**, GST 48.00 x 184.00 / 368.00 = **24.00**: Box 11 **184.00**, Box 12 **24.00**, Box 15 **0.00**. The 11.50 loss is in no box |
+| MC81 | August filed on the hybrid basis; the basis then changed to invoice; the September return | At 31 Aug AWS-2 still owes USD 115.00: GST on creditors 115.00 x **48.00** (its NZD GST) / 230.00 = **24.00** (not 115.00 x 30.00 / 230.00 = 15.00 of USD GST); GST on debtors **24.00** (INV-0001). Hybrid -> invoice (IR546): suggested Box 13 **24.00** |
+
+Setup (C, payments basis): as B.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC82 | A USD invoice and a USD credit note for Acme, 1 Sep, with GST; bill AWS-3, 1 Sep: USD 200.00 + GST at 1.60 (NZD 368.00, GST 48.00), USD 46.00 of it paid on 10 Sep from 1030 at **1.50**; the September return | The invoice and credit note are refused as before ("Foreign-currency invoices aren't supported yet while sales count for GST when they're paid (the payments basis)…", question 2). The bill works; September: Box 5 0.00, Box 11 368.00 x 46 / 230 = **73.60**, Box 12 **9.60** (at the bill's rate, not 1.50) |
+| MC83 | Spend money of USD 50.00 inclusive, GST, from 1030 at 1.60 | Still refused: "GST on foreign-currency spend and receive money isn't supported yet…" (FXB4) |
+
+Tests: `tests/integration/multi-currency-gst.test.ts` (MC71-MC83), and
+MC2, MC10, MC25, MC64 and MC69 revised in their own tests.
+
 ### Not supported yet (refused rather than guessed)
 
-- **Standard-rated GST on foreign-currency invoices, bills and credit notes**
-  (only ZERO, EXEMPT and NONE, or no tax).
 - **Foreign-currency sales while sales count for GST when paid** (the
   payments basis): which NZD value a part payment counts at isn't settled.
   Hybrid and invoice bases work. (Foreign-currency bills on the payments or
-  hybrid basis count their share of the bill's NZD value; with no GST on them
-  they're in no box.)
+  hybrid basis count their share of the bill's NZD value and NZD GST, at the
+  bill's rate: MC80, MC82.)
+- **Standard-rated GST on foreign-currency spend and receive money** (FXB4,
+  MC83), and the **reverse charge on imported services** (in any currency).
 - **Prepayments** of foreign-currency invoices, and **supplier
   overpayments** (as in NZD, SP3). (Foreign overpayments and refunds are
   built, MC14-MC19, and payments for several foreign documents, MC20-MC24.)
@@ -2208,11 +2303,15 @@ Tests: `tests/integration/multi-currency-projects.test.ts` (MC61-MC70).
 
 ### Questions for Jess (multi-currency)
 
-1. Standard-rated GST on foreign-currency documents (e.g. a USD invoice to
-   an NZ customer, or a USD bill with NZ GST): IRD's BR Pub 04/01 says GST
-   amounts are converted at the time of supply; should Tohyee build that
-   (GST converted at the document's rate)? Imported services under the
-   reverse charge aren't built either.
+1. Answered 1 Oct 2026 by following NetSuite (and IRD's BR Pub 04/01):
+   standard-rated GST on foreign-currency invoices, credit notes, bills and
+   supplier credit notes is worked out in the document's currency and each
+   line's GST converted at the document's rate, rounded to cents; payments
+   and revaluations never change it (MC71-MC83; MC2, MC10, MC25, MC64 and
+   MC69 revised). Please check the examples. Still open: whether a printed
+   tax invoice in USD should also show its GST in NZD (it shows USD only),
+   and imported services under the reverse charge and GST on
+   foreign-currency spend and receive money, which aren't built.
 2. Payments basis: count a part-paid foreign-currency sale at its share of
    the invoice's NZD value (the time-of-supply rate), or at the payment's
    rate?

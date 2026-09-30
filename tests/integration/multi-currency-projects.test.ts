@@ -151,9 +151,7 @@ describeWithDatabase("multi-currency projects and CRM", () => {
 
   it("MC64: invoicing a USD project makes a USD invoice at a rate for its date", async () => {
     const everything = { invoiceDate: "2026-07-10", dueDate: "2026-08-20", accountCode: "4000", timeEntryIds: (await run((tx) => getProject(tx, website))).timeEntries.map((entry) => entry.id), taskIds: [setup] };
-    await expect(run((tx) => invoiceProject(tx, website, { idempotencyKey: key("inv"), ...everything, taxCode: "GST", exchangeRate: "1.60" }))).rejects.toThrow(
-      /GST on foreign-currency invoices, bills and credit notes isn't supported yet/,
-    );
+    // Standard-rated GST would work as on any USD invoice (revised 1 Oct 2026, MC71); this one is zero-rated.
     await expect(run((tx) => invoiceProject(tx, website, { idempotencyKey: key("inv"), ...everything, taxCode: "ZERO" }))).rejects.toThrow(
       /Type the exchange rate for this invoice \(NZD per 1 USD\): no USD rate has been used on or before 2026-07-10 yet/,
     );
@@ -265,13 +263,24 @@ describeWithDatabase("multi-currency projects and CRM", () => {
     );
   });
 
-  it("MC69: a won opportunity's invoice is in its company's currency, zero-rated", async () => {
+  it("MC69: a won opportunity's invoice is in its company's currency, with the usual GST code (revised 1 Oct 2026)", async () => {
     const before = await journals();
     await run((tx) => updateOpportunity(tx, retainer, { stage: "won" }));
     const { created, invoice } = await run((tx) => makeInvoiceFromOpportunity(tx, retainer));
     expect(created).toBe(true);
-    expect(invoice).toMatchObject({ status: "draft", currencyCode: "USD", exchangeRate: "1.6", invoiceDate: todayIsoDate(), subtotal: "2000.00", total: "2000.00", baseTotal: "3200.00" });
-    expect(invoice.lines.map((line) => [line.description, line.accountCode, line.taxCode, line.lineAmount])).toEqual([["Annual retainer", "4000", "ZERO", "2000.00"]]);
+    // USD 2,000.00 + GST 300.00 at 1.60: NZD 3,200.00 + 480.00 (MC71).
+    expect(invoice).toMatchObject({
+      status: "draft",
+      currencyCode: "USD",
+      exchangeRate: "1.6",
+      invoiceDate: todayIsoDate(),
+      subtotal: "2000.00",
+      taxTotal: "300.00",
+      total: "2300.00",
+      baseTaxTotal: "480.00",
+      baseTotal: "3680.00",
+    });
+    expect(invoice.lines.map((line) => [line.description, line.accountCode, line.taxCode, line.lineAmount])).toEqual([["Annual retainer", "4000", "GST", "2000.00"]]);
     const again = await run((tx) => makeInvoiceFromOpportunity(tx, retainer));
     expect([again.created, again.invoice.id]).toEqual([false, invoice.id]);
     await expect(run((tx) => updateOpportunity(tx, retainer, { contactId: harbour.id }))).rejects.toThrow(/has made an invoice, so its company can't change/);
@@ -280,7 +289,7 @@ describeWithDatabase("multi-currency projects and CRM", () => {
     );
     const logo = await run((tx) => createOpportunity(tx, { name: "Logo licence", contactId: acme.id, amount: "100.00", stage: "won" }));
     const typed = await run((tx) => makeInvoiceFromOpportunity(tx, logo.id, { exchangeRate: "1.58" }));
-    expect(typed.invoice).toMatchObject({ currencyCode: "USD", exchangeRate: "1.58", total: "100.00", baseTotal: "158.00" });
+    expect(typed.invoice).toMatchObject({ currencyCode: "USD", exchangeRate: "1.58", total: "115.00", baseTaxTotal: "23.70", baseTotal: "181.70" });
     await run((tx) => updateOpportunity(tx, reprint, { stage: "won" }));
     await expect(run((tx) => makeInvoiceFromOpportunity(tx, reprint, { exchangeRate: "1.2" }))).rejects.toThrow(
       /This opportunity is in NZD, so its invoice has no exchange rate/,

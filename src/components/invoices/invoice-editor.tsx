@@ -300,8 +300,8 @@ function InvoiceForm({
       </div>
       {foreign ? (
         <Notice tone="info">
-          This invoice is in {currencyCode}. Use zero-rated (ZERO), exempt or no GST codes: GST on foreign-currency invoices isn&apos;t
-          supported yet. Approving posts its {baseCurrency} value, each line converted at the rate.
+          This invoice is in {currencyCode}, and its GST is worked out in {currencyCode} as usual (use ZERO for exports). Approving
+          posts its {baseCurrency} value, each line and its GST converted at the rate.
         </Notice>
       ) : null}
       <CustomFieldInputs setup={customSetup} record="document" uses={["invoice"]} value={customFields} onChange={setCustomFields} />

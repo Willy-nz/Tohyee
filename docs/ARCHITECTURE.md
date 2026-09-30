@@ -288,7 +288,9 @@ Enforced by the database itself, not just the app:
   foreign-currency document keeps its `exchange_rate` and base amounts
   (`base_subtotal`, `base_tax_total`, `base_total`, and each line's
   `base_net_amount`, `base_tax_amount`: each line converted and rounded
-  once, the totals their sums); a base-currency one has none. Accounts
+  once, the totals their sums; standard-rated GST is worked out in the
+  document's currency and its base GST posted to the GST account with no
+  foreign amount, MC71-MC83); a base-currency one has none. Accounts
   receivable and payable stay base-currency accounts, but (like NetSuite's
   A/R and A/P) their lines for foreign-currency documents carry the foreign
   amount and currency: `fx_kind` `document` for the document's own line
@@ -963,9 +965,9 @@ as the admin login, straight into an encrypted file:
 - Backup key custody beyond "keep a copy of TOHYEE_SECRET_KEY", and recovery
   targets. Restoring the core database is still manual.
 - Remote BI connectivity.
-- Foreign-currency invoices, bills and payments, and GST on standard-rated
-  foreign-currency transactions. (Line-level foreign amounts and rates were
-  decided by Jess on 30 Sep 2026, following NetSuite: see "Foreign-currency
-  lines" under Financial integrity.)
+- GST on standard-rated foreign-currency spend and receive money, and the
+  reverse charge on imported services. (Foreign-currency documents, their
+  standard-rated GST included, were built overnight on 1 Oct 2026 following
+  NetSuite: see "Foreign-currency documents" under Financial integrity.)
 - Backdated stock movements (needs re-costing of later movements), and
   voiding documents whose stock has moved since.
