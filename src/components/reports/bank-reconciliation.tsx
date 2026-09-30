@@ -75,7 +75,15 @@ export function BankReconciliationReportView({ organisationId, initialAccountId 
             <table className={ui.table}>
               <tbody>
                 <tr className={ui.reportTotal}>
-                  <td>Balance in Tohyee</td>
+                  <td>
+                    Balance in Tohyee{data.currencyCode !== data.baseCurrency ? ` (${data.currencyCode})` : ""}
+                    {data.currencyCode !== data.baseCurrency ? (
+                      <div className={ui.muted}>
+                        {data.baseCurrency} {formatMoney(data.baseLedgerBalance)}. The report is in {data.currencyCode}, like the
+                        statement.
+                      </div>
+                    ) : null}
+                  </td>
                   <td className={ui.num}>
                     <Money value={data.ledgerBalance} />
                   </td>
@@ -131,6 +139,12 @@ export function BankReconciliationReportView({ organisationId, initialAccountId 
                         {formatDate(item.date)} · {originLabel(item.origin)} <Link href={journalHref(item.journalId)}>#{item.journalId}</Link>
                         {item.description ? ` · ${item.description}` : ""}
                         {item.reconciledOn ? <span className={ui.muted}> (on the statement {formatDate(item.reconciledOn)})</span> : null}
+                        {data.currencyCode !== data.baseCurrency ? (
+                          <span className={ui.muted}>
+                            {" "}
+                            ({data.baseCurrency} {formatMoney(item.baseAmount)})
+                          </span>
+                        ) : null}
                       </td>
                       <td className={ui.num}>
                         <Money value={item.amount} />

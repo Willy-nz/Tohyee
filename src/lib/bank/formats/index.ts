@@ -14,6 +14,8 @@ export type StatementFile = {
   errors: string[];
   closingBalance: { amount: string; date: string | null } | null;
   accountNumber: string | null;
+  /** Currencies the file says it's in; empty when it doesn't say (FXB10). */
+  currencies: string[];
   /** CSV and Excel only: the column headings, the first rows as text, and the layout used. */
   table: { headers: string[]; sampleRows: string[][]; layout: TableLayout } | null;
 };
@@ -54,6 +56,7 @@ export function readStatementFile(fileName: string, bytes: Buffer, layout?: Tabl
       errors: result.errors,
       closingBalance: null,
       accountNumber: null,
+      currencies: result.currencies,
       table: { headers: result.headers, sampleRows: rows.slice(start, start + 8), layout: result.layout },
     };
   }

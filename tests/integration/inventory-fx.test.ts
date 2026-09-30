@@ -145,7 +145,8 @@ describeWithDatabase("inventory and FX revaluation", () => {
         postingDate: "2026-08-10",
         reference: "USD-IN",
         lines: [
-          { accountCode: "1000", debitAmount: "1600" },
+          // Lines on a foreign-currency account carry the foreign amount and rate too (FXB1-FXB11).
+          { accountCode: "1000", debitAmount: "1600", foreignAmount: "1000", exchangeRate: "1.6" },
           { accountCode: "3000", creditAmount: "1600" },
         ],
       }),
@@ -230,7 +231,7 @@ describeWithDatabase("inventory and FX revaluation", () => {
         reference: "USD-BILL",
         lines: [
           { accountCode: "6070", debitAmount: "800" },
-          { accountCode: "2020", creditAmount: "800" },
+          { accountCode: "2020", creditAmount: "800", foreignAmount: "500", exchangeRate: "1.6" },
         ],
       }),
     );
@@ -284,7 +285,7 @@ describeWithDatabase("inventory and FX revaluation", () => {
         reference: "USD-OUT",
         lines: [
           { accountCode: "6070", debitAmount: "100" },
-          { accountCode: "1010", creditAmount: "100" },
+          { accountCode: "1010", creditAmount: "100", foreignAmount: "62.50", exchangeRate: "1.6" },
         ],
       }),
     );

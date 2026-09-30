@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { ACCOUNT_TYPE_LABELS, FeedBadge } from "@/components/bank/common";
+import { CurrencyMoney, OpeningBalancePanel } from "@/components/bank/foreign";
 import { FeedPanel } from "@/components/bank/feed-panel";
 import { ImportPanel } from "@/components/bank/import-panel";
 import { StatementLinesPanel, TransactionsPanel } from "@/components/bank/lines-panel";
@@ -11,6 +12,7 @@ import { ReconcilePanel } from "@/components/bank/reconcile-panel";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Card, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
 import type { BankAccount } from "@/lib/bank/accounts";
 import { formatDate, formatDateTime } from "@/lib/format";
 
@@ -19,6 +21,7 @@ type Tab = (typeof TABS)[number];
 
 function BankAccountView({ organisationId, accountId }: { organisationId: string; accountId: string }) {
   const detail = useApiData<{ bankAccount: BankAccount }>(`/api/bank-accounts/${accountId}`, { organisationId });
+  const { can, current } = useWorkspace();
   const [tab, setTab] = useState<Tab>("reconcile");
 
   if (detail.error) return <Notice tone="error">{detail.error}</Notice>;
@@ -31,8 +34,15 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
     feed: "Bank feed",
     transactions: "Bank transactions",
   };
+  // A foreign-currency account's statement is in its currency, so compare its balance in that currency (FXB7).
+  const balanceInCurrency = account.isForeign ? account.foreignBalance : account.ledgerBalance;
   const difference =
-    account.statementBalance !== null && account.unreconciledCount === 0 && account.statementBalance !== account.ledgerBalance;
+    account.statementBalance !== null &&
+    balanceInCurrency !== null &&
+    account.unreconciledCount === 0 &&
+    account.statementBalance !== balanceInCurrency;
+  const money = (value: string | null) =>
+    account.isForeign ? <CurrencyMoney currency={account.statementCurrency} value={value} /> : value === null ? "—" : <Money value={value} />;
 
   return (
     <>
@@ -47,15 +57,40 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
       <div className={ui.statRow}>
         <Stat
           label={account.statementBalanceAt ? `Statement balance (${formatDateTime(account.statementBalanceAt)})` : "Statement balance"}
-          value={account.statementBalance !== null ? <Money value={account.statementBalance} /> : "—"}
+          value={account.statementBalance !== null ? money(account.statementBalance) : "—"}
         />
-        <Stat label="Balance in Tohyee" value={<Money value={account.ledgerBalance} />} />
+        <Stat
+          label="Balance in Tohyee"
+          value={
+            account.isForeign ? (
+              <>
+                {money(account.foreignBalance)}
+                <div className={ui.muted}>
+                  <CurrencyMoney currency={current?.baseCurrency ?? "NZD"} value={account.ledgerBalance} />
+                </div>
+              </>
+            ) : (
+              <Money value={account.ledgerBalance} />
+            )
+          }
+        />
         <Stat label="Lines to reconcile" value={account.unreconciledCount} />
         <Stat
           label={account.lastLineDate ? `Latest line ${formatDate(account.lastLineDate)}` : "Bank feed"}
           value={<FeedBadge feed={account.feed} />}
         />
       </div>
+      {account.isForeign ? (
+        <OpeningBalancePanel organisationId={organisationId} account={account} canEnter={can("bookkeeper")} onSaved={detail.reload} />
+      ) : null}
+      {account.isForeign ? (
+        <p className={ui.muted}>
+          Statement lines, matching and the reconciliation report are in {account.statementCurrency}, with{" "}
+          {current?.baseCurrency ?? "NZD"} beside them. Spend and receive money use an exchange rate (filled in with the last one used);
+          transfers to and from {current?.baseCurrency ?? "NZD"} accounts take both amounts. Invoices and bills can&apos;t be paid from
+          these lines yet.
+        </p>
+      ) : null}
       {account.accountType === "credit_card" ? (
         <p className={ui.muted}>For a credit card, a negative balance is what&apos;s owed on the card.</p>
       ) : null}

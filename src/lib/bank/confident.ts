@@ -4,6 +4,7 @@ import { MATCH_WINDOW_DAYS, reconcileStatementLine } from "@/lib/bank/reconcile"
 import { listBankRules, ruleMatches } from "@/lib/bank/rules";
 import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError } from "@/lib/errors";
+import { lastRateOnOrBefore, ratesUsed } from "@/lib/ledger/foreign";
 import { dec, toFixedString } from "@/lib/money/decimal";
 import { asRecord, optionalSource, optionalString, requireArray, requireId, requireIdempotencyKey } from "@/lib/validation";
 
@@ -58,6 +59,8 @@ export type ConfidentSuggestion =
       taxCode: string | null;
       amountsMode: string;
       description: string;
+      /** For a foreign-currency line: the rate it'll be converted at (the last one used, D4). */
+      exchangeRate: string | null;
     };
 
 export type LineConfidence = {
@@ -80,6 +83,7 @@ type LineRow = {
   particulars: string | null;
   code: string | null;
   reference: string | null;
+  currency_code: string | null;
 };
 
 const money = (value: string) => toFixedString(dec(value), 2);
@@ -89,7 +93,7 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
   const accountId = requireId(accountIdInput, "accountId");
   const lines = (
     await tx.query<LineRow>(
-      `select id, account_id, line_date::text, amount::text, description, payee, particulars, code, reference
+      `select id, account_id, line_date::text, amount::text, description, payee, particulars, code, reference, currency_code
          from bank_statement_lines where account_id = $1 and status = 'unreconciled' order by line_date, id`,
       [accountId],
     )
@@ -107,9 +111,11 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
     amount: string;
   }>(
     `select b.id as line_id, l.id as journal_line_id, l.journal_id, j.posting_date::text, j.origin, j.reference,
-            coalesce(l.description, j.description) as description, (l.debit_amount - l.credit_amount)::text as amount
+            coalesce(l.description, j.description) as description, l.account_amount::text as amount
        from bank_statement_lines b
-       join ledger_journal_lines l on l.account_id = b.account_id and l.debit_amount - l.credit_amount = b.amount
+       -- In the account's currency (FXB6); lines kept only in the base currency never match a foreign-currency line.
+       join ledger_journal_lines l on l.account_id = b.account_id and l.account_amount = b.amount
+        and (l.foreign_amount is not null or coalesce(b.currency_code, $3) = $3)
        join ledger_journals j on j.id = l.journal_id
       where b.account_id = $1 and b.status = 'unreconciled'
         and j.posting_date between b.line_date - $2::integer and b.line_date + $2::integer
@@ -117,7 +123,7 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
         and not exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal')
         and not exists (select 1 from bank_reconciliation_items i where i.journal_line_id = l.id and i.active)
       order by b.id, j.posting_date, l.id`,
-    [accountId, MATCH_WINDOW_DAYS],
+    [accountId, MATCH_WINDOW_DAYS, tx.baseCurrency],
   );
   const documentCandidates = await tx.query<{
     line_id: string;
@@ -128,8 +134,10 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
     date: string;
     amount_due: string;
   }>(
+    // Invoices and bills are in the base currency, so never for a foreign-currency line (FXB9).
     `with lines as (
-       select id, amount, line_date from bank_statement_lines where account_id = $1 and status = 'unreconciled'
+       select id, amount, line_date from bank_statement_lines
+        where account_id = $1 and status = 'unreconciled' and coalesce(currency_code, $2) = $2
      ),
      invoices_due as (
        select i.id, i.invoice_number as number, c.name as contact_name, i.invoice_date as date,
@@ -154,7 +162,7 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
      select l.id, 'bill', d.id, d.number, d.contact_name, d.date::text, d.amount_due::text
        from lines l join bills_due d on l.amount < 0 and d.amount_due = -l.amount and d.date <= l.line_date
      order by 1, 6, 3`,
-    [accountId],
+    [accountId, tx.baseCurrency],
   );
 
   const candidates = new Map<string, ConfidentSuggestion[]>();
@@ -189,6 +197,7 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
     for (const candidate of list) uses.set(candidate.key, (uses.get(candidate.key) ?? 0) + 1);
   }
   const rules = await listBankRules(tx, { activeOnly: true });
+  const rates = await ratesUsed(tx, lines.map((row) => row.currency_code ?? tx.baseCurrency));
   return lines.map((row): LineConfidence => {
     const list = candidates.get(row.id) ?? [];
     if (list.length === 1) {
@@ -197,13 +206,17 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
     }
     if (list.length > 1) return { lineId: row.id, suggestion: null, candidateCount: list.length, competing: false };
     const line = { accountId: row.account_id, amount: money(row.amount), description: row.description, payee: row.payee, particulars: row.particulars, code: row.code, reference: row.reference };
-    const rule = rules.find((candidate) => ruleMatches(candidate, line));
+    const matched = rules.find((candidate) => ruleMatches(candidate, line));
+    // A foreign-currency line is converted at the last rate used (D4); with none, a rule isn't confident.
+    const foreign = row.currency_code !== null && row.currency_code !== tx.baseCurrency;
+    const rate = foreign ? lastRateOnOrBefore(rates.get(row.currency_code!), row.line_date)?.rate ?? null : null;
+    const rule = foreign && rate === null ? undefined : matched;
     return {
       lineId: row.id,
       suggestion: rule
         ? {
             kind: "rule",
-            key: `rule:${rule.id}`,
+            key: rate === null ? `rule:${rule.id}` : `rule:${rule.id}@${rate}`,
             ruleId: rule.id,
             ruleName: rule.name,
             contactId: rule.contactId,
@@ -213,6 +226,7 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
             taxCode: rule.amountsMode === "no_tax" ? null : rule.taxCode,
             amountsMode: rule.amountsMode,
             description: rule.lineDescription ?? row.description,
+            exchangeRate: rate,
           }
         : null,
       candidateCount: 0,
@@ -231,6 +245,7 @@ function commandFor(suggestion: ConfidentSuggestion, line: StatementLine): Recor
   }
   return {
     kind: "bank_transaction",
+    ...(suggestion.exchangeRate ? { exchangeRate: suggestion.exchangeRate } : {}),
     contactId: suggestion.contactId,
     amountsMode: suggestion.amountsMode,
     lines: [{ description: suggestion.description, accountCode: suggestion.accountCode, taxCode: suggestion.taxCode ?? undefined, amount: unsigned }],

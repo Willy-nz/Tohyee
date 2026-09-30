@@ -315,7 +315,9 @@ document_lines as (
          tax_amount
     from supplier_credit_note_lines
   union all
-  select 'bank_transaction', bank_transaction_id, line_order, description, tax_code_id, tax_rate, net_amount, tax_amount
+  -- Foreign-currency spend and receive money count at their base amounts (FXB2).
+  select 'bank_transaction', bank_transaction_id, line_order, description, tax_code_id, tax_rate,
+         coalesce(base_net_amount, net_amount), coalesce(base_tax_amount, tax_amount)
     from bank_transaction_lines
   union all
   select 'expense_claim', claim_id, line_order, supplier_name || ': ' || description, tax_code_id, tax_rate, net_amount,

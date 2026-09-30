@@ -295,6 +295,8 @@ describeWithDatabase("fixed assets", () => {
       await client.query("insert into accounts (code, name, account_class, account_type) values ('7030', 'Donations', 'revenue', 'other_income')");
       expect((await applyMigrations(client, tenantMigrations, "test:upgrade")).applied).toContain("0029");
       expect((await client.query("select code, name, system_key from accounts where code like '70%' order by code")).rows).toEqual([
+        // Added later by migration 0033 (foreign-currency bank accounts, FXB5).
+        { code: "7020", name: "Realised currency gains and losses", system_key: "realised_fx" },
         { code: "7030", name: "Donations", system_key: null },
         { code: "7031", name: "Gain or loss on disposal of fixed assets", system_key: "fixed_asset_disposal" },
         { code: "7040", name: "Capital gains on disposal of fixed assets", system_key: "fixed_asset_capital_gain" },

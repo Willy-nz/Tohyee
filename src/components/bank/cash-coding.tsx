@@ -35,14 +35,19 @@ export function CashCodingForm({
   organisationId: string;
   accountId: string;
   lines: StatementLine[];
-  lookups: { accounts: Account[]; contacts: Contact[]; taxCodes: TaxCode[]; tracking: TrackingSetup };
+  lookups: { accounts: Account[]; contacts: Contact[]; taxCodes: TaxCode[]; tracking: TrackingSetup; baseCurrency: string };
   onDone: (reconciledIds: string[]) => void;
 }) {
-  const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive);
+  // Foreign-currency lines (FXB2-FXB4): converted at a rate; only zero-rated, exempt or no-GST codes.
+  const foreign = lines.some((line) => line.currencyCode !== lookups.baseCurrency);
+  const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive && (!foreign || taxCode.category !== "standard"));
+  const [exchangeRate, setExchangeRate] = useState("");
   const contacts = lookups.contacts.filter((contact) => !contact.isArchived);
   const [contactId, setContactId] = useState("");
   const [accountCode, setAccountCode] = useState("");
-  const [taxCode, setTaxCode] = useState(() => (activeTaxCodes.find((code) => code.category === "standard") ?? activeTaxCodes[0])?.code ?? "");
+  const [taxCode, setTaxCode] = useState(() =>
+    foreign ? "" : ((activeTaxCodes.find((code) => code.category === "standard") ?? activeTaxCodes[0])?.code ?? ""),
+  );
   const [description, setDescription] = useState("");
   const [tracking, setTracking] = useState<TrackingTags>({});
   const [own, setOwn] = useState<Record<string, Own>>({});
@@ -72,6 +77,7 @@ export function CashCodingForm({
           contactId: contactId || undefined,
           accountCode: accountCode || undefined,
           taxCode: taxCode || null,
+          ...(foreign && exchangeRate.trim() ? { exchangeRate: exchangeRate.trim() } : {}),
           description: description.trim() || undefined,
           tracking,
           lines: sent.map((line) => {
@@ -141,6 +147,14 @@ export function CashCodingForm({
           <Field label="Description" hint="Blank: each line's own description.">
             <input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} />
           </Field>
+          {foreign ? (
+            <Field
+              label={`Exchange rate (${lookups.baseCurrency} per 1 ${lines[0].currencyCode})`}
+              hint="Blank: each line's rate shown (the last one used on or before its date). A line with no rate shown needs one typed here."
+            >
+              <input inputMode="decimal" value={exchangeRate} onChange={(event) => setExchangeRate(event.target.value)} />
+            </Field>
+          ) : null}
           <TrackingSelects setup={lookups.tracking} labelPrefix="All lines" value={tracking} onChange={setTracking} />
           <div className={ui.tableWrap}>
             <table className={ui.table}>

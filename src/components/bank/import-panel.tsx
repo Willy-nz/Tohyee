@@ -331,6 +331,12 @@ export function ImportPanel({ organisationId, account, onChanged }: { organisati
           >
             <input type="file" accept={ACCEPT} onChange={(event) => void choose(event.target.files?.[0])} disabled={busy} />
           </Field>
+          {account.isForeign ? (
+            <p className={ui.muted}>
+              Lines are recorded in {account.statementCurrency}. A file that says it&apos;s in another currency (an OFX CURDEF, a CAMT.053
+              or MT940 currency, or a CSV currency column) is refused.
+            </p>
+          ) : null}
           {done ? (
             <Notice tone="success">
               Imported {done.lineCount} new {done.lineCount === 1 ? "line" : "lines"}

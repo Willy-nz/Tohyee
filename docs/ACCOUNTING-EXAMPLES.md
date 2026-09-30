@@ -50,14 +50,17 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
   `tests/integration/projects.test.ts` (PJ1-PJ13) and
   `tests/integration/bank-quick.test.ts` (BK17-BK25) and
-  `tests/integration/bank-split.test.ts` (BK26-BK28), all against
+  `tests/integration/bank-split.test.ts` (BK26-BK28) and
+  `tests/integration/bank-foreign.test.ts` (FXB1-FXB11), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
   a printed document is headed and shows (QT5, PD3-PD7), and
   `tests/unit/fixed-asset-depreciation.test.ts` the depreciation and
   disposal maths (FA3, FA4, FA6-FA10), and `tests/unit/project-amounts.test.ts`
-  the project time and markup maths (PJ3-PJ7)
+  the project time and markup maths (PJ3-PJ7), and
+  `tests/unit/foreign-currency.test.ts` the conversion, carrying value,
+  rate and file currency pieces of FXB2-FXB10
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -77,7 +80,8 @@ All amounts are NZD with 2 decimal places unless stated.
 - **R4** Journals must balance exactly: `Dr 10.00 / Cr 9.99` is refused.
   PostgreSQL also refuses an unbalanced journal at commit.
 - **R5** Journals are posted in the base currency only. A `USD` journal in an
-  `NZD` organisation is refused.
+  `NZD` organisation is refused. (Lines on foreign-currency accounts carry
+  their foreign amount as well: FXB1-FXB11.)
 
 ## Weighted-average stock
 
@@ -241,6 +245,11 @@ A USD bank account holds USD 1,000.00, booked at NZD 1,600.00. Revalue on
   NZD is an unrealised **loss**.
 - **F7** Only accounts marked with a foreign currency can be revalued, and
   only when their balance has the normal sign.
+
+Since foreign-currency lines keep their foreign amount (FXB1-FXB11), the
+USD 1,000.00 is in the ledger too (the journal booking it gives USD 1,000.00
+at 1.6), so it needn't be typed; typing it is still allowed if it agrees,
+and it's still typed for accounts with postings from before (FXB7).
 
 ## Sales invoices
 
@@ -1365,9 +1374,186 @@ Date,Amount,Payee,Particulars,Code,Reference,Balance
     is in the bank, not in Tohyee (matched to a journal dated after the
     date).
 
+### Foreign-currency bank accounts (examples not yet approved by Jess)
+
+A bank or credit card account can be in a foreign currency (its currency in
+the chart of accounts, e.g. USD). Following NetSuite, which keeps every
+transaction in both currencies:
+
+- **Every journal line on a foreign-currency account has both amounts**: the
+  foreign amount, the NZD (base) amount and the exchange rate (NZD per 1
+  unit of the foreign currency). The foreign amount is on the same side as
+  the NZD amount (a debit of NZD 1,654.30 is a debit of USD 1,000.00). The
+  database refuses a line on a foreign-currency account without a foreign
+  amount in that currency, and a foreign amount on an NZD account. Lines
+  posted before Tohyee kept foreign amounts keep only their NZD amount.
+- **Rates** have up to 8 decimal places. NZD amount = foreign amount x rate,
+  worked out with the full rate and rounded once to cents, half away from
+  zero (R3). The database checks this for every line posted at a rate.
+- An account's **foreign balance** is its opening foreign balance (below),
+  if any, plus its lines' foreign amounts (debits less credits); its **NZD
+  balance** is the usual ledger balance. Statement lines, matching and the
+  bank reconciliation report use the foreign balance and foreign amounts;
+  NZD is shown beside them.
+- **Opening foreign balance.** An account that already has NZD-only
+  postings needs its foreign balance entered **once**, as at a date on or
+  after its last NZD-only posting, before it can take statement lines or
+  new postings. It records that the NZD balance at that date is that many
+  units of foreign currency; it posts nothing. Afterwards nothing can be
+  posted to the account dated on or before that date. The foreign balance
+  must have the same sign as the NZD balance (both zero, both money in the
+  account, or both owed). Accounts with no postings don't need one.
+- **The rate shown on a statement line** is the last rate used for its
+  currency on or before the line's date: the latest of a rate a posted line
+  in that currency was converted at (spend or receive money, a transfer
+  into a foreign account, a manual journal) and a revaluation's closing rate
+  for that currency (by date; on the same date, the one entered last). The
+  line shows its NZD value at that rate. It's filled in and can be changed.
+  With no such rate, the rate must be typed. Rates of money leaving at its
+  carrying value (transfers out) aren't market rates and aren't used.
+- **Spend and receive money** on a foreign account are in the account's
+  currency, converted at the rate given (or the one shown). Only zero-rated
+  (ZERO), exempt (EXEMPT) and no-GST (NONE) codes, or no tax code, can be
+  used: standard-rated GST on foreign-currency transactions isn't supported
+  yet. Several lines are allowed when each line's NZD amount (rounded on its
+  own) adds up to the NZD amount of the total; otherwise it's refused. In the
+  GST return and project costs they count at their NZD amounts.
+- **Transfers** between an NZD account and a foreign account: the NZD side is
+  what really moved, so it's given in NZD and in the foreign currency.
+  - **Out of a foreign account**: the foreign amount leaves at its **carrying
+    value** = the account's NZD balance x foreign amount / foreign balance, on
+    the transfer date, rounded once to cents; taking everything left takes
+    the whole remaining NZD balance (the weighted-average stock approach,
+    W1-W4). The NZD account gets the NZD received, and the difference goes to
+    **7020 Realised currency gains and losses** (a gain is a credit). A
+    transfer out can't take more than the foreign balance.
+  - **Into a foreign account**: booked at the NZD that left; the rate stored
+    is NZD / foreign amount (8 decimal places, for information).
+  - Nothing but a revaluation can be posted to a foreign account dated
+    before its latest transfer out (its carrying value would change); post
+    in date order.
+    Transfers between two foreign-currency accounts aren't supported yet.
+- **Revaluation** (F1-F7) of an account whose foreign balance is known uses
+  it; typing a different foreign balance is refused. Its lines on the account
+  have a foreign amount of 0.00 (only the NZD value changes) at the closing
+  rate. Accounts without a known foreign balance still have it typed.
+- **Imports** record each line's currency: the file's, when it says (OFX
+  CURDEF, CAMT.053 Ccy, MT940 balances, a CSV or Excel currency column),
+  otherwise the account's. A file in another currency is refused. **Akahu
+  bank feeds can't be linked to foreign-currency accounts**: Akahu's
+  transactions don't say their currency.
+- **Invoices and bills are in NZD**, so paying them from a foreign-currency
+  statement line is refused, and one-click OK never suggests them for one.
+  Adjustments (BK24) aren't available on foreign-currency lines yet.
+
+Setup as above, plus 1030 **USD account** (bank, USD), the customer Etsy and
+the supplier Amazon Web Services. 1030 was set to USD before Tohyee kept
+foreign amounts, and has one posting from then: a manual journal on 1 Jun
+2026, Dr 1030 1,600.00 / Cr 3000 1,600.00 (USD 1,000.00 received, but only the
+NZD was kept). This statement is imported into 1030 (after FXB1):
+
+```
+Date,Amount,Payee,Particulars,Code,Reference,Balance
+03/07/2026,1000.00,ETSY PAYMENTS,,,,2000.00
+05/07/2026,-50.00,AMAZON WEB SERVICES,,,,1950.00
+10/07/2026,-500.00,TRANSFER TO NZD,,,,1450.00
+20/07/2026,610.00,TRANSFER FROM NZD,,,,2060.00
+05/08/2026,-2060.00,TRANSFER TO NZD,,,,0.00
+```
+
+- **FXB1** Opening foreign balance. Before it's entered, importing that file
+  into 1030, or posting to 1030, is refused: "Account 1030 (USD account) has
+  postings from before Tohyee kept foreign amounts. Enter its USD balance as
+  at a date (its opening foreign balance) first." Entering **USD 1,000.00 as
+  at 30 Jun 2026** records USD 1,000.00 = NZD **1,600.00** (1030's NZD balance
+  on 30 Jun) and posts nothing; the trial balance doesn't change. 1030's
+  balance is then USD 1,000.00 / NZD 1,600.00. Refused: a second opening
+  balance for 1030; one dated before 1 Jun (before its last NZD-only
+  posting); USD -1,000.00 (the other sign); one for 1000 (an NZD account) or
+  for a USD account with no postings ("doesn't need one"); and afterwards, a
+  manual journal on 1030 dated 30 Jun 2026 or earlier. Retrying with the
+  same idempotency key returns the same opening balance.
+- **FXB2** Receive USD 1,000.00 at 1.6543. The 3 Jul line (+1,000.00) shows no
+  rate (none has been used for USD yet), so one must be typed; without it
+  it's refused ("Type the exchange rate…"). Receive money from Etsy, 4000
+  Sales, ZERO, at **1.6543**: NZD **1,654.30** (1,000.00 x 1.6543). Journal on
+  3 Jul: Dr 1030 1,654.30 (USD 1,000.00 at 1.6543) / Cr 4000 1,654.30. The
+  line is reconciled. It adds **1,654.30** to Box 5 and Box 6 of the July GST
+  return. 1030: USD 2,000.00 / NZD 3,254.30.
+- **FXB3** Spend USD 50.00 at 1.66. The 5 Jul line (-50.00) shows the last
+  USD rate, **1.6543** (FXB2), and NZD **-82.72** (50.00 x 1.6543 = 82.715,
+  rounded half away from zero). Changing the rate to **1.66**: spend money to
+  Amazon Web Services, 6040 Software and subscriptions, no GST, NZD **83.00**.
+  Journal on 5 Jul: Dr 6040 83.00 / Cr 1030 83.00 (USD 50.00 at 1.66). In no
+  GST box. 1030: USD 1,950.00 / NZD 3,171.30. The next line now shows 1.66.
+- **FXB4** What's refused on foreign-currency spend and receive money, with
+  nothing posted:
+  - the 5 Jul line with tax code GST: "GST on foreign-currency spend and
+    receive money isn't supported yet. Use zero-rated (ZERO), exempt
+    (EXEMPT) or no GST (NONE)…";
+  - two lines of USD 10.01 at 1.5 (15.015 → 15.02 each, 30.04; but USD 20.02
+    x 1.5 = 30.03): "…the lines come to NZD 30.04 but the total is NZD
+    30.03…". Two lines of USD 30.00 and USD 20.00 at 1.66 (49.80 + 33.20 =
+    83.00 = USD 50.00 x 1.66) are allowed;
+  - a rate of 0, or with more than 8 decimal places;
+  - a bank transaction in USD on 1000 (an NZD account) is still refused.
+- **FXB5** Transfer out: from the 10 Jul line (-500.00), a transfer to 1000,
+  NZD **820.00** received. Carrying value = 3,171.30 x 500.00 / 1,950.00 =
+  813.1538… → **813.15**, so the gain is 820.00 - 813.15 = **6.85**. Journal on
+  10 Jul: Dr 1000 820.00 / Cr 1030 813.15 (USD 500.00 at carrying value) /
+  Cr 7020 6.85. 1030: USD 1,450.00 / NZD 2,358.15. A +820.00 line on 1000 on 10
+  Jul matches the 1000 journal line (BK4). Transferring USD 1,450.01 is
+  refused (more than the foreign balance); a transfer from 1030 without the
+  NZD received is refused.
+- **FXB6** Transfer in: from a -1,000.00 line on 1000 on 20 Jul, a transfer to
+  1030, USD **610.00** received. Journal on 20 Jul: Dr 1030 1,000.00 (USD
+  610.00, rate 1.63934426) / Cr 1000 1,000.00. The 20 Jul +610.00 line on 1030
+  then **matches** the 1030 journal line (USD 610.00), posting nothing. 1030:
+  USD 2,060.00 / NZD 3,358.15. Now a spend money on 1030 dated 9 Jul (before
+  the FXB5 transfer out) is refused.
+- **FXB7** Revaluation on 31 Jul 2026 at 1.64 (reversal 1 Aug), with no
+  foreign balance typed: the foreign balance is USD **2,060.00** from the
+  ledger; revalued 2,060.00 x 1.64 = **3,378.40**; carrying **3,358.15**;
+  Dr 1030 20.25 (USD 0.00 at 1.64) / Cr 7000 20.25, reversed on 1 Aug.
+  Typing USD 2,000.00 for 1030 is refused ("…the ledger has USD 2,060.00…").
+  The bank reconciliation report for 1030 as at 31 Jul: balance in Tohyee
+  **USD 2,060.00** (NZD 3,378.40), statement balance **USD 2,060.00** (the 20
+  Jul line's running balance), nothing outstanding: fully explained. The 5 Aug
+  line now shows the rate **1.64** (the revaluation, later than the 20 Jul
+  transfer's 1.63934426).
+- **FXB8** Transfer everything left: from the 5 Aug line (-2,060.00), a
+  transfer to 1000, NZD **3,400.00** received. After the 1 Aug reversal 1030's
+  NZD balance is 3,358.15, and all USD 2,060.00 is leaving, so the carrying
+  value is the whole **3,358.15** and the gain **41.85**: Dr 1000 3,400.00 /
+  Cr 1030 3,358.15 (USD 2,060.00) / Cr 7020 41.85. 1030: USD 0.00 / NZD 0.00.
+  With NZD 3,300.00 received instead it would be a loss of 58.15: Dr 7020
+  58.15.
+- **FXB9** Invoices and bills: a +115.00 line on 1030 can't pay INV-0001 (NZD):
+  "…Invoices and bills are in NZD, so they can't be paid from a USD
+  statement line yet…"; one-click OK suggests no invoice for it, and an
+  adjustment on it is refused. Voiding the FXB3 spend money (after
+  unreconciling) posts its exact reversal, foreign amount included.
+- **FXB10** Imports: a CSV with a Currency column saying NZD, into 1030, is
+  refused: "This file is in NZD, but 1030 (USD account) is in USD. Nothing was
+  imported."; an OFX file with CURDEF USD into 1000 is refused the same way.
+  The file above (no currency column) is recorded in USD. An Akahu feed
+  can't be linked to 1030 ("…Akahu's transactions don't say their
+  currency…").
+- **FXB11** After FXB1-FXB8 the trial balance as at 31 Aug 2026 still balances
+  in NZD: 1030 **0.00**, 7020 **48.70** credit (6.85 + 41.85), 7000 nothing
+  (the revaluation was reversed), 4000 1,754.30 credit (FXB2's 1,654.30 and
+  INV-0001's 100.00), 6040 83.00 debit.
+
 ### Not supported yet (refused rather than guessed)
 
-- **Foreign-currency bank accounts** can't take statement lines.
+- **Akahu bank feeds for foreign-currency accounts**: Akahu's transaction
+  data has no currency, so a feed can't be linked to one (FXB10). Import
+  statement files instead.
+- **Standard-rated GST on foreign-currency spend and receive money** (FXB4),
+  paying NZD invoices or bills from a foreign-currency line (FXB9), and
+  adjustments on foreign-currency lines.
+- **Transfers between two foreign-currency accounts**, and posting to a
+  foreign-currency account dated before its latest transfer out (FXB6).
 - **Splitting with an adjustment**: the statement lines must add up to the
   transaction exactly (BK27).
 - **Older Excel files** (.xls): save them as .xlsx or CSV.

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { ACCOUNT_TYPE_LABELS, FeedBadge } from "@/components/bank/common";
+import { CurrencyMoney } from "@/components/bank/foreign";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -11,12 +12,15 @@ import type { BankAccount } from "@/lib/bank/accounts";
 import type { AkahuSettings } from "@/lib/bank/akahu/settings";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate, formatDateTime, personName } from "@/lib/format";
+import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 
 function AddAccountForm({ organisationId, onAdded }: { organisationId: string; onAdded: () => void }) {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [accountType, setAccountType] = useState<BankAccount["accountType"]>("bank");
   const [description, setDescription] = useState("");
+  const base = useWorkspace().current?.baseCurrency ?? "NZD";
+  const [currencyCode, setCurrencyCode] = useState(base);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +31,7 @@ function AddAccountForm({ organisationId, onAdded }: { organisationId: string; o
     try {
       await api("/api/bank-accounts", {
         method: "POST",
-        body: { organisationId, code, name, accountType, description: description || undefined },
+        body: { organisationId, code, name, accountType, description: description || undefined, currencyCode: currencyCode === base ? undefined : currencyCode },
       });
       setCode("");
       setName("");
@@ -58,6 +62,15 @@ function AddAccountForm({ organisationId, onAdded }: { organisationId: string; o
         </Field>
         <Field label="Description" hint="Optional, e.g. the account number.">
           <input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} />
+        </Field>
+        <Field label="Currency" hint={currencyCode === base ? undefined : "Statement lines and matching are in this currency, with NZD beside them. No Akahu feed."}>
+          <select value={currencyCode} onChange={(event) => setCurrencyCode(event.target.value)}>
+            {[base, ...Object.keys(CURRENCY_MINOR_UNITS).filter((code) => code !== base)].map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
         </Field>
       </div>
       <div className={ui.actions}>
@@ -276,14 +289,23 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
                     <td className={ui.num}>
                       {account.statementBalance !== null ? (
                         <span title={account.statementBalanceAt ? `As at ${formatDateTime(account.statementBalanceAt)}` : undefined}>
-                          <Money value={account.statementBalance} />
+                          {account.isForeign ? <CurrencyMoney currency={account.statementCurrency} value={account.statementBalance} /> : <Money value={account.statementBalance} />}
                         </span>
                       ) : (
                         <span className={ui.muted}>—</span>
                       )}
                     </td>
                     <td className={ui.num}>
-                      <Money value={account.ledgerBalance} />
+                      {account.isForeign ? (
+                        <>
+                          <CurrencyMoney currency={account.statementCurrency} value={account.foreignBalance} />
+                          <div className={ui.muted}>
+                            <Money value={account.ledgerBalance} />
+                          </div>
+                        </>
+                      ) : (
+                        <Money value={account.ledgerBalance} />
+                      )}
                     </td>
                     <td>{account.lastLineDate ? formatDate(account.lastLineDate) : <span className={ui.muted}>None yet</span>}</td>
                     <td>

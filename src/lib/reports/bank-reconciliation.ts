@@ -1,6 +1,8 @@
 import { getBankAccount } from "@/lib/bank/accounts";
 import { businessTimeZone, parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
+import { ValidationError } from "@/lib/errors";
+import { foreignAccountState } from "@/lib/ledger/foreign";
 import { add, dec, isZero, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 
 /**
@@ -55,7 +57,10 @@ export type TohyeeNotInBankItem = {
   origin: string;
   reference: string;
   description: string | null;
+  /** In the account's currency. */
   amount: string;
+  /** The journal line's base-currency amount (the same as `amount` on a base-currency account). */
+  baseAmount: string;
   /** When it's reconciled to a statement line dated after the report date, that line's date. */
   reconciledOn: string | null;
 };
@@ -63,10 +68,15 @@ export type TohyeeNotInBankItem = {
 export type BankReconciliationReport = {
   account: { id: string; code: string; name: string; accountType: "bank" | "credit_card" };
   asAt: string;
+  /** The account's currency: statement lines, balances and items are in it (FXB7). */
   currencyCode: string;
+  baseCurrency: string;
   statementBalance: string | null;
   statementBalanceSource: StatementBalanceSource | null;
+  /** Tohyee's balance in the account's currency. */
   ledgerBalance: string;
+  /** Tohyee's balance in the base currency (the same as `ledgerBalance` on a base-currency account). */
+  baseLedgerBalance: string;
   bankNotInTohyee: { items: BankNotInTohyeeItem[]; total: string };
   tohyeeNotInBank: { items: TohyeeNotInBankItem[]; total: string };
   /** Tohyee's balance + in the bank not in Tohyee - in Tohyee not in the bank. */
@@ -128,14 +138,17 @@ export async function bankReconciliationReport(
 ): Promise<BankReconciliationReport> {
   const account = await getBankAccount(tx, input.accountId);
   const asAt = parseOptionalIsoDate(input.asAt, "asAt") ?? todayIsoDate();
-  const ledger = (
-    await tx.query<{ balance: string }>(
-      `select coalesce(sum(l.debit_amount - l.credit_amount), 0)::text as balance
-         from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id
-        where l.account_id = $1 and j.posting_date <= $2`,
-      [account.id, asAt],
-    )
-  ).rows[0];
+  // A foreign-currency account is reconciled in its currency (FXB7): its foreign balance and lines' foreign amounts.
+  const foreign = account.statementCurrency !== tx.baseCurrency;
+  const state = await foreignAccountState(tx, account.id, asAt);
+  if (foreign && state.foreignBalance === null) {
+    throw new ValidationError(
+      state.needsOpeningBalance
+        ? `Account ${account.code} (${account.name}) has postings from before Tohyee kept foreign amounts. Enter its opening foreign balance first.`
+        : `Account ${account.code} (${account.name})'s ${account.statementCurrency} balance is only known from ${state.opening?.asAtDate} (its opening foreign balance).`,
+    );
+  }
+  const ledger = { balance: foreign ? state.foreignBalance! : state.baseBalance };
   const unreconciled = await tx.query<{ id: string; line_date: string; description: string; reference: string | null; amount: string }>(
     `select id, line_date::text, description, reference, amount::text from bank_statement_lines
       where account_id = $1 and status = 'unreconciled' and line_date <= $2
@@ -191,13 +204,15 @@ export async function bankReconciliationReport(
     reference: string;
     description: string | null;
     amount: string;
+    base_amount: string;
     reconciled_on: string | null;
     correction_kind: string | null;
     related_journal_id: string | null;
     journal_reconciled: boolean;
   }>(
     `select l.id, l.journal_id, j.posting_date::text, j.origin, j.reference, coalesce(l.description, j.description) as description,
-            (l.debit_amount - l.credit_amount - rec.on_statement)::text as amount, rec.reconciled_on::text as reconciled_on,
+            (l.account_amount - rec.on_statement)::text as amount, rec.reconciled_on::text as reconciled_on,
+            (l.debit_amount - l.credit_amount)::text as base_amount,
             j.correction_kind, j.related_journal_id,
             exists (select 1 from bank_reconciliation_items ri join ledger_journal_lines rl on rl.id = ri.journal_line_id
                      where ri.active and rl.journal_id = j.id and rl.account_id = $1) as journal_reconciled
@@ -214,9 +229,11 @@ export async function bankReconciliationReport(
            join bank_statement_lines b on b.id = r.statement_line_id
           where i.journal_line_id = l.id and i.active
        ) rec
-      where l.account_id = $1 and j.posting_date <= $2 and l.debit_amount - l.credit_amount <> rec.on_statement
+      where l.account_id = $1 and j.posting_date <= $2 and l.account_amount <> rec.on_statement
+        -- A foreign-currency account's revaluations (foreign amount 0) and base-only postings aren't on its statement.
+        and (not $3::boolean or l.foreign_amount > 0)
       order by j.posting_date, l.id`,
-    [account.id, asAt],
+    [account.id, asAt, foreign],
   );
   // A voided payment or transaction and its reversal, both dated on or before
   // the date and neither reconciled, cancel out: leave both off the list.
@@ -244,6 +261,7 @@ export async function bankReconciliationReport(
     reference: row.reference,
     description: row.description,
     amount: money(row.amount),
+    baseAmount: money(row.base_amount),
     reconciledOn: row.reconciled_on,
   }));
   const ledgerBalance = money(ledger.balance);
@@ -255,10 +273,12 @@ export async function bankReconciliationReport(
   return {
     account: { id: account.id, code: account.code, name: account.name, accountType: account.accountType },
     asAt,
-    currencyCode: tx.baseCurrency,
+    currencyCode: account.statementCurrency,
+    baseCurrency: tx.baseCurrency,
     statementBalance: statement.balance,
     statementBalanceSource: statement.source,
     ledgerBalance,
+    baseLedgerBalance: money(state.baseBalance),
     bankNotInTohyee: { items: bankItems, total: bankTotal },
     tohyeeNotInBank: { items: tohyeeItems, total: tohyeeTotal },
     expectedStatementBalance: expected,

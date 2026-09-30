@@ -756,6 +756,8 @@ describeWithDatabase("customer payments", () => {
         { code: "1100", system_key: "accounts_receivable" },
         // Added by migration 0028 (expense claims, EC1).
         { code: "2010", system_key: "expense_claims_payable" },
+        // Added by migration 0033 (foreign-currency bank accounts, FXB5).
+        { code: "7020", system_key: "realised_fx" },
         // Added by migration 0029 (fixed assets, FA1).
         { code: "7030", system_key: "fixed_asset_disposal" },
         { code: "7040", system_key: "fixed_asset_capital_gain" },

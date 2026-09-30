@@ -5,6 +5,7 @@ import { useState } from "react";
 import { InOutCells, journalHref, LineDetails, LineStatusBadge, originLabel } from "@/components/bank/common";
 import { Pager } from "@/components/bank/reconcile-panel";
 import { Money } from "@/components/books";
+import { LineBaseValue } from "@/components/bank/foreign";
 import { useApiData } from "@/components/hooks";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
@@ -82,7 +83,7 @@ export function StatementLinesPanel({
   account: BankAccount;
   onChanged: () => void;
 }) {
-  const { can } = useWorkspace();
+  const { can, current } = useWorkspace();
   const [status, setStatus] = useState<(typeof FILTERS)[number]["status"]>("all");
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -145,8 +146,8 @@ export function StatementLinesPanel({
                 <tr>
                   <th>Date</th>
                   <th>Description</th>
-                  <th className={ui.num}>Money in</th>
-                  <th className={ui.num}>Money out</th>
+                  <th className={ui.num}>Money in{account.isForeign ? ` (${account.statementCurrency})` : ""}</th>
+                  <th className={ui.num}>Money out{account.isForeign ? ` (${account.statementCurrency})` : ""}</th>
                   <th className={ui.num}>Balance</th>
                   <th>Status</th>
                   <th>Reconciled with</th>
@@ -167,6 +168,7 @@ export function StatementLinesPanel({
                       ) : null}
                       <LineDetails line={line} />
                       <div className={ui.muted}>{line.source === "akahu" ? "Bank feed" : "Imported file"}</div>
+                      {account.isForeign ? <LineBaseValue line={line} baseCurrency={current?.baseCurrency ?? "NZD"} /> : null}
                     </td>
                     <InOutCells amount={line.amount} />
                     <td className={ui.num}>{line.balance !== null ? <Money value={line.balance} /> : null}</td>
@@ -263,7 +265,7 @@ function VoidButton({ path, label, onVoided, organisationId }: { path: string; l
 
 /** Spend and receive money and transfers posted on the account. */
 export function TransactionsPanel({ organisationId, account }: { organisationId: string; account: BankAccount }) {
-  const { can } = useWorkspace();
+  const { can, current } = useWorkspace();
   const transactions = useApiData<{ bankTransactions: BankTransaction[] }>("/api/bank-transactions", {
     organisationId,
     accountId: account.id,
@@ -304,6 +306,12 @@ export function TransactionsPanel({ organisationId, account }: { organisationId:
                   <td>
                     {transaction.contactName}
                     {transaction.reference ? <div className={ui.muted}>{transaction.reference}</div> : null}
+                    {transaction.exchangeRate ? (
+                      <div className={ui.muted}>
+                        {transaction.currencyCode} {formatMoney(transaction.total)} at {transaction.exchangeRate} = {current?.baseCurrency ?? "NZD"}{" "}
+                        {formatMoney(transaction.baseTotal)}
+                      </div>
+                    ) : null}
                     <CustomValuesText setup={customSetup.data} values={transaction.customFields} />
                   </td>
                   <td>
@@ -369,7 +377,18 @@ export function TransactionsPanel({ organisationId, account }: { organisationId:
                   <td>{transfer.toAccountCode}</td>
                   <td>{transfer.reference}</td>
                   <td className={ui.num}>
+                    {transfer.currencyCode !== (current?.baseCurrency ?? "NZD") ? `${transfer.currencyCode} ` : ""}
                     <Money value={transfer.amount} />
+                    {transfer.toAmount !== null ? (
+                      <div className={ui.muted}>
+                        arrived as {transfer.toCurrencyCode} {formatMoney(transfer.toAmount)}
+                        {transfer.carryingAmount !== null
+                          ? `; carrying value ${formatMoney(transfer.carryingAmount)}, realised ${
+                              transfer.realisedGain?.startsWith("-") ? "loss" : "gain"
+                            } ${formatMoney(transfer.realisedGain?.replace(/^-/, "") ?? "0")}`
+                          : ""}
+                      </div>
+                    ) : null}
                   </td>
                   <td>
                     {transfer.status === "voided" ? (

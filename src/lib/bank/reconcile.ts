@@ -143,13 +143,16 @@ type CandidateRow = {
   description: string | null;
   line_description: string | null;
   reconciled: boolean;
+  has_foreign?: boolean;
 };
 
 async function loadJournalLines(tx: OrgTx, ids: string[]): Promise<CandidateRow[]> {
   const result = await tx.query<CandidateRow>(
-    `select l.id, l.journal_id, l.account_id, (l.debit_amount - l.credit_amount)::text as amount, j.posting_date::text,
+    // In the account's currency (FXB6): the foreign amount on a foreign-currency account.
+    `select l.id, l.journal_id, l.account_id, l.account_amount::text as amount, j.posting_date::text,
             j.origin, j.reference, j.description, l.description as line_description,
-            exists (select 1 from bank_reconciliation_items i where i.journal_line_id = l.id and i.active) as reconciled
+            exists (select 1 from bank_reconciliation_items i where i.journal_line_id = l.id and i.active) as reconciled,
+            l.foreign_amount is not null as has_foreign
        from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id
       where l.id = any($1::bigint[])`,
     [ids],
@@ -209,6 +212,15 @@ export async function reconcileStatementLine(
   if (line.status === "deleted") throw new ConflictError("This line's import was deleted.");
   await assertPostingDateAllowed(tx, line.date);
   const account = (await tx.query<{ code: string }>("select code from accounts where id = $1", [line.accountId])).rows[0];
+  const foreignLine = line.currencyCode !== tx.baseCurrency;
+  if (foreignLine && kind === "payments") {
+    throw new ValidationError(
+      `Account ${account.code} is in ${line.currencyCode}. Invoices and bills are in ${tx.baseCurrency}, so they can't be paid from a ${line.currencyCode} statement line yet. Record the payment from a ${tx.baseCurrency} account, or code this line as receive or spend money.`,
+    );
+  }
+  if (foreignLine && adjustment) {
+    throw new ValidationError(`Adjustments aren't available on ${line.currencyCode} statement lines yet. Record the difference as its own spend or receive money.`);
+  }
   const moneyIn = !line.amount.startsWith("-");
   const unsigned = line.amount.replace(/^-/, "");
   const subKey = (suffix: string) => `${idempotencyKey}:${suffix}`;
@@ -221,6 +233,9 @@ export async function reconcileStatementLine(
     if (rows.length !== journalLineIds.length) throw new ValidationError("One of the chosen transactions doesn't exist.");
     for (const row of rows) {
       if (row.account_id !== line.accountId) throw new ValidationError(`Journal #${row.journal_id} isn't on this account.`);
+      if (foreignLine && !row.has_foreign) {
+        throw new ValidationError(`Journal #${row.journal_id} was posted before Tohyee kept ${line.currencyCode} amounts, so it can't be matched to a ${line.currencyCode} line.`);
+      }
       if (row.reconciled) throw new ConflictError(`Journal #${row.journal_id} is already reconciled with another statement line.`);
       if (daysBetween(row.posting_date, line.date) > MATCH_WINDOW_DAYS) {
         throw new ValidationError(`Journal #${row.journal_id} (${row.posting_date}) is more than ${MATCH_WINDOW_DAYS} days from the line's date.`);
@@ -301,19 +316,34 @@ export async function reconcileStatementLine(
         amountsMode: command.amountsMode,
         lines: command.lines,
         customFields: command.customFields,
+        // A foreign-currency line: the rate typed, or the one shown on the line (D4).
+        exchangeRate: command.exchangeRate ?? (foreignLine ? line.suggestedRate?.rate : undefined),
       },
       { expectedTotal: unsigned },
     );
     journalLineIds = [await journalLineOn(tx, bankTransaction.journalId, line.accountId)];
   } else {
     const other = requireString(command.otherAccountCode, "otherAccountCode", { maxLength: 20 });
+    // Across currencies (FXB5, FXB6), `otherAmount` is what moved in the other account's currency.
+    const otherCurrency = (
+      await tx.query<{ currency: string }>("select coalesce(currency_code, $2) as currency from accounts where lower(code) = lower($1)", [
+        other,
+        tx.baseCurrency,
+      ])
+    ).rows[0]?.currency;
+    const across = otherCurrency !== undefined && otherCurrency !== line.currencyCode;
+    const otherAmount = command.otherAmount == null || command.otherAmount === "" ? undefined : command.otherAmount;
+    if (across && otherAmount === undefined) {
+      throw new ValidationError(`Give the ${otherCurrency} amount that ${moneyIn ? "left" : "arrived in"} ${other} for this ${line.currencyCode} ${unsigned}.`);
+    }
     const { transfer } = await createTransfer(tx, {
       source,
       idempotencyKey: subKey("transfer"),
       fromAccountCode: moneyIn ? other : account.code,
       toAccountCode: moneyIn ? account.code : other,
       date: line.date,
-      amount: unsigned,
+      amount: across && moneyIn ? otherAmount : unsigned,
+      toAmount: across ? (moneyIn ? unsigned : otherAmount) : undefined,
       reference: command.reference ?? line.reference ?? undefined,
     });
     journalLineIds = [await journalLineOn(tx, transfer.journalId, line.accountId)];
@@ -336,7 +366,7 @@ export async function reconcileStatementLine(
   const reconciliationId = inserted.rows[0].id;
   await tx.query(
     `insert into bank_reconciliation_items (reconciliation_id, journal_line_id, amount)
-     select $1, l.id, l.debit_amount - l.credit_amount from ledger_journal_lines l where l.id = any($2::bigint[])`,
+     select $1, l.id, l.account_amount from ledger_journal_lines l where l.id = any($2::bigint[])`,
     [reconciliationId, journalLineIds],
   );
   await tx.query("update bank_statement_lines set status = 'reconciled', updated_at = now() where id = $1", [lineId]);
@@ -621,8 +651,9 @@ export type LineSuggestions = {
 export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?: BankRule[]): Promise<LineSuggestions> {
   const line = await getStatementLine(tx, lineIdInput);
   const moneyIn = !line.amount.startsWith("-");
+  const foreignLine = line.currencyCode !== tx.baseCurrency;
   const candidates = await tx.query<CandidateRow & { voided: boolean }>(
-    `select l.id, l.journal_id, l.account_id, (l.debit_amount - l.credit_amount)::text as amount, j.posting_date::text,
+    `select l.id, l.journal_id, l.account_id, l.account_amount::text as amount, j.posting_date::text,
             j.origin, j.reference, j.description, l.description as line_description, false as reconciled,
             (j.correction_kind is not distinct from 'reversal'
               or exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal')) as voided
@@ -631,11 +662,15 @@ export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?
         and ((l.debit_amount > 0) = $2)
         and j.posting_date between $3::date - $4::integer and $3::date + $4::integer
         and not exists (select 1 from bank_reconciliation_items i where i.journal_line_id = l.id and i.active)
-      order by (l.debit_amount - l.credit_amount) = $5::numeric desc, voided, abs(j.posting_date - $3::date), l.id
+        and (not $6::boolean or l.foreign_amount > 0)
+      order by l.account_amount = $5::numeric desc, voided, abs(j.posting_date - $3::date), l.id
       limit 25`,
-    [line.accountId, moneyIn, line.date, MATCH_WINDOW_DAYS, line.amount],
+    [line.accountId, moneyIn, line.date, MATCH_WINDOW_DAYS, line.amount, foreignLine],
   );
-  const documents = moneyIn
+  // Invoices and bills are in the base currency: never suggested for a foreign-currency line (FXB9).
+  const documents = foreignLine
+    ? { rows: [] as Array<{ id: string; number: string; contact_name: string; amount_due: string; date: string }> }
+    : moneyIn
     ? await tx.query<{ id: string; number: string; contact_name: string; amount_due: string; date: string }>(
         `select i.id, i.invoice_number as number, c.name as contact_name, i.invoice_date::text as date,
                 (i.total - coalesce((select sum(p.amount - p.overpayment_amount) from customer_payments p where p.invoice_id = i.id and p.status = 'active'), 0)

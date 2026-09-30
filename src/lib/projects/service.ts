@@ -352,7 +352,7 @@ const SOURCES = `(
     from expense_claim_receipts r join expense_claims x on x.id = r.claim_id join accounts a on a.id = r.account_id
   union all
   select 'bank_transaction_line', l.id, t.id, 'Spend money' || coalesce(' ' || t.reference, ''), c.name, t.transaction_date,
-         l.description, a.code, a.name, a.account_type, a.account_class, l.net_amount, t.kind = 'spend' and t.status = 'posted', null
+         l.description, a.code, a.name, a.account_type, a.account_class, coalesce(l.base_net_amount, l.net_amount), t.kind = 'spend' and t.status = 'posted', null
     from bank_transaction_lines l join bank_transactions t on t.id = l.bank_transaction_id
     join contacts c on c.id = t.contact_id join accounts a on a.id = l.account_id
 )`;

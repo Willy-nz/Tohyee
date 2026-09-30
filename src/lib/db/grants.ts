@@ -20,6 +20,7 @@ const APPEND_ONLY_TABLES = [
   "gst_return_lines",
   "fixed_asset_depreciation_lines",
   "bank_reconciliation_splits",
+  "ledger_foreign_opening_balances",
 ];
 
 function quoteRole(role: string): string {
