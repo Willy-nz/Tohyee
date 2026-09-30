@@ -1,0 +1,22 @@
+{
+  "name": "tohyee-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tohyee address: hands out Cloudflare Tunnel addresses to Tohyee servers. Runs as a Cloudflare Worker.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:setup": "wrangler d1 migrations apply tohyee-relay --remote",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260930.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.144.0"
+  }
+}

@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "dist/**",
     "next-env.d.ts",
+    // The Tohyee address Worker has its own tools and checks (see relay/README.md).
+    "relay/**",
   ]),
 ]);
 
