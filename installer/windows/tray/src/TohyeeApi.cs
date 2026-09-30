@@ -31,9 +31,26 @@ namespace Tohyee.Tray
         private readonly HttpClient _client;
         private readonly CookieContainer _cookies = new CookieContainer();
         private readonly string _baseUrl;
+        private readonly Func<string, string, object, Dictionary<string, object>> _fake;
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = 16 * 1024 * 1024 };
 
         public string SignedInEmail { get; private set; }
+
+        /// <summary>The screenshots mode: answers come from sample data, nothing goes over the network.</summary>
+        public bool IsDemo
+        {
+            get { return _fake != null; }
+        }
+
+        public static TohyeeApi Demo(string email, Func<string, string, object, Dictionary<string, object>> answer)
+        {
+            return new TohyeeApi("http://127.0.0.1:3001", answer) { SignedInEmail = email };
+        }
+
+        private TohyeeApi(string baseUrl, Func<string, string, object, Dictionary<string, object>> fake) : this(baseUrl)
+        {
+            _fake = fake;
+        }
 
         public TohyeeApi(string baseUrl)
         {
@@ -83,6 +100,7 @@ namespace Tohyee.Tray
 
         private async Task<Dictionary<string, object>> Send(HttpMethod method, string path, object body, TimeSpan timeout)
         {
+            if (_fake != null) return _fake(method.Method, path, body);
             using (var cancel = new System.Threading.CancellationTokenSource(timeout))
             using (var request = new HttpRequestMessage(method, _baseUrl + path))
             {

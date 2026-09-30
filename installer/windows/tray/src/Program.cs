@@ -19,10 +19,18 @@ namespace Tohyee.Tray
         ///   TohyeeTray.exe --settings    the tray icon, with the server settings window open
         ///   TohyeeTray.exe --back-up     the same, backing up every organisation now (Start menu: Back up Tohyee)
         ///   TohyeeTray.exe --self-test &lt;file&gt;   checks it can reach Tohyee (used by the installer test)
+        ///   TohyeeTray.exe --demo-screenshots &lt;folder&gt;   saves pictures of each page with sample data (no server, no network)
         /// </summary>
         [STAThread]
         private static int Main(string[] args)
         {
+            // GitHub (news) and Tailscale's package server need TLS 1.2; older
+            // Windows 10 builds don't offer it to .NET Framework apps by default.
+            System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+            if (args.Length >= 2 && args[0] == "--demo-screenshots")
+            {
+                return DemoData.Screenshots(args[1]);
+            }
             var settings = TraySettings.Load();
             if (args.Length >= 1 && args[0] == "--self-test")
             {

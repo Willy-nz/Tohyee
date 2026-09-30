@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     The Tohyee server app for Windows: a tray icon by the clock that shows the
-    server is running, and a window for the server settings (organisations,
-    users, remote access, email, updates). Built for .NET Framework 4.8, which
+    server is running, and a window for the server settings (home, organisations,
+    users, phone access, backups, email, updates). Built for .NET Framework 4.8, which
     comes with Windows 10 and 11, so nothing else needs installing.
     Built by installer/windows/build.ps1 with `dotnet build`.
   -->
@@ -15,6 +15,7 @@
     <RootNamespace>Tohyee.Tray</RootNamespace>
     <Nullable>disable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>assets\tohyee.ico</ApplicationIcon>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Product>Tohyee</Product>
     <Description>Tohyee server</Description>
@@ -24,6 +25,12 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The logo, rendered from assets/logo.svg (WinForms can't draw SVG); built into the exe. -->
+    <EmbeddedResource Include="assets\tohyee.ico" LogicalName="Tohyee.Tray.tohyee.ico" />
+    <EmbeddedResource Include="assets\logo-32.png" LogicalName="Tohyee.Tray.logo-32.png" />
+    <EmbeddedResource Include="assets\logo-128.png" LogicalName="Tohyee.Tray.logo-128.png" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />

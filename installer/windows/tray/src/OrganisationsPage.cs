@@ -22,18 +22,20 @@ namespace Tohyee.Tray
         public OrganisationsPage(TohyeeApi api)
         {
             _api = api;
-            var page = Ui.Page();
-            page.Controls.Add(Ui.Title("Organisations"));
-            page.Controls.Add(Ui.Note("Each organisation has its own PostgreSQL database, so it can be backed up, restored or moved on its own. Being a server admin doesn't give you access to an organisation's books; its owner adds people."));
-            page.Controls.Add(_list);
+            BackColor = Theme.Bg;
+            var page = Ui.Page("Organisations", "Each organisation has its own PostgreSQL database, so it can be backed up, restored or moved on its own. Being a server admin doesn't give you access to an organisation's books; its owner adds people.");
+            var card = Ui.Card(page, null, null);
             var buttons = Ui.Row();
-            buttons.Controls.Add(Ui.Btn("New organisation…", async (s, e) => await Create()));
+            buttons.Margin = new Padding(0, 0, 0, 8);
+            buttons.Controls.Add(Ui.Primary("New organisation…", async (s, e) => await Create()));
             buttons.Controls.Add(Ui.Btn("Rename…", async (s, e) => await Rename()));
             buttons.Controls.Add(Ui.Btn("Retry set-up or upgrade", async (s, e) => await Repair()));
             buttons.Controls.Add(Ui.Btn("Take out of use / put back", async (s, e) => await ToggleActive()));
             buttons.Controls.Add(Ui.Btn("Refresh", async (s, e) => await Reload()));
-            page.Controls.Add(buttons);
-            page.Controls.Add(_status);
+            card.Body.Controls.Add(buttons);
+            _list.Height = Theme.S(320);
+            card.Body.Controls.Add(_list);
+            card.Body.Controls.Add(_status);
             Controls.Add(page);
             Load += async (s, e) => await Reload();
         }
@@ -72,9 +74,10 @@ namespace Tohyee.Tray
                     { Tag = organisation };
                     if (status.StartsWith("Set-up failed") || status.StartsWith("Upgrade failed")) item.ForeColor = Ui.Danger;
                     else if (status == "Out of use") item.ForeColor = Ui.Muted;
+                    else if (status != "Ready") item.ForeColor = Theme.Warning;
                     _list.Items.Add(item);
                 }
-                foreach (ColumnHeader column in _list.Columns) column.Width = -2;
+                Ui.FitColumns(_list);
                 _list.EndUpdate();
                 if (_organisations.Count == 0) Ui.Show(_status, "No organisations yet. Use New organisation to create the first one.", false);
             });
@@ -188,7 +191,7 @@ namespace Tohyee.Tray
             AutoSize = true;
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
 
-            var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Padding = new Padding(16), WrapContents = false };
+            var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Padding = new Padding(20), WrapContents = false };
             page.Controls.Add(Ui.Note("It gets its own database with a starting New Zealand chart of accounts. The owner can add everyone else."));
             var form = Ui.Form();
             Ui.Field(form, "Name", _name);
@@ -206,8 +209,9 @@ namespace Tohyee.Tray
             };
             _id.KeyPress += (s, e) => _idTouched = true;
 
-            var ok = new Button { Text = "Create", AutoSize = true };
-            var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+            var ok = Ui.Primary("Create", null);
+            var cancel = Ui.Btn("Cancel", null);
+            cancel.DialogResult = DialogResult.Cancel;
             ok.Click += (s, e) =>
             {
                 var problem = Check();
@@ -225,6 +229,7 @@ namespace Tohyee.Tray
             Controls.Add(page);
             AcceptButton = ok;
             CancelButton = cancel;
+            Theme.Apply(this);
         }
 
         private string Check()

@@ -16,62 +16,67 @@ namespace Tohyee.Tray
     internal sealed class BackupsPage : UserControl
     {
         private readonly TohyeeApi _api;
-        private readonly Label _state = new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 10.5f), Margin = new Padding(0, 0, 0, 8), MaximumSize = new Size(760, 0) };
+        private readonly Label _state = Ui.State();
         private readonly CheckBox _enabled = new CheckBox { Text = "Back up every night", AutoSize = true };
-        private readonly TextBox _time = new TextBox { Width = 80 };
-        private readonly TextBox _folder = new TextBox { Width = 420 };
-        private readonly Label _folderNote = new Label { AutoSize = true, ForeColor = Ui.Muted, MaximumSize = new Size(560, 0) };
+        private readonly TextBox _time = new TextBox { Width = Theme.S(80) };
+        private readonly TextBox _folder = new TextBox { Width = Theme.S(330) };
+        private readonly Label _folderNote = new Label { AutoSize = true, ForeColor = Ui.Muted, MaximumSize = new Size(Theme.S(600), 0), Margin = new Padding(0, 2, 0, 6) };
         private readonly ListView _status = Ui.List("Organisation", "Last good backup", "Size", "Latest attempt");
         private readonly ListView _files = Ui.List("Made", "Organisation", "Size", "File");
         private readonly Label _message = Ui.Status();
-        private readonly Label _keyState = new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 10f), MaximumSize = new Size(640, 0), Margin = new Padding(0, 0, 0, 4) };
+        private readonly Label _keyState = Ui.State();
         private string _defaultFolder;
 
         public BackupsPage(TohyeeApi api)
         {
             _api = api;
-            _status.Height = 130;
-            _files.Height = 170;
-            var page = Ui.Page();
-            page.Controls.Add(Ui.Title("Backups"));
-            page.Controls.Add(Ui.Note("Every night Tohyee backs up each organisation into its own file, encrypted with this server's secret key, keeps 14 daily and 12 monthly backups, and checks each file after it's made. Choose a OneDrive folder to get copies off this computer."));
-            page.Controls.Add(_state);
+            _status.Height = Theme.S(150);
+            _files.Height = Theme.S(200);
+            BackColor = Theme.Bg;
+            var page = Ui.Page("Backups", "Every night Tohyee backs up each organisation into its own file, encrypted with this server's secret key, keeps 14 daily and 12 monthly backups, and checks each file after it's made. Choose a OneDrive folder to get copies off this computer.");
 
-            page.Controls.Add(Ui.Title("Your backup key"));
-            page.Controls.Add(Ui.Note("Backups can only be opened with this server's backup key. If this computer is lost or rebuilt, you'll need a copy of the key to restore them, so save one somewhere safe that isn't the backup folder, such as a password manager. Then paste it back here so Tohyee can check your copy is exactly right."));
-            page.Controls.Add(_keyState);
-            var keyButtons = Ui.Row();
-            keyButtons.Controls.Add(Ui.Btn("Show the key…", async (s, e) => await ShowKey()));
-            keyButtons.Controls.Add(Ui.Btn("Check my saved copy…", async (s, e) => await CheckKey()));
-            page.Controls.Add(keyButtons);
-
+            var nightly = Ui.Card(page, "Nightly backups", null);
+            nightly.Body.Controls.Add(_state);
             var form = Ui.Form();
             Ui.Field(form, "Nightly", _enabled);
             Ui.Field(form, "At (24-hour)", _time);
-            var folderRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-            folderRow.Controls.Add(_folder);
+            _time.Dock = DockStyle.None;
+            var folderRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), BackColor = Theme.Card };
+            folderRow.Controls.Add(Ui.Input(_folder));
+            _folder.Margin = new Padding(0, 4, 8, 0);
             folderRow.Controls.Add(Ui.Btn("Browse…", (s, e) => Browse()));
             folderRow.Controls.Add(Ui.Btn("Use OneDrive", (s, e) => UseOneDrive()));
-            Ui.Field(form, "Folder", folderRow);
+            form.ColumnStyles[1].Width = Theme.S(600);
+            form.RowCount += 1;
+            form.Controls.Add(new Label { Text = "Folder", AutoSize = true, ForeColor = Theme.Muted, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 12, 7) });
+            form.Controls.Add(folderRow);
             form.RowCount += 1;
             form.Controls.Add(new Label());
             form.Controls.Add(_folderNote);
-            page.Controls.Add(form);
-
+            nightly.Body.Controls.Add(form);
             var settingsButtons = Ui.Row();
-            settingsButtons.Controls.Add(Ui.Btn("Save", async (s, e) => await Save()));
+            settingsButtons.Controls.Add(Ui.Primary("Save", async (s, e) => await Save()));
             settingsButtons.Controls.Add(Ui.Btn("Back up now", async (s, e) => await BackUpNow()));
             settingsButtons.Controls.Add(Ui.Btn("Open the folder", (s, e) => TrayApp.OpenFolder(_folder.Text.Trim())));
-            page.Controls.Add(settingsButtons);
+            nightly.Body.Controls.Add(settingsButtons);
+            nightly.Body.Controls.Add(_message);
 
-            page.Controls.Add(_status);
-            page.Controls.Add(Ui.Note("Backup files. Restoring one makes a new organisation, e.g. \"Green Island (restored from 2026-09-27)\", with the same people, so you can check it before using it."));
-            page.Controls.Add(_files);
+            var key = Ui.Card(page, "Your backup key", "Backups can only be opened with this server's backup key. If this computer is lost or rebuilt, you'll need a copy of the key to restore them, so save one somewhere safe that isn't the backup folder, such as a password manager. Then paste it back here so Tohyee can check your copy is exactly right.");
+            key.Body.Controls.Add(_keyState);
+            var keyButtons = Ui.Row();
+            keyButtons.Controls.Add(Ui.Btn("Show the key…", async (s, e) => await ShowKey()));
+            keyButtons.Controls.Add(Ui.Btn("Check my saved copy…", async (s, e) => await CheckKey()));
+            key.Body.Controls.Add(keyButtons);
+
+            var latest = Ui.Card(page, "Each organisation", null);
+            latest.Body.Controls.Add(_status);
+
+            var files = Ui.Card(page, "Backup files", "Restoring one makes a new organisation, e.g. \"Green Island (restored from 2026-09-27)\", with the same people, so you can check it before using it.");
+            files.Body.Controls.Add(_files);
             var fileButtons = Ui.Row();
             fileButtons.Controls.Add(Ui.Btn("Restore as a copy…", async (s, e) => await Restore()));
             fileButtons.Controls.Add(Ui.Btn("Refresh", async (s, e) => await Reload()));
-            page.Controls.Add(fileButtons);
-            page.Controls.Add(_message);
+            files.Body.Controls.Add(fileButtons);
             Controls.Add(page);
             Load += async (s, e) => await Reload();
         }
@@ -111,7 +116,7 @@ namespace Tohyee.Tray
                 if (good == null) anyNever = true;
                 _status.Items.Add(item);
             }
-            foreach (ColumnHeader column in _status.Columns) column.Width = -2;
+            Ui.FitColumns(_status);
             _status.EndUpdate();
 
             _files.BeginUpdate();
@@ -129,7 +134,7 @@ namespace Tohyee.Tray
                 { Tag = file };
                 _files.Items.Add(item);
             }
-            foreach (ColumnHeader column in _files.Columns) column.Width = -2;
+            Ui.FitColumns(_files);
             _files.EndUpdate();
 
             var keyStatus = J.Obj(result, "keyStatus");
@@ -167,7 +172,7 @@ namespace Tohyee.Tray
             else
             {
                 _state.Text = "On: every night at " + _time.Text + (anyNever ? ". Not everything has been backed up yet; use Back up now to start." : ".");
-                _state.ForeColor = anyNever ? Color.Black : Ui.Success;
+                _state.ForeColor = anyNever ? Theme.Text : Ui.Success;
             }
         }
 
@@ -288,16 +293,17 @@ namespace Tohyee.Tray
                 StartPosition = FormStartPosition.CenterParent,
                 MinimizeBox = false,
                 MaximizeBox = false,
-                ClientSize = new Size(480, 170),
+                ClientSize = new Size(Theme.S(480), Theme.S(170)),
             })
             {
-                var label = new Label { Text = prompt, Left = 16, Top = 12, Width = 448, Height = 64, AutoSize = false };
-                var box = new TextBox { Left = 16, Top = 82, Width = 448, UseSystemPasswordChar = hidden };
-                var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Left = 298, Top = 124, Width = 80 };
-                var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Left = 384, Top = 124, Width = 80 };
+                var label = new Label { Text = prompt, Left = Theme.S(16), Top = Theme.S(12), Width = Theme.S(448), Height = Theme.S(64), AutoSize = false };
+                var box = new TextBox { Left = Theme.S(16), Top = Theme.S(82), Width = Theme.S(448), UseSystemPasswordChar = hidden };
+                var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Left = Theme.S(298), Top = Theme.S(124), Width = Theme.S(80), Height = Theme.S(30) };
+                var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Left = Theme.S(384), Top = Theme.S(124), Width = Theme.S(80), Height = Theme.S(30) };
                 dialog.Controls.AddRange(new Control[] { label, box, ok, cancel });
                 dialog.AcceptButton = ok;
                 dialog.CancelButton = cancel;
+                Theme.Apply(dialog);
                 return dialog.ShowDialog(FindForm()) == DialogResult.OK ? box.Text.Trim() : null;
             }
         }
@@ -321,25 +327,27 @@ namespace Tohyee.Tray
                 StartPosition = FormStartPosition.CenterParent,
                 MinimizeBox = false,
                 MaximizeBox = false,
-                ClientSize = new Size(560, 230),
+                ClientSize = new Size(Theme.S(560), Theme.S(230)),
             })
             {
                 var label = new Label
                 {
                     Text = "Save this key somewhere safe that isn't the backup folder, such as a password manager (as a note called \"Tohyee backup key\"). Anyone with the key and the backup files can read the books, so keep it private. Then use \"Check my saved copy\".",
-                    Left = 16, Top = 12, Width = 528, Height = 72, AutoSize = false,
+                    Left = Theme.S(16), Top = Theme.S(12), Width = Theme.S(528), Height = Theme.S(72), AutoSize = false,
                 };
-                var box = new TextBox { Text = key, ReadOnly = true, Left = 16, Top = 92, Width = 528, Font = new Font("Consolas", 11f) };
-                var copied = new Label { Left = 16, Top = 130, Width = 400, ForeColor = Ui.Success };
-                var copy = new Button { Text = "Copy", Left = 16, Top = 180, Width = 90 };
+                var box = new TextBox { Text = key, ReadOnly = true, Left = Theme.S(16), Top = Theme.S(92), Width = Theme.S(528), Font = Theme.F("Consolas", 11f) };
+                var copied = new Label { Left = Theme.S(16), Top = Theme.S(130), Width = Theme.S(400), Height = Theme.S(22), ForeColor = Ui.Success };
+                var copy = new Button { Text = "Copy", Left = Theme.S(16), Top = Theme.S(180), Width = Theme.S(90), Height = Theme.S(30) };
                 copy.Click += (s, e) =>
                 {
                     Clipboard.SetText(key);
                     copied.Text = "Copied. Paste it into your password manager now.";
                 };
-                var done = new Button { Text = "Done", DialogResult = DialogResult.OK, Left = 454, Top = 180, Width = 90 };
+                var done = new Button { Text = "Done", DialogResult = DialogResult.OK, Left = Theme.S(454), Top = Theme.S(180), Width = Theme.S(90), Height = Theme.S(30) };
                 dialog.Controls.AddRange(new Control[] { label, box, copied, copy, done });
                 dialog.AcceptButton = done;
+                Theme.Apply(dialog);
+                copied.ForeColor = Ui.Success;
                 dialog.ShowDialog(FindForm());
             }
             try

@@ -10,10 +10,16 @@ that something happened.
   repaired by server admins.
 - **Server settings apart from the books** (organisations, users, remote
   access, email, updates), open only on the server computer itself. On
-  Windows they're in the **Tohyee server app**: an icon by the clock (started
-  when you sign in, like a media server's) that shows whether Tohyee is
-  running, restarts it, backs it up and opens the logs, and a window for the
-  settings. On Docker and Linux they're a **command-line tool**
+  Windows they're in the **Tohyee server app**: an icon by the clock (the
+  logo with a green, amber or red dot; started when you sign in, like a
+  media server's) that shows whether Tohyee is running, restarts it, backs it
+  up and opens the logs, and a dark window for the settings with a sidebar
+  (Home, Organisations, Users, Phone access, Backups, Email, Updates). **Home**
+  shows whether the server is running (version, how long it's been up),
+  phone access, the last backup and the organisations at a glance, the latest
+  Tohyee news (GitHub releases plus announcements from `website/news.json`,
+  fetched at most every four hours and kept for when the computer is
+  offline) and a (light-hearted) conference card. On Docker and Linux they're a **command-line tool**
   (`tohyee-admin.cjs` in the image, `npm run admin` from a checkout).
 - **Nightly backups** of each organisation (and the server's own database),
   encrypted with the server's secret key, into a folder the server admin
@@ -470,9 +476,20 @@ that something happened.
   backup codes from your profile.
 - **Server email** (Gmail or other SMTP, password encrypted) for security
   alerts and two-step reset links, with a test button.
-- **Remote access** through a Cloudflare Tunnel (in the server settings):
-  paste the tunnel token, Tohyee runs Cloudflare's connector and shows its
-  status; needs two-step sign-in to be in force.
+- **Phone access (remote access)**, two ways, both needing two-step sign-in
+  to be in force:
+  - **Tailscale Funnel** (the default, Windows server app → Phone access):
+    one button installs Tailscale from Tailscale's package server if needed
+    (checksum checked, unattended mode so it works before anyone signs in to
+    Windows), signs in to Tailscale in the browser, records the address on
+    the server (which refuses without two-step sign-in), and turns Funnel on
+    for Tohyee's port in the background so it survives restarts; then shows
+    the `https://….ts.net` address with a QR code, Copy address, and Turn
+    off. Tohyee doesn't store any Tailscale login. The server tests cover
+    requests arriving through Funnel; the Tailscale steps themselves still
+    need trying on a real Windows computer.
+  - **Cloudflare Tunnel** (advanced, your own domain): paste the tunnel
+    token, Tohyee runs Cloudflare's connector and shows its status.
 - **Update check** against GitHub releases.
 
 ## Not built yet, on purpose

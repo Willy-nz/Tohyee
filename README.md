@@ -171,14 +171,27 @@ On the server, unpack the bundle, set `DATABASE_URL`, `TOHYEE_SECRET_KEY`
 Put it behind HTTPS (e.g. Caddy or nginx) if it's reachable beyond your own
 network.
 
-**From anywhere (phone or laptop):** Remote access in the server settings connects Tohyee
-to a free Cloudflare Tunnel (you need a domain on Cloudflare), so it has an
-https address without opening ports on your router. Everyone signs in with
-a password and an authenticator app (two-step sign-in), which is required
-whenever `TOHYEE_SECRET_KEY` is set (the installers set it). Set up Email in
-the server settings too, for security alerts and lost-phone reset links. The Windows
-installer and Docker image include Cloudflare's `cloudflared`; on Linux,
-install it or set `TOHYEE_CLOUDFLARED_PATH`.
+**From anywhere (phone or laptop):** there are two ways, and either gives
+Tohyee an https address without opening ports on your router.
+
+- **The easy way, Tailscale Funnel (Windows):** in the Tohyee server app, open
+  **Phone access** and press **Set up phone access**. It installs Tailscale if
+  needed (Windows asks for permission), you sign in to Tailscale once in your
+  browser (free for personal use), and it turns on Funnel for Tohyee. The app
+  then shows your address (`https://<computer>.<tailnet>.ts.net`) with a QR
+  code to scan with your phone. Tohyee never sees your Tailscale login.
+- **The advanced way, Cloudflare Tunnel:** your own address on your own domain
+  (you need a domain on Cloudflare). Remote access in the server settings (on
+  Windows, under Phone access → Cloudflare Tunnel) takes the tunnel token and
+  Tohyee runs Cloudflare's connector. The Windows installer and Docker image
+  include Cloudflare's `cloudflared`; on Linux, install it or set
+  `TOHYEE_CLOUDFLARED_PATH`.
+
+Either way, everyone signs in with a password and an authenticator app
+(two-step sign-in), which is required whenever `TOHYEE_SECRET_KEY` is set (the
+installers set it), and phone access can't be turned on without it. Set up
+Email in the server settings too, for security alerts and lost-phone reset
+links.
 
 **Backups:** every night (2am by default) Tohyee backs up each organisation,
 and its own database of users and settings, into files in the backup folder:
