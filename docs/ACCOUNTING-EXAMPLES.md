@@ -4253,10 +4253,10 @@ journal dated the conversion date, origin "Opening balances", which can't be
 corrected like a manual journal. Accounts receivable, accounts payable and
 inventory aren't posted from the trial balance, because the open invoices,
 open bills and stock on hand make them up: their trial balance lines go to
-**3900 Historical adjustment** instead, an equity account (decided with
-Jess, 30 Sep 2026: equity, like NetSuite's "Opening Balance" and Xero's
-"Historical Adjustment"; Tohyee uses Xero's name because most organisations
-coming to Tohyee come from Xero, and its bookkeepers know it). Each open
+**3900 Opening balance** instead, an equity account (decided with Jess,
+30 Sep 2026: equity and named like NetSuite's "Opening Balance" account;
+Xero calls its equivalent "Historical Adjustment", and importing either name
+maps to it). Each open
 invoice then posts Dr accounts receivable / Cr 3900, each open bill Dr 3900 /
 Cr accounts payable, and the stock Dr inventory / Cr 3900, all dated the
 conversion date. So 3900 ends at 0.00, and accounts receivable, accounts
@@ -4337,7 +4337,7 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
 20/04/2026, **460.00**. Stock: MUG 40 worth **800.00**; VASE 3 worth
 **10.00**.
 
-- **IM1** The starting chart of accounts has **3900 Historical adjustment**
+- **IM1** The starting chart of accounts has **3900 Opening balance**
   (equity, "Used by Tohyee"); an organisation without one gets it at 3900,
   or the next free code up to 3999, the first time opening balances are
   posted. It's the account the three sub-ledger lines clear through, and is
@@ -4536,11 +4536,13 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
 - **IM21** The conversion account for organisations that had the old one:
   migration 0036 changes **2990 Conversion clearing** (current liability)
   to **3900 Historical adjustment** (equity; the next free code up to 3999
-  if 3900 is taken; the name only if it was still "Conversion clearing")
+  if 3900 is taken; the name only if it was still "Conversion clearing"),
+  and migration 0038 then renames it **Opening balance** if it still has
+  that starting name
   when nothing is posted to it. If something is (opening balances already
   brought in), it's left as it is, because an account's class can't change
   once it has postings; it's still used and still 0.00. Organisations with
-  no conversion account get 3900 Historical adjustment. Importing a chart
+  no conversion account get 3900 Opening balance. Importing a chart
   of accounts with `840,Historical Adjustment,Current Liability` (Xero's)
   re-codes 3900 to 840, named Historical Adjustment, and it **stays Equity**
   ("it stays Equity, not Current liability") rather than refusing the file.
@@ -4570,17 +4572,16 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
 
 Decided with Jess (30 Sep 2026): open invoices and bills carry their GST, as
 in Xero (IM13, IM17-IM20), and the conversion account is equity (IM1, IM21).
+Also decided, following NetSuite: the trial balance's GST line is taken as
+already including the GST in the open invoices and bills (NetSuite
+migrations load open invoices and bills without tax, against an equity
+opening balance account, so the tax balance comes only from the trial
+balance), and the conversion account is named "Opening balance" (NetSuite's
+name), code 3900 (NetSuite doesn't fix a number).
 
-- **GST account at the conversion**: Tohyee takes the trial balance's GST
-  line as including the GST in the open invoices and bills (as Xero's,
-  MYOB's and Tohyee's own GST accounts do) and shows the split (IM17). Is
-  that right for the systems your clients come from, or do some keep that
-  GST in a separate account that should be added in automatically?
 - **Rounding allowance**: GST within 0.05 of 3/23 of what's owed is one
   standard-rated line; more than 0.05 less is split in two (IM20). Is 0.05
   right?
-- **Name and code**: 3900 "Historical adjustment" (Xero's name), or would
-  you rather "Opening balance adjustments", or another code?
 - **Bank balances**: should the bank account's opening balance be the
   ledger balance (as built) with unpresented items entered as opening
   transactions, as in Xero?
