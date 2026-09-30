@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import type { SendingAccount } from "@/lib/email/settings";
+import type { SendingAccount, SmtpAccount } from "@/lib/email/settings";
 
 /**
  * Sending through an organisation's own SMTP account (nodemailer), and
@@ -12,15 +12,22 @@ export type OutgoingMessage = {
   to: string[];
   cc: string[];
   subject: string;
+  /** The plain-text version, for mail clients that want it. */
   text: string;
-  /** The document's own PDF; the only attachment Tohyee ever adds. */
+  /** The HTML version (`html.ts`), when there is one. */
+  html: string | null;
+  /** The document's own PDF; the only file Tohyee ever attaches. */
   attachment: { fileName: string; bytes: Uint8Array } | null;
+  /** Images the HTML shows by Content-ID (the organisation's logo), never remote images. */
+  inline: InlineImage[];
   messageId: string;
 };
 
+export type InlineImage = { cid: string; fileName: string; contentType: "image/png" | "image/jpeg"; bytes: Uint8Array };
+
 export type SendResult = { messageId: string; response: string; rejected: string[] };
 
-export function createAccountTransport(account: SendingAccount) {
+export function createAccountTransport(account: SmtpAccount) {
   return nodemailer.createTransport({
     host: account.host,
     port: account.port,
@@ -51,7 +58,7 @@ export function newMessageId(account: Pick<SendingAccount, "fromAddress">, organ
   return `<tohyee.${organisationId.replace(/[^A-Za-z0-9-]/g, "")}.${emailId}.${Date.now().toString(36)}${random}@${domain}>`;
 }
 
-export async function sendMessage(transport: AccountTransport, account: SendingAccount, message: OutgoingMessage): Promise<SendResult> {
+export async function sendMessage(transport: AccountTransport, account: SmtpAccount, message: OutgoingMessage): Promise<SendResult> {
   const info = await transport.sendMail({
     from: fromHeader(account),
     sender: account.fromAddress,
@@ -60,11 +67,24 @@ export async function sendMessage(transport: AccountTransport, account: SendingA
     cc: message.cc.length > 0 ? message.cc : undefined,
     subject: message.subject,
     text: message.text,
+    ...(message.html ? { html: message.html } : {}),
     messageId: message.messageId,
     envelope: { from: account.fromAddress, to: [...message.to, ...message.cc] },
-    attachments: message.attachment
-      ? [{ filename: message.attachment.fileName, content: Buffer.from(message.attachment.bytes), contentType: "application/pdf" }]
-      : [],
+    attachments: [
+      ...(message.attachment
+        ? [{ filename: message.attachment.fileName, content: Buffer.from(message.attachment.bytes), contentType: "application/pdf" }]
+        : []),
+      // Inline images go in a multipart/related part with the HTML, shown by Content-ID.
+      ...(message.html
+        ? message.inline.map((image) => ({
+            filename: image.fileName,
+            content: Buffer.from(image.bytes),
+            contentType: image.contentType,
+            cid: image.cid,
+            contentDisposition: "inline" as const,
+          }))
+        : []),
+    ],
   });
   const rejected = ((info.rejected ?? []) as Array<string | { address: string }>).map((entry) => (typeof entry === "string" ? entry : entry.address));
   return { messageId: info.messageId ?? message.messageId, response: String(info.response ?? ""), rejected };
@@ -78,7 +98,7 @@ type SmtpError = Error & { code?: string; responseCode?: number; response?: stri
  * that usually go away (the server was busy or couldn't be reached); a
  * wrong password or a refused address won't fix itself, so it isn't retried.
  */
-export function explainSmtpError(error: unknown, account: Pick<SendingAccount, "host" | "port" | "security">): { message: string; retryable: boolean } {
+export function explainSmtpError(error: unknown, account: Pick<SmtpAccount, "host" | "port" | "security">): { message: string; retryable: boolean } {
   const err = (error instanceof Error ? error : new Error(String(error))) as SmtpError;
   const code = err.code ?? "";
   const said = (err.response ?? err.message ?? "").replace(/\s+/g, " ").trim().slice(0, 300);

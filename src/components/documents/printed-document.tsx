@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { OrganisationLogo } from "@/components/organisation/logo";
 import { formatRate, formatUnitPrice } from "@/lib/documents/format";
 import { PrintButton } from "@/components/reports/ledger-reports";
 import { Card, Notice, ui } from "@/components/ui";
@@ -63,6 +64,7 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
       <article className={ui.reportPaper}>
         <header className={ui.reportPaperHeader} style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           <div>
+            <OrganisationLogo organisationId={organisationId} />
             <h2 className={ui.reportPaperTitle}>{labels.title}</h2>
             <p style={{ margin: 0, whiteSpace: "pre-line" }}>
               <strong>{doc.customer.name}</strong>

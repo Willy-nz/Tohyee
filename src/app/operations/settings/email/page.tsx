@@ -1,19 +1,21 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { type FormEvent, Suspense, useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
-import type { OrganisationEmailSettings, SmtpSecurity } from "@/lib/email/settings";
+import type { OrganisationEmailSettings, SendingMethod, SmtpSecurity } from "@/lib/email/settings";
 import { EMAIL_KIND_LABELS, type EmailTemplate, PLACEHOLDERS } from "@/lib/email/templates";
 import { formatDateTime, personName } from "@/lib/format";
 
 /**
  * Settings › Email (admins): the organisation's own email account, which
  * invoices, quotes, credit notes, purchase orders and statements are sent
- * from, and the templates each email starts with.
+ * from (a Microsoft 365 / Outlook mailbox an admin signs in to, or any SMTP
+ * account), and the templates each email starts with.
  */
 
 type Preset = "gmail" | "microsoft" | "other";
@@ -53,10 +55,10 @@ function PresetHelp({ preset }: { preset: Preset }) {
   if (preset === "microsoft") {
     return (
       <Notice tone="info">
-        <strong>Microsoft 365 (Outlook for business):</strong> use the mailbox&apos;s email address and password, or an app password if your organisation
-        uses them. A Microsoft 365 admin must turn on <strong>Authenticated SMTP</strong> for this mailbox (Microsoft 365 admin centre › Users › the
-        user › Mail › Manage email apps). Microsoft is phasing out passwords for this kind of sending (new Microsoft 365 organisations can&apos;t use
-        them from 2027). Personal Outlook.com and Hotmail accounts no longer accept passwords from other apps, so they can&apos;t be used here.
+        <strong>Microsoft 365 with a password:</strong> Microsoft is retiring passwords for this kind of sending, and personal Outlook.com and Hotmail
+        accounts already refuse them, so choose <strong>Microsoft 365 / Outlook (sign in)</strong> above instead where you can. If you still use a
+        password: the mailbox&apos;s email address and password (or an app password), and a Microsoft 365 admin must turn on{" "}
+        <strong>Authenticated SMTP</strong> for this mailbox (Microsoft 365 admin centre › Users › the user › Mail › Manage email apps).
       </Notice>
     );
   }
@@ -70,6 +72,7 @@ function PresetHelp({ preset }: { preset: Preset }) {
 
 function AccountForm({ organisationId, settings, onSaved }: { organisationId: string; settings: OrganisationEmailSettings; onSaved: (message: string) => void }) {
   const [preset, setPreset] = useState<Preset>(presetOf(settings.host));
+  const replacesMicrosoft = settings.sendingMethod === "microsoft" && settings.microsoft !== null;
   const [fromName, setFromName] = useState(settings.fromName ?? "");
   const [fromAddress, setFromAddress] = useState(settings.fromAddress ?? "");
   const [replyTo, setReplyTo] = useState(settings.replyTo ?? "");
@@ -124,13 +127,16 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
       {!settings.secretsAvailable ? (
         <Notice tone="error">This server has no TOHYEE_SECRET_KEY, so it can&apos;t keep an email password safely. A server admin needs to set it first.</Notice>
       ) : null}
+      {replacesMicrosoft ? (
+        <Notice tone="info">Documents are sent from the Microsoft mailbox {settings.microsoft?.email} now. Saving SMTP details here switches to SMTP.</Notice>
+      ) : null}
       {settings.hasPassword && !settings.passwordReadable ? (
         <Notice tone="warning">The saved password can&apos;t be read on this server any more (was the server&apos;s key changed?). Enter it again.</Notice>
       ) : null}
       <Field label="Email account">
         <select value={preset} onChange={(event) => choose(event.target.value as Preset)}>
           <option value="gmail">Gmail or Google Workspace</option>
-          <option value="microsoft">Microsoft 365 (Outlook for business)</option>
+          <option value="microsoft">Microsoft 365 with a password</option>
           <option value="other">Other (any SMTP server)</option>
         </select>
       </Field>
@@ -140,7 +146,7 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
           <input value={fromName} onChange={(event) => setFromName(event.target.value)} maxLength={100} required />
         </Field>
         <Field label="From address" hint="Blank uses the username.">
-          <input type="email" value={fromAddress} onChange={(event) => setFromAddress(event.target.value)} maxLength={254} placeholder={username} />
+          <input type="email" value={settings.sendingMethod === "microsoft" && fromAddress === settings.microsoft?.email ? "" : fromAddress} onChange={(event) => setFromAddress(event.target.value)} maxLength={254} placeholder={username} />
         </Field>
         <Field label="Reply-to address" hint="Optional. Where replies go, if not the from address.">
           <input type="email" value={replyTo} onChange={(event) => setReplyTo(event.target.value)} maxLength={254} />
@@ -178,13 +184,153 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
         <Button type="submit" disabled={busy || !settings.secretsAvailable}>
           Save
         </Button>
-        {settings.hasPassword ? (
+        {settings.hasPassword || settings.microsoft ? (
           <Button variant="danger" onClick={() => void remove()}>
-            Remove
+            Remove everything
           </Button>
         ) : null}
       </div>
     </form>
+  );
+}
+
+const METHOD_LABELS: Record<SendingMethod, string> = {
+  microsoft: "Microsoft 365 / Outlook (sign in)",
+  smtp: "SMTP: Gmail, or any email provider, with a password",
+};
+
+/** The organisation's Microsoft app (shared with the CRM's mail sync), which the mailbox signs in through. */
+function MicrosoftAppForm({ organisationId, settings, onSaved }: { organisationId: string; settings: OrganisationEmailSettings; onSaved: (message: string) => void }) {
+  const [clientId, setClientId] = useState(settings.microsoftApp.clientId ?? "");
+  const [secret, setSecret] = useState("");
+  const [tenant, setTenant] = useState(settings.microsoftApp.tenant);
+  const [error, setError] = useState<string | null>(null);
+  const redirect = typeof window === "undefined" ? "/api/email/microsoft/callback" : `${window.location.origin}/api/email/microsoft/callback`;
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await api("/api/crm/mail/settings", { method: "PUT", body: { organisationId, microsoftClientId: clientId, microsoftClientSecret: secret, microsoftTenant: tenant } });
+      onSaved("Microsoft app saved. Now connect the mailbox.");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+  return (
+    <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
+      <Notice tone="info">
+        <strong>1. The organisation&apos;s Microsoft app.</strong> Tohyee signs in through an app you register once, so no one else&apos;s app ever has access. In
+        the Microsoft Entra admin centre (entra.microsoft.com) › App registrations › New registration: any name (&ldquo;Tohyee&rdquo;); for a business
+        mailbox choose &ldquo;Accounts in this organizational directory only&rdquo; and put your domain as the tenant below, or for Outlook.com choose
+        &ldquo;Accounts in any organizational directory and personal Microsoft accounts&rdquo; and leave the tenant as common. Add a <strong>Web</strong> redirect
+        URI of <code>{redirect}</code>. Under API permissions add Microsoft Graph delegated permissions <strong>Mail.Send</strong>, User.Read and
+        offline_access. Under Certificates &amp; secrets make a client secret and paste its value below. The CRM&apos;s email sync uses the same app.
+      </Notice>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <div className={ui.grid3}>
+        <Field label="Application (client) ID">
+          <input value={clientId} onChange={(event) => setClientId(event.target.value)} maxLength={300} autoComplete="off" />
+        </Field>
+        <Field label="Client secret" hint={settings.microsoftApp.secretSaved ? "Saved, and never shown again. Leave blank to keep it." : "Stored encrypted on this server."}>
+          <input type="password" value={secret} onChange={(event) => setSecret(event.target.value)} maxLength={500} autoComplete="new-password" />
+        </Field>
+        <Field label="Tenant" hint="common, or your domain (like glimmers.onmicrosoft.com).">
+          <input value={tenant} onChange={(event) => setTenant(event.target.value)} maxLength={100} />
+        </Field>
+      </div>
+      <div className={ui.actions}>
+        <Button type="submit" variant="secondary" disabled={!settings.secretsAvailable}>
+          Save Microsoft app
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** Step 2: signing in to the mailbox, its from name and reply-to, and disconnecting. */
+function MicrosoftMailbox({ organisationId, settings, onSaved }: { organisationId: string; settings: OrganisationEmailSettings; onSaved: (message: string) => void }) {
+  const [fromName, setFromName] = useState(settings.fromName ?? "");
+  const [replyTo, setReplyTo] = useState(settings.replyTo ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const appReady = Boolean(settings.microsoftApp.clientId) && settings.microsoftApp.secretSaved;
+  const mailbox = settings.microsoft;
+  async function connect() {
+    setBusy(true);
+    setError(null);
+    try {
+      const { url } = await api<{ url: string }>("/api/email/microsoft/connect", { method: "POST", body: { organisationId } });
+      window.location.assign(url);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setBusy(false);
+    }
+  }
+  async function disconnect() {
+    if (!window.confirm(`Disconnect ${mailbox?.email}? Documents can't be emailed through it until it's connected again.`)) return;
+    setError(null);
+    try {
+      await api("/api/email/microsoft/disconnect", { method: "POST", body: { organisationId } });
+      onSaved(settings.smtpSaved ? "Disconnected. Documents are sent by SMTP again." : "Disconnected.");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+  async function use(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await api("/api/email/settings", { method: "PUT", body: { organisationId, sendingMethod: "microsoft", fromName, replyTo } });
+      onSaved(settings.sendingMethod === "microsoft" ? "Saved." : `Documents are now sent from ${mailbox?.email}.`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <Notice tone="info">
+        <strong>2. The mailbox.</strong> An admin signs in to the mailbox documents should come from, once. Tohyee can then only send as it (Mail.Send);
+        it can&apos;t read it. Sent emails also appear in its Sent Items.
+      </Notice>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {mailbox ? (
+        <>
+          <p style={{ margin: 0 }}>
+            Connected: <strong>{mailbox.email}</strong>{" "}
+            <span className={ui.muted}>
+              by {personName(mailbox, "connectedBy")} on {formatDateTime(mailbox.connectedAt)}
+            </span>
+          </p>
+          {!mailbox.tokensReadable ? <Notice tone="warning">The mailbox&apos;s sign-in can&apos;t be read on this server any more. Connect it again.</Notice> : null}
+          <form onSubmit={(event) => void use(event)} style={{ display: "grid", gap: 12 }}>
+            <div className={ui.grid2}>
+              <Field label="From name" hint="Microsoft shows the mailbox's own display name; this is used in Tohyee's emails and history.">
+                <input value={fromName} onChange={(event) => setFromName(event.target.value)} maxLength={100} required />
+              </Field>
+              <Field label="Reply-to address" hint="Optional. Where replies go, if not the mailbox.">
+                <input type="email" value={replyTo} onChange={(event) => setReplyTo(event.target.value)} maxLength={254} />
+              </Field>
+            </div>
+            <div className={ui.actions}>
+              <Button type="submit">{settings.sendingMethod === "microsoft" ? "Save" : "Send from this mailbox"}</Button>
+              <Button variant="secondary" onClick={() => void connect()} disabled={busy || !appReady}>
+                Connect another mailbox
+              </Button>
+              <Button variant="danger" onClick={() => void disconnect()}>
+                Disconnect
+              </Button>
+            </div>
+          </form>
+        </>
+      ) : (
+        <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+          <Button onClick={() => void connect()} disabled={busy || !appReady || !settings.secretsAvailable}>
+            Connect Microsoft account
+          </Button>
+          {!appReady ? <span className={ui.muted}>Save the Microsoft app first.</span> : null}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -271,9 +417,15 @@ function TemplateForm({ organisationId, template, onSaved }: { organisationId: s
 function EmailSettings({ organisationId }: { organisationId: string }) {
   const loaded = useApiData<{ settings: OrganisationEmailSettings; templates: EmailTemplate[] }>("/api/email/settings", { organisationId });
   const [message, setMessage] = useState<string | null>(null);
+  const [choice, setChoice] = useState<SendingMethod | null>(null);
+  // Coming back from Microsoft's sign-in (?connected= or ?error=).
+  const params = useSearchParams();
+  const connected = params.get("connected");
+  const problem = message ? null : params.get("error");
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!loaded.data) return <p className={ui.muted}>Loading…</p>;
   const { settings, templates } = loaded.data;
+  const method = choice ?? settings.sendingMethod;
   const saved = (text: string) => {
     setMessage(text);
     loaded.reload();
@@ -281,17 +433,38 @@ function EmailSettings({ organisationId }: { organisationId: string }) {
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
+      {!message && connected ? <Notice tone="success">Connected {connected}. Documents are now sent from it; send a test email to check.</Notice> : null}
+      {problem ? <Notice tone="error">{problem}</Notice> : null}
       <Card
         title="Email account"
         description="Invoices, quotes, credit notes, purchase orders and statements are emailed from this account, so they come from your address and replies come back to you."
-        actions={settings.configured ? <Badge tone="green">Set up</Badge> : <Badge tone="amber">Not set up</Badge>}
+        actions={settings.configured ? <Badge tone="green">Sending with {settings.sendingMethod === "microsoft" ? "Microsoft" : "SMTP"}</Badge> : <Badge tone="amber">Not set up</Badge>}
       >
         {settings.updatedAt ? (
           <p className={ui.muted} style={{ margin: 0 }}>
             Saved by {personName(settings, "updatedBy")} on {formatDateTime(settings.updatedAt)}.
           </p>
         ) : null}
-        <AccountForm key={settings.updatedAt ?? "new"} organisationId={organisationId} settings={settings} onSaved={saved} />
+        <Field label="How documents are sent">
+          <select value={method} onChange={(event) => setChoice(event.target.value as SendingMethod)}>
+            {(Object.keys(METHOD_LABELS) as SendingMethod[]).map((value) => (
+              <option key={value} value={value}>
+                {METHOD_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {method === "microsoft" ? (
+          <div style={{ display: "grid", gap: 16 }}>
+            <MicrosoftAppForm key={`app:${settings.microsoftApp.clientId ?? ""}:${settings.microsoftApp.tenant}`} organisationId={organisationId} settings={settings} onSaved={saved} />
+            <MicrosoftMailbox key={`mailbox:${settings.updatedAt ?? "new"}`} organisationId={organisationId} settings={settings} onSaved={saved} />
+            <p className={ui.muted} style={{ margin: 0 }}>
+              Google accounts can&apos;t sign in this way yet: use SMTP with an app password for Gmail.
+            </p>
+          </div>
+        ) : (
+          <AccountForm key={settings.updatedAt ?? "new"} organisationId={organisationId} settings={settings} onSaved={saved} />
+        )}
       </Card>
       <TestEmail key={`test-${settings.updatedAt ?? "new"}`} organisationId={organisationId} settings={settings} onTested={loaded.reload} />
       <Card
@@ -310,7 +483,9 @@ export default function EmailSettingsPage() {
   return (
     <Page>
       <PageHeader title="Email" description="Send documents from the organisation's own email account." />
-      <RequireOrganisation>{(organisationId) => <EmailSettings organisationId={organisationId} />}</RequireOrganisation>
+      <Suspense fallback={null}>
+        <RequireOrganisation>{(organisationId) => <EmailSettings organisationId={organisationId} />}</RequireOrganisation>
+      </Suspense>
     </Page>
   );
 }

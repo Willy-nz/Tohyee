@@ -215,9 +215,13 @@ export async function prepareDocumentEmail(tx: OrgTx, input: { kind?: unknown; i
     configured: account.configured,
     notice: account.configured
       ? null
-      : account.hasPassword
-        ? "The saved email password can't be read on this server any more (was TOHYEE_SECRET_KEY changed?). An admin needs to enter it again in Settings > Email."
-        : NOT_SET_UP,
+      : account.sendingMethod === "microsoft"
+        ? account.microsoft?.tokensReadable
+          ? "The organisation's Microsoft app isn't set up. An admin needs to enter it in Settings > Email."
+          : "The Microsoft mailbox's sign-in can't be read on this server any more (was TOHYEE_SECRET_KEY changed?). An admin needs to connect it again in Settings > Email."
+        : account.hasPassword
+          ? "The saved email password can't be read on this server any more (was TOHYEE_SECRET_KEY changed?). An admin needs to enter it again in Settings > Email."
+          : NOT_SET_UP,
     from: account.configured ? `${account.fromName} <${account.fromAddress}>` : null,
     replyTo: account.configured ? (account.replyTo ?? account.fromAddress) : null,
     to: subject.defaultTo,
@@ -247,6 +251,8 @@ export type DocumentEmail = {
   lastError: string | null;
   messageId: string | null;
   smtpResponse: string | null;
+  /** How it was sent: through SMTP or the Microsoft mailbox (null until sent). */
+  sentVia: "smtp" | "microsoft" | null;
   requestedByEmail: string;
   createdAt: string;
   finishedAt: string | null;
@@ -269,6 +275,7 @@ type EmailRow = {
   last_error: string | null;
   message_id: string | null;
   smtp_response: string | null;
+  sent_via: "smtp" | "microsoft" | null;
   requested_by_email: string;
   created_at: string;
   finished_at: string | null;
@@ -278,7 +285,7 @@ function emailColumns(prefix = ""): string {
   const p = prefix ? `${prefix}.` : "";
   return `${p}id::text as id, ${p}request_hash, ${p}document_kind, ${p}document_id::text as document_id, ${p}contact_id::text as contact_id,
     ${p}batch_id::text as batch_id, ${p}status, ${p}to_addresses, ${p}cc_addresses, ${p}subject, ${p}attachment_name, ${p}attempts,
-    ${p}next_attempt_at, ${p}last_error, ${p}message_id, ${p}smtp_response, ${p}requested_by_email, ${p}created_at, ${p}finished_at`;
+    ${p}next_attempt_at, ${p}last_error, ${p}message_id, ${p}smtp_response, ${p}sent_via, ${p}requested_by_email, ${p}created_at, ${p}finished_at`;
 }
 const EMAIL_COLUMNS = emailColumns();
 
@@ -299,6 +306,7 @@ function toEmail(row: EmailRow): DocumentEmail {
     lastError: row.last_error,
     messageId: row.message_id,
     smtpResponse: row.smtp_response,
+    sentVia: row.sent_via,
     requestedByEmail: row.requested_by_email,
     createdAt: row.created_at,
     finishedAt: row.finished_at,

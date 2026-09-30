@@ -2,7 +2,7 @@ import type { PrintedDocument } from "@/lib/documents/print";
 import { formatRate, formatUnitPrice } from "@/lib/documents/format";
 import type { PrintKind } from "@/lib/documents/tax-invoice";
 import { formatDate, formatGstNumber, formatMoney, formatQuantity } from "@/lib/format";
-import { CONTENT_WIDTH, type Column, PdfWriter, type TableFooterRow } from "@/lib/pdf/writer";
+import { CONTENT_WIDTH, type Column, type PdfImage, PdfWriter, type TableFooterRow } from "@/lib/pdf/writer";
 import type { AgedAmounts } from "@/lib/reports/ageing";
 import type { ActivityStatement, OutstandingStatement } from "@/lib/reports/customer-statements";
 
@@ -49,14 +49,31 @@ export function statementFileName(statement: ActivityStatement | OutstandingStat
 }
 
 /** Two blocks side by side (left and right), moving down past the taller. */
-function sideBySide(writer: PdfWriter, left: (x: number, width: number) => void, right: (x: number, width: number) => void, gap = 16): void {
+async function sideBySide(
+  writer: PdfWriter,
+  left: (x: number, width: number) => void | Promise<void>,
+  right: (x: number, width: number) => void | Promise<void>,
+  gap = 16,
+): Promise<void> {
   const half = (CONTENT_WIDTH - gap) / 2;
   const top = writer.y;
-  left(0, half);
+  await left(0, half);
   const leftBottom = writer.y;
   writer.y = top;
-  right(half + gap, half);
+  await right(half + gap, half);
   writer.y = Math.max(leftBottom, writer.y);
+}
+
+/** The logo's box, top left: at most this many points wide and high. */
+const LOGO_BOX = { maxWidth: 170, maxHeight: 56 };
+
+/** The organisation's logo top left (when it has one), then the title under it. */
+async function logoAndTitle(writer: PdfWriter, logo: PdfImage | null | undefined, title: string, x: number, width: number): Promise<void> {
+  if (logo) {
+    await writer.image(logo, { x, ...LOGO_BOX, maxWidth: Math.min(LOGO_BOX.maxWidth, width) });
+    writer.space(10);
+  }
+  writer.text(title, { x, width, bold: true, size: 20, gap: 4 });
 }
 
 /** "Label   value" rows, labels muted, in a box at x. */
@@ -77,15 +94,15 @@ function nameAndAddress(writer: PdfWriter, name: string, address: string | null,
   if (address) writer.text(address, { x, width });
 }
 
-export async function renderDocumentPdf(doc: PrintedDocument): Promise<{ fileName: string; bytes: Uint8Array }> {
+export async function renderDocumentPdf(doc: PrintedDocument, options: { logo?: PdfImage | null } = {}): Promise<{ fileName: string; bytes: Uint8Array }> {
   const { labels } = doc;
   const heading = `${labels.title}${doc.number ? ` ${doc.number}` : ""}`;
   const writer = await PdfWriter.create({ title: heading, author: doc.organisation.name, footer: `${doc.organisation.name} · ${heading}` });
   const hasTax = doc.amountsMode !== "no_tax";
 
-  sideBySide(
+  await sideBySide(
     writer,
-    (x, width) => writer.text(labels.title, { x, width, bold: true, size: 20, gap: 4 }),
+    (x, width) => logoAndTitle(writer, options.logo, labels.title, x, width),
     (x, width) => {
       writer.text(doc.organisation.name, { x, width, bold: true, size: 10.5, align: "right" });
       if (doc.organisation.postalAddress) writer.text(doc.organisation.postalAddress, { x, width, align: "right" });
@@ -101,7 +118,7 @@ export async function renderDocumentPdf(doc: PrintedDocument): Promise<{ fileNam
   if (doc.expiryDate) rows.push(["Expires", formatDate(doc.expiryDate)]);
   if (doc.reference) rows.push(["Reference", doc.reference]);
   if (doc.organisation.gstNumber) rows.push(["GST number", formatGstNumber(doc.organisation.gstNumber)]);
-  sideBySide(
+  await sideBySide(
     writer,
     (x, width) => nameAndAddress(writer, doc.customer.name, doc.customer.billingAddress, x, width),
     (x, width) => details(writer, rows, x, width),
@@ -184,15 +201,16 @@ function ageingTable(writer: PdfWriter, ageing: AgedAmounts, currencyCode: strin
 export async function renderStatementPdf(
   statement: ActivityStatement | OutstandingStatement,
   organisation: { name: string; postalAddress: string | null },
+  options: { logo?: PdfImage | null } = {},
 ): Promise<{ fileName: string; bytes: Uint8Array }> {
   const title = statement.kind === "activity" ? "Activity statement" : "Statement";
   const period =
     statement.kind === "activity" ? `${formatDate(statement.from)} to ${formatDate(statement.to)}` : `Outstanding as at ${formatDate(statement.asAt)}`;
   const writer = await PdfWriter.create({ title: `${title} for ${statement.customer.name}`, author: organisation.name, footer: `${organisation.name} · ${title}` });
-  sideBySide(
+  await sideBySide(
     writer,
-    (x, width) => {
-      writer.text(title, { x, width, bold: true, size: 20, gap: 4 });
+    async (x, width) => {
+      await logoAndTitle(writer, options.logo, title, x, width);
       writer.text(period, { x, width, muted: true });
     },
     (x, width) => {

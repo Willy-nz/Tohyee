@@ -2,11 +2,16 @@ import { createHash } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { EMAIL_HISTORY_ENTITY, loadEmailSubject, type StatementOptions } from "@/lib/email/documents";
+import { emailSummary, renderEmailHtml } from "@/lib/email/html";
+import { saveRefreshedTokens } from "@/lib/email/microsoft";
+import { explainOpenError, openSender, type Sender } from "@/lib/email/sender";
 import { readSendingAccount, type SendingAccount } from "@/lib/email/settings";
-import { type AccountTransport, createAccountTransport, explainSmtpError, newMessageId, sendMessage } from "@/lib/email/smtp";
+import { type InlineImage, newMessageId } from "@/lib/email/smtp";
 import type { EmailDocumentKind } from "@/lib/email/templates";
 import { HttpError } from "@/lib/errors";
+import { formatGstNumber } from "@/lib/format";
 import { listAllOrganisations } from "@/lib/organisations/admin";
+import { emailLogo, getLogo } from "@/lib/organisations/logo";
 import { getOrganisation, type OrganisationRecord } from "@/lib/organisations/registry";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { renderDocumentPdf, renderStatementPdf } from "@/lib/pdf/documents";
@@ -19,9 +24,12 @@ import { loadMemberNames, type PeopleNames } from "@/lib/people/names";
  *    processes never send the same email),
  * 2. load the document and check it can still be sent (a transaction),
  *    then write its PDF,
- * 3. send it through the organisation's SMTP account (no transaction open),
+ * 3. send it through the organisation's SMTP account or Microsoft mailbox
+ *    (`sender.ts`; no transaction open), as HTML with the logo and a plain-
+ *    text version,
  * 4. record what happened (a transaction): `sent` with the SMTP server's
- *    message id and reply only when the server accepted it; a problem that
+ *    message id and reply (or Microsoft's request id) only when it was
+ *    accepted; a problem that
  *    usually passes (busy server, no connection) is tried again after 1, 5
  *    and 30 minutes; anything else, or a fourth failure, is `failed` with
  *    the reason in plain English. Each result goes in the document's history.
@@ -107,16 +115,24 @@ async function claim(tx: OrgTx, now: Date): Promise<ClaimedRow[]> {
 }
 
 type Outcome =
-  | { kind: "sent"; messageId: string; response: string; rejected: string[]; sha256: string; bytes: number }
+  | { kind: "sent"; via: "smtp" | "microsoft"; messageId: string; response: string; rejected: string[]; sha256: string; bytes: number }
   | { kind: "failed"; error: string; retryable: boolean };
 
 async function record(tx: OrgTx, row: ClaimedRow, outcome: Outcome, now: Date): Promise<"sent" | "failed" | "retrying"> {
   if (outcome.kind === "sent") {
     await tx.query(
       `update document_emails set status = 'sent', finished_at = now(), message_id = $2, smtp_response = $3, attachment_sha256 = $4,
-              attachment_bytes = $5, last_error = $6
+              attachment_bytes = $5, last_error = $6, sent_via = $7
         where id = $1`,
-      [row.id, outcome.messageId, outcome.response.slice(0, 1000), outcome.sha256, outcome.bytes, outcome.rejected.length > 0 ? `Refused by the email server: ${outcome.rejected.join(", ")}` : null],
+      [
+        row.id,
+        outcome.messageId,
+        outcome.response.slice(0, 1000),
+        outcome.sha256,
+        outcome.bytes,
+        outcome.rejected.length > 0 ? `Refused by the email server: ${outcome.rejected.join(", ")}` : null,
+        outcome.via,
+      ],
     );
     await auditEmail(tx, row, "document_email.sent", {
       to: row.to_addresses,
@@ -124,6 +140,7 @@ async function record(tx: OrgTx, row: ClaimedRow, outcome: Outcome, now: Date): 
       subject: row.subject,
       attachmentName: row.attachment_name,
       messageId: outcome.messageId,
+      sentVia: outcome.via,
       smtpResponse: outcome.response.slice(0, 300),
       rejected: outcome.rejected,
       requestedByEmail: row.requested_by_email,
@@ -142,35 +159,52 @@ async function record(tx: OrgTx, row: ClaimedRow, outcome: Outcome, now: Date): 
   return "failed";
 }
 
-async function attachmentFor(organisation: OrganisationRecord, people: PeopleNames, row: ClaimedRow): Promise<{ fileName: string; bytes: Uint8Array }> {
+type Content = { attachment: { fileName: string; bytes: Uint8Array }; html: string; inline: InlineImage[] };
+
+/**
+ * What goes in the email besides its text: the PDF (written from the
+ * document as it is now, which was checked can still be sent), and the HTML
+ * version with the organisation's logo as an inline image.
+ */
+async function contentFor(organisation: OrganisationRecord, people: PeopleNames, account: SendingAccount, row: ClaimedRow): Promise<Content> {
   const loaded = await withOrganisationTransaction(
     organisation,
     actorFor(row),
     async (tx) => {
       const subject = await loadEmailSubject(tx, row.document_kind, row.document_id, row.statement ?? undefined);
-      const settings = subject.statementData ? await getOrganisationSettings(tx) : null;
-      return { subject, settings };
+      return { subject, settings: await getOrganisationSettings(tx), logo: await getLogo(tx) };
     },
     { people },
   );
-  const { subject, settings } = loaded;
+  const { subject, settings, logo } = loaded;
   const pdf = subject.printed
-    ? await renderDocumentPdf(subject.printed)
-    : await renderStatementPdf(subject.statementData!, { name: settings!.displayName, postalAddress: settings!.postalAddress });
-  // The name shown when it was queued is the one it goes out with.
-  return { fileName: row.attachment_name, bytes: pdf.bytes };
+    ? await renderDocumentPdf(subject.printed, { logo })
+    : await renderStatementPdf(subject.statementData!, { name: settings.displayName, postalAddress: settings.postalAddress }, { logo });
+  const image = emailLogo(logo);
+  const html = renderEmailHtml({
+    subject: row.subject,
+    body: row.body,
+    organisation: {
+      name: settings.displayName,
+      postalAddress: settings.postalAddress,
+      gstNumber: settings.gstNumber ? formatGstNumber(settings.gstNumber) : null,
+      email: account.replyTo ?? account.fromAddress,
+    },
+    summary: emailSummary(row.document_kind, subject.values),
+    logo: image?.html ?? null,
+  });
+  return {
+    // The name shown when it was queued is the one it goes out with.
+    attachment: { fileName: row.attachment_name, bytes: pdf.bytes },
+    html,
+    inline: image ? [image.inline] : [],
+  };
 }
 
-async function sendOne(
-  organisation: OrganisationRecord,
-  people: PeopleNames,
-  account: SendingAccount,
-  transport: AccountTransport,
-  row: ClaimedRow,
-): Promise<Outcome> {
-  let attachment: { fileName: string; bytes: Uint8Array };
+async function sendOne(organisation: OrganisationRecord, people: PeopleNames, account: SendingAccount, sender: Sender, row: ClaimedRow): Promise<Outcome> {
+  let content: Content;
   try {
-    attachment = await attachmentFor(organisation, people, row);
+    content = await contentFor(organisation, people, account, row);
   } catch (error) {
     if (error instanceof HttpError) {
       return { kind: "failed", error: `It wasn't sent: ${error.message}`, retryable: false };
@@ -179,22 +213,25 @@ async function sendOne(
     return { kind: "failed", error: "Tohyee couldn't write the PDF to attach. Check the server logs.", retryable: false };
   }
   try {
-    const result = await sendMessage(transport, account, {
+    const result = await sender.send({
       to: row.to_addresses,
       cc: row.cc_addresses,
       subject: row.subject,
       text: row.body,
-      attachment,
+      html: content.html,
+      attachment: content.attachment,
+      inline: content.inline,
       messageId: newMessageId(account, organisation.id, row.id),
     });
     return {
       kind: "sent",
+      via: sender.via,
       ...result,
-      sha256: createHash("sha256").update(attachment.bytes).digest("hex"),
-      bytes: attachment.bytes.length,
+      sha256: createHash("sha256").update(content.attachment.bytes).digest("hex"),
+      bytes: content.attachment.bytes.length,
     };
   } catch (error) {
-    const explained = explainSmtpError(error, account);
+    const explained = sender.explain(error);
     return { kind: "failed", error: explained.message, retryable: explained.retryable };
   }
 }
@@ -220,16 +257,27 @@ export async function processOrganisationOutbox(organisation: OrganisationRecord
       { people },
     );
     if (rows.length === 0) break;
-    const transport = account ? createAccountTransport(account) : null;
+    // Opening a Microsoft sender may renew its sign-in (network, outside any transaction; the new tokens are saved in one of their own).
+    let sender: Sender | null = null;
+    let openError: { message: string; retryable: boolean } | null = accountError ? { message: `It wasn't sent: ${accountError}`, retryable: false } : null;
+    if (account) {
+      try {
+        sender = await openSender(account, (tokens) =>
+          withOrganisationTransaction(organisation, JOB_ACTOR, (tx) => saveRefreshedTokens(tx, account.fromAddress, tokens), { people }),
+        );
+      } catch (error) {
+        openError = explainOpenError(account, error);
+      }
+    }
     try {
       for (const row of rows) {
         const outcome: Outcome =
-          account && transport ? await sendOne(organisation, people, account, transport, row) : { kind: "failed", error: `It wasn't sent: ${accountError}`, retryable: false };
+          account && sender ? await sendOne(organisation, people, account, sender, row) : { kind: "failed", error: openError!.message, retryable: openError!.retryable };
         const recorded = await withOrganisationTransaction(organisation, actorFor(row), (tx) => record(tx, row, outcome, now), { people });
         result[recorded] += 1;
       }
     } finally {
-      transport?.close();
+      sender?.close();
     }
     if (options.now) break;
   }

@@ -8,16 +8,19 @@ import {
   type EmailDocumentKind,
   type EmailTemplate,
 } from "@/lib/email/templates";
+import { microsoftApp } from "@/lib/crm/mail/service";
+import type { ProviderApp } from "@/lib/crm/mail/providers";
 import { UnavailableError, ValidationError } from "@/lib/errors";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
 import { optionalString, requireOneOf, requireString } from "@/lib/validation";
 
 /**
  * An organisation's own email account for sending its documents (Settings >
- * Email, admins only), kept in the organisation's database. The password is
- * encrypted with TOHYEE_SECRET_KEY like the server's other secrets, only
- * decrypted by the background job that sends, and never returned to the
- * browser: screens only learn whether one is saved.
+ * Email, admins only), kept in the organisation's database: an SMTP account
+ * with a password, or a Microsoft 365 / Outlook mailbox an admin signed in
+ * to (`microsoft.ts`). The password and tokens are encrypted with
+ * TOHYEE_SECRET_KEY like the server's other secrets, only decrypted to send,
+ * and never returned to the browser: screens only learn whether one is saved.
  */
 
 export const SMTP_SECURITY = ["ssl", "starttls", "none"] as const;
@@ -26,8 +29,26 @@ export type SmtpSecurity = (typeof SMTP_SECURITY)[number];
 /** Plain connections (no TLS) are only allowed to a mail relay on the server computer itself. */
 export const LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1"];
 
+/** How documents are sent: SMTP (with a password), or a Microsoft 365 / Outlook mailbox an admin signed in to. */
+export const SENDING_METHODS = ["smtp", "microsoft"] as const;
+export type SendingMethod = (typeof SENDING_METHODS)[number];
+
 export type OrganisationEmailSettings = {
+  /** Emails can be sent with the chosen method. */
   configured: boolean;
+  sendingMethod: SendingMethod;
+  /** SMTP details are saved (whether or not SMTP is the method in use). */
+  smtpSaved: boolean;
+  /** The Microsoft mailbox connected for sending, if any (tokens are never returned). */
+  microsoft: {
+    email: string;
+    connectedAt: string;
+    connectedByEmail: string | null;
+    /** False when the saved tokens can't be decrypted (the server's key changed): connect again. */
+    tokensReadable: boolean;
+  } | null;
+  /** The organisation's Microsoft app (shared with the CRM's mail sync). */
+  microsoftApp: { clientId: string | null; secretSaved: boolean; tenant: string };
   fromName: string | null;
   fromAddress: string | null;
   replyTo: string | null;
@@ -49,11 +70,18 @@ type SettingsRow = {
   from_name: string;
   from_address: string;
   reply_to: string | null;
-  smtp_host: string;
-  smtp_port: number;
-  smtp_security: SmtpSecurity;
-  smtp_username: string;
-  smtp_password_ciphertext: string;
+  sending_method: SendingMethod;
+  smtp_host: string | null;
+  smtp_port: number | null;
+  smtp_security: SmtpSecurity | null;
+  smtp_username: string | null;
+  smtp_password_ciphertext: string | null;
+  microsoft_email: string | null;
+  microsoft_refresh_token_ciphertext: string | null;
+  microsoft_access_token_ciphertext: string | null;
+  microsoft_access_token_expires_at: string | Date | null;
+  microsoft_connected_by_email: string | null;
+  microsoft_connected_at: string | Date | null;
   updated_by_email: string;
   updated_at: string;
   last_test_at: string | null;
@@ -66,8 +94,16 @@ async function readRow(tx: OrgTx): Promise<SettingsRow | null> {
   return result.rows[0] ?? null;
 }
 
-function passwordReadable(ciphertext: string): boolean {
-  if (!secretsAvailable()) return false;
+async function microsoftAppSettings(tx: OrgTx): Promise<OrganisationEmailSettings["microsoftApp"]> {
+  const result = await tx.query<{ microsoft_client_id: string | null; microsoft_client_secret_ciphertext: string | null; microsoft_tenant: string }>(
+    "select microsoft_client_id, microsoft_client_secret_ciphertext, microsoft_tenant from crm_mail_settings where id = true",
+  );
+  const row = result.rows[0];
+  return { clientId: row?.microsoft_client_id ?? null, secretSaved: Boolean(row?.microsoft_client_secret_ciphertext), tenant: row?.microsoft_tenant ?? "common" };
+}
+
+function passwordReadable(ciphertext: string | null): boolean {
+  if (!ciphertext || !secretsAvailable()) return false;
   try {
     decryptSecret(ciphertext);
     return true;
@@ -78,9 +114,14 @@ function passwordReadable(ciphertext: string): boolean {
 
 export async function getOrganisationEmailSettings(tx: OrgTx): Promise<OrganisationEmailSettings> {
   const row = await readRow(tx);
+  const microsoftApp = await microsoftAppSettings(tx);
   if (!row) {
     return {
       configured: false,
+      sendingMethod: "smtp",
+      smtpSaved: false,
+      microsoft: null,
+      microsoftApp,
       fromName: null,
       fromAddress: null,
       replyTo: null,
@@ -97,16 +138,30 @@ export async function getOrganisationEmailSettings(tx: OrgTx): Promise<Organisat
     };
   }
   const readable = passwordReadable(row.smtp_password_ciphertext);
+  const tokensReadable = passwordReadable(row.microsoft_refresh_token_ciphertext);
+  const microsoftReady = tokensReadable && Boolean(microsoftApp.clientId) && microsoftApp.secretSaved;
   return {
-    configured: readable,
+    configured: row.sending_method === "microsoft" ? microsoftReady : readable,
+    sendingMethod: row.sending_method,
+    smtpSaved: row.smtp_host !== null,
+    microsoft:
+      row.microsoft_email && row.microsoft_connected_at
+        ? {
+            email: row.microsoft_email,
+            connectedAt: new Date(row.microsoft_connected_at).toISOString(),
+            connectedByEmail: row.microsoft_connected_by_email,
+            tokensReadable,
+          }
+        : null,
+    microsoftApp,
     fromName: row.from_name,
-    fromAddress: row.from_address,
+    fromAddress: row.sending_method === "microsoft" && row.microsoft_email ? row.microsoft_email : row.from_address,
     replyTo: row.reply_to,
     host: row.smtp_host,
     port: row.smtp_port,
     security: row.smtp_security,
     username: row.smtp_username,
-    hasPassword: true,
+    hasPassword: row.smtp_password_ciphertext !== null,
     passwordReadable: readable,
     secretsAvailable: secretsAvailable(),
     updatedAt: row.updated_at,
@@ -147,11 +202,29 @@ export async function updateOrganisationEmailSettings(
     username?: unknown;
     password?: unknown;
     clear?: unknown;
+    sendingMethod?: unknown;
   },
 ): Promise<OrganisationEmailSettings> {
   if (input.clear === true) {
     await tx.query("delete from organisation_email_settings");
     await writeAuditEvent(tx, { eventType: "email_settings.cleared", entityType: "email_settings", entityId: "email" });
+    return getOrganisationEmailSettings(tx);
+  }
+  if (input.sendingMethod !== undefined) {
+    // Switching between the saved SMTP account and the connected Microsoft mailbox (and the from name and reply-to they share).
+    const method = requireOneOf(input.sendingMethod, "sending method", SENDING_METHODS);
+    const current = await readRow(tx);
+    if (method === "microsoft" && !current?.microsoft_email) throw new ValidationError("Connect a Microsoft 365 or Outlook mailbox first.");
+    if (method === "smtp" && !current?.smtp_host) throw new ValidationError("Save the SMTP account's details first.");
+    const fromName = input.fromName === undefined ? current!.from_name : headerText(requireString(input.fromName, "from name", { maxLength: 100 }).replace(/["<>]/g, ""), 100);
+    if (!fromName) throw new ValidationError("Enter the from name, usually the organisation's name.");
+    const replyTo = input.replyTo === undefined ? current!.reply_to : optionalAddress(input.replyTo, "The reply-to address");
+    await tx.query(
+      `update organisation_email_settings set sending_method = $1, from_name = $2, reply_to = $3, updated_by_email = $4, updated_at = now(),
+              last_test_at = null, last_test_ok = null, last_test_error = null`,
+      [method, fromName, replyTo, tx.actor.email],
+    );
+    await writeAuditEvent(tx, { eventType: "email_settings.method_changed", entityType: "email_settings", entityId: "email", details: { sendingMethod: method, fromName, replyTo } });
     return getOrganisationEmailSettings(tx);
   }
   if (!secretsAvailable()) {
@@ -178,16 +251,18 @@ export async function updateOrganisationEmailSettings(
   // Google shows app passwords in groups of four ("abcd efgh ijkl mnop"); the spaces aren't part of it.
   const password = typed && host === "smtp.gmail.com" ? typed.replace(/\s+/g, "") : typed;
   if (!password && !current) throw new ValidationError("Enter the email account's password (for Gmail, an app password).");
+  if (!password && !current?.smtp_password_ciphertext) throw new ValidationError("Enter the email account's password (for Gmail, an app password).");
   if (!password && current && !passwordReadable(current.smtp_password_ciphertext)) {
     throw new ValidationError("The saved password can't be read on this server any more. Enter it again.");
   }
   const ciphertext = password ? encryptSecret(password) : current!.smtp_password_ciphertext;
+  // Saving the SMTP account makes it the way documents are sent.
   await tx.query(
-    `insert into organisation_email_settings (id, from_name, from_address, reply_to, smtp_host, smtp_port, smtp_security, smtp_username,
+    `insert into organisation_email_settings (id, from_name, from_address, reply_to, sending_method, smtp_host, smtp_port, smtp_security, smtp_username,
                                               smtp_password_ciphertext, updated_by_email, updated_at)
-     values (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+     values (true, $1, $2, $3, 'smtp', $4, $5, $6, $7, $8, $9, now())
      on conflict (id) do update set from_name = excluded.from_name, from_address = excluded.from_address, reply_to = excluded.reply_to,
-       smtp_host = excluded.smtp_host, smtp_port = excluded.smtp_port, smtp_security = excluded.smtp_security,
+       sending_method = 'smtp', smtp_host = excluded.smtp_host, smtp_port = excluded.smtp_port, smtp_security = excluded.smtp_security,
        smtp_username = excluded.smtp_username, smtp_password_ciphertext = excluded.smtp_password_ciphertext,
        updated_by_email = excluded.updated_by_email, updated_at = now(),
        last_test_at = null, last_test_ok = null, last_test_error = null`,
@@ -202,8 +277,9 @@ export async function updateOrganisationEmailSettings(
   return getOrganisationEmailSettings(tx);
 }
 
-/** What the sending code needs, password included. Server-side only; never returned by an API route. */
-export type SendingAccount = {
+/** What the sending code needs, password or tokens included. Server-side only; never returned by an API route. */
+export type SmtpAccount = {
+  method: "smtp";
   fromName: string;
   fromAddress: string;
   replyTo: string | null;
@@ -214,26 +290,67 @@ export type SendingAccount = {
   password: string;
 };
 
+export type MicrosoftAccount = {
+  method: "microsoft";
+  fromName: string;
+  /** The connected mailbox: Microsoft sends from it. */
+  fromAddress: string;
+  replyTo: string | null;
+  refreshToken: string;
+  accessToken: string | null;
+  accessTokenExpiresAt: string | null;
+  app: ProviderApp;
+};
+
+export type SendingAccount = SmtpAccount | MicrosoftAccount;
+
 export const NOT_SET_UP =
   "Email isn't set up for this organisation yet. An admin can set it up in Settings > Email with the organisation's own Gmail, Microsoft 365 or other email account.";
 
 export async function readSendingAccount(tx: OrgTx): Promise<SendingAccount> {
   const row = await readRow(tx);
   if (!row) throw new UnavailableError(NOT_SET_UP);
+  if (row.sending_method === "microsoft") {
+    let refreshToken: string;
+    let accessToken: string | null;
+    try {
+      refreshToken = decryptSecret(row.microsoft_refresh_token_ciphertext!);
+      accessToken = row.microsoft_access_token_ciphertext ? decryptSecret(row.microsoft_access_token_ciphertext) : null;
+    } catch {
+      throw new UnavailableError("The Microsoft mailbox's sign-in can't be read on this server (was TOHYEE_SECRET_KEY changed?). An admin needs to connect it again in Settings > Email.");
+    }
+    let app: ProviderApp;
+    try {
+      app = await microsoftApp(tx);
+    } catch {
+      throw new UnavailableError("The organisation's Microsoft app isn't set up (or its secret can't be read). An admin needs to enter it in Settings > Email.");
+    }
+    return {
+      method: "microsoft",
+      fromName: row.from_name,
+      fromAddress: row.microsoft_email!,
+      replyTo: row.reply_to,
+      refreshToken,
+      accessToken,
+      accessTokenExpiresAt: row.microsoft_access_token_expires_at ? new Date(row.microsoft_access_token_expires_at).toISOString() : null,
+      app,
+    };
+  }
   let password: string;
   try {
-    password = decryptSecret(row.smtp_password_ciphertext);
+    password = decryptSecret(row.smtp_password_ciphertext!);
   } catch {
     throw new UnavailableError("The saved email password can't be read on this server (was TOHYEE_SECRET_KEY changed?). An admin needs to enter it again in Settings > Email.");
   }
   return {
+    method: "smtp",
     fromName: row.from_name,
     fromAddress: row.from_address,
     replyTo: row.reply_to,
-    host: row.smtp_host,
-    port: row.smtp_port,
-    security: row.smtp_security,
-    username: row.smtp_username,
+    host: row.smtp_host!,
+    port: row.smtp_port!,
+    security: row.smtp_security!,
+    username: row.smtp_username!,
     password,
   };
 }

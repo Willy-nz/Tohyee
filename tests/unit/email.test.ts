@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { headerText, isEmailAddress, optionalAddress, requireAddresses, splitAddresses } from "@/lib/email/addresses";
+import { emailSummary, escapeHtml, paragraphs, renderEmailHtml } from "@/lib/email/html";
+import { explainGraphError, GraphSendError, graphMessage, sendViaGraph } from "@/lib/email/microsoft";
 import { explainSmtpError } from "@/lib/email/smtp";
+import { fitLogo, imageSize } from "@/lib/organisations/logo";
 import { checkTemplate, DEFAULT_TEMPLATES, EMAIL_DOCUMENT_KINDS, fillTemplate, unknownPlaceholders } from "@/lib/email/templates";
 import { safeFileName } from "@/lib/pdf/documents";
 
@@ -90,5 +93,82 @@ describe("attachment names", () => {
     expect(safeFileName('Statement A/B: "Cafe" 2026-07-31')).toBe("Statement A B Cafe 2026-07-31.pdf");
     expect(safeFileName("Statement Ōtepoti Café")).toBe("Statement Ōtepoti Café.pdf");
     expect(safeFileName("   ")).toBe("Document.pdf");
+  });
+});
+
+describe("HTML emails", () => {
+  const organisation = { name: "Glimmers & Co <NZ>", postalAddress: "PO Box 5\nDunedin", gstNumber: "123-456-789", email: "jess@glimmers.nz" };
+
+  it("escapes everything typed, keeps paragraphs and line breaks, and shows the summary and contact details", () => {
+    const html = renderEmailHtml({
+      subject: 'Invoice "1" <x>',
+      body: "Hi <script>alert(1)</script>,\n\nLine one\nLine two\n\n\nBye",
+      organisation,
+      summary: emailSummary("invoice", { number: "INV-0001", total: "316.25", "amount due": "100.00", "due date": "20 Aug 2026" }),
+      logo: { cid: "logo-abc@tohyee", width: 120, height: 40 },
+    });
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("Hi &lt;script&gt;alert(1)&lt;/script&gt;,");
+    expect(html).toContain("Line one<br>Line two");
+    expect(html.match(/<p /g)).toHaveLength(3);
+    expect(html).toContain("<title>Invoice &quot;1&quot; &lt;x&gt;</title>");
+    expect(html).toContain('src="cid:logo-abc@tohyee" width="120" height="40" alt="Glimmers &amp; Co &lt;NZ&gt;"');
+    expect(html).toContain("PO Box 5<br>Dunedin");
+    expect(html).toContain("GST number 123-456-789");
+    expect(html).not.toMatch(/https?:\/\//);
+    expect(emailSummary("invoice", { number: "INV-0001", total: "316.25", "amount due": "100.00", "due date": "20 Aug 2026" })).toEqual([
+      { label: "Invoice number", value: "INV-0001" },
+      { label: "Total", value: "$316.25" },
+      { label: "Amount due", value: "$100.00" },
+      { label: "Due date", value: "20 Aug 2026" },
+    ]);
+    expect(emailSummary("statement", { "statement date": "31 Jul 2026", balance: "316.25" })).toEqual([
+      { label: "Statement date", value: "31 Jul 2026" },
+      { label: "Balance owing", value: "$316.25" },
+    ]);
+    expect(paragraphs("  \n\n")).toEqual([]);
+    expect(escapeHtml(`&<>"'`)).toBe("&amp;&lt;&gt;&quot;&#39;");
+  });
+
+  it("without a logo the header is the organisation's name", () => {
+    const html = renderEmailHtml({ subject: "s", body: "b", organisation: { ...organisation, postalAddress: null, gstNumber: null, email: null }, summary: [], logo: null });
+    expect(html).not.toContain("<img");
+    expect(html).toContain("Glimmers &amp; Co &lt;NZ&gt;</div>");
+  });
+});
+
+describe("the organisation's logo", () => {
+  it("reads the size of PNG and JPEG images from their headers, and fits them in a box", () => {
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    expect(imageSize(png)).toEqual({ contentType: "image/png", width: 1, height: 1 });
+    // SOI, an APP0 segment, then SOF0 with height 40 and width 300.
+    const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x28, 0x01, 0x2c, 0x03, 0, 0, 0, 0, 0, 0]);
+    expect(imageSize(jpeg)).toEqual({ contentType: "image/jpeg", width: 300, height: 40 });
+    expect(imageSize(Buffer.from("GIF89a..........."))).toBeNull();
+    expect(fitLogo({ width: 800, height: 200 }, { width: 200, height: 64 })).toEqual({ width: 200, height: 50 });
+    expect(fitLogo({ width: 100, height: 40 }, { width: 200, height: 64 })).toEqual({ width: 100, height: 40 });
+  });
+});
+
+describe("sending through Microsoft Graph", () => {
+  it("refuses attachments over the 3 MB Graph takes in one request, and explains Graph's answers", async () => {
+    const message = {
+      to: ["a@b.nz"],
+      cc: [],
+      subject: "s",
+      text: "t",
+      html: null,
+      attachment: { fileName: "big.pdf", bytes: new Uint8Array(3 * 1024 * 1024 + 1) },
+      inline: [],
+      messageId: "<x@y>",
+    };
+    await expect(sendViaGraph("token", { fromAddress: "a@b.nz", replyTo: null }, message)).rejects.toThrow("more than the 3 MB Microsoft takes in one email");
+    expect(explainGraphError(new GraphSendError(429, "ApplicationThrottled: slow down")).retryable).toBe(true);
+    expect(explainGraphError(new GraphSendError(503, "busy")).retryable).toBe(true);
+    expect(explainGraphError(new GraphSendError(403, "ErrorAccessDenied: no")).message).toMatch(/Mail\.Send permission/);
+    expect(explainGraphError(new GraphSendError(400, "ErrorInvalidRecipients: bad")).retryable).toBe(false);
+    const body = graphMessage({ fromAddress: "a@b.nz", replyTo: null }, { ...message, attachment: null, text: "Plain" });
+    expect(body.message.body).toEqual({ contentType: "Text", content: "Plain" });
+    expect(body.message.replyTo).toEqual([{ emailAddress: { address: "a@b.nz" } }]);
   });
 });

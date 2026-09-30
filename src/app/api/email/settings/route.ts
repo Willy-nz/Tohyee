@@ -3,8 +3,10 @@ import { getOrganisationEmailSettings, listEmailTemplates, updateOrganisationEma
 
 /**
  * GET: the organisation's email account (never its password) and templates.
- * PUT: saves the account; a blank password keeps the saved one, `clear: true`
- * removes it. Admins only.
+ * PUT: saves the SMTP account (and makes it the way documents are sent); a
+ * blank password keeps the saved one, `clear: true` removes everything, and
+ * `sendingMethod` alone switches between SMTP and the connected Microsoft
+ * mailbox (with the from name and reply-to). Admins only.
  */
 export const GET = route(async (request) => {
   const result = await withOrganisation(request, searchParams(request).get("organisationId"), "admin", async (tx) => ({
@@ -27,6 +29,7 @@ export const PUT = route(async (request) => {
       username: body.username,
       password: body.password,
       clear: body.clear,
+      sendingMethod: body.sendingMethod,
     }),
   );
   return json({ settings });

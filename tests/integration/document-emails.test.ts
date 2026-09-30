@@ -1,3 +1,4 @@
+import { deflateSync } from "node:zlib";
 import type { AddressInfo } from "node:net";
 import { simpleParser, type ParsedMail } from "mailparser";
 import { SMTPServer } from "smtp-server";
@@ -11,9 +12,15 @@ import * as settingsRoute from "@/app/api/email/settings/route";
 import * as testRoute from "@/app/api/email/settings/test/route";
 import * as statementsRoute from "@/app/api/email/statements/route";
 import * as templatesRoute from "@/app/api/email/templates/route";
+import * as msCallbackRoute from "@/app/api/email/microsoft/callback/route";
+import * as msConnectRoute from "@/app/api/email/microsoft/connect/route";
+import * as msDisconnectRoute from "@/app/api/email/microsoft/disconnect/route";
+import * as logoRoute from "@/app/api/organisations/[organisationId]/logo/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createContact } from "@/lib/contacts/service";
 import { approveCreditNote, createCreditNote } from "@/lib/credit-notes/service";
+import { setMailFetchForTests } from "@/lib/crm/mail/providers";
+import { saveMailSettings } from "@/lib/crm/mail/service";
 import { createPerson } from "@/lib/crm/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
@@ -25,6 +32,7 @@ import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { approvePurchaseOrder, createPurchaseOrder } from "@/lib/purchase-orders/service";
 import { createQuote, finaliseQuote, getQuote } from "@/lib/quotes/service";
 import { getRecordExtras } from "@/lib/records/extras";
+import { decryptSecret } from "@/lib/secrets";
 import {
   apiRequest,
   createTestOrganisation,
@@ -94,7 +102,7 @@ describeWithDatabase("emailing documents", () => {
         stream.on("data", (chunk: Buffer) => chunks.push(chunk));
         stream.on("end", () => {
           if (mode === "busy") return callback(Object.assign(new Error("Too many messages, try again later"), { responseCode: 451 }));
-          simpleParser(Buffer.concat(chunks)).then(
+          simpleParser(Buffer.concat(chunks), { keepCidLinks: true }).then(
             (mail) => {
               received.push({
                 from: session.envelope.mailFrom ? session.envelope.mailFrom.address : "",
@@ -554,5 +562,251 @@ describeWithDatabase("emailing documents", () => {
     expect(sent).toMatchObject({ status: "sent", batchId: queuedRun.id });
     const contactHistory = await w.as((tx) => getRecordExtras(tx, "owner", "contact", w.kobe.id));
     expect(contactHistory.history.some((entry) => entry.eventType === "document_email.sent")).toBe(true);
+  });
+
+  // ------------------------------------------------------------------ logo and HTML emails
+
+  /** A 4 x 2 pixel PNG (red), made here so the test needs no files. */
+  function tinyPng(): Buffer {
+    const crcTable = Array.from({ length: 256 }, (_, n) => {
+      let c = n;
+      for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      return c >>> 0;
+    });
+    const crc = (bytes: Buffer) => {
+      let c = 0xffffffff;
+      for (const byte of bytes) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
+      return (c ^ 0xffffffff) >>> 0;
+    };
+    const chunk = (type: string, data: Buffer) => {
+      const length = Buffer.alloc(4);
+      length.writeUInt32BE(data.length);
+      const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+      const check = Buffer.alloc(4);
+      check.writeUInt32BE(crc(body));
+      return Buffer.concat([length, body, check]);
+    };
+    const header = Buffer.alloc(13);
+    header.writeUInt32BE(4, 0);
+    header.writeUInt32BE(2, 4);
+    header.set([8, 2, 0, 0, 0], 8);
+    const row = Buffer.from([0, ...Array.from({ length: 4 }, () => [220, 40, 60]).flat()]);
+    const pixels = deflateSync(Buffer.concat([row, row]));
+    return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header), chunk("IDAT", pixels), chunk("IEND", Buffer.alloc(0))]);
+  }
+
+  async function uploadLogo(org: string, content: Buffer, fileName = "logo.png", cookie = ownerCookie) {
+    return call(logoRoute.PUT, `/api/organisations/${org}/logo`, {
+      method: "PUT",
+      cookie,
+      body: { fileName, fileBase64: content.toString("base64") },
+      context: params({ organisationId: org }),
+    });
+  }
+
+  it("a logo is uploaded in Settings (PNG or JPEG, 512 KB at most) and stored in the organisation's database", async () => {
+    const w = await setup();
+    const png = tinyPng();
+    expect((await uploadLogo(w.org, png, "logo.png", bookkeeperCookie)).status).toBe(403);
+    const notImage = await uploadLogo(w.org, Buffer.from("%PDF-1.7 not a logo"), "logo.png");
+    expect([notImage.status, notImage.json.error]).toEqual([400, "logo.png isn't a PNG or JPEG image. Save the logo as PNG or JPEG."]);
+    const tooBig = await uploadLogo(w.org, Buffer.concat([png, Buffer.alloc(600 * 1024)]), "big.png");
+    expect(tooBig.status).toBe(400);
+    expect(tooBig.json.error).toMatch(/A logo can be at most 512 KB/);
+    const saved = await uploadLogo(w.org, png, "Glimmers logo.png");
+    expect(saved.status).toBe(200);
+    expect(saved.json.logo).toMatchObject({ fileName: "Glimmers logo.png", contentType: "image/png", width: 4, height: 2, byteSize: png.length });
+    const stored = await w.as((tx) => tx.query<{ content: Buffer }>("select content from organisation_logo"));
+    expect(Buffer.compare(stored.rows[0].content, png)).toBe(0);
+    const image = await call(logoRoute.GET, `/api/organisations/${w.org}/logo`, { cookie: viewerCookie, context: params({ organisationId: w.org }) });
+    expect([image.status, image.headers.get("content-type")]).toEqual([200, "image/png"]);
+    // On the server's PDFs, top left.
+    const invoice = await w.invoice();
+    const pdf = await pdfRoute.GET(apiRequest(`/api/documents/pdf?organisationId=${w.org}&kind=invoice&id=${invoice.id}`, { cookie: viewerCookie }), noContext as never);
+    expect(Buffer.from(await pdf.arrayBuffer()).toString("latin1")).toMatch(/\/Subtype\s*\/Image/);
+    const removed = await call(logoRoute.DELETE, `/api/organisations/${w.org}/logo`, { method: "DELETE", context: params({ organisationId: w.org }) });
+    expect(removed.json).toEqual({ logo: null });
+    const info = await call(logoRoute.GET, `/api/organisations/${w.org}/logo?info=1`, { cookie: viewerCookie, context: params({ organisationId: w.org }) });
+    expect(info.json).toEqual({ logo: null });
+  });
+
+  it("emails are HTML with the logo as an inline (CID) image, everything typed escaped, and a plain-text version", async () => {
+    const w = await setup();
+    await uploadLogo(w.org, tinyPng());
+    const invoice = await w.invoice();
+    const body = "Hi <b>Kobe</b> & friends,\n\nHere's invoice INV-0001.\nThanks,\nGlimmers";
+    await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Invoice INV-0001 <from> Glimmers", body });
+    expect(await w.send()).toMatchObject({ sent: 1 });
+    const { mail } = received[0];
+    // The plain-text version, exactly as typed.
+    expect(mail.text?.trim()).toBe(body);
+    const html = String(mail.html);
+    expect(html).toContain("Hi &lt;b&gt;Kobe&lt;/b&gt; &amp; friends,");
+    expect(html).not.toContain("<b>Kobe</b>");
+    expect(html).toContain("Here&#39;s invoice INV-0001.<br>Thanks,<br>Glimmers");
+    expect(html).toContain("<title>Invoice INV-0001 &lt;from&gt; Glimmers</title>");
+    // The summary box and footer.
+    expect(html).toMatch(/Invoice number<\/td>\s*<td[^>]*>INV-0001<\/td>/);
+    expect(html).toMatch(/Total<\/td>\s*<td[^>]*>\$316\.25<\/td>/);
+    expect(html).toMatch(/Due date<\/td>\s*<td[^>]*>20 Aug 2026<\/td>/);
+    expect(html).toContain("PO Box 5, Dunedin");
+    expect(html).toContain("jess@glimmers.test");
+    // No remote images or links: the only image is the inline logo.
+    const sources = [...html.matchAll(/src="([^"]+)"/g)].map((match) => match[1]);
+    expect(sources).toHaveLength(1);
+    expect(sources[0]).toMatch(/^cid:logo-[0-9a-f]{16}@tohyee$/);
+    expect(html).not.toMatch(/https?:\/\//);
+    const inline = mail.attachments.find((attachment) => attachment.contentDisposition === "inline");
+    expect(inline).toMatchObject({ contentType: "image/png", cid: sources[0].slice(4), related: true });
+    const pdf = mail.attachments.find((attachment) => attachment.contentType === "application/pdf");
+    expect(pdf?.filename).toBe("Invoice INV-0001.pdf");
+    expect(pdf?.content.toString("latin1")).toMatch(/\/Subtype\s*\/Image/);
+  });
+
+  // ------------------------------------------------------------------ Microsoft 365 / Outlook (sign in)
+
+  type GraphState = { sent: Array<{ body: Record<string, unknown>; token: string }>; tokenRequests: URLSearchParams[]; sendStatus: number; tokens: number };
+
+  /** A fake Microsoft sign-in server and Graph: tokens, /me and /me/sendMail. */
+  function fakeMicrosoft(state: GraphState) {
+    return async (url: string, init?: RequestInit): Promise<Response> => {
+      const target = new URL(url);
+      if (target.host === "login.microsoftonline.com" && target.pathname === "/glimmers.onmicrosoft.com/oauth2/v2.0/token") {
+        const form = new URLSearchParams(String(init?.body ?? ""));
+        state.tokenRequests.push(form);
+        state.tokens += 1;
+        return Response.json({ access_token: `access-${state.tokens}`, refresh_token: `refresh-${state.tokens}`, expires_in: 3600 });
+      }
+      if (target.host === "graph.microsoft.com" && target.pathname === "/v1.0/me") {
+        return Response.json({ mail: "Accounts@Glimmers.nz", userPrincipalName: "accounts@glimmers.onmicrosoft.com" });
+      }
+      if (target.host === "graph.microsoft.com" && target.pathname === "/v1.0/me/sendMail" && init?.method === "POST") {
+        const token = String((init.headers as Record<string, string>).Authorization).replace("Bearer ", "");
+        if (state.sendStatus !== 202) {
+          return Response.json({ error: { code: state.sendStatus === 429 ? "ApplicationThrottled" : "InvalidAuthenticationToken", message: "Try later" } }, { status: state.sendStatus });
+        }
+        state.sent.push({ body: JSON.parse(String(init.body)) as Record<string, unknown>, token });
+        return new Response(null, { status: 202, headers: { "request-id": `req-${state.sent.length}` } });
+      }
+      return new Response("not found", { status: 404 });
+    };
+  }
+
+  it("sends through a Microsoft 365 or Outlook mailbox an admin signed in to, with Graph's sendMail", async () => {
+    const w = await setup({ emailSetUp: false });
+    await uploadLogo(w.org, tinyPng());
+    await w.as((tx) => saveMailSettings(tx, { microsoftClientId: "ms-client", microsoftClientSecret: "ms-secret", microsoftTenant: "glimmers.onmicrosoft.com" }));
+    const graph: GraphState = { sent: [], tokenRequests: [], sendStatus: 202, tokens: 0 };
+    setMailFetchForTests(fakeMicrosoft(graph));
+    try {
+      // Connecting: admins only; Microsoft's sign-in asks for Mail.Send, and comes back to the email settings.
+      expect((await call(msConnectRoute.POST, "/api/email/microsoft/connect", { method: "POST", cookie: bookkeeperCookie, body: { organisationId: w.org } })).status).toBe(403);
+      const started = await call(msConnectRoute.POST, "/api/email/microsoft/connect", { method: "POST", body: { organisationId: w.org } });
+      const signIn = new URL(started.json.url as string);
+      expect(signIn.host + signIn.pathname).toBe("login.microsoftonline.com/glimmers.onmicrosoft.com/oauth2/v2.0/authorize");
+      expect(signIn.searchParams.get("scope")).toBe("offline_access User.Read Mail.Send");
+      expect(signIn.searchParams.get("redirect_uri")).toBe("http://tohyee.test/api/email/microsoft/callback");
+      const state = signIn.searchParams.get("state")!;
+      const back = await msCallbackRoute.GET(apiRequest(`/api/email/microsoft/callback?code=code-1&state=${encodeURIComponent(state)}`, { cookie: ownerCookie }));
+      expect(back.status).toBe(303);
+      expect(back.headers.get("location")).toBe("http://tohyee.test/operations/settings/email?connected=accounts%40glimmers.nz");
+      expect(graph.tokenRequests[0].get("grant_type")).toBe("authorization_code");
+      expect(graph.tokenRequests[0].get("scope")).toBe("offline_access User.Read Mail.Send");
+      // The state is used once.
+      const again = await msCallbackRoute.GET(apiRequest(`/api/email/microsoft/callback?code=code-1&state=${encodeURIComponent(state)}`, { cookie: ownerCookie }));
+      expect(new URL(again.headers.get("location")!).searchParams.get("error")).toBe("That sign-in link has expired or was already used. Start connecting again.");
+
+      const read = await call(settingsRoute.GET, `/api/email/settings?organisationId=${w.org}`);
+      expect(read.json.settings).toMatchObject({
+        configured: true,
+        sendingMethod: "microsoft",
+        fromName: "Glimmers",
+        fromAddress: "accounts@glimmers.nz",
+        microsoft: { email: "accounts@glimmers.nz", connectedByEmail: owner.email, tokensReadable: true },
+        microsoftApp: { clientId: "ms-client", secretSaved: true, tenant: "glimmers.onmicrosoft.com" },
+      });
+      expect(read.text).not.toContain("refresh-1");
+      expect(read.text).not.toContain("access-1");
+      const stored = await w.as((tx) => tx.query<{ microsoft_refresh_token_ciphertext: string }>("select microsoft_refresh_token_ciphertext from organisation_email_settings"));
+      expect(stored.rows[0].microsoft_refresh_token_ciphertext).toMatch(/^v1:/);
+
+      // Sending an invoice: HTML with the logo inline, the PDF attached, replies to the mailbox.
+      const invoice = await w.invoice();
+      const prepared = await call(prepareRoute.GET, `/api/email/prepare?organisationId=${w.org}&kind=invoice&id=${invoice.id}`, { cookie: bookkeeperCookie });
+      expect(prepared.json.email).toMatchObject({ configured: true, from: "Glimmers <accounts@glimmers.nz>", replyTo: "accounts@glimmers.nz" });
+      await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", cc: "jess@glimmers.test", subject: "Invoice INV-0001 from Glimmers", body: "Hi Kobe Cafe,\n\nHere's invoice INV-0001." });
+      expect(await w.send()).toMatchObject({ sent: 1, failed: 0 });
+      expect(received).toHaveLength(0);
+      expect(graph.sent).toHaveLength(1);
+      expect(graph.sent[0].token).toBe("access-1");
+      const message = (graph.sent[0].body as { message: Record<string, unknown>; saveToSentItems: boolean }).message as {
+        subject: string;
+        body: { contentType: string; content: string };
+        toRecipients: unknown[];
+        ccRecipients: unknown[];
+        replyTo: unknown[];
+        attachments: Array<Record<string, unknown>>;
+      };
+      expect((graph.sent[0].body as { saveToSentItems: boolean }).saveToSentItems).toBe(true);
+      expect(message.subject).toBe("Invoice INV-0001 from Glimmers");
+      expect(message.body.contentType).toBe("HTML");
+      expect(message.body.content).toContain("Here&#39;s invoice INV-0001.");
+      expect(message.toRecipients).toEqual([{ emailAddress: { address: "accounts@kobe.test" } }]);
+      expect(message.ccRecipients).toEqual([{ emailAddress: { address: "jess@glimmers.test" } }]);
+      expect(message.replyTo).toEqual([{ emailAddress: { address: "accounts@glimmers.nz" } }]);
+      expect(message.attachments.map((attachment) => [attachment["@odata.type"], attachment.name, attachment.contentType, attachment.isInline])).toEqual([
+        ["#microsoft.graph.fileAttachment", "Invoice INV-0001.pdf", "application/pdf", false],
+        ["#microsoft.graph.fileAttachment", "logo.png", "image/png", true],
+      ]);
+      expect(message.body.content).toContain(`src="cid:${message.attachments[1].contentId as string}"`);
+      expect(Buffer.from(message.attachments[0].contentBytes as string, "base64").subarray(0, 5).toString()).toBe("%PDF-");
+      const [sent] = await emailsFor(w.org, "invoice", invoice.id);
+      expect(sent).toMatchObject({ status: "sent", sentVia: "microsoft", messageId: "graph:req-1" });
+      expect(sent.smtpResponse).toContain("Accepted by Microsoft Graph (202)");
+
+      // An expired access token is renewed with the refresh token, and the new refresh token replaces the old one.
+      await w.as((tx) => tx.query("update organisation_email_settings set microsoft_access_token_expires_at = now() - interval '1 minute'"));
+      await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Again", body: "Again" });
+      expect(await w.send()).toMatchObject({ sent: 1 });
+      expect(graph.tokenRequests[1].get("grant_type")).toBe("refresh_token");
+      expect(graph.tokenRequests[1].get("refresh_token")).toBe("refresh-1");
+      expect(graph.tokenRequests[1].get("scope")).toBe("offline_access User.Read Mail.Send");
+      expect(graph.sent[1].token).toBe("access-2");
+      const rotated = await w.as((tx) => tx.query<{ microsoft_refresh_token_ciphertext: string }>("select microsoft_refresh_token_ciphertext from organisation_email_settings"));
+      expect(decryptSecret(rotated.rows[0].microsoft_refresh_token_ciphertext)).toBe("refresh-2");
+
+      // Throttled: tried again later. The sign-in withdrawn: failed, saying to connect again.
+      graph.sendStatus = 429;
+      await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Busy", body: "Busy" });
+      expect(await w.send()).toMatchObject({ retrying: 1 });
+      graph.sendStatus = 401;
+      await w.as((tx) => tx.query("update document_emails set next_attempt_at = now() where status = 'queued'"));
+      expect(await w.send()).toMatchObject({ failed: 1 });
+      const failed = (await emailsFor(w.org, "invoice", invoice.id)).find((email) => email.subject === "Busy")!;
+      expect(failed.lastError).toMatch(/^Microsoft didn't accept the mailbox's sign-in\. An admin needs to connect it again in Settings > Email\./);
+
+      // The test email goes the same way.
+      graph.sendStatus = 202;
+      const tested = await call(testRoute.POST, "/api/email/settings/test", { method: "POST", body: { organisationId: w.org } });
+      expect(tested.json).toMatchObject({ ok: true, to: owner.email });
+      expect((graph.sent.at(-1)!.body as { message: { subject: string } }).message.subject).toBe("Test email from Tohyee for Glimmers");
+
+      // SMTP details can be saved as well (switching to SMTP), and switched back.
+      const smtp = await call(settingsRoute.PUT, "/api/email/settings", {
+        method: "PUT",
+        body: { organisationId: w.org, fromName: "Glimmers", fromAddress: SMTP_USER, host: "127.0.0.1", port: smtpPort, security: "none", username: SMTP_USER, password: SMTP_PASSWORD },
+      });
+      expect(smtp.json.settings).toMatchObject({ sendingMethod: "smtp", configured: true, microsoft: { email: "accounts@glimmers.nz" } });
+      const switched = await call(settingsRoute.PUT, "/api/email/settings", { method: "PUT", body: { organisationId: w.org, sendingMethod: "microsoft", replyTo: "jess@glimmers.test" } });
+      expect(switched.json.settings).toMatchObject({ sendingMethod: "microsoft", replyTo: "jess@glimmers.test", fromAddress: "accounts@glimmers.nz" });
+
+      // Disconnecting forgets the sign-in; the saved SMTP account is used again.
+      const disconnected = await call(msDisconnectRoute.POST, "/api/email/microsoft/disconnect", { method: "POST", body: { organisationId: w.org } });
+      expect(disconnected.json.settings).toMatchObject({ sendingMethod: "smtp", configured: true, microsoft: null });
+      const tokensLeft = await w.as((tx) => tx.query("select 1 from organisation_email_settings where microsoft_refresh_token_ciphertext is not null"));
+      expect(tokensLeft.rowCount).toBe(0);
+    } finally {
+      setMailFetchForTests(null);
+    }
   });
 });

@@ -503,11 +503,24 @@ that something happened.
   alerts and two-step reset links, with a test button.
 - **Emailing documents** (decided by Jess, 30 Sep 2026): invoices, credit
   notes, quotes, purchase orders and customer statements are emailed from
-  **each organisation's own email account** (Settings > Email, admins: Gmail
-  or Google Workspace with an app password, Microsoft 365 with Authenticated
+  **each organisation's own email account** (Settings > Email, admins:
+  **Microsoft 365 / Outlook (sign in)**, decided with Jess 30 Sep 2026 since
+  Microsoft is retiring password SMTP: the organisation registers its own
+  Microsoft app once (shared with the CRM's mail sync), an admin clicks
+  **Connect Microsoft account** and signs in to the mailbox, which then sends
+  for the organisation through Microsoft Graph with the Mail.Send permission,
+  showing the connected address, with Disconnect; or **SMTP**: Gmail or
+  Google Workspace with an app password, Microsoft 365 with Authenticated
   SMTP, or any SMTP server; from name, from address, reply-to; the password
-  encrypted with TOHYEE_SECRET_KEY and never sent back to the browser; a
-  **Send test email** button). Each document has an **Email** card
+  and tokens encrypted with TOHYEE_SECRET_KEY and never sent back to the
+  browser; a **Send test email** button). Emails are **HTML** with the
+  organisation's **logo** (Settings: PNG or JPEG up to 512 KB, stored in
+  the organisation's database so backups have it; embedded in the email,
+  never a remote image), the message as paragraphs, a box with the
+  document's number, total and due date, and the organisation's contact
+  details, plus the plain text for mail clients that want it; templates stay
+  plain text with placeholders. The logo is also top left on the PDFs and
+  print pages. Each document has an **Email** card
   (bookkeepers and above send; everyone sees the history): To (the contact's
   email and its primary person's), Cc, subject and message from the
   organisation's **templates** (editable in Settings > Email, with
@@ -528,9 +541,10 @@ that something happened.
   organisation. Addresses are plain `name@domain` only and line breaks are
   taken out of subjects, so nothing typed can add a header; the only
   attachment is the document's own PDF; internal notes are never included.
-  Not built: sending from Google or Microsoft with their sign-in (OAuth)
-  instead of a password, HTML emails, and tracking whether the email was
-  opened.
+  Not built: signing in with Google to send (a possible follow-up; Gmail
+  uses an app password for now), attachments over 3 MB through Microsoft
+  (Graph's upload sessions), and tracking whether the email was opened
+  (never: no tracking pixels).
 - **Phone access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):

@@ -56,6 +56,9 @@ export type Column = {
 
 export type TableFooterRow = { label: string; values: string[]; bold?: boolean };
 
+/** An image to draw, such as the organisation's logo. */
+export type PdfImage = { contentType: "image/png" | "image/jpeg"; content: Uint8Array };
+
 export type TextOptions ={ size?: number; bold?: boolean; muted?: boolean; align?: Align; width?: number; x?: number };
 
 export class PdfWriter {
@@ -174,6 +177,22 @@ export class PdfWriter {
   /** Height of wrapped text, without drawing it. */
   measure(text: string, width: number, size = 10, bold = false): number {
     return this.wrap(text, width, size, bold).length * size * 1.3;
+  }
+
+  /**
+   * Draws a PNG or JPEG at the current position (x from the left margin),
+   * scaled down to fit `maxWidth` x `maxHeight` points (never enlarged
+   * beyond 72 dpi), and moves down past it. Returns the height used.
+   */
+  async image(image: PdfImage, options: { x?: number; maxWidth: number; maxHeight: number }): Promise<number> {
+    const embedded = image.contentType === "image/png" ? await this.doc.embedPng(image.content) : await this.doc.embedJpg(image.content);
+    const scale = Math.min(1, options.maxWidth / embedded.width, options.maxHeight / embedded.height);
+    const width = embedded.width * scale;
+    const height = embedded.height * scale;
+    this.ensure(height);
+    this.page.drawImage(embedded, { x: MARGIN + (options.x ?? 0), y: PAGE_HEIGHT - MARGIN - this.y - height, width, height });
+    this.y += height;
+    return height;
   }
 
   rule(options: { x?: number; width?: number; thick?: boolean } = {}): void {

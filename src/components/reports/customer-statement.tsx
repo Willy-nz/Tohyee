@@ -6,6 +6,7 @@ import { Money } from "@/components/books";
 import { EmailDocumentPanel, pdfHref, type StatementQuery } from "@/components/documents/email-document";
 import { StatementRunCard } from "@/components/reports/statement-emails";
 import { useApiData } from "@/components/hooks";
+import { OrganisationLogo } from "@/components/organisation/logo";
 import { Balance, BUCKET_LABELS, BUCKETS, PrintButton } from "@/components/reports/ledger-reports";
 import { Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -73,6 +74,7 @@ function StatementHeader({
   const { current } = useWorkspace();
   return (
     <header className={ui.reportPaperHeader}>
+      {current ? <OrganisationLogo organisationId={current.id} /> : null}
       <h2 className={ui.reportPaperTitle}>{title}</h2>
       <p className={ui.reportPaperMeta}>
         {current?.displayName}
