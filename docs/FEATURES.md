@@ -370,7 +370,13 @@ that something happened.
   them or line by line; each becomes its own spend or receive money
   reconciled to its line, exactly as if done one at a time, each in its own
   transaction, and the result says which lines were done and why any weren't
-  (examples BK22, BK23, not yet approved by Jess).
+  (examples BK22, BK23, not yet approved by Jess). **Small differences**:
+  when matching a line or paying invoices or bills from it and the amounts
+  differ slightly (a merchant fee taken off a deposit), the difference can be
+  recorded in the same step as an adjustment to a chosen account, with an
+  optional GST code: spend or receive money for the difference, reconciled
+  with the payment or match so the line ties exactly, while the invoice or
+  bill is still paid in full (examples BK24, BK25, not yet approved by Jess).
 - **Modules**: Accounting and Tax are always on; the **CRM** and
   **Advanced reporting** are switched on per organisation in Settings, and
   their menus and screens show only while on (MOD1).

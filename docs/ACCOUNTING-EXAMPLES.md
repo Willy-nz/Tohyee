@@ -49,7 +49,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
   `tests/integration/projects.test.ts` (PJ1-PJ13) and
-  `tests/integration/bank-quick.test.ts` (BK17-BK23), all against
+  `tests/integration/bank-quick.test.ts` (BK17-BK25), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -1216,6 +1216,73 @@ Date,Amount,Payee,Particulars,Code,Reference
   A line with no account, for all or its own, is refused with "Choose an
   account for this line"; a line on another account or already reconciled is
   refused; viewers can't cash code (403).
+
+### Small differences when matching (examples not yet approved by Jess)
+
+Like Xero's adjustment. When matching a line (BK4) or paying invoices or
+bills from it (BK5) and the amounts differ slightly (a merchant fee taken
+off a deposit, a customer rounding up), the difference can be recorded in
+the same step as an **adjustment** to an account the person chooses, with an
+optional GST code. There's no limit on the difference, but the account must
+be chosen.
+
+- The adjustment is a bank transaction (BK6, BK7) for the difference: spend
+  money when the line is less than what it's matched with (money in) or more
+  than it (money out), otherwise receive money; dated the line date, one line
+  to the chosen account, tax inclusive with a GST code or no GST without one,
+  described as given ("Adjustment" if not). Its contact is the one chosen, or
+  when paying, the first invoice's or bill's contact; when matching, a
+  contact must be chosen.
+- Payments are recorded for the amounts given (usually the full amount due),
+  not the line's amount. The line is reconciled to the payments or matched
+  journal lines **and** the adjustment, which together add up to it exactly.
+- It all happens in one database transaction with the reconciliation: if
+  anything is refused (a locked period, no account), nothing is posted.
+- Unreconciling (BK11) leaves the payment and the adjustment; void them
+  separately. The adjustment counts in the GST return like any bank
+  transaction.
+
+Setup as above (INV-0001 115.00 due, B1 230.00 due, both 10 May 2026).
+
+- **BK24** Recording a difference:
+  - A **+113.50** line on 20 May (INV-0001 less a 1.50 merchant fee). Pay
+    INV-0001 **115.00** with an adjustment to 6020 Bank fees, no GST,
+    "Merchant fee": a customer payment of 115.00 dated 20 May (Dr 1000
+    115.00 / Cr 1100 115.00) and spend money to Kobe Ltd dated 20 May (Dr
+    6020 1.50 / Cr 1000 1.50). The line is reconciled to both (115.00 -
+    1.50 = 113.50). INV-0001 is **paid**, amount due **0.00**. The spend
+    money is in no GST box.
+  - A **+115.50** line on 20 May instead (the customer paid 0.50 over). Pay
+    INV-0001 **115.00** with an adjustment to 4100 Other revenue, GST:
+    receive money from Kobe Ltd of 0.50, GST inclusive: Dr 1000 0.50 / Cr
+    4100 0.43 / Cr 2100 0.07. It adds **0.50** to Box 5. INV-0001 is paid
+    with no overpayment.
+  - A **-231.50** line on 21 May (B1 plus a 1.50 payment fee). Pay B1
+    **230.00** with an adjustment to 6020, no GST: a supplier payment (Dr
+    2000 230.00 / Cr 1000 230.00) and spend money to Kauri Supplies (Dr 6020
+    1.50 / Cr 1000 1.50). B1 is paid.
+  - Matching: a customer payment of 115.00 into 1000 on 19 May is already
+    recorded. The +113.50 line on 20 May is matched to it with an adjustment
+    to 6020, no GST, contact Kobe Ltd: only the spend money (Dr 6020 1.50 /
+    Cr 1000 1.50) is posted, and the line is reconciled to the payment and
+    the spend money.
+- **BK25** What's refused, with nothing posted:
+  - an adjustment with no account: "Choose the account for the 1.50
+    difference.";
+  - matching with an adjustment and no contact: "Choose a contact for the
+    1.50 adjustment.";
+  - an adjustment when the amounts already add up to the line: "…already
+    add up to the line, so there's no difference for an adjustment.";
+  - an adjustment with a bank transaction or a transfer;
+  - an adjustment to 1100 Accounts receivable (as for any bank transaction);
+  - with the period locked up to 20 May, paying INV-0001 from the +113.50
+    line with an adjustment: refused, and neither the payment nor the
+    adjustment is posted.
+
+  Retrying the BK24 payment with an adjustment with the same key returns
+  the reconciled line and posts nothing more; the same key with another
+  account is refused (409). Unreconciling it leaves the payment and the
+  spend money; after that the spend money can be voided on its own.
 
 ### Not supported yet (refused rather than guessed)
 

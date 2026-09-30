@@ -88,7 +88,107 @@ function TotalCheck({ total, target }: { total: bigint | null; target: string })
   );
 }
 
-function MatchForm({ line, suggestions, submit, busy }: { line: StatementLine; suggestions: LineSuggestions; submit: Submit; busy: boolean }) {
+type AdjustmentValue = { accountCode: string; taxCode: string; description: string; contactId: string };
+const NO_ADJUSTMENT: AdjustmentValue = { accountCode: "", taxCode: "", description: "", contactId: "" };
+
+/**
+ * A small difference between the line and what it's matched with or pays,
+ * recorded in the same step as spend or receive money to a chosen account
+ * (examples BK24, BK25). `difference` is the line less the total, signed like
+ * the line.
+ */
+function AdjustmentFields({
+  difference,
+  value,
+  onChange,
+  lookups,
+  contactHint,
+}: {
+  difference: bigint;
+  value: AdjustmentValue;
+  onChange: (value: AdjustmentValue) => void;
+  lookups: Lookups;
+  /** Where the contact comes from when none is chosen; without it a contact is required. */
+  contactHint?: string;
+}) {
+  const unsigned = centsToText(difference < BigInt(0) ? -difference : difference);
+  const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive);
+  return (
+    <div className={ui.suggestion} style={{ display: "grid", gap: 8 }}>
+      <span>
+        Record the {formatMoney(unsigned)} difference as an adjustment: {difference < BigInt(0) ? "spend money" : "receive money"} of{" "}
+        {formatMoney(unsigned)} on the line&apos;s date, reconciled with the rest, so the line ties exactly.
+      </span>
+      <div className={ui.grid2}>
+        <Field label="Adjustment account">
+          <AccountSelect
+            accounts={lookups.accounts}
+            filter={takesBankTransactionLines}
+            value={value.accountCode}
+            onChange={(accountCode) => onChange({ ...value, accountCode })}
+            required
+          />
+        </Field>
+        <Field label="GST" hint="With a GST code the difference includes GST.">
+          <select value={value.taxCode} onChange={(event) => onChange({ ...value, taxCode: event.target.value })}>
+            <option value="">No GST</option>
+            {activeTaxCodes.map((taxCode) => (
+              <option key={taxCode.id} value={taxCode.code}>
+                {taxCode.code} ({formatRate(taxCode.rate)})
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Description">
+          <input
+            value={value.description}
+            placeholder="Adjustment"
+            onChange={(event) => onChange({ ...value, description: event.target.value })}
+            maxLength={500}
+          />
+        </Field>
+        <Field label="Contact">
+          <select value={value.contactId} onChange={(event) => onChange({ ...value, contactId: event.target.value })} required={!contactHint}>
+            <option value="">{contactHint ?? "Choose a contact"}</option>
+            {lookups.contacts
+              .filter((contact) => !contact.isArchived)
+              .map((contact) => (
+                <option key={contact.id} value={contact.id}>
+                  {contact.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+/** The adjustment to send, or undefined when there's no difference. */
+function adjustmentCommand(difference: bigint | null, value: AdjustmentValue): Record<string, unknown> | undefined {
+  if (difference === null || difference === BigInt(0)) return undefined;
+  return {
+    accountCode: value.accountCode,
+    taxCode: value.taxCode || undefined,
+    description: value.description.trim() || undefined,
+    contactId: value.contactId || undefined,
+  };
+}
+
+function MatchForm({
+  line,
+  suggestions,
+  lookups,
+  submit,
+  busy,
+}: {
+  line: StatementLine;
+  suggestions: LineSuggestions;
+  lookups: Lookups;
+  submit: Submit;
+  busy: boolean;
+}) {
+  const [adjustment, setAdjustment] = useState<AdjustmentValue>(NO_ADJUSTMENT);
   const [chosen, setChosen] = useState<string[]>(() => {
     const exact = suggestions.matches.find((match) => match.exact);
     return exact ? [exact.journalLineId] : [];
@@ -104,11 +204,14 @@ function MatchForm({ line, suggestions, submit, busy }: { line: StatementLine; s
   const total = suggestions.matches
     .filter((match) => chosen.includes(match.journalLineId))
     .reduce((sum, match) => sum + (toCents(match.amount) ?? BigInt(0)), BigInt(0));
+  const lineCents = toCents(line.amount);
+  const difference = chosen.length > 0 && lineCents !== null ? lineCents - total : null;
+  const needsAdjustment = difference !== null && difference !== BigInt(0);
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        void submit({ kind: "match", journalLineIds: chosen });
+        void submit({ kind: "match", journalLineIds: chosen, adjustment: adjustmentCommand(difference, adjustment) });
       }}
       style={{ display: "grid", gap: 10 }}
     >
@@ -154,9 +257,10 @@ function MatchForm({ line, suggestions, submit, busy }: { line: StatementLine; s
         </table>
       </div>
       <TotalCheck total={total} target={line.amount} />
+      {needsAdjustment ? <AdjustmentFields difference={difference} value={adjustment} onChange={setAdjustment} lookups={lookups} /> : null}
       <div className={ui.actions}>
-        <Button type="submit" disabled={busy || chosen.length === 0}>
-          {busy ? "Reconciling…" : "Match"}
+        <Button type="submit" disabled={busy || chosen.length === 0 || (needsAdjustment && (!adjustment.accountCode || !adjustment.contactId))}>
+          {busy ? "Reconciling…" : needsAdjustment ? "Match with adjustment" : "Match"}
         </Button>
       </div>
     </form>
@@ -167,17 +271,19 @@ function PaymentsForm({
   organisationId,
   line,
   suggestions,
-  contacts,
+  lookups,
   submit,
   busy,
 }: {
   organisationId: string;
   line: StatementLine;
   suggestions: LineSuggestions;
-  contacts: Contact[];
+  lookups: Lookups;
   submit: Submit;
   busy: boolean;
 }) {
+  const contacts = lookups.contacts;
+  const [adjustment, setAdjustment] = useState<AdjustmentValue>(NO_ADJUSTMENT);
   const { current } = useWorkspace();
   const moneyIn = !line.amount.startsWith("-");
   const unsigned = line.amount.replace(/^-/, "");
@@ -212,10 +318,19 @@ function PaymentsForm({
   const allValid = entered.every(([, amount]) => toCents(amount) !== null);
   const total = allValid ? entered.reduce((sum, [, amount]) => sum + (toCents(amount) ?? BigInt(0)), BigInt(0)) : null;
   const allocation = (id: string, amount: string) => (moneyIn ? { invoiceId: id, amount } : { billId: id, amount });
+  const unsignedCents = toCents(unsigned);
+  // The line less the payments, signed like the line.
+  const difference =
+    total !== null && entered.length > 0 && unsignedCents !== null ? (moneyIn ? unsignedCents - total : total - unsignedCents) : null;
+  const needsAdjustment = difference !== null && difference !== BigInt(0);
 
   function submitChosen(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void submit({ kind: "payments", allocations: entered.map(([id, amount]) => allocation(id, amount.trim())) });
+    void submit({
+      kind: "payments",
+      allocations: entered.map(([id, amount]) => allocation(id, amount.trim())),
+      adjustment: adjustmentCommand(difference, adjustment),
+    });
   }
 
   return (
@@ -308,9 +423,20 @@ function PaymentsForm({
             </table>
           </div>
           <TotalCheck total={total} target={unsigned} />
+          {needsAdjustment ? (
+            <AdjustmentFields
+              difference={difference}
+              value={adjustment}
+              onChange={setAdjustment}
+              lookups={lookups}
+              contactHint={moneyIn ? "The invoice's customer" : "The bill's supplier"}
+            />
+          ) : null}
           <div className={ui.actions}>
-            <Button type="submit" disabled={busy || entered.length === 0}>
-              {busy ? "Reconciling…" : `Record ${entered.length === 1 ? "payment" : "payments"} and reconcile`}
+            <Button type="submit" disabled={busy || entered.length === 0 || (needsAdjustment && !adjustment.accountCode)}>
+              {busy
+                ? "Reconciling…"
+                : `Record ${entered.length === 1 ? "payment" : "payments"}${needsAdjustment ? " and adjustment" : ""} and reconcile`}
             </Button>
           </div>
         </form>
@@ -726,13 +852,13 @@ function LineReconciler({
           </button>
         ))}
       </div>
-      {mode === "match" ? <MatchForm line={line} suggestions={suggestions} submit={submit} busy={busy} /> : null}
+      {mode === "match" ? <MatchForm line={line} suggestions={suggestions} lookups={lookups} submit={submit} busy={busy} /> : null}
       {mode === "payments" ? (
         <PaymentsForm
           organisationId={organisationId}
           line={line}
           suggestions={suggestions}
-          contacts={lookups.contacts}
+          lookups={lookups}
           submit={submit}
           busy={busy}
         />

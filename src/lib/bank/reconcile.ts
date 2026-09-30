@@ -9,7 +9,17 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { recordPayment } from "@/lib/invoices/payments";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { dec, parseDecimalInput, toFixedString } from "@/lib/money/decimal";
-import { asRecord, optionalSource, requireArray, requireId, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
+import {
+  asRecord,
+  optionalId,
+  optionalSource,
+  optionalString,
+  requireArray,
+  requireId,
+  requireIdempotencyKey,
+  requireOneOf,
+  requireString,
+} from "@/lib/validation";
 
 /**
  * Reconciling statement lines (examples BK4-BK13): a line is tied to journal
@@ -32,6 +42,16 @@ function formatCents(value: bigint): string {
   return `${negative ? "-" : ""}${text.slice(0, -2)}.${text.slice(-2)}`;
 }
 
+/** An adjustment needs a difference and an account (examples BK24, BK25). */
+function assertAdjustable(adjustment: Adjustment, difference: bigint, what: string): void {
+  if (difference === BigInt(0)) {
+    throw new ValidationError(`${what} already add up to the line, so there's no difference for an adjustment.`);
+  }
+  if (!adjustment.accountCode) {
+    throw new ValidationError(`Choose the account for the ${formatCents(difference < BigInt(0) ? -difference : difference)} difference.`);
+  }
+}
+
 function daysBetween(a: string, b: string): number {
   return Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000;
 }
@@ -45,6 +65,71 @@ async function journalLineOn(tx: OrgTx, journalId: string, accountId: string): P
     throw new ValidationError(`Journal #${journalId} doesn't have exactly one line on this account, so it can't be matched automatically.`);
   }
   return result.rows[0].id;
+}
+
+type Adjustment = {
+  accountCode: string | null;
+  taxCode: string | null;
+  contactId: string | null;
+  description: string | null;
+  tracking: unknown;
+};
+
+function parseAdjustment(input: unknown): Adjustment | null {
+  if (input == null) return null;
+  const entry = asRecord(input, "adjustment");
+  const accountCode = optionalString(entry.accountCode, "adjustment accountCode", { maxLength: 20 });
+  return {
+    accountCode,
+    taxCode: optionalString(entry.taxCode, "adjustment taxCode", { maxLength: 20 }),
+    contactId: optionalId(entry.contactId, "adjustment contactId"),
+    description: optionalString(entry.description, "adjustment description", { maxLength: 500 }),
+    tracking: entry.tracking,
+  };
+}
+
+/**
+ * The difference between a statement line and what it's matched with or pays
+ * (examples BK24, BK25), posted as spend money (money out, `difference`
+ * negative) or receive money (money in) for the difference, dated the line
+ * date, to the chosen account: like Xero's adjustment. Returns its journal
+ * line on the line's account, to reconcile with the rest.
+ */
+async function postAdjustment(
+  tx: OrgTx,
+  line: StatementLine,
+  adjustment: Adjustment,
+  difference: bigint,
+  defaultContactId: string | null,
+  command: { source: string; idempotencyKey: string },
+): Promise<string> {
+  const unsigned = formatCents(difference < BigInt(0) ? -difference : difference);
+  const contactId = adjustment.contactId ?? defaultContactId;
+  if (!contactId) throw new ValidationError(`Choose a contact for the ${unsigned} adjustment.`);
+  const { bankTransaction } = await createBankTransaction(
+    tx,
+    {
+      source: command.source,
+      idempotencyKey: command.idempotencyKey,
+      kind: difference > BigInt(0) ? "receive" : "spend",
+      accountId: line.accountId,
+      contactId,
+      date: line.date,
+      reference: (line.reference ?? line.particulars ?? undefined)?.slice(0, 100),
+      amountsMode: adjustment.taxCode ? "inclusive" : "no_tax",
+      lines: [
+        {
+          description: adjustment.description ?? "Adjustment",
+          accountCode: adjustment.accountCode,
+          taxCode: adjustment.taxCode ?? undefined,
+          amount: unsigned,
+          tracking: adjustment.tracking,
+        },
+      ],
+    },
+    { expectedTotal: unsigned },
+  );
+  return journalLineOn(tx, bankTransaction.journalId, line.accountId);
 }
 
 type CandidateRow = {
@@ -78,6 +163,11 @@ async function loadJournalLines(tx: OrgTx, ids: string[]): Promise<CandidateRow[
  * - "payments": `allocations` of `{ invoiceId | billId, amount }` paid from the line (BK5);
  * - "bank_transaction": a spend or receive money for the line (BK6, BK7, BK9);
  * - "transfer": `otherAccountCode`, the other bank or credit card account (BK8, BK9).
+ *
+ * For "match" and "payments", an `adjustment` (`accountCode`, optional
+ * `taxCode`, `contactId`, `description`, `tracking`) records a difference
+ * between the line and what it's matched with or pays as spend or receive
+ * money, reconciled with the rest (BK24, BK25).
  */
 export async function reconcileStatementLine(
   tx: OrgTx,
@@ -88,6 +178,10 @@ export async function reconcileStatementLine(
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const kind = requireOneOf(command.kind, "kind", ["match", "payments", "bank_transaction", "transfer"] as const);
+  const adjustment = parseAdjustment(command.adjustment);
+  if (adjustment && kind !== "match" && kind !== "payments") {
+    throw new ValidationError("An adjustment is only for a difference when matching, or paying invoices or bills.");
+  }
   const hash = requestHash("bank_reconciliation", { lineId, command: { ...command, idempotencyKey: null, source: null, organisationId: null } });
   const replay = async (): Promise<ReconcileResult | null> => {
     const earlier = await tx.query<{ statement_line_id: string; request_hash: string }>(
@@ -126,7 +220,11 @@ export async function reconcileStatementLine(
       }
     }
     const total = rows.reduce((sum, row) => sum + cents(row.amount), BigInt(0));
-    if (total !== cents(line.amount)) {
+    const difference = cents(line.amount) - total;
+    if (adjustment) {
+      assertAdjustable(adjustment, difference, "The chosen transactions");
+      journalLineIds.push(await postAdjustment(tx, line, adjustment, difference, null, { source, idempotencyKey: subKey("adjustment") }));
+    } else if (difference !== BigInt(0)) {
       throw new ValidationError(`The chosen transactions add up to ${formatCents(total)}, but the line is ${line.amount}.`);
     }
   } else if (kind === "payments") {
@@ -138,7 +236,11 @@ export async function reconcileStatementLine(
     });
     if (allocations.length === 0) throw new ValidationError(`Choose at least one ${moneyIn ? "invoice" : "bill"} to pay.`);
     const total = allocations.reduce((sum, entry) => sum + cents(entry.amount), BigInt(0));
-    if (total !== cents(unsigned)) {
+    // Signed like the line: money in pays invoices, money out pays bills.
+    const difference = cents(line.amount) - (moneyIn ? total : -total);
+    if (adjustment) {
+      assertAdjustable(adjustment, difference, "The payments");
+    } else if (difference !== BigInt(0)) {
       throw new ValidationError(`The payments add up to ${formatCents(total)}, but the line is ${unsigned}. They must add up to the line.`);
     }
     const reference = (line.reference ?? line.particulars ?? line.payee ?? undefined)?.slice(0, 100);
@@ -167,6 +269,16 @@ export async function reconcileStatementLine(
               })
             ).payment;
       journalLineIds.push(await journalLineOn(tx, payment.journalId, line.accountId));
+    }
+    if (adjustment) {
+      const first = allocations[0];
+      const contact = await tx.query<{ contact_id: string }>(
+        "invoiceId" in first ? "select contact_id from sales_invoices where id = $1" : "select contact_id from bills where id = $1",
+        ["invoiceId" in first ? first.invoiceId : first.billId],
+      );
+      journalLineIds.push(
+        await postAdjustment(tx, line, adjustment, difference, contact.rows[0]?.contact_id ?? null, { source, idempotencyKey: subKey("adjustment") }),
+      );
     }
   } else if (kind === "bank_transaction") {
     const { bankTransaction } = await createBankTransaction(
@@ -225,7 +337,7 @@ export async function reconcileStatementLine(
     eventType: "statement_line.reconciled",
     entityType: "bank_statement_line",
     entityId: lineId,
-    details: { kind, reconciliationId, journalLineIds, amount: line.amount, date: line.date },
+    details: { kind, reconciliationId, journalLineIds, amount: line.amount, date: line.date, adjusted: adjustment !== null },
   });
   return { created: true, line: await getStatementLine(tx, lineId) };
 }

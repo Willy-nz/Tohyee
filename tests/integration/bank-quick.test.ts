@@ -8,11 +8,11 @@ import * as bankRecReportRoute from "@/app/api/reports/bank-reconciliation/route
 import { createBankAccount, listBankAccounts, listStatementLines, setStatementLineExcluded } from "@/lib/bank/accounts";
 import { importStatementFile } from "@/lib/bank/imports";
 import { confidentMatches, okConfidentMatches, okStatementLine } from "@/lib/bank/confident";
-import { reconcileStatementLine } from "@/lib/bank/reconcile";
+import { reconcileStatementLine, unreconcileStatementLine } from "@/lib/bank/reconcile";
 import { createBankRule } from "@/lib/bank/rules";
 import { createBankTransaction, getBankTransaction, voidBankTransaction } from "@/lib/bank/transactions";
 import { recordSupplierPayment } from "@/lib/bills/payments";
-import { approveBill, createBill } from "@/lib/bills/service";
+import { approveBill, createBill, getBill } from "@/lib/bills/service";
 import { type Contact, createContact } from "@/lib/contacts/service";
 import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
@@ -671,5 +671,174 @@ describeWithDatabase("quicker bank reconciliation", () => {
     const response = await post(bookkeeperCookie);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ succeeded: 1, failed: 0 });
+  });
+
+  async function adjustmentWorld(csv: string) {
+    const world = await setup();
+    await world.importFile(csv);
+    const gst = () => world.asUser(viewer, (tx) => calculateGstReturn(tx, { periodStart: "2026-05-01", periodEnd: "2026-05-31" }));
+    const items = async (lineId: string) => {
+      const line = (await world.lines()).find((entry) => entry.id === lineId)!;
+      return line.reconciliation!.items.map((item) => ({ origin: item.origin, journalId: item.journalId }));
+    };
+    return { ...world, gst, items };
+  }
+  const FEE = { accountCode: "6020", description: "Merchant fee" };
+
+  it("BK24: paying INV-0001 115.00 from a 113.50 line with a 1.50 bank fee adjustment; 0.50 over to 4100 with GST; a bill; matching", async () => {
+    const world = await adjustmentWorld("Date,Amount,Payee\n20/05/2026,113.50,KOBE LTD\n21/05/2026,-231.50,KAURI SUPPLIES\n");
+    const before = await world.gst();
+    const short = await world.lineOn("113.50");
+    const journals = await world.journalCount();
+    const { line } = await world.reconcile(short.id, {
+      kind: "payments",
+      allocations: [{ invoiceId: world.i1.id, amount: "115.00" }],
+      adjustment: FEE,
+    });
+    expect(line.status).toBe("reconciled");
+    expect(await world.journalCount()).toBe(journals + 2);
+    const [payment, fee] = await world.items(short.id);
+    expect([payment.origin, fee.origin]).toEqual(["customer_payment", "bank_transaction"]);
+    expect(await world.postedLines(payment.journalId)).toEqual([
+      ["1000", "115.00", "0.00"],
+      ["1100", "0.00", "115.00"],
+    ]);
+    expect(await world.postedLines(fee.journalId)).toEqual([
+      ["6020", "1.50", "0.00"],
+      ["1000", "0.00", "1.50"],
+    ]);
+    const feeRow = (await world.sql("select id::text from bank_transactions where journal_id = $1", [fee.journalId])).rows[0];
+    expect(await world.asUser(viewer, (tx) => getBankTransaction(tx, feeRow.id))).toMatchObject({
+      kind: "spend",
+      date: "2026-05-20",
+      contactName: "Kobe Ltd",
+      lines: [expect.objectContaining({ description: "Merchant fee", accountCode: "6020", taxCode: null })],
+    });
+    expect(await world.asUser(viewer, (tx) => getInvoice(tx, world.i1.id))).toMatchObject({ paidStatus: "paid", amountDue: "0.00" });
+    const after = await world.gst();
+    expect(after.boxes.box11).toBe(before.boxes.box11);
+    expect(after.lines.filter((entry) => entry.documentType === "bank_transaction")).toEqual([
+      expect.objectContaining({ amount: "1.50", gst: "0.00", boxes: [], category: "out_of_scope" }),
+    ]);
+
+    // A bill: -231.50 pays B1 230.00 and 1.50 goes to bank fees.
+    const bill = await world.lineOn("-231.50");
+    await world.reconcile(bill.id, { kind: "payments", allocations: [{ billId: world.b1.id, amount: "230.00" }], adjustment: { accountCode: "6020" } });
+    const [billPayment, billFee] = await world.items(bill.id);
+    expect(await world.postedLines(billPayment.journalId)).toEqual([
+      ["2000", "230.00", "0.00"],
+      ["1000", "0.00", "230.00"],
+    ]);
+    expect(await world.postedLines(billFee.journalId)).toEqual([
+      ["6020", "1.50", "0.00"],
+      ["1000", "0.00", "1.50"],
+    ]);
+    const billFeeRow = (await world.sql("select id::text from bank_transactions where journal_id = $1", [billFee.journalId])).rows[0];
+    expect(await world.asUser(viewer, (tx) => getBankTransaction(tx, billFeeRow.id))).toMatchObject({
+      kind: "spend",
+      contactName: "Kauri Supplies",
+      lines: [expect.objectContaining({ description: "Adjustment" })],
+    });
+    expect(await world.asUser(viewer, (tx) => getBill(tx, world.b1.id))).toMatchObject({ paidStatus: "paid", amountDue: "0.00" });
+
+    // 0.50 over, kept as other revenue with GST.
+    const over = await adjustmentWorld("Date,Amount,Payee\n20/05/2026,115.50,KOBE LTD\n");
+    const overBefore = await over.gst();
+    const extra = await over.lineOn("115.50");
+    await over.reconcile(extra.id, {
+      kind: "payments",
+      allocations: [{ invoiceId: over.i1.id, amount: "115.00" }],
+      adjustment: { accountCode: "4100", taxCode: "GST" },
+    });
+    const [overPayment, overAdjustment] = await over.items(extra.id);
+    expect(await over.postedLines(overAdjustment.journalId)).toEqual([
+      ["4100", "0.00", "0.43"],
+      ["2100", "0.00", "0.07"],
+      ["1000", "0.50", "0.00"],
+    ]);
+    expect(
+      (await over.sql("select overpayment_amount::text from customer_payments where journal_id = $1", [overPayment.journalId])).rows[0]
+        .overpayment_amount,
+    ).toBe("0.00");
+    const overAfter = await over.gst();
+    expect(toFixedString(sub(dec(overAfter.boxes.box5), dec(overBefore.boxes.box5)), 2)).toBe("0.50");
+
+    // Matching a payment already recorded, with a contact chosen for the adjustment.
+    const matched = await adjustmentWorld("Date,Amount,Payee\n20/05/2026,113.50,KOBE LTD\n");
+    const { payment: recorded } = await matched.asUser(bookkeeper, (tx) =>
+      recordPayment(tx, matched.i1.id, { idempotencyKey: key("pay"), paymentDate: "2026-05-19", amount: "115.00", bankAccountCode: "1000" }),
+    );
+    const recordedLine = (await matched.sql("select id::text from ledger_journal_lines where journal_id = $1 and account_id = $2", [recorded.journalId, matched.bank.id]))
+      .rows[0].id as string;
+    const matchedLine = await matched.lineOn("113.50");
+    const beforeMatch = await matched.journalCount();
+    await matched.reconcile(matchedLine.id, { kind: "match", journalLineIds: [recordedLine], adjustment: { ...FEE, contactId: matched.kobe.id } });
+    expect(await matched.journalCount()).toBe(beforeMatch + 1);
+    const [matchedPayment, matchedFee] = await matched.items(matchedLine.id);
+    expect(matchedPayment.journalId).toBe(recorded.journalId);
+    expect(await matched.postedLines(matchedFee.journalId)).toEqual([
+      ["6020", "1.50", "0.00"],
+      ["1000", "0.00", "1.50"],
+    ]);
+  });
+
+  it("BK25: adjustments are refused without an account, a contact when matching, or a difference; nothing is posted; retries", async () => {
+    const world = await adjustmentWorld("Date,Amount,Payee\n20/05/2026,113.50,KOBE LTD\n21/05/2026,-46.00,Z ENERGY\n");
+    const short = await world.lineOn("113.50");
+    const fuel = await world.lineOn("-46.00");
+    const pay = (adjustment: Record<string, unknown>, amount = "115.00", idempotencyKey = key("reconcile")) =>
+      world.asUser(bookkeeper, (tx) =>
+        reconcileStatementLine(tx, short.id, { idempotencyKey, kind: "payments", allocations: [{ invoiceId: world.i1.id, amount }], adjustment }),
+      );
+    const journals = await world.journalCount();
+    await expect(pay({ description: "Fee" })).rejects.toThrow("Choose the account for the 1.50 difference.");
+    await expect(pay(FEE, "113.50")).rejects.toThrow("The payments already add up to the line, so there's no difference for an adjustment.");
+    await expect(pay({ accountCode: "1100" })).rejects.toThrow(/accounts receivable/);
+    const { payment } = await world.asUser(bookkeeper, (tx) =>
+      recordPayment(tx, world.i1.id, { idempotencyKey: key("pay"), paymentDate: "2026-05-19", amount: "10.00", bankAccountCode: "1000" }),
+    );
+    const paymentLine = (await world.sql("select id::text from ledger_journal_lines where journal_id = $1 and account_id = $2", [payment.journalId, world.bank.id]))
+      .rows[0].id as string;
+    const withPayment = await world.journalCount();
+    await expect(world.reconcile(short.id, { kind: "match", journalLineIds: [paymentLine], adjustment: FEE })).rejects.toThrow(
+      "Choose a contact for the 103.50 adjustment.",
+    );
+    await expect(
+      world.reconcile(fuel.id, {
+        kind: "bank_transaction",
+        contactId: world.zEnergy.id,
+        amountsMode: "inclusive",
+        lines: [{ description: "Petrol", accountCode: "6120", taxCode: "GST", amount: "46.00" }],
+        adjustment: FEE,
+      }),
+    ).rejects.toThrow("An adjustment is only for a difference when matching, or paying invoices or bills.");
+    await expect(world.reconcile(fuel.id, { kind: "transfer", otherAccountCode: "1010", adjustment: FEE })).rejects.toThrow(/only for a difference/);
+    expect(await world.journalCount()).toBe(withPayment);
+    expect(withPayment).toBe(journals + 1);
+    await world.asUser(bookkeeper, (tx) => voidPayment(tx, world.i1.id, payment.id, { idempotencyKey: key("void"), voidDate: "2026-05-19" }));
+
+    // A locked period refuses the whole thing: no payment, no adjustment.
+    await world.lock("2026-05-20");
+    const locked = await world.journalCount();
+    await expect(pay(FEE)).rejects.toThrow(/locked period/);
+    expect(await world.journalCount()).toBe(locked);
+    expect(await world.asUser(viewer, (tx) => getInvoice(tx, world.i1.id))).toMatchObject({ amountDue: "115.00" });
+    await world.lock(null);
+
+    // Retries return the line and post nothing more; another account with the same key is refused.
+    const retryKey = key("reconcile");
+    const first = await pay(FEE, "115.00", retryKey);
+    const posted = await world.journalCount();
+    expect(await pay(FEE, "115.00", retryKey)).toEqual({ ...first, created: false });
+    await expect(pay({ ...FEE, accountCode: "6070" }, "115.00", retryKey)).rejects.toThrow(/idempotency key/i);
+    expect(await world.journalCount()).toBe(posted);
+
+    // Unreconciling leaves the payment and the adjustment; the adjustment can then be voided on its own.
+    const [, fee] = await world.items(short.id);
+    await world.asUser(bookkeeper, (tx) => unreconcileStatementLine(tx, short.id, { idempotencyKey: key("unreconcile") }));
+    expect(await world.asUser(viewer, (tx) => getInvoice(tx, world.i1.id))).toMatchObject({ paidStatus: "paid" });
+    const feeRow = (await world.sql("select id::text from bank_transactions where journal_id = $1", [fee.journalId])).rows[0];
+    const voided = await world.asUser(bookkeeper, (tx) => voidBankTransaction(tx, feeRow.id, { idempotencyKey: key("void"), voidDate: "2026-05-20" }));
+    expect(voided.bankTransaction.status).toBe("voided");
   });
 });
