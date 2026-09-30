@@ -70,7 +70,7 @@ Filename: "{autodesktop}\Tohyee.url"; Section: "InternetShortcut"; Key: "URL"; S
 Filename: "{group}\Tohyee server settings.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:3001/server"
 
 [Icons]
-Name: "{group}\Tohyee server settings"; Filename: "{app}\tray\TohyeeTray.exe"; Parameters: "--settings"; Comment: "Organisations, users, remote access, email and updates (this computer only)"
+Name: "{group}\Tohyee server settings"; Filename: "{app}\tray\TohyeeTray.exe"; Parameters: "--settings"; Comment: "Organisations, users, phone access, backups, email and updates (this computer only)"
 Name: "{group}\Back up Tohyee"; Filename: "{app}\tray\TohyeeTray.exe"; Parameters: "--back-up"; Comment: "Back up every organisation now, encrypted, to the backup folder (sign in first)"
 Name: "{group}\Tohyee logs"; Filename: "{commonappdata}\Tohyee\logs"
 Name: "{group}\Uninstall Tohyee"; Filename: "{uninstallexe}"

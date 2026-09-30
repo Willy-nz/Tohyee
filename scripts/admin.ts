@@ -23,7 +23,7 @@ import {
   retryProvisioning,
   updateOrganisation,
 } from "@/lib/organisations/admin";
-import { getRemoteAccess, updateRemoteAccess } from "@/lib/remote/settings";
+import { getRemoteAccess, getTohyeeAddress, releaseTohyeeAddress, updateRemoteAccess } from "@/lib/remote/settings";
 import { getLatestReleaseCheck } from "@/lib/updates/server-updates";
 import { backupKeyStatus, checkSavedBackupKey, revealBackupKey } from "@/lib/backups/key";
 import {
@@ -62,9 +62,12 @@ Users
   users server-admin --email EMAIL --on|--off
   users reset-two-step --email EMAIL        lost phone: they set it up again at next sign-in
 
-Remote access (Cloudflare Tunnel)
+Remote access (use Tohyee from anywhere; one way at a time)
   remote-access show [--json]
+  remote-access address --on|--off          a Tohyee address (run by the Tohyee project, no sign-up)
+  remote-access address release             give the Tohyee address back
   remote-access set --on|--off [--token] [--url https://books.example.nz]
+                                            your own domain: a Cloudflare Tunnel token
                                             --token: TOHYEE_TUNNEL_TOKEN or asked
   remote-access clear
   (Restart Tohyee afterwards: the running server starts or stops the tunnel when it starts.)
@@ -348,13 +351,39 @@ async function remoteAccess(command: string | undefined, args: string[]) {
     // The tunnel itself runs inside the Tohyee server, not this command, so
     // its live state isn't known here.
     show(args, { ...remote, tunnel: undefined }, () => {
-      console.log(`Remote access: ${remote.enabled ? "on" : "off"}`);
+      const how =
+        remote.method === "tohyee"
+          ? "a Tohyee address"
+          : remote.method === "tailscale"
+            ? "Tailscale Funnel, set up in the Windows server app"
+            : "your own domain, Cloudflare Tunnel";
+      console.log(`Remote access: ${remote.enabled ? "on" : "off"} (${how})`);
       console.log(`Public address: ${remote.publicUrl ?? "(not set)"}`);
+      console.log(`Tohyee address: ${remote.tohyeeAddress ?? "none"} (address service ${remote.addressService})`);
+      if (remote.method === "tailscale") {
+        console.log("Tailscale's free plan is for non-commercial use only; businesses need a paid Tailscale plan (https://tailscale.com/pricing).");
+      }
       console.log(`Tunnel token: ${remote.hasToken ? `saved (tunnel ${remote.tunnelId ?? "unknown"})` : "not saved"}`);
       console.log(`Give Cloudflare this service address: ${remote.localService}`);
       if (!remote.twoStepRequired) console.log("Two-step sign-in isn't in force (TOHYEE_SECRET_KEY isn't set), so the tunnel won't start.");
       console.log("Whether the tunnel is connected right now shows in the server's log.");
     });
+    return;
+  }
+  if (command === "address") {
+    if (args[0] === "release") {
+      await releaseTohyeeAddress(COMMAND_LINE_ADMIN, { apply: false });
+      console.log("The Tohyee address was given back. Restart Tohyee to stop a running tunnel.");
+      return;
+    }
+    const remote = onOff(args)
+      ? await getTohyeeAddress(COMMAND_LINE_ADMIN, { apply: false })
+      : await updateRemoteAccess(COMMAND_LINE_ADMIN, { method: "tohyee", enabled: false }, { apply: false });
+    console.log(
+      remote.enabled
+        ? `Your Tohyee address is ${remote.publicUrl}. Restart Tohyee for the tunnel to start. Run by the Tohyee project; your books still stay on this computer and the address service never sees them.`
+        : `The Tohyee address is off (kept: ${remote.tohyeeAddress ?? "none"}). Restart Tohyee for the tunnel to stop.`,
+    );
     return;
   }
   if (command === "set") {

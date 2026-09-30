@@ -40,15 +40,27 @@ namespace Tohyee.Tray
         private readonly Timer _timer;
         private readonly HttpClient _health = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(4) };
         private readonly TohyeeApi _api;
+        private readonly AppServices _services;
         private ServerSettingsForm _settingsForm;
         private ServerState _state = ServerState.Checking;
         private string _version;
+        private string _stateText;
+        private TimeSpan? _uptime;
         private bool _checking;
 
         public TrayApp(TraySettings settings, bool openSettings, bool backUp = false)
         {
             _settings = settings;
             _api = new TohyeeApi(settings.AdminUrl);
+            _services = new AppServices
+            {
+                Api = _api,
+                Settings = settings,
+                Tailscale = new TailscaleCli(),
+                Cloudflare = new CloudflaredCli(settings),
+                News = NewsFeed.ForThisUser(),
+                Server = () => new ServerInfo { State = _state, Text = _stateText, Version = _version, Uptime = _uptime },
+            };
 
             var menu = new ContextMenuStrip();
             _statusItem = new ToolStripMenuItem("Checking Tohyee…") { Enabled = false };
@@ -145,6 +157,8 @@ namespace Tohyee.Tray
                     : state == ServerState.Starting ? "Tohyee is starting…"
                     : state == ServerState.Stopped ? "Tohyee is stopped: " + detail
                     : "Tohyee has a problem" + (detail != null ? ": " + detail : "");
+                _stateText = text;
+                _uptime = state == ServerState.Running ? ServiceUptime("Tohyee") : null;
                 _statusItem.Text = text;
                 _icon.Text = text.Length > 63 ? text.Substring(0, 63) : text;
                 if (state != _state)
@@ -163,6 +177,67 @@ namespace Tohyee.Tray
             finally
             {
                 _checking = false;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ServiceStatusProcess
+        {
+            public int ServiceType;
+            public int CurrentState;
+            public int ControlsAccepted;
+            public int Win32ExitCode;
+            public int ServiceSpecificExitCode;
+            public int CheckPoint;
+            public int WaitHint;
+            public int ProcessId;
+            public int ServiceFlags;
+        }
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr OpenSCManager(string machine, string database, int access);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr OpenService(IntPtr manager, string name, int access);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool QueryServiceStatusEx(IntPtr service, int level, ref ServiceStatusProcess status, int size, out int needed);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool CloseServiceHandle(IntPtr handle);
+
+        /// <summary>
+        /// How long a service's process has been running, if Windows lets this
+        /// user see it (SERVICE_QUERY_STATUS is open to everyone; the process's
+        /// start time may not be). Null when it can't tell.
+        /// </summary>
+        private static TimeSpan? ServiceUptime(string name)
+        {
+            if (Environment.OSVersion.Platform != PlatformID.Win32NT) return null;
+            var manager = IntPtr.Zero;
+            var service = IntPtr.Zero;
+            try
+            {
+                manager = OpenSCManager(null, null, 0x0001); // SC_MANAGER_CONNECT
+                if (manager == IntPtr.Zero) return null;
+                service = OpenService(manager, name, 0x0004); // SERVICE_QUERY_STATUS
+                if (service == IntPtr.Zero) return null;
+                var status = new ServiceStatusProcess();
+                int needed;
+                if (!QueryServiceStatusEx(service, 0, ref status, Marshal.SizeOf(typeof(ServiceStatusProcess)), out needed) || status.ProcessId == 0) return null;
+                using (var process = Process.GetProcessById(status.ProcessId))
+                {
+                    return DateTime.Now - process.StartTime;
+                }
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+            finally
+            {
+                if (service != IntPtr.Zero) CloseServiceHandle(service);
+                if (manager != IntPtr.Zero) CloseServiceHandle(manager);
             }
         }
 
@@ -188,39 +263,42 @@ namespace Tohyee.Tray
             }
         }
 
-        /// <summary>A rounded square in Tohyee blue with a status dot.</summary>
-        private static Icon MakeIcon(ServerState state)
+        private static Image _trayLogo;
+
+        /// <summary>
+        /// The Tohyee logo with a status dot: green when running, amber while
+        /// starting, red when stopped or unwell. Drawn at 32 px; Windows scales it.
+        /// </summary>
+        internal static Icon MakeIcon(ServerState state)
         {
             using (var bitmap = new Bitmap(32, 32))
             using (var g = Graphics.FromImage(bitmap))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.Clear(Color.Transparent);
-                using (var path = new GraphicsPath())
+                if (_trayLogo == null) _trayLogo = Theme.LoadImage("logo-32.png");
+                if (_trayLogo != null)
                 {
-                    path.AddArc(2, 2, 10, 10, 180, 90);
-                    path.AddArc(20, 2, 10, 10, 270, 90);
-                    path.AddArc(20, 20, 10, 10, 0, 90);
-                    path.AddArc(2, 20, 10, 10, 90, 90);
-                    path.CloseFigure();
-                    using (var brush = new LinearGradientBrush(new Point(0, 0), new Point(32, 32), Color.FromArgb(56, 189, 248), Color.FromArgb(37, 99, 235)))
+                    g.DrawImage(_trayLogo, new Rectangle(0, 0, 30, 30));
+                }
+                else
+                {
+                    using (var path = Theme.Rounded(new RectangleF(1, 1, 28, 28), 7))
+                    using (var brush = new SolidBrush(Theme.Accent))
                     {
                         g.FillPath(brush, path);
                     }
                 }
-                using (var font = new Font("Segoe UI", 15, FontStyle.Bold, GraphicsUnit.Pixel))
-                using (var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                {
-                    g.DrawString("T", font, Brushes.White, new RectangleF(0, 0, 30, 30), format);
-                }
                 var dot = state == ServerState.Running ? Color.FromArgb(34, 197, 94)
                     : state == ServerState.Starting || state == ServerState.Checking ? Color.FromArgb(245, 158, 11)
                     : Color.FromArgb(239, 68, 68);
+                // A big dot with a dark ring, so the colour reads even at 16 px on a light or dark taskbar.
+                using (var ring = new SolidBrush(Color.FromArgb(17, 24, 39)))
                 using (var brush = new SolidBrush(dot))
-                using (var pen = new Pen(Color.White, 2))
                 {
-                    g.FillEllipse(brush, 19, 19, 12, 12);
-                    g.DrawEllipse(pen, 19, 19, 12, 12);
+                    g.FillEllipse(ring, 16, 16, 16, 16);
+                    g.FillEllipse(brush, 18.5f, 18.5f, 11, 11);
                 }
                 return Icon.FromHandle(bitmap.GetHicon());
             }
@@ -237,7 +315,7 @@ namespace Tohyee.Tray
         {
             if (_settingsForm == null || _settingsForm.IsDisposed)
             {
-                _settingsForm = new ServerSettingsForm(_api, _settings);
+                _settingsForm = new ServerSettingsForm(_services);
             }
             _settingsForm.Show();
             if (_settingsForm.WindowState == FormWindowState.Minimized) _settingsForm.WindowState = FormWindowState.Normal;
@@ -260,7 +338,7 @@ namespace Tohyee.Tray
             _settingsForm.BackUpNow();
         }
 
-        private static void RunElevated(string powershellArguments)
+        internal static void RunElevated(string powershellArguments)
         {
             try
             {

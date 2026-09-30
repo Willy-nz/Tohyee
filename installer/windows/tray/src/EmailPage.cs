@@ -12,9 +12,9 @@ namespace Tohyee.Tray
     internal sealed class EmailPage : UserControl
     {
         private readonly TohyeeApi _api;
-        private readonly Label _state = new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 10.5f), Margin = new Padding(0, 0, 0, 8) };
+        private readonly Label _state = Ui.State();
         private readonly ComboBox _provider = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-        private readonly Label _providerNote = new Label { AutoSize = true, ForeColor = Ui.Muted, MaximumSize = new Size(380, 0) };
+        private readonly Label _providerNote = new Label { AutoSize = true, ForeColor = Ui.Muted, MaximumSize = new Size(Theme.S(420), 0), Margin = new Padding(0, 2, 0, 6) };
         private readonly TextBox _host = new TextBox();
         private readonly TextBox _port = new TextBox();
         private readonly TextBox _username = new TextBox();
@@ -27,10 +27,10 @@ namespace Tohyee.Tray
         public EmailPage(TohyeeApi api)
         {
             _api = api;
-            var page = Ui.Page();
-            page.Controls.Add(Ui.Title("Email"));
-            page.Controls.Add(Ui.Note("The email account this server sends from: security alerts (two-step sign-in changes, backup codes used, locked accounts) and links to reset two-step sign-in when someone loses their phone."));
-            page.Controls.Add(_state);
+            BackColor = Theme.Bg;
+            var page = Ui.Page("Email", "The email account this server sends from: security alerts (two-step sign-in changes, backup codes used, locked accounts) and links to reset two-step sign-in when someone loses their phone.");
+            var card = Ui.Card(page, null, null);
+            card.Body.Controls.Add(_state);
             var form = Ui.Form();
             Ui.Field(form, "Email provider", _provider);
             form.RowCount += 1;
@@ -45,13 +45,13 @@ namespace Tohyee.Tray
             form.Controls.Add(_passwordHint);
             Ui.Field(form, "Send from", _fromAddress);
             Ui.Field(form, "From name", _fromName);
-            page.Controls.Add(form);
+            card.Body.Controls.Add(form);
             var buttons = Ui.Row();
-            buttons.Controls.Add(Ui.Btn("Save", async (s, e) => await Save()));
+            buttons.Controls.Add(Ui.Primary("Save", async (s, e) => await Save()));
             buttons.Controls.Add(Ui.Btn("Send a test email", async (s, e) => await Test()));
-            buttons.Controls.Add(Ui.Btn("Remove", async (s, e) => await Remove()));
-            page.Controls.Add(buttons);
-            page.Controls.Add(_status);
+            buttons.Controls.Add(Ui.DangerBtn("Remove", async (s, e) => await Remove()));
+            card.Body.Controls.Add(buttons);
+            card.Body.Controls.Add(_status);
             Controls.Add(page);
 
             _provider.Items.AddRange(new object[] { "Gmail", "Outlook / Microsoft 365", "Other (SMTP)" });
@@ -85,7 +85,7 @@ namespace Tohyee.Tray
             _state.Text = configured
                 ? "Set up: sending as " + J.Str(email, "fromAddress") + " through " + J.Str(email, "host") + (J.Str(email, "updatedAt") != null ? " · saved " + J.When(J.Str(email, "updatedAt")) : "")
                 : "Not set up yet.";
-            _state.ForeColor = configured ? Ui.Success : Color.Black;
+            _state.ForeColor = configured ? Ui.Success : Theme.Text;
             var host = J.Str(email, "host");
             _provider.SelectedIndex = host == null || host == "smtp.gmail.com" ? 0 : host == "smtp.office365.com" ? 1 : 2;
             if (host != null) _host.Text = host;

@@ -14,24 +14,34 @@ namespace Tohyee.Tray
     internal sealed class UpdatesPage : UserControl
     {
         private readonly TohyeeApi _api;
-        private readonly Label _result = new Label { AutoSize = true, Font = new Font("Segoe UI Semibold", 10.5f), MaximumSize = new Size(720, 0), Margin = new Padding(0, 8, 0, 4) };
-        private readonly Label _detail = new Label { AutoSize = true, ForeColor = Ui.Muted, MaximumSize = new Size(720, 0), Margin = new Padding(0, 0, 0, 8) };
+        private readonly Label _result = new Label { AutoSize = true, Font = Theme.Strong, ForeColor = Theme.Text, Tag = "wrap", Margin = new Padding(0, 10, 0, 4) };
+        private readonly Label _detail = new Label { AutoSize = true, ForeColor = Ui.Muted, Tag = "wrap", Margin = new Padding(0, 0, 0, 8) };
         private readonly FlowLayoutPanel _links = Ui.Row();
         private readonly Label _status = Ui.Status();
 
         public UpdatesPage(TohyeeApi api)
         {
             _api = api;
-            var page = Ui.Page();
-            page.Controls.Add(Ui.Title("Updates"));
-            page.Controls.Add(Ui.Note("Compares this server with the latest release on GitHub. To update, download the new TohyeeSetup and run it on this computer: it stops Tohyee, replaces the program, keeps your data and passwords, and starts it again. Back up first (tray menu → Back up now)."));
+            BackColor = Theme.Bg;
+            var page = Ui.Page("Updates", "Compares this server with the latest release on GitHub. To update, download the new TohyeeSetup and run it on this computer: it stops Tohyee, replaces the program, keeps your data and passwords, and starts it again. Back up first (tray menu → Back up now).");
+            var card = Ui.Card(page, null, null);
             var buttons = Ui.Row();
-            buttons.Controls.Add(Ui.Btn("Check now", async (s, e) => await Check()));
-            page.Controls.Add(buttons);
-            page.Controls.Add(_result);
-            page.Controls.Add(_detail);
-            page.Controls.Add(_links);
-            page.Controls.Add(_status);
+            buttons.Controls.Add(Ui.Primary("Check now", async (s, e) => await Check()));
+            card.Body.Controls.Add(buttons);
+            card.Body.Controls.Add(_result);
+            card.Body.Controls.Add(_detail);
+            card.Body.Controls.Add(_links);
+            card.Body.Controls.Add(_status);
+            // Nothing to show until the first check.
+            foreach (var label in new[] { _result, _detail })
+            {
+                var line = label;
+                line.Visible = false;
+                line.TextChanged += (s, e) => line.Visible = line.Text.Length > 0;
+            }
+            _links.Visible = false;
+            _links.ControlAdded += (s, e) => _links.Visible = true;
+            _links.ControlRemoved += (s, e) => _links.Visible = _links.Controls.Count > 0;
             Controls.Add(page);
         }
 
@@ -45,7 +55,7 @@ namespace Tohyee.Tray
                 var release = J.Obj(check, "release");
                 var available = J.Bool(check, "updateAvailable");
                 _result.Text = "This server runs v" + J.Str(check, "currentVersion") + ". The latest release is v" + J.Str(check, "latestVersion") + (available ? ": an update is available." : ": you're up to date.");
-                _result.ForeColor = available ? Color.FromArgb(180, 83, 9) : Ui.Success;
+                _result.ForeColor = available ? Theme.Warning : Ui.Success;
                 var published = J.Str(release, "publishedAt");
                 _detail.Text = (J.Str(release, "name") ?? J.Str(release, "tagName")) + (published != null ? ", published " + J.When(published) : "");
                 var notes = J.Str(release, "htmlUrl");
@@ -54,7 +64,7 @@ namespace Tohyee.Tray
                 if (setup != null && available)
                 {
                     var url = J.Str(setup, "downloadUrl");
-                    _links.Controls.Add(Ui.Btn("Download " + J.Str(setup, "name"), (s, e) => TrayApp.Open(url)));
+                    _links.Controls.Add(Ui.Primary("Download " + J.Str(setup, "name"), (s, e) => TrayApp.Open(url)));
                 }
             });
         }

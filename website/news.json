@@ -1,0 +1,12 @@
+{
+  "about": "Announcements shown on the Home page of the Tohyee server app (Windows), next to the GitHub releases. Edit this file on main and GitHub Pages publishes it to https://willy-nz.github.io/Tohyee/news.json. Each item: date (YYYY-MM-DD), title, body, and optionally link (https) and kind (\"conference\" shows it in the conference card).",
+  "items": [
+    {
+      "date": "2026-09-30",
+      "kind": "conference",
+      "title": "Save the date: TohyeeCon",
+      "body": "The first Tohyee conference is coming to Ōtepoti Dunedin… one day. Date to be confirmed (probably after payroll is built). 🐶",
+      "link": "https://github.com/Willy-nz/Tohyee"
+    }
+  ]
+}

@@ -1,8 +1,14 @@
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
-import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import * as remoteRoute from "@/app/api/admin/remote-access/route";
+import * as addressRoute from "@/app/api/admin/remote-access/tohyee-address/route";
 import { publicOrigin } from "@/lib/auth/origin";
+import { assertSameOrigin } from "@/lib/auth/guard";
+import { sessionCookieHeader } from "@/lib/auth/sessions";
 import { parseTunnelToken } from "@/lib/remote/settings";
+import { addressServiceUrl, DEFAULT_ADDRESS_SERVICE } from "@/lib/remote/address-service";
 import { setTunnelCommandForTests, stopTunnel } from "@/lib/remote/tunnel";
 import { coreQuery } from "@/lib/db/transactions";
 import { apiRequest, createTestUser, describeWithDatabase, sessionCookieFor, startTestServer, type TestServer } from "../helpers/test-server";
@@ -19,7 +25,7 @@ async function body(response: Response) {
   return (await response.json()) as Record<string, unknown>;
 }
 
-describeWithDatabase("remote access through a Cloudflare Tunnel", () => {
+describeWithDatabase("remote access: a Tohyee address, your own domain (Cloudflare Tunnel) or Tailscale Funnel", () => {
   let server: TestServer;
   const originalKey = process.env.TOHYEE_SECRET_KEY;
   let adminCookie = "";
@@ -33,6 +39,8 @@ describeWithDatabase("remote access through a Cloudflare Tunnel", () => {
       hasToken: boolean;
       tunnelId: string | null;
       publicUrl: string | null;
+      method: string;
+      tohyeeAddress: string | null;
       tunnel: { status: string; message: string | null; log: string[] };
     };
 
@@ -74,6 +82,8 @@ describeWithDatabase("remote access through a Cloudflare Tunnel", () => {
     const state = await read();
     expect(state).toMatchObject({ enabled: true, hasToken: true, publicUrl: "https://books.example.nz", tunnelId: "11111111-2222-3333-4444-555555555555" });
     expect(state.tunnel.log.some((line) => line.includes("Registered tunnel connection"))).toBe(true);
+    // cloudflared is told where Tohyee is, for tunnels without routes of their own (Connect to Cloudflare's).
+    expect(state.tunnel.log.some((line) => /url=http:\/\/127\.0\.0\.1:\d+$/.test(line))).toBe(true);
     const stored = await coreQuery<{ secret_ciphertext: string }>("select secret_ciphertext from server_settings where key = 'remote_access'");
     expect(stored.rows[0].secret_ciphertext).not.toContain("eyJ");
     // Emailed links use the public address, not whatever Host a request claims.
@@ -93,5 +103,250 @@ describeWithDatabase("remote access through a Cloudflare Tunnel", () => {
     const cleared = await put(adminCookie, { clear: true });
     expect(cleared.status).toBe(200);
     expect(await read()).toMatchObject({ enabled: false, hasToken: false, publicUrl: null });
+  });
+
+  describe("Tailscale Funnel (set up by the Windows server app)", () => {
+    const address = "https://tohyee-pc.tail1a2b3c.ts.net";
+
+    /** What Tailscale Funnel sends on to 127.0.0.1:<port> (ipn/ipnlocal/serve.go keeps Host and adds X-Forwarded-*). */
+    function throughFunnel(path: string, init: { method?: string; origin?: string } = {}): Request {
+      const headers: Record<string, string> = {
+        host: "tohyee-pc.tail1a2b3c.ts.net",
+        "x-forwarded-host": "tohyee-pc.tail1a2b3c.ts.net",
+        "x-forwarded-proto": "https",
+        "x-forwarded-for": "203.0.113.9",
+      };
+      if (init.origin) headers.origin = init.origin;
+      return new Request(`http://127.0.0.1:3000${path}`, { method: init.method ?? "GET", headers });
+    }
+
+    it("needs two-step sign-in in force and a ts.net address, but no Cloudflare token", async () => {
+      delete process.env.TOHYEE_SECRET_KEY;
+      expect((await put(adminCookie, { method: "tailscale", enabled: true, publicUrl: address })).status).toBe(503);
+      process.env.TOHYEE_SECRET_KEY = "remote-access-test-key-0123456789abcdef";
+      expect((await put(bookkeeperCookie, { method: "tailscale", enabled: true, publicUrl: address })).status).toBe(403);
+      expect((await put(adminCookie, { method: "tailscale", enabled: true, publicUrl: "https://books.example.nz" })).status).toBe(400);
+      expect((await put(adminCookie, { method: "tailscale", enabled: true })).status).toBe(400);
+      expect((await put(adminCookie, { method: "carrier-pigeon", enabled: true, publicUrl: address })).status).toBe(400);
+
+      const saved = await put(adminCookie, { method: "tailscale", enabled: true, publicUrl: address });
+      expect(saved.status).toBe(200);
+      expect(await read()).toMatchObject({ method: "tailscale", enabled: true, publicUrl: address, hasToken: false });
+      // Emailed links use the Funnel address.
+      expect(await publicOrigin(apiRequest("/x", { origin: "https://evil.example" }))).toBe(address);
+    });
+
+    it("doesn't run the Cloudflare connector, and keeps a saved token for switching back", async () => {
+      await put(adminCookie, { enabled: true, tunnelToken: token("c2VjcmV0"), publicUrl: "books.example.nz" });
+      await vi.waitFor(async () => expect((await read()).tunnel.status).toBe("connected"), { timeout: 5000, interval: 100 });
+      await put(adminCookie, { method: "tailscale", enabled: true, publicUrl: address });
+      const state = await read();
+      expect(state).toMatchObject({ method: "tailscale", enabled: true, hasToken: true, publicUrl: address });
+      expect(state.tunnel.status).toBe("off");
+      // Saving the Cloudflare form (no method) switches back and restarts the connector.
+      await put(adminCookie, { enabled: true, publicUrl: "books.example.nz" });
+      await vi.waitFor(async () => expect((await read()).tunnel.status).toBe("connected"), { timeout: 5000, interval: 100 });
+      expect((await read()).method).toBe("cloudflare");
+      // Turning phone access off forgets the Funnel address.
+      await put(adminCookie, { method: "tailscale", enabled: false, publicUrl: "" });
+      expect(await read()).toMatchObject({ method: "tailscale", enabled: false, publicUrl: null });
+      expect((await read()).tunnel.status).toBe("off");
+      await put(adminCookie, { clear: true });
+    });
+
+    it("accepts sign-ins arriving through Funnel on the ts.net address over https", () => {
+      expect(() => assertSameOrigin(throughFunnel("/api/auth/login", { method: "POST", origin: address }))).not.toThrow();
+      expect(() => assertSameOrigin(throughFunnel("/api/auth/login", { method: "POST", origin: "https://evil.example" }))).toThrow(
+        /Cross-site/,
+      );
+      expect(sessionCookieHeader(throughFunnel("/api/auth/login", { method: "POST", origin: address }), "abc")).toMatch(/; Secure$/);
+    });
+
+    it("never lets server settings through Funnel (it connects to the main port, without the local-only secret)", async () => {
+      const request = throughFunnel("/api/admin/remote-access");
+      request.headers.set("cookie", adminCookie);
+      expect((await remoteRoute.GET(request, noContext)).status).toBe(403);
+    });
+  });
+  describe("a Tohyee address (from the Tohyee address service)", () => {
+    type Call = { method: string; url: string; authorization: string | undefined; body: Record<string, unknown> | null };
+    let service: Server;
+    const calls: Call[] = [];
+    let answer: { status: number; body: unknown } | null = null;
+    const originalService = process.env.TOHYEE_ADDRESS_SERVICE_URL;
+    const released = new Set<string>();
+    let firstInstallId = "";
+
+    const post = (cookie: string) => addressRoute.POST(apiRequest("/api/admin/remote-access/tohyee-address", { method: "POST", cookie, body: {} }), noContext);
+    const release = (cookie: string) => addressRoute.DELETE(apiRequest("/api/admin/remote-access/tohyee-address", { method: "DELETE", cookie }), noContext);
+    const health = async () =>
+      (await body(await addressRoute.GET(apiRequest("/api/admin/remote-access/tohyee-address", { cookie: adminCookie }), noContext))).addressService as {
+        available: boolean;
+        message: string | null;
+      };
+
+    beforeAll(async () => {
+      process.env.TOHYEE_SECRET_KEY = "remote-access-test-key-0123456789abcdef";
+      // A stand-in for the service, following its API exactly.
+      service = createServer((request, response) => {
+        let text = "";
+        request.on("data", (chunk) => (text += chunk));
+        request.on("end", () => {
+          const call: Call = { method: request.method ?? "", url: request.url ?? "", authorization: request.headers.authorization, body: text ? JSON.parse(text) : null };
+          calls.push(call);
+          const send = (status: number, payload?: unknown) => {
+            response.writeHead(status, { "content-type": "application/json" });
+            response.end(payload === undefined ? "" : JSON.stringify(payload));
+          };
+          if (answer) return send(answer.status, answer.body);
+          if (call.method === "GET" && call.url === "/v1/health") return send(200, { ok: true });
+          if (call.method === "POST" && call.url === "/v1/addresses") {
+            return send(201, { hostname: "k7m2q9.tohyee.example", tunnelToken: token("YWRkcmVzcw"), releaseKey: "release-secret-123" });
+          }
+          if (call.method === "DELETE" && call.url === "/v1/addresses/k7m2q9.tohyee.example") {
+            if (call.authorization !== "Bearer release-secret-123") return send(401, { error: "That release key isn't right." });
+            released.add("k7m2q9.tohyee.example");
+            response.writeHead(204);
+            return response.end();
+          }
+          return send(404, { error: "Not found." });
+        });
+      });
+      await new Promise<void>((resolve) => service.listen(0, "127.0.0.1", resolve));
+    });
+
+    afterAll(async () => {
+      process.env.TOHYEE_ADDRESS_SERVICE_URL = originalService;
+      await new Promise<void>((resolve) => service.close(() => resolve()));
+    });
+
+    const useService = () => {
+      process.env.TOHYEE_ADDRESS_SERVICE_URL = `http://127.0.0.1:${(service.address() as AddressInfo).port}`;
+    };
+
+    it("uses the project's service unless TOHYEE_ADDRESS_SERVICE_URL says otherwise (https, or http on this computer only)", () => {
+      delete process.env.TOHYEE_ADDRESS_SERVICE_URL;
+      expect(addressServiceUrl()).toBe(DEFAULT_ADDRESS_SERVICE);
+      process.env.TOHYEE_ADDRESS_SERVICE_URL = "http://addresses.example.com";
+      expect(addressServiceUrl()).toBe(DEFAULT_ADDRESS_SERVICE);
+      process.env.TOHYEE_ADDRESS_SERVICE_URL = "https://addresses.example.com/";
+      expect(addressServiceUrl()).toBe("https://addresses.example.com");
+    });
+
+    it("says plainly when the service isn't there yet", async () => {
+      // Nothing listens on port 9 here.
+      process.env.TOHYEE_ADDRESS_SERVICE_URL = "http://127.0.0.1:9";
+      expect(await health()).toMatchObject({ available: false, message: "The Tohyee address service isn't available yet." });
+      const refused = await post(adminCookie);
+      expect(refused.status).toBe(503);
+      expect((await body(refused)).error).toBe("The Tohyee address service isn't available yet.");
+      expect(await read()).toMatchObject({ enabled: false, tohyeeAddress: null });
+      useService();
+      expect(await health()).toMatchObject({ available: true, message: null });
+    });
+
+    it("needs two-step sign-in in force, and a server admin", async () => {
+      useService();
+      delete process.env.TOHYEE_SECRET_KEY;
+      expect((await post(adminCookie)).status).toBe(503);
+      process.env.TOHYEE_SECRET_KEY = "remote-access-test-key-0123456789abcdef";
+      expect((await post(bookkeeperCookie)).status).toBe(403);
+      expect((await release(bookkeeperCookie)).status).toBe(403);
+      expect(calls.filter((call) => call.method !== "GET")).toHaveLength(0);
+    });
+
+    it("shows the service's own message when it refuses", async () => {
+      useService();
+      answer = { status: 429, body: { error: "Too many new addresses from this network today. Try again tomorrow." } };
+      const refused = await post(adminCookie);
+      answer = null;
+      expect(refused.status).toBe(429);
+      expect((await body(refused)).error).toBe("The Tohyee address service said: Too many new addresses from this network today. Try again tomorrow.");
+      expect(await read()).toMatchObject({ enabled: false, tohyeeAddress: null });
+    });
+
+    it("gets an address in one step, runs the connector with its token, and keeps the secrets encrypted", async () => {
+      useService();
+      calls.length = 0;
+      const saved = await post(adminCookie);
+      expect(saved.status).toBe(200);
+      const text = JSON.stringify(await body(saved));
+      expect(text).not.toContain("release-secret-123");
+      expect(text).not.toContain(token("YWRkcmVzcw"));
+      const request = calls.find((call) => call.method === "POST");
+      expect(request?.body).toEqual({ port: expect.any(Number), installId: expect.stringMatching(/^[A-Za-z0-9_-]{32}$/), version: expect.any(String) });
+      firstInstallId = request?.body?.installId as string;
+
+      await vi.waitFor(async () => expect((await read()).tunnel.status).toBe("connected"), { timeout: 5000, interval: 100 });
+      const state = await read();
+      expect(state).toMatchObject({ method: "tohyee", enabled: true, publicUrl: "https://k7m2q9.tohyee.example", tohyeeAddress: "https://k7m2q9.tohyee.example" });
+      expect(state.tunnel.log.some((line) => /url=http:\/\/127\.0\.0\.1:\d+$/.test(line))).toBe(true);
+      expect(await publicOrigin(apiRequest("/x", { origin: "https://evil.example" }))).toBe("https://k7m2q9.tohyee.example");
+      const stored = await coreQuery<{ key: string; secret_ciphertext: string; value: unknown }>(
+        "select key, secret_ciphertext, value from server_settings where key in ('remote_access', 'address_service')",
+      );
+      expect(stored.rows).toHaveLength(2);
+      for (const row of stored.rows) {
+        expect(row.secret_ciphertext).not.toContain("release-secret-123");
+        expect(row.secret_ciphertext).not.toContain("eyJ");
+        expect(row.secret_ciphertext).not.toContain(request?.body?.installId as string);
+        expect(JSON.stringify(row.value)).not.toContain(request?.body?.installId as string);
+      }
+    });
+
+    it("turning it off stops the connector but keeps the address; turning it on again doesn't ask the service", async () => {
+      useService();
+      await put(adminCookie, { method: "tohyee", enabled: false });
+      expect(await read()).toMatchObject({ method: "tohyee", enabled: false, publicUrl: null, tohyeeAddress: "https://k7m2q9.tohyee.example" });
+      expect((await read()).tunnel.status).toBe("off");
+      calls.length = 0;
+      await post(adminCookie);
+      expect(calls).toHaveLength(0);
+      await vi.waitFor(async () => expect((await read()).tunnel.status).toBe("connected"), { timeout: 5000, interval: 100 });
+      // The same switch through PUT.
+      await put(adminCookie, { method: "tohyee", enabled: false });
+      expect((await put(adminCookie, { method: "tohyee", enabled: true, publicUrl: "https://evil.example" })).status).toBe(200);
+      expect(await read()).toMatchObject({ method: "tohyee", enabled: true, publicUrl: "https://k7m2q9.tohyee.example" });
+    });
+
+    it("only one way is on: switching to Tailscale or your own domain keeps the address for later", async () => {
+      useService();
+      await put(adminCookie, { method: "tailscale", enabled: true, publicUrl: "https://tohyee-pc.tail1a2b3c.ts.net" });
+      expect(await read()).toMatchObject({ method: "tailscale", enabled: true, tohyeeAddress: "https://k7m2q9.tohyee.example" });
+      expect((await read()).tunnel.status).toBe("off");
+      await put(adminCookie, { method: "cloudflare", enabled: true, tunnelToken: token("b3duZG9tYWlu"), publicUrl: "books.example.nz" });
+      await vi.waitFor(async () => expect((await read()).tunnel.status).toBe("connected"), { timeout: 5000, interval: 100 });
+      expect(await read()).toMatchObject({ method: "cloudflare", publicUrl: "https://books.example.nz", tohyeeAddress: "https://k7m2q9.tohyee.example" });
+      // And back: the address's own token, not the Cloudflare one.
+      calls.length = 0;
+      await post(adminCookie);
+      expect(calls).toHaveLength(0);
+      expect(await read()).toMatchObject({ method: "tohyee", enabled: true, hasToken: true, publicUrl: "https://k7m2q9.tohyee.example" });
+    });
+
+    it("gives the address back with its release key, then forgets it", async () => {
+      useService();
+      answer = { status: 503, body: { error: "Down for maintenance." } };
+      expect((await release(adminCookie)).status).toBe(503);
+      answer = null;
+      expect((await read()).tohyeeAddress).toBe("https://k7m2q9.tohyee.example");
+
+      const done = await release(adminCookie);
+      expect(done.status).toBe(200);
+      expect(released.has("k7m2q9.tohyee.example")).toBe(true);
+      expect(await read()).toMatchObject({ method: "tohyee", enabled: false, publicUrl: null, tohyeeAddress: null, hasToken: true });
+      expect((await read()).tunnel.status).toBe("off");
+      expect((await put(adminCookie, { method: "tohyee", enabled: true })).status).toBe(400);
+
+      // The same install id asks again, so the service can hand back the same address.
+      calls.length = 0;
+      await post(adminCookie);
+      expect(calls.find((call) => call.method === "POST")?.body?.installId).toBe(firstInstallId);
+      // Removing remote access gives the address back too.
+      released.clear();
+      await put(adminCookie, { clear: true });
+      expect(released.has("k7m2q9.tohyee.example")).toBe(true);
+      expect(await read()).toMatchObject({ enabled: false, tohyeeAddress: null, hasToken: false });
+    });
   });
 });

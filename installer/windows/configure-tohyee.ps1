@@ -149,6 +149,12 @@ try {
   Copy-Item -Force (Join-Path $InstallDir 'service\WinSW-x64.exe') $serviceExe
 
   function X([string]$Value) { return [System.Security.SecurityElement]::Escape($Value) }
+  # Optional: another Tohyee address service (Phone access > Tohyee address), set in tohyee.env.
+  $addressServiceEnv = ''
+  if ($settings.Contains('TOHYEE_ADDRESS_SERVICE_URL') -and $settings['TOHYEE_ADDRESS_SERVICE_URL']) {
+    $addressServiceEnv = "  <env name=""TOHYEE_ADDRESS_SERVICE_URL"" value=""$(X $settings['TOHYEE_ADDRESS_SERVICE_URL'])""/>`r`n"
+  }
+
   $databaseUrl = "postgresql://tohyee:$($settings['POSTGRES_PASSWORD'])@localhost:$pgPort/tohyee"
   $xml = @"
 <service>
@@ -180,7 +186,7 @@ try {
   <env name="TOHYEE_CLOUDFLARED_PATH" value="$(X $CloudflaredExe)"/>
   <env name="TOHYEE_PG_BIN" value="$(X $PgBin)"/>
   <env name="TOHYEE_BACKUP_DIR" value="$(X (Join-Path $DataRoot 'backups'))"/>
-</service>
+$addressServiceEnv</service>
 "@
   [System.IO.File]::WriteAllText((Join-Path $ServiceDir 'TohyeeServer.xml'), $xml)
 

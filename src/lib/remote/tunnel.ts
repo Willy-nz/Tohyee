@@ -4,9 +4,18 @@ import { createServer } from "node:net";
 /**
  * Runs Cloudflare's `cloudflared` connector so this server can be reached
  * from anywhere through a Cloudflare Tunnel, without opening router ports.
- * The tunnel (and which address it answers on) is set up in Cloudflare's
- * dashboard; Tohyee only needs the tunnel's token. One connector per server
- * process, kept on globalThis so every route bundle sees the same one.
+ * Tohyee only needs the tunnel's token: from the Tohyee address service, from
+ * the server app's Connect to Cloudflare, or pasted from Cloudflare's
+ * dashboard. One connector per server process, kept on globalThis so every
+ * route bundle sees the same one.
+ *
+ * It runs `cloudflared tunnel run --url http://127.0.0.1:<port>` with the
+ * token in TUNNEL_TOKEN. A tunnel made in Cloudflare's dashboard (or by the
+ * address service) is "remotely managed": Cloudflare sends its routes to the
+ * connector, and they replace the --url. A tunnel made with `cloudflared tunnel
+ * create` (Connect to Cloudflare) has no routes of its own, so --url is what
+ * sends its address to Tohyee; without it cloudflared answers 503 to
+ * everything (cloudflared's ingress/ingress.go, ParseIngressFromConfigAndCLI).
  */
 export type TunnelStatus = "off" | "starting" | "connected" | "reconnecting" | "error" | "missing_program";
 
@@ -23,6 +32,8 @@ export type TunnelState = {
 type Runner = {
   child: ChildProcess | null;
   token: string | null;
+  /** Where the connector sends requests when the tunnel has no routes of its own. */
+  service: string | null;
   metricsPort: number | null;
   restartTimer: NodeJS.Timeout | null;
   state: TunnelState;
@@ -37,6 +48,7 @@ function runner(): Runner {
   holder.__tohyeeTunnel ??= {
     child: null,
     token: null,
+    service: null,
     metricsPort: null,
     restartTimer: null,
     version: 0,
@@ -112,6 +124,7 @@ async function launch(version: number): Promise<void> {
   if (current.version !== version || !current.token) return;
   const program = commandForTests?.program ?? cloudflaredProgram();
   const prefix = commandForTests?.prefix ?? [];
+  const service = current.service ? ["--url", current.service] : [];
   current.metricsPort = await freePort();
   if (current.version !== version) return;
   current.state = {
@@ -122,7 +135,7 @@ async function launch(version: number): Promise<void> {
   };
   let child: ChildProcess;
   try {
-    child = spawn(/* turbopackIgnore: true */ program, [...prefix, "tunnel", "--no-autoupdate", "--metrics", `127.0.0.1:${current.metricsPort}`, "run"], {
+    child = spawn(/* turbopackIgnore: true */ program, [...prefix, "tunnel", "--no-autoupdate", "--metrics", `127.0.0.1:${current.metricsPort}`, "run", ...service], {
       env: { ...process.env, TUNNEL_TOKEN: current.token },
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -168,12 +181,13 @@ function killChild(current: Runner): void {
   if (child && child.exitCode === null) child.kill();
 }
 
-/** Starts (or restarts with a new token) the tunnel connector. */
-export function startTunnel(token: string): void {
+/** Starts (or restarts with a new token) the tunnel connector, sending requests to `service` (e.g. http://127.0.0.1:3000). */
+export function startTunnel(token: string, service: string | null = null): void {
   const current = runner();
-  if (current.token === token && (current.child || current.restartTimer)) return;
+  if (current.token === token && current.service === service && (current.child || current.restartTimer)) return;
   killChild(current);
   current.token = token;
+  current.service = service;
   current.version += 1;
   current.state = { status: "starting", message: null, startedAt: null, connectedAt: null, restarts: 0, program: null, log: [] };
   void launch(current.version);

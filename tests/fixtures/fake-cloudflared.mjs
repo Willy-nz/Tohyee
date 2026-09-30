@@ -1,4 +1,4 @@
-// A stand-in for cloudflared in tests: `tunnel --no-autoupdate --metrics HOST:PORT run`.
+// A stand-in for cloudflared in tests: `tunnel --no-autoupdate --metrics HOST:PORT run [--url SERVICE]`.
 // A token containing "bad" is refused like Cloudflare would; otherwise it
 // "connects", logs like cloudflared does and answers /ready with 200.
 import { createServer } from "node:http";
@@ -7,7 +7,9 @@ const metrics = process.argv[process.argv.indexOf("--metrics") + 1];
 const [host, port] = metrics.split(":");
 const token = process.env.TUNNEL_TOKEN ?? "";
 const now = () => new Date().toISOString().replace(/\.\d+Z$/, "Z");
-process.stderr.write(`${now()} INF Starting tunnel tunnelID=test\n`);
+const urlAt = process.argv.indexOf("--url");
+const service = urlAt > 0 ? process.argv[urlAt + 1] : "none";
+process.stderr.write(`${now()} INF Starting tunnel tunnelID=test url=${service}\n`);
 if (Buffer.from(token, "base64").toString("utf8").includes("YmFk")) {
   process.stderr.write(`${now()} ERR Register tunnel error from server side error="Unauthorized: Invalid tunnel secret"\n`);
   process.exit(1);
