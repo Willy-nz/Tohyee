@@ -14,6 +14,7 @@ export const POST = route<Context>(async (request, context) => {
       billDate: body.billDate,
       dueDate: body.dueDate,
       supplierInvoiceNumber: body.supplierInvoiceNumber,
+      exchangeRate: body.exchangeRate,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

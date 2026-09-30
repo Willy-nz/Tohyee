@@ -156,8 +156,13 @@ export type InvoiceInput = {
   exchangeRate?: unknown;
 };
 
-/** Whether a path may make documents in a currency other than the base (only ones entered directly; MC11). */
-export type ForeignOption = { foreignCurrency?: boolean; feature?: string };
+/**
+ * Whether a path may make documents in a currency other than the base (MC11).
+ * `template`: a quote, repeating template or purchase order (MC25-MC28), in
+ * the contact's currency but with no rate: it posts nothing, and the
+ * invoice or bill made from it takes a rate for its own date.
+ */
+export type ForeignOption = { foreignCurrency?: boolean; feature?: string; template?: boolean };
 
 const MAX_LINES = 200;
 /** Quantities and unit prices allow up to 4 decimal places. */
@@ -612,8 +617,10 @@ async function resolveDraft(
       [],
     );
     await assertForeignSalesBasis(tx, "invoice", currencyCode);
-    exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.invoiceDate, typed: draft.exchangeRateInput, what: "invoice" });
-    base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+    if (!foreign.template) {
+      exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.invoiceDate, typed: draft.exchangeRateInput, what: "invoice" });
+      base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+    }
   }
 
   return {

@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { BillStatusBadge } from "@/components/bills/bill-editor";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
+import { ExchangeRateField, useLastRate } from "@/components/fx";
 import { useApiData } from "@/components/hooks";
 import { formatUnitPrice } from "@/components/invoices/invoice-editor";
 import { PurchaseOrderStatusBadge } from "@/components/purchase-orders/purchase-order-editor";
@@ -38,6 +39,10 @@ function PurchaseOrderActions({
   const [billDate, setBillDate] = useState(today);
   const [dueDate, setDueDate] = useState("");
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
+  // An order in another currency (MC28) makes a bill at a rate for the bill date.
+  const baseCurrency = useWorkspace().current?.baseCurrency ?? "NZD";
+  const [typedRate, setTypedRate] = useState<string | null>(null);
+  const suggestedRate = useLastRate(organisationId, purchaseOrder.currencyCode, baseCurrency, billDate);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasRemaining = purchaseOrder.lines.some((line) => isPositive(dec(line.remainingQuantity)));
@@ -70,7 +75,15 @@ function PurchaseOrderActions({
     void run(async () => {
       const result = await api<{ purchaseOrder: PurchaseOrder; bill: Bill }>(`/api/purchase-orders/${purchaseOrder.id}/bill`, {
         method: "POST",
-        body: { organisationId, source: "ui", idempotencyKey: copyKey, billDate, dueDate: dueDate || null, supplierInvoiceNumber },
+        body: {
+          organisationId,
+          source: "ui",
+          idempotencyKey: copyKey,
+          billDate,
+          dueDate: dueDate || null,
+          supplierInvoiceNumber,
+          ...(purchaseOrder.currencyCode !== baseCurrency && typedRate !== null ? { exchangeRate: typedRate } : {}),
+        },
       });
       router.push(`/operations/bills/${result.bill.id}`);
     });
@@ -130,6 +143,7 @@ function PurchaseOrderActions({
           <Field label="Due date" hint="Leave blank to use the supplier's payment terms.">
             <input type="date" value={dueDate} min={billDate || undefined} onChange={(event) => setDueDate(event.target.value)} />
           </Field>
+          <ExchangeRateField currencyCode={purchaseOrder.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
           <Button onClick={copyToBill} disabled={busy || !supplierInvoiceNumber.trim() || !billDate}>
             {busy ? "Working…" : "Copy to bill"}
           </Button>

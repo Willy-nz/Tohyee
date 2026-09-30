@@ -626,8 +626,11 @@ export async function resolveDraft(
       lines.map((line, index) => ({ taxCategory: line.taxCategory, itemType: lineItems[index].itemType })),
       [],
     );
-    exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.billDate, typed: draft.exchangeRateInput, what: "bill" });
-    base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+    // A purchase order or repeating bill (MC27, MC28) has no rate: the bill made from it takes one for its date.
+    if (!foreign.template) {
+      exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.billDate, typed: draft.exchangeRateInput, what: "bill" });
+      base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+    }
   }
 
   return {

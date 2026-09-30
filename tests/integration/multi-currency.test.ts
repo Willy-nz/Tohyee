@@ -17,9 +17,6 @@ import { postFxRevaluation } from "@/lib/ledger/fx-revaluation";
 import { getJournal, postJournal } from "@/lib/ledger/journals";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { recordPaymentBatch } from "@/lib/payments/batches";
-import { createPurchaseOrder } from "@/lib/purchase-orders/service";
-import { createQuote } from "@/lib/quotes/service";
-import { createRepeatingInvoice } from "@/lib/repeating/service";
 import { agedPayables } from "@/lib/reports/aged-payables";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
 import { activityStatement, outstandingStatement } from "@/lib/reports/customer-statements";
@@ -360,40 +357,8 @@ describeWithDatabase("multi-currency invoices and bills", () => {
 
   it("MC11: what's refused rather than guessed", async () => {
     const refusedFor = /for customers in a currency other than NZD isn't supported yet \(refused rather than guessed\)/;
-    await expect(
-      run((tx) =>
-        createQuote(tx, { idempotencyKey: key("quote"), contactId: acme.id, quoteDate: "2026-07-15", expiryDate: "2026-08-14", amountsMode: "exclusive", lines: [line("Quote", "10.00")] }),
-      ),
-    ).rejects.toThrow(refusedFor);
-    await expect(
-      run((tx) =>
-        createRepeatingInvoice(tx, {
-          idempotencyKey: key("ri"),
-          contactId: acme.id,
-          amountsMode: "exclusive",
-          lines: [line("Monthly", "10.00")],
-          period: "month",
-          every: 1,
-          startDate: "2026-07-31",
-          dueRule: "days_after",
-          dueDays: 20,
-          saveAs: "draft",
-        }),
-      ),
-    ).rejects.toThrow(refusedFor);
-    await expect(
-      run((tx) =>
-        createPurchaseOrder(tx, {
-          idempotencyKey: key("po"),
-          contactId: aws.id,
-          orderDate: "2026-07-01",
-          deliveryDate: "2026-07-10",
-          amountsMode: "no_tax",
-          lines: [{ description: "Hosting", quantity: "1", unitPrice: "50.00", accountCode: "6040" }],
-        }),
-      ),
-    ).rejects.toThrow(/for suppliers in a currency other than NZD isn't supported yet \(refused rather than guessed\)/);
-    // An invoice for a USD customer made by anything but entering it directly (e.g. accepting a quote) is refused the same way.
+    // Quotes, repeating documents and purchase orders for USD contacts are built (MC25-MC28). An invoice for a USD
+    // customer made any other way but entering it directly (a project's or the CRM's) is still refused.
     await expect(
       run((tx) =>
         createInvoice(tx, { idempotencyKey: key("inv"), contactId: acme.id, invoiceDate: "2026-07-30", dueDate: "2026-08-20", amountsMode: "exclusive", lines: [line("X", "1.00")], exchangeRate: "1.6" }),

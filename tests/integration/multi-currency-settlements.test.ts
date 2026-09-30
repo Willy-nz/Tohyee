@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createBankAccount } from "@/lib/bank/accounts";
-import { type Contact, createContact } from "@/lib/contacts/service";
+import { type Contact, createContact, updateContact } from "@/lib/contacts/service";
 import { refundCreditNote, voidRefund } from "@/lib/credit-notes/refunds";
 import { approveCreditNote, createCreditNote, getCreditNote } from "@/lib/credit-notes/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -10,6 +10,10 @@ import { getPayment, recordPayment, voidPayment } from "@/lib/invoices/payments"
 import { approveInvoice, createInvoice, getInvoice } from "@/lib/invoices/service";
 import { approveBill, createBill, getBill } from "@/lib/bills/service";
 import { recordPaymentBatch, voidPaymentBatch } from "@/lib/payments/batches";
+import { approvePurchaseOrder, copyPurchaseOrderToBill, createPurchaseOrder } from "@/lib/purchase-orders/service";
+import { acceptQuote, createQuote, finaliseQuote } from "@/lib/quotes/service";
+import { createRepeatingBill, runRepeatingBills } from "@/lib/repeating/bills";
+import { createRepeatingInvoice, runRepeatingInvoices } from "@/lib/repeating/service";
 import { postFxRevaluation } from "@/lib/ledger/fx-revaluation";
 import { getJournal } from "@/lib/ledger/journals";
 import { periodChecklist } from "@/lib/ledger/period-close";
@@ -441,5 +445,133 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
       ["7020", "5.00", "0.00"],
     ]);
     expect(await run((tx) => getInvoice(tx, invoices["INV-0006"]))).toMatchObject({ amountDue: "50.00", amountDueBase: "80.00" });
+  });
+
+  const journalCount = async () => Number((await run((tx) => tx.query<{ n: string }>("select count(*)::text as n from ledger_journals"))).rows[0].n);
+  const zeroLine = (description: string, unitPrice: string) => ({ description, quantity: "1", unitPrice, accountCode: "4000", taxCode: "ZERO" });
+
+  it("MC25: a USD quote is in USD with no rate and posts nothing; accepting it makes a USD invoice at a rate for its date", async () => {
+    await expect(
+      run((tx) =>
+        createQuote(tx, {
+          idempotencyKey: key("quote"),
+          contactId: acme.id,
+          quoteDate: "2026-08-20",
+          amountsMode: "exclusive",
+          lines: [{ ...zeroLine("Design", "400.00"), taxCode: "GST" }],
+        }),
+      ),
+    ).rejects.toThrow(/GST on foreign-currency invoices, bills and credit notes isn't supported yet/);
+    const before = await journalCount();
+    const draft = await run((tx) =>
+      createQuote(tx, { idempotencyKey: key("quote"), contactId: acme.id, quoteDate: "2026-08-20", expiryDate: "2026-09-20", amountsMode: "exclusive", lines: [zeroLine("Design", "400.00")] }),
+    );
+    expect(draft.quote).toMatchObject({ currencyCode: "USD", total: "400.00" });
+    const finalised = await run((tx) => finaliseQuote(tx, draft.quote.id, { idempotencyKey: key("fin") }));
+    expect(finalised.quote.quoteNumber).toBe("QU-0001");
+    expect(await journalCount()).toBe(before);
+    // No rate typed: the invoice takes the last USD rate used on or before 25 Aug (MC22's payment, 1.60).
+    const accepted = await run((tx) => acceptQuote(tx, draft.quote.id, { idempotencyKey: key("accept"), invoiceDate: "2026-08-25", dueDate: "2026-09-25" }));
+    expect(accepted.invoice).toMatchObject({ status: "draft", currencyCode: "USD", total: "400.00", exchangeRate: "1.6", baseTotal: "640.00" });
+    expect(await journalCount()).toBe(before);
+    const approved = (await run((tx) => approveInvoice(tx, accepted.invoice.id, { idempotencyKey: key("approve") }))).invoice;
+    expect(await posted(approved.approvalJournalId!)).toEqual([
+      ["1100", "640.00", "0.00", "USD 400.00 document"],
+      ["4000", "0.00", "640.00"],
+    ]);
+    // A rate typed when accepting is used instead.
+    const second = await run((tx) =>
+      createQuote(tx, { idempotencyKey: key("quote"), contactId: acme.id, quoteDate: "2026-08-20", amountsMode: "exclusive", lines: [zeroLine("Extra", "10.00")] }),
+    );
+    await run((tx) => finaliseQuote(tx, second.quote.id, { idempotencyKey: key("fin") }));
+    const typed = await run((tx) => acceptQuote(tx, second.quote.id, { idempotencyKey: key("accept"), invoiceDate: "2026-08-26", dueDate: "2026-09-25", exchangeRate: "1.58" }));
+    expect(typed.invoice).toMatchObject({ exchangeRate: "1.58", baseTotal: "15.80" });
+  });
+
+  it("MC26: a USD repeating invoice saves USD drafts, each at a rate for its date; approving automatically is refused", async () => {
+    const template = (saveAs: string) =>
+      run((tx) =>
+        createRepeatingInvoice(tx, {
+          idempotencyKey: key("ri"),
+          contactId: acme.id,
+          amountsMode: "exclusive",
+          lines: [zeroLine("Retainer", "100.00")],
+          period: "month",
+          every: 1,
+          startDate: "2026-08-31",
+          dueRule: "days_after",
+          dueDays: 20,
+          saveAs,
+        }),
+      );
+    await expect(template("approve")).rejects.toThrow(/Repeating invoices in USD can only be saved as drafts for now \(refused rather than guessed\)/);
+    const { repeatingInvoice } = await template("draft");
+    expect(repeatingInvoice).toMatchObject({ currencyCode: "USD", total: "100.00" });
+    const before = await journalCount();
+    const result = await inOrganisation(ORG, { userId: null, email: "repeating-invoices@tohyee" }, (tx) =>
+      runRepeatingInvoices(tx, { today: "2026-08-31", repeatingInvoiceId: repeatingInvoice.id }),
+    );
+    expect(result).toMatchObject({ made: 1, failed: 0 });
+    const made = (await run((tx) => tx.query<{ id: string }>("select invoice_id::text as id from repeating_invoice_runs where repeating_invoice_id = $1", [repeatingInvoice.id])))
+      .rows[0].id;
+    // The last USD rate used on or before 31 Aug is 1.60 (MC25's approved invoice; the 1.58 one is still a draft, which posts nothing).
+    expect(await run((tx) => getInvoice(tx, made))).toMatchObject({ status: "draft", invoiceDate: "2026-08-31", currencyCode: "USD", exchangeRate: "1.6", baseTotal: "160.00" });
+    expect(await journalCount()).toBe(before);
+  });
+
+  it("MC27: a USD repeating bill saves USD drafts at a rate for their date", async () => {
+    const template = (saveAs: string) =>
+      run((tx) =>
+        createRepeatingBill(tx, {
+          idempotencyKey: key("rb"),
+          contactId: aws.id,
+          supplierInvoiceNumber: "AWS-{month}",
+          amountsMode: "no_tax",
+          lines: [{ description: "Hosting", quantity: "1", unitPrice: "40.00", accountCode: "6040" }],
+          period: "month",
+          every: 1,
+          startDate: "2026-08-31",
+          dueRule: "days_after",
+          dueDays: 14,
+          saveAs,
+        }),
+      );
+    await expect(template("approve")).rejects.toThrow(/Repeating bills in USD can only be saved as drafts for now/);
+    const { repeatingBill } = await template("draft");
+    expect(repeatingBill.currencyCode).toBe("USD");
+    const result = await inOrganisation(ORG, { userId: null, email: "repeating-bills@tohyee" }, (tx) =>
+      runRepeatingBills(tx, { today: "2026-08-31", repeatingBillId: repeatingBill.id }),
+    );
+    expect(result).toMatchObject({ made: 1, failed: 0 });
+    const made = (await run((tx) => tx.query<{ id: string }>("select bill_id::text as id from repeating_bill_runs where repeating_bill_id = $1", [repeatingBill.id]))).rows[0].id;
+    expect(await run((tx) => getBill(tx, made))).toMatchObject({ status: "draft", billDate: "2026-08-31", currencyCode: "USD", exchangeRate: "1.6", baseTotal: "64.00" });
+  });
+
+  it("MC28: a USD purchase order is in USD with no rate; the bill copied from it takes the bill date's rate", async () => {
+    const before = await journalCount();
+    const draft = await run((tx) =>
+      createPurchaseOrder(tx, {
+        idempotencyKey: key("po"),
+        contactId: aws.id,
+        orderDate: "2026-08-20",
+        deliveryDate: "2026-08-25",
+        amountsMode: "no_tax",
+        lines: [{ description: "Reserved instances", quantity: "3", unitPrice: "20.00", accountCode: "6040" }],
+      }),
+    );
+    expect(draft.purchaseOrder).toMatchObject({ currencyCode: "USD", total: "60.00" });
+    const approved = (await run((tx) => approvePurchaseOrder(tx, draft.purchaseOrder.id, { idempotencyKey: key("appr") }))).purchaseOrder;
+    expect(await journalCount()).toBe(before);
+    const copied = await run((tx) =>
+      copyPurchaseOrderToBill(tx, approved.id, { idempotencyKey: key("copy"), billDate: "2026-08-28", dueDate: "2026-09-28", supplierInvoiceNumber: "AWS-PO1", exchangeRate: "1.55" }),
+    );
+    expect(copied.bill).toMatchObject({ status: "draft", currencyCode: "USD", total: "60.00", exchangeRate: "1.55", baseTotal: "93.00" });
+    const bill = (await run((tx) => approveBill(tx, copied.bill.id, { idempotencyKey: key("approve") }))).bill;
+    expect(await posted(bill.approvalJournalId!)).toEqual([
+      ["6040", "93.00", "0.00"],
+      ["2000", "0.00", "93.00", "USD 60.00 document"],
+    ]);
+    // Its currency is fixed now it has documents (MC1): the database refuses a change too.
+    await expect(run((tx) => updateContact(tx, aws.id, { currencyCode: "EUR" }))).rejects.toThrow(/currency can't change/);
   });
 });

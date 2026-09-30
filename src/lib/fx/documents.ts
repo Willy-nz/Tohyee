@@ -341,3 +341,17 @@ export function foreignRefundFields(row: {
     realisedGain: money(row.realised_gain),
   };
 }
+
+/**
+ * A repeating invoice or bill for a contact in another currency (MC26, MC27)
+ * saves drafts only, refused rather than guessed: each one takes the last rate
+ * used for its currency (Tohyee has no daily rate table like NetSuite's), so
+ * the rate is checked before it's approved and posted.
+ */
+export function assertForeignTemplateSavesDrafts(base: string, currencyCode: string, saveAs: string, document: "invoice" | "bill"): void {
+  if (currencyCode !== base && saveAs !== "draft") {
+    throw new ValidationError(
+      `Repeating ${document}s in ${currencyCode} can only be saved as drafts for now (refused rather than guessed): each ${document} takes the last ${currencyCode} rate used, so check its rate before approving it.`,
+    );
+  }
+}

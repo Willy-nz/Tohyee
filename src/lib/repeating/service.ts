@@ -1,4 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
+import { assertForeignTemplateSavesDrafts } from "@/lib/fx/documents";
 import { keptCustom, parseCustomInput } from "@/lib/custom-fields/service";
 import type { CustomValues } from "@/lib/custom-fields/values";
 import { dueDateFromTerms } from "@/lib/customers/service";
@@ -321,6 +322,13 @@ function asSent(template: RepeatingInvoice): RepeatingInput {
   };
 }
 
+/**
+ * A template for a customer in another currency (MC26) is in that currency,
+ * like NetSuite's memorized transactions, with no rate: each invoice made
+ * from it takes a rate for its own date.
+ */
+const TEMPLATE_FOREIGN = { foreignCurrency: true, template: true, feature: "Repeating invoices" } as const;
+
 async function resolveFor(tx: OrgTx, draft: SalesDraft, current?: RepeatingInvoice): Promise<ResolvedSalesDraft> {
   return current
     ? resolveSalesDraft(
@@ -330,8 +338,9 @@ async function resolveFor(tx: OrgTx, draft: SalesDraft, current?: RepeatingInvoi
         keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)),
         current.salespersonId,
         current.lines,
+        TEMPLATE_FOREIGN,
       )
-    : resolveSalesDraft(tx, draft);
+    : resolveSalesDraft(tx, draft, undefined, undefined, undefined, undefined, TEMPLATE_FOREIGN);
 }
 
 /** Saves a new template (RI1). It starts active; nothing is made until the job runs. */
@@ -353,6 +362,7 @@ export async function createRepeatingInvoice(
   }
   await checkDueRule(tx, parsed);
   const resolved = await resolveFor(tx, parsed.draft);
+  assertForeignTemplateSavesDrafts(tx.baseCurrency, resolved.currencyCode, parsed.saveAs, "invoice");
   const inserted = await tx.query<{ id: string }>(
     `insert into repeating_invoices (command_source, idempotency_key, request_hash, contact_id, reference, amounts_mode, currency_code,
                                      subtotal, tax_total, total, custom_fields, salesperson_id, period, every, start_date, end_date,
@@ -414,6 +424,7 @@ export async function updateRepeatingInvoice(tx: OrgTx, idInput: unknown, input:
   const parsed = parseTemplate(merged);
   await checkDueRule(tx, parsed);
   const resolved = await resolveFor(tx, parsed.draft, current);
+  assertForeignTemplateSavesDrafts(tx.baseCurrency, resolved.currencyCode, parsed.saveAs, "invoice");
   const { scheduleChanged, resumedFrom } = resumedAfterChange(current, parsed, today);
   await tx.query(
     `update repeating_invoices
@@ -500,7 +511,8 @@ const INVOICES: RepeatingKind<RepeatingInvoice> = {
       lines: linesAsSent(template.lines),
       customFields: template.customFields,
       salespersonId: template.salespersonId,
-    });
+      // In the template's currency (MC26), at the last rate used on or before the date (MC3).
+    }, { foreignCurrency: true, feature: "Repeating invoices" });
     return made.invoice.id;
   },
   async approve(tx, template, date, invoiceId) {

@@ -22,6 +22,7 @@ import {
   type ResolvedSalesDraft,
   type SalesDraft,
 } from "@/lib/invoices/service";
+import { parseRateInput } from "@/lib/fx/documents";
 import { dec, toPlainString } from "@/lib/money/decimal";
 import { parseSalespersonInput } from "@/lib/salespeople/service";
 import { keptValues } from "@/lib/tracking/service";
@@ -230,6 +231,14 @@ function asSent(quote: Quote): QuoteInput {
   };
 }
 
+/**
+ * A quote for a customer in another currency (MC25) is in that currency, like
+ * NetSuite's estimates ("the currency from the original transaction is
+ * maintained"), with no rate: it posts nothing. The invoice made from it
+ * takes a rate for its own date.
+ */
+const QUOTE_FOREIGN = { foreignCurrency: true, template: true, feature: "Quotes" } as const;
+
 async function resolveFor(tx: OrgTx, draft: SalesDraft, current?: Quote): Promise<ResolvedSalesDraft> {
   // Quotes use the invoice's custom fields and tracking, since their lines become an invoice's (QT3).
   return current
@@ -240,8 +249,9 @@ async function resolveFor(tx: OrgTx, draft: SalesDraft, current?: Quote): Promis
         keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)),
         current.salespersonId,
         current.lines,
+        QUOTE_FOREIGN,
       )
-    : resolveSalesDraft(tx, draft);
+    : resolveSalesDraft(tx, draft, undefined, undefined, undefined, undefined, QUOTE_FOREIGN);
 }
 
 export async function getQuote(tx: OrgTx, quoteIdInput: unknown): Promise<Quote> {
@@ -541,17 +551,25 @@ async function closeCommand(
  * dated `invoiceDate`, due on `dueDate` or else the customer's payment terms,
  * with the quote number as its reference unless the quote had one. The quote
  * and invoice are linked both ways. Accepting again with the same key returns
- * the same invoice; an accepted or declined quote can't be accepted.
+ * the same invoice; an accepted or declined quote can't be accepted. A quote in
+ * another currency (MC25) makes an invoice in it at a rate for the invoice
+ * date: `exchangeRate`, or else the last rate used on or before it (MC3).
  */
 export async function acceptQuote(
   tx: OrgTx,
   quoteIdInput: unknown,
-  input: { source?: unknown; idempotencyKey: unknown; invoiceDate: unknown; dueDate?: unknown },
+  input: { source?: unknown; idempotencyKey: unknown; invoiceDate: unknown; dueDate?: unknown; exchangeRate?: unknown },
 ): Promise<{ created: boolean; quote: Quote; invoice: Invoice }> {
   const quoteId = requireId(quoteIdInput, "quoteId");
   const invoiceDate = parseIsoDate(input.invoiceDate, "invoiceDate");
   const sentDue = parseOptionalIsoDate(input.dueDate, "dueDate");
-  const command = await closeCommand(tx, quoteId, "accept", input, { invoiceDate, dueDate: sentDue });
+  const typedRate = parseRateInput(input.exchangeRate);
+  const command = await closeCommand(tx, quoteId, "accept", input, {
+    invoiceDate,
+    dueDate: sentDue,
+    // Only when sent, so earlier accepts hash the same.
+    ...(typedRate != null ? { exchangeRate: typedRate } : {}),
+  });
   const earlier = await command.replay();
   if (earlier) return { created: false, quote: earlier, invoice: await getInvoice(tx, earlier.invoiceId!) };
   const current = await lockQuote(tx, quoteId);
@@ -575,7 +593,8 @@ export async function acceptQuote(
     lines: linesAsSent(current.lines),
     customFields: current.customFields,
     salespersonId: current.salespersonId,
-  });
+    ...(typedRate != null ? { exchangeRate: typedRate } : {}),
+  }, { foreignCurrency: true, feature: "Quotes" });
   await tx.query(
     `update quotes set status = 'accepted', invoice_id = $2, close_command_source = $3, close_idempotency_key = $4,
             close_request_hash = $5, closed_by_user_id = $6, closed_by_email = $7, closed_at = now(), updated_at = now()

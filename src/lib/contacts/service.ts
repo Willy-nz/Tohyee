@@ -163,12 +163,15 @@ function parseContactCurrency(tx: OrgTx, input: unknown): string | null | undefi
 async function assertCurrencyCanChange(tx: OrgTx, contact: { id: string; name: string; currencyCode: string | null }): Promise<void> {
   const used = await tx.query(
     `select 1 where exists (select 1 from sales_invoices where contact_id = $1) or exists (select 1 from bills where contact_id = $1)
-        or exists (select 1 from sales_credit_notes where contact_id = $1) or exists (select 1 from supplier_credit_notes where contact_id = $1)`,
+        or exists (select 1 from sales_credit_notes where contact_id = $1) or exists (select 1 from supplier_credit_notes where contact_id = $1)
+        or exists (select 1 from quotes where contact_id = $1) or exists (select 1 from repeating_invoices where contact_id = $1)
+        or exists (select 1 from repeating_bills where contact_id = $1) or exists (select 1 from purchase_orders where contact_id = $1)`,
     [contact.id],
   );
   if ((used.rowCount ?? 0) > 0) {
+    // Quotes, repeating documents and purchase orders are in the contact's currency too (MC25-MC28).
     throw new ConflictError(
-      `${contact.name} has invoices, bills or credit notes in ${contact.currencyCode ?? tx.baseCurrency}, so its currency can't change. Add a new contact for the other currency.`,
+      `${contact.name} has invoices, bills or credit notes in ${contact.currencyCode ?? tx.baseCurrency}, so its currency can't change (quotes, repeating documents and purchase orders count too). Add a new contact for the other currency.`,
     );
   }
 }

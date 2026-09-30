@@ -1,4 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
+import { assertForeignTemplateSavesDrafts } from "@/lib/fx/documents";
 import {
   approveBill,
   type BillLine,
@@ -307,9 +308,11 @@ function asSent(template: RepeatingBill): RepeatingBillInput {
  * once locations are in use (RB7), since every bill made would need one.
  */
 async function resolveFor(tx: OrgTx, draft: DraftDetails, current?: RepeatingBill): Promise<ResolvedDraft> {
+  // A supplier in another currency (MC27): the template is in it, with no rate; each bill takes one for its date.
+  const foreign = { foreignCurrency: true, template: true, feature: "Repeating bills" };
   const resolved = current
-    ? await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines)
-    : await resolveDraft(tx, draft);
+    ? await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines, foreign)
+    : await resolveDraft(tx, draft, undefined, undefined, undefined, foreign);
   const stockLines = resolved.resolvedLines.flatMap((line, index) => (line.itemType === "stock" ? [{ line, index }] : []));
   if (stockLines.length > 0) {
     const ctx = await loadStockContext(tx, "repeating bills with stock items can't be saved");
@@ -390,6 +393,7 @@ export async function createRepeatingBill(
     return { created: false, repeatingBill: await getRepeatingBill(tx, existing.rows[0].id) };
   }
   const resolved = await resolveFor(tx, parsed.draft);
+  assertForeignTemplateSavesDrafts(tx.baseCurrency, resolved.currencyCode, parsed.saveAs, "bill");
   await checkDueRule(tx, parsed);
   const inserted = await tx.query<{ id: string }>(
     `insert into repeating_bills (command_source, idempotency_key, request_hash, contact_id, supplier_invoice_number, amounts_mode, currency_code,
@@ -446,6 +450,7 @@ export async function updateRepeatingBill(tx: OrgTx, idInput: unknown, input: Re
   ) as RepeatingBillInput;
   const parsed = parseTemplate(merged);
   const resolved = await resolveFor(tx, parsed.draft, current);
+  assertForeignTemplateSavesDrafts(tx.baseCurrency, resolved.currencyCode, parsed.saveAs, "bill");
   await checkDueRule(tx, parsed);
   const { scheduleChanged, resumedFrom } = resumedAfterChange(current, parsed, today);
   await tx.query(
@@ -526,7 +531,8 @@ const BILLS: RepeatingKind<RepeatingBill> = {
       amountsMode: template.amountsMode,
       lines: purchaseLinesAsSent(template.lines),
       customFields: template.customFields,
-    });
+      // In the template's currency (MC27), at the last rate used on or before the date (MC3).
+    }, null, { foreignCurrency: true, feature: "Repeating bills" });
     return made.bill.id;
   },
   async approve(tx, template, date, billId) {

@@ -64,7 +64,10 @@ that something happened.
   credit notes are in the document's currency at their own rate, realising
   the difference on 7020 (MC14-MC19); one payment can pay several of a
   contact's foreign documents at one rate, each with its own gain or loss
-  (MC20-MC24). Zero-rated, exempt and no-GST codes only.
+  (MC20-MC24); quotes, repeating invoices and bills and purchase orders are
+  in the contact's currency with no rate, and the invoice or bill made from
+  them takes a rate for its own date (MC25-MC28; repeating ones save
+  drafts). Zero-rated, exempt and no-GST codes only.
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
   posts its journal in the same transaction. **Stock tracking** (ST1-ST12):
@@ -663,8 +666,9 @@ isn't acceptable, because people would trust it:
   an adjustment when splitting one posted transaction across several
   statement lines, and old Excel (.xls) files
 - on foreign-currency documents (MC11): standard-rated GST, supplier
-  overpayments, payments through a bank account in a third currency, stock items, quotes, repeating documents and
-  purchase orders, and sales on the payments GST basis; also paying NZD
+  overpayments, payments through a bank account in a third currency, stock
+  items, project and CRM invoices, approving repeating ones automatically,
+  and sales on the payments GST basis; also paying NZD
   documents from a foreign-currency statement line, standard-rated GST on
   foreign-currency spend and receive money, adjustments on foreign-currency
   lines, and transfers between two foreign-currency accounts

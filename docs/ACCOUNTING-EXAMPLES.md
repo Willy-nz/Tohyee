@@ -55,7 +55,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/bank-split.test.ts` (BK26-BK28) and
   `tests/integration/bank-foreign.test.ts` (FXB1-FXB11) and
   `tests/integration/multi-currency.test.ts` (MC1-MC13) and
-  `tests/integration/multi-currency-settlements.test.ts` (MC14-MC24) and
+  `tests/integration/multi-currency-settlements.test.ts` (MC14-MC28) and
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
   GP3, GP5, GP6), all against
@@ -1741,7 +1741,7 @@ Amazon Web Services (USD).
 | MC8 | Revaluation on 31 Jul at **1.62** (reversal 1 Aug) of 1030, 1100 USD and 2000 USD | 1030: USD 1,000.00, carrying 1,640.00, revalued 1,620.00: Dr 7010 **20.00** / Cr 1030 20.00. 1100 USD: USD **1,900.00** (INV-0005), carrying **3,040.00**, revalued **3,078.00**: Dr 1100 **38.00** (USD 0.00 at 1.62) / Cr 7000 38.00. 2000 USD: USD **50.00** (AWS-7), carrying **83.00**, revalued **81.00**: Dr 2000 **2.00** / Cr 7000 2.00. All reversed on 1 Aug. Before it, period close's FX check lists 1030, 1100 and 2000; after, it passes. Refused: 1100 without a currency ("…Say which currency…"), 1100 USD typed as 2,000.00 ("the ledger has USD 1900.00 open…"), 1100 EUR ("nothing open in EUR"), 1100 USD again on 31 Jul |
 | MC9 | Aged receivables and payables, and Acme's statement, as at 31 Jul | Acme: INV-0005 **USD 1,900.00 / NZD 3,040.00**, owes USD 1,900.00; total **NZD 3,155.00** (with Kobe's 115.00); revaluation **38.00** beside it (3,155.00 + 38.00 = 1100's 3,193.00). Payables: AWS-7 **USD 50.00 / NZD 83.00**; revaluation **-2.00**; 2000 **81.00**, difference 0.00. Period close's receivables and payables checks pass. Acme's July statement is in **USD**: closing **1,900.00**, NZD **3,040.00** beside it |
 | MC10 | Bills from AWS: AWS-7, 5 Jul, USD 50.00 at **1.66**, 6040, no tax; AWS-8, 6 Jul, the same; supplier credit note AWS-CR1, 7 Jul, USD 20.00 at **1.70**, applied to AWS-8 on 8 Jul; AWS-8's USD 30.00 paid 9 Jul from 1000 at 1.66 | AWS-7: Dr 6040 **83.00** / Cr 2000 **83.00 (USD 50.00)**; with a GST line: refused. AWS-CR1: Dr 2000 **34.00 (USD 20.00)** / Cr 6040 34.00. Applying: the bill's side 83.00 x 20 / 50 = **33.20**, the credit's **34.00**, loss **0.80**: Dr 2000 33.20 (USD 20.00) / Cr 2000 34.00 (USD 20.00) / Dr 7020 0.80. Payment: bank **49.80**, cleared **49.80**, no gain or loss (no 7020 line): Dr 2000 49.80 (USD 30.00) / Cr 1000 49.80 |
-| MC11 | Refused rather than guessed, with nothing posted | Quotes, repeating invoices, purchase orders (and repeating bills, project and CRM invoices) for a USD contact; a USD invoice made any way but entering it directly; stock items or item lines without a typed price on foreign-currency documents; a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
+| MC11 | Refused rather than guessed, with nothing posted | Project and CRM invoices for a USD contact (a USD invoice made any way but entering it directly, from a quote, MC25, or from a repeating invoice, MC26); stock items or item lines without a typed price on foreign-currency documents; a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
 | MC12 | AWS-7 paid on 5 Aug from 1030 at **1.65** (after the 1 Aug reversal) | Dr 2000 **83.00 (USD 50.00)** / Cr 1030 **82.50 (USD 50.00 at 1.65)** / Cr 7020 **0.50** |
 | MC13 | July GST return (invoice basis) and the trial balance at 31 Aug | Box 5 **5,678.51**, Box 6 **5,563.51** (1,654.30 + 827.15 + 45.06 + 3,200.00 - 163.00 zero-rated; Kobe's 115.00 standard-rated); AWS's no-GST bills in no box. Trial balance balances: 7020 debit **18.76** (-14.30 - 0.01 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50), 7000 and 7010 nothing (reversed), 1100 **3,155.00**, 2000 nothing, 1030 **1,557.50** (USD 950.00) |
 
@@ -1843,6 +1843,48 @@ AWS-2, 2 Aug, USD 30.00 at **1.70** (NZD 51.00), 6040.
 
 Tests: `tests/integration/multi-currency-settlements.test.ts` (MC20-MC24).
 
+### Quotes, repeating documents and purchase orders in a foreign currency (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) following NetSuite: "When you convert a sales
+transaction to another sales transaction in the sales process, the currency
+from the original transaction is maintained" (*Currency on Customer
+Transactions*); for purchases, "the currency from the original transaction
+is maintained and can't be changed", "Memorized purchase order transactions
+use the same currency as the original transaction" and "Payment must be made
+in the same currency as the purchase order" (*Currency on Vendor
+Transactions*). So:
+
+- A **quote**, **repeating invoice**, **repeating bill** or **purchase
+  order** for a contact in another currency is in that currency (the
+  database checks, and the contact's currency can't change once it has any,
+  MC1). It has **no rate** and posts nothing, like its NZD self.
+- The **invoice or bill made from it** is an ordinary foreign-currency
+  document (MC2, MC10) with a rate for **its own date**: the rate typed when
+  accepting the quote or copying the order to a bill, or else the last rate
+  used on or before that date (MC3), as for a document entered directly.
+  Nothing posts until it's approved.
+- The same line rules as foreign-currency documents apply when it's saved:
+  zero-rated, exempt or no-GST codes only, no stock items, and item lines
+  need a typed price (MC11).
+- **Repeating invoices and bills in a foreign currency save drafts only**
+  (smallest safe choice): each takes the last rate used, which could be
+  stale, since Tohyee has no daily rate table like NetSuite's Currency
+  Exchange Rates, so a person checks the rate before approving. Saving one
+  as "approve" is refused ("Repeating invoices in USD can only be saved as
+  drafts for now…").
+
+Setup: MC14-MC24 (the last USD rate used on 25 Aug is **1.60**, MC22's
+payment).
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC25 | A quote for Acme, 20 Aug 2026, USD 400.00 zero-rated; finalised QU-0001; accepted on 25 Aug with no rate typed | The quote is **USD 400.00** and posts nothing (with a GST line it's refused). Accepting makes a **draft** invoice in USD at **1.60** (the last USD rate used on or before 25 Aug): NZD **640.00**, still nothing posted; approved: Dr 1100 640.00 (USD 400.00) / Cr 4000 640.00. Another quote (USD 10.00) accepted on 26 Aug with the rate **1.58** typed: NZD **15.80** |
+| MC26 | A monthly repeating invoice for Acme from 31 Aug, USD 100.00 zero-rated, saved as a draft; the job runs on 31 Aug | Saving it as "approve" is refused. The template is **USD 100.00**. The job makes a **draft** invoice dated 31 Aug in USD at **1.60** (the last rate used by then; MC25's 1.58 invoice is a draft, which posts nothing, so it isn't one), NZD **160.00**; nothing posts |
+| MC27 | A monthly repeating bill from AWS from 31 Aug, "AWS-{month}", USD 40.00 no tax to 6040, a draft; the job runs on 31 Aug | "Approve" refused; the bill made is a **draft** dated 31 Aug, USD 40.00 at **1.60** = NZD **64.00** |
+| MC28 | A purchase order to AWS, 20 Aug, 3 x USD 20.00 no tax to 6040; approved; copied to a bill AWS-PO1 dated 28 Aug at **1.55** | The order is **USD 60.00** and posts nothing, approved or not. The bill is a draft, USD 60.00 at 1.55 = NZD **93.00**; approved: Dr 6040 93.00 / Cr 2000 93.00 (USD 60.00). AWS's currency can't change now |
+
+Tests: `tests/integration/multi-currency-settlements.test.ts` (MC25-MC28).
+
 ### Not supported yet (refused rather than guessed)
 
 - **Standard-rated GST on foreign-currency invoices, bills and credit notes**
@@ -1864,8 +1906,9 @@ Tests: `tests/integration/multi-currency-settlements.test.ts` (MC20-MC24).
   it has documents.
 - **Stock items** on foreign-currency documents, and item lines whose price
   would come from the item (item prices are NZD).
-- **Quotes, repeating invoices and bills, purchase orders, project and CRM
-  invoices** for contacts in another currency.
+- **Project and CRM invoices** for contacts in another currency. (Quotes,
+  repeating invoices and bills and purchase orders are built: MC25-MC28;
+  repeating ones save drafts only.)
 - **A separate rounding gain/loss account** (NetSuite's): the cents are part
   of the realised gain or loss (MC4).
 
@@ -3494,7 +3537,7 @@ following month" and billing address "12 George St, Dunedin 9016".
   progress invoicing): accepting makes one invoice for the whole quote.
 - Linking a quote to a CRM opportunity. A won opportunity still makes its
   own invoice (CRM5).
-- Foreign-currency quotes.
+- (Foreign-currency quotes are built: MC25.)
 
 ## Repeating invoices (examples not yet approved by Jess)
 
@@ -3574,7 +3617,8 @@ is **115.00**.
 - Daily, yearly or "end of month" schedules (Xero has these); weeks and
   months cover them except daily.
 - Placeholders in descriptions (Xero's [Month] [Year]).
-- Foreign-currency templates.
+- Approving foreign-currency invoices automatically (they're saved as
+  drafts, MC26).
 
 ## Repeating bills (examples not yet approved by Jess)
 
@@ -3696,7 +3740,8 @@ invoice number **RENT-{month}**, monthly from **31 Jan 2026**, due the
 
 - Paying bills automatically (Xero doesn't either); approved bills wait in
   "Awaiting payment" like any other.
-- Bills made from a purchase order, foreign-currency templates, and daily,
+- Bills made from a purchase order, approving foreign-currency bills
+  automatically (they're saved as drafts, MC27), and daily,
   yearly or "day N of the current month" rules.
 - Placeholders in line descriptions (Xero's [Month] [Year]).
 
@@ -3928,7 +3973,7 @@ GST). No locations.
 - Receiving goods without a bill (goods received notes, NetSuite's item
   receipts): stock comes in when the bill is approved (ST1).
 - Copying a purchase order to a new purchase order, making one from a sales
-  invoice or quote, and foreign-currency purchase orders.
+  invoice or quote. (Foreign-currency purchase orders are built: MC28.)
 
 ### Questions for Jess (purchase orders)
 
