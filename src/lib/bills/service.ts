@@ -1,3 +1,4 @@
+import { openingAmounts, openingLineDescription, type OpeningLine } from "@/lib/import/opening-gst";
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { assertRequiredFields, type CustomFieldContext, keptCustom, parseCustomInput, resolveDocumentCustom } from "@/lib/custom-fields/service";
 import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
@@ -1380,30 +1381,37 @@ export async function createOpeningBill(
     billDate: string;
     dueDate: string;
     amount: string;
+    /** Including GST, with the GST in each (IM13, IM17-IM20); their amounts add up to `amount`. */
+    lines: OpeningLine[];
   },
 ): Promise<Bill> {
   const source = "import";
   const hash = requestHash("opening_bill", { ...input });
+  const opening = openingAmounts(input.amount, input.lines);
   let billId: string;
   try {
     const inserted = await tx.query<{ id: string }>(
       `insert into bills (command_source, idempotency_key, request_hash, contact_id, bill_date, due_date, supplier_invoice_number,
                           amounts_mode, currency_code, subtotal, tax_total, total, is_opening_balance, created_by_user_id, created_by_email)
-       values ($1, $2, $3, $4, $5, $6, $7, 'no_tax', $8, $9::numeric, 0.00, $9::numeric, true, $10, $11)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, true, $13, $14)
        returning id`,
-      [source, input.idempotencyKey, hash, input.contactId, input.billDate, input.dueDate, input.supplierInvoiceNumber, tx.baseCurrency, input.amount, tx.actor.userId, tx.actor.email],
+      [source, input.idempotencyKey, hash, input.contactId, input.billDate, input.dueDate, input.supplierInvoiceNumber, opening.amountsMode, tx.baseCurrency, opening.subtotal, opening.taxTotal, input.amount, tx.actor.userId, tx.actor.email],
     );
     billId = inserted.rows[0].id;
   } catch (error) {
     if (isUniqueViolation(error, NUMBER_INDEX)) throw numberTaken(input.contactName, input.supplierInvoiceNumber);
     throw error;
   }
-  await tx.query(
-    `insert into bill_lines (bill_id, line_order, description, quantity, unit_price, account_id, tax_code_id, tax_rate,
-                             line_amount, net_amount, tax_amount)
-     select $1, 1, $2, 1, $3::numeric, a.id, null, 0, $3::numeric, $3::numeric, 0.00 from accounts a where a.code = $4`,
-    [billId, `Owed at ${input.conversionDate} (opening balance)`, input.amount, input.clearingAccountCode],
-  );
+  for (const [index, line] of input.lines.entries()) {
+    await tx.query(
+      `insert into bill_lines (bill_id, line_order, description, quantity, unit_price, account_id, tax_code_id, tax_rate,
+                               line_amount, net_amount, tax_amount)
+       select $1, $2, $3, 1, $4::numeric, a.id, (select id from tax_codes where code = $5), $6::numeric, $4::numeric,
+              $4::numeric - $7::numeric, $7::numeric
+         from accounts a where a.code = $8`,
+      [billId, index + 1, openingLineDescription(input.conversionDate, line), line.amount, line.taxCode, line.rate, line.gst, input.clearingAccountCode],
+    );
+  }
   const payable = await controlAccountCode(tx, PAYABLE_ACCOUNT, "opening bills can't be brought in");
   const posted = await postJournalBody(
     tx,
@@ -1431,7 +1439,7 @@ export async function createOpeningBill(
     eventType: "bill.opening_balance",
     entityType: "bill",
     entityId: billId,
-    details: { supplierInvoiceNumber: input.supplierInvoiceNumber, billDate: input.billDate, amount: input.amount, journalId: posted.journal.id },
+    details: { supplierInvoiceNumber: input.supplierInvoiceNumber, billDate: input.billDate, amount: input.amount, gst: opening.taxTotal, journalId: posted.journal.id },
   });
   return getBill(tx, billId);
 }

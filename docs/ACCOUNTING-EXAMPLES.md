@@ -4236,7 +4236,8 @@ The steps, in order: 1 chart of accounts, 2 contacts, 3 products and
 services, 4 opening balances (trial balance and stock) and 5 open invoices
 and bills, posted together as at the **conversion date**, then 6 a final
 check and the period lock. Tests: `tests/integration/import.test.ts`
-(IM1-IM16) and `tests/unit/import-fields.test.ts` (column matching).
+(IM1-IM21), `tests/unit/import-fields.test.ts` (column matching) and
+`tests/unit/opening-gst.test.ts` (GST in open documents).
 
 **Running a step again.** Accounts and products and services are matched by
 code, contacts by name (ignoring case). A match is updated from the columns
@@ -4252,14 +4253,17 @@ journal dated the conversion date, origin "Opening balances", which can't be
 corrected like a manual journal. Accounts receivable, accounts payable and
 inventory aren't posted from the trial balance, because the open invoices,
 open bills and stock on hand make them up: their trial balance lines go to
-**2990 Conversion clearing** instead. Each open invoice then posts Dr
-accounts receivable / Cr 2990, each open bill Dr 2990 / Cr accounts
-payable, and the stock Dr inventory / Cr 2990, all dated the conversion
-date. So 2990 ends at 0.00, and accounts receivable, accounts payable and
-inventory equal their sub-ledgers without being counted twice. (Xero's
-conversion balances do the same with invoices entered before the conversion
-date and its own clearing account; NetSuite uses an opening balance
-account.) This means:
+**3900 Historical adjustment** instead, an equity account (decided with
+Jess, 30 Sep 2026: equity, like NetSuite's "Opening Balance" and Xero's
+"Historical Adjustment"; Tohyee uses Xero's name because most organisations
+coming to Tohyee come from Xero, and its bookkeepers know it). Each open
+invoice then posts Dr accounts receivable / Cr 3900, each open bill Dr 3900 /
+Cr accounts payable, and the stock Dr inventory / Cr 3900, all dated the
+conversion date. So 3900 ends at 0.00, and accounts receivable, accounts
+payable and inventory equal their sub-ledgers without being counted twice.
+(Xero's conversion balances do the same with invoices entered before the
+conversion date and its Historical Adjustment account; NetSuite posts to its
+Opening Balance equity account.) This means:
 
 - The trial balance must balance, and accounts receivable must equal the
   open invoices, accounts payable the open bills and inventory the stock
@@ -4267,16 +4271,37 @@ account.) This means:
   shown (IM8, IM9).
 - Nothing may already be posted on or before the conversion date, and the
   conversion date must be in an open period.
-- Open invoices and bills are one line each: the number, contact, date, due
-  date and **amount still owed including GST**. They keep their date, due
-  date and number (not Tohyee's INV sequence, IM10), have no GST (it was
-  accounted for before the conversion) and are marked as opening balances,
-  so they never count in a GST return or in sales by salesperson (IM11).
-  They can be paid, credited and voided like any other invoice or bill
-  (IM12); voiding one reverses it to 2990, where the accountant clears it
-  with a journal.
+- Open invoices and bills are one row each: the number, contact, date, due
+  date, **amount still owed including GST**, and the **GST in it** (decided
+  with Jess, 30 Sep 2026: like Xero, where outstanding invoices at the
+  conversion are the original invoices with their GST). They keep their
+  date, due date and number (not Tohyee's INV sequence, IM10) and are marked
+  as opening balances. Approving or voiding one never counts in a GST
+  return, since it was issued before the conversion; on the bases where GST
+  counts when paid (the payments basis, and purchases on the hybrid basis),
+  a payment or credit after the conversion counts its share of the GST,
+  exactly like any invoice or bill paid on that basis (the same proportional
+  rule, G11). On the invoice basis the GST was returned before the
+  conversion, so it's never returned again (IM11, IM13, IM18, IM19). They
+  never count in sales by salesperson. They can be paid, credited and
+  voided like any other invoice or bill (IM12); voiding one reverses it to
+  3900, where the accountant clears it with a journal.
+- The GST is given as a GST column (the GST in what's still owed; or, with
+  the invoice's total, the whole invoice's GST, from which the GST in what's
+  owed is worked out in proportion), or a GST code (with GST: 3/23 of what's
+  owed), IM20. Where GST counts when paid, every row needs one (0.00 if
+  there's none); elsewhere it's optional.
 - The GST line of the trial balance is posted to 2100 as a balance only:
-  journals never count in a GST return.
+  journals never count in a GST return. **It includes the GST in the open
+  invoices and bills**, as Xero's GST account does (Xero puts unpaid GST on
+  outstanding invoices in the GST account at the conversion) and as
+  Tohyee's own does for every invoice (GST goes to 2100 when an invoice is
+  approved, on every basis; the GST return decides when it's reported). So
+  the open invoices' and bills' journals post no GST (Dr accounts receivable
+  / Cr 3900 of the amount including GST, as before), and the check shows how
+  2100 splits (IM17): on the payments basis, 2100 = what the GST returns up
+  to the conversion left to pay + GST in the open invoices (not yet
+  returned) - GST in the open bills (not yet claimed).
 - Stock is a quantity and a value per item (and per location once stock is
   kept by location). It comes in as a receipt at that value exactly (3
   worth 10.00 is 10.00, not 3 x 3.33), dated the conversion date.
@@ -4312,10 +4337,12 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
 20/04/2026, **460.00**. Stock: MUG 40 worth **800.00**; VASE 3 worth
 **10.00**.
 
-- **IM1** The first opening balances import adds **2990 Conversion
-  clearing** (current liability, "Used by Tohyee"), or the next free code up
-  to 2999. It's the account the three sub-ledger lines clear through, and is
-  0.00 once they're posted (IM7).
+- **IM1** The starting chart of accounts has **3900 Historical adjustment**
+  (equity, "Used by Tohyee"); an organisation without one gets it at 3900,
+  or the next free code up to 3999, the first time opening balances are
+  posted. It's the account the three sub-ledger lines clear through, and is
+  0.00 once they're posted (IM7). It can't have a balance of its own in the
+  imported trial balance.
 - **IM2** Chart of accounts, Xero-style file:
 
   ```
@@ -4367,20 +4394,20 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
 - **IM6** Posting Tui Traders' opening balances makes, all dated 31 Mar
   2026:
   - the opening journal (reference OPENING, origin "Opening balances"):
-    Dr 1000 **12,450.00**, Dr 2990 **1,725.00** (1100, held by the open
-    invoices), Dr 2990 **810.00** (1400, held by the opening stock), Dr 1600
-    **3,000.00** / Cr 2990 **460.00** (2000, held by the open bills), Cr
+    Dr 1000 **12,450.00**, Dr 3900 **1,725.00** (1100, held by the open
+    invoices), Dr 3900 **810.00** (1400, held by the opening stock), Dr 1600
+    **3,000.00** / Cr 3900 **460.00** (2000, held by the open bills), Cr
     2100 **1,380.00**, Cr 3000 **10,000.00**, Cr 3200 **6,145.00**; total
     **17,985.00**;
-  - INV-0107: Dr 1100 **1,150.00** / Cr 2990 1,150.00; INV-0112: Dr 1100
-    **575.00** / Cr 2990 575.00 (each approved, one line "Owed at
+  - INV-0107: Dr 1100 **1,150.00** / Cr 3900 1,150.00; INV-0112: Dr 1100
+    **575.00** / Cr 3900 575.00 (each approved, one line "Owed at
     2026-03-31 (opening balance)" of 1,150.00 or 575.00, no GST);
-  - K-311: Dr 2990 **460.00** / Cr 2000 460.00;
+  - K-311: Dr 3900 **460.00** / Cr 2000 460.00;
   - stock receipts: MUG 40 at **800.00** (unit cost 20.00) and VASE 3 at
-    **10.00** (not 9.99), each Dr 1400 / Cr 2990.
+    **10.00** (not 9.99), each Dr 1400 / Cr 3900.
 - **IM7** The trial balance at 31 Mar 2026 is exactly the imported one: 1000
   12,450.00 Dr, 1100 1,725.00 Dr, 1400 810.00 Dr, 1600 3,000.00 Dr, 2000
-  460.00 Cr, 2100 1,380.00 Cr, 3000 10,000.00 Cr, 3200 6,145.00 Cr, and 2990
+  460.00 Cr, 2100 1,380.00 Cr, 3000 10,000.00 Cr, 3200 6,145.00 Cr, and 3900
   **0.00**. The final check shows each account's imported and Tohyee
   balance side by side, all matching; locking up to 31 Mar 2026 (the
   ordinary period lock) then refuses anything dated on or before it.
@@ -4390,7 +4417,7 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
   VASE 3 worth 10.00, total **810.00** = 1400.
 - **IM8** INV-0112 at **500.00** instead: refused, "Accounts receivable
   (1100) is 1,725.00 in the trial balance, but the open invoices add up to
-  1,650.00: a difference of 75.00". Nothing is posted and 2990 isn't made.
+  1,650.00: a difference of 75.00". Nothing is posted.
   The same for accounts payable against the open bills, and inventory
   against the stock values.
 - **IM9** 3200 at **6,110.00** instead: refused, "debits 17,985.00, credits
@@ -4406,20 +4433,24 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
   has no lines either (the opening invoices and bill are left out, and the
   opening journal never counts). 2100 at 31 May: 1,380.00 + 15.00 =
   **1,395.00** Cr. Opening invoices are left out of sales by salesperson.
+  The same with the GST columns of IM17 (INV-0107 carrying 150.00 of GST):
+  on the invoice basis that GST was returned before the conversion, so
+  paying INV-0107 still counts nothing.
 - **IM12** Paying later: INV-0107 paid 1,150.00 on 20 Apr 2026 from 1000
   posts Dr 1000 / Cr 1100 1,150.00 and the invoice is paid; K-311 paid
   460.00 on 22 Apr posts Dr 2000 / Cr 1000. Aged receivables at 30 Apr:
   Harbour Cafe **575.00** (10 days overdue). Kobe Ltd's activity statement
   for April starts with a balance of **1,150.00** (INV-0107) and ends at
   0.00 after the payment.
-- **IM13** GST basis (question for Jess below): on the **payments basis**,
-  GST on an invoice issued before the conversion but paid after it is
-  returned when it's paid, but the file has only the amount still owed, not
-  its GST. So open invoices are refused on the payments basis, and open
-  bills on the payments and hybrid bases, with a message to enter them as
-  ordinary invoices or bills (with their GST) dated the conversion date
-  instead. On the hybrid basis open invoices are accepted (sales count on
-  the invoice basis).
+- **IM13** GST basis: on the **payments basis**, the IM6 files (no GST
+  column) are refused row by row: "Invoice INV-0107 needs its GST: this
+  organisation accounts for GST on sales when they're paid (the payments
+  basis), so the GST in what's still owed is returned when it's paid. Map a
+  GST column (0.00 if there's none) or a GST code." (and the same for
+  INV-0112 and bill K-311). With IM17's GST columns they're accepted. On the
+  **hybrid basis** only the bill needs its GST (sales count when approved,
+  so the invoices' GST was returned before the conversion); on the
+  **invoice basis** neither does.
 - **IM14** Once only: a second opening balances import is refused ("already
   brought in as at 2026-03-31"); retrying the first with the same key and
   files returns it (nothing new). Something already posted on or before
@@ -4435,13 +4466,97 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
   `Code,Name,Type,GST code,Description`), and importing an exported file
   back changes nothing (every row unchanged).
 
+- **IM17** A **payments-basis** conversion: Tui Traders as above, but on
+  the payments basis, with the GST in each open document:
+
+  ```
+  Invoice number,Customer,Invoice date,Due date,Amount due,GST
+  INV-0107,Kobe Ltd,15/03/2026,20/04/2026,1150.00,150.00
+  INV-0112,Harbour Cafe,28/03/2026,20/04/2026,575.00,75.00
+  ```
+
+  and bill K-311 460.00 with GST **60.00**. Everything posts exactly as in
+  IM6 (the journals don't post GST again): INV-0107 is one line "Owed at
+  2026-03-31 (opening balance)", GST code GST, 1,150.00 including GST
+  **150.00** (subtotal 1,000.00), and its journal is Dr 1100 1,150.00 / Cr
+  3900 1,150.00. The trial balance at 31 Mar is exactly IM7's (2100
+  1,380.00 Cr, 3900 0.00). The check shows how 2100 splits:
+
+  | GST (2100) at 31 Mar 2026, payments basis | |
+  | --- | ---: |
+  | GST account in the trial balance (owed to IRD) | 1,380.00 |
+  | GST in the open invoices (not yet returned) | 225.00 |
+  | GST in the open bills (not yet claimed) | 60.00 |
+  | **Owed from GST returns up to 31 Mar** (1,380.00 - 225.00 + 60.00) | **1,215.00** |
+
+  So the old system's GST account (like Xero's, and Tohyee's own) already
+  holds the 225.00 still to be returned and the 60.00 still to be claimed;
+  the 1,215.00 should be what the returns up to 31 Mar left to pay. The
+  Feb-Mar 2026 return in Tohyee has no lines.
+- **IM18** The first GST return after it, 1 Apr - 31 May 2026, payments
+  basis. I1 (Harbour Cafe, 100.00 + GST 15.00) approved 10 Apr and not
+  paid; INV-0107 paid in full, **1,150.00** on 20 Apr; INV-0112 part paid,
+  **230.00** on 25 May; K-311 paid in full, **460.00** on 22 Apr. Counted:
+  INV-0107 1,150.00 (GST 150.00); INV-0112 230.00, its share of 575.00 (GST
+  230.00 x 75.00 / 575.00 = **30.00**); K-311 460.00 (GST 60.00). I1 isn't
+  counted (not paid). Box 5 **1,380.00**, Box 6 **0.00**, Box 7
+  **1,380.00**, Box 8 = 1,380.00 x 3/23 = **180.00**, Box 11 **460.00**,
+  Box 12 **60.00**, Box 15 **120.00** (to pay). GST on transactions: sales
+  180.00, purchases 60.00. 2100 at 31 May: 1,380.00 + I1's 15.00 =
+  **1,395.00** Cr = 1,215.00 (returns to 31 Mar) + 120.00 (this return) +
+  60.00 not yet returned (INV-0112's 345.00 still owed has 45.00 of GST, and
+  I1 15.00). INV-0112's other 345.00 paid on 10 Jun counts in Jun-Jul: Box 5
+  **345.00**, Box 8 **45.00**.
+- **IM19** The same on the **hybrid basis**: the opening invoices' GST was
+  returned before the conversion (sales count when approved), so paying
+  INV-0107 and INV-0112 counts nothing; I1 counts when approved and K-311
+  when paid. Apr-May: Box 5 **115.00**, Box 8 **15.00**, Box 11 **460.00**,
+  Box 12 **60.00**, Box 15 **-45.00** (a refund). 2100 splits as 1,380.00 +
+  60.00 (not yet claimed) = **1,440.00** owed from the returns up to 31 Mar.
+- **IM20** Ways to give the GST (payments basis):
+  - a **GST code** without an amount: INV-0112 575.00 with "15% GST on
+    Income" (or GST) has GST 575.00 x 3/23 = **75.00**; with ZERO it has
+    0.00 (counted in Box 6 when paid);
+  - another system's export with the **whole invoice's** total and GST
+    (`Total`, `TaxTotal`) and what's still owed (`InvoiceAmountDue`), a row
+    per invoice line: INV-0112 total 805.00, GST 105.00, owed 575.00 has
+    575.00 x 105.00 / 805.00 = **75.00** in what's owed (the rows for its
+    other lines are the same invoice, left out);
+  - **less than 3/23** of what's owed: K-311 460.00 with GST 30.00 becomes
+    two lines, **230.00** with GST (30.00 x 23 / 3, GST 30.00) and
+    **230.00** with no GST (out of scope). Paying it in full counts Box 11
+    **230.00**, Box 12 **30.00**, and the 2100 split shows 30.00 not yet
+    claimed (1,185.00 from the returns);
+  - up to **0.05** from 3/23 is taken as line-by-line rounding: 460.00 with
+    GST 60.04 is one line with GST 60.04;
+  - refused: GST 70.00 on 460.00 ("The GST (70.00) is more than GST at 15%
+    on what's owed would be (60.00)."), GST with a code that has none ("The
+    GST is 60.00 but the GST code ZERO has no GST."), negative GST, and a
+    total less than what's owed.
+- **IM21** The conversion account for organisations that had the old one:
+  migration 0036 changes **2990 Conversion clearing** (current liability)
+  to **3900 Historical adjustment** (equity; the next free code up to 3999
+  if 3900 is taken; the name only if it was still "Conversion clearing")
+  when nothing is posted to it. If something is (opening balances already
+  brought in), it's left as it is, because an account's class can't change
+  once it has postings; it's still used and still 0.00. Organisations with
+  no conversion account get 3900 Historical adjustment. Importing a chart
+  of accounts with `840,Historical Adjustment,Current Liability` (Xero's)
+  re-codes 3900 to 840, named Historical Adjustment, and it **stays Equity**
+  ("it stays Equity, not Current liability") rather than refusing the file.
+
 ### Not supported yet (refused rather than guessed)
 
 - Opening balances on **foreign-currency accounts**.
 - **Unused credit notes, overpayments and prepayments** at the conversion
   date (a negative amount owed).
-- Open invoices on the **payments basis**, and open bills on the payments or
-  hybrid basis (IM13).
+- Open invoices and bills **brought in line by line** with their original
+  accounts: each is one line (two when its GST is less than 3/23) on 3900,
+  with the GST in what's still owed. Box 6 counts a zero-rated part only
+  when its row has the ZERO code; the rest of a split document is treated as
+  having no GST.
+- A **GST account kept elsewhere** in the old system (GST on unpaid invoices
+  in a separate account): add it to the GST line of the trial balance.
 - **Unpresented payments and deposits** at the conversion date: the bank
   account's opening balance is taken as what the bank's statement said.
 - Several **conversion dates** (for example bringing in history month by
@@ -4453,15 +4568,19 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
 
 ### Questions for Jess (bringing in existing books)
 
-- **Payments basis**: should open invoices and bills at the conversion date
-  carry their GST (a GST column, or the original invoice lines), so GST is
-  returned when they're paid after the conversion? For now they're refused
-  on that basis (IM13). Is Tohyee right that, under IR375, GST on a
-  pre-conversion invoice paid after the conversion is due in the return
-  covering the payment, not in the old system's returns?
-- **Clearing account**: is 2990 "Conversion clearing" (current liability)
-  the right name, code and type, or would you rather an equity "Opening
-  balance" account as in NetSuite?
+Decided with Jess (30 Sep 2026): open invoices and bills carry their GST, as
+in Xero (IM13, IM17-IM20), and the conversion account is equity (IM1, IM21).
+
+- **GST account at the conversion**: Tohyee takes the trial balance's GST
+  line as including the GST in the open invoices and bills (as Xero's,
+  MYOB's and Tohyee's own GST accounts do) and shows the split (IM17). Is
+  that right for the systems your clients come from, or do some keep that
+  GST in a separate account that should be added in automatically?
+- **Rounding allowance**: GST within 0.05 of 3/23 of what's owed is one
+  standard-rated line; more than 0.05 less is split in two (IM20). Is 0.05
+  right?
+- **Name and code**: 3900 "Historical adjustment" (Xero's name), or would
+  you rather "Opening balance adjustments", or another code?
 - **Bank balances**: should the bank account's opening balance be the
   ledger balance (as built) with unpresented items entered as opening
   transactions, as in Xero?

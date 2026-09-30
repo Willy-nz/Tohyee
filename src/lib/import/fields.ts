@@ -135,6 +135,26 @@ export const IMPORT_FIELDS: Readonly<Record<ImportKind, readonly ImportField[]>>
       otherSystem: ["InvoiceAmountDue", "AmountDue"],
     },
     { key: "reference", label: "Reference", aliases: ["reference", "ref"], otherSystem: ["Reference"] },
+    {
+      key: "gst",
+      label: "GST in the amount owed",
+      hint: "Needed on the payments basis (0.00 if none). If you also map the invoice total, this can be the whole invoice's GST: the GST in what's owed is worked out in proportion.",
+      aliases: ["gst", "gst amount", "gst owed", "tax", "tax amount", "tax total", "gst total"],
+      otherSystem: ["TaxTotal"],
+    },
+    {
+      key: "total",
+      label: "Invoice total (incl. GST)",
+      hint: "Only needed when the GST column is the whole invoice's GST rather than the GST in what's still owed.",
+      aliases: ["invoice total", "total", "original amount"],
+      otherSystem: ["Total", "InvoiceTotal"],
+    },
+    {
+      key: "gstCode",
+      label: "GST code",
+      hint: "Instead of a GST amount: GST, ZERO, EXEMPT or NONE, or names like \"15% GST on Income\". With GST, the GST is 3/23 of what's owed.",
+      aliases: ["gst code", "tax code", "tax type", "tax rate"],
+    },
   ],
   open_bills: [
     { key: "number", label: "Supplier's invoice number", required: true, aliases: ["invoice number", "number", "bill number", "supplier invoice number"], otherSystem: ["*InvoiceNumber", "InvoiceNumber"] },
@@ -147,6 +167,26 @@ export const IMPORT_FIELDS: Readonly<Record<ImportKind, readonly ImportField[]>>
       required: true,
       aliases: ["amount due", "amount outstanding", "outstanding", "balance", "amount owed"],
       otherSystem: ["InvoiceAmountDue", "AmountDue"],
+    },
+    {
+      key: "gst",
+      label: "GST in the amount owed",
+      hint: "Needed on the payments basis (0.00 if none). If you also map the bill total, this can be the whole bill's GST: the GST in what's owed is worked out in proportion.",
+      aliases: ["gst", "gst amount", "gst owed", "tax", "tax amount", "tax total", "gst total"],
+      otherSystem: ["TaxTotal"],
+    },
+    {
+      key: "total",
+      label: "Bill total (incl. GST)",
+      hint: "Only needed when the GST column is the whole bill's GST rather than the GST in what's still owed.",
+      aliases: ["bill total", "total", "original amount"],
+      otherSystem: ["Total", "InvoiceTotal"],
+    },
+    {
+      key: "gstCode",
+      label: "GST code",
+      hint: "Instead of a GST amount: GST, ZERO, EXEMPT or NONE, or names like \"15% GST on Expenses\". With GST, the GST is 3/23 of what's owed.",
+      aliases: ["gst code", "tax code", "tax type", "tax rate"],
     },
   ],
 };

@@ -164,6 +164,10 @@ const ROLE_NAMES: Record<string, SystemKey> = {
   inventory: "inventory",
   "stock on hand": "inventory",
   "retained earnings": "retained_earnings",
+  "historical adjustment": "conversion_clearing",
+  "opening balance": "conversion_clearing",
+  "opening balance equity": "conversion_clearing",
+  "conversion clearing": "conversion_clearing",
 };
 
 const ROLE_LABELS: Partial<Record<SystemKey, string>> = {
@@ -172,6 +176,7 @@ const ROLE_LABELS: Partial<Record<SystemKey, string>> = {
   gst: "GST",
   inventory: "inventory",
   retained_earnings: "retained earnings",
+  conversion_clearing: "historical adjustment",
 };
 
 function accountsApplier(tx: OrgTx, accounts: Account[], taxCodes: TaxCodeFinder): Applier {
@@ -204,7 +209,9 @@ function accountsApplier(tx: OrgTx, accounts: Account[], taxCodes: TaxCodeFinder
       }
     }
     if (existing) {
-      if (existing.systemKey && type && type !== existing.accountType) {
+      // Another system's historical adjustment account is often a current liability (Xero's 840); Tohyee's stays equity (IM1).
+      const keepsType = existing.systemKey === "conversion_clearing" && type !== undefined && type !== existing.accountType;
+      if (existing.systemKey && type && type !== existing.accountType && !keepsType) {
         throw new ValidationError(
           `${existing.code} (${existing.name}) is used by Tohyee for automatic postings, so its type stays ${ACCOUNT_TYPES[existing.accountType].label}, not ${ACCOUNT_TYPES[type].label}.`,
         );
@@ -212,14 +219,15 @@ function accountsApplier(tx: OrgTx, accounts: Account[], taxCodes: TaxCodeFinder
       const changes: Record<string, unknown> = {};
       if (existing.code !== code) changes.code = code;
       if (name && name !== existing.name) changes.name = name;
-      if (type && type !== existing.accountType) changes.accountType = type;
+      if (type && type !== existing.accountType && !keepsType) changes.accountType = type;
       if (description !== undefined && description !== existing.description) changes.description = description;
       if (defaultTaxCode !== undefined && defaultTaxCode !== existing.defaultTaxCode) changes.defaultTaxCode = defaultTaxCode;
       if (Object.keys(changes).length === 0) return { row: 0, label, action: "unchanged" };
       const updated = await updateAccount(tx, existing.id, changes);
       remember(updated, existing.code);
       const names: Record<string, string> = { code: "code", name: "name", accountType: "type", description: "description", defaultTaxCode: "GST code" };
-      return { row: 0, label, action: "update", detail: recoded ?? `Changes its ${Object.keys(changes).map((field) => names[field]).join(", ")}` };
+      const kept = keepsType ? ` (it stays ${ACCOUNT_TYPES[existing.accountType].label}, not ${ACCOUNT_TYPES[type!].label})` : "";
+      return { row: 0, label, action: "update", detail: `${recoded ?? `Changes its ${Object.keys(changes).map((field) => names[field]).join(", ")}`}${kept}` };
     }
     if (!name) throw new ValidationError("Name is needed for a new account.");
     if (!type) throw new ValidationError("Type is needed for a new account (for example Expense or Current asset).");

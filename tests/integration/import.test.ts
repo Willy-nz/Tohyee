@@ -29,6 +29,7 @@ import { agedPayables } from "@/lib/reports/aged-payables";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
 import { activityStatement } from "@/lib/reports/customer-statements";
 import { inventoryValuation, trialBalance } from "@/lib/reports/financial";
+import { tenantMigrations } from "@/lib/db/migrations/tenant";
 import { calculateGstReturn } from "@/lib/reports/gst-return";
 import { salesBySalesperson } from "@/lib/reports/sales-by-salesperson";
 import {
@@ -75,6 +76,14 @@ INV-0112,Harbour Cafe,28/03/2026,20/04/2026,575.00`;
 
 const OPEN_BILLS = `Invoice number,Supplier,Bill date,Due date,Amount due
 K-311,Kauri Supplies,20/03/2026,20/04/2026,460.00`;
+
+/** IM17: the same open invoices and bill with the GST in what's still owed. */
+const OPEN_INVOICES_GST = `Invoice number,Customer,Invoice date,Due date,Amount due,GST
+INV-0107,Kobe Ltd,15/03/2026,20/04/2026,1150.00,150.00
+INV-0112,Harbour Cafe,28/03/2026,20/04/2026,575.00,75.00`;
+
+const OPEN_BILLS_GST = `Invoice number,Supplier,Bill date,Due date,Amount due,GST
+K-311,Kauri Supplies,20/03/2026,20/04/2026,460.00,60.00`;
 
 const STOCK = `Item code,Quantity,Value
 MUG,40,800.00
@@ -164,28 +173,29 @@ describeWithDatabase("bringing in existing books", () => {
     return { org, asUser, contacts, conversion, master, tb, journalLines, count };
   }
 
-  it("IM1, IM6: posting opening balances makes 2990 Conversion clearing and the opening journal, invoices, bill and stock", async () => {
+  it("IM1, IM6: opening balances post through 3900 Historical adjustment: the opening journal, invoices, bill and stock", async () => {
     const world = await setup();
+    // IM1: it's in the starting chart, equity.
+    const clearing = (await world.asUser(admin, (tx) => listAccounts(tx))).find((account) => account.code === "3900")!;
+    expect(clearing).toMatchObject({ name: "Historical adjustment", accountType: "equity", accountClass: "equity", systemKey: "conversion_clearing" });
     const check = await world.conversion({}, false);
     expect(check).toMatchObject({ ok: true, committed: false, problems: [] });
-    expect(check.plan.clearingAccountCode).toBe("2990");
+    expect(check.plan.clearingAccountCode).toBe("3900");
     expect(check.plan.skipped).toEqual([expect.objectContaining({ kind: "trial_balance", row: 10 })]);
     expect(await world.count("ledger_journals")).toBe(0);
-    expect(await world.count("accounts where system_key = 'conversion_clearing'")).toBe(0);
 
     const posted = await world.conversion();
     expect(posted).toMatchObject({ ok: true, committed: true });
-    const clearing = (await world.asUser(admin, (tx) => listAccounts(tx))).find((account) => account.code === "2990")!;
-    expect(clearing).toMatchObject({ name: "Conversion clearing", accountType: "current_liability", systemKey: "conversion_clearing" });
+    expect(await world.count("accounts where system_key = 'conversion_clearing'")).toBe(1);
 
     const journal = await world.asUser(admin, (tx) => getJournal(tx, posted.journalId!));
     expect(journal).toMatchObject({ origin: "opening_balance", postingDate: "2026-03-31", reference: "OPENING", totalDebit: "17985.00" });
     expect(await world.journalLines(posted.journalId!)).toEqual([
       ["1000", "12450.00", "0.00"],
-      ["2990", "1725.00", "0.00"],
-      ["2990", "810.00", "0.00"],
+      ["3900", "1725.00", "0.00"],
+      ["3900", "810.00", "0.00"],
       ["1600", "3000.00", "0.00"],
-      ["2990", "0.00", "460.00"],
+      ["3900", "0.00", "460.00"],
       ["2100", "0.00", "1380.00"],
       ["3000", "0.00", "10000.00"],
       ["3200", "0.00", "6145.00"],
@@ -204,22 +214,22 @@ describeWithDatabase("bringing in existing books", () => {
       contactName: "Kobe Ltd",
     });
     const full = await world.asUser(admin, (tx) => getInvoice(tx, inv107.id));
-    expect(full.lines).toEqual([expect.objectContaining({ description: "Owed at 2026-03-31 (opening balance)", accountCode: "2990", taxCode: null, lineAmount: "1150.00" })]);
+    expect(full.lines).toEqual([expect.objectContaining({ description: "Owed at 2026-03-31 (opening balance)", accountCode: "3900", taxCode: null, lineAmount: "1150.00" })]);
     expect(await world.journalLines(inv107.approvalJournalId!)).toEqual([
       ["1100", "1150.00", "0.00"],
-      ["2990", "0.00", "1150.00"],
+      ["3900", "0.00", "1150.00"],
     ]);
     const inv112 = invoices.find((invoice) => invoice.invoiceNumber === "INV-0112")!;
     expect(await world.journalLines(inv112.approvalJournalId!)).toEqual([
       ["1100", "575.00", "0.00"],
-      ["2990", "0.00", "575.00"],
+      ["3900", "0.00", "575.00"],
     ]);
     expect((await world.asUser(admin, (tx) => getJournal(tx, inv112.approvalJournalId!))).postingDate).toBe("2026-03-31");
 
     const bill = (await world.asUser(admin, (tx) => listBills(tx))).bills[0];
     expect(bill).toMatchObject({ supplierInvoiceNumber: "K-311", status: "approved", isOpeningBalance: true, total: "460.00", billDate: "2026-03-20" });
     expect(await world.journalLines(bill.approvalJournalId!)).toEqual([
-      ["2990", "460.00", "0.00"],
+      ["3900", "460.00", "0.00"],
       ["2000", "0.00", "460.00"],
     ]);
 
@@ -234,12 +244,12 @@ describeWithDatabase("bringing in existing books", () => {
       ),
     );
     expect(movements.rows).toEqual([
-      { item_code: "MUG", unit_cost: "20", value_delta: "800.00", offset: "2990" },
-      expect.objectContaining({ item_code: "VASE", value_delta: "10.00", offset: "2990" }),
+      { item_code: "MUG", unit_cost: "20", value_delta: "800.00", offset: "3900" },
+      expect.objectContaining({ item_code: "VASE", value_delta: "10.00", offset: "3900" }),
     ]);
   });
 
-  it("IM7: the trial balance at the conversion date is the imported one, 2990 is 0.00, and the period can be locked", async () => {
+  it("IM7: the trial balance at the conversion date is the imported one, 3900 is 0.00, and the period can be locked", async () => {
     const world = await setup();
     await world.conversion();
     expect(await world.tb("2026-03-31")).toEqual({
@@ -255,7 +265,7 @@ describeWithDatabase("bringing in existing books", () => {
     const status = await world.asUser(admin, (tx) => conversionStatus(tx));
     expect(status).toMatchObject({ matches: true, clearingBalance: "0.00", locked: false, conversion: { conversionDate: "2026-03-31", invoiceCount: 2, billCount: 1, stockCount: 2 } });
     expect(status.lines.find((line) => line.code === "1100")).toMatchObject({ imported: "1725.00", inTohyee: "1725.00", difference: "0.00" });
-    expect(status.lines.find((line) => line.code === "2990")).toMatchObject({ imported: "0.00", inTohyee: "0.00" });
+    expect(status.lines.find((line) => line.code === "3900")).toMatchObject({ imported: "0.00", inTohyee: "0.00" });
 
     const aged = await world.asUser(admin, (tx) => agedReceivables(tx, { asAt: "2026-03-31" }));
     expect(aged.rows.map((row) => [row.name, row.amounts.current])).toEqual([
@@ -304,7 +314,6 @@ describeWithDatabase("bringing in existing books", () => {
     expect(stock.problems[0].message).toContain("Inventory (1400) is 810.00 in the trial balance, but the stock values add up to 809.99");
     expect(await world.count("ledger_journals")).toBe(0);
     expect(await world.count("sales_invoices")).toBe(0);
-    expect(await world.count("accounts where system_key = 'conversion_clearing'")).toBe(0);
   });
 
   it("IM9: an unbalanced trial balance is refused, showing the difference", async () => {
@@ -405,6 +414,17 @@ describeWithDatabase("bringing in existing books", () => {
     const sales = await world.asUser(admin, (tx) => salesBySalesperson(tx, { from: "2026-03-01", to: "2026-05-31" }));
     expect(JSON.stringify(sales)).not.toContain("INV-0107");
     expect(JSON.stringify(sales)).toContain(i1.invoiceNumber!);
+
+    // With GST columns, on the invoice basis: that GST was returned before the conversion, so paying still counts nothing.
+    const withGst = await setup();
+    await withGst.conversion({ invoices: OPEN_INVOICES_GST, bills: OPEN_BILLS_GST });
+    const opening = (await withGst.asUser(admin, (tx) => listInvoices(tx))).invoices.find((invoice) => invoice.invoiceNumber === "INV-0107")!;
+    expect(opening.taxTotal).toBe("150.00");
+    await withGst.asUser(admin, (tx) =>
+      recordPayment(tx, opening.id, { idempotencyKey: key("pay"), paymentDate: "2026-04-20", amount: "1150.00", bankAccountCode: "1000" }),
+    );
+    expect((await withGst.asUser(admin, (tx) => calculateGstReturn(tx, { periodStart: "2026-04-01", periodEnd: "2026-05-31" }))).lines).toEqual([]);
+    expect((await withGst.asUser(admin, (tx) => conversionStatus(tx))).gst).toMatchObject({ openInvoicesReturnedWhenPaid: false, fromReturns: "1380.00" });
   });
 
   it("IM12: opening invoices and bills are paid later like any other; aged reports and statements show them", async () => {
@@ -439,18 +459,251 @@ describeWithDatabase("bringing in existing books", () => {
     expect((await world.tb("2026-04-30"))["1100"]).toBe("575.00 Dr");
   });
 
-  it("IM13: on the payments basis open invoices are refused; on the hybrid basis open bills are", async () => {
+  it("IM13: where GST counts when paid, open invoices and bills need their GST; elsewhere it's optional", async () => {
     const world = await setup();
     await world.asUser(owner, (tx) => updateOrganisationSettings(tx, { gstBasis: "payments" }));
-    const payments = await world.conversion();
-    expect(payments.problems.map((problem) => [problem.kind, problem.message.slice(0, 50)])).toEqual([
-      ["open_bills", "This organisation accounts for GST on purchases wh"],
-      ["open_invoices", "This organisation accounts for GST on the payments"],
+    const payments = await world.conversion({}, false);
+    // (Accounts receivable and payable then don't tie either, since those rows are refused.)
+    expect(payments.problems.filter((problem) => problem.kind !== "trial_balance").map((problem) => [problem.kind, problem.row, problem.message.slice(0, 40)])).toEqual([
+      ["open_bills", 2, "Bill K-311 needs its GST: this organisat"],
+      ["open_invoices", 2, "Invoice INV-0107 needs its GST: this org"],
+      ["open_invoices", 3, "Invoice INV-0112 needs its GST: this org"],
     ]);
+    expect(payments.problems.find((problem) => problem.kind === "open_invoices")!.message).toBe(
+      "Invoice INV-0107 needs its GST: this organisation accounts for GST on sales when they're paid (the payments basis), so the GST in what's still owed is returned when it's paid. Map a GST column (0.00 if there's none) or a GST code.",
+    );
+    expect((await world.conversion({ invoices: OPEN_INVOICES_GST, bills: OPEN_BILLS_GST }, false)).problems).toEqual([]);
     await world.asUser(owner, (tx) => updateOrganisationSettings(tx, { gstBasis: "hybrid" }));
-    const hybrid = await world.conversion();
-    expect(hybrid.problems.map((problem) => problem.kind)).toEqual(["open_bills"]);
+    const hybrid = await world.conversion({}, false);
+    expect(hybrid.problems.filter((problem) => problem.kind !== "trial_balance").map((problem) => problem.kind)).toEqual(["open_bills"]);
+    await world.asUser(owner, (tx) => updateOrganisationSettings(tx, { gstBasis: "invoice" }));
+    expect((await world.conversion({}, false)).problems).toEqual([]);
     expect(await world.count("ledger_journals")).toBe(0);
+  });
+
+  it("IM17: a payments-basis conversion: open documents carry their GST, posted as IM6, and the GST account splits", async () => {
+    const world = await setup();
+    await world.asUser(owner, (tx) => updateOrganisationSettings(tx, { gstBasis: "payments" }));
+    const posted = await world.conversion({ invoices: OPEN_INVOICES_GST, bills: OPEN_BILLS_GST });
+    expect(posted).toMatchObject({ ok: true, committed: true, problems: [] });
+    expect(posted.plan.invoices.map((invoice) => [invoice.number, invoice.amount, invoice.gst])).toEqual([
+      ["INV-0107", "1150.00", "150.00"],
+      ["INV-0112", "575.00", "75.00"],
+    ]);
+    const expectedGst = {
+      basis: "payments",
+      accountCode: "2100",
+      balance: "1380.00",
+      openInvoices: "225.00",
+      openInvoicesReturnedWhenPaid: true,
+      openBills: "60.00",
+      openBillsClaimedWhenPaid: true,
+      fromReturns: "1215.00",
+    };
+    expect(posted.plan.gst).toEqual(expectedGst);
+
+    const invoices = (await world.asUser(admin, (tx) => listInvoices(tx))).invoices;
+    const inv107 = invoices.find((invoice) => invoice.invoiceNumber === "INV-0107")!;
+    expect(inv107).toMatchObject({ isOpeningBalance: true, amountsMode: "inclusive", subtotal: "1000.00", taxTotal: "150.00", total: "1150.00", amountDue: "1150.00" });
+    const full = await world.asUser(admin, (tx) => getInvoice(tx, inv107.id));
+    expect(full.lines).toEqual([
+      expect.objectContaining({ description: "Owed at 2026-03-31 (opening balance)", accountCode: "3900", taxCode: "GST", lineAmount: "1150.00", taxAmount: "150.00" }),
+    ]);
+    // The GST is already in the trial balance's GST line, so the journal doesn't post it again.
+    expect(await world.journalLines(inv107.approvalJournalId!)).toEqual([
+      ["1100", "1150.00", "0.00"],
+      ["3900", "0.00", "1150.00"],
+    ]);
+    const bill = (await world.asUser(admin, (tx) => listBills(tx))).bills[0];
+    expect(bill).toMatchObject({ taxTotal: "60.00", total: "460.00" });
+    expect(await world.journalLines(bill.approvalJournalId!)).toEqual([
+      ["3900", "460.00", "0.00"],
+      ["2000", "0.00", "460.00"],
+    ]);
+    expect(await world.tb("2026-03-31")).toEqual({
+      "1000": "12450.00 Dr",
+      "1100": "1725.00 Dr",
+      "1400": "810.00 Dr",
+      "1600": "3000.00 Dr",
+      "2000": "460.00 Cr",
+      "2100": "1380.00 Cr",
+      "3000": "10000.00 Cr",
+      "3200": "6145.00 Cr",
+    });
+    const status = await world.asUser(admin, (tx) => conversionStatus(tx));
+    expect(status).toMatchObject({ matches: true, clearingBalance: "0.00", gst: expectedGst });
+    // Nothing counts before the conversion.
+    const febMar = await world.asUser(admin, (tx) => calculateGstReturn(tx, { periodStart: "2026-02-01", periodEnd: "2026-03-31" }));
+    expect(febMar.lines).toEqual([]);
+  });
+
+  async function firstReturnWorld(basis: "payments" | "hybrid") {
+    const world = await setup();
+    await world.asUser(owner, (tx) => updateOrganisationSettings(tx, { gstBasis: basis }));
+    await world.conversion({ invoices: OPEN_INVOICES_GST, bills: OPEN_BILLS_GST });
+    const i1 = await world.asUser(admin, async (tx) => {
+      const draft = await createInvoice(tx, {
+        idempotencyKey: key("invoice"),
+        contactId: world.contacts["Harbour Cafe"],
+        invoiceDate: "2026-04-10",
+        dueDate: "2026-04-20",
+        amountsMode: "exclusive",
+        lines: [{ description: "Mugs", quantity: "2", unitPrice: "50.00", accountCode: "4000", taxCode: "GST" }],
+      });
+      return (await approveInvoice(tx, draft.invoice.id, { idempotencyKey: key("approve") })).invoice;
+    });
+    const invoices = (await world.asUser(admin, (tx) => listInvoices(tx))).invoices;
+    const byNumber = (number: string) => invoices.find((invoice) => invoice.invoiceNumber === number)!;
+    const pay = (number: string, paymentDate: string, amount: string) =>
+      world.asUser(admin, (tx) => recordPayment(tx, byNumber(number).id, { idempotencyKey: key("pay"), paymentDate, amount, bankAccountCode: "1000" }));
+    await pay("INV-0107", "2026-04-20", "1150.00");
+    await pay("INV-0112", "2026-05-25", "230.00");
+    const bill = (await world.asUser(admin, (tx) => listBills(tx))).bills[0];
+    await world.asUser(admin, (tx) =>
+      recordSupplierPayment(tx, bill.id, { idempotencyKey: key("pay"), paymentDate: "2026-04-22", amount: "460.00", bankAccountCode: "1000" }),
+    );
+    const gstReturn = (periodStart: string, periodEnd: string) => world.asUser(admin, (tx) => calculateGstReturn(tx, { periodStart, periodEnd }));
+    return { world, i1, pay, gstReturn };
+  }
+
+  it("IM18: the first payments-basis return after the conversion counts what was paid on the opening invoices and bill", async () => {
+    const { world, i1, pay, gstReturn } = await firstReturnWorld("payments");
+    const aprMay = await gstReturn("2026-04-01", "2026-05-31");
+    expect(aprMay.boxes).toMatchObject({
+      box5: "1380.00",
+      box6: "0.00",
+      box7: "1380.00",
+      box8: "180.00",
+      box11: "460.00",
+      box12: "60.00",
+      box15: "120.00",
+    });
+    expect(aprMay.gstOnTransactions).toMatchObject({ sales: "180.00", purchases: "60.00" });
+    expect(aprMay.lines.map((line) => [line.documentNumber, line.eventType, line.eventDate, line.amount, line.gst, line.settledAmount, line.documentTotal])).toEqual([
+      ["INV-0107", "customer_payment", "2026-04-20", "1150.00", "150.00", "1150.00", "1150.00"],
+      ["INV-0112", "customer_payment", "2026-05-25", "230.00", "30.00", "230.00", "575.00"],
+      ["K-311", "supplier_payment", "2026-04-22", "460.00", "60.00", "460.00", "460.00"],
+    ]);
+    expect(aprMay.lines.some((line) => line.documentNumber === i1.invoiceNumber)).toBe(false);
+    // 2100: 1,215.00 from the old returns + 120.00 this return + 60.00 not returned yet (INV-0112's 45.00 and I1's 15.00).
+    expect((await world.tb("2026-05-31"))["2100"]).toBe("1395.00 Cr");
+    await pay("INV-0112", "2026-06-10", "345.00");
+    const junJul = await gstReturn("2026-06-01", "2026-07-31");
+    expect(junJul.boxes).toMatchObject({ box5: "345.00", box8: "45.00" });
+  });
+
+  it("IM19: on the hybrid basis the opening invoices' GST was returned before; the opening bill's counts when paid", async () => {
+    const { world, gstReturn } = await firstReturnWorld("hybrid");
+    const aprMay = await gstReturn("2026-04-01", "2026-05-31");
+    expect(aprMay.boxes).toMatchObject({ box5: "115.00", box8: "15.00", box11: "460.00", box12: "60.00", box15: "-45.00" });
+    expect(aprMay.lines.map((line) => [line.documentNumber, line.eventType])).toEqual([
+      [expect.stringMatching(/^INV-/), "invoice_approved"],
+      ["K-311", "supplier_payment"],
+    ]);
+    expect(aprMay.lines.some((line) => line.documentNumber === "INV-0107")).toBe(false);
+    expect((await world.asUser(admin, (tx) => conversionStatus(tx))).gst).toMatchObject({
+      basis: "hybrid",
+      openInvoicesReturnedWhenPaid: false,
+      openBillsClaimedWhenPaid: true,
+      fromReturns: "1440.00",
+    });
+  });
+
+  it("IM20: GST from a GST code, from the whole invoice's GST and total, split when it's less than 3/23, and refused when it's more", async () => {
+    const world = await setup();
+    await world.asUser(owner, (tx) => updateOrganisationSettings(tx, { gstBasis: "payments" }));
+    // A GST code only: 575.00 x 3/23 = 75.00.
+    const byCode = await world.conversion(
+      {
+        invoices: `Invoice number,Customer,Invoice date,Due date,Amount due,GST code
+INV-0107,Kobe Ltd,15/03/2026,20/04/2026,1150.00,15% GST on Income
+INV-0112,Harbour Cafe,28/03/2026,20/04/2026,575.00,GST`,
+        bills: OPEN_BILLS_GST,
+      },
+      false,
+    );
+    expect(byCode.plan.invoices.map((invoice) => invoice.gst)).toEqual(["150.00", "75.00"]);
+    // Another system's export: the whole invoice's total and GST, and what's still owed (a row per invoice line).
+    const xero = await world.conversion(
+      {
+        invoices: `*ContactName,*InvoiceNumber,*InvoiceDate,*DueDate,Total,TaxTotal,InvoiceAmountDue,*Description
+Kobe Ltd,INV-0107,15/03/2026,20/04/2026,1150.00,150.00,1150.00,Mugs
+Harbour Cafe,INV-0112,28/03/2026,20/04/2026,805.00,105.00,575.00,Vases
+Harbour Cafe,INV-0112,28/03/2026,20/04/2026,805.00,105.00,575.00,Delivery`,
+        bills: OPEN_BILLS_GST,
+      },
+      false,
+    );
+    expect(xero.problems).toEqual([]);
+    expect(xero.plan.invoices.map((invoice) => [invoice.number, invoice.gst])).toEqual([
+      ["INV-0107", "150.00"],
+      ["INV-0112", "75.00"],
+    ]);
+    // Less than 3/23: a standard-rated part of 30.00 x 23 / 3 = 230.00 and the rest with no GST.
+    const split = await world.conversion({ invoices: OPEN_INVOICES_GST, bills: OPEN_BILLS_GST.replace("460.00,60.00", "460.00,30.00") }, false);
+    expect(split.plan.bills[0].lines).toEqual([
+      { amount: "230.00", gst: "30.00", taxCode: "GST", rate: "0.15", part: "standard" },
+      { amount: "230.00", gst: "0.00", taxCode: null, rate: "0", part: "rest" },
+    ]);
+    // Line-by-line rounding is allowed for (within 0.05); more than 3/23 isn't; a zero-rated code with GST isn't.
+    const rounding = await world.conversion({ invoices: OPEN_INVOICES_GST, bills: OPEN_BILLS_GST.replace("460.00,60.00", "460.00,60.04") }, false);
+    expect(rounding.plan.bills[0].lines).toEqual([{ amount: "460.00", gst: "60.04", taxCode: "GST", rate: "0.15", part: null }]);
+    const tooMuch = await world.conversion({ invoices: OPEN_INVOICES_GST, bills: OPEN_BILLS_GST.replace("460.00,60.00", "460.00,70.00") }, false);
+    expect(tooMuch.problems).toContainEqual({ kind: "open_bills", row: 2, message: "The GST (70.00) is more than GST at 15% on what's owed would be (60.00)." });
+    const zeroRated = await world.conversion({ invoices: OPEN_INVOICES_GST, bills: `${OPEN_BILLS_GST.replace("Amount due,GST", "Amount due,GST,GST code")},ZERO` }, false);
+    expect(zeroRated.problems).toContainEqual({ kind: "open_bills", row: 2, message: "The GST is 60.00 but the GST code ZERO has no GST." });
+
+    // Posting the split bill and paying it: Box 11 230.00, Box 12 30.00.
+    await world.conversion({ invoices: OPEN_INVOICES_GST, bills: OPEN_BILLS_GST.replace("460.00,60.00", "460.00,30.00") });
+    const bill = (await world.asUser(admin, (tx) => listBills(tx))).bills[0];
+    expect(bill).toMatchObject({ total: "460.00", taxTotal: "30.00" });
+    await world.asUser(admin, (tx) =>
+      recordSupplierPayment(tx, bill.id, { idempotencyKey: key("pay"), paymentDate: "2026-04-22", amount: "460.00", bankAccountCode: "1000" }),
+    );
+    const aprMay = await world.asUser(admin, (tx) => calculateGstReturn(tx, { periodStart: "2026-04-01", periodEnd: "2026-05-31" }));
+    expect(aprMay.boxes).toMatchObject({ box11: "230.00", box12: "30.00" });
+    expect((await world.asUser(admin, (tx) => conversionStatus(tx))).gst).toMatchObject({ openBills: "30.00", fromReturns: "1185.00" });
+  });
+
+  it("IM21: an older organisation's 2990 Conversion clearing becomes 3900 Historical adjustment if nothing is posted to it", async () => {
+    const world = await setup();
+    const changeOver = tenantMigrations.find((migration) => migration.version === "0036")!.sql;
+    const section = changeOver.slice(changeOver.indexOf("update accounts a"));
+    // As a 0035 organisation had it: 2990 Conversion clearing, a current liability.
+    const asBefore = (tx: OrgTx) =>
+      tx.query(
+        "update accounts set code = '2990', name = 'Conversion clearing', account_class = 'liability', account_type = 'current_liability' where system_key = 'conversion_clearing'",
+      );
+    await world.asUser(owner, async (tx) => {
+      await asBefore(tx);
+      await tx.query(section);
+    });
+    expect((await world.asUser(admin, (tx) => listAccounts(tx))).find((account) => account.systemKey === "conversion_clearing")).toMatchObject({
+      code: "3900",
+      name: "Historical adjustment",
+      accountType: "equity",
+    });
+    // With something posted to it, it's left as it is (its class is fixed once it has postings), and still used.
+    const posted = await setup();
+    await posted.asUser(owner, asBefore);
+    await posted.conversion();
+    await posted.asUser(owner, (tx) => tx.query(section));
+    expect((await posted.asUser(admin, (tx) => listAccounts(tx))).find((account) => account.systemKey === "conversion_clearing")).toMatchObject({
+      code: "2990",
+      name: "Conversion clearing",
+      accountType: "current_liability",
+    });
+    expect((await posted.asUser(admin, (tx) => conversionStatus(tx))).clearingBalance).toBe("0.00");
+    // Another system's chart names its own historical adjustment account: Tohyee's is re-coded to it and stays equity.
+    const other = await setup({ people: false, items: false });
+    const result = await other.master("accounts", "*Code,*Name,*Type\n840,Historical Adjustment,Current Liability");
+    expect(result.problems).toEqual([]);
+    expect(result.outcomes[0]).toMatchObject({ action: "update", detail: "Tohyee's historical adjustment account, re-coded from 3900 (it stays Equity, not Current liability)" });
+    expect((await other.asUser(admin, (tx) => listAccounts(tx))).find((account) => account.code === "840")).toMatchObject({
+      name: "Historical Adjustment",
+      accountType: "equity",
+      systemKey: "conversion_clearing",
+    });
   });
 
   it("IM14: opening balances are brought in once; a retry returns the first", async () => {

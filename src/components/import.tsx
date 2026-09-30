@@ -20,7 +20,8 @@ import {
   type ImportPreset,
   missingRequired,
 } from "@/lib/import/fields";
-import type { ConversionResult, ConversionStatus } from "@/lib/import/conversion";
+import type { ConversionGst, ConversionResult, ConversionStatus } from "@/lib/import/conversion";
+import { GST_BASIS_LABELS } from "@/lib/tax/categories";
 import type { ImportFile } from "@/lib/import/read";
 import type { ImportResult, RowProblem } from "@/lib/import/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -477,10 +478,13 @@ function ConversionStep({
         </>
       ) : (
         <>
-          <Card title="Open invoices" description="One row per invoice still owed at the conversion date: number, customer, date, due date and the amount still owed including GST.">
+          <Card
+            title="Open invoices"
+            description="One row per invoice still owed at the conversion date: number, customer, date, due date, the amount still owed including GST, and the GST in it (a GST column, or a GST code). On the payments basis the GST is needed: it's returned when the invoice is paid."
+          >
             <FilePicker organisationId={organisationId} kind="open_invoices" loaded={files.open_invoices} onLoaded={set("open_invoices")} optional />
           </Card>
-          <Card title="Open bills" description="One row per bill still owed at the conversion date.">
+          <Card title="Open bills" description="One row per bill still owed at the conversion date, with its GST like the invoices. On the payments and hybrid bases the GST is needed: it's claimed when the bill is paid.">
             <FilePicker organisationId={organisationId} kind="open_bills" loaded={files.open_bills} onLoaded={set("open_bills")} optional />
           </Card>
           <Card title="Check and post the opening balances">
@@ -564,7 +568,7 @@ function ConversionStep({
                               </td>
                               <td>
                                 {line.postedTo}
-                                {line.heldBy ? <span className={ui.muted}> (clearing; held by the {line.heldBy})</span> : null}
+                                {line.heldBy ? <span className={ui.muted}> (historical adjustment; held by the {line.heldBy})</span> : null}
                               </td>
                               <td className={ui.num}>
                                 <Money value={line.debit} blankZero />
@@ -578,6 +582,7 @@ function ConversionStep({
                       </table>
                     </div>
                   ) : null}
+                  {plan.invoices.length + plan.bills.length > 0 ? <GstSplit gst={plan.gst} /> : null}
                   {plan.skipped.length > 0 ? (
                     <p className={ui.muted}>
                       Left out: {plan.skipped.map((entry) => `${IMPORT_KIND_LABELS[entry.kind ?? "trial_balance"]} row ${entry.row} (${entry.message})`).join("; ")}.
@@ -589,6 +594,65 @@ function ConversionStep({
           </Card>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * How the GST account's opening balance splits (IM17): the GST in the open
+ * invoices and bills is already in it, and on the payments basis (purchases
+ * too on the hybrid basis) it's returned or claimed when they're paid.
+ */
+function GstSplit({ gst }: { gst: ConversionGst }) {
+  const later = gst.openInvoicesReturnedWhenPaid || gst.openBillsClaimedWhenPaid;
+  return (
+    <div className={ui.tableWrap}>
+      <table className={ui.table}>
+        <caption className={ui.muted} style={{ textAlign: "left" }}>
+          GST{gst.accountCode ? ` (${gst.accountCode})` : ""} at the conversion date, {GST_BASIS_LABELS[gst.basis].toLowerCase()}
+        </caption>
+        <tbody>
+          <tr>
+            <td>GST account in the trial balance (owed to IRD)</td>
+            <td className={ui.num}>
+              <Money value={gst.balance} />
+            </td>
+          </tr>
+          <tr>
+            <td>
+              GST in the open invoices{" "}
+              <span className={ui.muted}>{gst.openInvoicesReturnedWhenPaid ? "(returned when they're paid, so not yet returned)" : "(returned before the conversion)"}</span>
+            </td>
+            <td className={ui.num}>
+              <Money value={gst.openInvoices} />
+            </td>
+          </tr>
+          <tr>
+            <td>
+              GST in the open bills{" "}
+              <span className={ui.muted}>{gst.openBillsClaimedWhenPaid ? "(claimed when they're paid, so not yet claimed)" : "(claimed before the conversion)"}</span>
+            </td>
+            <td className={ui.num}>
+              <Money value={gst.openBills} />
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <strong>Owed to IRD from GST returns up to the conversion date</strong>
+              {later ? <span className={ui.muted}> (the GST account, less GST not yet returned, plus GST not yet claimed)</span> : null}
+            </td>
+            <td className={ui.num}>
+              <strong>
+                <Money value={gst.fromReturns} />
+              </strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p className={ui.muted}>
+        This should be what your last GST returns left to pay (negative: a refund due). If it isn&apos;t, the old system probably kept GST on unpaid invoices or bills
+        in another account: add it to the GST line of the trial balance.
+      </p>
     </div>
   );
 }
@@ -617,7 +681,7 @@ function FinalCheck({ organisationId, status, reload }: { organisationId: string
   return (
     <Card
       title={`Trial balance at ${formatDate(conversion.conversionDate)}`}
-      description="Tohyee's trial balance at the conversion date beside the one imported, account by account (debits positive, credits negative). Conversion clearing should be 0.00."
+      description="Tohyee's trial balance at the conversion date beside the one imported, account by account (debits positive, credits negative). Historical adjustment (the account opening balances clear through) should be 0.00."
     >
       <div style={{ display: "grid", gap: 12 }}>
         {status.matches ? <Notice tone="success">Every account matches the imported trial balance.</Notice> : <Notice tone="error">Some accounts don&apos;t match: see the differences below.</Notice>}
@@ -650,6 +714,7 @@ function FinalCheck({ organisationId, status, reload }: { organisationId: string
             </tbody>
           </table>
         </div>
+        {status.gst && conversion.invoiceCount + conversion.billCount > 0 ? <GstSplit gst={status.gst} /> : null}
         {status.locked ? (
           <Notice tone="success">Locked up to {formatDate(status.lockDate)}: nothing can be posted on or before the conversion date.</Notice>
         ) : (

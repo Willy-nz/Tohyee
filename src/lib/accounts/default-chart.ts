@@ -34,6 +34,8 @@ export const NZ_DEFAULT_CHART: readonly ChartTemplateAccount[] = [
   { code: "3000", name: "Owner funds introduced", type: "equity" },
   { code: "3100", name: "Owner drawings", type: "equity" },
   { code: "3200", name: "Retained earnings", type: "equity", systemKey: "retained_earnings" },
+  // Opening balances clear through here when existing books are brought in (IM1); always 0.00 afterwards.
+  { code: "3900", name: "Historical adjustment", type: "equity", systemKey: "conversion_clearing" },
   { code: "4000", name: "Sales", type: "revenue" },
   { code: "4100", name: "Other revenue", type: "revenue" },
   { code: "4200", name: "Interest income", type: "other_income" },

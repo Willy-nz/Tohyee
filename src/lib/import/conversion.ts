@@ -7,13 +7,16 @@ import { ConflictError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import type { ImportKind, ImportOptions, ImportRecord } from "@/lib/import/fields";
 import { isRowProblem, parseOptions, parseRecords, problemMessage, type RowProblem, saveMapping } from "@/lib/import/service";
-import { date, money, number } from "@/lib/import/values";
+import { openingDocumentGst, type OpeningLine, type OpeningTaxCode } from "@/lib/import/opening-gst";
+import { date, money, number, TaxCodeFinder } from "@/lib/import/values";
 import { loadStockContext } from "@/lib/inventory/stock";
 import { postMovement, QUANTITY_SCALE } from "@/lib/inventory/movements";
 import { createOpeningInvoice } from "@/lib/invoices/service";
 import { parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed, getPeriodControls } from "@/lib/ledger/period-controls";
 import { abs, add, dec, isNegative, isPositive, isZero, neg, sub, toFixedString, ZERO_DECIMAL, type Decimal } from "@/lib/money/decimal";
+import { countsWhenSettled } from "@/lib/reports/gst-boxes";
+import type { GstBasis, TaxCategory } from "@/lib/tax/categories";
 import { requireIdempotencyKey } from "@/lib/validation";
 
 /**
@@ -35,8 +38,13 @@ import { requireIdempotencyKey } from "@/lib/validation";
  *   open bills and inventory the stock, to the cent; the trial balance must
  *   balance. Any problem refuses the whole thing, naming the file and row.
  * - Opening GST (the trial balance's GST line) is a balance only: journals
- *   never count in a GST return, and opening invoices and bills never do
- *   either (IM8).
+ *   never count in a GST return. Open invoices and bills carry the GST in
+ *   what's still owed, as in Xero: they never count when approved (that was
+ *   before the conversion), but on the payments basis (and for purchases on
+ *   the hybrid basis) each payment after the conversion counts its share, like
+ *   any invoice paid on that basis (IM11, IM13, IM17-IM20). Their GST is
+ *   already in the trial balance's GST line, so their journals don't post it
+ *   again; `ConversionGst` shows how that line splits (IM17).
  */
 
 export type ConversionFileKind = "trial_balance" | "stock" | "open_invoices" | "open_bills";
@@ -63,6 +71,41 @@ export type ConversionTie = {
   difference: string;
 };
 
+/** One open invoice or bill as it'll be brought in. */
+export type ConversionDocument = {
+  row: number;
+  number: string;
+  contactName: string;
+  date: string;
+  dueDate: string;
+  amount: string;
+  /** The GST in what's still owed; null when the file doesn't say (only where it never counts). */
+  gst: string | null;
+  lines: OpeningLine[];
+};
+
+/**
+ * How the GST account's opening balance splits (IM17): GST in the open
+ * invoices and bills is already in it, as it is for any invoice in Tohyee
+ * (GST goes to the GST account when an invoice is approved, whatever the
+ * basis). Where it's returned when paid, the rest is what the returns up to
+ * the conversion date left owing (or to be refunded).
+ */
+export type ConversionGst = {
+  basis: GstBasis;
+  accountCode: string | null;
+  /** The GST account in the trial balance, credit (owed to IRD) positive. */
+  balance: string;
+  /** GST in the open invoices, and whether it's still to be returned (payments basis) or was returned before. */
+  openInvoices: string;
+  openInvoicesReturnedWhenPaid: boolean;
+  /** GST in the open bills, and whether it's still to be claimed (payments and hybrid bases). */
+  openBills: string;
+  openBillsClaimedWhenPaid: boolean;
+  /** The balance less GST still to be returned, plus GST still to be claimed: what the returns up to the conversion date left owing. */
+  fromReturns: string;
+};
+
 export type ConversionPlan = {
   conversionDate: string;
   totalDebit: string;
@@ -71,8 +114,9 @@ export type ConversionPlan = {
   clearingAccountCode: string;
   lines: ConversionLine[];
   ties: ConversionTie[];
-  invoices: Array<{ row: number; number: string; contactName: string; date: string; dueDate: string; amount: string }>;
-  bills: Array<{ row: number; number: string; contactName: string; date: string; dueDate: string; amount: string }>;
+  invoices: ConversionDocument[];
+  bills: ConversionDocument[];
+  gst: ConversionGst;
   stock: Array<{ row: number; itemCode: string; location: string | null; locationId?: string; quantity: string; value: string }>;
   /** Rows left out on purpose (headings, totals, nothing owed, the same invoice on several rows). */
   skipped: RowProblem[];
@@ -120,6 +164,31 @@ function codeFromName(text: string | undefined): string | null {
 
 const val = (record: ImportRecord, field: string) => (record.values[field] ?? "").trim();
 
+/** An open document as the check shows it (without its ids). */
+function publicDocument(document: ConversionDocument): ConversionDocument {
+  const { row, number: documentNumber, contactName, date: documentDate, dueDate, amount, gst, lines } = document;
+  return { row, number: documentNumber, contactName, date: documentDate, dueDate, amount, gst, lines };
+}
+
+/** How the GST account's opening balance splits between the old returns and the open documents (IM17). */
+function conversionGst(input: { basis: GstBasis; accountCode: string | null; balance: Decimal; openInvoices: Decimal; openBills: Decimal }): ConversionGst {
+  const invoicesLater = countsWhenSettled(input.basis, "sales");
+  const billsLater = countsWhenSettled(input.basis, "purchases");
+  let fromReturns = input.balance;
+  if (invoicesLater) fromReturns = sub(fromReturns, input.openInvoices);
+  if (billsLater) fromReturns = add(fromReturns, input.openBills);
+  return {
+    basis: input.basis,
+    accountCode: input.accountCode,
+    balance: money2(input.balance),
+    openInvoices: money2(input.openInvoices),
+    openInvoicesReturnedWhenPaid: invoicesLater,
+    openBills: money2(input.openBills),
+    openBillsClaimedWhenPaid: billsLater,
+    fromReturns: money2(fromReturns),
+  };
+}
+
 /**
  * Checks everything and works out what would be posted; posts nothing.
  * Problems are collected rather than thrown, so every one is shown at once.
@@ -157,8 +226,19 @@ async function plan(tx: OrgTx, parsed: Parsed): Promise<{ plan: ConversionPlan; 
       `Something is already posted on or before ${conversionDate} (${earlier.rows[0].reference} on ${earlier.rows[0].posting_date}). Opening balances are the starting point, so nothing can be dated on or before the conversion date; void or correct it first, or use a conversion date before it.`,
     );
   }
-  const settings = await tx.query<{ gst_basis: string }>("select gst_basis from organisation_settings where id = true");
-  const basis = settings.rows[0]?.gst_basis ?? "invoice";
+  const settings = await tx.query<{ gst_basis: GstBasis }>("select gst_basis from organisation_settings where id = true");
+  const basis: GstBasis = settings.rows[0]?.gst_basis ?? "invoice";
+  const taxCodes = await tx.query<{ code: string; label: string; category: TaxCategory; rate: string; is_active: boolean }>(
+    "select code, label, category, rate::text, is_active from tax_codes order by code",
+  );
+  const finder = await TaxCodeFinder.load(tx);
+  const codeOf = (text: string): OpeningTaxCode | null => {
+    const found = finder.find(text, "GST code");
+    const row = found ? taxCodes.rows.find((entry) => entry.code === found) : undefined;
+    return row ? { code: row.code, category: row.category, rate: row.rate } : null;
+  };
+  const standardRow = taxCodes.rows.find((entry) => entry.is_active && entry.category === "standard");
+  const standard: OpeningTaxCode | null = standardRow ? { code: standardRow.code, category: standardRow.category, rate: standardRow.rate } : null;
 
   const accounts = await tx.query<{
     id: string;
@@ -266,11 +346,13 @@ async function plan(tx: OrgTx, parsed: Parsed): Promise<{ plan: ConversionPlan; 
     "select id, name, is_customer, is_supplier from contacts where not is_archived",
   );
   const contactByName = new Map(contacts.rows.map((row) => [row.name.toLowerCase(), row]));
-  type OpenDocument = ConversionPlan["invoices"][number] & { contactId: string; reference: string | null };
+  type OpenDocument = ConversionDocument & { contactId: string; reference: string | null };
   const readDocuments = (kind: "open_invoices" | "open_bills"): OpenDocument[] => {
     const documents: OpenDocument[] = [];
     const seen = new Map<string, { row: number; key: string }>();
     const noun = kind === "open_invoices" ? "invoice" : "bill";
+    // Where GST on these counts when they're paid, the file has to say how much there is (IM13).
+    const gstNeeded = countsWhenSettled(basis, kind === "open_invoices" ? "sales" : "purchases");
     for (const record of files[kind]) {
       const parsedRow = attempt(kind, record.row, () => {
         const numberText = val(record, "number");
@@ -281,12 +363,15 @@ async function plan(tx: OrgTx, parsed: Parsed): Promise<{ plan: ConversionPlan; 
         const documentDate = date(val(record, "date"), kind === "open_invoices" ? "Invoice date" : "Bill date", options.dateOrder);
         const dueDate = date(val(record, "dueDate"), "Due date", options.dateOrder);
         const amount = money(val(record, "amount"), "Amount still owed");
-        return { numberText, contactName, documentDate, dueDate, amount };
+        const gst = money(val(record, "gst"), "GST");
+        const total = money(val(record, "total"), `${noun[0].toUpperCase()}${noun.slice(1)} total`);
+        const gstCode = val(record, "gstCode");
+        return { numberText, contactName, documentDate, dueDate, amount, gst, total, gstCode };
       });
       if (!parsedRow) continue;
-      const { numberText, contactName, documentDate, dueDate, amount } = parsedRow;
+      const { numberText, contactName, documentDate, dueDate, amount, gst: gstText, total: totalText, gstCode } = parsedRow;
       // Another system's export has a row per line of each invoice: the same invoice on several rows is one invoice.
-      const key = [numberText.toLowerCase(), contactName.toLowerCase(), documentDate, dueDate, amount].join("|");
+      const key = [numberText.toLowerCase(), contactName.toLowerCase(), documentDate, dueDate, amount, gstText ?? "", totalText ?? "", gstCode.toLowerCase()].join("|");
       const same = seen.get(`${contactName.toLowerCase()}|${numberText.toLowerCase()}`);
       if (same) {
         if (same.key === key) skipped.push({ kind, row: record.row, message: `${noun} ${numberText} again (row ${same.row})` });
@@ -328,7 +413,30 @@ async function plan(tx: OrgTx, parsed: Parsed): Promise<{ plan: ConversionPlan; 
         problem(kind, record.row, "The reference can be at most 100 characters.");
         continue;
       }
-      documents.push({ row: record.row, number: numberText, contactId: contact.id, contactName: contact.name, date: documentDate, dueDate, amount, reference });
+      const opening = attempt(kind, record.row, () =>
+        openingDocumentGst({ noun, amount, gst: gstText, total: totalText, taxCode: gstCode ? codeOf(gstCode) : null, standard }),
+      );
+      if (!opening) continue;
+      if (opening.gst === null && gstNeeded) {
+        problem(
+          kind,
+          record.row,
+          `${noun[0].toUpperCase()}${noun.slice(1)} ${numberText} needs its GST: this organisation accounts for GST on ${kind === "open_invoices" ? "sales" : "purchases"} when they're paid (the ${basis} basis), so the GST in what's still owed is returned when it's paid. Map a GST column (0.00 if there's none) or a GST code.`,
+        );
+        continue;
+      }
+      documents.push({
+        row: record.row,
+        number: numberText,
+        contactId: contact.id,
+        contactName: contact.name,
+        date: documentDate,
+        dueDate,
+        amount,
+        gst: opening.gst,
+        lines: opening.lines,
+        reference,
+      });
     }
     return documents;
   };
@@ -354,22 +462,6 @@ async function plan(tx: OrgTx, parsed: Parsed): Promise<{ plan: ConversionPlan; 
     );
     if ((clash.rowCount ?? 0) > 0) problem("open_bills", bill.row, `${bill.contactName} already has a bill numbered ${bill.number} in Tohyee.`);
   }
-  // Payments basis: GST on these is returned when they're paid, but Tohyee only has the amount still owed, not its GST (question for Jess, IM9).
-  if (invoices.length > 0 && basis === "payments") {
-    problem(
-      "open_invoices",
-      0,
-      "This organisation accounts for GST on the payments basis, so GST on these invoices is due when they're paid, but the file only has what's still owed, not its GST. Open invoices can't be brought in on the payments basis yet: enter them as ordinary invoices dated the conversion date instead.",
-    );
-  }
-  if (bills.length > 0 && (basis === "payments" || basis === "hybrid")) {
-    problem(
-      "open_bills",
-      0,
-      `This organisation accounts for GST on purchases when they're paid (the ${basis} basis), but the file only has what's still owed, not its GST. Open bills can't be brought in on that basis yet: enter them as ordinary bills dated the conversion date instead.`,
-    );
-  }
-
   // Stock.
   const stock: ConversionPlan["stock"] = [];
   if (files.stock.length > 0) {
@@ -464,6 +556,16 @@ async function plan(tx: OrgTx, parsed: Parsed): Promise<{ plan: ConversionPlan; 
   tie("Accounts payable", payable, -1, total(bills.map((bill) => bill.amount)), "open_bills", "open bills");
   tie("Inventory", inventory, 1, total(stock.map((entry) => entry.value)), "stock", "stock values");
 
+  const gstAccount = system("gst");
+  const gstLine = gstAccount ? lines.find((entry) => entry.accountId === gstAccount.id) : undefined;
+  const gst = conversionGst({
+    basis,
+    accountCode: gstAccount?.code ?? null,
+    balance: gstLine ? sub(dec(gstLine.credit), dec(gstLine.debit)) : ZERO_DECIMAL,
+    openInvoices: total(invoices.map((invoice) => invoice.gst ?? "0")),
+    openBills: total(bills.map((bill) => bill.gst ?? "0")),
+  });
+
   problems.sort((a, b) => (a.kind ?? "").localeCompare(b.kind ?? "") || a.row - b.row);
   return {
     plan: {
@@ -474,8 +576,9 @@ async function plan(tx: OrgTx, parsed: Parsed): Promise<{ plan: ConversionPlan; 
       clearingAccountCode: clearingCode,
       lines,
       ties,
-      invoices: invoices.map(({ row, number: documentNumber, contactName, date: documentDate, dueDate, amount }) => ({ row, number: documentNumber, contactName, date: documentDate, dueDate, amount })),
-      bills: bills.map(({ row, number: documentNumber, contactName, date: documentDate, dueDate, amount }) => ({ row, number: documentNumber, contactName, date: documentDate, dueDate, amount })),
+      invoices: invoices.map(publicDocument),
+      bills: bills.map(publicDocument),
+      gst,
       stock,
       skipped,
     },
@@ -500,6 +603,7 @@ async function post(tx: OrgTx, parsed: Parsed, planned: ConversionPlan): Promise
       dueDate: invoice.dueDate,
       reference: parsed.files.open_invoices.find((record) => record.row === invoice.row)?.values.reference?.trim() || null,
       amount: invoice.amount,
+      lines: invoice.lines,
     });
   }
   for (const bill of planned.bills) {
@@ -513,6 +617,7 @@ async function post(tx: OrgTx, parsed: Parsed, planned: ConversionPlan): Promise
       billDate: bill.date,
       dueDate: bill.dueDate,
       amount: bill.amount,
+      lines: bill.lines,
     });
   }
   if (planned.stock.length > 0) {
@@ -677,6 +782,8 @@ export type ConversionStatus = {
   /** Every account agrees with the imported trial balance at the conversion date. */
   matches: boolean;
   clearingBalance: string | null;
+  /** How the GST account's imported balance splits (IM17). */
+  gst: ConversionGst | null;
   lockDate: string | null;
   /** Up to the conversion date is locked. */
   locked: boolean;
@@ -702,7 +809,7 @@ export async function conversionStatus(tx: OrgTx): Promise<ConversionStatus> {
     "select conversion_date::text, journal_id, invoice_count, bill_count, stock_count, created_by_email, created_at from conversion_balances where id = true",
   );
   const row = found.rows[0];
-  if (!row) return { conversion: null, lines: [], matches: false, clearingBalance: null, lockDate: controls.lockDate, locked: false };
+  if (!row) return { conversion: null, lines: [], matches: false, clearingBalance: null, gst: null, lockDate: controls.lockDate, locked: false };
   const result = await tx.query<{ id: string; code: string; name: string; system_key: string | null; imported: string; ledger: string }>(
     `select a.id, a.code, a.name, a.system_key,
             coalesce((select c.debit_amount - c.credit_amount from conversion_balance_lines c where c.account_id = a.id), 0)::text as imported,
@@ -728,6 +835,22 @@ export async function conversionStatus(tx: OrgTx): Promise<ConversionStatus> {
       };
     });
   const clearing = lines.find((entry) => entry.clearing);
+  const gstFigures = await tx.query<{ basis: GstBasis; code: string | null; balance: string; invoices: string; bills: string }>(
+    `select s.gst_basis as basis, a.code,
+            coalesce((select c.credit_amount - c.debit_amount from conversion_balance_lines c where c.account_id = a.id), 0)::text as balance,
+            (select coalesce(sum(tax_total), 0) from sales_invoices where is_opening_balance)::text as invoices,
+            (select coalesce(sum(tax_total), 0) from bills where is_opening_balance)::text as bills
+       from organisation_settings s left join accounts a on a.system_key = 'gst'
+      where s.id = true`,
+  );
+  const figures = gstFigures.rows[0];
+  const gst = conversionGst({
+    basis: figures.basis,
+    accountCode: figures.code,
+    balance: dec(figures.balance),
+    openInvoices: dec(figures.invoices),
+    openBills: dec(figures.bills),
+  });
   return {
     conversion: {
       conversionDate: row.conversion_date,
@@ -748,6 +871,7 @@ export async function conversionStatus(tx: OrgTx): Promise<ConversionStatus> {
     })),
     matches: lines.every((entry) => isZero(dec(entry.difference))),
     clearingBalance: clearing ? clearing.inTohyee : "0.00",
+    gst,
     lockDate: controls.lockDate,
     locked: controls.lockDate !== null && controls.lockDate >= row.conversion_date,
   };

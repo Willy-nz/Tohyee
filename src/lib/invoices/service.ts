@@ -1,3 +1,4 @@
+import { openingAmounts, openingLineDescription, type OpeningLine } from "@/lib/import/opening-gst";
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { checkCreditLimit, dueDateFromTerms } from "@/lib/customers/service";
 import { parseSalespersonInput, resolveSalesperson } from "@/lib/salespeople/service";
@@ -1379,25 +1380,32 @@ export async function createOpeningInvoice(
     dueDate: string;
     reference: string | null;
     amount: string;
+    /** Including GST, with the GST in each (IM13, IM17-IM20); their amounts add up to `amount`. */
+    lines: OpeningLine[];
   },
 ): Promise<Invoice> {
   const source = "import";
   const hash = requestHash("opening_invoice", { ...input });
+  const opening = openingAmounts(input.amount, input.lines);
   const inserted = await tx.query<{ id: string }>(
     `insert into sales_invoices (command_source, idempotency_key, request_hash, contact_id, invoice_date, due_date,
                                  reference, amounts_mode, currency_code, subtotal, tax_total, total, is_opening_balance,
                                  created_by_user_id, created_by_email)
-     values ($1, $2, $3, $4, $5, $6, $7, 'no_tax', $8, $9::numeric, 0.00, $9::numeric, true, $10, $11)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, true, $13, $14)
      returning id`,
-    [source, input.idempotencyKey, hash, input.contactId, input.invoiceDate, input.dueDate, input.reference, tx.baseCurrency, input.amount, tx.actor.userId, tx.actor.email],
+    [source, input.idempotencyKey, hash, input.contactId, input.invoiceDate, input.dueDate, input.reference, opening.amountsMode, tx.baseCurrency, opening.subtotal, opening.taxTotal, input.amount, tx.actor.userId, tx.actor.email],
   );
   const invoiceId = inserted.rows[0].id;
-  await tx.query(
-    `insert into sales_invoice_lines (invoice_id, line_order, description, quantity, unit_price, account_id, tax_code_id, tax_rate,
-                                      line_amount, net_amount, tax_amount)
-     select $1, 1, $2, 1, $3::numeric, a.id, null, 0, $3::numeric, $3::numeric, 0.00 from accounts a where a.code = $4`,
-    [invoiceId, `Owed at ${input.conversionDate} (opening balance)`, input.amount, input.clearingAccountCode],
-  );
+  for (const [index, line] of input.lines.entries()) {
+    await tx.query(
+      `insert into sales_invoice_lines (invoice_id, line_order, description, quantity, unit_price, account_id, tax_code_id, tax_rate,
+                                        line_amount, net_amount, tax_amount)
+       select $1, $2, $3, 1, $4::numeric, a.id, (select id from tax_codes where code = $5), $6::numeric, $4::numeric,
+              $4::numeric - $7::numeric, $7::numeric
+         from accounts a where a.code = $8`,
+      [invoiceId, index + 1, openingLineDescription(input.conversionDate, line), line.amount, line.taxCode, line.rate, line.gst, input.clearingAccountCode],
+    );
+  }
   const receivable = await controlAccountCode(tx, RECEIVABLE_ACCOUNT, "opening invoices can't be brought in");
   const posted = await postJournalBody(
     tx,
@@ -1431,7 +1439,7 @@ export async function createOpeningInvoice(
     eventType: "invoice.opening_balance",
     entityType: "sales_invoice",
     entityId: invoiceId,
-    details: { invoiceNumber: input.invoiceNumber, invoiceDate: input.invoiceDate, amount: input.amount, journalId: posted.journal.id },
+    details: { invoiceNumber: input.invoiceNumber, invoiceDate: input.invoiceDate, amount: input.amount, gst: opening.taxTotal, journalId: posted.journal.id },
   });
   return getInvoice(tx, invoiceId);
 }

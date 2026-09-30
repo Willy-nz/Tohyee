@@ -458,7 +458,7 @@ that something happened.
   up (RC3-RC12, CST3). With it on, items also get NetSuite's extras
   (below). The **GST audit report** (step 5, above) is for everyone.
 - **Import and export** (Accounting > Settings, admins and owners; examples
-  IM1-IM16, not yet approved by Jess): a wizard following NetSuite's import
+  IM1-IM21, not yet approved by Jess): a wizard following NetSuite's import
   assistant for bringing in existing books: upload CSV or Excel, map columns
   (automatic for Tohyee's own columns and for Xero-style exports, labelled
   "From another accounting system"; remembered per organisation), check
@@ -468,9 +468,16 @@ that something happened.
   GST number, payment terms and custom fields), products and services (by
   code), then opening balances as at a conversion date: the trial balance,
   stock on hand, and open invoices and bills, posted together once through
-  2990 Conversion clearing so accounts receivable, payable and inventory
-  equal their documents and stock; open invoices keep their numbers and stay
-  out of GST returns and sales reports. A final check compares the trial
+  3900 Historical adjustment (equity, like Xero's and NetSuite's opening
+  balance accounts, decided with Jess 30 Sep 2026) so accounts receivable,
+  payable and inventory equal their documents and stock; open invoices keep
+  their numbers and stay out of sales reports. Open invoices and bills carry
+  the GST in what's still owed (a GST column, the whole invoice's GST with
+  its total, or a GST code), as in Xero: on the payments basis (and for
+  purchases on the hybrid basis) paying them after the conversion puts the
+  paid share of their GST in that period's return; on the invoice basis it
+  was returned before, so never again. The check shows how the GST account's
+  opening balance splits between the old returns and the open documents. A final check compares the trial
   balance at the conversion date with the imported one and locks the period.
   Accounts get a usual GST code, filled in when the account is picked on a
   line. The chart of accounts, contacts and items export as CSV.

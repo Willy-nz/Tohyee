@@ -230,16 +230,20 @@ const SETTLEMENTS_SQL = `
  * total is the sum of its lines.
  */
 const EVENT_LINES_SQL = `
+-- Invoices and bills owed at the conversion date (is_opening_balance) were
+-- approved before it, so approving or voiding one never counts; on the bases
+-- where they count when settled, paying them after it does, like any other
+-- (IM11, IM13, IM18, IM19).
 with events as (
   select 'sales' as side, 'invoice_approved' as event_type, i.invoice_date as event_date, 1 as sign,
          'sales_invoice' as document_type, i.id as document_id, null::bigint as settlement_id,
          null::numeric as settled
     from sales_invoices i
-   where not $3 and i.status in ('approved', 'voided') and i.invoice_date between $1 and $2
+   where not $3 and i.status in ('approved', 'voided') and i.invoice_date between $1 and $2 and not i.is_opening_balance
   union all
   select 'sales', 'invoice_voided', i.void_date, -1, 'sales_invoice', i.id, null, null
     from sales_invoices i
-   where not $3 and i.status = 'voided' and i.void_date between $1 and $2
+   where not $3 and i.status = 'voided' and i.void_date between $1 and $2 and not i.is_opening_balance
   union all
   select 'sales', 'credit_note_approved', n.credit_note_date, -1, 'sales_credit_note', n.id, null, null
     from sales_credit_notes n
@@ -251,11 +255,11 @@ with events as (
   union all
   select 'purchases', 'bill_approved', b.bill_date, 1, 'bill', b.id, null, null
     from bills b
-   where not $4 and b.status in ('approved', 'voided') and b.bill_date between $1 and $2
+   where not $4 and b.status in ('approved', 'voided') and b.bill_date between $1 and $2 and not b.is_opening_balance
   union all
   select 'purchases', 'bill_voided', b.void_date, -1, 'bill', b.id, null, null
     from bills b
-   where not $4 and b.status = 'voided' and b.void_date between $1 and $2
+   where not $4 and b.status = 'voided' and b.void_date between $1 and $2 and not b.is_opening_balance
   union all
   select 'purchases', 'supplier_credit_note_approved', s.credit_note_date, -1, 'supplier_credit_note', s.id, null, null
     from supplier_credit_notes s
@@ -289,12 +293,10 @@ documents as (
   select 'sales_invoice' as document_type, id as document_id, invoice_number as document_number, reference, contact_id,
          null::text as claimant
     from sales_invoices
-    -- Invoices and bills owed at the conversion date were accounted for before it (IM8).
-   where not is_opening_balance
   union all
   select 'sales_credit_note', id, credit_note_number, reference, contact_id, null from sales_credit_notes
   union all
-  select 'bill', id, supplier_invoice_number, null, contact_id, null from bills where not is_opening_balance
+  select 'bill', id, supplier_invoice_number, null, contact_id, null from bills
   union all
   select 'supplier_credit_note', id, supplier_credit_note_number, reference, contact_id, null from supplier_credit_notes
   union all
