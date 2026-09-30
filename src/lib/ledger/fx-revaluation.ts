@@ -1,5 +1,6 @@
 import { parseAccountCodeInput, resolveAccountsByCode } from "@/lib/accounts/service";
 import { writeAuditEvent } from "@/lib/audit";
+import { RECEIVABLES_SQL } from "@/lib/customers/service";
 import { parseIsoDate, parseOptionalIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, ValidationError } from "@/lib/errors";
@@ -7,8 +8,11 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { foreignAccountState } from "@/lib/ledger/foreign";
 import { type ForeignAmount, type JournalBody, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { currencyMinorUnits, parseCurrencyCode } from "@/lib/money/currency";
+import { PAYABLES_SQL } from "@/lib/reports/aged-payables";
 import {
   abs,
+  add,
+  type Decimal,
   dec,
   isNegative,
   isZero,
@@ -19,6 +23,7 @@ import {
   sub,
   toFixedString,
   toPlainString,
+  ZERO_DECIMAL,
 } from "@/lib/money/decimal";
 import {
   asRecord,
@@ -42,6 +47,34 @@ export type FxRevaluationItem = {
   closingRate: string;
   deltaAmount: string;
   description: string | null;
+  /**
+   * For accounts receivable or payable (MC32-MC37): each open document revalued, like NetSuite's Open
+   * Receivables and Open Payables lists. Empty for a bank or other account, and for revaluations from
+   * before documents were revalued one by one.
+   */
+  documents: FxRevaluationDocument[];
+};
+
+export type RevaluedDocumentKind = "invoice" | "credit_note" | "overpayment" | "bill" | "supplier_credit_note";
+
+/**
+ * One open document in a revaluation (MC32): its open foreign amount and its
+ * base value at its own rate, both in the account's normal direction (credit
+ * notes and overpayments are negative), its own rate and its unrealised
+ * amount, (closing rate - its rate) x open foreign amount, rounded once.
+ */
+export type FxRevaluationDocument = {
+  lineOrder: number;
+  kind: RevaluedDocumentKind;
+  documentId: string;
+  documentNumber: string | null;
+  documentDate: string;
+  currencyCode: string;
+  foreignAmount: string;
+  carryingAmount: string;
+  documentRate: string;
+  closingRate: string;
+  deltaAmount: string;
 };
 
 export type FxRevaluationRun = {
@@ -118,6 +151,45 @@ async function loadRuns(tx: OrgTx, where: string, values: unknown[], limit = 50)
       order by i.run_id, i.line_order`,
     [runs.rows.map((run) => run.id)],
   );
+  const documents = await tx.query<{
+    run_id: string;
+    item_line_order: number;
+    line_order: number;
+    document_kind: RevaluedDocumentKind;
+    document_id: string;
+    document_number: string | null;
+    document_date: string;
+    currency_code: string;
+    foreign_amount: string;
+    carrying_amount: string;
+    document_rate: string;
+    closing_rate: string;
+    delta_amount: string;
+  }>(
+    `select d.run_id, d.item_line_order, d.line_order, d.document_kind, d.document_id::text, d.document_number,
+            d.document_date::text, d.currency_code, d.foreign_amount::text, d.carrying_amount::text,
+            d.document_rate::text, d.closing_rate::text, d.delta_amount::text
+       from ledger_fx_revaluation_documents d
+      where d.run_id = any($1::bigint[])
+      order by d.run_id, d.line_order`,
+    [runs.rows.map((run) => run.id)],
+  );
+  const documentsOf = (runId: string, itemLineOrder: number): FxRevaluationDocument[] =>
+    documents.rows
+      .filter((row) => row.run_id === runId && row.item_line_order === itemLineOrder)
+      .map((row) => ({
+        lineOrder: row.line_order,
+        kind: row.document_kind,
+        documentId: row.document_id,
+        documentNumber: row.document_number,
+        documentDate: row.document_date,
+        currencyCode: row.currency_code,
+        foreignAmount: row.foreign_amount,
+        carryingAmount: row.carrying_amount,
+        documentRate: toPlainString(dec(row.document_rate)),
+        closingRate: toPlainString(dec(row.closing_rate)),
+        deltaAmount: row.delta_amount,
+      }));
   return runs.rows.map((run) => ({
     id: run.id,
     reference: run.reference,
@@ -148,6 +220,7 @@ async function loadRuns(tx: OrgTx, where: string, values: unknown[], limit = 50)
         closingRate: item.closing_rate,
         deltaAmount: item.delta_amount,
         description: item.description,
+        documents: documentsOf(run.id, item.line_order),
       })),
   }));
 }
@@ -217,13 +290,84 @@ export async function openCurrencyBalance(
   };
 }
 
-/** Open foreign-currency balances on accounts receivable and payable as at a date, for the revaluation screen and period close (MC8). */
+export type OpenForeignDocument = {
+  kind: RevaluedDocumentKind;
+  documentId: string;
+  documentNumber: string | null;
+  documentDate: string;
+  /** Open, in the document's currency, in the account's normal direction (credit notes and overpayments are negative). */
+  foreign: string;
+  /** Its open base value at its own rate, the same way round. */
+  base: string;
+  rate: string;
+};
+
+/**
+ * The open foreign-currency documents on accounts receivable (invoices,
+ * credit notes and overpayments) or payable (bills and supplier credit
+ * notes) in one currency as at a date (MC32), from the same documents as
+ * aged receivables and payables, like NetSuite's Open Receivables and Open
+ * Payables lists.
+ */
+export async function openForeignDocuments(
+  tx: OrgTx,
+  systemKey: "accounts_receivable" | "accounts_payable",
+  currencyCode: string,
+  asAt: string,
+): Promise<OpenForeignDocument[]> {
+  const sql =
+    systemKey === "accounts_receivable"
+      ? `${RECEIVABLES_SQL}
+         select 'invoice' as kind, i.id::text, i.invoice_number as number, i.invoice_date::text as date,
+                i.amount_due::text as foreign, i.amount_due_base::text as base, s.exchange_rate::text as rate
+           from invoices i join sales_invoices s on s.id = i.id
+          where s.currency_code = $2 and s.exchange_rate is not null and (i.amount_due <> 0 or i.amount_due_base <> 0)
+         union all
+         select 'credit_note', n.id::text, n.credit_note_number, n.credit_note_date::text,
+                (-n.unused)::text, (-n.base_unused)::text, s.exchange_rate::text
+           from credit_notes_open n join sales_credit_notes s on s.id = n.id
+          where s.currency_code = $2 and s.exchange_rate is not null and (n.unused <> 0 or n.base_unused <> 0)
+         union all
+         select 'overpayment', o.id::text, 'Overpayment on ' || o.invoice_number, o.payment_date::text,
+                (-o.unused)::text, (-o.base_unused)::text, p.exchange_rate::text
+           from overpayments_open o join customer_payments p on p.id = o.id
+          where p.currency_code = $2 and p.exchange_rate is not null and (o.unused <> 0 or o.base_unused <> 0)
+         order by 4, 1, 2`
+      : `${PAYABLES_SQL}
+         select 'bill' as kind, b.id::text, b.supplier_invoice_number as number, b.bill_date::text as date,
+                b.amount_due::text as foreign, b.amount_due_base::text as base, d.exchange_rate::text as rate
+           from bills_due b join bills d on d.id = b.id
+          where d.currency_code = $2 and d.exchange_rate is not null and (b.amount_due <> 0 or b.amount_due_base <> 0)
+         union all
+         select 'supplier_credit_note', c.id::text, c.supplier_credit_note_number, c.credit_note_date::text,
+                (-c.unused)::text, (-c.unused_base)::text, n.exchange_rate::text
+           from credit c join supplier_credit_notes n on n.id = c.id
+          where n.currency_code = $2 and n.exchange_rate is not null and (c.unused <> 0 or c.unused_base <> 0)
+         order by 4, 1, 2`;
+  const rows = await tx.query<{ kind: RevaluedDocumentKind; id: string; number: string | null; date: string; foreign: string; base: string; rate: string }>(
+    sql,
+    [asAt, currencyCode],
+  );
+  return rows.rows.map((row) => ({
+    kind: row.kind,
+    documentId: row.id,
+    documentNumber: row.number,
+    documentDate: row.date,
+    foreign: toFixedString(dec(row.foreign), currencyMinorUnits(currencyCode)),
+    base: toFixedString(dec(row.base), currencyMinorUnits(tx.baseCurrency)),
+    rate: toPlainString(dec(row.rate)),
+  }));
+}
+
+/** Open foreign-currency balances on accounts receivable and payable as at a date, for the revaluation screen and period close (MC8), with their open documents (MC32). */
 export async function openCurrencyBalances(
   tx: OrgTx,
   asAt: string,
-): Promise<Array<{ accountId: string; accountCode: string; accountName: string; currencyCode: string; foreign: string; base: string }>> {
-  const rows = await tx.query<{ id: string; code: string; name: string; account_class: string; currency: string }>(
-    `select distinct a.id::text, a.code, a.name, a.account_class, l.foreign_currency_code as currency
+): Promise<
+  Array<{ accountId: string; accountCode: string; accountName: string; currencyCode: string; foreign: string; base: string; documents: OpenForeignDocument[] }>
+> {
+  const rows = await tx.query<{ id: string; code: string; name: string; account_class: string; system_key: "accounts_receivable" | "accounts_payable"; currency: string }>(
+    `select distinct a.id::text, a.code, a.name, a.account_class, a.system_key, l.foreign_currency_code as currency
        from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id join accounts a on a.id = l.account_id
       where a.system_key in ('accounts_receivable', 'accounts_payable') and l.foreign_currency_code is not null and j.posting_date <= $1
       order by a.code, l.foreign_currency_code`,
@@ -233,9 +377,85 @@ export async function openCurrencyBalances(
   for (const row of rows.rows) {
     const balance = await openCurrencyBalance(tx, { id: row.id, accountClass: row.account_class }, row.currency, asAt);
     if (isZero(dec(balance.foreign)) && isZero(dec(balance.base))) continue;
-    out.push({ accountId: row.id, accountCode: row.code, accountName: row.name, currencyCode: row.currency, ...balance });
+    const documents = await openForeignDocuments(tx, row.system_key, row.currency, asAt);
+    out.push({ accountId: row.id, accountCode: row.code, accountName: row.name, currencyCode: row.currency, ...balance, documents });
   }
   return out;
+}
+
+/**
+ * Revalues the open documents on accounts receivable or payable in one
+ * currency (MC32-MC37), following NetSuite's Revalue Open Currency Balances:
+ * each open invoice, bill, credit note or overpayment on its own, by
+ * (closing rate - its own rate) x its open foreign amount, rounded once to
+ * cents (NetSuite's help doesn't say how it rounds; rounding each document
+ * is the choice made). The account and currency's total is the sum. Refused:
+ * nothing open; a typed foreign amount that doesn't agree; documents whose
+ * total doesn't agree with the ledger (period close's check); and an earlier
+ * revaluation of the same balance not yet reversed by the date (NetSuite
+ * would revalue from that revaluation's rate; Tohyee's always reverse the
+ * next day, so it isn't supported).
+ */
+async function revalueOpenDocuments(
+  tx: OrgTx,
+  account: { id: string; code: string; name: string; accountClass: string; systemKey: string | null },
+  currencyCode: string,
+  typed: string | null,
+  closingRate: string,
+  revaluationDate: string,
+): Promise<{ foreignAmount: string; carrying: string; revalued: string; delta: Decimal; documents: Array<OpenForeignDocument & { delta: string }> }> {
+  const foreignScale = currencyMinorUnits(currencyCode);
+  const baseScale = currencyMinorUnits(tx.baseCurrency);
+  const unreversed = await tx.query<{ reference: string; revaluation_date: string; reversal_posting_date: string }>(
+    `select r.reference, r.revaluation_date::text, r.reversal_posting_date::text
+       from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id
+      where i.account_id = $1 and i.currency_code = $2 and i.revaluation_date < $3 and r.reversal_posting_date > $3
+      order by r.revaluation_date limit 1`,
+    [account.id, currencyCode, revaluationDate],
+  );
+  if (unreversed.rows[0]) {
+    const earlier = unreversed.rows[0];
+    throw new ValidationError(
+      `Account ${account.code} ${currencyCode} was revalued on ${earlier.revaluation_date} (${earlier.reference}), and that isn't reversed until ${earlier.reversal_posting_date}. Revaluing it again before then isn't supported yet.`,
+    );
+  }
+  const systemKey = account.systemKey === "accounts_payable" ? "accounts_payable" : "accounts_receivable";
+  const documents = await openForeignDocuments(tx, systemKey, currencyCode, revaluationDate);
+  if (documents.length === 0) {
+    throw new ValidationError(`Account ${account.code} has nothing open in ${currencyCode} on ${revaluationDate}, so there's nothing to revalue.`);
+  }
+  const foreign = documents.reduce((total, document) => add(total, dec(document.foreign)), ZERO_DECIMAL);
+  const carrying = documents.reduce((total, document) => add(total, dec(document.base)), ZERO_DECIMAL);
+  const foreignAmount = toFixedString(foreign, foreignScale);
+  if (typed !== null && toFixedString(dec(typed), foreignScale) !== foreignAmount) {
+    throw new ValidationError(
+      `Account ${account.code}: the ledger has ${currencyCode} ${foreignAmount} open on ${revaluationDate}, not ${toFixedString(dec(typed), foreignScale)}. Leave the foreign amount blank to use the ledger's.`,
+    );
+  }
+  const ledger = await openCurrencyBalance(tx, account, currencyCode, revaluationDate);
+  if (ledger.foreign !== foreignAmount || ledger.base !== toFixedString(carrying, baseScale)) {
+    throw new ValidationError(
+      `Account ${account.code}'s ${currencyCode} balance on ${revaluationDate} (${currencyCode} ${ledger.foreign}, ${tx.baseCurrency} ${ledger.base}) doesn't agree with its open documents (${currencyCode} ${foreignAmount}, ${tx.baseCurrency} ${toFixedString(carrying, baseScale)}), so they can't be revalued one by one. Period close's check lists the difference.`,
+    );
+  }
+  if (isZero(foreign)) {
+    throw new ValidationError(
+      `Account ${account.code}'s open ${currencyCode} documents come to ${currencyCode} 0.00 on ${revaluationDate}; revaluing them isn't supported yet. Apply the credit to the invoices first.`,
+    );
+  }
+  let delta = ZERO_DECIMAL;
+  const revalued = documents.map((document) => {
+    const change = roundHalfUp(mul(sub(dec(closingRate), dec(document.rate)), dec(document.foreign)), baseScale);
+    delta = add(delta, change);
+    return { ...document, delta: toFixedString(change, baseScale) };
+  });
+  return {
+    foreignAmount,
+    carrying: toFixedString(carrying, baseScale),
+    revalued: toFixedString(add(carrying, delta), baseScale),
+    delta,
+    documents: revalued,
+  };
 }
 
 export async function listFxRevaluations(
@@ -419,27 +639,17 @@ export async function postFxRevaluation(
     );
   }
 
-  const computed = [];
+  type Computed = (typeof prepared)[number] & {
+    foreignAmount: string;
+    carrying: string;
+    revalued: string;
+    delta: Decimal;
+    documents: Array<OpenForeignDocument & { delta: string }>;
+  };
+  const computed: Computed[] = [];
   for (const item of prepared) {
     if (item.control) {
-      // MC8: the open documents in this currency, from the ledger; a typed amount must agree.
-      const open = await openCurrencyBalance(tx, item.account, item.currencyCode, revaluationDate);
-      if (isZero(dec(open.foreign))) {
-        throw new ValidationError(`Account ${item.account.code} has nothing open in ${item.currencyCode} on ${revaluationDate}, so there's nothing to revalue.`);
-      }
-      if (item.typed !== null && toFixedString(dec(item.typed), currencyMinorUnits(item.currencyCode)) !== open.foreign) {
-        throw new ValidationError(
-          `Account ${item.account.code}: the ledger has ${item.currencyCode} ${open.foreign} open on ${revaluationDate}, not ${toFixedString(dec(item.typed), currencyMinorUnits(item.currencyCode))}. Leave the foreign amount blank to use the ledger's.`,
-        );
-      }
-      const revalued = roundHalfUp(mul(dec(open.foreign), dec(item.balance.closingRate)), baseScale);
-      computed.push({
-        ...item,
-        foreignAmount: open.foreign,
-        carrying: open.base,
-        revalued: toFixedString(revalued, baseScale),
-        delta: sub(revalued, dec(open.base)),
-      });
+      computed.push({ ...item, ...(await revalueOpenDocuments(tx, item.account, item.currencyCode, item.typed, item.balance.closingRate, revaluationDate)) });
       continue;
     }
     const totals = await tx.query<{ debits: string; credits: string }>(
@@ -467,15 +677,15 @@ export async function postFxRevaluation(
       carrying: toFixedString(carrying, baseScale),
       revalued: toFixedString(revalued, baseScale),
       delta,
+      documents: [],
     });
   }
 
   const lines: Array<{ accountCode: string; debitAmount: string; creditAmount: string; description: string; foreign?: ForeignAmount }> = [];
-  for (const item of computed) {
-    if (isZero(item.delta)) continue;
-    const amount = toFixedString(abs(item.delta), baseScale);
-    const label = item.balance.description ?? `${item.account.code} ${item.currencyCode}`;
-    const increases = !isNegative(item.delta);
+  const addPair = (item: Computed, delta: Decimal, label: string) => {
+    if (isZero(delta)) return;
+    const amount = toFixedString(abs(delta), baseScale);
+    const increases = !isNegative(delta);
     // An asset worth more, or a liability worth less, is a gain.
     const isGain = item.account.accountClass === "asset" ? increases : !increases;
     const accountSide = item.account.accountClass === "asset" ? increases : !increases; // debit the account?
@@ -498,6 +708,17 @@ export async function postFxRevaluation(
       creditAmount: accountSide ? amount : "0",
       description: `Unrealised FX ${isGain ? "gain" : "loss"} ${label}`,
     });
+  };
+  for (const item of computed) {
+    const label = item.balance.description ?? `${item.account.code} ${item.currencyCode}`;
+    if (item.control) {
+      // One pair of lines per open document (MC32), like NetSuite's revaluation of each open transaction.
+      for (const document of item.documents) {
+        addPair(item, dec(document.delta), `${label} ${document.documentNumber ?? `#${document.documentId}`}`.slice(0, 200));
+      }
+    } else {
+      addPair(item, item.delta, label);
+    }
   }
   if (lines.length === 0) {
     throw new ValidationError("Nothing to revalue: every balance already matches the closing rate.");
@@ -583,6 +804,33 @@ export async function postFxRevaluation(
       ],
     );
   }
+  let documentLine = 0;
+  for (const [index, item] of computed.entries()) {
+    for (const document of item.documents) {
+      documentLine += 1;
+      await tx.query(
+        `insert into ledger_fx_revaluation_documents (
+           run_id, item_line_order, line_order, document_kind, document_id, document_number, document_date, currency_code,
+           foreign_amount, carrying_amount, document_rate, closing_rate, delta_amount
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10::numeric, $11::numeric, $12::numeric, $13::numeric)`,
+        [
+          runId,
+          index + 1,
+          documentLine,
+          document.kind,
+          document.documentId,
+          document.documentNumber,
+          document.documentDate,
+          item.currencyCode,
+          document.foreign,
+          document.base,
+          document.rate,
+          item.balance.closingRate,
+          document.delta,
+        ],
+      );
+    }
+  }
 
   await writeAuditEvent(tx, {
     eventType: "ledger.fx_revaluation_posted",
@@ -604,6 +852,9 @@ export async function postFxRevaluation(
         carrying: item.carrying,
         revalued: item.revalued,
         delta: toFixedString(item.delta, baseScale),
+        ...(item.control
+          ? { documents: item.documents.map((document) => ({ kind: document.kind, id: document.documentId, foreign: document.foreign, rate: document.rate, delta: document.delta })) }
+          : {}),
       })),
     },
   });

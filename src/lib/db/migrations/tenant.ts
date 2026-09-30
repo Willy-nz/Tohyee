@@ -8206,4 +8206,282 @@ alter table document_emails drop constraint document_emails_sent_via_check;
 alter table document_emails add constraint document_emails_sent_via_check check (sent_via in ('smtp', 'microsoft', 'google'));
 `,
   },
+  {
+    version: "0045",
+    name: "fx_rounding_and_document_revaluation",
+    sql: `
+-- Following NetSuite (examples MC31-MC45): the cent or two left by rounding
+-- when a payment or credit settles a foreign-currency document goes to a
+-- Rounding Gain/Loss account of its own, apart from the realised gain or
+-- loss ((payment rate - document rate) x amount, rounded to cents); and open
+-- invoices, bills, credit notes and overpayments are revalued one by one.
+
+-- The rounding account: 7050 in the starting chart; existing organisations
+-- get it here, at 7050 or the next free code after it.
+insert into accounts (code, name, account_class, account_type, system_key)
+select (select min(c)::text from generate_series(7050, 7999) c where not exists (select 1 from accounts where lower(code) = c::text)),
+       'Rounding gains and losses', 'revenue', 'other_income', 'fx_rounding'
+ where exists (select 1 from accounts)
+   and not exists (select 1 from accounts where system_key = 'fx_rounding')
+   and exists (select 1 from generate_series(7050, 7999) c where not exists (select 1 from accounts where lower(code) = c::text));
+
+-- Each settlement keeps its realised gain (on 7020) and its rounding (on
+-- 7050) apart; together they're the difference, as before. Settlements from
+-- before have no rounding (null): all of it went to 7020.
+alter table customer_payments add column rounding_gain numeric;
+alter table customer_payments drop constraint customer_payments_base_check;
+alter table customer_payments add constraint customer_payments_base_check check (
+  (exchange_rate is null and base_amount is null and base_cleared is null and realised_gain is null and base_overpayment is null
+   and rounding_gain is null)
+  or (exchange_rate is not null and base_amount > 0 and base_cleared >= 0 and coalesce(base_overpayment, 0) >= 0
+      and realised_gain + coalesce(rounding_gain, 0) = base_amount - coalesce(base_overpayment, 0) - base_cleared
+      and (overpayment_amount <> 0 or coalesce(base_overpayment, 0) = 0)
+      and (amount <> overpayment_amount or base_cleared = 0)));
+alter table supplier_payments add column rounding_gain numeric;
+alter table supplier_payments drop constraint supplier_payments_base_check;
+alter table supplier_payments add constraint supplier_payments_base_check check (
+  (exchange_rate is null and base_amount is null and base_cleared is null and realised_gain is null and rounding_gain is null)
+  or (exchange_rate is not null and base_amount > 0 and base_cleared > 0
+      and realised_gain + coalesce(rounding_gain, 0) = base_cleared - base_amount));
+alter table sales_credit_note_applications add column rounding_gain numeric;
+alter table sales_credit_note_applications drop constraint sales_credit_note_applications_base_check;
+alter table sales_credit_note_applications add constraint sales_credit_note_applications_base_check check (
+  (invoice_base is null and credit_note_base is null and realised_gain is null and journal_id is null and rounding_gain is null)
+  or (invoice_base > 0 and credit_note_base > 0 and realised_gain + coalesce(rounding_gain, 0) = credit_note_base - invoice_base
+      and (journal_id is null) = (realised_gain = 0 and coalesce(rounding_gain, 0) = 0)));
+alter table supplier_credit_note_applications add column rounding_gain numeric;
+alter table supplier_credit_note_applications drop constraint supplier_credit_note_applications_base_check;
+alter table supplier_credit_note_applications add constraint supplier_credit_note_applications_base_check check (
+  (bill_base is null and credit_note_base is null and realised_gain is null and journal_id is null and rounding_gain is null)
+  or (bill_base > 0 and credit_note_base > 0 and realised_gain + coalesce(rounding_gain, 0) = bill_base - credit_note_base
+      and (journal_id is null) = (realised_gain = 0 and coalesce(rounding_gain, 0) = 0)));
+alter table customer_overpayment_applications add column rounding_gain numeric;
+alter table customer_overpayment_applications drop constraint customer_overpayment_applications_base_check;
+alter table customer_overpayment_applications add constraint customer_overpayment_applications_base_check check (
+  (invoice_base is null and overpayment_base is null and realised_gain is null and journal_id is null and rounding_gain is null)
+  or (invoice_base > 0 and overpayment_base > 0 and realised_gain + coalesce(rounding_gain, 0) = overpayment_base - invoice_base
+      and (journal_id is null) = (realised_gain = 0 and coalesce(rounding_gain, 0) = 0)));
+alter table customer_overpayment_refunds add column rounding_gain numeric;
+alter table customer_overpayment_refunds drop constraint customer_overpayment_refunds_base_check;
+alter table customer_overpayment_refunds add constraint customer_overpayment_refunds_base_check check (
+  (exchange_rate is null and base_amount is null and base_cleared is null and realised_gain is null and rounding_gain is null)
+  or (exchange_rate is not null and base_amount > 0 and base_cleared > 0
+      and realised_gain + coalesce(rounding_gain, 0) = base_cleared - base_amount));
+alter table sales_credit_note_refunds add column rounding_gain numeric;
+alter table sales_credit_note_refunds drop constraint sales_credit_note_refunds_base_check;
+alter table sales_credit_note_refunds add constraint sales_credit_note_refunds_base_check check (
+  (exchange_rate is null and base_amount is null and base_cleared is null and realised_gain is null and rounding_gain is null)
+  or (exchange_rate is not null and base_amount > 0 and base_cleared > 0
+      and realised_gain + coalesce(rounding_gain, 0) = base_cleared - base_amount));
+alter table supplier_credit_note_refunds add column rounding_gain numeric;
+alter table supplier_credit_note_refunds drop constraint supplier_credit_note_refunds_base_check;
+alter table supplier_credit_note_refunds add constraint supplier_credit_note_refunds_base_check check (
+  (exchange_rate is null and base_amount is null and base_cleared is null and realised_gain is null and rounding_gain is null)
+  or (exchange_rate is not null and base_amount > 0 and base_cleared > 0
+      and realised_gain + coalesce(rounding_gain, 0) = base_amount - base_cleared));
+
+-- A revaluation of accounts receivable or payable in one currency lists each
+-- open document it revalued (NetSuite's Open Receivables and Open
+-- Payables): its open foreign amount and base value in the account's normal
+-- direction (credit notes and overpayments are negative), its own rate, and
+-- its unrealised amount = (closing rate - its rate) x open foreign amount,
+-- rounded once. The account and currency's item is their total.
+create table ledger_fx_revaluation_documents (
+  id bigserial primary key,
+  run_id bigint not null references ledger_fx_revaluation_runs(id),
+  item_line_order integer not null,
+  line_order integer not null,
+  document_kind text not null
+    check (document_kind in ('invoice', 'credit_note', 'overpayment', 'bill', 'supplier_credit_note')),
+  document_id bigint not null,
+  document_number text,
+  document_date date not null,
+  currency_code text not null,
+  foreign_amount numeric not null check (foreign_amount <> 0),
+  carrying_amount numeric not null,
+  document_rate numeric not null check (document_rate > 0),
+  closing_rate numeric not null check (closing_rate > 0),
+  delta_amount numeric not null,
+  unique (run_id, line_order),
+  unique (run_id, document_kind, document_id),
+  foreign key (run_id, item_line_order) references ledger_fx_revaluation_run_items (run_id, line_order),
+  check (delta_amount = round((closing_rate - document_rate) * foreign_amount, scale(delta_amount)))
+);
+create trigger ledger_fx_revaluation_documents_append_only
+  before update or delete on ledger_fx_revaluation_documents
+  for each row execute function toeyee_forbid_mutation();
+create trigger ledger_fx_revaluation_documents_no_truncate
+  before truncate on ledger_fx_revaluation_documents
+  for each statement execute function toeyee_forbid_mutation();
+`,
+  },
+  {
+    version: "0046",
+    name: "currency_exchange_rates",
+    sql: `
+-- The currency exchange rates list (examples MC46-MC53), like NetSuite's
+-- Currency Exchange Rates: rates for each foreign currency, each with the
+-- date it takes effect, in the base currency per 1 unit (the direction of
+-- every other exchange_rate column). A new foreign-currency document takes
+-- the latest entry effective on or before its date. Entries are never
+-- changed or deleted: a correction is a newer entry, or archiving the wrong
+-- one. One command (a single rate or a pasted list) shares an idempotency
+-- key, one row per line.
+create table currency_exchange_rates (
+  id bigserial primary key,
+  command_source text not null,
+  idempotency_key text not null,
+  line_number integer not null check (line_number between 1 and 500),
+  request_hash text not null,
+  currency_code text not null check (currency_code ~ '^[A-Z]{3}$'),
+  effective_date date not null,
+  rate numeric not null check (rate > 0 and scale(rate) <= 8),
+  note text check (note is null or length(note) between 1 and 200),
+  created_by_user_id uuid,
+  created_by_email text,
+  created_at timestamptz not null default now(),
+  archived_at timestamptz,
+  archived_by_user_id uuid,
+  archived_by_email text,
+  unique (command_source, idempotency_key, line_number),
+  check (archived_at is not null or (archived_by_user_id is null and archived_by_email is null))
+);
+create index currency_exchange_rates_lookup_idx
+  on currency_exchange_rates (currency_code, effective_date desc, created_at desc, id desc) where archived_at is null;
+
+create function tohyee_guard_currency_exchange_rate() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.currency_code = (select base_currency from organisation_settings where id = true) then
+      raise exception 'Exchange rates are for foreign currencies, not %', new.currency_code using errcode = '23514';
+    end if;
+    if new.archived_at is not null then
+      raise exception 'A new exchange rate can''t be archived already' using errcode = '23514';
+    end if;
+    return new;
+  end if;
+  if tg_op = 'UPDATE' then
+    -- Archiving is the only change: once, and nothing else about the entry.
+    if old.archived_at is null and new.archived_at is not null
+       and (new.id, new.command_source, new.idempotency_key, new.line_number, new.request_hash, new.currency_code,
+            new.effective_date, new.rate, new.note, new.created_by_user_id, new.created_by_email, new.created_at)
+           is not distinct from
+           (old.id, old.command_source, old.idempotency_key, old.line_number, old.request_hash, old.currency_code,
+            old.effective_date, old.rate, old.note, old.created_by_user_id, old.created_by_email, old.created_at) then
+      return new;
+    end if;
+    raise exception 'Exchange rates can''t be changed; add a newer entry or archive this one' using errcode = 'P0001';
+  end if;
+  raise exception 'Exchange rates can''t be deleted; archive them instead' using errcode = 'P0001';
+end;
+$$;
+create trigger currency_exchange_rates_guard before insert or update or delete on currency_exchange_rates
+  for each row execute function tohyee_guard_currency_exchange_rate();
+create trigger currency_exchange_rates_no_truncate before truncate on currency_exchange_rates
+  for each statement execute function tohyee_guard_currency_exchange_rate();
+`,
+  },
+  {
+    version: "0047",
+    name: "foreign_currency_projects_crm",
+    sql: `
+-- Projects and CRM opportunities in a customer's currency (MC61-MC70),
+-- following NetSuite: "Projects and their associated transactions must share
+-- a single currency", and a new transaction starts in the customer's
+-- currency. A project's rates, fixed prices and estimate are in its currency,
+-- and so are an opportunity's amount. Existing ones take their customer's
+-- currency (the base currency for customers without one).
+alter table projects disable trigger projects_guard;
+alter table projects add column currency_code text;
+update projects p
+   set currency_code = coalesce(c.currency_code, (select base_currency from organisation_settings limit 1), 'NZD')
+  from contacts c where c.id = p.contact_id;
+alter table projects enable trigger projects_guard;
+alter table projects alter column currency_code set not null;
+alter table projects add constraint projects_currency_code_check check (currency_code ~ '^[A-Z]{3}$');
+
+alter table crm_opportunities add column currency_code text;
+update crm_opportunities o
+   set currency_code = coalesce(c.currency_code, (select base_currency from organisation_settings limit 1), 'NZD')
+  from contacts c where c.id = o.contact_id;
+alter table crm_opportunities alter column currency_code set not null;
+alter table crm_opportunities add constraint crm_opportunities_currency_code_check check (currency_code ~ '^[A-Z]{3}$');
+
+-- They're in their contact's currency (the same check as quotes, 0043).
+create trigger projects_currency_check before insert or update of contact_id, currency_code on projects
+  for each row execute function tohyee_check_contact_currency();
+create trigger crm_opportunities_currency_check before insert or update of contact_id, currency_code on crm_opportunities
+  for each row execute function tohyee_check_contact_currency();
+
+-- A project's currency doesn't change once it has tasks, time, expenses or
+-- invoices (their amounts are in it); an opportunity's once it has made its
+-- invoice.
+create function tohyee_guard_project_currency() returns trigger
+language plpgsql as $$
+begin
+  if new.currency_code <> old.currency_code
+     and (exists (select 1 from project_tasks where project_id = old.id)
+          or exists (select 1 from project_time_entries where project_id = old.id)
+          or exists (select 1 from project_expenses where project_id = old.id)
+          or exists (select 1 from project_invoices where project_id = old.id)) then
+    raise exception 'Project % has tasks, time, expenses or invoices in %, so its currency can''t change', old.name, old.currency_code
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+create trigger projects_currency_guard before update of currency_code on projects
+  for each row execute function tohyee_guard_project_currency();
+
+create function tohyee_guard_opportunity_currency() returns trigger
+language plpgsql as $$
+begin
+  if old.invoice_id is not null and (new.currency_code <> old.currency_code or new.contact_id <> old.contact_id) then
+    raise exception 'Opportunity % has made an invoice, so its company and currency can''t change', old.name
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+create trigger crm_opportunities_currency_guard before update of contact_id, currency_code on crm_opportunities
+  for each row execute function tohyee_guard_opportunity_currency();
+
+-- A contact's currency can't change once it has projects or opportunities
+-- either (their estimates, rates and amounts are in it). A trigger of its
+-- own, beside contacts_currency_guard.
+create function tohyee_guard_contact_currency_projects() returns trigger
+language plpgsql as $$
+begin
+  if coalesce(new.currency_code, '') is distinct from coalesce(old.currency_code, '')
+     and (exists (select 1 from projects where contact_id = old.id)
+          or exists (select 1 from crm_opportunities where contact_id = old.id)) then
+    raise exception 'Contact % has projects or opportunities, so its currency can''t change', old.name
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+create trigger contacts_currency_projects_guard
+  before update of currency_code on contacts
+  for each row execute function tohyee_guard_contact_currency_projects();
+
+-- Charging an expense on a project in another currency isn't settled (its
+-- cost is in the base currency, and which rate converts it isn't), so a
+-- foreign-currency project's expenses are costs only (MC63).
+create function tohyee_check_project_expense_currency() returns trigger
+language plpgsql as $$
+begin
+  if new.chargeable and new.status = 'active'
+     and (select p.currency_code from projects p where p.id = new.project_id)
+         <> (select base_currency from organisation_settings limit 1) then
+    raise exception 'Expenses on a project in another currency can''t be chargeable yet' using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+create trigger project_expenses_currency_check before insert or update of chargeable, status on project_expenses
+  for each row execute function tohyee_check_project_expense_currency();
+`,
+  },
 ];

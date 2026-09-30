@@ -1,5 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
-import { assertForeignTemplateSavesDrafts } from "@/lib/fx/documents";
+import { assertListedRateForRepeating } from "@/lib/fx/documents";
 import {
   approveBill,
   type BillLine,
@@ -393,7 +393,6 @@ export async function createRepeatingBill(
     return { created: false, repeatingBill: await getRepeatingBill(tx, existing.rows[0].id) };
   }
   const resolved = await resolveFor(tx, parsed.draft);
-  assertForeignTemplateSavesDrafts(tx.baseCurrency, resolved.currencyCode, parsed.saveAs, "bill");
   await checkDueRule(tx, parsed);
   const inserted = await tx.query<{ id: string }>(
     `insert into repeating_bills (command_source, idempotency_key, request_hash, contact_id, supplier_invoice_number, amounts_mode, currency_code,
@@ -450,7 +449,6 @@ export async function updateRepeatingBill(tx: OrgTx, idInput: unknown, input: Re
   ) as RepeatingBillInput;
   const parsed = parseTemplate(merged);
   const resolved = await resolveFor(tx, parsed.draft, current);
-  assertForeignTemplateSavesDrafts(tx.baseCurrency, resolved.currencyCode, parsed.saveAs, "bill");
   await checkDueRule(tx, parsed);
   const { scheduleChanged, resumedFrom } = resumedAfterChange(current, parsed, today);
   await tx.query(
@@ -531,11 +529,14 @@ const BILLS: RepeatingKind<RepeatingBill> = {
       amountsMode: template.amountsMode,
       lines: purchaseLinesAsSent(template.lines),
       customFields: template.customFields,
-      // In the template's currency (MC27), at the last rate used on or before the date (MC3).
+      // In the template's currency (MC27), at the list's rate for the date (MC48), else the last rate used (MC3).
     }, null, { foreignCurrency: true, feature: "Repeating bills" });
     return made.bill.id;
   },
   async approve(tx, template, date, billId) {
+    // In another currency, only at a rate from the exchange rates list (MC51); otherwise left as a draft.
+    const rate = (await tx.query<{ exchange_rate: string | null }>("select exchange_rate::text from bills where id = $1", [billId])).rows[0]?.exchange_rate ?? null;
+    await assertListedRateForRepeating(tx, { currencyCode: template.currencyCode, date, exchangeRate: rate, document: "bill" });
     await approveBill(tx, billId, { source: "repeating", idempotencyKey: `repeating-bill-${template.id}-${date}-approve` });
     return null;
   },

@@ -48,13 +48,16 @@ that something happened.
 - **FX revaluation** of foreign-currency asset and liability accounts, with
   carrying amounts and (where Tohyee has them) foreign balances taken from
   the ledger, and automatic next-day reversal; also the open
-  foreign-currency invoices, bills and credit notes on accounts receivable
-  and payable, one currency at a time (MC8).
+  foreign-currency invoices, bills, credit notes and overpayments on
+  accounts receivable and payable, one currency at a time and, like
+  NetSuite, each document on its own at its own rate, listed on the
+  revaluation (MC8, MC39-MC43).
 - **Multi-currency invoices, bills, credit notes and payments** (built
   overnight 1 Oct 2026 following NetSuite, examples MC1-MC13 not yet approved
   by Jess): a contact has a currency (like NetSuite's primary currency); its
-  documents are in it at a rate for their date (the last rate used,
-  changeable), each line converted to NZD on its own; accounts receivable
+  documents are in it at a rate for their date (from the exchange rates
+  list, else the last rate used; changeable), each line converted to NZD on
+  its own; accounts receivable
   and payable carry the foreign amount beside the NZD; payments are in the
   document's currency into or from a bank account in that currency or NZD, at
   their own rate, with the realised gain or loss on 7020; credit notes applied
@@ -66,10 +69,27 @@ that something happened.
   contact's foreign documents at one rate, each with its own gain or loss
   (MC20-MC24); quotes, repeating invoices and bills and purchase orders are
   in the contact's currency with no rate, and the invoice or bill made from
-  them takes a rate for its own date (MC25-MC28; repeating ones save
-  drafts); stock items on foreign-currency documents are valued in NZD at
-  the document's rate, and cost of sales is the NZD average (MC29).
+  them takes a rate for its own date (MC25-MC28; repeating ones are approved
+  automatically only at a rate from the exchange rates list); stock items on foreign-currency documents are valued in NZD at
+  the document's rate, and cost of sales is the NZD average (MC29); like
+  NetSuite, the cent or two left by rounding when a payment, credit or
+  refund settles a foreign document goes to 7050 Rounding gains and losses,
+  apart from the realised gain or loss on 7020 (MC31-MC38);
+  projects and CRM opportunities for a customer in another currency are in
+  it, and so are the invoices made from them (MC61-MC70).
   Zero-rated, exempt and no-GST codes only.
+- **Currency exchange rates list** (built overnight 1 Oct 2026 following
+  NetSuite's Currency Exchange Rates, examples MC46-MC53 not yet approved by
+  Jess): Accounting › Exchange rates keeps rates for each foreign currency
+  with the date each takes effect (NZD per 1 unit), added one at a time or
+  pasted from a spreadsheet by bookkeepers, admins and owners, audited, and
+  corrected by a newer entry or archiving (never changed or deleted). New
+  foreign-currency invoices, bills, credit notes, payments, refunds, bank
+  statement lines, accepted quotes and copied purchase orders start with the
+  rate in effect on their date (else the last rate used); foreign repeating
+  invoices and bills are approved automatically when the list has a rate for
+  their date (else left as drafts saying why); FX revaluation suggests the
+  list's closing rate. No automatic daily feed (a question for Jess).
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
   posts its journal in the same transaction. **Stock tracking** (ST1-ST12):
@@ -305,7 +325,11 @@ that something happened.
   time at cost, draft invoices, unbilled, written off, estimate left) and
   the **time report** (by person, project and task for a date range) are
   under Reporting. Projects post nothing; only their invoices do. A timer,
-  deposits and progress billing aren't built.
+  deposits and progress billing aren't built. A project is in its
+  **customer's currency** (built overnight 1 Oct 2026 following NetSuite,
+  MC61-MC70 not yet approved by Jess): for a USD customer its rates, prices,
+  estimate and invoices are in USD (at a rate for the invoice's date), while
+  staff and expense costs and profit stay NZD; its expenses are costs only.
 - **Customer payments** against one approved sales invoice at a time:
   recording a payment posts Dr the bank account / Cr accounts receivable on
   the payment date, and voiding it posts the exact reversal on the void date.
@@ -479,7 +503,9 @@ that something happened.
   companies are the contacts, which can now also be **prospects**; **people**
   at each company; **opportunities** with Twenty's stages (plus Lost) on a
   drag-and-drop pipeline board, where a won one makes its draft invoice in
-  one click (and makes a prospect a customer); **tasks** with due dates and
+  one click (and makes a prospect a customer); an opportunity for a company
+  in another currency is in it, amount and invoice (MC68, MC69), and the
+  board totals each currency on its own; **tasks** with due dates and
   assignees; logged **calls, meetings and notes**; and a **timeline** per
   company that also shows its invoices, credit notes, bills and payments.
   People, opportunities, tasks and activities are never deleted (CRM1-CRM9).
@@ -584,10 +610,12 @@ that something happened.
   sent through the Gmail API (35 MB at most; bigger is refused with a plain
   message), with plain-English errors for access withdrawn, the permission
   unticked, a Workspace admin blocking the app and Gmail's daily limit; the
-  settings help explains Google's "unverified app" screen (Internal apps for
-  Workspace, Testing with test users for personal Gmail; **TO VERIFY**
-  against Google's current documentation, not yet checked, nor tried with a
-  real Google app); or **SMTP**: Gmail or
+  settings help explains Google's "unverified app" screen (checked against
+  Google's documentation on 1 Oct 2026: gmail.send is a sensitive, not
+  restricted, permission; Internal apps for Workspace need no verification;
+  for personal Gmail, an External app published In production works
+  unverified for up to 100 people, while Testing ends the connection after 7
+  days; not yet tried with a real Google app); or **SMTP**: Gmail or
   Google Workspace with an app password, Microsoft 365 with Authenticated
   SMTP, or any SMTP server; from name, from address, reply-to; the password
   and tokens encrypted with TOHYEE_SECRET_KEY and never sent back to the
@@ -679,8 +707,10 @@ isn't acceptable, because people would trust it:
   statement lines, and old Excel (.xls) files
 - on foreign-currency documents (MC11): standard-rated GST, supplier
   overpayments, payments through a bank account in a third currency (as
-  NetSuite, MC30), project and CRM invoices, approving repeating ones
-  automatically, and sales on the payments GST basis; also paying NZD
+  NetSuite, MC30), chargeable expenses on foreign-currency projects and
+  projects in currencies without cents (MC70), approving repeating ones
+  automatically without a rate from the exchange rates list, and sales on the
+  payments GST basis; an automatic daily exchange rate feed; also paying NZD
   documents from a foreign-currency statement line, standard-rated GST on
   foreign-currency spend and receive money, adjustments on foreign-currency
   lines, and transfers between two foreign-currency accounts
@@ -704,11 +734,14 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    kits are built).
 4. NZ payroll.
 5. The rest of foreign-currency documents (MC11): standard-rated GST on
-   them, the payments basis, and project and CRM invoices. Foreign-currency
-   bank accounts, invoices, bills, credit notes, payments, overpayments,
-   refunds, batch payments, quotes, repeating documents, purchase orders and
-   stock are built (MC1-MC29); a bank account in a third currency stays
-   refused, as in NetSuite (MC30).
+   them, the payments basis, and chargeable expenses on foreign-currency
+   projects. Foreign-currency bank accounts, invoices, bills, credit notes,
+   payments, overpayments, refunds, batch payments, quotes, repeating
+   documents, purchase orders, stock, projects, CRM opportunities and the
+   exchange rates list are built (MC1-MC29, MC46-MC53, MC61-MC70), with
+   rounding on its own account and revaluation per open document
+   (MC31-MC43); a bank account in a third currency stays refused, as in
+   NetSuite (MC30).
 
 ## Guardrails
 

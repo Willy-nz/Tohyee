@@ -1,4 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
+import { listedRates } from "@/lib/fx/rates";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
@@ -210,9 +211,13 @@ export async function recordForeignOpeningBalance(
 
 export type RateUsed = {
   rate: string;
+  /** The date it was used on, or for the list, the date it takes effect. */
   date: string;
-  /** Where it came from: a posted line converted at it, or a revaluation's closing rate. */
-  source: "posted" | "revaluation";
+  /**
+   * Where it came from: the currency exchange rates list (MC48), a posted
+   * line converted at it, or a revaluation's closing rate.
+   */
+  source: "list" | "posted" | "revaluation";
 };
 
 /**
@@ -255,13 +260,34 @@ export async function ratesUsed(tx: OrgTx, currencies: readonly string[]): Promi
   return byCurrency;
 }
 
-/** The last rate used for a currency on or before a date (D4), from `ratesUsed`, or null. */
+/**
+ * The rates a foreign-currency document, payment, refund or statement line
+ * can start with, per currency (MC48, MC49): the currency exchange rates
+ * list's entries (newest effective date first), then the rates used in the
+ * books (`ratesUsed`).
+ */
+export async function defaultRates(tx: OrgTx, currencies: readonly string[]): Promise<Map<string, RateUsed[]>> {
+  const listed = await listedRates(tx, currencies);
+  const used = await ratesUsed(tx, currencies);
+  const byCurrency = new Map<string, RateUsed[]>();
+  for (const [code, rates] of used) {
+    byCurrency.set(code, [...(listed.get(code) ?? []).map((entry): RateUsed => ({ ...entry, source: "list" })), ...rates]);
+  }
+  return byCurrency;
+}
+
+/**
+ * The rate for a date from `defaultRates` (or `ratesUsed`), or null: the
+ * list's entry effective on or before it, like NetSuite's Currency Exchange
+ * Rates (MC48); with none, the last rate used on or before it (D4, MC3, MC49).
+ */
 export function lastRateOnOrBefore(rates: readonly RateUsed[] | undefined, date: string): RateUsed | null {
-  return (rates ?? []).find((entry) => entry.date <= date) ?? null;
+  const all = rates ?? [];
+  return all.find((entry) => entry.source === "list" && entry.date <= date) ?? all.find((entry) => entry.source !== "list" && entry.date <= date) ?? null;
 }
 
 export async function lastRateFor(tx: OrgTx, currency: string, date: string): Promise<RateUsed | null> {
-  return lastRateOnOrBefore((await ratesUsed(tx, [currency])).get(currency), date);
+  return lastRateOnOrBefore((await defaultRates(tx, [currency])).get(currency), date);
 }
 
 export { convertAtRate, impliedRate } from "@/lib/money/fx";

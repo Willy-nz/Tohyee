@@ -1,13 +1,15 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, Fragment, useState } from "react";
 import { AccountSelect, Money, RequireOrganisation, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, todayInBrowser, personName } from "@/lib/format";
-import type { FxRevaluationRun } from "@/lib/ledger/fx-revaluation";
+import { rateInEffect } from "@/lib/fx/rate-text";
+import type { ExchangeRatesList } from "@/lib/fx/rates";
+import type { FxRevaluationDocument, FxRevaluationRun, OpenForeignDocument } from "@/lib/ledger/fx-revaluation";
 
 type BalanceDraft = { key: number; accountCode: string; foreignAmount: string; closingRate: string };
 
@@ -23,7 +25,32 @@ function nextDay(date: string): string {
   return next.toISOString().slice(0, 10);
 }
 
-type OpenBalance = { accountId: string; accountCode: string; accountName: string; currencyCode: string; foreign: string; base: string };
+type OpenBalance = {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  currencyCode: string;
+  foreign: string;
+  base: string;
+  documents: OpenForeignDocument[];
+};
+
+/** A document's revaluation as a gain (positive) or loss (negative): on payables, a larger amount owed is a loss. */
+function asGain(delta: string, balanceType: "asset" | "liability"): string {
+  if (balanceType === "asset") return delta;
+  return delta.startsWith("-") ? delta.slice(1) : delta === "0.00" ? delta : `-${delta}`;
+}
+
+function documentLabel(document: { kind: string; documentNumber: string | null; documentId: string }): string {
+  const nouns: Record<string, string> = {
+    invoice: "Invoice",
+    credit_note: "Credit note",
+    overpayment: "",
+    bill: "Bill",
+    supplier_credit_note: "Supplier credit note",
+  };
+  return [nouns[document.kind], document.documentNumber ?? `#${document.documentId}`].filter(Boolean).join(" ");
+}
 
 function RevaluationForm({
   organisationId,
@@ -50,6 +77,11 @@ function RevaluationForm({
   const [openRates, setOpenRates] = useState<Record<string, string>>({});
   const openKey = (balance: OpenBalance) => `${balance.accountCode}|${balance.currencyCode}`;
   const openBalances = open.data?.balances ?? [];
+  // The exchange rates list's rate in effect on the revaluation date is suggested as the closing rate (MC53).
+  const listed = useApiData<ExchangeRatesList>("/api/fx/rates", { organisationId });
+  const listRate = (currencyCode: string | null | undefined) =>
+    currencyCode && /^\d{4}-\d{2}-\d{2}$/.test(date) ? (rateInEffect(listed.data?.rates ?? [], currencyCode, date)?.rate ?? "") : "";
+  const openRate = (balance: OpenBalance) => openRates[openKey(balance)] ?? listRate(balance.currencyCode);
 
   if (foreignAccounts.length === 0 && openBalances.length === 0) {
     return (
@@ -88,8 +120,8 @@ function RevaluationForm({
                 closingRate: row.closingRate,
               })),
             ...openBalances
-              .filter((balance) => (openRates[openKey(balance)] ?? "").trim())
-              .map((balance) => ({ accountCode: balance.accountCode, currencyCode: balance.currencyCode, closingRate: openRates[openKey(balance)].trim() })),
+              .filter((balance) => openRate(balance).trim())
+              .map((balance) => ({ accountCode: balance.accountCode, currencyCode: balance.currencyCode, closingRate: openRate(balance).trim() })),
           ],
         },
       });
@@ -162,7 +194,19 @@ function RevaluationForm({
                     ariaLabel="Account"
                     accounts={foreignAccounts}
                     value={row.accountCode}
-                    onChange={(code) => setRows((current) => current.map((entry) => (entry.key === row.key ? { ...entry, accountCode: code } : entry)))}
+                    onChange={(code) =>
+                      setRows((current) =>
+                        current.map((entry) =>
+                          entry.key === row.key
+                            ? {
+                                ...entry,
+                                accountCode: code,
+                                closingRate: entry.closingRate || listRate(foreignAccounts.find((account) => account.code === code)?.currencyCode),
+                              }
+                            : entry,
+                        ),
+                      )
+                    }
                     required={openBalances.length === 0}
                   />
                 </td>
@@ -218,7 +262,8 @@ function RevaluationForm({
             </thead>
             <tbody>
               {openBalances.map((balance) => (
-                <tr key={openKey(balance)}>
+                <Fragment key={openKey(balance)}>
+                <tr>
                   <td>
                     {balance.accountCode} · {balance.accountName} · {balance.currencyCode}
                   </td>
@@ -233,12 +278,28 @@ function RevaluationForm({
                       aria-label={`Closing rate for ${balance.accountCode} ${balance.currencyCode}`}
                       className={ui.num}
                       inputMode="decimal"
-                      value={openRates[openKey(balance)] ?? ""}
+                      value={openRate(balance)}
                       onChange={(event) => setOpenRates((current) => ({ ...current, [openKey(balance)]: event.target.value }))}
                       placeholder="Leave blank to skip"
                     />
                   </td>
                 </tr>
+                {/* Each open document is revalued on its own (MC39), like NetSuite's Open Receivables and Open Payables. */}
+                {balance.documents.map((document) => (
+                  <tr key={`${document.kind}-${document.documentId}`} className={ui.muted}>
+                    <td>
+                      {documentLabel(document)} · {formatDate(document.documentDate)} · at {document.rate}
+                    </td>
+                    <td className={ui.num}>
+                      {balance.currencyCode} {formatMoney(document.foreign)}
+                    </td>
+                    <td className={ui.num}>
+                      <Money value={document.base} />
+                    </td>
+                    <td />
+                  </tr>
+                ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -251,7 +312,10 @@ function RevaluationForm({
         <Button type="submit" disabled={busy}>
           {busy ? "Posting…" : "Post revaluation"}
         </Button>
-        <span className={ui.muted}>The carrying amount comes from the ledger; you give the closing rate (and the foreign balance only when the ledger doesn&apos;t have it).</span>
+        <span className={ui.muted}>
+          The carrying amount comes from the ledger; you give the closing rate (and the foreign balance only when the ledger doesn&apos;t have it).
+          Closing rates start as the exchange rates list&apos;s rate in effect on the revaluation date, if there is one.
+        </span>
       </div>
     </form>
   );
@@ -307,7 +371,8 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
               </thead>
               <tbody>
                 {run.items.map((item) => (
-                  <tr key={item.lineOrder}>
+                  <Fragment key={item.lineOrder}>
+                  <tr>
                     <td>
                       {item.accountCode} · {item.accountName}
                       {item.currencyCode && !accountsHaveCurrency(item.accountCode) ? ` · ${item.currencyCode}` : ""}
@@ -323,9 +388,28 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
                       <Money value={item.revaluedAmount} />
                     </td>
                     <td className={ui.num}>
-                      <Money value={item.balanceType === "asset" ? item.deltaAmount : item.deltaAmount.startsWith("-") ? item.deltaAmount.slice(1) : `-${item.deltaAmount}`} />
+                      <Money value={asGain(item.deltaAmount, item.balanceType)} />
                     </td>
                   </tr>
+                  {item.documents.map((document: FxRevaluationDocument) => (
+                    <tr key={`${document.kind}-${document.documentId}`} className={ui.muted}>
+                      <td>
+                        {documentLabel(document)} · at {document.documentRate}
+                      </td>
+                      <td className={ui.num}>
+                        {document.currencyCode} {formatMoney(document.foreignAmount)}
+                      </td>
+                      <td className={ui.num}>{document.closingRate}</td>
+                      <td className={ui.num}>
+                        <Money value={document.carryingAmount} />
+                      </td>
+                      <td />
+                      <td className={ui.num}>
+                        <Money value={asGain(document.deltaAmount, item.balanceType)} />
+                      </td>
+                    </tr>
+                  ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

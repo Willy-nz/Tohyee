@@ -69,4 +69,5 @@ export const NZ_DEFAULT_CHART: readonly ChartTemplateAccount[] = [
   { code: "7020", name: "Realised currency gains and losses", type: "other_income", systemKey: "realised_fx" },
   { code: "7030", name: "Gain or loss on disposal of fixed assets", type: "other_income", systemKey: "fixed_asset_disposal" },
   { code: "7040", name: "Capital gains on disposal of fixed assets", type: "other_income", systemKey: "fixed_asset_capital_gain" },
+  { code: "7050", name: "Rounding gains and losses", type: "other_income", systemKey: "fx_rounding" },
 ];

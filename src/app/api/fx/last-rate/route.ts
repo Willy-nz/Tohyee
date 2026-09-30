@@ -4,9 +4,9 @@ import { lastRateFor } from "@/lib/ledger/foreign";
 import { parseCurrencyCode } from "@/lib/money/currency";
 
 /**
- * GET: the last rate used for a currency on or before a date (D4), which a
- * foreign-currency invoice, bill, credit note or payment starts with (MC3),
- * or null when none has been used yet.
+ * GET: the rate a foreign-currency invoice, bill, credit note or payment
+ * starts with: the exchange rates list's rate effective on the date (MC48),
+ * else the last rate used on or before it (D4, MC3), or null when neither.
  */
 export const GET = route(async (request) => {
   const params = searchParams(request);

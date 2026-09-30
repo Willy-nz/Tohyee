@@ -1,10 +1,11 @@
 import { isBankOrCreditCard } from "@/lib/accounts/types";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
+import { listedRateOn } from "@/lib/fx/rates";
 import { lastRateFor } from "@/lib/ledger/foreign";
 import { parseExchangeRate } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { add, cmp, dec, isZero, mulDiv, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, isZero, mul, mulDiv, neg, roundHalfUp, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { convertAtRate } from "@/lib/money/fx";
 import type { ResolvedLineItem } from "@/lib/items/lines";
 import { countsWhenSettled } from "@/lib/reports/gst-boxes";
@@ -38,9 +39,11 @@ export async function contactCurrency(tx: OrgTx, contactId: string): Promise<str
 
 /**
  * The exchange rate for a foreign-currency document or payment (MC2, MC3):
- * the one typed, or else the last rate used for the currency on or before
- * the date (like a statement line's, D4). Null in the base currency, where
- * a typed rate is refused. With no rate to use, it must be typed.
+ * the one typed, or else the currency exchange rates list's rate effective
+ * on the date (MC48), or else the last rate used for the currency on or
+ * before the date (like a statement line's, D4; MC49). Null in the base
+ * currency, where a typed rate is refused. With no rate to use, it must be
+ * typed.
  */
 export async function exchangeRateFor(
   tx: OrgTx,
@@ -55,7 +58,7 @@ export async function exchangeRateFor(
   const last = await lastRateFor(tx, input.currencyCode, input.date);
   if (!last) {
     throw new ValidationError(
-      `Type the exchange rate for this ${input.what} (${tx.baseCurrency} per 1 ${input.currencyCode}): no ${input.currencyCode} rate has been used on or before ${input.date} yet.`,
+      `Type the exchange rate for this ${input.what} (${tx.baseCurrency} per 1 ${input.currencyCode}): no ${input.currencyCode} rate has been used on or before ${input.date} yet, and the exchange rates list (Accounting › Exchange rates) has none effective by then.`,
     );
   }
   return last.rate;
@@ -191,6 +194,55 @@ export function realisedLines(accountCode: string, gain: string, description: st
   ];
 }
 
+/** The account rounding on settlements goes to (7050 Rounding gains and losses in the starting chart; MC31). */
+export async function roundingFxAccountCode(tx: OrgTx): Promise<string> {
+  const found = await tx.query<{ code: string }>("select code from accounts where system_key = 'fx_rounding' and is_active");
+  if (!found.rows[0]) {
+    throw new ValidationError("No active account is set up for rounding gains and losses (7050 in the starting chart), so this can't be posted.");
+  }
+  return found.rows[0].code;
+}
+
+/**
+ * A settlement's gain (a loss is negative) split the way NetSuite splits it
+ * (MC31-MC45): the realised gain or loss is (the rate of the side debited -
+ * the rate of the side credited) x the foreign amount settled, with the full
+ * rates, rounded once to cents (NetSuite's "Variance = (Payment FX Rate -
+ * Source FX Rate) x Payment"); whatever is left of the whole difference is
+ * rounding, for the Rounding Gain/Loss account.
+ */
+export type GainSplit = { gain: string; realised: string; rounding: string };
+
+export function splitGain(gain: string, amount: string, debitRate: string, creditRate: string, baseScale = 2): GainSplit {
+  const realised = roundHalfUp(mul(sub(dec(debitRate), dec(creditRate)), dec(amount)), baseScale);
+  return {
+    gain: toFixedString(dec(gain), baseScale),
+    realised: toFixedString(realised, baseScale),
+    rounding: toFixedString(sub(dec(gain), realised), baseScale),
+  };
+}
+
+/**
+ * The journal lines of a settlement's gain or loss (MC31): the realised part
+ * on 7020 and any rounding on 7050, each only when it isn't 0.00.
+ */
+export async function settlementGainLines(tx: OrgTx, split: GainSplit, description: string) {
+  const realised = isZero(dec(split.realised)) ? [] : realisedLines(await realisedFxAccountCode(tx), split.realised, description);
+  const roundingValue = dec(split.rounding);
+  if (isZero(roundingValue)) return realised;
+  const positive = cmp(roundingValue, ZERO_DECIMAL) > 0;
+  const amount = toFixedString(positive ? roundingValue : neg(roundingValue), 2);
+  return [
+    ...realised,
+    {
+      accountCode: await roundingFxAccountCode(tx),
+      debitAmount: positive ? "0" : amount,
+      creditAmount: positive ? amount : "0",
+      description: `${positive ? "Currency rounding gain" : "Currency rounding loss"}: ${description}`,
+    },
+  ];
+}
+
 /**
  * The open (not yet cleared) base value of a foreign-currency document, or
  * of a payment's overpayment, from its settlements (payments, applications
@@ -265,6 +317,9 @@ export type ForeignRefund = {
   baseCleared: string;
   /** Customer side: carrying value less the bank amount; supplier side: the bank amount less carrying value. */
   gain: string;
+  /** The gain split into NetSuite's realised gain ((rate debited - rate credited) x amount, on 7020) and rounding (on 7050; MC31). */
+  realised: string;
+  rounding: string;
   /** Journal lines: the control account at carrying value, the bank at the rate, and any realised gain or loss. */
   lines: Array<Record<string, unknown>>;
 };
@@ -317,8 +372,10 @@ export async function foreignRefund(
         { ...bankLine, debitAmount: baseAmount, creditAmount: "0" },
         { ...control, debitAmount: "0", creditAmount: baseCleared },
       ];
-  const gainLines = isZero(dec(gain)) ? [] : realisedLines(await realisedFxAccountCode(tx), gain, `${input.label} refunded at ${rate}`);
-  return { bank, rate, baseAmount, baseCleared, gain, lines: [...lines, ...gainLines] };
+  // Customer side: the credit is debited at its own rate and the bank credited at the refund's; supplier side the other way.
+  const split = customer ? splitGain(gain, input.amount, input.creditRate, rate) : splitGain(gain, input.amount, rate, input.creditRate);
+  const gainLines = await settlementGainLines(tx, split, `${input.label} refunded at ${rate}`);
+  return { bank, rate, baseAmount, baseCleared, gain, realised: split.realised, rounding: split.rounding, lines: [...lines, ...gainLines] };
 }
 
 /** A refund's foreign-currency fields (MC16-MC18) as read from its row; null for a base-currency refund. */
@@ -327,26 +384,45 @@ export function foreignRefundFields(row: {
   base_amount: string | null;
   base_cleared: string | null;
   realised_gain: string | null;
-}): { exchangeRate: string | null; baseAmount: string | null; baseCleared: string | null; realisedGain: string | null } {
+  rounding_gain: string | null;
+}): { exchangeRate: string | null; baseAmount: string | null; baseCleared: string | null; realisedGain: string | null; roundingGain: string | null } {
   const money = (value: string | null) => (value === null ? null : toFixedString(dec(value), 2));
   return {
     exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
     baseAmount: money(row.base_amount),
     baseCleared: money(row.base_cleared),
     realisedGain: money(row.realised_gain),
+    roundingGain: roundingField(row),
   };
 }
 
 /**
- * A repeating invoice or bill for a contact in another currency (MC26, MC27)
- * saves drafts only, refused rather than guessed: each one takes the last rate
- * used for its currency (Tohyee has no daily rate table like NetSuite's), so
- * the rate is checked before it's approved and posted.
+ * A settlement's rounding (MC31) as read from its row: 0.00 for a foreign
+ * one from before rounding was kept apart (all of it went to 7020), null for
+ * a base-currency one.
  */
-export function assertForeignTemplateSavesDrafts(base: string, currencyCode: string, saveAs: string, document: "invoice" | "bill"): void {
-  if (currencyCode !== base && saveAs !== "draft") {
+export function roundingField(row: { realised_gain: string | null; rounding_gain: string | null }): string | null {
+  if (row.realised_gain === null) return null;
+  return toFixedString(dec(row.rounding_gain ?? "0"), 2);
+}
+
+/**
+ * A repeating invoice or bill in another currency set to be approved (MC26,
+ * MC27, MC51) is approved only when the currency exchange rates list has a
+ * rate effective on its date, which it took: a rate someone entered for
+ * that time, like NetSuite's Currency Exchange Rates. With only the last
+ * rate used in the books (which may be stale), it's left as a draft and the
+ * reason shows in the template's history.
+ */
+export async function assertListedRateForRepeating(
+  tx: OrgTx,
+  input: { currencyCode: string; date: string; exchangeRate: string | null; document: "invoice" | "bill" },
+): Promise<void> {
+  if (input.currencyCode === tx.baseCurrency) return;
+  const listed = await listedRateOn(tx, input.currencyCode, input.date);
+  if (!listed) {
     throw new ValidationError(
-      `Repeating ${document}s in ${currencyCode} can only be saved as drafts for now (refused rather than guessed): each ${document} takes the last ${currencyCode} rate used, so check its rate before approving it.`,
+      `The exchange rates list has no ${input.currencyCode} rate effective on or before ${input.date}, so this ${input.document} took the last ${input.currencyCode} rate used${input.exchangeRate ? ` (${input.exchangeRate})` : ""}. Check its rate, then approve it; or add rates under Accounting › Exchange rates.`,
     );
   }
 }

@@ -6,13 +6,13 @@ import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { clearedBase, exchangeRateFor, openBase, parseRateInput, realisedFxAccountCode, realisedLines } from "@/lib/fx/documents";
+import { clearedBase, exchangeRateFor, openBase, parseRateInput, roundingField, settlementGainLines, splitGain } from "@/lib/fx/documents";
 import { foreignReceivableLines, resolveBankAccount as resolveCustomerBankAccount, splitForeignPayment } from "@/lib/invoices/payments";
 import { getInvoice, type Invoice, lockInvoice, receivableAccountCode } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { convertAtRate } from "@/lib/money/fx";
-import { add, cmp, dec, type Decimal, isPositive, isZero, parseDecimalInput, sub, sum, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, type Decimal, isPositive, parseDecimalInput, sub, sum, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { optionalSource, optionalString, requireId, requireIdempotencyKey } from "@/lib/validation";
 
 /**
@@ -30,9 +30,10 @@ import { optionalSource, optionalString, requireId, requireIdempotencyKey } from
  * once; each document's part is its amount x rate, rounded once, except the
  * last, which takes what's left of the bank line, so the parts add up to it.
  * Each document is cleared at its own carrying value and has its own
- * realised gain or loss on 7020 (NetSuite: "For payments or credits applied
- * to multiple transactions, NetSuite calculates and records a gain or loss
- * for each transaction").
+ * realised gain or loss on 7020, (payment rate - its rate) x its amount
+ * (NetSuite: "For payments or credits applied to multiple transactions,
+ * NetSuite calculates and records a gain or loss for each transaction");
+ * any rounding cent goes to 7050, Rounding gains and losses (MC20, MC31).
  */
 export type BatchKind = "customer" | "supplier";
 
@@ -48,6 +49,8 @@ export type PaymentBatchPart = {
   baseAmount: string | null;
   baseCleared: string | null;
   realisedGain: string | null;
+  /** Its rounding on 7050 (MC20, MC31); 0.00 when none. */
+  roundingGain: string | null;
 };
 
 export type PaymentBatch = {
@@ -168,10 +171,11 @@ export async function getPaymentBatch(tx: OrgTx, kind: BatchKind, batchIdInput: 
     base_amount: string | null;
     base_cleared: string | null;
     realised_gain: string | null;
+    rounding_gain: string | null;
   }>(
     `select p.id, p.${k.documentColumn} as document_id, d.${k.documentNumberColumn} as document_number, p.amount,
             ${kind === "customer" ? "p.overpayment_amount" : "0::numeric"} as overpayment,
-            p.base_amount::text, p.base_cleared::text, p.realised_gain::text
+            p.base_amount::text, p.base_cleared::text, p.realised_gain::text, p.rounding_gain::text
        from ${k.payments} p join ${k.documentTable} d on d.id = p.${k.documentColumn}
       where p.batch_id = $1 order by p.id`,
     [batchId],
@@ -205,6 +209,7 @@ export async function getPaymentBatch(tx: OrgTx, kind: BatchKind, batchIdInput: 
       baseAmount: baseMoney(part.base_amount),
       baseCleared: baseMoney(part.base_cleared),
       realisedGain: baseMoney(part.realised_gain),
+      roundingGain: roundingField(part),
     })),
     overpaymentAmount: toFixedString(sum(parts.rows.map((part) => dec(part.overpayment))), scale),
     exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
@@ -435,9 +440,8 @@ export async function recordPaymentBatch(
   const described = `${kind === "customer" ? "Payment from" : "Payment to"} ${contactName} for ${numbers.join(", ")}${rate ? ` (${currency} ${fixed(received)} at ${rate})` : ""}`.slice(0, 500);
   const bankBase = rate ? convertAtRate(fixed(received), rate) : fixed(received);
   // A foreign-currency payment (MC20-MC24): each part's share of the bank line, what it clears and its gain.
-  const fx: Array<{ baseAmount: string; cleared: string; gain: string; baseOverpayment: string; lines: Array<Record<string, unknown>> }> = [];
+  const fx: Array<{ baseAmount: string; cleared: string; realised: string; rounding: string; baseOverpayment: string; lines: Array<Record<string, unknown>> }> = [];
   if (rate) {
-    const gainAccount = await realisedFxAccountCode(tx);
     let allotted = ZERO_DECIMAL;
     for (const [index, line] of documents.entries()) {
       const partAmount = fixed(partAmounts[index]);
@@ -452,21 +456,25 @@ export async function recordPaymentBatch(
         fx.push({
           baseAmount,
           cleared: split.cleared,
-          gain: split.gain,
+          realised: split.realised,
+          rounding: split.rounding,
           baseOverpayment: split.baseOverpayment,
           lines: [
             ...foreignReceivableLines(control, description, currency, invoice.exchangeRate!, rate, split, invoicePart),
-            ...(isZero(dec(split.gain)) ? [] : realisedLines(gainAccount, split.gain, gainLabel)),
+            ...(await settlementGainLines(tx, split, gainLabel)),
           ],
         });
       } else {
         const bill = line.document.bill!;
         const cleared = clearedBase({ amount: bill.amountDue!, base: await openBase(tx, "bill", bill.id) }, partAmount);
         const gain = toFixedString(sub(dec(cleared), dec(baseAmount)), 2);
+        // Accounts payable is debited at the bill's rate and the bank credited at the payment's (MC22, MC31).
+        const split = splitGain(gain, partAmount, bill.exchangeRate!, rate);
         fx.push({
           baseAmount,
           cleared,
-          gain,
+          realised: split.realised,
+          rounding: split.rounding,
           baseOverpayment: "0.00",
           lines: [
             {
@@ -476,7 +484,7 @@ export async function recordPaymentBatch(
               description,
               foreign: { currencyCode: currency, amount: partAmount, rate: bill.exchangeRate!, kind: "carrying_value" as const },
             },
-            ...(isZero(dec(gain)) ? [] : realisedLines(gainAccount, gain, gainLabel)),
+            ...(await settlementGainLines(tx, split, gainLabel)),
           ],
         });
       }
@@ -563,16 +571,17 @@ export async function recordPaymentBatch(
       rate,
       fx[index]?.baseAmount ?? null,
       fx[index]?.cleared ?? null,
-      fx[index]?.gain ?? null,
+      fx[index]?.realised ?? null,
+      fx[index]?.rounding ?? null,
     ];
     if (kind === "customer") {
       await tx.query(
         `insert into customer_payments (
            command_source, idempotency_key, request_hash, invoice_id, payment_date, amount, currency_code,
            bank_account_id, reference, journal_id, created_by_user_id, created_by_email, batch_id,
-           exchange_rate, base_amount, base_cleared, realised_gain, overpayment_amount, base_overpayment
+           exchange_rate, base_amount, base_cleared, realised_gain, rounding_gain, overpayment_amount, base_overpayment
          ) values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric,
-                   $17::numeric, $18::numeric, $19::numeric)`,
+                   $17::numeric, $18::numeric, $19::numeric, $20::numeric)`,
         [...values, fixed(partOverpayment), fx[index] ? fx[index].baseOverpayment : null],
       );
     } else {
@@ -580,8 +589,8 @@ export async function recordPaymentBatch(
         `insert into supplier_payments (
            command_source, idempotency_key, request_hash, bill_id, payment_date, amount, currency_code,
            bank_account_id, reference, journal_id, created_by_user_id, created_by_email, batch_id,
-           exchange_rate, base_amount, base_cleared, realised_gain
-         ) values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric)`,
+           exchange_rate, base_amount, base_cleared, realised_gain, rounding_gain
+         ) values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric, $18::numeric)`,
         values,
       );
     }
@@ -602,7 +611,7 @@ export async function recordPaymentBatch(
         id: line.id,
         number: line.document.number,
         amount: fixed(partAmounts[index]),
-        ...(fx[index] ? { baseAmount: fx[index].baseAmount, baseCleared: fx[index].cleared, realisedGain: fx[index].gain } : {}),
+        ...(fx[index] ? { baseAmount: fx[index].baseAmount, baseCleared: fx[index].cleared, realisedGain: fx[index].realised, roundingGain: fx[index].rounding } : {}),
       })),
     },
   });

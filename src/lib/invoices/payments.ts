@@ -7,7 +7,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { getInvoice, lockInvoice, receivableAccountCode, type Invoice } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
-import { clearedBase, exchangeRateFor, openBase, parseRateInput, realisedFxAccountCode, realisedLines, thirdCurrencyMessage } from "@/lib/fx/documents";
+import { clearedBase, exchangeRateFor, openBase, parseRateInput, roundingField, settlementGainLines, splitGain, thirdCurrencyMessage } from "@/lib/fx/documents";
 import { convertAtRate } from "@/lib/money/fx";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { creditNoteCreditStatus, type CreditStatus } from "@/lib/invoices/amounts";
@@ -71,6 +71,8 @@ export type CustomerPayment = {
   baseAmount: string | null;
   baseCleared: string | null;
   realisedGain: string | null;
+  /** Rounding on 7050 (MC31): what's left of the difference after the realised gain; 0.00 when none. */
+  roundingGain: string | null;
   /** For a foreign-currency overpayment (MC14): its base value at the payment's rate, and what's left of it (0.00 once voided). */
   baseOverpayment: string | null;
   overpaymentRemainingBase: string | null;
@@ -105,6 +107,7 @@ type PaymentRow = {
   base_amount: string | null;
   base_cleared: string | null;
   realised_gain: string | null;
+  rounding_gain: string | null;
   base_overpayment: string | null;
   overpayment_base_used: string | null;
 };
@@ -113,7 +116,7 @@ export const PAYMENT_SELECT = `select p.id, p.invoice_id, i.invoice_number, i.co
        p.payment_date, p.amount, p.overpayment_amount, used.overpayment_applied, used.overpayment_refunded,
        p.currency_code, p.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, p.reference,
        p.journal_id, p.created_by_email, p.created_at, p.void_date, p.void_journal_id, p.voided_by_email, p.voided_at,
-       p.batch_id, p.exchange_rate::text, p.base_amount::text, p.base_cleared::text, p.realised_gain::text,
+       p.batch_id, p.exchange_rate::text, p.base_amount::text, p.base_cleared::text, p.realised_gain::text, p.rounding_gain::text,
        case when p.exchange_rate is null then null else coalesce(p.base_overpayment, 0)::text end as base_overpayment,
        case when p.exchange_rate is null then null else tohyee_overpayment_base_used(p.id)::text end as overpayment_base_used
   from customer_payments p
@@ -165,6 +168,7 @@ export function toPayment(row: PaymentRow): CustomerPayment {
     baseAmount: row.base_amount === null ? null : toFixedString(dec(row.base_amount), 2),
     baseCleared: row.base_cleared === null ? null : toFixedString(dec(row.base_cleared), 2),
     realisedGain: row.realised_gain === null ? null : toFixedString(dec(row.realised_gain), 2),
+    roundingGain: roundingField(row),
     baseOverpayment: row.base_overpayment === null ? null : toFixedString(dec(row.base_overpayment), 2),
     overpaymentRemainingBase:
       row.base_overpayment === null
@@ -430,8 +434,11 @@ export type ForeignPaymentSplit = {
   baseAmount: string;
   /** The invoice's carrying value of the part that pays it (0.00 when it's all overpayment). */
   cleared: string;
-  /** Realised gain on the part that pays the invoice (a loss is negative). */
+  /** The difference on the part that pays the invoice (a loss is negative)... */
   gain: string;
+  /** ...split into NetSuite's realised gain ((payment rate - invoice rate) x amount, on 7020) and rounding (on 7050; MC31). */
+  realised: string;
+  rounding: string;
   /** The part beyond the amount due, in the invoice's currency, and its base value at the payment's rate. */
   overpayment: string;
   baseOverpayment: string;
@@ -462,7 +469,9 @@ export async function splitForeignPayment(
     ? "0.00"
     : clearedBase({ amount: invoice.amountDue!, base: await openBase(tx, "invoice", invoice.id) }, toFixedString(invoicePart, scale));
   const gain = toFixedString(sub(sub(dec(baseAmount), dec(baseOverpayment)), dec(cleared)), 2);
-  return { baseAmount, cleared, gain, overpayment: toFixedString(overpayment, scale), baseOverpayment };
+  // The bank is debited at the payment's rate and the invoice credited at its own (MC31).
+  const { realised, rounding } = splitGain(gain, toFixedString(invoicePart, scale), rate, invoice.exchangeRate!);
+  return { baseAmount, cleared, gain, realised, rounding, overpayment: toFixedString(overpayment, scale), baseOverpayment };
 }
 
 /**
@@ -532,9 +541,9 @@ async function recordForeignPayment(
   const rate = (await exchangeRateFor(tx, { currencyCode: currency, date: input.paymentDate, typed: input.typedRate, what: "payment" }))!;
   const receivable = await receivableAccountCode(tx);
   const split = await splitForeignPayment(tx, invoice, input.amount, rate);
-  const { baseAmount, cleared, gain, overpayment, baseOverpayment } = split;
+  const { baseAmount, cleared, realised, rounding, overpayment, baseOverpayment } = split;
   const invoicePart = toFixedString(sub(dec(input.amount), dec(overpayment)), scale);
-  const gainLines = isZero(dec(gain)) ? [] : realisedLines(await realisedFxAccountCode(tx), gain, `${invoice.invoiceNumber} paid at ${rate}`);
+  const gainLines = await settlementGainLines(tx, split, `${invoice.invoiceNumber} paid at ${rate}`);
 
   const next = await tx.query<{ id: string }>("select nextval(pg_get_serial_sequence('customer_payments', 'id'))::text as id");
   const paymentId = next.rows[0].id;
@@ -570,9 +579,9 @@ async function recordForeignPayment(
       `insert into customer_payments (
          id, command_source, idempotency_key, request_hash, invoice_id, payment_date, amount, overpayment_amount,
          currency_code, bank_account_id, reference, journal_id, created_by_user_id, created_by_email,
-         exchange_rate, base_amount, base_cleared, realised_gain, base_overpayment
+         exchange_rate, base_amount, base_cleared, realised_gain, base_overpayment, rounding_gain
        )
-       values ($1, $2, $3, $4, $5, $6, $7::numeric, $18::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric, $19::numeric)`,
+       values ($1, $2, $3, $4, $5, $6, $7::numeric, $18::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric, $19::numeric, $20::numeric)`,
       [
         paymentId,
         input.source,
@@ -590,9 +599,10 @@ async function recordForeignPayment(
         rate,
         baseAmount,
         cleared,
-        gain,
+        realised,
         overpayment,
         baseOverpayment,
+        rounding,
       ],
     );
   } catch (error) {
@@ -616,7 +626,8 @@ async function recordForeignPayment(
       baseAmount,
       baseCleared: cleared,
       baseOverpayment,
-      realisedGain: gain,
+      realisedGain: realised,
+      roundingGain: rounding,
       bankAccountCode: bank.code,
       journalId: posted.journal.id,
     },

@@ -259,7 +259,7 @@ A USD bank account holds USD 1,000.00, booked at NZD 1,600.00. Revalue on
 - **F7** Only accounts marked with a foreign currency can be revalued, and
   only when their balance has the normal sign. (Accounts receivable and
   payable also revalue their open foreign-currency documents, one currency
-  at a time, with either sign: MC8.)
+  at a time and each document on its own, with either sign: MC8, MC39.)
 
 Since foreign-currency lines keep their foreign amount (FXB1-FXB11), the
 USD 1,000.00 is in the ledger too (the journal booking it gives USD 1,000.00
@@ -1672,10 +1672,12 @@ expressed in NZD as at the time of supply).
   the contact's currency, as NetSuite shows balances and credit limits in the
   primary currency.
 - **Exchange rate**: NZD per 1 unit, up to 8 decimal places (as NetSuite).
-  A document or payment starts with the last rate used for its currency on
-  or before its date (the same lookup as a statement line, D4: rates posted
-  lines were converted at, documents' and payments' own rates, revaluations'
-  closing rates) and it can be changed; with none, it must be typed.
+  A document or payment starts with the rate in the currency exchange rates
+  list effective on its date (MC48), or with none there, the last rate used
+  for its currency on or before its date (the same lookup as a statement
+  line, D4: rates posted lines were converted at, documents' and payments'
+  own rates, revaluations' closing rates), and it can be changed; with
+  neither, it must be typed.
 - **Converting a document**: like NetSuite, each line's net amount and GST is
   converted on its own (amount x rate, rounded once to cents, half away from
   zero) and the document's NZD total is the sum of its lines.
@@ -1689,28 +1691,26 @@ expressed in NZD as at the time of supply).
   in that currency or in NZD, at the payment's own rate. The bank line is
   amount x payment rate. The document is cleared at its carrying value of
   what's paid: its open NZD x amount / its open amount, rounded once, and
-  all that's left when it's paid off (as FXB8). The difference is the
-  realised gain or loss on 7020, NetSuite's realized gain/loss ((payment rate
-  - document rate) x amount). NetSuite puts the cent or two left by rounding
-  into a separate Rounding Gain/Loss account; Tohyee has none, so it's part of
-  the realised gain or loss on the payment that clears the document (MC4).
+  all that's left when it's paid off (as FXB8). The difference is split as
+  NetSuite splits it: the realised gain or loss on 7020 is (payment rate -
+  document rate) x amount, rounded once, and the cent or two left by
+  rounding goes to **7050 Rounding gains and losses** (MC4, MC31-MC38).
 - **Credit notes** applied to an invoice (or supplier credit notes to a bill)
   of the same contact and currency clear each side at its own carrying value;
   a difference is a realised gain or loss in a journal of its own, dated the
   application date (NetSuite's realized gain/loss on applying a credit
-  memo), and removing the application reverses it. Credit applied across
+  memo: (credit's rate - document's rate) x amount, any rounding on 7050,
+  MC34), and removing the application reverses it. Credit applied across
   currencies stays refused.
 - **Month end**: open foreign-currency documents are revalued per account
   and currency (1100 USD, 2000 USD), like NetSuite's revaluation of open
-  currency balances: foreign balance = the foreign amounts of the account's
-  lines in that currency; carrying value = their NZD; the difference to
-  foreign x closing rate goes to 7000/7010 on the date and is reversed the
-  next day (as F1-F7; NetSuite also reverses on the first day of the next
-  period). Payments after it still clear at the document's own rate.
-  NetSuite revalues each open transaction; Tohyee revalues the currency's
-  total, which can differ from the sum of per-document revaluations by
-  rounding cents (a question below). Period close's FX check lists each
-  account and currency with an open balance.
+  currency balances, and, as NetSuite does, **each open document on its
+  own**: (closing rate - its rate) x its open foreign amount, rounded once;
+  the account and currency's total is the sum (MC39). It goes to 7000/7010
+  on the date and is reversed the next day (as F1-F7; NetSuite also reverses
+  on the first day of the next period). Payments after it still clear at the
+  document's own rate. Period close's FX check lists each account and
+  currency with an open balance.
 - **Reports**: aged receivables and payables are in NZD, each foreign-currency
   document at its own rate, with its own currency and amount beside it and
   the contact's total in its currency; on a revaluation date the revaluation
@@ -1736,16 +1736,16 @@ Amazon Web Services (USD).
 | MC1 | Contacts: Acme with currency "usd", AWS "USD", Kobe none; "NZD" typed; "XYZ" | Acme and AWS are **USD**, Kobe and "NZD" are blank (NZD); "XYZ" refused. A contact with no documents can change currency; once Acme has an invoice, changing it is refused ("…has invoices, bills or credit notes in USD, so its currency can't change"), by the database too |
 | MC2 | INV-0001 for Acme, 3 Jul 2026: 1 x USD 1,000.00, 4000, ZERO, exclusive | With no rate typed and no USD rate used yet: refused ("Type the exchange rate…"). With a GST line: refused. At **1.6543**: NZD **1,654.30**. Journal: Dr 1100 **1,654.30 (USD 1,000.00)** / Cr 4000 **1,654.30** |
 | MC3 | INV-0002 for Acme, 4 Jul, USD 500.00, no rate typed | Takes **1.6543** (the last USD rate on or before 4 Jul): NZD **827.15** |
-| MC4 | INV-0003, 12 Jul, three lines of USD 10.01 at **1.5**; paid in full the same day into 1000 at 1.5 | Each line 15.015 -> **15.02**, so NZD **45.06** (not 30.03 x 1.5 = 45.05): Dr 1100 45.06 (USD 30.03) / Cr 4000 45.06. Payment: bank **45.05**, 1100 cleared **45.06**, realised loss **0.01**: Dr 1000 45.05 / Dr 7020 0.01 / Cr 1100 45.06 (USD 30.03) |
+| MC4 | INV-0003, 12 Jul, three lines of USD 10.01 at **1.5**; paid in full the same day into 1000 at 1.5 | Each line 15.015 -> **15.02**, so NZD **45.06** (not 30.03 x 1.5 = 45.05): Dr 1100 45.06 (USD 30.03) / Cr 4000 45.06. Payment: bank **45.05**, 1100 cleared **45.06**; the same rate, so no realised gain or loss ((1.5 - 1.5) x 30.03 = 0.00) and the cent is a **rounding loss** (MC31): Dr 1000 45.05 / Dr 7050 0.01 / Cr 1100 45.06 (USD 30.03) |
 | MC5 | A USD statement line on 1030, 20 Jul, +1,000.00: pay INV-0001 at **1.64** | Dr 1030 **1,640.00 (USD 1,000.00 at 1.64)** / Dr 7020 **14.30** / Cr 1100 **1,654.30 (USD 1,000.00)**; INV-0001 paid, NZD due 0.00. An NZD invoice (Kobe's INV-0004) from a USD line stays refused ("Invoice INV-0004 is in NZD, so it can't be paid from a USD statement line yet", FXB9), and a USD invoice from an NZD line is refused (record it on the invoice, then match) |
 | MC6 | INV-0002 (USD 500.00 = NZD 827.15): USD 200.00 on 15 Jul into 1000 at **1.70**, then USD 300.00 on 28 Jul at **1.60** | First: bank **340.00**, cleared 827.15 x 200 / 500 = **330.86**, gain **9.14**: Dr 1000 340.00 / Cr 1100 330.86 (USD 200.00) / Cr 7020 9.14. Due **USD 300.00 = NZD 496.29**. Second (the rest): bank **480.00**, cleared all **496.29**, loss **16.29**: Dr 1000 480.00 / Dr 7020 16.29 / Cr 1100 496.29. Into 1040 (EUR) refused (a third currency, MC30); overpaying is MC14. Voiding the second on 29 Jul posts its exact reversal (USD 300.00 back on 1100); paid again on 29 Jul at 1.60, the same |
 | MC7 | CN-0001 for Acme, 22 Jul, USD 100.00 at **1.63**; INV-0005, 25 Jul, USD 2,000.00 at **1.60** (NZD 3,200.00); CN-0001 applied to INV-0005 on 28 Jul | Credit note: Dr 4000 **163.00** / Cr 1100 **163.00 (USD 100.00)**. Applying: the credit note's side **163.00**, the invoice's 3,200.00 x 100 / 2,000 = **160.00**, gain **3.00** ((1.63 - 1.60) x 100): Dr 1100 163.00 (USD 100.00) / Cr 1100 160.00 (USD 100.00) / Cr 7020 3.00. INV-0005 due **USD 1,900.00 = NZD 3,040.00**. Removing it posts the exact reversal; applied again, the same. (Refunding a USD credit note: MC17.) |
-| MC8 | Revaluation on 31 Jul at **1.62** (reversal 1 Aug) of 1030, 1100 USD and 2000 USD | 1030: USD 1,000.00, carrying 1,640.00, revalued 1,620.00: Dr 7010 **20.00** / Cr 1030 20.00. 1100 USD: USD **1,900.00** (INV-0005), carrying **3,040.00**, revalued **3,078.00**: Dr 1100 **38.00** (USD 0.00 at 1.62) / Cr 7000 38.00. 2000 USD: USD **50.00** (AWS-7), carrying **83.00**, revalued **81.00**: Dr 2000 **2.00** / Cr 7000 2.00. All reversed on 1 Aug. Before it, period close's FX check lists 1030, 1100 and 2000; after, it passes. Refused: 1100 without a currency ("…Say which currency…"), 1100 USD typed as 2,000.00 ("the ledger has USD 1900.00 open…"), 1100 EUR ("nothing open in EUR"), 1100 USD again on 31 Jul |
+| MC8 | Revaluation on 31 Jul at **1.62** (reversal 1 Aug) of 1030, 1100 USD and 2000 USD | 1030: USD 1,000.00, carrying 1,640.00, revalued 1,620.00: Dr 7010 **20.00** / Cr 1030 20.00. 1100 USD: USD **1,900.00** (INV-0005, its only open document: (1.62 - 1.60) x 1,900.00), carrying **3,040.00**, revalued **3,078.00**: Dr 1100 **38.00** (USD 0.00 at 1.62) / Cr 7000 38.00. 2000 USD: USD **50.00** (AWS-7: (1.62 - 1.66) x 50.00), carrying **83.00**, revalued **81.00**: Dr 2000 **2.00** / Cr 7000 2.00. All reversed on 1 Aug. Before it, period close's FX check lists 1030, 1100 and 2000; after, it passes. Refused: 1100 without a currency ("…Say which currency…"), 1100 USD typed as 2,000.00 ("the ledger has USD 1900.00 open…"), 1100 EUR ("nothing open in EUR"), 1100 USD again on 31 Jul |
 | MC9 | Aged receivables and payables, and Acme's statement, as at 31 Jul | Acme: INV-0005 **USD 1,900.00 / NZD 3,040.00**, owes USD 1,900.00; total **NZD 3,155.00** (with Kobe's 115.00); revaluation **38.00** beside it (3,155.00 + 38.00 = 1100's 3,193.00). Payables: AWS-7 **USD 50.00 / NZD 83.00**; revaluation **-2.00**; 2000 **81.00**, difference 0.00. Period close's receivables and payables checks pass. Acme's July statement is in **USD**: closing **1,900.00**, NZD **3,040.00** beside it |
 | MC10 | Bills from AWS: AWS-7, 5 Jul, USD 50.00 at **1.66**, 6040, no tax; AWS-8, 6 Jul, the same; supplier credit note AWS-CR1, 7 Jul, USD 20.00 at **1.70**, applied to AWS-8 on 8 Jul; AWS-8's USD 30.00 paid 9 Jul from 1000 at 1.66 | AWS-7: Dr 6040 **83.00** / Cr 2000 **83.00 (USD 50.00)**; with a GST line: refused. AWS-CR1: Dr 2000 **34.00 (USD 20.00)** / Cr 6040 34.00. Applying: the bill's side 83.00 x 20 / 50 = **33.20**, the credit's **34.00**, loss **0.80**: Dr 2000 33.20 (USD 20.00) / Cr 2000 34.00 (USD 20.00) / Dr 7020 0.80. Payment: bank **49.80**, cleared **49.80**, no gain or loss (no 7020 line): Dr 2000 49.80 (USD 30.00) / Cr 1000 49.80 |
-| MC11 | Refused rather than guessed, with nothing posted | Project and CRM invoices for a USD contact (a USD invoice made any way but entering it directly, from a quote, MC25, or from a repeating invoice, MC26); item lines without a typed price on foreign-currency documents (stock items are MC29); a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
+| MC11 | Refused rather than guessed, with nothing posted | A USD invoice made any way but entering it directly, from a quote (MC25), a repeating invoice (MC26), a project (MC64) or a CRM opportunity (MC69); item lines without a typed price on foreign-currency documents (stock items are MC29); a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
 | MC12 | AWS-7 paid on 5 Aug from 1030 at **1.65** (after the 1 Aug reversal) | Dr 2000 **83.00 (USD 50.00)** / Cr 1030 **82.50 (USD 50.00 at 1.65)** / Cr 7020 **0.50** |
-| MC13 | July GST return (invoice basis) and the trial balance at 31 Aug | Box 5 **5,678.51**, Box 6 **5,563.51** (1,654.30 + 827.15 + 45.06 + 3,200.00 - 163.00 zero-rated; Kobe's 115.00 standard-rated); AWS's no-GST bills in no box. Trial balance balances: 7020 debit **18.76** (-14.30 - 0.01 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50), 7000 and 7010 nothing (reversed), 1100 **3,155.00**, 2000 nothing, 1030 **1,557.50** (USD 950.00) |
+| MC13 | July GST return (invoice basis) and the trial balance at 31 Aug | Box 5 **5,678.51**, Box 6 **5,563.51** (1,654.30 + 827.15 + 45.06 + 3,200.00 - 163.00 zero-rated; Kobe's 115.00 standard-rated); AWS's no-GST bills in no box. Trial balance balances: 7020 debit **18.75** (-14.30 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50), 7050 debit **0.01** (MC4), 7000 and 7010 nothing (reversed), 1100 **3,155.00**, 2000 nothing, 1030 **1,557.50** (USD 950.00) |
 
 Tests: `tests/integration/multi-currency.test.ts` (MC1-MC13).
 
@@ -1779,7 +1779,8 @@ the currency of the credits it refunds (*Refunding an Open Balance*), and
   in NZD. The bank moves amount x refund rate, rounded once; accounts
   receivable (payable) is cleared at the credit's carrying value (all
   that's left when the rest is refunded); the difference is realised on
-  7020. Voiding posts the exact reversal, foreign amounts included.
+  7020 (the rates' difference x amount; any rounding on 7050, MC36).
+  Voiding posts the exact reversal, foreign amounts included.
 - **Supplier overpayments** are still refused, as in NZD (SP3).
 - Aged receivables and payables, customer statements, Home and period
   close count unused foreign credit at its carrying value, so the documents
@@ -1797,7 +1798,7 @@ INV-0002, 2 Jul, USD 500.00 at **1.70** (NZD 850.00), both zero-rated.
 | MC16 | Refund the USD 40.00 left on 20 Jul from 1000 at **1.62** | Bank 40.00 x 1.62 = **64.80**; carrying value all **66.00**; gain **1.20**: Dr 1100 66.00 (USD 40.00) / Cr 1000 64.80 / Cr 7020 1.20; **used**. USD 40.01 and a refund from 1040 (EUR, MC30) are refused. Voided on 21 Jul (exact reversal), then refunded from 1030 at 1.62: Cr 1030 64.80 (USD 40.00 at 1.62). The payment can't be voided now (OP8) |
 | MC17 | CN-0001 for Acme, 5 Jul, USD 100.00 at **1.63** (NZD 163.00); refund USD 30.00 on 15 Jul from 1030 at **1.60** | Carrying 163.00 x 30 / 100 = **48.90**, bank **48.00**, gain **0.90**: Dr 1100 48.90 (USD 30.00) / Cr 1030 48.00 (USD 30.00 at 1.60) / Cr 7020 0.90. Remaining **USD 70.00 = NZD 114.10**. Voided on 16 Jul (exact reversal; back to USD 100.00 = NZD 163.00) and refunded again, the same |
 | MC18 | Supplier credit note AWS-CR1, 5 Jul, USD 20.00 at **1.70** (NZD 34.00); AWS refunds it on 12 Jul into 1030 at **1.66** | Bank **33.20**, carrying **34.00**, loss **0.80**: Dr 1030 33.20 (USD 20.00 at 1.66) / Dr 7020 0.80 / Cr 2000 34.00 (USD 20.00). Remaining 0.00. Voided (exact reversal) and received again, the same |
-| MC19 | As at 31 Jul | Aged receivables: Acme's INV-0002 **USD 440.00 / NZD 748.00** less CN-0001's unused **USD 70.00 / NZD 114.10**: Acme owes **USD 370.00**, total **NZD 633.90** = 1100 on the trial balance. 7020 credit **48.30** (50.00 - 3.00 + 1.20 + 0.90 - 0.80); 2000 nothing. Revaluing 1100 USD at **1.60**: USD 370.00, carrying **633.90**, revalued **592.00**, Dr 7010 **41.90** / Cr 1100 41.90; aged receivables shows the revaluation **-41.90**, and period close's receivables and payables checks pass |
+| MC19 | As at 31 Jul | Aged receivables: Acme's INV-0002 **USD 440.00 / NZD 748.00** less CN-0001's unused **USD 70.00 / NZD 114.10**: Acme owes **USD 370.00**, total **NZD 633.90** = 1100 on the trial balance. 7020 credit **48.30** (50.00 - 3.00 + 1.20 + 0.90 - 0.80); 2000 nothing. Revaluing 1100 USD at **1.60**: USD 370.00, carrying **633.90**, revalued **592.00**, one document at a time (MC39): INV-0002 (1.60 - 1.70) x 440.00 = **-44.00**, CN-0001 (1.60 - 1.63) x -70.00 = **+2.10**: Dr 7010 44.00 / Cr 1100 44.00 and Dr 1100 2.10 / Cr 7000 2.10, **-41.90** in all; aged receivables shows the revaluation **-41.90**, and period close's receivables and payables checks pass |
 
 Tests: `tests/integration/multi-currency-settlements.test.ts` (MC14-MC19).
 
@@ -1819,11 +1820,12 @@ plus:
 - The **bank line** is the whole amount x rate, rounded once, so it matches
   the one statement line. Each document's **part** is its amount x rate,
   rounded once, except the last listed, which takes what's left of the bank
-  line, so the parts add up to it exactly (the last part carries any
-  rounding cent, as MC4 keeps rounding in 7020).
+  line, so the parts add up to it exactly.
 - Each document is cleared at its own carrying value, and each has **its own
-  realised gain or loss** line on 7020, after its accounts receivable
-  (payable) line.
+  realised gain or loss** line on 7020, (payment rate - its rate) x its
+  amount, rounded once, after its accounts receivable (payable) line; any
+  cent left over (the last part's included) is rounding, on 7050 (MC20,
+  MC31).
 - A customer overpayment (every invoice paid in full, the extra on the last
   one) is USD credit at the payment's rate, as MC14. Supplier overpayments
   stay refused (SMP3).
@@ -1837,7 +1839,7 @@ AWS-2, 2 Aug, USD 30.00 at **1.70** (NZD 51.00), 6040.
 
 | ID | What happens | Result |
 | --- | --- | --- |
-| MC20 | Acme pays USD **200.02** on 10 Aug into 1000 at **1.65**: USD 100.01 for INV-0003 and for INV-0004 | Bank 200.02 x 1.65 = 330.033 -> **330.03** (not 165.02 + 165.02). INV-0003's part 100.01 x 1.65 = **165.02**, clears **160.02**, gain **5.00**; INV-0004's part is the rest, **165.01**, clears **162.02**, gain **2.99** (NetSuite's 3.00 less the rounding cent). One journal: Dr 1000 330.03 / Cr 1100 160.02 (USD 100.01) / Cr 7020 5.00 / Cr 1100 162.02 (USD 100.01) / Cr 7020 2.99. Both **paid** |
+| MC20 | Acme pays USD **200.02** on 10 Aug into 1000 at **1.65**: USD 100.01 for INV-0003 and for INV-0004 | Bank 200.02 x 1.65 = 330.033 -> **330.03** (not 165.02 + 165.02). INV-0003's part 100.01 x 1.65 = **165.02**, clears **160.02**, gain **5.00** ((1.65 - 1.60) x 100.01 = 5.0005); INV-0004's part is the rest, **165.01**, clears **162.02**: realised gain **3.00** ((1.65 - 1.62) x 100.01 = 3.0003) and a rounding loss of **0.01** on 7050. One journal: Dr 1000 330.03 / Cr 1100 160.02 (USD 100.01) / Cr 7020 5.00 / Cr 1100 162.02 (USD 100.01) / Cr 7020 3.00 / Dr 7050 0.01. Both **paid** |
 | MC21 | Acme pays USD **110.00** on 12 Aug into 1030 at **1.70** for INV-0005 and INV-0006, USD 50.00 each | Both paid in full, so the extra USD **10.00** is an overpayment on INV-0006. Bank **187.00** (USD 110.00 at 1.70); INV-0005's part 85.00 clears 80.00, gain **5.00**; INV-0006's part (the rest, 102.00) is 85.00 on the invoice, clearing 80.00, gain **5.00**, and the overpayment USD 10.00 = **17.00**: Dr 1030 187.00 / Cr 1100 80.00 (USD 50.00) / Cr 7020 5.00 / Cr 1100 80.00 (USD 50.00) / Cr 1100 17.00 (USD 10.00, the overpayment) / Cr 7020 5.00. With USD 40.00 for INV-0005 instead it's refused (MP4) |
 | MC22 | USD **80.00** paid to AWS on 15 Aug from 1030 at **1.60** for AWS-1 (50.00) and AWS-2 (30.00) | AWS-1's part **80.00** clears **83.00**, gain **3.00**; AWS-2's **48.00** clears **51.00**, gain **3.00**: Dr 2000 83.00 (USD 50.00) / Cr 7020 3.00 / Dr 2000 51.00 (USD 30.00) / Cr 7020 3.00 / Cr 1030 128.00 (USD 80.00 at 1.60). Both **paid**. USD 80.01 (a supplier overpayment) and paying from 1040 (EUR) are refused |
 | MC23 | Refused, nothing posted | A rate typed for Kobe Ltd's NZD invoice ("…in NZD, so the payment has no exchange rate"); Kobe's NZD invoice paid into 1030 (USD); a USD invoice with an NZD one (they're different customers, MP4) |
@@ -1862,18 +1864,18 @@ Transactions*). So:
   MC1). It has **no rate** and posts nothing, like its NZD self.
 - The **invoice or bill made from it** is an ordinary foreign-currency
   document (MC2, MC10) with a rate for **its own date**: the rate typed when
-  accepting the quote or copying the order to a bill, or else the last rate
-  used on or before that date (MC3), as for a document entered directly.
-  Nothing posts until it's approved.
+  accepting the quote or copying the order to a bill, or else the exchange
+  rates list's rate effective on that date (MC51), or else the last rate
+  used on or before it (MC3), as for a document entered directly. Nothing
+  posts until it's approved.
 - The same line rules as foreign-currency documents apply when it's saved:
   zero-rated, exempt or no-GST codes only, no stock items, and item lines
   need a typed price (MC11).
-- **Repeating invoices and bills in a foreign currency save drafts only**
-  (smallest safe choice): each takes the last rate used, which could be
-  stale, since Tohyee has no daily rate table like NetSuite's Currency
-  Exchange Rates, so a person checks the rate before approving. Saving one
-  as "approve" is refused ("Repeating invoices in USD can only be saved as
-  drafts for now…").
+- **Repeating invoices and bills in a foreign currency** can be saved as
+  "approve" (revised 1 Oct 2026, MC52): each one is approved only when the
+  exchange rates list has a rate effective on its date, which it takes.
+  With only the last rate used (which could be stale), it's left as a draft
+  and its history says why, so a person checks the rate before approving.
 
 Setup: MC14-MC24 (the last USD rate used on 25 Aug is **1.60**, MC22's
 payment).
@@ -1881,8 +1883,8 @@ payment).
 | ID | What happens | Result |
 | --- | --- | --- |
 | MC25 | A quote for Acme, 20 Aug 2026, USD 400.00 zero-rated; finalised QU-0001; accepted on 25 Aug with no rate typed | The quote is **USD 400.00** and posts nothing (with a GST line it's refused). Accepting makes a **draft** invoice in USD at **1.60** (the last USD rate used on or before 25 Aug): NZD **640.00**, still nothing posted; approved: Dr 1100 640.00 (USD 400.00) / Cr 4000 640.00. Another quote (USD 10.00) accepted on 26 Aug with the rate **1.58** typed: NZD **15.80** |
-| MC26 | A monthly repeating invoice for Acme from 31 Aug, USD 100.00 zero-rated, saved as a draft; the job runs on 31 Aug | Saving it as "approve" is refused. The template is **USD 100.00**. The job makes a **draft** invoice dated 31 Aug in USD at **1.60** (the last rate used by then; MC25's 1.58 invoice is a draft, which posts nothing, so it isn't one), NZD **160.00**; nothing posts |
-| MC27 | A monthly repeating bill from AWS from 31 Aug, "AWS-{month}", USD 40.00 no tax to 6040, a draft; the job runs on 31 Aug | "Approve" refused; the bill made is a **draft** dated 31 Aug, USD 40.00 at **1.60** = NZD **64.00** |
+| MC26 | A monthly repeating invoice for Acme from 31 Aug, USD 100.00 zero-rated, saved as "approve"; the job runs on 31 Aug; the exchange rates list is empty | The template is **USD 100.00**. The job makes an invoice dated 31 Aug in USD at **1.60** (the last rate used by then; MC25's 1.58 invoice is a draft, which posts nothing, so it isn't one), NZD **160.00**, and leaves it a **draft** (approval refused, 1 made): "Left as a draft: The exchange rates list has no USD rate effective on or before 2026-08-31, so this invoice took the last USD rate used (1.6)…"; nothing posts. (Revised 1 Oct 2026: saving it as "approve" used to be refused. With a list rate it's approved, MC52.) |
+| MC27 | A monthly repeating bill from AWS from 31 Aug, "AWS-{month}", USD 40.00 no tax to 6040, saved as "approve"; the job runs on 31 Aug | The bill made is a **draft** (approval refused, as MC26) dated 31 Aug, USD 40.00 at **1.60** = NZD **64.00** |
 | MC28 | A purchase order to AWS, 20 Aug, 3 x USD 20.00 no tax to 6040; approved; copied to a bill AWS-PO1 dated 28 Aug at **1.55** | The order is **USD 60.00** and posts nothing, approved or not. The bill is a draft, USD 60.00 at 1.55 = NZD **93.00**; approved: Dr 6040 93.00 / Cr 2000 93.00 (USD 60.00). AWS's currency can't change now |
 
 Tests: `tests/integration/multi-currency-settlements.test.ts` (MC25-MC28).
@@ -1944,6 +1946,234 @@ Transfer the money to a USD or NZD account first."
 
 Tests: `tests/integration/multi-currency-settlements.test.ts` (MC30).
 
+### Rounding gains and losses, and revaluing each document (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) following NetSuite, as Jess asked, settling
+questions 3, 4 and 8 below. NetSuite's help (*Variance Calculations for
+Realized Gain and Loss*, *Rounding Gain/Loss Using the Same Exchange Rate*,
+*Applied Payments and Realized Gain/Loss*, *Revaluation of Open Currency
+Balances*, *Currency Revaluation Transactions*) says:
+
+- **Rounding Gain/Loss** is a system account of its own, apart from
+  Realized Gain/Loss. When a payment or credit is applied to a document (or
+  a credit is refunded) the realised variance is (payment rate - source
+  document's rate) x the foreign amount applied, with the full rates,
+  rounded to 2 decimal places; if the NZD cleared from the document doesn't
+  exactly equal the payment's NZD plus that variance, the cent or two left
+  posts to Rounding Gain/Loss.
+- For payments or credits applied to several documents, NetSuite "calculates
+  and records a gain or loss for each transaction", and any rounding goes to
+  Rounding Gain/Loss.
+- **Revalue Open Currency Balances** revalues each open receivable and
+  payable transaction on its own ((period-end rate - the transaction's rate,
+  or its last revaluation's rate) x its open foreign amount), plus
+  foreign-currency bank and other balance sheet accounts, lists them by
+  document (Open Receivables, Open Payables, Other Accounts) and reverses
+  itself on the first day of the next period.
+
+So, in Tohyee:
+
+- **7050 Rounding gains and losses** (other income) is in the starting chart;
+  migration 0045 gives existing organisations it at 7050 or the next free
+  code. It's found by its role, like 7020.
+- Every settlement of a foreign-currency document (a payment, a statement
+  line matched to it, a payment for several documents, a credit note or
+  overpayment applied, a refund of foreign credit) splits its difference:
+  the **realised** part on 7020 is (rate of the side debited - rate of the
+  side credited) x the foreign amount, rounded once, half away from zero; the
+  rest is **rounding** on 7050. Each is only posted when it isn't 0.00. The
+  payment, application or refund keeps both (`realisedGain`,
+  `roundingGain`); ones from before keep all of it as realised (rounding
+  0.00). Voiding or removing posts the exact reversal, 7050 included.
+  (Transfers out of a foreign-currency bank account, FXB5, settle no
+  document, so their gain or loss stays all on 7020.)
+- In a payment for several documents each document has its own realised gain
+  and its own rounding; the last part still takes what's left of the bank
+  line, so its rounding includes that cent (MC20, MC38).
+- **Revaluing accounts receivable or payable** in a currency revalues each
+  open invoice, bill, credit note, supplier credit note and customer
+  overpayment on its own: (closing rate - its own rate) x its open foreign
+  amount, **rounded to cents one document at a time** (NetSuite's help
+  doesn't say how it rounds; this is the choice made). Credit notes and
+  overpayments count as negative amounts. The account and currency's total
+  is the sum; it can differ by a cent or two from revaluing the currency's
+  total (MC39). Each document gets its own pair of lines (the control
+  account and 7000 or 7010) and is listed on the revaluation; the documents
+  must agree with the ledger (period close's check), or it's refused.
+  Foreign-currency bank and other accounts are still revalued as one balance
+  each (F1-F7). Every revaluation still reverses the next day, so a
+  document's "last revaluation's rate" never applies; revaluing again before
+  an earlier one is reversed is refused (MC42).
+- The FX revaluation screen lists the open documents under each account and
+  currency, and each past revaluation's documents with their rates and
+  gains or losses.
+
+Setup (1): 1000 (NZD), 1030 USD account, 1100, 2000, 4000, 6040, 7020, 7050;
+customer Acme Inc (USD) and supplier Amazon Web Services (USD); everything
+zero-rated or no tax. USD 10.05 at 1.5 is 15.075 -> **15.08** and at 1.60 is
+**16.08**, but (1.60 - 1.5) x 10.05 = 1.005 -> **1.01**: a cent of rounding.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC31 | The chart of accounts; an organisation from before migration 0045 whose 7050 is already "Donations" | A new organisation has **7050 Rounding gains and losses** (other income). The older one gets it at **7051**; 7050 Donations is left alone |
+| MC32 | INV-0001, 1 Jul 2026, USD 10.05 at **1.5** (NZD 15.08); paid in full on 10 Jul into 1000 at **1.60**; voided on 11 Jul and paid again that day | Bank **16.08**, cleared **15.08**; realised gain **1.01**, rounding loss **0.01**: Dr 1000 16.08 / Cr 1100 15.08 (USD 10.05) / Cr 7020 1.01 / Dr 7050 0.01. Voiding posts the exact reversal (Cr 7050 0.01); paid again, the same |
+| MC33 | Bill AWS-1, 1 Jul, USD 10.05 at 1.5 (NZD 15.08), paid on 10 Jul from 1000 at 1.60 | Bank **16.08**, cleared **15.08**; realised loss **1.01** ((1.5 - 1.60) x 10.05), rounding gain **0.01**: Dr 2000 15.08 (USD 10.05) / Cr 1000 16.08 / Dr 7020 1.01 / Cr 7050 0.01 |
+| MC34 | CN-0001, 3 Jul, USD 10.05 at 1.5 (NZD 15.08); INV-0003, 4 Jul, USD 20.00 at 1.60 (NZD 32.00); CN-0001 applied to INV-0003 on 15 Jul; removed on 16 Jul and applied again | The credit's side **15.08**, the invoice's 32.00 x 10.05 / 20.00 = **16.08**; realised loss **1.01**, rounding gain **0.01**: Dr 1100 15.08 (USD 10.05) / Cr 1100 16.08 (USD 10.05) / Dr 7020 1.01 / Cr 7050 0.01. INV-0003 due **USD 9.95 = NZD 15.92**. Removing posts the exact reversal; applied again, the same |
+| MC35 | INV-0004, 5 Jul, USD 10.00 at 1.60 (NZD 16.00); Acme pays USD **20.05** on 6 Jul into 1000 at **1.5**; INV-0005, 7 Jul, USD 10.05 at 1.60 (NZD 16.08); the USD 10.05 overpayment applied to it on 20 Jul | Payment: bank 30.075 -> **30.08**, overpayment USD 10.05 = **15.08**, the invoice part 15.00 clears 16.00: realised loss **1.00**, no rounding: Dr 1000 30.08 / Cr 1100 16.00 (USD 10.00) / Cr 1100 15.08 (USD 10.05) / Dr 7020 1.00. Applying: the overpayment's side **15.08**, INV-0005's **16.08**; realised loss **1.01**, rounding gain **0.01**: Dr 1100 15.08 / Cr 1100 16.08 / Dr 7020 1.01 / Cr 7050 0.01 |
+| MC36 | CN-0002, 8 Jul, USD 10.05 at 1.60 (NZD 16.08), refunded on 21 Jul from 1000 at 1.5; supplier credit note AWS-CR1, 9 Jul, USD 10.05 at 1.5 (NZD 15.08), refunded by AWS on 22 Jul into 1000 at 1.60 | CN-0002: bank **15.08**, carrying **16.08**; realised gain **1.01** ((1.60 - 1.5) x 10.05), rounding loss **0.01**: Dr 1100 16.08 (USD 10.05) / Cr 1000 15.08 / Cr 7020 1.01 / Dr 7050 0.01. AWS-CR1: bank **16.08**, carrying **15.08**; realised gain **1.01**, rounding loss **0.01**: Dr 1000 16.08 / Cr 2000 15.08 (USD 10.05) / Cr 7020 1.01 / Dr 7050 0.01 |
+| MC37 | Supplier credit note AWS-CR2, 10 Jul, USD 10.05 at 1.60 (NZD 16.08); bill AWS-2, 10 Jul, USD 20.00 at 1.5 (NZD 30.00); AWS-CR2 applied to AWS-2 on 23 Jul | The bill's side 30.00 x 10.05 / 20.00 = 15.075 -> **15.08**, the credit's **16.08**; realised loss **1.01** ((1.5 - 1.60) x 10.05), rounding gain **0.01**: Dr 2000 15.08 / Cr 2000 16.08 / Dr 7020 1.01 / Cr 7050 0.01 |
+| MC38 | Bills AWS-3 and AWS-4, 11 Jul, USD 10.05 each at 1.5 (NZD 15.08 each), paid together on 25 Jul from 1000 at 1.60 (USD 20.10) | Bank 20.10 x 1.60 = **32.16**; each part **16.08** clears **15.08**, with its own realised loss **1.01** and rounding gain **0.01**: Dr 2000 15.08 / Dr 7020 1.01 / Cr 7050 0.01 / Dr 2000 15.08 / Dr 7020 1.01 / Cr 7050 0.01 / Cr 1000 32.16. Trial balance at 31 Jul: 7020 debit **4.03**, 7050 credit **0.03** |
+
+Setup (2), a second organisation: 1000, 1030 USD account, 1100, 2000, 4000,
+6040, 7000, 7010, 7020; Acme Inc (USD) and Amazon Web Services (USD). Open on
+31 Jul 2026: INV-0001 (1 Jul) and INV-0002 (2 Jul), USD 10.01 each at 1.5
+(NZD 15.02 each); INV-0003, 3 Jul, USD 100.00 at 1.62 (162.00); CN-0001, 4
+Jul, USD 20.00 at 1.60 (32.00), unused; INV-0004, 5 Jul, USD 50.00 at 1.60,
+paid with USD 60.00 on 6 Jul into 1030 at 1.64 (NZD 98.40), leaving an
+overpayment of USD 10.00 = 16.40; bills AWS-1 and AWS-2, 1 and 2 Jul, USD
+10.01 each at 1.5 (15.02 each); supplier credit note AWS-CR1, 3 Jul, USD
+5.00 at 1.70 (8.50), unused.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC39 | Revaluation on 31 Jul at **1.55** (reversal 1 Aug) of 1030, 1100 USD and 2000 USD | 1030 (one balance): USD 60.00, carrying 98.40, revalued 93.00, **-5.40**. 1100 USD, one document at a time: INV-0001 (1.55 - 1.5) x 10.01 = 0.5005 -> **+0.50**, INV-0002 **+0.50**, INV-0003 (1.55 - 1.62) x 100.00 = **-7.00**, CN-0001 (1.55 - 1.60) x -20.00 = **+1.00**, the overpayment (1.55 - 1.64) x -10.00 = **+0.90**: USD **90.02**, carrying **143.64**, **-4.10**, revalued **139.54** (the currency's total at 1.55, 90.02 x 1.55 = 139.53, would have given -4.11). 2000 USD: AWS-1 **+0.50**, AWS-2 **+0.50**, AWS-CR1 (1.55 - 1.70) x -5.00 = **+0.75**: USD 15.02, carrying 21.54, **+1.75** owed (a loss), revalued 23.29 (not 1.74). Journal: Cr 1030 5.40 / Dr 7010 5.40; Dr 1100 0.50 / Cr 7000 0.50 (INV-0001); the same for INV-0002; Cr 1100 7.00 / Dr 7010 7.00 (INV-0003); Dr 1100 1.00 / Cr 7000 1.00 (CN-0001); Dr 1100 0.90 / Cr 7000 0.90 (the overpayment); Cr 2000 0.50 / Dr 7010 0.50 (AWS-1); the same for AWS-2; Cr 2000 0.75 / Dr 7010 0.75 (AWS-CR1). Reversed on 1 Aug. The revaluation lists every document with its rate |
+| MC40 | The FX revaluation screen on 30 Jul | Under 1100 USD (USD 90.02, NZD 143.64): INV-0001, INV-0002, INV-0003, CN-0001 (-20.00, -32.00, at 1.6) and "Overpayment on INV-0004" (-10.00, -16.40, at 1.64), by date; under 2000 USD (USD 15.02, NZD 21.54): AWS-1, AWS-2, AWS-CR1 |
+| MC41 | As at 31 Jul, then 1 Aug | Aged receivables **143.64** with the revaluation **-4.10** beside it; aged payables' revaluation **1.75**, 2000 **23.29**, difference 0.00; period close's FX, receivables and payables checks pass. Trial balance 31 Jul: 7000 credit **2.90**, 7010 debit **14.15**, 1100 **139.54**; 1 Aug: 7000 and 7010 nothing, 1100 **143.64** |
+| MC42 | Refused, nothing posted | 1100 USD again on 31 Jul ("already revalued"); on 15 Aug with USD 90.00 typed ("the ledger has USD 90.02 open on 2026-08-15, not 90.00"); 1100 EUR ("nothing open in EUR"). After revaluing 2000 USD on 15 Aug with the reversal on 1 Sep, revaluing it on 31 Aug: "Account 2000 USD was revalued on 2026-08-15 (FX-MID), and that isn't reversed until 2026-09-01. Revaluing it again before then isn't supported yet." |
+| MC43 | INV-0003 paid on 3 Aug into 1000 at 1.55 (after the reversal) | Still cleared at its own rate: bank **155.00**, cleared **162.00**, realised loss **7.00**, no rounding: Dr 1000 155.00 / Cr 1100 162.00 (USD 100.00) / Dr 7020 7.00 |
+
+Tests: `tests/integration/multi-currency-rounding.test.ts` (MC31-MC43),
+`tests/unit/fx-rounding.test.ts`, and MC4, MC8, MC13, MC19 and MC20 in their
+own tests.
+
+### Currency exchange rates list (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) following NetSuite, as Jess asked. NetSuite
+keeps a **Currency Exchange Rates** list: "exchange rates for each currency
+pair" with an **effective date**, and when a transaction is entered "the
+exchange rate defaults to the rate in effect on the transaction date", which
+can be changed on the transaction (NetSuite help, *Currency Exchange Rates*,
+*Setting Exchange Rates Directly on Transactions*, *Currency Exchange Rate
+Integration*; sections N1404249, N1404429 and N564637). Its daily feed
+(Currency Exchange Rate Integration) comes from paid providers (HSBC,
+Xignite), so it isn't copied; whether to add a free feed is Jess's decision
+(question 6). In Tohyee:
+
+- **Accounting › Exchange rates**: for each foreign currency, rates with the
+  date each takes effect, **NZD per 1 unit** (the direction of every
+  document's rate), up to 8 decimal places, with an optional note (e.g.
+  "RBNZ"). Bookkeepers, admins and owners add them (the role that posts FX
+  revaluations); viewers see them. Each is audited (who and when). The base
+  currency, unknown currencies, a zero rate, more than 8 decimal places and
+  impossible dates are refused.
+- **Never changed or deleted** (the database checks): a correction is a
+  newer entry for the same date (for one date, the one added last wins) or
+  archiving the wrong one, which is kept with who archived it. Documents
+  that already took a rate keep it.
+- **Default rate**: a new foreign-currency invoice, bill, credit note,
+  supplier credit note, payment (one or several documents), refund, bank
+  statement line, accepted quote or copied purchase order starts with the
+  list's rate **in effect on its date** (the latest entry on or before it);
+  with none, the last rate used in the books on or before it (MC3, D4); with
+  neither, it must be typed (MC2). A typed rate always wins.
+- **Repeating invoices and bills** in a foreign currency are approved
+  automatically (when set to) only when the list has a rate effective on the
+  document's date, which it took; otherwise it's left as a draft at the last
+  rate used and the history says why. NetSuite's help doesn't say which rate
+  memorized transactions use; taking the rate in effect on the new
+  document's date, as for any new transaction, is the choice made
+  (question 9).
+- **Pasting several** (one command, all or nothing): one per line,
+  "currency, effective date, rate" and an optional note, with commas or tabs
+  (rows copied from a spreadsheet), dates as YYYY-MM-DD or DD/MM/YYYY, and a
+  heading line skipped.
+- **FX revaluation** starts each closing rate as the list's rate in effect on
+  the revaluation date, when there is one (it can be changed or cleared).
+
+Setup: 1000 (NZD), 1030 USD account, 1100, 2000, 4000, 6040, 7020; customer
+Acme Inc (USD); suppliers Amazon Web Services (USD) and Bristol Ltd (GBP);
+nothing posted before; all zero-rated or no tax.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC46 | A bookkeeper adds USD **1.60** effective 1 Jul 2026 (note "RBNZ"), USD **1.65** effective 1 Aug and EUR **1.80** effective 1 Jul | Added, each with an audit event (who, when). Refused: NZD ("NZD is the base currency, so it has no exchange rate"), "XYZ", a rate of 0, 1.123456789 (more than 8 places), 30 Feb. A viewer is refused (403). The same idempotency key again returns the same entry; with another rate it's refused. In effect on 15 Jul: **USD 1.60, EUR 1.80**, GBP none |
+| MC47 | USD **1.66** effective 1 Aug added later (a typo), then archived | While it's there, 15 Aug takes **1.66** (the newest for that date). Archived: 15 Aug takes **1.65** again; 1.66 stays in the list as archived by the bookkeeper; archiving it again is refused. The database refuses changing a rate, un-archiving, deleting and emptying the table, and a NZD entry |
+| MC48 | INV-0001 for Acme, 10 Jul, USD 1,000.00 at **1.70** typed; INV-0002, 15 Jul, USD 500.00 no rate typed; INV-0003, 5 Aug, USD 200.00 no rate; INV-0004, 6 Aug, USD 100.00 at **1.62** typed | INV-0001 NZD **1,700.00** (1.70 is now the last USD rate used). INV-0002 takes the list's **1.60** (effective 1 Jul), not the last used 1.70: NZD **800.00**, Dr 1100 800.00 (USD 500.00) / Cr 4000 800.00. INV-0003: **1.65**, NZD **330.00**. INV-0004: the typed **1.62**, NZD **162.00** |
+| MC49 | Bill BR-1 from Bristol (GBP), 1 Jul, GBP 100.00, no rate typed; again at **2.10**; BR-2, 20 Jul, GBP 50.00, no rate; a USD bill dated 20 Jun, no rate | BR-1 refused ("Type the exchange rate for this bill (NZD per 1 GBP): no GBP rate has been used on or before 2026-07-01 yet, and the exchange rates list … has none effective by then"); at 2.10: NZD **210.00**. BR-2 takes **2.10** (no GBP in the list, so the last rate used): NZD **105.00**. The USD bill on 20 Jun is refused (before the list's first USD entry and before any USD was used) |
+| MC50 | Acme pays INV-0002 (USD 500.00 = NZD 800.00) on 12 Aug into 1030, no rate typed; a USD statement line on 1030, 20 Aug, +100.00, matched to INV-0003 with no rate typed | Payment at **1.65**: Dr 1030 **825.00** (USD 500.00 at 1.65) / Cr 1100 800.00 (USD 500.00) / Cr 7020 **25.00**. The statement line shows **1.65** from the list (effective 1 Aug) and NZD **165.00**; matched, INV-0003 due **USD 100.00 = NZD 165.00**, no gain (its own rate) |
+| MC51 | A quote for Acme, 25 Jul, USD 400.00, accepted on 3 Aug with no rate; a purchase order to AWS, 25 Jul, 3 x USD 20.00, approved and copied to bill AWS-PO1 dated 3 Aug with no rate | Both take the rate for the new document's date, **1.65** (as NetSuite's bill made from a purchase order has its own rate): the draft invoice NZD **660.00**, the draft bill NZD **99.00** |
+| MC52 | A monthly repeating invoice for Acme from 31 Jul, USD 100.00, saved as "approve"; the job runs on 31 Aug. A monthly repeating bill from Bristol from 31 Jul, "BR-{month}", GBP 40.00 to 6040, "approve"; the job runs on 31 Jul, then GBP **2.05** effective 1 Aug is added and it runs on 31 Aug | Invoices: 31 Jul at **1.60**, approved: Dr 1100 **160.00** (USD 100.00) / Cr 4000 160.00; 31 Aug at **1.65**, approved, NZD **165.00**. Bill 31 Jul: no GBP in the list, so a **draft** at 2.10 (NZD 84.00), history: "Left as a draft: The exchange rates list has no GBP rate effective on or before 2026-07-31, so this bill took the last GBP rate used (2.1). Check its rate, then approve it; or add rates under Accounting › Exchange rates." Bill 31 Aug at **2.05**, approved: Dr 6040 **82.00** / Cr 2000 82.00 (GBP 40.00) |
+| MC53 | Pasted: "Currency,Date,Rate,Note" / "USD,31/08/2026,1.62,RBNZ month end" / (blank) / "EUR[tab]2026-08-31[tab]1.85"; and a paste whose line 2 is "USD, 2026-08-31, abc" | Two entries added: USD **1.62** and EUR **1.85**, effective 31 Aug (the heading and blank line skipped). The bad paste adds nothing ("Line 2: The rate must be a plain number…"). The revaluation on 31 Aug suggests **1.62** for USD (30 Aug would be 1.65), and a new USD document dated 31 Aug takes 1.62 |
+
+Tests: `tests/integration/fx-rate-table.test.ts` (MC46-MC53),
+`tests/unit/fx-rate-text.test.ts` (MC48, MC53).
+
+### Projects and CRM opportunities in a foreign currency (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) following NetSuite, as Jess asked. In NetSuite
+a new transaction starts in the customer's currency, and "Projects and their
+associated transactions must share a single currency" (NetSuite help,
+docs.oracle.com/en/cloud/saas/netsuite/ns-online-help, bridgehead_N1398658,
+section_N1404249, section_4369706980 and section_3752834264): a project for a customer in
+another currency is in that currency, its billing rates (time, fixed fees)
+are set in it, and the invoices made from it are in it, so nothing charged
+is converted from NZD. Staff costs stay in the base currency. So, in Tohyee:
+
+- **A project is in its customer's currency** (PJ1): taken from the customer
+  when it's created, never typed (the database checks). Its hourly rates,
+  fixed prices and estimate are in it. Existing projects are in their
+  customer's currency (NZD for NZD customers).
+- A project's currency **can't change once it has tasks, time, expenses or
+  invoices** (moving it to a customer in another currency is refused before
+  then too: its customer can't change once it has invoices, PJ); a
+  customer's currency can't change once it has projects or opportunities
+  (as MC1 for documents). The database refuses both.
+- **Staff cost rates and costs stay NZD** (PJ3), and so do expense costs
+  (the line's NZD net amount, PJ4).
+- **Invoicing a foreign project** (PJ6) makes a draft invoice in its
+  currency, like any foreign-currency invoice (MC2): the rate typed, or else
+  the one a new invoice for that date starts with (MC3); GST zero-rated,
+  exempt or none; nothing posts until it's approved.
+- **Profitability** (PJ9): invoiced, on draft invoices, unbilled, written
+  off and the estimate are in the project's currency; **invoiced (NZD)** is
+  the approved invoices' NZD subtotals at their own rates (what the ledger
+  has in 4000); costs and **profit (invoiced NZD less costs)** are NZD. The
+  report's totals are NZD: invoiced (NZD), costs and profit of every
+  project, and what's still to invoice of the NZD projects, with a line per
+  other currency for its projects' amounts (never added to NZD).
+- **Chargeable expenses on a foreign project are refused** (smallest safe
+  choice): the cost is NZD and which rate would turn it into USD for the
+  invoice isn't settled. Link it as not chargeable (a cost only) and charge
+  for it as a fixed price task. The database refuses it too.
+- **CRM**: an opportunity is in its company's currency (its amount too),
+  following its company if that changes, until it has made its invoice. The
+  pipeline totals each currency on its own; a company's open pipeline is in
+  its currency. A **won opportunity's invoice** (CRM5) is a draft in that
+  currency at the rate typed or else the usual starting rate; its line is
+  **zero-rated** (ZERO) rather than standard-rated GST, since only
+  zero-rated, exempt or no GST can be on a foreign-currency invoice (MC2),
+  or has no tax if there's no zero-rated code. It's checked before it's
+  approved.
+
+Setup: GST on the invoice basis; 1000, 1100, 4000, 6040; customers **Acme
+Inc (USD)** and **Harbour Cafe** (NZD), supplier Paw Supplies (NZD); Jess's
+staff cost rate **NZD 40.00** an hour; no USD rate used yet.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC61 | Projects: "Website build" for Acme, estimate 3,000.00; "Cafe menu" for Harbour Cafe | Website build is **USD** (estimate **USD 3,000.00**), Cafe menu **NZD**; nothing posts. Changing Acme's currency is now refused ("Acme Inc has projects or CRM opportunities in USD, so its currency can't change…"), by the database too; so is setting Website build's currency to NZD in the database ("This contact's documents are in USD, not NZD"). A project for Yamato KK (JPY) is refused: MC70 |
+| MC62 | Tasks: Development, hourly **USD 120.00**; Setup, fixed **USD 500.00**. Jess records 2 h 30 min of Development on 1 Jul 2026; on Cafe menu, Design hourly 90.00 and 1 h of Jess's time on 2 Jul | Jess's entry costs **NZD 100.00** (150 x 40.00 / 60, her NZD cost rate). Website build unbilled **USD 800.00** (300.00 time + 500.00 fixed); Cafe menu unbilled **90.00** (NZD), cost 40.00 |
+| MC63 | Bill PS-1 from Paw Supplies, 3 Jul, "Hosting" 50.00 + GST to 6040, approved; linked to Website build | Chargeable: refused ("Project Website build is in USD, and expense costs are in NZD. Charging an expense on a USD project isn't supported yet…"), and by the database. Not chargeable: linked at cost **NZD 50.00**; making it chargeable later is refused. Nothing posts |
+| MC64 | Invoice everything unbilled on Website build, 10 Jul, to 4000 | With GST (standard): refused ("GST on foreign-currency invoices…"). ZERO with no rate typed (no USD rate used yet): refused ("Type the exchange rate…"); nothing is linked. ZERO at **1.60**: a **draft USD invoice** for Acme: "Development (2 h 30 min)" 2.5 x **120.00** = **300.00**, "Setup" 1 x **500.00**: **USD 800.00**, no GST, NZD **1,280.00** (480.00 + 800.00); unbilled USD 0.00. Approved: Dr 1100 **1,280.00 (USD 800.00)** / Cr 4000 **1,280.00** |
+| MC65 | 1 h more Development on 12 Jul, invoiced on 20 Jul (ZERO) with no rate typed, and approved | Takes **1.60**, the rate a new USD invoice dated 20 Jul starts with (MC3; MC64's): "Development (1 h)" **USD 120.00** = NZD **192.00**: Dr 1100 192.00 (USD 120.00) / Cr 4000 192.00 |
+| MC66 | Project profitability and the time report for July 2026 | Website build: invoiced **USD 920.00**, invoiced (NZD) **1,472.00**; costs **NZD 190.00** (time 3 h 30 min, 140.00, plus hosting 50.00); profit **NZD 1,282.00**; unbilled **USD 0.00**; estimate USD 3,000.00, **USD 2,080.00** left. Cafe menu: costs 40.00, profit **-40.00**, unbilled **90.00**. Totals (NZD): invoiced **1,472.00**, costs **230.00**, profit **1,242.00**, unbilled **90.00** (NZD projects); USD projects: invoiced USD 920.00, unbilled USD 0.00. 4000 on the trial balance is 1,472.00. Time report: Jess 4 h 30 min, cost **NZD 180.00** |
+| MC67 | Currency locks | Website build can't move to Harbour Cafe (it has invoices). "Discovery" for Acme with a task Workshop (fixed USD 200.00) can't move to Harbour Cafe ("…has tasks, time or expenses in USD, so it can't move to a customer in NZD…"); the database refuses its currency changing too. "Scoping" for Acme, with nothing on it, moves to Harbour Cafe and is then **NZD** |
+| MC68 | CRM on. Opportunities "Annual retainer" for Acme 2,000.00 and "Menu reprint" for Harbour Cafe 500.00, both New | Annual retainer is **USD 2,000.00**, Menu reprint **NZD 500.00**; the New column totals **NZD 500.00 + USD 2,000.00** (never added together); Acme's open pipeline **USD 2,000.00**. Moved to Acme, Menu reprint is USD 500.00; moved back, NZD 500.00. For Yamato KK (JPY) 1000.50 is refused ("…no cents…"), 1000 works |
+| MC69 | Annual retainer and Menu reprint marked Won and invoiced (today); "Logo licence" for Acme, USD 100.00, Won, invoiced with the rate **1.58** typed | Annual retainer: a **draft USD invoice**, 1 x USD 2,000.00 to 4000, **ZERO**, at **1.60** (the last USD rate used, MC65's): NZD **3,200.00**; nothing posts; again returns the same invoice; its company can't change now (the database refuses too). Logo licence: USD 100.00 at 1.58 = NZD **158.00**. Menu reprint: NZD with GST, as CRM5 (575.00); a rate typed for it is refused ("…in NZD, so its invoice has no exchange rate"). In an organisation with no USD rate used, a USD opportunity's invoice without a rate is refused ("Type the exchange rate…") |
+| MC70 | Refused rather than guessed, nothing posted | A project for Yamato KK (JPY: "…which has no cents. Projects in JPY aren't supported yet…"); chargeable expenses on a USD project (MC63); standard-rated GST on a foreign project's invoice (MC64); invoicing a USD project, or a USD opportunity, while sales count for GST when paid (the payments basis, as MC11) |
+
+Tests: `tests/integration/multi-currency-projects.test.ts` (MC61-MC70).
+
 ### Not supported yet (refused rather than guessed)
 
 - **Standard-rated GST on foreign-currency invoices, bills and credit notes**
@@ -1965,11 +2195,16 @@ Tests: `tests/integration/multi-currency-settlements.test.ts` (MC30).
   it has documents.
 - Item lines whose price would come from the item on foreign-currency
   documents (item prices are NZD). (Stock items are built: MC29.)
-- **Project and CRM invoices** for contacts in another currency. (Quotes,
-  repeating invoices and bills and purchase orders are built: MC25-MC28;
-  repeating ones save drafts only.)
-- **A separate rounding gain/loss account** (NetSuite's): the cents are part
-  of the realised gain or loss (MC4).
+- **Revaluing receivables or payables again before an earlier revaluation of
+  them is reversed** (NetSuite would revalue from that revaluation's rate;
+  Tohyee's reverse the next day), and revaluing a currency whose open
+  documents net to 0.00 (MC42).
+- **An automatic daily rate feed** (NetSuite's Currency Exchange Rate
+  Integration uses paid providers); rates are typed or pasted into the list
+  (MC46, MC53). A question below.
+- **Chargeable expenses on a project in another currency** (MC63), and
+  projects in a currency without cents (JPY, XPF; MC70). (Projects and CRM
+  opportunities in another currency are built: MC61-MC70.)
 
 ### Questions for Jess (multi-currency)
 
@@ -1981,37 +2216,52 @@ Tests: `tests/integration/multi-currency-settlements.test.ts` (MC30).
 2. Payments basis: count a part-paid foreign-currency sale at its share of
    the invoice's NZD value (the time-of-supply rate), or at the payment's
    rate?
-3. Rounding: keep the cent or two of rounding in 7020, or add a separate
-   "Rounding gain/loss" account like NetSuite?
-4. Revaluation per currency total (built) or per open document like
-   NetSuite (can differ by a cent or two)?
+3. Answered 1 Oct 2026 by following NetSuite: rounding goes to a separate
+   account, 7050 Rounding gains and losses, apart from the realised gain or
+   loss on 7020 ((payment rate - document rate) x amount, rounded to cents),
+   MC31-MC38 (and MC4 revised). Please check the examples.
+4. Answered 1 Oct 2026 by following NetSuite: receivables and payables are
+   revalued per open document (MC39-MC43; MC8 and MC19 revised), each
+   rounded to cents on its own (NetSuite's help doesn't say how it rounds;
+   that was the choice made). Please check the examples.
 5. (Answered overnight 1 Oct 2026 by following NetSuite: foreign refunds,
    overpayments and batch payments are built, MC14-MC24, and a bank account
    in a third currency stays refused, MC30. Please check the examples.)
-6. The rate source: Tohyee only uses rates already used in the books; should
-   it fetch a daily rate (e.g. RBNZ) or keep a rate table like NetSuite's
-   Currency Exchange Rates list?
+6. (Answered overnight 1 Oct 2026 by following NetSuite: a Currency Exchange
+   Rates list is built under Accounting › Exchange rates, MC46-MC53, and new
+   documents take its rate in effect on their date, else the last rate used.)
+   Still yours to decide: NetSuite's automatic daily feed uses paid
+   providers (HSBC, Xignite), so none is built. Should Tohyee fetch a free
+   daily rate into the list (e.g. RBNZ's published rates), or keep rates
+   typed and pasted?
 7. Refunds (MC16-MC18): NetSuite's help doesn't show a customer refund's
    gain or loss in so many words; Tohyee treats a refund like a payment
    (refund rate against the credit's own rate, difference to 7020). Is that
    what you'd expect?
-8. Payments for several foreign documents (MC20): the last document takes the
-   rounding cent so the parts add up to the one bank line (MC20's 2.99 where
-   NetSuite would post 3.00 plus a 0.01 rounding entry). Fine, or would you
-   rather each part be rounded on its own and the cent go elsewhere?
-9. Repeating invoices and bills in a foreign currency save drafts only
-   (MC26, MC27), because each takes the last rate used, which may be stale.
-   Keep that, or allow "approve" once there's a daily rate source (question
-   6)?
-10. A quote accepted, or a purchase order copied, without a rate typed takes
-    the last rate used on or before the new document's date (MC25, MC28), as
-    for documents entered directly. OK?
+8. Answered 1 Oct 2026 by following NetSuite: each document in a payment for
+   several has its own realised gain and the rounding cent goes to 7050
+   (MC20 now posts 3.00 plus a 0.01 rounding loss; MC38). Please check the
+   examples.
+9. (Answered overnight 1 Oct 2026 by following NetSuite, whose memorized
+   transactions can post automatically: a foreign repeating invoice or bill
+   set to "approve" is approved when the exchange rates list has a rate
+   effective on its date, and otherwise left as a draft saying why, MC52,
+   MC26, MC27.) NetSuite's help doesn't say which rate a memorized
+   transaction uses; Tohyee takes the rate in effect on the new document's
+   date, like any new transaction. Please check.
+10. (Answered overnight 1 Oct 2026 by following NetSuite, whose bill made
+    from a purchase order has its own rate: a quote accepted, or a purchase
+    order copied, without a rate typed takes the exchange rates list's rate
+    in effect on the new document's date, else the last rate used on or
+    before it, as for documents entered directly, MC51, MC25, MC28.)
 11. Stock on a foreign bill is valued at the bill's rate and never adjusted
     when the bill is paid at another rate (MC29; the difference is realised
     on 7020). NetSuite's "bill exchange rate variance" only arises between an
     item receipt and a later bill, which Tohyee doesn't have. OK?
-12. Project and CRM invoices for foreign contacts are still refused. Build
-    them next (the invoice would take the last rate, like MC25)?
+12. (Answered overnight 1 Oct 2026 by following NetSuite: a project and a
+    CRM opportunity are in their customer's currency, and so are their
+    invoices, MC61-MC70. Please check the examples; what's still open about
+    them is under "Questions for Jess (projects)".)
 
 ## Reports
 
@@ -3098,7 +3348,9 @@ the opportunity's name and amount, the first active revenue account and the
 standard GST code, dated today and due on the customer's payment terms (in
 20 days if they have none, RC1), which is then edited and
 approved like any other. Making it marks a prospect as a customer too. An
-opportunity makes at most one invoice.
+opportunity makes at most one invoice. An opportunity for a company in
+another currency is in that currency, amount and invoice (zero-rated, at a
+rate for its date), following NetSuite (MC68, MC69).
 
 **Tasks** have a title, optional details, a due date, an assignee (a
 member), a status (To do, In progress, Done) and can be about a company, a
@@ -4743,6 +4995,9 @@ from them do (as ordinary invoices, I1-I9).
   and the **estimate** against invoiced plus unbilled; per task, estimated
   against actual hours. The **time report** lists entries in a date range,
   by person, project and task, with hours and cost.
+- A project is in its **customer's currency**: for a customer in another
+  currency, its rates, prices, estimate and invoices are in it, while costs
+  and profit stay NZD (MC61-MC70).
 
 Setup (GST 15%): customer **Harbour Cafe** (payment terms 20th of the
 following month), supplier **Paw Supplies**; members Jess (owner), Aroha
@@ -4868,8 +5123,9 @@ Harbour Cafe, estimate **2,000.00**, deadline 31 Aug 2026, with tasks
 - A **start/stop timer**: time is entered as hours and minutes.
 - Undoing a **write-off**, or writing items off other than when closing.
 - Linking **draft bills**, supplier credit notes, purchase orders, manual
-  journals, receive money or stock lines to projects; foreign-currency
-  projects.
+  journals, receive money or stock lines to projects. (Projects in a
+  customer's other currency are built, MC61-MC70, but their expenses are
+  costs only, MC63, and currencies without cents are refused, MC70.)
 - **Tracking the project in the ledger**: a project isn't a tracking or
   custom segment value, and linking an expense doesn't change its posted
   lines (posted history is append-only). Organisations that want the
@@ -4892,6 +5148,19 @@ Harbour Cafe, estimate **2,000.00**, deadline 31 Aug 2026, with tasks
   than the project's life?
 - Should a project automatically tag its invoice lines with a "Project"
   custom segment value, so the profit and loss can be split by project?
+- Projects and opportunities in another currency (MC61-MC70, following
+  NetSuite): should expenses be chargeable on a USD project, and if so
+  converted at which rate (the bill's, the invoice's, or a fixed one)? As
+  built they're costs only (MC63).
+- A won opportunity for a company in another currency makes a zero-rated
+  (ZERO) draft invoice (MC69), since standard-rated GST isn't built for
+  foreign-currency documents (multi-currency question 1). Right for your
+  overseas customers, or would you rather it had no GST code until someone
+  picks one?
+- A customer's currency can't change once it has any project or
+  opportunity, even a lost one or an empty project (MC61, as quotes do,
+  MC25). Should it be allowed while they have nothing on them?
+- Projects in currencies without cents (JPY, XPF) are refused (MC70). Needed?
 
 ## Bringing in existing books (examples not yet approved by Jess)
 

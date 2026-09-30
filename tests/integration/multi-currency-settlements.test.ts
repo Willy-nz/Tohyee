@@ -19,7 +19,7 @@ import { inventoryValuation } from "@/lib/reports/financial";
 import { approvePurchaseOrder, copyPurchaseOrderToBill, createPurchaseOrder } from "@/lib/purchase-orders/service";
 import { acceptQuote, createQuote, finaliseQuote } from "@/lib/quotes/service";
 import { createRepeatingBill, runRepeatingBills } from "@/lib/repeating/bills";
-import { createRepeatingInvoice, runRepeatingInvoices } from "@/lib/repeating/service";
+import { createRepeatingInvoice, getRepeatingInvoice, runRepeatingInvoices } from "@/lib/repeating/service";
 import { postFxRevaluation } from "@/lib/ledger/fx-revaluation";
 import { getJournal } from "@/lib/ledger/journals";
 import { periodChecklist } from "@/lib/ledger/period-close";
@@ -305,6 +305,17 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
     expect(fx.items.map((item) => [item.accountCode, item.foreignAmount, item.carryingAmount, item.revaluedAmount, item.deltaAmount])).toEqual([
       ["1100", "370.00", "633.90", "592.00", "-41.90"],
     ]);
+    // One by one (MC39): INV-0002 (1.60 - 1.70) x 440.00 = -44.00; CN-0001 (1.60 - 1.63) x -70.00 = +2.10.
+    expect(fx.items[0].documents.map((doc) => [doc.kind, doc.documentNumber, doc.foreignAmount, doc.carryingAmount, doc.deltaAmount])).toEqual([
+      ["invoice", "INV-0002", "440.00", "748.00", "-44.00"],
+      ["credit_note", "CN-0001", "-70.00", "-114.10", "2.10"],
+    ]);
+    expect(await posted(fx.revaluationJournalId)).toEqual([
+      ["1100", "0.00", "44.00", "USD 0.00 revaluation"],
+      ["7010", "44.00", "0.00"],
+      ["1100", "2.10", "0.00", "USD 0.00 revaluation"],
+      ["7000", "0.00", "2.10"],
+    ]);
     expect((await run((tx) => agedReceivables(tx, { asAt: "2026-07-31" }))).revaluation).toBe("-41.90");
     const checks = (await run((tx) => periodChecklist(tx, { periodEnd: "2026-07-31" }))).checks;
     expect(checks.filter((entry) => entry.key === "receivables" || entry.key === "payables").map((entry) => entry.status)).toEqual(["pass", "pass"]);
@@ -313,7 +324,7 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
   const batch = (kind: "customer" | "supplier", paymentDate: string, amount: string, bankAccountCode: string, documents: Array<{ id: string; amount: string }>, exchangeRate?: string) =>
     run((tx) => recordPaymentBatch(tx, kind, { idempotencyKey: key("batch"), paymentDate, amount, bankAccountCode, documents, exchangeRate }));
 
-  it("MC20: one USD payment for two USD invoices: one bank line, each invoice's own gain; the parts add up to the bank line", async () => {
+  it("MC20: one USD payment for two USD invoices: one bank line, each invoice's own gain; the rounding cent goes to 7050", async () => {
     const third = await invoice("INV-0003", "2026-08-03", "100.01", "1.60");
     const fourth = await invoice("INV-0004", "2026-08-04", "100.01", "1.62");
     expect([third.baseTotal, fourth.baseTotal]).toEqual(["160.02", "162.02"]);
@@ -323,16 +334,18 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
     ], "1.65");
     // 200.02 x 1.65 = 330.033 -> 330.03 in the bank; 100.01 x 1.65 = 165.0165 -> 165.02 for the first, the other 165.01 for the last.
     expect(paid).toMatchObject({ currencyCode: "USD", amount: "200.02", exchangeRate: "1.65", baseAmount: "330.03" });
-    expect(paid.parts.map((part) => [part.documentNumber, part.amount, part.baseAmount, part.baseCleared, part.realisedGain])).toEqual([
-      ["INV-0003", "100.01", "165.02", "160.02", "5.00"],
-      ["INV-0004", "100.01", "165.01", "162.02", "2.99"],
+    // Each gain is (1.65 - its rate) x 100.01, rounded: 5.00 and 3.00; the last part's cent short is rounding (MC31).
+    expect(paid.parts.map((part) => [part.documentNumber, part.amount, part.baseAmount, part.baseCleared, part.realisedGain, part.roundingGain])).toEqual([
+      ["INV-0003", "100.01", "165.02", "160.02", "5.00", "0.00"],
+      ["INV-0004", "100.01", "165.01", "162.02", "3.00", "-0.01"],
     ]);
     expect(await posted(paid.journalId)).toEqual([
       ["1000", "330.03", "0.00"],
       ["1100", "0.00", "160.02", "USD 100.01 carrying_value"],
       ["7020", "0.00", "5.00"],
       ["1100", "0.00", "162.02", "USD 100.01 carrying_value"],
-      ["7020", "0.00", "2.99"],
+      ["7020", "0.00", "3.00"],
+      ["7050", "0.01", "0.00"],
     ]);
     for (const id of [third.id, fourth.id]) {
       expect(await run((tx) => getInvoice(tx, id))).toMatchObject({ paidStatus: "paid", amountDue: "0.00", amountDueBase: "0.00" });
@@ -494,7 +507,7 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
     expect(typed.invoice).toMatchObject({ exchangeRate: "1.58", baseTotal: "15.80" });
   });
 
-  it("MC26: a USD repeating invoice saves USD drafts, each at a rate for its date; approving automatically is refused", async () => {
+  it("MC26: a USD repeating invoice makes USD invoices at a rate for their date; with no rate in the exchange rates list, left as drafts", async () => {
     const template = (saveAs: string) =>
       run((tx) =>
         createRepeatingInvoice(tx, {
@@ -510,14 +523,17 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
           saveAs,
         }),
       );
-    await expect(template("approve")).rejects.toThrow(/Repeating invoices in USD can only be saved as drafts for now \(refused rather than guessed\)/);
-    const { repeatingInvoice } = await template("draft");
-    expect(repeatingInvoice).toMatchObject({ currencyCode: "USD", total: "100.00" });
+    // Saved as "approve" (MC52); the list has no USD rate, so the invoice is left as a draft, saying why.
+    const { repeatingInvoice } = await template("approve");
+    expect(repeatingInvoice).toMatchObject({ currencyCode: "USD", total: "100.00", saveAs: "approve" });
     const before = await journalCount();
     const result = await inOrganisation(ORG, { userId: null, email: "repeating-invoices@tohyee" }, (tx) =>
       runRepeatingInvoices(tx, { today: "2026-08-31", repeatingInvoiceId: repeatingInvoice.id }),
     );
-    expect(result).toMatchObject({ made: 1, failed: 0 });
+    expect(result).toEqual({ made: 1, approved: 0, refused: 1, failed: 0 });
+    expect((await run((tx) => getRepeatingInvoice(tx, repeatingInvoice.id))).runs[0].message).toMatch(
+      /^Left as a draft: The exchange rates list has no USD rate effective on or before 2026-08-31, so this invoice took the last USD rate used \(1\.6\)/,
+    );
     const made = (await run((tx) => tx.query<{ id: string }>("select invoice_id::text as id from repeating_invoice_runs where repeating_invoice_id = $1", [repeatingInvoice.id])))
       .rows[0].id;
     // The last USD rate used on or before 31 Aug is 1.60 (MC25's approved invoice; the 1.58 one is still a draft, which posts nothing).
@@ -525,7 +541,7 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
     expect(await journalCount()).toBe(before);
   });
 
-  it("MC27: a USD repeating bill saves USD drafts at a rate for their date", async () => {
+  it("MC27: a USD repeating bill makes USD bills at a rate for their date; with no rate in the list, left as drafts", async () => {
     const template = (saveAs: string) =>
       run((tx) =>
         createRepeatingBill(tx, {
@@ -542,13 +558,12 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
           saveAs,
         }),
       );
-    await expect(template("approve")).rejects.toThrow(/Repeating bills in USD can only be saved as drafts for now/);
-    const { repeatingBill } = await template("draft");
+    const { repeatingBill } = await template("approve");
     expect(repeatingBill.currencyCode).toBe("USD");
     const result = await inOrganisation(ORG, { userId: null, email: "repeating-bills@tohyee" }, (tx) =>
       runRepeatingBills(tx, { today: "2026-08-31", repeatingBillId: repeatingBill.id }),
     );
-    expect(result).toMatchObject({ made: 1, failed: 0 });
+    expect(result).toEqual({ made: 1, approved: 0, refused: 1, failed: 0 });
     const made = (await run((tx) => tx.query<{ id: string }>("select bill_id::text as id from repeating_bill_runs where repeating_bill_id = $1", [repeatingBill.id]))).rows[0].id;
     expect(await run((tx) => getBill(tx, made))).toMatchObject({ status: "draft", billDate: "2026-08-31", currencyCode: "USD", exchangeRate: "1.6", baseTotal: "64.00" });
   });

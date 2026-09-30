@@ -169,7 +169,7 @@ describeWithDatabase("multi-currency invoices and bills", () => {
     expect(approved).toMatchObject({ invoiceNumber: "INV-0002", exchangeRate: "1.6543", baseTotal: "827.15" });
   });
 
-  it("MC4: each line is converted on its own (as NetSuite does); paying at the same rate leaves a cent of realised loss", async () => {
+  it("MC4: each line is converted on its own (as NetSuite does); paying at the same rate leaves a cent of rounding loss on 7050", async () => {
     const approved = await invoice("INV-0003", acme.id, "2026-07-12", [line("A", "10.01"), line("B", "10.01"), line("C", "10.01")], { exchangeRate: "1.5" });
     expect(approved).toMatchObject({ total: "30.03", baseTotal: "45.06" });
     expect(approved.lines.map((entry) => entry.baseNetAmount)).toEqual(["15.02", "15.02", "15.02"]);
@@ -178,11 +178,12 @@ describeWithDatabase("multi-currency invoices and bills", () => {
       ["4000", "0.00", "45.06"],
     ]);
     const { payment, invoice: paid } = await pay(approved.id, "2026-07-12", "30.03", "1000", "1.5");
-    expect(payment).toMatchObject({ exchangeRate: "1.5", baseAmount: "45.05", baseCleared: "45.06", realisedGain: "-0.01" });
+    // The same rate, so no realised gain or loss ((1.5 - 1.5) x 30.03 = 0.00): the cent is rounding (MC31).
+    expect(payment).toMatchObject({ exchangeRate: "1.5", baseAmount: "45.05", baseCleared: "45.06", realisedGain: "0.00", roundingGain: "-0.01" });
     expect(await posted(payment.journalId)).toEqual([
       ["1000", "45.05", "0.00"],
       ["1100", "0.00", "45.06", "USD 30.03 carrying_value"],
-      ["7020", "0.01", "0.00"],
+      ["7050", "0.01", "0.00"],
     ]);
     expect(paid).toMatchObject({ paidStatus: "paid", amountDue: "0.00", amountDueBase: "0.00" });
   });
@@ -358,7 +359,7 @@ describeWithDatabase("multi-currency invoices and bills", () => {
   it("MC11: what's refused rather than guessed", async () => {
     const refusedFor = /for customers in a currency other than NZD isn't supported yet \(refused rather than guessed\)/;
     // Quotes, repeating documents and purchase orders for USD contacts are built (MC25-MC28). An invoice for a USD
-    // customer made any other way but entering it directly (a project's or the CRM's) is still refused.
+    // customer made by a path that doesn't say it handles foreign currency is still refused (projects and the CRM do: MC64, MC69).
     await expect(
       run((tx) =>
         createInvoice(tx, { idempotencyKey: key("inv"), contactId: acme.id, invoiceDate: "2026-07-30", dueDate: "2026-08-20", amountsMode: "exclusive", lines: [line("X", "1.00")], exchangeRate: "1.6" }),
@@ -448,6 +449,12 @@ describeWithDatabase("multi-currency invoices and bills", () => {
       ["1100", "USD", "1900.00", "3040.00", "3078.00", "38.00"],
       ["2000", "USD", "50.00", "83.00", "81.00", "-2.00"],
     ]);
+    // Receivables and payables are revalued document by document (MC39): (1.62 - 1.60) x 1,900.00 and (1.62 - 1.66) x 50.00.
+    expect(fx.items.map((item) => item.documents.map((doc) => [doc.documentNumber, doc.foreignAmount, doc.documentRate, doc.deltaAmount]))).toEqual([
+      [],
+      [["INV-0005", "1900.00", "1.6", "38.00"]],
+      [["AWS-7", "50.00", "1.66", "-2.00"]],
+    ]);
     expect(await posted(fx.revaluationJournalId)).toEqual([
       ["1030", "0.00", "20.00", "USD 0.00 revaluation"],
       ["7010", "20.00", "0.00"],
@@ -502,8 +509,9 @@ describeWithDatabase("multi-currency invoices and bills", () => {
     const tb = await run((tx) => trialBalance(tx, { asAt: "2026-08-31" }));
     expect(tb.balanced).toBe(true);
     const row = (code: string) => tb.rows.find((entry) => entry.code === code);
-    // -14.30 - 0.01 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50
-    expect(row("7020")).toMatchObject({ debit: "18.76", credit: "0.00" });
+    // -14.30 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50; MC4's cent is rounding, on 7050.
+    expect(row("7020")).toMatchObject({ debit: "18.75", credit: "0.00" });
+    expect(row("7050")).toMatchObject({ debit: "0.01", credit: "0.00" });
     expect(row("7000")).toBeUndefined();
     expect(row("7010")).toBeUndefined();
     expect(row("1100")).toMatchObject({ debit: "3155.00" });

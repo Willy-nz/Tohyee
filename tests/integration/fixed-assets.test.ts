@@ -300,6 +300,8 @@ describeWithDatabase("fixed assets", () => {
         { code: "7030", name: "Donations", system_key: null },
         { code: "7031", name: "Gain or loss on disposal of fixed assets", system_key: "fixed_asset_disposal" },
         { code: "7040", name: "Capital gains on disposal of fixed assets", system_key: "fixed_asset_capital_gain" },
+        // Added later by migration 0045 (rounding gains and losses, MC31).
+        { code: "7050", name: "Rounding gains and losses", system_key: "fx_rounding" },
       ]);
       expect((await client.query("select fixed_asset_first_month, fixed_asset_disposal_month from organisation_settings")).rows).toEqual([
         { fixed_asset_first_month: "full_month", fixed_asset_disposal_month: "exclude" },

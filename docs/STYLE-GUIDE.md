@@ -13,7 +13,7 @@
 - `src/app/operations/**`: screens. Client components talk to the API with
   `api()` from `src/lib/client/api.ts`.
 - Code that runs in the browser may import **types** from server modules, but
-  **values** only from browser-safe modules (`money/decimal`, `money/currency`, `money/fx`,
+  **values** only from browser-safe modules (`money/decimal`, `money/currency`, `money/fx`, `fx/rate-text`,
   `accounts/types`, `auth/roles`, `tax/categories`, `invoices/amounts`,
   `bills/accounts`, `customers/terms`, `repeating/schedule`, `repeating/bill-rules`, `reports/gst-boxes`, `items/pricing`, `budgets/fill`, `fixed-assets/depreciation`, `projects/amounts`, `import/fields`, `financial-year`, `format`, `errors`, `documents/format`,
   `documents/tax-invoice`, `email/addresses`, `email/templates`).

@@ -1,5 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
-import { assertForeignTemplateSavesDrafts } from "@/lib/fx/documents";
+import { assertListedRateForRepeating } from "@/lib/fx/documents";
 import { keptCustom, parseCustomInput } from "@/lib/custom-fields/service";
 import type { CustomValues } from "@/lib/custom-fields/values";
 import { dueDateFromTerms } from "@/lib/customers/service";
@@ -362,7 +362,6 @@ export async function createRepeatingInvoice(
   }
   await checkDueRule(tx, parsed);
   const resolved = await resolveFor(tx, parsed.draft);
-  assertForeignTemplateSavesDrafts(tx.baseCurrency, resolved.currencyCode, parsed.saveAs, "invoice");
   const inserted = await tx.query<{ id: string }>(
     `insert into repeating_invoices (command_source, idempotency_key, request_hash, contact_id, reference, amounts_mode, currency_code,
                                      subtotal, tax_total, total, custom_fields, salesperson_id, period, every, start_date, end_date,
@@ -424,7 +423,6 @@ export async function updateRepeatingInvoice(tx: OrgTx, idInput: unknown, input:
   const parsed = parseTemplate(merged);
   await checkDueRule(tx, parsed);
   const resolved = await resolveFor(tx, parsed.draft, current);
-  assertForeignTemplateSavesDrafts(tx.baseCurrency, resolved.currencyCode, parsed.saveAs, "invoice");
   const { scheduleChanged, resumedFrom } = resumedAfterChange(current, parsed, today);
   await tx.query(
     `update repeating_invoices
@@ -511,11 +509,14 @@ const INVOICES: RepeatingKind<RepeatingInvoice> = {
       lines: linesAsSent(template.lines),
       customFields: template.customFields,
       salespersonId: template.salespersonId,
-      // In the template's currency (MC26), at the last rate used on or before the date (MC3).
+      // In the template's currency (MC26), at the list's rate for the date (MC48), else the last rate used (MC3).
     }, { foreignCurrency: true, feature: "Repeating invoices" });
     return made.invoice.id;
   },
   async approve(tx, template, date, invoiceId) {
+    // In another currency, only at a rate from the exchange rates list (MC51); otherwise left as a draft.
+    const rate = (await tx.query<{ exchange_rate: string | null }>("select exchange_rate::text from sales_invoices where id = $1", [invoiceId])).rows[0]?.exchange_rate ?? null;
+    await assertListedRateForRepeating(tx, { currencyCode: template.currencyCode, date, exchangeRate: rate, document: "invoice" });
     const approved = await approveInvoice(tx, invoiceId, { source: "repeating", idempotencyKey: `repeating-${template.id}-${date}-approve` });
     return approved.creditWarning ? `Approved over the credit limit: ${approved.creditWarning}` : null;
   },

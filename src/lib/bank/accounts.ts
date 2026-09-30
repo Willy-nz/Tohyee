@@ -5,7 +5,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import type { ParsedStatementLine } from "@/lib/bank/formats/common";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
-import { convertAtRate, foreignAccountState, type ForeignOpeningBalance, lastRateOnOrBefore, ratesUsed, type RateUsed } from "@/lib/ledger/foreign";
+import { convertAtRate, foreignAccountState, type ForeignOpeningBalance, defaultRates, lastRateOnOrBefore, type RateUsed } from "@/lib/ledger/foreign";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, dec, mulDiv, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { optionalString, requireId, requireOneOf } from "@/lib/validation";
@@ -507,7 +507,7 @@ function toStatementLine(row: StatementLineRow, baseCurrency: string): Statement
 async function withBaseAmounts(tx: OrgTx, lines: StatementLine[]): Promise<StatementLine[]> {
   const foreign = lines.filter((line) => line.currencyCode !== tx.baseCurrency);
   if (foreign.length === 0) return lines;
-  const rates = await ratesUsed(tx, foreign.map((line) => line.currencyCode));
+  const rates = await defaultRates(tx, foreign.map((line) => line.currencyCode));
   const baseScale = currencyMinorUnits(tx.baseCurrency);
   for (const line of foreign) {
     line.suggestedRate = lastRateOnOrBefore(rates.get(line.currencyCode), line.date);
