@@ -41,6 +41,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ quotes, quote_lines, quote_numbering   quotes (post nothing; accepting makes a draft invoice)
 ├─ repeating_invoices, repeating_invoice_lines   repeating invoice templates (post nothing)
 ├─ repeating_invoice_runs   one row per scheduled date made (unique), so a date is never made twice
+├─ repeating_bills, repeating_bill_lines, repeating_bill_runs   repeating bill templates and the bills they made (the same rules)
 ├─ customer_payments      money received against sales invoices (with any overpayment)
 ├─ customer_overpayment_applications   overpayments applied to other sales invoices
 ├─ customer_overpayment_refunds        overpayments paid back to customers
@@ -229,8 +230,8 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices and purchase orders, projects (with profitability, the time report and staff cost rates); print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add notes and files, and edit, delete or remove their own |
+| viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices, repeating bills and purchase orders, projects (with profitability, the time report and staff cost rates); print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
+| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add notes and files, and edit, delete or remove their own |
 | admin | + approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, period locks, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -766,15 +767,19 @@ account and shown on its Bank feed tab, and the next run tries again. It makes
 no network calls inside a database transaction and re-resolves each
 organisation from the registry.
 
-The repeating invoices job (`src/lib/repeating/scheduler.ts`, started from
-`src/instrumentation.ts`; `TOHYEE_REPEATING_INVOICES_SCHEDULER=off` stops
-it) runs two minutes after start-up and then hourly: for each ready
+The repeating invoices and bills job (`src/lib/repeating/scheduler.ts`,
+started from `src/instrumentation.ts`; `TOHYEE_REPEATING_INVOICES_SCHEDULER=off`
+stops both) runs two minutes after start-up and then hourly: for each ready
 organisation, each active template runs in its own transaction and makes
-every scheduled date up to today not yet made (examples RI1-RI10). Each date
-made is a row in `repeating_invoice_runs`, unique on (template, date), and
-the template row is locked while it runs, so overlapping runs, restarts or
-a second server process never make a date twice. An error is kept on the
-template and that date is tried again next run. No network calls.
+every scheduled date up to today not yet made (examples RI1-RI10,
+RB1-RB10). The rules live once in `src/lib/repeating/runner.ts`; each
+document type is a `RepeatingKind` that says how to make and approve one
+(`service.ts` for invoices, `bills.ts` for bills). Each date made is a row
+in `repeating_invoice_runs` or `repeating_bill_runs`, unique on (template,
+date), and the template row is locked while it runs, so overlapping runs,
+restarts or a second server process never make a date twice. An error is
+kept on the template and that date is tried again next run. No network
+calls.
 
 The email job (`src/lib/email/outbox.ts`, started from
 `src/instrumentation.ts`; `TOHYEE_EMAIL_OUTBOX=off` stops it) sends the

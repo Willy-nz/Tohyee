@@ -16,7 +16,8 @@
  * And the CRM mail sync, which syncs connected Gmail and Microsoft 365
  * mailboxes every 15 minutes (off with TOHYEE_MAIL_SYNC_SCHEDULER=off).
  *
- * And the repeating invoices job, which makes due invoices every hour
+ * And the repeating invoices and bills job, which makes due invoices and
+ * bills every hour
  * (off with TOHYEE_REPEATING_INVOICES_SCHEDULER=off).
  *
  * And the email job, which sends queued invoices, quotes, statements and

@@ -56,7 +56,7 @@ people working on the code.
   email account.
 
 **Purchases**
-- Bills, supplier credit notes, purchase orders billed in parts, paying one or
+- Bills, repeating bills, supplier credit notes, purchase orders billed in parts, paying one or
   several bills at once, and expense claims.
 
 **Bank**

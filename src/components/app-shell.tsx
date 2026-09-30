@@ -70,6 +70,7 @@ const MENUS: Menu[] = [
           { href: "/operations/bills", label: "Bills" },
           { href: "/operations/bills?show=awaiting", label: "Awaiting payment" },
           { href: "/operations/purchase-orders", label: "Purchase orders" },
+          { href: "/operations/repeating-bills", label: "Repeating bills" },
           { href: "/operations/supplier-credit-notes", label: "Supplier credit notes" },
           { href: "/operations/supplier-payments", label: "Payments for several bills" },
           { href: "/operations/expense-claims", label: "Expense claims" },
@@ -207,7 +208,7 @@ const AREAS: Record<string, string[]> = {
     "/operations/customer-payments",
     "/operations/projects",
   ],
-  Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/supplier-credit-notes", "/operations/supplier-payments", "/operations/expense-claims"],
+  Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/repeating-bills", "/operations/supplier-credit-notes", "/operations/supplier-payments", "/operations/expense-claims"],
   Reporting: ["/operations/reports", "/operations/budgets", "/operations/project-reports"],
   Accounting: [
     "/operations/bank-accounts",

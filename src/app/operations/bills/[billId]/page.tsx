@@ -227,7 +227,11 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
   const customSetup = useCustomFields(organisationId);
   const { can } = useWorkspace();
   const router = useRouter();
-  const details = useApiData<{ bill: Bill; creditApplied: SupplierCreditNoteApplication[] }>(
+  const details = useApiData<{
+    bill: Bill;
+    creditApplied: SupplierCreditNoteApplication[];
+    fromRepeating: { id: string; scheduledDate: string } | null;
+  }>(
     `/api/bills/${encodeURIComponent(billId)}`,
     { organisationId },
   );
@@ -250,7 +254,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
   }
   const bill = updated ?? details.data.bill;
   const hasTax = bill.amountsMode !== "no_tax";
-  const { creditApplied } = details.data;
+  const { creditApplied, fromRepeating } = details.data;
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
@@ -285,6 +289,11 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
         {bill.purchaseOrderId ? (
           <div>
             From purchase order <Link href={`/operations/purchase-orders/${bill.purchaseOrderId}`}>{bill.purchaseOrderNumber}</Link>.
+          </div>
+        ) : null}
+        {fromRepeating ? (
+          <div>
+            Made by a <Link href={`/operations/repeating-bills/${fromRepeating.id}`}>repeating bill</Link> for {formatDate(fromRepeating.scheduledDate)}.
           </div>
         ) : null}
         <CustomValuesText setup={customSetup.data} values={bill.customFields} />

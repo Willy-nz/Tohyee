@@ -42,6 +42,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/customer-statements.test.ts` (CST1-CST5) and
   `tests/integration/quotes.test.ts` (QT1-QT8) and
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
+  `tests/integration/repeating-bills.test.ts` (RB1-RB10) and
   `tests/integration/printed-documents.test.ts` (PD1-PD8) and
   `tests/integration/purchase-orders.test.ts` (PO1-PO9) and
   `tests/integration/stock-transfers.test.ts` (TR1-TR6) and
@@ -55,7 +56,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/import.test.ts` (IM1-IM16), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
-  repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
+  repeating dates (RI1, RI5, RI6), `tests/unit/repeating-bill-rules.test.ts`
+  the repeating bill numbers and due dates (RB1-RB3) and `tests/unit/tax-invoice.test.ts` what
   a printed document is headed and shows (QT5, PD3-PD7), and
   `tests/unit/fixed-asset-depreciation.test.ts` the depreciation and
   disposal maths (FA3, FA4, FA6-FA10), and `tests/unit/project-amounts.test.ts`
@@ -3167,6 +3169,123 @@ is **115.00**.
   months cover them except daily.
 - Placeholders in descriptions (Xero's [Month] [Year]).
 - Foreign-currency templates.
+
+## Repeating bills (examples not yet approved by Jess)
+
+Written from Xero's repeating bills (and NetSuite's memorized bills); Jess
+hasn't approved them yet. The purchases twin of repeating invoices, made by
+the same scheduler (`src/lib/repeating/runner.ts`), so the dates, the hourly
+job, "Run now", catching up missed dates, pause, resume and end work exactly
+as in RI1-RI10. A **template** holds a supplier, bill lines (the bill line
+rules: B1-B4, items fill the supplier's price as in IT6, stock items as in
+ST1), a **supplier invoice number pattern**, a **due date rule**, how often,
+a start date, an optional end date, and whether each bill is **saved as a
+draft** or **approved**. Templates post nothing; approved bills post as in
+B1, and **nothing is ever paid automatically**.
+
+- **Supplier invoice numbers**: every bill needs one, and a supplier can't
+  have two bills that aren't voided with the same number (B5). So the
+  template holds a pattern: **{date}** becomes the bill date (2026-01-31),
+  **{month}** its month (2026-01) and **{n}** the bill's number in the
+  template's history (1, 2, 3...; history rows are never deleted, so it
+  never repeats). A pattern needs {date} or {n}, or {month} on a monthly
+  schedule; otherwise it's refused. If the supplier already has a bill with
+  the number (perhaps the same bill entered by hand), the bill isn't made:
+  the template shows the error and tries that date again next run.
+- **Due dates**: suppliers have no payment terms in Tohyee, so the rule is
+  one of Xero's bill rules: N days after the bill date, N days after the
+  end of the bill's month, or day N (1-31) of the following month (a day the
+  month doesn't have becomes its last day).
+- **Stock items** are allowed, as on any bill. Once locations are in use
+  each stock line needs a Location, checked when the template is saved.
+  Approving moves the stock in (ST1); if the approval is refused (e.g.
+  stock has moved after that date), the bill is left as a draft with the
+  reason, as for any refused approval.
+- **Approve automatically** approves each bill as a person would: period
+  locks, required tracking and custom fields and stock rules apply. A
+  refused approval leaves the draft and records why in the history.
+
+Setup (GST 15%): supplier Harbour Property Ltd; the template has one line,
+1 x Office rent at **1,000.00** tax exclusive (GST) to 6150 Rent, supplier
+invoice number **RENT-{month}**, monthly from **31 Jan 2026**, due the
+**20th of the following month**, saved as drafts, so each bill is
+**1,150.00**.
+
+- **RB1** Saving the template posts nothing and makes no bill; its next
+  bill is 31 Jan 2026, numbered **RENT-2026-01**. A pattern with no
+  placeholder ("RENT"), {month} on a weekly schedule, due day 0 of the
+  following month, and a contact that's only a customer are refused.
+- **RB2** The job run on 5 Mar 2026 makes two draft bills: **31 Jan**,
+  **RENT-2026-01**, due **20 Feb**; and **28 Feb**, **RENT-2026-02**, due
+  **20 Mar**; each 1,000.00 + GST 150.00 = **1,150.00** to 6150. Nothing is
+  posted. Each bill links back to the template and date; the next is
+  **31 Mar 2026, RENT-2026-03**.
+- **RB3** Pattern **Invoice {n}**, due **30 days after** the bill date:
+  31 Jan is **Invoice 1** due **2 Mar 2026**, 28 Feb is **Invoice 2** due
+  **30 Mar 2026**. Southern Cleaning, 1 x 46.00 tax inclusive to 6030,
+  pattern **SC {date}**, due **7 days after the end of the bill month**:
+  **SC 2026-01-31** due **7 Feb**, **SC 2026-02-28** due **7 Mar**, each
+  **46.00** (GST 6.00, as B2).
+- **RB4** Running again on 5 Mar makes nothing; two runs at once on 31 Mar
+  make just RENT-2026-03. With a second template for Old Landlord (since
+  archived), the hourly job run on 5 Mar makes Harbour's two bills and
+  records "Old Landlord is archived..." on the other; running again makes
+  nothing more.
+- **RB5** Approve automatically: run on 5 Mar 2026, RENT-2026-01 and
+  RENT-2026-02 are approved, each posting **Dr 6150 1,000.00 / Dr 2100
+  150.00 / Cr 2000 1,150.00** on its own date (31 Jan, 28 Feb). Each is
+  **unpaid** with **1,150.00** due; no supplier payment is recorded.
+- **RB6** Changing the unit price to 1,050.00 on 5 Mar makes the 31 Mar
+  bill **1,207.50** (1,050.00 + GST 157.50); the January and February bills
+  keep 1,150.00.
+- **RB7** Stock (Advanced features on, location Dunedin): Paw Supplies'
+  price for WIDGET is 4.80. A template of 10 x WIDGET, pattern **PS-{n}**,
+  monthly from 15 Jan 2026, due 20 days after, approved: without a Location
+  it's refused ("WIDGET is a stock item, so it needs a Location"); at
+  Dunedin the item fills 4.80 and 1400, so the line is **48.00**. Run on
+  20 Feb 2026: **PS-1** (15 Jan, due 4 Feb) and **PS-2** (15 Feb, due
+  7 Mar), each **Dr 1400 48.00 / Dr 2100 7.20 / Cr 2000 55.20**; WIDGET at
+  Dunedin is **20** units worth **96.00**, equal to 1400.
+- **RB8** Paused on 5 Mar: a run on 5 May makes nothing. Resumed on 10 May:
+  the next is **31 May 2026, RENT-2026-05**; March and April are never
+  made. Ended: nothing more is made, and changing or resuming it is refused.
+  Every 2 weeks from 5 Jan 2026 to 2 Feb 2026 with pattern **W{n}**: run on
+  10 Feb makes **W1, W2, W3** (5 Jan, 19 Jan, 2 Feb) and the template ends
+  itself.
+- **RB9** Approve automatically with the period locked to 31 Jan 2026: run
+  on 5 Mar, RENT-2026-01 is **left as a draft** with "Left as a draft:
+  2026-01-31 is in a locked period..." in the history, and RENT-2026-02 is
+  approved. Separately, with a draft bill from Harbour numbered
+  **rent-2026-01** typed by hand: the run makes nothing, and the template
+  shows "2026-01-31: Harbour Property Ltd already has a bill with the
+  invoice number rent-2026-01..." and stays at 31 Jan. Once that bill is
+  deleted, the next run makes and approves both.
+- **RB10** With pattern **R{n}**, deleting the 31 Jan draft (R1) keeps the
+  history line (shown as deleted), 31 Jan isn't made again, and the 28 Feb
+  bill is **R2**. A draft made by a template can be approved by hand like
+  any other. A viewer can't run a template.
+
+### Not supported yet (refused rather than guessed)
+
+- Paying bills automatically (Xero doesn't either); approved bills wait in
+  "Awaiting payment" like any other.
+- Bills made from a purchase order, foreign-currency templates, and daily,
+  yearly or "day N of the current month" rules.
+- Placeholders in line descriptions (Xero's [Month] [Year]).
+
+### Questions for Jess (repeating bills)
+
+- Supplier invoice numbers: is a pattern with {date}, {month} or {n} the
+  right way to meet "one number per supplier" (Xero doesn't insist on
+  unique bill references), or should repeating bills be allowed to leave the
+  number blank on drafts, to be typed from the supplier's real invoice
+  before approving?
+- When the number is already taken by a bill entered by hand, the template
+  stops at that date (it may be the same bill). Should it skip that date
+  instead, or make the bill with a suffix?
+- Suppliers have no payment terms in Tohyee (only customers do), so each
+  template has its own due rule. Should suppliers get payment terms, which
+  bills and repeating bills would then use?
 
 ## Printed invoices, credit notes and quotes (examples not yet approved by Jess)
 

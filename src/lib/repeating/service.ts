@@ -4,7 +4,7 @@ import type { CustomValues } from "@/lib/custom-fields/values";
 import { dueDateFromTerms } from "@/lib/customers/service";
 import { parseIsoDate, parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import type { Actor, OrgTx } from "@/lib/db/org-transaction";
-import { ConflictError, HttpError, NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { AMOUNTS_MODES, type AmountsMode } from "@/lib/invoices/amounts";
 import {
@@ -20,7 +20,25 @@ import {
   type ResolvedSalesDraft,
   type SalesDraft,
 } from "@/lib/invoices/service";
-import { datesBetween, nextDate, REPEAT_PERIODS, type RepeatPeriod } from "@/lib/repeating/schedule";
+import {
+  assertNotEnded,
+  firstPending as firstPendingDate,
+  listDueTemplateIds,
+  lockTemplate as lockAny,
+  parseWhole,
+  REPEATING_STATUSES,
+  type RepeatingKind,
+  type RepeatingStatus,
+  resumedAfterChange,
+  type RunOutcome,
+  type RunResult,
+  runTemplates,
+  SAVE_AS,
+  type SaveAs,
+  setTemplateStatus,
+  templateForDocument,
+} from "@/lib/repeating/runner";
+import { nextDate, REPEAT_PERIODS, type RepeatPeriod } from "@/lib/repeating/schedule";
 import { parseSalespersonInput } from "@/lib/salespeople/service";
 import { keptValues } from "@/lib/tracking/service";
 import { optionalId, optionalSource, optionalString, requireId, requireIdempotencyKey, requireOneOf } from "@/lib/validation";
@@ -35,17 +53,10 @@ import { optionalId, optionalSource, optionalString, requireId, requireIdempoten
  * (unique), so running twice never makes two, and missed dates are caught up
  * in order. Templates post nothing; the invoices post when approved.
  */
-export const REPEATING_STATUSES = ["active", "paused", "ended"] as const;
-export type RepeatingStatus = (typeof REPEATING_STATUSES)[number];
+export { REPEATING_STATUSES, SAVE_AS };
+export type { RepeatingStatus, RunResult, SaveAs } from "@/lib/repeating/runner";
 export const DUE_RULES = ["terms", "days_after"] as const;
 export type DueRule = (typeof DUE_RULES)[number];
-export const SAVE_AS = ["draft", "approve"] as const;
-export type SaveAs = (typeof SAVE_AS)[number];
-
-/** Who the background job acts as in the audit trail and on the invoices it makes. */
-export const REPEATING_ACTOR: Actor = { userId: null, email: "repeating-invoices@tohyee" };
-/** At most this many dates are made per template in one run (the rest next run). */
-const MAX_DATES_PER_RUN = 60;
 
 export type RepeatingRun = {
   id: string;
@@ -53,7 +64,7 @@ export type RepeatingRun = {
   invoiceId: string | null;
   invoiceNumber: string | null;
   invoiceDeleted: boolean;
-  outcome: "draft" | "approved" | "approval_refused";
+  outcome: RunOutcome;
   message: string | null;
   createdByEmail: string | null;
   createdAt: string;
@@ -142,13 +153,7 @@ const SUMMARY_SQL = `select r.*, c.name as contact_name,
 
 /** The first date still to be made: after the last one made, and not before a resume (RI7). */
 function firstPending(row: Pick<Row, "start_date" | "resumed_from" | "last_run">): string {
-  let from = row.start_date;
-  if (row.resumed_from && row.resumed_from > from) from = row.resumed_from;
-  if (row.last_run) {
-    const after = new Date(Date.parse(`${row.last_run}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
-    if (after > from) from = after;
-  }
-  return from;
+  return firstPendingDate({ startDate: row.start_date, resumedFrom: row.resumed_from, lastRun: row.last_run });
 }
 
 function toSummary(row: Row): RepeatingInvoiceSummary {
@@ -193,14 +198,6 @@ type Parsed = {
   dueDays: number | null;
   saveAs: SaveAs;
 };
-
-function parseWhole(input: unknown, field: string, min: number, max: number): number {
-  const value = typeof input === "string" && /^\d{1,3}$/.test(input.trim()) ? Number(input.trim()) : input;
-  if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
-    throw new ValidationError(`${field} must be a whole number from ${min} to ${max}.`);
-  }
-  return value;
-}
 
 function parseTemplate(input: RepeatingInput): Parsed {
   const contactId = requireId(input.contactId, "contactId");
@@ -399,13 +396,7 @@ export async function createRepeatingInvoice(
 }
 
 async function lockTemplate(tx: OrgTx, id: string): Promise<RepeatingInvoice> {
-  const locked = await tx.query("select id from repeating_invoices where id = $1 for update", [id]);
-  if (locked.rowCount === 0) throw new NotFoundError("Repeating invoice not found.");
-  return getRepeatingInvoice(tx, id);
-}
-
-function assertNotEnded(template: RepeatingInvoice): void {
-  if (template.status === "ended") throw new ConflictError("This repeating invoice has ended, so it can't be changed. Save a new one instead.");
+  return lockAny(tx, INVOICES, id);
 }
 
 /**
@@ -415,7 +406,7 @@ function assertNotEnded(template: RepeatingInvoice): void {
  */
 export async function updateRepeatingInvoice(tx: OrgTx, idInput: unknown, input: RepeatingInput, today = todayIsoDate()): Promise<RepeatingInvoice> {
   const current = await lockTemplate(tx, requireId(idInput, "repeatingInvoiceId"));
-  assertNotEnded(current);
+  assertNotEnded(INVOICES, current);
   const saved = asSent(current);
   const merged = Object.fromEntries(
     (Object.keys(saved) as Array<keyof RepeatingInput>).map((key) => [key, input[key] === undefined ? saved[key] : input[key]]),
@@ -423,8 +414,7 @@ export async function updateRepeatingInvoice(tx: OrgTx, idInput: unknown, input:
   const parsed = parseTemplate(merged);
   await checkDueRule(tx, parsed);
   const resolved = await resolveFor(tx, parsed.draft, current);
-  const scheduleChanged = parsed.period !== current.period || parsed.every !== current.every || parsed.startDate !== current.startDate;
-  const resumedFrom = scheduleChanged && current.runs.length > 0 ? (current.resumedFrom && current.resumedFrom > today ? current.resumedFrom : today) : current.resumedFrom;
+  const { scheduleChanged, resumedFrom } = resumedAfterChange(current, parsed, today);
   await tx.query(
     `update repeating_invoices
         set contact_id = $2, reference = $3, amounts_mode = $4, currency_code = $5, subtotal = $6::numeric, tax_total = $7::numeric,
@@ -474,151 +464,78 @@ export async function setRepeatingStatus(
   statusInput: unknown,
   today = todayIsoDate(),
 ): Promise<RepeatingInvoice> {
-  const status = requireOneOf(statusInput, "status", REPEATING_STATUSES);
-  const current = await lockTemplate(tx, requireId(idInput, "repeatingInvoiceId"));
-  assertNotEnded(current);
-  if (current.status === status) return current;
-  const resumedFrom = status === "active" ? today : current.resumedFrom;
-  await tx.query("update repeating_invoices set status = $2, resumed_from = $3, updated_at = now() where id = $1", [current.id, status, resumedFrom]);
-  await writeAuditEvent(tx, {
-    eventType: `repeating_invoice.${status === "active" ? "resumed" : status}`,
-    entityType: "repeating_invoice",
-    entityId: current.id,
-    details: { from: current.status, to: status },
-  });
-  return getRepeatingInvoice(tx, current.id);
+  return setTemplateStatus(tx, INVOICES, requireId(idInput, "repeatingInvoiceId"), statusInput, today);
 }
 
-export type RunResult = { made: number; approved: number; refused: number; failed: number };
+/**
+ * How the shared scheduler (`./runner`) makes repeating invoices (RI2-RI6,
+ * RI9): each date gets a draft invoice dated that day, due by the customer's
+ * terms or N days after; with "approve" it's then approved as a person would
+ * (period locks, the credit limit, required fields).
+ */
+const INVOICES: RepeatingKind<RepeatingInvoice> = {
+  table: "repeating_invoices",
+  runsTable: "repeating_invoice_runs",
+  templateColumn: "repeating_invoice_id",
+  documentColumn: "invoice_id",
+  entityType: "repeating_invoice",
+  label: "repeating invoice",
+  documentNoun: "invoice",
+  actor: { userId: null, email: "repeating-invoices@tohyee" },
+  get: (tx, id) => getRepeatingInvoice(tx, id),
+  async make(tx, template, date) {
+    const dueDate =
+      template.dueRule === "terms"
+        ? await dueDateFromTerms(tx, template.contactId, date)
+        : new Date(Date.parse(`${date}T00:00:00Z`) + (template.dueDays ?? 0) * 86_400_000).toISOString().slice(0, 10);
+    if (dueDate === null) throw new ValidationError("The customer no longer has payment terms, so the due date can't be worked out. Edit the template.");
+    const made = await createInvoice(tx, {
+      source: "repeating",
+      idempotencyKey: `repeating-${template.id}-${date}`,
+      contactId: template.contactId,
+      invoiceDate: date,
+      dueDate,
+      reference: template.reference,
+      amountsMode: template.amountsMode,
+      lines: linesAsSent(template.lines),
+      customFields: template.customFields,
+      salespersonId: template.salespersonId,
+    });
+    return made.invoice.id;
+  },
+  async approve(tx, template, date, invoiceId) {
+    const approved = await approveInvoice(tx, invoiceId, { source: "repeating", idempotencyKey: `repeating-${template.id}-${date}-approve` });
+    return approved.creditWarning ? `Approved over the credit limit: ${approved.creditWarning}` : null;
+  },
+};
 
-function reason(error: unknown): string {
-  return (error instanceof HttpError ? error.message : "Something went wrong making this invoice; see the server log.").slice(0, 1000);
-}
+/** How the shared scheduler makes repeating invoices, for the hourly job. */
+export const REPEATING_INVOICE_KIND = INVOICES;
+
+/** Who the background job acts as in the audit trail and on the invoices it makes. */
+export const REPEATING_ACTOR: Actor = INVOICES.actor;
 
 /**
  * Makes the invoices that are due (RI2-RI6, RI9): for each active template
  * (or just `repeatingInvoiceId`), every scheduled date up to `today` that
- * hasn't been made yet, oldest first. Each date gets a draft invoice dated
- * that day; with "approve" it's then approved, and a refused approval (a
- * locked period, a credit limit that blocks, a missing required field)
- * leaves the draft and records why on the template's history. If an invoice
- * can't be made at all (say the customer is archived), the template keeps the
- * error and stops at that date until the next run.
+ * hasn't been made yet, oldest first, with the shared scheduler. A refused
+ * approval leaves the draft and records why; an invoice that can't be made
+ * at all (say the customer is archived) stops the template at that date
+ * until the next run.
  */
 export async function runRepeatingInvoices(
   tx: OrgTx,
   options: { today?: string; repeatingInvoiceId?: unknown } = {},
 ): Promise<RunResult> {
-  const today = options.today ?? todayIsoDate();
-  const only = optionalId(options.repeatingInvoiceId, "repeatingInvoiceId");
-  const result: RunResult = { made: 0, approved: 0, refused: 0, failed: 0 };
-  const due = await tx.query<{ id: string }>(
-    "select id from repeating_invoices where status = 'active' and start_date <= $1 and ($2::bigint is null or id = $2) order by id",
-    [today, only],
-  );
-  for (const { id } of due.rows) {
-    // Locking the template makes two runs take turns, and the second sees the first's dates as made (RI3).
-    await tx.query("select id from repeating_invoices where id = $1 for update", [id]);
-    const template = await getRepeatingInvoice(tx, id);
-    if (template.status !== "active") continue;
-    const lastRun = template.runs[0]?.scheduledDate ?? null;
-    const from = firstPending({ start_date: template.startDate, resumed_from: template.resumedFrom, last_run: lastRun });
-    const dates = datesBetween(
-      { period: template.period, every: template.every, startDate: template.startDate, endDate: template.endDate },
-      from,
-      today,
-      MAX_DATES_PER_RUN,
-    );
-    let lastError: string | null = null;
-    for (const date of dates) {
-      await tx.query("savepoint repeating_date");
-      let invoiceId: string;
-      try {
-        const dueDate =
-          template.dueRule === "terms"
-            ? await dueDateFromTerms(tx, template.contactId, date)
-            : new Date(Date.parse(`${date}T00:00:00Z`) + (template.dueDays ?? 0) * 86_400_000).toISOString().slice(0, 10);
-        if (dueDate === null) throw new ValidationError("The customer no longer has payment terms, so the due date can't be worked out. Edit the template.");
-        const made = await createInvoice(tx, {
-          source: "repeating",
-          idempotencyKey: `repeating-${template.id}-${date}`,
-          contactId: template.contactId,
-          invoiceDate: date,
-          dueDate,
-          reference: template.reference,
-          amountsMode: template.amountsMode,
-          lines: linesAsSent(template.lines),
-          customFields: template.customFields,
-          salespersonId: template.salespersonId,
-        });
-        invoiceId = made.invoice.id;
-        await tx.query("release savepoint repeating_date");
-      } catch (error) {
-        await tx.query("rollback to savepoint repeating_date");
-        if (!(error instanceof HttpError)) console.warn(`[tohyee] Repeating invoice ${template.id} on ${date}:`, error);
-        lastError = `${date}: ${reason(error)}`;
-        result.failed += 1;
-        break;
-      }
-      let outcome: RepeatingRun["outcome"] = "draft";
-      let message: string | null = null;
-      if (template.saveAs === "approve") {
-        await tx.query("savepoint repeating_approve");
-        try {
-          const approved = await approveInvoice(tx, invoiceId, { source: "repeating", idempotencyKey: `repeating-${template.id}-${date}-approve` });
-          await tx.query("release savepoint repeating_approve");
-          outcome = "approved";
-          message = approved.creditWarning ? `Approved over the credit limit: ${approved.creditWarning}` : null;
-          result.approved += 1;
-        } catch (error) {
-          await tx.query("rollback to savepoint repeating_approve");
-          if (!(error instanceof HttpError)) console.warn(`[tohyee] Repeating invoice ${template.id} approval on ${date}:`, error);
-          outcome = "approval_refused";
-          message = `Left as a draft: ${reason(error)}`.slice(0, 1000);
-          result.refused += 1;
-        }
-      }
-      await tx.query(
-        `insert into repeating_invoice_runs (repeating_invoice_id, scheduled_date, invoice_id, outcome, message, created_by_email)
-         values ($1, $2, $3, $4, $5, $6)`,
-        [template.id, date, invoiceId, outcome, message, tx.actor.email],
-      );
-      await writeAuditEvent(tx, {
-        eventType: "repeating_invoice.invoice_made",
-        entityType: "repeating_invoice",
-        entityId: template.id,
-        details: { scheduledDate: date, invoiceId, outcome, ...(message ? { message } : {}) },
-      });
-      result.made += 1;
-    }
-    if (lastError !== null || (template.lastError !== null && dates.length > 0)) {
-      await tx.query(
-        `update repeating_invoices set last_error = $2, last_error_at = case when $2::text is null then null else now() end, updated_at = now() where id = $1`,
-        [template.id, lastError],
-      );
-      if (lastError) {
-        await writeAuditEvent(tx, { eventType: "repeating_invoice.failed", entityType: "repeating_invoice", entityId: template.id, details: { error: lastError } });
-      }
-    }
-    // Past the end date with every date made: the template ends itself.
-    if (lastError === null && template.endDate !== null && template.endDate <= today) {
-      const after = await getRepeatingInvoice(tx, template.id);
-      if (after.nextDate === null) {
-        await tx.query("update repeating_invoices set status = 'ended', updated_at = now() where id = $1", [template.id]);
-        await writeAuditEvent(tx, { eventType: "repeating_invoice.ended", entityType: "repeating_invoice", entityId: template.id, details: { reason: "end date reached" } });
-      }
-    }
-  }
-  return result;
+  return runTemplates(tx, INVOICES, { today: options.today, templateId: options.repeatingInvoiceId, idField: "repeatingInvoiceId" });
 }
 
 /** Active templates with a date that may be due by `today`, for the job to run one at a time. */
 export async function listDueRepeatingInvoiceIds(tx: OrgTx, today = todayIsoDate()): Promise<string[]> {
-  const due = await tx.query<{ id: string }>("select id from repeating_invoices where status = 'active' and start_date <= $1 order by id", [today]);
-  return due.rows.map((row) => row.id);
+  return listDueTemplateIds(tx, INVOICES, today);
 }
 
-/** Makes a template's due invoices now, on request ("Run now"), with the same code as the nightly job. */
+/** Makes a template's due invoices now, on request ("Run now"), with the same code as the hourly job. */
 export async function runRepeatingInvoiceNow(tx: OrgTx, idInput: unknown): Promise<{ result: RunResult; repeatingInvoice: RepeatingInvoice }> {
   const id = requireId(idInput, "repeatingInvoiceId");
   const result = await runRepeatingInvoices(tx, { repeatingInvoiceId: id });
@@ -627,10 +544,5 @@ export async function runRepeatingInvoiceNow(tx: OrgTx, idInput: unknown): Promi
 
 /** The template and date that made an invoice (RI2), if any. */
 export async function repeatingForInvoice(tx: OrgTx, invoiceId: string): Promise<{ id: string; scheduledDate: string } | null> {
-  const found = await tx.query<{ id: string; scheduled_date: string }>(
-    "select repeating_invoice_id as id, scheduled_date from repeating_invoice_runs where invoice_id = $1",
-    [invoiceId],
-  );
-  const row = found.rows[0];
-  return row ? { id: row.id, scheduledDate: row.scheduled_date } : null;
+  return templateForDocument(tx, INVOICES, invoiceId);
 }

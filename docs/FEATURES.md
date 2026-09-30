@@ -163,6 +163,19 @@ that something happened.
   (locked period, credit limit, required field) leaves the draft with the
   reason in the template's history. Pause, resume (paused dates are
   skipped) and end.
+- **Repeating bills** (Purchases; RB1-RB10, not yet approved by Jess), like
+  Xero's repeating bills and made by the same scheduler as repeating
+  invoices: a template with a supplier and bill lines (items fill the
+  supplier's price; stock items need a Location once locations are in use),
+  a supplier invoice number pattern with {date}, {month} or {n} so each
+  bill's number is its own, a due date rule (N days after the bill date, N
+  days after the end of its month, or day N of the following month, since
+  suppliers have no payment terms), every N weeks or months, and each bill
+  saved as a draft or approved. The hourly job and "Run now" make each
+  date's bill once, catching up missed dates; a number the supplier already
+  has stops the template at that date with the reason. Pause, resume and
+  end; a history of the bills made, linked both ways. Nothing is paid
+  automatically.
 - **Printed invoices, credit notes and quotes** (PD1-PD8, not yet
   approved): "Print or save as PDF" with the browser's print, showing the
   organisation's name, address and GST number (set in Settings), the
