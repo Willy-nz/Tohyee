@@ -133,12 +133,13 @@ const MENUS: Menu[] = [
           { href: "/operations/fixed-assets", label: "Fixed assets" },
           { href: "/operations/fixed-assets/depreciation", label: "Depreciation" },
           { href: "/operations/fx-revaluation", label: "FX revaluation", minRole: "bookkeeper" },
+          { href: "/operations/period-close", label: "Period close" },
         ],
       },
       {
         heading: "Settings",
         links: [
-          { href: "/operations/settings", label: "Settings and locks", minRole: "admin" },
+          { href: "/operations/settings", label: "Settings", minRole: "admin" },
           { href: "/operations/settings/tracking", label: "Tracking categories", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/custom-fields", label: "Custom fields", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/salespeople", label: "Salespeople", minRole: "admin", module: "reporting" },
@@ -217,6 +218,7 @@ const AREAS: Record<string, string[]> = {
     "/operations/inventory",
     "/operations/fixed-assets",
     "/operations/fx-revaluation",
+    "/operations/period-close",
     "/operations/settings",
     "/operations/members",
   ],

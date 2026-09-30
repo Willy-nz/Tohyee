@@ -52,7 +52,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/bank-quick.test.ts` (BK17-BK25) and
   `tests/integration/bank-split.test.ts` (BK26-BK28) and
   `tests/integration/bank-foreign.test.ts` (FXB1-FXB11) and
-  `tests/integration/import.test.ts` (IM1-IM16), all against
+  `tests/integration/import.test.ts` (IM1-IM16) and
+  `tests/integration/period-close.test.ts` (YE1-YE4, PC1-PC12), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -205,8 +206,10 @@ With a lock date of 31 Mar 2026:
   every date once any lock was set, because it compared a Date object with a
   string.)
 - **L2** 31 Mar 2026 and 10 Feb 2026 are refused.
-- **L3** With an unlock window of 1-28 Feb 2026, 10 Feb 2026 posts and
-  15 Jan 2026 is still refused.
+- **L3** Reopening February (moving the lock to 31 Jan 2026, with a reason;
+  without one it's refused) reopens March too: 10 Feb 2026 posts and
+  15 Jan 2026 is still refused. (The unlock window this used to describe is
+  gone: see "Year end and period close".)
 - **L4** A retry of a journal that was posted before the period was locked
   returns the original journal instead of an error.
 
@@ -1564,11 +1567,13 @@ Date,Amount,Payee,Particulars,Code,Reference,Balance
 
 The financial year ends on the last day of a month chosen in Settings
 (default: 31 March, NZ's standard balance date). There are no year-end closing
-journals; the balance sheet works profit out when it runs.
+journals; the balance sheet works profit out when it runs (see "Year end and
+period close", YE1-YE4).
 
 - **P1** The trial balance always balances; totals of debits = credits.
 - **P2** Balance sheet: assets = liabilities + equity + earnings from previous
-  years + current year earnings. With a 31 March year end, a balance sheet at
+  years + current year earnings (retained earnings is the retained earnings
+  account plus earnings from previous years). With a 31 March year end, a balance sheet at
   31 Dec 2026 counts profit from 1 Apr 2026 as current year earnings. Sales of
   7.00 on 20 Jan and 5.00 on 10 Feb 2026 belong to the year that ended
   31 Mar 2026, so they show as **12.00** of earnings from previous years. With
@@ -4245,7 +4250,8 @@ that have something in them (a blank cell changes nothing); anything else is
 added; nothing is ever deleted or archived. Opening balances (steps 4 and 5)
 are brought in **once**: a second import is refused, and a retry of the
 same request returns the first (IM14). Mistakes found later are corrected
-with a journal after the conversion date (or in an unlock window), or by
+with a journal after the conversion date (or after reopening the period on
+Period close), or by
 voiding an opening invoice or bill.
 
 **How opening balances post (IM6).** The trial balance is posted as one
@@ -4590,3 +4596,237 @@ name), code 3900 (NetSuite doesn't fix a number).
   re-coding Tohyee's account to the other system's code, what you want?
 - Should contacts without customer or supplier columns default to both
   (the screen's default for the other-system preset)?
+
+## Year end and period close (examples not yet approved by Jess)
+
+Written from NetSuite's documentation (Jess's standing rule: follow NetSuite
+for design): "Year-End Closing" (NetSuite closes the year automatically once
+all of its periods are closed, and doesn't post net income to retained
+earnings, "because doing so would zero the past income statements"),
+"Period Close Checklist" (lock, check, then close, period by period) and
+"Reopening a Closed Period" (a justification is required and saved, and any
+later closed periods are reopened automatically). Jess hasn't approved these
+yet. Tests: `tests/integration/period-close.test.ts` (YE1-YE4, PC1-PC12)
+and `tests/unit/financial-year.test.ts` (the month and year dates).
+
+**Retained earnings, without a closing journal.** Nothing is posted at a
+year end. The balance sheet works profit out when it runs (P2):
+
+- **Current year earnings**: income less expenses from the first day of the
+  financial year the balance sheet date is in, to that date.
+- **Retained earnings**: the retained earnings account's own balance (3200
+  in the starting chart; whichever account is marked as retained earnings)
+  plus all profit before the start of that financial year. It's one line;
+  3200 isn't listed separately among the equity accounts.
+
+So a year's profit moves from current year earnings into retained earnings
+on the first day of the next financial year. The profit and loss is
+unchanged (P3), and the **trial balance** lists each account's ledger
+balance as posted: income and expense accounts keep their balances from
+every year (there's no closing journal to clear them), so its equity lines
+plus all profit equal the balance sheet's equity. Custom reports (CR6) keep
+their "Earnings from previous years" row and 3200 in the equity accounts
+group; together they're the same retained earnings.
+
+**Periods.** Periods are calendar months; financial years end on the chosen
+month (Settings). Accounting › Period close lists each financial year with
+its months, newest first, from the first month with postings (or the lock
+date, if earlier) to this month:
+**Open**, **Closed**, or **Partly locked** (the import's lock at a
+conversion date in the middle of a month). A financial year is **closed**
+when its last month is.
+
+**Closing a month** runs its checklist, then locks it: the lock date moves
+to the month's last day, so nothing dated on or before it can be posted,
+approved, voided or corrected (L1-L4; PostgreSQL refuses such journals too).
+Months are closed **in order**: a month can't be closed while an earlier
+month with postings is open (months without postings in between close with
+it, and its checks cover everything from the day after the lock date).
+Every check posts nothing and is worked out from the books each time; each
+is **Pass**, **Needs attention** or **Not applicable**, with links to fix it:
+
+| Check | Passes when |
+| --- | --- |
+| Bank accounts reconciled | For each bank and credit card account with anything on or before the month end: the bank reconciliation report at the month end (BK20) knows the statement balance, has no statement lines on or before it left unreconciled, and is fully explained. Payments not yet on the statement are fine |
+| No drafts left in the period | No draft invoices, credit notes, bills or supplier credit notes, and no draft or submitted expense claims, dated from the day after the lock date to the month end |
+| Depreciation run to the period end | With fixed assets registered by the month end: depreciation has been run to it, or a run to it would charge nothing (FA3) |
+| Foreign-currency balances revalued | Every foreign-currency account with a balance at the month end is in an FX revaluation dated the month end (F1-F7) |
+| Stock equals the inventory account | Stock on hand (all stock movements to the month end) equals 1400 at the month end |
+| No stock below zero | No item (at any location) is below zero at the month end (NetSuite's "Review negative inventory"; ST10) |
+| Receivables equal accounts receivable | Aged receivables' total at the month end equals 1100 |
+| Payables equal accounts payable | Aged payables' total at the month end equals 2000 (AGP1) |
+| GST returns filed | Every GST period after the latest filed return (the same length, H4) that ends by the month end is filed. With no return filed: needs attention if there's a GST number, otherwise not applicable |
+| Opening balance account at 0.00 | 3900 Opening balance (IM1) is 0.00 at the month end |
+
+Bookkeepers can close a month whose checks all pass (or don't apply). With
+checks needing attention only an **owner or admin** can close it, after
+ticking that they've reviewed them; the checks they accepted are recorded
+in the audit log with the close. Closing a month that's already closed
+changes nothing.
+
+**Reopening** (owners and admins only) needs a reason. It moves the lock
+date to the day before the month starts, so **every later closed month
+reopens too**, as in NetSuite. The reason, who did it and the lock date before and after
+are in the audit log and in the page's history. Reopening an open month
+changes nothing.
+
+**One lock, one screen.** Period close replaces the old lock date and unlock
+window on Settings (Settings now just says what's closed and links here).
+The unlock window is gone: on upgrade, an open unlock window becomes a
+reopening from its first day (what reopening that month does now), recorded
+in the audit log. The import's last step still locks up to the conversion
+date. Moving the lock date earlier any other way also needs a reason (L3).
+
+**Changing the financial year end** is refused while a financial year with
+postings is closed (its retained earnings and current year earnings would
+move); reopen it first.
+
+Setup for YE1-YE4 and PC1: the starting chart, a 31 March year end, and
+these journals:
+
+| Date | Journal |
+| --- | --- |
+| 1 Apr 2025 | Dr 1000 10,000.00 / Cr 3000 Owner funds introduced 10,000.00 |
+| 10 Jul 2025 | Dr 1000 15,000.00 / Cr 4000 Sales 15,000.00 |
+| 20 Feb 2026 | Dr 6010 Accounting fees 2,654.33 / Cr 1000 2,654.33 |
+| 15 Apr 2026 | Dr 1000 1,000.00 / Cr 4000 1,000.00 |
+
+The year ending 31 Mar 2026 made a profit of 15,000.00 - 2,654.33 =
+**12,345.67**.
+
+- **YE1** Balance sheet at 31 Mar 2026: 1000 **22,345.67**; 3000
+  **10,000.00**; Retained earnings **0.00**; Current year earnings
+  (since 1 Apr 2025) **12,345.67**; total equity **22,345.67**. The profit
+  and loss without a start date, to 31 Mar 2026, covers 1 Apr 2025 - 31 Mar
+  2026 and shows net profit **12,345.67**.
+- **YE2** At 1 Apr 2026: Retained earnings **12,345.67**, Current year
+  earnings **0.00**, total equity 22,345.67. At 30 Apr 2026: Retained
+  earnings **12,345.67**, Current year earnings **1,000.00**, 1000 and total
+  equity **23,345.67**; the profit and loss to 30 Apr 2026 starts on 1 Apr
+  2026 and shows **1,000.00**. No journal is posted at the year end (still
+  4). The trial balance at 30 Apr 2026: 1000 23,345.67 Dr, 6010 2,654.33
+  Dr, 3000 10,000.00 Cr, 4000 16,000.00 Cr; 26,000.00 each side.
+- **YE3** After a journal on 20 Apr 2026, Dr 3200 500.00 / Cr 1000 500.00
+  (a dividend out of retained earnings): at 30 Apr 2026 Retained earnings
+  is **11,845.67** (-500.00 + 12,345.67), 3200 isn't listed among the equity
+  accounts (only 3000 10,000.00), Current year earnings 1,000.00, 1000 and
+  total equity **22,845.67**.
+- **YE4** With nothing closed, changing the year end to 30 June (after YE3):
+  at 30 Apr 2026 the year started 1 Jul 2025, so Retained earnings is
+  **-500.00** and Current year earnings **13,345.67** (15,000.00 - 2,654.33
+  + 1,000.00); total equity still 22,845.67. Back to 31 March, then closing
+  April 2025, July 2025, February 2026 and March 2026 (as the owner,
+  accepting the bank check: there's no statement) closes the year ending
+  31 Mar 2026. Changing the year end is then **refused** ("The financial
+  year ending 31 Mar 2026 is closed"). After reopening March 2026 (reason
+  "Balance date change") the lock is 28 Feb 2026, no year with postings is
+  closed, and the change is allowed.
+- **PC1** Periods on 10 May 2026 (before anything is closed): the year
+  ending 31 Mar 2027 (May 2026, April 2026) and the year ending 31 Mar 2026
+  (March 2026 back to April 2025), all Open; April 2025, July 2025, February
+  2026 and April 2026 have postings. Only April 2025 can be closed (it's the
+  next to close). After closing it (lock 30 Apr 2025), May, June and July
+  2025 can be closed; closing March 2026 is **refused** ("Close July 2025
+  first"). After closing July 2025, February 2026 and March 2026, the year
+  ending 31 Mar 2026 is **Closed** (May and June 2025 are closed too) and
+  April 2026 is next; the close of March 2026 is recorded as closing the
+  financial year.
+
+The rest start from a new organisation (starting chart, 31 March year end,
+no GST number) with Kobe Ltd (customer) and Paw Supplies (supplier), and
+look at the checklist for June 2026. A check not mentioned passes or
+doesn't apply.
+
+- **PC2** Drafts: a draft invoice to Kobe Ltd on 12 Jun 2026 (100.00 + GST
+  = **115.00**), a draft bill from Paw Supplies on 20 Jun 2026 (200.00 +
+  GST = **230.00**) and a draft invoice on 1 Jul 2026: "No drafts left in
+  the period" needs attention, listing "Invoice, 12 Jun 2026: Kobe Ltd,
+  115.00" and "Bill, 20 Jun 2026: Paw Supplies, 230.00", each linking to
+  it (the July draft isn't listed). A bookkeeper closing June is
+  **refused**. After approving the invoice and deleting the bill it passes,
+  and the bookkeeper closes June (lock 30 Jun 2026).
+- **PC3** Bank: a journal on 1 Jun 2026, Dr 1000 1,000.00 / Cr 3000. With no
+  statement: needs attention ("No statement balance is known at 30 Jun
+  2026"). After importing this statement and matching the 1 Jun line to the
+  journal:
+
+  ```
+  Date,Amount,Payee,Particulars,Code,Reference,Balance
+  01/06/2026,1000.00,J KELLY,CAPITAL,,,1000.00
+  28/06/2026,-12.00,MONTHLY FEE,,,,988.00
+  02/07/2026,-50.00,Z ENERGY,,,,938.00
+  ```
+
+  it still needs attention: "1 statement line on or before 30 Jun 2026 not
+  reconciled (-12.00)". After coding the fee as spend money (6010, No GST)
+  it passes: the account is reconciled to 30 Jun 2026 (the 2 Jul line is
+  later and doesn't count).
+- **PC4** Depreciation: a journal on 1 Jun 2026, Dr 1600 1,200.00 / Cr 3000,
+  and a desk registered as Office equipment (straight line 20%) bought
+  1 Jun 2026 for 1,200.00: needs attention ("Depreciation of 20.00 to 30
+  Jun 2026 hasn't been run (never run)"). After running depreciation to
+  30 Jun 2026 it passes. With no fixed assets it doesn't apply.
+- **PC5** FX: 1000 set to USD, and a journal on 1 Jun 2026, Dr 1000 1,600.00
+  (USD 1,000.00 at 1.6) / Cr 3000: "Foreign-currency balances revalued"
+  needs attention, listing 1000. After revaluing it on 30 Jun 2026 at
+  1.6543 (F2: 1,654.30) it passes. (The bank check needs attention too:
+  there's no statement.)
+- **PC6** Stock: with negative stock on, a bill on 1 Jun 2026 for 2 Widgets
+  @ 5.00 and an invoice on 10 Jun for 3 @ 12.00 (ST10): "No stock below
+  zero" needs attention (WIDGET, -1 on hand) and "Stock equals the
+  inventory account" passes (-5.00 each). After a bill on 20 Jun for 4 @
+  6.00 both pass: stock **18.00** equals 1400.
+- **PC7** Receivables and payables: the invoice of PC2 approved (115.00) and
+  the bill approved (230.00): both pass. A manual journal on 15 Jun 2026,
+  Dr 1100 50.00 / Cr 4000 50.00, makes receivables need attention
+  ("Aged receivables 115.00 but 1100 Accounts receivable 165.00 at 30 Jun
+  2026 (difference -50.00)"); a journal on 16 Jun reversing it makes it
+  pass again.
+- **PC8** GST: with a GST number set and no GST return filed, it needs
+  attention; without a GST number it doesn't apply. After filing the return
+  for 1 Apr - 31 May 2026 (two months), June passes ("Filed to 31 May
+  2026": the next return, June-July, ends after 30 Jun), and July needs
+  attention: "1 Jun 2026 to 31 Jul 2026" isn't filed.
+- **PC9** Opening balance: a journal on 10 Jun 2026, Dr 6010 100.00 / Cr
+  3900 100.00: needs attention ("3900 Opening balance is 100.00 Cr at 30
+  Jun 2026"). After Dr 3900 100.00 / Cr 3000 100.00 on 11 Jun it passes.
+- **PC10** Closing: with only a journal on 10 Jun 2026 (Dr 6010 50.00 / Cr
+  3000 50.00) every check passes or doesn't apply, and a **bookkeeper**
+  closes June: the lock date is 30 Jun 2026, the audit log has the close
+  (no warnings accepted), and posting on 30 Jun is refused, by Tohyee and
+  by PostgreSQL (a journal inserted directly). Closing June again changes
+  nothing; a viewer can't close. With a draft invoice dated 5 Jul 2026 a
+  bookkeeper can't close July; the owner can't without confirming; the owner
+  confirming closes it (lock 31 Jul 2026) and the audit log lists "No drafts
+  left in the period" as accepted.
+- **PC11** In order: journals on 10 Jun and 10 Jul 2026 (Dr 6010 / Cr 3000):
+  closing July is **refused** ("Close June 2026 first"); closing May 2026
+  (no postings) works, then June, then July.
+- **PC12** Reopening, after PC11 (closed to 31 Jul 2026): a bookkeeper
+  can't reopen, and an admin can't without a reason. The owner reopening
+  June with "Missing supplier bill" moves the lock to **31 May 2026**, so
+  June and July are both open and 15 Jul 2026 posts again; the audit log
+  has the reason. Reopening June again changes nothing. Reopening May moves
+  the lock to 30 Apr 2026.
+
+### Not supported yet (refused rather than guessed)
+
+- Locking only sales or only purchases (NetSuite's "Lock A/R" and "Lock
+  A/P") before closing: a period is open or closed for everything.
+- Closing several months with postings in one go: each is closed in turn.
+- Changes that don't touch the ledger in a closed period (NetSuite's "Allow
+  non-G/L changes"): drafts dated in a closed period can still be edited,
+  but not approved.
+
+### Questions for Jess (year end and period close)
+
+- **Trial balance**: NetSuite's trial balance shows income and expense
+  accounts for the financial year to date, with earlier profit in retained
+  earnings. Tohyee's shows each account's balance since the books began (so
+  it ties to account transactions). Should it change to NetSuite's?
+- Should a bookkeeper be able to close a month when every check passes (as
+  built), or only owners and admins, like the old lock date?
+- Is "no statement imported" for a bank account a warning (as built), or
+  should accounts without statements be left out?
+- Should the GST check use a GST period setting (1, 2 or 6 months) rather
+  than the length of the latest filed return?

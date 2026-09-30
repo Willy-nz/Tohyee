@@ -30,10 +30,18 @@ function sourceText(report: Report): string {
  * Reporting › Bank reconciliation (examples BK20, BK21): the bank's balance,
  * Tohyee's, and the items between them, as at a date. Printable.
  */
-export function BankReconciliationReportView({ organisationId, initialAccountId }: { organisationId: string; initialAccountId?: string | null }) {
+export function BankReconciliationReportView({
+  organisationId,
+  initialAccountId,
+  initialAsAt,
+}: {
+  organisationId: string;
+  initialAccountId?: string | null;
+  initialAsAt?: string | null;
+}) {
   const accounts = useApiData<{ bankAccounts: BankAccount[] }>("/api/bank-accounts", { organisationId });
   const [chosen, setChosen] = useState(initialAccountId ?? "");
-  const [asAt, setAsAt] = useState(todayInBrowser);
+  const [asAt, setAsAt] = useState(() => (initialAsAt && /^\d{4}-\d{2}-\d{2}$/.test(initialAsAt) ? initialAsAt : todayInBrowser()));
   const accountId = chosen || accounts.data?.bankAccounts[0]?.id || "";
   const report = useApiData<Report>(accountId ? "/api/reports/bank-reconciliation" : null, { organisationId, accountId, asAt });
   const data = report.data;

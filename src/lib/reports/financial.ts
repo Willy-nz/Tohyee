@@ -205,10 +205,12 @@ export function earningsOf(rows: AccountTotalsRow[]): Decimal {
 
 /**
  * Assets, liabilities and equity as at a date. There are no year-end closing
- * journals: profit is worked out when the report runs and shown as two equity
- * lines so the sheet balances:
+ * journals (like NetSuite): profit is worked out when the report runs
+ * (P2, YE1-YE4):
  * - current year earnings: profit from the start of this financial year;
- * - earnings from previous years: all profit before that.
+ * - retained earnings: the retained earnings account's own balance plus all
+ *   profit before this financial year (`previousYearsEarnings`), so a
+ *   year's profit moves into it on the first day of the next year.
  */
 export async function balanceSheet(tx: OrgTx, input: { asAt?: unknown }) {
   const asAt = parseOptionalIsoDate(input.asAt, "asAt") ?? todayIsoDate();
@@ -221,12 +223,24 @@ export async function balanceSheet(tx: OrgTx, input: { asAt?: unknown }) {
     money,
   );
   const liabilities = buildSections(rows, ["credit_card", "current_liability", "non_current_liability"], money);
-  const equity = buildSections(rows, ["equity"], money);
+  const retainedAccount = (
+    await tx.query<{ id: string; code: string; name: string }>(
+      "select id::text, code, name from accounts where system_key = 'retained_earnings' and account_class = 'equity'",
+    )
+  ).rows[0];
+  const retainedRow = retainedAccount ? rows.find((row) => row.id === retainedAccount.id) : undefined;
+  const retainedBalance = retainedRow ? naturalAmount(retainedRow) : ZERO_DECIMAL;
+  const equity = buildSections(
+    rows.filter((row) => row.id !== retainedAccount?.id),
+    ["equity"],
+    money,
+  );
 
   const allEarnings = earningsOf(rows);
   const currentYearEarnings = earningsOf(await accountTotals(tx, yearStart, asAt));
   const previousYearsEarnings = sub(allEarnings, currentYearEarnings);
-  const totalEquity = add(equity.total, allEarnings);
+  const retainedEarnings = add(retainedBalance, previousYearsEarnings);
+  const totalEquity = add(add(equity.total, retainedBalance), allEarnings);
   const liabilitiesAndEquity = add(liabilities.total, totalEquity);
   return {
     asAt,
@@ -235,7 +249,14 @@ export async function balanceSheet(tx: OrgTx, input: { asAt?: unknown }) {
     assets: { sections: assets.sections, total: money(assets.total) },
     liabilities: { sections: liabilities.sections, total: money(liabilities.total) },
     equity: {
+      /** Equity accounts other than retained earnings. */
       sections: equity.sections,
+      retainedEarnings: {
+        account: retainedAccount ?? null,
+        accountBalance: money(retainedBalance),
+        previousYearsEarnings: money(previousYearsEarnings),
+        total: money(retainedEarnings),
+      },
       previousYearsEarnings: money(previousYearsEarnings),
       currentYearEarnings: money(currentYearEarnings),
       total: money(totalEquity),

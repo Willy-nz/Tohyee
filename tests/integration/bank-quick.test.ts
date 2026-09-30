@@ -127,7 +127,7 @@ describeWithDatabase("quicker bank reconciliation", () => {
       (await asUser(owner, (tx) => getJournal(tx, journalId))).lines.map((entry) => [entry.accountCode, entry.debitAmount, entry.creditAmount]);
     const journalCount = async () =>
       Number((await asUser(owner, (tx) => tx.query<{ count: string }>("select count(*)::text as count from ledger_journals"))).rows[0].count);
-    const lock = (lockDate: string | null) => asUser(owner, (tx) => updatePeriodControls(tx, { lockDate }));
+    const lock = (lockDate: string | null) => asUser(owner, (tx) => updatePeriodControls(tx, { lockDate, reason: "Test set-up" }));
     const zRule = () =>
       asUser(bookkeeper, (tx) =>
         createBankRule(tx, {
@@ -321,7 +321,7 @@ describeWithDatabase("quicker bank reconciliation", () => {
       {
         lineId: income.id,
         ok: false,
-        error: "2026-05-20 is in a locked period (locked up to 2026-05-20). Use a later date, or ask an admin to open an unlock window.",
+        error: "2026-05-20 is in a locked period (locked up to 2026-05-20). Use a later date, or ask an owner or admin to reopen the period on Period close.",
       },
       expect.objectContaining({ lineId: fuel.id, ok: true, created: true }),
     ]);
@@ -595,7 +595,7 @@ describeWithDatabase("quicker bank reconciliation", () => {
       {
         lineId: world.fuel21.id,
         ok: false,
-        error: "2026-05-21 is in a locked period (locked up to 2026-05-21). Use a later date, or ask an admin to open an unlock window.",
+        error: "2026-05-21 is in a locked period (locked up to 2026-05-21). Use a later date, or ask an owner or admin to reopen the period on Period close.",
       },
       expect.objectContaining({ lineId: world.fuel24.id, ok: true, created: true }),
       expect.objectContaining({ lineId: world.fuel26.id, ok: true, created: true }),

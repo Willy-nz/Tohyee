@@ -107,7 +107,7 @@ describeWithDatabase("one transaction split across several statement lines", () 
       asUser(bookkeeper, (tx) => unreconcileStatementLine(tx, lineId, { idempotencyKey }));
     const line = (lineId: string) => asUser(viewer, (tx) => getStatementLine(tx, lineId));
     const journalCount = async () => Number((await sql("select count(*)::text as count from ledger_journals")).rows[0].count as string);
-    const lock = (lockDate: string | null) => asUser(owner, (tx) => updatePeriodControls(tx, { lockDate }));
+    const lock = (lockDate: string | null) => asUser(owner, (tx) => updatePeriodControls(tx, { lockDate, reason: "Test set-up" }));
     const report = (asAt: string) => asUser(viewer, (tx) => bankReconciliationReport(tx, { accountId: bank.id, asAt }));
     return { org, asUser, run, kobe, bank, savings, receive, journalLine, importFile, lines, lineOn, split, unreconcile, line, journalCount, lock, report, sql };
   }

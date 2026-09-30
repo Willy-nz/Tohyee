@@ -155,7 +155,7 @@ describeWithDatabase("ledger", () => {
     ).rejects.toThrow(/already used for a different journal/);
   });
 
-  it("L1-L4: lock dates block on/before the lock, allow after it and inside an unlock window", async () => {
+  it("L1-L4: lock dates block on/before the lock, allow after it, and reopening moves the lock back", async () => {
     await inOrg((tx) => updatePeriodControls(tx, { lockDate: "2026-03-31" }));
 
     // Regression: an earlier version rejected every date once any lock was set.
@@ -164,19 +164,22 @@ describeWithDatabase("ledger", () => {
     await expect(inOrg((tx) => postJournal(tx, journal("2026-03-31", "5")))).rejects.toThrow(/locked period/);
     await expect(inOrg((tx) => postJournal(tx, journal("2026-02-10", "5")))).rejects.toThrow(/locked period/);
 
-    await inOrg((tx) => updatePeriodControls(tx, { unlockStart: "2026-02-01", unlockEnd: "2026-02-28" }));
-    const inWindow = await inOrg((tx) => postJournal(tx, journal("2026-02-10", "5")));
-    expect(inWindow.created).toBe(true);
+    // L3: reopening February (with a reason) moves the lock to 31 Jan, so
+    // March reopens too; moving the lock back without a reason is refused.
+    await expect(inOrg((tx) => updatePeriodControls(tx, { lockDate: "2026-01-31" }))).rejects.toThrow(/reason/);
+    await inOrg((tx) => updatePeriodControls(tx, { lockDate: "2026-01-31", reason: "Late February invoice" }));
+    const reopened = await inOrg((tx) => postJournal(tx, journal("2026-02-10", "5")));
+    expect(reopened.created).toBe(true);
     await expect(inOrg((tx) => postJournal(tx, journal("2026-01-15", "5")))).rejects.toThrow(/locked period/);
 
     // A retry of something already posted still succeeds after the period locks.
     const retryKey = key("late-retry");
-    await inOrg((tx) => updatePeriodControls(tx, { lockDate: null, unlockStart: null, unlockEnd: null }));
+    await inOrg((tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     await inOrg((tx) => postJournal(tx, journal("2026-01-20", "7", retryKey)));
     await inOrg((tx) => updatePeriodControls(tx, { lockDate: "2026-03-31" }));
     const lateRetry = await inOrg((tx) => postJournal(tx, journal("2026-01-20", "7", retryKey)));
     expect(lateRetry.created).toBe(false);
-    await inOrg((tx) => updatePeriodControls(tx, { lockDate: null }));
+    await inOrg((tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
   });
 
   it("C1-C4: corrections reverse and replace, can be chained, and can't be repeated", async () => {
@@ -312,7 +315,7 @@ describeWithDatabase("ledger", () => {
         }),
       ),
     ).rejects.toThrow(/locked period/);
-    await inOrg((tx) => updatePeriodControls(tx, { lockDate: null }));
+    await inOrg((tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
   });
 
   it("lists journals newest first with paging", async () => {

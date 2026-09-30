@@ -722,7 +722,7 @@ function FinalCheck({ organisationId, status, reload }: { organisationId: string
             <Button disabled={busy || !status.matches} onClick={() => void lock()}>
               Lock up to {formatDate(conversion.conversionDate)}
             </Button>
-            <span className={ui.muted}>Uses the ordinary period lock (Settings and locks), so it can be opened again by an admin.</span>
+            <span className={ui.muted}>Closes everything up to the conversion date (Accounting › Period close), so an owner or admin can reopen it there, with a reason.</span>
           </div>
         )}
       </div>

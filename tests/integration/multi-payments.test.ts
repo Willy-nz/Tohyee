@@ -415,7 +415,7 @@ describeWithDatabase("payments for several invoices and bills", () => {
     ];
     await w.as((tx) => updatePeriodControls(tx, { lockDate: "2026-05-15" }));
     await expect(w.receive("195.00", documents)).rejects.toThrow(/locked/i);
-    await w.as((tx) => updatePeriodControls(tx, { lockDate: null }));
+    await w.as((tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     await expect(w.receive("195.00", documents, { bankAccountCode: "1100" })).rejects.toThrow(/isn't a bank account/);
 
     const idempotencyKey = key("retry");
@@ -427,7 +427,7 @@ describeWithDatabase("payments for several invoices and bills", () => {
 
     await w.as((tx) => updatePeriodControls(tx, { lockDate: "2026-05-31" }));
     await expect(w.voidBatch("customer", first.batch.id, "2026-05-20")).rejects.toThrow(/locked/i);
-    await w.as((tx) => updatePeriodControls(tx, { lockDate: null }));
+    await w.as((tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     const voidKey = key("void-retry");
     await w.voidBatch("customer", first.batch.id, "2026-06-01", voidKey);
     expect((await w.voidBatch("customer", first.batch.id, "2026-06-01", voidKey)).created).toBe(false);
@@ -543,7 +543,7 @@ describeWithDatabase("payments for several invoices and bills", () => {
     ];
     await w.as((tx) => updatePeriodControls(tx, { lockDate: "2026-05-15" }));
     await expect(w.payBills("365.00", documents)).rejects.toThrow(/locked/i);
-    await w.as((tx) => updatePeriodControls(tx, { lockDate: null }));
+    await w.as((tx) => updatePeriodControls(tx, { lockDate: null, reason: "Test set-up" }));
     await expect(w.payBills("365.00", documents, { bankAccountCode: "2000" })).rejects.toThrow(/isn't a bank account/);
     const idempotencyKey = key("retry");
     const first = await w.payBills("365.00", documents, { idempotencyKey });

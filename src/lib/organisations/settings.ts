@@ -3,6 +3,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { ValidationError } from "@/lib/errors";
 import { isFinancialYearEndMonth } from "@/lib/financial-year";
+import { assertFinancialYearEndChangeable } from "@/lib/ledger/period-controls";
 import { parseCurrencyCode } from "@/lib/money/currency";
 import { GST_BASES, type GstBasis } from "@/lib/tax/categories";
 import { optionalString, requireOneOf, requireString } from "@/lib/validation";
@@ -152,6 +153,9 @@ export async function updateOrganisationSettings(
   const paymentDetails =
     input.paymentDetails === undefined ? current.paymentDetails : optionalString(input.paymentDetails, "paymentDetails", { maxLength: 1000 });
 
+  if (financialYearEndMonth !== current.financialYearEndMonth) {
+    await assertFinancialYearEndChangeable(tx, current.financialYearEndMonth);
+  }
   if (baseCurrency !== current.baseCurrency && current.hasPostings) {
     throw new ValidationError(
       "The base currency can't change once journals have been posted.",
