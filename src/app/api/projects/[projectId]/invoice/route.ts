@@ -18,6 +18,7 @@ export const POST = route<Context>(async (request, context) => {
       timeEntryIds: body.timeEntryIds,
       taskIds: body.taskIds,
       expenseIds: body.expenseIds,
+      exchangeRate: body.exchangeRate,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

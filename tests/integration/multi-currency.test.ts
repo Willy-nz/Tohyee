@@ -358,7 +358,7 @@ describeWithDatabase("multi-currency invoices and bills", () => {
   it("MC11: what's refused rather than guessed", async () => {
     const refusedFor = /for customers in a currency other than NZD isn't supported yet \(refused rather than guessed\)/;
     // Quotes, repeating documents and purchase orders for USD contacts are built (MC25-MC28). An invoice for a USD
-    // customer made any other way but entering it directly (a project's or the CRM's) is still refused.
+    // customer made by a path that doesn't say it handles foreign currency is still refused (projects and the CRM do: MC64, MC69).
     await expect(
       run((tx) =>
         createInvoice(tx, { idempotencyKey: key("inv"), contactId: acme.id, invoiceDate: "2026-07-30", dueDate: "2026-08-20", amountsMode: "exclusive", lines: [line("X", "1.00")], exchangeRate: "1.6" }),

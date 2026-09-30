@@ -4,7 +4,9 @@ import { dueDateFromTerms } from "@/lib/customers/service";
 import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { parseRateInput } from "@/lib/fx/documents";
 import { createInvoice, getInvoice, type Invoice } from "@/lib/invoices/service";
+import { currencyMinorUnits } from "@/lib/money/currency";
 import { cmp, dec, toFixedString } from "@/lib/money/decimal";
 import { parseOptionalIsoDate } from "@/lib/dates";
 import { listMembers } from "@/lib/organisations/members";
@@ -18,7 +20,9 @@ import { optionalId, optionalString, requireId, requireString } from "@/lib/vali
  * contacts), people, opportunities with Twenty's pipeline stages, tasks, and
  * notes (here activities: calls, meetings and notes), and a timeline per
  * company. Only an opportunity's invoice ever reaches the ledger, and only
- * when that draft is approved.
+ * when that draft is approved. An opportunity is in its company's currency,
+ * and so is its invoice (MC68, MC69), as a NetSuite transaction starts in the
+ * customer's currency.
  */
 
 export const OPPORTUNITY_STAGES = ["new", "screening", "meeting", "proposal", "won", "lost"] as const;
@@ -67,7 +71,9 @@ export type Opportunity = {
   pointOfContactId: string | null;
   pointOfContactName: string | null;
   ownerUserId: string | null;
+  /** In `currencyCode`, the company's currency (MC68), excluding GST. */
   amount: string;
+  currencyCode: string;
   closeDate: string | null;
   stage: OpportunityStage;
   position: number;
@@ -279,7 +285,7 @@ export async function updatePerson(tx: OrgTx, idInput: unknown, input: PersonInp
 // Opportunities (CRM3-CRM5, CRM9)
 
 const OPPORTUNITY_SELECT = `select o.id, o.name, o.contact_id, c.name as contact_name, o.point_of_contact_id,
-    nullif(concat_ws(' ', p.first_name, p.last_name), '') as point_of_contact_name, o.owner_user_id, o.amount::text,
+    nullif(concat_ws(' ', p.first_name, p.last_name), '') as point_of_contact_name, o.owner_user_id, o.amount::text, o.currency_code,
     o.close_date::text, o.stage, o.position, o.invoice_id, i.invoice_number, o.created_at, o.updated_at
   from crm_opportunities o
   join contacts c on c.id = o.contact_id
@@ -295,6 +301,7 @@ type OpportunityRow = {
   point_of_contact_name: string | null;
   owner_user_id: string | null;
   amount: string;
+  currency_code: string;
   close_date: string | null;
   stage: OpportunityStage;
   position: number;
@@ -314,6 +321,7 @@ function toOpportunity(row: OpportunityRow): Opportunity {
     pointOfContactName: row.point_of_contact_name,
     ownerUserId: row.owner_user_id,
     amount: toFixedString(dec(row.amount), 2),
+    currencyCode: row.currency_code,
     closeDate: row.close_date,
     stage: row.stage,
     position: row.position,
@@ -371,6 +379,15 @@ type OpportunityInput = {
 async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Opportunity | null) {
   const contactId = input.contactId === undefined && current ? current.contactId : requireId(input.contactId, "contactId");
   await requireContact(tx, contactId);
+  if (current?.invoiceId && contactId !== current.contactId) {
+    throw new ConflictError("This opportunity has made an invoice, so its company can't change.");
+  }
+  // The amount is in the company's currency (MC68).
+  const currencyCode = (await tx.query<{ currency_code: string | null }>("select currency_code from contacts where id = $1", [contactId])).rows[0]?.currency_code ?? tx.baseCurrency;
+  const amount = input.amount === undefined ? (current?.amount ?? "0.00") : parseAmount(input.amount);
+  if (currencyMinorUnits(currencyCode) < 2 && cmp(dec(amount), dec(toFixedString(dec(amount), currencyMinorUnits(currencyCode)))) !== 0) {
+    throw new ValidationError(`The amount is in ${currencyCode}, which has no cents, so it must be a whole number.`);
+  }
   const pointOfContactId =
     input.pointOfContactId === undefined ? (current?.pointOfContactId ?? null) : optionalId(input.pointOfContactId === "" ? null : input.pointOfContactId, "pointOfContactId");
   if (pointOfContactId) {
@@ -382,7 +399,8 @@ async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Op
     contactId,
     pointOfContactId,
     ownerUserId: input.ownerUserId === undefined ? (current?.ownerUserId ?? null) : await parseMember(tx, input.ownerUserId, "The owner"),
-    amount: input.amount === undefined ? (current?.amount ?? "0.00") : parseAmount(input.amount),
+    amount,
+    currencyCode,
     closeDate: input.closeDate === undefined ? (current?.closeDate ?? null) : parseOptionalIsoDate(input.closeDate, "close date"),
     stage: input.stage === undefined ? (current?.stage ?? "new") : parseStage(input.stage),
   };
@@ -397,8 +415,8 @@ export async function createOpportunity(tx: OrgTx, input: OpportunityInput): Pro
   await requireCrm(tx);
   const values = await opportunityValues(tx, input, null);
   const inserted = await tx.query<{ id: string }>(
-    `insert into crm_opportunities (name, contact_id, point_of_contact_id, owner_user_id, amount, close_date, stage, position, created_by_email)
-     values ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9) returning id`,
+    `insert into crm_opportunities (name, contact_id, point_of_contact_id, owner_user_id, amount, close_date, stage, position, created_by_email, currency_code)
+     values ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10) returning id`,
     [
       values.name,
       values.contactId,
@@ -409,6 +427,7 @@ export async function createOpportunity(tx: OrgTx, input: OpportunityInput): Pro
       values.stage,
       await nextPosition(tx, values.stage),
       tx.actor.email,
+      values.currencyCode,
     ],
   );
   const id = inserted.rows[0].id;
@@ -428,9 +447,9 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
   const position = values.stage === current.stage ? current.position : await nextPosition(tx, values.stage);
   await tx.query(
     `update crm_opportunities set name = $2, contact_id = $3, point_of_contact_id = $4, owner_user_id = $5, amount = $6::numeric,
-            close_date = $7, stage = $8, position = $9, updated_at = now()
+            close_date = $7, stage = $8, position = $9, currency_code = $10, updated_at = now()
       where id = $1`,
-    [current.id, values.name, values.contactId, values.pointOfContactId, values.ownerUserId, values.amount, values.closeDate, values.stage, position],
+    [current.id, values.name, values.contactId, values.pointOfContactId, values.ownerUserId, values.amount, values.closeDate, values.stage, position, values.currencyCode],
   );
   await writeAuditEvent(tx, {
     eventType: "crm.opportunity_updated",
@@ -453,9 +472,20 @@ function addDays(date: string, days: number): string {
  * (no tax if there isn't one), dated today and due on the customer's payment
  * terms, or in 20 days if they have none (RC1). A prospect
  * becomes a customer. Making it again returns the same invoice.
+ *
+ * For a company in another currency (MC69) the invoice is in it, at the rate
+ * typed or else the one any new invoice for that date starts with, and its
+ * line is zero-rated (ZERO) rather than standard-rated, since GST on
+ * foreign-currency invoices is only zero-rated, exempt or none (MC2); no tax
+ * if there's no zero-rated code. It's a draft, checked before it's approved.
  */
-export async function makeInvoiceFromOpportunity(tx: OrgTx, idInput: unknown): Promise<{ created: boolean; invoice: Invoice }> {
+export async function makeInvoiceFromOpportunity(
+  tx: OrgTx,
+  idInput: unknown,
+  input: { exchangeRate?: unknown } = {},
+): Promise<{ created: boolean; invoice: Invoice }> {
   await requireCrm(tx);
+  const typedRate = parseRateInput(input.exchangeRate);
   const current = await getOpportunity(tx, idInput);
   await tx.query("select id from crm_opportunities where id = $1 for update", [current.id]);
   const locked = await getOpportunity(tx, current.id);
@@ -468,23 +498,33 @@ export async function makeInvoiceFromOpportunity(tx: OrgTx, idInput: unknown): P
     "select code from accounts where is_active and account_class = 'revenue' order by code limit 1",
   );
   if (!account.rows[0]) throw new ValidationError("There's no active revenue account to invoice to.");
+  const foreign = locked.currencyCode !== tx.baseCurrency;
+  if (!foreign && typedRate != null) throw new ValidationError(`This opportunity is in ${tx.baseCurrency}, so its invoice has no exchange rate.`);
   const taxCode = await tx.query<{ code: string }>(
-    `select code from tax_codes where is_active and category = 'standard' and effective_from <= $1
+    `select code from tax_codes where is_active and category = $2 and effective_from <= $1
         and (effective_to is null or effective_to >= $1) order by id limit 1`,
-    [today],
+    [today, foreign ? "zero_rated" : "standard"],
   );
   const gst = taxCode.rows[0]?.code ?? null;
-  const { invoice } = await createInvoice(tx, {
-    source: "crm",
-    idempotencyKey: `opportunity-${locked.id}`,
-    contactId: locked.contactId,
-    invoiceDate: today,
-    // The customer's payment terms if they have any (RC1), else 20 days.
-    dueDate: (await dueDateFromTerms(tx, locked.contactId, today)) ?? addDays(today, 20),
-    amountsMode: gst ? "exclusive" : "no_tax",
-    reference: locked.name.slice(0, 100),
-    lines: [{ description: locked.name, quantity: "1", unitPrice: locked.amount, accountCode: account.rows[0].code, taxCode: gst }],
-  });
+  const { invoice } = await createInvoice(
+    tx,
+    {
+      source: "crm",
+      idempotencyKey: `opportunity-${locked.id}`,
+      contactId: locked.contactId,
+      invoiceDate: today,
+      // The customer's payment terms if they have any (RC1), else 20 days.
+      dueDate: (await dueDateFromTerms(tx, locked.contactId, today)) ?? addDays(today, 20),
+      amountsMode: gst ? "exclusive" : "no_tax",
+      reference: locked.name.slice(0, 100),
+      lines: [{ description: locked.name, quantity: "1", unitPrice: locked.amount, accountCode: account.rows[0].code, taxCode: gst }],
+      ...(typedRate != null ? { exchangeRate: typedRate } : {}),
+    },
+    { foreignCurrency: true, feature: "CRM invoices" },
+  );
+  if (invoice.currencyCode !== locked.currencyCode) {
+    throw new ConflictError(`This opportunity is in ${locked.currencyCode}, but ${locked.contactName}'s invoices are in ${invoice.currencyCode}.`);
+  }
   await tx.query("update crm_opportunities set invoice_id = $2, updated_at = now() where id = $1", [locked.id, invoice.id]);
   await writeAuditEvent(tx, {
     eventType: "crm.opportunity_invoiced",
@@ -782,8 +822,10 @@ export type CompanySummary = {
   isArchived: boolean;
   people: number;
   openTasks: number;
-  /** Open opportunities (not Won or Lost), excluding GST. */
+  /** Open opportunities (not Won or Lost), excluding GST, in `currencyCode`. */
   openPipeline: string;
+  /** The company's currency (MC68): its opportunities and documents are in it. */
+  currencyCode: string;
   lastActivityAt: string | null;
 };
 
@@ -797,12 +839,13 @@ export async function listCompanies(tx: OrgTx, options: { search?: unknown; incl
     is_supplier: boolean;
     is_prospect: boolean;
     is_archived: boolean;
+    currency_code: string | null;
     people: string;
     open_tasks: string;
     open_pipeline: string;
     last_activity_at: string | null;
   }>(
-    `select c.id, c.name, c.is_customer, c.is_supplier, c.is_prospect, c.is_archived,
+    `select c.id, c.name, c.is_customer, c.is_supplier, c.is_prospect, c.is_archived, c.currency_code,
             (select count(*) from crm_people p where p.contact_id = c.id and not p.is_archived)::text as people,
             (select count(*) from crm_tasks t
                left join crm_people p on p.id = t.person_id left join crm_opportunities o on o.id = t.opportunity_id
@@ -827,6 +870,7 @@ export async function listCompanies(tx: OrgTx, options: { search?: unknown; incl
     people: Number(row.people),
     openTasks: Number(row.open_tasks),
     openPipeline: toFixedString(dec(row.open_pipeline), 2),
+    currencyCode: row.currency_code ?? tx.baseCurrency,
     lastActivityAt: row.last_activity_at ? new Date(row.last_activity_at).toISOString() : null,
   }));
 }

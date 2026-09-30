@@ -9,7 +9,8 @@ import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/component
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
-import { formatDate, todayInBrowser, personName } from "@/lib/format";
+import { ExchangeRateField, useLastRate } from "@/components/fx";
+import { formatDate, formatMoney, todayInBrowser, personName } from "@/lib/format";
 import { CHARGE_TYPE_LABELS, CHARGE_TYPES, type ChargeType, formatMinutes, minutesAsHours, timeAmount } from "@/lib/projects/amounts";
 import type {
   BilledOn,
@@ -58,6 +59,25 @@ function BilledBadge({ billed, writtenOff }: { billed: BilledOn | null; writtenO
   return null;
 }
 
+/** The base currency (NZD unless the organisation says otherwise). */
+function useBaseCurrency(): string {
+  return useWorkspace().current?.baseCurrency ?? "NZD";
+}
+
+/**
+ * An amount in a project's currency (MC61): prefixed with the currency when
+ * it isn't the base currency, so it's never read as NZD.
+ */
+function InCurrency({ value, currency, blankZero }: { value: string | null | undefined; currency: string; blankZero?: boolean }) {
+  const base = useBaseCurrency();
+  if (currency === base || (blankZero && (value == null || /^-?0*(\.0*)?$/.test(value)))) return <Money value={value} blankZero={blankZero} />;
+  return (
+    <span className={ui.num}>
+      {currency} {formatMoney(value)}
+    </span>
+  );
+}
+
 function useRun() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +109,7 @@ export function ProjectList({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const router = useRouter();
   const [filter, setFilter] = useState(FILTERS[0]);
+  const baseCurrency = useBaseCurrency();
   const list = useApiData<{ projects: ProjectSummary[] }>("/api/projects", { organisationId, status: filter.status });
   return (
     <Card
@@ -143,10 +164,10 @@ export function ProjectList({ organisationId }: { organisationId: string }) {
                     {formatMinutes(project.figures.minutes)}
                   </td>
                   <td data-label="Unbilled" className={ui.num}>
-                    <Money value={project.figures.unbilled} />
+                    <InCurrency value={project.figures.unbilled} currency={project.currencyCode} />
                   </td>
                   <td data-label="Invoiced" className={ui.num}>
-                    <Money value={project.figures.invoiced} />
+                    <InCurrency value={project.figures.invoiced} currency={project.currencyCode} />
                   </td>
                   <td data-label="Profit" className={ui.num}>
                     <Money value={project.figures.profit} />
@@ -156,6 +177,11 @@ export function ProjectList({ organisationId }: { organisationId: string }) {
             </tbody>
           </table>
         </div>
+      ) : null}
+      {list.data?.projects.some((project) => project.currencyCode !== baseCurrency) ? (
+        <p className={ui.muted}>
+          A project is in its customer&apos;s currency. Profit is in {baseCurrency}: invoices at their own rates, less costs.
+        </p>
       ) : null}
     </Card>
   );
@@ -180,9 +206,12 @@ export function ProjectEditor({
   const [deadline, setDeadline] = useState(project?.deadline ?? "");
   const [createKey] = useState(() => newIdempotencyKey("project"));
   const { busy, error, run } = useRun();
+  const baseCurrency = useBaseCurrency();
   if (contacts.error) return <Notice tone="error">{contacts.error}</Notice>;
   if (!contacts.data) return <p className={ui.muted}>Loading…</p>;
   const customers = contacts.data.contacts.filter((contact) => contact.isCustomer && !contact.isArchived);
+  // The project is in its customer's currency (MC61).
+  const currency = customers.find((contact) => contact.id === contactId)?.currencyCode ?? (contactId ? baseCurrency : null);
   const save = (event: React.FormEvent) => {
     event.preventDefault();
     const body = { organisationId, name, contactId, estimate: estimate.trim() || null, deadline: deadline || null };
@@ -201,7 +230,16 @@ export function ProjectEditor({
         <Field label="Project name">
           <input value={name} maxLength={200} onChange={(event) => setName(event.target.value)} required />
         </Field>
-        <Field label="Customer" hint={project && project.invoices.length > 0 ? "It has invoices, so the customer can't change." : undefined}>
+        <Field
+          label="Customer"
+          hint={
+            project && project.invoices.length > 0
+              ? "It has invoices, so the customer can't change."
+              : currency && currency !== baseCurrency
+                ? `The project will be in ${currency}, the customer's currency: its rates, prices, estimate and invoices are in ${currency}.`
+                : undefined
+          }
+        >
           <select value={contactId} onChange={(event) => setContactId(event.target.value)} required disabled={Boolean(project && project.invoices.length > 0)}>
             <option value="">Choose a customer</option>
             {customers.map((contact) => (
@@ -211,7 +249,7 @@ export function ProjectEditor({
             ))}
           </select>
         </Field>
-        <Field label="Estimate (optional)" hint="What you expect to invoice, excluding GST.">
+        <Field label={`Estimate (optional${currency && currency !== baseCurrency ? `, ${currency}` : ""})`} hint="What you expect to invoice, excluding GST.">
           <input inputMode="decimal" value={estimate} onChange={(event) => setEstimate(event.target.value)} />
         </Field>
         <Field label="Deadline (optional)">
@@ -235,22 +273,33 @@ export function ProjectEditor({
 
 function FiguresCard({ project }: { project: Project }) {
   const f = project.figures;
+  const base = useBaseCurrency();
+  const c = project.currencyCode;
+  const foreign = c !== base;
   return (
-    <Card title={project.name} description={`For ${project.contactName}${project.deadline ? `, due ${formatDate(project.deadline)}` : ""}`} actions={<StatusBadge status={project.status} />}>
+    <Card
+      title={project.name}
+      description={`For ${project.contactName}${foreign ? `, in ${c}` : ""}${project.deadline ? `, due ${formatDate(project.deadline)}` : ""}`}
+      actions={<StatusBadge status={project.status} />}
+    >
       <div className={ui.grid4}>
-        <Stat label="Invoiced" value={<Money value={f.invoiced} />} />
-        <Stat label="Costs" value={<Money value={f.costs} />} />
-        <Stat label="Profit" value={<Money value={f.profit} />} />
-        <Stat label="Unbilled" value={<Money value={f.unbilled} />} />
-        <Stat label="Time" value={`${formatMinutes(f.minutes)} (cost ${f.timeCost})`} />
-        <Stat label="Expenses at cost" value={<Money value={f.expenseCost} />} />
-        {f.onDraftInvoices !== "0.00" ? <Stat label="On draft invoices" value={<Money value={f.onDraftInvoices} />} /> : null}
-        {f.writtenOff !== "0.00" ? <Stat label="Written off" value={<Money value={f.writtenOff} />} /> : null}
-        {project.estimate ? <Stat label="Estimate" value={<Money value={project.estimate} />} /> : null}
-        {f.estimateLeft !== null ? <Stat label="Estimate left" value={<Money value={f.estimateLeft} />} /> : null}
+        <Stat label="Invoiced" value={<InCurrency value={f.invoiced} currency={c} />} />
+        {foreign ? <Stat label={`Invoiced (${base})`} value={<Money value={f.invoicedBase} />} /> : null}
+        <Stat label={foreign ? `Costs (${base})` : "Costs"} value={<Money value={f.costs} />} />
+        <Stat label={foreign ? `Profit (${base})` : "Profit"} value={<Money value={f.profit} />} />
+        <Stat label="Unbilled" value={<InCurrency value={f.unbilled} currency={c} />} />
+        <Stat label="Time" value={`${formatMinutes(f.minutes)} (cost ${foreign ? `${base} ` : ""}${f.timeCost})`} />
+        <Stat label={foreign ? `Expenses at cost (${base})` : "Expenses at cost"} value={<Money value={f.expenseCost} />} />
+        {f.onDraftInvoices !== "0.00" ? <Stat label="On draft invoices" value={<InCurrency value={f.onDraftInvoices} currency={c} />} /> : null}
+        {f.writtenOff !== "0.00" ? <Stat label="Written off" value={<InCurrency value={f.writtenOff} currency={c} />} /> : null}
+        {project.estimate ? <Stat label="Estimate" value={<InCurrency value={project.estimate} currency={c} />} /> : null}
+        {f.estimateLeft !== null ? <Stat label="Estimate left" value={<InCurrency value={f.estimateLeft} currency={c} />} /> : null}
       </div>
       <p className={ui.muted}>
         Projects post nothing: only their invoices do. Costs are expenses excluding GST plus time at each person&apos;s staff cost rate.
+        {foreign
+          ? ` This project is in ${c}, its customer's currency: rates, prices, the estimate and its invoices are in ${c}. Costs are in ${base}, so profit is the invoices in ${base} (at their own rates) less costs.`
+          : ""}
       </p>
     </Card>
   );
@@ -259,6 +308,8 @@ function FiguresCard({ project }: { project: Project }) {
 function TasksCard({ organisationId, project, onChanged }: { organisationId: string; project: Project; onChanged: (project: Project) => void }) {
   const { can } = useWorkspace();
   const open = project.status === "in_progress" && can("bookkeeper");
+  // Rates and prices are in the project's currency (MC62).
+  const currencyPrefix = project.currencyCode !== useBaseCurrency() ? `${project.currencyCode} ` : "";
   const [name, setName] = useState("");
   const [chargeType, setChargeType] = useState<ChargeType>("hourly");
   const [rate, setRate] = useState("");
@@ -309,7 +360,7 @@ function TasksCard({ organisationId, project, onChanged }: { organisationId: str
                   </td>
                   <td data-label="Charged">
                     {CHARGE_TYPE_LABELS[task.chargeType]}
-                    {task.chargeType === "hourly" ? ` · ${task.rate} an hour` : task.chargeType === "fixed" ? ` · ${task.rate}` : ""}{" "}
+                    {task.chargeType === "hourly" ? ` · ${currencyPrefix}${task.rate} an hour` : task.chargeType === "fixed" ? ` · ${currencyPrefix}${task.rate}` : ""}{" "}
                     <BilledBadge billed={task.billedOn} writtenOff={task.writtenOffAt} />
                   </td>
                   <td data-label="Estimate" className={ui.num}>
@@ -319,7 +370,7 @@ function TasksCard({ organisationId, project, onChanged }: { organisationId: str
                     {formatMinutes(task.minutes)}
                   </td>
                   <td data-label="Unbilled" className={ui.num}>
-                    <Money value={task.unbilledAmount} blankZero />
+                    <InCurrency value={task.unbilledAmount} currency={project.currencyCode} blankZero />
                   </td>
                   <td>
                     {open && task.status === "active" ? (
@@ -349,7 +400,7 @@ function TasksCard({ organisationId, project, onChanged }: { organisationId: str
             </select>
           </Field>
           {chargeType !== "non_chargeable" ? (
-            <Field label={chargeType === "hourly" ? "Rate per hour" : "Price"}>
+            <Field label={`${chargeType === "hourly" ? "Rate per hour" : "Price"}${currencyPrefix ? ` (${project.currencyCode})` : ""}`}>
               <input inputMode="decimal" size={8} value={rate} onChange={(event) => setRate(event.target.value)} required />
             </Field>
           ) : null}
@@ -511,7 +562,10 @@ function ExpensesCard({ organisationId, project, onChanged }: { organisationId: 
   const [search, setSearch] = useState("");
   const sources = useApiData<{ sources: ExpenseSource[] }>(open ? "/api/project-expense-sources" : null, { organisationId, search: search.trim() || null });
   const [chosen, setChosen] = useState("");
-  const [chargeable, setChargeable] = useState(true);
+  // A project in another currency takes expenses as costs only (MC63).
+  const foreign = project.currencyCode !== useBaseCurrency();
+  const [chargeableChoice, setChargeable] = useState(true);
+  const chargeable = chargeableChoice && !foreign;
   const [markup, setMarkup] = useState("");
   const [key, setKey] = useState(() => newIdempotencyKey("project-expense"));
   const { busy, error, run } = useRun();
@@ -545,6 +599,11 @@ function ExpensesCard({ organisationId, project, onChanged }: { organisationId: 
   return (
     <Card title="Expenses" description="Lines of approved bills, expense claims and spend money, linked at their cost excluding GST. Linking doesn't post anything.">
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {foreign && open ? (
+        <Notice tone="info">
+          This project is in {project.currencyCode} and expense costs aren&apos;t, so expenses go on it as costs only for now. To charge for one, add a fixed price task in {project.currencyCode}.
+        </Notice>
+      ) : null}
       {expenses.length === 0 ? <Empty>No expenses on this project.</Empty> : null}
       {expenses.length > 0 ? (
         <div className={ui.tableWrap}>
@@ -577,7 +636,7 @@ function ExpensesCard({ organisationId, project, onChanged }: { organisationId: 
                       <Money value={expense.cost} />
                     </td>
                     <td data-label="Chargeable">
-                      {changeable ? (
+                      {changeable && (!foreign || expense.chargeable) ? (
                         <label className={ui.checkbox}>
                           <input type="checkbox" checked={expense.chargeable} disabled={busy} onChange={(event) => toggle(expense.id, event.target.checked)} />
                           {expense.chargeable && expense.markupPercent !== "0" ? `+${expense.markupPercent}%` : ""}
@@ -623,9 +682,11 @@ function ExpensesCard({ organisationId, project, onChanged }: { organisationId: 
               ))}
             </select>
           </Field>
-          <label className={ui.checkbox}>
-            <input type="checkbox" checked={chargeable} onChange={(event) => setChargeable(event.target.checked)} /> Chargeable
-          </label>
+          {!foreign ? (
+            <label className={ui.checkbox}>
+              <input type="checkbox" checked={chargeable} onChange={(event) => setChargeable(event.target.checked)} /> Chargeable
+            </label>
+          ) : null}
           {chargeable ? (
             <Field label="Markup %">
               <input inputMode="decimal" size={5} value={markup} onChange={(event) => setMarkup(event.target.value)} />
@@ -657,10 +718,16 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
   const [taxCode, setTaxCode] = useState<string | null>(null);
   const [key, setKey] = useState(() => newIdempotencyKey("project-invoice"));
   const { busy, error, run } = useRun();
+  // A project in another currency makes an invoice in it, at a rate for its date (MC64, MC65).
+  const baseCurrency = useBaseCurrency();
+  const foreign = project.currencyCode !== baseCurrency;
+  const [typedRate, setTypedRate] = useState<string | null>(null);
+  const suggestedRate = useLastRate(organisationId, project.currencyCode, baseCurrency, invoiceDate);
   if (project.status !== "in_progress" || !can("bookkeeper") || all.length === 0) return null;
-  const activeTax = (taxCodes.data?.taxCodes ?? []).filter((code) => code.isActive);
+  // GST on a foreign-currency invoice is zero-rated, exempt or none (MC2).
+  const activeTax = (taxCodes.data?.taxCodes ?? []).filter((code) => code.isActive && (!foreign || code.category !== "standard"));
   const account = accountCode ?? (accounts.data?.accounts ?? []).find((entry) => entry.isActive && entry.accountClass === "revenue")?.code ?? "";
-  const tax = taxCode ?? (activeTax.find((code) => code.category === "standard") ?? activeTax[0])?.code ?? "";
+  const tax = taxCode ?? (activeTax.find((code) => code.category === (foreign ? "zero_rated" : "standard")) ?? activeTax[0])?.code ?? "";
   const ticked = (id: string) => !unticked.has(id);
   const flip = (id: string) => {
     const next = new Set(unticked);
@@ -684,6 +751,7 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
             timeEntryIds: time.filter((entry) => ticked(`time:${entry.id}`)).map((entry) => entry.id),
             taskIds: fixed.filter((task) => ticked(`task:${task.id}`)).map((task) => task.id),
             expenseIds: expenses.filter((expense) => ticked(`expense:${expense.id}`)).map((expense) => expense.id),
+            ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}),
           },
         }),
       (result) => {
@@ -701,7 +769,7 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
       </td>
       <td className={ui.muted}>{detail}</td>
       <td className={ui.num}>
-        <Money value={amount} />
+        <InCurrency value={amount} currency={project.currencyCode} />
       </td>
     </tr>
   );
@@ -745,6 +813,7 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
             ))}
           </select>
         </Field>
+        <ExchangeRateField currencyCode={project.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
         <Button onClick={submit} disabled={busy || !account || all.every((id) => !ticked(id))}>
           {busy ? "Making…" : "Make draft invoice"}
         </Button>
@@ -779,10 +848,10 @@ function InvoicesCard({ project }: { project: Project }) {
                   <Badge tone={invoice.status === "approved" ? "green" : invoice.status === "voided" ? "red" : "amber"}>{invoice.status}</Badge>
                 </td>
                 <td data-label="Excl. GST" className={ui.num}>
-                  <Money value={invoice.subtotal} />
+                  <InCurrency value={invoice.subtotal} currency={project.currencyCode} />
                 </td>
                 <td data-label="Total" className={ui.num}>
-                  <Money value={invoice.total} />
+                  <InCurrency value={invoice.total} currency={project.currencyCode} />
                 </td>
               </tr>
             ))}
@@ -964,7 +1033,7 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
   return (
     <Card
       title="Project profitability"
-      description="Invoiced (approved invoices, excluding GST) less costs (expenses at cost and time at staff cost rates), with what's still to invoice."
+      description={`Invoiced (approved invoices, excluding GST, in ${data?.baseCurrency ?? "NZD"} at each invoice's rate) less costs (expenses at cost and time at staff cost rates), with what's still to invoice in each project's currency.`}
       actions={
         <Button variant="secondary" onClick={() => window.print()}>
           Print or save as PDF
@@ -990,7 +1059,7 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
               <tr>
                 <th>Project</th>
                 <th className={ui.num}>Time</th>
-                <th className={ui.num}>Invoiced</th>
+                <th className={ui.num}>Invoiced ({data.baseCurrency})</th>
                 <th className={ui.num}>Time cost</th>
                 <th className={ui.num}>Expenses</th>
                 <th className={ui.num}>Profit</th>
@@ -1009,8 +1078,14 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
                   <td data-label="Time" className={ui.num}>
                     {formatMinutes(project.figures.minutes)}
                   </td>
-                  <td data-label="Invoiced" className={ui.num}>
-                    <Money value={project.figures.invoiced} />
+                  <td data-label={`Invoiced (${data.baseCurrency})`} className={ui.num}>
+                    <Money value={project.figures.invoicedBase} />
+                    {project.currencyCode !== data.baseCurrency ? (
+                      <span className={ui.muted}>
+                        {" "}
+                        ({project.currencyCode} {formatMoney(project.figures.invoiced)})
+                      </span>
+                    ) : null}
                   </td>
                   <td data-label="Time cost" className={ui.num}>
                     <Money value={project.figures.timeCost} />
@@ -1022,16 +1097,16 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
                     <Money value={project.figures.profit} />
                   </td>
                   <td data-label="Draft invoices" className={ui.num}>
-                    <Money value={project.figures.onDraftInvoices} blankZero />
+                    <InCurrency value={project.figures.onDraftInvoices} currency={project.currencyCode} blankZero />
                   </td>
                   <td data-label="Unbilled" className={ui.num}>
-                    <Money value={project.figures.unbilled} />
+                    <InCurrency value={project.figures.unbilled} currency={project.currencyCode} />
                   </td>
                   <td data-label="Estimate" className={ui.num}>
-                    {project.estimate ? <Money value={project.estimate} /> : ""}
+                    {project.estimate ? <InCurrency value={project.estimate} currency={project.currencyCode} /> : ""}
                   </td>
                   <td data-label="Estimate left" className={ui.num}>
-                    {project.figures.estimateLeft !== null ? <Money value={project.figures.estimateLeft} /> : ""}
+                    {project.figures.estimateLeft !== null ? <InCurrency value={project.figures.estimateLeft} currency={project.currencyCode} /> : ""}
                   </td>
                 </tr>
               ))}
@@ -1041,7 +1116,7 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
                 <th>Total</th>
                 <th className={ui.num}>{formatMinutes(data.totals.minutes)}</th>
                 <th className={ui.num}>
-                  <Money value={data.totals.invoiced} />
+                  <Money value={data.totals.invoicedBase} />
                 </th>
                 <th className={ui.num}>
                   <Money value={data.totals.timeCost} />
@@ -1057,10 +1132,31 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
                 </th>
                 <th className={ui.num}>
                   <Money value={data.totals.unbilled} />
+                  {data.otherCurrencies.length > 0 ? <span className={ui.muted}> ({data.baseCurrency} projects)</span> : null}
                 </th>
                 <th />
                 <th />
               </tr>
+              {data.otherCurrencies.map((row) => (
+                <tr key={row.currencyCode}>
+                  <th>{row.currencyCode} projects</th>
+                  <th />
+                  <th className={ui.muted}>
+                    {row.currencyCode} {formatMoney(row.invoiced)}
+                  </th>
+                  <th />
+                  <th />
+                  <th />
+                  <th className={ui.num}>
+                    <InCurrency value={row.onDraftInvoices} currency={row.currencyCode} blankZero />
+                  </th>
+                  <th className={ui.num}>
+                    <InCurrency value={row.unbilled} currency={row.currencyCode} />
+                  </th>
+                  <th />
+                  <th />
+                </tr>
+              ))}
             </tfoot>
           </table>
         </div>

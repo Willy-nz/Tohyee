@@ -68,7 +68,9 @@ that something happened.
   in the contact's currency with no rate, and the invoice or bill made from
   them takes a rate for its own date (MC25-MC28; repeating ones save
   drafts); stock items on foreign-currency documents are valued in NZD at
-  the document's rate, and cost of sales is the NZD average (MC29).
+  the document's rate, and cost of sales is the NZD average (MC29);
+  projects and CRM opportunities for a customer in another currency are in
+  it, and so are the invoices made from them (MC61-MC70).
   Zero-rated, exempt and no-GST codes only.
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
@@ -305,7 +307,11 @@ that something happened.
   time at cost, draft invoices, unbilled, written off, estimate left) and
   the **time report** (by person, project and task for a date range) are
   under Reporting. Projects post nothing; only their invoices do. A timer,
-  deposits and progress billing aren't built.
+  deposits and progress billing aren't built. A project is in its
+  **customer's currency** (built overnight 1 Oct 2026 following NetSuite,
+  MC61-MC70 not yet approved by Jess): for a USD customer its rates, prices,
+  estimate and invoices are in USD (at a rate for the invoice's date), while
+  staff and expense costs and profit stay NZD; its expenses are costs only.
 - **Customer payments** against one approved sales invoice at a time:
   recording a payment posts Dr the bank account / Cr accounts receivable on
   the payment date, and voiding it posts the exact reversal on the void date.
@@ -479,7 +485,9 @@ that something happened.
   companies are the contacts, which can now also be **prospects**; **people**
   at each company; **opportunities** with Twenty's stages (plus Lost) on a
   drag-and-drop pipeline board, where a won one makes its draft invoice in
-  one click (and makes a prospect a customer); **tasks** with due dates and
+  one click (and makes a prospect a customer); an opportunity for a company
+  in another currency is in it, amount and invoice (MC68, MC69), and the
+  board totals each currency on its own; **tasks** with due dates and
   assignees; logged **calls, meetings and notes**; and a **timeline** per
   company that also shows its invoices, credit notes, bills and payments.
   People, opportunities, tasks and activities are never deleted (CRM1-CRM9).
@@ -679,7 +687,8 @@ isn't acceptable, because people would trust it:
   statement lines, and old Excel (.xls) files
 - on foreign-currency documents (MC11): standard-rated GST, supplier
   overpayments, payments through a bank account in a third currency (as
-  NetSuite, MC30), project and CRM invoices, approving repeating ones
+  NetSuite, MC30), chargeable expenses on foreign-currency projects and
+  projects in currencies without cents (MC70), approving repeating ones
   automatically, and sales on the payments GST basis; also paying NZD
   documents from a foreign-currency statement line, standard-rated GST on
   foreign-currency spend and receive money, adjustments on foreign-currency
@@ -704,10 +713,11 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    kits are built).
 4. NZ payroll.
 5. The rest of foreign-currency documents (MC11): standard-rated GST on
-   them, the payments basis, and project and CRM invoices. Foreign-currency
-   bank accounts, invoices, bills, credit notes, payments, overpayments,
-   refunds, batch payments, quotes, repeating documents, purchase orders and
-   stock are built (MC1-MC29); a bank account in a third currency stays
+   them, the payments basis, and chargeable expenses on foreign-currency
+   projects. Foreign-currency bank accounts, invoices, bills, credit notes,
+   payments, overpayments, refunds, batch payments, quotes, repeating
+   documents, purchase orders, stock, projects and CRM opportunities are
+   built (MC1-MC29, MC61-MC70); a bank account in a third currency stays
    refused, as in NetSuite (MC30).
 
 ## Guardrails
