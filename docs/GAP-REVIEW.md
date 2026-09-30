@@ -28,7 +28,7 @@ rules are well settled; then the larger scope items.
 | 6 | **Fixed assets**: register, IRD depreciation (DV/SL), disposals | Every year-end needs it | Large. Built overnight (examples FA) |
 | 7 | **Expense claims** (staff paid back) | Common in Xero | Medium. Built overnight (examples EC) |
 | 8 | **Projects and time tracking** | In Jess's scope | Large. Built overnight (examples PJ) |
-| 9 | **Multi-currency invoices and bills** | In Jess's scope | Large |
+| 9 | **Multi-currency invoices and bills** | In Jess's scope | Large. Currency exchange rates list: Built overnight (examples MC46…MC53) |
 | 10 | **NZ payroll** (PAYE, KiwiSaver, ACC, student loan, payday filing) | In Jess's scope; needs current IRD rates and Jess's decisions, so planned rather than built overnight | Very large |
 | 11 | **Not-for-profit module** (funds/grants, restricted funds, PBE reporting) | In Jess's scope; tracking categories and custom segments cover part of it | Large |
 

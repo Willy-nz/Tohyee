@@ -25,11 +25,11 @@ export function CurrencyMoney({ currency, value }: { currency: string; value: st
   );
 }
 
-/** A foreign-currency line's base value: what it was reconciled at, or at the last rate used (D4). */
+/** A foreign-currency line's base value: what it was reconciled at, or at the list's rate or the last rate used (D4, MC50). */
 export function LineBaseValue({ line, baseCurrency }: { line: StatementLine; baseCurrency: string }) {
   if (line.currencyCode === baseCurrency) return null;
   if (line.baseAmount === null) {
-    return <div className={ui.muted}>No {line.currencyCode} rate used yet: type one</div>;
+    return <div className={ui.muted}>No {line.currencyCode} rate yet: type one</div>;
   }
   // Shown without its sign: the column already says whether it's money in or out.
   return (
@@ -62,8 +62,10 @@ export function RateField({
       label={`Exchange rate (${baseCurrency} per 1 ${currency})`}
       hint={
         suggested
-          ? `Filled in with the last ${currency} rate used, ${suggested.rate} (${suggested.source === "revaluation" ? "a revaluation" : "a transaction"} on ${formatDate(suggested.date)}). Change it to the bank's rate if it's different.`
-          : `No ${currency} rate has been used on or before this date yet, so type the bank's rate.`
+          ? suggested.source === "list"
+            ? `Filled in from the exchange rates list: ${suggested.rate}, effective ${formatDate(suggested.date)}. Change it to the bank's rate if it's different.`
+            : `Filled in with the last ${currency} rate used, ${suggested.rate} (${suggested.source === "revaluation" ? "a revaluation" : "a transaction"} on ${formatDate(suggested.date)}). Change it to the bank's rate if it's different.`
+          : `No ${currency} rate in the exchange rates list or used on or before this date yet, so type the bank's rate.`
       }
     >
       <input inputMode="decimal" value={rate} onChange={(event) => onChange(event.target.value)} required aria-label="Exchange rate" />

@@ -204,7 +204,7 @@ function RepeatingForm({
             <input value={dueDays} onChange={(event) => setDueDays(event.target.value)} inputMode="numeric" pattern="[0-9]{1,3}" required />
           </Field>
         ) : null}
-        <Field label="Each invoice is">
+        <Field label="Each invoice is" hint="In another currency, approved only when the exchange rates list has a rate for its date; otherwise left as a draft.">
           <select value={saveAs} onChange={(event) => setSaveAs(event.target.value as SaveAs)}>
             <option value="draft">Saved as a draft</option>
             <option value="approve">Approved (posted)</option>

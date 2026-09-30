@@ -4,7 +4,7 @@ import { MATCH_WINDOW_DAYS, reconcileStatementLine } from "@/lib/bank/reconcile"
 import { listBankRules, ruleMatches } from "@/lib/bank/rules";
 import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError } from "@/lib/errors";
-import { lastRateOnOrBefore, ratesUsed } from "@/lib/ledger/foreign";
+import { defaultRates, lastRateOnOrBefore } from "@/lib/ledger/foreign";
 import { dec, toFixedString } from "@/lib/money/decimal";
 import { asRecord, optionalSource, optionalString, requireArray, requireId, requireIdempotencyKey } from "@/lib/validation";
 
@@ -198,7 +198,7 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
     for (const candidate of list) uses.set(candidate.key, (uses.get(candidate.key) ?? 0) + 1);
   }
   const rules = await listBankRules(tx, { activeOnly: true });
-  const rates = await ratesUsed(tx, lines.map((row) => row.currency_code ?? tx.baseCurrency));
+  const rates = await defaultRates(tx, lines.map((row) => row.currency_code ?? tx.baseCurrency));
   return lines.map((row): LineConfidence => {
     const list = candidates.get(row.id) ?? [];
     if (list.length === 1) {

@@ -242,7 +242,7 @@ function RepeatingBillForm({
             />
           </Field>
         )}
-        <Field label="Each bill is" hint="Nothing is paid automatically either way.">
+        <Field label="Each bill is" hint="Nothing is paid automatically either way. In another currency, approved only when the exchange rates list has a rate for its date; otherwise left as a draft.">
           <select value={saveAs} onChange={(event) => setSaveAs(event.target.value as SaveAs)}>
             <option value="draft">Saved as a draft</option>
             <option value="approve">Approved (posted)</option>

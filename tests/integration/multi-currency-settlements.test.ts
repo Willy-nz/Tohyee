@@ -19,7 +19,7 @@ import { inventoryValuation } from "@/lib/reports/financial";
 import { approvePurchaseOrder, copyPurchaseOrderToBill, createPurchaseOrder } from "@/lib/purchase-orders/service";
 import { acceptQuote, createQuote, finaliseQuote } from "@/lib/quotes/service";
 import { createRepeatingBill, runRepeatingBills } from "@/lib/repeating/bills";
-import { createRepeatingInvoice, runRepeatingInvoices } from "@/lib/repeating/service";
+import { createRepeatingInvoice, getRepeatingInvoice, runRepeatingInvoices } from "@/lib/repeating/service";
 import { postFxRevaluation } from "@/lib/ledger/fx-revaluation";
 import { getJournal } from "@/lib/ledger/journals";
 import { periodChecklist } from "@/lib/ledger/period-close";
@@ -494,7 +494,7 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
     expect(typed.invoice).toMatchObject({ exchangeRate: "1.58", baseTotal: "15.80" });
   });
 
-  it("MC26: a USD repeating invoice saves USD drafts, each at a rate for its date; approving automatically is refused", async () => {
+  it("MC26: a USD repeating invoice makes USD invoices at a rate for their date; with no rate in the exchange rates list, left as drafts", async () => {
     const template = (saveAs: string) =>
       run((tx) =>
         createRepeatingInvoice(tx, {
@@ -510,14 +510,17 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
           saveAs,
         }),
       );
-    await expect(template("approve")).rejects.toThrow(/Repeating invoices in USD can only be saved as drafts for now \(refused rather than guessed\)/);
-    const { repeatingInvoice } = await template("draft");
-    expect(repeatingInvoice).toMatchObject({ currencyCode: "USD", total: "100.00" });
+    // Saved as "approve" (MC52); the list has no USD rate, so the invoice is left as a draft, saying why.
+    const { repeatingInvoice } = await template("approve");
+    expect(repeatingInvoice).toMatchObject({ currencyCode: "USD", total: "100.00", saveAs: "approve" });
     const before = await journalCount();
     const result = await inOrganisation(ORG, { userId: null, email: "repeating-invoices@tohyee" }, (tx) =>
       runRepeatingInvoices(tx, { today: "2026-08-31", repeatingInvoiceId: repeatingInvoice.id }),
     );
-    expect(result).toMatchObject({ made: 1, failed: 0 });
+    expect(result).toEqual({ made: 1, approved: 0, refused: 1, failed: 0 });
+    expect((await run((tx) => getRepeatingInvoice(tx, repeatingInvoice.id))).runs[0].message).toMatch(
+      /^Left as a draft: The exchange rates list has no USD rate effective on or before 2026-08-31, so this invoice took the last USD rate used \(1\.6\)/,
+    );
     const made = (await run((tx) => tx.query<{ id: string }>("select invoice_id::text as id from repeating_invoice_runs where repeating_invoice_id = $1", [repeatingInvoice.id])))
       .rows[0].id;
     // The last USD rate used on or before 31 Aug is 1.60 (MC25's approved invoice; the 1.58 one is still a draft, which posts nothing).
@@ -525,7 +528,7 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
     expect(await journalCount()).toBe(before);
   });
 
-  it("MC27: a USD repeating bill saves USD drafts at a rate for their date", async () => {
+  it("MC27: a USD repeating bill makes USD bills at a rate for their date; with no rate in the list, left as drafts", async () => {
     const template = (saveAs: string) =>
       run((tx) =>
         createRepeatingBill(tx, {
@@ -542,13 +545,12 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
           saveAs,
         }),
       );
-    await expect(template("approve")).rejects.toThrow(/Repeating bills in USD can only be saved as drafts for now/);
-    const { repeatingBill } = await template("draft");
+    const { repeatingBill } = await template("approve");
     expect(repeatingBill.currencyCode).toBe("USD");
     const result = await inOrganisation(ORG, { userId: null, email: "repeating-bills@tohyee" }, (tx) =>
       runRepeatingBills(tx, { today: "2026-08-31", repeatingBillId: repeatingBill.id }),
     );
-    expect(result).toMatchObject({ made: 1, failed: 0 });
+    expect(result).toEqual({ made: 1, approved: 0, refused: 1, failed: 0 });
     const made = (await run((tx) => tx.query<{ id: string }>("select bill_id::text as id from repeating_bill_runs where repeating_bill_id = $1", [repeatingBill.id]))).rows[0].id;
     expect(await run((tx) => getBill(tx, made))).toMatchObject({ status: "draft", billDate: "2026-08-31", currencyCode: "USD", exchangeRate: "1.6", baseTotal: "64.00" });
   });
