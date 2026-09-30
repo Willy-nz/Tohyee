@@ -118,6 +118,8 @@ export type BillSummary = {
   /** The purchase order the bill was copied from (PO3), or null. */
   purchaseOrderId: string | null;
   purchaseOrderNumber: string | null;
+  /** Owed at the conversion date when the books were brought in (IM5): no GST. */
+  isOpeningBalance: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -165,6 +167,7 @@ type BillRow = {
   custom_fields: CustomValues;
   purchase_order_id: string | null;
   po_number: string | null;
+  is_opening_balance: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -172,7 +175,8 @@ type BillRow = {
 const SUMMARY_COLUMNS = `b.id, b.status, b.contact_id, c.name as contact_name, b.bill_date, b.due_date,
   b.supplier_invoice_number, b.amounts_mode, b.currency_code, b.subtotal, b.tax_total, b.total,
   paid.amount_paid, credited.amount_credited, b.approval_journal_id, b.approved_at, b.approved_by_email, b.void_date, b.void_journal_id, b.voided_at,
-  b.voided_by_email, b.created_by_email, b.created_at, b.updated_at, b.custom_fields, b.purchase_order_id, po.po_number`;
+  b.voided_by_email, b.created_by_email, b.created_at, b.updated_at, b.custom_fields, b.purchase_order_id, po.po_number,
+  b.is_opening_balance`;
 
 /** Bills with their supplier and the sums of their active payments and supplier credit applied. */
 const SUMMARY_FROM = `bills b
@@ -240,6 +244,7 @@ function toSummary(row: BillRow): BillSummary {
     customFields: row.custom_fields ?? {},
     purchaseOrderId: row.purchase_order_id,
     purchaseOrderNumber: row.po_number,
+    isOpeningBalance: row.is_opening_balance,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1351,4 +1356,82 @@ export async function voidBill(
     details: { supplierInvoiceNumber: current.supplierInvoiceNumber, voidDate, journalId: posted.journal.id },
   });
   return { created: true, bill: await getBill(tx, billId) };
+}
+
+/**
+ * A bill still owed at the conversion date, brought in with the opening
+ * balances (examples IM5-IM9): one line for the amount still owed
+ * (including GST, with no tax code: its GST was claimed before the
+ * conversion) on the conversion clearing account, approved at once:
+ * Dr conversion clearing / Cr accounts payable, dated the conversion date. It
+ * can then be paid, credited and voided like any other bill, and never counts
+ * in a GST return. Called only by the opening balances import
+ * (`@/lib/import/conversion`), which checks the supplier, number and dates.
+ */
+export async function createOpeningBill(
+  tx: OrgTx,
+  input: {
+    idempotencyKey: string;
+    conversionDate: string;
+    clearingAccountCode: string;
+    contactId: string;
+    contactName: string;
+    supplierInvoiceNumber: string;
+    billDate: string;
+    dueDate: string;
+    amount: string;
+  },
+): Promise<Bill> {
+  const source = "import";
+  const hash = requestHash("opening_bill", { ...input });
+  let billId: string;
+  try {
+    const inserted = await tx.query<{ id: string }>(
+      `insert into bills (command_source, idempotency_key, request_hash, contact_id, bill_date, due_date, supplier_invoice_number,
+                          amounts_mode, currency_code, subtotal, tax_total, total, is_opening_balance, created_by_user_id, created_by_email)
+       values ($1, $2, $3, $4, $5, $6, $7, 'no_tax', $8, $9::numeric, 0.00, $9::numeric, true, $10, $11)
+       returning id`,
+      [source, input.idempotencyKey, hash, input.contactId, input.billDate, input.dueDate, input.supplierInvoiceNumber, tx.baseCurrency, input.amount, tx.actor.userId, tx.actor.email],
+    );
+    billId = inserted.rows[0].id;
+  } catch (error) {
+    if (isUniqueViolation(error, NUMBER_INDEX)) throw numberTaken(input.contactName, input.supplierInvoiceNumber);
+    throw error;
+  }
+  await tx.query(
+    `insert into bill_lines (bill_id, line_order, description, quantity, unit_price, account_id, tax_code_id, tax_rate,
+                             line_amount, net_amount, tax_amount)
+     select $1, 1, $2, 1, $3::numeric, a.id, null, 0, $3::numeric, $3::numeric, 0.00 from accounts a where a.code = $4`,
+    [billId, `Owed at ${input.conversionDate} (opening balance)`, input.amount, input.clearingAccountCode],
+  );
+  const payable = await controlAccountCode(tx, PAYABLE_ACCOUNT, "opening bills can't be brought in");
+  const posted = await postJournalBody(
+    tx,
+    "bill:approval",
+    billId,
+    parseJournalBody(tx, {
+      postingDate: input.conversionDate,
+      reference: input.supplierInvoiceNumber.slice(0, 100),
+      description: `Opening balance: bill ${input.supplierInvoiceNumber} from ${input.contactName}`,
+      lines: [
+        { accountCode: input.clearingAccountCode, debitAmount: input.amount, creditAmount: "0", description: `Bill ${input.supplierInvoiceNumber}` },
+        { accountCode: payable, debitAmount: "0", creditAmount: input.amount, description: input.contactName },
+      ],
+    }),
+    { origin: "bill" },
+  );
+  await tx.query(
+    `update bills
+        set status = 'approved', approval_journal_id = $2, approve_command_source = $3, approve_idempotency_key = $4,
+            approve_request_hash = $5, approved_by_user_id = $6, approved_by_email = $7, approved_at = now(), updated_at = now()
+      where id = $1`,
+    [billId, posted.journal.id, source, input.idempotencyKey, hash, tx.actor.userId, tx.actor.email],
+  );
+  await writeAuditEvent(tx, {
+    eventType: "bill.opening_balance",
+    entityType: "bill",
+    entityId: billId,
+    details: { supplierInvoiceNumber: input.supplierInvoiceNumber, billDate: input.billDate, amount: input.amount, journalId: posted.journal.id },
+  });
+  return getBill(tx, billId);
 }

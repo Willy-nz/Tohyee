@@ -18,9 +18,10 @@ type Draft = {
   accountType: AccountType;
   description: string;
   currencyCode: string;
+  defaultTaxCode: string;
 };
 
-const EMPTY_DRAFT: Draft = { code: "", name: "", accountType: "expense", description: "", currencyCode: "" };
+const EMPTY_DRAFT: Draft = { code: "", name: "", accountType: "expense", description: "", currencyCode: "", defaultTaxCode: "" };
 
 function AccountForm({
   initial,
@@ -97,9 +98,14 @@ function AccountForm({
           </select>
         </Field>
       </div>
-      <Field label="Description">
-        <input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} maxLength={500} />
-      </Field>
+      <div className={ui.grid2}>
+        <Field label="Description">
+          <input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} maxLength={500} />
+        </Field>
+        <Field label="Usual GST code" hint="Filled in when this account is picked on an invoice or bill line, e.g. GST, ZERO or NONE.">
+          <input value={draft.defaultTaxCode} onChange={(event) => setDraft({ ...draft, defaultTaxCode: event.target.value.toUpperCase() })} maxLength={20} />
+        </Field>
+      </div>
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>
           {busy ? "Saving…" : submitLabel}
@@ -164,6 +170,7 @@ function Accounts({ organisationId }: { organisationId: string }) {
               accountType: editing.accountType,
               description: editing.description ?? "",
               currencyCode: editing.currencyCode ?? "",
+              defaultTaxCode: editing.defaultTaxCode ?? "",
             }}
             lockClass={editing.hasPostings ? editing.accountClass : null}
             lockCurrency={editing.hasPostings}
@@ -207,6 +214,7 @@ function Accounts({ organisationId }: { organisationId: string }) {
                 <th>Code</th>
                 <th>Name</th>
                 <th>Type</th>
+                <th>GST code</th>
                 <th>Currency</th>
                 <th>Status</th>
                 {isAdmin ? <th /> : null}
@@ -218,7 +226,7 @@ function Accounts({ organisationId }: { organisationId: string }) {
               return (
                 <tbody key={accountClass}>
                   <tr className={ui.reportHeading}>
-                    <td colSpan={isAdmin ? 6 : 5}>{CLASS_LABELS[accountClass]}</td>
+                    <td colSpan={isAdmin ? 7 : 6}>{CLASS_LABELS[accountClass]}</td>
                   </tr>
                   {rows.map((account) => (
                     <tr key={account.id}>
@@ -228,6 +236,7 @@ function Accounts({ organisationId }: { organisationId: string }) {
                         {account.description ? <div className={ui.muted}>{account.description}</div> : null}
                       </td>
                       <td>{ACCOUNT_TYPES[account.accountType]?.label ?? account.accountType}</td>
+                      <td>{account.defaultTaxCode ?? ""}</td>
                       <td>{account.currencyCode ?? ""}</td>
                       <td>
                         {account.isActive ? <Badge tone="green">Active</Badge> : <Badge>Archived</Badge>}{" "}

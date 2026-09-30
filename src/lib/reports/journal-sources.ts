@@ -143,6 +143,7 @@ const ORIGIN_NAMES: Record<string, string> = {
   correction: "Correction",
   inventory: "Stock movement",
   fx_revaluation: "FX revaluation",
+  opening_balance: "Opening balances",
 };
 
 /** The source of a journal from its row. `isReversal` marks a void (or a correction's reversal). */

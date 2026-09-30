@@ -71,6 +71,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bank_transfers         money moved between bank and card accounts
 ├─ bank_rules             text to look for, and the bank transaction to suggest
 ├─ record_notes, record_attachments   notes and files on journals, documents and contacts
+├─ conversion_balances, conversion_balance_lines   opening balances as brought in, once (IM1-IM16)
+├─ import_mappings        the column mapping last used for each kind of import file
 └─ audit_events
 ```
 
@@ -673,6 +675,26 @@ Enforced by the app (and covered by tests):
   by Location; the account's total is unchanged. `stock_transfers` is
   append-only, and a check ties `transfer_out`/`transfer_in` movements to
   source type `transfer`.
+- Bringing in existing books (IM1-IM16, `src/lib/import/`): each file's
+  rows go through the ordinary services (accounts, contacts, items, stock
+  movements) inside one savepoint per file and one per row, so every rule
+  still applies; any refused row rolls the whole file back, and a check runs
+  the same way and always rolls back. Opening balances are one command
+  (`importConversion`): the trial balance posts as one journal of origin
+  `opening_balance` (not correctable in the ledger) with its accounts
+  receivable, accounts payable and inventory lines on the account with
+  system key `conversion_clearing` (2990, made when first needed); open
+  invoices and bills are approved documents flagged `is_opening_balance`
+  (their own number, no INV sequence, no GST: checks in migration 0034),
+  posting Dr AR / Cr clearing and Dr clearing / Cr AP, and stock comes in as
+  receipts at its value against clearing, all dated the conversion date. The
+  command refuses unless the trial balance balances and AR, AP and inventory
+  equal their documents; it leaves clearing at 0.00. `conversion_balances`
+  (one row, append-only) and its lines keep the imported trial balance for
+  the final check. The GST return's documents and sales by salesperson leave
+  opening invoices and bills out, the invoice counter passes over INV-numbers
+  they use, and the bank reconciliation report and matching leave the
+  opening journal out.
 - Ledger and document reports (AGP, ATX, JR, GA, CST) store nothing and
   post nothing. Aged payables (`src/lib/reports/aged-payables.ts`) and
   customer statements (`customer-statements.ts`) read the documents as at a

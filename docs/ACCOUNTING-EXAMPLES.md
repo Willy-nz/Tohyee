@@ -51,7 +51,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/projects.test.ts` (PJ1-PJ13) and
   `tests/integration/bank-quick.test.ts` (BK17-BK25) and
   `tests/integration/bank-split.test.ts` (BK26-BK28) and
-  `tests/integration/bank-foreign.test.ts` (FXB1-FXB11), all against
+  `tests/integration/bank-foreign.test.ts` (FXB1-FXB11) and
+  `tests/integration/import.test.ts` (IM1-IM16), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6) and `tests/unit/tax-invoice.test.ts` what
@@ -60,7 +61,8 @@ proves it". Test names start with the example IDs they cover:
   disposal maths (FA3, FA4, FA6-FA10), and `tests/unit/project-amounts.test.ts`
   the project time and markup maths (PJ3-PJ7), and
   `tests/unit/foreign-currency.test.ts` the conversion, carrying value,
-  rate and file currency pieces of FXB2-FXB10
+  rate and file currency pieces of FXB2-FXB10, and
+  `tests/unit/import-fields.test.ts` the import column matching (IM2-IM5, IM16)
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -4215,3 +4217,256 @@ Harbour Cafe, estimate **2,000.00**, deadline 31 Aug 2026, with tasks
   than the project's life?
 - Should a project automatically tag its invoice lines with a "Project"
   custom segment value, so the profit and loss can be split by project?
+
+## Bringing in existing books (examples not yet approved by Jess)
+
+Accountants bring an organisation's existing books into Tohyee instead of
+starting from nothing (Accounting > Settings > **Import and export**, admins
+and owners). It follows NetSuite's import assistant, as Jess asked: for each
+file, upload a CSV or Excel (.xlsx) file, map its columns to fields (matched
+from the headings, and remembered per organisation for next time), check it
+(every row, with each problem named by row), then import it in one
+transaction. **If any row is refused, nothing in that file is imported.**
+There are two presets: Tohyee's own columns (what the exports write), and
+"From another accounting system (Xero-style export)", which knows the
+headings of Xero's standard exports (`*ContactName`, `InvoiceAmountDue`, ...).
+The preset is labelled neutrally; no other product is named on screen.
+
+The steps, in order: 1 chart of accounts, 2 contacts, 3 products and
+services, 4 opening balances (trial balance and stock) and 5 open invoices
+and bills, posted together as at the **conversion date**, then 6 a final
+check and the period lock. Tests: `tests/integration/import.test.ts`
+(IM1-IM16) and `tests/unit/import-fields.test.ts` (column matching).
+
+**Running a step again.** Accounts and products and services are matched by
+code, contacts by name (ignoring case). A match is updated from the columns
+that have something in them (a blank cell changes nothing); anything else is
+added; nothing is ever deleted or archived. Opening balances (steps 4 and 5)
+are brought in **once**: a second import is refused, and a retry of the
+same request returns the first (IM14). Mistakes found later are corrected
+with a journal after the conversion date (or in an unlock window), or by
+voiding an opening invoice or bill.
+
+**How opening balances post (IM6).** The trial balance is posted as one
+journal dated the conversion date, origin "Opening balances", which can't be
+corrected like a manual journal. Accounts receivable, accounts payable and
+inventory aren't posted from the trial balance, because the open invoices,
+open bills and stock on hand make them up: their trial balance lines go to
+**2990 Conversion clearing** instead. Each open invoice then posts Dr
+accounts receivable / Cr 2990, each open bill Dr 2990 / Cr accounts
+payable, and the stock Dr inventory / Cr 2990, all dated the conversion
+date. So 2990 ends at 0.00, and accounts receivable, accounts payable and
+inventory equal their sub-ledgers without being counted twice. (Xero's
+conversion balances do the same with invoices entered before the conversion
+date and its own clearing account; NetSuite uses an opening balance
+account.) This means:
+
+- The trial balance must balance, and accounts receivable must equal the
+  open invoices, accounts payable the open bills and inventory the stock
+  values, to the cent. Otherwise nothing is posted and the difference is
+  shown (IM8, IM9).
+- Nothing may already be posted on or before the conversion date, and the
+  conversion date must be in an open period.
+- Open invoices and bills are one line each: the number, contact, date, due
+  date and **amount still owed including GST**. They keep their date, due
+  date and number (not Tohyee's INV sequence, IM10), have no GST (it was
+  accounted for before the conversion) and are marked as opening balances,
+  so they never count in a GST return or in sales by salesperson (IM11).
+  They can be paid, credited and voided like any other invoice or bill
+  (IM12); voiding one reverses it to 2990, where the accountant clears it
+  with a journal.
+- The GST line of the trial balance is posted to 2100 as a balance only:
+  journals never count in a GST return.
+- Stock is a quantity and a value per item (and per location once stock is
+  kept by location). It comes in as a receipt at that value exactly (3
+  worth 10.00 is 10.00, not 3 x 3.33), dated the conversion date.
+- Bank accounts take their balance from the trial balance. That opening
+  line is the bank's balance at the conversion date, so the bank
+  reconciliation report and matching leave it out (IM15); statement lines
+  from before the conversion date aren't expected.
+- Foreign-currency accounts, unused credit notes and overpayments (a
+  negative amount owed) aren't supported in opening balances yet (refused).
+
+The main example: **Tui Traders Ltd**, starting chart of accounts, GST on
+the invoice basis, customers Kobe Ltd and Harbour Cafe, supplier Kauri
+Supplies, stock items MUG and VASE, converting at **31 March 2026**.
+
+Trial balance at 31 Mar 2026 (columns Account code, Account, Debit, Credit;
+a last row "Total" with no code is left out):
+
+| Account | Debit | Credit |
+| --- | ---: | ---: |
+| 1000 Business bank account | 12,450.00 | |
+| 1100 Accounts receivable | 1,725.00 | |
+| 1400 Inventory | 810.00 | |
+| 1600 Office equipment | 3,000.00 | |
+| 2000 Accounts payable | | 460.00 |
+| 2100 GST | | 1,380.00 |
+| 3000 Owner funds introduced | | 10,000.00 |
+| 3200 Retained earnings | | 6,145.00 |
+| **Total** | **17,985.00** | **17,985.00** |
+
+Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
+**1,150.00**; **INV-0112** Harbour Cafe, 28/03/2026, due 20/04/2026,
+**575.00**. Open bill: **K-311** Kauri Supplies, 20/03/2026, due
+20/04/2026, **460.00**. Stock: MUG 40 worth **800.00**; VASE 3 worth
+**10.00**.
+
+- **IM1** The first opening balances import adds **2990 Conversion
+  clearing** (current liability, "Used by Tohyee"), or the next free code up
+  to 2999. It's the account the three sub-ledger lines clear through, and is
+  0.00 once they're posted (IM7).
+- **IM2** Chart of accounts, Xero-style file:
+
+  ```
+  *Code,*Name,*Type,*Tax Code,Description
+  200,Sales,Revenue,15% GST on Income,
+  610,Accounts Receivable,Current Asset,No GST,
+  6000,Advertising,Overhead,GST on Expenses,
+  7500,Donations,Expense,No GST,Gifts to charities
+  ```
+
+  Check: 200 **added** (Revenue, GST code GST); 610 is Tohyee's accounts
+  receivable account, so **1100 is re-coded 610** and keeps its role (and
+  its type); 6000 **updated** (renamed Advertising, usual GST code GST); 7500
+  **added** (Expense, NONE, with its description). Importing it: 2 added, 2
+  updated. Importing the same file again: 4 unchanged. Types are read from
+  Tohyee's names and the other system's (Overhead is Expense, Sales is
+  Revenue, Prepayment is Current asset, and so on); tax codes from their
+  code or label, or names like "15% GST on Income" (GST), "Zero Rated"
+  (ZERO), "Exempt Expenses" (EXEMPT) and "No GST" (NONE); "GST on Imports"
+  is refused.
+- **IM3** Refusals: `1000,Business bank account,Current asset` (1000 is the
+  bank account Tohyee uses, so its type stays Bank), `8000,Sundry income,`
+  (a new account needs a type) and `8100,Rent received,Other income`. The
+  check names row 2 and row 3; importing is refused and **8100 isn't added
+  either**. The same code twice in one file is refused on the later row.
+- **IM4** Contacts, Xero-style file with no customer or supplier columns,
+  "mark new contacts as" customer and supplier:
+
+  ```
+  *ContactName,EmailAddress,POAddressLine1,POCity,POPostalCode,TaxNumber
+  Kobe Ltd,accounts@kobe.co.nz,1 Queen Street,Auckland,1010,123-456-789
+  Harbour Cafe,,,,,
+  ```
+
+  Kobe Ltd is added as a customer and supplier with billing address "1 Queen
+  Street / Auckland / 1010" (one line each) and GST number 123456789.
+  Importing `KOBE LTD,hello@kobe.co.nz` later updates Kobe Ltd's email and
+  leaves everything else. With Tohyee's columns, "Payment terms" is matched
+  to the organisation's terms by name ("20th of the following month") and a
+  custom field column (Advanced reporting) to its field; a list field's
+  option by its name. A row with an email of "not-an-email" refuses the
+  whole file.
+- **IM5** Products and services, Xero-style file: `MUG` with
+  InventoryAssetAccount 1400 becomes a **stock** item (purchase account
+  1400); `DELIVERY` with only a sale price of 12.50 and sales account 4000
+  becomes a **service**; `BOX` with a purchase price becomes **non-stock**.
+  "15% GST on Income" and "15% GST on Expenses" are GST. Quantities in the
+  file are ignored: stock on hand comes with the opening balances.
+- **IM6** Posting Tui Traders' opening balances makes, all dated 31 Mar
+  2026:
+  - the opening journal (reference OPENING, origin "Opening balances"):
+    Dr 1000 **12,450.00**, Dr 2990 **1,725.00** (1100, held by the open
+    invoices), Dr 2990 **810.00** (1400, held by the opening stock), Dr 1600
+    **3,000.00** / Cr 2990 **460.00** (2000, held by the open bills), Cr
+    2100 **1,380.00**, Cr 3000 **10,000.00**, Cr 3200 **6,145.00**; total
+    **17,985.00**;
+  - INV-0107: Dr 1100 **1,150.00** / Cr 2990 1,150.00; INV-0112: Dr 1100
+    **575.00** / Cr 2990 575.00 (each approved, one line "Owed at
+    2026-03-31 (opening balance)" of 1,150.00 or 575.00, no GST);
+  - K-311: Dr 2990 **460.00** / Cr 2000 460.00;
+  - stock receipts: MUG 40 at **800.00** (unit cost 20.00) and VASE 3 at
+    **10.00** (not 9.99), each Dr 1400 / Cr 2990.
+- **IM7** The trial balance at 31 Mar 2026 is exactly the imported one: 1000
+  12,450.00 Dr, 1100 1,725.00 Dr, 1400 810.00 Dr, 1600 3,000.00 Dr, 2000
+  460.00 Cr, 2100 1,380.00 Cr, 3000 10,000.00 Cr, 3200 6,145.00 Cr, and 2990
+  **0.00**. The final check shows each account's imported and Tohyee
+  balance side by side, all matching; locking up to 31 Mar 2026 (the
+  ordinary period lock) then refuses anything dated on or before it.
+  Aged receivables at 31 Mar 2026: Kobe Ltd 1,150.00 and Harbour Cafe
+  575.00 (current, due 20 Apr), total **1,725.00** = 1100. Aged payables:
+  Kauri Supplies **460.00** = 2000. Stock on hand: MUG 40 worth 800.00,
+  VASE 3 worth 10.00, total **810.00** = 1400.
+- **IM8** INV-0112 at **500.00** instead: refused, "Accounts receivable
+  (1100) is 1,725.00 in the trial balance, but the open invoices add up to
+  1,650.00: a difference of 75.00". Nothing is posted and 2990 isn't made.
+  The same for accounts payable against the open bills, and inventory
+  against the stock values.
+- **IM9** 3200 at **6,110.00** instead: refused, "debits 17,985.00, credits
+  17,950.00, a difference of 35.00". Nothing is posted.
+- **IM10** Numbers: INV-0107 and INV-0112 keep their numbers. If an opening
+  invoice is numbered **INV-0001**, the first invoice approved in Tohyee is
+  **INV-0002** (the counter passes over numbers opening invoices have). An
+  opening invoice with a number already in Tohyee is refused.
+- **IM11** GST: the first return after the conversion, 1 Apr - 31 May 2026
+  (invoice basis), with a new invoice I1 (100.00 + GST 15.00) dated 10 Apr
+  and INV-0107 paid in full on 20 Apr: Box 5 **115.00**, Box 8 **15.00**,
+  and only I1 is in its lines. A return for 1 Feb - 31 Mar 2026 in Tohyee
+  has no lines either (the opening invoices and bill are left out, and the
+  opening journal never counts). 2100 at 31 May: 1,380.00 + 15.00 =
+  **1,395.00** Cr. Opening invoices are left out of sales by salesperson.
+- **IM12** Paying later: INV-0107 paid 1,150.00 on 20 Apr 2026 from 1000
+  posts Dr 1000 / Cr 1100 1,150.00 and the invoice is paid; K-311 paid
+  460.00 on 22 Apr posts Dr 2000 / Cr 1000. Aged receivables at 30 Apr:
+  Harbour Cafe **575.00** (10 days overdue). Kobe Ltd's activity statement
+  for April starts with a balance of **1,150.00** (INV-0107) and ends at
+  0.00 after the payment.
+- **IM13** GST basis (question for Jess below): on the **payments basis**,
+  GST on an invoice issued before the conversion but paid after it is
+  returned when it's paid, but the file has only the amount still owed, not
+  its GST. So open invoices are refused on the payments basis, and open
+  bills on the payments and hybrid bases, with a message to enter them as
+  ordinary invoices or bills (with their GST) dated the conversion date
+  instead. On the hybrid basis open invoices are accepted (sales count on
+  the invoice basis).
+- **IM14** Once only: a second opening balances import is refused ("already
+  brought in as at 2026-03-31"); retrying the first with the same key and
+  files returns it (nothing new). Something already posted on or before
+  the conversion date refuses the import.
+- **IM15** Bank reconciliation: a statement for 1000 with one line, 2 Apr
+  2026, -46.00, running balance **12,404.00**, reconciled to a spend money
+  of 46.00 on 2 Apr. The report as at 30 Apr: Tohyee **12,404.00**, nothing
+  in Tohyee that isn't on the statement (the opening line isn't an item),
+  statement balance 12,404.00, fully explained. The opening line is never
+  offered as a match for a statement line.
+- **IM16** Export: the chart of accounts, contacts, and products and
+  services download as CSV with Tohyee's column headings (for example
+  `Code,Name,Type,GST code,Description`), and importing an exported file
+  back changes nothing (every row unchanged).
+
+### Not supported yet (refused rather than guessed)
+
+- Opening balances on **foreign-currency accounts**.
+- **Unused credit notes, overpayments and prepayments** at the conversion
+  date (a negative amount owed).
+- Open invoices on the **payments basis**, and open bills on the payments or
+  hybrid basis (IM13).
+- **Unpresented payments and deposits** at the conversion date: the bank
+  account's opening balance is taken as what the bank's statement said.
+- Several **conversion dates** (for example bringing in history month by
+  month), and importing **transactions** (invoices, bills and journals
+  from before the conversion date, other than what's still owed).
+- Contacts' **people**, customer groups, price levels and credit limits,
+  items' units, price level prices, suppliers and kits, and payment terms
+  from another system's day-and-term columns.
+
+### Questions for Jess (bringing in existing books)
+
+- **Payments basis**: should open invoices and bills at the conversion date
+  carry their GST (a GST column, or the original invoice lines), so GST is
+  returned when they're paid after the conversion? For now they're refused
+  on that basis (IM13). Is Tohyee right that, under IR375, GST on a
+  pre-conversion invoice paid after the conversion is due in the return
+  covering the payment, not in the old system's returns?
+- **Clearing account**: is 2990 "Conversion clearing" (current liability)
+  the right name, code and type, or would you rather an equity "Opening
+  balance" account as in NetSuite?
+- **Bank balances**: should the bank account's opening balance be the
+  ledger balance (as built) with unpresented items entered as opening
+  transactions, as in Xero?
+- Is matching another system's "Accounts Receivable" (and Accounts Payable,
+  GST, Inventory, Retained Earnings) to Tohyee's own account by name, and
+  re-coding Tohyee's account to the other system's code, what you want?
+- Should contacts without customer or supplier columns default to both
+  (the screen's default for the other-system preset)?

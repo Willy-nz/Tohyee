@@ -52,6 +52,7 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   expense_claim_payment: "Expense claim payment",
   fixed_asset_depreciation: "Depreciation",
   fixed_asset_disposal: "Asset disposal",
+  opening_balance: "Opening balances",
 };
 
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {

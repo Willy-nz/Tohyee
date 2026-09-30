@@ -230,6 +230,8 @@ export async function bankReconciliationReport(
           where i.journal_line_id = l.id and i.active
        ) rec
       where l.account_id = $1 and j.posting_date <= $2 and l.account_amount <> rec.on_statement
+        -- The opening balance brought in at the conversion date is the bank's balance then, not an item to find on a statement (IM12).
+        and j.origin <> 'opening_balance'
         -- A foreign-currency account's revaluations (foreign amount 0) and base-only postings aren't on its statement.
         and (not $3::boolean or l.foreign_amount > 0)
       order by j.posting_date, l.id`,

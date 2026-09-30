@@ -112,6 +112,8 @@ export type InvoiceSummary = {
   /** The salesperson (SR1), or null. */
   salespersonId: string | null;
   salespersonName: string | null;
+  /** Owed at the conversion date when the books were brought in (IM5): keeps its old number, no GST. */
+  isOpeningBalance: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -161,6 +163,7 @@ type InvoiceRow = {
   custom_fields: CustomValues;
   salesperson_id: string | null;
   salesperson_name: string | null;
+  is_opening_balance: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -169,7 +172,7 @@ const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name 
   i.due_date, i.reference, i.amounts_mode, i.currency_code, i.subtotal, i.tax_total, i.total,
   paid.amount_paid, credited.amount_credited, i.approval_journal_id, i.approved_at, i.approved_by_email, i.void_date, i.void_journal_id,
   i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at, i.custom_fields,
-  i.salesperson_id, sp.name as salesperson_name`;
+  i.salesperson_id, sp.name as salesperson_name, i.is_opening_balance`;
 
 /**
  * Invoices with their customer, what their active payments paid on them (a
@@ -242,6 +245,7 @@ function toSummary(row: InvoiceRow): InvoiceSummary {
     customFields: row.custom_fields ?? {},
     salespersonId: row.salesperson_id,
     salespersonName: row.salesperson_name,
+    isOpeningBalance: row.is_opening_balance,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1063,13 +1067,19 @@ export function formatInvoiceNumber(sequence: number): string {
 /**
  * Takes the next invoice number. The counter row stays locked until the
  * transaction ends, and a refused approval rolls it back, so there are no gaps.
+ * A number already used by an invoice brought in with the opening balances
+ * (IM7) is passed over: that invoice has it.
  */
 async function takeInvoiceNumber(tx: OrgTx): Promise<{ sequence: number; invoiceNumber: string }> {
-  const result = await tx.query<{ last_number: number }>(
-    "update sales_invoice_numbering set last_number = last_number + 1 where id = true returning last_number",
-  );
-  const sequence = Number(result.rows[0].last_number);
-  return { sequence, invoiceNumber: formatInvoiceNumber(sequence) };
+  for (;;) {
+    const result = await tx.query<{ last_number: number }>(
+      "update sales_invoice_numbering set last_number = last_number + 1 where id = true returning last_number",
+    );
+    const sequence = Number(result.rows[0].last_number);
+    const invoiceNumber = formatInvoiceNumber(sequence);
+    const taken = await tx.query("select 1 from sales_invoices where invoice_number = $1 and is_opening_balance", [invoiceNumber]);
+    if (taken.rowCount === 0) return { sequence, invoiceNumber };
+  }
 }
 
 /**
@@ -1343,4 +1353,85 @@ export async function voidInvoice(
     details: { invoiceNumber: current.invoiceNumber, voidDate, journalId: posted.journal.id },
   });
   return { created: true, invoice: await getInvoice(tx, invoiceId) };
+}
+
+/**
+ * An invoice still owed at the conversion date, brought in with the opening
+ * balances (examples IM5-IM9). It keeps the number it had, has one line for
+ * the amount still owed (including GST, with no tax code: its GST was
+ * accounted for before the conversion) on the conversion clearing account,
+ * and is approved at once: Dr accounts receivable / Cr conversion clearing,
+ * dated the conversion date. It can then be paid, credited and voided like
+ * any other invoice, and never counts in a GST return or sales report.
+ * Called only by the opening balances import (`@/lib/import/conversion`),
+ * which checks the contact, number and dates first.
+ */
+export async function createOpeningInvoice(
+  tx: OrgTx,
+  input: {
+    idempotencyKey: string;
+    conversionDate: string;
+    clearingAccountCode: string;
+    contactId: string;
+    contactName: string;
+    invoiceNumber: string;
+    invoiceDate: string;
+    dueDate: string;
+    reference: string | null;
+    amount: string;
+  },
+): Promise<Invoice> {
+  const source = "import";
+  const hash = requestHash("opening_invoice", { ...input });
+  const inserted = await tx.query<{ id: string }>(
+    `insert into sales_invoices (command_source, idempotency_key, request_hash, contact_id, invoice_date, due_date,
+                                 reference, amounts_mode, currency_code, subtotal, tax_total, total, is_opening_balance,
+                                 created_by_user_id, created_by_email)
+     values ($1, $2, $3, $4, $5, $6, $7, 'no_tax', $8, $9::numeric, 0.00, $9::numeric, true, $10, $11)
+     returning id`,
+    [source, input.idempotencyKey, hash, input.contactId, input.invoiceDate, input.dueDate, input.reference, tx.baseCurrency, input.amount, tx.actor.userId, tx.actor.email],
+  );
+  const invoiceId = inserted.rows[0].id;
+  await tx.query(
+    `insert into sales_invoice_lines (invoice_id, line_order, description, quantity, unit_price, account_id, tax_code_id, tax_rate,
+                                      line_amount, net_amount, tax_amount)
+     select $1, 1, $2, 1, $3::numeric, a.id, null, 0, $3::numeric, $3::numeric, 0.00 from accounts a where a.code = $4`,
+    [invoiceId, `Owed at ${input.conversionDate} (opening balance)`, input.amount, input.clearingAccountCode],
+  );
+  const receivable = await controlAccountCode(tx, RECEIVABLE_ACCOUNT, "opening invoices can't be brought in");
+  const posted = await postJournalBody(
+    tx,
+    "invoice:approval",
+    invoiceId,
+    parseJournalBody(tx, {
+      postingDate: input.conversionDate,
+      reference: input.invoiceNumber,
+      description: `Opening balance: invoice ${input.invoiceNumber} to ${input.contactName}`,
+      lines: [
+        { accountCode: receivable, debitAmount: input.amount, creditAmount: "0", description: input.contactName },
+        { accountCode: input.clearingAccountCode, debitAmount: "0", creditAmount: input.amount, description: `Invoice ${input.invoiceNumber}` },
+      ],
+    }),
+    { origin: "invoice" },
+  );
+  try {
+    await tx.query(
+      `update sales_invoices
+          set status = 'approved', invoice_number = $2, approval_journal_id = $3,
+              approve_command_source = $4, approve_idempotency_key = $5, approve_request_hash = $6,
+              approved_by_user_id = $7, approved_by_email = $8, approved_at = now(), updated_at = now()
+        where id = $1`,
+      [invoiceId, input.invoiceNumber, posted.journal.id, source, input.idempotencyKey, hash, tx.actor.userId, tx.actor.email],
+    );
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new ConflictError(`There's already an invoice numbered ${input.invoiceNumber}.`);
+    throw error;
+  }
+  await writeAuditEvent(tx, {
+    eventType: "invoice.opening_balance",
+    entityType: "sales_invoice",
+    entityId: invoiceId,
+    details: { invoiceNumber: input.invoiceNumber, invoiceDate: input.invoiceDate, amount: input.amount, journalId: posted.journal.id },
+  });
+  return getInvoice(tx, invoiceId);
 }

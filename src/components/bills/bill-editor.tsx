@@ -1,5 +1,6 @@
 "use client";
 
+import { usualTaxCode } from "@/lib/accounts/types";
 import Link from "next/link";
 import { type Dispatch, type FormEvent, type SetStateAction, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
@@ -396,7 +397,7 @@ export function PurchaseLines({
                     accounts={accounts}
                     filter={takesBillLines}
                     value={line.accountCode}
-                    onChange={(code) => update(line.key, { accountCode: code })}
+                    onChange={(code) => update(line.key, { accountCode: code, ...usualTaxCode(accounts, taxCodes, code) })}
                     required
                   />
                   <TrackingSelects

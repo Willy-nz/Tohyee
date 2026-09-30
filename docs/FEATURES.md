@@ -456,6 +456,23 @@ that something happened.
   at most 4 levels) with aged receivables and customer statements rolled
   up (RC3-RC12, CST3). With it on, items also get NetSuite's extras
   (below). The **GST audit report** (step 5, above) is for everyone.
+- **Import and export** (Accounting > Settings, admins and owners; examples
+  IM1-IM16, not yet approved by Jess): a wizard following NetSuite's import
+  assistant for bringing in existing books: upload CSV or Excel, map columns
+  (automatic for Tohyee's own columns and for Xero-style exports, labelled
+  "From another accounting system"; remembered per organisation), check
+  every row, then import the whole file in one transaction or nothing. Steps:
+  chart of accounts (by code; Tohyee's own control accounts keep their type
+  and can take the other system's code), contacts (by name, with addresses,
+  GST number, payment terms and custom fields), products and services (by
+  code), then opening balances as at a conversion date: the trial balance,
+  stock on hand, and open invoices and bills, posted together once through
+  2990 Conversion clearing so accounts receivable, payable and inventory
+  equal their documents and stock; open invoices keep their numbers and stay
+  out of GST returns and sales reports. A final check compares the trial
+  balance at the conversion date with the imported one and locks the period.
+  Accounts get a usual GST code, filled in when the account is picked on a
+  line. The chart of accounts, contacts and items export as CSV.
 - **Products and services** (Sales, like Xero's items, for everyone): a
   code (unique ignoring case), name, description, sale and purchase prices,
   income and purchase accounts and sales and purchase tax codes; service,
@@ -524,7 +541,9 @@ isn't acceptable, because people would trust it:
 - export jobs and downloads
 - job executions
 - AI suggestions
-- import staging (other than bank statements)
+- import staging (other than bank statements and the one-file-at-a-time
+  import checks, which save nothing), and importing transactions from before
+  a conversion date
 - bank feeds from providers other than Akahu, Akahu feeds for
   foreign-currency accounts (Akahu's transactions don't say their currency),
   an adjustment when splitting one posted transaction across several

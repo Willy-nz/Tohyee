@@ -1,5 +1,6 @@
 "use client";
 
+import { usualTaxCode } from "@/lib/accounts/types";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { AccountSelect, useAccounts } from "@/components/books";
@@ -320,7 +321,7 @@ function SupplierCreditNoteForm({
                     accounts={accounts}
                     filter={takesBillLines}
                     value={line.accountCode}
-                    onChange={(code) => update(line.key, { accountCode: code })}
+                    onChange={(code) => update(line.key, { accountCode: code, ...usualTaxCode(accounts, taxCodes, code) })}
                     required
                   />
                   <TrackingSelects

@@ -289,10 +289,12 @@ documents as (
   select 'sales_invoice' as document_type, id as document_id, invoice_number as document_number, reference, contact_id,
          null::text as claimant
     from sales_invoices
+    -- Invoices and bills owed at the conversion date were accounted for before it (IM8).
+   where not is_opening_balance
   union all
   select 'sales_credit_note', id, credit_note_number, reference, contact_id, null from sales_credit_notes
   union all
-  select 'bill', id, supplier_invoice_number, null, contact_id, null from bills
+  select 'bill', id, supplier_invoice_number, null, contact_id, null from bills where not is_opening_balance
   union all
   select 'supplier_credit_note', id, supplier_credit_note_number, reference, contact_id, null from supplier_credit_notes
   union all

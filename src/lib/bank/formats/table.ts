@@ -293,7 +293,7 @@ export function readTable(rows: string[][], layoutInput?: TableLayout | null): T
 }
 
 /** Splits CSV (or semicolon, tab or pipe separated) text into rows, following RFC 4180 quoting. */
-export function parseDelimited(text: string): string[][] {
+export function parseDelimited(text: string, options: { keepBlankRows?: boolean } = {}): string[][] {
   const sample = text.split(/\r?\n/).slice(0, 30);
   const delimiter = [",", ";", "\t", "|"]
     .map((candidate) => {
@@ -341,5 +341,6 @@ export function parseDelimited(text: string): string[][] {
     row.push(field);
     rows.push(row);
   }
-  return rows.filter((cells) => cells.some((cell) => cell.trim() !== ""));
+  // Imports keep blank rows so the row numbers they report are the spreadsheet's.
+  return options.keepBlankRows ? rows : rows.filter((cells) => cells.some((cell) => cell.trim() !== ""));
 }

@@ -663,6 +663,7 @@ export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?
         and j.posting_date between $3::date - $4::integer and $3::date + $4::integer
         and not exists (select 1 from bank_reconciliation_items i where i.journal_line_id = l.id and i.active)
         and (not $6::boolean or l.foreign_amount > 0)
+        and j.origin <> 'opening_balance'
       order by l.account_amount = $5::numeric desc, voided, abs(j.posting_date - $3::date), l.id
       limit 25`,
     [line.accountId, moneyIn, line.date, MATCH_WINDOW_DAYS, line.amount, foreignLine],
