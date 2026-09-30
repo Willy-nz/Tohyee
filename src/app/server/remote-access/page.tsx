@@ -100,6 +100,84 @@ function RemoteForm({ remote, onSaved }: { remote: RemoteAccess; onSaved: (remot
   );
 }
 
+/** A Tohyee address: one click, no sign-up (run by the Tohyee project). */
+function TohyeeAddressCard({ remote, onChanged }: { remote: RemoteAccess; onChanged: (remote: RemoteAccess) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const on = remote.method === "tohyee" && remote.enabled;
+
+  async function run(method: "POST" | "DELETE", confirmText: string | null) {
+    if (confirmText && !window.confirm(confirmText)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onChanged((await api<{ remoteAccess: RemoteAccess }>("/api/admin/remote-access/tohyee-address", { method })).remoteAccess);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function turnOff() {
+    if (!window.confirm(`Turn off phone access? Tohyee stops being reachable at ${remote.tohyeeAddress}. The address is kept for next time.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onChanged(
+        (await api<{ remoteAccess: RemoteAccess }>("/api/admin/remote-access", { method: "PUT", body: { method: "tohyee", enabled: false } }))
+          .remoteAccess,
+      );
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const other = remote.enabled && remote.method !== "tohyee";
+  return (
+    <Card
+      title="Tohyee address (recommended)"
+      description="One click, no sign-up: Tohyee gets an address like https://k7m2q9.tohyee.example and runs Cloudflare's connector for it."
+      actions={
+        on ? (
+          <Button variant="danger" onClick={() => void turnOff()} disabled={busy}>
+            Turn off
+          </Button>
+        ) : (
+          <Button
+            onClick={() => void run("POST", other ? "Switch phone access to a Tohyee address? The way it works now is turned off." : null)}
+            disabled={busy || !remote.secretsAvailable}
+          >
+            {busy ? "Working…" : remote.tohyeeAddress ? "Turn on" : "Get a Tohyee address"}
+          </Button>
+        )
+      }
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {remote.tohyeeAddress ? (
+        <p>
+          {on ? "On at " : "Your address (off): "}
+          <a href={remote.tohyeeAddress} target="_blank" rel="noreferrer">
+            {remote.tohyeeAddress}
+          </a>
+          {" · "}
+          <button
+            type="button"
+            className={ui.linkButton}
+            disabled={busy}
+            onClick={() => void run("DELETE", "Give this address back? Tohyee stops being reachable at it, and a new one may be different.")}
+          >
+            Give this address back
+          </button>
+        </p>
+      ) : null}
+      <p className={ui.muted}>Run by the Tohyee project. Your books still stay on this computer; the address service never sees them.</p>
+    </Card>
+  );
+}
+
 export default function RemoteAccessPage() {
   const { user } = useWorkspace();
   const [remote, setRemote] = useState<RemoteAccess | null>(null);
@@ -165,7 +243,7 @@ export default function RemoteAccessPage() {
     <Page>
       <PageHeader
         title="Remote access"
-        description="Use Tohyee from anywhere (phone or laptop) through a Cloudflare Tunnel: nothing to open on your router, and a proper https address."
+        description="Use Tohyee from anywhere (phone or laptop): nothing to open on your router, and a proper https address. Three ways, one at a time: a Tohyee address, your own domain on Cloudflare, or Tailscale Funnel."
       />
       {error ? <Notice tone="error">{error}</Notice> : null}
       {!remote && !error ? <p className={ui.muted}>Loading…</p> : null}
@@ -177,9 +255,10 @@ export default function RemoteAccessPage() {
                 ? `Phone access is on through Tailscale Funnel${remote.publicUrl ? ` at ${remote.publicUrl}` : ""}. `
                 : "Phone access through Tailscale Funnel is off. "}
               It&apos;s set up in the Tohyee server app on the server computer (Phone access). Saving a Cloudflare Tunnel below switches
-              to Cloudflare instead.
+              to Cloudflare instead. Tailscale&apos;s free plan is for non-commercial use only; businesses need a paid Tailscale plan.
             </Notice>
           ) : null}
+          <TohyeeAddressCard remote={remote} onChanged={setRemote} />
           {!remote.twoStepRequired ? (
             <Notice tone="error">
               Remote access can&apos;t be turned on until two-step sign-in is in force, and that needs TOHYEE_SECRET_KEY set on the server.
@@ -236,7 +315,10 @@ export default function RemoteAccessPage() {
               </div>
             ) : null}
           </Card>
-          <Card title="Set up" description="Once only. Cloudflare's menu names can change a little; the pieces stay the same.">
+          <Card
+            title="Your own domain (Cloudflare)"
+            description="Free for businesses; needs a domain on Cloudflare. The Windows server app does this for you with Connect to Cloudflare; here you paste a tunnel token. Once only. Cloudflare's menu names can change a little; the pieces stay the same."
+          >
             <SetupSteps localService={remote.localService} />
           </Card>
           <Card title="Tunnel">

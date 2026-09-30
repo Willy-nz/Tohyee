@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
@@ -176,6 +178,37 @@ describeWithDatabase("admin CLI", () => {
 
     expect((await cli(["remote-access", "clear"], { TOHYEE_SECRET_KEY: SECRET_KEY })).stdout).toContain("Remote access removed");
     expect(JSON.parse((await cli(["remote-access", "show", "--json"])).stdout)).toMatchObject({ enabled: false, hasToken: false });
+  });
+
+  it("remote access: a Tohyee address from the command line (for Linux and Docker)", async () => {
+    const missing = await cli(["remote-access", "address", "--on"], { TOHYEE_ADDRESS_SERVICE_URL: "http://127.0.0.1:9" });
+    expect(missing).toMatchObject({ code: 1, stderr: "The Tohyee address service isn't available yet." });
+
+    const service = createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        if (request.method === "DELETE") {
+          response.writeHead(204);
+          return response.end();
+        }
+        response.writeHead(201, { "content-type": "application/json" });
+        response.end(JSON.stringify({ hostname: "k7m2q9.tohyee.example", tunnelToken: tunnelToken("YWRkcmVzcw"), releaseKey: "release-secret-123" }));
+      });
+    });
+    await new Promise<void>((resolve) => service.listen(0, "127.0.0.1", resolve));
+    const env = { TOHYEE_ADDRESS_SERVICE_URL: `http://127.0.0.1:${(service.address() as AddressInfo).port}` };
+    try {
+      const on = await cli(["remote-access", "address", "--on"], env);
+      expect(on.code).toBe(0);
+      expect(on.stdout).toContain("Your Tohyee address is https://k7m2q9.tohyee.example.");
+      expect(JSON.parse((await cli(["remote-access", "show", "--json"], env)).stdout)).toMatchObject({ method: "tohyee", enabled: true });
+      expect((await cli(["remote-access", "address", "--off"], env)).stdout).toContain("off (kept: https://k7m2q9.tohyee.example)");
+      expect((await cli(["remote-access", "address", "release"], env)).stdout).toContain("given back");
+      expect(JSON.parse((await cli(["remote-access", "show", "--json"], env)).stdout)).toMatchObject({ enabled: false, tohyeeAddress: null });
+    } finally {
+      await new Promise<void>((resolve) => service.close(() => resolve()));
+      await cli(["remote-access", "clear"]);
+    }
   });
 
   it("email: saves the SMTP details with the password encrypted, never shows the password, and clears them", async () => {
