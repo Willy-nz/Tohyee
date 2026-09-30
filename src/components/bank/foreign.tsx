@@ -31,9 +31,10 @@ export function LineBaseValue({ line, baseCurrency }: { line: StatementLine; bas
   if (line.baseAmount === null) {
     return <div className={ui.muted}>No {line.currencyCode} rate used yet: type one</div>;
   }
+  // Shown without its sign: the column already says whether it's money in or out.
   return (
     <div className={ui.muted}>
-      {baseCurrency} {formatMoney(line.baseAmount)}
+      {baseCurrency} {formatMoney(line.baseAmount.replace(/^-/, ""))}
       {line.status !== "reconciled" && line.suggestedRate ? ` at ${line.suggestedRate.rate}` : ""}
     </div>
   );

@@ -63,7 +63,7 @@ function AddAccountForm({ organisationId, onAdded }: { organisationId: string; o
         <Field label="Description" hint="Optional, e.g. the account number.">
           <input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} />
         </Field>
-        <Field label="Currency" hint={currencyCode === base ? undefined : "Statement lines and matching are in this currency, with NZD beside them. No Akahu feed."}>
+        <Field label="Currency" hint={currencyCode === base ? undefined : `Statement lines and matching are in this currency, with ${base} beside them. No Akahu feed.`}>
           <select value={currencyCode} onChange={(event) => setCurrencyCode(event.target.value)}>
             {[base, ...Object.keys(CURRENCY_MINOR_UNITS).filter((code) => code !== base)].map((code) => (
               <option key={code} value={code}>

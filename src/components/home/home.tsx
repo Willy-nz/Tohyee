@@ -141,8 +141,9 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
                   <span>
                     {account.isForeign ? (
                       <>
-                        <CurrencyMoney currency={account.statementCurrency} value={account.foreignBalance} /> (
-                        <Money value={account.ledgerBalance} />)
+                        <CurrencyMoney currency={account.statementCurrency} value={account.foreignBalance} />
+                        {" · "}
+                        <CurrencyMoney currency={summary.currencyCode} value={account.ledgerBalance} />
                       </>
                     ) : (
                       <Money value={account.ledgerBalance} />

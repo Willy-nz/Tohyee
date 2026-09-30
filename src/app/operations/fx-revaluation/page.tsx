@@ -197,7 +197,7 @@ function RevaluationForm({
         <Button type="submit" disabled={busy}>
           {busy ? "Posting…" : "Post revaluation"}
         </Button>
-        <span className={ui.muted}>The carrying amount comes from the ledger; you only give the foreign balance and the rate.</span>
+        <span className={ui.muted}>The carrying amount comes from the ledger; you give the closing rate (and the foreign balance only when the ledger doesn&apos;t have it).</span>
       </div>
     </form>
   );

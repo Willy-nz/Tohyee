@@ -11,8 +11,16 @@ import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
-import { formatDate, formatDateTime, personName } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, personName } from "@/lib/format";
 import type { Journal, JournalWithLines } from "@/lib/ledger/journals";
+
+/** How a foreign-currency line's base amount came about (FXB1-FXB11). */
+const FX_KIND_TEXT: Record<"rate" | "implied" | "carrying_value" | "revaluation", string> = {
+  rate: "at",
+  implied: "arrived; rate",
+  carrying_value: "left at its carrying value; rate",
+  revaluation: "(revaluation) at",
+};
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 type JournalDetails = {
@@ -296,6 +304,12 @@ function JournalDetail({
                   {line.accountCode} · {line.accountName}
                   <TrackingTagsText setup={tracking.data} tags={line.tracking} />
                   <CustomValuesText setup={customSetup.data} values={line.customFields} />
+                  {line.foreign ? (
+                    <div className={ui.muted}>
+                      {line.foreign.currencyCode} {formatMoney(line.foreign.amount)}{" "}
+                      {FX_KIND_TEXT[line.foreign.kind]} {line.foreign.rate}
+                    </div>
+                  ) : null}
                 </td>
                 <td className={ui.muted}>{line.description}</td>
                 <td className={ui.num}>
