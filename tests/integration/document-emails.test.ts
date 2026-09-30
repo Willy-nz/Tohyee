@@ -1,0 +1,558 @@
+import type { AddressInfo } from "node:net";
+import { simpleParser, type ParsedMail } from "mailparser";
+import { SMTPServer } from "smtp-server";
+import { extractText, getDocumentProxy } from "unpdf";
+import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import * as pdfRoute from "@/app/api/documents/pdf/route";
+import * as emailsRoute from "@/app/api/email/documents/route";
+import * as retryRoute from "@/app/api/email/documents/[emailId]/retry/route";
+import * as prepareRoute from "@/app/api/email/prepare/route";
+import * as settingsRoute from "@/app/api/email/settings/route";
+import * as testRoute from "@/app/api/email/settings/test/route";
+import * as statementsRoute from "@/app/api/email/statements/route";
+import * as templatesRoute from "@/app/api/email/templates/route";
+import type { SessionUser } from "@/lib/auth/sessions";
+import { createContact } from "@/lib/contacts/service";
+import { approveCreditNote, createCreditNote } from "@/lib/credit-notes/service";
+import { createPerson } from "@/lib/crm/service";
+import type { OrgTx } from "@/lib/db/org-transaction";
+import { coreQuery } from "@/lib/db/transactions";
+import type { DocumentEmail, StatementRun, StatementRunPreview } from "@/lib/email/documents";
+import { processOrganisationOutbox } from "@/lib/email/outbox";
+import { approveInvoice, createInvoice, getInvoice } from "@/lib/invoices/service";
+import { getOrganisation } from "@/lib/organisations/registry";
+import { updateOrganisationSettings } from "@/lib/organisations/settings";
+import { approvePurchaseOrder, createPurchaseOrder } from "@/lib/purchase-orders/service";
+import { createQuote, finaliseQuote, getQuote } from "@/lib/quotes/service";
+import { getRecordExtras } from "@/lib/records/extras";
+import {
+  apiRequest,
+  createTestOrganisation,
+  createTestUser,
+  describeWithDatabase,
+  inOrganisation,
+  key,
+  params,
+  sessionCookieFor,
+  startTestServer,
+  type TestServer,
+} from "../helpers/test-server";
+
+/**
+ * Emailing documents from the organisation's own account, against a real
+ * SMTP server running in this process (smtp-server), so the message that
+ * arrives is checked as a mail client would see it: from, reply-to, to and
+ * cc, subject, message, and the PDF (read back to find its total).
+ */
+
+const SMTP_USER = "accounts@glimmers.test";
+const SMTP_PASSWORD = "app-password-1234";
+const noContext = undefined as unknown;
+
+type Received = { from: string; recipients: string[]; mail: ParsedMail };
+
+describeWithDatabase("emailing documents", () => {
+  let server: TestServer;
+  let smtp: SMTPServer;
+  let smtpPort = 0;
+  let mode: "ok" | "busy" | "reject" = "ok";
+  let received: Received[] = [];
+  let owner: SessionUser;
+  let bookkeeper: SessionUser;
+  let viewer: SessionUser;
+  let ownerCookie: string;
+  let bookkeeperCookie: string;
+  let viewerCookie: string;
+  let organisations = 0;
+
+  beforeAll(async () => {
+    process.env.TOHYEE_SECRET_KEY = "test-secret-key-for-document-emails-0123456789";
+    process.env.TOHYEE_EMAIL_OUTBOX = "off";
+    server = await startTestServer();
+    owner = await createTestUser("email-owner@example.com", { serverAdmin: true });
+    bookkeeper = await createTestUser("email-bookkeeper@example.com");
+    viewer = await createTestUser("email-viewer@example.com");
+    ownerCookie = await sessionCookieFor(owner);
+    bookkeeperCookie = await sessionCookieFor(bookkeeper);
+    viewerCookie = await sessionCookieFor(viewer);
+    smtp = new SMTPServer({
+      secure: false,
+      authOptional: false,
+      allowInsecureAuth: true,
+      disabledCommands: ["STARTTLS"],
+      logger: false,
+      onAuth(auth, _session, callback) {
+        if (auth.username === SMTP_USER && auth.password === SMTP_PASSWORD) return callback(null, { user: SMTP_USER });
+        return callback(Object.assign(new Error("Invalid username or password"), { responseCode: 535 }));
+      },
+      onRcptTo(_address, _session, callback) {
+        if (mode === "reject") return callback(Object.assign(new Error("No such user here"), { responseCode: 550 }));
+        return callback();
+      },
+      onData(stream, session, callback) {
+        const chunks: Buffer[] = [];
+        stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+        stream.on("end", () => {
+          if (mode === "busy") return callback(Object.assign(new Error("Too many messages, try again later"), { responseCode: 451 }));
+          simpleParser(Buffer.concat(chunks)).then(
+            (mail) => {
+              received.push({
+                from: session.envelope.mailFrom ? session.envelope.mailFrom.address : "",
+                recipients: session.envelope.rcptTo.map((rcpt) => rcpt.address),
+                mail,
+              });
+              callback(null, "Queued as TEST123");
+            },
+            (error: Error) => callback(error),
+          );
+        });
+      },
+    });
+    await new Promise<void>((resolve) => smtp.listen(0, "127.0.0.1", resolve));
+    smtpPort = (smtp.server.address() as AddressInfo).port;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => smtp?.close(() => resolve()));
+    await server?.teardown();
+  });
+
+  beforeEach(() => {
+    mode = "ok";
+    received = [];
+  });
+
+  async function call(route: (request: Request, context: never) => Promise<Response>, path: string, options: { method?: string; cookie?: string; body?: unknown; context?: unknown } = {}) {
+    const response = await route(apiRequest(path, { method: options.method, cookie: options.cookie ?? ownerCookie, body: options.body }), (options.context ?? noContext) as never);
+    const text = await response.text();
+    let json: Record<string, unknown> = {};
+    try {
+      json = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      // not JSON (a PDF)
+    }
+    return { status: response.status, json, text, headers: response.headers };
+  }
+
+  async function setup(options: { emailSetUp?: boolean } = {}) {
+    organisations += 1;
+    const org = `email-${organisations}-co`;
+    await createTestOrganisation(owner, org);
+    await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'bookkeeper'), ($1, $3, 'viewer')", [
+      org,
+      bookkeeper.id,
+      viewer.id,
+    ]);
+    const as = <T>(work: (tx: OrgTx) => Promise<T>) => inOrganisation(org, { userId: owner.id, email: owner.email }, work);
+    await as((tx) =>
+      updateOrganisationSettings(tx, {
+        displayName: "Glimmers",
+        postalAddress: "PO Box 5, Dunedin",
+        gstNumber: "123-456-789",
+        paymentDetails: "Pay into 12-3456-7890123-00",
+        crmEnabled: true,
+      }),
+    );
+    const kobe = (
+      await as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Kobe Cafe", isCustomer: true, email: "accounts@kobe.test", postalAddress: "12 George St, Dunedin" }))
+    ).contact;
+    await as((tx) => createPerson(tx, { contactId: kobe.id, firstName: "Mia", email: "mia@kobe.test", isPrimary: true }));
+    const invoice = async (contactId = kobe.id, approve = true) => {
+      const draft = (
+        await as((tx) =>
+          createInvoice(tx, {
+            idempotencyKey: key("i"),
+            contactId,
+            invoiceDate: "2026-07-20",
+            dueDate: "2026-08-20",
+            amountsMode: "exclusive",
+            lines: [
+              { description: "Paw print pendant", quantity: "2", unitPrice: "120.00", accountCode: "4000", taxCode: "GST" },
+              { description: "Engraving", quantity: "1", unitPrice: "35.00", accountCode: "4000", taxCode: "GST" },
+            ],
+          }),
+        )
+      ).invoice;
+      return approve ? (await as((tx) => approveInvoice(tx, draft.id, { idempotencyKey: key("ap") }))).invoice : draft;
+    };
+    if (options.emailSetUp !== false) {
+      const saved = await call(settingsRoute.PUT, "/api/email/settings", {
+        method: "PUT",
+        body: {
+          organisationId: org,
+          fromName: "Glimmers",
+          fromAddress: SMTP_USER,
+          replyTo: "jess@glimmers.test",
+          host: "127.0.0.1",
+          port: smtpPort,
+          security: "none",
+          username: SMTP_USER,
+          password: SMTP_PASSWORD,
+        },
+      });
+      expect(saved.status).toBe(200);
+    }
+    const organisation = (await getOrganisation(org))!;
+    const send = () => processOrganisationOutbox(organisation);
+    return { org, as, kobe, invoice, send, organisation };
+  }
+
+  async function queue(org: string, body: Record<string, unknown>, cookie = bookkeeperCookie) {
+    return call(emailsRoute.POST, "/api/email/documents", { method: "POST", cookie, body: { organisationId: org, idempotencyKey: key("email"), ...body } });
+  }
+
+  async function emailsFor(org: string, kind: string, id: string): Promise<DocumentEmail[]> {
+    const listed = await call(emailsRoute.GET, `/api/email/documents?organisationId=${org}&kind=${kind}&id=${id}`, { cookie: viewerCookie });
+    return listed.json.emails as DocumentEmail[];
+  }
+
+  async function pdfText(bytes: Buffer | Uint8Array): Promise<string> {
+    const pdf = await getDocumentProxy(new Uint8Array(bytes));
+    const { text } = await extractText(pdf, { mergePages: true });
+    return text;
+  }
+
+  it("keeps the account's password on the server, and only admins see or change the settings", async () => {
+    const w = await setup();
+    const read = await call(settingsRoute.GET, `/api/email/settings?organisationId=${w.org}`);
+    expect(read.status).toBe(200);
+    expect(read.text).not.toContain(SMTP_PASSWORD);
+    expect(read.json.settings).toMatchObject({ configured: true, hasPassword: true, fromAddress: SMTP_USER, replyTo: "jess@glimmers.test", host: "127.0.0.1", security: "none" });
+    const stored = await w.as((tx) => tx.query<{ smtp_password_ciphertext: string }>("select smtp_password_ciphertext from organisation_email_settings"));
+    expect(stored.rows[0].smtp_password_ciphertext).toMatch(/^v1:/);
+    expect(stored.rows[0].smtp_password_ciphertext).not.toContain(SMTP_PASSWORD);
+    expect((await call(settingsRoute.GET, `/api/email/settings?organisationId=${w.org}`, { cookie: bookkeeperCookie })).status).toBe(403);
+    const plainToGmail = await call(settingsRoute.PUT, "/api/email/settings", {
+      method: "PUT",
+      body: { organisationId: w.org, fromName: "Glimmers", host: "smtp.gmail.com", port: 587, security: "none", username: SMTP_USER },
+    });
+    expect(plainToGmail.status).toBe(400);
+    expect(plainToGmail.json.error).toMatch(/only allowed to a mail server on this computer/);
+    // A blank password keeps the saved one.
+    const kept = await call(settingsRoute.PUT, "/api/email/settings", {
+      method: "PUT",
+      body: { organisationId: w.org, fromName: "Glimmers Ltd", host: "127.0.0.1", port: smtpPort, security: "none", username: SMTP_USER, password: "" },
+    });
+    expect(kept.json.settings).toMatchObject({ configured: true, fromName: "Glimmers Ltd", fromAddress: SMTP_USER });
+
+    const tested = await call(testRoute.POST, "/api/email/settings/test", { method: "POST", body: { organisationId: w.org } });
+    expect(tested.json).toMatchObject({ ok: true, to: owner.email });
+    expect(received).toHaveLength(1);
+    expect(received[0].mail.subject).toBe("Test email from Tohyee for Glimmers");
+    expect(received[0].mail.from?.value[0]).toMatchObject({ name: "Glimmers Ltd", address: SMTP_USER });
+  });
+
+  it("a test email with the wrong password says so in plain English", async () => {
+    const w = await setup();
+    await call(settingsRoute.PUT, "/api/email/settings", {
+      method: "PUT",
+      body: { organisationId: w.org, fromName: "Glimmers", host: "127.0.0.1", port: smtpPort, security: "none", username: SMTP_USER, password: "wrong" },
+    });
+    const tested = await call(testRoute.POST, "/api/email/settings/test", { method: "POST", body: { organisationId: w.org, to: "me@glimmers.test" } });
+    expect(tested.json.ok).toBe(false);
+    expect(tested.json.error).toMatch(/didn't accept the username and password\. For Gmail, use an app password/);
+    expect(tested.json.settings).toMatchObject({ lastTest: { ok: false } });
+  });
+
+  it("emails an approved invoice with its PDF, from the organisation's account, and records it in the history", async () => {
+    const w = await setup();
+    const invoice = await w.invoice();
+    const prepared = await call(prepareRoute.GET, `/api/email/prepare?organisationId=${w.org}&kind=invoice&id=${invoice.id}`, { cookie: bookkeeperCookie });
+    expect(prepared.status).toBe(200);
+    expect(prepared.json.email).toMatchObject({
+      configured: true,
+      from: `Glimmers <${SMTP_USER}>`,
+      replyTo: "jess@glimmers.test",
+      to: ["accounts@kobe.test", "mia@kobe.test"],
+      subject: "Invoice INV-0001 from Glimmers",
+      attachmentName: "Invoice INV-0001.pdf",
+    });
+    const body = (prepared.json.email as { body: string }).body;
+    expect(body).toContain("Hi Kobe Cafe,");
+    expect(body).toContain("Here's invoice INV-0001 for $316.25.");
+    expect(body).toContain("The amount due is $316.25, due on 20 Aug 2026.");
+
+    expect((await queue(w.org, { kind: "invoice", id: invoice.id, to: ["accounts@kobe.test"], subject: "x", body: "y" }, viewerCookie)).status).toBe(403);
+    const queued = await queue(w.org, {
+      kind: "invoice",
+      id: invoice.id,
+      to: "accounts@kobe.test, mia@kobe.test",
+      cc: "jess@glimmers.test",
+      subject: "Invoice INV-0001 from Glimmers",
+      body,
+    });
+    expect(queued.status).toBe(201);
+    expect(queued.json.email).toMatchObject({ status: "queued", to: ["accounts@kobe.test", "mia@kobe.test"], cc: ["jess@glimmers.test"] });
+    // Nothing is "sent" until the SMTP server has taken it.
+    expect(received).toHaveLength(0);
+    expect(await w.send()).toMatchObject({ sent: 1, failed: 0, retrying: 0, waiting: 0 });
+
+    expect(received).toHaveLength(1);
+    const { mail, from, recipients } = received[0];
+    expect(from).toBe(SMTP_USER);
+    expect(recipients.sort()).toEqual(["accounts@kobe.test", "jess@glimmers.test", "mia@kobe.test"]);
+    expect(mail.from?.value[0]).toEqual({ name: "Glimmers", address: SMTP_USER });
+    expect(mail.replyTo?.value[0].address).toBe("jess@glimmers.test");
+    expect((Array.isArray(mail.to) ? mail.to : [mail.to]).flatMap((to) => to!.value.map((v) => v.address))).toEqual(["accounts@kobe.test", "mia@kobe.test"]);
+    expect(mail.subject).toBe("Invoice INV-0001 from Glimmers");
+    expect(mail.text).toContain("Here's invoice INV-0001 for $316.25.");
+    expect(mail.attachments).toHaveLength(1);
+    expect(mail.attachments[0]).toMatchObject({ filename: "Invoice INV-0001.pdf", contentType: "application/pdf" });
+    const text = await pdfText(mail.attachments[0].content);
+    expect(text).toContain("Tax invoice");
+    expect(text).toContain("INV-0001");
+    expect(text).toContain("123-456-789");
+    expect(text).toContain("316.25");
+    expect(text).toContain("Pay into 12-3456-7890123-00");
+
+    const [sent] = await emailsFor(w.org, "invoice", invoice.id);
+    expect(sent).toMatchObject({ status: "sent", attempts: 1, messageId: mail.messageId, requestedByEmail: bookkeeper.email });
+    expect(sent.smtpResponse).toContain("Queued as TEST123");
+    const history = await w.as((tx) => getRecordExtras(tx, "owner", "invoice", invoice.id));
+    const emailed = history.history.find((entry) => entry.eventType === "document_email.sent");
+    expect(emailed?.actorEmail).toBe(bookkeeper.email);
+    expect(emailed?.summary).toContain("Emailed to accounts@kobe.test, mia@kobe.test (cc jess@glimmers.test) with Invoice INV-0001.pdf");
+    // The invoice itself is untouched.
+    const after = await w.as((tx) => getInvoice(tx, invoice.id));
+    expect([after.status, after.amountDue]).toEqual(["approved", "316.25"]);
+
+    // The same request again (a retried click) doesn't send twice.
+    const idempotencyKey = key("same");
+    const first = await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Again", body: "Again", idempotencyKey });
+    const again = await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Again", body: "Again", idempotencyKey });
+    expect([first.status, again.status]).toEqual([201, 200]);
+    expect((again.json.email as DocumentEmail).id).toBe((first.json.email as DocumentEmail).id);
+
+    const pdf = await call(pdfRoute.GET, `/api/documents/pdf?organisationId=${w.org}&kind=invoice&id=${invoice.id}`, { cookie: viewerCookie });
+    expect(pdf.headers.get("content-type")).toBe("application/pdf");
+    expect(pdf.headers.get("content-disposition")).toContain("Invoice INV-0001.pdf");
+  });
+
+  it("refuses addresses that could add headers, and takes line breaks out of the subject", async () => {
+    const w = await setup();
+    const invoice = await w.invoice();
+    const injected = await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test\r\nBcc: spy@evil.test", subject: "Hi", body: "Hi" });
+    expect(injected.status).toBe(400);
+    expect(injected.json.error).toMatch(/"Bcc:" isn't an email address/);
+    const named = await queue(w.org, { kind: "invoice", id: invoice.id, to: '"Kobe" <accounts@kobe.test>', subject: "Hi", body: "Hi" });
+    expect(named.status).toBe(400);
+    const queued = await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Invoice\r\nBcc: spy@evil.test", body: "Hi" });
+    expect((queued.json.email as DocumentEmail).subject).toBe("Invoice Bcc: spy@evil.test");
+    await w.send();
+    expect(received[0].recipients).toEqual(["accounts@kobe.test"]);
+    expect(received[0].mail.bcc).toBeUndefined();
+    expect(received[0].mail.headers.has("bcc")).toBe(false);
+    expect(received[0].mail.attachments.map((a) => a.filename)).toEqual(["Invoice INV-0001.pdf"]);
+  });
+
+  it("drafts can't be emailed, and without an email account the dialog says how to set one up", async () => {
+    const w = await setup({ emailSetUp: false });
+    const draft = await w.invoice(w.kobe.id, false);
+    const prepared = await call(prepareRoute.GET, `/api/email/prepare?organisationId=${w.org}&kind=invoice&id=${draft.id}`, { cookie: bookkeeperCookie });
+    expect(prepared.status).toBe(400);
+    expect(prepared.json.error).toBe("Approve the invoice before emailing it.");
+    const approved = await w.invoice();
+    const notSetUp = await call(prepareRoute.GET, `/api/email/prepare?organisationId=${w.org}&kind=invoice&id=${approved.id}`, { cookie: bookkeeperCookie });
+    expect(notSetUp.json.email).toMatchObject({ configured: false, notice: expect.stringContaining("Settings > Email") });
+    const refused = await queue(w.org, { kind: "invoice", id: approved.id, to: "accounts@kobe.test", subject: "Hi", body: "Hi" });
+    expect(refused.status).toBe(503);
+  });
+
+  it("a busy server is tried again later; a refused address fails and can be sent again", async () => {
+    const w = await setup();
+    const invoice = await w.invoice();
+    mode = "busy";
+    const queued = await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Invoice", body: "Hello" });
+    expect(await w.send()).toMatchObject({ sent: 0, retrying: 1, waiting: 1 });
+    let [email] = await emailsFor(w.org, "invoice", invoice.id);
+    expect(email).toMatchObject({ status: "queued", attempts: 1 });
+    expect(email.lastError).toMatch(/busy or is limiting how much this account sends.*try again later/);
+    expect(email.lastError).toContain("Too many messages, try again later");
+    mode = "ok";
+    // Not due yet: nothing happens.
+    expect(await w.send()).toMatchObject({ sent: 0, waiting: 1 });
+    expect(await processOrganisationOutbox(w.organisation, { now: new Date(Date.now() + 2 * 60_000) })).toMatchObject({ sent: 1 });
+    [email] = await emailsFor(w.org, "invoice", invoice.id);
+    expect(email).toMatchObject({ id: (queued.json.email as DocumentEmail).id, status: "sent", attempts: 2 });
+    expect(received).toHaveLength(1);
+    const history = await w.as((tx) => getRecordExtras(tx, "owner", "invoice", invoice.id));
+    expect(history.history.map((entry) => entry.eventType)).toEqual(
+      expect.arrayContaining(["document_email.queued", "document_email.retrying", "document_email.sent"]),
+    );
+
+    mode = "reject";
+    await queue(w.org, { kind: "invoice", id: invoice.id, to: "nobody@kobe.test", subject: "Invoice", body: "Hello" });
+    expect(await w.send()).toMatchObject({ failed: 1 });
+    const [failed] = await emailsFor(w.org, "invoice", invoice.id);
+    expect(failed).toMatchObject({ status: "failed", attempts: 1, messageId: null });
+    expect(failed.lastError).toMatch(/refused the sender or recipient address/);
+    const failedHistory = await w.as((tx) => getRecordExtras(tx, "owner", "invoice", invoice.id));
+    expect(failedHistory.history.at(-1)?.summary).toMatch(/^Email to nobody@kobe.test failed: The email server refused/);
+    // A finished email can't be changed, even in the database.
+    await expect(w.as((tx) => tx.query("update document_emails set status = 'sent' where id = $1", [failed.id]))).rejects.toThrow(/finished/);
+    await expect(w.as((tx) => tx.query("delete from document_emails where id = $1", [failed.id]))).rejects.toThrow(/can't be deleted/);
+
+    mode = "ok";
+    const retried = await call(retryRoute.POST, `/api/email/documents/${failed.id}/retry`, {
+      method: "POST",
+      cookie: bookkeeperCookie,
+      body: { organisationId: w.org, idempotencyKey: key("retry") },
+      context: params({ emailId: failed.id }),
+    });
+    expect(retried.status).toBe(201);
+    await w.send();
+    expect(received.at(-1)?.recipients).toEqual(["nobody@kobe.test"]);
+  });
+
+  it("a wrong password fails straight away instead of being retried", async () => {
+    const w = await setup();
+    await w.as((tx) =>
+      tx.query("update organisation_email_settings set smtp_username = 'someone-else@glimmers.test'"),
+    );
+    const invoice = await w.invoice();
+    await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Invoice", body: "Hello" });
+    expect(await w.send()).toMatchObject({ failed: 1, retrying: 0 });
+    const [email] = await emailsFor(w.org, "invoice", invoice.id);
+    expect(email.lastError).toMatch(/didn't accept the username and password/);
+  });
+
+  it("quotes show as sent only from a real send, and keep their status; credit notes and purchase orders go too", async () => {
+    const w = await setup();
+    const quote = (
+      await w.as((tx) =>
+        createQuote(tx, {
+          idempotencyKey: key("q"),
+          contactId: w.kobe.id,
+          quoteDate: "2026-07-15",
+          expiryDate: "2026-08-14",
+          amountsMode: "exclusive",
+          lines: [{ description: "Paw print pendant", quantity: "1", unitPrice: "100.00", accountCode: "4000", taxCode: "GST" }],
+        }),
+      )
+    ).quote;
+    const draftPrepare = await call(prepareRoute.GET, `/api/email/prepare?organisationId=${w.org}&kind=quote&id=${quote.id}`, { cookie: bookkeeperCookie });
+    expect(draftPrepare.json.error).toMatch(/Finalise the quote/);
+    await w.as((tx) => finaliseQuote(tx, quote.id, { idempotencyKey: key("f") }));
+    const prepared = await call(prepareRoute.GET, `/api/email/prepare?organisationId=${w.org}&kind=quote&id=${quote.id}`, { cookie: bookkeeperCookie });
+    const email = prepared.json.email as { subject: string; body: string; to: string[] };
+    expect(email.subject).toBe("Quote QU-0001 from Glimmers");
+    await queue(w.org, { kind: "quote", id: quote.id, to: email.to, subject: email.subject, body: email.body });
+    expect((await emailsFor(w.org, "quote", quote.id))[0].status).toBe("queued");
+    await w.send();
+    expect((await emailsFor(w.org, "quote", quote.id))[0].status).toBe("sent");
+    expect((await w.as((tx) => getQuote(tx, quote.id))).status).toBe("finalised");
+    expect(await pdfText(received[0].mail.attachments[0].content)).toContain("115.00");
+
+    const creditNote = (
+      await w.as((tx) =>
+        createCreditNote(tx, {
+          idempotencyKey: key("cn"),
+          contactId: w.kobe.id,
+          creditNoteDate: "2026-07-25",
+          amountsMode: "exclusive",
+          lines: [{ description: "Engraving refund", quantity: "1", unitPrice: "35.00", accountCode: "4000", taxCode: "GST" }],
+        }),
+      )
+    ).creditNote;
+    await w.as((tx) => approveCreditNote(tx, creditNote.id, { idempotencyKey: key("ap") }));
+    await queue(w.org, { kind: "credit_note", id: creditNote.id, to: "accounts@kobe.test", subject: "Credit note", body: "Credit" });
+
+    const supplier = (await w.as((tx) => createContact(tx, { idempotencyKey: key("s"), name: "Paw Supplies", isSupplier: true, email: "orders@paw.test" }))).contact;
+    const order = (
+      await w.as((tx) =>
+        createPurchaseOrder(tx, {
+          idempotencyKey: key("po"),
+          contactId: supplier.id,
+          orderDate: "2026-07-01",
+          deliveryDate: "2026-07-10",
+          deliveryAddress: "12 Stuart St, Dunedin 9016",
+          amountsMode: "exclusive",
+          lines: [{ description: "Silver blanks", quantity: "10", unitPrice: "5.00", accountCode: "5100", taxCode: "GST" }],
+        }),
+      )
+    ).purchaseOrder;
+    await w.as((tx) => approvePurchaseOrder(tx, order.id, { idempotencyKey: key("appr") }));
+    const poPrepared = await call(prepareRoute.GET, `/api/email/prepare?organisationId=${w.org}&kind=purchase_order&id=${order.id}`, { cookie: bookkeeperCookie });
+    expect(poPrepared.json.email).toMatchObject({ to: ["orders@paw.test"], subject: "Purchase order PO-0001 from Glimmers", attachmentName: "Purchase order PO-0001.pdf" });
+    const po = poPrepared.json.email as { subject: string; body: string; to: string[] };
+    await queue(w.org, { kind: "purchase_order", id: order.id, to: po.to, subject: po.subject, body: po.body });
+    received = [];
+    expect(await w.send()).toMatchObject({ sent: 2 });
+    const names = received.map((r) => r.mail.attachments[0].filename).sort();
+    expect(names).toEqual(["Credit note CN-0001.pdf", "Purchase order PO-0001.pdf"]);
+    const poText = await pdfText(received.find((r) => r.mail.attachments[0].filename === "Purchase order PO-0001.pdf")!.mail.attachments[0].content);
+    expect(poText).toContain("Purchase order");
+    expect(poText).toContain("57.50");
+    expect(poText).toContain("12 Stuart St, Dunedin 9016");
+  });
+
+  it("templates are edited in Settings, with placeholders checked", async () => {
+    const w = await setup();
+    const bad = await call(templatesRoute.PUT, "/api/email/templates", {
+      method: "PUT",
+      body: { organisationId: w.org, kind: "invoice", subject: "Invoice {number}", body: "Hi {first name}" },
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.json.error).toMatch(/\{first name\} isn't something Tohyee can fill in/);
+    expect(
+      (await call(templatesRoute.PUT, "/api/email/templates", { method: "PUT", cookie: bookkeeperCookie, body: { organisationId: w.org, kind: "invoice", subject: "a", body: "b" } }))
+        .status,
+    ).toBe(403);
+    const saved = await call(templatesRoute.PUT, "/api/email/templates", {
+      method: "PUT",
+      body: { organisationId: w.org, kind: "invoice", subject: "{organisation}: invoice {number}", body: "Kia ora {contact}, ${amount due} is due {due date}. Ref {reference}." },
+    });
+    expect(saved.status).toBe(200);
+    const invoice = await w.invoice();
+    const prepared = await call(prepareRoute.GET, `/api/email/prepare?organisationId=${w.org}&kind=invoice&id=${invoice.id}`, { cookie: bookkeeperCookie });
+    expect(prepared.json.email).toMatchObject({ subject: "Glimmers: invoice INV-0001", body: "Kia ora Kobe Cafe, $316.25 is due 20 Aug 2026. Ref ." });
+  });
+
+  it("emails statements: one customer, or everyone with a balance, with results per customer", async () => {
+    const w = await setup();
+    await w.invoice();
+    const paw = (await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Paw Walkers", isCustomer: true }))).contact;
+    await w.invoice(paw.id);
+    const noBalance = (await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Quiet Customer", isCustomer: true, email: "quiet@example.test" }))).contact;
+
+    const statement = { statementKind: "outstanding", asAt: "2026-07-31" };
+    const one = await call(prepareRoute.GET, `/api/email/prepare?organisationId=${w.org}&kind=statement&id=${w.kobe.id}&statementKind=outstanding&asAt=2026-07-31`, {
+      cookie: bookkeeperCookie,
+    });
+    expect(one.json.email).toMatchObject({
+      subject: "Statement from Glimmers",
+      attachmentName: "Statement Kobe Cafe 2026-07-31.pdf",
+      body: expect.stringContaining("Here's your statement as at 31 Jul 2026. The balance owing is $316.25."),
+    });
+
+    const preview = await call(statementsRoute.GET, `/api/email/statements?organisationId=${w.org}&statementKind=outstanding&asAt=2026-07-31`, { cookie: bookkeeperCookie });
+    const recipients = (preview.json as unknown as StatementRunPreview).recipients;
+    expect(recipients.map((r) => [r.name, r.balance, r.to, r.skipReason])).toEqual([
+      ["Kobe Cafe", "316.25", ["accounts@kobe.test", "mia@kobe.test"], null],
+      ["Paw Walkers", "316.25", [], "No email address on the contact"],
+    ]);
+    expect(recipients.some((r) => r.contactId === noBalance.id)).toBe(false);
+
+    const run = await call(statementsRoute.POST, "/api/email/statements", {
+      method: "POST",
+      cookie: bookkeeperCookie,
+      body: { organisationId: w.org, idempotencyKey: key("run"), statement },
+    });
+    expect(run.status).toBe(201);
+    const queuedRun = run.json.run as StatementRun;
+    expect(queuedRun.emails.map((e) => [e.contactName, e.status])).toEqual([["Kobe Cafe", "queued"]]);
+    expect(queuedRun.skipped.map((s) => s.name)).toEqual(["Paw Walkers"]);
+    await w.send();
+    expect(received).toHaveLength(1);
+    expect(received[0].mail.attachments[0].filename).toBe("Statement Kobe Cafe 2026-07-31.pdf");
+    const text = await pdfText(received[0].mail.attachments[0].content);
+    expect(text).toContain("Statement");
+    expect(text).toContain("Outstanding as at 31 Jul 2026");
+    expect(text).toContain("INV-0001");
+    expect(text).toContain("316.25");
+    const [sent] = await emailsFor(w.org, "statement", w.kobe.id);
+    expect(sent).toMatchObject({ status: "sent", batchId: queuedRun.id });
+    const contactHistory = await w.as((tx) => getRecordExtras(tx, "owner", "contact", w.kobe.id));
+    expect(contactHistory.history.some((entry) => entry.eventType === "document_email.sent")).toBe(true);
+  });
+});

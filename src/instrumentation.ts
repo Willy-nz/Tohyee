@@ -19,6 +19,10 @@
  * And the repeating invoices job, which makes due invoices every hour
  * (off with TOHYEE_REPEATING_INVOICES_SCHEDULER=off).
  *
+ * And the email job, which sends queued invoices, quotes, statements and
+ * other documents from each organisation's own email account and retries
+ * failures (off with TOHYEE_EMAIL_OUTBOX=off).
+ *
  * And the backup scheduler, which backs up every organisation each night
  * (off with TOHYEE_BACKUP_SCHEDULER=off; the time and folder are server settings).
  *
@@ -76,6 +80,11 @@ export async function register() {
   if (process.env.TOHYEE_REPEATING_INVOICES_SCHEDULER !== "off") {
     const { startRepeatingInvoiceScheduler } = await import("@/lib/repeating/scheduler");
     startRepeatingInvoiceScheduler();
+  }
+
+  if (process.env.TOHYEE_EMAIL_OUTBOX !== "off") {
+    const { startEmailOutbox } = await import("@/lib/email/outbox");
+    startEmailOutbox();
   }
 
   if (process.env.TOHYEE_BACKUP_SCHEDULER !== "off") {

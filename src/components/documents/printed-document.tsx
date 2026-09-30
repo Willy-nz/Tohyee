@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
-import { formatRate, formatUnitPrice } from "@/components/invoices/invoice-editor";
+import { formatRate, formatUnitPrice } from "@/lib/documents/format";
 import { PrintButton } from "@/components/reports/ledger-reports";
 import { Card, Notice, ui } from "@/components/ui";
 import type { PrintedDocument } from "@/lib/documents/print";

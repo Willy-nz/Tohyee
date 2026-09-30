@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { EmailDocumentPanel, pdfHref, useEmailedStatus } from "@/components/documents/email-document";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { RequireOrganisation } from "@/components/books";
@@ -8,7 +9,7 @@ import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { SalesLinesTable } from "@/components/documents/lines-table";
 import { useApiData } from "@/components/hooks";
 import { QuoteStatusBadge } from "@/components/quotes/quote-editor";
-import { Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
+import { Badge, Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
@@ -164,6 +165,8 @@ function QuoteView({ organisationId, quoteId }: { organisationId: string; quoteI
   const details = useApiData<{ quote: Quote }>(`/api/quotes/${encodeURIComponent(quoteId)}`, { organisationId });
   const [updated, setUpdated] = useState<Quote | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // "Sent" only from an email the email server accepted; the quote's own status doesn't change.
+  const emailed = useEmailedStatus(organisationId, "quote", quoteId);
   if (details.error) {
     return (
       <>
@@ -189,7 +192,11 @@ function QuoteView({ organisationId, quoteId }: { organisationId: string; quoteI
         actions={
           <>
             <QuoteStatusBadge quote={quote} />
+            {emailed ? <Badge tone="green">Sent</Badge> : null}
             <Link href={`/operations/quotes/${quote.id}/print`}>Print or save as PDF</Link>
+            <a href={pdfHref(organisationId, "quote", quote.id)} target="_blank" rel="noreferrer">
+              PDF
+            </a>
           </>
         }
       >
@@ -220,6 +227,12 @@ function QuoteView({ organisationId, quoteId }: { organisationId: string; quoteI
         </p>
       </Card>
       {can("bookkeeper") ? <QuoteActions key={quote.status} organisationId={organisationId} quote={quote} onChanged={onChanged} /> : null}
+      <EmailDocumentPanel
+        organisationId={organisationId}
+        kind="quote"
+        id={quote.id}
+        unavailableReason={quote.status === "draft" ? "Finalise the quote to email it." : null}
+      />
       <p>
         <Link href="/operations/quotes">Back to quotes</Link>
       </p>

@@ -73,6 +73,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ record_notes, record_attachments   notes and files on journals, documents and contacts
 ├─ conversion_balances, conversion_balance_lines   opening balances as brought in, once (IM1-IM16)
 ├─ import_mappings        the column mapping last used for each kind of import file
+├─ organisation_email_settings, email_templates   the organisation's own email account (password encrypted) and templates
+├─ document_emails, document_email_batches   each email of a document or statement: queued, then sent or failed by the job
 └─ audit_events
 ```
 
@@ -766,7 +768,27 @@ the template row is locked while it runs, so overlapping runs, restarts or
 a second server process never make a date twice. An error is kept on the
 template and that date is tried again next run. No network calls.
 
-Still to come for other jobs: a transactional outbox and bounded retries.
+The email job (`src/lib/email/outbox.ts`, started from
+`src/instrumentation.ts`; `TOHYEE_EMAIL_OUTBOX=off` stops it) sends the
+documents people ask to email, from each organisation's own SMTP account
+(`organisation_email_settings`, the password encrypted with
+TOHYEE_SECRET_KEY like other secrets). Asking to send only inserts a
+`document_emails` row (the outbox) and nudges the job; each email is then
+claimed in one transaction (`for update skip locked`, so two processes
+never send the same one), its document loaded and checked in another, its
+PDF written (`src/lib/pdf`, pdf-lib with Liberation Sans, from the same
+`printedDocument` and statement functions as the print pages), sent with
+no transaction open, and the result recorded in a third: `sent` with the
+SMTP server's message id only when it accepted the message; busy or
+unreachable servers are retried after 1, 5 and 30 minutes (four attempts);
+anything else fails with a plain-English reason. An email left "sending"
+for 10 minutes is marked failed, not resent, since it may have gone. Each
+organisation sends at most 100 an hour. The database refuses changes to
+what a queued email says and any change to a finished one. Every minute it
+works through organisations with emails waiting, and every 10 minutes it
+checks all of them (for retries and after a restart).
+
+Still to come for other jobs: a general transactional outbox.
 
 ## Backups and restore
 

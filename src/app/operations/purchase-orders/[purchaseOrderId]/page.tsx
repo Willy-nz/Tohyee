@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { EmailDocumentPanel, pdfHref } from "@/components/documents/email-document";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
@@ -252,6 +253,9 @@ function PurchaseOrderView({ organisationId, purchaseOrderId }: { organisationId
           <>
             <PurchaseOrderStatusBadge status={purchaseOrder.status} />
             <Link href={`/operations/purchase-orders/${purchaseOrder.id}/print`}>Print or save as PDF</Link>
+            <a href={pdfHref(organisationId, "purchase_order", purchaseOrder.id)} target="_blank" rel="noreferrer">
+              PDF
+            </a>
           </>
         }
       >
@@ -290,6 +294,12 @@ function PurchaseOrderView({ organisationId, purchaseOrderId }: { organisationId
       {can("bookkeeper") ? (
         <PurchaseOrderActions key={purchaseOrder.status} organisationId={organisationId} purchaseOrder={purchaseOrder} onChanged={onChanged} />
       ) : null}
+      <EmailDocumentPanel
+        organisationId={organisationId}
+        kind="purchase_order"
+        id={purchaseOrder.id}
+        unavailableReason={purchaseOrder.status === "draft" ? "Approve the purchase order to email it." : purchaseOrder.status === "cancelled" ? "A cancelled purchase order can't be emailed." : null}
+      />
       <p>
         <Link href="/operations/purchase-orders">Back to purchase orders</Link>
       </p>

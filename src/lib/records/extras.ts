@@ -191,6 +191,10 @@ function text(value: unknown): string | null {
   return typeof value === "string" || typeof value === "number" ? String(value) : null;
 }
 
+function addresses(value: unknown): string {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string").join(", ") : (text(value) ?? "");
+}
+
 /** A plain-English line for an audit event (NF11). */
 function summarise(eventType: string, details: Record<string, unknown>): string {
   switch (eventType) {
@@ -218,6 +222,16 @@ function summarise(eventType: string, details: Record<string, unknown>): string 
         : "Journal corrected";
     case "ledger.journal_posted":
       return "Journal posted";
+    case "document_email.queued":
+      return `Email to ${addresses(details.to)} asked for: "${text(details.subject) ?? ""}"`;
+    case "document_email.sent": {
+      const cc = addresses(details.cc);
+      return `Emailed to ${addresses(details.to)}${cc ? ` (cc ${cc})` : ""} with ${text(details.attachmentName) ?? "the PDF"}; the email server accepted it (message id ${text(details.messageId) ?? "unknown"})`;
+    }
+    case "document_email.retrying":
+      return `Email to ${addresses(details.to)} not sent yet (attempt ${text(details.attempt) ?? "1"}), trying again: ${text(details.error) ?? ""}`;
+    case "document_email.failed":
+      return `Email to ${addresses(details.to)} failed: ${text(details.error) ?? ""}`;
     default: {
       const [subject, action] = eventType.split(".");
       const who = SUBJECTS[subject] ?? subject.replace(/_/g, " ");

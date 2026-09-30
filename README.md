@@ -50,6 +50,9 @@ people working on the code.
 - Repeating invoices, payment terms, customer payments (one or several
   invoices at once), overpayments and refunds, and customer statements.
 - Products and services, price levels, salespeople, and print or save as PDF.
+- Email invoices, quotes, credit notes, purchase orders and statements (as
+  PDFs) from the organisation's own Gmail, Microsoft 365 or other email
+  account.
 
 **Purchases**
 - Bills, supplier credit notes, purchase orders billed in parts, paying one or

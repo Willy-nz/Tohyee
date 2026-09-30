@@ -129,7 +129,7 @@ that something happened.
   notes, payments, refunds and their voids, closing balance) or an
   outstanding statement as at a date, both aged by due date at the foot; a
   parent customer can include its sub-customers. Printed or saved as PDF
-  with the browser's print; emailing them isn't built.
+  with the browser's print, or emailed as a PDF (below).
 - **GST audit report** (Tax; GA1-GA4, not yet approved): for a GST period
   on the organisation's basis, or a filed return as filed, every document
   behind Box 5, 6 and 11, the Box 9 and 13 adjustments and the lines left
@@ -151,8 +151,9 @@ that something happened.
   changes); accepting makes a draft invoice with the same lines, due by the
   customer's payment terms or a date given, linked both ways; declining
   closes it; a finalised quote past its expiry date shows as expired;
-  copying makes a new draft. Quotes post nothing. There's no "sent" status,
-  because nothing sends quotes yet.
+  copying makes a new draft. Quotes post nothing. A quote shows **Sent**
+  only once an email of it has been accepted by the email server (below); its
+  status doesn't change.
 - **Repeating invoices** (Sales; RI1-RI10, not yet approved): a template
   with invoice lines, every N weeks or months from a start date to an
   optional end date, due by payment terms or N days, and each invoice saved
@@ -170,7 +171,7 @@ that something happened.
   from a GST-registered organisation print as **Tax invoice**; drafts, voided
   invoices and quotes say so. The screen warns when a tax invoice over $1,000
   has no customer address, or GST is charged with no GST number in Settings.
-  Emailing isn't built.
+  Emailed as a PDF (below).
 - **Purchase orders** (Purchases; PO1-PO9, not yet approved by Jess): drafts
   to a supplier with the same lines as a bill (items fill the supplier's
   price), a delivery date, address and instructions; approving numbers them
@@ -183,7 +184,7 @@ that something happened.
   keep their item, the bill keeps its supplier, and bills can't add up to
   more than was ordered (the database refuses too). An approved purchase
   order with no bills can be cancelled. Stock comes in on the bill (ST1).
-  "Print or save as PDF" like quotes. Emailing isn't built.
+  "Print or save as PDF" like quotes, or emailed as a PDF (below).
 - **Expense claims** (Purchases; EC1-EC12, not yet approved by Jess), like
   Xero's older expense claims: a member enters the receipts they paid for
   themselves (date, supplier, description, account, tax code, amount
@@ -493,6 +494,36 @@ that something happened.
   backup codes from your profile.
 - **Server email** (Gmail or other SMTP, password encrypted) for security
   alerts and two-step reset links, with a test button.
+- **Emailing documents** (decided by Jess, 30 Sep 2026): invoices, credit
+  notes, quotes, purchase orders and customer statements are emailed from
+  **each organisation's own email account** (Settings > Email, admins: Gmail
+  or Google Workspace with an app password, Microsoft 365 with Authenticated
+  SMTP, or any SMTP server; from name, from address, reply-to; the password
+  encrypted with TOHYEE_SECRET_KEY and never sent back to the browser; a
+  **Send test email** button). Each document has an **Email** card
+  (bookkeepers and above send; everyone sees the history): To (the contact's
+  email and its primary person's), Cc, subject and message from the
+  organisation's **templates** (editable in Settings > Email, with
+  {contact}, {number}, {total}, {amount due}, {due date}, {organisation} and
+  so on), and the PDF's name. The PDF is written on the server with the
+  same figures as the print page (pdf-lib, pure JavaScript, so it works on
+  the Windows install). Sending is a background job: an email is **Sent**
+  only when the SMTP server accepted it (its message id is kept); a busy or
+  unreachable server is tried again after 1, 5 and 30 minutes; a wrong
+  password or refused address fails straight away with the reason in plain
+  English, and **Send again** is offered. Each email is recorded in the
+  document's history (the contact's for statements) with who asked, when
+  and to whom. Only approved invoices and credit notes, finalised quotes and
+  approved purchase orders can be emailed. **Statements** go to one customer,
+  or to **every customer with a balance** (a preview shows who gets one and
+  at which address, and who is skipped for having no email address; then a
+  result per customer). Limits: 100 emails an hour and 500 a day per
+  organisation. Addresses are plain `name@domain` only and line breaks are
+  taken out of subjects, so nothing typed can add a header; the only
+  attachment is the document's own PDF; internal notes are never included.
+  Not built: sending from Google or Microsoft with their sign-in (OAuth)
+  instead of a password, HTML emails, and tracking whether the email was
+  opened.
 - **Phone access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):
@@ -565,8 +596,7 @@ isn't acceptable, because people would trust it:
 The owner's to-do list in [TODO.md](TODO.md) comes first.
 
 1. Supplier overpayments and prepayments (once the owner has decided how GST works
-   on them). Emailing invoices, credit notes, quotes and statements comes
-   with or after these (they print already).
+   on them).
 2. Backdated stock movements with proper re-costing.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
