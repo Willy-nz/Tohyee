@@ -8,6 +8,7 @@ import { CreditStatusBadge } from "@/components/credit-notes/credit-note-editor"
 import { useApiData } from "@/components/hooks";
 import { OverpaymentApplications, OverpaymentRefunds } from "@/components/invoices/overpayment-credit";
 import { Badge, Card, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
 import { formatDate } from "@/lib/format";
 import type { CustomerPayment } from "@/lib/invoices/payments";
 
@@ -27,6 +28,7 @@ function OverpaymentView({ organisationId, paymentId }: { organisationId: string
   // Applying, removing, refunding and voiding return the updated payment, which is shown straight away.
   const [updated, setUpdated] = useState<CustomerPayment | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const baseCurrency = useWorkspace().current?.baseCurrency ?? "NZD";
 
   if (details.error) {
     return (
@@ -76,6 +78,9 @@ function OverpaymentView({ organisationId, paymentId }: { organisationId: string
           <Stat label="Applied" value={<Money value={payment.overpaymentApplied} />} />
           <Stat label="Refunded" value={<Money value={payment.overpaymentRefunded} />} />
           <Stat label="Left" value={<Money value={payment.overpaymentRemaining} />} />
+          {payment.exchangeRate ? (
+            <Stat label={`Left (${baseCurrency}, at ${payment.exchangeRate})`} value={<Money value={payment.overpaymentRemainingBase ?? "0.00"} />} />
+          ) : null}
         </div>
         <p className={ui.muted}>
           The whole payment was posted as{" "}
