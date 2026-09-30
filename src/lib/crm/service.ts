@@ -474,10 +474,10 @@ function addDays(date: string, days: number): string {
  * becomes a customer. Making it again returns the same invoice.
  *
  * For a company in another currency (MC69) the invoice is in it, at the rate
- * typed or else the one any new invoice for that date starts with, and its
- * line is zero-rated (ZERO) rather than standard-rated, since GST on
- * foreign-currency invoices is only zero-rated, exempt or none (MC2); no tax
- * if there's no zero-rated code. It's a draft, checked before it's approved.
+ * typed or else the one any new invoice for that date starts with, with the
+ * same standard GST code as an NZD one (revised 1 Oct 2026: standard-rated
+ * GST works on foreign-currency invoices, MC71). It's a draft, so the tax
+ * code can be changed (e.g. to ZERO for an export) before it's approved.
  */
 export async function makeInvoiceFromOpportunity(
   tx: OrgTx,
@@ -501,9 +501,9 @@ export async function makeInvoiceFromOpportunity(
   const foreign = locked.currencyCode !== tx.baseCurrency;
   if (!foreign && typedRate != null) throw new ValidationError(`This opportunity is in ${tx.baseCurrency}, so its invoice has no exchange rate.`);
   const taxCode = await tx.query<{ code: string }>(
-    `select code from tax_codes where is_active and category = $2 and effective_from <= $1
+    `select code from tax_codes where is_active and category = 'standard' and effective_from <= $1
         and (effective_to is null or effective_to >= $1) order by id limit 1`,
-    [today, foreign ? "zero_rated" : "standard"],
+    [today],
   );
   const gst = taxCode.rows[0]?.code ?? null;
   const { invoice } = await createInvoice(

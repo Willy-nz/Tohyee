@@ -266,8 +266,8 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
       </div>
       {foreign ? (
         <Notice tone="info">
-          This bill is in {currencyCode}. Use zero-rated, exempt or no GST codes (or no tax): GST on foreign-currency bills isn&apos;t
-          supported yet. Approving posts its {baseCurrency} value, each line converted at the rate.
+          This bill is in {currencyCode}, and its GST is worked out in {currencyCode} as usual. Approving posts its {baseCurrency}{" "}
+          value, each line and its GST converted at the rate.
         </Notice>
       ) : null}
       <CustomFieldInputs setup={customSetup} record="document" uses={["bill"]} value={customFields} onChange={setCustomFields} />

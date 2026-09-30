@@ -470,17 +470,7 @@ describeWithDatabase("multi-currency overpayments and refunds", () => {
   const zeroLine = (description: string, unitPrice: string) => ({ description, quantity: "1", unitPrice, accountCode: "4000", taxCode: "ZERO" });
 
   it("MC25: a USD quote is in USD with no rate and posts nothing; accepting it makes a USD invoice at a rate for its date", async () => {
-    await expect(
-      run((tx) =>
-        createQuote(tx, {
-          idempotencyKey: key("quote"),
-          contactId: acme.id,
-          quoteDate: "2026-08-20",
-          amountsMode: "exclusive",
-          lines: [{ ...zeroLine("Design", "400.00"), taxCode: "GST" }],
-        }),
-      ),
-    ).rejects.toThrow(/GST on foreign-currency invoices, bills and credit notes isn't supported yet/);
+    // A USD quote with GST (revised 1 Oct 2026) is MC79; this one is zero-rated.
     const before = await journalCount();
     const draft = await run((tx) =>
       createQuote(tx, { idempotencyKey: key("quote"), contactId: acme.id, quoteDate: "2026-08-20", expiryDate: "2026-09-20", amountsMode: "exclusive", lines: [zeroLine("Design", "400.00")] }),

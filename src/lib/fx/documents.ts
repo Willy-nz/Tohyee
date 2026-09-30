@@ -7,9 +7,8 @@ import { parseExchangeRate } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, cmp, dec, isZero, mul, mulDiv, neg, roundHalfUp, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { convertAtRate } from "@/lib/money/fx";
-import type { ResolvedLineItem } from "@/lib/items/lines";
 import { countsWhenSettled } from "@/lib/reports/gst-boxes";
-import type { GstBasis, TaxCategory } from "@/lib/tax/categories";
+import type { GstBasis } from "@/lib/tax/categories";
 
 /**
  * Foreign-currency invoices, bills and credit notes (examples MC1-MC13),
@@ -73,16 +72,17 @@ export function parseRateInput(input: unknown): string | null | undefined {
 
 /**
  * What can't be on a foreign-currency document yet (MC11), refused rather
- * than guessed: standard-rated GST (GST on foreign-currency supplies needs
- * the IRD rules settled first) and item lines with a blank price (an item's
- * prices are in the base currency). Stock items are allowed (MC29): stock is
- * valued in the base currency, at the document's rate.
+ * than guessed: item lines with a blank price (an item's prices are in the
+ * base currency). Standard-rated GST is allowed (MC71-MC80): it's worked out
+ * in the document's currency exactly as on a base-currency document, and
+ * each line's GST is converted at the document's rate (`convertDocumentLines`).
+ * Stock items are allowed (MC29): stock is valued in the base currency, at
+ * the document's rate.
  */
 export function assertForeignLinesSupported(
   kind: DocumentKind,
   currencyCode: string,
   base: string,
-  lines: ReadonlyArray<{ taxCategory: TaxCategory | null; itemType?: ResolvedLineItem["itemType"] }>,
   sent: ReadonlyArray<{ itemId: string | null; unitPrice: string }>,
 ): void {
   const noun = DOCUMENT_NOUNS[kind];
@@ -90,13 +90,6 @@ export function assertForeignLinesSupported(
     if (line.itemId !== null && line.unitPrice === "") {
       throw new ValidationError(
         `Line ${index + 1}: this ${noun} is in ${currencyCode}, and item prices are in ${base}, so type the unit price in ${currencyCode}.`,
-      );
-    }
-  });
-  lines.forEach((line, index) => {
-    if (line.taxCategory === "standard") {
-      throw new ValidationError(
-        `Line ${index + 1}: GST on foreign-currency invoices, bills and credit notes isn't supported yet (refused rather than guessed). Use zero-rated (ZERO), exempt (EXEMPT) or no GST (NONE), or raise it in ${base}.`,
       );
     }
   });
@@ -125,9 +118,14 @@ export type BaseAmounts = {
 };
 
 /**
- * A document's base-currency amounts (MC2, MC4): each line's net amount and
- * GST x the rate, rounded once, as NetSuite converts line by line; the totals
- * are the sums of the lines.
+ * A document's base-currency amounts (MC2, MC4, MC71-MC73): each line's net
+ * amount and GST x the rate, rounded once, as NetSuite converts line by line
+ * (its base-currency tax is the transaction-currency tax at the
+ * transaction's rate). The totals are the sums of the lines, so the
+ * journal's receivable (or payable) line is exactly its income (or expense)
+ * lines plus its GST line. A cent between that and the foreign total x the
+ * rate stays in the document's carrying value, and is rounding (7050) when
+ * the document is settled (MC73), never GST.
  */
 export function convertDocumentLines(
   lines: ReadonlyArray<{ netAmount: string; taxAmount: string }>,

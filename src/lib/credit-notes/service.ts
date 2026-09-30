@@ -449,7 +449,7 @@ async function resolveDraft(
   // A customer in another currency gets credit notes in it (MC7).
   const currencyCode = await contactCurrency(tx, sent.contactId);
   if (currencyCode !== tx.baseCurrency) {
-    assertForeignLinesSupported("credit_note", currencyCode, tx.baseCurrency, [], sent.lines);
+    assertForeignLinesSupported("credit_note", currencyCode, tx.baseCurrency, sent.lines);
   }
   // Blanks on item lines are filled from the item (IT2); what was sent is kept.
   const draft: DraftDetails = { ...sent, lines: await fillLinesFromItems(tx, sent.lines, { side: "sale", contactId: sent.contactId, noTax: sent.amountsMode === "no_tax" }) };
@@ -548,13 +548,6 @@ async function resolveDraft(
   let exchangeRate: string | null = null;
   let base: ReturnType<typeof convertDocumentLines> | null = null;
   if (currencyCode !== tx.baseCurrency) {
-    assertForeignLinesSupported(
-      "credit_note",
-      currencyCode,
-      tx.baseCurrency,
-      lines.map((line, index) => ({ taxCategory: line.taxCategory, itemType: lineItems[index].itemType })),
-      [],
-    );
     await assertForeignSalesBasis(tx, "credit_note", currencyCode);
     exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.creditNoteDate, typed: draft.exchangeRateInput, what: "credit note" });
     base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));

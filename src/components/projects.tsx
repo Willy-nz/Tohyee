@@ -724,10 +724,10 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
   const [typedRate, setTypedRate] = useState<string | null>(null);
   const suggestedRate = useLastRate(organisationId, project.currencyCode, baseCurrency, invoiceDate);
   if (project.status !== "in_progress" || !can("bookkeeper") || all.length === 0) return null;
-  // GST on a foreign-currency invoice is zero-rated, exempt or none (MC2).
-  const activeTax = (taxCodes.data?.taxCodes ?? []).filter((code) => code.isActive && (!foreign || code.category !== "standard"));
+  // GST on a foreign-currency invoice works as on an NZD one (MC71).
+  const activeTax = (taxCodes.data?.taxCodes ?? []).filter((code) => code.isActive);
   const account = accountCode ?? (accounts.data?.accounts ?? []).find((entry) => entry.isActive && entry.accountClass === "revenue")?.code ?? "";
-  const tax = taxCode ?? (activeTax.find((code) => code.category === (foreign ? "zero_rated" : "standard")) ?? activeTax[0])?.code ?? "";
+  const tax = taxCode ?? (activeTax.find((code) => code.category === "standard") ?? activeTax[0])?.code ?? "";
   const ticked = (id: string) => !unticked.has(id);
   const flip = (id: string) => {
     const next = new Set(unticked);

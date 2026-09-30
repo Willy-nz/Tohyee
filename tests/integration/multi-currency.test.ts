@@ -141,15 +141,7 @@ describeWithDatabase("multi-currency invoices and bills", () => {
         createInvoice(tx, { idempotencyKey: key("inv"), contactId: acme.id, invoiceDate: "2026-07-03", dueDate: "2026-08-20", amountsMode: "exclusive", lines }, { foreignCurrency: true }),
       ),
     ).rejects.toThrow(/Type the exchange rate for this invoice \(NZD per 1 USD\): no USD rate has been used on or before 2026-07-03 yet/);
-    await expect(
-      run((tx) =>
-        createInvoice(
-          tx,
-          { idempotencyKey: key("inv"), contactId: acme.id, invoiceDate: "2026-07-03", dueDate: "2026-08-20", amountsMode: "exclusive", lines: [line("Consulting", "1000.00", { taxCode: "GST" })], exchangeRate: "1.6543" },
-          { foreignCurrency: true },
-        ),
-      ),
-    ).rejects.toThrow(/GST on foreign-currency invoices, bills and credit notes isn't supported yet \(refused rather than guessed\)/);
+    // Standard-rated GST on a USD invoice (revised 1 Oct 2026) is MC71; this one is zero-rated.
     const approved = await invoice("INV-0001", acme.id, "2026-07-03", lines, { exchangeRate: "1.6543" });
     expect(approved).toMatchObject({ invoiceNumber: "INV-0001", currencyCode: "USD", total: "1000.00", exchangeRate: "1.6543", baseTotal: "1654.30", amountDueBase: "1654.30" });
     expect(approved.lines[0]).toMatchObject({ netAmount: "1000.00", baseNetAmount: "1654.30", baseTaxAmount: "0.00" });
@@ -294,25 +286,7 @@ describeWithDatabase("multi-currency invoices and bills", () => {
   });
 
   it("MC10: a USD bill and a supplier credit note applied at another rate; a payment at the bill's rate has no gain", async () => {
-    await expect(
-      run((tx) =>
-        createBill(
-          tx,
-          {
-            idempotencyKey: key("bill"),
-            contactId: aws.id,
-            billDate: "2026-07-05",
-            dueDate: "2026-08-31",
-            supplierInvoiceNumber: "AWS-GST",
-            amountsMode: "exclusive",
-            lines: [{ description: "Hosting", quantity: "1", unitPrice: "50.00", accountCode: "6040", taxCode: "GST" }],
-            exchangeRate: "1.66",
-          },
-          null,
-          { foreignCurrency: true },
-        ),
-      ),
-    ).rejects.toThrow(/GST on foreign-currency invoices, bills and credit notes isn't supported yet/);
+    // A USD bill with GST (revised 1 Oct 2026) is MC75; these have no tax.
     const first = await bill("AWS-7", "2026-07-05", "50.00", "1.66");
     expect(first).toMatchObject({ currencyCode: "USD", baseTotal: "83.00", amountDueBase: "83.00" });
     expect(await posted(first.approvalJournalId!)).toEqual([

@@ -8,6 +8,7 @@ import { Money, RequireOrganisation } from "@/components/books";
 import { CreditNoteApplications, CreditNoteRefunds } from "@/components/credit-notes/credit-note-credit";
 import { CreditNoteStatusBadge, CreditStatusBadge } from "@/components/credit-notes/credit-note-editor";
 import { useApiData } from "@/components/hooks";
+import { ForeignTotals } from "@/components/fx-totals";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { formatRate, formatUnitPrice } from "@/components/invoices/invoice-editor";
@@ -163,7 +164,7 @@ function CreditNoteActions({
 function CreditNoteView({ organisationId, creditNoteId }: { organisationId: string; creditNoteId: string }) {
   const trackingSetup = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
-  const { can } = useWorkspace();
+  const { can, current } = useWorkspace();
   const details = useApiData<{ creditNote: CreditNote }>(`/api/credit-notes/${encodeURIComponent(creditNoteId)}`, {
     organisationId,
   });
@@ -273,6 +274,13 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
               <Stat label="Remaining credit" value={<Money value={creditNote.remainingCredit} />} />
             </>
           ) : null}
+          <ForeignTotals
+            document={creditNote}
+            baseCurrency={current?.baseCurrency ?? "NZD"}
+            hasTax={hasTax}
+            openLabel="Remaining"
+            openBase={creditNote.remainingCreditBase}
+          />
         </div>
         <p className={ui.muted}>
           Saved by {personName(creditNote, "createdBy") ?? "unknown"} on {formatDateTime(creditNote.createdAt)}.

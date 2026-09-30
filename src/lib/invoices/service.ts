@@ -513,7 +513,7 @@ async function resolveDraft(
       );
     }
     // Item prices are in the base currency, so a foreign-currency line gives its own (MC11).
-    assertForeignLinesSupported("invoice", currencyCode, tx.baseCurrency, [], sent.lines);
+    assertForeignLinesSupported("invoice", currencyCode, tx.baseCurrency, sent.lines);
   }
   // Blanks on item lines are filled from the item (IT2); what was sent is kept.
   const draft: DraftDetails = { ...sent, lines: await fillLinesFromItems(tx, sent.lines, { side: "sale", contactId: sent.contactId, noTax: sent.amountsMode === "no_tax" }) };
@@ -605,17 +605,10 @@ async function resolveDraft(
       );
     }
   });
-  // A foreign-currency invoice (MC2): no standard-rated GST or stock yet; a rate for its date; each line converted.
+  // A foreign-currency invoice (MC2, MC71): a rate for its date; each line (GST included) converted.
   let exchangeRate: string | null = null;
   let base: ReturnType<typeof convertDocumentLines> | null = null;
   if (currencyCode !== tx.baseCurrency) {
-    assertForeignLinesSupported(
-      "invoice",
-      currencyCode,
-      tx.baseCurrency,
-      lines.map((line, index) => ({ taxCategory: line.taxCategory, itemType: lineItems[index].itemType })),
-      [],
-    );
     await assertForeignSalesBasis(tx, "invoice", currencyCode);
     if (!foreign.template) {
       exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.invoiceDate, typed: draft.exchangeRateInput, what: "invoice" });

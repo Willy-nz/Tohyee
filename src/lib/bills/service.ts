@@ -508,7 +508,7 @@ export async function resolveDraft(
         `${name} is in ${currencyCode}. ${foreign.feature ?? "This"} for suppliers in a currency other than ${tx.baseCurrency} isn't supported yet (refused rather than guessed): enter a ${currencyCode} bill directly instead.`,
       );
     }
-    assertForeignLinesSupported("bill", currencyCode, tx.baseCurrency, [], sent.lines);
+    assertForeignLinesSupported("bill", currencyCode, tx.baseCurrency, sent.lines);
   }
   // Blanks on item lines are filled from the item (IT2); what was sent is kept.
   const draft: DraftDetails = { ...sent, lines: await fillLinesFromItems(tx, sent.lines, { side: "purchase", contactId: sent.contactId, noTax: sent.amountsMode === "no_tax" }) };
@@ -615,17 +615,10 @@ export async function resolveDraft(
       );
     }
   });
-  // A foreign-currency bill (MC10): no standard-rated GST or stock yet; a rate for its date; each line converted.
+  // A foreign-currency bill (MC10, MC75): a rate for its date; each line (GST included) converted.
   let exchangeRate: string | null = null;
   let base: ReturnType<typeof convertDocumentLines> | null = null;
   if (currencyCode !== tx.baseCurrency) {
-    assertForeignLinesSupported(
-      "bill",
-      currencyCode,
-      tx.baseCurrency,
-      lines.map((line, index) => ({ taxCategory: line.taxCategory, itemType: lineItems[index].itemType })),
-      [],
-    );
     // A purchase order or repeating bill (MC27, MC28) has no rate: the bill made from it takes one for its date.
     if (!foreign.template) {
       exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.billDate, typed: draft.exchangeRateInput, what: "bill" });
