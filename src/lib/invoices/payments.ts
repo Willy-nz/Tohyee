@@ -7,7 +7,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { getInvoice, lockInvoice, receivableAccountCode, type Invoice } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
-import { clearedBase, exchangeRateFor, openBase, parseRateInput, realisedFxAccountCode, realisedLines } from "@/lib/fx/documents";
+import { clearedBase, exchangeRateFor, openBase, parseRateInput, realisedFxAccountCode, realisedLines, thirdCurrencyMessage } from "@/lib/fx/documents";
 import { convertAtRate } from "@/lib/money/fx";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { creditNoteCreditStatus, type CreditStatus } from "@/lib/invoices/amounts";
@@ -71,6 +71,9 @@ export type CustomerPayment = {
   baseAmount: string | null;
   baseCleared: string | null;
   realisedGain: string | null;
+  /** For a foreign-currency overpayment (MC14): its base value at the payment's rate, and what's left of it (0.00 once voided). */
+  baseOverpayment: string | null;
+  overpaymentRemainingBase: string | null;
 };
 
 type PaymentRow = {
@@ -102,13 +105,17 @@ type PaymentRow = {
   base_amount: string | null;
   base_cleared: string | null;
   realised_gain: string | null;
+  base_overpayment: string | null;
+  overpayment_base_used: string | null;
 };
 
 export const PAYMENT_SELECT = `select p.id, p.invoice_id, i.invoice_number, i.contact_id, c.name as contact_name, p.status,
        p.payment_date, p.amount, p.overpayment_amount, used.overpayment_applied, used.overpayment_refunded,
        p.currency_code, p.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, p.reference,
        p.journal_id, p.created_by_email, p.created_at, p.void_date, p.void_journal_id, p.voided_by_email, p.voided_at,
-       p.batch_id, p.exchange_rate::text, p.base_amount::text, p.base_cleared::text, p.realised_gain::text
+       p.batch_id, p.exchange_rate::text, p.base_amount::text, p.base_cleared::text, p.realised_gain::text,
+       case when p.exchange_rate is null then null else coalesce(p.base_overpayment, 0)::text end as base_overpayment,
+       case when p.exchange_rate is null then null else tohyee_overpayment_base_used(p.id)::text end as overpayment_base_used
   from customer_payments p
   join sales_invoices i on i.id = p.invoice_id
   join contacts c on c.id = i.contact_id
@@ -158,6 +165,11 @@ export function toPayment(row: PaymentRow): CustomerPayment {
     baseAmount: row.base_amount === null ? null : toFixedString(dec(row.base_amount), 2),
     baseCleared: row.base_cleared === null ? null : toFixedString(dec(row.base_cleared), 2),
     realisedGain: row.realised_gain === null ? null : toFixedString(dec(row.realised_gain), 2),
+    baseOverpayment: row.base_overpayment === null ? null : toFixedString(dec(row.base_overpayment), 2),
+    overpaymentRemainingBase:
+      row.base_overpayment === null
+        ? null
+        : toFixedString(row.status === "active" ? sub(dec(row.base_overpayment), dec(row.overpayment_base_used ?? "0")) : ZERO_DECIMAL, 2),
   };
 }
 
@@ -244,7 +256,7 @@ export async function resolveBankAccount(
   if (accountCurrency !== null && accountCurrency !== currency) {
     throw new ValidationError(
       currency
-        ? `${label} is in ${accountCurrency}. A ${currency} invoice is paid into a ${currency} or ${tx.baseCurrency} bank account (a payment in one currency into an account in another isn't supported yet).`
+        ? thirdCurrencyMessage(label, accountCurrency, currency, "invoice", tx.baseCurrency)
         : `${label} is in ${accountCurrency}. Payments go into bank accounts in the base currency (${tx.baseCurrency}) only.`,
     );
   }
@@ -413,15 +425,92 @@ export async function recordPayment(
   return { created: true, payment: await getPayment(tx, paymentId), invoice: await getInvoice(tx, invoiceId) };
 }
 
+export type ForeignPaymentSplit = {
+  /** What moved in the bank account for this payment (amount x rate, rounded once). */
+  baseAmount: string;
+  /** The invoice's carrying value of the part that pays it (0.00 when it's all overpayment). */
+  cleared: string;
+  /** Realised gain on the part that pays the invoice (a loss is negative). */
+  gain: string;
+  /** The part beyond the amount due, in the invoice's currency, and its base value at the payment's rate. */
+  overpayment: string;
+  baseOverpayment: string;
+};
+
 /**
- * A payment of a foreign-currency invoice (examples MC5, MC6), in the
+ * How a payment of a foreign-currency invoice splits (MC5, MC6, MC14): the
+ * part beyond the amount due is an overpayment, credit in the invoice's
+ * currency at the payment's rate (NetSuite leaves it as an unapplied
+ * payment at the payment's rate); the rest clears the invoice at its carrying
+ * value, and the difference between that part's bank amount and what it
+ * clears is the realised gain or loss. `baseAmount` is passed when it's one
+ * part of a payment for several invoices (MC21).
+ */
+export async function splitForeignPayment(
+  tx: OrgTx,
+  invoice: Invoice,
+  amount: string,
+  rate: string,
+  baseAmount: string = convertAtRate(amount, rate),
+): Promise<ForeignPaymentSplit> {
+  const scale = currencyMinorUnits(invoice.currencyCode);
+  const beyond = sub(dec(amount), dec(invoice.amountDue!));
+  const overpayment = isPositive(beyond) ? beyond : ZERO_DECIMAL;
+  const invoicePart = sub(dec(amount), overpayment);
+  const baseOverpayment = isZero(overpayment) ? "0.00" : convertAtRate(toFixedString(overpayment, scale), rate);
+  const cleared = isZero(invoicePart)
+    ? "0.00"
+    : clearedBase({ amount: invoice.amountDue!, base: await openBase(tx, "invoice", invoice.id) }, toFixedString(invoicePart, scale));
+  const gain = toFixedString(sub(sub(dec(baseAmount), dec(baseOverpayment)), dec(cleared)), 2);
+  return { baseAmount, cleared, gain, overpayment: toFixedString(overpayment, scale), baseOverpayment };
+}
+
+/**
+ * A foreign-currency payment's lines on accounts receivable (MC5, MC14): the
+ * invoice part at the invoice's carrying value, and any overpayment as credit
+ * at the payment's rate.
+ */
+export function foreignReceivableLines(
+  receivable: string,
+  description: string,
+  currency: string,
+  invoiceRate: string,
+  rate: string,
+  split: ForeignPaymentSplit,
+  invoicePart: string,
+) {
+  const lines = [];
+  if (!isZero(dec(invoicePart))) {
+    lines.push({
+      accountCode: receivable,
+      debitAmount: "0",
+      creditAmount: split.cleared,
+      description,
+      foreign: { currencyCode: currency, amount: invoicePart, rate: invoiceRate, kind: "carrying_value" as const },
+    });
+  }
+  if (!isZero(dec(split.overpayment))) {
+    lines.push({
+      accountCode: receivable,
+      debitAmount: "0",
+      creditAmount: split.baseOverpayment,
+      description: `${description} (overpayment)`,
+      foreign: { currencyCode: currency, amount: split.overpayment, rate, kind: "document" as const },
+    });
+  }
+  return lines;
+}
+
+/**
+ * A payment of a foreign-currency invoice (examples MC5, MC6, MC14), in the
  * invoice's currency, into a bank account in that currency or the base
  * currency, at the payment's own rate (typed, or the last rate used on or
  * before the payment date). The bank account gets amount x rate, rounded
  * once; accounts receivable is cleared at the invoice's carrying value of
  * what's paid (all that's left when it pays the rest); the difference is a
- * realised gain or loss on 7020, like NetSuite's realized gain/loss.
- * Overpaying is refused (not supported yet).
+ * realised gain or loss on 7020, like NetSuite's realized gain/loss. Anything
+ * beyond the amount due is an overpayment in the invoice's currency, at the
+ * payment's rate (MC14).
  */
 async function recordForeignPayment(
   tx: OrgTx,
@@ -438,18 +527,13 @@ async function recordForeignPayment(
   },
 ): Promise<PaymentResult> {
   const currency = invoice.currencyCode;
-  const due = invoice.amountDue!;
-  if (cmp(dec(input.amount), dec(due)) > 0) {
-    throw new ValidationError(
-      `Invoice ${invoice.invoiceNumber} has ${currency} ${due} due. Overpaying a foreign-currency invoice isn't supported yet (refused rather than guessed): record no more than what's due.`,
-    );
-  }
+  const scale = currencyMinorUnits(currency);
   const bank = await resolveBankAccount(tx, input.bankAccountCode, currency);
   const rate = (await exchangeRateFor(tx, { currencyCode: currency, date: input.paymentDate, typed: input.typedRate, what: "payment" }))!;
   const receivable = await receivableAccountCode(tx);
-  const baseAmount = convertAtRate(input.amount, rate);
-  const cleared = clearedBase({ amount: due, base: await openBase(tx, "invoice", invoice.id) }, input.amount);
-  const gain = toFixedString(sub(dec(baseAmount), dec(cleared)), 2);
+  const split = await splitForeignPayment(tx, invoice, input.amount, rate);
+  const { baseAmount, cleared, gain, overpayment, baseOverpayment } = split;
+  const invoicePart = toFixedString(sub(dec(input.amount), dec(overpayment)), scale);
   const gainLines = isZero(dec(gain)) ? [] : realisedLines(await realisedFxAccountCode(tx), gain, `${invoice.invoiceNumber} paid at ${rate}`);
 
   const next = await tx.query<{ id: string }>("select nextval(pg_get_serial_sequence('customer_payments', 'id'))::text as id");
@@ -473,13 +557,7 @@ async function recordForeignPayment(
             description: customer,
             ...(bank.currencyCode ? { foreign: { currencyCode: currency, amount: input.amount, rate, kind: "rate" as const } } : {}),
           },
-          {
-            accountCode: receivable,
-            debitAmount: "0",
-            creditAmount: cleared,
-            description: customer,
-            foreign: { currencyCode: currency, amount: input.amount, rate: invoice.exchangeRate!, kind: "carrying_value" as const },
-          },
+          ...foreignReceivableLines(receivable, customer, currency, invoice.exchangeRate!, rate, split, invoicePart),
           ...gainLines,
         ],
       },
@@ -492,9 +570,9 @@ async function recordForeignPayment(
       `insert into customer_payments (
          id, command_source, idempotency_key, request_hash, invoice_id, payment_date, amount, overpayment_amount,
          currency_code, bank_account_id, reference, journal_id, created_by_user_id, created_by_email,
-         exchange_rate, base_amount, base_cleared, realised_gain
+         exchange_rate, base_amount, base_cleared, realised_gain, base_overpayment
        )
-       values ($1, $2, $3, $4, $5, $6, $7::numeric, 0, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric)`,
+       values ($1, $2, $3, $4, $5, $6, $7::numeric, $18::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric, $19::numeric)`,
       [
         paymentId,
         input.source,
@@ -513,6 +591,8 @@ async function recordForeignPayment(
         baseAmount,
         cleared,
         gain,
+        overpayment,
+        baseOverpayment,
       ],
     );
   } catch (error) {
@@ -530,10 +610,12 @@ async function recordForeignPayment(
       invoiceNumber: invoice.invoiceNumber,
       paymentDate: input.paymentDate,
       amount: input.amount,
+      overpaymentAmount: overpayment,
       currencyCode: currency,
       exchangeRate: rate,
       baseAmount,
       baseCleared: cleared,
+      baseOverpayment,
       realisedGain: gain,
       bankAccountCode: bank.code,
       journalId: posted.journal.id,

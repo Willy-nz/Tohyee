@@ -63,10 +63,7 @@ with due as (
   select i.due_date,
          case when i.base_total is null then i.total - tohyee_invoice_settled(i.id)
               when i.total = tohyee_invoice_settled(i.id) then 0
-              else i.base_total
-                   - coalesce((select sum(p.base_cleared) from customer_payments p where p.invoice_id = i.id and p.status = 'active'), 0)
-                   - coalesce((select sum(a.invoice_base) from sales_credit_note_applications a
-                                where a.invoice_id = i.id and a.status = 'active'), 0) end as amount_due
+              else i.base_total - tohyee_invoice_base_settled(i.id) end as amount_due
     from sales_invoices i
    where i.status = 'approved'
 )

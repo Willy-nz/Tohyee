@@ -220,9 +220,7 @@ const SUMMARY_FROM = `bills b
      where a.bill_id = b.id and a.status = 'active'
   ) credited
   cross join lateral (
-    select coalesce((select sum(p.base_cleared) from supplier_payments p where p.bill_id = b.id and p.status = 'active'), 0)
-         + coalesce((select sum(a.bill_base) from supplier_credit_note_applications a
-                      where a.bill_id = b.id and a.status = 'active'), 0) as base_settled
+    select tohyee_bill_base_settled(b.id) as base_settled
   ) base_settled`;
 
 type LineRow = LineItemRow & {

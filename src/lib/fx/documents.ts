@@ -1,9 +1,10 @@
+import { isBankOrCreditCard } from "@/lib/accounts/types";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { lastRateFor } from "@/lib/ledger/foreign";
 import { parseExchangeRate } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { add, cmp, dec, isZero, mulDiv, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, isZero, mulDiv, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { convertAtRate } from "@/lib/money/fx";
 import type { ResolvedLineItem } from "@/lib/items/lines";
 import { countsWhenSettled } from "@/lib/reports/gst-boxes";
@@ -195,24 +196,148 @@ export function realisedLines(accountCode: string, gain: string, description: st
   ];
 }
 
-/** The open (not yet cleared) base value of a foreign-currency document, from its settlements. */
-export async function openBase(tx: OrgTx, kind: DocumentKind, id: string): Promise<string> {
-  const sql: Record<DocumentKind, string> = {
-    invoice: `select (d.base_total
-                 - coalesce((select sum(p.base_cleared) from customer_payments p where p.invoice_id = d.id and p.status = 'active'), 0)
-                 - coalesce((select sum(a.invoice_base) from sales_credit_note_applications a where a.invoice_id = d.id and a.status = 'active'), 0))::text as open
-                from sales_invoices d where d.id = $1`,
-    bill: `select (d.base_total
-                 - coalesce((select sum(p.base_cleared) from supplier_payments p where p.bill_id = d.id and p.status = 'active'), 0)
-                 - coalesce((select sum(a.bill_base) from supplier_credit_note_applications a where a.bill_id = d.id and a.status = 'active'), 0))::text as open
-             from bills d where d.id = $1`,
-    credit_note: `select (d.base_total
-                 - coalesce((select sum(a.credit_note_base) from sales_credit_note_applications a where a.credit_note_id = d.id and a.status = 'active'), 0))::text as open
-                from sales_credit_notes d where d.id = $1`,
-    supplier_credit_note: `select (d.base_total
-                 - coalesce((select sum(a.credit_note_base) from supplier_credit_note_applications a where a.credit_note_id = d.id and a.status = 'active'), 0))::text as open
-                from supplier_credit_notes d where d.id = $1`,
+/**
+ * The open (not yet cleared) base value of a foreign-currency document, or
+ * of a payment's overpayment, from its settlements (payments, applications
+ * and refunds; MC14-MC18).
+ */
+export async function openBase(tx: OrgTx, kind: DocumentKind | "overpayment", id: string): Promise<string> {
+  const sql: Record<DocumentKind | "overpayment", string> = {
+    invoice: "select (d.base_total - tohyee_invoice_base_settled(d.id))::text as open from sales_invoices d where d.id = $1",
+    bill: "select (d.base_total - tohyee_bill_base_settled(d.id))::text as open from bills d where d.id = $1",
+    credit_note: "select (d.base_total - tohyee_credit_note_base_used(d.id))::text as open from sales_credit_notes d where d.id = $1",
+    supplier_credit_note:
+      "select (d.base_total - tohyee_supplier_credit_note_base_used(d.id))::text as open from supplier_credit_notes d where d.id = $1",
+    overpayment:
+      "select (coalesce(p.base_overpayment, 0) - tohyee_overpayment_base_used(p.id))::text as open from customer_payments p where p.id = $1",
   };
   const row = (await tx.query<{ open: string | null }>(sql[kind], [id])).rows[0];
   return toFixedString(dec(row?.open ?? "0"), currencyMinorUnits(tx.baseCurrency));
+}
+
+/**
+ * The bank account money in a foreign currency moves through (MC5, MC16-MC18,
+ * MC21, MC30): an active bank or credit card account in that currency or in
+ * the base currency. NetSuite expects the payment currency to match the
+ * transaction's ("If the account currency is different from the base
+ * currency, only bills that use the account currency show in the list"), so
+ * a bank account in a third currency is refused.
+ */
+export async function resolveForeignBankAccount(
+  tx: OrgTx,
+  code: string,
+  currency: string,
+  what: { document: string; verb: string },
+): Promise<{ id: string; code: string; name: string; currencyCode: string | null }> {
+  const result = await tx.query<{ id: string; code: string; name: string; account_type: string; currency_code: string | null; is_active: boolean }>(
+    "select id, code, name, account_type, currency_code, is_active from accounts where lower(code) = lower($1)",
+    [code],
+  );
+  const row = result.rows[0];
+  if (!row) throw new ValidationError(`There's no account with the code ${code}.`);
+  const label = `Account ${row.code} (${row.name})`;
+  if (!row.is_active) throw new ValidationError(`${label} is archived, so ${what.verb}.`);
+  if (!isBankOrCreditCard(row.account_type)) {
+    throw new ValidationError(`${label} isn't a bank account, so ${what.verb}. Choose a bank or credit card account.`);
+  }
+  const accountCurrency = row.currency_code === tx.baseCurrency ? null : row.currency_code;
+  if (accountCurrency !== null && accountCurrency !== currency) {
+    throw new ValidationError(thirdCurrencyMessage(label, accountCurrency, currency, what.document, tx.baseCurrency));
+  }
+  return { id: row.id, code: row.code, name: row.name, currencyCode: accountCurrency };
+}
+
+/**
+ * Why a bank account in a third currency can't pay a foreign-currency
+ * document (MC30), following NetSuite, where the payment is in the
+ * transaction's currency and a foreign-currency bank account only pays
+ * transactions in its own currency.
+ */
+export function thirdCurrencyMessage(label: string, accountCurrency: string, currency: string, document: string, base: string): string {
+  return (
+    `${label} is in ${accountCurrency}, but this ${document} is in ${currency}. Like NetSuite, money for a ${currency} ${document} moves in ${currency}, ` +
+    `through a ${currency} or ${base} bank account; paying it from an account in a third currency isn't supported. ` +
+    `Transfer the money to a ${currency} or ${base} account first.`
+  );
+}
+
+export type ForeignRefund = {
+  bank: { id: string; code: string; name: string; currencyCode: string | null };
+  rate: string;
+  /** What moved in the bank account: amount x rate, rounded once. */
+  baseAmount: string;
+  /** The credit's carrying value of what's refunded. */
+  baseCleared: string;
+  /** Customer side: carrying value less the bank amount; supplier side: the bank amount less carrying value. */
+  gain: string;
+  /** Journal lines: the control account at carrying value, the bank at the rate, and any realised gain or loss. */
+  lines: Array<Record<string, unknown>>;
+};
+
+/**
+ * A refund of foreign-currency credit (MC16-MC18): in the credit's currency at
+ * the refund's own rate (typed, or the last rate used), from (or into) a bank
+ * account in that currency or the base currency. The control account
+ * (receivable or payable) is cleared at the credit's carrying value; the
+ * bank moves amount x rate; the difference is a realised gain or loss on
+ * 7020, as NetSuite posts realised gain or loss when a transaction settles at
+ * a rate other than its own.
+ */
+export async function foreignRefund(
+  tx: OrgTx,
+  input: {
+    side: "customer" | "supplier";
+    currency: string;
+    amount: string;
+    open: { amount: string; base: string };
+    date: string;
+    typedRate: unknown;
+    bankAccountCode: string;
+    controlAccountCode: string;
+    creditRate: string;
+    document: string;
+    label: string;
+    description: string;
+  },
+): Promise<ForeignRefund> {
+  const bank = await resolveForeignBankAccount(tx, input.bankAccountCode, input.currency, {
+    document: input.document,
+    verb: input.side === "customer" ? "refunds can't be paid from it" : "refunds can't be received into it",
+  });
+  const rate = (await exchangeRateFor(tx, { currencyCode: input.currency, date: input.date, typed: input.typedRate, what: "refund" }))!;
+  const baseAmount = convertAtRate(input.amount, rate);
+  const baseCleared = clearedBase(input.open, input.amount);
+  const customer = input.side === "customer";
+  const gain = toFixedString(customer ? sub(dec(baseCleared), dec(baseAmount)) : sub(dec(baseAmount), dec(baseCleared)), 2);
+  const bankForeign = bank.currencyCode ? { foreign: { currencyCode: input.currency, amount: input.amount, rate, kind: "rate" as const } } : {};
+  const controlForeign = { foreign: { currencyCode: input.currency, amount: input.amount, rate: input.creditRate, kind: "carrying_value" as const } };
+  const control = { accountCode: input.controlAccountCode, description: input.description, ...controlForeign };
+  const bankLine = { accountCode: bank.code, description: input.description, ...bankForeign };
+  const lines = customer
+    ? [
+        { ...control, debitAmount: baseCleared, creditAmount: "0" },
+        { ...bankLine, debitAmount: "0", creditAmount: baseAmount },
+      ]
+    : [
+        { ...bankLine, debitAmount: baseAmount, creditAmount: "0" },
+        { ...control, debitAmount: "0", creditAmount: baseCleared },
+      ];
+  const gainLines = isZero(dec(gain)) ? [] : realisedLines(await realisedFxAccountCode(tx), gain, `${input.label} refunded at ${rate}`);
+  return { bank, rate, baseAmount, baseCleared, gain, lines: [...lines, ...gainLines] };
+}
+
+/** A refund's foreign-currency fields (MC16-MC18) as read from its row; null for a base-currency refund. */
+export function foreignRefundFields(row: {
+  exchange_rate: string | null;
+  base_amount: string | null;
+  base_cleared: string | null;
+  realised_gain: string | null;
+}): { exchangeRate: string | null; baseAmount: string | null; baseCleared: string | null; realisedGain: string | null } {
+  const money = (value: string | null) => (value === null ? null : toFixedString(dec(value), 2));
+  return {
+    exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    baseAmount: money(row.base_amount),
+    baseCleared: money(row.base_cleared),
+    realisedGain: money(row.realised_gain),
+  };
 }

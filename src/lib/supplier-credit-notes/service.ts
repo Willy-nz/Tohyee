@@ -192,7 +192,8 @@ const SUMMARY_COLUMNS = `n.id, n.status, n.supplier_credit_note_number, n.contac
 const SUMMARY_FROM = `supplier_credit_notes n
   join contacts c on c.id = n.contact_id
   cross join lateral (
-    select coalesce(sum(a.amount), 0) as amount_applied, coalesce(sum(a.credit_note_base), 0) as base_applied
+    -- The base value used includes refunds' (MC18).
+    select coalesce(sum(a.amount), 0) as amount_applied, tohyee_supplier_credit_note_base_used(n.id) as base_applied
       from supplier_credit_note_applications a
      where a.credit_note_id = n.id and a.status = 'active'
   ) applied

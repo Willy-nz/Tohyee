@@ -234,9 +234,7 @@ describeWithDatabase("multi-currency invoices and bills", () => {
       ["7020", "0.00", "9.14"],
     ]);
     expect(first.invoice).toMatchObject({ paidStatus: "part_paid", amountDue: "300.00", amountDueBase: "496.29" });
-    await expect(pay(invoices["INV-0002"], "2026-07-28", "300.01", "1000", "1.60")).rejects.toThrow(
-      /Overpaying a foreign-currency invoice isn't supported yet \(refused rather than guessed\)/,
-    );
+    // Overpaying (USD 300.01) is MC14; a bank account in a third currency stays refused (MC30).
     await expect(pay(invoices["INV-0002"], "2026-07-28", "300.00", "1040", "1.60")).rejects.toThrow(/Account 1040 \(EUR account\) is in EUR/);
     const second = await pay(invoices["INV-0002"], "2026-07-28", "300.00", "1000", "1.60");
     expect(second.payment).toMatchObject({ baseAmount: "480.00", baseCleared: "496.29", realisedGain: "-16.29" });
@@ -293,8 +291,8 @@ describeWithDatabase("multi-currency invoices and bills", () => {
     ]);
     expect((await apply()).applications[0].realisedGain).toBe("3.00");
     await expect(
-      run((tx) => refundCreditNote(tx, creditNoteId, { idempotencyKey: key("refund"), refundDate: "2026-07-30", amount: "1.00", bankAccountCode: "1000" })),
-    ).rejects.toThrow(/Refunding a foreign-currency credit note isn't supported yet/);
+      run((tx) => refundCreditNote(tx, creditNoteId, { idempotencyKey: key("refund"), refundDate: "2026-07-30", amount: "1.00", bankAccountCode: "1040" })),
+    ).rejects.toThrow(/Credit note CN-0001 has no credit left to refund/);
   });
 
   it("MC10: a USD bill and a supplier credit note applied at another rate; a payment at the bill's rate has no gain", async () => {

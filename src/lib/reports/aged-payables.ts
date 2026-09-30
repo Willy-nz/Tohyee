@@ -55,7 +55,12 @@ credit as (
          - coalesce((select sum(r.amount) from supplier_credit_note_refunds r, params
                       where r.credit_note_id = n.id and r.refund_date <= params.as_at
                         and (r.void_date is null or r.void_date > params.as_at)), 0) as unused,
-         coalesce(n.base_total - coalesce((select sum(a.credit_note_base) from live_apps a where a.credit_note_id = n.id), 0),
+         -- A foreign-currency credit note's unused base value at its own rate (MC10, MC18).
+         coalesce(n.base_total
+                  - coalesce((select sum(a.credit_note_base) from live_apps a where a.credit_note_id = n.id), 0)
+                  - coalesce((select sum(r.base_cleared) from supplier_credit_note_refunds r, params
+                               where r.credit_note_id = n.id and r.refund_date <= params.as_at
+                                 and (r.void_date is null or r.void_date > params.as_at)), 0),
                   n.total
                   - coalesce((select sum(a.amount) from live_apps a where a.credit_note_id = n.id), 0)
                   - coalesce((select sum(r.amount) from supplier_credit_note_refunds r, params

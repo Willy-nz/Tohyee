@@ -59,9 +59,11 @@ that something happened.
   document's currency into or from a bank account in that currency or NZD, at
   their own rate, with the realised gain or loss on 7020; credit notes applied
   at another rate realise the difference; aged receivables and payables and
-  customer statements show the document currency and NZD. Zero-rated,
-  exempt and no-GST codes only; refunds, overpayments and batch payments in a
-  foreign currency are refused for now.
+  customer statements show the document currency and NZD; overpayments,
+  applying them, and refunds of overpayments, credit notes and supplier
+  credit notes are in the document's currency at their own rate, realising
+  the difference on 7020 (MC14-MC19). Zero-rated, exempt and no-GST codes
+  only; batch payments in a foreign currency are refused for now.
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
   posts its journal in the same transaction. **Stock tracking** (ST1-ST12):
@@ -659,8 +661,9 @@ isn't acceptable, because people would trust it:
   foreign-currency accounts (Akahu's transactions don't say their currency),
   an adjustment when splitting one posted transaction across several
   statement lines, and old Excel (.xls) files
-- on foreign-currency documents (MC11): standard-rated GST, overpayments,
-  refunds, payments for several documents, payments through a bank account
+- on foreign-currency documents (MC11): standard-rated GST, supplier
+  overpayments, payments for several documents, payments through a bank account
+
   in a third currency, stock items, quotes, repeating documents and
   purchase orders, and sales on the payments GST basis; also paying NZD
   documents from a foreign-currency statement line, standard-rated GST on

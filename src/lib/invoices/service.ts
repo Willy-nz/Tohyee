@@ -227,10 +227,7 @@ const SUMMARY_FROM = `sales_invoices i
                       where o.invoice_id = i.id and o.status = 'active'), 0) as amount_credited
   ) credited
   cross join lateral (
-    select coalesce((select sum(p.base_cleared) from customer_payments p
-                      where p.invoice_id = i.id and p.status = 'active'), 0)
-         + coalesce((select sum(a.invoice_base) from sales_credit_note_applications a
-                      where a.invoice_id = i.id and a.status = 'active'), 0) as base_settled
+    select tohyee_invoice_base_settled(i.id) as base_settled
   ) base_settled`;
 
 type LineRow = LineItemRow & {

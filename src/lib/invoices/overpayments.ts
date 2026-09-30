@@ -7,10 +7,12 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { getPayment, PAYMENT_SELECT, toPayment, type CustomerPayment } from "@/lib/invoices/payments";
 import { controlAccountCode, lockInvoice, RECEIVABLE_ACCOUNT } from "@/lib/invoices/service";
-import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
+import { clearedBase, foreignRefund, foreignRefundFields, openBase, parseRateInput, realisedFxAccountCode, realisedLines } from "@/lib/fx/documents";
+import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { add, cmp, dec, isZero, parseDecimalInput, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, isZero, parseDecimalInput, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+
 import {
   asRecord,
   optionalBoolean,
@@ -59,6 +61,11 @@ export type OverpaymentApplication = {
   removalDate: string | null;
   removedByEmail: string | null;
   removedAt: string | null;
+  /** In a foreign currency (MC15): the base value cleared from the invoice and from the overpayment, the realised gain (a loss is negative) and its journal. */
+  invoiceBase: string | null;
+  overpaymentBase: string | null;
+  realisedGain: string | null;
+  journalId: string | null;
 };
 
 export type OverpaymentRefund = {
@@ -79,6 +86,11 @@ export type OverpaymentRefund = {
   voidJournalId: string | null;
   voidedByEmail: string | null;
   voidedAt: string | null;
+  /** For a foreign-currency overpayment (MC16): the refund's rate, what moved in the bank, the carrying value refunded and the realised gain. */
+  exchangeRate: string | null;
+  baseAmount: string | null;
+  baseCleared: string | null;
+  realisedGain: string | null;
 };
 
 type ApplicationRow = {
@@ -97,6 +109,10 @@ type ApplicationRow = {
   removal_date: string | null;
   removed_by_email: string | null;
   removed_at: string | null;
+  invoice_base: string | null;
+  overpayment_base: string | null;
+  realised_gain: string | null;
+  journal_id: string | null;
 };
 
 type RefundRow = {
@@ -117,6 +133,10 @@ type RefundRow = {
   void_journal_id: string | null;
   voided_by_email: string | null;
   voided_at: string | null;
+  exchange_rate: string | null;
+  base_amount: string | null;
+  base_cleared: string | null;
+  realised_gain: string | null;
 };
 
 /** The most invoices one command can apply overpayment credit to. */
@@ -124,7 +144,8 @@ const MAX_APPLICATIONS = 100;
 
 const APPLICATION_SELECT = `select o.id, o.payment_id, p.invoice_id as source_invoice_id,
        s.invoice_number as source_invoice_number, o.invoice_id, i.invoice_number, o.status, o.application_date,
-       o.amount, o.currency_code, o.created_by_email, o.created_at, o.removal_date, o.removed_by_email, o.removed_at
+       o.amount, o.currency_code, o.created_by_email, o.created_at, o.removal_date, o.removed_by_email, o.removed_at,
+       o.invoice_base::text, o.overpayment_base::text, o.realised_gain::text, o.journal_id::text
   from customer_overpayment_applications o
   join customer_payments p on p.id = o.payment_id
   join sales_invoices s on s.id = p.invoice_id
@@ -132,7 +153,8 @@ const APPLICATION_SELECT = `select o.id, o.payment_id, p.invoice_id as source_in
 
 const REFUND_SELECT = `select r.id, r.payment_id, r.status, r.refund_date, r.amount, r.currency_code, r.bank_account_id,
        a.code as bank_account_code, a.name as bank_account_name, r.reference, r.journal_id, r.created_by_email,
-       r.created_at, r.void_date, r.void_journal_id, r.voided_by_email, r.voided_at
+       r.created_at, r.void_date, r.void_journal_id, r.voided_by_email, r.voided_at,
+       r.exchange_rate::text, r.base_amount::text, r.base_cleared::text, r.realised_gain::text
   from customer_overpayment_refunds r
   join accounts a on a.id = r.bank_account_id`;
 
@@ -153,6 +175,10 @@ function toApplication(row: ApplicationRow): OverpaymentApplication {
     removalDate: row.removal_date,
     removedByEmail: row.removed_by_email,
     removedAt: row.removed_at,
+    invoiceBase: row.invoice_base === null ? null : toFixedString(dec(row.invoice_base), 2),
+    overpaymentBase: row.overpayment_base === null ? null : toFixedString(dec(row.overpayment_base), 2),
+    realisedGain: row.realised_gain === null ? null : toFixedString(dec(row.realised_gain), 2),
+    journalId: row.journal_id,
   };
 }
 
@@ -175,6 +201,7 @@ function toRefund(row: RefundRow): OverpaymentRefund {
     voidJournalId: row.void_journal_id,
     voidedByEmail: row.voided_by_email,
     voidedAt: row.voided_at,
+    ...foreignRefundFields(row),
   };
 }
 
@@ -329,7 +356,7 @@ export async function applyOverpayment(
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const applicationDate = parseIsoDate(command.applicationDate, "applicationDate");
-  // Payments are always in the base currency, like the approved invoices they pay.
+  // Foreign-currency overpayments (MC15) have the same minor units here (USD, EUR, ...).
   const scale = currencyMinorUnits(tx.baseCurrency);
   const rawApplications = requireArray(command.applications, "applications", MAX_APPLICATIONS);
   if (rawApplications.length === 0) {
@@ -448,17 +475,76 @@ export async function applyOverpayment(
   }
   await assertPostingDateAllowed(tx, applicationDate);
 
+  // A foreign-currency overpayment (MC15): what's left of it, in its currency and at its carrying value (the
+  // payment's rate). Each application clears both sides at their own carrying values; the difference is a
+  // realised gain or loss, posted in a journal of its own, as for credit notes (MC7).
+  let overpaymentOpen =
+    payment.exchangeRate !== null ? { amount: payment.overpaymentRemaining, base: await openBase(tx, "overpayment", paymentId) } : null;
+  const receivable = overpaymentOpen ? await controlAccountCode(tx, RECEIVABLE_ACCOUNT, "credit can't be applied") : null;
   const ids: string[] = [];
   for (const entry of sorted) {
     const amount = toFixedString(entry.amount, scale);
+    const invoice = invoices.get(entry.invoiceId)!;
+    const next = await tx.query<{ id: string }>(
+      "select nextval(pg_get_serial_sequence('customer_overpayment_applications', 'id'))::text as id",
+    );
+    const nextId = next.rows[0].id;
+    let fx: { invoiceBase: string; overpaymentBase: string; gain: string; journalId: string | null } | null = null;
+    if (overpaymentOpen) {
+      const overpaymentBase = clearedBase(overpaymentOpen, amount);
+      const invoiceBase = clearedBase({ amount: invoice.amountDue!, base: await openBase(tx, "invoice", invoice.id) }, amount);
+      overpaymentOpen = {
+        amount: toFixedString(sub(dec(overpaymentOpen.amount), dec(amount)), scale),
+        base: toFixedString(sub(dec(overpaymentOpen.base), dec(overpaymentBase)), 2),
+      };
+      const gain = toFixedString(sub(dec(overpaymentBase), dec(invoiceBase)), 2);
+      let journalId: string | null = null;
+      if (!isZero(dec(gain))) {
+        const currency = payment.currencyCode;
+        const posted = await postJournalBody(
+          tx,
+          "customer_overpayment_application:apply",
+          nextId,
+          parseJournalBody(
+            tx,
+            {
+              postingDate: applicationDate,
+              reference: `Overpayment on ${payment.invoiceNumber} to ${invoice.invoiceNumber}`.slice(0, 100),
+              description: `Overpayment on ${payment.invoiceNumber} applied to ${invoice.invoiceNumber} (${currency} ${amount})`,
+              lines: [
+                {
+                  accountCode: receivable!,
+                  debitAmount: overpaymentBase,
+                  creditAmount: "0",
+                  description: `Overpayment on ${payment.invoiceNumber} used`,
+                  foreign: { currencyCode: currency, amount, rate: payment.exchangeRate!, kind: "carrying_value" as const },
+                },
+                {
+                  accountCode: receivable!,
+                  debitAmount: "0",
+                  creditAmount: invoiceBase,
+                  description: `${invoice.invoiceNumber} credited`,
+                  foreign: { currencyCode: currency, amount, rate: invoice.exchangeRate!, kind: "carrying_value" as const },
+                },
+                ...realisedLines(await realisedFxAccountCode(tx), gain, `overpayment on ${payment.invoiceNumber} applied to ${invoice.invoiceNumber}`),
+              ],
+            },
+            { internal: true },
+          ),
+          { origin: "customer_payment" },
+        );
+        journalId = posted.journal.id;
+      }
+      fx = { invoiceBase, overpaymentBase, gain, journalId };
+    }
     let inserted;
     try {
       inserted = await tx.query<{ id: string }>(
         `insert into customer_overpayment_applications (
-           command_source, idempotency_key, request_hash, payment_id, invoice_id, application_date, amount,
-           currency_code, created_by_user_id, created_by_email
+           id, command_source, idempotency_key, request_hash, payment_id, invoice_id, application_date, amount,
+           currency_code, created_by_user_id, created_by_email, invoice_base, overpayment_base, realised_gain, journal_id
          )
-         values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10)
+         values ($11, $1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $12::numeric, $13::numeric, $14::numeric, $15)
          returning id`,
         [
           source,
@@ -471,6 +557,11 @@ export async function applyOverpayment(
           payment.currencyCode,
           tx.actor.userId,
           tx.actor.email,
+          nextId,
+          fx?.invoiceBase ?? null,
+          fx?.overpaymentBase ?? null,
+          fx?.gain ?? null,
+          fx?.journalId ?? null,
         ],
       );
     } catch (error) {
@@ -483,7 +574,6 @@ export async function applyOverpayment(
     }
     const applicationId = inserted.rows[0].id;
     ids.push(applicationId);
-    const invoice = invoices.get(entry.invoiceId)!;
     await writeAuditEvent(tx, {
       eventType: "overpayment.applied",
       entityType: "customer_overpayment_application",
@@ -495,6 +585,7 @@ export async function applyOverpayment(
         invoiceNumber: invoice.invoiceNumber,
         applicationDate,
         amount,
+        ...(fx ? { invoiceBase: fx.invoiceBase, overpaymentBase: fx.overpaymentBase, realisedGain: fx.gain, journalId: fx.journalId } : {}),
       },
     });
   }
@@ -563,6 +654,32 @@ export async function removeOverpaymentApplication(
     throw new ValidationError(`The removal date can't be before the application date (${application.applicationDate}).`);
   }
   await assertPostingDateAllowed(tx, removalDate);
+  // A realised gain or loss posted when it was applied (MC15) is reversed on the removal date.
+  if (application.journalId) {
+    const original = await getJournal(tx, application.journalId);
+    await postJournalBody(
+      tx,
+      "customer_overpayment_application:removal",
+      applicationId,
+      parseJournalBody(
+        tx,
+        {
+          postingDate: removalDate,
+          reference: `REV-${original.reference}`.slice(0, 100),
+          description: `Removal of ${original.description ?? original.reference}`.slice(0, 500),
+          lines: original.lines.map((line) => ({
+            accountCode: line.accountCode,
+            debitAmount: line.creditAmount,
+            creditAmount: line.debitAmount,
+            description: line.description,
+            ...sameForeign(line),
+          })),
+        },
+        { internal: true },
+      ),
+      { origin: "customer_payment", relatedJournalId: original.id, correctionKind: "reversal" },
+    );
+  }
 
   try {
     await tx.query(
@@ -669,6 +786,8 @@ export async function refundOverpayment(
     amount: unknown;
     bankAccountCode: unknown;
     reference?: unknown;
+    /** For a foreign-currency overpayment (MC16): base currency per 1 unit on the refund date; left out, the last rate used. */
+    exchangeRate?: unknown;
   },
 ): Promise<RefundResult> {
   const paymentId = requireId(paymentIdInput, "paymentId");
@@ -679,12 +798,15 @@ export async function refundOverpayment(
   const amount = dec(parseDecimalInput(command.amount, "amount", { maxScale: scale }));
   const bankAccountCode = parseAccountCodeInput(command.bankAccountCode, "bankAccountCode");
   const reference = optionalString(command.reference, "reference", { maxLength: 100 });
+  const typedRate = parseRateInput(command.exchangeRate);
   const hash = requestHash("overpayment_refund", {
     paymentId,
     refundDate,
     amount: toPlainString(amount),
     bankAccountCode: bankAccountCode.toLowerCase(),
     reference,
+    // Only when sent, so earlier refunds hash the same.
+    ...(typedRate != null ? { exchangeRate: typedRate } : {}),
   });
   const replay = async (): Promise<RefundResult | null> => {
     const earlier = await findRefundByKey(tx, "record", source, idempotencyKey);
@@ -713,29 +835,59 @@ export async function refundOverpayment(
       `The refund of ${toFixedString(amount, scale)} is more than the overpayment left (${payment.overpaymentRemaining}).`,
     );
   }
-  const bank = await resolveBankAccount(tx, bankAccountCode);
   const receivable = await controlAccountCode(tx, RECEIVABLE_ACCOUNT, "refunds can't be recorded");
+  const fixedAmount = toFixedString(amount, scale);
+  const customer = payment.contactName;
+  // A foreign-currency overpayment (MC16) is refunded in its currency at the refund's rate; the difference
+  // from its carrying value (the payment's rate) is a realised gain or loss.
+  const fx =
+    payment.exchangeRate !== null
+      ? await foreignRefund(tx, {
+          side: "customer",
+          currency: payment.currencyCode,
+          amount: fixedAmount,
+          open: { amount: payment.overpaymentRemaining, base: await openBase(tx, "overpayment", paymentId) },
+          date: refundDate,
+          typedRate,
+          bankAccountCode,
+          controlAccountCode: receivable,
+          creditRate: payment.exchangeRate,
+          document: "overpayment",
+          label: `overpayment on ${payment.invoiceNumber}`,
+          description: customer,
+        })
+      : null;
+  if (!fx && typedRate != null) {
+    throw new ValidationError(`${paymentLabel(payment)} is in ${tx.baseCurrency}, so its refunds have no exchange rate.`);
+  }
+  const bank = fx ? fx.bank : await resolveBankAccount(tx, bankAccountCode);
 
   // The journal is keyed by the refund's id, so it's taken first.
   const next = await tx.query<{ id: string }>(
     "select nextval(pg_get_serial_sequence('customer_overpayment_refunds', 'id'))::text as id",
   );
   const refundId = next.rows[0].id;
-  const fixedAmount = toFixedString(amount, scale);
-  const customer = payment.contactName;
   const posted = await postJournalBody(
     tx,
     "customer_overpayment_refund:record",
     refundId,
-    parseJournalBody(tx, {
-      postingDate: refundDate,
-      reference: reference ?? payment.invoiceNumber,
-      description: `Refund of overpayment to ${customer} on ${payment.invoiceNumber}`,
-      lines: [
-        { accountCode: receivable, debitAmount: fixedAmount, creditAmount: "0", description: customer },
-        { accountCode: bank.code, debitAmount: "0", creditAmount: fixedAmount, description: customer },
-      ],
-    }),
+    parseJournalBody(
+      tx,
+      {
+        postingDate: refundDate,
+        reference: reference ?? payment.invoiceNumber,
+        description: fx
+          ? `Refund of overpayment to ${customer} on ${payment.invoiceNumber} (${payment.currencyCode} ${fixedAmount} at ${fx.rate})`
+          : `Refund of overpayment to ${customer} on ${payment.invoiceNumber}`,
+        lines: fx
+          ? fx.lines
+          : [
+              { accountCode: receivable, debitAmount: fixedAmount, creditAmount: "0", description: customer },
+              { accountCode: bank.code, debitAmount: "0", creditAmount: fixedAmount, description: customer },
+            ],
+      },
+      { internal: true },
+    ),
     { origin: "customer_overpayment_refund" },
   );
 
@@ -743,9 +895,10 @@ export async function refundOverpayment(
     await tx.query(
       `insert into customer_overpayment_refunds (
          id, command_source, idempotency_key, request_hash, payment_id, refund_date, amount, currency_code,
-         bank_account_id, reference, journal_id, created_by_user_id, created_by_email
+         bank_account_id, reference, journal_id, created_by_user_id, created_by_email,
+         exchange_rate, base_amount, base_cleared, realised_gain
        )
-       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13)`,
+       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric)`,
       [
         refundId,
         source,
@@ -760,6 +913,10 @@ export async function refundOverpayment(
         posted.journal.id,
         tx.actor.userId,
         tx.actor.email,
+        fx?.rate ?? null,
+        fx?.baseAmount ?? null,
+        fx?.baseCleared ?? null,
+        fx?.gain ?? null,
       ],
     );
   } catch (error) {
@@ -779,6 +936,7 @@ export async function refundOverpayment(
       amount: fixedAmount,
       bankAccountCode: bank.code,
       journalId: posted.journal.id,
+      ...(fx ? { exchangeRate: fx.rate, baseAmount: fx.baseAmount, baseCleared: fx.baseCleared, realisedGain: fx.gain } : {}),
     },
   });
   return { created: true, refund: await getRefund(tx, refundId), payment: await getPayment(tx, paymentId) };
@@ -839,18 +997,23 @@ export async function voidOverpaymentRefund(
     tx,
     "customer_overpayment_refund:void",
     refundId,
-    parseJournalBody(tx, {
-      postingDate: voidDate,
-      reference: `VOID-${original.reference}`.slice(0, 100),
-      description: `Void of refund of overpayment to ${payment.contactName} on ${payment.invoiceNumber}`,
-      lines: original.lines.map((line) => ({
-        accountCode: line.accountCode,
-        debitAmount: line.creditAmount,
-        creditAmount: line.debitAmount,
-        description: line.description,
-        tracking: line.tracking,
-      })),
-    }),
+    parseJournalBody(
+      tx,
+      {
+        postingDate: voidDate,
+        reference: `VOID-${original.reference}`.slice(0, 100),
+        description: `Void of refund of overpayment to ${payment.contactName} on ${payment.invoiceNumber}`,
+        lines: original.lines.map((line) => ({
+          accountCode: line.accountCode,
+          debitAmount: line.creditAmount,
+          creditAmount: line.debitAmount,
+          description: line.description,
+          tracking: line.tracking,
+          ...sameForeign(line),
+        })),
+      },
+      { internal: true },
+    ),
     { origin: "customer_overpayment_refund", relatedJournalId: original.id, correctionKind: "reversal" },
   );
 

@@ -55,6 +55,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/bank-split.test.ts` (BK26-BK28) and
   `tests/integration/bank-foreign.test.ts` (FXB1-FXB11) and
   `tests/integration/multi-currency.test.ts` (MC1-MC13) and
+  `tests/integration/multi-currency-settlements.test.ts` (MC14-MC19) and
+
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
   GP3, GP5, GP6), all against
@@ -468,8 +470,8 @@ does.
   posts no journal and puts the amount back on both.
 - **Refunding** what's left posts Dr 1100 / Cr the bank account on the
   refund date (on or after the payment date), from an active, base-currency
-  account of type bank. A refund can be voided once, which posts the exact
-  reversal.
+  account of type bank (a foreign-currency overpayment: MC16). A refund can be
+  voided once, which posts the exact reversal.
 - What's left of an overpayment is the overpayment less its active
   applications and active refunds; its status is **open** (none used),
   **part used** or **used** (none left). Only the split is stored; the rest
@@ -538,7 +540,7 @@ plus the steps it names.
   amount due (SP3).
 - **Receiving money that isn't against any invoice**: refused, like
   prepayments. (A customer who paid an invoice twice is OP4.)
-- **Foreign-currency** payments and invoices.
+- **Foreign-currency** overpayments are built: see MC14-MC16.
 - **Correcting an overpayment refund**: its journals can't be corrected in
   the ledger. Void the refund and record it again.
 
@@ -771,8 +773,8 @@ modes, line rules and per-line GST in `src/lib/invoices/amounts.ts`).
   posts no journal and puts the amount back on both. Nothing is deleted.
 - **Refunding** remaining credit posts Dr 1100 / Cr the bank account on the
   refund date (on or after the credit note date), from an active,
-  base-currency account of type bank. A refund can be voided once, which posts
-  the exact reversal on the void date.
+  base-currency account of type bank (a foreign-currency credit note: MC17). A
+  refund can be voided once, which posts the exact reversal on the void date.
 - A credit note's remaining credit is its total less its active applications
   and active refunds; its credit status is **open** (none used), **part used**
   or **used** (none left). An invoice's amount due is its total less its active
@@ -869,9 +871,10 @@ work exactly like bill lines (the same amounts modes and line maths in
 - **Removing** an application (once, dated on or after the application)
   posts no journal and puts the amount back on both. Nothing is deleted.
 - **Refund received**: the supplier pays remaining credit back into an
-  active, base-currency account of type bank. It posts Dr the bank account /
-  Cr 2000 on the refund date (on or after the credit note date). A refund can
-  be voided once, which posts the exact reversal on the void date.
+  active, base-currency account of type bank (a foreign-currency one: MC18).
+  It posts Dr the bank account / Cr 2000 on the refund date (on or after the
+  credit note date). A refund can be voided once, which posts the exact
+  reversal on the void date.
 - A supplier credit note's remaining credit is its total less its active
   applications and active refunds; its credit status is **open** (none used),
   **part used** or **used** (none left). A bill's amount due is its total less
@@ -1732,16 +1735,68 @@ Amazon Web Services (USD).
 | MC3 | INV-0002 for Acme, 4 Jul, USD 500.00, no rate typed | Takes **1.6543** (the last USD rate on or before 4 Jul): NZD **827.15** |
 | MC4 | INV-0003, 12 Jul, three lines of USD 10.01 at **1.5**; paid in full the same day into 1000 at 1.5 | Each line 15.015 -> **15.02**, so NZD **45.06** (not 30.03 x 1.5 = 45.05): Dr 1100 45.06 (USD 30.03) / Cr 4000 45.06. Payment: bank **45.05**, 1100 cleared **45.06**, realised loss **0.01**: Dr 1000 45.05 / Dr 7020 0.01 / Cr 1100 45.06 (USD 30.03) |
 | MC5 | A USD statement line on 1030, 20 Jul, +1,000.00: pay INV-0001 at **1.64** | Dr 1030 **1,640.00 (USD 1,000.00 at 1.64)** / Dr 7020 **14.30** / Cr 1100 **1,654.30 (USD 1,000.00)**; INV-0001 paid, NZD due 0.00. An NZD invoice (Kobe's INV-0004) from a USD line stays refused ("Invoice INV-0004 is in NZD, so it can't be paid from a USD statement line yet", FXB9), and a USD invoice from an NZD line is refused (record it on the invoice, then match) |
-| MC6 | INV-0002 (USD 500.00 = NZD 827.15): USD 200.00 on 15 Jul into 1000 at **1.70**, then USD 300.00 on 28 Jul at **1.60** | First: bank **340.00**, cleared 827.15 x 200 / 500 = **330.86**, gain **9.14**: Dr 1000 340.00 / Cr 1100 330.86 (USD 200.00) / Cr 7020 9.14. Due **USD 300.00 = NZD 496.29**. Second (the rest): bank **480.00**, cleared all **496.29**, loss **16.29**: Dr 1000 480.00 / Dr 7020 16.29 / Cr 1100 496.29. USD 300.01 refused (overpaying); into 1040 (EUR) refused. Voiding the second on 29 Jul posts its exact reversal (USD 300.00 back on 1100); paid again on 29 Jul at 1.60, the same |
-| MC7 | CN-0001 for Acme, 22 Jul, USD 100.00 at **1.63**; INV-0005, 25 Jul, USD 2,000.00 at **1.60** (NZD 3,200.00); CN-0001 applied to INV-0005 on 28 Jul | Credit note: Dr 4000 **163.00** / Cr 1100 **163.00 (USD 100.00)**. Applying: the credit note's side **163.00**, the invoice's 3,200.00 x 100 / 2,000 = **160.00**, gain **3.00** ((1.63 - 1.60) x 100): Dr 1100 163.00 (USD 100.00) / Cr 1100 160.00 (USD 100.00) / Cr 7020 3.00. INV-0005 due **USD 1,900.00 = NZD 3,040.00**. Removing it posts the exact reversal; applied again, the same. Refunding a USD credit note is refused |
+| MC6 | INV-0002 (USD 500.00 = NZD 827.15): USD 200.00 on 15 Jul into 1000 at **1.70**, then USD 300.00 on 28 Jul at **1.60** | First: bank **340.00**, cleared 827.15 x 200 / 500 = **330.86**, gain **9.14**: Dr 1000 340.00 / Cr 1100 330.86 (USD 200.00) / Cr 7020 9.14. Due **USD 300.00 = NZD 496.29**. Second (the rest): bank **480.00**, cleared all **496.29**, loss **16.29**: Dr 1000 480.00 / Dr 7020 16.29 / Cr 1100 496.29. Into 1040 (EUR) refused (a third currency, MC30); overpaying is MC14. Voiding the second on 29 Jul posts its exact reversal (USD 300.00 back on 1100); paid again on 29 Jul at 1.60, the same |
+| MC7 | CN-0001 for Acme, 22 Jul, USD 100.00 at **1.63**; INV-0005, 25 Jul, USD 2,000.00 at **1.60** (NZD 3,200.00); CN-0001 applied to INV-0005 on 28 Jul | Credit note: Dr 4000 **163.00** / Cr 1100 **163.00 (USD 100.00)**. Applying: the credit note's side **163.00**, the invoice's 3,200.00 x 100 / 2,000 = **160.00**, gain **3.00** ((1.63 - 1.60) x 100): Dr 1100 163.00 (USD 100.00) / Cr 1100 160.00 (USD 100.00) / Cr 7020 3.00. INV-0005 due **USD 1,900.00 = NZD 3,040.00**. Removing it posts the exact reversal; applied again, the same. (Refunding a USD credit note: MC17.) |
 | MC8 | Revaluation on 31 Jul at **1.62** (reversal 1 Aug) of 1030, 1100 USD and 2000 USD | 1030: USD 1,000.00, carrying 1,640.00, revalued 1,620.00: Dr 7010 **20.00** / Cr 1030 20.00. 1100 USD: USD **1,900.00** (INV-0005), carrying **3,040.00**, revalued **3,078.00**: Dr 1100 **38.00** (USD 0.00 at 1.62) / Cr 7000 38.00. 2000 USD: USD **50.00** (AWS-7), carrying **83.00**, revalued **81.00**: Dr 2000 **2.00** / Cr 7000 2.00. All reversed on 1 Aug. Before it, period close's FX check lists 1030, 1100 and 2000; after, it passes. Refused: 1100 without a currency ("…Say which currency…"), 1100 USD typed as 2,000.00 ("the ledger has USD 1900.00 open…"), 1100 EUR ("nothing open in EUR"), 1100 USD again on 31 Jul |
 | MC9 | Aged receivables and payables, and Acme's statement, as at 31 Jul | Acme: INV-0005 **USD 1,900.00 / NZD 3,040.00**, owes USD 1,900.00; total **NZD 3,155.00** (with Kobe's 115.00); revaluation **38.00** beside it (3,155.00 + 38.00 = 1100's 3,193.00). Payables: AWS-7 **USD 50.00 / NZD 83.00**; revaluation **-2.00**; 2000 **81.00**, difference 0.00. Period close's receivables and payables checks pass. Acme's July statement is in **USD**: closing **1,900.00**, NZD **3,040.00** beside it |
 | MC10 | Bills from AWS: AWS-7, 5 Jul, USD 50.00 at **1.66**, 6040, no tax; AWS-8, 6 Jul, the same; supplier credit note AWS-CR1, 7 Jul, USD 20.00 at **1.70**, applied to AWS-8 on 8 Jul; AWS-8's USD 30.00 paid 9 Jul from 1000 at 1.66 | AWS-7: Dr 6040 **83.00** / Cr 2000 **83.00 (USD 50.00)**; with a GST line: refused. AWS-CR1: Dr 2000 **34.00 (USD 20.00)** / Cr 6040 34.00. Applying: the bill's side 83.00 x 20 / 50 = **33.20**, the credit's **34.00**, loss **0.80**: Dr 2000 33.20 (USD 20.00) / Cr 2000 34.00 (USD 20.00) / Dr 7020 0.80. Payment: bank **49.80**, cleared **49.80**, no gain or loss (no 7020 line): Dr 2000 49.80 (USD 30.00) / Cr 1000 49.80 |
-| MC11 | Refused rather than guessed, with nothing posted | Quotes, repeating invoices, purchase orders (and repeating bills, project and CRM invoices) for a USD contact; a USD invoice made any way but entering it directly; a payment for several invoices or bills that includes a USD one; overpaying a USD invoice; refunds of foreign-currency credit notes; stock items or item lines without a typed price on foreign-currency documents; a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
+| MC11 | Refused rather than guessed, with nothing posted | Quotes, repeating invoices, purchase orders (and repeating bills, project and CRM invoices) for a USD contact; a USD invoice made any way but entering it directly; a payment for several invoices or bills that includes a USD one; stock items or item lines without a typed price on foreign-currency documents; a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
 | MC12 | AWS-7 paid on 5 Aug from 1030 at **1.65** (after the 1 Aug reversal) | Dr 2000 **83.00 (USD 50.00)** / Cr 1030 **82.50 (USD 50.00 at 1.65)** / Cr 7020 **0.50** |
 | MC13 | July GST return (invoice basis) and the trial balance at 31 Aug | Box 5 **5,678.51**, Box 6 **5,563.51** (1,654.30 + 827.15 + 45.06 + 3,200.00 - 163.00 zero-rated; Kobe's 115.00 standard-rated); AWS's no-GST bills in no box. Trial balance balances: 7020 debit **18.76** (-14.30 - 0.01 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50), 7000 and 7010 nothing (reversed), 1100 **3,155.00**, 2000 nothing, 1030 **1,557.50** (USD 950.00) |
 
 Tests: `tests/integration/multi-currency.test.ts` (MC1-MC13).
+
+### Foreign-currency overpayments and refunds (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026), following NetSuite as Jess asked. NetSuite
+posts a realised gain or loss whenever a payment or credit settles a
+transaction at a rate other than its own: "Variance = (Payment FX Rate -
+Source FX Rate) x Payment", and "the payment transaction can be a payment,
+credit memo, customer deposit, or journal entry" (*Variance Calculations for
+Realized Gain and Loss*, *Accounting for Fluctuation in Exchange Rates for
+Closed Transactions*). A customer refund has its own Exchange Rate field, in
+the currency of the credits it refunds (*Refunding an Open Balance*), and
+"NetSuite expects the payment currency to match the invoice currency"
+(*Currency on Customer Transactions*). So, in Tohyee:
+
+- **Overpaying a foreign-currency invoice** (OP1 in another currency): the
+  overpayment is credit in the invoice's currency **at the payment's rate**
+  (NetSuite's unapplied payment). Its base value is overpayment x rate,
+  rounded once, on its own accounts receivable line (`fx_kind` "document");
+  the rest of the bank amount pays the invoice, cleared at the invoice's
+  carrying value, and the realised gain or loss is on that part only.
+  Paying an already-paid invoice is all overpayment (OP4), with no gain.
+- **Applying** it to the same customer's other invoices in that currency
+  works like a foreign credit note (MC7): each side clears at its own
+  carrying value, and the difference is a realised gain or loss in a journal
+  of its own, dated the application date; removing it posts the reversal.
+- **Refunding** an overpayment, a credit note or a supplier credit note
+  is in the credit's currency, at the **refund's own rate** (typed, or the
+  last rate used, MC3), from (or into) a bank account in that currency or
+  in NZD. The bank moves amount x refund rate, rounded once; accounts
+  receivable (payable) is cleared at the credit's carrying value (all
+  that's left when the rest is refunded); the difference is realised on
+  7020. Voiding posts the exact reversal, foreign amounts included.
+- **Supplier overpayments** are still refused, as in NZD (SP3).
+- Aged receivables and payables, customer statements, Home and period
+  close count unused foreign credit at its carrying value, so the documents
+  still add up to 1100 and 2000.
+
+Setup: 1000 (NZD), 1030 USD account, 1040 EUR account, 1100, 2000, 4000,
+6040, 7020; customer Acme Inc (USD), supplier Amazon Web Services (USD);
+INV-0001 for Acme, 1 Jul 2026, USD 1,000.00 at **1.60** (NZD 1,600.00) and
+INV-0002, 2 Jul, USD 500.00 at **1.70** (NZD 850.00), both zero-rated.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC14 | Acme pays USD **1,100.00** for INV-0001 on 3 Jul into 1030 at **1.65** | Bank 1,100.00 x 1.65 = **1,815.00**; overpayment USD **100.00** = **165.00**; the invoice part (1,815.00 - 165.00 = 1,650.00) clears **1,600.00**, gain **50.00** ((1.65 - 1.60) x 1,000): Dr 1030 1,815.00 (USD 1,100.00 at 1.65) / Cr 1100 1,600.00 (USD 1,000.00) / Cr 1100 165.00 (USD 100.00, the overpayment) / Cr 7020 50.00. INV-0001 **paid**; overpayment **open**, USD 100.00 = NZD 165.00. Paying INV-0001 USD 10.00 again (into 1000 at 1.65) is all overpayment: Dr 1000 16.50 / Cr 1100 16.50 (USD 10.00), no gain; voiding it posts the exact reversal |
+| MC15 | Apply USD 60.00 of it to INV-0002 on 10 Jul | The overpayment's side 165.00 x 60 / 100 = **99.00**; the invoice's 850.00 x 60 / 500 = **102.00**; loss **3.00** ((1.65 - 1.70) x 60): Dr 1100 99.00 (USD 60.00) / Cr 1100 102.00 (USD 60.00) / Dr 7020 3.00. INV-0002 due **USD 440.00 = NZD 748.00**; overpayment left **USD 40.00 = NZD 66.00**, **part used**. Removing it posts the exact reversal; applied again, the same |
+| MC16 | Refund the USD 40.00 left on 20 Jul from 1000 at **1.62** | Bank 40.00 x 1.62 = **64.80**; carrying value all **66.00**; gain **1.20**: Dr 1100 66.00 (USD 40.00) / Cr 1000 64.80 / Cr 7020 1.20; **used**. USD 40.01 and a refund from 1040 (EUR, MC30) are refused. Voided on 21 Jul (exact reversal), then refunded from 1030 at 1.62: Cr 1030 64.80 (USD 40.00 at 1.62). The payment can't be voided now (OP8) |
+| MC17 | CN-0001 for Acme, 5 Jul, USD 100.00 at **1.63** (NZD 163.00); refund USD 30.00 on 15 Jul from 1030 at **1.60** | Carrying 163.00 x 30 / 100 = **48.90**, bank **48.00**, gain **0.90**: Dr 1100 48.90 (USD 30.00) / Cr 1030 48.00 (USD 30.00 at 1.60) / Cr 7020 0.90. Remaining **USD 70.00 = NZD 114.10**. Voided on 16 Jul (exact reversal; back to USD 100.00 = NZD 163.00) and refunded again, the same |
+| MC18 | Supplier credit note AWS-CR1, 5 Jul, USD 20.00 at **1.70** (NZD 34.00); AWS refunds it on 12 Jul into 1030 at **1.66** | Bank **33.20**, carrying **34.00**, loss **0.80**: Dr 1030 33.20 (USD 20.00 at 1.66) / Dr 7020 0.80 / Cr 2000 34.00 (USD 20.00). Remaining 0.00. Voided (exact reversal) and received again, the same |
+| MC19 | As at 31 Jul | Aged receivables: Acme's INV-0002 **USD 440.00 / NZD 748.00** less CN-0001's unused **USD 70.00 / NZD 114.10**: Acme owes **USD 370.00**, total **NZD 633.90** = 1100 on the trial balance. 7020 credit **48.30** (50.00 - 3.00 + 1.20 + 0.90 - 0.80); 2000 nothing. Revaluing 1100 USD at **1.60**: USD 370.00, carrying **633.90**, revalued **592.00**, Dr 7010 **41.90** / Cr 1100 41.90; aged receivables shows the revaluation **-41.90**, and period close's receivables and payables checks pass |
+
+Tests: `tests/integration/multi-currency-settlements.test.ts` (MC14-MC19).
 
 ### Not supported yet (refused rather than guessed)
 
@@ -1752,9 +1807,9 @@ Tests: `tests/integration/multi-currency.test.ts` (MC1-MC13).
   Hybrid and invoice bases work. (Foreign-currency bills on the payments or
   hybrid basis count their share of the bill's NZD value; with no GST on them
   they're in no box.)
-- **Overpayments and prepayments** of foreign-currency invoices, **payments for
-  several documents** that include one, and **refunds** of foreign-currency
-  credit notes.
+- **Prepayments** of foreign-currency invoices, **supplier overpayments**
+  (as in NZD, SP3) and **payments for several documents** that include one.
+  (Foreign overpayments and refunds are built: MC14-MC19.)
 - **Paying in one currency into (or from) a bank account in a third
   currency** (a USD invoice from the EUR account), paying NZD documents from a
   foreign-currency statement line, and a foreign-currency document from an

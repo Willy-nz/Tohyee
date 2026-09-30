@@ -162,29 +162,7 @@ async function outstandingAsAt(tx: OrgTx, ids: string[], asAt: string, names: Ma
     outstanding: string;
     outstanding_base: string;
   }>(
-    `${RECEIVABLES_SQL},
-     credit_notes as (
-       select n.id, n.contact_id, n.credit_note_number, n.credit_note_date, n.total,
-              n.total
-              - coalesce((select sum(a.amount) from live_cn_apps a where a.credit_note_id = n.id), 0)
-              - coalesce((select sum(r.amount) from sales_credit_note_refunds r, params
-                           where r.credit_note_id = n.id and r.refund_date <= params.as_at
-                             and (r.void_date is null or r.void_date > params.as_at)), 0) as unused,
-              n.base_total - coalesce((select sum(a.credit_note_base) from live_cn_apps a where a.credit_note_id = n.id), 0) as base_unused
-         from sales_credit_notes n, params
-        where n.status in ('approved', 'voided') and n.credit_note_date <= params.as_at
-          and (n.void_date is null or n.void_date > params.as_at)
-     ),
-     overpayments as (
-       select p.id, i.contact_id, i.invoice_number, p.payment_date, p.overpayment_amount,
-              p.overpayment_amount
-              - coalesce((select sum(a.amount) from live_op_apps a where a.payment_id = p.id), 0)
-              - coalesce((select sum(r.amount) from customer_overpayment_refunds r, params
-                           where r.payment_id = p.id and r.refund_date <= params.as_at
-                             and (r.void_date is null or r.void_date > params.as_at)), 0) as unused
-         from live_payments p join sales_invoices i on i.id = p.invoice_id
-        where p.overpayment_amount > 0
-     )
+    `${RECEIVABLES_SQL}
      select 'invoice' as type, i.id::text as document_id, i.id::text as link_id, i.invoice_number as number, i.invoice_date as date,
             i.due_date, i.contact_id::text, s.total::text as original, i.amount_due::text as outstanding,
             i.amount_due_base::text as outstanding_base
@@ -193,11 +171,11 @@ async function outstandingAsAt(tx: OrgTx, ids: string[], asAt: string, names: Ma
      union all
      select 'credit_note', id::text, id::text, credit_note_number, credit_note_date, null, contact_id::text, total::text, (-unused)::text,
             (-coalesce(base_unused, unused))::text
-       from credit_notes where (unused <> 0 or coalesce(base_unused, 0) <> 0) and contact_id = any($2::bigint[])
+       from credit_notes_open where (unused <> 0 or coalesce(base_unused, 0) <> 0) and contact_id = any($2::bigint[])
      union all
      select 'overpayment', id::text, id::text, invoice_number, payment_date, null, contact_id::text, overpayment_amount::text, (-unused)::text,
-            (-unused)::text
-       from overpayments where unused <> 0 and contact_id = any($2::bigint[])
+            (-coalesce(base_unused, unused))::text
+       from overpayments_open where (unused <> 0 or coalesce(base_unused, 0) <> 0) and contact_id = any($2::bigint[])
      order by date, type desc, document_id`,
     [asAt, ids],
   );

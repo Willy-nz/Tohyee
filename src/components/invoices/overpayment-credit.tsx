@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { ExchangeRateField, useLastRate } from "@/components/fx";
 import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -25,9 +26,14 @@ function laterOf(first: string, second: string): string {
   return first < second ? second : first;
 }
 
-/** Refunds are paid from active bank accounts in the base currency (example OP7). */
-function isRefundAccount(account: Account): boolean {
-  return (account.accountType === "bank" || account.accountType === "credit_card") && account.currencyCode === null;
+/**
+ * Refunds move through active bank accounts in the base currency, or, for
+ * foreign-currency credit, in its own currency (MC16-MC18; a third currency is refused, MC30).
+ */
+function refundAccountFilter(currencyCode: string | null) {
+  return (account: Account): boolean =>
+    (account.accountType === "bank" || account.accountType === "credit_card") &&
+    (account.currencyCode === null || (currencyCode !== null && account.currencyCode === currencyCode));
 }
 
 /**
@@ -256,6 +262,12 @@ function RefundForm({
     reference: "",
   });
   const [chosenAccount, setChosenAccount] = useState<string | null>(null);
+  // Foreign-currency credit is refunded in its currency at the refund's own rate (MC16-MC18).
+  const foreign = payment.exchangeRate !== null;
+  const baseCurrency = useWorkspace().current?.baseCurrency ?? "NZD";
+  const [typedRate, setTypedRate] = useState<string | null>(null);
+  const suggestedRate = useLastRate(organisationId, payment.currencyCode, baseCurrency, fields.refundDate);
+  const isRefundAccount = refundAccountFilter(foreign ? payment.currencyCode : null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -282,6 +294,7 @@ function RefundForm({
           amount: fields.amount,
           bankAccountCode,
           reference: fields.reference,
+          ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}),
         },
       });
       setKey(newIdempotencyKey("overpayment-refund"));
@@ -324,6 +337,9 @@ function RefundForm({
         >
           <input inputMode="decimal" value={fields.amount} onChange={(event) => set("amount", event.target.value)} required />
         </Field>
+        {foreign ? (
+          <ExchangeRateField currencyCode={payment.currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
+        ) : null}
         <Field label="Bank account">
           <AccountSelect
             accounts={accounts.data?.accounts ?? []}
