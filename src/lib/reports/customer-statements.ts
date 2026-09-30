@@ -60,6 +60,8 @@ export type OutstandingLine = {
   original: string;
   /** Still owed (an invoice), or credit left as a negative amount. */
   outstanding: string;
+  /** The same in the base currency, at the document's own rate (MC9). */
+  outstandingBase: string;
   daysOverdue: number;
 };
 
@@ -70,7 +72,10 @@ type StatementBase = {
   includeSubCustomers: boolean;
   /** The customers covered (the parent first, then its subs by name). */
   customers: { id: string; name: string }[];
+  /** The customer's currency (MC9): every amount is in it, except the ones marked base. */
   currencyCode: string;
+  /** The organisation's base currency. */
+  baseCurrency: string;
   /** Aged as at the statement date, by each invoice's due date, less unused credit. */
   ageing: AgedAmounts;
 };
@@ -84,6 +89,8 @@ export type ActivityStatement = StatementBase & {
   totalAmount: string;
   totalPayment: string;
   closing: string;
+  /** The closing balance in the base currency, at the documents' own rates (MC9). */
+  closingBase: string;
 };
 
 export type OutstandingStatement = StatementBase & {
@@ -91,6 +98,8 @@ export type OutstandingStatement = StatementBase & {
   asAt: string;
   lines: OutstandingLine[];
   balance: string;
+  /** The balance in the base currency, at the documents' own rates (MC9). */
+  balanceBase: string;
 };
 
 async function customersCovered(tx: OrgTx, contactId: string, includeSubs: boolean): Promise<{ id: string; name: string }[]> {
@@ -112,22 +121,35 @@ async function customersCovered(tx: OrgTx, contactId: string, includeSubs: boole
 async function startStatement(
   tx: OrgTx,
   input: { contactId?: unknown; includeSubCustomers?: unknown },
-): Promise<{ customer: StatementCustomer; includeSubCustomers: boolean; customers: { id: string; name: string }[]; ids: string[] }> {
+): Promise<{ customer: StatementCustomer; includeSubCustomers: boolean; customers: { id: string; name: string }[]; ids: string[]; currencyCode: string }> {
   const contact = await getContact(tx, input.contactId);
   if (!contact.isCustomer) throw new ValidationError(`${contact.name} isn't a customer, so there's no statement for them.`);
   const includeSubCustomers = input.includeSubCustomers === true || input.includeSubCustomers === "true";
   const customers = await customersCovered(tx, contact.id, includeSubCustomers);
+  const ids = customers.map((customer) => customer.id);
+  // A statement is in the customer's currency (MC9); sub-customers in other currencies can't be added in.
+  const currencies = await tx.query<{ currency: string }>(
+    "select distinct coalesce(currency_code, $2) as currency from contacts where id = any($1::bigint[])",
+    [ids, tx.baseCurrency],
+  );
+  if (currencies.rows.length > 1) {
+    throw new ValidationError(
+      `${contact.name} and its sub-customers are in different currencies (${currencies.rows.map((row) => row.currency).join(", ")}), so they can't share a statement yet. Make one statement per customer.`,
+    );
+  }
   return {
     customer: { id: contact.id, name: contact.name, billingAddress: contact.postalAddress, email: contact.email },
     includeSubCustomers,
     customers,
-    ids: customers.map((customer) => customer.id),
+    ids,
+    currencyCode: currencies.rows[0]?.currency ?? tx.baseCurrency,
   };
 }
 
 /** Invoices owed and credit unused as at a date for some customers, and their ageing. */
-async function outstandingAsAt(tx: OrgTx, ids: string[], asAt: string, names: Map<string, string>) {
-  const scale = currencyMinorUnits(tx.baseCurrency);
+async function outstandingAsAt(tx: OrgTx, ids: string[], asAt: string, names: Map<string, string>, currencyCode: string) {
+  const scale = currencyMinorUnits(currencyCode);
+  const baseScale = currencyMinorUnits(tx.baseCurrency);
   const rows = await tx.query<{
     type: OutstandingLine["type"];
     document_id: string;
@@ -138,6 +160,7 @@ async function outstandingAsAt(tx: OrgTx, ids: string[], asAt: string, names: Ma
     contact_id: string;
     original: string;
     outstanding: string;
+    outstanding_base: string;
   }>(
     `${RECEIVABLES_SQL},
      credit_notes as (
@@ -146,7 +169,8 @@ async function outstandingAsAt(tx: OrgTx, ids: string[], asAt: string, names: Ma
               - coalesce((select sum(a.amount) from live_cn_apps a where a.credit_note_id = n.id), 0)
               - coalesce((select sum(r.amount) from sales_credit_note_refunds r, params
                            where r.credit_note_id = n.id and r.refund_date <= params.as_at
-                             and (r.void_date is null or r.void_date > params.as_at)), 0) as unused
+                             and (r.void_date is null or r.void_date > params.as_at)), 0) as unused,
+              n.base_total - coalesce((select sum(a.credit_note_base) from live_cn_apps a where a.credit_note_id = n.id), 0) as base_unused
          from sales_credit_notes n, params
         where n.status in ('approved', 'voided') and n.credit_note_date <= params.as_at
           and (n.void_date is null or n.void_date > params.as_at)
@@ -162,14 +186,17 @@ async function outstandingAsAt(tx: OrgTx, ids: string[], asAt: string, names: Ma
         where p.overpayment_amount > 0
      )
      select 'invoice' as type, i.id::text as document_id, i.id::text as link_id, i.invoice_number as number, i.invoice_date as date,
-            i.due_date, i.contact_id::text, s.total::text as original, i.amount_due::text as outstanding
+            i.due_date, i.contact_id::text, s.total::text as original, i.amount_due::text as outstanding,
+            i.amount_due_base::text as outstanding_base
        from invoices i join sales_invoices s on s.id = i.id
-      where i.amount_due <> 0 and i.contact_id = any($2::bigint[])
+      where (i.amount_due <> 0 or i.amount_due_base <> 0) and i.contact_id = any($2::bigint[])
      union all
-     select 'credit_note', id::text, id::text, credit_note_number, credit_note_date, null, contact_id::text, total::text, (-unused)::text
-       from credit_notes where unused <> 0 and contact_id = any($2::bigint[])
+     select 'credit_note', id::text, id::text, credit_note_number, credit_note_date, null, contact_id::text, total::text, (-unused)::text,
+            (-coalesce(base_unused, unused))::text
+       from credit_notes where (unused <> 0 or coalesce(base_unused, 0) <> 0) and contact_id = any($2::bigint[])
      union all
-     select 'overpayment', id::text, id::text, invoice_number, payment_date, null, contact_id::text, overpayment_amount::text, (-unused)::text
+     select 'overpayment', id::text, id::text, invoice_number, payment_date, null, contact_id::text, overpayment_amount::text, (-unused)::text,
+            (-unused)::text
        from overpayments where unused <> 0 and contact_id = any($2::bigint[])
      order by date, type desc, document_id`,
     [asAt, ids],
@@ -199,10 +226,12 @@ async function outstandingAsAt(tx: OrgTx, ids: string[], asAt: string, names: Ma
       href,
       original: toFixedString(dec(row.original), scale),
       outstanding: toFixedString(outstanding, scale),
+      outstandingBase: toFixedString(dec(row.outstanding_base), baseScale),
       daysOverdue: Math.max(daysOverdue, 0),
     };
   });
-  return { lines, ageing: toAmounts(buckets, scale) };
+  const balanceBase = toFixedString(sum(lines.map((line) => dec(line.outstandingBase))), baseScale);
+  return { lines, ageing: toAmounts(buckets, scale), balanceBase };
 }
 
 /** The statement's balance as at a date (from the documents; the same as aged receivables). */
@@ -325,7 +354,7 @@ export async function activityStatement(
   if (from > to) throw new ValidationError("The start date must be on or before the end date.");
   const start = await startStatement(tx, input);
   const names = new Map(start.customers.map((customer) => [customer.id, customer.name]));
-  const scale = currencyMinorUnits(tx.baseCurrency);
+  const scale = currencyMinorUnits(start.currencyCode);
   const money = (value: Decimal) => toFixedString(value, scale);
 
   const opening = await balanceAsAt(tx, start.ids, dayBefore(from));
@@ -351,13 +380,14 @@ export async function activityStatement(
       balance: money(balance),
     };
   });
-  const { ageing } = await outstandingAsAt(tx, start.ids, to, names);
+  const { ageing, balanceBase } = await outstandingAsAt(tx, start.ids, to, names, start.currencyCode);
   return {
     kind: "activity",
     customer: start.customer,
     includeSubCustomers: start.includeSubCustomers,
     customers: start.customers,
-    currencyCode: tx.baseCurrency,
+    currencyCode: start.currencyCode,
+    baseCurrency: tx.baseCurrency,
     from,
     to,
     opening: money(opening),
@@ -365,6 +395,7 @@ export async function activityStatement(
     totalAmount: money(sum(adds)),
     totalPayment: money(sum(takes)),
     closing: money(balance),
+    closingBase: balanceBase,
     ageing,
   };
 }
@@ -376,18 +407,20 @@ export async function outstandingStatement(
   const asAt = parseOptionalIsoDate(input.asAt, "asAt") ?? todayIsoDate();
   const start = await startStatement(tx, input);
   const names = new Map(start.customers.map((customer) => [customer.id, customer.name]));
-  const scale = currencyMinorUnits(tx.baseCurrency);
-  const { lines, ageing } = await outstandingAsAt(tx, start.ids, asAt, names);
+  const scale = currencyMinorUnits(start.currencyCode);
+  const { lines, ageing, balanceBase } = await outstandingAsAt(tx, start.ids, asAt, names, start.currencyCode);
   const balance = sum(lines.map((line) => dec(line.outstanding)));
   return {
     kind: "outstanding",
     customer: start.customer,
     includeSubCustomers: start.includeSubCustomers,
     customers: start.customers,
-    currencyCode: tx.baseCurrency,
+    currencyCode: start.currencyCode,
+    baseCurrency: tx.baseCurrency,
     asAt,
     lines,
     balance: toFixedString(isZero(balance) ? ZERO_DECIMAL : balance, scale),
+    balanceBase,
     ageing,
   };
 }

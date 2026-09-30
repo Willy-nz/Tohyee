@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as runRoute from "@/app/api/repeating-bills/[repeatingBillId]/run/route";
 import type { SessionUser } from "@/lib/auth/sessions";
-import { approveBill, createBill, deleteBill, getBill, listBills } from "@/lib/bills/service";
-import { archiveContact, createContact } from "@/lib/contacts/service";
+import { approveBill, createBill, deleteBill, getBill, listBills, updateBill } from "@/lib/bills/service";
+import { archiveContact, createContact, updateContact } from "@/lib/contacts/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { inventoryValuation } from "@/lib/reports/financial";
@@ -330,5 +330,60 @@ describeWithDatabase("repeating bills", () => {
       params({ repeatingBillId: template.id }),
     );
     expect(response.status).toBe(403);
+  });
+
+  it("RB11: with no number pattern, each bill is a draft without a number, completed from the real invoice", async () => {
+    const w = await setup();
+    const template = await w.template({ supplierInvoiceNumber: "" });
+    expect([template.supplierInvoiceNumber, template.nextDate, template.nextSupplierInvoiceNumber]).toEqual([null, "2026-01-31", null]);
+    // Approving automatically needs a number, so it's refused (the database refuses it too).
+    await expect(w.template({ supplierInvoiceNumber: null, saveAs: "approve" })).rejects.toThrow(
+      "Bills without a supplier's invoice number are saved as drafts, so give a number pattern to approve them automatically",
+    );
+    await expect(w.as((tx) => updateRepeatingBill(tx, template.id, { saveAs: "approve" }))).rejects.toThrow("saved as drafts");
+    await expect(w.as((tx) => tx.query("update repeating_bills set save_as = 'approve' where id = $1", [template.id]))).rejects.toThrow(
+      /repeating_bills_number_or_draft/,
+    );
+
+    expect(await w.run("2026-03-05")).toEqual({ made: 2, approved: 0, refused: 0, failed: 0 });
+    expect(await w.bills()).toEqual([
+      ["2026-01-31", "2026-02-20", "draft", null, "1150.00"],
+      ["2026-02-28", "2026-03-20", "draft", null, "1150.00"],
+    ]);
+    expect((await w.as((tx) => tx.query("select 1 from ledger_journals"))).rowCount).toBe(0);
+    const runs = (await w.as((tx) => getRepeatingBill(tx, template.id))).runs;
+    expect(runs.map((r) => [r.scheduledDate, r.outcome, r.supplierInvoiceNumber])).toEqual([
+      ["2026-02-28", "draft", null],
+      ["2026-01-31", "draft", null],
+    ]);
+    // January's invoice arrives: its number is typed on the draft, and it's approved as usual (B1, B9).
+    const january = runs[1].billId!;
+    await expect(w.as((tx) => approveBill(tx, january, { idempotencyKey: key("a") }))).rejects.toThrow("Add the supplier's invoice number before approving");
+    await w.as((tx) => updateBill(tx, january, { supplierInvoiceNumber: "HP-10442" }));
+    const approved = (await w.as((tx) => approveBill(tx, january, { idempotencyKey: key("a") }))).bill;
+    expect(await w.journal(approved.approvalJournalId!)).toEqual(["2026-01-31", ["6150", "1000.00", "0.00"], ["2100", "150.00", "0.00"], ["2000", "0.00", "1150.00"]]);
+    // A pattern still works as built once it's given.
+    const withPattern = await w.as((tx) => updateRepeatingBill(tx, template.id, { supplierInvoiceNumber: "RENT-{month}" }));
+    expect(withPattern.nextSupplierInvoiceNumber).toBe("RENT-2026-03");
+  });
+
+  it("RB12, SPT3: due by the supplier's payment terms", async () => {
+    const w = await setup();
+    // Harbour has no terms yet, so due by its terms is refused.
+    await expect(w.template({ dueRule: "terms", dueDays: null })).rejects.toThrow("This supplier has no payment terms");
+    const twentieth = (await w.as((tx) => tx.query<{ id: string }>("select id::text from payment_terms where name = '20th of the following month'"))).rows[0].id;
+    await w.as((tx) => updateContact(tx, w.harbour.id, { supplierPaymentTermId: twentieth }));
+    const template = await w.template({ dueRule: "terms", dueDays: null });
+    expect([template.dueRule, template.dueDays]).toEqual(["terms", 0]);
+    expect(await w.run("2026-03-05")).toEqual({ made: 2, approved: 0, refused: 0, failed: 0 });
+    // The same as RB2, from the supplier's terms.
+    expect(await w.bills()).toEqual([
+      ["2026-01-31", "2026-02-20", "draft", "RENT-2026-01", "1150.00"],
+      ["2026-02-28", "2026-03-20", "draft", "RENT-2026-02", "1150.00"],
+    ]);
+    // Terms taken away: the next run makes nothing and says why.
+    await w.as((tx) => updateContact(tx, w.harbour.id, { supplierPaymentTermId: null }));
+    expect((await w.run("2026-04-05")).made).toBe(0);
+    expect((await w.as((tx) => getRepeatingBill(tx, template.id))).lastError).toMatch(/Harbour Property Ltd no longer has payment terms/);
   });
 });

@@ -149,7 +149,7 @@ function RepeatingBillView({ organisationId, id }: { organisationId: string; id:
           <Stat label="Next bill" value={template.nextDate ? formatDate(template.nextDate) : "—"} />
           <Stat label="Due" value={describeBillDue(template.dueRule, template.dueDays)} />
           <Stat label="Each bill is" value={template.saveAs === "approve" ? "Approved (nothing is paid)" : "Saved as a draft"} />
-          <Stat label="Supplier's invoice number" value={template.supplierInvoiceNumber} />
+          <Stat label="Supplier's invoice number" value={template.supplierInvoiceNumber ?? "None: drafts without a number"} />
           <Stat label="Next bill's number" value={template.nextSupplierInvoiceNumber ?? "—"} />
         </div>
         {template.resumedFrom ? <div className={ui.muted}>Dates before {formatDate(template.resumedFrom)} that weren&apos;t made are skipped.</div> : null}

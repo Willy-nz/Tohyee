@@ -55,7 +55,7 @@ function RepeatingBillList({ organisationId, filter }: { organisationId: string;
                 ) : null}
               </td>
               <td data-label="Supplier's invoice number" className={ui.muted}>
-                {template.nextSupplierInvoiceNumber ?? template.supplierInvoiceNumber}
+                {template.nextSupplierInvoiceNumber ?? template.supplierInvoiceNumber ?? "(no number)"}
               </td>
               <td data-label="How often">{describeSchedule(template)}</td>
               <td data-label="Next bill">{template.nextDate ? formatDate(template.nextDate) : "—"}</td>

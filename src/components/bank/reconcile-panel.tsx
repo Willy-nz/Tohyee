@@ -429,7 +429,10 @@ function PaymentsForm({
     awaitingPayment: "true",
     limit: "200",
   });
-  const base = current?.baseCurrency;
+  // A line pays documents in its own currency (MC5): a USD line pays USD invoices and bills, at a rate.
+  const base = line.currencyCode ?? current?.baseCurrency;
+  const foreign = line.currencyCode !== lookups.baseCurrency;
+  const [rate, setRate] = useState(line.suggestedRate?.rate ?? "");
   const documents = moneyIn
     ? (invoices.data?.invoices ?? [])
         .filter((invoice) => invoice.currencyCode === base)
@@ -457,6 +460,7 @@ function PaymentsForm({
       kind: "payments",
       allocations: entered.map(([id, amount]) => allocation(id, amount.trim())),
       adjustment: adjustmentCommand(difference, adjustment),
+      ...(foreign ? { exchangeRate: rate.trim() } : {}),
     });
   }
 
@@ -473,13 +477,25 @@ function PaymentsForm({
                 key={document.id}
                 variant="secondary"
                 disabled={busy}
-                onClick={() => void submit({ kind: "payments", allocations: [allocation(document.id, document.amountDue)] })}
+                onClick={() =>
+                  void submit({ kind: "payments", allocations: [allocation(document.id, document.amountDue)], ...(foreign ? { exchangeRate: rate.trim() } : {}) })
+                }
               >
                 Pay {document.number} · {document.contactName} · {formatDate(document.date)}
               </Button>
             ))}
           </div>
         </div>
+      ) : null}
+      {foreign ? (
+        <RateField
+          currency={line.currencyCode}
+          baseCurrency={lookups.baseCurrency}
+          rate={rate}
+          onChange={setRate}
+          amount={unsigned}
+          suggested={line.suggestedRate}
+        />
       ) : null}
       <Field label={moneyIn ? "Customer" : "Supplier"} hint={`Pay one or more of their approved ${noun}s from this line.`}>
         <select
@@ -1037,12 +1053,7 @@ function LineReconciler({
       </div>
       {mode === "match" ? <MatchForm line={line} suggestions={suggestions} lookups={lookups} submit={submit} busy={busy} /> : null}
       {mode === "split" ? <SplitForm line={line} otherLines={otherLines} suggestions={suggestions} submit={submit} busy={busy} /> : null}
-      {mode === "payments" && line.currencyCode !== lookups.baseCurrency ? (
-        <Notice tone="info">
-          Invoices and bills are in {lookups.baseCurrency}, so they can&apos;t be paid from a {line.currencyCode} statement line yet.
-          Record the payment from a {lookups.baseCurrency} account, or code this line as {moneyIn ? "receive" : "spend"} money.
-        </Notice>
-      ) : mode === "payments" ? (
+      {mode === "payments" ? (
         <PaymentsForm
           organisationId={organisationId}
           line={line}

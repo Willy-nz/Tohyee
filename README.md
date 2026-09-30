@@ -56,7 +56,8 @@ people working on the code.
   email account.
 
 **Purchases**
-- Bills, repeating bills, supplier credit notes, purchase orders billed in parts, paying one or
+- Bills (due dates from each supplier's payment terms), repeating bills,
+  supplier credit notes, purchase orders billed in parts, paying one or
   several bills at once, and expense claims.
 
 **Bank**
@@ -67,8 +68,10 @@ people working on the code.
 
 **GST and reports**
 - GST return (GST101A, boxes 5-15) on the invoice, payments or hybrid basis,
-  with a GST audit report listing the documents behind every box.
-- Trial balance, profit and loss, balance sheet, account transactions, journal
+  with a GST audit report listing the documents behind every box, and a
+  GST filing frequency setting (monthly, two-monthly or six-monthly).
+- Trial balance (this year's income and expenses, earlier years' profit in
+  retained earnings, as in NetSuite), profit and loss, balance sheet, account transactions, journal
   report, aged receivables and payables, budgets with budget vs actual, and
   custom reports with your own layout.
 

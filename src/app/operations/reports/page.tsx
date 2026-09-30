@@ -22,8 +22,10 @@ type Group = { sections: Section[]; total: string };
 
 type TrialBalance = {
   asAt: string;
+  financialYearStart: string;
+  previousYearsEarnings: string;
   currencyCode: string;
-  rows: Array<{ accountId: string; code: string; name: string; debit: string; credit: string }>;
+  rows: Array<{ accountId: string | null; code: string; name: string; debit: string; credit: string; previousYearsEarnings?: string }>;
   totalDebit: string;
   totalCredit: string;
   balanced: boolean;
@@ -231,9 +233,16 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
               </thead>
               <tbody>
                 {report.data.rows.map((row) => (
-                  <tr key={row.accountId}>
+                  <tr key={row.accountId ?? "retained"}>
                     <td>
-                      {row.code} · {row.name}
+                      {row.code ? `${row.code} · ` : ""}
+                      {row.name}
+                      {row.previousYearsEarnings && row.previousYearsEarnings !== "0.00" ? (
+                        <span className={ui.muted}>
+                          {" "}
+                          · includes <Money value={row.previousYearsEarnings} /> of earnings from previous years
+                        </span>
+                      ) : null}
                     </td>
                     <td className={ui.num}>
                       <Money value={row.debit} blankZero />
@@ -259,6 +268,10 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
                 </tr>
               </tfoot>
             </table>
+            <p className={ui.muted}>
+              Income and expense accounts show this financial year only, from {formatDate(report.data.financialYearStart)}; earlier
+              years&apos; profit is in retained earnings, as on the balance sheet.
+            </p>
           </div>
         )
       ) : null}

@@ -21,6 +21,7 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { loadStockContext, stockLocation } from "@/lib/inventory/stock";
 import { AMOUNTS_MODES, type AmountsMode } from "@/lib/invoices/amounts";
 import { dec, toPlainString } from "@/lib/money/decimal";
+import { dueDateFromSupplierTerms } from "@/lib/customers/service";
 import { BILL_DUE_RULES, billDueDate, billNumberFor, type BillDueRule, NUMBER_PATTERN_MAX, numberPatternProblem } from "@/lib/repeating/bill-rules";
 import {
   assertNotEnded,
@@ -74,8 +75,11 @@ export type RepeatingBillSummary = {
   status: RepeatingStatus;
   contactId: string;
   contactName: string;
-  /** The pattern each bill's supplier invoice number is made from, e.g. "Rent {month}" (RB3). */
-  supplierInvoiceNumber: string;
+  /**
+   * The pattern each bill's supplier invoice number is made from, e.g. "Rent
+   * {month}" (RB3), or null: each bill is a draft without a number (RB11).
+   */
+  supplierInvoiceNumber: string | null;
   amountsMode: AmountsMode;
   currencyCode: string;
   subtotal: string;
@@ -123,7 +127,7 @@ type Row = {
   status: RepeatingStatus;
   contact_id: string;
   contact_name: string;
-  supplier_invoice_number: string;
+  supplier_invoice_number: string | null;
   amounts_mode: AmountsMode;
   currency_code: string;
   subtotal: string;
@@ -202,8 +206,14 @@ function parseTemplate(input: RepeatingBillInput): Parsed {
   const endDate = parseOptionalIsoDate(input.endDate, "endDate");
   if (endDate !== null && endDate < startDate) throw new ValidationError("The end date can't be before the start date.");
   const period = requireOneOf(input.period, "period", REPEAT_PERIODS);
-  const pattern = requireString(input.supplierInvoiceNumber, "supplierInvoiceNumber", { maxLength: NUMBER_PATTERN_MAX });
-  const problem = numberPatternProblem(pattern, period);
+  const saveAs = requireOneOf(input.saveAs, "saveAs", SAVE_AS);
+  // RB11: an empty pattern makes drafts without a number, to be completed from the supplier's invoice.
+  const sentPattern = input.supplierInvoiceNumber;
+  const pattern =
+    sentPattern === null || sentPattern === undefined || (typeof sentPattern === "string" && sentPattern.trim() === "")
+      ? null
+      : requireString(sentPattern, "supplierInvoiceNumber", { maxLength: NUMBER_PATTERN_MAX });
+  const problem = numberPatternProblem(pattern ?? "", period, saveAs);
   if (problem) throw new ValidationError(problem);
   const amountsMode = requireOneOf(input.amountsMode, "amountsMode", AMOUNTS_MODES);
   const dueRule = requireOneOf(input.dueRule, "dueRule", BILL_DUE_RULES);
@@ -223,9 +233,22 @@ function parseTemplate(input: RepeatingBillInput): Parsed {
     startDate,
     endDate,
     dueRule,
-    dueDays: dueRule === "day_of_next_month" ? parseWhole(input.dueDays, "dueDays", 1, 31) : parseWhole(input.dueDays, "dueDays", 0, 365),
-    saveAs: requireOneOf(input.saveAs, "saveAs", SAVE_AS),
+    // RB12: the supplier's terms need no days.
+    dueDays:
+      dueRule === "terms"
+        ? 0
+        : dueRule === "day_of_next_month"
+          ? parseWhole(input.dueDays, "dueDays", 1, 31)
+          : parseWhole(input.dueDays, "dueDays", 0, 365),
+    saveAs,
   };
+}
+
+/** RB12: due by the supplier's payment terms needs a supplier that has them. */
+async function checkDueRule(tx: OrgTx, parsed: Parsed): Promise<void> {
+  if (parsed.dueRule === "terms" && (await dueDateFromSupplierTerms(tx, parsed.draft.contactId, parsed.startDate)) === null) {
+    throw new ValidationError("This supplier has no payment terms, so choose a number of days for the due date instead (or give the supplier payment terms in Contacts).");
+  }
 }
 
 function hashPayload(parsed: Parsed): Record<string, unknown> {
@@ -367,6 +390,7 @@ export async function createRepeatingBill(
     return { created: false, repeatingBill: await getRepeatingBill(tx, existing.rows[0].id) };
   }
   const resolved = await resolveFor(tx, parsed.draft);
+  await checkDueRule(tx, parsed);
   const inserted = await tx.query<{ id: string }>(
     `insert into repeating_bills (command_source, idempotency_key, request_hash, contact_id, supplier_invoice_number, amounts_mode, currency_code,
                                   subtotal, tax_total, total, custom_fields, period, every, start_date, end_date,
@@ -422,6 +446,7 @@ export async function updateRepeatingBill(tx: OrgTx, idInput: unknown, input: Re
   ) as RepeatingBillInput;
   const parsed = parseTemplate(merged);
   const resolved = await resolveFor(tx, parsed.draft, current);
+  await checkDueRule(tx, parsed);
   const { scheduleChanged, resumedFrom } = resumedAfterChange(current, parsed, today);
   await tx.query(
     `update repeating_bills
@@ -484,12 +509,19 @@ const BILLS: RepeatingKind<RepeatingBill> = {
   actor: { userId: null, email: "repeating-bills@tohyee" },
   get: (tx, id) => getRepeatingBill(tx, id),
   async make(tx, template, date, sequence) {
+    const dueDate =
+      template.dueRule === "terms"
+        ? await dueDateFromSupplierTerms(tx, template.contactId, date)
+        : billDueDate(date, template.dueRule, template.dueDays);
+    if (dueDate === null) {
+      throw new ValidationError(`${template.contactName} no longer has payment terms, so the due date can't be worked out. Edit the template, or give the supplier payment terms.`);
+    }
     const made = await createBill(tx, {
       source: "repeating",
       idempotencyKey: `repeating-bill-${template.id}-${date}`,
       contactId: template.contactId,
       billDate: date,
-      dueDate: billDueDate(date, template.dueRule, template.dueDays),
+      dueDate,
       supplierInvoiceNumber: billNumberFor(template.supplierInvoiceNumber, date, sequence),
       amountsMode: template.amountsMode,
       lines: purchaseLinesAsSent(template.lines),

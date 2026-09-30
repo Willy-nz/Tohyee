@@ -117,6 +117,101 @@ export function parseGstPeriod(
   return { periodStart, periodEnd, months };
 }
 
+// ---------------------------------------------------------------------------
+// The GST period setting (GP1-GP6), like NetSuite's tax periods
+
+/**
+ * How often the organisation files GST, and which months its periods end in
+ * (IRD: monthly, two-monthly or six-monthly; two-monthly periods end in odd
+ * or even months). `endMonth` is the first month of the year a period ends
+ * in: 1 for monthly, 1 (odd) or 2 (even) for two-monthly, and 1-6 for
+ * six-monthly (3 is March and September).
+ */
+export type GstPeriodSetting = { months: 1 | 2 | 6; endMonth: number };
+
+const FULL_MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** The setting from any month a period ends in (e.g. two-monthly ending in September is odd months: 1). */
+export function gstPeriodSetting(months: number, anyEndMonth: number): GstPeriodSetting {
+  if (!(GST_RETURN_PERIOD_MONTHS as readonly number[]).includes(months)) {
+    throw new ValidationError("The GST filing frequency is monthly (1), two-monthly (2) or six-monthly (6).");
+  }
+  if (!Number.isInteger(anyEndMonth) || anyEndMonth < 1 || anyEndMonth > 12) {
+    throw new ValidationError("The month a GST period ends in is a month number from 1 to 12.");
+  }
+  return { months: months as GstPeriodSetting["months"], endMonth: ((anyEndMonth - 1) % months) + 1 };
+}
+
+/** "Two-monthly, ending in odd months (January, March, May...)". */
+export function describeGstPeriodSetting(setting: GstPeriodSetting): string {
+  if (setting.months === 1) return "Monthly";
+  if (setting.months === 2) {
+    return setting.endMonth === 1
+      ? "Two-monthly, ending in odd months (January, March, May, July, September, November)"
+      : "Two-monthly, ending in even months (February, April, June, August, October, December)";
+  }
+  return `Six-monthly, ending in ${FULL_MONTH_NAMES[setting.endMonth - 1]} and ${FULL_MONTH_NAMES[setting.endMonth + 5]}`;
+}
+
+/** The last day of the first period (by the setting) that ends on or after `date`. */
+export function gstPeriodEndOnOrAfter(setting: GstPeriodSetting, date: string): string {
+  let index = monthIndex(date);
+  while ((((index % 12) + 1 - setting.endMonth) % setting.months + setting.months) % setting.months !== 0) index += 1;
+  return gstPeriodEnd(`${String(Math.floor(index / 12)).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}-01`, 1);
+}
+
+/** The period (by the setting) that `date` is in (GP1). */
+export function gstPeriodContaining(setting: GstPeriodSetting, date: string): { periodStart: string; periodEnd: string } {
+  const periodEnd = gstPeriodEndOnOrAfter(setting, date);
+  const startIndex = monthIndex(periodEnd) - setting.months + 1;
+  const periodStart = `${String(Math.floor(startIndex / 12)).padStart(4, "0")}-${String((startIndex % 12) + 1).padStart(2, "0")}-01`;
+  return { periodStart, periodEnd };
+}
+
+function nextDay(date: string): string {
+  const moved = new Date(`${date}T00:00:00Z`);
+  moved.setUTCDate(moved.getUTCDate() + 1);
+  return moved.toISOString().slice(0, 10);
+}
+
+function previousDay(date: string): string {
+  const moved = new Date(`${date}T00:00:00Z`);
+  moved.setUTCDate(moved.getUTCDate() - 1);
+  return moved.toISOString().slice(0, 10);
+}
+
+/**
+ * The GST period after a filed return (GP2, GP3): from the day after it to
+ * the end of the setting's period that day is in (shorter than usual when
+ * the frequency changed). Without a setting, the same length as the filed
+ * return (H4, the old rule).
+ */
+export function gstPeriodAfter(
+  setting: GstPeriodSetting | null,
+  filed: { periodStart: string; periodEnd: string },
+): { periodStart: string; periodEnd: string } {
+  const periodStart = nextDay(filed.periodEnd);
+  if (setting) return { periodStart, periodEnd: gstPeriodEndOnOrAfter(setting, periodStart) };
+  const months = monthIndex(filed.periodEnd) - monthIndex(filed.periodStart) + 1;
+  return { periodStart, periodEnd: gstPeriodEnd(periodStart, months) };
+}
+
+/**
+ * The period the GST return opens on (GP4): the one after the latest filed
+ * return; with none filed, the latest period (by the setting) that has
+ * ended before `today`. Null with neither a filed return nor a setting.
+ */
+export function suggestedGstPeriod(
+  setting: GstPeriodSetting | null,
+  latestFiled: { periodStart: string; periodEnd: string } | null,
+  today: string,
+): { periodStart: string; periodEnd: string } | null {
+  if (latestFiled) return gstPeriodAfter(setting, latestFiled);
+  if (!setting) return null;
+  // The period today is in hasn't ended yet, so it's the one before it.
+  return gstPeriodContaining(setting, previousDay(gstPeriodContaining(setting, today).periodStart));
+}
+
 /** Box 9 and Box 13 adjustments: each a GST amount more than zero with at most 2 decimal places. */
 export function parseGstAdjustments(input: unknown): GstAdjustment[] {
   if (input == null) {

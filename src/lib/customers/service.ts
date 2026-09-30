@@ -396,6 +396,44 @@ export async function dueDateFromTerms(tx: OrgTx, contactId: string, invoiceDate
 }
 
 // ---------------------------------------------------------------------------
+// Supplier payment terms (SPT1-SPT5), like the Terms on NetSuite's vendor record
+
+/**
+ * The due date for a new bill from its supplier's payment terms, or null
+ * when the supplier has none (or they're archived). The same terms list and
+ * maths as customers' (RC1): "20th of the following month" on a bill dated
+ * 15 June is due 20 July.
+ */
+export async function dueDateFromSupplierTerms(tx: OrgTx, contactId: string, billDate: string): Promise<string | null> {
+  const found = await tx.query<{ kind: PaymentTermKind; days: number; is_active: boolean }>(
+    `select t.kind, t.days, t.is_active from contacts c join payment_terms t on t.id = c.supplier_payment_term_id where c.id = $1`,
+    [contactId],
+  );
+  const term = found.rows[0];
+  if (!term || !term.is_active) return null;
+  return dueDateFor(billDate, term);
+}
+
+/**
+ * A supplier's payment term as sent (SPT1): blank clears it; a newly chosen
+ * term must be active, and only suppliers can be given one. A contact that
+ * stops being a supplier keeps its term (as customers keep theirs).
+ */
+export async function resolveSupplierPaymentTerm(
+  tx: OrgTx,
+  input: unknown,
+  current: string | null,
+  options: { isSupplier: boolean },
+): Promise<string | null> {
+  if (input === undefined) return current;
+  const next = blank(input) ? null : optionalId(input, "supplierPaymentTermId");
+  if (next === null || next === current) return next;
+  if (!options.isSupplier) throw new ValidationError("Only suppliers have supplier payment terms.");
+  await checkListChoice(tx, "payment_terms", next);
+  return next;
+}
+
+// ---------------------------------------------------------------------------
 // Receivables balances (RC3-RC5, RC9-RC11)
 
 /**
@@ -418,15 +456,24 @@ live_op_apps as (
   select a.* from customer_overpayment_applications a, params
    where a.application_date <= params.as_at and (a.removal_date is null or a.removal_date > params.as_at)
 ),
-invoices as (
-  select i.id, i.contact_id, i.invoice_number, i.invoice_date, i.due_date,
+invoices_open as (
+  select i.id, i.contact_id, i.invoice_number, i.invoice_date, i.due_date, i.currency_code, i.base_total,
          i.total
          - coalesce((select sum(p.amount - p.overpayment_amount) from live_payments p where p.invoice_id = i.id), 0)
          - coalesce((select sum(a.amount) from live_cn_apps a where a.invoice_id = i.id), 0)
-         - coalesce((select sum(a.amount) from live_op_apps a where a.invoice_id = i.id), 0) as amount_due
+         - coalesce((select sum(a.amount) from live_op_apps a where a.invoice_id = i.id), 0) as amount_due,
+         -- A foreign-currency invoice's open base value at its own rate (MC9).
+         i.base_total
+         - coalesce((select sum(p.base_cleared) from live_payments p where p.invoice_id = i.id), 0)
+         - coalesce((select sum(a.invoice_base) from live_cn_apps a where a.invoice_id = i.id), 0) as base_due
     from sales_invoices i, params
    where i.status in ('approved', 'voided') and i.invoice_date <= params.as_at
      and (i.void_date is null or i.void_date > params.as_at)
+),
+invoices as (
+  select id, contact_id, invoice_number, invoice_date, due_date, currency_code, amount_due,
+         case when base_total is null then amount_due else base_due end as amount_due_base
+    from invoices_open
 ),
 credit as (
   select n.contact_id,
@@ -434,12 +481,23 @@ credit as (
          - coalesce((select sum(a.amount) from live_cn_apps a where a.credit_note_id = n.id), 0)
          - coalesce((select sum(r.amount) from sales_credit_note_refunds r, params
                       where r.credit_note_id = n.id and r.refund_date <= params.as_at
-                        and (r.void_date is null or r.void_date > params.as_at)), 0) as unused
+                        and (r.void_date is null or r.void_date > params.as_at)), 0) as unused,
+         coalesce(n.base_total - coalesce((select sum(a.credit_note_base) from live_cn_apps a where a.credit_note_id = n.id), 0),
+                  n.total
+                  - coalesce((select sum(a.amount) from live_cn_apps a where a.credit_note_id = n.id), 0)
+                  - coalesce((select sum(r.amount) from sales_credit_note_refunds r, params
+                               where r.credit_note_id = n.id and r.refund_date <= params.as_at
+                                 and (r.void_date is null or r.void_date > params.as_at)), 0)) as unused_base
     from sales_credit_notes n, params
    where n.status in ('approved', 'voided') and n.credit_note_date <= params.as_at
      and (n.void_date is null or n.void_date > params.as_at)
   union all
   select i.contact_id,
+         p.overpayment_amount
+         - coalesce((select sum(a.amount) from live_op_apps a where a.payment_id = p.id), 0)
+         - coalesce((select sum(r.amount) from customer_overpayment_refunds r, params
+                      where r.payment_id = p.id and r.refund_date <= params.as_at
+                        and (r.void_date is null or r.void_date > params.as_at)), 0),
          p.overpayment_amount
          - coalesce((select sum(a.amount) from live_op_apps a where a.payment_id = p.id), 0)
          - coalesce((select sum(r.amount) from customer_overpayment_refunds r, params

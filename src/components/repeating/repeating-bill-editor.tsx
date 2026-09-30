@@ -25,6 +25,7 @@ import type { TrackingSetup } from "@/lib/tracking/service";
 
 /** Short enough for the select; the preview below spells out each due date. */
 const SHORT_DUE_LABELS: Record<BillDueRule, string> = {
+  terms: "Supplier's payment terms",
   days_after: "Days after bill date",
   days_after_month_end: "Days after month end",
   day_of_next_month: "Day of next month",
@@ -101,7 +102,7 @@ function RepeatingBillForm({
   const defaultTaxCode = defaultPurchaseTaxCode(data.taxCodes);
   const lineDefaults = startingValues(data.customSetup, "line", ["bill"]);
   const [contactId, setContactId] = useState(template?.contactId ?? "");
-  const [numberPattern, setNumberPattern] = useState(template?.supplierInvoiceNumber ?? "{date}");
+  const [numberPattern, setNumberPattern] = useState(template ? (template.supplierInvoiceNumber ?? "") : "{date}");
   const [amountsMode, setAmountsMode] = useState<AmountsMode>(template?.amountsMode ?? "exclusive");
   const [customFields, setCustomFields] = useState<CustomValues>(() => template?.customFields ?? startingValues(data.customSetup, "document", ["bill"]));
   const [lines, setLines] = useState<EditorLine[]>(() => (template ? editorLines(template.lines, defaultTaxCode) : [blankLine(defaultTaxCode, lineDefaults)]));
@@ -118,7 +119,7 @@ function RepeatingBillForm({
   const supplierOptions = data.contacts.filter((contact) => contact.isSupplier && !contact.isArchived);
   const everyNumber = /^\d{1,2}$/.test(every) ? Number(every) : 0;
   const dueNumber = /^\d{1,3}$/.test(dueDays) ? Number(dueDays) : null;
-  const patternProblem = numberPatternProblem(numberPattern, period);
+  const patternProblem = numberPatternProblem(numberPattern, period, saveAs);
   // The same date, number and due date maths as the server (RB1-RB3).
   // A template that has made bills carries on from its next date (or from today, once its schedule changes), and numbers from its history.
   const scheduleChanged = template ? period !== template.period || everyNumber !== template.every || startDate !== template.startDate : false;
@@ -134,7 +135,7 @@ function RepeatingBillForm({
     setError(null);
     const fields = {
       contactId,
-      supplierInvoiceNumber: numberPattern,
+      supplierInvoiceNumber: numberPattern.trim() || null,
       amountsMode,
       lines: linesForApi(lines, amountsMode !== "no_tax"),
       customFields,
@@ -143,7 +144,7 @@ function RepeatingBillForm({
       startDate,
       endDate: endDate || null,
       dueRule,
-      dueDays: dueNumber,
+      dueDays: dueRule === "terms" ? 0 : dueNumber,
       saveAs,
     };
     try {
@@ -184,9 +185,9 @@ function RepeatingBillForm({
         </Field>
         <Field
           label="Supplier's invoice number"
-          hint="Each bill needs its own. {date} becomes the bill date, {month} its month and {n} the bill's number (1, 2, 3…)."
+          hint="Each bill needs its own. {date} becomes the bill date, {month} its month and {n} the bill's number (1, 2, 3…). Leave it empty to make drafts without a number, to fill in from each real invoice."
         >
-          <input value={numberPattern} onChange={(event) => setNumberPattern(event.target.value)} maxLength={NUMBER_PATTERN_MAX} required />
+          <input value={numberPattern} onChange={(event) => setNumberPattern(event.target.value)} maxLength={NUMBER_PATTERN_MAX} />
         </Field>
         <Field label="Amounts are">
           <select value={amountsMode} onChange={(event) => setAmountsMode(event.target.value as AmountsMode)}>
@@ -229,16 +230,18 @@ function RepeatingBillForm({
             ))}
           </select>
         </Field>
-        <Field label={dueRule === "day_of_next_month" ? "Day of the month" : "Days"}>
-          <input
-            value={dueDays}
-            onChange={(event) => setDueDays(event.target.value)}
-            inputMode="numeric"
-            pattern="[0-9]{1,3}"
-            aria-label="Due days"
-            required
-          />
-        </Field>
+        {dueRule === "terms" ? null : (
+          <Field label={dueRule === "day_of_next_month" ? "Day of the month" : "Days"}>
+            <input
+              value={dueDays}
+              onChange={(event) => setDueDays(event.target.value)}
+              inputMode="numeric"
+              pattern="[0-9]{1,3}"
+              aria-label="Due days"
+              required
+            />
+          </Field>
+        )}
         <Field label="Each bill is" hint="Nothing is paid automatically either way.">
           <select value={saveAs} onChange={(event) => setSaveAs(event.target.value as SaveAs)}>
             <option value="draft">Saved as a draft</option>
@@ -246,13 +249,18 @@ function RepeatingBillForm({
           </select>
         </Field>
       </div>
-      {patternProblem && numberPattern.trim() !== "" ? <Notice tone="warning">{patternProblem}</Notice> : null}
+      {patternProblem ? <Notice tone="warning">{patternProblem}</Notice> : null}
       {preview.length > 0 && !patternProblem ? (
         <p className={ui.muted}>
           {preview
             .map((date, index) => {
-              const due = dueNumber !== null && (dueRule !== "day_of_next_month" || (dueNumber >= 1 && dueNumber <= 31)) ? `, due ${formatDate(billDueDate(date, dueRule, dueNumber))}` : "";
-              return `${formatDate(date)}: ${billNumberFor(numberPattern, date, madeSoFar + index + 1)}${due}`;
+              const due =
+                dueRule === "terms"
+                  ? ", due by the supplier's terms"
+                  : dueNumber !== null && (dueRule !== "day_of_next_month" || (dueNumber >= 1 && dueNumber <= 31))
+                    ? `, due ${formatDate(billDueDate(date, dueRule, dueNumber))}`
+                    : "";
+              return `${formatDate(date)}: ${billNumberFor(numberPattern, date, madeSoFar + index + 1) ?? "draft, no number yet"}${due}`;
             })
             .join("; ")}
           {preview.length === 3 ? "; …" : "."}

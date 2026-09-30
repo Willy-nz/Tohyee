@@ -26,6 +26,7 @@ export const POST = route(async (request) => {
       phone: body.phone,
       postalAddress: body.postalAddress,
       gstNumber: body.gstNumber,
+      currencyCode: body.currencyCode,
       customFields: body.customFields,
       defaultSalespersonId: body.defaultSalespersonId,
       isProspect: body.isProspect,
@@ -35,6 +36,7 @@ export const POST = route(async (request) => {
       customerGroupId: body.customerGroupId,
       priceLevelId: body.priceLevelId,
       parentContactId: body.parentContactId,
+      supplierPaymentTermId: body.supplierPaymentTermId,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

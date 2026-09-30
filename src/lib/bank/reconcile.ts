@@ -213,11 +213,6 @@ export async function reconcileStatementLine(
   await assertPostingDateAllowed(tx, line.date);
   const account = (await tx.query<{ code: string }>("select code from accounts where id = $1", [line.accountId])).rows[0];
   const foreignLine = line.currencyCode !== tx.baseCurrency;
-  if (foreignLine && kind === "payments") {
-    throw new ValidationError(
-      `Account ${account.code} is in ${line.currencyCode}. Invoices and bills are in ${tx.baseCurrency}, so they can't be paid from a ${line.currencyCode} statement line yet. Record the payment from a ${tx.baseCurrency} account, or code this line as receive or spend money.`,
-    );
-  }
   if (foreignLine && adjustment) {
     throw new ValidationError(`Adjustments aren't available on ${line.currencyCode} statement lines yet. Record the difference as its own spend or receive money.`);
   }
@@ -257,6 +252,26 @@ export async function reconcileStatementLine(
       return { billId: requireId(entry.billId, `Allocation ${index + 1} billId`), amount };
     });
     if (allocations.length === 0) throw new ValidationError(`Choose at least one ${moneyIn ? "invoice" : "bill"} to pay.`);
+    // A statement line pays documents in its own currency (MC5): a USD line pays USD invoices and bills at the
+    // payment's rate; paying documents in another currency from it isn't supported yet (FXB9).
+    for (const allocation of allocations) {
+      const document = (
+        await tx.query<{ currency_code: string; number: string | null }>(
+          "invoiceId" in allocation
+            ? "select currency_code, invoice_number as number from sales_invoices where id = $1"
+            : "select currency_code, supplier_invoice_number as number from bills where id = $1",
+          ["invoiceId" in allocation ? allocation.invoiceId : allocation.billId],
+        )
+      ).rows[0];
+      if (document && document.currency_code !== line.currencyCode) {
+        const noun = "invoiceId" in allocation ? "Invoice" : "Bill";
+        throw new ValidationError(
+          foreignLine
+            ? `Account ${account.code} is in ${line.currencyCode}. ${noun} ${document.number ?? ""} is in ${document.currency_code}, so it can't be paid from a ${line.currencyCode} statement line yet. Record the payment from a ${document.currency_code} account, or code this line as receive or spend money.`
+            : `${noun} ${document.number ?? ""} is in ${document.currency_code}, so it can't be paid from a ${line.currencyCode} statement line here. Record the payment on the ${noun.toLowerCase()} (with its rate), then match this line to it.`,
+        );
+      }
+    }
     const total = allocations.reduce((sum, entry) => sum + cents(entry.amount), BigInt(0));
     // Signed like the line: money in pays invoices, money out pays bills.
     const difference = cents(line.amount) - (moneyIn ? total : -total);
@@ -278,6 +293,8 @@ export async function reconcileStatementLine(
                 amount: allocation.amount,
                 bankAccountCode: account.code,
                 reference,
+                // A foreign-currency line: the rate typed, or the one shown on the line (D4, MC5).
+                ...(foreignLine ? { exchangeRate: command.exchangeRate ?? line.suggestedRate?.rate } : {}),
               })
             ).payment
           : (
@@ -288,6 +305,7 @@ export async function reconcileStatementLine(
                 amount: allocation.amount,
                 bankAccountCode: account.code,
                 reference,
+                ...(foreignLine ? { exchangeRate: command.exchangeRate ?? line.suggestedRate?.rate } : {}),
               })
             ).payment;
       journalLineIds.push(await journalLineOn(tx, payment.journalId, line.accountId));
@@ -668,26 +686,26 @@ export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?
       limit 25`,
     [line.accountId, moneyIn, line.date, MATCH_WINDOW_DAYS, line.amount, foreignLine],
   );
-  // Invoices and bills are in the base currency: never suggested for a foreign-currency line (FXB9).
-  const documents = foreignLine
-    ? { rows: [] as Array<{ id: string; number: string; contact_name: string; amount_due: string; date: string }> }
-    : moneyIn
+  // Invoices and bills in the line's currency only (FXB9, MC5).
+  const documents = moneyIn
     ? await tx.query<{ id: string; number: string; contact_name: string; amount_due: string; date: string }>(
         `select i.id, i.invoice_number as number, c.name as contact_name, i.invoice_date::text as date,
                 (i.total - coalesce((select sum(p.amount - p.overpayment_amount) from customer_payments p where p.invoice_id = i.id and p.status = 'active'), 0)
                          - coalesce((select sum(a.amount) from sales_credit_note_applications a where a.invoice_id = i.id and a.status = 'active'), 0)
                          - coalesce((select sum(o.amount) from customer_overpayment_applications o where o.invoice_id = i.id and o.status = 'active'), 0))::text as amount_due
            from sales_invoices i join contacts c on c.id = i.contact_id
-          where i.status = 'approved'
+          where i.status = 'approved' and i.currency_code = $1
           order by i.invoice_date, i.id`,
+        [line.currencyCode],
       )
     : await tx.query<{ id: string; number: string; contact_name: string; amount_due: string; date: string }>(
         `select b.id, b.supplier_invoice_number as number, c.name as contact_name, b.bill_date::text as date,
                 (b.total - coalesce((select sum(p.amount) from supplier_payments p where p.bill_id = b.id and p.status = 'active'), 0)
                          - coalesce((select sum(a.amount) from supplier_credit_note_applications a where a.bill_id = b.id and a.status = 'active'), 0))::text as amount_due
            from bills b join contacts c on c.id = b.contact_id
-          where b.status = 'approved'
+          where b.status = 'approved' and b.currency_code = $1
           order by b.bill_date, b.id`,
+        [line.currencyCode],
       );
   const unsigned = line.amount.replace(/^-/, "");
   const exactDocuments = documents.rows

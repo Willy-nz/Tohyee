@@ -9,6 +9,11 @@ import {
   gstPeriodEnd,
   parseGstAdjustments,
   parseGstPeriod,
+  describeGstPeriodSetting,
+  gstPeriodAfter,
+  gstPeriodContaining,
+  gstPeriodSetting,
+  suggestedGstPeriod,
 } from "@/lib/reports/gst-boxes";
 
 const noAdjustments = { adjustments: [] };
@@ -229,5 +234,62 @@ describe("GST payments and hybrid bases maths", () => {
       amount: "3.00",
     });
     expect(basisChangeAdjustment({ from: "invoice", to: "payments", asAt: "2026-03-31", debtorsGst: "30.00", creditorsGst: "30.00" })).toBeNull();
+  });
+});
+
+/** docs/ACCOUNTING-EXAMPLES.md, "GST period setting" (GP1, GP2, GP4): calendar arithmetic only. */
+describe("GST period setting", () => {
+  const odd = gstPeriodSetting(2, 1);
+  const even = gstPeriodSetting(2, 2);
+  const marchSeptember = gstPeriodSetting(6, 3);
+  const monthly = gstPeriodSetting(1, 1);
+
+  it("GP1: the setting and the period a date is in", () => {
+    expect(gstPeriodSetting(2, 9)).toEqual({ months: 2, endMonth: 1 });
+    expect(gstPeriodSetting(2, 12)).toEqual({ months: 2, endMonth: 2 });
+    expect(gstPeriodSetting(6, 9)).toEqual({ months: 6, endMonth: 3 });
+    expect(gstPeriodSetting(1, 7)).toEqual({ months: 1, endMonth: 1 });
+    expect(() => gstPeriodSetting(3, 3)).toThrow("monthly (1), two-monthly (2) or six-monthly (6)");
+    expect(() => gstPeriodSetting(2, 13)).toThrow("a month number from 1 to 12");
+    expect(describeGstPeriodSetting(odd)).toBe("Two-monthly, ending in odd months (January, March, May, July, September, November)");
+    expect(describeGstPeriodSetting(even)).toBe("Two-monthly, ending in even months (February, April, June, August, October, December)");
+    expect(describeGstPeriodSetting(marchSeptember)).toBe("Six-monthly, ending in March and September");
+    expect(describeGstPeriodSetting(monthly)).toBe("Monthly");
+
+    expect(gstPeriodContaining(odd, "2026-06-15")).toEqual({ periodStart: "2026-06-01", periodEnd: "2026-07-31" });
+    expect(gstPeriodContaining(even, "2026-06-15")).toEqual({ periodStart: "2026-05-01", periodEnd: "2026-06-30" });
+    expect(gstPeriodContaining(odd, "2026-12-10")).toEqual({ periodStart: "2026-12-01", periodEnd: "2027-01-31" });
+    expect(gstPeriodContaining(even, "2027-02-28")).toEqual({ periodStart: "2027-01-01", periodEnd: "2027-02-28" });
+    expect(gstPeriodContaining(marchSeptember, "2026-06-15")).toEqual({ periodStart: "2026-04-01", periodEnd: "2026-09-30" });
+    expect(gstPeriodContaining(marchSeptember, "2027-01-15")).toEqual({ periodStart: "2026-10-01", periodEnd: "2027-03-31" });
+    expect(gstPeriodContaining(monthly, "2028-02-10")).toEqual({ periodStart: "2028-02-01", periodEnd: "2028-02-29" });
+    for (const setting of [odd, even, marchSeptember, monthly]) {
+      const period = gstPeriodContaining(setting, "2026-06-15");
+      expect(parseGstPeriod(period.periodStart, period.periodEnd).months).toBe(setting.months);
+    }
+  });
+
+  it("GP2: the period after a filed return follows the setting, shorter once when the frequency changed", () => {
+    const aprilMay = { periodStart: "2026-04-01", periodEnd: "2026-05-31" };
+    expect(gstPeriodAfter(odd, aprilMay)).toEqual({ periodStart: "2026-06-01", periodEnd: "2026-07-31" });
+    expect(gstPeriodAfter(even, aprilMay)).toEqual({ periodStart: "2026-06-01", periodEnd: "2026-06-30" });
+    expect(gstPeriodAfter(monthly, aprilMay)).toEqual({ periodStart: "2026-06-01", periodEnd: "2026-06-30" });
+    expect(gstPeriodAfter(null, aprilMay)).toEqual({ periodStart: "2026-06-01", periodEnd: "2026-07-31" });
+    expect(gstPeriodAfter(marchSeptember, { periodStart: "2025-10-01", periodEnd: "2026-03-31" })).toEqual({
+      periodStart: "2026-04-01",
+      periodEnd: "2026-09-30",
+    });
+    expect(gstPeriodAfter(null, { periodStart: "2026-03-01", periodEnd: "2026-03-31" })).toEqual({ periodStart: "2026-04-01", periodEnd: "2026-04-30" });
+  });
+
+  it("GP4: the GST return opens on the period after the latest filed one, or the latest ended period", () => {
+    expect(suggestedGstPeriod(odd, null, "2026-10-01")).toEqual({ periodStart: "2026-08-01", periodEnd: "2026-09-30" });
+    expect(suggestedGstPeriod(odd, null, "2026-09-30")).toEqual({ periodStart: "2026-06-01", periodEnd: "2026-07-31" });
+    expect(suggestedGstPeriod(marchSeptember, null, "2026-10-01")).toEqual({ periodStart: "2026-04-01", periodEnd: "2026-09-30" });
+    expect(suggestedGstPeriod(odd, { periodStart: "2026-08-01", periodEnd: "2026-09-30" }, "2026-10-01")).toEqual({
+      periodStart: "2026-10-01",
+      periodEnd: "2026-11-30",
+    });
+    expect(suggestedGstPeriod(null, null, "2026-10-01")).toBeNull();
   });
 });

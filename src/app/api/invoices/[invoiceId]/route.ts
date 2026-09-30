@@ -41,6 +41,7 @@ export const PATCH = route<Context>(async (request, context) => {
       lines: body.lines,
       customFields: body.customFields,
       salespersonId: body.salespersonId,
+      exchangeRate: body.exchangeRate,
     }),
   );
   return json({ invoice });

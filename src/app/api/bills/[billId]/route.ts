@@ -28,6 +28,7 @@ export const PATCH = route<Context>(async (request, context) => {
       amountsMode: body.amountsMode,
       lines: body.lines,
       customFields: body.customFields,
+      exchangeRate: body.exchangeRate,
     }),
   );
   return json({ bill });

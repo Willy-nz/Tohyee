@@ -14,14 +14,16 @@ import {
 import { previewDepreciationRun } from "@/lib/fixed-assets/runs";
 import { formatDate, formatMoney } from "@/lib/format";
 import { foreignAccountState } from "@/lib/ledger/foreign";
+import { openCurrencyBalances } from "@/lib/ledger/fx-revaluation";
 import { getPeriodControls, type PeriodControls, setLockDate } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { dec, isNegative, isZero, neg, sub, toFixedString } from "@/lib/money/decimal";
+import { add, dec, isNegative, isZero, neg, sub, toFixedString } from "@/lib/money/decimal";
 import { agedPayables } from "@/lib/reports/aged-payables";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
 import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
 import { financialYearEndMonth } from "@/lib/reports/financial";
-import { gstPeriodEnd, parseGstPeriod } from "@/lib/reports/gst-boxes";
+import { describeGstPeriodSetting, gstPeriodAfter } from "@/lib/reports/gst-boxes";
+import { latestFiledGstPeriod, loadGstPeriodSetting } from "@/lib/reports/gst-return";
 import { requireString } from "@/lib/validation";
 
 /**
@@ -232,7 +234,12 @@ async function bankCheck(tx: OrgTx, periodEnd: string, money: (value: string) =>
       const report = await bankReconciliationReport(tx, { accountId: account.id, asAt: periodEnd });
       const unreconciled = report.bankNotInTohyee.items;
       if (report.statementBalance === null) {
-        items.push({ label, detail: `No statement balance is known at ${longDate(periodEnd)}: import the bank statement to that date.`, href: `/operations/bank-accounts/${account.id}` });
+        // PC3, decided 1 Oct 2026 following NetSuite (its close doesn't require bank statements): a warning, not a block.
+        items.push({
+          label,
+          detail: `No statement balance is known at ${longDate(periodEnd)}: no bank statement or feed covers that date, so Tohyee can't check this account against the bank. Import the statement to that date, or, if this account has no statements (cash, a loan or a clearing account), an owner or admin can accept this warning when closing.`,
+          href: `/operations/bank-accounts/${account.id}`,
+        });
       } else if (unreconciled.length > 0) {
         items.push({
           label,
@@ -332,6 +339,15 @@ async function fxCheck(tx: OrgTx, periodEnd: string): Promise<PeriodCheck> {
     const hasBalance = !isZero(dec(state.baseBalance)) || (state.foreignBalance !== null && !isZero(dec(state.foreignBalance)));
     if (hasBalance) needing.push(account);
   }
+  // Open foreign-currency documents on accounts receivable and payable, one line per currency (MC8).
+  for (const open of await openCurrencyBalances(tx, periodEnd)) {
+    const revalued = await tx.query(
+      `select 1 from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id
+        where i.account_id = $1 and i.currency_code = $2 and r.revaluation_date = $3`,
+      [open.accountId, open.currencyCode, periodEnd],
+    );
+    needing.push({ id: open.accountId, code: open.accountCode, name: open.accountName, currency_code: open.currencyCode, revalued: (revalued.rowCount ?? 0) > 0 });
+  }
   if (needing.length === 0) return notApplicable("fx_revaluation", title, `No foreign-currency account has a balance on ${longDate(periodEnd)}.`);
   const missing = needing.filter((account) => !account.revalued);
   if (missing.length === 0) return pass("fx_revaluation", title, `Revalued on ${longDate(periodEnd)}.`);
@@ -408,7 +424,9 @@ async function ledgerCheck(
   const title = key === "receivables" ? "Receivables equal accounts receivable" : "Payables equal accounts payable";
   const account = await systemAccountBalance(tx, key === "receivables" ? "accounts_receivable" : "accounts_payable", periodEnd);
   if (!account) return notApplicable(key, title, "There's no control account.");
-  const documents = key === "receivables" ? (await agedReceivables(tx, { asAt: periodEnd })).total.total : (await agedPayables(tx, { asAt: periodEnd })).total.total;
+  // Foreign-currency documents are at their own rates; a revaluation on the date is beside them (MC9).
+  const aged = key === "receivables" ? await agedReceivables(tx, { asAt: periodEnd }) : await agedPayables(tx, { asAt: periodEnd });
+  const documents = toFixedString(add(dec(aged.total.total), dec(aged.revaluation)), 2);
   const ledger = key === "receivables" ? account.balance : toFixedString(neg(dec(account.balance)), 2);
   const difference = sub(dec(documents), dec(ledger));
   const report = key === "receivables" ? "Aged receivables" : "Aged payables";
@@ -425,13 +443,16 @@ async function ledgerCheck(
   };
 }
 
+/**
+ * Every GST period after the latest filed return that ends by the month end
+ * must be filed. The periods come from the GST period setting (GP5); without
+ * one, each is the same length as the latest filed return (PC8).
+ */
 async function gstCheck(tx: OrgTx, periodEnd: string): Promise<PeriodCheck> {
   const title = "GST returns filed";
   const fix = { href: "/operations/gst-return", label: "GST return" };
-  const returns = await tx.query<{ period_start: string; period_end: string }>(
-    "select period_start::text, period_end::text from gst_returns order by period_end desc limit 1",
-  );
-  const last = returns.rows[0];
+  const last = await latestFiledGstPeriod(tx);
+  const setting = await loadGstPeriodSetting(tx);
   if (!last) {
     const registered = (await tx.query<{ gst_number: string | null }>("select gst_number from organisation_settings where id = true")).rows[0].gst_number;
     if (!registered) return notApplicable("gst", title, "No GST number is set and no GST return has been filed in Tohyee.");
@@ -444,17 +465,17 @@ async function gstCheck(tx: OrgTx, periodEnd: string): Promise<PeriodCheck> {
       fix,
     };
   }
-  const months = parseGstPeriod(last.period_start, last.period_end).months;
   const unfiled: CheckItem[] = [];
-  for (let start = addDays(last.period_end, 1); gstPeriodEnd(start, months) <= periodEnd; start = addDays(gstPeriodEnd(start, months), 1)) {
-    unfiled.push({ label: `${longDate(start)} to ${longDate(gstPeriodEnd(start, months))}`, detail: "Not filed yet.", href: "/operations/gst-return" });
+  for (let next = gstPeriodAfter(setting, last); next.periodEnd <= periodEnd; next = gstPeriodAfter(setting, next)) {
+    unfiled.push({ label: `${longDate(next.periodStart)} to ${longDate(next.periodEnd)}`, detail: "Not filed yet.", href: "/operations/gst-return" });
   }
-  if (unfiled.length === 0) return pass("gst", title, `Filed to ${longDate(last.period_end)}.`);
+  const basis = setting ? `GST period setting: ${describeGstPeriodSetting(setting)}.` : "No GST period setting, so each period is as long as the latest filed return (set it in Settings).";
+  if (unfiled.length === 0) return pass("gst", title, `Filed to ${longDate(last.periodEnd)}. ${basis}`);
   return {
     key: "gst",
     title,
     status: "warning",
-    summary: `${unfiled.length} GST ${unfiled.length === 1 ? "return ends" : "returns end"} by ${longDate(periodEnd)} and ${unfiled.length === 1 ? "isn't" : "aren't"} filed.`,
+    summary: `${unfiled.length} GST ${unfiled.length === 1 ? "return ends" : "returns end"} by ${longDate(periodEnd)} and ${unfiled.length === 1 ? "isn't" : "aren't"} filed. ${basis}`,
     items: unfiled,
     fix,
   };

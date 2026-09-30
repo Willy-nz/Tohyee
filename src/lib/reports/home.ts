@@ -3,8 +3,8 @@ import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { dec, toFixedString } from "@/lib/money/decimal";
-import { gstPeriodEnd, parseGstPeriod } from "@/lib/reports/gst-boxes";
-import { calculateGstReturn } from "@/lib/reports/gst-return";
+import { gstPeriodAfter } from "@/lib/reports/gst-boxes";
+import { calculateGstReturn, latestFiledGstPeriod, loadGstPeriodSetting } from "@/lib/reports/gst-return";
 import type { GstBasis } from "@/lib/tax/categories";
 
 /**
@@ -59,7 +59,14 @@ function toDue(row: DueRow): AmountsDue {
  */
 const OWED_SQL = `
 with due as (
-  select i.due_date, i.total - tohyee_invoice_settled(i.id) as amount_due
+  -- In the base currency: a foreign-currency invoice at its own rate (MC9).
+  select i.due_date,
+         case when i.base_total is null then i.total - tohyee_invoice_settled(i.id)
+              when i.total = tohyee_invoice_settled(i.id) then 0
+              else i.base_total
+                   - coalesce((select sum(p.base_cleared) from customer_payments p where p.invoice_id = i.id and p.status = 'active'), 0)
+                   - coalesce((select sum(a.invoice_base) from sales_credit_note_applications a
+                                where a.invoice_id = i.id and a.status = 'active'), 0) end as amount_due
     from sales_invoices i
    where i.status = 'approved'
 )
@@ -72,10 +79,11 @@ select coalesce(sum(amount_due), 0)::text as total, count(*)::integer as count,
 /** Approved bills with something still to pay (H3): less active supplier payments and supplier credit applied. */
 const BILLS_SQL = `
 with due as (
+  -- In the base currency: a foreign-currency bill at its own rate (MC9).
   select b.due_date,
-         b.total
-         - coalesce((select sum(p.amount) from supplier_payments p where p.bill_id = b.id and p.status = 'active'), 0)
-         - coalesce((select sum(a.amount) from supplier_credit_note_applications a
+         coalesce(b.base_total, b.total)
+         - coalesce((select sum(coalesce(p.base_cleared, p.amount)) from supplier_payments p where p.bill_id = b.id and p.status = 'active'), 0)
+         - coalesce((select sum(coalesce(a.bill_base, a.amount)) from supplier_credit_note_applications a
                       where a.bill_id = b.id and a.status = 'active'), 0) as amount_due
     from bills b
    where b.status = 'approved'
@@ -86,24 +94,16 @@ select coalesce(sum(amount_due), 0)::text as total, count(*)::integer as count,
   from due
  where amount_due > 0`;
 
-function monthsBetween(start: string, end: string): number {
-  return parseGstPeriod(start, end).months;
-}
-
 /**
- * The period straight after the latest filed GST return, the same length, with
- * its Box 15 so far (H4). Tohyee doesn't guess a period when none is filed.
+ * The period straight after the latest filed GST return, with its Box 15 so
+ * far (H4): to the end of the GST period setting's period (GP3), or without
+ * a setting the same length as that return. Tohyee doesn't guess a period
+ * when none is filed.
  */
 async function nextGstReturn(tx: OrgTx): Promise<NextGstReturn> {
-  const latest = await tx.query<{ period_start: string; period_end: string }>(
-    "select period_start, period_end from gst_returns order by period_end desc limit 1",
-  );
-  const last = latest.rows[0];
+  const last = await latestFiledGstPeriod(tx);
   if (!last) return { status: "none_filed" };
-  const next = new Date(`${last.period_end}T00:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  const periodStart = next.toISOString().slice(0, 10);
-  const periodEnd = gstPeriodEnd(periodStart, monthsBetween(last.period_start, last.period_end));
+  const { periodStart, periodEnd } = gstPeriodAfter(await loadGstPeriodSetting(tx), last);
   try {
     const report = await calculateGstReturn(tx, { periodStart, periodEnd });
     return { status: "ready", periodStart, periodEnd, basis: report.basis, box15: report.boxes.box15 };

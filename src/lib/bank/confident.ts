@@ -147,7 +147,7 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
                       - coalesce((select sum(o.amount) from customer_overpayment_applications o where o.invoice_id = i.id and o.status = 'active'), 0)
                 as amount_due
          from sales_invoices i join contacts c on c.id = i.contact_id
-        where i.status = 'approved'
+        where i.status = 'approved' and i.currency_code = $2
      ),
      bills_due as (
        select b.id, b.supplier_invoice_number as number, c.name as contact_name, b.bill_date as date,
@@ -155,7 +155,7 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
                       - coalesce((select sum(a.amount) from supplier_credit_note_applications a where a.bill_id = b.id and a.status = 'active'), 0)
                 as amount_due
          from bills b join contacts c on c.id = b.contact_id
-        where b.status = 'approved'
+        where b.status = 'approved' and b.currency_code = $2
      )
      select l.id as line_id, 'invoice' as document_kind, d.id, d.number, d.contact_name, d.date::text, d.amount_due::text
        from lines l join invoices_due d on l.amount > 0 and d.amount_due = l.amount and d.date <= l.line_date

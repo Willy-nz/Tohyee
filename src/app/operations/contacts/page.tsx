@@ -25,6 +25,7 @@ import type { CustomerSetup } from "@/lib/customers/service";
 import type { SalespeopleSetup } from "@/lib/salespeople/service";
 import { type CustomFieldSetup, type CustomFieldUse, type CustomValues, fieldsFor } from "@/lib/custom-fields/values";
 import { formatGstNumber } from "@/lib/format";
+import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 type Draft = {
@@ -42,6 +43,10 @@ type Draft = {
   isProspect: boolean;
   /** Terms, delivery address, credit limit and so on (RC1-RC8). */
   customer: CustomerDraft;
+  /** A supplier's payment terms (SPT1); "" for none. */
+  supplierPaymentTermId: string;
+  /** "" for the base currency (MC1). */
+  currencyCode: string;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -56,6 +61,8 @@ const EMPTY_DRAFT: Draft = {
   defaultSalespersonId: "",
   isProspect: false,
   customer: EMPTY_CUSTOMER_DRAFT,
+  supplierPaymentTermId: "",
+  currencyCode: "",
 };
 
 function draftFrom(contact: Contact): Draft {
@@ -71,13 +78,22 @@ function draftFrom(contact: Contact): Draft {
     defaultSalespersonId: contact.defaultSalespersonId ?? "",
     isProspect: contact.isProspect,
     customer: customerDraftFrom(contact),
+    supplierPaymentTermId: contact.supplierPaymentTermId ?? "",
+    currencyCode: contact.currencyCode ?? "",
   };
 }
 
-/** What's sent: the customer details only for customers (the server keeps a former customer's). */
+/**
+ * What's sent: the customer details only for customers and the supplier's
+ * terms only for suppliers (the server keeps a former customer's or supplier's).
+ */
 function bodyFrom(draft: Draft): Record<string, unknown> {
-  const { customer, ...rest } = draft;
-  return draft.isCustomer ? { ...rest, ...customerBody(customer) } : rest;
+  const { customer, supplierPaymentTermId, ...rest } = draft;
+  return {
+    ...rest,
+    ...(draft.isCustomer ? customerBody(customer) : {}),
+    ...(draft.isSupplier ? { supplierPaymentTermId: supplierPaymentTermId || null } : {}),
+  };
 }
 
 /** A prospect uses the customer fields, as on the server. */
@@ -138,6 +154,7 @@ function ContactForm({
   const [draft, setDraft] = useState<Draft>(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const baseCurrency = useWorkspace().current?.baseCurrency ?? "NZD";
   const typeLabelId = useId();
   // Values for fields the contact's roles use are shown; the rest (like a
   // customer field's default on a supplier) are kept aside and not saved.
@@ -235,6 +252,18 @@ function ContactForm({
             maxLength={20}
           />
         </Field>
+        <Field label="Currency" hint="Their invoices, bills and credit notes are in it. It can't change once they have any.">
+          <select value={draft.currencyCode} onChange={(event) => setDraft({ ...draft, currencyCode: event.target.value })}>
+            <option value="">{baseCurrency} (the organisation&apos;s currency)</option>
+            {Object.keys(CURRENCY_MINOR_UNITS)
+              .filter((code) => code !== baseCurrency)
+              .map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+          </select>
+        </Field>
       </div>
       <Field label={draft.isCustomer ? "Billing address" : "Postal address"}>
         <textarea
@@ -260,6 +289,23 @@ function ContactForm({
             onChange={(id) => setDraft({ ...draft, defaultSalespersonId: id })}
           />
         </CustomerFields>
+      ) : null}
+      {draft.isSupplier ? (
+        <div className={ui.grid3}>
+          <Field label="Supplier payment terms" hint="New bills from this supplier take their due date from these.">
+            <select value={draft.supplierPaymentTermId} onChange={(event) => setDraft({ ...draft, supplierPaymentTermId: event.target.value })}>
+              <option value="">None</option>
+              {(customerSetup?.paymentTerms ?? [])
+                .filter((term) => term.isActive || term.id === draft.supplierPaymentTermId)
+                .map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.name}
+                    {term.isActive ? "" : " (archived)"}
+                  </option>
+                ))}
+            </select>
+          </Field>
+        </div>
       ) : null}
       <CustomFieldInputs
         setup={customSetup}
@@ -468,7 +514,10 @@ function Contacts({ organisationId }: { organisationId: string }) {
                       ) : null}
                       {contact.primaryPerson ? <div className={ui.muted}>Attention: {contact.primaryPerson.name}</div> : null}
                     </td>
-                    <td>{kind(contact)}</td>
+                    <td>
+                      {kind(contact)}
+                      {contact.currencyCode ? <div className={ui.muted}>In {contact.currencyCode}</div> : null}
+                    </td>
                     <td>{contact.email ?? ""}</td>
                     <td>{contact.phone ?? ""}</td>
                     <td>{formatGstNumber(contact.gstNumber)}</td>

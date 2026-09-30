@@ -27,7 +27,9 @@ import {
 } from "@/lib/invoices/amounts";
 import type { Invoice, InvoiceStatus } from "@/lib/invoices/service";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { isDecimalString } from "@/lib/money/decimal";
+import { add, dec, isDecimalString, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { convertAtRate, isRateText } from "@/lib/money/fx";
+import { ExchangeRateField, effectiveRate, useLastRate } from "@/components/fx";
 import type { TaxCode } from "@/lib/tax/codes";
 import type { CustomerSetup } from "@/lib/customers/service";
 import type { SalespeopleSetup } from "@/lib/salespeople/service";
@@ -162,6 +164,12 @@ function InvoiceForm({
   const [idempotencyKey] = useState(() => newIdempotencyKey("invoice"));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A customer in another currency gets invoices in it, at a rate for the invoice date (MC1-MC3).
+  const chosenCustomer = customers.find((contact) => contact.id === contactId);
+  const currencyCode = chosenCustomer ? (chosenCustomer.currencyCode ?? baseCurrency) : (invoice?.currencyCode ?? baseCurrency);
+  const foreign = currencyCode !== baseCurrency;
+  const [typedRate, setTypedRate] = useState<string | null>(invoice?.exchangeRate ?? null);
+  const suggestedRate = useLastRate(organisationId, currencyCode, baseCurrency, invoiceDate);
 
   const hasTax = amountsMode !== "no_tax";
 
@@ -192,6 +200,8 @@ function InvoiceForm({
       })),
       customFields,
       salespersonId: salespersonId || null,
+      // Left out, the server takes the last rate used, the one shown (MC3).
+      ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}),
     };
     try {
       const result = invoice
@@ -227,6 +237,8 @@ function InvoiceForm({
       <div className={ui.grid3}>
         <Field label="Customer">
           <select value={contactId} onChange={(event) => {
+              const next = customers.find((contact) => contact.id === event.target.value);
+              if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
               setContactId(event.target.value);
               refillDue(event.target.value, invoiceDate);
               if (!invoice) {
@@ -243,6 +255,7 @@ function InvoiceForm({
             {customerOptions.map((contact) => (
               <option key={contact.id} value={contact.id}>
                 {contact.name}
+                {contact.currencyCode && contact.currencyCode !== baseCurrency ? ` (${contact.currencyCode})` : ""}
               </option>
             ))}
           </select>
@@ -283,12 +296,21 @@ function InvoiceForm({
             ))}
           </select>
         </Field>
+        <ExchangeRateField currencyCode={currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
       </div>
+      {foreign ? (
+        <Notice tone="info">
+          This invoice is in {currencyCode}. Use zero-rated (ZERO), exempt or no GST codes: GST on foreign-currency invoices isn&apos;t
+          supported yet. Approving posts its {baseCurrency} value, each line converted at the rate.
+        </Notice>
+      ) : null}
       <CustomFieldInputs setup={customSetup} record="document" uses={["invoice"]} value={customFields} onChange={setCustomFields} />
       <SalesLines
         organisationId={organisationId}
         items={items}
-        baseCurrency={baseCurrency}
+        baseCurrency={currencyCode}
+        homeCurrency={foreign ? baseCurrency : undefined}
+        exchangeRate={foreign ? effectiveRate(typedRate, suggestedRate) : undefined}
         accounts={accounts}
         taxCodes={taxCodes}
         tracking={tracking}
@@ -335,10 +357,16 @@ export function SalesLines({
   setLines,
   defaults,
   lineDefaults,
+  homeCurrency,
+  exchangeRate,
 }: {
   organisationId: string;
   items: ItemList | null;
+  /** The document's currency. */
   baseCurrency: string;
+  /** For a foreign-currency document (MC2): the organisation's base currency and the rate, to show the total in it. */
+  homeCurrency?: string;
+  exchangeRate?: string;
   accounts: Account[];
   taxCodes: TaxCode[];
   tracking: TrackingSetup;
@@ -369,6 +397,17 @@ export function SalesLines({
     scale,
   );
   const money = (value: string) => formatMoney(value, scale);
+  // Each line converted on its own, as the server does (MC4).
+  const homeTotal =
+    homeCurrency && exchangeRate && isRateText(exchangeRate) && complete.every(Boolean)
+      ? toFixedString(
+          amounts.lines.reduce(
+            (total, entry) => add(add(total, dec(convertAtRate(entry.netAmount, exchangeRate))), dec(convertAtRate(entry.taxAmount, exchangeRate))),
+            ZERO_DECIMAL,
+          ),
+          2,
+        )
+      : null;
 
   function update(key: number, patch: Partial<EditorLine>) {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
@@ -513,6 +552,7 @@ export function SalesLines({
         <Stat label={hasTax ? "Subtotal (excl. GST)" : "Subtotal"} value={money(amounts.subtotal)} />
         {hasTax ? <Stat label="GST" value={money(amounts.taxTotal)} /> : null}
         <Stat label={`Total (${baseCurrency})`} value={money(amounts.total)} />
+        {homeTotal !== null ? <Stat label={`Total (${homeCurrency} at ${exchangeRate})`} value={formatMoney(homeTotal)} /> : null}
       </div>
     </>
   );

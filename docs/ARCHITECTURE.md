@@ -34,7 +34,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ inventory_item_balances, inventory_movements   stock by item code and location (a Location tracking value)
 ├─ stock_transfers        stock moved between locations (append-only; its two movements and journal point at it)
 ├─ tax_codes, accounting_period_controls
-├─ contacts               customers and suppliers (with terms, credit limit, group, price level, parent)
+├─ contacts               customers and suppliers (with terms, credit limit, group, price level, parent, currency)
 ├─ payment_terms, customer_groups, price_levels   lists for customers (archived, never deleted)
 ├─ items, item_units, item_level_prices, item_suppliers, kit_components   products and services
 ├─ sales_invoices, sales_invoice_lines, sales_invoice_numbering
@@ -280,6 +280,30 @@ Enforced by the database itself, not just the app:
   it. Nothing but a revaluation is posted to a foreign-currency account
   dated before its latest transfer out. An account's currency can't change
   once it has postings.
+- **Foreign-currency documents** (built overnight 1 Oct 2026 following
+  NetSuite as Jess asked; migration 0042; examples MC1-MC13, not yet
+  approved): `contacts.currency_code` (null is the base currency) is the
+  contact's currency; its invoices, bills and credit notes are in it (a
+  trigger), and it can't change once it has any (a trigger). A
+  foreign-currency document keeps its `exchange_rate` and base amounts
+  (`base_subtotal`, `base_tax_total`, `base_total`, and each line's
+  `base_net_amount`, `base_tax_amount`: each line converted and rounded
+  once, the totals their sums); a base-currency one has none. Accounts
+  receivable and payable stay base-currency accounts, but (like NetSuite's
+  A/R and A/P) their lines for foreign-currency documents carry the foreign
+  amount and currency: `fx_kind` `document` for the document's own line
+  (base = its lines' sum), `carrying_value` for a payment or credit
+  clearing it (at the document's carrying value of what's cleared) and
+  `revaluation`; the trigger refuses any other foreign amount on them, and
+  on other base-currency accounts as before. Payments store their own
+  rate, the base amount that moved in the bank account, the base cleared
+  and the realised gain (`base_amount - base_cleared` for receivables,
+  the other way for payables, posted to 7020); credit note applications
+  between foreign-currency documents store both sides' base and the gain,
+  with its own journal. A document's open base value is its base total less
+  its active settlements' base cleared (`src/lib/fx/documents.ts`).
+  Revaluation items are unique per account, currency and date, so accounts
+  receivable and payable revalue each currency's open balance.
 - Posted history is append-only: `ledger_journals`, `ledger_journal_lines`,
   `inventory_movements`, `stock_transfers`, FX revaluation runs and `audit_events` reject
   `UPDATE`, `DELETE` and `TRUNCATE`. Corrections are new rows.
@@ -319,7 +343,9 @@ Enforced by the database itself, not just the app:
   approved and voided bills are frozen, and neither table can be truncated. A
   unique index stops a supplier having two bills that aren't voided (drafts
   included) with the same supplier invoice number, compared ignoring case and
-  spaces.
+  spaces. Only a draft can be without a number (B9, migration 0041); approved
+  and voided bills always have one (a check constraint), and a repeating bill
+  without a number pattern can only save drafts (RB11).
 - Supplier payments: a payment is recorded against an approved bill, in the
   bill's currency and dated on or after it, and a bill's active payments plus
   active credit applied can't add up to more than its total. Payments can't be edited, deleted or

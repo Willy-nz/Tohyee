@@ -5,6 +5,7 @@ import { ValidationError } from "@/lib/errors";
 import { isFinancialYearEndMonth } from "@/lib/financial-year";
 import { assertFinancialYearEndChangeable } from "@/lib/ledger/period-controls";
 import { parseCurrencyCode } from "@/lib/money/currency";
+import { type GstPeriodSetting, gstPeriodSetting } from "@/lib/reports/gst-boxes";
 import { GST_BASES, type GstBasis } from "@/lib/tax/categories";
 import { optionalString, requireOneOf, requireString } from "@/lib/validation";
 
@@ -27,6 +28,11 @@ export type OrganisationSettings = {
   financialYearEndMonth: number;
   /** For the GST return; nothing else uses it. */
   gstBasis: GstBasis;
+  /**
+   * How often GST is filed and which months periods end in (GP1-GP6), or
+   * null when not set. Used by the GST return, Home and the period close.
+   */
+  gstPeriod: GstPeriodSetting | null;
   /** The Advanced reporting module: tracking categories, custom fields and salespeople (TC1-TC10, CF1-CF10, SR1-SR8). */
   advancedFeatures: boolean;
   /** The CRM module (MOD1, CRM1-CRM9). */
@@ -49,6 +55,8 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     base_currency: string;
     financial_year_end_month: number;
     gst_basis: GstBasis;
+    gst_period_months: number | null;
+    gst_period_end_month: number | null;
     advanced_features: boolean;
     crm_enabled: boolean;
     allow_negative_stock: boolean;
@@ -57,7 +65,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     payment_details: string | null;
     has_postings: boolean;
   }>(
-    `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, advanced_features, crm_enabled, allow_negative_stock,
+    `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, gst_period_months, gst_period_end_month, advanced_features, crm_enabled, allow_negative_stock,
             postal_address, gst_number, payment_details,
             exists (select 1 from ledger_journals) as has_postings
        from organisation_settings where id = true`,
@@ -69,6 +77,10 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     baseCurrency: row.base_currency,
     financialYearEndMonth: row.financial_year_end_month,
     gstBasis: row.gst_basis,
+    gstPeriod:
+      row.gst_period_months === null || row.gst_period_end_month === null
+        ? null
+        : gstPeriodSetting(row.gst_period_months, row.gst_period_end_month),
     advancedFeatures: row.advanced_features,
     crmEnabled: row.crm_enabled,
     allowNegativeStock: row.allow_negative_stock,
@@ -77,6 +89,22 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     paymentDetails: row.payment_details,
     hasPostings: row.has_postings,
   };
+}
+
+/**
+ * The GST period setting (GP1): `months` blank clears it; otherwise 1, 2 or 6
+ * with any month a period ends in (defaults to the financial year end
+ * month, as IRD aligns periods with the balance date).
+ */
+function parseGstPeriod(monthsInput: unknown, endMonthInput: unknown, financialYearEndMonth: number): GstPeriodSetting | null {
+  if (monthsInput === null || monthsInput === "") return null;
+  const whole = (value: unknown) => (typeof value === "string" && /^\d{1,2}$/.test(value.trim()) ? Number(value.trim()) : value);
+  const months = whole(monthsInput);
+  const endMonth = endMonthInput === undefined || endMonthInput === null || endMonthInput === "" ? financialYearEndMonth : whole(endMonthInput);
+  if (typeof months !== "number" || typeof endMonth !== "number") {
+    throw new ValidationError("The GST filing frequency is monthly (1), two-monthly (2) or six-monthly (6), with a month a period ends in (1-12).");
+  }
+  return gstPeriodSetting(months, endMonth);
 }
 
 function parseFinancialYearEndMonth(input: unknown): number {
@@ -100,6 +128,8 @@ export async function updateOrganisationSettings(
     baseCurrency?: unknown;
     financialYearEndMonth?: unknown;
     gstBasis?: unknown;
+    gstPeriodMonths?: unknown;
+    gstPeriodEndMonth?: unknown;
     advancedFeatures?: unknown;
     crmEnabled?: unknown;
     allowNegativeStock?: unknown;
@@ -123,6 +153,14 @@ export async function updateOrganisationSettings(
       : parseFinancialYearEndMonth(input.financialYearEndMonth);
   const gstBasis =
     input.gstBasis === undefined ? current.gstBasis : requireOneOf(input.gstBasis, "gstBasis", GST_BASES);
+  const gstPeriod =
+    input.gstPeriodMonths === undefined && input.gstPeriodEndMonth === undefined
+      ? current.gstPeriod
+      : parseGstPeriod(
+          input.gstPeriodMonths === undefined ? (current.gstPeriod?.months ?? null) : input.gstPeriodMonths,
+          input.gstPeriodEndMonth === undefined ? current.gstPeriod?.endMonth : input.gstPeriodEndMonth,
+          financialYearEndMonth,
+        );
   if (input.advancedFeatures !== undefined && typeof input.advancedFeatures !== "boolean") {
     throw new ValidationError("advancedFeatures must be true or false.");
   }
@@ -166,17 +204,30 @@ export async function updateOrganisationSettings(
     `update organisation_settings
         set display_name = $1, base_currency = $2, financial_year_end_month = $3, gst_basis = $4,
             advanced_features = $5, crm_enabled = $6, allow_negative_stock = $7, postal_address = $8, gst_number = $9,
-            payment_details = $10, updated_at = now()
+            payment_details = $10, gst_period_months = $11, gst_period_end_month = $12, updated_at = now()
       where id = true`,
-    [displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled, allowNegativeStock, postalAddress, gstNumber, paymentDetails],
+    [
+      displayName,
+      baseCurrency,
+      financialYearEndMonth,
+      gstBasis,
+      advancedFeatures,
+      crmEnabled,
+      allowNegativeStock,
+      postalAddress,
+      gstNumber,
+      paymentDetails,
+      gstPeriod?.months ?? null,
+      gstPeriod?.endMonth ?? null,
+    ],
   );
   await writeAuditEvent(tx, {
     eventType: "organisation.settings_updated",
     entityType: "organisation_settings",
     entityId: tx.organisationId,
-    details: { displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled, allowNegativeStock, postalAddress, gstNumber, paymentDetails },
+    details: { displayName, baseCurrency, financialYearEndMonth, gstBasis, gstPeriod, advancedFeatures, crmEnabled, allowNegativeStock, postalAddress, gstNumber, paymentDetails },
   });
-  return { ...current, displayName, baseCurrency, financialYearEndMonth, gstBasis, advancedFeatures, crmEnabled, allowNegativeStock, postalAddress, gstNumber, paymentDetails };
+  return { ...current, displayName, baseCurrency, financialYearEndMonth, gstBasis, gstPeriod, advancedFeatures, crmEnabled, allowNegativeStock, postalAddress, gstNumber, paymentDetails };
 }
 
 /**

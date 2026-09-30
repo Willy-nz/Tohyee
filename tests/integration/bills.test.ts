@@ -442,6 +442,100 @@ describeWithDatabase("bills", () => {
     }
   });
 
+  it("B9: a draft can wait for the supplier's invoice number; approving needs it, and the database refuses an approved bill without one", async () => {
+    const waiting = await newContact("Waiting Supplies", { isSupplier: true });
+    const first = await draft({ contactId: waiting.id, supplierInvoiceNumber: undefined });
+    const second = await draft({ contactId: waiting.id, supplierInvoiceNumber: "  " });
+    expect([first.status, first.supplierInvoiceNumber, first.total, second.supplierInvoiceNumber]).toEqual(["draft", null, "230.00", null]);
+    const before = await journalCount();
+    await expect(approve(first.id)).rejects.toThrow(
+      "Add the supplier's invoice number before approving: this draft bill from Waiting Supplies doesn't have one yet.",
+    );
+    expect(await journalCount()).toBe(before);
+    expect((await asUser(owner, (tx) => getBill(tx, first.id))).status).toBe("draft");
+    // The database refuses it too.
+    await expect(
+      asUser(owner, (tx) => tx.query("update bills set status = 'approved', approval_journal_id = 1, approve_command_source = 'x', approve_idempotency_key = 'x', approve_request_hash = 'x', approved_at = now() where id = $1", [first.id])),
+    ).rejects.toThrow(/bills_number_unless_draft|violates check constraint/);
+    // Typed from the real invoice, it's approved as usual with the number as the journal's reference.
+    await asUser(bookkeeper, (tx) => updateBill(tx, first.id, { supplierInvoiceNumber: "WS-8841" }));
+    const { bill } = await approve(first.id);
+    expect([bill.status, bill.supplierInvoiceNumber]).toEqual(["approved", "WS-8841"]);
+    const posted = await journal(bill.approvalJournalId!);
+    expect(posted.reference).toBe("WS-8841");
+    expect(await postedLines(bill.approvalJournalId!)).toEqual([
+      ["6010", "200.00", "0.00"],
+      ["2100", "30.00", "0.00"],
+      ["2000", "0.00", "230.00"],
+    ]);
+    // The number is still unique for the supplier (B5), and clearing a number on a draft works.
+    await expect(asUser(bookkeeper, (tx) => updateBill(tx, second.id, { supplierInvoiceNumber: "ws-8841 " }))).rejects.toThrow(
+      "Waiting Supplies already has a bill with the invoice number WS-8841",
+    );
+    const third = await draft({ contactId: waiting.id, supplierInvoiceNumber: "WS-9000" });
+    expect((await asUser(bookkeeper, (tx) => updateBill(tx, third.id, { supplierInvoiceNumber: "" }))).supplierInvoiceNumber).toBeNull();
+  });
+
+  it("SPT1, SPT2, SPT5: a supplier's payment terms fill a new bill's due date, which a draft can still change", async () => {
+    const terms = (await asUser(owner, (tx) => tx.query<{ id: string; name: string }>("select id::text, name from payment_terms"))).rows;
+    const term = (name: string) => terms.find((entry) => entry.name === name)!.id;
+    // SPT1: suppliers have their own terms, separate from a customer's.
+    const harbour = (
+      await asUser(bookkeeper, (tx) =>
+        createContact(tx, { idempotencyKey: key("contact"), name: "Harbour Property Ltd", isSupplier: true, supplierPaymentTermId: term("20th of the following month") }),
+      )
+    ).contact;
+    expect(harbour.supplierPaymentTermId).toBe(term("20th of the following month"));
+    const both = (
+      await asUser(bookkeeper, (tx) =>
+        createContact(tx, {
+          idempotencyKey: key("contact"),
+          name: "Paw Supplies and Sales",
+          isSupplier: true,
+          isCustomer: true,
+          paymentTermId: term("7 days"),
+          supplierPaymentTermId: term("30 days"),
+        }),
+      )
+    ).contact;
+    expect([both.paymentTermId, both.supplierPaymentTermId]).toEqual([term("7 days"), term("30 days")]);
+    await expect(
+      asUser(bookkeeper, (tx) => createContact(tx, { idempotencyKey: key("contact"), name: "Only A Customer", isCustomer: true, supplierPaymentTermId: term("30 days") })),
+    ).rejects.toThrow("Only suppliers have supplier payment terms.");
+    await expect(asUser(bookkeeper, (tx) => updateContact(tx, customer.id, { supplierPaymentTermId: term("30 days") }))).rejects.toThrow(
+      "Only suppliers have supplier payment terms.",
+    );
+
+    // SPT2: sent without a due date, the bill takes it from the supplier's terms.
+    const noDue = { dueDate: undefined, contactId: harbour.id };
+    expect((await draft({ ...noDue, billDate: "2026-06-15" })).dueDate).toBe("2026-07-20");
+    expect((await draft({ ...noDue, billDate: "2026-12-31" })).dueDate).toBe("2027-01-20");
+    expect((await draft({ contactId: harbour.id, billDate: "2026-06-15", dueDate: "2026-06-30" })).dueDate).toBe("2026-06-30");
+    const june = await draft({ ...noDue, billDate: "2026-06-15" });
+    expect((await asUser(bookkeeper, (tx) => updateBill(tx, june.id, { dueDate: "2026-08-01" }))).dueDate).toBe("2026-08-01");
+    // A contact that's both uses its supplier terms on bills (30 days), not its customer terms (7 days).
+    expect((await draft({ dueDate: undefined, contactId: both.id, billDate: "2026-06-15" })).dueDate).toBe("2026-07-15");
+    // Retrying with the same key returns the same bill.
+    const retryKey = key("bill");
+    const once = await asUser(bookkeeper, (tx) =>
+      createBill(tx, { idempotencyKey: retryKey, contactId: harbour.id, billDate: "2026-06-15", supplierInvoiceNumber: nextNumber(), amountsMode: "exclusive", lines: [line("1", "200.00")] }),
+    );
+    const again = await asUser(bookkeeper, (tx) =>
+      createBill(tx, { idempotencyKey: retryKey, contactId: harbour.id, billDate: "2026-06-15", supplierInvoiceNumber: once.bill.supplierInvoiceNumber, amountsMode: "exclusive", lines: [line("1", "200.00")] }),
+    );
+    expect([once.created, again.created, again.bill.id, again.bill.dueDate]).toEqual([true, false, once.bill.id, "2026-07-20"]);
+
+    // SPT5: changing the supplier's terms never changes a saved bill; archived terms can't be chosen and give no due date.
+    await asUser(bookkeeper, (tx) => updateContact(tx, harbour.id, { supplierPaymentTermId: term("7 days") }));
+    expect((await asUser(owner, (tx) => getBill(tx, june.id))).dueDate).toBe("2026-08-01");
+    expect((await draft({ ...noDue, billDate: "2026-06-15" })).dueDate).toBe("2026-06-22");
+    await asUser(owner, (tx) => tx.query("update payment_terms set is_active = false where id = $1", [term("14 days")]));
+    await expect(asUser(bookkeeper, (tx) => updateContact(tx, harbour.id, { supplierPaymentTermId: term("14 days") }))).rejects.toThrow("14 days is archived.");
+    await asUser(owner, (tx) => tx.query("update payment_terms set is_active = false where id = $1", [term("7 days")]));
+    await expect(draft({ ...noDue, billDate: "2026-06-15" })).rejects.toThrow("this supplier has no payment terms");
+    await asUser(owner, (tx) => tx.query("update payment_terms set is_active = true where id in ($1, $2)", [term("7 days"), term("14 days")]));
+  });
+
   it("L4, B6, B7, B8: retrying an approval or a void after its period is locked returns the original, not a lock error", async () => {
     const approveKey = key("approve");
     const { bill: approved } = await approve((await draft()).id, approveKey);
@@ -672,8 +766,8 @@ describeWithDatabase("bills", () => {
     const refusals: Array<[Record<string, unknown>, RegExp | string]> = [
       [{ contactId: "999999" }, "There's no contact #999999."],
       [{ dueDate: "2026-05-09" }, "The due date can't be before the bill date."],
-      [{ supplierInvoiceNumber: undefined }, "supplierInvoiceNumber is required."],
-      [{ supplierInvoiceNumber: "   " }, "supplierInvoiceNumber is required."],
+      // A draft can be saved without the number (B9); a due date is needed unless the supplier has payment terms (SPT2).
+      [{ dueDate: undefined }, "dueDate is required (YYYY-MM-DD): this supplier has no payment terms to work it out from."],
       [{ supplierInvoiceNumber: "x".repeat(101) }, "supplierInvoiceNumber can be at most 100 characters."],
       [{ amountsMode: "gross" }, /amountsMode must be one of/],
       [{ lines: [] }, "A bill needs at least one line."],

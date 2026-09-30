@@ -245,6 +245,12 @@ export async function refundCreditNote(
   if (creditNote.status === "voided") {
     throw new ConflictError(`${creditNoteLabel(creditNote)} has been voided, so it can't be refunded.`);
   }
+  if (creditNote.exchangeRate !== null) {
+    // MC11: refunds in a foreign currency need the refund's own rate and a realised gain or loss; not built yet.
+    throw new ValidationError(
+      `${creditNoteLabel(creditNote)} is in ${creditNote.currencyCode}. Refunding a foreign-currency credit note isn't supported yet (refused rather than guessed): apply its credit to the contact's ${creditNote.currencyCode} documents instead.`,
+    );
+  }
   if (refundDate < creditNote.creditNoteDate) {
     throw new ValidationError(`The refund date can't be before the credit note date (${creditNote.creditNoteDate}).`);
   }
