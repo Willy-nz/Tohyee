@@ -39,6 +39,10 @@ export type OrganisationSettings = {
   crmEnabled: boolean;
   /** Whether stock may go below zero (ST9-ST12); off by default. */
   allowNegativeStock: boolean;
+  /** NetSuite's "Foreign Trade" (EX3, EX4): overseas customers' new sales lines start with the tax code for exports. Off by default. */
+  foreignTrade: boolean;
+  /** NetSuite's "Tax Code for Exports" (EX4, EX13): a zero-rated sales tax code, ZERO to start with. */
+  exportTaxCode: string | null;
   /** Shown on printed invoices, credit notes and quotes (PD1). */
   postalAddress: string | null;
   /** The organisation's GST number, as digits (PD1); shown on tax invoices. */
@@ -60,12 +64,15 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     advanced_features: boolean;
     crm_enabled: boolean;
     allow_negative_stock: boolean;
+    foreign_trade: boolean;
+    export_tax_code: string | null;
     postal_address: string | null;
     gst_number: string | null;
     payment_details: string | null;
     has_postings: boolean;
   }>(
     `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, gst_period_months, gst_period_end_month, advanced_features, crm_enabled, allow_negative_stock,
+            foreign_trade, (select t.code from tax_codes t where t.id = export_tax_code_id) as export_tax_code,
             postal_address, gst_number, payment_details,
             exists (select 1 from ledger_journals) as has_postings
        from organisation_settings where id = true`,
@@ -84,6 +91,8 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     advancedFeatures: row.advanced_features,
     crmEnabled: row.crm_enabled,
     allowNegativeStock: row.allow_negative_stock,
+    foreignTrade: row.foreign_trade,
+    exportTaxCode: row.export_tax_code,
     postalAddress: row.postal_address,
     gstNumber: row.gst_number,
     paymentDetails: row.payment_details,
@@ -105,6 +114,34 @@ function parseGstPeriod(monthsInput: unknown, endMonthInput: unknown, financialY
     throw new ValidationError("The GST filing frequency is monthly (1), two-monthly (2) or six-monthly (6), with a month a period ends in (1-12).");
   }
   return gstPeriodSetting(months, endMonth);
+}
+
+const CATEGORY_WORDS: Readonly<Record<string, string>> = {
+  standard: "standard-rated",
+  exempt: "exempt",
+  out_of_scope: "no GST (out of scope)",
+};
+
+/**
+ * The tax code for exports (EX13): an active zero-rated code. Exports are
+ * zero-rated, not exempt (IR375), so they count in Box 5 and Box 6; an
+ * exempt or standard-rated code is refused. The database checks it too.
+ */
+async function resolveExportTaxCode(tx: OrgTx, input: unknown): Promise<{ id: string; code: string }> {
+  const code = requireString(input, "exportTaxCode", { maxLength: 20 }).toUpperCase();
+  const found = await tx.query<{ id: string; code: string; category: string; is_active: boolean }>(
+    "select id, code, category, is_active from tax_codes where code = $1",
+    [code],
+  );
+  const row = found.rows[0];
+  if (!row) throw new ValidationError(`There's no tax code ${code}.`);
+  if (!row.is_active) throw new ValidationError(`${row.code} is inactive, so it can't be the tax code for exports. Choose an active zero-rated code.`);
+  if (row.category !== "zero_rated") {
+    throw new ValidationError(
+      `The tax code for exports must be zero-rated (like ZERO): exports are zero-rated, not exempt, so they count in Box 5 and Box 6 of the GST return. ${row.code} is ${CATEGORY_WORDS[row.category] ?? row.category}.`,
+    );
+  }
+  return { id: row.id, code: row.code };
 }
 
 function parseFinancialYearEndMonth(input: unknown): number {
@@ -133,6 +170,8 @@ export async function updateOrganisationSettings(
     advancedFeatures?: unknown;
     crmEnabled?: unknown;
     allowNegativeStock?: unknown;
+    foreignTrade?: unknown;
+    exportTaxCode?: unknown;
     postalAddress?: unknown;
     gstNumber?: unknown;
     paymentDetails?: unknown;
@@ -185,6 +224,16 @@ export async function updateOrganisationSettings(
     }
   }
 
+  if (input.foreignTrade !== undefined && typeof input.foreignTrade !== "boolean") {
+    throw new ValidationError("foreignTrade must be true or false.");
+  }
+  const foreignTrade = input.foreignTrade === undefined ? current.foreignTrade : input.foreignTrade;
+  const exportTax =
+    input.exportTaxCode === undefined || input.exportTaxCode === current.exportTaxCode
+      ? null
+      : await resolveExportTaxCode(tx, input.exportTaxCode);
+  const exportTaxCode = exportTax ? exportTax.code : current.exportTaxCode;
+
   const postalAddress =
     input.postalAddress === undefined ? current.postalAddress : optionalString(input.postalAddress, "postalAddress", { maxLength: 500 });
   const gstNumber = input.gstNumber === undefined ? current.gstNumber : parseGstNumber(input.gstNumber);
@@ -204,7 +253,8 @@ export async function updateOrganisationSettings(
     `update organisation_settings
         set display_name = $1, base_currency = $2, financial_year_end_month = $3, gst_basis = $4,
             advanced_features = $5, crm_enabled = $6, allow_negative_stock = $7, postal_address = $8, gst_number = $9,
-            payment_details = $10, gst_period_months = $11, gst_period_end_month = $12, updated_at = now()
+            payment_details = $10, gst_period_months = $11, gst_period_end_month = $12, foreign_trade = $13,
+            export_tax_code_id = coalesce($14::bigint, export_tax_code_id), updated_at = now()
       where id = true`,
     [
       displayName,
@@ -219,15 +269,47 @@ export async function updateOrganisationSettings(
       paymentDetails,
       gstPeriod?.months ?? null,
       gstPeriod?.endMonth ?? null,
+      foreignTrade,
+      exportTax?.id ?? null,
     ],
   );
   await writeAuditEvent(tx, {
     eventType: "organisation.settings_updated",
     entityType: "organisation_settings",
     entityId: tx.organisationId,
-    details: { displayName, baseCurrency, financialYearEndMonth, gstBasis, gstPeriod, advancedFeatures, crmEnabled, allowNegativeStock, postalAddress, gstNumber, paymentDetails },
+    details: {
+      displayName,
+      baseCurrency,
+      financialYearEndMonth,
+      gstBasis,
+      gstPeriod,
+      advancedFeatures,
+      crmEnabled,
+      allowNegativeStock,
+      postalAddress,
+      gstNumber,
+      paymentDetails,
+      // Only when they change, so earlier history reads the same (EX4).
+      ...(foreignTrade !== current.foreignTrade ? { foreignTrade } : {}),
+      ...(exportTaxCode !== current.exportTaxCode ? { exportTaxCode } : {}),
+    },
   });
-  return { ...current, displayName, baseCurrency, financialYearEndMonth, gstBasis, gstPeriod, advancedFeatures, crmEnabled, allowNegativeStock, postalAddress, gstNumber, paymentDetails };
+  return {
+    ...current,
+    displayName,
+    baseCurrency,
+    financialYearEndMonth,
+    gstBasis,
+    gstPeriod,
+    advancedFeatures,
+    crmEnabled,
+    allowNegativeStock,
+    foreignTrade,
+    exportTaxCode,
+    postalAddress,
+    gstNumber,
+    paymentDetails,
+  };
 }
 
 /**

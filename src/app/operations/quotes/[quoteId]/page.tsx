@@ -8,6 +8,7 @@ import { RequireOrganisation } from "@/components/books";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { SalesLinesTable } from "@/components/documents/lines-table";
 import { ExchangeRateField, useLastRate } from "@/components/fx";
+import { DocumentExportFlags } from "@/components/exports";
 import { useApiData } from "@/components/hooks";
 import { QuoteStatusBadge } from "@/components/quotes/quote-editor";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
@@ -219,6 +220,7 @@ function QuoteView({ organisationId, quoteId }: { organisationId: string; quoteI
           <Stat label="Reference" value={quote.reference ?? "—"} />
         </div>
         {quote.salespersonName ? <div className={ui.muted}>Salesperson: {quote.salespersonName}</div> : null}
+        <DocumentExportFlags organisationId={organisationId} contactId={quote.contactId} lineTaxCodes={quote.lines.map((line) => line.taxCode)} />
         {quote.invoiceId ? (
           <div>
             Accepted: made invoice{" "}

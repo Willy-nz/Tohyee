@@ -6,6 +6,7 @@ import { useState } from "react";
 import { RequireOrganisation } from "@/components/books";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { SalesLinesTable } from "@/components/documents/lines-table";
+import { DocumentExportFlags } from "@/components/exports";
 import { useApiData } from "@/components/hooks";
 import { RepeatingStatusBadge } from "@/components/repeating/repeating-editor";
 import { Button, Card, Empty, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
@@ -160,6 +161,7 @@ function RepeatingView({ organisationId, id }: { organisationId: string; id: str
           <Stat label="Each invoice is" value={template.saveAs === "approve" ? "Approved" : "Saved as a draft"} />
           <Stat label="Reference" value={template.reference ?? "—"} />
         </div>
+        <DocumentExportFlags organisationId={organisationId} contactId={template.contactId} lineTaxCodes={template.lines.map((line) => line.taxCode)} />
         {template.resumedFrom ? <div className={ui.muted}>Dates before {formatDate(template.resumedFrom)} that weren&apos;t made are skipped.</div> : null}
         <CustomValuesText setup={customSetup.data} values={template.customFields} />
         <SalesLinesTable organisationId={organisationId} document={template} />

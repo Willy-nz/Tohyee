@@ -82,6 +82,18 @@ export const IMPORT_FIELDS: Readonly<Record<ImportKind, readonly ImportField[]>>
     },
     { key: "gstNumber", label: "GST number", aliases: ["gst number", "tax number", "gst no"], otherSystem: ["TaxNumber"] },
     { key: "paymentTerms", label: "Payment terms", hint: "The name of payment terms set up in Tohyee.", aliases: ["payment terms", "terms"] },
+    {
+      key: "billingCountry",
+      label: "Country",
+      hint: "The billing address's country: a two-letter code (NZ, AU) or its name. Blank: New Zealand.",
+      aliases: ["country", "billing country"],
+    },
+    {
+      key: "deliveryCountry",
+      label: "Delivery country",
+      hint: "Only if goods go to another country than the billing address's.",
+      aliases: ["delivery country", "shipping country"],
+    },
   ],
   items: [
     { key: "code", label: "Code", required: true, aliases: ["code", "item code"], otherSystem: ["*ItemCode"] },

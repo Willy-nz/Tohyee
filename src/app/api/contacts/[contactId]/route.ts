@@ -29,6 +29,9 @@ export const PATCH = route<{ params: Promise<{ contactId: string }> }>(async (re
     priceLevelId: body.priceLevelId,
     parentContactId: body.parentContactId,
     supplierPaymentTermId: body.supplierPaymentTermId,
+    billingCountry: body.billingCountry,
+    deliveryCountry: body.deliveryCountry,
+    defaultSalesTaxCode: body.defaultSalesTaxCode,
   };
   const contact = await withOrganisation(request, body.organisationId, "bookkeeper", async (tx) => {
     if (body.isArchived === undefined) {

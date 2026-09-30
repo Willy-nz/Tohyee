@@ -31,6 +31,7 @@ rules are well settled; then the larger scope items.
 | 9 | **Multi-currency invoices and bills** | In Jess's scope | Large. Rounding gains and losses and revaluation per open document (examples MC31-MC43), the currency exchange rates list (examples MC46-MC53), and projects and CRM opportunities in a customer's currency (examples MC61-MC70): Built overnight. Standard-rated GST on foreign-currency documents: Built overnight (examples MC71-MC83) |
 | 10 | **NZ payroll** (PAYE, KiwiSaver, ACC, student loan, payday filing) | In Jess's scope; needs current IRD rates and Jess's decisions, so planned rather than built overnight | Very large |
 | 11 | **Not-for-profit module** (funds/grants, restricted funds, PBE reporting) | In Jess's scope; tracking categories and custom segments cover part of it | Large |
+| 12 | **Exports**: a country on contacts, NetSuite's Foreign trade setting and Tax code for exports, a contact's own sales tax code, and an export flag on sales documents | Exports are zero-rated (IR375) whatever the invoice's currency; Jess asked for "an option and a flag" | Medium. Built overnight (examples EX1-EX15); purchases (imports) not built |
 
 Also noticed, smaller: supplier overpayments and prepayments (waiting on
 Jess's GST decision), emailing documents to customers (built: sent from each

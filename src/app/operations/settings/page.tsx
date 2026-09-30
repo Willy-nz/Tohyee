@@ -16,6 +16,7 @@ import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import type { OrganisationSettings } from "@/lib/organisations/settings";
 import { describeGstPeriodSetting, gstPeriodSetting } from "@/lib/reports/gst-boxes";
 import { GST_BASES, GST_BASIS_LABELS, type GstBasis } from "@/lib/tax/categories";
+import type { TaxCode } from "@/lib/tax/codes";
 
 /** The GST filing frequency choices (GP1): "months:endMonth", or "" for not set. */
 const GST_PERIOD_CHOICES: Array<{ value: string; label: string }> = [
@@ -33,13 +34,27 @@ const GST_PERIOD_CHOICES: Array<{ value: string; label: string }> = [
 // live in the parent; the forms only keep their error messages.
 type SavedHandler = (message: string) => void;
 
-function SettingsForm({ organisationId, settings, onSaved }: { organisationId: string; settings: OrganisationSettings; onSaved: SavedHandler }) {
+function SettingsForm({
+  organisationId,
+  settings,
+  taxCodes,
+  onSaved,
+}: {
+  organisationId: string;
+  settings: OrganisationSettings;
+  taxCodes: TaxCode[];
+  onSaved: SavedHandler;
+}) {
   const [displayName, setDisplayName] = useState(settings.displayName);
   const [baseCurrency, setBaseCurrency] = useState(settings.baseCurrency);
   const [financialYearEndMonth, setFinancialYearEndMonth] = useState(settings.financialYearEndMonth);
   const [gstBasis, setGstBasis] = useState<GstBasis>(settings.gstBasis);
   const [gstPeriod, setGstPeriod] = useState(settings.gstPeriod ? `${settings.gstPeriod.months}:${settings.gstPeriod.endMonth}` : "");
   const [allowNegativeStock, setAllowNegativeStock] = useState(settings.allowNegativeStock);
+  const [foreignTrade, setForeignTrade] = useState(settings.foreignTrade);
+  const [exportTaxCode, setExportTaxCode] = useState(settings.exportTaxCode ?? "");
+  // Only zero-rated codes can be the tax code for exports (EX13).
+  const zeroRated = taxCodes.filter((code) => code.category === "zero_rated" && (code.isActive || code.code === settings.exportTaxCode));
   const [postalAddress, setPostalAddress] = useState(settings.postalAddress ?? "");
   const [gstNumber, setGstNumber] = useState(settings.gstNumber ? formatGstNumber(settings.gstNumber) : "");
   const [paymentDetails, setPaymentDetails] = useState(settings.paymentDetails ?? "");
@@ -59,6 +74,8 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
           gstPeriodMonths: gstPeriod === "" ? null : Number(gstPeriod.split(":")[0]),
           gstPeriodEndMonth: gstPeriod === "" ? null : Number(gstPeriod.split(":")[1]),
           allowNegativeStock,
+          foreignTrade,
+          ...(exportTaxCode ? { exportTaxCode } : {}),
           postalAddress: postalAddress.trim() || null,
           gstNumber: gstNumber.trim() || null,
           paymentDetails: paymentDetails.trim() || null,
@@ -124,6 +141,27 @@ function SettingsForm({ organisationId, settings, onSaved }: { organisationId: s
           </select>
         </Field>
       </div>
+      <h3 style={{ margin: "8px 0 0" }}>Exports</h3>
+      <div className={ui.grid3}>
+        <label className={ui.checkbox}>
+          <input type="checkbox" checked={foreignTrade} onChange={(event) => setForeignTrade(event.target.checked)} />
+          Foreign trade: new sales lines for customers outside New Zealand (by their delivery country, else their billing country)
+          start with the tax code for exports. A customer&apos;s own default sales tax code comes first, and any line can be changed.
+        </label>
+        <Field
+          label="Tax code for exports"
+          hint="A zero-rated code. Exported goods and most services to non-residents are zero-rated (GST at 0%), not exempt, so they count in Box 5 and Box 6 of the GST return."
+        >
+          <select value={exportTaxCode} onChange={(event) => setExportTaxCode(event.target.value)}>
+            {exportTaxCode === "" ? <option value="">None</option> : null}
+            {zeroRated.map((code) => (
+              <option key={code.id} value={code.code}>
+                {code.code} ({code.label}){code.isActive ? "" : " (inactive)"}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
       <h3 style={{ margin: "8px 0 0" }}>On printed invoices, credit notes and quotes</h3>
       <div className={ui.grid3}>
         <Field label="GST number" hint="Printed on tax invoices and credit notes. Without it, invoices print as “Invoice”, not “Tax invoice”.">
@@ -153,6 +191,7 @@ function Settings({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const settings = useApiData<{ settings: OrganisationSettings }>(`/api/organisations/${organisationId}/settings`);
   const controls = useApiData<{ controls: PeriodControls }>("/api/ledger/period-controls", { organisationId });
+  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
   const [saved, setSaved] = useState<{ settings: string | null }>({ settings: null });
   if (!can("admin")) {
     return <Notice tone="warning">Only organisation admins and owners can change settings.</Notice>;
@@ -161,12 +200,14 @@ function Settings({ organisationId }: { organisationId: string }) {
     <>
       <Card title="Organisation">
         {settings.error ? <Notice tone="error">{settings.error}</Notice> : null}
+        {taxCodes.error ? <Notice tone="error">{taxCodes.error}</Notice> : null}
         {saved.settings ? <Notice tone="success">{saved.settings}</Notice> : null}
-        {settings.data ? (
+        {settings.data && taxCodes.data ? (
           <SettingsForm
             key={JSON.stringify(settings.data.settings)}
             organisationId={organisationId}
             settings={settings.data.settings}
+            taxCodes={taxCodes.data.taxCodes}
             onSaved={(message) => {
               setSaved((current) => ({ ...current, settings: message }));
               settings.reload();

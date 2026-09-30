@@ -8,6 +8,7 @@ import {
   type EditorLine,
   editorLines,
   linesForApi,
+  retaxLines,
   salesDefaults,
   SalesLines,
   useSalesEditorData,
@@ -16,6 +17,8 @@ import { customerDefault, SalespersonField } from "@/components/salespeople";
 import { Badge, Button, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { CustomValues } from "@/lib/custom-fields/values";
+import { ExportBadge } from "@/components/exports";
+import { contactSalesTaxCode } from "@/lib/tax/exports";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode } from "@/lib/invoices/amounts";
 import { datesBetween, type RepeatPeriod } from "@/lib/repeating/schedule";
@@ -152,6 +155,8 @@ function RepeatingForm({
             value={contactId}
             onChange={(event) => {
               setContactId(event.target.value);
+              const next = data.customers.find((contact) => contact.id === event.target.value);
+              setLines((current) => retaxLines(current, contactSalesTaxCode(next, data.exportSettings, data.taxCodes)));
               if (!template) {
                 const chosen = data.customers.find((contact) => contact.id === event.target.value);
                 setSalespersonId(customerDefault(data.salespeople, chosen?.defaultSalespersonId));
@@ -169,6 +174,7 @@ function RepeatingForm({
               </option>
             ))}
           </select>
+          <ExportBadge contact={data.customers.find((contact) => contact.id === contactId)} />
         </Field>
         <Field label="Repeat every">
           <span style={{ display: "flex", gap: 8 }}>
@@ -246,6 +252,8 @@ function RepeatingForm({
         setLines={setLines}
         defaults={defaults}
         lineDefaults={lineDefaults}
+        contact={data.customers.find((contact) => contact.id === contactId)}
+        exportSettings={data.exportSettings}
       />
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>

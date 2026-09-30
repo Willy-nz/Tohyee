@@ -2362,6 +2362,118 @@ MC2, MC10, MC25, MC64 and MC69 revised in their own tests.
     invoices, MC61-MC70. Please check the examples; what's still open about
     them is under "Questions for Jess (projects)".)
 
+## Exports and the tax code for overseas customers (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) at Jess's request ("should be an option and a
+flag"), following NetSuite. NetSuite's tax preferences (Setting Tax
+Preferences, section_N1813668) have, per nexus, a **Foreign Trade** box
+("if this box is checked, the system creates the Export tax code") and a
+**Tax Code for Exports**, "the default tax code for orders placed by
+international customers", besides a **Default Tax Code** used "if no tax code
+has been predefined for the customer or items"; its tax lookup works "based
+on the shipping address of the customer". A NetSuite customer can carry its
+own tax code, and any line can be changed by hand.
+
+IRD's GST guide (IR375, March 2026, pages 7-8): exported goods, and most
+services to non-residents, are **zero-rated, not exempt**: "GST is charged at
+0%", the sale goes in Box 5 (total sales) and Box 6 (zero-rated supplies),
+and GST on the expenses can still be claimed. **The currency of the invoice
+doesn't decide it**: a USD invoice to a New Zealand customer is
+standard-rated, and an NZD invoice to an overseas customer can be
+zero-rated. So:
+
+- **Contacts have a country** for their billing address and, optionally, for
+  their delivery address (blank: the billing country), as ISO 3166-1 codes
+  chosen from a list of names. The addresses themselves stay free text.
+  Existing and new contacts are in **New Zealand** unless set otherwise. The
+  contacts CSV import and export have **Country** and **Delivery country**
+  columns (a code like AU or a name like Australia).
+- **Settings › Exports** (admins; audited): **Foreign trade**, off for every
+  organisation to start with, and the **Tax code for exports**, ZERO to start
+  with, which must be an active **zero-rated** code.
+- **A contact's own default sales tax code** (optional; an inactive code is
+  refused).
+- **A new sales line starts with**: the contact's own default sales tax code
+  if it has one; else, with Foreign trade on and the delivery country (else
+  the billing country) outside New Zealand, the tax code for exports; else
+  Tohyee's usual default, exactly as before (the item's sales tax code, the
+  account's usual code, or the first active standard-rated code). This is
+  on invoices, credit notes, quotes, repeating invoices, a project's invoice
+  and a won CRM opportunity's invoice, and on item lines. It's **only a
+  starting value**: any line can be changed and saves as chosen, and saved
+  documents never change when a contact or the settings change.
+- **The flag**: a sales document for a contact outside New Zealand shows
+  **Export (Australia)** (the country's name) by the customer, in the editor
+  and on the document; with Foreign trade on, a standard-rated line for that
+  customer shows a gentle warning, "This customer is overseas; exports are
+  usually zero-rated." It never blocks saving: a service consumed in New
+  Zealand can be standard-rated.
+- **GST return**: nothing new. Zero-rated lines were already in Box 5 and
+  Box 6, and exempt and no-GST lines in no box (EX11).
+- **Purchases (imports)** aren't covered: suppliers have a country, but
+  there's no default purchase tax code per contact and no import tax code
+  (imported goods' GST is collected by Customs and imported services are
+  under the reverse charge, neither built).
+
+Setup: invoice basis, GST 15%; tax codes GST (standard, 15%), ZERO (zero
+rated), EXEMPT (exempt), NONE (no GST); 1100 Accounts receivable, 2100 GST,
+4000 Sales (its usual code GST); an item TOUR whose sales tax code is GST.
+Customers, all in NZD unless stated: **Kobe Ltd** (New Zealand), **Wombat Pty
+Ltd** (Australia), **Paws LLC** (United States), **Tui Traders** (New Zealand,
+in USD), **Kiwi Gifts Ltd** (billing New Zealand, delivery Australia),
+**Sydney Visitors** (billing Australia, delivery New Zealand), **Harbour
+Tours** (Australia, own default sales tax code GST: tours taken in New
+Zealand) and **Rata Rentals** (New Zealand, own default EXEMPT: residential
+rent). Amounts exclusive of GST.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| EX1 | Migration 0048 on an organisation with existing contacts; a new organisation; a contact added with no country | Every existing contact: billing country **NZ** (New Zealand), no delivery country, no default sales tax code. Foreign trade **off**, tax code for exports **ZERO**, for existing and new organisations. The new contact is in **NZ** |
+| EX2 | Foreign trade on. A new invoice for Kobe Ltd (New Zealand): 1 x 100.00 to 4000 | The line starts with **GST**, as before (the organisation's usual default): GST **15.00**, total **115.00** |
+| EX3 | Foreign trade **off**. A new invoice for Wombat Pty Ltd (Australia) | The line starts with **GST**, as before. The invoice shows **Export (Australia)**; no warning (Foreign trade is off) |
+| EX4 | An admin turns Foreign trade on. A new invoice for Wombat, 1 Jul 2026: 1 x 500.00 to 4000; another line with the item TOUR | The change is in the history (organisation.settings_updated, foreignTrade true). The line starts with **ZERO**, and stays ZERO when account 4000 (usual code GST) or the item TOUR (sales code GST) is picked. Approved: GST **0.00**, total **500.00**: Dr 1100 500.00 / Cr 4000 500.00 |
+| EX5 | Foreign trade on. New invoices for Harbour Tours (Australia, own default GST) and Rata Rentals (New Zealand, own default EXEMPT); setting an inactive code OLD as a contact's default | Harbour Tours' lines start with **GST** (the contact's own code beats the tax code for exports), with the warning (EX12); Rata Rentals' with **EXEMPT** (beating the usual GST). OLD is refused: "Tax code OLD is inactive, so it can't be a contact's default sales tax code." |
+| EX6 | Foreign trade on. New invoices for Kiwi Gifts Ltd (billing NZ, delivery Australia) and Sydney Visitors (billing Australia, delivery NZ) | The delivery country decides: Kiwi Gifts' lines start with **ZERO** and show **Export (Australia)**; Sydney Visitors' with **GST**, no export flag |
+| EX7 | Foreign trade on. Wombat's line starts ZERO; it's changed by hand to GST, 1 x 200.00, and saved; then the customer is changed to Kobe and back | Saves with **GST**: GST **30.00**, total **230.00**. The warning shows but doesn't stop the save. A code chosen by hand stays when the customer changes |
+| EX8 | Wombat's draft invoice from EX4 (ZERO) is saved. An admin then turns Foreign trade off, and Wombat's billing country is changed to New Zealand; the draft is approved | The saved draft still has **ZERO** and approves with GST **0.00**, total **500.00**. Only new lines start differently (now **GST**) |
+| EX9 | Foreign trade on. An invoice for Tui Traders (New Zealand, in USD): 1 x USD 1,000.00 at **1.60** | The currency doesn't decide the tax: the line starts with **GST**. USD 1,000.00 + GST **150.00** = **1,150.00**; NZD 1,600.00 + GST **240.00** = **1,840.00** (as MC71). No export flag |
+| EX10 | Foreign trade on. An invoice for Paws LLC (United States, in NZD): 1 x 800.00 | The line starts with **ZERO**: GST **0.00**, total **800.00** NZD. It shows **Export (United States)** |
+| EX11 | Foreign trade on. July 2026, approved: Kobe 1 x 100.00 GST (115.00); Wombat 1 x 500.00 ZERO; Paws 1 x 800.00 ZERO; Rata Rentals 1 x 400.00 EXEMPT. The July GST return (invoice basis) | Box 5 **1,415.00** (115.00 + 500.00 + 800.00), Box 6 **1,300.00** (the exports), Box 7 **115.00**, Box 8 **15.00**. The exempt 400.00 is in **no box** (exempt sales are left out; zero-rated ones aren't) |
+| EX12 | The flag and warning for Foreign trade on or off, for Wombat, Kobe and Sydney Visitors, with lines coded GST, ZERO, EXEMPT or NONE | **Export (Australia)** by Wombat whatever the setting; nothing by Kobe or Sydney Visitors (delivered in New Zealand). The warning "This customer is overseas; exports are usually zero-rated." only with Foreign trade on, for Wombat, when a line is standard-rated (GST); not for ZERO, EXEMPT or NONE lines |
+| EX13 | An admin sets the tax code for exports to EXEMPT, GST, NONE, an inactive zero-rated code, then a new zero-rated code EXPORT | EXEMPT is refused: "The tax code for exports must be zero-rated (like ZERO): exports are zero-rated, not exempt, so they count in Box 5 and Box 6 of the GST return. EXEMPT is exempt." GST and NONE likewise, and the inactive code ("…is inactive…"). EXPORT is accepted and audited. The database refuses a non-zero-rated code too |
+| EX14 | Countries: a contact's billing country "XX", "Australia" and "au"; a contacts CSV with Country "Australia", "US" and blank, and Delivery country "AU" | "XX" is refused ("Billing country "XX" isn't a country…"); "Australia" and "au" are both **AU**. The import gives **AU**, **US** and **NZ**, and the delivery country **AU**; the export writes the codes back |
+| EX15 | Foreign trade on. A won CRM opportunity's invoice for Wombat, for Harbour Tours and for Kobe; a credit note, quote, repeating invoice and project invoice for Wombat | The CRM invoices' lines are **ZERO** (Wombat), **GST** (Harbour Tours' own code) and **GST** (Kobe). The other documents' new lines start with **ZERO** in their editors, the same rule |
+
+Tests: `tests/integration/exports.test.ts` (EX1-EX11, EX13-EX15) and
+`tests/unit/exports.test.ts` (the editors' starting code, the flag and
+warning, and countries: EX2-EX7, EX9, EX10, EX12, EX14).
+
+### Not supported yet (refused rather than guessed)
+
+- **Imports and overseas suppliers**: no default purchase tax code per
+  contact, no import tax code, and no reverse charge on imported services.
+  Suppliers' countries are recorded but don't change bills.
+- **Deciding which services to non-residents are zero-rated**: IR375 has
+  exceptions (e.g. services to a non-resident who's in New Zealand when they
+  receive them). Tohyee only suggests the tax code for exports by country and
+  warns; the person entering the line decides.
+- **Checking the export evidence** (IRD's time limits for goods to leave New
+  Zealand, customs export entries): not recorded.
+- **Tax lookup by region** (NetSuite's "Enable Tax Lookup on Sales and
+  Purchases" by state or province): only the country is used.
+
+### Questions for Jess (exports)
+
+1. Foreign trade is off for every organisation to start with, new ones too.
+   Would you rather new organisations start with it on?
+2. The delivery country beats the billing country (as NetSuite's lookup uses
+   the shipping address). A customer with no delivery country uses the
+   billing country. Right for your clients?
+3. Should suppliers get a default purchase tax code too (e.g. NONE for
+   overseas software subscriptions), and an import code? Not built.
+4. The warning shows on approved documents as well as drafts (it can't
+   change them). Keep it, or only on drafts?
+
 ## Reports
 
 The financial year ends on the last day of a month chosen in Settings

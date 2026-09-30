@@ -35,6 +35,8 @@ import type { CustomerSetup } from "@/lib/customers/service";
 import type { SalespeopleSetup } from "@/lib/salespeople/service";
 import { type CustomFieldSetup, type CustomValues } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
+import { ExportBadge, ExportWarning, useExportSettings } from "@/components/exports";
+import { contactSalesTaxCode, type ExportSettings, retaxLines, usualWithContact } from "@/lib/tax/exports";
 
 const STATUS_BADGES: Record<InvoiceStatus, { label: string; tone: "neutral" | "green" | "red" }> = {
   draft: { label: "Draft", tone: "neutral" },
@@ -71,6 +73,10 @@ export type EditorLine = {
   taxCode: string;
   tracking: TrackingTags;
   customFields: CustomValues;
+  /** The code Tohyee's usual default gave (the item's, the account's or the organisation's), before the customer's (EX2-EX6). */
+  usualTaxCode?: string;
+  /** Chosen by hand, or saved: the customer's defaults leave it alone (EX7, EX8). */
+  taxTyped?: boolean;
 };
 
 let lineKey = 0;
@@ -81,9 +87,28 @@ function nextLineKey(): number {
 
 export type Defaults = { accountCode: string; taxCode: string };
 
-export function blankLine(defaults: Defaults, customFields: CustomValues = {}): EditorLine {
-  return { key: nextLineKey(), itemId: "", unitId: "", description: "", quantity: "1", unitPrice: "", tracking: {}, customFields, ...defaults };
+/**
+ * A new line. `contactTaxCode` is the customer's starting code (their own
+ * default, or the tax code for exports, EX2-EX6); without one the line starts
+ * with the usual default.
+ */
+export function blankLine(defaults: Defaults, customFields: CustomValues = {}, contactTaxCode: string | null = null): EditorLine {
+  return {
+    key: nextLineKey(),
+    itemId: "",
+    unitId: "",
+    description: "",
+    quantity: "1",
+    unitPrice: "",
+    tracking: {},
+    customFields,
+    ...defaults,
+    taxCode: contactTaxCode ?? defaults.taxCode,
+    usualTaxCode: defaults.taxCode,
+  };
 }
+
+export { retaxLines, usualWithContact };
 
 /** Invoice lines go to revenue accounts, the same rule the server checks. */
 function isRevenue(account: Account): boolean {
@@ -101,6 +126,7 @@ type FormProps = {
   customSetup: CustomFieldSetup;
   salespeople: SalespeopleSetup;
   customerSetup: CustomerSetup;
+  exportSettings: ExportSettings;
   invoice?: Invoice;
   onSaved: (invoice: Invoice) => void;
   onCancel: () => void;
@@ -117,6 +143,7 @@ function InvoiceForm({
   customSetup,
   salespeople,
   customerSetup,
+  exportSettings,
   invoice,
   onSaved,
   onCancel,
@@ -157,6 +184,7 @@ function InvoiceForm({
           taxCode: line.taxCode ?? defaults.taxCode,
           tracking: line.tracking ?? {},
           customFields: line.customFields ?? {},
+          taxTyped: true,
         }))
       : [blankLine(defaults, lineDefaults)],
   );
@@ -241,6 +269,7 @@ function InvoiceForm({
               if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
               setContactId(event.target.value);
               refillDue(event.target.value, invoiceDate);
+              setLines((current) => retaxLines(current, contactSalesTaxCode(next, exportSettings, taxCodes)));
               if (!invoice) {
                 const chosen = customers.find((contact) => contact.id === event.target.value);
                 setSalespersonId(customerDefault(salespeople, chosen?.defaultSalespersonId));
@@ -259,6 +288,7 @@ function InvoiceForm({
               </option>
             ))}
           </select>
+          <ExportBadge contact={chosenCustomer} />
         </Field>
         <Field label="Invoice date" hint="Approving posts the invoice on this date.">
           <input
@@ -300,8 +330,9 @@ function InvoiceForm({
       </div>
       {foreign ? (
         <Notice tone="info">
-          This invoice is in {currencyCode}, and its GST is worked out in {currencyCode} as usual (use ZERO for exports). Approving
-          posts its {baseCurrency} value, each line and its GST converted at the rate.
+          This invoice is in {currencyCode}, and its GST is worked out in {currencyCode} as usual. The currency doesn&apos;t decide
+          the tax code: where the customer is does (exports are zero-rated). Approving posts its {baseCurrency} value, each line and
+          its GST converted at the rate.
         </Notice>
       ) : null}
       <CustomFieldInputs setup={customSetup} record="document" uses={["invoice"]} value={customFields} onChange={setCustomFields} />
@@ -322,6 +353,8 @@ function InvoiceForm({
         setLines={setLines}
         defaults={defaults}
         lineDefaults={lineDefaults}
+        contact={chosenCustomer}
+        exportSettings={exportSettings}
       />
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>
@@ -359,6 +392,8 @@ export function SalesLines({
   lineDefaults,
   homeCurrency,
   exchangeRate,
+  contact,
+  exportSettings,
 }: {
   organisationId: string;
   items: ItemList | null;
@@ -378,8 +413,12 @@ export function SalesLines({
   setLines: (update: (current: EditorLine[]) => EditorLine[]) => void;
   defaults: Defaults;
   lineDefaults: CustomValues;
+  /** The chosen customer and the organisation's export settings (EX2-EX6, EX12). */
+  contact?: Contact;
+  exportSettings?: ExportSettings | null;
 }) {
   const scale = currencyMinorUnits(baseCurrency);
+  const contactTaxCode = contactSalesTaxCode(contact, exportSettings, taxCodes);
   const hasTax = amountsMode !== "no_tax";
   const rates = new Map(taxCodes.map((taxCode) => [taxCode.code, taxCode.rate]));
   const usable = (value: string) => isDecimalString(value) && !value.trim().startsWith("-");
@@ -454,7 +493,10 @@ export function SalesLines({
                     itemId={line.itemId}
                     unitId={line.unitId}
                     labelPrefix={`Line ${index + 1}`}
-                    onPick={(patch) => update(line.key, patch)}
+                    onPick={(patch) => {
+                      const { taxCode, ...rest } = patch;
+                      update(line.key, { ...rest, ...usualWithContact(taxCode, contactTaxCode) });
+                    }}
                   />
                 </td>
                 <td data-label="Quantity">
@@ -483,7 +525,9 @@ export function SalesLines({
                     accounts={accounts}
                     filter={isRevenue}
                     value={line.accountCode}
-                    onChange={(code) => update(line.key, { accountCode: code, ...usualTaxCode(accounts, taxCodes, code) })}
+                    onChange={(code) =>
+                      update(line.key, { accountCode: code, ...usualWithContact(usualTaxCode(accounts, taxCodes, code).taxCode, contactTaxCode) })
+                    }
                     required
                   />
                   <TrackingSelects
@@ -507,7 +551,7 @@ export function SalesLines({
                     <select
                       aria-label={`Line ${index + 1} tax code`}
                       value={line.taxCode}
-                      onChange={(event) => update(line.key, { taxCode: event.target.value })}
+                      onChange={(event) => update(line.key, { taxCode: event.target.value, taxTyped: true })}
                       required
                     >
                       <option value="">Choose</option>
@@ -540,7 +584,7 @@ export function SalesLines({
           <tfoot>
             <tr>
               <td colSpan={hasTax ? 8 : 6}>
-                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaults, lineDefaults)])}>
+                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaults, lineDefaults, contactTaxCode)])}>
                   Add line
                 </Button>
               </td>
@@ -548,6 +592,7 @@ export function SalesLines({
           </tfoot>
         </table>
       </div>
+      {hasTax ? <ExportWarning contact={contact} settings={exportSettings} lineTaxCodes={lines.map((line) => line.taxCode)} taxCodes={taxCodes} /> : null}
       <div className={ui.statRow} aria-live="polite">
         <Stat label={hasTax ? "Subtotal (excl. GST)" : "Subtotal"} value={money(amounts.subtotal)} />
         {hasTax ? <Stat label="GST" value={money(amounts.taxTotal)} /> : null}
@@ -568,11 +613,20 @@ export function useSalesEditorData(organisationId: string) {
   const customSetup = useCustomFields(organisationId);
   const salespeople = useSalespeople(organisationId);
   const customerSetup = useCustomerSetup(organisationId);
+  const exportSettings = useExportSettings(organisationId);
   const error =
-    accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error ?? salespeople.error ?? customerSetup.error;
+    accounts.error ??
+    contacts.error ??
+    taxCodes.error ??
+    tracking.error ??
+    customSetup.error ??
+    salespeople.error ??
+    customerSetup.error ??
+    exportSettings.error;
   const ready =
-    accounts.data && contacts.data && taxCodes.data && tracking.data && customSetup.data && salespeople.data && customerSetup.data
+    accounts.data && contacts.data && taxCodes.data && tracking.data && customSetup.data && salespeople.data && customerSetup.data && exportSettings.data
       ? {
+          exportSettings: exportSettings.data,
           accounts: accounts.data.accounts,
           items: items.data,
           customers: contacts.data.contacts,
@@ -608,6 +662,8 @@ export function editorLines(saved: ReadonlyArray<{ itemId: string | null; unitId
     taxCode: line.taxCode ?? defaults.taxCode,
     tracking: line.tracking ?? {},
     customFields: line.customFields ?? {},
+    // Saved lines keep their tax codes whatever the customer or settings (EX8).
+    taxTyped: true,
   }));
 }
 
@@ -651,12 +707,29 @@ export function InvoiceEditor({
   const customSetup = useCustomFields(organisationId);
   const salespeople = useSalespeople(organisationId);
   const customerSetup = useCustomerSetup(organisationId);
+  const exportSettings = useExportSettings(organisationId);
   const error =
-    accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error ?? salespeople.error ?? customerSetup.error;
+    accounts.error ??
+    contacts.error ??
+    taxCodes.error ??
+    tracking.error ??
+    customSetup.error ??
+    salespeople.error ??
+    customerSetup.error ??
+    exportSettings.error;
   if (error) {
     return <Notice tone="error">{error}</Notice>;
   }
-  if (!accounts.data || !contacts.data || !taxCodes.data || !tracking.data || !customSetup.data || !salespeople.data || !customerSetup.data) {
+  if (
+    !accounts.data ||
+    !contacts.data ||
+    !taxCodes.data ||
+    !tracking.data ||
+    !customSetup.data ||
+    !salespeople.data ||
+    !customerSetup.data ||
+    !exportSettings.data
+  ) {
     return <p className={ui.muted}>Loading…</p>;
   }
   return (
@@ -671,6 +744,7 @@ export function InvoiceEditor({
       customSetup={customSetup.data}
       salespeople={salespeople.data}
       customerSetup={customerSetup.data}
+      exportSettings={exportSettings.data}
       invoice={invoice}
       onSaved={onSaved}
       onCancel={onCancel}

@@ -803,7 +803,7 @@ Harbour Cafe,INV-0112,28/03/2026,20/04/2026,805.00,105.00,575.00,Delivery`,
     const cookie = await sessionCookieFor(admin);
     const response = await exportRoute.GET(apiRequest(`/api/import/export?organisationId=${world.org}&kind=contacts`, { cookie }), noContext);
     expect(response.headers.get("content-type")).toBe("text/csv; charset=utf-8");
-    expect((await response.text()).split("\r\n")[0]).toBe("Name,Customer (yes/no),Supplier (yes/no),Email,Phone,Billing (postal) address,Delivery address,GST number,Payment terms");
+    expect((await response.text()).split("\r\n")[0]).toBe("Name,Customer (yes/no),Supplier (yes/no),Email,Phone,Billing (postal) address,Delivery address,GST number,Payment terms,Country,Delivery country");
     const bookkeeperCookie = await sessionCookieFor(bookkeeper);
     const refused = await recordsRoute.POST(
       apiRequest("/api/import/records", { method: "POST", cookie: bookkeeperCookie, body: { organisationId: world.org, kind: "accounts", records: [], idempotencyKey: key("x") } }),

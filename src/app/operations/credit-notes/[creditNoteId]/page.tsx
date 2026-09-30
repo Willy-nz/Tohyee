@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Money, RequireOrganisation } from "@/components/books";
 import { CreditNoteApplications, CreditNoteRefunds } from "@/components/credit-notes/credit-note-credit";
 import { CreditNoteStatusBadge, CreditStatusBadge } from "@/components/credit-notes/credit-note-editor";
+import { DocumentExportFlags } from "@/components/exports";
 import { useApiData } from "@/components/hooks";
 import { ForeignTotals } from "@/components/fx-totals";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
@@ -214,6 +215,7 @@ function CreditNoteView({ organisationId, creditNoteId }: { organisationId: stri
           <Stat label="Customer" value={creditNote.contactName} />
         </div>
         {creditNote.salespersonName ? <div className={ui.muted}>Salesperson: {creditNote.salespersonName}</div> : null}
+        <DocumentExportFlags organisationId={organisationId} contactId={creditNote.contactId} lineTaxCodes={creditNote.lines.map((line) => line.taxCode)} />
         <CustomValuesText setup={customSetup.data} values={creditNote.customFields} />
         <div className={ui.tableWrap}>
           <table className={ui.table}>

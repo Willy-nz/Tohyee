@@ -8,6 +8,7 @@ import {
   type EditorLine,
   editorLines,
   linesForApi,
+  retaxLines,
   salesDefaults,
   SalesLines,
   useSalesEditorData,
@@ -19,6 +20,8 @@ import { todayInBrowser } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode } from "@/lib/invoices/amounts";
 import type { Quote, QuoteSummary } from "@/lib/quotes/service";
 import type { CustomValues } from "@/lib/custom-fields/values";
+import { ExportBadge } from "@/components/exports";
+import { contactSalesTaxCode } from "@/lib/tax/exports";
 
 export function QuoteStatusBadge({ quote }: { quote: Pick<QuoteSummary, "status" | "expired"> }) {
   if (quote.expired) return <Badge tone="amber">Expired</Badge>;
@@ -129,6 +132,8 @@ function QuoteForm({
             value={contactId}
             onChange={(event) => {
               setContactId(event.target.value);
+              const next = data.customers.find((contact) => contact.id === event.target.value);
+              setLines((current) => retaxLines(current, contactSalesTaxCode(next, data.exportSettings, data.taxCodes)));
               if (!quote) {
                 const chosen = data.customers.find((contact) => contact.id === event.target.value);
                 setSalespersonId(customerDefault(data.salespeople, chosen?.defaultSalespersonId));
@@ -146,6 +151,7 @@ function QuoteForm({
               </option>
             ))}
           </select>
+          <ExportBadge contact={data.customers.find((contact) => contact.id === contactId)} />
         </Field>
         <Field label="Quote date">
           <input type="date" value={quoteDate} onChange={(event) => setQuoteDate(event.target.value)} required />
@@ -186,6 +192,8 @@ function QuoteForm({
         setLines={setLines}
         defaults={defaults}
         lineDefaults={lineDefaults}
+        contact={data.customers.find((contact) => contact.id === contactId)}
+        exportSettings={data.exportSettings}
       />
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>

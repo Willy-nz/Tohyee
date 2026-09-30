@@ -13,6 +13,7 @@ import { listMembers } from "@/lib/organisations/members";
 import { syncedFor } from "@/lib/crm/mail/service";
 import { crmEnabled, requireCrm, requirePeople } from "@/lib/crm/switch";
 import { optionalId, optionalString, requireId, requireString } from "@/lib/validation";
+import { contactSalesTaxCodeFor } from "@/lib/tax/contact-tax";
 
 /**
  * The CRM module (examples MOD1, CRM1-CRM9), after Twenty
@@ -477,7 +478,9 @@ function addDays(date: string, days: number): string {
  * typed or else the one any new invoice for that date starts with, with the
  * same standard GST code as an NZD one (revised 1 Oct 2026: standard-rated
  * GST works on foreign-currency invoices, MC71). It's a draft, so the tax
- * code can be changed (e.g. to ZERO for an export) before it's approved.
+ * code can be changed before it's approved. The company's own default sales
+ * tax code, or with Foreign trade on the tax code for exports for an
+ * overseas company, comes before the standard code (EX15).
  */
 export async function makeInvoiceFromOpportunity(
   tx: OrgTx,
@@ -505,7 +508,8 @@ export async function makeInvoiceFromOpportunity(
         and (effective_to is null or effective_to >= $1) order by id limit 1`,
     [today],
   );
-  const gst = taxCode.rows[0]?.code ?? null;
+  // The company's own default sales tax code, or the tax code for exports, comes first (EX15).
+  const gst = (await contactSalesTaxCodeFor(tx, locked.contactId)) ?? taxCode.rows[0]?.code ?? null;
   const { invoice } = await createInvoice(
     tx,
     {

@@ -126,6 +126,12 @@ async function seedOrganisationDatabase(organisation: ProvisioningRow): Promise<
         );
       }
     }
+    // ZERO is the tax code for exports to start with (EX1); Foreign trade stays off.
+    await client.query(
+      `update organisation_settings
+          set export_tax_code_id = (select id from tax_codes where code = 'ZERO' and category = 'zero_rated')
+        where export_tax_code_id is null`,
+    );
     await client.query("commit");
   } catch (error) {
     await client.query("rollback").catch(() => undefined);
