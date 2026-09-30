@@ -485,7 +485,7 @@ describeWithDatabase("foreign-currency bank accounts", () => {
     );
     const line = await lineOn(usd.id, "2026-08-06", "115.00");
     await expect(reconcile(line.id, { kind: "payments", allocations: [{ invoiceId, amount: "115.00" }] })).rejects.toThrow(
-      /Invoices and bills are in NZD, so they can't be paid from a USD statement line yet/,
+      /Invoice INV-0001 is in NZD, so it can't be paid from a USD statement line yet/,
     );
     expect((await run((tx) => confidentMatches(tx, usd.id))).find((entry) => entry.lineId === line.id)!.suggestion).toBeNull();
     await expect(

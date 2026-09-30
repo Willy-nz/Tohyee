@@ -8,6 +8,7 @@ import { LineItemPicker, useItems } from "@/components/items";
 import type { ItemList } from "@/lib/items/service";
 import type { InvoiceSummary } from "@/lib/invoices/service";
 import { useApiData } from "@/components/hooks";
+import { ExchangeRateField, useLastRate } from "@/components/fx";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { customerDefault, SalespersonField, useSalespeople } from "@/components/salespeople";
 import { TrackingSelects, useTracking } from "@/components/tracking";
@@ -186,6 +187,12 @@ function CreditNoteForm({
   const [idempotencyKey] = useState(() => newIdempotencyKey("credit-note"));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A customer in another currency gets credit notes in it, at a rate for its date (MC7).
+  const chosenCustomer = customers.find((contact) => contact.id === contactId);
+  const currencyCode = chosenCustomer ? (chosenCustomer.currencyCode ?? baseCurrency) : (creditNote?.currencyCode ?? baseCurrency);
+  const foreign = currencyCode !== baseCurrency;
+  const [typedRate, setTypedRate] = useState<string | null>(creditNote?.exchangeRate ?? null);
+  const suggestedRate = useLastRate(organisationId, currencyCode, baseCurrency, creditNoteDate);
 
   const hasTax = amountsMode !== "no_tax";
   const rates = new Map(taxCodes.map((taxCode) => [taxCode.code, taxCode.rate]));
@@ -236,6 +243,7 @@ function CreditNoteForm({
       customFields,
       salespersonId: salespersonId || null,
       returnInvoiceId: returnInvoiceId || null,
+      ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}),
     };
     try {
       const result = creditNote
@@ -271,6 +279,8 @@ function CreditNoteForm({
       <div className={ui.grid3}>
         <Field label="Customer">
           <select value={contactId} onChange={(event) => {
+              const next = customers.find((contact) => contact.id === event.target.value);
+              if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
               setContactId(event.target.value);
               if (!creditNote) {
                 const chosen = customers.find((contact) => contact.id === event.target.value);
@@ -293,6 +303,7 @@ function CreditNoteForm({
         <Field label="Credit note date" hint="Approving posts the credit note on this date.">
           <input type="date" value={creditNoteDate} onChange={(event) => setCreditNoteDate(event.target.value)} required />
         </Field>
+        <ExchangeRateField currencyCode={currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
         <SalespersonField setup={salespeople} value={salespersonId} onChange={setSalespersonId} />
         <Field label="Reference" hint="Optional, like the invoice it credits.">
           <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
@@ -456,7 +467,7 @@ function CreditNoteForm({
       <div className={ui.statRow} aria-live="polite">
         <Stat label={hasTax ? "Subtotal (excl. GST)" : "Subtotal"} value={money(amounts.subtotal)} />
         {hasTax ? <Stat label="GST" value={money(amounts.taxTotal)} /> : null}
-        <Stat label={`Total (${baseCurrency})`} value={money(amounts.total)} />
+        <Stat label={`Total (${currencyCode})`} value={money(amounts.total)} />
       </div>
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>

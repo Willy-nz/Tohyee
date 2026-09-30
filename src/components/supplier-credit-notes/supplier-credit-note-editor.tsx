@@ -7,6 +7,7 @@ import { AccountSelect, useAccounts } from "@/components/books";
 import { LineItemPicker, useItems } from "@/components/items";
 import type { ItemList } from "@/lib/items/service";
 import { useApiData } from "@/components/hooks";
+import { ExchangeRateField, useLastRate } from "@/components/fx";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate } from "@/components/invoices/invoice-editor";
@@ -130,6 +131,12 @@ function SupplierCreditNoteForm({
   const [idempotencyKey] = useState(() => newIdempotencyKey("supplier-credit-note"));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A supplier in another currency gets credit notes in it, at a rate for its date (MC10).
+  const chosenSupplier = suppliers.find((contact) => contact.id === contactId);
+  const currencyCode = chosenSupplier ? (chosenSupplier.currencyCode ?? baseCurrency) : (creditNote?.currencyCode ?? baseCurrency);
+  const foreign = currencyCode !== baseCurrency;
+  const [typedRate, setTypedRate] = useState<string | null>(creditNote?.exchangeRate ?? null);
+  const suggestedRate = useLastRate(organisationId, currencyCode, baseCurrency, creditNoteDate);
 
   const hasTax = amountsMode !== "no_tax";
   const rates = new Map(taxCodes.map((taxCode) => [taxCode.code, taxCode.rate]));
@@ -179,6 +186,7 @@ function SupplierCreditNoteForm({
         customFields: line.customFields,
       })),
       customFields,
+      ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}),
     };
     try {
       const result = creditNote
@@ -213,7 +221,15 @@ function SupplierCreditNoteForm({
       ) : null}
       <div className={ui.grid3}>
         <Field label="Supplier">
-          <select value={contactId} onChange={(event) => setContactId(event.target.value)} required>
+          <select
+            value={contactId}
+            onChange={(event) => {
+              const next = suppliers.find((contact) => contact.id === event.target.value);
+              if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
+              setContactId(event.target.value);
+            }}
+            required
+          >
             <option value="">Choose a supplier</option>
             {savedSupplier ? (
               <option value={savedSupplier.contactId}>{savedSupplier.contactName} (archived or not a supplier)</option>
@@ -239,6 +255,7 @@ function SupplierCreditNoteForm({
         <Field label="Credit note date" hint="The date on the supplier's credit note. Approving posts it on this date.">
           <input type="date" value={creditNoteDate} onChange={(event) => setCreditNoteDate(event.target.value)} required />
         </Field>
+        <ExchangeRateField currencyCode={currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
         <Field label="Reference" hint="Optional, like the bill it credits.">
           <input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={100} />
         </Field>
@@ -389,7 +406,7 @@ function SupplierCreditNoteForm({
       <div className={ui.statRow} aria-live="polite">
         <Stat label={hasTax ? "Subtotal (excl. GST)" : "Subtotal"} value={money(amounts.subtotal)} />
         {hasTax ? <Stat label="GST" value={money(amounts.taxTotal)} /> : null}
-        <Stat label={`Total (${baseCurrency})`} value={money(amounts.total)} />
+        <Stat label={`Total (${currencyCode})`} value={money(amounts.total)} />
       </div>
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>

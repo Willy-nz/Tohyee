@@ -342,7 +342,8 @@ function sourceLabel(tx: OrgTx, row: { document_label: string; person_email: str
 const SOURCES = `(
   select 'bill_line'::text as source_type, l.id as line_id, b.id as document_id,
          'Bill ' || b.supplier_invoice_number as document_label, c.name as contact_name, b.bill_date as date,
-         l.description, a.code as account_code, a.name as account_name, a.account_type, a.account_class, l.net_amount,
+         l.description, a.code as account_code, a.name as account_name, a.account_type, a.account_class,
+         coalesce(l.base_net_amount, l.net_amount) as net_amount,
          b.status = 'approved' as usable,
          null::text as person_email
     from bill_lines l join bills b on b.id = l.bill_id join contacts c on c.id = b.contact_id join accounts a on a.id = l.account_id

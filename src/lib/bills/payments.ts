@@ -6,9 +6,11 @@ import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
+import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
+import { clearedBase, exchangeRateFor, openBase, parseRateInput, realisedFxAccountCode, realisedLines } from "@/lib/fx/documents";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { cmp, dec, isZero, parseDecimalInput, toFixedString, toPlainString } from "@/lib/money/decimal";
+import { cmp, dec, isZero, parseDecimalInput, significantScale, sub, toFixedString, toPlainString } from "@/lib/money/decimal";
+import { convertAtRate } from "@/lib/money/fx";
 import { optionalSource, optionalString, requireId, requireIdempotencyKey } from "@/lib/validation";
 
 /**
@@ -43,6 +45,15 @@ export type SupplierPayment = {
   voidedAt: string | null;
   /** Set when it's one bill's part of a payment for several bills (SMP1-SMP6), which is voided as a whole. */
   batchId: string | null;
+  /**
+   * For a foreign-currency bill (MC10): the payment's rate, the base amount that left the bank account,
+   * the base amount it cleared from accounts payable (at the bill's rate) and the realised gain
+   * (negative for a loss). Null otherwise.
+   */
+  exchangeRate: string | null;
+  baseAmount: string | null;
+  baseCleared: string | null;
+  realisedGain: string | null;
 };
 
 type PaymentRow = {
@@ -65,12 +76,16 @@ type PaymentRow = {
   voided_by_email: string | null;
   voided_at: string | null;
   batch_id: string | null;
+  exchange_rate: string | null;
+  base_amount: string | null;
+  base_cleared: string | null;
+  realised_gain: string | null;
 };
 
 const PAYMENT_SELECT = `select p.id, p.bill_id, b.supplier_invoice_number, p.status, p.payment_date, p.amount,
        p.currency_code, p.bank_account_id, a.code as bank_account_code, a.name as bank_account_name, p.reference,
        p.journal_id, p.created_by_email, p.created_at, p.void_date, p.void_journal_id, p.voided_by_email, p.voided_at,
-       p.batch_id
+       p.batch_id, p.exchange_rate::text, p.base_amount::text, p.base_cleared::text, p.realised_gain::text
   from supplier_payments p
   join bills b on b.id = p.bill_id
   join accounts a on a.id = p.bank_account_id`;
@@ -96,6 +111,10 @@ function toPayment(row: PaymentRow): SupplierPayment {
     voidedByEmail: row.voided_by_email,
     voidedAt: row.voided_at,
     batchId: row.batch_id,
+    exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    baseAmount: row.base_amount === null ? null : toFixedString(dec(row.base_amount), 2),
+    baseCleared: row.base_cleared === null ? null : toFixedString(dec(row.base_cleared), 2),
+    realisedGain: row.realised_gain === null ? null : toFixedString(dec(row.realised_gain), 2),
   };
 }
 
@@ -152,12 +171,14 @@ function isUniqueViolation(error: unknown): boolean {
 
 /**
  * The account a payment is made from (example SP8): an active bank account
- * in the base currency.
+ * in the base currency, or, for a foreign-currency bill (MC10), in the
+ * bill's currency (`currency`).
  */
 export async function resolveBankAccount(
   tx: OrgTx,
   code: string,
-): Promise<{ id: string; code: string; name: string }> {
+  currency: string | null = null,
+): Promise<{ id: string; code: string; name: string; currencyCode: string | null }> {
   const result = await tx.query<{
     id: string;
     code: string;
@@ -179,12 +200,15 @@ export async function resolveBankAccount(
   if (!isBankOrCreditCard(row.account_type)) {
     throw new ValidationError(`${label} isn't a bank account, so payments can't be made from it. Choose a bank or credit card account.`);
   }
-  if (row.currency_code !== null) {
+  const accountCurrency = row.currency_code === tx.baseCurrency ? null : row.currency_code;
+  if (accountCurrency !== null && accountCurrency !== currency) {
     throw new ValidationError(
-      `${label} is in ${row.currency_code}. Payments are made from bank accounts in the base currency (${tx.baseCurrency}) only.`,
+      currency
+        ? `${label} is in ${accountCurrency}. A ${currency} bill is paid from a ${currency} or ${tx.baseCurrency} bank account (a payment in one currency from an account in another isn't supported yet).`
+        : `${label} is in ${accountCurrency}. Payments are made from bank accounts in the base currency (${tx.baseCurrency}) only.`,
     );
   }
-  return { id: row.id, code: row.code, name: row.name };
+  return { id: row.id, code: row.code, name: row.name, currencyCode: accountCurrency };
 }
 
 /**
@@ -203,23 +227,27 @@ export async function recordSupplierPayment(
     amount: unknown;
     bankAccountCode: unknown;
     reference?: unknown;
+    /** For a foreign-currency bill (MC10): base currency per 1 unit on the payment date; left out, the last rate used. */
+    exchangeRate?: unknown;
   },
 ): Promise<PaymentResult> {
   const billId = requireId(billIdInput, "billId");
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const paymentDate = parseIsoDate(command.paymentDate, "paymentDate");
-  // Approved bills are always in the base currency: it can't change once anything is posted.
-  const scale = currencyMinorUnits(tx.baseCurrency);
-  const amount = dec(parseDecimalInput(command.amount, "amount", { maxScale: scale }));
+  // In the bill's currency (MC10): checked against it once the bill is loaded.
+  const amount = dec(parseDecimalInput(command.amount, "amount", { maxScale: 4 }));
   const bankAccountCode = parseAccountCodeInput(command.bankAccountCode, "bankAccountCode");
   const reference = optionalString(command.reference, "reference", { maxLength: 100 });
+  const typedRate = parseRateInput(command.exchangeRate);
   const hash = requestHash("supplier_payment", {
     billId,
     paymentDate,
     amount: toPlainString(amount),
     bankAccountCode: bankAccountCode.toLowerCase(),
     reference,
+    // Only when sent, so earlier payments hash the same.
+    ...(typedRate != null ? { exchangeRate: typedRate } : {}),
   });
   const replay = async (): Promise<PaymentResult | null> => {
     const earlier = await findByKey(tx, "record", source, idempotencyKey);
@@ -251,6 +279,10 @@ export async function recordSupplierPayment(
       `The payment date can't be before the bill date (${bill.billDate}). Prepayments aren't supported yet.`,
     );
   }
+  const scale = currencyMinorUnits(bill.currencyCode);
+  if (significantScale(amount) > scale) {
+    throw new ValidationError(scale === 0 ? "amount must be a whole number." : `amount can have at most ${scale} decimal places.`);
+  }
   const due = dec(bill.amountDue!);
   if (isZero(due)) {
     throw new ConflictError(`${billLabel(bill)} is already paid in full.`);
@@ -259,6 +291,21 @@ export async function recordSupplierPayment(
     throw new ValidationError(
       `The payment of ${toFixedString(amount, scale)} is more than the amount due (${bill.amountDue}). Overpayments aren't supported yet.`,
     );
+  }
+  if (bill.exchangeRate !== null) {
+    return recordForeignSupplierPayment(tx, bill, {
+      source,
+      idempotencyKey,
+      hash,
+      paymentDate,
+      amount: toFixedString(amount, scale),
+      bankAccountCode,
+      reference,
+      typedRate,
+    });
+  }
+  if (typedRate != null) {
+    throw new ValidationError(`${billLabel(bill)} is in ${tx.baseCurrency}, so its payments have no exchange rate.`);
   }
   const bank = await resolveBankAccount(tx, bankAccountCode);
   const payable = await payableAccountCode(tx);
@@ -335,6 +382,127 @@ export async function recordSupplierPayment(
 }
 
 /**
+ * A payment of a foreign-currency bill (example MC10), the mirror of a
+ * customer's (MC5): in the bill's currency, from a bank account in that
+ * currency or the base currency, at the payment's own rate. The bank account
+ * is credited amount x rate, rounded once; accounts payable is cleared at the
+ * bill's carrying value of what's paid; the difference is a realised gain
+ * (paying less than it was carried at) or loss on 7020.
+ */
+async function recordForeignSupplierPayment(
+  tx: OrgTx,
+  bill: Bill,
+  input: {
+    source: string;
+    idempotencyKey: string;
+    hash: string;
+    paymentDate: string;
+    amount: string;
+    bankAccountCode: string;
+    reference: string | null;
+    typedRate: string | null | undefined;
+  },
+): Promise<PaymentResult> {
+  const currency = bill.currencyCode;
+  const bank = await resolveBankAccount(tx, input.bankAccountCode, currency);
+  const rate = (await exchangeRateFor(tx, { currencyCode: currency, date: input.paymentDate, typed: input.typedRate, what: "payment" }))!;
+  const payable = await payableAccountCode(tx);
+  const baseAmount = convertAtRate(input.amount, rate);
+  const cleared = clearedBase({ amount: bill.amountDue!, base: await openBase(tx, "bill", bill.id) }, input.amount);
+  const gain = toFixedString(sub(dec(cleared), dec(baseAmount)), 2);
+  const gainLines = isZero(dec(gain)) ? [] : realisedLines(await realisedFxAccountCode(tx), gain, `bill ${bill.supplierInvoiceNumber} paid at ${rate}`);
+
+  const next = await tx.query<{ id: string }>("select nextval(pg_get_serial_sequence('supplier_payments', 'id'))::text as id");
+  const paymentId = next.rows[0].id;
+  const supplier = bill.contactName;
+  const posted = await postJournalBody(
+    tx,
+    "supplier_payment:record",
+    paymentId,
+    parseJournalBody(
+      tx,
+      {
+        postingDate: input.paymentDate,
+        reference: input.reference ?? bill.supplierInvoiceNumber,
+        description: `Payment to ${supplier} for bill ${bill.supplierInvoiceNumber} (${currency} ${input.amount} at ${rate})`,
+        lines: [
+          {
+            accountCode: payable,
+            debitAmount: cleared,
+            creditAmount: "0",
+            description: supplier,
+            foreign: { currencyCode: currency, amount: input.amount, rate: bill.exchangeRate!, kind: "carrying_value" as const },
+          },
+          {
+            accountCode: bank.code,
+            debitAmount: "0",
+            creditAmount: baseAmount,
+            description: supplier,
+            ...(bank.currencyCode ? { foreign: { currencyCode: currency, amount: input.amount, rate, kind: "rate" as const } } : {}),
+          },
+          ...gainLines,
+        ],
+      },
+      { internal: true },
+    ),
+    { origin: "supplier_payment" },
+  );
+  try {
+    await tx.query(
+      `insert into supplier_payments (
+         id, command_source, idempotency_key, request_hash, bill_id, payment_date, amount, currency_code,
+         bank_account_id, reference, journal_id, created_by_user_id, created_by_email,
+         exchange_rate, base_amount, base_cleared, realised_gain
+       )
+       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric, $16::numeric, $17::numeric)`,
+      [
+        paymentId,
+        input.source,
+        input.idempotencyKey,
+        input.hash,
+        bill.id,
+        input.paymentDate,
+        input.amount,
+        currency,
+        bank.id,
+        input.reference,
+        posted.journal.id,
+        tx.actor.userId,
+        tx.actor.email,
+        rate,
+        baseAmount,
+        cleared,
+        gain,
+      ],
+    );
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ConflictError("That idempotency key was already used for a different payment. Use a new key for a new payment.");
+    }
+    throw error;
+  }
+  await writeAuditEvent(tx, {
+    eventType: "supplier_payment.recorded",
+    entityType: "supplier_payment",
+    entityId: paymentId,
+    details: {
+      billId: bill.id,
+      supplierInvoiceNumber: bill.supplierInvoiceNumber,
+      paymentDate: input.paymentDate,
+      amount: input.amount,
+      currencyCode: currency,
+      exchangeRate: rate,
+      baseAmount,
+      baseCleared: cleared,
+      realisedGain: gain,
+      bankAccountCode: bank.code,
+      journalId: posted.journal.id,
+    },
+  });
+  return { created: true, payment: await getPayment(tx, paymentId), bill: await getBill(tx, bill.id) };
+}
+
+/**
  * Voids a payment (example SP4): posts the exact reversal of its journal on
  * the void date, which must be in an open period and not before the payment.
  * The amount is due again. A payment can only be voided once.
@@ -400,8 +568,9 @@ export async function voidSupplierPayment(
         creditAmount: line.debitAmount,
         description: line.description,
         tracking: line.tracking,
+        ...sameForeign(line),
       })),
-    }),
+    }, { internal: true }),
     { origin: "supplier_payment", relatedJournalId: original.id, correctionKind: "reversal" },
   );
 

@@ -23,6 +23,8 @@ function nextDay(date: string): string {
   return next.toISOString().slice(0, 10);
 }
 
+type OpenBalance = { accountId: string; accountCode: string; accountName: string; currencyCode: string; foreign: string; base: string };
+
 function RevaluationForm({
   organisationId,
   accounts,
@@ -43,8 +45,13 @@ function RevaluationForm({
   const [key, setKey] = useState(() => newIdempotencyKey("fx"));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Open foreign-currency invoices and bills on accounts receivable and payable (MC8), one closing rate each.
+  const open = useApiData<{ balances: OpenBalance[] }>(date ? "/api/ledger/revaluations/open-balances" : null, { organisationId, asAt: date });
+  const [openRates, setOpenRates] = useState<Record<string, string>>({});
+  const openKey = (balance: OpenBalance) => `${balance.accountCode}|${balance.currencyCode}`;
+  const openBalances = open.data?.balances ?? [];
 
-  if (foreignAccounts.length === 0) {
+  if (foreignAccounts.length === 0 && openBalances.length === 0) {
     return (
       <Empty>
         There are no foreign-currency accounts yet. In the chart of accounts, set a currency on the bank, receivable or
@@ -71,16 +78,24 @@ function RevaluationForm({
           rateSource,
           unrealisedGainAccountCode: gain,
           unrealisedLossAccountCode: loss,
-          balances: rows.map((row) => ({
-            accountCode: row.accountCode,
-            // Blank: the ledger's foreign balance (FXB7).
-            foreignAmount: row.foreignAmount.trim() || undefined,
-            closingRate: row.closingRate,
-          })),
+          balances: [
+            ...rows
+              .filter((row) => row.accountCode || row.closingRate)
+              .map((row) => ({
+                accountCode: row.accountCode,
+                // Blank: the ledger's foreign balance (FXB7).
+                foreignAmount: row.foreignAmount.trim() || undefined,
+                closingRate: row.closingRate,
+              })),
+            ...openBalances
+              .filter((balance) => (openRates[openKey(balance)] ?? "").trim())
+              .map((balance) => ({ accountCode: balance.accountCode, currencyCode: balance.currencyCode, closingRate: openRates[openKey(balance)].trim() })),
+          ],
         },
       });
       setKey(newIdempotencyKey("fx"));
       setRows([blankRow()]);
+      setOpenRates({});
       setReference("");
       onPosted(result.run);
     } catch (caught) {
@@ -148,7 +163,7 @@ function RevaluationForm({
                     accounts={foreignAccounts}
                     value={row.accountCode}
                     onChange={(code) => setRows((current) => current.map((entry) => (entry.key === row.key ? { ...entry, accountCode: code } : entry)))}
-                    required
+                    required={openBalances.length === 0}
                   />
                 </td>
                 <td>
@@ -172,7 +187,7 @@ function RevaluationForm({
                     onChange={(event) =>
                       setRows((current) => current.map((entry) => (entry.key === row.key ? { ...entry, closingRate: event.target.value } : entry)))
                     }
-                    required
+                    required={openBalances.length === 0 || row.accountCode !== ""}
                   />
                 </td>
                 <td>
@@ -190,6 +205,45 @@ function RevaluationForm({
           </tbody>
         </table>
       </div>
+      {openBalances.length > 0 ? (
+        <div className={ui.tableWrap}>
+          <table className={ui.table}>
+            <thead>
+              <tr>
+                <th>Open foreign-currency invoices and bills</th>
+                <th className={ui.num}>Open in that currency</th>
+                <th className={ui.num}>At their own rates</th>
+                <th className={ui.num}>Closing rate (base per 1)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {openBalances.map((balance) => (
+                <tr key={openKey(balance)}>
+                  <td>
+                    {balance.accountCode} · {balance.accountName} · {balance.currencyCode}
+                  </td>
+                  <td className={ui.num}>
+                    {balance.currencyCode} {formatMoney(balance.foreign)}
+                  </td>
+                  <td className={ui.num}>
+                    <Money value={balance.base} />
+                  </td>
+                  <td>
+                    <input
+                      aria-label={`Closing rate for ${balance.accountCode} ${balance.currencyCode}`}
+                      className={ui.num}
+                      inputMode="decimal"
+                      value={openRates[openKey(balance)] ?? ""}
+                      onChange={(event) => setOpenRates((current) => ({ ...current, [openKey(balance)]: event.target.value }))}
+                      placeholder="Leave blank to skip"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
       <div className={ui.actions}>
         <Button variant="secondary" onClick={() => setRows((current) => [...current, blankRow()])}>
           Add account
@@ -205,6 +259,7 @@ function RevaluationForm({
 
 function FxRevaluation({ organisationId }: { organisationId: string }) {
   const accounts = useAccounts(organisationId);
+  const accountsHaveCurrency = (code: string) => Boolean(accounts.data?.accounts.find((account) => account.code === code)?.currencyCode);
   const runs = useApiData<{ revaluations: FxRevaluationRun[] }>("/api/ledger/revaluations", { organisationId });
   const [message, setMessage] = useState<string | null>(null);
   return (
@@ -255,6 +310,7 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
                   <tr key={item.lineOrder}>
                     <td>
                       {item.accountCode} · {item.accountName}
+                      {item.currencyCode && !accountsHaveCurrency(item.accountCode) ? ` · ${item.currencyCode}` : ""}
                     </td>
                     <td className={ui.num}>
                       {item.currencyCode} {formatMoney(item.foreignAmount)}

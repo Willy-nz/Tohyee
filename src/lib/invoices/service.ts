@@ -20,13 +20,23 @@ import {
   type AmountsMode,
   type PaidStatus,
 } from "@/lib/invoices/amounts";
-import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
+import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
+import {
+  assertForeignLinesSupported,
+  assertForeignSalesBasis,
+  contactCurrency,
+  convertDocumentLines,
+  exchangeRateFor,
+  parseRateInput,
+} from "@/lib/fx/documents";
+import type { TaxCategory } from "@/lib/tax/categories";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import {
   add,
   dec,
   isZero,
+  sub,
   parseDecimalInput,
   toFixedString,
   toPlainString,
@@ -76,6 +86,9 @@ export type InvoiceLine = LineItemFields & {
   /** Tracking categories (TC3): category id -> value id. */
   tracking: TrackingTags;
   customFields: CustomValues;
+  /** On a foreign-currency invoice: the net amount and GST in the base currency (MC2); null otherwise. */
+  baseNetAmount: string | null;
+  baseTaxAmount: string | null;
 };
 
 export type InvoiceSummary = {
@@ -92,6 +105,14 @@ export type InvoiceSummary = {
   subtotal: string;
   taxTotal: string;
   total: string;
+  /** Base currency per 1 unit of the invoice's currency; null for a base-currency invoice (MC2). */
+  exchangeRate: string | null;
+  /** The base-currency amounts of a foreign-currency invoice (its lines converted one by one); null otherwise. */
+  baseSubtotal: string | null;
+  baseTaxTotal: string | null;
+  baseTotal: string | null;
+  /** On an approved foreign-currency invoice: the base value of what's still due, at the invoice's rate (MC6). */
+  amountDueBase: string | null;
   /** The sum of the invoice's active payments (examples CP1-CP4). */
   amountPaid: string;
   /** The sum of the credit applied to the invoice from credit notes (examples CN3, CN4, CN7). */
@@ -131,7 +152,12 @@ export type InvoiceInput = {
   lines?: unknown;
   customFields?: unknown;
   salespersonId?: unknown;
+  /** For a customer in another currency: base currency per 1 unit (MC2). Left out, the last rate used is taken. */
+  exchangeRate?: unknown;
 };
+
+/** Whether a path may make documents in a currency other than the base (only ones entered directly; MC11). */
+export type ForeignOption = { foreignCurrency?: boolean; feature?: string };
 
 const MAX_LINES = 200;
 /** Quantities and unit prices allow up to 4 decimal places. */
@@ -153,6 +179,11 @@ type InvoiceRow = {
   total: string;
   amount_paid: string;
   amount_credited: string;
+  exchange_rate: string | null;
+  base_subtotal: string | null;
+  base_tax_total: string | null;
+  base_total: string | null;
+  base_settled: string;
   approval_journal_id: string | null;
   approved_at: string | null;
   approved_by_email: string | null;
@@ -173,7 +204,8 @@ const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name 
   i.due_date, i.reference, i.amounts_mode, i.currency_code, i.subtotal, i.tax_total, i.total,
   paid.amount_paid, credited.amount_credited, i.approval_journal_id, i.approved_at, i.approved_by_email, i.void_date, i.void_journal_id,
   i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at, i.custom_fields,
-  i.salesperson_id, sp.name as salesperson_name, i.is_opening_balance`;
+  i.salesperson_id, sp.name as salesperson_name, i.is_opening_balance,
+  i.exchange_rate::text, i.base_subtotal::text, i.base_tax_total::text, i.base_total::text, base_settled.base_settled::text`;
 
 /**
  * Invoices with their customer, what their active payments paid on them (a
@@ -193,7 +225,13 @@ const SUMMARY_FROM = `sales_invoices i
                       where a.invoice_id = i.id and a.status = 'active'), 0)
          + coalesce((select sum(o.amount) from customer_overpayment_applications o
                       where o.invoice_id = i.id and o.status = 'active'), 0) as amount_credited
-  ) credited`;
+  ) credited
+  cross join lateral (
+    select coalesce((select sum(p.base_cleared) from customer_payments p
+                      where p.invoice_id = i.id and p.status = 'active'), 0)
+         + coalesce((select sum(a.invoice_base) from sales_credit_note_applications a
+                      where a.invoice_id = i.id and a.status = 'active'), 0) as base_settled
+  ) base_settled`;
 
 type LineRow = LineItemRow & {
   line_order: number;
@@ -211,7 +249,11 @@ type LineRow = LineItemRow & {
   tax_amount: string;
   tracking: TrackingTags;
   custom_fields: CustomValues;
+  base_net_amount: string | null;
+  base_tax_amount: string | null;
 };
+
+const baseMoney = (value: string | null) => (value === null ? null : toFixedString(dec(value), 2));
 
 function toSummary(row: InvoiceRow): InvoiceSummary {
   const scale = currencyMinorUnits(row.currency_code);
@@ -231,6 +273,11 @@ function toSummary(row: InvoiceRow): InvoiceSummary {
     subtotal: row.subtotal,
     taxTotal: row.tax_total,
     total: row.total,
+    exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    baseSubtotal: baseMoney(row.base_subtotal),
+    baseTaxTotal: baseMoney(row.base_tax_total),
+    baseTotal: baseMoney(row.base_total),
+    amountDueBase: approved && row.base_total !== null ? toFixedString(sub(dec(row.base_total), dec(row.base_settled)), 2) : null,
     amountPaid: payment.amountPaid,
     amountCredited: toFixedString(dec(row.amount_credited), scale),
     amountDue: approved ? payment.amountDue : null,
@@ -270,6 +317,8 @@ function toLine(row: LineRow): InvoiceLine {
     taxAmount: row.tax_amount,
     tracking: row.tracking ?? {},
     customFields: row.custom_fields ?? {},
+    baseNetAmount: baseMoney(row.base_net_amount),
+    baseTaxAmount: baseMoney(row.base_tax_amount),
   };
 }
 
@@ -297,6 +346,8 @@ type DraftDetails = {
   customInput: Record<string, unknown> | undefined;
   /** As sent: undefined when not sent (the customer's default applies), null for none. */
   salespersonInput: string | null | undefined;
+  /** As sent: undefined or null when not given (a foreign-currency invoice then takes the last rate used, MC3). */
+  exchangeRateInput?: string | null;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -306,6 +357,10 @@ type ResolvedDraft = DraftDetails & {
   subtotal: string;
   taxTotal: string;
   total: string;
+  exchangeRate: string | null;
+  baseSubtotal: string | null;
+  baseTaxTotal: string | null;
+  baseTotal: string | null;
   customFields: CustomValues;
   customCtx: CustomFieldContext;
   salespersonId: string | null;
@@ -323,6 +378,8 @@ type ResolvedDraft = DraftDetails & {
     tracking: TrackingTags;
     accountClass: AccountClass;
     customFields: CustomValues;
+    baseNetAmount: string | null;
+    baseTaxAmount: string | null;
   }>;
 };
 
@@ -394,6 +451,7 @@ function parseDraft(input: InvoiceInput, options: { dueFromTerms?: boolean } = {
     lines,
     customInput: parseCustomInput(input.customFields, ""),
     salespersonInput: parseSalespersonInput(input.salespersonId),
+    exchangeRateInput: parseRateInput(input.exchangeRate),
   };
 }
 
@@ -410,6 +468,7 @@ function hashPayload(draft: DraftDetails): Record<string, unknown> {
     // Values that weren't sent stay out, so older requests hash the same.
     ...(draft.customInput !== undefined ? { customFields: draft.customInput } : {}),
     ...(draft.salespersonInput !== undefined ? { salespersonId: draft.salespersonInput } : {}),
+    ...(draft.exchangeRateInput != null ? { exchangeRate: draft.exchangeRateInput } : {}),
   };
 }
 
@@ -428,8 +487,9 @@ export async function resolveSalesDraft(
   keptFields: ReadonlySet<string> = new Set(),
   keptSalesperson: string | null = null,
   keptItems: ReadonlyArray<LineItemRef> = [],
+  foreign: ForeignOption = {},
 ): Promise<ResolvedDraft> {
-  return resolveDraft(tx, sent, kept, keptFields, keptSalesperson, keptItems);
+  return resolveDraft(tx, sent, kept, keptFields, keptSalesperson, keptItems, foreign);
 }
 
 async function resolveDraft(
@@ -439,7 +499,20 @@ async function resolveDraft(
   keptFields: ReadonlySet<string> = new Set(),
   keptSalesperson: string | null = null,
   keptItems: ReadonlyArray<LineItemRef> = [],
+  foreign: ForeignOption = { foreignCurrency: true },
 ): Promise<ResolvedDraft> {
+  // A customer in another currency gets invoices in it (MC1), entered directly only (MC11).
+  const currencyCode = await contactCurrency(tx, sent.contactId);
+  if (currencyCode !== tx.baseCurrency) {
+    if (!foreign.foreignCurrency) {
+      const name = (await tx.query<{ name: string }>("select name from contacts where id = $1", [sent.contactId])).rows[0]?.name ?? "This customer";
+      throw new ValidationError(
+        `${name} is in ${currencyCode}. ${foreign.feature ?? "This"} for customers in a currency other than ${tx.baseCurrency} isn't supported yet (refused rather than guessed): raise a ${currencyCode} invoice directly instead.`,
+      );
+    }
+    // Item prices are in the base currency, so a foreign-currency line gives its own (MC11).
+    assertForeignLinesSupported("invoice", currencyCode, tx.baseCurrency, [], sent.lines);
+  }
   // Blanks on item lines are filled from the item (IT2); what was sent is kept.
   const draft: DraftDetails = { ...sent, lines: await fillLinesFromItems(tx, sent.lines, { side: "sale", contactId: sent.contactId, noTax: sent.amountsMode === "no_tax" }) };
   const salesperson = await resolveSalesperson(tx, draft.salespersonInput, { contactId: draft.contactId, kept: keptSalesperson });
@@ -472,10 +545,11 @@ async function resolveDraft(
     id: string;
     code: string;
     rate: string;
+    category: TaxCategory;
     is_active: boolean;
     effective_from: string;
     effective_to: string | null;
-  }>("select id, code, rate, is_active, effective_from, effective_to from tax_codes where code = any($1::text[])", [
+  }>("select id, code, rate, category, is_active, effective_from, effective_to from tax_codes where code = any($1::text[])", [
     wantedTaxCodes,
   ]);
   const taxCodesByCode = new Map(taxCodes.rows.map((row) => [row.code, row]));
@@ -496,6 +570,7 @@ async function resolveDraft(
     }
     let taxCodeId: string | null = null;
     let taxRate = "0";
+    let taxCategory: TaxCategory | null = null;
     if (line.taxCode !== null) {
       const taxCode = taxCodesByCode.get(line.taxCode);
       if (!taxCode) {
@@ -513,20 +588,36 @@ async function resolveDraft(
       }
       taxCodeId = taxCode.id;
       taxRate = toPlainString(dec(taxCode.rate));
+      taxCategory = taxCode.category;
     }
-    return { ...line, accountId: account.id, accountCode: account.code, accountClass: account.account_class as AccountClass, taxCodeId, taxRate };
+    return { ...line, accountId: account.id, accountCode: account.code, accountClass: account.account_class as AccountClass, taxCodeId, taxRate, taxCategory };
   });
 
   const lineItems = await resolveLineItems(tx, draft.lines, "sale", keptItems);
-  const scale = currencyMinorUnits(tx.baseCurrency);
+  const scale = currencyMinorUnits(currencyCode);
   const amounts = calculateInvoice(draft.amountsMode, lines, scale);
   amounts.lines.forEach((line, index) => {
     if (isZero(dec(line.lineAmount))) {
       throw new ValidationError(
-        `Line ${index + 1} comes to ${line.lineAmount} once rounded to ${tx.baseCurrency}. Check its quantity and unit price.`,
+        `Line ${index + 1} comes to ${line.lineAmount} once rounded to ${currencyCode}. Check its quantity and unit price.`,
       );
     }
   });
+  // A foreign-currency invoice (MC2): no standard-rated GST or stock yet; a rate for its date; each line converted.
+  let exchangeRate: string | null = null;
+  let base: ReturnType<typeof convertDocumentLines> | null = null;
+  if (currencyCode !== tx.baseCurrency) {
+    assertForeignLinesSupported(
+      "invoice",
+      currencyCode,
+      tx.baseCurrency,
+      lines.map((line, index) => ({ taxCategory: line.taxCategory, itemType: lineItems[index].itemType })),
+      [],
+    );
+    await assertForeignSalesBasis(tx, "invoice", currencyCode);
+    exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.invoiceDate, typed: draft.exchangeRateInput, what: "invoice" });
+    base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
+  }
 
   return {
     ...draft,
@@ -534,10 +625,14 @@ async function resolveDraft(
     customCtx: custom.ctx,
     salespersonId: salesperson.id,
     contactName: customer.name,
-    currencyCode: tx.baseCurrency,
+    currencyCode,
     subtotal: amounts.subtotal,
     taxTotal: amounts.taxTotal,
     total: amounts.total,
+    exchangeRate,
+    baseSubtotal: base?.baseSubtotal ?? null,
+    baseTaxTotal: base?.baseTaxTotal ?? null,
+    baseTotal: base?.baseTotal ?? null,
     resolvedLines: lines.map((line, index) => ({
       description: line.description,
       quantity: line.quantity,
@@ -551,6 +646,8 @@ async function resolveDraft(
       tracking: line.tracking,
       accountClass: line.accountClass,
       customFields: custom.lines[index],
+      baseNetAmount: base?.lines[index].baseNetAmount ?? null,
+      baseTaxAmount: base?.lines[index].baseTaxAmount ?? null,
     })),
   };
 }
@@ -583,6 +680,8 @@ type StoredHeader = {
   total: string;
   customFields: CustomValues;
   salespersonId: string | null;
+  exchangeRate: string | null;
+  baseTotal: string | null;
 };
 
 const plain = (value: string) => toPlainString(dec(value));
@@ -601,6 +700,8 @@ function headerState(invoice: StoredHeader): string {
     plain(invoice.total),
     customValuesKey(invoice.customFields),
     invoice.salespersonId,
+    invoice.exchangeRate === null ? null : plain(invoice.exchangeRate),
+    invoice.baseTotal === null ? null : plain(invoice.baseTotal),
   ]);
 }
 
@@ -667,11 +768,30 @@ function draftOf(invoice: Invoice): DraftDetails {
     })),
     customInput: invoice.customFields,
     salespersonInput: invoice.salespersonId,
+    exchangeRateInput: invoice.exchangeRate,
   };
 }
 
 async function insertLines(tx: OrgTx, invoiceId: string, lines: ResolvedDraft["resolvedLines"]): Promise<void> {
   await insertSalesLines(tx, "sales_invoice_lines", invoiceId, lines);
+  await setBaseLineAmounts(tx, "sales_invoice_lines", "invoice_id", invoiceId, lines);
+}
+
+/** A foreign-currency document's lines' base amounts (MC2), set on a draft's lines once they're saved. */
+export async function setBaseLineAmounts(
+  tx: OrgTx,
+  table: "sales_invoice_lines" | "sales_credit_note_lines" | "bill_lines" | "supplier_credit_note_lines",
+  parentColumn: "invoice_id" | "credit_note_id" | "bill_id",
+  parentId: string,
+  lines: ReadonlyArray<{ baseNetAmount: string | null; baseTaxAmount: string | null }>,
+): Promise<void> {
+  for (const [index, line] of lines.entries()) {
+    if (line.baseNetAmount === null) continue;
+    await tx.query(
+      `update ${table} set base_net_amount = $3::numeric, base_tax_amount = $4::numeric where ${parentColumn} = $1 and line_order = $2`,
+      [parentId, index + 1, line.baseNetAmount, line.baseTaxAmount],
+    );
+  }
 }
 
 /** The line tables that hold sales lines: invoices, quotes (QT1) and repeating invoice templates (RI2). */
@@ -767,7 +887,8 @@ export async function loadSalesLines(tx: OrgTx, table: SalesLineTable, parentId:
   const lines = await tx.query<LineRow>(
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
-            l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS}
+            l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS},
+            ${table === "sales_invoice_lines" ? "l.base_net_amount::text, l.base_tax_amount::text" : "null as base_net_amount, null as base_tax_amount"}
        from ${table} l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
@@ -832,6 +953,7 @@ export async function listInvoices(
 export async function createInvoice(
   tx: OrgTx,
   input: InvoiceInput & { source?: unknown; idempotencyKey: unknown },
+  foreign: ForeignOption = {},
 ): Promise<{ created: boolean; invoice: Invoice }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
@@ -851,12 +973,14 @@ export async function createInvoice(
     draft.dueDate = fromTerms;
   }
 
-  const resolved = await resolveDraft(tx, draft);
+  const resolved = await resolveDraft(tx, draft, new Set(), new Set(), null, [], foreign);
   const inserted = await tx.query<{ id: string }>(
     `insert into sales_invoices (command_source, idempotency_key, request_hash, contact_id, invoice_date, due_date,
                                  reference, amounts_mode, currency_code, subtotal, tax_total, total,
-                                 created_by_user_id, created_by_email)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14)
+                                 created_by_user_id, created_by_email,
+                                 exchange_rate, base_subtotal, base_tax_total, base_total)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14,
+             $15::numeric, $16::numeric, $17::numeric, $18::numeric)
      on conflict (command_source, idempotency_key) do nothing
      returning id`,
     [
@@ -874,6 +998,10 @@ export async function createInvoice(
       resolved.total,
       tx.actor.userId,
       tx.actor.email,
+      resolved.exchangeRate,
+      resolved.baseSubtotal,
+      resolved.baseTaxTotal,
+      resolved.baseTotal,
     ],
   );
   const invoiceId = inserted.rows[0]?.id;
@@ -925,6 +1053,13 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
     lines: input.lines === undefined ? saved.lines : input.lines,
     customFields: input.customFields === undefined ? saved.customInput : input.customFields,
     salespersonId: input.salespersonId === undefined ? saved.salespersonInput : input.salespersonId,
+    // Not sent: the saved rate stays while the customer does (MC3).
+    exchangeRate:
+      input.exchangeRate !== undefined
+        ? input.exchangeRate
+        : input.contactId === undefined || String(input.contactId) === saved.contactId
+          ? saved.exchangeRateInput
+          : undefined,
   });
   const resolved = await resolveDraft(
     tx,
@@ -939,7 +1074,7 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
     return current;
   }
 
-  const changed: string[] = (["contactId", "invoiceDate", "dueDate", "reference", "amountsMode"] as const).filter(
+  const changed: string[] = (["contactId", "invoiceDate", "dueDate", "reference", "amountsMode", "exchangeRate"] as const).filter(
     (field) => resolved[field] !== current[field],
   );
   if (!same.lines) {
@@ -955,6 +1090,7 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
     `update sales_invoices
         set contact_id = $2, invoice_date = $3, due_date = $4, reference = $5, amounts_mode = $6,
             currency_code = $7, subtotal = $8::numeric, tax_total = $9::numeric, total = $10::numeric,
+            exchange_rate = $11::numeric, base_subtotal = $12::numeric, base_tax_total = $13::numeric, base_total = $14::numeric,
             updated_at = now()
       where id = $1`,
     [
@@ -968,6 +1104,10 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
       resolved.subtotal,
       resolved.taxTotal,
       resolved.total,
+      resolved.exchangeRate,
+      resolved.baseSubtotal,
+      resolved.baseTaxTotal,
+      resolved.baseTotal,
     ],
   );
   await tx.query("delete from sales_invoice_lines where invoice_id = $1", [current.id]);
@@ -1120,12 +1260,6 @@ export async function approveInvoice(
   if (current.status !== "draft") {
     throw new ConflictError(`${invoiceLabel(current)} is already ${current.status}.`);
   }
-  if (current.currencyCode !== tx.baseCurrency) {
-    throw new ValidationError(
-      `This draft was saved in ${current.currencyCode}, but the base currency is now ${tx.baseCurrency}. Open it and save it again first.`,
-    );
-  }
-
   const resolved = await resolveDraft(
     tx,
     draftOf(current),
@@ -1157,17 +1291,28 @@ export async function approveInvoice(
 
   const { sequence, invoiceNumber } = await takeInvoiceNumber(tx);
   const scale = currencyMinorUnits(tx.baseCurrency);
+  // A foreign-currency invoice posts its base amounts, with its foreign amount on accounts receivable (MC2).
+  const foreignCurrency = resolved.exchangeRate !== null;
   // One revenue line per account and set of tracking tags (TC3).
   const revenue = new Map<string, { code: string; amount: Decimal; tracking: TrackingTags }>();
   for (const line of resolved.resolvedLines) {
     const key = `${line.accountId}|${trackingKey(line.tracking)}`;
     const entry = revenue.get(key) ?? { code: line.accountCode, amount: ZERO_DECIMAL, tracking: line.tracking };
-    entry.amount = add(entry.amount, dec(line.netAmount));
+    entry.amount = add(entry.amount, dec(foreignCurrency ? line.baseNetAmount! : line.netAmount));
     revenue.set(key, entry);
   }
   const customer = resolved.contactName;
+  const taxTotal = foreignCurrency ? resolved.baseTaxTotal! : resolved.taxTotal;
   const journalLines = [
-    { accountCode: accounts.receivable, debitAmount: resolved.total, creditAmount: "0", description: customer },
+    {
+      accountCode: accounts.receivable,
+      debitAmount: foreignCurrency ? resolved.baseTotal! : resolved.total,
+      creditAmount: "0",
+      description: customer,
+      ...(foreignCurrency
+        ? { foreign: { currencyCode: resolved.currencyCode, amount: resolved.total, rate: resolved.exchangeRate!, kind: "document" as const } }
+        : {}),
+    },
     ...[...revenue.values()]
       .filter((entry) => !isZero(entry.amount))
       .map((entry) => ({
@@ -1177,9 +1322,7 @@ export async function approveInvoice(
         description: customer,
         tracking: entry.tracking,
       })),
-    ...(isZero(dec(resolved.taxTotal))
-      ? []
-      : [{ accountCode: accounts.gst, debitAmount: "0", creditAmount: resolved.taxTotal, description: "GST" }]),
+    ...(isZero(dec(taxTotal)) ? [] : [{ accountCode: accounts.gst, debitAmount: "0", creditAmount: taxTotal, description: "GST" }]),
   ];
   // Stock items move stock and post cost of sales in the same journal (ST1-ST11).
   const stock = await planDocumentStock(
@@ -1194,12 +1337,16 @@ export async function approveInvoice(
     tx,
     "invoice:approval",
     invoiceId,
-    parseJournalBody(tx, {
-      postingDate: current.invoiceDate,
-      reference: invoiceNumber,
-      description: `Invoice ${invoiceNumber} to ${customer}`,
-      lines: journalLines,
-    }),
+    parseJournalBody(
+      tx,
+      {
+        postingDate: current.invoiceDate,
+        reference: invoiceNumber,
+        description: `Invoice ${invoiceNumber} to ${customer}`,
+        lines: journalLines,
+      },
+      { internal: true },
+    ),
     { origin: "invoice" },
   );
   await stock?.planner.record(posted.journal.id);
@@ -1322,10 +1469,11 @@ export async function voidInvoice(
           creditAmount: line.debitAmount,
           description: line.description,
           tracking: line.tracking,
+          ...sameForeign(line),
         })),
         ...(voidStock?.journalLines ?? []),
       ],
-    }),
+    }, { internal: true }),
     { origin: "invoice", relatedJournalId: original.id, correctionKind: "reversal" },
   );
   await voidStock?.planner.record(posted.journal.id);

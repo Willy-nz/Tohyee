@@ -25,6 +25,7 @@ import type { CustomerSetup } from "@/lib/customers/service";
 import type { SalespeopleSetup } from "@/lib/salespeople/service";
 import { type CustomFieldSetup, type CustomFieldUse, type CustomValues, fieldsFor } from "@/lib/custom-fields/values";
 import { formatGstNumber } from "@/lib/format";
+import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 type Draft = {
@@ -44,6 +45,8 @@ type Draft = {
   customer: CustomerDraft;
   /** A supplier's payment terms (SPT1); "" for none. */
   supplierPaymentTermId: string;
+  /** "" for the base currency (MC1). */
+  currencyCode: string;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -59,6 +62,7 @@ const EMPTY_DRAFT: Draft = {
   isProspect: false,
   customer: EMPTY_CUSTOMER_DRAFT,
   supplierPaymentTermId: "",
+  currencyCode: "",
 };
 
 function draftFrom(contact: Contact): Draft {
@@ -75,6 +79,7 @@ function draftFrom(contact: Contact): Draft {
     isProspect: contact.isProspect,
     customer: customerDraftFrom(contact),
     supplierPaymentTermId: contact.supplierPaymentTermId ?? "",
+    currencyCode: contact.currencyCode ?? "",
   };
 }
 
@@ -149,6 +154,7 @@ function ContactForm({
   const [draft, setDraft] = useState<Draft>(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const baseCurrency = useWorkspace().current?.baseCurrency ?? "NZD";
   const typeLabelId = useId();
   // Values for fields the contact's roles use are shown; the rest (like a
   // customer field's default on a supplier) are kept aside and not saved.
@@ -245,6 +251,18 @@ function ContactForm({
             onChange={(event) => setDraft({ ...draft, gstNumber: event.target.value })}
             maxLength={20}
           />
+        </Field>
+        <Field label="Currency" hint="Their invoices, bills and credit notes are in it. It can't change once they have any.">
+          <select value={draft.currencyCode} onChange={(event) => setDraft({ ...draft, currencyCode: event.target.value })}>
+            <option value="">{baseCurrency} (the organisation&apos;s currency)</option>
+            {Object.keys(CURRENCY_MINOR_UNITS)
+              .filter((code) => code !== baseCurrency)
+              .map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+          </select>
         </Field>
       </div>
       <Field label={draft.isCustomer ? "Billing address" : "Postal address"}>
@@ -496,7 +514,10 @@ function Contacts({ organisationId }: { organisationId: string }) {
                       ) : null}
                       {contact.primaryPerson ? <div className={ui.muted}>Attention: {contact.primaryPerson.name}</div> : null}
                     </td>
-                    <td>{kind(contact)}</td>
+                    <td>
+                      {kind(contact)}
+                      {contact.currencyCode ? <div className={ui.muted}>In {contact.currencyCode}</div> : null}
+                    </td>
                     <td>{contact.email ?? ""}</td>
                     <td>{contact.phone ?? ""}</td>
                     <td>{formatGstNumber(contact.gstNumber)}</td>

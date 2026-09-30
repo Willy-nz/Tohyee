@@ -6,7 +6,7 @@ import { Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { reportCategories, TrackingTagsText, useTracking } from "@/components/tracking";
 import { Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
-import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, todayInBrowser, personName } from "@/lib/format";
 import type { AccountTransactions } from "@/lib/reports/account-transactions";
 import type { AgedPayables } from "@/lib/reports/aged-payables";
 import type { AgeBucket, AgedAmounts } from "@/lib/reports/ageing";
@@ -73,7 +73,7 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
   return (
     <Card
       title="Aged payables"
-      description="What you owe each supplier, by days past the bill's due date, less supplier credit not yet used. The total matches accounts payable on the balance sheet."
+      description="What you owe each supplier, by days past the bill's due date, less supplier credit not yet used, in the base currency (foreign-currency bills at their own rates, with their own currency beside them). The total matches accounts payable on the balance sheet, with any FX revaluation on the date."
       actions={
         <div className={ui.inlineForm} data-print="hide">
           <Field label="As at">
@@ -115,6 +115,11 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
                       >
                         {open === row.contactId ? "▾" : "▸"} {row.name}
                       </button>
+                      {row.foreign ? (
+                        <div className={ui.muted}>
+                          Owed {row.foreign.currencyCode} {formatMoney(row.foreign.total)}
+                        </div>
+                      ) : null}
                     </td>
                     <AgedCells amounts={row.amounts} />
                   </tr>
@@ -126,9 +131,10 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
                             <Link href={`/operations/bills/${bill.id}`}>{bill.supplierInvoiceNumber}</Link> · dated {formatDate(bill.billDate)} · due{" "}
                             {formatDate(bill.dueDate)}
                             {bill.daysOverdue > 0 ? ` · ${bill.daysOverdue} days overdue` : ""}
+                            {bill.currencyCode !== data.currencyCode ? ` · ${bill.currencyCode} ${formatMoney(bill.amountDue)}` : ""}
                           </td>
                           <td className={ui.num}>
-                            <Money value={bill.amountDue} />
+                            <Money value={bill.amountDueBase} />
                           </td>
                         </tr>
                       ))}
@@ -137,9 +143,10 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
                           <td colSpan={BUCKETS.length + 2} style={{ paddingLeft: 28 }}>
                             <Link href={`/operations/supplier-credit-notes/${credit.id}`}>{credit.supplierCreditNoteNumber}</Link> · credit dated{" "}
                             {formatDate(credit.creditNoteDate)}
+                            {credit.currencyCode !== data.currencyCode ? ` · ${credit.currencyCode} ${formatMoney(credit.unused)}` : ""}
                           </td>
                           <td className={ui.num}>
-                            <Money value={`-${credit.unused}`} />
+                            <Money value={`-${credit.unusedBase}`} />
                           </td>
                         </tr>
                       ))}
@@ -153,6 +160,14 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
                 <td>Total ({data.currencyCode})</td>
                 <AgedCells amounts={data.total} />
               </tr>
+              {data.revaluation !== "0.00" ? (
+                <tr>
+                  <td colSpan={BUCKETS.length + 2}>Unrealised FX revaluation of foreign-currency bills on this date (reversed the next day)</td>
+                  <td className={ui.num}>
+                    <Money value={data.revaluation} />
+                  </td>
+                </tr>
+              ) : null}
               {data.payablesAccount ? (
                 <tr>
                   <td colSpan={BUCKETS.length + 2}>

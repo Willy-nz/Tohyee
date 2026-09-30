@@ -151,6 +151,14 @@ function ActivityPaper({ statement }: { statement: ActivityStatement }) {
                 <Balance value={statement.closing} />
               </td>
             </tr>
+            {statement.currencyCode !== statement.baseCurrency ? (
+              <tr>
+                <td colSpan={showCustomer ? 6 : 5}>In {statement.baseCurrency}, at each document&apos;s own rate</td>
+                <td className={ui.num}>
+                  <Balance value={statement.closingBase} />
+                </td>
+              </tr>
+            ) : null}
           </tfoot>
         </table>
       </div>
@@ -209,6 +217,14 @@ function OutstandingPaper({ statement }: { statement: OutstandingStatement }) {
                   <Money value={statement.balance} />
                 </td>
               </tr>
+              {statement.currencyCode !== statement.baseCurrency ? (
+                <tr>
+                  <td colSpan={showCustomer ? 5 : 4}>In {statement.baseCurrency}, at each document&apos;s own rate</td>
+                  <td className={ui.num}>
+                    <Money value={statement.balanceBase} />
+                  </td>
+                </tr>
+              ) : null}
             </tfoot>
           </table>
         </div>

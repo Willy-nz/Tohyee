@@ -126,6 +126,8 @@ type RawEventRow = {
   tax_rate: string;
   line_amount: string;
   line_gst: string;
+  /** Set on lines of foreign-currency invoices, bills and credit notes (MC13). */
+  foreign_currency?: boolean;
 };
 
 /** A counted line as it was filed. */
@@ -295,32 +297,36 @@ with events as (
 ),
 documents as (
   select 'sales_invoice' as document_type, id as document_id, invoice_number as document_number, reference, contact_id,
-         null::text as claimant
+         null::text as claimant, total, base_total
     from sales_invoices
   union all
-  select 'sales_credit_note', id, credit_note_number, reference, contact_id, null from sales_credit_notes
+  select 'sales_credit_note', id, credit_note_number, reference, contact_id, null, total, base_total from sales_credit_notes
   union all
-  select 'bill', id, supplier_invoice_number, null, contact_id, null from bills
+  select 'bill', id, supplier_invoice_number, null, contact_id, null, total, base_total from bills
   union all
-  select 'supplier_credit_note', id, supplier_credit_note_number, reference, contact_id, null from supplier_credit_notes
+  select 'supplier_credit_note', id, supplier_credit_note_number, reference, contact_id, null, total, base_total from supplier_credit_notes
   union all
-  select 'bank_transaction', id, coalesce(reference, 'BT-' || id), reference, contact_id, null from bank_transactions
+  select 'bank_transaction', id, coalesce(reference, 'BT-' || id), reference, contact_id, null, null, null from bank_transactions
   union all
-  select 'expense_claim', id, 'CLAIM-' || id, null, null, claimant_email from expense_claims
+  select 'expense_claim', id, 'CLAIM-' || id, null, null, claimant_email, null, null from expense_claims
 ),
+-- Foreign-currency documents count at their base amounts: each line converted
+-- at the document's rate, as at the time of supply (GST Act s 77; MC13).
 document_lines as (
   select 'sales_invoice' as document_type, invoice_id as document_id, line_order, description, tax_code_id,
-         tax_rate, net_amount, tax_amount
+         tax_rate, coalesce(base_net_amount, net_amount) as net_amount, coalesce(base_tax_amount, tax_amount) as tax_amount
     from sales_invoice_lines
   union all
-  select 'sales_credit_note', credit_note_id, line_order, description, tax_code_id, tax_rate, net_amount, tax_amount
+  select 'sales_credit_note', credit_note_id, line_order, description, tax_code_id, tax_rate,
+         coalesce(base_net_amount, net_amount), coalesce(base_tax_amount, tax_amount)
     from sales_credit_note_lines
   union all
-  select 'bill', bill_id, line_order, description, tax_code_id, tax_rate, net_amount, tax_amount
+  select 'bill', bill_id, line_order, description, tax_code_id, tax_rate,
+         coalesce(base_net_amount, net_amount), coalesce(base_tax_amount, tax_amount)
     from bill_lines
   union all
-  select 'supplier_credit_note', credit_note_id, line_order, description, tax_code_id, tax_rate, net_amount,
-         tax_amount
+  select 'supplier_credit_note', credit_note_id, line_order, description, tax_code_id, tax_rate,
+         coalesce(base_net_amount, net_amount), coalesce(base_tax_amount, tax_amount)
     from supplier_credit_note_lines
   union all
   -- Foreign-currency spend and receive money count at their base amounts (FXB2).
@@ -332,7 +338,11 @@ document_lines as (
          tax_amount
     from expense_claim_receipts
 )
-select e.side, e.event_type, e.event_date, e.sign, e.settlement_id::text, e.settled::text,
+select e.side, e.event_type, e.event_date, e.sign, e.settlement_id::text,
+       -- A foreign-currency document's settlement is its share of the document's base amount.
+       (case when d.base_total is not null and e.settled is not null then round(e.settled * d.base_total / d.total, 2)
+             else e.settled end)::text as settled,
+       d.base_total is not null as foreign_currency,
        (sum(l.net_amount + l.tax_amount) over (partition by e.event_type, e.document_type, e.document_id,
                                                            e.settlement_id))::text as document_total,
        e.document_type, e.document_id::text, d.document_number, d.reference,
@@ -494,6 +504,13 @@ async function workOut(
     countsWhenSettled(basis, "sales"),
     countsWhenSettled(basis, "purchases"),
   ]);
+  // MC11: how a part-paid foreign-currency sale counts when sales count as they're settled isn't settled yet.
+  const foreignSettled = result.rows.find((row) => row.side === "sales" && row.settlement_id !== null && row.foreign_currency);
+  if (foreignSettled) {
+    throw new ValidationError(
+      `${DOCUMENT_LABELS[foreignSettled.document_type]} ${foreignSettled.document_number} is in a foreign currency. Counting foreign-currency sales when they're paid (the payments basis) isn't supported yet (refused rather than guessed).`,
+    );
+  }
   // Expense claims have no contact; their lines show the claimant, by name.
   const lines = eventLines(
     result.rows.map((row) => (row.document_type === "expense_claim" && row.contact_id === null ? { ...row, contact_name: personName(tx, row.contact_name) } : row)),

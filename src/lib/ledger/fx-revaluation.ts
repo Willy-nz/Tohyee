@@ -13,6 +13,7 @@ import {
   isNegative,
   isZero,
   mul,
+  neg,
   parseDecimalInput,
   roundHalfUp,
   sub,
@@ -183,6 +184,60 @@ async function revaluedForeignAmount(
   return normal;
 }
 
+/** Whether an account is accounts receivable or payable, which hold foreign-currency documents (MC8). */
+function isControlAccount(account: { systemKey: string | null }): boolean {
+  return account.systemKey === "accounts_receivable" || account.systemKey === "accounts_payable";
+}
+
+/**
+ * The open foreign-currency balance on accounts receivable or payable in one
+ * currency as at a date (MC8): the foreign amounts of its lines in that
+ * currency (debits less credits) and their base amounts, both in the
+ * account's normal direction (a credit balance on payables is positive).
+ */
+export async function openCurrencyBalance(
+  tx: OrgTx,
+  account: { id: string; accountClass: string },
+  currencyCode: string,
+  asAt: string,
+): Promise<{ foreign: string; base: string }> {
+  const totals = (
+    await tx.query<{ foreign: string; base: string }>(
+      `select coalesce(sum(l.account_amount), 0)::text as foreign, coalesce(sum(l.debit_amount - l.credit_amount), 0)::text as base
+         from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id
+        where l.account_id = $1 and l.foreign_currency_code = $2 and j.posting_date <= $3`,
+      [account.id, currencyCode, asAt],
+    )
+  ).rows[0];
+  const flip = account.accountClass !== "asset";
+  const signed = (value: string) => (flip ? neg(dec(value)) : dec(value));
+  return {
+    foreign: toFixedString(signed(totals.foreign), currencyMinorUnits(currencyCode)),
+    base: toFixedString(signed(totals.base), currencyMinorUnits(tx.baseCurrency)),
+  };
+}
+
+/** Open foreign-currency balances on accounts receivable and payable as at a date, for the revaluation screen and period close (MC8). */
+export async function openCurrencyBalances(
+  tx: OrgTx,
+  asAt: string,
+): Promise<Array<{ accountId: string; accountCode: string; accountName: string; currencyCode: string; foreign: string; base: string }>> {
+  const rows = await tx.query<{ id: string; code: string; name: string; account_class: string; currency: string }>(
+    `select distinct a.id::text, a.code, a.name, a.account_class, l.foreign_currency_code as currency
+       from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id join accounts a on a.id = l.account_id
+      where a.system_key in ('accounts_receivable', 'accounts_payable') and l.foreign_currency_code is not null and j.posting_date <= $1
+      order by a.code, l.foreign_currency_code`,
+    [asAt],
+  );
+  const out = [];
+  for (const row of rows.rows) {
+    const balance = await openCurrencyBalance(tx, { id: row.id, accountClass: row.account_class }, row.currency, asAt);
+    if (isZero(dec(balance.foreign)) && isZero(dec(balance.base))) continue;
+    out.push({ accountId: row.id, accountCode: row.code, accountName: row.name, currencyCode: row.currency, ...balance });
+  }
+  return out;
+}
+
 export async function listFxRevaluations(
   tx: OrgTx,
   filters: { revaluationDateFrom?: unknown; revaluationDateTo?: unknown } = {},
@@ -260,9 +315,11 @@ export async function postFxRevaluation(
   });
   const seen = new Set<string>();
   for (const balance of balances) {
-    const key = balance.accountCode.toLowerCase();
+    const key = `${balance.accountCode.toLowerCase()}|${balance.claimedCurrency ?? ""}`;
     if (seen.has(key)) {
-      throw new ValidationError(`Account ${balance.accountCode} is listed more than once.`);
+      throw new ValidationError(
+        `Account ${balance.accountCode}${balance.claimedCurrency ? ` (${balance.claimedCurrency})` : ""} is listed more than once.`,
+      );
     }
     seen.add(key);
   }
@@ -286,6 +343,22 @@ export async function postFxRevaluation(
     if (account.accountClass !== "asset" && account.accountClass !== "liability") {
       throw new ValidationError(`Account ${account.code} isn't an asset or liability account.`);
     }
+    // Accounts receivable and payable: their open balance in one foreign currency (MC8), like NetSuite's open currency balances.
+    if (isControlAccount(account) && (!account.currencyCode || account.currencyCode === tx.baseCurrency)) {
+      if (!balance.claimedCurrency || balance.claimedCurrency === tx.baseCurrency) {
+        throw new ValidationError(
+          `Account ${account.code} (${account.name}) holds documents in several currencies. Say which currency to revalue (e.g. USD).`,
+        );
+      }
+      const typed =
+        balance.foreignAmountRaw == null || balance.foreignAmountRaw === ""
+          ? null
+          : parseDecimalInput(balance.foreignAmountRaw, `${account.code} foreign amount`, {
+              maxScale: currencyMinorUnits(balance.claimedCurrency),
+              allowNegative: true,
+            });
+      return { balance, account, typed, currencyCode: balance.claimedCurrency, control: true };
+    }
     if (!account.currencyCode) {
       throw new ValidationError(
         `Account ${account.code} (${account.name}) is a ${tx.baseCurrency} account. Set its currency in the chart of accounts before revaluing it.`,
@@ -301,7 +374,7 @@ export async function postFxRevaluation(
         : parseDecimalInput(balance.foreignAmountRaw, `${account.code} foreign amount`, {
             maxScale: currencyMinorUnits(account.currencyCode),
           });
-    return { balance, account, typed };
+    return { balance, account, typed, currencyCode: account.currencyCode, control: false };
   });
 
   const hash = requestHash("fx_revaluation", {
@@ -315,6 +388,8 @@ export async function postFxRevaluation(
     loss: lossCode.toLowerCase(),
     balances: prepared.map((item) => ({
       account: item.balance.accountCode.toLowerCase(),
+      // Only for accounts receivable and payable, so earlier revaluations hash the same.
+      ...(item.control ? { currencyCode: item.currencyCode } : {}),
       foreignAmount: item.typed,
       closingRate: item.balance.closingRate,
       description: item.balance.description,
@@ -332,20 +407,41 @@ export async function postFxRevaluation(
     return { created: false, run };
   }
 
-  const already = await tx.query<{ code: string }>(
-    `select a.code from ledger_fx_revaluation_run_items i
+  const already = await tx.query<{ code: string; currency_code: string }>(
+    `select a.code, i.currency_code from ledger_fx_revaluation_run_items i
        join accounts a on a.id = i.account_id
-      where i.revaluation_date = $1 and i.account_id = any($2::bigint[])`,
-    [revaluationDate, prepared.map((item) => item.account.id)],
+      where i.revaluation_date = $1 and (i.account_id, i.currency_code) in (select * from unnest($2::bigint[], $3::text[]))`,
+    [revaluationDate, prepared.map((item) => item.account.id), prepared.map((item) => item.currencyCode)],
   );
   if (already.rows.length > 0) {
     throw new ConflictError(
-      `${already.rows.map((row) => row.code).join(", ")} already revalued on ${revaluationDate}.`,
+      `${already.rows.map((row) => `${row.code} (${row.currency_code})`).join(", ")} already revalued on ${revaluationDate}.`,
     );
   }
 
   const computed = [];
   for (const item of prepared) {
+    if (item.control) {
+      // MC8: the open documents in this currency, from the ledger; a typed amount must agree.
+      const open = await openCurrencyBalance(tx, item.account, item.currencyCode, revaluationDate);
+      if (isZero(dec(open.foreign))) {
+        throw new ValidationError(`Account ${item.account.code} has nothing open in ${item.currencyCode} on ${revaluationDate}, so there's nothing to revalue.`);
+      }
+      if (item.typed !== null && toFixedString(dec(item.typed), currencyMinorUnits(item.currencyCode)) !== open.foreign) {
+        throw new ValidationError(
+          `Account ${item.account.code}: the ledger has ${item.currencyCode} ${open.foreign} open on ${revaluationDate}, not ${toFixedString(dec(item.typed), currencyMinorUnits(item.currencyCode))}. Leave the foreign amount blank to use the ledger's.`,
+        );
+      }
+      const revalued = roundHalfUp(mul(dec(open.foreign), dec(item.balance.closingRate)), baseScale);
+      computed.push({
+        ...item,
+        foreignAmount: open.foreign,
+        carrying: open.base,
+        revalued: toFixedString(revalued, baseScale),
+        delta: sub(revalued, dec(open.base)),
+      });
+      continue;
+    }
     const totals = await tx.query<{ debits: string; credits: string }>(
       `select coalesce(sum(l.debit_amount), 0)::text as debits,
               coalesce(sum(l.credit_amount), 0)::text as credits
@@ -378,7 +474,7 @@ export async function postFxRevaluation(
   for (const item of computed) {
     if (isZero(item.delta)) continue;
     const amount = toFixedString(abs(item.delta), baseScale);
-    const label = item.balance.description ?? `${item.account.code} ${item.account.currencyCode}`;
+    const label = item.balance.description ?? `${item.account.code} ${item.currencyCode}`;
     const increases = !isNegative(item.delta);
     // An asset worth more, or a liability worth less, is a gain.
     const isGain = item.account.accountClass === "asset" ? increases : !increases;
@@ -388,10 +484,10 @@ export async function postFxRevaluation(
       debitAmount: accountSide ? amount : "0",
       creditAmount: accountSide ? "0" : amount,
       description: `FX revaluation ${label}`,
-      // Only the base value changes: a foreign amount of 0 at the closing rate (FXB7).
+      // Only the base value changes: a foreign amount of 0 at the closing rate (FXB7, MC8).
       foreign: {
-        currencyCode: item.account.currencyCode!,
-        amount: toFixedString(dec("0"), currencyMinorUnits(item.account.currencyCode!)),
+        currencyCode: item.currencyCode!,
+        amount: toFixedString(dec("0"), currencyMinorUnits(item.currencyCode!)),
         rate: toPlainString(dec(item.balance.closingRate)),
         kind: "revaluation",
       },
@@ -476,7 +572,7 @@ export async function postFxRevaluation(
         index + 1,
         item.account.id,
         item.account.accountClass,
-        item.account.currencyCode,
+        item.currencyCode,
         item.foreignAmount,
         item.carrying,
         item.revalued,
@@ -502,7 +598,7 @@ export async function postFxRevaluation(
       reversalJournalId: reversalJournal.journal.id,
       balances: computed.map((item) => ({
         account: item.account.code,
-        currency: item.account.currencyCode,
+        currency: item.currencyCode,
         foreignAmount: item.foreignAmount,
         closingRate: item.balance.closingRate,
         carrying: item.carrying,

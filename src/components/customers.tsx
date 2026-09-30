@@ -11,7 +11,7 @@ import type { Contact } from "@/lib/contacts/service";
 import type { Person } from "@/lib/crm/service";
 import type { CreditLimitAction, CustomerSetup, PaymentTerm } from "@/lib/customers/service";
 import { describeTerm, dueDateFor, PAYMENT_TERM_KIND_LABELS, PAYMENT_TERM_KINDS, type PaymentTermKind } from "@/lib/customers/terms";
-import { formatDate, todayInBrowser } from "@/lib/format";
+import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import type { AgedAmounts, AgedReceivables, AgeBucket } from "@/lib/reports/aged-receivables";
 
 /**
@@ -682,7 +682,7 @@ export function AgedReceivablesReport({ organisationId }: { organisationId: stri
   return (
     <Card
       title="Aged receivables"
-      description="What each customer owes, by days past the due date, less credit not yet used. The total matches accounts receivable on the balance sheet."
+      description="What each customer owes, by days past the due date, less credit not yet used, in the base currency (foreign-currency invoices at their own rates, with their own currency beside them). The total matches accounts receivable on the balance sheet, with any FX revaluation on the date."
       actions={
         <div className={ui.inlineForm}>
           <Field label="As at">
@@ -730,6 +730,11 @@ export function AgedReceivablesReport({ organisationId }: { organisationId: stri
                       ) : (
                         row.name
                       )}
+                      {row.foreign ? (
+                        <div className={ui.muted}>
+                          Owes {row.foreign.currencyCode} {formatMoney(row.foreign.total)}
+                        </div>
+                      ) : null}
                     </td>
                     <AmountCells amounts={row.amounts} />
                   </tr>
@@ -740,9 +745,10 @@ export function AgedReceivablesReport({ organisationId }: { organisationId: stri
                             <Link href={`/operations/invoices/${invoice.id}`}>{invoice.invoiceNumber ?? `#${invoice.id}`}</Link> · dated{" "}
                             {formatDate(invoice.invoiceDate)} · due {formatDate(invoice.dueDate)}
                             {invoice.daysOverdue > 0 ? ` · ${invoice.daysOverdue} days overdue` : ""}
+                            {invoice.currencyCode !== report.data!.currencyCode ? ` · ${invoice.currencyCode} ${formatMoney(invoice.amountDue)}` : ""}
                           </td>
                           <td className={ui.num}>
-                            <Money value={invoice.amountDue} />
+                            <Money value={invoice.amountDueBase} />
                           </td>
                         </tr>
                       ))
@@ -761,6 +767,14 @@ export function AgedReceivablesReport({ organisationId }: { organisationId: stri
                 <td>Total ({report.data.currencyCode})</td>
                 <AmountCells amounts={report.data.total} />
               </tr>
+              {report.data.revaluation !== "0.00" ? (
+                <tr>
+                  <td colSpan={BUCKETS.length + 2}>Unrealised FX revaluation of foreign-currency invoices on this date (reversed the next day)</td>
+                  <td className={ui.num}>
+                    <Money value={report.data.revaluation} />
+                  </td>
+                </tr>
+              ) : null}
             </tfoot>
           </table>
         </div>

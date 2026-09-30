@@ -54,6 +54,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/bank-quick.test.ts` (BK17-BK25) and
   `tests/integration/bank-split.test.ts` (BK26-BK28) and
   `tests/integration/bank-foreign.test.ts` (FXB1-FXB11) and
+  `tests/integration/multi-currency.test.ts` (MC1-MC13) and
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
   GP3, GP5, GP6), all against
@@ -253,7 +254,9 @@ A USD bank account holds USD 1,000.00, booked at NZD 1,600.00. Revalue on
 - **F6** Liabilities work the other way: a USD payable that is worth more in
   NZD is an unrealised **loss**.
 - **F7** Only accounts marked with a foreign currency can be revalued, and
-  only when their balance has the normal sign.
+  only when their balance has the normal sign. (Accounts receivable and
+  payable also revalue their open foreign-currency documents, one currency
+  at a time, with either sign: MC8.)
 
 Since foreign-currency lines keep their foreign amount (FXB1-FXB11), the
 USD 1,000.00 is in the ledger too (the journal booking it gives USD 1,000.00
@@ -311,7 +314,9 @@ An invoice's amounts are tax **exclusive** (GST is added on top), tax
   the customer with a sales credit note instead (CN1-CN12).
 - **Correcting an approved invoice**: it can't be edited, and its journals
   can't be corrected in the ledger. Void it and raise a new one.
-- **Foreign-currency invoices**: invoices are in the base currency only.
+- **Foreign-currency invoices**: see "Multi-currency invoices and bills"
+  (MC1-MC13, not yet approved by Jess) for what's built and what's still
+  refused.
 
 ## Customer payments
 
@@ -362,8 +367,9 @@ never stored or typed in.
   prepayments is still to be decided by the owner.
 - **One payment for several invoices**: see "Payments for several invoices"
   below.
-- **Foreign-currency bank accounts**: payments go into bank accounts in the
-  base currency only.
+- **Foreign-currency bank accounts**: an NZD invoice is paid into a bank
+  account in the base currency only; a foreign-currency invoice into one in
+  its currency or the base currency (MC5, MC6).
 - **Correcting a payment**: its journals can't be corrected in the ledger.
   Void the payment and record it again. A void can't be dated before the
   payment.
@@ -1519,9 +1525,10 @@ transaction in both currencies:
   otherwise the account's. A file in another currency is refused. **Akahu
   bank feeds can't be linked to foreign-currency accounts**: Akahu's
   transactions don't say their currency.
-- **Invoices and bills are in NZD**, so paying them from a foreign-currency
-  statement line is refused, and one-click OK never suggests them for one.
-  Adjustments (BK24) aren't available on foreign-currency lines yet.
+- **Invoices and bills** in the line's currency can be paid from it, at a rate
+  (MC5, not yet approved by Jess); NZD ones can't be paid from a
+  foreign-currency line, and one-click OK never suggests invoices or bills for
+  one. Adjustments (BK24) aren't available on foreign-currency lines yet.
 
 Setup as above, plus 1030 **USD account** (bank, USD), the customer Etsy and
 the supplier Amazon Web Services. 1030 was set to USD before Tohyee kept
@@ -1606,8 +1613,8 @@ Date,Amount,Payee,Particulars,Code,Reference,Balance
   With NZD 3,300.00 received instead it would be a loss of 58.15: Dr 7020
   58.15.
 - **FXB9** Invoices and bills: a +115.00 line on 1030 can't pay INV-0001 (NZD):
-  "…Invoices and bills are in NZD, so they can't be paid from a USD
-  statement line yet…"; one-click OK suggests no invoice for it, and an
+  "…Invoice INV-0001 is in NZD, so it can't be paid from a USD statement line
+  yet…" (a USD invoice can be, MC5); one-click OK suggests no invoice for it, and an
   adjustment on it is refused. Voiding the FXB3 spend money (after
   unreconciling) posts its exact reversal, foreign amount included.
 - **FXB10** Imports: a CSV with a Currency column saying NZD, into 1030, is
@@ -1628,12 +1635,159 @@ Date,Amount,Payee,Particulars,Code,Reference,Balance
   statement files instead.
 - **Standard-rated GST on foreign-currency spend and receive money** (FXB4),
   paying NZD invoices or bills from a foreign-currency line (FXB9), and
-  adjustments on foreign-currency lines.
+  adjustments on foreign-currency lines. (Paying invoices and bills in the
+  line's own currency is built: MC5.)
 - **Transfers between two foreign-currency accounts**, and posting to a
   foreign-currency account dated before its latest transfer out (FXB6).
 - **Splitting with an adjustment**: the statement lines must add up to the
   transaction exactly (BK27).
 - **Older Excel files** (.xls): save them as .xlsx or CSV.
+
+## Multi-currency invoices and bills (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) following NetSuite, as Jess asked ("copy what
+NetSuite does"); where NetSuite didn't settle something the smallest safe
+choice was taken and anything else is refused ("Not supported yet") and
+listed as a question below. Sources: NetSuite help, *Customers and Multiple
+Currencies*, *Vendors and Multiple Currencies*, *Setting Exchange Rates
+Directly on Transactions*, *Applied Payments and Realized Gain/Loss*,
+*Variance Calculations for Realized Gain and Loss*, *Rounding Gain/Loss
+Using the Same Exchange Rate*, *Revaluation of Open Currency Balances*,
+*Currency Revaluation Transactions* and *Accounts Receivable and Accounts
+Payable* (docs.oracle.com/en/cloud/saas/netsuite/ns-online-help); IRD, BR
+Pub 04/01 *Supplies paid for in foreign currency* (GST Act s 77: amounts are
+expressed in NZD as at the time of supply).
+
+- **A contact has a currency**, like a NetSuite customer's or vendor's
+  primary currency: blank is NZD. Its invoices, bills and credit notes are in
+  it (the database checks), and it can't change once the contact has any
+  ("You can't remove a currency from a customer if transactions have been
+  entered in that currency"). Credit limits and a customer's statement are in
+  the contact's currency, as NetSuite shows balances and credit limits in the
+  primary currency.
+- **Exchange rate**: NZD per 1 unit, up to 8 decimal places (as NetSuite).
+  A document or payment starts with the last rate used for its currency on
+  or before its date (the same lookup as a statement line, D4: rates posted
+  lines were converted at, documents' and payments' own rates, revaluations'
+  closing rates) and it can be changed; with none, it must be typed.
+- **Converting a document**: like NetSuite, each line's net amount and GST is
+  converted on its own (amount x rate, rounded once to cents, half away from
+  zero) and the document's NZD total is the sum of its lines.
+- **Posting**: accounts receivable (1100) and payable (2000) stay NZD
+  accounts but, like NetSuite's A/R and A/P accounts, hold documents in any
+  currency: a foreign-currency document's line on them has the foreign amount
+  and currency beside the NZD (`fx_kind` "document"); income, expense and GST
+  lines are NZD only. Manual journals still can't put a foreign amount on
+  1100 or 2000.
+- **Payments** are in the document's currency, into (or from) a bank account
+  in that currency or in NZD, at the payment's own rate. The bank line is
+  amount x payment rate. The document is cleared at its carrying value of
+  what's paid: its open NZD x amount / its open amount, rounded once, and
+  all that's left when it's paid off (as FXB8). The difference is the
+  realised gain or loss on 7020, NetSuite's realized gain/loss ((payment rate
+  - document rate) x amount). NetSuite puts the cent or two left by rounding
+  into a separate Rounding Gain/Loss account; Tohyee has none, so it's part of
+  the realised gain or loss on the payment that clears the document (MC4).
+- **Credit notes** applied to an invoice (or supplier credit notes to a bill)
+  of the same contact and currency clear each side at its own carrying value;
+  a difference is a realised gain or loss in a journal of its own, dated the
+  application date (NetSuite's realized gain/loss on applying a credit
+  memo), and removing the application reverses it. Credit applied across
+  currencies stays refused.
+- **Month end**: open foreign-currency documents are revalued per account
+  and currency (1100 USD, 2000 USD), like NetSuite's revaluation of open
+  currency balances: foreign balance = the foreign amounts of the account's
+  lines in that currency; carrying value = their NZD; the difference to
+  foreign x closing rate goes to 7000/7010 on the date and is reversed the
+  next day (as F1-F7; NetSuite also reverses on the first day of the next
+  period). Payments after it still clear at the document's own rate.
+  NetSuite revalues each open transaction; Tohyee revalues the currency's
+  total, which can differ from the sum of per-document revaluations by
+  rounding cents (a question below). Period close's FX check lists each
+  account and currency with an open balance.
+- **Reports**: aged receivables and payables are in NZD, each foreign-currency
+  document at its own rate, with its own currency and amount beside it and
+  the contact's total in its currency; on a revaluation date the revaluation
+  is shown beside the total, so documents + revaluation = the ledger (the
+  period close check uses the same). A customer's statement is in the
+  customer's currency with the NZD balance beside it. The trial balance,
+  balance sheet and GST return are NZD. Home (money owed, bills to pay) and
+  sales by salesperson are NZD at the documents' rates.
+- **GST**: only zero-rated (ZERO), exempt (EXEMPT) and no-GST (NONE) codes,
+  or no tax, on foreign-currency documents. On the invoice basis a
+  foreign-currency invoice counts at its lines' NZD amounts on its date (s 77,
+  the time of supply being the invoice date under s 9(1)): zero-rated sales
+  in Boxes 5 and 6.
+
+Setup: 1000 Business bank account (NZD), 1030 USD account and 1040 EUR
+account (both new, no postings before), 1100, 2000, 4000 Sales, 6040
+Software and subscriptions, 7000/7010 unrealised and 7020 realised currency
+gains and losses; customers Acme Inc (USD) and Kobe Ltd (NZD); supplier
+Amazon Web Services (USD).
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| MC1 | Contacts: Acme with currency "usd", AWS "USD", Kobe none; "NZD" typed; "XYZ" | Acme and AWS are **USD**, Kobe and "NZD" are blank (NZD); "XYZ" refused. A contact with no documents can change currency; once Acme has an invoice, changing it is refused ("…has invoices, bills or credit notes in USD, so its currency can't change"), by the database too |
+| MC2 | INV-0001 for Acme, 3 Jul 2026: 1 x USD 1,000.00, 4000, ZERO, exclusive | With no rate typed and no USD rate used yet: refused ("Type the exchange rate…"). With a GST line: refused. At **1.6543**: NZD **1,654.30**. Journal: Dr 1100 **1,654.30 (USD 1,000.00)** / Cr 4000 **1,654.30** |
+| MC3 | INV-0002 for Acme, 4 Jul, USD 500.00, no rate typed | Takes **1.6543** (the last USD rate on or before 4 Jul): NZD **827.15** |
+| MC4 | INV-0003, 12 Jul, three lines of USD 10.01 at **1.5**; paid in full the same day into 1000 at 1.5 | Each line 15.015 -> **15.02**, so NZD **45.06** (not 30.03 x 1.5 = 45.05): Dr 1100 45.06 (USD 30.03) / Cr 4000 45.06. Payment: bank **45.05**, 1100 cleared **45.06**, realised loss **0.01**: Dr 1000 45.05 / Dr 7020 0.01 / Cr 1100 45.06 (USD 30.03) |
+| MC5 | A USD statement line on 1030, 20 Jul, +1,000.00: pay INV-0001 at **1.64** | Dr 1030 **1,640.00 (USD 1,000.00 at 1.64)** / Dr 7020 **14.30** / Cr 1100 **1,654.30 (USD 1,000.00)**; INV-0001 paid, NZD due 0.00. An NZD invoice (Kobe's INV-0004) from a USD line stays refused ("Invoice INV-0004 is in NZD, so it can't be paid from a USD statement line yet", FXB9), and a USD invoice from an NZD line is refused (record it on the invoice, then match) |
+| MC6 | INV-0002 (USD 500.00 = NZD 827.15): USD 200.00 on 15 Jul into 1000 at **1.70**, then USD 300.00 on 28 Jul at **1.60** | First: bank **340.00**, cleared 827.15 x 200 / 500 = **330.86**, gain **9.14**: Dr 1000 340.00 / Cr 1100 330.86 (USD 200.00) / Cr 7020 9.14. Due **USD 300.00 = NZD 496.29**. Second (the rest): bank **480.00**, cleared all **496.29**, loss **16.29**: Dr 1000 480.00 / Dr 7020 16.29 / Cr 1100 496.29. USD 300.01 refused (overpaying); into 1040 (EUR) refused. Voiding the second on 29 Jul posts its exact reversal (USD 300.00 back on 1100); paid again on 29 Jul at 1.60, the same |
+| MC7 | CN-0001 for Acme, 22 Jul, USD 100.00 at **1.63**; INV-0005, 25 Jul, USD 2,000.00 at **1.60** (NZD 3,200.00); CN-0001 applied to INV-0005 on 28 Jul | Credit note: Dr 4000 **163.00** / Cr 1100 **163.00 (USD 100.00)**. Applying: the credit note's side **163.00**, the invoice's 3,200.00 x 100 / 2,000 = **160.00**, gain **3.00** ((1.63 - 1.60) x 100): Dr 1100 163.00 (USD 100.00) / Cr 1100 160.00 (USD 100.00) / Cr 7020 3.00. INV-0005 due **USD 1,900.00 = NZD 3,040.00**. Removing it posts the exact reversal; applied again, the same. Refunding a USD credit note is refused |
+| MC8 | Revaluation on 31 Jul at **1.62** (reversal 1 Aug) of 1030, 1100 USD and 2000 USD | 1030: USD 1,000.00, carrying 1,640.00, revalued 1,620.00: Dr 7010 **20.00** / Cr 1030 20.00. 1100 USD: USD **1,900.00** (INV-0005), carrying **3,040.00**, revalued **3,078.00**: Dr 1100 **38.00** (USD 0.00 at 1.62) / Cr 7000 38.00. 2000 USD: USD **50.00** (AWS-7), carrying **83.00**, revalued **81.00**: Dr 2000 **2.00** / Cr 7000 2.00. All reversed on 1 Aug. Before it, period close's FX check lists 1030, 1100 and 2000; after, it passes. Refused: 1100 without a currency ("…Say which currency…"), 1100 USD typed as 2,000.00 ("the ledger has USD 1900.00 open…"), 1100 EUR ("nothing open in EUR"), 1100 USD again on 31 Jul |
+| MC9 | Aged receivables and payables, and Acme's statement, as at 31 Jul | Acme: INV-0005 **USD 1,900.00 / NZD 3,040.00**, owes USD 1,900.00; total **NZD 3,155.00** (with Kobe's 115.00); revaluation **38.00** beside it (3,155.00 + 38.00 = 1100's 3,193.00). Payables: AWS-7 **USD 50.00 / NZD 83.00**; revaluation **-2.00**; 2000 **81.00**, difference 0.00. Period close's receivables and payables checks pass. Acme's July statement is in **USD**: closing **1,900.00**, NZD **3,040.00** beside it |
+| MC10 | Bills from AWS: AWS-7, 5 Jul, USD 50.00 at **1.66**, 6040, no tax; AWS-8, 6 Jul, the same; supplier credit note AWS-CR1, 7 Jul, USD 20.00 at **1.70**, applied to AWS-8 on 8 Jul; AWS-8's USD 30.00 paid 9 Jul from 1000 at 1.66 | AWS-7: Dr 6040 **83.00** / Cr 2000 **83.00 (USD 50.00)**; with a GST line: refused. AWS-CR1: Dr 2000 **34.00 (USD 20.00)** / Cr 6040 34.00. Applying: the bill's side 83.00 x 20 / 50 = **33.20**, the credit's **34.00**, loss **0.80**: Dr 2000 33.20 (USD 20.00) / Cr 2000 34.00 (USD 20.00) / Dr 7020 0.80. Payment: bank **49.80**, cleared **49.80**, no gain or loss (no 7020 line): Dr 2000 49.80 (USD 30.00) / Cr 1000 49.80 |
+| MC11 | Refused rather than guessed, with nothing posted | Quotes, repeating invoices, purchase orders (and repeating bills, project and CRM invoices) for a USD contact; a USD invoice made any way but entering it directly; a payment for several invoices or bills that includes a USD one; overpaying a USD invoice; refunds of foreign-currency credit notes; stock items or item lines without a typed price on foreign-currency documents; a manual journal with a foreign amount on 1100 (and, in the database, any foreign amount on 1100 or 2000 but a document's, a payment's or credit's, or a revaluation's); foreign-currency invoices and credit notes while sales count when paid (the payments basis) |
+| MC12 | AWS-7 paid on 5 Aug from 1030 at **1.65** (after the 1 Aug reversal) | Dr 2000 **83.00 (USD 50.00)** / Cr 1030 **82.50 (USD 50.00 at 1.65)** / Cr 7020 **0.50** |
+| MC13 | July GST return (invoice basis) and the trial balance at 31 Aug | Box 5 **5,678.51**, Box 6 **5,563.51** (1,654.30 + 827.15 + 45.06 + 3,200.00 - 163.00 zero-rated; Kobe's 115.00 standard-rated); AWS's no-GST bills in no box. Trial balance balances: 7020 debit **18.76** (-14.30 - 0.01 + 9.14 - 16.29 + 3.00 - 0.80 + 0.50), 7000 and 7010 nothing (reversed), 1100 **3,155.00**, 2000 nothing, 1030 **1,557.50** (USD 950.00) |
+
+Tests: `tests/integration/multi-currency.test.ts` (MC1-MC13).
+
+### Not supported yet (refused rather than guessed)
+
+- **Standard-rated GST on foreign-currency invoices, bills and credit notes**
+  (only ZERO, EXEMPT and NONE, or no tax).
+- **Foreign-currency sales while sales count for GST when paid** (the
+  payments basis): which NZD value a part payment counts at isn't settled.
+  Hybrid and invoice bases work. (Foreign-currency bills on the payments or
+  hybrid basis count their share of the bill's NZD value; with no GST on them
+  they're in no box.)
+- **Overpayments and prepayments** of foreign-currency invoices, **payments for
+  several documents** that include one, and **refunds** of foreign-currency
+  credit notes.
+- **Paying in one currency into (or from) a bank account in a third
+  currency** (a USD invoice from the EUR account), paying NZD documents from a
+  foreign-currency statement line, and a foreign-currency document from an
+  NZD statement line (pay it on the document, then match the line).
+- **Credit applied across currencies**, and a contact's currency changing once
+  it has documents.
+- **Stock items** on foreign-currency documents, and item lines whose price
+  would come from the item (item prices are NZD).
+- **Quotes, repeating invoices and bills, purchase orders, project and CRM
+  invoices** for contacts in another currency.
+- **A separate rounding gain/loss account** (NetSuite's): the cents are part
+  of the realised gain or loss (MC4).
+
+### Questions for Jess (multi-currency)
+
+1. Standard-rated GST on foreign-currency documents (e.g. a USD invoice to
+   an NZ customer, or a USD bill with NZ GST): IRD's BR Pub 04/01 says GST
+   amounts are converted at the time of supply; should Tohyee build that
+   (GST converted at the document's rate)? Imported services under the
+   reverse charge aren't built either.
+2. Payments basis: count a part-paid foreign-currency sale at its share of
+   the invoice's NZD value (the time-of-supply rate), or at the payment's
+   rate?
+3. Rounding: keep the cent or two of rounding in 7020, or add a separate
+   "Rounding gain/loss" account like NetSuite?
+4. Revaluation per currency total (built) or per open document like
+   NetSuite (can differ by a cent or two)?
+5. Should foreign-currency refunds, overpayments, batch payments and
+   cross-currency payments (a USD invoice paid from the EUR account) come
+   next?
+6. The rate source: Tohyee only uses rates already used in the books; should
+   it fetch a daily rate (e.g. RBNZ) or keep a rate table like NetSuite's
+   Currency Exchange Rates list?
 
 ## Reports
 

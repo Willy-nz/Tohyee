@@ -14,9 +14,10 @@ import {
 import { previewDepreciationRun } from "@/lib/fixed-assets/runs";
 import { formatDate, formatMoney } from "@/lib/format";
 import { foreignAccountState } from "@/lib/ledger/foreign";
+import { openCurrencyBalances } from "@/lib/ledger/fx-revaluation";
 import { getPeriodControls, type PeriodControls, setLockDate } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { dec, isNegative, isZero, neg, sub, toFixedString } from "@/lib/money/decimal";
+import { add, dec, isNegative, isZero, neg, sub, toFixedString } from "@/lib/money/decimal";
 import { agedPayables } from "@/lib/reports/aged-payables";
 import { agedReceivables } from "@/lib/reports/aged-receivables";
 import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
@@ -338,6 +339,15 @@ async function fxCheck(tx: OrgTx, periodEnd: string): Promise<PeriodCheck> {
     const hasBalance = !isZero(dec(state.baseBalance)) || (state.foreignBalance !== null && !isZero(dec(state.foreignBalance)));
     if (hasBalance) needing.push(account);
   }
+  // Open foreign-currency documents on accounts receivable and payable, one line per currency (MC8).
+  for (const open of await openCurrencyBalances(tx, periodEnd)) {
+    const revalued = await tx.query(
+      `select 1 from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id
+        where i.account_id = $1 and i.currency_code = $2 and r.revaluation_date = $3`,
+      [open.accountId, open.currencyCode, periodEnd],
+    );
+    needing.push({ id: open.accountId, code: open.accountCode, name: open.accountName, currency_code: open.currencyCode, revalued: (revalued.rowCount ?? 0) > 0 });
+  }
   if (needing.length === 0) return notApplicable("fx_revaluation", title, `No foreign-currency account has a balance on ${longDate(periodEnd)}.`);
   const missing = needing.filter((account) => !account.revalued);
   if (missing.length === 0) return pass("fx_revaluation", title, `Revalued on ${longDate(periodEnd)}.`);
@@ -414,7 +424,9 @@ async function ledgerCheck(
   const title = key === "receivables" ? "Receivables equal accounts receivable" : "Payables equal accounts payable";
   const account = await systemAccountBalance(tx, key === "receivables" ? "accounts_receivable" : "accounts_payable", periodEnd);
   if (!account) return notApplicable(key, title, "There's no control account.");
-  const documents = key === "receivables" ? (await agedReceivables(tx, { asAt: periodEnd })).total.total : (await agedPayables(tx, { asAt: periodEnd })).total.total;
+  // Foreign-currency documents are at their own rates; a revaluation on the date is beside them (MC9).
+  const aged = key === "receivables" ? await agedReceivables(tx, { asAt: periodEnd }) : await agedPayables(tx, { asAt: periodEnd });
+  const documents = toFixedString(add(dec(aged.total.total), dec(aged.revaluation)), 2);
   const ledger = key === "receivables" ? account.balance : toFixedString(neg(dec(account.balance)), 2);
   const difference = sub(dec(documents), dec(ledger));
   const report = key === "receivables" ? "Aged receivables" : "Aged payables";

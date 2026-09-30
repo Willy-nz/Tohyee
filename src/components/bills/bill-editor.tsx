@@ -21,6 +21,7 @@ import { formatMoney, todayInBrowser } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode, calculateInvoice } from "@/lib/invoices/amounts";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
+import { ExchangeRateField, useLastRate } from "@/components/fx";
 import type { TaxCode } from "@/lib/tax/codes";
 import { type CustomFieldSetup, type CustomValues } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
@@ -139,6 +140,12 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
   const [idempotencyKey] = useState(() => newIdempotencyKey("bill"));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A supplier in another currency gets bills in it, at a rate for the bill date (MC10).
+  const chosenSupplier = contacts.find((contact) => contact.id === contactId);
+  const currencyCode = chosenSupplier ? (chosenSupplier.currencyCode ?? baseCurrency) : (bill?.currencyCode ?? baseCurrency);
+  const foreign = currencyCode !== baseCurrency;
+  const [typedRate, setTypedRate] = useState<string | null>(bill?.exchangeRate ?? null);
+  const suggestedRate = useLastRate(organisationId, currencyCode, baseCurrency, billDate);
 
   const hasTax = amountsMode !== "no_tax";
   const supplierOptions = contacts.filter((contact) => contact.isSupplier && !contact.isArchived);
@@ -156,6 +163,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
       amountsMode,
       lines: linesForApi(lines, hasTax),
       customFields,
+      ...(foreign && typedRate !== null ? { exchangeRate: typedRate } : {}),
     };
     try {
       const result = bill
@@ -193,6 +201,8 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
           <select
             value={contactId}
             onChange={(event) => {
+              const next = contacts.find((contact) => contact.id === event.target.value);
+              if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
               setContactId(event.target.value);
               refillDue(event.target.value, billDate);
             }}
@@ -205,6 +215,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
             {supplierOptions.map((contact) => (
               <option key={contact.id} value={contact.id}>
                 {contact.name}
+                {contact.currencyCode && contact.currencyCode !== baseCurrency ? ` (${contact.currencyCode})` : ""}
               </option>
             ))}
           </select>
@@ -251,7 +262,14 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
             required
           />
         </Field>
+        <ExchangeRateField currencyCode={currencyCode} baseCurrency={baseCurrency} suggested={suggestedRate} value={typedRate} onChange={setTypedRate} />
       </div>
+      {foreign ? (
+        <Notice tone="info">
+          This bill is in {currencyCode}. Use zero-rated, exempt or no GST codes (or no tax): GST on foreign-currency bills isn&apos;t
+          supported yet. Approving posts its {baseCurrency} value, each line converted at the rate.
+        </Notice>
+      ) : null}
       <CustomFieldInputs setup={customSetup} record="document" uses={["bill"]} value={customFields} onChange={setCustomFields} />
       {bill?.purchaseOrderId ? (
         <Notice tone="info">
@@ -264,7 +282,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
       <PurchaseLines
         organisationId={organisationId}
         items={items}
-        baseCurrency={baseCurrency}
+        baseCurrency={currencyCode}
         accounts={accounts}
         taxCodes={taxCodes}
         tracking={tracking}

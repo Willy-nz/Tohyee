@@ -318,6 +318,12 @@ export async function recordPaymentBatch(
     if (document.contactId !== contactId) {
       throw new ValidationError(`One payment can only pay ${k.documents} of one ${k.contact}: ${document.number} is ${document.contactName}'s.`);
     }
+    if (document.currencyCode !== tx.baseCurrency) {
+      // MC11: each foreign-currency document is paid on its own, at the payment's rate.
+      throw new ValidationError(
+        `${capital(k.document)} ${document.number} is in ${document.currencyCode}. One payment for several ${k.documents} is in ${tx.baseCurrency} only, so this isn't supported yet (refused rather than guessed): pay it on its own.`,
+      );
+    }
     if (paymentDate < document.date) {
       throw new ValidationError(`The payment date can't be before the date of ${k.document} ${document.number} (${document.date}).`);
     }

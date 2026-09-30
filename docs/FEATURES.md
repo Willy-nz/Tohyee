@@ -47,7 +47,21 @@ that something happened.
   posting, database-enforced balancing and append-only history.
 - **FX revaluation** of foreign-currency asset and liability accounts, with
   carrying amounts and (where Tohyee has them) foreign balances taken from
-  the ledger, and automatic next-day reversal.
+  the ledger, and automatic next-day reversal; also the open
+  foreign-currency invoices, bills and credit notes on accounts receivable
+  and payable, one currency at a time (MC8).
+- **Multi-currency invoices, bills, credit notes and payments** (built
+  overnight 1 Oct 2026 following NetSuite, examples MC1-MC13 not yet approved
+  by Jess): a contact has a currency (like NetSuite's primary currency); its
+  documents are in it at a rate for their date (the last rate used,
+  changeable), each line converted to NZD on its own; accounts receivable
+  and payable carry the foreign amount beside the NZD; payments are in the
+  document's currency into or from a bank account in that currency or NZD, at
+  their own rate, with the realised gain or loss on 7020; credit notes applied
+  at another rate realise the difference; aged receivables and payables and
+  customer statements show the document currency and NZD. Zero-rated,
+  exempt and no-GST codes only; refunds, overpayments and batch payments in a
+  foreign currency are refused for now.
 - **Stock**: receipts, sales, stocktake adjustments, customer and supplier
   returns, landed cost; weighted-average costing to the cent; every movement
   posts its journal in the same transaction. **Stock tracking** (ST1-ST12):
@@ -165,7 +179,7 @@ that something happened.
   journals don't. A new organisation starts with the standard NZ codes
   (GST 15%, Zero rated, Exempt, No GST, from 1 Oct 2010); existing
   organisations with no codes at all were given them by migration 0031.
-- **Sales invoices** in the base currency: drafts that can be edited and
+- **Sales invoices** in the base currency (or the customer's currency, MC1-MC13): drafts that can be edited and
   deleted, tax-exclusive, tax-inclusive or no-tax amounts, GST worked out and
   rounded per line, approval that numbers the invoice (`INV-0001`, with no
   gaps) and posts its journal on the invoice date, and voiding that posts the
@@ -309,7 +323,7 @@ that something happened.
   customer paid twice) is all credit, after a confirmation on screen. Sales >
   Overpayments lists them all (or those with credit left, with the total
   left), each linking to its page. See examples OP1-OP11.
-- **Bills** from suppliers in the base currency: drafts that can be edited and
+- **Bills** from suppliers in the base currency (or the supplier's currency, MC10): drafts that can be edited and
   deleted, with the supplier's invoice number (a supplier can't have two bills
   that aren't voided with the same number, ignoring case and spaces; a draft
   can wait for it, approving needs it, B9),
@@ -330,7 +344,7 @@ that something happened.
   one payment to a supplier (Dr accounts payable per bill / Cr bank once). The
   amounts must add up to the payment exactly, since supplier overpayments
   aren't built. See examples SMP1-SMP6.
-- **Sales credit notes** in the base currency: drafts with the same lines,
+- **Sales credit notes** in the base currency (or the customer's currency, MC7): drafts with the same lines,
   amounts modes and per-line GST as invoices (a new draft can start from an
   approved invoice's lines), approval that numbers the credit note
   (`CN-0001`, from its own counter, with no gaps) and posts Dr revenue and GST
@@ -344,7 +358,7 @@ that something happened.
   stored. A credit note with active applications or refunds, or an invoice
   with credit applied, can't be voided. Period locks apply to every step;
   every command is idempotent. See examples CN1-CN12.
-- **Supplier credit notes** in the base currency: drafts with the same lines,
+- **Supplier credit notes** in the base currency (or the supplier's currency, MC10): drafts with the same lines,
   amounts modes and line account rules as bills (a new draft can start from a
   bill's supplier and lines), carrying the supplier's credit note number
   (required, and unique per supplier among credit notes that aren't voided,
@@ -645,10 +659,13 @@ isn't acceptable, because people would trust it:
   foreign-currency accounts (Akahu's transactions don't say their currency),
   an adjustment when splitting one posted transaction across several
   statement lines, and old Excel (.xls) files
-- foreign-currency invoices, bills and payments (and paying NZD ones from a
-  foreign-currency statement line), standard-rated GST on foreign-currency
-  spend and receive money, adjustments on foreign-currency lines, and
-  transfers between two foreign-currency accounts
+- on foreign-currency documents (MC11): standard-rated GST, overpayments,
+  refunds, payments for several documents, payments through a bank account
+  in a third currency, stock items, quotes, repeating documents and
+  purchase orders, and sales on the payments GST basis; also paying NZD
+  documents from a foreign-currency statement line, standard-rated GST on
+  foreign-currency spend and receive money, adjustments on foreign-currency
+  lines, and transfers between two foreign-currency accounts
 - GST: deferred-payment supplies of $225,000 or more on the payments basis
   (section 19D), checking payments-basis eligibility, and bad debt write-offs
 - amending a filed GST return, imported goods (Customs GST), GST rates other
@@ -668,8 +685,8 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
 4. NZ payroll.
-5. Foreign-currency invoices, bills and payments (foreign-currency bank
-   accounts are built).
+5. The rest of foreign-currency documents (MC11): foreign-currency bank
+   accounts, invoices, bills, credit notes and payments are built.
 
 ## Guardrails
 
