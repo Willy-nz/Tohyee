@@ -1131,12 +1131,18 @@ export async function receiveWebhook(
   } catch {
     return REFUSED;
   }
-  if (!WEBHOOK_KEY_PATTERN.test(webhookKey)) return REFUSED;
+  // Without the key no connection's secret can be read. Checked before the organisation is looked up, and
+  // an organisation that isn't usable (being set up or upgraded) gets the same refusal as one that doesn't
+  // exist, so the address can't be used to learn which organisations are on the server or their state.
+  // The platform sends a refused delivery again later.
+  if (!WEBHOOK_KEY_PATTERN.test(webhookKey) || !secretsAvailable()) return REFUSED;
   const organisation = await getOrganisation(organisationId);
-  if (!organisation || !organisation.isActive) return REFUSED;
-  // Not ready yet (e.g. being upgraded): the platform tries again later.
-  assertOrganisationUsable(organisation);
-  if (!secretsAvailable()) throw new UnavailableError("Webhooks can't be checked without TOHYEE_SECRET_KEY.");
+  if (!organisation) return REFUSED;
+  try {
+    assertOrganisationUsable(organisation);
+  } catch {
+    return REFUSED;
+  }
 
   // 1. Find the connection and its secret.
   const row = await withOrganisationTransaction(organisation, SALES_PLATFORM_ACTOR, async (tx) => {

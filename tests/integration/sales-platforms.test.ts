@@ -571,6 +571,43 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
       await webhook({ organisationId: "Bad Org!", webhookKey }, "customers/create", payload),
     ];
     expect(refused.map((response) => response.status)).toEqual([401, 401, 401, 401, 401, 401, 401]);
+
+    // A properly signed delivery gets the same refusal, saying nothing about the organisation, while it's being
+    // upgraded or when the server has no TOHYEE_SECRET_KEY (the store sends it again later).
+    await coreQuery("update organisations set migration_status = 'failed' where id = $1", [w.org]);
+    try {
+      const upgrading = await webhook(path, "customers/create", payload);
+      expect(upgrading.status).toBe(401);
+      expect(await upgrading.json()).toEqual({ message: "Refused." });
+    } finally {
+      await coreQuery("update organisations set migration_status = 'current' where id = $1", [w.org]);
+    }
+    delete process.env.TOHYEE_SECRET_KEY;
+    const noKey = await webhook(path, "customers/create", payload);
+    process.env.TOHYEE_SECRET_KEY = SECRET_KEY;
+    expect(noKey.status).toBe(401);
+
+    // A body over 2 MB sent without a Content-Length is refused without being read in full.
+    let sent = 0;
+    const chunk = new Uint8Array(64 * 1024);
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        sent += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+    });
+    const huge = await webhookRoute.POST(
+      new Request(`https://tohyee.example.nz/api/sales-platforms/webhooks/${w.org}/${webhookKey}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: endless,
+        duplex: "half",
+      } as RequestInit),
+      params(path),
+    );
+    expect(huge.status).toBe(413);
+    expect(sent).toBeLessThan(3 * 1024 * 1024);
+
     expect(await contactsNamed(w, "Eve Forger")).toHaveLength(0);
     expect(await contactsNamed(w, "Eve Changed")).toHaveLength(0);
     expect((await log(w, connection.id)).map((entry) => entry.action)).toEqual(["connected"]);
