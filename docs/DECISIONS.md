@@ -173,3 +173,41 @@ The Income Tax Act subpart LY text is **(unverified)**.
     extension makes them later.
 50. **Payroll split for R&D: each R&D share rounded down to the cent, the
     remainder to non-R&D.**
+
+## Shopify and other sales platforms (examples SPC1-SPC10 and later)
+
+Answered 1 Oct 2026 ("do what a normal / big ERP would do"), with the
+connection details checked against Shopify's docs.
+
+51. **How a store connects: both kinds of app are supported.** Since
+    1 January 2026 stores can't create new custom apps in the Shopify admin
+    (those gave a fixed Admin API access token). New apps are made in
+    Shopify's Dev Dashboard and connect with a client ID and secret,
+    exchanged for an Admin API token with the client credentials grant
+    (`POST https://{shop}.myshopify.com/admin/oauth/access_token`, tokens
+    last 24 hours, so Tohyee refreshes them). That grant only works for an
+    app and store owned by the same Shopify organisation. Tohyee accepts an
+    existing admin-app token or a Dev Dashboard client ID and secret.
+    Connecting stores owned by someone else (a bookkeeper connecting a
+    client's store) needs Shopify's authorization code grant: a later stage.
+    Sources: [client credentials grant](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/client-credentials-grant),
+    [Shopify dev forum](https://community.shopify.dev/t/how-to-get-admin-api-tokens-using-apps-in-dev-dashboard/29472).
+52. **Orders reach the accounts per order, ERP style** (as NetSuite's
+    Shopify connectors do): each Shopify order becomes a sales order; a paid
+    order is invoiced and its payment received into a "Shopify clearing"
+    account; refunds become credit notes and refunds; each Shopify payout is
+    a transfer from the clearing account to the bank, with Shopify's fees as
+    an expense, so payouts match the bank feed.
+53. **Tax comes from Shopify's own tax lines**, mapped to Tohyee tax codes,
+    using Shopify's "taxes included" flag to work out GST-exclusive amounts.
+    An organisation that isn't GST registered records no GST (the Glimmers
+    store isn't GST registered). Untaxed products use a zero-rated or exempt
+    code chosen in the connection's settings.
+54. **Products with tracked inventory become stock items**; others become
+    non-stock items. Stock levels come from Tohyee's own movements (invoices
+    from Shopify orders move stock). Sending stock levels back to Shopify
+    needs write access and is a later stage.
+55. **A customer's country comes across** onto the contact. Overseas
+    customers get the export tax code only when the organisation's existing
+    "Foreign Trade" setting is on (examples EX3, EX4), so it's switched per
+    organisation.
