@@ -8655,7 +8655,7 @@ create trigger tax_codes_available_on_guard
 `,
   },
   {
-    version: "0051",
+    version: "0052",
     name: "not_for_profit_module",
     sql: `
 alter table organisation_settings

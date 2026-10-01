@@ -152,6 +152,8 @@ re-runs the whole sequence.
   database, and is checksummed. **Never edit a released migration; add a new
   one.** An edited migration or a database newer than the code stops that
   database from being migrated.
+- Tenant migration numbers are unique across active branches; coordinate the
+  next number with the other open branches before adding a tenant migration.
 - The core database migrates first; if it fails, the server doesn't start.
 - Each organisation then migrates on its own. A failure marks that
   organisation `failed` and blocks it (not half-upgraded); others carry on.
