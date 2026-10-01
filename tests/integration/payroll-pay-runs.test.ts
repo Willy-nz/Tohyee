@@ -392,6 +392,10 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
         esct: "28.20",
         kiwiSaverEmployerNet: "66.03",
         employerCost: "2786.54",
+        extraPay: "0.00",
+        extraPayTax: "0.00",
+        extraPayTaxRate: null,
+        lumpSumLowestRate: false,
       });
       expect(pay(run, people.kiri).pay).toMatchObject({ paye: "343.00", netPay: "1657.00", employerCost: "2000.00" });
       expect(run.totals).toEqual({
@@ -568,6 +572,10 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
         esct: "5.25",
         kiwiSaverEmployerNet: "25.55",
         employerCost: "953.40",
+        extraPay: "0.00",
+        extraPayTax: "0.00",
+        extraPayTaxRate: null,
+        lumpSumLowestRate: false,
       });
 
       const approved = await approve(jess, run.id);
@@ -628,6 +636,10 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
         esct: "21.35",
         kiwiSaverEmployerNet: "101.15",
         employerCost: "3622.50",
+        extraPay: "0.00",
+        extraPayTax: "0.00",
+        extraPayTaxRate: null,
+        lumpSumLowestRate: false,
       });
     });
 
@@ -724,7 +736,7 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
 
   describe("PRUN8: refused rather than guessed", () => {
     it("refuses pay items Tohyee doesn't support yet", async () => {
-      for (const kind of ["bonus", "back_pay", "final_pay", "leave", "child_support", "payroll_giving", "employer_contribution"]) {
+      for (const kind of ["leave", "child_support", "payroll_giving", "employer_contribution"]) {
         const refused = await call(payItemsRoute.POST, mere, "/api/payroll/pay-items", {
           method: "POST",
           body: { idempotencyKey: key("item"), name: `Refused ${kind}`, kind, accountCode: "6200" },
@@ -742,14 +754,25 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
         body: { idempotencyKey: key("item"), name: "No levy", kind: "allowance", accountCode: "6200", subjectToAccLevy: false },
       });
       expect(levyApart.body.error).toContain(NOT_SUPPORTED);
+      // Bonuses are the Extra pay kind (P12); its treatment is fixed.
+      const bonus = await call(payItemsRoute.POST, mere, "/api/payroll/pay-items", {
+        method: "POST",
+        body: { idempotencyKey: key("item"), name: "Refused bonus", kind: "bonus", accountCode: "6200" },
+      });
+      expect(bonus.body.error).toContain("(bonuses and lump sums are extra_pay)");
+      const untaxedRedundancy = await call(payItemsRoute.POST, mere, "/api/payroll/pay-items", {
+        method: "POST",
+        body: { idempotencyKey: key("item"), name: "Redundancy KS", kind: "redundancy", accountCode: "6200", countsForKiwiSaver: true },
+      });
+      expect(untaxedRedundancy.body.error).toBe("Redundancy pay items are taxable and don't count for KiwiSaver (decision 125).");
     });
 
-    it("refuses final pays, part periods on a salary, pay rate changes in a period and odd monthly periods", async () => {
+    it("refuses part periods on a salary (starting or finishing), pay rate changes in a period and odd monthly periods", async () => {
       const leavers = await group("Leavers", "weekly");
       await employee({ firstName: "Tama", lastName: "Leaving", payFrequency: "weekly", annualSalary: "52000", finishDate: "2026-10-07", payGroupId: leavers });
       const final = await createRun(ben, { payGroupId: leavers, periodStart: "2026-10-05", payDate: "2026-10-14" });
       expect(final.body.error).toBe(
-        `${NOT_SUPPORTED}: final pays. Tama Leaving finishes on 2026-10-07, inside this pay period; move them out of Leavers to pay everyone else.`,
+        `${NOT_SUPPORTED}: part of a pay period on a salary. Tama Leaving finishes on 2026-10-07, before the period ends.`,
       );
 
       const starters = await group("Starters", "weekly");
@@ -803,7 +826,7 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
       const draft = await asUser(ben, (tx) => getPayRun(tx, runId));
       expect(pay(draft, lou)).toMatchObject({
         pay: null,
-        problem: `${NOT_SUPPORTED}: final pays. Lou Leaver finishes on 2026-10-07, inside this pay period; move them out of Late changes to pay everyone else.`,
+        problem: `${NOT_SUPPORTED}: part of a pay period on a salary. Lou Leaver finishes on 2026-10-07, before the period ends.`,
       });
       expect(pay(draft, rai)).toMatchObject({
         pay: null,

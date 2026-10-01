@@ -19,8 +19,21 @@ import { rdSettings, timeZone } from "@/lib/rd/common";
  * callers show them only to people with payroll access (decision 6).
  */
 
-/** Pay item kinds that are employee costs IRD lists (IR1240 p 63; decision 66). */
-export const RD_PAY_ITEM_KINDS = ["ordinary_time", "overtime", "allowance", "holiday_pay", "kiwisaver_employer"] as const;
+/**
+ * Pay item kinds that are employee costs IRD lists (IR1240 p 63; decisions 66
+ * and 136): bonuses, back pay and holiday pay on finishing count; redundancy
+ * isn't in IRD's list.
+ */
+export const RD_PAY_ITEM_KINDS = [
+  "ordinary_time",
+  "overtime",
+  "allowance",
+  "holiday_pay",
+  "extra_pay",
+  "back_pay",
+  "termination_holiday_pay",
+  "kiwisaver_employer",
+] as const;
 
 export type RdPayShare = {
   activityId: string;

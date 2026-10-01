@@ -2,16 +2,35 @@ import { writeAuditEvent } from "@/lib/audit";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import { addDays } from "@/lib/financial-year";
+import { formatDate, formatMoney } from "@/lib/format";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { controlAccountCode, type ControlAccount } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
-import { add, dec, type Decimal, isPositive, isZero, mul, parseDecimalInput, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import {
+  add,
+  cmp,
+  dec,
+  type Decimal,
+  isNegative,
+  isPositive,
+  isZero,
+  mul,
+  parseDecimalInput,
+  sub,
+  sum,
+  toFixedString,
+  toPlainString,
+  ZERO_DECIMAL,
+} from "@/lib/money/decimal";
 import { requirePayrollAccess } from "@/lib/payroll/access";
 import { allocationOn } from "@/lib/payroll/allocations";
+import { annualiseForExtraPay, type ExtraPayMethod } from "@/lib/payroll/calculations";
 import type { PayFrequency } from "@/lib/payroll/groups";
 import {
   calculateEmployeePay,
+  calculationFrequency,
   type EmployeePayResult,
   type KiwiSaverStatus,
   lineAmount,
@@ -19,7 +38,16 @@ import {
   payPeriodEnd,
   salaryForPeriod,
 } from "@/lib/payroll/pay-calculation";
-import { PAY_ITEM_COLUMNS, PAY_ITEM_FROM, type PayItemCategory, type PayItemKind, type PayItemRow } from "@/lib/payroll/pay-items";
+import {
+  EXTRA_PAY_KINDS,
+  PAY_ITEM_COLUMNS,
+  PAY_ITEM_FROM,
+  PAY_ITEM_KIND_ORDER_SQL,
+  type PayItemCategory,
+  type PayItemKind,
+  type PayItemRow,
+  TERMINATION_KINDS,
+} from "@/lib/payroll/pay-items";
 import { payRateOn } from "@/lib/payroll/pay-rates";
 import { NOT_SUPPORTED, payrollRatesOn } from "@/lib/payroll/rates";
 import { percentageOfWeight, splitByWeights, timesheetWeights } from "@/lib/payroll/timesheet-split";
@@ -39,6 +67,10 @@ import { asRecord, optionalSource, optionalString, requireArray, requireIdempote
  * journal lines totalled by pay item, account and tracking, never by
  * employee (decision 6). Approved pay runs are never changed, only voided
  * (an exact reversing journal). Everything needs payroll access.
+ *
+ * Extra pays (bonuses, back pay, holiday pay on finishing, redundancy) are
+ * lines taxed under IRD's extra pay rules against the four weeks' pay or,
+ * on a final pay, the last 2 paid periods (P12; decisions 124-135).
  */
 
 export type PayRunStatus = "draft" | "approved" | "voided";
@@ -53,6 +85,15 @@ export type PayRunLine = {
   rate: string | null;
   amount: string;
   description: string | null;
+  /** Back pay worked out from pay rate history: the approved pay run it's for (decision 133). */
+  backPayForPayRunId: string | null;
+};
+
+/** How an employee's extra pays are taxed (decisions 126-130): kept when approved. */
+export type ExtraPayBasis = {
+  method: ExtraPayMethod | "flat_rate";
+  /** The annualised income, or null for a flat rate. */
+  annualised: string | null;
 };
 
 export type PayRunEmployee = {
@@ -72,6 +113,12 @@ export type PayRunEmployee = {
   problem: string | null;
   /** Approved timesheets covering the period (live on a draft, as used once approved; TS5, TS6). */
   timesheets: PayRunTimesheets | null;
+  /** The employee's finish date when this is their final pay (decision 134). */
+  finishDate: string | null;
+  /** How the extra pays were (or will be) taxed, or null with none. */
+  extraPayBasis: ExtraPayBasis | null;
+  /** What the person running pay should know: a final pay, how extra pays are taxed (XP8, XP12). */
+  notes: string[];
 };
 
 export type PayRunTimesheets = {
@@ -276,6 +323,13 @@ type EmployeeRow = {
   esct: string | null;
   kiwisaver_employer_net: string | null;
   employer_cost: string | null;
+  extra_pay: string | null;
+  extra_pay_tax: string | null;
+  extra_pay_tax_rate: string | null;
+  extra_pay_method: ExtraPayMethod | "flat_rate" | null;
+  extra_pay_annualised: string | null;
+  lump_sum_lowest_rate: boolean | null;
+  kept_finish_date: string | null;
 };
 
 /**
@@ -298,7 +352,8 @@ async function loadEmployees(tx: OrgTx, run: RunRow): Promise<EmployeeRow[]> {
             pe.gross::text, pe.taxable_earnings::text, pe.non_taxable_earnings::text, pe.kiwisaver_earnings::text,
             pe.paye::text, pe.student_loan_deduction::text, pe.kiwisaver_employee::text, pe.deductions::text,
             pe.net_pay::text, pe.kiwisaver_employer::text, pe.esct::text, pe.kiwisaver_employer_net::text,
-            pe.employer_cost::text
+            pe.employer_cost::text, pe.extra_pay::text, pe.extra_pay_tax::text, pe.extra_pay_tax_rate::text,
+            pe.extra_pay_method, pe.extra_pay_annualised::text, pe.lump_sum_lowest_rate, pe.finish_date::text as kept_finish_date
        from payroll_pay_run_employees pe
        join payroll_employees e on e.id = pe.employee_id
       where pe.pay_run_id = $1
@@ -316,17 +371,20 @@ type LineRow = {
   category: PayItemCategory;
   kind: PayItemKind;
   subject_to_paye: boolean;
+  subject_to_acc_levy: boolean;
   subject_to_kiwisaver: boolean;
   quantity: string | null;
   rate: string | null;
   amount: string;
   description: string | null;
+  back_pay_for_pay_run_id: string | null;
 };
 
 async function loadLines(tx: OrgTx, runId: string): Promise<LineRow[]> {
   const result = await tx.query<LineRow>(
     `select l.employee_id, l.line_number, l.pay_item_id, p.name as pay_item_name, p.category, p.kind,
-            p.subject_to_paye, p.subject_to_kiwisaver, l.quantity::text, l.rate::text, l.amount::text, l.description
+            p.subject_to_paye, p.subject_to_acc_levy, p.subject_to_kiwisaver, l.quantity::text, l.rate::text, l.amount::text,
+            l.description, l.back_pay_for_pay_run_id::text
        from payroll_pay_run_lines l join payroll_pay_items p on p.id = l.pay_item_id
       where l.pay_run_id = $1
       order by l.employee_id, l.line_number`,
@@ -346,6 +404,7 @@ function toLine(row: LineRow): PayRunLine {
     rate: row.rate === null ? null : trimRate(row.rate),
     amount: toFixedString(dec(row.amount), 2),
     description: row.description,
+    backPayForPayRunId: row.back_pay_for_pay_run_id,
   };
 }
 
@@ -372,6 +431,10 @@ function storedPay(row: EmployeeRow): EmployeePayResult | null {
     esct: m(row.esct),
     kiwiSaverEmployerNet: m(row.kiwisaver_employer_net),
     employerCost: m(row.employer_cost),
+    extraPay: m(row.extra_pay),
+    extraPayTax: m(row.extra_pay_tax),
+    extraPayTaxRate: row.extra_pay_tax_rate === null ? null : toPlainString(dec(row.extra_pay_tax_rate)),
+    lumpSumLowestRate: row.lump_sum_lowest_rate ?? false,
   };
 }
 
@@ -380,7 +443,16 @@ async function rateForPeriod(tx: OrgTx, employeeId: string, periodStart: string,
   return payRateOn(tx, employeeId, startDate > periodStart ? startDate : periodStart);
 }
 
-function calculate(run: RunRow, employee: EmployeeRow, lines: LineRow[]): { pay: EmployeePayResult | null; problem: string | null } {
+function isExtraPayLine(line: LineRow): boolean {
+  return line.category === "earnings" && EXTRA_PAY_KINDS.includes(line.kind);
+}
+
+function calculate(
+  run: RunRow,
+  employee: EmployeeRow,
+  lines: LineRow[],
+  basis: ExtraPayBasis | null,
+): { pay: EmployeePayResult | null; problem: string | null } {
   if (run.status !== "draft") return { pay: storedPay(employee), problem: null };
   if (employee.is_archived) return { pay: null, problem: `${employee.name} is archived. Take them off this pay run.` };
   try {
@@ -398,8 +470,11 @@ function calculate(run: RunRow, employee: EmployeeRow, lines: LineRow[]): { pay:
         category: line.category === "deduction" ? "deduction" : "earnings",
         taxable: line.subject_to_paye,
         kiwiSaver: line.subject_to_kiwisaver,
+        extraPay: isExtraPayLine(line),
+        accLevy: line.subject_to_acc_levy,
         amount: line.amount,
       })),
+      extraPayAnnualised: basis ? (basis.annualised ?? "0.00") : null,
     });
     return { pay, problem: null };
   } catch (error) {
@@ -408,7 +483,135 @@ function calculate(run: RunRow, employee: EmployeeRow, lines: LineRow[]): { pay:
   }
 }
 
-type Calculated = { employee: EmployeeRow; lines: LineRow[]; pay: EmployeePayResult | null; problem: string | null };
+type Calculated = {
+  employee: EmployeeRow;
+  lines: LineRow[];
+  pay: EmployeePayResult | null;
+  problem: string | null;
+  finishDate: string | null;
+  basis: ExtraPayBasis | null;
+};
+
+/** The finish date when it's inside the period: a final pay (decision 134). */
+function finalPayDate(run: RunRow, employee: EmployeeRow): string | null {
+  if (run.status !== "draft") return employee.kept_finish_date;
+  const finish = employee.finish_date;
+  return finish !== null && finish >= run.period_start && finish <= run.period_end ? finish : null;
+}
+
+const FLAT_RATE_CODES = new Set(["ND", "NSW", "CAE", "EDW"]);
+
+/** An approved pay's regular taxable pay: taxable earnings less extra pays (decision 126). */
+const REGULAR_PAY_SQL = "(pe.taxable_earnings - coalesce(pe.extra_pay, 0))";
+
+/**
+ * How a draft's extra pays are taxed (decisions 126, 128, 130), or why they
+ * can't be: four weeks' regular pay to the pay date, or the last 2 paid
+ * periods when a final pay has holiday pay on finishing or redundancy.
+ */
+async function extraPayBasis(
+  tx: OrgTx,
+  run: RunRow,
+  employee: EmployeeRow,
+  lines: LineRow[],
+  finishDate: string | null,
+): Promise<{ basis: ExtraPayBasis | null; problem: string | null }> {
+  const extras = lines.filter((line) => isExtraPayLine(line) && isPositive(dec(line.amount)));
+  if (extras.length === 0) return { basis: null, problem: null };
+  const name = employee.name;
+  const termination = extras.some((line) => TERMINATION_KINDS.includes(line.kind));
+  if (termination && finishDate === null) {
+    return {
+      basis: null,
+      problem: `${NOT_SUPPORTED}: holiday pay on finishing or redundancy on a pay that isn't ${name}'s final pay (their finish date isn't in this pay period).`,
+    };
+  }
+  if (!termination && finishDate !== null) {
+    return {
+      basis: null,
+      problem: `${NOT_SUPPORTED}: an extra pay or back pay on ${name}'s final pay without holiday pay on finishing or redundancy (whether it arises from the employment ending decides IRD's method).`,
+    };
+  }
+  const code = employee.tax_code.trim().replace(/\s+/g, " ").toUpperCase();
+  if (FLAT_RATE_CODES.has(code)) return { basis: { method: "flat_rate", annualised: null }, problem: null };
+  const method: ExtraPayMethod = termination ? "end_of_employment" : "four_weeks";
+  const frequency = calculationFrequency(run.pay_frequency);
+  const regularHere = lines
+    .filter((line) => line.category === "earnings" && line.subject_to_paye && !isExtraPayLine(line))
+    .reduce((total, line) => add(total, dec(line.amount)), ZERO_DECIMAL);
+  const earlier =
+    method === "four_weeks"
+      ? await tx.query<{ pay_frequency: PayFrequency; regular: string }>(
+          `select r.pay_frequency, ${REGULAR_PAY_SQL}::text as regular
+             from payroll_pay_run_employees pe join payroll_pay_runs r on r.id = pe.pay_run_id
+            where pe.employee_id = $1 and r.status = 'approved' and r.id <> $2
+              and r.pay_date between $3::date and $4::date and ${REGULAR_PAY_SQL} > 0
+            order by r.pay_date, r.run_number`,
+          [employee.employee_id, run.id, addDays(run.pay_date, -27), run.pay_date],
+        )
+      : await tx.query<{ pay_frequency: PayFrequency; regular: string }>(
+          `select r.pay_frequency, ${REGULAR_PAY_SQL}::text as regular
+             from payroll_pay_run_employees pe join payroll_pay_runs r on r.id = pe.pay_run_id
+            where pe.employee_id = $1 and r.status = 'approved' and r.id <> $2
+              and r.period_end < $3::date and ${REGULAR_PAY_SQL} > 0
+            order by r.period_end desc, r.run_number desc
+            limit 2`,
+          [employee.employee_id, run.id, run.period_start],
+        );
+  const other = earlier.rows.find((row) => row.pay_frequency !== run.pay_frequency);
+  if (other) {
+    return {
+      basis: null,
+      problem: `${NOT_SUPPORTED}: an extra pay taxed against pays of another frequency (${name} had a ${calculationFrequency(other.pay_frequency)} pay; this pay run is ${frequency}).`,
+    };
+  }
+  const pays = earlier.rows.map((row) => toFixedString(dec(row.regular), 2));
+  if (method === "four_weeks" && isPositive(regularHere)) pays.push(toFixedString(regularHere, 2));
+  try {
+    return { basis: { method, annualised: annualiseForExtraPay({ method, frequency, pays }) }, problem: null };
+  } catch (error) {
+    if (error instanceof ValidationError) return { basis: null, problem: `${error.message.replace(/\.$/, "")} for ${name}.` };
+    throw error;
+  }
+}
+
+/** Back pay lines whose pay period another approved pay run has already back-paid (decision 133). */
+async function backPayClash(tx: OrgTx, run: RunRow, employee: EmployeeRow, lines: LineRow[]): Promise<string | null> {
+  const targets = lines.map((line) => line.back_pay_for_pay_run_id).filter((id): id is string => id !== null);
+  if (targets.length === 0) return null;
+  const clash = await tx.query<{ target: string; run_number: string }>(
+    `select t.run_number::text as target, r.run_number::text
+       from payroll_pay_run_lines l
+       join payroll_pay_runs r on r.id = l.pay_run_id
+       join payroll_pay_runs t on t.id = l.back_pay_for_pay_run_id
+      where l.employee_id = $1 and l.back_pay_for_pay_run_id = any($2::uuid[]) and r.status = 'approved' and r.id <> $3
+      order by r.run_number limit 1`,
+    [employee.employee_id, targets, run.id],
+  );
+  const row = clash.rows[0];
+  return row
+    ? `${NOT_SUPPORTED}: a second back pay for ${payRunReference(row.target)}: ${employee.name} was already given back pay for it on ${payRunReference(row.run_number)}. Remove the back pay.`
+    : null;
+}
+
+function notesFor(finishDate: string | null, pay: EmployeePayResult | null, basis: ExtraPayBasis | null): string[] {
+  const notes: string[] = [];
+  if (finishDate) {
+    notes.push(
+      `Final pay: employment finishes on ${formatDate(finishDate)}. Holiday pay owed on finishing isn't calculated by Tohyee until leave (P8) is built; work it out outside Tohyee and add it as Holiday pay on finishing.`,
+    );
+  }
+  if (pay && basis && isPositive(dec(pay.extraPay))) {
+    const how =
+      basis.method === "flat_rate"
+        ? "the tax code's flat rate"
+        : `IRD's extra pay rules, ${basis.method === "four_weeks" ? "four weeks' pay" : "the last 2 paid pay periods"} annualised: $${formatMoney(basis.annualised ?? "0")}`;
+    notes.push(
+      `Extra pay $${formatMoney(pay.extraPay)} taxed at ${pay.extraPayTaxRate}% (${how})${pay.lumpSumLowestRate ? "; lowest rate, so the lump sum indicator is on" : ""}.`,
+    );
+  }
+  return notes;
+}
 
 async function calculateRun(tx: OrgTx, run: RunRow): Promise<Calculated[]> {
   const employees = await loadEmployees(tx, run);
@@ -416,7 +619,21 @@ async function calculateRun(tx: OrgTx, run: RunRow): Promise<Calculated[]> {
   const calculated: Calculated[] = [];
   for (const employee of employees) {
     const own = lines.filter((line) => line.employee_id === employee.employee_id);
-    const result = calculate(run, employee, own);
+    const finishDate = finalPayDate(run, employee);
+    let basis: ExtraPayBasis | null = null;
+    let basisProblem: string | null = null;
+    if (run.status !== "draft") {
+      basis = employee.extra_pay_method
+        ? {
+            method: employee.extra_pay_method,
+            annualised: employee.extra_pay_annualised === null ? null : toFixedString(dec(employee.extra_pay_annualised), 2),
+          }
+        : null;
+    } else if (!employee.is_archived) {
+      ({ basis, problem: basisProblem } = await extraPayBasis(tx, run, employee, own, finishDate));
+      basisProblem ??= await backPayClash(tx, run, employee, own);
+    }
+    const result = basisProblem ? { pay: null, problem: basisProblem } : calculate(run, employee, own, basis);
     // A finish date or pay rate change entered after the draft was made is refused here too (PRUN8).
     const later =
       run.status === "draft" && !employee.is_archived
@@ -425,11 +642,10 @@ async function calculateRun(tx: OrgTx, run: RunRow): Promise<Calculated[]> {
             { id: employee.employee_id, name: employee.name, start_date: employee.start_date, finish_date: employee.finish_date },
             run.period_start,
             run.period_end,
-            run.pay_group_name,
             run.id,
           )
         : null;
-    calculated.push({ employee, lines: own, ...(later ? { pay: null, problem: later } : result) });
+    calculated.push({ employee, lines: own, finishDate, basis, ...(later ? { pay: null, problem: later } : result) });
   }
   return calculated;
 }
@@ -488,6 +704,9 @@ export async function getPayRun(tx: OrgTx, idInput: unknown): Promise<PayRun> {
       pay: entry.pay,
       problem: entry.problem,
       timesheets: timesheets.get(entry.employee.employee_id) ?? null,
+      finishDate: entry.finishDate,
+      extraPayBasis: entry.basis,
+      notes: notesFor(entry.finishDate, entry.pay, entry.basis),
     })),
     totals: totalsOf(calculated),
     problemCount: calculated.filter((entry) => entry.problem !== null).length,
@@ -531,9 +750,11 @@ function isUniqueViolation(error: unknown): boolean {
 
 /**
  * Creates a draft pay run (PRUN11): a line of Ordinary time for each
- * employee in the pay group who is paid in the period. Refuses (PRUN8) a
- * pay group where someone finishes inside the period (a final pay), someone
- * on a salary starts after the period starts, or a pay rate changes inside
+ * employee in the pay group who is paid in the period. Someone finishing
+ * inside the period gets their final pay (decision 134): hourly, 0 hours to
+ * fill in unless approved timesheets cover every day to the finish date.
+ * Refuses (PRUN8) a pay group where someone on a salary starts after the
+ * period starts or finishes before it ends, or a pay rate changes inside
  * the period.
  */
 export async function createPayRun(
@@ -600,9 +821,6 @@ export async function createPayRun(
 
   const drafts: Array<{ employeeId: string; quantity: string | null; rate: string | null; amount: string; description: string | null }> = [];
   for (const employee of employees.rows) {
-    if (employee.finish_date !== null && employee.finish_date <= periodEnd) {
-      throw new ValidationError(finalPayRefusal(employee, groupName));
-    }
     const rate = await rateForPeriod(tx, employee.id, periodStart, employee.start_date);
     if (!rate) throw new ValidationError(`${employee.name} has no pay rate for ${periodStart}. Add one under Employees.`);
     if (rate.payBasis === "salary" && employee.start_date > periodStart) {
@@ -610,21 +828,27 @@ export async function createPayRun(
         `${NOT_SUPPORTED}: part of a pay period on a salary. ${employee.name} starts on ${employee.start_date}, after the period starts.`,
       );
     }
-    const refused = await periodRefusal(tx, employee, periodStart, periodEnd, groupName);
+    const refused = await periodRefusal(tx, employee, periodStart, periodEnd);
     if (refused) throw new ValidationError(refused);
     if (rate.payBasis === "salary") {
       drafts.push({ employeeId: employee.id, quantity: null, rate: null, amount: salaryForPeriod(rate.annualSalary!, frequency), description: null });
     } else {
-      // Approved timesheets covering every day of the period give the hours (TS8; decision 99).
-      const coverage = await timesheetCoverage(tx, employee.id, periodStart, periodEnd);
+      // Approved timesheets covering every day of the period give the hours (TS8; decision 99); someone finishing
+      // before the period ends starts at 0 hours unless timesheets cover every day to their finish date (decision 134).
+      const leavesEarly = employee.finish_date !== null && employee.finish_date < periodEnd;
+      const coverage = await timesheetCoverage(tx, employee.id, periodStart, leavesEarly ? employee.finish_date! : periodEnd);
       const fromTimesheets = coverage.allDaysCovered && isPositive(dec(coverage.totalHours));
-      const hours = fromTimesheets ? coverage.totalHours : ordinaryHoursForPeriod(rate.ordinaryHoursPerWeek!, frequency);
+      const hours = fromTimesheets ? coverage.totalHours : leavesEarly ? "0.00" : ordinaryHoursForPeriod(rate.ordinaryHoursPerWeek!, frequency);
       drafts.push({
         employeeId: employee.id,
         quantity: hours,
         rate: rate.hourlyRate!,
         amount: lineAmount(hours, rate.hourlyRate!),
-        description: fromTimesheets ? "From approved timesheets" : null,
+        description: fromTimesheets
+          ? "From approved timesheets"
+          : leavesEarly
+            ? `Final pay: enter the hours worked to ${formatDate(employee.finish_date)}`
+            : null,
       });
     }
   }
@@ -667,28 +891,29 @@ export async function createPayRun(
   return { created: true, payRun };
 }
 
-function finalPayRefusal(employee: GroupEmployee, groupName: string): string {
-  return `${NOT_SUPPORTED}: final pays. ${employee.name} finishes on ${employee.finish_date}, inside this pay period; move them out of ${groupName} to pay everyone else.`;
-}
-
 /**
  * Why an employee can't be paid on a pay run for this period (PRUN8): they
- * finish inside it (a final pay) or their pay rate changes part-way through.
- * Checked when the draft is made and again every time it's calculated, so a
- * finish date or pay rate entered afterwards isn't missed on approval.
+ * finished before it, they're on a salary and finish part-way through it
+ * (decision 134), or their pay rate changes part-way through. Checked when
+ * the draft is made and again every time it's calculated, so a finish date
+ * or pay rate entered afterwards isn't missed on approval.
  */
 async function periodRefusal(
   tx: OrgTx,
   employee: GroupEmployee,
   periodStart: string,
   periodEnd: string,
-  groupName: string,
   payRunId: string | null = null,
 ): Promise<string | null> {
   if (employee.finish_date !== null && employee.finish_date < periodStart) {
     return `${employee.name} finished on ${employee.finish_date}, before this pay period. Take them off this pay run.`;
   }
-  if (employee.finish_date !== null && employee.finish_date <= periodEnd) return finalPayRefusal(employee, groupName);
+  if (employee.finish_date !== null && employee.finish_date < periodEnd) {
+    const rate = await rateForPeriod(tx, employee.id, periodStart, employee.start_date);
+    if (rate?.payBasis === "salary") {
+      return `${NOT_SUPPORTED}: part of a pay period on a salary. ${employee.name} finishes on ${employee.finish_date}, before the period ends.`;
+    }
+  }
   const change = await tx.query<{ effective_from: string }>(
     `select effective_from::text from payroll_pay_rates
       where employee_id = $1 and effective_from > $2 and effective_from <= $3
@@ -736,7 +961,9 @@ function rejectNegative(input: unknown): void {
  * Replaces one employee's earnings and deductions on a draft (PRUN2). Each
  * line is a pay item with hours x rate (overtime's rate defaults to the
  * hourly rate x the item's multiplier) or an amount. Employer KiwiSaver,
- * PAYE, student loan and ESCT are calculated, not entered.
+ * PAYE, student loan and ESCT are calculated, not entered. Back pay worked
+ * out from pay rate history stays, after the typed lines (XP10); remove it
+ * with removeBackPay.
  */
 export async function setPayRunEmployeeLines(
   tx: OrgTx,
@@ -808,12 +1035,29 @@ export async function setPayRunEmployeeLines(
     }
   }
 
+  const backPay = await tx.query<{ pay_item_id: string; amount: string; description: string | null; back_pay_for_pay_run_id: string }>(
+    `select pay_item_id, amount::text, description, back_pay_for_pay_run_id from payroll_pay_run_lines
+      where pay_run_id = $1 and employee_id = $2 and back_pay_for_pay_run_id is not null order by line_number`,
+    [run.id, employeeId],
+  );
+  if (parsed.length + backPay.rows.length > 200) {
+    throw new ValidationError("An employee can have at most 200 lines on a pay run, back pay included.");
+  }
   await tx.query("delete from payroll_pay_run_lines where pay_run_id = $1 and employee_id = $2", [run.id, employeeId]);
-  for (const [index, line] of parsed.entries()) {
+  const kept = backPay.rows.map((row) => ({
+    payItemId: row.pay_item_id,
+    quantity: null,
+    rate: null,
+    amount: row.amount,
+    description: row.description,
+    backPayFor: row.back_pay_for_pay_run_id,
+  }));
+  for (const [index, line] of [...parsed.map((entry) => ({ ...entry, backPayFor: null as string | null })), ...kept].entries()) {
     await tx.query(
-      `insert into payroll_pay_run_lines (pay_run_id, employee_id, line_number, pay_item_id, quantity, rate, amount, description)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [run.id, employeeId, index + 1, line.payItemId, line.quantity, line.rate, line.amount, line.description],
+      `insert into payroll_pay_run_lines (pay_run_id, employee_id, line_number, pay_item_id, quantity, rate, amount, description,
+                                          back_pay_for_pay_run_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [run.id, employeeId, index + 1, line.payItemId, line.quantity, line.rate, line.amount, line.description, line.backPayFor],
     );
   }
   await markPrepared(tx, run.id);
@@ -829,6 +1073,199 @@ export async function setPayRunEmployeeLines(
 function parseUuidField(input: unknown, index: number): string {
   if (typeof input !== "string" || !UUID_PATTERN.test(input)) throw new ValidationError(`Line ${index + 1}: choose a pay item.`);
   return input;
+}
+
+type BackPayTarget = { id: string; run_number: string; period_start: string; period_end: string; pay_frequency: PayFrequency };
+
+type PaidLine = { kind: PayItemKind; quantity: string | null; rate: string | null; amount: string; rate_multiplier: string | null };
+
+/**
+ * One approved pay period's back pay at a new pay rate (decision 133):
+ * Ordinary time at the new rate (hours x rate, or the salary for the
+ * period) and Overtime paid at the old rate x its multiplier, less what was
+ * paid. Refuses what it can't work out honestly.
+ */
+function backPayForPeriod(
+  target: BackPayTarget,
+  lines: PaidLine[],
+  rate: { pay_basis: "salary" | "hourly"; annual_salary: string | null; hourly_rate: string | null; effective_from: string },
+): { amount: Decimal; description: string } {
+  const reference = payRunReference(target.run_number);
+  const refuse = (what: string) => new ValidationError(`${NOT_SUPPORTED}: back pay ${what} (${reference}).`);
+  if (lines.some((line) => line.kind === "holiday_pay" || line.kind === "termination_holiday_pay")) {
+    throw refuse("for a pay period with holiday pay in it: holiday pay on back pay needs leave, payroll stage P8");
+  }
+  const ordinary = lines.filter((line) => line.kind === "ordinary_time");
+  const overtime = lines.filter((line) => line.kind === "overtime");
+  const period = `${formatDate(target.period_start)} to ${formatDate(target.period_end)}`;
+  let paid = ZERO_DECIMAL;
+  let owed = ZERO_DECIMAL;
+  let description: string;
+  if (rate.pay_basis === "salary") {
+    if (ordinary.some((line) => line.quantity !== null)) throw refuse("when the pay basis changed from hourly to a salary");
+    if (overtime.length > 0) throw refuse("on overtime at a typed rate");
+    for (const line of ordinary) paid = add(paid, dec(line.amount));
+    owed = dec(salaryForPeriod(rate.annual_salary!, target.pay_frequency));
+    description = `Back pay for ${reference} (${period}): salary of $${formatMoney(rate.annual_salary)} a year from ${formatDate(rate.effective_from)}`;
+  } else {
+    if (ordinary.some((line) => line.quantity === null)) throw refuse("when the pay basis changed from a salary to hourly");
+    const paidRates = [...new Set(ordinary.map((line) => toPlainString(dec(line.rate!))))];
+    if (paidRates.length > 1) throw refuse("for a pay period paid at more than one ordinary rate");
+    const newRate = rate.hourly_rate!;
+    let hours = ZERO_DECIMAL;
+    for (const line of ordinary) {
+      paid = add(paid, dec(line.amount));
+      owed = add(owed, dec(lineAmount(line.quantity!, newRate)));
+      hours = add(hours, dec(line.quantity!));
+    }
+    for (const line of overtime) {
+      const multiplier = line.rate_multiplier;
+      if (line.quantity === null || multiplier === null || paidRates.length !== 1 || cmp(dec(line.rate!), mul(dec(paidRates[0]), dec(multiplier))) !== 0) {
+        throw refuse("on overtime at a typed rate");
+      }
+      paid = add(paid, dec(line.amount));
+      owed = add(owed, dec(lineAmount(line.quantity, toFixedString(mul(dec(newRate), dec(multiplier)), 6))));
+    }
+    description = `Back pay for ${reference} (${period}): ${toFixedString(hours, 2)} h at $${formatMoney(newRate)}${
+      paidRates[0] ? ` instead of $${formatMoney(paidRates[0])}` : ""
+    }${overtime.length ? ", and overtime" : ""}`;
+  }
+  const amount = sub(owed, paid);
+  if (isNegative(amount)) throw refuse("at a lower rate than was paid");
+  return { amount, description: description.slice(0, 200) };
+}
+
+/**
+ * Adds back pay to an employee on a draft from a pay rate in their history
+ * (XP10, decision 133): one Back pay line for each approved pay period the
+ * rate now covers that was paid at less. Taxed as an extra pay.
+ */
+export async function addBackPay(
+  tx: OrgTx,
+  runIdInput: unknown,
+  employeeIdInput: unknown,
+  input: { payItemId: unknown; payRateId: unknown },
+): Promise<{ payRun: PayRun }> {
+  await requirePayrollAccess(tx);
+  const run = await findRun(tx, runIdInput, true);
+  assertDraft(run);
+  const employeeId = parseUuid(employeeIdInput, "employee");
+  const onRun = await tx.query<{ start_date: string; name: string }>(
+    `select e.start_date::text, e.first_name || ' ' || e.last_name as name
+       from payroll_pay_run_employees pe join payroll_employees e on e.id = pe.employee_id
+      where pe.pay_run_id = $1 and pe.employee_id = $2`,
+    [run.id, employeeId],
+  );
+  if (!onRun.rows[0]) throw new NotFoundError(`That employee isn't on ${payRunReference(run.run_number)}.`);
+  if (typeof input.payItemId !== "string" || !UUID_PATTERN.test(input.payItemId)) throw new ValidationError("Choose a Back pay pay item.");
+  const item = await tx.query<PayItemRow>(`select ${PAY_ITEM_COLUMNS} from ${PAY_ITEM_FROM} where p.id = $1`, [input.payItemId]);
+  if (!item.rows[0] || item.rows[0].kind !== "back_pay") throw new ValidationError("Choose a pay item of the kind Back pay.");
+  if (item.rows[0].is_archived) throw new ValidationError(`${item.rows[0].name} is archived.`);
+  if (typeof input.payRateId !== "string" || !UUID_PATTERN.test(input.payRateId)) throw new NotFoundError("That pay rate wasn't found.");
+  const found = await tx.query<{
+    id: string;
+    effective_from: string;
+    pay_basis: "salary" | "hourly";
+    annual_salary: string | null;
+    hourly_rate: string | null;
+  }>(
+    `select id, effective_from::text, pay_basis, annual_salary::text, hourly_rate::text from payroll_pay_rates
+      where id = $1 and employee_id = $2`,
+    [input.payRateId, employeeId],
+  );
+  const rate = found.rows[0];
+  if (!rate) throw new NotFoundError("That pay rate wasn't found for this employee.");
+  if (rate.effective_from >= run.period_start) {
+    throw new ValidationError(`No back pay is owed for that pay rate: it starts on ${formatDate(rate.effective_from)}, not before this pay period.`);
+  }
+  const targets = await tx.query<BackPayTarget>(
+    `select r.id, r.run_number::text, r.period_start::text, r.period_end::text, r.pay_frequency
+       from payroll_pay_runs r join payroll_pay_run_employees pe on pe.pay_run_id = r.id
+      where pe.employee_id = $1 and r.status = 'approved' and r.period_end >= $2::date and r.period_end < $3::date
+      order by r.period_start, r.run_number`,
+    [employeeId, rate.effective_from, run.period_start],
+  );
+  const added: Array<{ targetId: string; amount: string; description: string }> = [];
+  for (const target of targets.rows) {
+    const reference = payRunReference(target.run_number);
+    if (target.period_start < rate.effective_from) {
+      throw new ValidationError(
+        `${NOT_SUPPORTED}: back pay for a pay rate that starts part-way through a paid period (${reference} pays ${target.period_start} to ${target.period_end}; the rate starts on ${rate.effective_from}).`,
+      );
+    }
+    const inEffect = await rateForPeriod(tx, employeeId, target.period_start, onRun.rows[0].start_date);
+    if (inEffect?.id !== rate.id) continue; // a later pay rate covers this period
+    const earlier = await tx.query<{ run_number: string }>(
+      `select r.run_number::text from payroll_pay_run_lines l join payroll_pay_runs r on r.id = l.pay_run_id
+        where l.back_pay_for_pay_run_id = $1 and l.employee_id = $2 and r.status <> 'voided'
+        order by r.run_number limit 1`,
+      [target.id, employeeId],
+    );
+    if (earlier.rows[0]) {
+      throw new ValidationError(
+        `${NOT_SUPPORTED}: a second back pay for ${reference}: ${onRun.rows[0].name} already has back pay for it on ${payRunReference(earlier.rows[0].run_number)}.`,
+      );
+    }
+    const paid = await tx.query<PaidLine>(
+      `select p.kind, l.quantity::text, l.rate::text, l.amount::text, p.rate_multiplier::text
+         from payroll_pay_run_lines l join payroll_pay_items p on p.id = l.pay_item_id
+        where l.pay_run_id = $1 and l.employee_id = $2 and p.category = 'earnings'
+        order by l.line_number`,
+      [target.id, employeeId],
+    );
+    const result = backPayForPeriod(target, paid.rows, rate);
+    if (isPositive(result.amount)) {
+      added.push({ targetId: target.id, amount: toFixedString(result.amount, 2), description: result.description });
+    }
+  }
+  if (added.length === 0) {
+    throw new ValidationError("No back pay is owed for that pay rate: no approved pay period it covers was paid at less.");
+  }
+  const last = await tx.query<{ count: string; last: string | null }>(
+    "select count(*)::text as count, max(line_number)::text as last from payroll_pay_run_lines where pay_run_id = $1 and employee_id = $2",
+    [run.id, employeeId],
+  );
+  if (Number(last.rows[0].count) + added.length > 200) {
+    throw new ValidationError("An employee can have at most 200 lines on a pay run, back pay included.");
+  }
+  let lineNumber = Number(last.rows[0].last ?? "0");
+  for (const line of added) {
+    lineNumber += 1;
+    await tx.query(
+      `insert into payroll_pay_run_lines (pay_run_id, employee_id, line_number, pay_item_id, amount, description, back_pay_for_pay_run_id)
+       values ($1, $2, $3, $4, $5, $6, $7)`,
+      [run.id, employeeId, lineNumber, item.rows[0].id, line.amount, line.description, line.targetId],
+    );
+  }
+  await markPrepared(tx, run.id);
+  await writeAuditEvent(tx, {
+    eventType: "payroll_pay_run.back_pay_added",
+    entityType: "payroll_pay_run",
+    entityId: run.id,
+    details: { reference: payRunReference(run.run_number), employeeId, payRateId: rate.id, periodCount: added.length },
+  });
+  return { payRun: await getPayRun(tx, run.id) };
+}
+
+/** Takes the back pay worked out from pay rate history off an employee on a draft (XP10). */
+export async function removeBackPay(tx: OrgTx, runIdInput: unknown, employeeIdInput: unknown): Promise<{ payRun: PayRun }> {
+  await requirePayrollAccess(tx);
+  const run = await findRun(tx, runIdInput, true);
+  assertDraft(run);
+  const employeeId = parseUuid(employeeIdInput, "employee");
+  const removed = await tx.query(
+    "delete from payroll_pay_run_lines where pay_run_id = $1 and employee_id = $2 and back_pay_for_pay_run_id is not null",
+    [run.id, employeeId],
+  );
+  if (!removed.rowCount) throw new NotFoundError(`That employee has no back pay on ${payRunReference(run.run_number)}.`);
+  await markPrepared(tx, run.id);
+  await writeAuditEvent(tx, {
+    eventType: "payroll_pay_run.back_pay_removed",
+    entityType: "payroll_pay_run",
+    entityId: run.id,
+    details: { reference: payRunReference(run.run_number), employeeId, lineCount: removed.rowCount },
+  });
+  return { payRun: await getPayRun(tx, run.id) };
 }
 
 /** Leaves an employee out of a draft (PRUN11). */
@@ -883,8 +1320,7 @@ async function itemAccounts(tx: OrgTx): Promise<Map<string, ItemAccount | { id: 
   const result = await tx.query<{ id: string; name: string; rank: number; account_id: string | null; account_code: string | null; is_active: boolean | null }>(
     `select p.id, p.name, a.id::text as account_id, a.code as account_code, a.is_active,
             (row_number() over (order by array_position(array['earnings', 'deduction', 'employer_contribution'], p.category),
-                                         array_position(array['ordinary_time', 'overtime', 'allowance', 'holiday_pay', 'reimbursement',
-                                                              'after_tax_deduction', 'kiwisaver_employer'], p.kind),
+                                         array_position(${PAY_ITEM_KIND_ORDER_SQL}, p.kind),
                                          lower(p.name), p.id))::int as rank
        from payroll_pay_items p left join accounts a on a.id = p.account_id`,
   );
@@ -1099,7 +1535,9 @@ export async function approvePayRun(
           set employee_name = $3, tax_code = $4, student_loan = $5, kiwisaver_status = $6, kiwisaver_employee_rate = $7,
               kiwisaver_employer_rate = $8, esct_rate = $9, gross = $10, taxable_earnings = $11, non_taxable_earnings = $12,
               kiwisaver_earnings = $13, paye = $14, student_loan_deduction = $15, kiwisaver_employee = $16, deductions = $17,
-              net_pay = $18, kiwisaver_employer = $19, esct = $20, kiwisaver_employer_net = $21, employer_cost = $22
+              net_pay = $18, kiwisaver_employer = $19, esct = $20, kiwisaver_employer_net = $21, employer_cost = $22,
+              extra_pay = $23, extra_pay_tax = $24, extra_pay_tax_rate = $25, extra_pay_method = $26, extra_pay_annualised = $27,
+              lump_sum_lowest_rate = $28, finish_date = $29
         where pay_run_id = $1 and employee_id = $2`,
       [
         run.id,
@@ -1124,6 +1562,13 @@ export async function approvePayRun(
         pay.esct,
         pay.kiwiSaverEmployerNet,
         pay.employerCost,
+        pay.extraPay,
+        pay.extraPayTax,
+        pay.extraPayTaxRate,
+        isPositive(dec(pay.extraPay)) ? (entry.basis?.method ?? null) : null,
+        isPositive(dec(pay.extraPay)) ? (entry.basis?.annualised ?? null) : null,
+        pay.lumpSumLowestRate,
+        entry.finishDate,
       ],
     );
   }
