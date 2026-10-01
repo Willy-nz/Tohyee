@@ -2,6 +2,7 @@ import { ValidationError } from "@/lib/errors";
 import { cmp, dec, isNegative, isPositive, isZero } from "@/lib/money/decimal";
 import { addMonths, addDays, daysInclusive } from "./dates";
 import { annualEntitlementDates, type UnpaidLeave } from "./annual";
+import { sickEntitlementDates } from "./sick";
 import type { PeriodEarnings } from "./earnings";
 import { refuse } from "./rules";
 
@@ -78,6 +79,14 @@ export function checkOpeningBalances(input: {
       throw new ValidationError(`Give the date last entitled to annual holidays: 12 months from the start was ${fromStart[0]}, on or before the opening date.`);
     }
     if (!isZero(cashedUp)) throw new ValidationError("Annual holidays can't have been cashed up before any entitlement (s 28A(1)).");
+    if (isPositive(annual)) throw new ValidationError("Before 12 months' employment there's no annual holiday entitlement (s 16(1)): the balance is 0, or negative if taken in advance.");
+  }
+
+  // Sick and family violence leave before 6 months: nothing yet, or less than nothing if taken in advance (s 63(3), s 72D(3)).
+  if (sickEntitlementDates(input.startDate, asAt).length === 0) {
+    if (isPositive(dec(figures.sickDays)) || isPositive(dec(figures.familyViolenceDays))) {
+      throw new ValidationError("Before 6 months' employment there's no sick or family violence leave entitlement (s 63(1)(a), s 72D): the balances are 0, or negative if taken in advance.");
+    }
   }
 
   // Alternative holidays arise on public holidays worked before the opening date.

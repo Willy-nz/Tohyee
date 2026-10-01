@@ -124,6 +124,18 @@ describe("Opening balances (HL43-HL48)", () => {
     expect(() => check(hemi({ annualLastEntitled: null }))).toThrow("Give the date last entitled to annual holidays: 12 months from the start was 2025-03-04");
     expect(() => check(hemi({ annualCashedUpWeeks: "1.5" }))).toThrow("from 0 to 1");
     expect(() => check(hemi({ alternativeHolidays: ["2026-10-26"] }))).toThrow("between the start date and the opening date");
+    // Started Mon 6 Apr 2026: no annual entitlement yet at 4 Oct 2026, and sick leave only from 6 Oct 2026.
+    const newcomer = (overrides: Partial<OpeningBalanceFigures>) =>
+      checkOpeningBalances({
+        figures: hemi({ annualLastEntitled: null, annualCashedUpWeeks: "0", alternativeHolidays: [], earnings: hemiRows().filter((row) => row.periodStart >= "2026-04-06"), ...overrides }),
+        startDate: "2026-04-06",
+        finishDate: null,
+        unpaid: [],
+        approvedPeriods: [],
+      });
+    expect(() => newcomer({ annualWeeks: "1" })).toThrow("Before 12 months' employment there's no annual holiday entitlement");
+    expect(() => newcomer({ annualWeeks: "0", sickDays: "2" })).toThrow("Before 6 months' employment there's no sick or family violence leave entitlement");
+    expect(() => newcomer({ annualWeeks: "0", sickDays: "0", familyViolenceDays: "0" })).not.toThrow();
   });
 
   it("HL48: ADP over a row only partly inside the 52 weeks is refused; whole rows count their days", () => {

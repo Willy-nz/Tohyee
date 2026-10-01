@@ -12118,7 +12118,10 @@ employer moves payroll to Tohyee from the pay period starting **Mon 5 Oct
     overlap each other, a row after the opening date, or a row covering a
     pay period Tohyee has already approved for him: not saved.
   - A negative annual balance without the holiday pay paid in advance, or
-    that amount with a balance that isn't negative: not saved.
+    that amount with a balance that isn't negative: not saved. Nor a
+    positive annual balance before 12 months' employment, or positive sick
+    or family violence days before 6 months (there's no entitlement yet;
+    only leave taken in advance, a negative balance, s 63(3)).
   - Opening balances for an employee set to casual (s 63(1)(b)'s hours test
     needs approved timesheets for the 6 months, decision 145): not saved.
   - Replacing the opening balances after an approved pay run has paid Hemi
