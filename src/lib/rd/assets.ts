@@ -323,7 +323,7 @@ async function checkUsageActivity(tx: OrgTx, activityId: string | null): Promise
  * the server, and entries more than 14 days after the use are flagged
  * (decision 38).
  */
-export async function addUsage(tx: OrgTx, assetIdInput: unknown, bodyInput: unknown): Promise<{ created: boolean; asset: AssetRd }> {
+export async function addUsage(tx: OrgTx, assetIdInput: unknown, bodyInput: unknown): Promise<{ created: boolean; usageId: string; asset: AssetRd }> {
   const body = asRecord(bodyInput, "body");
   const asset = await requireAsset(tx, assetIdInput, true);
   const idempotencyKey = requireIdempotencyKey(body.idempotencyKey);
@@ -331,10 +331,10 @@ export async function addUsage(tx: OrgTx, assetIdInput: unknown, bodyInput: unkn
   if (workDate > todayIsoDate()) throw new ValidationError("Usage can't be logged for a future date.");
   const fields = parseUsage(body);
   const hash = requestHash("rd_asset_usage", { assetId: asset.id, workDate, ...fields });
-  const existing = (await tx.query<{ request_hash: string }>("select request_hash from rd_asset_usage where idempotency_key = $1", [idempotencyKey])).rows[0];
+  const existing = (await tx.query<{ id: string; request_hash: string }>("select id, request_hash from rd_asset_usage where idempotency_key = $1", [idempotencyKey])).rows[0];
   if (existing) {
     assertSameRequest(existing.request_hash, hash, "usage log entry");
-    return { created: false, asset: await getAssetRd(tx, asset.id) };
+    return { created: false, usageId: existing.id, asset: await getAssetRd(tx, asset.id) };
   }
   await checkUsageActivity(tx, fields.activityId);
   const id = (
@@ -347,7 +347,7 @@ export async function addUsage(tx: OrgTx, assetIdInput: unknown, bodyInput: unkn
   ).rows[0].id;
   await writeHistory(tx, "asset_usage", id, "created", { assetId: asset.id, workDate, ...fields });
   await writeAuditEvent(tx, { eventType: "rd.asset_usage_logged", entityType: "fixed_asset", entityId: asset.id, details: { usageId: id, workDate, hours: fields.hours } });
-  return { created: true, asset: await getAssetRd(tx, asset.id) };
+  return { created: true, usageId: id, asset: await getAssetRd(tx, asset.id) };
 }
 
 async function lockUsage(tx: OrgTx, id: string) {

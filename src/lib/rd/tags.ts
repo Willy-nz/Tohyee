@@ -714,12 +714,12 @@ export async function listDocumentLines(tx: OrgTx, documentTypeInput: unknown, d
 
 /**
  * Posted cost lines not yet tagged, newest first, for tagging from the R&D
- * screens (bookkeepers and above). Spend money is tagged from here or from
- * its journal.
+ * screens (anyone in the organisation reads; bookkeepers tag). Spend money
+ * is tagged from here or from its journal.
  */
 export async function listUntaggedLines(tx: OrgTx, filters: { search?: unknown; from?: unknown; to?: unknown } = {}): Promise<RdLine[]> {
   const settings = await rdSettings(tx);
-  const search = optionalString(filters.search, "search", { maxLength: 100 });
+  const search = optionalString(filters.search, "search", { maxLength: 100 })?.replace(/[\\%_]/g, "\\$&") ?? null;
   const from = filters.from ? requireString(filters.from, "from", { pattern: /^\d{4}-\d{2}-\d{2}$/, patternHint: "from must be YYYY-MM-DD." }) : null;
   const to = filters.to ? requireString(filters.to, "to", { pattern: /^\d{4}-\d{2}-\d{2}$/, patternHint: "to must be YYYY-MM-DD." }) : null;
   const rows = (
