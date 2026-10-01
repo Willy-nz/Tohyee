@@ -177,6 +177,8 @@ export async function postLeaveLiability(
   const meanwhile = await replay();
   if (meanwhile) return meanwhile;
 
+  // Settings can't change the accounts under a posting (decision 184).
+  await tx.query("select 1 from organisation_settings where id = true for share");
   const accounts = await leaveLiabilityAccountIds(tx);
   if (!accounts.expenseAccountId || !accounts.liabilityAccountId) {
     throw new ValidationError(
