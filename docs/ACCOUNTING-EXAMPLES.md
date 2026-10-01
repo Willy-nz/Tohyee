@@ -11923,7 +11923,8 @@ amount paid.
   included (Fri 25 Jun 2027 in this list), decision 162; s 45 moves a
   holiday that falls on a Saturday to the Monday and on a Sunday to the
   Tuesday, so Christmas 2027 (Saturday) is Mon 27 Dec and Boxing Day
-  (Sunday) Tue 28 Dec.)
+  (Sunday) Tue 28 Dec. 2028 isn't published yet; it's added when it is,
+  decision 179.)
   Public holiday dates are kept as dated data with their source, like the
   IRD rates in P2. Anniversary day is set per employee, defaulting from the
   organisation's; if not agreed, it's the one for the province where they
