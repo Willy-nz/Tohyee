@@ -9,12 +9,20 @@ export const GET = route(async (request) => {
   return json({ settings });
 });
 
-/** Body: { organisationId, approverMustDiffer?, irdPaymentFrequency? ("monthly" or "twice_monthly") }. */
+/**
+ * Body: { organisationId, approverMustDiffer?, irdPaymentFrequency? ("monthly" or "twice_monthly"),
+ * leaveExpenseAccountCode?, leaveLiabilityAccountCode? (null or "" to clear; decision 184) }.
+ */
 export const PUT = route(async (request) => {
   const body = await readJson(request);
   const settings = await withPayrollAccess(request, body.organisationId, (tx, { membership }) => {
     if (!roleAtLeast(membership.role, "admin")) throw new ForbiddenError("Only admins can change payroll settings.");
-    return updatePayrollSettings(tx, { approverMustDiffer: body.approverMustDiffer, irdPaymentFrequency: body.irdPaymentFrequency });
+    return updatePayrollSettings(tx, {
+      approverMustDiffer: body.approverMustDiffer,
+      irdPaymentFrequency: body.irdPaymentFrequency,
+      leaveExpenseAccountCode: body.leaveExpenseAccountCode,
+      leaveLiabilityAccountCode: body.leaveLiabilityAccountCode,
+    });
   });
   return json({ settings });
 });

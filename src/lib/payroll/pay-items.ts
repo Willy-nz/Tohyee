@@ -491,16 +491,47 @@ export async function updatePayItem(tx: OrgTx, id: string, input: Record<string,
   return { payItem: toPayItem(await findPayItem(tx, id)) };
 }
 
-/** Payroll settings (PRUN7, PPAY9). */
-export type PayrollSettings = { approverMustDiffer: boolean; irdPaymentFrequency: IrdPaymentFrequency };
+/**
+ * Payroll settings (PRUN7, PPAY9), and the two accounts the leave liability
+ * is posted to (decision 184; HL56): an expense account for the leave
+ * expense and a current liability account for employee entitlements.
+ */
+export type PayrollSettings = {
+  approverMustDiffer: boolean;
+  irdPaymentFrequency: IrdPaymentFrequency;
+  leaveExpenseAccountCode: string | null;
+  leaveLiabilityAccountCode: string | null;
+};
+
+type SettingsRow = {
+  payroll_approver_must_differ: boolean;
+  payroll_ird_payment_frequency: IrdPaymentFrequency;
+  payroll_leave_expense_account_id: string | null;
+  payroll_leave_liability_account_id: string | null;
+  leave_expense_code: string | null;
+  leave_liability_code: string | null;
+};
+
+async function settingsRow(tx: OrgTx): Promise<SettingsRow | undefined> {
+  const result = await tx.query<SettingsRow>(
+    `select s.payroll_approver_must_differ, s.payroll_ird_payment_frequency,
+            s.payroll_leave_expense_account_id::text, s.payroll_leave_liability_account_id::text,
+            e.code as leave_expense_code, l.code as leave_liability_code
+       from organisation_settings s
+       left join accounts e on e.id = s.payroll_leave_expense_account_id
+       left join accounts l on l.id = s.payroll_leave_liability_account_id
+      where s.id = true`,
+  );
+  return result.rows[0];
+}
 
 async function readPayrollSettings(tx: OrgTx): Promise<PayrollSettings> {
-  const result = await tx.query<{ payroll_approver_must_differ: boolean; payroll_ird_payment_frequency: IrdPaymentFrequency }>(
-    "select payroll_approver_must_differ, payroll_ird_payment_frequency from organisation_settings where id = true",
-  );
+  const row = await settingsRow(tx);
   return {
-    approverMustDiffer: result.rows[0]?.payroll_approver_must_differ ?? false,
-    irdPaymentFrequency: result.rows[0]?.payroll_ird_payment_frequency ?? "monthly",
+    approverMustDiffer: row?.payroll_approver_must_differ ?? false,
+    irdPaymentFrequency: row?.payroll_ird_payment_frequency ?? "monthly",
+    leaveExpenseAccountCode: row?.leave_expense_code ?? null,
+    leaveLiabilityAccountCode: row?.leave_liability_code ?? null,
   };
 }
 
@@ -509,30 +540,97 @@ export async function getPayrollSettings(tx: OrgTx): Promise<PayrollSettings> {
   return readPayrollSettings(tx);
 }
 
+/** The leave liability accounts' ids (decision 184), or null where not set. */
+export async function leaveLiabilityAccountIds(tx: OrgTx): Promise<{ expenseAccountId: string | null; liabilityAccountId: string | null }> {
+  const row = await settingsRow(tx);
+  return { expenseAccountId: row?.payroll_leave_expense_account_id ?? null, liabilityAccountId: row?.payroll_leave_liability_account_id ?? null };
+}
+
+/**
+ * Checks an account for the leave liability (decision 184): base currency,
+ * active, not a control account; the expense an expense (or direct costs)
+ * account, the entitlements a current liability.
+ */
+async function resolveLeaveAccount(tx: OrgTx, code: unknown, which: "expense" | "liability", keptId: string | null): Promise<string> {
+  const accountCode = requireString(code, which === "expense" ? "Leave expense account" : "Employee entitlements account", { maxLength: 20 });
+  const found = await tx.query<{ id: string; code: string; name: string; account_class: string; account_type: string; system_key: string | null; currency_code: string | null; is_active: boolean }>(
+    "select id::text, code, name, account_class, account_type, system_key, currency_code, is_active from accounts where lower(code) = lower($1)",
+    [accountCode],
+  );
+  const account = found.rows[0];
+  if (!account) throw new ValidationError(`There's no account with the code ${accountCode}.`);
+  const label = `Account ${account.code} (${account.name})`;
+  if (!account.is_active && account.id !== keptId) throw new ValidationError(`${label} is archived.`);
+  if (account.currency_code !== null && account.currency_code !== tx.baseCurrency) {
+    throw new ValidationError(`${label} is in ${account.currency_code}; the leave liability is posted in the base currency.`);
+  }
+  if (account.system_key !== null) throw new ValidationError(`${label} is a control account, so the leave liability can't use it.`);
+  if (which === "expense" && account.account_class !== "expense") {
+    throw new ValidationError(`${label} isn't an expense account. The leave expense goes to an expense or direct costs account.`);
+  }
+  if (which === "liability" && account.account_type !== "current_liability") {
+    throw new ValidationError(`${label} isn't a current liability account. Employee entitlements are a current liability (short-term employee benefits).`);
+  }
+  return account.id;
+}
+
 /**
  * Changes payroll settings (admins with payroll access; the route checks the
  * role). Each setting left out stays as it is. How often IRD is paid is
- * monthly, or twice a month for employers IRD has told to (PPAY9).
+ * monthly, or twice a month for employers IRD has told to (PPAY9). The
+ * employee entitlements account can't change while the last leave
+ * liability posting not voided left a liability in it (decision 184).
  */
 export async function updatePayrollSettings(tx: OrgTx, input: Record<string, unknown>): Promise<PayrollSettings> {
   await requirePayrollAccess(tx);
-  const current = await readPayrollSettings(tx);
-  if (input.approverMustDiffer === undefined && input.irdPaymentFrequency === undefined) {
-    throw new ValidationError("Give approverMustDiffer or irdPaymentFrequency.");
+  const fields = ["approverMustDiffer", "irdPaymentFrequency", "leaveExpenseAccountCode", "leaveLiabilityAccountCode"];
+  if (fields.every((field) => input[field] === undefined)) {
+    throw new ValidationError(`Give ${fields.join(", ")} or more.`);
   }
+  await tx.query("select 1 from organisation_settings where id = true for update");
+  const current = await readPayrollSettings(tx);
+  const ids = await leaveLiabilityAccountIds(tx);
   const approverMustDiffer = input.approverMustDiffer === undefined ? current.approverMustDiffer : requireBoolean(input.approverMustDiffer, "approverMustDiffer");
   const irdPaymentFrequency =
     input.irdPaymentFrequency === undefined ? current.irdPaymentFrequency : parseIrdPaymentFrequency(input.irdPaymentFrequency);
+  const blank = (value: unknown) => value === null || value === "";
+  const expenseAccountId =
+    input.leaveExpenseAccountCode === undefined
+      ? ids.expenseAccountId
+      : blank(input.leaveExpenseAccountCode)
+        ? null
+        : await resolveLeaveAccount(tx, input.leaveExpenseAccountCode, "expense", ids.expenseAccountId);
+  const liabilityAccountId =
+    input.leaveLiabilityAccountCode === undefined
+      ? ids.liabilityAccountId
+      : blank(input.leaveLiabilityAccountCode)
+        ? null
+        : await resolveLeaveAccount(tx, input.leaveLiabilityAccountCode, "liability", ids.liabilityAccountId);
+  if (liabilityAccountId !== ids.liabilityAccountId) {
+    const last = await tx.query<{ posting_number: string; liability: string }>(
+      `select posting_number::text, liability::text from payroll_leave_liability_postings
+        where status = 'active' order by posting_number desc limit 1`,
+    );
+    if (last.rows[0] && cmp(dec(last.rows[0].liability), ZERO_DECIMAL) !== 0) {
+      throw new ConflictError(
+        `LEAVELIAB-${last.rows[0].posting_number} left the leave liability in ${current.leaveLiabilityAccountCode ?? "the employee entitlements account"}, so that account can't change until a posting brings it to 0.00 or the postings are voided (decision 184).`,
+      );
+    }
+  }
   const updated = await tx.query(
-    "update organisation_settings set payroll_approver_must_differ = $1, payroll_ird_payment_frequency = $2 where id = true",
-    [approverMustDiffer, irdPaymentFrequency],
+    `update organisation_settings
+        set payroll_approver_must_differ = $1, payroll_ird_payment_frequency = $2,
+            payroll_leave_expense_account_id = $3, payroll_leave_liability_account_id = $4
+      where id = true`,
+    [approverMustDiffer, irdPaymentFrequency, expenseAccountId, liabilityAccountId],
   );
   if (updated.rowCount !== 1) throw new NotFoundError("The organisation's settings weren't found.");
+  const settings = await readPayrollSettings(tx);
   await writeAuditEvent(tx, {
     eventType: "payroll_settings.updated",
     entityType: "organisation_settings",
     entityId: "payroll",
-    details: { approverMustDiffer, irdPaymentFrequency },
+    details: settings,
   });
-  return { approverMustDiffer, irdPaymentFrequency };
+  return settings;
 }
