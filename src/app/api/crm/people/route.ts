@@ -21,6 +21,7 @@ export const POST = route(async (request) => {
       email: body.email,
       phone: body.phone,
       isPrimary: body.isPrimary,
+      customFields: body.customFields,
     }),
   );
   return json({ person }, { status: 201 });

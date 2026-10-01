@@ -38,6 +38,8 @@ export type OrganisationSettings = {
   advancedFeatures: boolean;
   /** The CRM module (MOD1, CRM1-CRM9). */
   crmEnabled: boolean;
+  /** The Not-for-profit module (NFP1). */
+  notForProfitEnabled: boolean;
   /** Whether stock may go below zero (ST9-ST12); off by default. */
   allowNegativeStock: boolean;
   /** NetSuite's "Foreign Trade" (EX3, EX4): overseas customers' new sales lines start with the tax code for exports. Off by default. */
@@ -64,6 +66,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     gst_period_end_month: number | null;
     advanced_features: boolean;
     crm_enabled: boolean;
+    not_for_profit_enabled: boolean;
     allow_negative_stock: boolean;
     foreign_trade: boolean;
     export_tax_code: string | null;
@@ -72,7 +75,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     payment_details: string | null;
     has_postings: boolean;
   }>(
-    `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, gst_period_months, gst_period_end_month, advanced_features, crm_enabled, allow_negative_stock,
+    `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, gst_period_months, gst_period_end_month, advanced_features, crm_enabled, not_for_profit_enabled, allow_negative_stock,
             foreign_trade, (select t.code from tax_codes t where t.id = export_tax_code_id) as export_tax_code,
             postal_address, gst_number, payment_details,
             exists (select 1 from ledger_journals) as has_postings
@@ -91,6 +94,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
         : gstPeriodSetting(row.gst_period_months, row.gst_period_end_month),
     advancedFeatures: row.advanced_features,
     crmEnabled: row.crm_enabled,
+    notForProfitEnabled: row.not_for_profit_enabled,
     allowNegativeStock: row.allow_negative_stock,
     foreignTrade: row.foreign_trade,
     exportTaxCode: row.export_tax_code,
@@ -176,6 +180,7 @@ export async function updateOrganisationSettings(
     gstPeriodEndMonth?: unknown;
     advancedFeatures?: unknown;
     crmEnabled?: unknown;
+    notForProfitEnabled?: unknown;
     allowNegativeStock?: unknown;
     foreignTrade?: unknown;
     exportTaxCode?: unknown;
@@ -215,6 +220,10 @@ export async function updateOrganisationSettings(
     throw new ValidationError("crmEnabled must be true or false.");
   }
   const crmEnabled = input.crmEnabled === undefined ? current.crmEnabled : input.crmEnabled;
+  if (input.notForProfitEnabled !== undefined && typeof input.notForProfitEnabled !== "boolean") {
+    throw new ValidationError("notForProfitEnabled must be true or false.");
+  }
+  const notForProfitEnabled = input.notForProfitEnabled === undefined ? current.notForProfitEnabled : input.notForProfitEnabled;
   if (input.allowNegativeStock !== undefined && typeof input.allowNegativeStock !== "boolean") {
     throw new ValidationError("allowNegativeStock must be true or false.");
   }
@@ -259,9 +268,10 @@ export async function updateOrganisationSettings(
   await tx.query(
     `update organisation_settings
         set display_name = $1, base_currency = $2, financial_year_end_month = $3, gst_basis = $4,
-            advanced_features = $5, crm_enabled = $6, allow_negative_stock = $7, postal_address = $8, gst_number = $9,
-            payment_details = $10, gst_period_months = $11, gst_period_end_month = $12, foreign_trade = $13,
-            export_tax_code_id = coalesce($14::bigint, export_tax_code_id), updated_at = now()
+            advanced_features = $5, crm_enabled = $6, not_for_profit_enabled = $7, allow_negative_stock = $8,
+            postal_address = $9, gst_number = $10, payment_details = $11, gst_period_months = $12,
+            gst_period_end_month = $13, foreign_trade = $14,
+            export_tax_code_id = coalesce($15::bigint, export_tax_code_id), updated_at = now()
       where id = true`,
     [
       displayName,
@@ -270,6 +280,7 @@ export async function updateOrganisationSettings(
       gstBasis,
       advancedFeatures,
       crmEnabled,
+      notForProfitEnabled,
       allowNegativeStock,
       postalAddress,
       gstNumber,
@@ -292,6 +303,7 @@ export async function updateOrganisationSettings(
       gstPeriod,
       advancedFeatures,
       crmEnabled,
+      notForProfitEnabled,
       allowNegativeStock,
       postalAddress,
       gstNumber,
@@ -310,6 +322,7 @@ export async function updateOrganisationSettings(
     gstPeriod,
     advancedFeatures,
     crmEnabled,
+    notForProfitEnabled,
     allowNegativeStock,
     foreignTrade,
     exportTaxCode,

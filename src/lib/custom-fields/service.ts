@@ -1,21 +1,29 @@
 import type { AccountClass } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
+import { crmEnabled } from "@/lib/crm/switch";
 import {
-  CONTACT_USES,
+  CUSTOM_FIELD_RECORD_LABELS,
+  CUSTOM_FIELD_RECORD_NAMES,
   CUSTOM_FIELD_RECORDS,
   CUSTOM_FIELD_TYPES,
+  CUSTOM_FIELD_USE_LABELS,
   type CustomField,
   type CustomFieldRecord,
+  type CustomFieldSection,
   type CustomFieldSetup,
+  type CustomFieldSwitches,
   type CustomFieldType,
   type CustomFieldUse,
   type CustomValue,
   type CustomValues,
-  DOCUMENT_KINDS,
   type DocumentKind,
+  isSwitchedOn,
   normaliseCustomValue,
+  SECTION_RECORDS,
+  type SectionRecord,
   sortedValues,
   useLabel,
+  USES_BY_RECORD,
 } from "@/lib/custom-fields/values";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -23,11 +31,19 @@ import { advancedFeaturesOn } from "@/lib/tracking/service";
 import { requireId, requireOneOf } from "@/lib/validation";
 
 /**
- * Custom fields (examples CF1-CF10): set-up, and checking the values put on
- * contacts, documents and lines. Values never change an amount, account, tag
- * or GST box.
+ * Custom fields (examples CF1-CF10, CRMF1-CRMF9): set-up, and checking the
+ * values put on contacts, documents, lines, CRM people and opportunities.
+ * Values never change an amount, account, tag, stage or GST box.
+ *
+ * Fields on customers, suppliers, documents and lines need Advanced reporting;
+ * fields on prospects, people and opportunities need the CRM (CRMF1).
  */
 export const MAX_CUSTOM_FIELDS = 100;
+/** People and opportunities each have their own limit, apart from the accounting fields (CRMF2). */
+export const MAX_CRM_FIELDS = 100;
+export const MAX_SECTIONS = 20;
+
+const RECORD_ORDER = `array_position(array[${CUSTOM_FIELD_RECORDS.map((record) => `'${record}'`).join(", ")}]::text[], record)`;
 
 type FieldRow = {
   id: string;
@@ -41,18 +57,27 @@ type FieldRow = {
   show_in_list: boolean;
   is_active: boolean;
   sort_order: number;
+  section_id: string | null;
 };
+
+async function loadSwitches(tx: OrgTx): Promise<CustomFieldSwitches> {
+  return { advancedFeatures: await advancedFeaturesOn(tx), crmEnabled: await crmEnabled(tx) };
+}
 
 export async function getCustomFieldSetup(tx: OrgTx): Promise<CustomFieldSetup> {
   const fields = await tx.query<FieldRow>(
-    `select id, record, label, help, field_type, used_on, is_required, default_value, show_in_list, is_active, sort_order
-       from custom_fields order by record, sort_order, id`,
+    `select id, record, label, help, field_type, used_on, is_required, default_value, show_in_list, is_active, sort_order, section_id
+       from custom_fields order by ${RECORD_ORDER}, sort_order, id`,
   );
   const options = await tx.query<{ id: string; field_id: string; name: string; is_active: boolean }>(
     "select id, field_id, name, is_active from custom_field_options order by sort_order, id",
   );
+  const sections = await tx.query<{ id: string; record: SectionRecord; name: string; sort_order: number }>(
+    `select id, record, name, sort_order from custom_field_sections order by ${RECORD_ORDER}, sort_order, id`,
+  );
   return {
-    advancedFeatures: await advancedFeaturesOn(tx),
+    ...(await loadSwitches(tx)),
+    sections: sections.rows.map((row) => ({ id: row.id, record: row.record, name: row.name, sortOrder: row.sort_order })),
     fields: fields.rows.map((row) => ({
       id: row.id,
       record: row.record,
@@ -65,6 +90,7 @@ export async function getCustomFieldSetup(tx: OrgTx): Promise<CustomFieldSetup> 
       showInList: row.show_in_list,
       isActive: row.is_active,
       sortOrder: row.sort_order,
+      sectionId: row.section_id,
       options: options.rows
         .filter((option) => option.field_id === row.id)
         .map((option) => ({ id: option.id, name: option.name, isActive: option.is_active })),
@@ -72,10 +98,41 @@ export async function getCustomFieldSetup(tx: OrgTx): Promise<CustomFieldSetup> 
   };
 }
 
-async function requireAdvanced(tx: OrgTx): Promise<void> {
-  if (!(await advancedFeaturesOn(tx))) {
-    throw new ConflictError("Advanced reporting is off. Turn it on in Settings › Modules first.");
+function moduleIs(use: CustomFieldUse): string {
+  return isSwitchedOn({ advancedFeatures: true, crmEnabled: false }, use) ? "Advanced reporting is" : "The CRM is";
+}
+
+/** A new field, or a place added to one, needs that place's switch on (CRMF1). */
+function requireSwitchedOn(switches: CustomFieldSwitches, uses: readonly CustomFieldUse[]): void {
+  for (const use of uses) {
+    if (!isSwitchedOn(switches, use)) throw new ConflictError(`${moduleIs(use)} off, so a field can't be on ${CUSTOM_FIELD_USE_LABELS[use]}.`);
   }
+}
+
+/**
+ * Changing a field: places being added need their switch on; otherwise one
+ * of the places it's on must be switched on, so customer fields can still be
+ * changed with the CRM off and accounting fields stay as they were with
+ * Advanced reporting off (CRMF10).
+ */
+function requireCanChange(switches: CustomFieldSwitches, current: readonly CustomFieldUse[], next: readonly CustomFieldUse[] = current): void {
+  requireSwitchedOn(
+    switches,
+    next.filter((use) => !current.includes(use)),
+  );
+  if (!current.some((use) => isSwitchedOn(switches, use)) && !next.some((use) => isSwitchedOn(switches, use))) {
+    throw new ConflictError(`${moduleIs(current[0])} off. Turn it on in Settings › Modules first.`);
+  }
+}
+
+/** A section can be set up when any use of its kind of record is switched on. */
+function requireSectionSwitchedOn(switches: CustomFieldSwitches, record: SectionRecord): void {
+  const uses = USES_BY_RECORD[record];
+  if (uses.some((use) => isSwitchedOn(switches, use))) return;
+  const what = CUSTOM_FIELD_RECORD_LABELS[record].toLowerCase();
+  const modules =
+    record === "contact" ? "Advanced reporting and the CRM are" : isSwitchedOn({ advancedFeatures: true, crmEnabled: false }, uses[0]) ? "Advanced reporting is" : "The CRM is";
+  throw new ConflictError(`${modules} off, so a section can't be for ${what}.`);
 }
 
 function parseText(input: unknown, what: string, max: number): string {
@@ -97,15 +154,21 @@ function parseBool(input: unknown, what: string): boolean | undefined {
 }
 
 function parseUsedOn(input: unknown, record: CustomFieldRecord): CustomFieldUse[] {
-  const allowed: readonly string[] = record === "contact" ? CONTACT_USES : DOCUMENT_KINDS;
+  const allowed = USES_BY_RECORD[record];
+  // People and opportunities have one use each, so it needn't be chosen (CRMF2).
+  if (allowed.length === 1 && (input === undefined || input === null || (Array.isArray(input) && input.length === 0))) return [...allowed];
   if (!Array.isArray(input) || input.length === 0) {
-    throw new ValidationError(record === "contact" ? "Choose customers, suppliers or both." : "Choose at least one kind of document it's used on.");
+    throw new ValidationError(record === "contact" ? "Choose customers, suppliers or prospects." : "Choose at least one kind of document it's used on.");
   }
   const uses = [...new Set(input.map(String))];
   for (const use of uses) {
-    if (!allowed.includes(use)) throw new ValidationError(`A ${record} field can't be used on "${use}".`);
+    if (!(allowed as readonly string[]).includes(use)) throw new ValidationError(`${capitalise(CUSTOM_FIELD_RECORD_NAMES[record])} field can't be used on "${use}".`);
   }
-  return allowed.filter((use) => uses.includes(use)) as CustomFieldUse[];
+  return allowed.filter((use) => uses.includes(use));
+}
+
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function checkRequired(type: CustomFieldType, isRequired: boolean): void {
@@ -117,7 +180,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 function labelTaken(label: string, record: CustomFieldRecord): ConflictError {
-  return new ConflictError(`There's already a ${record} field called ${label}.`);
+  return new ConflictError(`There's already ${CUSTOM_FIELD_RECORD_NAMES[record]} field called ${label}.`);
 }
 
 async function loadField(tx: OrgTx, id: string): Promise<CustomField> {
@@ -150,20 +213,22 @@ export async function createCustomField(
     record: unknown;
     label: unknown;
     type: unknown;
-    usedOn: unknown;
+    usedOn?: unknown;
     help?: unknown;
     isRequired?: unknown;
     defaultValue?: unknown;
     showInList?: unknown;
     options?: unknown;
+    sectionId?: unknown;
   },
 ): Promise<CustomFieldSetup> {
-  await requireAdvanced(tx);
   const record = requireOneOf(input.record, "record", CUSTOM_FIELD_RECORDS);
   const type = requireOneOf(input.type, "type", CUSTOM_FIELD_TYPES);
   const label = parseText(input.label, "The label", 60);
   const help = parseHelp(input.help);
   const usedOn = parseUsedOn(input.usedOn, record);
+  requireSwitchedOn(await loadSwitches(tx), usedOn);
+  const sectionId = await parseSectionId(tx, input.sectionId, record);
   const isRequired = parseBool(input.isRequired, "isRequired") ?? false;
   const showInList = parseBool(input.showInList, "showInList") ?? false;
   checkRequired(type, isRequired);
@@ -173,8 +238,17 @@ export async function createCustomField(
   if (!hasOptions && optionNames.length > 0) throw new ValidationError("Only a list or multiple select has options.");
 
   await tx.query("lock table custom_fields in share row exclusive mode");
-  const count = await tx.query<{ count: string }>("select count(*)::text as count from custom_fields");
-  if (Number(count.rows[0].count) >= MAX_CUSTOM_FIELDS) throw new ConflictError(`An organisation can have at most ${MAX_CUSTOM_FIELDS} custom fields.`);
+  if (record === "person" || record === "opportunity") {
+    const count = await tx.query<{ count: string }>("select count(*)::text as count from custom_fields where record = $1", [record]);
+    if (Number(count.rows[0].count) >= MAX_CRM_FIELDS) {
+      throw new ConflictError(`An organisation can have at most ${MAX_CRM_FIELDS} ${record} fields.`);
+    }
+  } else {
+    const count = await tx.query<{ count: string }>(
+      "select count(*)::text as count from custom_fields where record in ('contact', 'document', 'line')",
+    );
+    if (Number(count.rows[0].count) >= MAX_CUSTOM_FIELDS) throw new ConflictError(`An organisation can have at most ${MAX_CUSTOM_FIELDS} custom fields.`);
+  }
 
   // A default is checked like any value; list defaults name their options.
   const pseudoOptions = optionNames.map((name, index) => ({ id: `new-${index}`, name, isActive: true }));
@@ -188,10 +262,10 @@ export async function createCustomField(
   let fieldId: string;
   try {
     const inserted = await tx.query<{ id: string }>(
-      `insert into custom_fields (record, label, help, field_type, used_on, is_required, show_in_list, sort_order)
-       values ($1, $2, $3, $4, $5, $6, $7, (select coalesce(max(sort_order), 0) + 1 from custom_fields where record = $1))
+      `insert into custom_fields (record, label, help, field_type, used_on, is_required, show_in_list, section_id, sort_order)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, (select coalesce(max(sort_order), 0) + 1 from custom_fields where record = $1))
        returning id`,
-      [record, label, help, type, usedOn, isRequired, showInList],
+      [record, label, help, type, usedOn, isRequired, showInList, sectionId],
     );
     fieldId = inserted.rows[0].id;
   } catch (error) {
@@ -215,12 +289,16 @@ export async function createCustomField(
     eventType: "custom_field.created",
     entityType: "custom_field",
     entityId: fieldId,
-    details: { record, label, type, usedOn, isRequired, showInList, options: optionNames },
+    details: { record, label, type, usedOn, isRequired, showInList, sectionId, options: optionNames },
   });
   return getCustomFieldSetup(tx);
 }
 
-/** Changes a field's label, help, where it's used, required, default, list column, or archives or restores it (CF1, CF7). */
+/**
+ * Changes a field's label, help, where it's used, required, default, list
+ * column or section, moves it up or down among its section's fields, or
+ * archives or restores it (CF1, CF7, CRMF6).
+ */
 export async function updateCustomField(
   tx: OrgTx,
   idInput: unknown,
@@ -234,9 +312,10 @@ export async function updateCustomField(
     isActive?: unknown;
     record?: unknown;
     type?: unknown;
+    sectionId?: unknown;
+    move?: unknown;
   },
 ): Promise<CustomFieldSetup> {
-  await requireAdvanced(tx);
   const field = await loadField(tx, requireId(idInput, "fieldId"));
   if ((input.record !== undefined && input.record !== field.record) || (input.type !== undefined && input.type !== field.type)) {
     throw new ValidationError("A custom field's type and what it's on can't be changed. Archive it and add a new one instead.");
@@ -244,6 +323,9 @@ export async function updateCustomField(
   const label = input.label === undefined ? field.label : parseText(input.label, "The label", 60);
   const help = input.help === undefined ? field.help : parseHelp(input.help);
   const usedOn = input.usedOn === undefined ? field.usedOn : parseUsedOn(input.usedOn, field.record);
+  requireCanChange(await loadSwitches(tx), field.usedOn, usedOn);
+  const sectionId = input.sectionId === undefined ? field.sectionId : await parseSectionId(tx, input.sectionId, field.record);
+  const move = input.move === undefined ? undefined : requireOneOf(input.move, "move", ["up", "down"] as const);
   const isRequired = parseBool(input.isRequired, "isRequired") ?? field.isRequired;
   const showInList = parseBool(input.showInList, "showInList") ?? field.showInList;
   const isActive = parseBool(input.isActive, "isActive") ?? field.isActive;
@@ -256,27 +338,179 @@ export async function updateCustomField(
     await tx.query(
       `update custom_fields
           set label = $2, help = $3, used_on = $4, is_required = $5, default_value = $6::jsonb, show_in_list = $7,
-              is_active = $8, updated_at = now()
+              is_active = $8, section_id = $9, updated_at = now()
         where id = $1`,
-      [field.id, label, help, usedOn, isRequired, defaultValue === null ? null : JSON.stringify(defaultValue), showInList, isActive],
+      [field.id, label, help, usedOn, isRequired, defaultValue === null ? null : JSON.stringify(defaultValue), showInList, isActive, sectionId],
     );
   } catch (error) {
     if (isUniqueViolation(error)) throw labelTaken(label, field.record);
     throw error;
   }
+  if (move) await moveField(tx, field.id, field.record, sectionId, move);
   await writeAuditEvent(tx, {
     eventType: "custom_field.updated",
     entityType: "custom_field",
     entityId: field.id,
-    details: { label, help, usedOn, isRequired, defaultValue, showInList, isActive },
+    details: { label, help, usedOn, isRequired, defaultValue, showInList, isActive, sectionId, ...(move ? { move } : {}) },
+  });
+  return getCustomFieldSetup(tx);
+}
+
+/** Moves a field one place up or down among the fields in its section; the record's fields are numbered again in order. */
+async function moveField(tx: OrgTx, fieldId: string, record: CustomFieldRecord, sectionId: string | null, move: "up" | "down"): Promise<void> {
+  await tx.query("lock table custom_fields in share row exclusive mode");
+  const rows = await tx.query<{ id: string; section_id: string | null; sort_order: number }>(
+    "select id, section_id, sort_order from custom_fields where record = $1 order by sort_order, id",
+    [record],
+  );
+  const order = rows.rows.map((row) => row.id);
+  const peers = rows.rows.filter((row) => row.section_id === sectionId).map((row) => row.id);
+  const at = peers.indexOf(fieldId);
+  const neighbour = peers[move === "up" ? at - 1 : at + 1];
+  if (neighbour === undefined) return;
+  const from = order.indexOf(fieldId);
+  const to = order.indexOf(neighbour);
+  [order[from], order[to]] = [order[to], order[from]];
+  await renumber(tx, "custom_fields", order, rows.rows);
+}
+
+async function renumber(
+  tx: OrgTx,
+  table: "custom_fields" | "custom_field_sections",
+  order: readonly string[],
+  rows: ReadonlyArray<{ id: string; sort_order: number }>,
+): Promise<void> {
+  const current = new Map(rows.map((row) => [row.id, row.sort_order]));
+  for (const [index, id] of order.entries()) {
+    if (current.get(id) === index + 1) continue;
+    await tx.query(`update ${table} set sort_order = $2, updated_at = now() where id = $1`, [id, index + 1]);
+  }
+}
+
+async function parseSectionId(tx: OrgTx, input: unknown, record: CustomFieldRecord): Promise<string | null> {
+  if (input === undefined || input === null || input === "") return null;
+  const id = requireId(input, "sectionId");
+  const found = await tx.query<{ name: string; record: SectionRecord }>("select name, record from custom_field_sections where id = $1", [id]);
+  const section = found.rows[0];
+  if (!section) throw new NotFoundError("Section not found.");
+  if (section.record !== record) {
+    throw new ValidationError(
+      `${section.name} is a section for ${CUSTOM_FIELD_RECORD_LABELS[section.record].toLowerCase()}, not ${CUSTOM_FIELD_RECORD_LABELS[record].toLowerCase()}.`,
+    );
+  }
+  return id;
+}
+
+// ---------------------------------------------------------------------------
+// Sections (CRMF6): named, ordered groups of fields on a record's page and
+// form. They only group fields; they never hide or change them.
+
+function sectionNameTaken(name: string, record: SectionRecord): ConflictError {
+  return new ConflictError(`There's already a section called ${name} for ${CUSTOM_FIELD_RECORD_LABELS[record].toLowerCase()}.`);
+}
+
+function parseSectionRecord(input: unknown): SectionRecord {
+  if (input === "line") throw new ValidationError("Lines don't have sections; their fields are columns.");
+  return requireOneOf(input, "record", SECTION_RECORDS);
+}
+
+async function loadSection(tx: OrgTx, idInput: unknown): Promise<CustomFieldSection> {
+  const id = requireId(idInput, "sectionId");
+  const section = (await getCustomFieldSetup(tx)).sections.find((entry) => entry.id === id);
+  if (!section) throw new NotFoundError("Section not found.");
+  return section;
+}
+
+export async function createCustomFieldSection(tx: OrgTx, input: { record: unknown; name: unknown }): Promise<CustomFieldSetup> {
+  const record = parseSectionRecord(input.record);
+  const name = parseText(input.name, "The section's name", 60);
+  requireSectionSwitchedOn(await loadSwitches(tx), record);
+  await tx.query("lock table custom_field_sections in share row exclusive mode");
+  const count = await tx.query<{ count: string }>("select count(*)::text as count from custom_field_sections where record = $1", [record]);
+  if (Number(count.rows[0].count) >= MAX_SECTIONS) {
+    throw new ConflictError(`${CUSTOM_FIELD_RECORD_LABELS[record]} can have at most ${MAX_SECTIONS} sections.`);
+  }
+  let sectionId: string;
+  try {
+    const inserted = await tx.query<{ id: string }>(
+      `insert into custom_field_sections (record, name, sort_order)
+       values ($1, $2, (select coalesce(max(sort_order), 0) + 1 from custom_field_sections where record = $1)) returning id`,
+      [record, name],
+    );
+    sectionId = inserted.rows[0].id;
+  } catch (error) {
+    if (isUniqueViolation(error)) throw sectionNameTaken(name, record);
+    throw error;
+  }
+  await writeAuditEvent(tx, {
+    eventType: "custom_field.section_created",
+    entityType: "custom_field_section",
+    entityId: sectionId,
+    details: { record, name },
+  });
+  return getCustomFieldSetup(tx);
+}
+
+/** Renames a section or moves it one place up or down among its kind's sections. */
+export async function updateCustomFieldSection(
+  tx: OrgTx,
+  idInput: unknown,
+  input: { name?: unknown; move?: unknown },
+): Promise<CustomFieldSetup> {
+  const section = await loadSection(tx, idInput);
+  requireSectionSwitchedOn(await loadSwitches(tx), section.record);
+  const name = input.name === undefined ? section.name : parseText(input.name, "The section's name", 60);
+  const move = input.move === undefined ? undefined : requireOneOf(input.move, "move", ["up", "down"] as const);
+  try {
+    await tx.query("update custom_field_sections set name = $2, updated_at = now() where id = $1", [section.id, name]);
+  } catch (error) {
+    if (isUniqueViolation(error)) throw sectionNameTaken(name, section.record);
+    throw error;
+  }
+  if (move) {
+    await tx.query("lock table custom_field_sections in share row exclusive mode");
+    const rows = await tx.query<{ id: string; sort_order: number }>(
+      "select id, sort_order from custom_field_sections where record = $1 order by sort_order, id",
+      [section.record],
+    );
+    const order = rows.rows.map((row) => row.id);
+    const from = order.indexOf(section.id);
+    const to = move === "up" ? from - 1 : from + 1;
+    if (to >= 0 && to < order.length) {
+      [order[from], order[to]] = [order[to], order[from]];
+      await renumber(tx, "custom_field_sections", order, rows.rows);
+    }
+  }
+  await writeAuditEvent(tx, {
+    eventType: "custom_field.section_updated",
+    entityType: "custom_field_section",
+    entityId: section.id,
+    details: { record: section.record, name, ...(name !== section.name ? { nameFrom: section.name } : {}), ...(move ? { move } : {}) },
+  });
+  return getCustomFieldSetup(tx);
+}
+
+/** Removes a section with no fields in it (archived ones count). */
+export async function deleteCustomFieldSection(tx: OrgTx, idInput: unknown): Promise<CustomFieldSetup> {
+  const section = await loadSection(tx, idInput);
+  requireSectionSwitchedOn(await loadSwitches(tx), section.record);
+  await tx.query("lock table custom_fields in share row exclusive mode");
+  const used = await tx.query("select 1 from custom_fields where section_id = $1 limit 1", [section.id]);
+  if (used.rows.length > 0) throw new ConflictError(`Move ${section.name}'s fields out first.`);
+  await tx.query("delete from custom_field_sections where id = $1", [section.id]);
+  await writeAuditEvent(tx, {
+    eventType: "custom_field.section_deleted",
+    entityType: "custom_field_section",
+    entityId: section.id,
+    details: { record: section.record, name: section.name },
   });
   return getCustomFieldSetup(tx);
 }
 
 /** Adds an option to a list or multiple select. */
 export async function addCustomFieldOption(tx: OrgTx, fieldIdInput: unknown, input: { name: unknown }): Promise<CustomFieldSetup> {
-  await requireAdvanced(tx);
   const field = await loadField(tx, requireId(fieldIdInput, "fieldId"));
+  requireCanChange(await loadSwitches(tx), field.usedOn);
   if (field.type !== "list" && field.type !== "multi_select") throw new ValidationError("Only a list or multiple select has options.");
   const name = parseText(input.name, "The option's name", 100);
   if (field.options.length >= 200) throw new ConflictError("A list can have at most 200 options.");
@@ -305,7 +539,6 @@ export async function updateCustomFieldOption(
   optionIdInput: unknown,
   input: { name?: unknown; isActive?: unknown },
 ): Promise<CustomFieldSetup> {
-  await requireAdvanced(tx);
   const optionId = requireId(optionIdInput, "optionId");
   const found = await tx.query<{ field_id: string; name: string; is_active: boolean }>(
     "select field_id, name, is_active from custom_field_options where id = $1",
@@ -313,6 +546,8 @@ export async function updateCustomFieldOption(
   );
   const option = found.rows[0];
   if (!option) throw new NotFoundError("Option not found.");
+  const field = await loadField(tx, option.field_id);
+  requireCanChange(await loadSwitches(tx), field.usedOn);
   const name = input.name === undefined ? option.name : parseText(input.name, "The option's name", 100);
   const isActive = parseBool(input.isActive, "isActive") ?? option.is_active;
   try {
@@ -333,11 +568,24 @@ export async function updateCustomFieldOption(
 // ---------------------------------------------------------------------------
 // Values on records
 
-export type CustomFieldContext = { advancedFeatures: boolean; fields: Map<string, CustomField> };
+export type CustomFieldContext = CustomFieldSwitches & { fields: Map<string, CustomField> };
 
 export async function loadCustomFieldContext(tx: OrgTx): Promise<CustomFieldContext> {
   const setup = await getCustomFieldSetup(tx);
-  return { advancedFeatures: setup.advancedFeatures, fields: new Map(setup.fields.map((field) => [field.id, field])) };
+  return {
+    advancedFeatures: setup.advancedFeatures,
+    crmEnabled: setup.crmEnabled,
+    fields: new Map(setup.fields.map((field) => [field.id, field])),
+  };
+}
+
+/** The uses of a record that a field is on and whose switch is on. */
+function liveUses(ctx: CustomFieldSwitches, field: CustomField, uses: readonly CustomFieldUse[]): CustomFieldUse[] {
+  return field.usedOn.filter((use) => uses.includes(use) && isSwitchedOn(ctx, use));
+}
+
+function moduleName(use: CustomFieldUse): string {
+  return isSwitchedOn({ advancedFeatures: true, crmEnabled: false }, use) ? "advanced reporting" : "the CRM";
 }
 
 /** Values the record already had, so they can stay when a field or option is archived or the switch is off (CF7, CF8). */
@@ -366,8 +614,10 @@ export function parseCustomInput(input: unknown, label: string): Record<string, 
 
 /**
  * Checks values for one record and returns them as stored (CF2, CF5, CF7,
- * CF8). `uses` is what the record is: its document kind, or a contact's
- * roles. Values not sent (undefined) mean a new record's defaults.
+ * CF8, CRMF3, CRMF8). `uses` is what the record is: its document kind, a
+ * contact's roles, or "person" or "opportunity". Values not sent (undefined)
+ * mean a new record's defaults. A use whose switch is off gets no defaults
+ * and can't be given new values, but keeps what it has.
  */
 export function resolveCustomValues(
   ctx: CustomFieldContext,
@@ -377,10 +627,9 @@ export function resolveCustomValues(
   const prefix = options.label ? `${options.label}: ` : "";
   const kept = options.kept ?? new Set<string>();
   if (raw === undefined) {
-    if (!ctx.advancedFeatures) return {};
     const out: CustomValues = {};
     for (const field of ctx.fields.values()) {
-      if (field.record === options.record && field.isActive && field.defaultValue !== null && field.usedOn.some((use) => options.uses.includes(use))) {
+      if (field.record === options.record && field.isActive && field.defaultValue !== null && liveUses(ctx, field, options.uses).length > 0) {
         out[field.id] = field.defaultValue;
       }
     }
@@ -401,9 +650,13 @@ export function resolveCustomValues(
     if (normalised === null) continue;
     const already = kept.has(`${id}=${JSON.stringify(normalised)}`);
     if (!already) {
-      if (!ctx.advancedFeatures) throw new ValidationError(`${prefix}advanced reporting is off, so ${field.label} can't be set.`);
+      const applicable = field.usedOn.filter((use) => options.uses.includes(use));
+      const switchedOff = applicable.length > 0 ? applicable : field.usedOn;
+      if (!switchedOff.some((use) => isSwitchedOn(ctx, use))) {
+        throw new ValidationError(`${prefix}${moduleName(switchedOff[0])} is off, so ${field.label} can't be set.`);
+      }
       if (!field.isActive) throw new ValidationError(`${prefix}${field.label} is archived.`);
-      if (!field.usedOn.some((use) => options.uses.includes(use))) {
+      if (applicable.length === 0) {
         throw new ValidationError(`${prefix}${field.label} isn't used on ${options.uses.map((use) => useLabel(options.record, use)).join(" or ")}.`);
       }
     }
@@ -412,20 +665,23 @@ export function resolveCustomValues(
   return sortedValues(out);
 }
 
-/** The first required field that's missing, or null (CF3, CF4). Lines only need them on income and expense accounts. */
+/**
+ * The first required field that's missing, or null (CF3, CF4, CRMF4). Lines
+ * only need them on income and expense accounts; a field isn't required on a
+ * use whose switch is off (CRMF8).
+ */
 export function missingRequiredField(
   ctx: CustomFieldContext,
   values: CustomValues,
   options: { record: CustomFieldRecord; uses: readonly CustomFieldUse[]; accountClass?: AccountClass },
 ): string | null {
-  if (!ctx.advancedFeatures) return null;
   if (options.record === "line" && options.accountClass !== "revenue" && options.accountClass !== "expense") return null;
   for (const field of ctx.fields.values()) {
     if (
       field.record === options.record &&
       field.isActive &&
       field.isRequired &&
-      field.usedOn.some((use) => options.uses.includes(use)) &&
+      liveUses(ctx, field, options.uses).length > 0 &&
       values[field.id] === undefined
     ) {
       return field.label;
