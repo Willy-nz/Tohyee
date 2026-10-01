@@ -23,6 +23,8 @@ export const POST = route(async (request) => {
       amount: body.amount,
       closeDate: body.closeDate,
       stage: body.stage,
+        probability: body.probability,
+        forecastCategory: body.forecastCategory,
       customFields: body.customFields,
       recordTypeId: body.recordTypeId,
       },

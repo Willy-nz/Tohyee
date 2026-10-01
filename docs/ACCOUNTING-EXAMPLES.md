@@ -5065,14 +5065,15 @@ Setup for CRMS2-CRMS7: as CRT (Mānuka Vets, Aroha Ngata, "Memorial paw
 prints 2027" for 2,400.00 closing 2026-12-15, owner Jess, NZD base).
 
 - **CRMS1** Upgrade: before it, the organisation has "Clinic display"
-  (Proposal, 600.00), "Menu reprint" (Won, 500.00, with its invoice) and
-  "Old prints" (Lost, 200.00), and "Clinic display" was moved New →
-  Proposal. Afterwards there are the six stages above; Clinic display is
-  75% Pipeline (weighted 450.00), Menu reprint 100% Closed (weighted
-  500.00, still with its invoice), Old prints 0% Omitted. Clinic display's
+  (Proposal, 600.00), "Menu reprint" (Won, 500.00) and "Old prints" (Lost,
+  200.00), and "Clinic display" was moved New → Proposal. Afterwards there
+  are the six stages above; Clinic display is 75% Pipeline (weighted
+  450.00), Menu reprint 100% Closed (weighted 500.00), Old prints 0%
+  Omitted, and the opportunities list in the stages' order. Clinic display's
   stage history shows the move to Proposal (by whoever did it, then) with
   no probability (it wasn't kept). A stage that doesn't exist ("nonsense")
-  is refused by the database. A new opportunity starts in New at 10%
+  is refused by the database ("There's no stage called nonsense"). A new
+  opportunity starts in New at 10%
   Pipeline.
 - **CRMS2** Set-up rules: the admin adds "Negotiation" (Open, 90%, Commit)
   and moves it up to sit between Proposal and Won. "proposal" is refused
@@ -5179,8 +5180,8 @@ prints 2027" for 2,400.00 closing 2026-12-15, owner Jess, NZD base).
   bookkeeper can't set one (403). Clearing Jess's November quota removes
   it. Each change is in the history.
 - **CRMS11** Over HTTP and with the CRM off: every stage, sales process,
-  forecast and quota route needs a signed-in member (401 without, 403 for
-  someone outside the organisation): a viewer reads stages and forecasts
+  forecast and quota route needs a signed-in member (401 without, 404 for
+  someone outside the organisation, as for other organisation routes): a viewer reads stages and forecasts
   (200), a bookkeeper changes an opportunity's probability (200) but not
   stages or quotas (403), an admin adds and changes stages (201, 200) and
   sets quotas (200). With the CRM off, stages, processes and quotas can't

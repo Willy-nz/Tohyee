@@ -1,11 +1,11 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { getRecordType } from "@/lib/crm/record-types/service";
-import { getOpportunity, listActivities, listTasks, opportunityTimeline, updateOpportunity } from "@/lib/crm/service";
+import { getOpportunity, listActivities, listTasks, opportunityStageHistory, opportunityTimeline, updateOpportunity } from "@/lib/crm/service";
 import { getInvoice } from "@/lib/invoices/service";
 
 type Context = { params: Promise<{ opportunityId: string }> };
 
-/** An opportunity's record page (CRT11): the opportunity, its record type, tasks, activities, timeline and invoice. */
+/** An opportunity's record page (CRT11): the opportunity, its record type, tasks, activities, timeline, stage history (CRMS6) and invoice. */
 export const GET = route<Context>(async (request, context) => {
   const { opportunityId } = await context.params;
   const result = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", async (tx) => {
@@ -16,6 +16,7 @@ export const GET = route<Context>(async (request, context) => {
       tasks: await listTasks(tx, { opportunityId: opportunity.id }),
       activities: await listActivities(tx, { opportunityId: opportunity.id }),
       timeline: await opportunityTimeline(tx, opportunity.id),
+      stageHistory: await opportunityStageHistory(tx, opportunity.id),
       invoice: opportunity.invoiceId ? await getInvoice(tx, opportunity.invoiceId) : null,
     };
   });
@@ -38,6 +39,8 @@ export const PATCH = route<Context>(async (request, context) => {
         amount: body.amount,
         closeDate: body.closeDate,
         stage: body.stage,
+        probability: body.probability,
+        forecastCategory: body.forecastCategory,
         customFields: body.customFields,
         recordTypeId: body.recordTypeId,
       },

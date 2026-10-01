@@ -17,6 +17,16 @@ import { parseOptionalIsoDate } from "@/lib/dates";
 import { listMembers } from "@/lib/organisations/members";
 import { syncedFor } from "@/lib/crm/mail/service";
 import { crmEnabled, requireCrm, requirePeople } from "@/lib/crm/switch";
+import {
+  type ForecastCategory,
+  isForecastCategory,
+  type OpportunityStageSetup,
+  opportunityRuleProblem,
+  parseProbability,
+  type StageType,
+  weightedAmount,
+} from "@/lib/crm/forecast-figures";
+import { chooseStage, listStages } from "@/lib/crm/stages";
 import { optionalId, optionalString, requireId, requireString } from "@/lib/validation";
 import { contactSalesTaxCodeFor } from "@/lib/tax/contact-tax";
 
@@ -31,18 +41,13 @@ import { contactSalesTaxCodeFor } from "@/lib/tax/contact-tax";
  * customer's currency.
  */
 
-export const OPPORTUNITY_STAGES = ["new", "screening", "meeting", "proposal", "won", "lost"] as const;
-export type OpportunityStage = (typeof OPPORTUNITY_STAGES)[number];
-export const OPPORTUNITY_STAGE_LABELS: Record<OpportunityStage, string> = {
-  new: "New",
-  screening: "Screening",
-  meeting: "Meeting",
-  proposal: "Proposal",
-  won: "Won",
-  lost: "Lost",
-};
-/** Open opportunities are still being worked on. */
-export const OPEN_STAGES: readonly OpportunityStage[] = ["new", "screening", "meeting", "proposal"];
+/**
+ * An opportunity's stage is the key of one of the organisation's own stages
+ * (CRMS1, decision 77); the six starting stages keep the keys new,
+ * screening, meeting, proposal, won and lost. A stage's type (Open, Closed
+ * won, Closed lost), not its name, says whether it's open or won.
+ */
+export type OpportunityStage = string;
 
 export const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -87,6 +92,14 @@ export type Opportunity = {
   currencyCode: string;
   closeDate: string | null;
   stage: OpportunityStage;
+  /** The stage's name now, its type, and the opportunity's own probability and forecast category (CRMS5). */
+  stageName: string;
+  stageType: StageType;
+  /** A whole per cent; starts as the stage's and can be changed (decision 80). */
+  probability: number;
+  forecastCategory: ForecastCategory;
+  /** Amount × probability, rounded half up to the currency's smallest unit (decision 88). */
+  weightedAmount: string;
   position: number;
   invoiceId: string | null;
   invoiceNumber: string | null;
@@ -196,10 +209,11 @@ async function checkCrmLayout(
   values: LayoutValues,
   before: { type: RecordType; values: LayoutValues } | null,
   options: SaveOptions,
+  startingStage = "new",
 ): Promise<void> {
   const ctx = await loadCustomFieldContext(tx);
   const uses = [record] as const;
-  const standardDefaults: Record<string, unknown> = record === "opportunity" ? { amount: "0.00", stage: "new" } : {};
+  const standardDefaults: Record<string, unknown> = record === "opportunity" ? { amount: "0.00", stage: startingStage } : {};
   await checkAgainstLayout(tx, {
     record,
     type,
@@ -426,9 +440,10 @@ export async function updatePerson(tx: OrgTx, idInput: unknown, input: PersonInp
 
 const OPPORTUNITY_SELECT = `select o.id, o.name, o.contact_id, c.name as contact_name, o.point_of_contact_id,
     nullif(concat_ws(' ', p.first_name, p.last_name), '') as point_of_contact_name, o.owner_user_id, o.amount::text, o.currency_code,
-    o.close_date::text, o.stage, o.position, o.invoice_id, i.invoice_number, o.custom_fields, o.created_at, o.updated_at,
-    o.record_type_id, t.name as record_type_name
+    o.close_date::text, o.stage, s.name as stage_name, s.stage_type, o.probability, o.forecast_category, o.position, o.invoice_id,
+    i.invoice_number, o.custom_fields, o.created_at, o.updated_at, o.record_type_id, t.name as record_type_name
   from crm_opportunities o
+  join crm_opportunity_stages s on s.key = o.stage
   join contacts c on c.id = o.contact_id
   join crm_record_types t on t.id = o.record_type_id
   left join crm_people p on p.id = o.point_of_contact_id
@@ -446,6 +461,10 @@ type OpportunityRow = {
   currency_code: string;
   close_date: string | null;
   stage: OpportunityStage;
+  stage_name: string;
+  stage_type: StageType;
+  probability: number;
+  forecast_category: ForecastCategory;
   position: number;
   invoice_id: string | null;
   invoice_number: string | null;
@@ -469,6 +488,11 @@ function toOpportunity(row: OpportunityRow): Opportunity {
     currencyCode: row.currency_code,
     closeDate: row.close_date,
     stage: row.stage,
+    stageName: row.stage_name,
+    stageType: row.stage_type,
+    probability: row.probability,
+    forecastCategory: row.forecast_category,
+    weightedAmount: weightedAmount(row.amount, row.probability, currencyMinorUnits(row.currency_code)),
     position: row.position,
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
@@ -486,7 +510,7 @@ export async function listOpportunities(tx: OrgTx, options: { contactId?: unknow
   const result = await tx.query<OpportunityRow>(
     `${OPPORTUNITY_SELECT}
       where ($1::bigint is null or o.contact_id = $1) and ($2::bigint is null or o.point_of_contact_id = $2)
-      order by array_position(array['new','screening','meeting','proposal','won','lost'], o.stage), o.position, o.id`,
+      order by s.sort_order, o.position, o.id`,
     [contactId, personId],
   );
   return result.rows.map(toOpportunity);
@@ -507,13 +531,6 @@ function parseAmount(input: unknown): string {
   return toFixedString(dec(text), 2);
 }
 
-function parseStage(input: unknown): OpportunityStage {
-  if (typeof input !== "string" || !(OPPORTUNITY_STAGES as readonly string[]).includes(input)) {
-    throw new ValidationError(`The stage must be one of ${OPPORTUNITY_STAGES.join(", ")}.`);
-  }
-  return input as OpportunityStage;
-}
-
 type OpportunityInput = {
   name?: unknown;
   contactId?: unknown;
@@ -522,6 +539,10 @@ type OpportunityInput = {
   amount?: unknown;
   closeDate?: unknown;
   stage?: unknown;
+  /** A whole per cent; the stage's when not sent (CRMS5). */
+  probability?: unknown;
+  /** pipeline, best_case, commit, closed or omitted; the stage's when not sent (CRMS5). */
+  forecastCategory?: unknown;
   customFields?: unknown;
   /** A CRM record type for opportunities (CRT10); the default for a new one. */
   recordTypeId?: unknown;
@@ -535,7 +556,30 @@ function opportunityLayoutValues(
   return { standard: { name, contactId, pointOfContactId, ownerUserId, amount, closeDate, stage }, custom };
 }
 
-async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Opportunity | null) {
+/**
+ * An opportunity's probability and forecast category (CRMS5, decision 80):
+ * the ones sent, else the new stage's when the stage changes, else the ones
+ * it has. They must fit the stage's type.
+ */
+function forecastValues(input: OpportunityInput, stage: OpportunityStageSetup, current: Opportunity | null): { probability: number; forecastCategory: ForecastCategory } {
+  const moved = current === null || current.stage !== stage.key;
+  let probability = moved ? stage.probability : current.probability;
+  if (input.probability !== undefined && input.probability !== null && input.probability !== "") {
+    const parsed = parseProbability(input.probability);
+    if (parsed === null) throw new ValidationError("The probability must be a whole number from 0 to 100.");
+    probability = parsed;
+  }
+  let forecastCategory = moved ? stage.forecastCategory : current.forecastCategory;
+  if (input.forecastCategory !== undefined && input.forecastCategory !== null && input.forecastCategory !== "") {
+    if (!isForecastCategory(input.forecastCategory)) throw new ValidationError("The forecast category must be pipeline, best_case, commit, closed or omitted.");
+    forecastCategory = input.forecastCategory;
+  }
+  const problem = opportunityRuleProblem(stage.type, probability, forecastCategory);
+  if (problem) throw new ValidationError(problem);
+  return { probability, forecastCategory };
+}
+
+async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Opportunity | null, stage: OpportunityStageSetup) {
   const contactId = input.contactId === undefined && current ? current.contactId : requireId(input.contactId, "contactId");
   await requireContact(tx, contactId);
   if (current?.invoiceId && contactId !== current.contactId) {
@@ -561,7 +605,8 @@ async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Op
     amount,
     currencyCode,
     closeDate: input.closeDate === undefined ? (current?.closeDate ?? null) : parseOptionalIsoDate(input.closeDate, "close date"),
-    stage: input.stage === undefined ? (current?.stage ?? "new") : parseStage(input.stage),
+    stage: stage.key,
+    ...forecastValues(input, stage, current),
   };
 }
 
@@ -572,14 +617,16 @@ async function nextPosition(tx: OrgTx, stage: OpportunityStage): Promise<number>
 
 export async function createOpportunity(tx: OrgTx, input: OpportunityInput, options: SaveOptions = {}): Promise<Opportunity> {
   await requireCrm(tx);
-  const values = await opportunityValues(tx, input, null);
-  const customFields = await crmCustomValues(tx, "opportunity", input.customFields, null);
   const recordType = await chooseRecordType(tx, "opportunity", input.recordTypeId, null);
-  await checkCrmLayout(tx, "opportunity", recordType, opportunityLayoutValues(values, customFields), null, options);
+  const stage = await chooseStage(tx, input.stage, null, recordType.id);
+  const values = await opportunityValues(tx, input, null, stage);
+  const customFields = await crmCustomValues(tx, "opportunity", input.customFields, null);
+  const startingStage = await chooseStage(tx, undefined, null, recordType.id);
+  await checkCrmLayout(tx, "opportunity", recordType, opportunityLayoutValues(values, customFields), null, options, startingStage.key);
   const inserted = await tx.query<{ id: string }>(
     `insert into crm_opportunities (name, contact_id, point_of_contact_id, owner_user_id, amount, close_date, stage, position, created_by_email, currency_code,
-                                    custom_fields, record_type_id)
-     values ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::jsonb, $12) returning id`,
+                                    custom_fields, record_type_id, probability, forecast_category)
+     values ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14) returning id`,
     [
       values.name,
       values.contactId,
@@ -593,6 +640,8 @@ export async function createOpportunity(tx: OrgTx, input: OpportunityInput, opti
       values.currencyCode,
       JSON.stringify(customFields),
       recordType.id,
+      values.probability,
+      values.forecastCategory,
     ],
   );
   const id = inserted.rows[0].id;
@@ -610,12 +659,13 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
   await requireCrm(tx);
   const current = await getOpportunity(tx, idInput);
   await tx.query("select id from crm_opportunities where id = $1 for update", [current.id]);
-  const values = await opportunityValues(tx, input, current);
-  if (current.invoiceId && values.stage !== current.stage) {
+  const recordType = await chooseRecordType(tx, "opportunity", input.recordTypeId, current.recordTypeId);
+  if (current.invoiceId && input.stage !== undefined && input.stage !== current.stage) {
     throw new ConflictError("This opportunity has made an invoice, so its stage can't change.");
   }
+  const stage = await chooseStage(tx, input.stage, { key: current.stage, recordTypeId: current.recordTypeId }, recordType.id);
+  const values = await opportunityValues(tx, input, current, stage);
   const customFields = await crmCustomValues(tx, "opportunity", input.customFields, current.customFields);
-  const recordType = await chooseRecordType(tx, "opportunity", input.recordTypeId, current.recordTypeId);
   const currentType = recordType.id === current.recordTypeId ? recordType : await getRecordType(tx, current.recordTypeId);
   await checkCrmLayout(
     tx,
@@ -628,7 +678,8 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
   const position = values.stage === current.stage ? current.position : await nextPosition(tx, values.stage);
   await tx.query(
     `update crm_opportunities set name = $2, contact_id = $3, point_of_contact_id = $4, owner_user_id = $5, amount = $6::numeric,
-            close_date = $7, stage = $8, position = $9, currency_code = $10, custom_fields = $11::jsonb, record_type_id = $12, updated_at = now()
+            close_date = $7, stage = $8, position = $9, currency_code = $10, custom_fields = $11::jsonb, record_type_id = $12,
+            probability = $13, forecast_category = $14, updated_at = now()
       where id = $1`,
     [
       current.id,
@@ -643,6 +694,8 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
       values.currencyCode,
       JSON.stringify(customFields),
       recordType.id,
+      values.probability,
+      values.forecastCategory,
     ],
   );
   await writeAuditEvent(tx, {
@@ -692,7 +745,8 @@ export async function makeInvoiceFromOpportunity(
   await tx.query("select id from crm_opportunities where id = $1 for update", [current.id]);
   const locked = await getOpportunity(tx, current.id);
   if (locked.invoiceId) return { created: false, invoice: await getInvoice(tx, locked.invoiceId) };
-  if (locked.stage !== "won") throw new ConflictError("Only a won opportunity can make an invoice. Mark it as Won first.");
+  // The stage's type, not its name, says it's won (CRMS4, decision 82).
+  if (locked.stageType !== "won") throw new ConflictError("Only a won opportunity can make an invoice. Move it to a Closed won stage first.");
   const contact = await tx.query<{ is_customer: boolean }>("select is_customer from contacts where id = $1", [locked.contactId]);
   if (!contact.rows[0]?.is_customer) await updateContact(tx, locked.contactId, { isCustomer: true });
   const today = todayIsoDate();
@@ -1039,9 +1093,9 @@ export async function crmHome(tx: OrgTx): Promise<CrmHome> {
     ? (
         await tx.query<OpportunityRow>(
           `${OPPORTUNITY_SELECT}
-            where o.owner_user_id = $1 and o.stage = any($2::text[])
-            order by array_position(array['new','screening','meeting','proposal','won','lost'], o.stage), o.position, o.id`,
-          [me, OPEN_STAGES],
+            where o.owner_user_id = $1 and s.stage_type = 'open'
+            order by s.sort_order, o.position, o.id`,
+          [me],
         )
       ).rows.map(toOpportunity)
     : [];
@@ -1081,7 +1135,7 @@ export type CompanySummary = {
   isArchived: boolean;
   people: number;
   openTasks: number;
-  /** Open opportunities (not Won or Lost), excluding GST, in `currencyCode`. */
+  /** Open opportunities (in an Open stage, not Closed won or lost), excluding GST, in `currencyCode`. */
   openPipeline: string;
   /** The company's currency (MC68): its opportunities and documents are in it. */
   currencyCode: string;
@@ -1113,7 +1167,7 @@ export async function listCompanies(tx: OrgTx, options: { search?: unknown; incl
                left join crm_people p on p.id = t.person_id left join crm_opportunities o on o.id = t.opportunity_id
               where t.status <> 'done' and (t.contact_id = c.id or p.contact_id = c.id or o.contact_id = c.id))::text as open_tasks,
             (select coalesce(sum(o.amount), 0) from crm_opportunities o
-              where o.contact_id = c.id and o.stage in ('new', 'screening', 'meeting', 'proposal'))::text as open_pipeline,
+              where o.contact_id = c.id and o.stage in (select key from crm_opportunity_stages where stage_type = 'open'))::text as open_pipeline,
             (select max(a.happened_at) from crm_activities a
                left join crm_people p on p.id = a.person_id left join crm_opportunities o on o.id = a.opportunity_id
               where a.contact_id = c.id or p.contact_id = c.id or o.contact_id = c.id) as last_activity_at
@@ -1188,6 +1242,68 @@ export async function opportunityTimeline(tx: OrgTx, opportunityIdInput: unknown
   return timelineFor(tx, { opportunityId: opportunity.id });
 }
 
+/** One row of an opportunity's stage history (CRMS6). Probability and category are null for changes made before they were kept. */
+export type StageHistoryEntry = {
+  at: string;
+  by: string | null;
+  stage: OpportunityStage;
+  stageName: string;
+  amount: string;
+  probability: number | null;
+  forecastCategory: ForecastCategory | null;
+  weightedAmount: string | null;
+  closeDate: string | null;
+};
+
+/**
+ * An opportunity's stage history, newest first (CRMS6, decision 83), after
+ * Salesforce's Stage History: a row when it was added and whenever its
+ * stage, amount, probability, forecast category or expected close date
+ * changed, with who and when. It's read from the audit history.
+ */
+export async function opportunityStageHistory(tx: OrgTx, opportunityIdInput: unknown): Promise<StageHistoryEntry[]> {
+  const opportunity = await getOpportunity(tx, opportunityIdInput);
+  const minor = currencyMinorUnits(opportunity.currencyCode);
+  const stageNames = new Map((await listStages(tx)).map((stage) => [stage.key, stage.name]));
+  const events = await tx.query<{ details: Record<string, unknown>; actor_email: string | null; created_at: string }>(
+    `select details, actor_email, created_at from audit_events
+      where entity_type = 'crm_opportunity' and entity_id = $1 and event_type in ('crm.opportunity_created', 'crm.opportunity_updated')
+      order by id`,
+    [opportunity.id],
+  );
+  const rows: StageHistoryEntry[] = [];
+  let last: StageHistoryEntry | null = null;
+  for (const event of events.rows) {
+    const d = event.details;
+    const stage = String(d.stage ?? last?.stage ?? opportunity.stage);
+    const amount = toFixedString(dec(String(d.amount ?? last?.amount ?? "0")), 2);
+    const probability = typeof d.probability === "number" ? d.probability : null;
+    const forecastCategory = isForecastCategory(d.forecastCategory) ? d.forecastCategory : null;
+    const closeDate = d.closeDate === undefined ? (last?.closeDate ?? null) : ((d.closeDate as string | null) ?? null);
+    const changed =
+      last === null ||
+      stage !== last.stage ||
+      amount !== last.amount ||
+      closeDate !== last.closeDate ||
+      (probability !== null && last.probability !== null && probability !== last.probability) ||
+      (forecastCategory !== null && last.forecastCategory !== null && forecastCategory !== last.forecastCategory);
+    const entry: StageHistoryEntry = {
+      at: new Date(event.created_at).toISOString(),
+      by: event.actor_email,
+      stage,
+      stageName: stageNames.get(stage) ?? stage,
+      amount,
+      probability,
+      forecastCategory,
+      weightedAmount: probability === null ? null : weightedAmount(amount, probability, minor),
+      closeDate,
+    };
+    if (changed) rows.push(entry);
+    last = entry;
+  }
+  return rows.reverse();
+}
+
 type TimelineTarget = { contactId: string } | { personId: string } | { opportunityId: string };
 
 async function timelineFor(tx: OrgTx, target: TimelineTarget): Promise<TimelineEntry[]> {
@@ -1225,14 +1341,16 @@ async function timelineFor(tx: OrgTx, target: TimelineTarget): Promise<TimelineE
         and (e.event_type = 'crm.opportunity_created' or (e.event_type = 'crm.opportunity_updated' and e.details ? 'stageFrom'))`,
     [contactId, personId, opportunityId],
   );
+  const stageNames = new Map((await listStages(tx)).map((stage) => [stage.key, stage.name]));
+  const stageName = (key: unknown) => stageNames.get(String(key)) ?? String(key);
   for (const event of events.rows) {
-    const stage = event.details.stage as OpportunityStage;
-    const from = event.details.stageFrom as OpportunityStage | undefined;
+    const stage = event.details.stage;
+    const from = event.details.stageFrom;
     entries.push({
       kind: event.event_type === "crm.opportunity_created" ? "opportunity_created" : "opportunity_stage",
       at: new Date(event.created_at).toISOString(),
-      title: event.event_type === "crm.opportunity_created" ? `Opportunity added: ${event.name}` : `Opportunity ${event.name}: ${OPPORTUNITY_STAGE_LABELS[from!]} → ${OPPORTUNITY_STAGE_LABELS[stage]}`,
-      detail: event.event_type === "crm.opportunity_created" ? OPPORTUNITY_STAGE_LABELS[stage] : null,
+      title: event.event_type === "crm.opportunity_created" ? `Opportunity added: ${event.name}` : `Opportunity ${event.name}: ${stageName(from)} → ${stageName(stage)}`,
+      detail: event.event_type === "crm.opportunity_created" ? stageName(stage) : null,
       amount: event.event_type === "crm.opportunity_created" ? toFixedString(dec(String(event.details.amount ?? "0")), 2) : null,
       href: `/crm/opportunities/${event.entity_id}`,
       by: event.actor_email,
