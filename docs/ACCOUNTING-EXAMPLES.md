@@ -39,6 +39,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM10) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
   `tests/integration/sales-platforms.test.ts` (SPC1-SPC10) and
+  `tests/integration/crm-custom-fields.test.ts` (CRMF1-CRMF12, not yet
+  approved) and
   `tests/integration/reports-ledger.test.ts` (AGP1-AGP3, ATX1-ATX5,
   JR1-JR3) and `tests/integration/gst-audit.test.ts` (GA1-GA4) and
   `tests/integration/customer-statements.test.ts` (CST1-CST5) and
@@ -60,7 +62,9 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/tax-available-on.test.ts` (TAO1-TAO5, TAO7-TAO12) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
-  GP3, GP5, GP6), all against
+  GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PE1, PE2)
+  and `tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE13),
+  all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6), `tests/unit/repeating-bill-rules.test.ts`
@@ -73,10 +77,177 @@ proves it". Test names start with the example IDs they cover:
   rate and file currency pieces of FXB2-FXB10, and
   `tests/unit/import-fields.test.ts` the import column matching (IM2-IM5, IM16), and
   `tests/unit/tax-available-on.test.ts` the tax code pickers and starting codes
-  by side (TAO2-TAO4, TAO6, TAO8), and `tests/unit/sales-platforms.test.ts`
+  by side (TAO2-TAO4, TAO6, TAO8),
+  `tests/unit/custom-field-sections.test.ts` the grouping of fields into
+  sections and which switch a field needs (CRMF1, CRMF6, CRMF8), and
+  `tests/unit/payroll-rates.test.ts`,
+  `tests/unit/payroll-calculations.test.ts` and
+  `tests/unit/payroll-ird-tables.test.ts` IRD's payroll rates and
+  calculations (PR1-PR16), and `tests/unit/payroll-allocation.test.ts`
+  the payroll % split (PE3-PE5), and `tests/unit/sales-platforms.test.ts`
   the webhook signature check, Shopify record shapes and which value is kept
   (SPC2, SPC3, SPC5, SPC6, SPC8), and `tests/unit/sales-platforms-screen.test.ts`
   the sync log on the settings screen (SPC10)
+
+## NZ payroll — employee records (examples not yet approved by Jess)
+
+This first stage follows [NetSuite's employee payroll record](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N921988.html) for keeping payroll details on the employee, and [Xero's NZ employee setup](https://central.xero.com/s/article/Set-up-a-fixed-term-employee) for salary or hourly pay details. This stage stores employee details only; it does not calculate or post payroll.
+
+| ID | Employee details | Result |
+| --- | --- | --- |
+| PE1 | Add Aroha Ngata, starting 1 April 2026, fortnightly salary of NZD 70,000.00 a year, tax code M, student loan, and her IRD and bank details. Record the current KiwiSaver status and the employee and employer rates supplied for her. | Her payroll profile is saved; the IRD number and bank account are encrypted in the organisation database. No tax or net-pay amount is calculated and no journal is posted. |
+| PE2 | Set Aroha's finish date to 30 September 2026, then archive her. | Her profile remains in the database and audit trail, is hidden from the active list and can be restored; it is never deleted. |
+
+The rates in PE1 are copied from the employee's current instructions; see [IRD's KiwiSaver employer guidance](https://www.ird.govt.nz/kiwisaver/kiwisaver-employers). This example does not prescribe KiwiSaver rates or calculate deductions. Entering an employee is not authority to run payroll.
+
+### Not supported yet (refused rather than guessed)
+
+- Pay calculations, approval and journal posting; payment to employees or Inland Revenue; and payslips. The current sources to verify before building calculations are [IRD's 2026 IR340 PAYE tables](https://www.ird.govt.nz/-/media/project/ir/home/documents/forms-and-guides/ir300---ir399/ir340/ir340-apr-2026.pdf), [Payroll Calculations and Business Rules](https://www.ird.govt.nz/employing-staff/payroll-calculations-and-business-rules), and [Employer's guide IR335](https://www.ird.govt.nz/forms-guides).
+- Payday filing exports. Use IRD's [file upload service](https://www.ird.govt.nz/digital-service-providers/services-catalogue/returns-and-information/payday-filing/payday-filing-through-file-upload-services) and its [2026–27 file upload specification](https://www.ird.govt.nz/-/media/project/ir/home/documents/digital-service-providers/iir-file-upload-specification/payday-filing-file-upload-specification-2026-2027.pdf); the exact required records and output layout have not yet been verified against the specification.
+- Holidays Act leave calculations. Annual leave, sick leave, public holidays, alternative days, ordinary weekly pay and average weekly earnings need Jess-approved worked examples and decisions first.
+- Questions for Jess: which pay frequencies and KiwiSaver status values are needed in practice; which payroll bank account and payable/expense accounts to use; and how payroll corrections should fit the period-close workflow.
+
+## NZ payroll — cost allocation, pay rates, job details and payroll access (examples not yet approved by Jess)
+
+Stage P1b. Each employee gets a default **cost allocation** (where their pay
+is charged, split by %), a **pay rate history**, job details, and payroll
+data is only open to people an admin has given **payroll access**. Nothing
+here posts to the ledger or calculates pay; pay runs (P3) will use the
+allocation and rate in effect on each date.
+
+Sources followed (NetSuite first, then Xero Payroll NZ where NetSuite has no
+answer). The agent sandbox couldn't open docs.oracle.com or Xero Central, so
+these were found by web search and not read in full; check them before
+approving:
+
+- Splitting pay by % across Department, Class and Location: NetSuite's
+  [Labor Expense Allocation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_159118277665.html) and
+  [Classifying Individual Paycheck Lines](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1543951211.html)
+  (paycheck lines take the employee's Department, Class and Location by
+  default). NetSuite's percentage allocation schedules
+  ([Creating Expense Allocation Schedules](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1483674.html))
+  require the percentages to total 100%. Neither page says how leftover
+  cents are shared out; the largest-remainder rule below is ours (question
+  for Jess).
+- Effective-dated changes kept as history: NetSuite's
+  [Effective Dating for Employee Information](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_4659236711.html)
+  (an effective date and a reason, with a change log) and
+  [Compensation Tracking](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_157489167446.html); Xero's
+  [pay and work pattern effective date](https://central.xero.com/s/article/Change-an-employee-s-salary-and-wages-details).
+- Job title and supervisor (reports-to): NetSuite's
+  [Human Resources information on the employee record](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N895403.html).
+- Pay frequency and employee groups: NetSuite's
+  [Including an Employee in Payroll](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N921988.html) (pay
+  frequency on the employee) and [Creating a Payroll Batch](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N947366.html)
+  (run per pay frequency); Xero's [pay frequencies](https://central.xero.com/0/article/Add-a-pay-calendar)
+  and [employee groups for payroll tracking](https://central.xero.com/s/article/Payroll-tracking-in-Xero).
+- Payroll access separate from accounting roles: NetSuite's
+  [Advanced Employee Permissions](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_1494536002.html) (an
+  "Employee Compensation" permission apart from the rest of the employee
+  record) and Xero's [user role access to payroll](https://central.xero.com/s/article/User-role-access-to-payroll-in-Xero)
+  (only payroll admins and advisers see employee pay and bank details).
+
+Tests: `tests/unit/payroll-allocation.test.ts` (PE3, PE4, PE5),
+`tests/unit/payroll-access-screen.test.ts` (PE10's message) and
+`tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE13).
+
+### Cost allocation
+
+An allocation has an **effective-from date** and one or more lines. Each line
+has a percentage (more than 0, at most 2 decimal places) and any of a
+Department, Class and Location value (the tracking categories), a project
+and, later, an R&D activity (the RDTI register is stage R2; until then the
+R&D activity is always empty and setting one is refused). A line needs at
+least one of the Department, Class, Location or project. Two lines can't
+have exactly the same Department, Class, Location, project and R&D activity.
+The lines must total exactly **100.00%**. Saving a new allocation never
+changes an earlier one: the allocation in effect on a date is the one with
+the latest effective-from date on or before it (if two were saved for the
+same date, the later one saved). The database refuses an allocation that
+doesn't total 100.00% and refuses changing or deleting a saved one.
+
+**Splitting an amount** by the allocation: each line's exact share (amount ×
+% ÷ 100) is cut to whole cents (towards zero). The cents left over (fewer
+than the number of lines) go one each to the lines with the largest part
+cut off; when two lines tie, the earlier line gets the cent. So the parts
+always add back to exactly the amount. A negative amount is split as if it
+were positive and each part made negative, so a reversal mirrors the
+original exactly.
+
+| ID | Allocation and amount | Result |
+| --- | --- | --- |
+| PE3 | Aroha Ngata from 1 April 2026: 60% Department Sales, Location Wellington; 40% Department Operations, Location Auckland. Split **$1,234.57**. | Exact shares 740.742 and 493.828. Cut to cents: 740.74 + 493.82 = 1,234.56, so 1 cent is left. The 40% line had the larger part cut off (0.008 against 0.002), so it gets the cent: **Sales 740.74, Operations 493.83**, total 1,234.57. Split **−$1,234.57** (a reversal): **−740.74 and −493.83**. |
+| PE4 | Rounding cents: 33.33% / 33.33% / 33.34% of **$10.00**; 50% / 50% of **$0.01**; 33.33% / 33.33% / 33.34% of **$100.00**. | 3.333, 3.333, 3.334 cut to 3.33 each (9.99); the third line had the most cut off: **3.33, 3.33, 3.34**. Half a cent each ties, so the first line gets it: **0.01 and 0.00** (rounding each half up would give 0.02). 33.33, 33.33, 33.34 are exact: **33.33, 33.33, 33.34**, nothing left over. |
+| PE5 | Lines of 60% and 30% (90%); lines of 60% and 50% (110%); a line of 0%; a line of 33.333%; a 100% line with no Department, Class, Location or project; two 50% lines both Department Sales. | All refused: "The allocation lines total 90.00%. They must total exactly 100.00%." (and 110.00%); a 0% line, a third decimal place, an empty line ("Line 1 needs a Department, Class, Location or project") and a repeated line ("Line 2 is the same as line 1") are refused too. Nothing is saved. |
+| PE6 | Aroha is 100% Department Sales from 1 April 2026. On 20 September 2026 she moves to Operations from **15 September 2026** (mid-month): a new allocation, 100% Operations, effective 15 September 2026. | The allocation in effect on 1 May and 14 September 2026 is still **100% Sales**; on 15 September 2026 and later it's **100% Operations**. Both stay in her history, oldest first. Her primary department in the employee list (the department of the biggest line in effect today) is Operations. How a pay period that spans the move is charged is a P3 question (below). |
+
+### Pay rate history
+
+| ID | Rate changes | Result |
+| --- | --- | --- |
+| PE7 | Aroha starts on 1 April 2026 on a salary of **$70,000.00** a year (PE1), which becomes her first pay rate, effective 1 April 2026. On 20 September 2026 she's given **$74,000.00** a year from 1 October 2026, with the reason "Annual review". On 15 December 2026 she moves to **$38.50 an hour for 37.5 hours a week** from 1 January 2027. | Her rate on 20 September and 30 September 2026 is $70,000.00; on 1 October 2026, $74,000.00; on 1 January 2027, $38.50 an hour, 37.5 hours a week. Her current rate is the one in effect today. All three stay in her history. Saving another rate for 1 October 2026 (to correct a typo) replaces the earlier one from that date; both stay in the history. A rate before her start date, a zero rate, or a salary with an hourly rate is refused. The audit log records that a rate was added and from when, never the amount. |
+
+### Job details, pay groups and employee groups
+
+| ID | Details | Result |
+| --- | --- | --- |
+| PE8 | Pay groups "Weekly wages" (weekly) and "Monthly salaries" (monthly); employee groups "Wellington office" and "Field staff". Aroha (fortnightly) is given the job title "Payroll officer", reports to Mere Tane, and joins employee group "Wellington office". She's then put in pay group "Monthly salaries". | Job title, reports-to and employee group are saved. "Monthly salaries" is **refused** because her pay frequency is fortnightly ("Aroha is paid fortnightly but Monthly salaries is monthly"). Changing her to monthly in the same save puts her in it. An employee can't report to themselves or to someone who (directly or further up) reports to them. A pay group's frequency can't change while employees are in it. Groups are archived, never deleted. |
+
+### Payroll access
+
+Payroll access is a separate permission, not a role: an admin (or owner)
+gives it to, or takes it from, named members of the organisation. Without
+it, nobody (admins and owners included) can see or change employees' pay,
+allocations, rate history, IRD numbers or bank accounts, and later pay runs
+and payroll reports. Having it also needs the bookkeeper role or higher.
+It's kept in the organisation's own database against the person's user ID,
+and every grant and removal goes in the organisation's audit log with who
+did it and when.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| PE9 | Jess creates the organisation (or it's upgraded to this version); she's its first owner. Mere is an admin, Ben a bookkeeper. | **Jess has payroll access** from the start, recorded in the audit log as given by "system". Mere and Ben don't, even though Mere is an admin. |
+| PE10 | Ben (bookkeeper, no payroll access) opens Payroll › Employees, and tries the employee, pay rate, allocation and group APIs. | He sees "You need payroll access to see payroll. Ask an admin to give it to you in Settings › Payroll access." and no data; every payroll API answers 403 with that message, for reading and changing. |
+| PE11 | Mere (admin) opens Settings › Payroll access and gives it to herself, then to Ben. Later she removes Ben's. Ben tries to give himself access. A viewer is given access. | Mere and then Ben can see payroll once given it; the audit log shows "payroll access given" to each, by Mere, with the time. After removal Ben is refused again (PE10), and the audit log shows it. Ben can't give access (admins only, 403). Giving it to a viewer is refused ("needs the bookkeeper role or higher"). Removing access from the last member who has it (and the bookkeeper role or higher to use it) is refused, so there's always someone. |
+| PE12 | Ben, who has payroll access, is removed from the organisation and added again later. | When he's added again **he has no payroll access** until an admin gives it to him again; the removal is in the audit log. |
+| PE13 | Ben, who has payroll access, is moved from bookkeeper to viewer and later back to bookkeeper; separately, he is removed from the organisation. | Moving him below bookkeeper or removing him **takes his payroll access away at once**, with the reason in the audit log, so moving him back doesn't bring it back; an admin has to give it again. Trying to make a change you're not allowed to (an admin removing an owner) changes nothing, including payroll access. |
+
+No IRD number, bank account or pay amount is ever written into an audit
+event: allocation events record the effective date and the percentages,
+rate events the effective date and pay basis.
+
+### Not supported yet (refused rather than guessed)
+
+- Choosing an R&D activity on an allocation line (needs the RDTI register,
+  stage R2).
+- Allocations by pay item (e.g. overtime to a different department) and
+  timesheets overriding the default split: stages P3 and P9.
+- Changing or deleting a saved allocation or pay rate: save a new one with
+  the same effective date instead.
+
+### Questions for Jess (allocation, pay rates and payroll access)
+
+- A pay period that spans an allocation change (PE6, a monthly pay with a
+  move on 15 September): charge the whole pay by the allocation in effect on
+  the period's end date, its pay date, or split it by days in each part?
+- Once pay runs exist, should an allocation or rate dated before the last
+  posted pay run be refused, or treated as back pay (P12)?
+- One employee group per employee (as built, like Xero's employee group), or
+  several groups each?
+- Should a pay group set the employee's pay frequency (and later their pay
+  calendar), rather than having to match it as built?
+- Should removing the last person with payroll access be allowed if an
+  owner does it (it's refused as built)?
+- Should a viewer with payroll access be able to read payroll (refused as
+  built: payroll needs bookkeeper as well)?
+- Leftover cents in a split go to the lines with the largest part cut off,
+  the earlier line first on a tie (PE3, PE4). Is that right, or should they
+  always go to the biggest line, or the last line?
+- Should a line be allowed with no Department, Class, Location or project
+  (refused as built, PE5)?
+- When someone with payroll access is moved down to viewer, should their
+  access be removed then (as built it stays, unused, until an admin removes
+  it or they're moved back up)?
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -3708,9 +3879,10 @@ Item **WIDGET** "Widget", stock, sale price **12.00**, purchase price
 
 ## Modules and the CRM
 
-Decided with the owner (29 Sep 2026): Tohyee has four modules: **Accounting**
-and **Tax** (always on), **CRM** and **Advanced reporting** (each switched on
-per organisation in Settings). Advanced reporting is the existing
+Decided with the owner (29 Sep 2026): Tohyee has five modules: **Accounting**
+and **Tax** (always on), **CRM**, **Advanced reporting**, and **Not-for-profit**
+(each optional module is switched on per organisation in Settings).
+Advanced reporting is the existing
 "advanced features" switch: tracking categories and segments, custom fields,
 salespeople and their reports. The CRM follows
 [Twenty](https://github.com/twentyhq/twenty) (AGPL-3.0, the same licence as
@@ -3721,6 +3893,70 @@ built into Tohyee rather than run alongside it.
   either on or off is recorded in the history. With the CRM off its menu and
   screens are hidden and its commands are refused ("The CRM is off"); what
   was entered is kept.
+
+## Not-for-profit (examples not yet approved by Jess)
+
+The first tranche reuses Advanced reporting's tracking categories/custom
+segments for funds, and its budget and custom-report features. Set up a custom
+segment called **Fund**, with values grouped under **Unrestricted**,
+**Restricted** or **Endowment**; make it required if every income and expense
+line must be assigned. Tag the income/expense lines with the named fund value.
+This follows [NetSuite's custom segments for NFP financials](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1519241750.html)
+and [Xero's tracking categories](https://central.xero.com/s/article/Set-up-tracking-categories):
+both use transaction classifications to analyse financial activity; Tohyee
+uses its existing tracking tags rather than a duplicate fund dimension. Turn
+on Advanced reporting as well as Not-for-profit to create and use these tags.
+Fund labels are for analysis: they do not change a journal, GST treatment or
+the recognition policy for a grant.
+
+- **NFP1** In June 2026, the Community workshops fund (a value under
+  Restricted) earns **1,000.00** in workshop fees and incurs **400.00** in
+  printing costs. Post Dr 1000 Cash 1,000.00 / Cr 4000 Workshop fees 1,000.00
+  (Fund: Community workshops), then Dr 6010 Printing 400.00 (Fund: Community
+  workshops) / Cr 1000 Cash 400.00. The profit and loss split by Fund shows
+  revenue **1,000.00**, expenses **400.00** and net profit **600.00** for
+  Restricted. The $600 is this period's tagged activity, not a claim about the
+  fund's closing equity balance. A budget can be assigned to the fund value
+  and compared with its tagged actuals (BU5-BU7).
+
+### Not supported yet (refused rather than guessed)
+
+- **Fund equity balances carried forward by fund**: the existing balance sheet
+  calculates total retained and current-year earnings; income/expense tags do
+  not allocate untagged assets or liabilities. Do not treat a fund's tagged
+  period surplus as its equity balance. Jess needs to decide how opening
+  balances and shared assets/liabilities are allocated, and whether the
+  year-end schedule is calculated or posted.
+- **Grants and conditional funding**: no grant register, condition tracking,
+  deferred-income release or grant-specific recognition is provided. XRB
+  distinguishes conditions from restrictions in [PBE IPSAS 23](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/pbe-ipsas-23/).
+  The predecessor [PBE SFR-A (NFP)](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/pbe-sfr-a-nfp/)
+  and [PBE SFR-C (NFP)](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/pbe-sfr-c-nfp/)
+  apply to earlier reporting periods;
+  XRB's Tier 3 and Tier 4 requirements apply to periods beginning on or after
+  1 April 2024. The current Tier 3 requirements include documented
+  expectations, so the older condition/restriction rule alone is not enough
+  to implement current grants. Confirm the entity's tier, period and grant
+  terms against [XRB Tier 3](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/reporting-requirements-for-tier-3-not-for-profit-entities/)
+  and [Tier 4](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/reporting-requirements-for-tier-4-not-for-profit-entities/)
+  before adding grant recognition. Do not use an ordinary journal as a claim
+  that a grant has been recognised correctly.
+- **Donation tax-credit receipts**: Tohyee does not produce these. IRD's
+  [receipt requirements](https://www.ird.govt.nz/roles/not-for-profits-and-charities/running-your-nfp/requirements-for-creating-donation-receipts)
+  (reviewed 1 Oct 2026) confirm the donor's name, donation amount and date,
+  that the payment is a donation, and the receiving organisation's name and
+  IRD number. Confirm any other particulars and layout against the current
+  IRD guidance before generating a receipt that donors could rely on.
+- **Tier 3 and Tier 4 performance reports**: the standard P&L and balance sheet
+  are not PBE SFR-A (NFP) or PBE SFR-C (NFP) performance reports. Service
+  performance measures, required statement layouts, accounting policies and
+  disclosures are not implemented. Confirm the reporting tier and required
+  measures with Jess against the [XRB Tier 3](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/reporting-requirements-for-tier-3-not-for-profit-entities/)
+  and [Tier 4](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/reporting-requirements-for-tier-4-not-for-profit-entities/) requirements.
+- **Incorporated societies**: no society-specific financial statements,
+  filing dates or audit checks are implemented. Ask Jess which clients are
+  societies, whether they are registered charities, and which reporting
+  requirements apply; see [Incorporated Societies Act 2022, ss 102 and 108](https://www.legislation.govt.nz/act/public/2022/0012/latest/whole.html).
 
 **Companies** are Tohyee's contacts, so the CRM and the accounts share one
 list. As well as customer and supplier, a contact can be a **prospect**
@@ -4067,6 +4303,170 @@ Shopify store glimmers.myshopify.com, "Glimmers", NZD, prices exclude tax.
   tax code for exports?
 - Is your Shopify app an older one made in the store admin (an access
   token), or a new one from the Dev Dashboard (client ID and secret)?
+
+## Custom fields on CRM records (examples not yet approved by Jess)
+
+The owner asked (1 Oct 2026) for the CRM's records to carry many fields of
+the organisation's own, the way Salesforce accounts do. They're the custom
+fields above (CF1-CF10), extended:
+
+- Two more kinds of record: **people** and **opportunities**, alongside
+  contacts, documents and lines. Same types, required, defaults, show in
+  list, archiving, options and history. A people field is always on people
+  and an opportunity field on opportunities (there's nothing else to
+  choose).
+- A contact field can now be on **prospects** as well as customers and
+  suppliers (any of the three). A contact uses the fields for each of its
+  roles: a prospect-only company gets only prospect fields, a company that
+  is a customer and a prospect gets both. Prospects only get the fields an
+  admin deliberately turns on for prospects (Jess, 1 Oct 2026): the upgrade
+  leaves existing contact fields where they were, so a customer field, even
+  a required one, isn't shown on and doesn't block a prospect-only company
+  until an admin ticks prospects for it. (Before this, prospects used the
+  customer fields while Advanced reporting was on; values a prospect
+  already has stay on it.)
+- **Which switch** (decided by Jess, 1 Oct 2026): a field on prospects,
+  people or opportunities is a CRM field, usable while the **CRM** is on
+  even with Advanced reporting off. Fields on customers, suppliers,
+  documents and lines keep their rule: only with **Advanced reporting** on,
+  and with it off they behave exactly as before (not shown, not required,
+  can't be set or changed). A contact field on both customers and prospects
+  works on a company through whichever of its roles is switched on. Adding
+  a field, or adding a place to an existing one, needs that place's switch
+  on. Changing a field that's already somewhere (renaming, archiving,
+  required, default, list column, section, moving it, its options, or
+  taking it off a place) only needs one of the places it's on to be
+  switched on, so an organisation with the CRM off can still change its
+  customer fields.
+- Up to 100 fields on contacts, documents and lines together (as before),
+  and up to 100 more each on people and on opportunities.
+- People and opportunity values follow the contact rules: checked by type,
+  a required one needed whenever the record is saved (while the CRM is on),
+  a new record starts with the defaults, leaving the values out keeps them,
+  and they can be changed at any time (also after an opportunity has made
+  its invoice), each change in the record's history. Archived fields and
+  options stay on records that have them. With the CRM off a record keeps
+  its values and can be saved with them, but can't be given new ones.
+- Values never change an amount, account, tag, stage or GST box: an
+  opportunity's values don't reach the pipeline totals or the invoice it
+  makes, and nothing is posted.
+- **Sections**: an admin can add named sections for contacts, documents,
+  people and opportunities (not lines, whose fields sit on the line), up to
+  20 per kind, each name unique for its kind ignoring case. Sections are
+  renamed and moved up or down; an empty one can be removed, one with
+  fields in it (even archived ones) can't. A field is in at most one
+  section, of its own kind, and can be moved up or down among its section's
+  fields. A record's page and form show the fields with no section first,
+  then each section that has fields to show, in order, as a group that can
+  be collapsed (open to start). Sections only group fields: they don't hide
+  them from anyone (a section called "Admin only" is seen by everyone who
+  can see the record).
+- **Lists**: fields shown in lists are columns on the CRM's Companies list
+  (contact fields for the roles that are switched on), its People list,
+  and lines on the pipeline's cards (opportunity fields).
+
+Setup: CRM on, Advanced reporting off; company Mānuka Vets (a prospect),
+person Aroha Ngata at Mānuka Vets and the opportunity "Memorial paw prints
+2027" for 2,400.00 (CRM2, CRM3). Sections: "Practice details" (contacts),
+"Preferences" and "Personal" (people), "Marketing" (opportunities). Fields:
+contact "Practice size" (whole number, on prospects, shown in lists,
+Practice details); contact "Species seen" (multiple select: Dogs, Cats,
+Horses; on prospects, Practice details); person "Preferred contact" (list:
+Email, Phone, Text; required, default Email, shown in lists, Preferences);
+person "Birthday" (date, Personal); opportunity "Lead source" (list:
+Referral, Website, Expo; shown in lists, Marketing); opportunity "Discount
+offered" (percent, Marketing); opportunity "Sample kit sent" (check box, no
+section).
+
+- **CRMF1** Which switch: with Advanced reporting off and the CRM on, the
+  admin adds the seven fields and four sections. A contact field "Pet name"
+  on customers is refused ("Advanced reporting is off, so a field can't be
+  on customers."), and so is a document field on invoices. With the CRM
+  off as well, a people field is refused ("The CRM is off, so a field can't
+  be on people.") and so is a section for opportunities.
+- **CRMF2** Set-up rules: "Lead source" can be on people as well as
+  opportunities, but a second "lead source" on opportunities is refused
+  ("There's already an opportunity field called lead source."); a people
+  field can't be "used on" customers; a field's type and kind still can't
+  change; a 101st opportunity field is refused while people can still have
+  their own.
+- **CRMF3** Prospects: Mānuka Vets saved with Practice size 12 and Species
+  seen Dogs and Cats keeps them; "12.5" is refused ("Practice size: must
+  be a whole number"). Changing Practice size to 14 is in its history (from
+  12 to 14). Marking it a customer too keeps them. With Advanced reporting
+  on, a contact field on customers only ("Pet name") can't be given to a
+  prospect-only company ("Pet name isn't used on prospects."), and a
+  supplier-only contact can't be given Practice size. The upgrade leaves
+  existing contact fields where they were: one on customers is still only
+  on customers after it, and one on suppliers only on suppliers.
+- **CRMF4** People: Aroha starts with Preferred contact = Email (the
+  default); clearing it is refused ("Preferred contact is required.");
+  "2026-02-30" for Birthday is refused; changing Preferred contact from
+  Email to Phone is in her history (from Email to Phone); saving a new job
+  title without sending the values keeps them.
+- **CRMF5** Opportunities: the opportunity with Lead source Referral,
+  Discount offered 10 and Sample kit sent ticked still has amount
+  **2,400.00** and the New column's total is still **2,400.00**; "101" for
+  Discount offered is refused. Marking it Won and making the invoice gives
+  exactly the CRM5 invoice: one line "Memorial paw prints 2027" 1 ×
+  2,400.00 to 4000 with GST, total **2,760.00**, and no custom values on
+  the invoice or its line. After that Lead source can still be changed to
+  Expo (in its history), and the stage still can't change.
+- **CRMF6** Sections: moving "Personal" up puts it before "Preferences";
+  a second "preferences" for people is refused ("There's already a section
+  called preferences for people.") but "Preferences" for opportunities is
+  fine; a section for lines is refused; Lead source can't go in
+  "Preferences" ("Preferences is a section for people, not
+  opportunities."); "Marketing" can't be removed while it has fields ("Move
+  Marketing's fields out first.") but an empty section can be; a 21st
+  section for people is refused. Moving Discount offered up puts it before
+  Lead source. The opportunity form shows Sample kit sent (no section)
+  first, then Marketing with Discount offered and Lead source.
+- **CRMF7** Lists: the Companies list gives Mānuka Vets' values, with
+  Practice size as a column and Species seen not (it isn't shown in
+  lists); the People list has a Preferred contact column (Aroha: Phone);
+  the pipeline card shows Lead source.
+- **CRMF8** Switching off: with the CRM off and Advanced reporting on,
+  Aroha (a contact person) can still be saved with her values, but giving
+  her a new Birthday is refused ("the CRM is off, so Birthday can't be
+  set.") and Preferred contact isn't required; Mānuka Vets keeps Practice
+  size and can be saved with it, but not given a new one. With the CRM on
+  and Advanced reporting off, a company that is a customer and a prospect
+  can be given Practice size but not a new "Pet name" (customers only:
+  "advanced reporting is off, so Pet name can't be set.").
+- **CRMF9** Over HTTP: a viewer reads the setup, the company page and
+  the people and pipeline lists with their values, but can't change a
+  person's values (403); a bookkeeper can; adding a field or section is for
+  admins only (403 for a bookkeeper, 201 for an admin).
+- **CRMF10** Older customer fields with the CRM off: with Advanced
+  reporting on and the CRM off, the admin has a contact field "Channel"
+  (text, on customers) and a list "Region" (North, South; on customers and
+  suppliers), as an organisation would have from before the CRM. They can
+  rename Channel to "Sales channel", make it required, archive and restore
+  it, add an option "Islands" to Region and rename "South" to "South
+  Island". Adding prospects to Sales channel is refused ("The CRM is off,
+  so a field can't be on prospects."). Practice size (on prospects only)
+  can't be changed ("The CRM is off. Turn it on in Settings › Modules
+  first."). With Advanced reporting off as well, Sales channel can't be
+  changed either ("Advanced reporting is off. Turn it on in Settings ›
+  Modules first.").
+- **CRMF11** A required customer field doesn't block prospects: with both
+  switches on, "Account manager" (text, on customers, required). Mānuka
+  Vets (a prospect only) is saved with its Practice size and no Account
+  manager, and a new prospect "Rata Clinic" is made with no values; the
+  fields for a prospect are Practice size and Species seen only. Marking
+  Mānuka Vets a customer too without one is refused ("Account manager is
+  required."); with Account manager "Hemi" it's saved. With Advanced
+  reporting off, a new customer "Tui Kennels" is saved without one, as
+  before (not required, not shown), and a customer and prospect is saved
+  without one too.
+- **CRMF12** Turning a field on for prospects: the admin ticks prospects
+  on Account manager. Now it's one of the fields for a prospect (after
+  Practice size and Species seen), it's required there: saving Rata Clinic
+  without one is refused ("Account manager is required."), and with
+  "Hemi" it's saved and kept. With Advanced reporting off, it still shows
+  and is required on prospects (its prospect use needs only the CRM), but
+  not on a customer-only contact.
 
 ## Notes, files and history
 
@@ -6449,3 +6849,1534 @@ Decided (following NetSuite, 1 Oct 2026):
   NetSuite's close checklist has no bank reconciliation task.
 - **GST check**: uses the GST period setting (GP1-GP6) when it's set, and
   the latest filed return's length only when it isn't.
+
+## R&D Tax Incentive (examples not yet approved by Jess)
+
+Stage R1 of the RDTI plan in [HANDOVER.md](HANDOVER.md): what Tohyee should
+**record** and **report** for New Zealand's Research and Development Tax
+Incentive, written so Jess can approve it before anything is built (R2: the
+activity register and tagging; R3: the claim report). **Nothing in this
+section is built, and there are no tests for it yet.** Every rule below cites
+where it comes from. Where the guidance was unclear or left a choice, Jess
+asked Claude to research it and decide; those are decisions 30-50 in
+[DECISIONS.md](DECISIONS.md), applied in the examples below and listed at the
+end. The rule for each of them: never overstate a claim.
+
+What Tohyee will and won't do:
+
+- It **records** R&D activities, which costs and hours belong to them, and
+  who entered each record and when, and it **adds up** the figures the
+  supplementary return asks for.
+- It **doesn't decide** whether work is R&D. IRD decides that when it
+  approves activities (IR1240 p 19, p 108), and Tohyee never says an
+  activity "qualifies".
+- It **doesn't file** anything with IRD: the general approval application
+  and the supplementary return are filed in myIR (IR1240 p 103-104).
+
+### Sources (all read 1 October 2026)
+
+- IRD, **Research and Development Tax Incentive: Guidance, IR1240, April
+  2026** (141 pages, "What's new December 2025"):
+  <https://www.ird.govt.nz/-/media/project/ir/home/documents/forms-and-guides/ir1200---ir1299/ir1240/ir1240.pdf>.
+  The link in the task described an April 2025 version; on 1 Oct 2026 the
+  same address serves the April 2026 version, which is the one cited
+  throughout as "IR1240 p N" (the page number printed on the page).
+- IRD, **Research and development supplementary return guide, IR1060,
+  November 2022**:
+  <https://www.ird.govt.nz/-/media/project/ir/home/documents/forms-and-guides/ir1000---ir1099/ir1060/ir1060-2022.pdf>.
+- IRD web pages under <https://www.ird.govt.nz/research-and-development>:
+  "Research and development tax incentive" (updated 9 Apr 2026), "R&D tax
+  incentive due dates"
+  (`.../tax-incentive/research-and-development-tax-incentive-due-dates`,
+  updated 1 Apr 2026), "Claiming the R&D tax incentive"
+  (`.../tax-incentive/claiming`, updated 13 Apr 2026), "R&D supplementary
+  return" (`.../claiming/supplementary-return`, updated 30 Apr 2021) and
+  "About R&D tax incentive credits" (updated 9 Apr 2026).
+- **Income Tax Act 2007**, subpart LY (sections LY 1-LY 9) and section DI 5,
+  consolidation as at 7 May 2026; **Tax Administration Act 1994**, sections
+  33E, 68CB and 68CC, consolidation as at 1 May 2026. legislation.govt.nz
+  returned an empty response (HTTP 202) to every request from the agent's
+  sandbox on 1 Oct 2026, so the Acts were read from the GitHub mirror
+  [jonnonz1/nz-statute-book](https://github.com/jonnonz1/nz-statute-book),
+  which is **not** an official copy. Its Schedule 21B is empty, so Schedule
+  21B clauses are cited through IR1240. Check the cited sections on
+  legislation.govt.nz before R2 is built.
+- The amending Acts named under "What changed in 2025 and 2026" below, from
+  the same mirror.
+
+Short forms: "LY 4(1)" is a section of the Income Tax Act 2007; "TAA 68CB" a
+section of the Tax Administration Act 1994; "Sch 21B A cl 2" and "Sch 21B B
+cl 11" are clauses of Part A (eligible) and Part B (ineligible) of Schedule
+21B of the Income Tax Act 2007.
+
+### What changed in 2025 and 2026, and which income years it applies to
+
+- **General approval due date.** For a 31 March balance date it moved from
+  the 7th day of the 2nd month after the income year (**7 May**) to the
+  last day of the 3rd month (**30 June**) (TAA 68CB(2B), as amended by the
+  Taxation (Annual Rates for 2024–25, Emergency Response, and Remedial
+  Measures) Act 2025 s 173, in force 1 April 2025 under its s 2(34)). IRD's
+  due dates page shows "Before 1 April 2025: 7 May / From 1 April 2025: 30
+  June", and IR1240 p 19 and p 119 use 30 June (p 119's example for the
+  2024-25 year: "prior to 30 June 2025"). So 30 June applies to the
+  **2024-25 income year and later**; earlier years are closed and Tohyee
+  doesn't need the old date.
+- **Restructured, same deadlines.** The Taxation (Annual Rates for 2025–26,
+  Compliance Simplification, and Remedial Measures) Act 2026 s 196 rewrote
+  parts of TAA 68CB from 1 April 2026; the deadlines used below are the same
+  before and after.
+- **Investment boost (DI 5).** The Taxation (Budget Measures) Act 2025 s 15
+  (in force 22 May 2025, s 2(2)) changed Sch 21B A cl 1 to "depreciation
+  loss and amounts deductible under section DI 5", so the new 20% investment
+  deduction on assets available for use from 22 May 2025 can be eligible
+  R&D expenditure to the extent the asset is used for R&D, from the
+  **2025-26 income year** for 31 March balance dates. IR1240 April 2026 doesn't
+  mention DI 5 anywhere. Tohyee doesn't calculate DI 5: the deduction is
+  entered per asset with its tax depreciation and counts as depreciation
+  (RD11; decision 33, not yet checked against the Act on
+  legislation.govt.nz).
+- Nothing found changes the 15% rate, the $50,000 minimum, the $120 million
+  maximum or the 10% overseas limit; they're as in LY 4 and LY 7 (consolidation
+  as at 7 May 2026) and IR1240 April 2026. IRD's "Research and development tax
+  incentive" page (9 Apr 2026) says the same.
+
+### The example company
+
+**Kea Sensors Ltd**: a company, GST registered, 31 March balance date. The
+examples are for its **2026-27 income year** (1 Apr 2026 - 31 Mar 2027)
+unless they say otherwise. Its R&D project is "Low-power soil sensor", run
+by two employees, **Hana** and **Ben**. Jess is the owner, Sam the
+bookkeeper. All amounts are NZD, excluding GST.
+
+### The R&D activity register
+
+An **R&D activity** is a record in its own register (not a tracking
+category value, because it needs links, approvals and a place). It has:
+
+- a **project**: IRD's grouping of related core and supporting activities,
+  which is the level the supplementary return asks for expenditure (IR1240
+  p 104, p 109);
+- a **name** and the **descriptions IRD asks for** in the general approval
+  application: purpose and uncertainty, why it couldn't be resolved from
+  publicly available knowledge, the systematic approach, and for supporting
+  activities why they were required for the core activity (IR1240 p 104);
+- its **type**: **core** (an activity using a systematic approach to
+  resolve scientific or technological uncertainty, performed in New
+  Zealand; LY 2(1); IR1240 p 11) or **supporting** (only or main purpose of
+  supporting a core activity, and required for and integral to it; LY 2(3);
+  IR1240 p 12, p 37-39). A supporting activity is **linked to the core
+  activity or activities** it supports (one supporting activity may support
+  several, decision 39);
+- **where it's performed**: New Zealand, or overseas. Only supporting
+  activities can be overseas, and an overseas supporting activity is its
+  own activity linked to a core activity (LY 2(1)(c); IR1240 p 12,
+  p 69-70);
+- its **approval**: the kind (general approval, or criteria and
+  methodologies approval for significant performers, TAA 68CB and 68CC;
+  IR1240 p 19, p 108, p 113), the reference IRD gives, the date of IRD's
+  letter, the **income years** it covers (general approval can cover the
+  activities for up to 3 years, TAA 68CB(2); IR1240 p 108), and the letter
+  attached as a file. The letter is **required**: approval details can't be
+  saved without it (decision 40).
+
+- **RD1** Register core activity **C1** "Prototype and field-test a
+  low-power soil-moisture sensor": project "Low-power soil sensor", core,
+  performed in New Zealand. Registering an activity posts nothing and
+  changes no amount. Hana can tag time to C1 from the day it's registered,
+  with a warning while no approval is entered (RD3).
+- **RD2** Register supporting activity **S1** "Literature and patent search
+  for low-power sensing" (New Zealand), linked to C1, and **S2** "Sensor
+  calibration at Calibra Labs, Australia" (overseas), linked to C1.
+  Refused: a **core** activity performed overseas ("Core R&D must be
+  performed in New Zealand"; LY 2(1)(c)); a supporting activity with **no
+  core activity**; a supporting activity linked to **another supporting
+  activity**. S1 could also be linked to a second core activity C2 if the
+  search served both (decision 39); each cost line is still tagged to one
+  activity, so S1's costs are counted once.
+- **RD3** Approval: on 20 May 2027 Jess enters "General approval", IRD's
+  reference, the letter dated 18 May 2027, years **2026-27 to 2028-29**, and
+  attaches the letter, for C1, S1 and S2. Without the letter attached the
+  approval isn't saved (decision 40). The register shows the reference as
+  "entered by Jess on 20 May 2027 from IRD's letter; not checked with IRD"
+  (Tohyee can't check it). Tagging costs to C1, S1 and S2 before then is
+  allowed, with the warning "no approval entered for 2026-27" on each tag
+  (decision 47). The claim report gives credit only for activities with an
+  approval covering the year: until one covering 2026-27 is entered, it
+  lists C1, S1 and S2 as "no approval entered for 2026-27" and their costs
+  earn no credit; after 30 June 2027 (the deadline, RD24) it adds
+  "claimable only if general approval was applied for by 30 June 2027"
+  (TAA 68CB(2B); IR1240 p 19: without that, "you will not be able to claim
+  R&D tax credits for that year").
+- **RD4** Supporting work in another year: S1's search started in
+  **March 2026** (the 2025-26 year, before C1's work began in April), and 600.00 of Hana's
+  pay was tagged to S1 then. Supporting activity done in the income year
+  before a core activity can be claimed in the core activity's year
+  (LY 5(1)(ab)(i); IR1240 p 118-119) if the general approval covers it
+  (TAA 68CB(2)). So the 2025-26 report shows the 600.00 as "supporting
+  activity before its core activity: claim with 2026-27", and the 2026-27
+  report includes it. If no core activity happens, it can't be claimed: a
+  year with only supporting activities claims nothing (IR1240 p 38).
+  Supporting work done in the year **after** the core activity's year is
+  claimed in the core activity's year by varying the approval (LY
+  5(1)(ab)(ii); TAA 68CB(7B); IR1240 p 119), see RD24.
+- Changing an activity's descriptions, type or place keeps the old version
+  in its history (who, when). A **material change** to an approved activity
+  needs a variation from IRD (TAA 68CB(3B), (7); IR1240 p 109-112), so
+  Tohyee shows "changed since approval was entered" on the activity and in
+  the claim report, and the supplementary return's "no material change"
+  declaration (RD27) can't be prefilled as "no change".
+
+### Tagging costs to activities
+
+A **tag** links a posted cost line to an activity, with a **share** (a % or
+hours), a **category** (below) and, when it's not eligible, an **ineligible
+reason** (next part). Like tracking categories, tags **never change an
+amount, an account or a GST box** and post nothing; posted journals stay as
+they are.
+
+- **The amount is always excluding GST.** The R&D figure is the line's
+  amount as posted to its expense (or asset) account; the GST posted to the
+  GST account is never part of it (LY 1(6) applies the GST rule in DB 2;
+  IR1240 p 75: "the amount of your GST input credit claimed must be deducted").
+  When an organisation isn't GST registered, or a line has no GST, the
+  whole amount is the cost (IR1240 p 75 only removes GST "if you are GST
+  registered").
+- **Categories** are the supplementary return's (IR1240 p 104; IR1060):
+  **employee related costs**, **materials, consumables and overheads**,
+  **R&D tax depreciation**, **contract expenditure**, and **approved
+  research provider** (kept separate and counted once). The types of
+  eligible expenditure are in Sch 21B A cl 1-3 (IR1240 p 15, p 62-64).
+- **Flags** the return asks about (IR1240 p 105): **overseas**,
+  **commercial production**, **internal software development** and
+  **feedstock**.
+- **Expenditure counts when it's incurred**: when Kea is definitively
+  committed to it and it can be reliably estimated (IR1240 p 15). Tohyee
+  uses the posting date of the bill, expense claim, pay run or depreciation.
+- **Apportionment** must use an appropriate, documented method with an
+  audit trail (IR1240 p 15, p 63, p 100, p 102). IR1240 p 15 lists time %,
+  floor area, days or units of usage, volume, unit sales, dollar value and
+  activity-based costing.
+- Per-employee figures (RD5-RD7) are payroll details, so only people with
+  payroll access (HANDOVER P1b) see them; everyone else sees employee
+  related costs per activity as totals.
+
+**Employee costs** (Sch 21B A cl 3; IR1240 p 63-64). Eligible pay includes
+salary and wages including allowances, bonuses, employee share schemes,
+recruitment and relocation, overtime, holiday pay, long-service pay and
+superannuation contributions (IR1240 p 63), but only the share for time on
+R&D (IR1240 p 64). Unpaid time can't be claimed (IR1240 p 64). Only the
+costs IRD lists count (decision 36): **ACC levies, FBT and other employer
+costs are left out** and are never tagged as employee related costs. Tohyee's
+pay runs (P3) post each employee's cost split by their default allocation
+(P1b) unless timesheets (P9) cover the hours; R&D uses the **posted pay run's
+tags**, never a payroll calculation of its own (decision 37).
+
+- **RD5** Timesheet split. Hana's fortnightly pay run to 12 Jul 2026 posts
+  gross salary **2,400.00** and employer KiwiSaver contribution **72.00**
+  (as the pay run posts them): cost **2,472.00**. Her approved timesheet has
+  80 hours: **48 h C1**, **4 h S1**, **28 h** other work.
+  - C1: 2,472.00 × 48 / 80 = **1,483.20**
+  - S1: 2,472.00 × 4 / 80 = **123.60**
+  - not R&D: 2,472.00 − 1,483.20 − 123.60 = **865.20**
+
+  Each R&D share is rounded **down** to the cent and the remainder goes to
+  non-R&D, so the parts add up to the pay and R&D is never overstated
+  (decision 50). Here the shares are exact. Had the same pay covered 77 hours
+  (48 h C1, 4 h S1, 25 h other):
+  - C1: 2,472.00 × 48 / 77 = 1,540.987… → **1,540.98**
+  - S1: 2,472.00 × 4 / 77 = 128.415… → **128.41**
+  - not R&D: 2,472.00 − 1,540.98 − 128.41 = **802.61**
+
+  An ACC levy invoice paid for Hana isn't part of the 2,472.00 and isn't
+  tagged (decision 36). Across the year's 26 pays her timesheets give
+  **C1 36,500.00** and **S1 1,300.00**.
+- **RD6** Leave and training (IR1240 p 64, Zach). Ben's cost for the year
+  is **39,000.00**: 23 weeks on C1, 2 weeks on a project management course
+  for all his work, 4 weeks annual leave and 23 weeks other work. Time that
+  relates to both R&D and other work is taken out first: R&D share 23 / 46
+  = 50%; then 50% of the course (1 week) and leave (2 weeks) count, so
+  (23 + 1 + 2) / 52 = 26 / 52 = 50% and **C1 gets 39,000.00 × 50% =
+  19,500.00**. Tohyee spreads leave and training over the year this way, not
+  per pay (decision 35): worked per pay, leave in a fortnight with no R&D
+  would count nothing and the answer would depend on when the leave was
+  taken.
+- **RD7** No timesheet (a variation; in Kea's totals every pay has a
+  timesheet). If Hana's 1 Mar 2027 pay has no timesheet, P3 splits it by her
+  default allocation (say 60% C1, set by Jess on 1 Apr 2026): C1 2,472.00 ×
+  60% = 1,483.20. A default split counts only when it's **100% R&D**
+  (decision 34), so the report lists the 1,483.20 under "default split, no
+  time record" and leaves it **out of the total**; Jess can see it but it
+  earns no credit. An employee on R&D full time whose default allocation is
+  100% C1 does count without a timesheet (IR1240 p 100 accepts monthly
+  records for staff on R&D full time).
+
+**Goods and services, including overheads** (Sch 21B A cl 2; IR1240 p 63).
+
+- **RD8** Bill from Sensor Parts Ltd, 20 Jul 2026: "Capacitive sensor
+  components for prototypes" **4,000.00 + GST 600.00 = 4,600.00**, to an
+  expense account. Tagged 100% C1, materials, consumables and overheads:
+  **4,000.00** counts; the 600.00 GST never does. If Kea weren't GST
+  registered the line would post 4,600.00 and 4,600.00 would count.
+  Tohyee deducts the GST it actually posted for the line (rounded per line, as on
+  invoices and bills); IR1240 p 75's example deducts 1,304.34 from 10,000.00 where Tohyee
+  would post 1,304.35, so its figure would be 8,695.65 rather than
+  IRD's 8,695.66.
+
+  Goods not used by the end of the year aren't eligible for that year
+  (IR1240 p 63; decision 41). Had **1,000.00** of these components still
+  been unused on 31 Mar 2027 (Hana marks the tag "not used by year end",
+  stamped with who and when), only 4,000.00 − 1,000.00 = 3,000.00 would
+  count for 2026-27, and the report would list the 1,000.00 to be tagged in
+  the year they're used. (Not in Kea's totals: all were used.)
+- **RD9** Expense claim: Hana's receipt of 5 Aug 2026, "Potting mix and
+  pots for soil trials", **230.00 including GST** with the GST tax code:
+  posts 200.00 to expense and 30.00 GST. Tagged C1: **200.00** counts.
+- **RD10** Overheads by floor area (IR1240 p 15, p 63). Rent is **4,000.00
+  + GST** a month for 200 m²; the lab is 30 m² and used only for R&D. Tohyee
+  has one overhead rule, **"% of an account"**, and its **basis is
+  required**, chosen from IR1240 p 15's list (time, floor area, usage,
+  volume, unit sales, dollar value, activity-based costing), with the
+  calculation attached (decision 46). Jess sets the rule on the rent
+  account: **15% to C1 from 1 Apr 2026, basis floor area, 30 m² of 200 m²**,
+  with the floor plan attached. A rule with no basis or no attachment isn't
+  saved. Each rent line dated in the period gets the tag: 4,000.00 × 15% =
+  **600.00 a month**, 600.00 × 12 = **7,200.00 for the year**. The rule shows
+  who set it and when; changing it starts a new period and keeps the old
+  one (RD23).
+
+So C1's materials, consumables and overheads are 4,000.00 + 200.00 +
+7,200.00 = **11,400.00**.
+
+**Depreciation** (Sch 21B A cl 1; IR1240 p 62).
+
+- **RD11** Oscilloscope **FA-0007**, bought on a bill on 1 Apr 2026 for
+  **6,000.00 + GST**. The bill line is **capital** and isn't eligible (Sch
+  21B B cl 2; IR1240 p 76): it can only be tagged C1 as "ineligible:
+  acquiring depreciable property". R&D uses **tax depreciation, entered per
+  asset for the year**, never the book depreciation Tohyee's fixed assets
+  post (decision 33; Tohyee has no IRD rates, see the fixed asset examples).
+  Its 2026-27 book depreciation of **1,500.00** (the rate Kea typed for the
+  asset type) is ignored. For FA-0007's 2026-27 year Kea enters, from its
+  tax workings:
+  - Investment Boost (DI 5): 20% × 6,000.00 = **1,200.00**, which counts as
+    depreciation (decision 33; **unverified** against the Act);
+  - tax depreciation: **1,200.00** (say 25% diminishing value on the
+    6,000.00 − 1,200.00 = 4,800.00 left after the boost; Tohyee doesn't
+    check the rate);
+  - total 1,200.00 + 1,200.00 = **2,400.00**, stamped with who entered it
+    and when.
+
+  Kea keeps a **usage log**: 300 hours on C1 and 600 hours on other work;
+  idle time doesn't count (IR1240 p 62: share of use, not availability). C1
+  gets 2,400.00 × 300 / (300 + 600) = 2,400.00 × 300 / 900 = **800.00**,
+  category R&D tax depreciation. (Using book depreciation would have given
+  1,500.00 × 300 / 900 = 500.00.)
+
+**Contracts** (LY 6; IR1240 p 68-69).
+
+- **RD12** NZ contractor: Soil Lab NZ Ltd (not associated) analyses C1's
+  field samples, bill **3,100.00 + GST**. Eligible contract expenditure is
+  the contract amount less the contractor's own ineligible expenditure (LY
+  6; IR1240 p 68-69). Soil Lab's statement (attached) says none of its
+  costs are ineligible, so **3,100.00** counts. Had it said 400.00 of its
+  costs were ineligible, 2,700.00 would count. For an associated contractor
+  the lesser of what's paid and the contractor's costs counts (IR1240
+  p 69).
+- **RD13** Overseas: Calibra Labs Pty Ltd, Australia, bill
+  **AUD 8,100.00**, no GST, posted at the bill's rate (1 NZD = 0.90 AUD) as
+  **9,000.00**. Tagged S2, contract expenditure, overseas: foreign R&D
+  expenditure, limited in RD18. Goods bought overseas and used in New
+  Zealand aren't foreign (IR1240 p 70, p 96); payments for work done in New
+  Zealand by a non-resident are foreign R&D expenditure (LY 7(1); IR1240
+  p 70), so contacts and employees need a "non-resident" flag. Foreign
+  currency is counted at the **bill's rate**, and realised exchange gains
+  and losses are left out (decision 42): Kea pays the bill on 15 Aug 2026 at
+  1 NZD = 0.88 AUD, so the payment is AUD 8,100.00 ÷ 0.88 = 9,204.545… =
+  **9,204.55** and the realised exchange loss is 9,204.55 − 9,000.00 =
+  **204.55**. The loss isn't tagged; S2 stays at **9,000.00**.
+
+### Eligible and ineligible expenditure
+
+A cost line tagged to an activity is either **eligible** in one of the
+categories above or **ineligible** with a reason. Ineligible tags are kept
+because IR1060's evaluation section asks for "ineligible expenditure on R&D",
+and so Jess can see what was left out. The reasons are Schedule 21B Part B
+(IR1240 p 16, p 74-84) plus the rules in LY 5:
+
+| Reason | Source | Kea example or how Tohyee handles it |
+| --- | --- | --- |
+| GST input tax | LY 1(6); IR1240 p 75 | Never in the amount (RD8). |
+| Someone else's eligible expenditure | LY 5(3); IR1240 p 74 | A cost recharged to Kea that another claimant claims. |
+| Over the $120 million maximum | Sch 21B B cl 1; LY 4(3); IR1240 p 72-73, p 76 | RD16. |
+| Under the $50,000 minimum (not an approved research provider) | Sch 21B B cl 24; LY 4(1); IR1240 p 72, p 76 | RD17-RD19. |
+| Acquiring depreciable property | Sch 21B B cl 2; IR1240 p 76 | Oscilloscope 6,000.00 (RD11). IR1240 p 76: depreciable property costing more than $1,000. |
+| Cost of depreciable tangible property (except prototypes used solely for R&D) | Sch 21B B cl 3; IR1240 p 76-77 | |
+| Depreciation where the cost was already eligible; pooled property; loss on sale below adjusted tax value | Sch 21B B cl 4-6; IR1240 p 77-78 | |
+| Associates: depreciation, profit margins, leases above market | Sch 21B B cl 7-9; IR1240 p 78 | |
+| Mining | Sch 21B B cl 3B; IR1240 p 79 | |
+| Acquiring land (rent is eligible) | Sch 21B B cl 10; IR1240 p 79 | Kea's rent is eligible (RD10). |
+| Interest and financing | Sch 21B B cl 11-12; IR1240 p 79 | Interest on Kea's bank loan for the project, **1,200.00**. |
+| Working out the entitlement | Sch 21B B cl 13; IR1240 p 79 | Accountant's fee to prepare the claim, **1,800.00 + GST**. |
+| Corporate governance | Sch 21B B cl 13B; IR1240 p 79 | Board meeting costs. |
+| Intangible property other than software (e.g. royalties) | Sch 21B B cl 14; IR1240 p 80 | A patent licence fee. |
+| Bespoke software; internal software development over $25 million | Sch 21B B cl 15-16; IR1240 p 80, p 85 | |
+| Above market value; gifts; ineligible technology | Sch 21B B cl 17-19; IR1240 p 80-82 | Vouchers given to trial participants can be eligible (IR1240 p 82). |
+| Commercialisation | Sch 21B B cl 20; IR1240 p 79 | After C1 ends, a trade show stand to sell the sensor. |
+| Decommissioning; remediating land | Sch 21B B cl 20B-20C; IR1240 p 80 | |
+| Government and local authority grants (including co-funding) | Sch 21B B cl 21; IR1240 p 82-84 | RD15. |
+| Feedstock, to the extent of the output's value | Sch 21B B cl 22; IR1240 p 81-82 | RD14. |
+| Expenditure that gets a foreign R&D tax credit | Sch 21B B cl 23; IR1240 p 84 | |
+| Overseas expenditure over the 10% limit | LY 7; IR1240 p 69-71 | 866.67 of S2 (RD16). |
+| In commercial production, other than employee and additional costs | LY 5(1)(c); IR1240 p 64-68 | Not supported yet (Tohyee can't judge "additional"). |
+| Goods not used, or services not performed, by the end of the year | IR1240 p 63 | Ineligible for that year; listed to be tagged in the year they're used (RD8; decision 41). |
+| Unpaid time | IR1240 p 64 | Not a cost in Tohyee, so never tagged. |
+| Realised exchange gains and losses | Decision 42 | Not tagged; foreign lines count at the bill's rate (RD13). |
+
+ACC levies, FBT and other employer costs IRD doesn't list aren't tagged at
+all (decision 36), so they aren't in this list either.
+
+So Kea's ineligible amounts tagged to C1 in 2026-27 are 6,000.00 +
+1,200.00 + 1,800.00 = **9,000.00**, plus 866.67 of S2 over the overseas
+limit.
+
+- **RD14** Feedstock (a different year, not in Kea's totals). Inputs
+  transformed in a trial batch cost **2,500.00** (components 2,000.00 and
+  the trial's electricity 500.00); the 20 trial sensors are sold to Harbour Farms on an
+  invoice for **1,000.00 + GST**. Eligible feedstock inputs are reduced by
+  the output's value: 2,500.00 − 1,000.00 = **1,500.00**; staff and
+  depreciation aren't feedstock inputs and aren't reduced (IR1240
+  p 81-82). Unsold output is valued at its market value at the end of the
+  income year (IR1240 p 81), which Tohyee can't work out: the report asks for it (with who
+  entered it and when) and shows the worksheet IR1240 p 102 asks for.
+- **RD15** Grant (a different year): a 10,000.00 government grant pays
+  for part of Ben's R&D salary. Expenditure funded by the grant is
+  ineligible (Sch 21B B cl 21; IR1240 p 82-84), so of Ben's 19,500.00,
+  **9,500.00** counts. Co-funding and own spending the grant agreement
+  requires are ineligible too (IR1240 p 82-83). When the grant contract
+  doesn't say what the grant pays for, the claimant can choose to apply it
+  to ineligible expenditure (IR1240 p 84, L Co); Tohyee records
+  which costs the grant was applied to (a tag "grant-funded", with the
+  grant contract attached) and doesn't decide that for you.
+
+### Limits and the credit
+
+- The credit is **15%** of total eligible R&D expenditure: LY 4(2)
+  "0.15 × total eligible R&D expenditure"; IR1240 p 3, p 13. It's **rounded
+  down to the cent** (decision 32).
+- **Maximum**: total eligible expenditure is capped at **$120 million** (or a
+  higher amount IRD approves) (LY 4(3); IR1240 p 72-73).
+- **Minimum**: eligible expenditure must be **$50,000 or more** for the
+  year, unless it's on an approved research provider, which counts
+  whatever the amount (LY 4(1)(a)-(b); IR1240 p 72, p 76, p 89). Exactly
+  50,000.00 qualifies (RD19), and the minimum is tested **after** the
+  overseas limit (RD18).
+- **Overseas limit**: foreign R&D expenditure counts only up to 10% of
+  total eligible R&D expenditure, i.e. at most 0.1 × NZ eligible ÷ 0.9 (LY
+  7(5)-(6); IR1240 p 71, SA Co), **rounded down to the cent** (decision 32).
+- Only activities with an **approval covering the year** earn credit (RD3;
+  decision 47).
+- Expenditure on approved research providers isn't subject to the
+  refundability cap (IR1240 p 89); refundability is out of scope here.
+
+- **RD16** Kea's 2026-27 year:
+
+  | Activity | Employee related | Materials, consumables and overheads | Depreciation | Contract | Total |
+  | --- | --- | --- | --- | --- | --- |
+  | C1 core, NZ | 56,000.00 (Hana 36,500.00, Ben 19,500.00) | 11,400.00 | 800.00 | 3,100.00 | 71,300.00 |
+  | S1 supporting, NZ | 1,900.00 (Hana: 1,300.00 + 600.00 from 2025-26, RD4) | | | | 1,900.00 |
+  | **NZ eligible** | 57,900.00 | 11,400.00 | 800.00 | 3,100.00 | **73,200.00** |
+  | S2 supporting, overseas | | | | 9,000.00 spent, **8,133.33** counts | 8,133.33 |
+  | **Total eligible** | 57,900.00 | 11,400.00 | 800.00 | 11,233.33 | **81,333.33** |
+
+  C1: 56,000.00 + 11,400.00 + 800.00 + 3,100.00 = 71,300.00. NZ eligible:
+  71,300.00 + 1,900.00 = 73,200.00.
+
+  Overseas limit: 0.1 × 73,200.00 ÷ 0.9 = 8,133.333… → rounded down to the
+  cent, **8,133.33** (decision 32), so 9,000.00 − 8,133.33 = **866.67** of
+  S2 doesn't count. Total eligible: 73,200.00 + 8,133.33 = **81,333.33**.
+  Check: 10% of 81,333.33 is 8,133.333, and 8,133.33 is not more than that.
+  S2 is all contract expenditure, so the whole 866.67 comes off contract;
+  had S2 spent in more than one category, the 866.67 would come off each in
+  proportion to what it spent there (decision 43).
+
+  The minimum is tested on the total **after** the overseas limit (RD18;
+  decision 31): 81,333.33 is at least 50,000.00 and under 120,000,000.00.
+  C1, S1 and S2 have an approval covering 2026-27 (RD3).
+  **Credit: 0.15 × 81,333.33 = 12,199.9995 → rounded down to the cent,
+  12,199.99** (decision 32).
+- **RD17** Approved research provider (2027-28, a different year, like
+  IR1240 p 72 "Hannah"): Kea's own eligible expenditure is **10,000.00**
+  and it pays an approved research provider **20,000.00** (after the
+  provider's own ineligible costs, LY 6). Total 30,000.00 is under
+  50,000.00, so only the provider's **20,000.00** counts: credit **3,000.00**.
+  The return must then name the provider and give its IRD number (IR1060).
+- **RD18** Overseas limit before the minimum: NZ eligible **44,100.00**
+  and foreign **6,000.00**. Limit 0.1 × 44,100.00 ÷ 0.9 = **4,900.00**, so
+  total eligible is 44,100.00 + 4,900.00 = **49,000.00**: under 50,000.00,
+  **no credit**. Counting the foreign spend in full would give 44,100.00 +
+  6,000.00 = 50,100.00, over the minimum. Tohyee uses 49,000.00: LY 4(1)(a)
+  tests "eligible expenditure", and IR1240 p 14 says the excess over the
+  limit isn't eligible (decision 31). The report shows "under the $50,000
+  minimum after the overseas limit".
+- **RD19** Exactly 50,000.00 **qualifies** (decision 30): LY 4(1)(a) and
+  IR1240 p 13 say "$50,000 or more" and IRD's web page "at least", even
+  though IR1240 p 17 says "more than" and p 72 "must exceed". Credit 0.15 ×
+  50,000.00 = **7,500.00**. 49,999.99 doesn't qualify.
+- **RD20** Rounding, always **down to the cent** so a claim is never
+  overstated (decision 32):
+  - credit: total eligible **50,000.05** gives 0.15 × 50,000.05 =
+    7,500.0075 → **7,500.00**;
+  - overseas limit: NZ eligible **50,000.00** gives 0.1 × 50,000.00 ÷ 0.9 =
+    5,555.555… → **5,555.55** (IR1240 p 71's SA Co shows its limit in whole
+    dollars, 55,556, rounded up; Tohyee's figure is never more than the
+    limit). Check: 10%
+    of 50,000.00 + 5,555.55 = 55,555.55 is 5,555.555, and 5,555.55 is not
+    more than that.
+
+What Tohyee can't see: an organisation and its **associates** share the
+$120 million maximum (IR1240 p 72-73), and each
+organisation in Tohyee is its own database, so the report only shows a
+reminder to check this, never a combined figure. When a year's eligible
+expenditure passes $2 million the report notes that the significant
+performer (criteria and methodologies) route exists (TAA 68CC; IR1240 p 19,
+p 113); Tohyee doesn't support it.
+
+### Contemporaneous records
+
+IR1240 wants records made **at the time** of the R&D, not backdated or
+created at the end of the year or project; their credibility is better if
+they show the author and the date of creation (IR1240 p 19, p 97, p 100).
+There's no fixed frequency: the test is whether it gives confidence the
+record is reliable, and weekly or fortnightly estimates, or monthly records
+for staff on R&D full time, can do (IR1240 p 100). Usage of materials and
+equipment should be recorded at the time, and apportionment needs an audit
+trail (IR1240 p 100). Records are kept for 7 years after the end of the tax
+year (IR1240 p 17, p 101).
+
+So every R&D record (activity, time entry, timesheet approval, tag, usage
+log entry, apportionment rule, approval details) stores:
+
+- **who**: the signed-in user, never a name from the request;
+- **when entered**: the server's time when it's saved, which nobody can type
+  or change;
+- **the date of the work** it describes, which the person enters;
+- for edits and removals, **history**: the old and new values, who and when.
+  A removed record stays in history and drops out of the totals.
+
+The claim report shows how long after the work each record was entered and
+marks records changed after they were first entered. Records entered **more
+than 14 days** after the work are flagged (decision 38). Late or changed
+records aren't refused (IR1240 sets no fixed rule) but are listed
+separately with their hours and cost so Jess can decide whether to claim
+them.
+
+- **RD21** On time: Hana enters 6 h on C1 for Wed 1 Jul 2026 on Fri 3 Jul
+  2026 at 09:14. The report shows "entered 2 days after the work"; 2 is not
+  more than 14, so it isn't flagged.
+- **RD22** Late (a variation; in Kea's totals every pay has a timesheet):
+  on 16 Mar 2027 Hana enters 40 h on C1 for the week of 10-14 Aug 2026. The
+  report shows "entered **214 days** after the work (14 Aug 2026)" (17 days
+  left in August + 30 + 31 + 30 + 31 + 31 + 28 + 16 = 214), over 14 days, so
+  it's flagged. The pay for that fortnight was posted in August with the
+  default split (60% C1), so the R&D figures use the **posted pay run's
+  tags** (decision 37): the 60% split is listed under "default split, no
+  time record" and left out of the total (RD7). The timesheet is listed
+  under "entered late": 40 h × 30.90 an hour (2,472.00 ÷ 80) =
+  **1,236.00**, not in the total. It counts only if someone with payroll
+  access reallocates the posted pay's tags, which is a change with history
+  (who, when, old and new split); the reallocated line still shows "entered
+  late".
+- **RD23** Changed: on 20 Jul 2026 Hana changes her 1 Jul entry from 6 h to
+  7 h. History: "6 h, entered 3 Jul 2026 09:14 by Hana; changed to 7 h on 20
+  Jul 2026 by Hana". The report uses 7 h and marks it "changed 17 days after
+  entry". Jess changing the rent rule of RD10 from 15% to 20% on 25 Mar
+  2027 with effect from 1 Apr 2026 is shown the same way: the report gives
+  both figures (7,200.00 and 9,600.00), who changed it and when, and marks
+  the rule "changed after the period it covers".
+
+Files attached to R&D records (approval letters, statements, floor plans,
+depreciation workings) are part of these records and are **kept for 7 years
+after the end of the income year** (decision 45): for 2026-27, until 31 Mar
+2034. A file can be **replaced**, with the old one kept in history (who
+replaced it and when), but **not deleted**.
+
+### Deadlines for a 31 March balance date
+
+Reminders Tohyee shows owners and admins for Kea's **2026-27** year (no-agent
+dates, RD24):
+
+| Reminder | Due | Source |
+| --- | --- | --- |
+| Criteria and methodologies approval (significant performers only) | 30 Sep 2026 for 2026-27 (passed); 30 Sep 2027 for 2027-28 | TAA 68CC(3); IR1240 p 19, p 113; IRD due dates page |
+| Approval to exceed the $120 million maximum | 7 May 2027 | IR1240 p 73 |
+| **General approval** application, including supporting activity in the year before | **Wed 30 Jun 2027** | TAA 68CB(2B); IR1240 p 19, p 108, p 119; IRD due dates page |
+| Variation for a material change to an approved activity | Wed 30 Jun 2027 | TAA 68CB(7); IR1240 p 111 |
+| Income tax return, without a tax agent's extension | Wed 7 Jul 2027 | IR1060 |
+| **R&D supplementary return**: 30 days after the income tax return's due date | **Fri 6 Aug 2027** | TAA 33E; IR1240 p 9, p 103; IR1060; IRD due dates page |
+| Variation to add supporting activity done in the following year (2027-28) | Fri 30 Jun 2028 | TAA 68CB(7B); IR1240 p 119 |
+| Latest the income tax return can be filed for the credit to count: 1 year after its due date | Fri 7 Jul 2028 | LY 3(2)(a); IR1240 p 103 |
+
+- **RD24** These dates are worked from the balance date: the last day of
+  the 3rd month after the year (general approval), 30 days after the income
+  tax return's due date (supplementary return) and the last day of the 15th
+  month (following-year supporting activity variation). For a **30
+  September** balance date general approval is due **15 January** (IR1240
+  p 19). With a **tax agent's extension of time** the supplementary return
+  is due 30 days after the extended due date (IR1240 p 103: return due 31
+  Mar 2026 → supplementary return 30 Apr 2026, and the income tax return
+  filed by 31 Mar 2027). Tohyee shows **only the no-agent dates**, with the
+  note "If you have a tax agent or an extension of time, your income tax
+  return, R&D supplementary return and last filing date are later; check
+  with your agent" (decision 49). Late applications and returns can't be
+  accepted and the claim is declined (IR1240 p 104; IRD due dates page);
+  a due date on a weekend or public holiday moves to the next working day
+  (IRD due dates page). Both returns must be filed electronically (IR1240
+  p 104).
+- **RD25** The reminders say what's due and link to myIR; they don't record
+  that anything was filed. A reminder stops when its date has passed or, for
+  general approval, when approval details covering the year are entered
+  (RD3). Reminders show **from 60 days before** each date, to **owners and
+  admins** (decision 48): general approval due Wed 30 Jun 2027 shows from
+  Sat 1 May 2027 (30 Jun − 60 days); the supplementary return due Fri 6 Aug
+  2027 shows from Mon 7 Jun 2027.
+
+### The claim report (what R3 must produce)
+
+The supplementary return asks for these (IR1240 p 103-105; IR1060; IRD
+"R&D supplementary return" page), **per project**:
+
+- expenditure by category: materials, consumables and overheads; R&D tax
+  depreciation; employee related costs; contract expenditure; approved
+  research provider (separately, counted once);
+- the % of eligible expenditure on **core** activities (supporting is the
+  rest);
+- how much relates to **overseas** R&D, **internal software development**,
+  **feedstock** (and how far it exceeds the output's market value) and
+  **commercial production**;
+- the declaration that core and supporting activities haven't materially
+  changed since approval, or what changed;
+- for joint ventures and partnerships the parties, their IRD numbers and
+  shares, and whether an associated person also claims (IR1240 p 72-73,
+  p 105);
+
+and for the return as a whole: the approved research providers' names and
+IRD numbers when the total is under $50,000; whether a refund is wanted and
+the labour-related taxes for the refundability cap (PAYE, ESCT and FBT;
+IR1060); the evaluation questions (including the previous year's R&D
+expenditure and ineligible expenditure on R&D, which aren't part of the
+claim); and the credit for the income tax return's R&D tax credit field
+(IR1240 p 103).
+
+- **RD26** Kea's 2026-27 report, project "Low-power soil sensor":
+
+  | Figure | Amount |
+  | --- | --- |
+  | Materials, consumables and overheads | 11,400.00 |
+  | R&D tax depreciation (including Investment Boost) | 800.00 |
+  | Employee related costs | 57,900.00 |
+  | Contract expenditure (NZ 3,100.00 + overseas 8,133.33) | 11,233.33 |
+  | of which overseas (9,000.00 spent, 866.67 over the limit) | 8,133.33 |
+  | Approved research provider | 0.00 |
+  | **Total eligible R&D expenditure** | **81,333.33** |
+  | Core activities' share: 71,300.00 / 81,333.33 | 87.66% |
+  | Of which internal software development, feedstock, commercial production | 0.00 each |
+  | Of which supporting activity from 2025-26 (RD4) | 600.00 |
+  | Ineligible expenditure tagged to R&D | 9,000.00 (and 866.67 over the overseas limit) |
+  | Listed, not counted: default split, no time record; entered late; not used by year end | 0.00 each |
+  | **R&D tax credit** | **12,199.99** |
+
+  Check: 11,400.00 + 800.00 + 57,900.00 + 11,233.33 + 0.00 = 81,333.33.
+  The overseas amount stays in the category it was spent in, with an "of
+  which overseas" line (decision 43). Core %: 71,300.00 ÷ 81,333.33 × 100 =
+  87.6639…% → to two decimals, rounded down, **87.66%** (decision 44);
+  supporting is the rest, 1,900.00 + 8,133.33 = 10,033.33. Labour-related
+  taxes come from payroll (P10) once it's built; Tohyee has no FBT, so the
+  report leaves that for the return.
+- **RD27** Every figure drills down to the lines and records behind it (who
+  tagged what, when), with the apportionment rules and their bases, the
+  hours per employee per activity with the hourly cost, exchange rates for
+  foreign lines and the feedstock worksheet, which is the worksheet
+  "reconciling" the claim that IR1240 p 101-102 lists. The report
+  reconciles to the ledger: tagged amounts add up to the posted lines. The
+  "no material change" declaration isn't prefilled when an activity changed
+  after its approval was entered (RD3). Exporting the report saves the file
+  in the organisation with who exported it and when, so later changes to
+  the year's records show as differences from the last export; Tohyee has
+  no "filed" status for anyone to type.
+
+### How NetSuite and Xero do it
+
+Neither documents a New Zealand RDTI feature that the agent could find on 1
+Oct 2026. The sandbox couldn't open netsuite.com, docs.oracle.com, xero.com
+or central.xero.com, so this is from search results only:
+
+- **Xero**: Xero Central's "Track payroll expenditure in Xero"
+  (<https://central.xero.com/s/article/Payroll-tracking-in-Xero>) describes
+  tracking categories on payroll through employee groups and timesheet
+  categories; Xero Projects tracks time and costs per project. R&D would be
+  a tracking category or a project.
+- **NetSuite**: no help topic on R&D tax credits found; third-party
+  consultants describe the US credit (Form 6765) using projects, classes and
+  custom segments.
+
+Tohyee's proposal is closest to NetSuite's custom segments (CS1) and Xero's
+tracking: a tag on cost lines. The activity is its own register because it
+needs core and supporting links, places, approvals and record stamps that a
+category value can't hold.
+
+### Not supported yet (refused rather than guessed)
+
+- Deciding whether an activity is R&D, or whether a cost is "additional"
+  in commercial production (LY 5(1)(c)): the report lists commercial
+  production tags for Jess.
+- Refundability (the labour-related tax cap and the refund), carrying
+  credits forward and shareholder continuity, credit ordering, imputation
+  credits and provisional tax (IR1240 p 19-20).
+- Significant performers: criteria and methodologies approval and R&D
+  certificates (TAA 68CC; IR1240 p 113).
+- Joint ventures, partnerships, look-through companies and consolidated
+  groups (IR1240 p 105-106); associates' combined figures.
+- Ineligible entities (LY 3(2): e.g. Crown research institutes, tertiary
+  education organisations, Callaghan Innovation Growth Grant recipients,
+  R&D contractors): the organisation decides whether it can claim.
+- The internal software development $25 million cap (Sch 21B B cl 16).
+- Feedstock market values and the year-end valuation of unsold output.
+- Calculating tax depreciation or Investment Boost (DI 5): they're entered
+  per asset for the year (RD11; decision 33).
+- A tax agent's extended due dates: only the no-agent dates are shown, with
+  a note (RD24; decision 49).
+- GST adjustments for a change of use (IR1240 p 75, James).
+- Approved research provider status, the R&D loss tax credit, and levy
+  bodies.
+- Filing in myIR; payroll calculations.
+
+### Decided (R&D Tax Incentive)
+
+Decided 1 Oct 2026 on Jess's instruction to research and make the call; see
+`docs/DECISIONS.md` (decisions 30-50) for sources. The examples above follow
+them; Jess hasn't approved the examples yet.
+
+- **Exactly $50,000.00 qualifies** (RD19; decision 30).
+- **The minimum is tested after the 10% overseas limit** (RD18; 31).
+- **Overseas limit and credit rounded down to the cent** (RD16, RD20; 32).
+- **Tax depreciation, entered per asset for the year and split by its usage
+  log; Investment Boost counts as depreciation**; never book depreciation
+  (RD11; 33, unverified against the Act).
+- **A default % split counts only when it's 100% R&D**; any other is listed
+  as "default split, no time record" and left out (RD7; 34).
+- **Leave and training are spread over the year** (RD6; 35).
+- **Employee costs are only those IRD lists**; ACC levies, FBT and other
+  employer costs are left out (RD5; 36).
+- **Only the posted pay run's tags count**; a late timesheet is listed as
+  "entered late" and changing it is a reallocation with history (RD22; 37).
+- **Records entered more than 14 days after the work are flagged** (RD21,
+  RD22; 38).
+- **One supporting activity may support several core activities**; each
+  cost line is tagged to one activity (RD2; 39).
+- **Approval reference stored with the letter attached (required), marked
+  "not checked with IRD"** (RD3; 40).
+- **Goods not used by year end are ineligible for that year** and listed to
+  tag in the year they're used (RD8; 41).
+- **Foreign currency at the bill's rate; realised exchange gains and losses
+  left out** (RD13; 42).
+- **Overseas spending stays in its category with an "of which overseas"
+  line**; a limit reduction is spread in proportion (RD16, RD26; 43).
+- **Core % to two decimals, rounded down** (RD26; 44).
+- **Files on R&D records kept 7 years after the year**; replaceable with
+  history, not deletable (45).
+- **One "% of an account" overhead rule with a required basis** from IR1240
+  p 15's list and the calculation attached (RD10; 46).
+- **Tagging allowed without an approval, with a warning**; credit only for
+  activities with an approval covering the year (RD3; 47).
+- **Deadline reminders from 60 days before, to owners and admins** (RD25;
+  48).
+- **Only the no-agent due dates, with a note** about agents and extensions
+  (RD24; 49).
+- **Payroll split: each R&D share rounded down to the cent, the remainder to
+  non-R&D** (RD5; 50).
+
+## NZ payroll: IRD rates and calculations (examples not yet approved by Jess)
+
+Stage P2 of payroll (#60). Jess hasn't approved these. They cover IRD's
+rates and the calculations for **one ordinary pay**; there are no pay runs,
+journals or payslips yet. Every figure comes from IRD's **Payroll
+Calculations & Business Rules Specification** ("the spec") for the pay
+date's tax year, read on 1 Oct 2026 (the 2025-26 edition, version 1.0 of 1
+April 2025, and the 2026-27 edition, version 1.0 of 24 March 2026). The
+documents' names, editions, URLs and SHA-256 hashes are in
+`src/lib/payroll/rates/2025-26.ts` and `2026-27.ts`. The examples are
+IRD's own wherever IRD gives one: from the spec, the PAYE deduction tables
+**IR340** (weekly and fortnightly) and **IR341** (four-weekly and monthly),
+April 2025 and April 2026 editions, the **IR335** Employer's guide
+(September 2026) and the **KS4** KiwiSaver employer guide (April 2026).
+Page numbers are the printed ones. "Truncate" means drop the digits, as
+IRD's rules say: never round.
+
+Tests: `tests/unit/payroll-rates.test.ts` (PR1, and checks on the data
+files), `tests/unit/payroll-calculations.test.ts` (PR2-PR15) and
+`tests/unit/payroll-ird-tables.test.ts` (PR16).
+
+- **PR1 Rates by pay date.** Each edition covers pay dates 1 April to 31
+  March: a pay dated 31 Mar 2026 uses 2025-26 rates and one dated 1 Apr 2026
+  uses 2026-27 rates. Each value in a file also has its own date range, so a
+  rate IRD changes part way through a year is a second entry. Pay dates
+  before 1 Apr 2025 or after 31 Mar 2027 are refused ("Not supported yet
+  (refused rather than guessed): Tohyee has no IRD payroll rates for pay
+  dates on 2027-04-01"), never carried forward.
+  Rates in the files (spec section 2 and 5):
+
+  | | 2025-26 | 2026-27 |
+  | --- | --- | --- |
+  | Income tax (from 31 July 2024, both) | 10.5% to $15,600; 17.5% to $53,500 (less $1,092.00); 30% to $78,100 (less $7,779.50); 33% to $180,000 (less $10,122.50); 39% above (less $20,922.50) | same |
+  | ACC earners' levy | 1.67%, maximum liable earnings $152,790, maximum levy $2,551.59 | 1.75%, $156,641, $2,741.22 |
+  | IETC (ME codes) | $520 from $24,000; reduces by 13c a dollar above $66,000; none from $70,000 | same |
+  | Secondary codes SB, S, SH, ST, SA | 10.5%, 17.5%, 30%, 33%, 39% plus the levy (12.17%, 19.17%, 31.67%, 34.67%, 40.67%) | plus the levy (12.25%, 19.25%, 31.75%, 34.75%, 40.75%) |
+  | ND, NSW, CAE and EDW | 45%, 10.5%, 17.5%, 17.5% plus the levy (46.67%, 12.17%, 19.17%) | plus the levy (46.75%, 12.25%, 19.25%) |
+  | Student loan | 12% over $24,128 a year: $464 a week, $928 a fortnight, $1,856 four-weekly, $2,010.66 a month | same |
+  | KiwiSaver employee rates | 3% (default), 4%, 6%, 8%, 10% | 3.5% (default), 4%, 6%, 8%, 10%; 3% with a temporary rate reduction |
+  | KiwiSaver employer minimum | 3% | 3.5% (3% allowed with a temporary rate reduction) |
+  | ESCT (from 1 April 2025, both) | 10.5% to $18,720; 17.5% to $64,200; 30% to $93,720; 33% to $216,000; 39% above | same |
+
+- **PR2 M and M SL (spec 5.2).** IRD's ESS example 4 (2026-27 spec page 42;
+  2025-26 spec page 37): tax code M SL, four-weekly salary $3,500.00.
+  Annual income $3,500 x 13 = $45,500 (cents dropped). Tax $45,500 x 17.5% -
+  $1,092 = $6,870.50; ACC levy $45,500 x 1.75% = $796.25; total $7,666.75; a
+  week $7,666.75 / 52 = $147.4375, truncated **$147.43**; four-weekly
+  $147.43 x 52 / 13 = **$589.72 PAYE**, as IRD shows. With the 2025-26
+  levy (1.67%, $759.85) the same pay is $146.73 a week and **$586.92**, as
+  the 2025-26 spec shows. M SL's PAYE is the same as M's.
+- **PR3 More M pays from IRD.** Weekly, 2025-26: $500.03 is **$74.85** and
+  $515.03 is **$77.72** (spec 5.20.2: the RD 68 example, 2025-26 page 83);
+  $600.00 is **$94.02** (KS4 page 11). Weekly, 2026-27: $600.00 is **$94.50**
+  (IR340 April 2026 page 20); $880.00 is **$148.40** (IR335 page 28, Lani).
+  Fortnightly, 2026-27: $2,000.00 is **$343.00** (IR340 page 128).
+- **PR4 ACC earners' levy.** The annual levy is annual income x the rate,
+  not rounded, below the maximum liable earnings, and the maximum levy from
+  it (spec 5.2 step 4): 2026-27, $45,500 is **796.25**, $156,640 is
+  **2741.2** and $156,641 or more is **2741.22**; 2025-26, $45,500 is
+  **759.85** and $26,001 is **434.2167**. Annual income must be whole
+  dollars. IRD's rules include the levy in PAYE and never split a pay's PAYE
+  into tax and levy, so neither does Tohyee. Above the maximum: IR341 April
+  2026 page 103, four-weekly $15,504.00 on M: annual $201,552, tax
+  $57,682.78 + levy $2,741.22 = $60,424.00, $1,162.00 a week, **$4,648.00**
+  four-weekly, as IRD's example shows.
+- **PR5 ME (spec 5.3).** As M, less the IETC. Weekly, 2026-27: $600.00 is
+  annual $31,200, IETC $520: ($4,368.00 + $546.00 - $520) / 52 =
+  **$84.50** (IR340 page 20). $1,280.00 is annual $66,560, IETC $520 - $560
+  x 13% = $447.20: **$248.19** against M's $256.79 (IR340 page 37). From
+  $70,000 a year ME is the same as M ($3,013.00 a week: **$852.34** both,
+  IR340 page 81).
+- **PR6 Secondary codes (spec 5.6).** Pay truncated to whole dollars x (the
+  code's rate + the levy), truncated to cents; no annualising. IR340 April
+  2026 page 213, weekly $457.00: SB **55.98**, S **87.97**, SH **145.09**, ST
+  **158.80**, SA **186.22**. IR341 April 2026 page 286: four-weekly
+  $15,504.00 on SA is $15,504 x 40.75% = **$6,317.88**. Each SL code's PAYE
+  is the same as its code without SL.
+- **PR7 ND (spec 5.8).** 46.75% of whole dollars in 2026-27: IR335 page 13,
+  Brad's $860 week is **$402.05**. In 2025-26 (46.67%) the same pay is
+  **$401.36**.
+- **PR8 NSW (spec 5.5).** 10.5% plus the levy, on whole dollars: Mike's
+  $960.00 in 2026-27 is $100.80 tax + $16.80 levy = **$117.60** (2026-27 spec
+  page 26); his $800.00 in 2025-26 is $84.00 + $13.36 = **$97.36** (2025-26
+  spec page 20).
+- **PR9 CAE and EDW (spec 5.7).** 17.5% plus the levy, on whole dollars:
+  $457.89 is $457 x 19.25% = **$87.97** in 2026-27 and $457 x 19.17% =
+  **$87.60** in 2025-26.
+- **PR10 Student loan on main income (spec 5.4).** Pay truncated to whole
+  dollars; nothing at or below the pay period threshold; otherwise 12% of
+  the excess, truncated to cents. Four-weekly $3,500.00: ($3,500 - $1,856) x
+  12% = **$197.28** (ESS example 4, both years). Weekly $464.00 is **0.00**,
+  $464.99 is **0.00** (cents dropped) and $465.00 is **0.12** (IR340 April
+  2026 page 17). Monthly $2,600.00: ($2,600 - $2,010.66) x 12% = $70.7208,
+  **$70.72** (IR341 April 2026 page 116). Four-weekly $15,504.00:
+  **$1,637.76** (IR341 page 103).
+- **PR11 Student loan on secondary income (spec 5.6).** 12% of whole
+  dollars, no threshold: weekly $457.00 on S SL is **$54.84** (IR340 page
+  213); four-weekly $15,504.00 on SA SL is **$1,860.48** (IR341 page 286).
+  Codes without SL (M, ME, SB-SA, ND, NSW, CAE, EDW) deduct **0.00**.
+- **PR12 KiwiSaver employee deductions.** Gross (with its cents) x the rate,
+  truncated to cents: 4% of $500.03 is $20.00012, **$20.00** (spec 5.20.2);
+  3.5% of $3,500.00 is **$122.50** (ESS example 4); 3.5% of $600.00 is
+  **$21.00** (KS4 page 11); 3.5% of $465.00 is $16.275, **$16.27** (IR340
+  page 17). Only IRD's rates are accepted: 3.5% is refused for a pay dated
+  in 2025-26; in 2026-27, 3% is refused unless the employee has a temporary
+  rate reduction (then only 3% is accepted).
+- **PR13 KiwiSaver employer contributions.** Gross x the rate, truncated to
+  cents: 3% of $500.03 is $15.0009, **$15.00** (spec 5.20.2, 2025-26); 3.5% of
+  $2,600.00 is **$91.00** (KS4 page 12); 10% of $800.00 is **$80.00** (IR335
+  page 28). Below the minimum is refused: 3% for a pay dated 1 Apr 2026 or
+  later, unless the employee has a temporary rate reduction (KS4 page 16:
+  the employer can then reduce to 3%). Higher (voluntary) rates are allowed.
+- **PR14 ESCT rate.** The ESCT rate threshold amount (last year's salary or
+  wages plus gross employer contributions, or the employer's estimate) is an
+  input; Tohyee doesn't estimate it. $54,216.00 is **17.5%** (spec 5.21.1);
+  $14,425.88 is **10.5%**, $23,577.43 and $38,625.00 are **17.5%** (spec
+  5.21.2); $48,300 is **17.5%** and $72,450 is **30%** (IR335 page 27).
+  $18,720.00 is 10.5% and $18,721.00 is 17.5%; $18,720.50 falls between two
+  of IRD's bands and is refused. $216,001 is 39%.
+- **PR15 ESCT on a contribution (spec 5.21.3).** The contribution truncated
+  to whole dollars x the ESCT rate, truncated to cents; the net contribution
+  is the contribution with its cents less the ESCT. $122.50 at 17.5%: $122 x
+  17.5% = **$21.35**, net **$101.15** (ESS example 4, 2026-27); $105.00 at
+  17.5%: **$18.37**, net **$86.63** (2025-26). $79.04 at 17.5%: $79 x 17.5% =
+  $13.825, **$13.82**, and $39.52: **$6.82** (spec 5.21.4). $24.00 at 17.5%:
+  **$4.20**, net **$19.80** (spec 5.21.5). $91.00 at 17.5%: **$15.92**, net
+  **$75.08**, and $91.17: **$15.92**, net **$75.25** (IR341 April 2026 pages
+  116-117).
+- **PR16 IRD's PAYE tables.** 976 rows of IR340 and IR341 (April 2025 and
+  April 2026; every 97th row of each table, its last row and the rows either
+  side of each tax, levy, IETC and student loan threshold) are in
+  `tests/fixtures/ird-paye-tables.json` with their page numbers. For each
+  row Tohyee's M, ME and SL (or SB-SA and SL), KiwiSaver at every rate, and
+  net employer contribution and ESCT at every ESCT rate match IRD's figures
+  exactly.
+
+### Not supported yet (refused rather than guessed)
+
+- Pay dates outside 1 Apr 2025 to 31 Mar 2027 (no edition covers them).
+- Tax codes STC (tailored tax codes, which need the IR23 certificate's
+  rate) and WT (schedular payments); student loan special deduction rates
+  (SDR), Commissioner (SLCIR) and voluntary (SLBOR) deductions.
+- Pay frequencies other than weekly, fortnightly, four-weekly and monthly.
+- Gross pay, contributions or threshold amounts below zero.
+- ESCT rate threshold amounts between two bands (e.g. $18,720.50).
+
+Not built in this stage (not refusals: there's no function for them yet):
+extra pays (bonuses, lump sums, back pay, pay on leaving), employee share
+schemes, employer contributions taxed as salary (RD 68), estimating the
+ESCT rate threshold amount, which employees must have employer
+contributions (under 16 or over 65, savings suspensions, complying funds),
+payroll giving, child support. Pay runs, journals, payslips and payday
+filing are later stages.
+
+### Decided (NZ payroll rates)
+
+Decided 1 Oct 2026 on Jess's instruction to research and make the call; see
+`docs/DECISIONS.md` (decisions 1-5) for sources.
+
+- **Out-of-date IRD examples.** The 2026-27 spec's RD 68 example (page 88)
+  and KS4 (April 2026, page 11) still show 2025-26 figures; the tests use
+  them for 2025-26 only.
+- **ESCT rounding** follows the spec (5.20.6, 5.21.3) and IR341: the
+  contribution in whole dollars, truncated ($15.92, net $75.08), not KS4's or
+  IR335's rounded worked examples.
+- **The 3.5% employer minimum** applies to every pay dated 1 April 2026 or
+  later, even if most of its period was in March. The spec also says "first
+  full pay", but IRD's KiwiSaver changes page settles it: "all pay days from
+  1 April ... even if your pay period covers before and after 1 April".
+- **Every rate is picked by the pay date**, PAYE included (IR340 Aug 2024
+  applied new rates to pay "paid on or after 31 July 2024").
+- **ESCT threshold amounts between bands** (e.g. $18,720.50) stay refused;
+  IRD's bands are whole dollars, so enter a whole-dollar estimate.
+- **4% from 1 April 2028** (spec 2.3) will come with the edition that covers
+  it.
+
+## Holidays Act leave (examples not yet approved by Jess)
+
+**What gets built.** Tohyee builds this for the **Holidays Act 2003** as one
+dated rule-set that ends at each employee's first pay period starting on or
+after **6 Aug 2028**, when the **Employment Leave Act 2026** takes over, and
+stores **hours on every leave entry** (as well as days or weeks, the rate
+used and its inputs) so balances can move to the new law. The new law can't
+be followed early
+([MBIE, Holidays Act reform: Employment Leave Act](https://www.mbie.govt.nz/business-and-employment/employment-and-skills/employment-legislation-reviews/holidays-act-reform-employment-leave-act)).
+The questions these examples raised were decided on 1 Oct 2026: see
+"Decided (Holidays Act leave)" at the end of this section and
+`docs/DECISIONS.md`, decisions 7-29.
+
+Stage P7 of NZ payroll (#60). **This is a plan only: nothing here is built
+and there are no tests yet.** It sets out what Tohyee's leave calculations
+should do, with real numbers, so Jess can approve, change or refuse each
+example before stage P8 builds anything. P8 builds only the examples Jess
+approves, each with a test, and refuses the rest.
+
+**Which law.** On 1 Oct 2026 the **Holidays Act 2003** is in force. Section
+numbers below (s16, s21 and so on) are that Act's, from the official
+consolidation **as at 20 December 2023**
+([legislation.govt.nz, Holidays Act 2003](https://www.legislation.govt.nz/act/public/2003/0129/latest/DLM236387.html)).
+A search on 1 Oct 2026 found no later version.
+
+**Due to change.** The **Employment Leave Act 2026** (2026 No 48, Royal
+assent 6 August 2026) replaces the Holidays Act 2003 from **6 August 2028**
+(for each employee, from the start of their first pay period starting on or
+after that date). Under it leave is counted in hours and builds up from the
+start of employment, instead of the 12-month and 6-month waits below.
+Sources: [MBIE, Holidays Act reform: Employment Leave Act](https://www.mbie.govt.nz/business-and-employment/employment-and-skills/employment-legislation-reviews/holidays-act-reform-employment-leave-act),
+[Employment NZ, Employment Leave Act 2026](https://www.employment.govt.nz/news-and-updates/employment-leave-act-2026)
+and [the Act](https://www.legislation.govt.nz/act/public/2026/48/en/latest/)
+(found 1 Oct 2026). Nothing here covers the new Act, and no example uses a
+date on or after 6 Aug 2028. Anything P8 builds for the 2003 Act will stop
+applying then (decision 7).
+
+**How the sources were read (please check them).** The computer these
+were written on couldn't open legislation.govt.nz, employment.govt.nz,
+mbie.govt.nz, Xero Central or NetSuite's help directly, so:
+
+- the Act's wording was read on 1 Oct 2026 from a copy of the 20 December
+  2023 consolidation (the `jonnonz1/nz-statute-book` repository on GitHub,
+  `acts/public/2003/holidays-act-2003.md`). Every rule below comes from a
+  section of the Act, except where an example says it follows Employment NZ
+  guidance or a numbered decision in `docs/DECISIONS.md`;
+- Employment NZ and MBIE pages were found and summarised through a web
+  search on 1 Oct 2026, so their exact wording wasn't seen. Links are given;
+  where guidance seems to go further than the Act, the example names the
+  decision that settles it;
+- Xero Central articles were read on 1 Oct 2026 from undated copies (the
+  `web-arena-x/webarena-infinity` repository, `apps/user-manuals/xero/payroll/`),
+  each giving its Xero Central address. Xero may have changed them since.
+
+Please open the linked pages before approving.
+
+**NetSuite and Xero** (Jess's rule: follow NetSuite where it has an
+answer, otherwise Xero). NetSuite's help covers general time-off plans
+(accrual per period or per hour worked, in hours or days, with carryover
+limits: [Time-Off Management Setup](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4607408864.html),
+[Time-Off Rules](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1494524322.html))
+but says nothing about the Holidays Act's pay rates; NZ payroll on NetSuite
+comes from another company's add-on, not NetSuite's help. So **Xero Payroll
+NZ** is followed where the Act leaves room. Xero Central articles used
+(read 1 Oct 2026 as above):
+
+- [How annual leave rates are calculated](https://central.xero.com/s/article/Understand-how-annual-leave-rates-are-calculated)
+  and [Calculate an employee's four week average ordinary weekly pay](https://central.xero.com/s/article/How-to-manually-calculate-annual-leave-rates)
+- [How holiday pay and annual leave works](https://central.xero.com/s/article/Manage-annual-leave-and-holiday-pay-for-employees)
+- [Cash up an employee's annual leave](https://central.xero.com/s/article/Cash-up-an-employee-s-annual-leave)
+- [Delete an employee or end their employment](https://central.xero.com/s/article/Delete-an-employee-and-end-their-employment)
+  (final pay)
+- [Process employee sick leave](https://central.xero.com/s/article/Manage-sick-leave-for-employees)
+  and [Leave for employees working irregular hours explained](https://central.xero.com/s/article/Leave-for-employees-working-irregular-hours-explained)
+- [Pay an employee for working a public holiday](https://central.xero.com/s/article/Pay-an-employee-for-working-a-public-holiday)
+- [Track leave in days](https://central.xero.com/s/article/Track-leave-in-days)
+
+Employment NZ pages used (found 1 Oct 2026 as above):
+[Annual holidays](https://www.employment.govt.nz/leave-and-holidays/annual-holidays),
+[Managing annual holidays](https://www.employment.govt.nz/leave-and-holidays/annual-holidays/managing-annual-holidays),
+[Sick leave](https://www.employment.govt.nz/leave-and-holidays/sick-leave),
+[Public holidays rights for employees](https://www.employment.govt.nz/leave-and-holidays/public-holidays/public-holidays-rights-for-employees),
+[Factors to use to decide whether a day is an otherwise working day](https://www.employment.govt.nz/assets/uploads/documents/leave-and-holidays/Factors-to-use-to-decide-whether-a-day-is-an-otherwise-working-day.pdf),
+[Alternative holidays](https://www.employment.govt.nz/leave-and-holidays/public-holidays/alternative-holidays),
+[Relevant daily pay vs average daily pay](https://www.employment.govt.nz/assets/uploads/documents/pay-and-hours/Relevant-daily-pay-vs-average-daily-pay.pdf),
+[Final pay](https://www.employment.govt.nz/pay-and-hours/pay-and-wages/final-pay),
+[Holidays Act guidance tools: termination pay](https://www.employment.govt.nz/assets/uploads/documents/pay-and-hours/Holiday-Act-Guidance-tools-Termination-Pay.pdf)
+and [Deductions and premiums](https://www.employment.govt.nz/pay-and-hours/pay-and-wages/deductions).
+
+**The people in the examples.** Everyone is paid weekly, for pay periods
+Monday to Sunday.
+
+| Who | Pay | Usual week | Started |
+| --- | --- | --- | --- |
+| Aroha | Salary 62,400.00 a year (1,200.00 a week); a bonus of 2,600.00 each December that her agreement binds the employer to pay if targets are met | Mon-Fri, 8 hours a day | Tue 1 Apr 2025 |
+| Ben | 28.00 an hour, **30.00 from Mon 15 Jun 2026**; 5 hours' overtime at time and a half every Thursday (rostered); shift allowance 10.00 for each shift worked | Mon-Fri, 8 hours a day, plus the Thursday overtime | Mon 3 Mar 2025; last day Fri 18 Dec 2026 |
+| Cara | Permanent, hours and days vary week to week (not casual) | Varies | 2024 |
+| Dan | 25.00 an hour, **32.00 for the 4 weeks before his leave** | Mon-Fri, 8 hours a day | 2025 |
+| Eru | 25.00 an hour (1,000.00 a week) | Mon-Fri, 8 hours a day | Mon 6 Apr 2026; last day Fri 26 Feb 2027 |
+| Fiona | 27.00 an hour, part-time | Tue, Wed, Thu, 6 hours a day | 2025 |
+| George | Casual, as needed; often works Saturdays | Varies | 2026 |
+
+**Rounding.** Rates are kept exact; each payment is rounded to cents once
+(R3; decision 26). Xero also keeps rates unrounded (its example shows an
+average weekly earnings figure of $843.137255). A payment already rounded
+and paid (for example holiday pay) counts in later gross earnings at the
+amount paid.
+
+### The pay rates
+
+- **HL1 Ordinary weekly pay (OWP), salary** (s8(1)). Aroha's OWP is her
+  pay for an ordinary working week: **1,200.00**. Her December bonus isn't a
+  regular part of her pay, so it's left out (s8(1)(c)(i)); so is employer
+  KiwiSaver (s8(1)(c)(v)).
+- **HL2 OWP with regular overtime and an allowance** (s8(1)(b)). Ben's
+  overtime is rostered every week, so it's a regular part of his pay
+  (s8(1)(b)(ii)). From 15 Jun 2026: 40 × 30.00 = 1,200.00, overtime 5 × 45.00
+  = 225.00, shift allowance 5 × 10.00 = 50.00: OWP **1,475.00**. If his
+  overtime were occasional it would be left out (s8(1)(c)(ii)) and his OWP
+  would be 1,250.00. Xero counts "regular allowances" and "regular overtime"
+  in OWP and takes them from the employee's pay template. Tohyee does the
+  same: each pay item on Ben's usual pay is marked regular or not, and the
+  person running pay can change it in a pay run (decision 11).
+- **HL3 OWP by the four-week formula** (s8(2)). Where OWP can't be worked
+  out under s8(1) (Cara's hours vary), OWP = (a − b) ÷ 4: a is gross
+  earnings for the 4 calendar weeks before the end of the last pay period
+  before the calculation, and b is the irregular incentive payments,
+  irregular overtime and one-off payments in them (s8(1)(c)(i)-(iii)).
+  Cara's last 4 weeks: gross 3,600.00, of which a one-off payment 200.00
+  and irregular overtime 120.00. OWP = (3,600.00 − 320.00) ÷ 4 =
+  **820.00**. Xero's four-week page uses this when "weekly days and hours
+  vary significantly". Tohyee always works this figure out and shows it,
+  for Aroha and Ben too, but uses it only where OWP can't be worked out
+  under s8(1), as for Cara (decision 12).
+- **HL4 Average weekly earnings (AWE), with a pay rise, overtime, an
+  allowance and a bonus** (s5 "average weekly earnings", s14). AWE is 1/52
+  of gross earnings for the 12 months. Tohyee uses the **12 calendar
+  months ending at the end of the last pay period** (the Act's wording;
+  decision 10), not the last 52 weeks of pay periods. For Ben's last day
+  that pay period ends Sun 13 Dec 2026, so the 12 months are **Sun 14 Dec
+  2025 to Sun 13 Dec 2026**: the 52 pay periods from Mon 15 Dec 2025, plus
+  Sun 14 Dec 2025, the last day of the pay period before them. Pay for a
+  pay period only partly inside the 12 months counts for the hours worked
+  on the days inside them; Ben doesn't work Sundays, so that day adds
+  nothing. (Counting the whole 8-14 Dec 2025 pay period would catch a 53rd
+  week and overstate his AWE.)
+
+  | Gross earnings (s14) | Amount |
+  | --- | --- |
+  | Ordinary time, 26 weeks at 28.00 (including paid holidays and leave in those weeks, s14(a)(iii)) | 29,120.00 |
+  | Ordinary time, 26 weeks at 30.00 (likewise) | 31,200.00 |
+  | Overtime, 26 × 5 hours at 42.00 (s14(a)(v)) | 5,460.00 |
+  | Overtime, 26 × 5 hours at 45.00 | 5,850.00 |
+  | Shift allowance, 245 shifts at 10.00 (s14(a)(ii)) | 2,450.00 |
+  | Bonus his agreement binds the employer to pay (s14(a)(iv)) | 3,000.00 |
+  | **Total** | **77,080.00** |
+
+  Left out: a 120.00 reimbursement for tools he bought (actual costs,
+  s14(c)(i)), employer KiwiSaver (s14(c)(iii)) and a 100.00 Christmas
+  voucher the employer didn't have to give (discretionary, s14(b)(i)).
+  AWE = 77,080.00 ÷ 52 = **1,482.3077** (1,482.31). It mixes both pay
+  rates; OWP uses only the rate on the day (HL5).
+- **HL5 A pay rise just before leave: OWP wins.** Dan's 12 calendar months
+  (52 pay periods plus a Sunday he didn't work, as in HL4): 48 weeks at
+  1,000.00 and 4 at 1,280.00 = 53,120.00, so AWE = 53,120.00 ÷ 52 =
+  **1,021.54**. His OWP at
+  the start of his leave is 40 × 32.00 = **1,280.00**. A week's annual
+  holiday is paid at the greater (s21(2)(b)): **1,280.00**. After a pay cut
+  it works the other way and AWE protects the employee.
+- **HL6 Relevant daily pay (RDP)** (s9). What the employee would have been
+  paid had they worked that day, including overtime and incentive payments
+  they'd have had that day (s9(1)(b)), not employer KiwiSaver (s9(1)(c)).
+  For a public holiday it doesn't include the extra half (s9(3)).
+  - Ben, a Wednesday: 8 × 30.00 + 10.00 = **250.00**.
+  - Ben, a Thursday: 8 × 30.00 + 5 × 45.00 + 10.00 = **475.00**.
+  - Ben, a Saturday: not a working day, so no RDP.
+  - Aroha, any weekday: 1,200.00 ÷ 5 = **240.00**.
+- **HL7 Average daily pay (ADP)** (s9A). The employer may use ADP instead
+  of RDP if RDP can't practicably be worked out, or the employee's daily pay
+  varies within the pay period (s9A(1)). ADP = gross earnings for the 52
+  calendar weeks before the end of the last pay period ÷ the number of whole
+  or part days worked or on paid holidays or leave in them (s9A(2)). Cara:
+  41,600.00 ÷ 208 days = **200.00**. Days she didn't work and wasn't paid
+  for aren't counted. Unlike AWE, ADP keeps the 52 calendar weeks, because
+  s9A(2) says so. Like AWE, ADP is slow to reflect a pay rise. Xero lets you
+  switch between RDP and ADP on the payslip to compare them. In Tohyee RDP
+  or ADP is **set per employee**, with the reason for ADP recorded (Cara:
+  "daily pay varies within the pay period"), and can be changed in a pay
+  run. ADP is offered only for the two reasons in s9A(1) (decision 13).
+- **HL8 Units.** Annual holidays are an entitlement in **weeks** (s16);
+  sick, bereavement and alternative holidays are in **days** (s65, s70,
+  s56). The employer and employee agree what genuinely makes up a working
+  week (s17): Aroha's is 5 days of 8 hours, Fiona's 3 days of 6 hours. Xero
+  keeps every balance in **hours** ("Leave can only be accrued and displayed
+  in hours", Track leave in days). Tohyee keeps the Act's units and stores
+  the **hours on every leave entry**, worked out from the agreed week, and
+  shows days and hours alongside (decision 8). Aroha's 4 weeks is 20 days
+  or 160 hours; Fiona's is 12 days or 72 hours.
+
+### Annual holidays
+
+- **HL10 Entitlement** (s16). After each completed 12 months of continuous
+  employment, at least 4 weeks' paid annual holidays (s16(1)).
+  - Aroha started Tue 1 Apr 2025, completed 12 months at the end of Tue 31
+    Mar 2026, and is entitled to **4 weeks on Wed 1 Apr 2026**, then 4 more
+    each 1 April. For Fiona, 4 weeks is 12 of her working days (s17).
+  - An entitlement doesn't lapse: it stays until it's taken or paid out
+    (s16(4)), and the employer must let it be taken within 12 months of it
+    arising (s18(1)), so balances can build up past 4 weeks.
+  - Unpaid leave of 1 week or less counts towards the 12 months
+    (s16(2)(a)(vi)); longer unpaid leave doesn't, unless agreed
+    (s16(2)(b)). Had Aroha taken unpaid leave from Mon 2 to Sun 22 Feb 2026
+    (3 weeks), the first week still counts and her anniversary moves only by
+    the 2 weeks beyond it (14 days), from Wed 1 Apr to **Wed 15 Apr 2026**
+    (decision 14). Her AWE divisor stays 52.
+  - If they agree, in writing, to count the whole 3 weeks, Tohyee records
+    the agreement, the anniversary stays **Wed 1 Apr 2026** and her AWE
+    divisor drops from 52 to **50** (the weeks over 1 week, s16(3)). Without
+    a recorded agreement the divisor isn't cut. Xero's example lowers the
+    divisor for unpaid weeks without mentioning an agreement; Tohyee doesn't
+    follow it there.
+- **HL11 Taking annual holidays** (s21). Aroha takes Mon 6 to Fri 10 Jul
+  2026 (1 week). Paid at the greater of OWP at the start of the holiday
+  (1,200.00) and AWE for the 12 calendar months to the end of the last pay
+  period before it (Sun 6 Jul 2025 to Sun 5 Jul 2026, decision 10: 52 ×
+  1,200.00 + her December 2025 bonus 2,600.00 = 65,000.00; the Sunday at
+  the start adds nothing; ÷ 52 = 1,250.00): **1,250.00**. It's paid before
+  the holiday unless they agree it's paid in the usual pay (s27(1)). Balance
+  4 → **3 weeks** (the entry stores 40 hours). Xero likewise works the rate out for the period the leave is
+  taken in, not the one it's paid in.
+- **HL12 Cashing up** (s28A-s28F). On Mon 10 Aug 2026 Aroha asks in
+  writing to be paid out 1 week; her employer agrees in writing (s28A(2),
+  (3)). Both are attached to the cash-up, and Tohyee records the amount,
+  the portion (1 week, 40 hours) and the date; it won't save a cash-up
+  without them (decision 29). Paid at the s21(2) rate (s28B(1)(a)): OWP
+  1,200.00; AWE for Sun 10 Aug 2025 to Sun 9 Aug 2026 (decision 10) = (51 ×
+  1,200.00 + 1,250.00 holiday pay from HL11 + 2,600.00 bonus) ÷ 52 =
+  65,050.00 ÷ 52 = **1,250.96**. Paid **1,250.96** as soon as practicable
+  (s28B(1)(b)). Balance 3 → **2 weeks**.
+  - Refused: a second week cashed up in the same entitlement year (1 Apr
+    2026 to 31 Mar 2027; at most 1 week a year, s28A(2)(b)); cashing up when
+    the organisation has a policy not to (s28E); cashing up annual holidays
+    taken in advance (not yet an entitlement, s28A(1)). Tohyee never starts
+    a cash-up itself: the employee asks (s28C, s28D).
+  - Part of a week can be cashed up: 3 days (24 of her 40 hours) = 0.6 week
+    = 0.6 × 65,050.00 ÷ 52 = **750.58**, and the rest of the week later in
+    the same year. Tohyee keeps the total cashed up in the entitlement year
+    and refuses anything over 1 week (decision 29).
+  - The cash-up isn't gross earnings (s14(c)(iv)), so it doesn't raise
+    later AWE, ADP or 8% figures: Aroha's AWE in HL13 is 65,050.00 ÷ 52, not
+    66,300.96 ÷ 52. Xero: "Cashed up annual leave payments aren't included
+    in the employee's gross earnings and won't accrue holiday pay."
+- **HL13 Public holidays during annual holidays** (s40(1)). Aroha books Mon
+  22 Mar to Fri 2 Apr 2027. Good Friday (26 Mar) and Easter Monday (29 Mar)
+  are public holidays, not annual holidays: each is paid at her RDP, 240.00,
+  so **480.00**. The other **8 days** are annual holidays: 64 hours ÷ her
+  usual 40 a week = **1.6 weeks**, paid at the greater of OWP 1,200.00
+  and AWE for Sun 22 Mar 2026 to Sun 21 Mar 2027 (decision 10: 51 ×
+  1,200.00 + 1,250.00 + December 2026 bonus 2,600.00 = 65,050.00; the
+  cash-up is left out) ÷ 52 = 1,250.96: 1.6 × 65,050.00 ÷ 52 =
+  **2,001.54**. Balance 2 → 0.4 weeks, then **4.4 weeks** on Thu 1 Apr 2027
+  when her next 4 weeks arise.
+  - **Part weeks are valued by hours** (decision 9): the weekly rate ÷ usual
+    weekly hours × that day's hours, and the same share of a week comes off
+    the balance. Aroha's days are all 8 hours, so it's the same as counting
+    days. Ben's aren't: his usual week is 45 hours (8 a day plus 5 hours'
+    overtime on Thursday). Had he taken single days at the weekly rate in
+    HL16 (AWE 77,080.00 ÷ 52, more than his OWP 1,475.00), a Thursday (13
+    hours) would be 77,080.00 × 13 ÷ (52 × 45) = **428.22** and 13 ÷ 45 =
+    **0.2889 week** off his balance; a Wednesday (8 hours) 77,080.00 × 8 ÷
+    (52 × 45) = **263.52** and **0.1778 week**. Four Wednesday-type days and
+    a Thursday make the whole week: 4 × 263.5214 + 428.2222 = 1,482.3077.
+    Counting days instead (÷ 5) would pay 296.46 for each.
+- **HL14 Annual holidays in advance** (s20, s22). Eru's employer lets him
+  take Mon 15 to Fri 19 Feb 2027 before his first anniversary (Tue 6 Apr
+  2027). Paid at the greater of OWP (1,000.00) and AWE over the time he's
+  worked, with the divisor cut to the whole or part weeks worked (s22(2)(b)(ii)(B),
+  s22(3)): Mon 6 Apr 2026 to Sun 14 Feb 2027 is **45 weeks**, gross
+  45 × 1,000.00 + 1,500.00 occasional overtime in December 2026 =
+  46,500.00, so AWE = 46,500.00 ÷ 45 = **1,033.33**. Paid **1,033.33**.
+  His balance shows **−1 week** (taken in advance); had he stayed, he'd have
+  3 weeks left on 6 Apr 2027. The Act only says "an agreed portion", so
+  Tohyee sets **no hard limit** (decision 15). It warns when leave in
+  advance goes above what's been earned since the anniversary (or start):
+  Mon 6 Apr 2026 to Mon 15 Feb 2027 is 315 days, and 315 ÷ 365 × 4 weeks =
+  **3.45 weeks**, so 1 week gives no warning. Whenever leave is taken in
+  advance, Tohyee prompts for the written agreement that lets the employer
+  recover it if he leaves (HL15). Xero shows a cautious "available to take
+  in advance" estimate on the same basis, rounded down to whole days.
+- **HL15 Leaving before 12 months** (s23). Eru leaves on Fri 26 Feb 2027.
+  He's paid **8% of his gross earnings since he started**, less holiday pay
+  for annual holidays taken in advance (s23(2)). Gross earnings: 46,500.00
+  + 1,033.33 (the week in advance is holiday pay, so it counts,
+  s14(a)(iii)) + 1,000.00 (22-26 Feb) = 48,533.33. 8% = 3,882.67, less
+  1,033.33 = **2,849.34**, paid in his final pay (s27(2)). He has no
+  untaken entitlement, so there are no s40(3) public holidays to add.
+  - If the leave taken in advance had been worth more than the 8%, Tohyee
+    takes the difference off his final pay **only with his written consent
+    attached**; without it the deduction is refused (Wages Protection Act
+    1983, section unverified; Employment NZ, Deductions and premiums;
+    decision 16). Xero takes it off the final pay without asking; Tohyee
+    doesn't follow it there.
+- **HL16 Leaving after an entitlement has arisen** (s24, s25, s26, s40(3)).
+  Ben leaves on Fri 18 Dec 2026. His last entitlement arose Tue 3 Mar 2026
+  (4 weeks) and he's taken 2 weeks of it.
+  1. **Untaken entitlement** (s24): 2 weeks (90 hours, stored with
+     the entry) at the greater of OWP on his last day (1,475.00, HL2) and AWE
+     for the 12 calendar months to the end of the last pay period before it
+     (Sun 14 Dec 2025 to Sun 13 Dec 2026, HL4: 1,482.3077): 2 × 77,080.00 ÷
+     52 = **2,964.62**.
+  2. **Public holidays in that untaken time** (s40(3)): had Ben taken his
+     10 days straight after leaving, from Mon 21 Dec 2026, they'd have run
+     to Thu 7 Jan 2027, skipping Christmas Day (Fri 25 Dec), Boxing Day
+     (Sat 26 Dec, his holiday is Mon 28 Dec, s45(1)(b)), New Year's Day (Fri
+     1 Jan) and 2 January (Sat, his holiday is Mon 4 Jan). All four would
+     have been working days for him, so each is paid at the RDP for that
+     holiday's weekday (a Friday or a Monday) at his last pay rate, 8 ×
+     30.00 + 10.00 = 250.00 (decision 18; ADP instead if he were set to ADP
+     under decision 13): 4 × 250.00 = **1,000.00**. Xero's final pay page
+     says the same.
+  3. **8% since his last anniversary** (s25): gross earnings from 3 Mar to
+     18 Dec 2026 were 62,180.00 (wages, overtime, allowances and the holiday
+     pay for the 2 weeks he took). The untaken entitlement in 1 is added
+     (s26(a)), and so is the pay for the public holidays in 2, because
+     gross earnings include "the payment for the public holiday"
+     (Employment NZ guidance; decision 17): 62,180.00 + 2,964.62 +
+     1,000.00 = 66,144.62; 8% = 5,291.5696 = **5,291.57**. (Leaving the
+     public holidays out would have given 5,211.57.)
+  4. His alternative holiday was taken on 12 Nov (HL33), and sick leave
+     isn't paid out (s67), so nothing else.
+
+  Holiday pay in his final pay: 2,964.62 + 1,000.00 + 5,291.57 =
+  **9,256.19** (s27(2)). Xero's final pay pays the annual leave balance
+  plus its running 8% "holiday pay" since the last anniversary.
+
+### Sick leave and bereavement leave
+
+- **HL20 When it starts** (s63, s65). After 6 months' current continuous
+  employment (s63(1)(a)), 10 days' sick leave for each 12 months from then
+  (s63(2)(a), s65(2)). Aroha (started Tue 1 Apr 2025) completed 6 months at
+  the end of Tue 30 Sep 2025: **10 days on Wed 1 Oct 2025**, 10 more on Thu
+  1 Oct 2026, and so on. Bereavement leave starts on the same day (s63).
+  Before then, only if they agree to leave in advance; sick leave taken in
+  advance comes off the next entitlement (s63(3)). Xero adds sick leave
+  "annually after 6 months" at the pay run that includes the date.
+- **HL21 Employees without 6 months' continuous employment** (s63(1)(b)).
+  George, a casual, is entitled if over 6 months he worked an average of at
+  least 10 hours a week, and at least 1 hour in every week or at least 40
+  hours in every month. 312 hours over 26 weeks (12 a week on average) with
+  some work every week: entitled from the end of those 6 months
+  (s63(2)(b)). With one week of no work, the weekly test fails and the
+  monthly test decides. The Act doesn't define "month"; Tohyee uses
+  calendar months (decision 20), so George needs at least 40 hours in each
+  calendar month of the 6 months.
+- **HL22 Carrying sick leave over** (s66). Aroha used 3 days in the year to
+  30 Sep 2026, so 7 carry over: **17 days** on 1 Oct 2026. If she uses none
+  by 30 Sep 2027, up to 10 carry over to a maximum of 20 (s66(2)): **20
+  days** on 1 Oct 2027, and 7 lapse. Unused sick leave isn't paid out when
+  employment ends (s67).
+- **HL23 Paying sick leave** (s71, s72). Ben is sick Wed 4 and Thu 5 Nov
+  2026: RDP 250.00 + 475.00 = **725.00** (s71(1)), paid in that week's pay
+  (s72(1)); **2 days** come off his balance. A sick Saturday isn't a working
+  day for him: no pay, nothing off the balance. If he's away 3 or more
+  consecutive calendar days the employer may ask for proof (s68(1)) and may
+  hold the pay until it's given (s72(2)).
+  - **Part of a day** (decision 19). Had Ben gone home sick at noon on Wed
+    18 Nov 2026 after 4 of his 8 hours, **1 whole day** comes off his
+    balance by default (the Act counts days; the entry stores 8 hours) and
+    his pay for the day is still his RDP, 250.00: 4 hours worked (120.00)
+    and the shift allowance (10.00) as usual, plus 4 hours' sick leave
+    (120.00). Only where an agreement for part days is recorded for him
+    does **0.5 day** (4 hours) come off instead, with the same pay.
+- **HL24 Sick leave at ADP** (s9A). Cara's daily pay varies within the pay
+  period, so she's set to ADP, with that reason recorded (decision 13):
+  **200.00** a day (HL7). Xero's example
+  for an employee with uneven days: Moana's 10-hour Thursday on sick leave
+  is paid as 10 hours (her RDP for that day), not as her 7-hour "standard"
+  day.
+- **HL25 Sick leave and annual holidays** (s36, s38, s39). Sick during
+  annual holidays: those days can be sick leave if the employer agrees
+  (s36). Sick before booked annual holidays: the employer must let those
+  days be sick leave (s38). Sick leave used up: the employer can't make the
+  employee use annual holidays, but may agree if the employee asks (s39).
+- **HL26 Bereavement leave** (s69, s70, s71). Aroha's grandmother dies; she
+  takes Mon 9 to Wed 11 Nov 2026: **3 days** (s69(2)(a)(v), s70(1)(a)) at
+  RDP 240.00 = **720.00**. It doesn't come off her sick leave, and there's
+  no yearly balance: each bereavement has its own days, and two at the same
+  time give 3 days each (s70(2)). A miscarriage or still-birth is also 3
+  days (s69(2)(c), (d)). For anyone else's death it's **1 day**, if the
+  employer accepts the employee has suffered a bereavement (s69(2)(b), with
+  the factors in s69(3)). Bereavement during annual holidays must be
+  allowed instead of annual holidays (s37). Not paid out when employment
+  ends.
+- **HL27 Family violence leave** (s72A-s72J; decision 27). Built with sick
+  leave, as its own balance: 10 days for each 12 months from the same date
+  as sick leave (HL20; Aroha's arose on Thu 1 Oct 2026), paid like sick
+  leave at RDP or ADP (s72I), and not carried over (s72H). Aroha takes Tue
+  1 and Wed 2 Dec 2026: **2 days** at RDP 240.00 = **480.00**, and her
+  family violence balance goes 10 → **8 days** (16 hours stored); her sick
+  leave balance doesn't change. Its records are kept private: only people
+  with payroll access see them.
+
+### Public holidays and alternative holidays
+
+- **HL30 Otherwise a working day** (s12, s49). A public holiday is paid only
+  if it would otherwise have been a working day for the employee. Labour
+  Day, Mon 26 Oct 2026:
+  - Aroha (Mon-Fri) doesn't work it: paid her RDP, **240.00** (s49).
+  - Fiona (Tue-Thu) doesn't work Mondays: **no pay**.
+  - Cara (varies): if it's not clear, employer and employee consider her
+    agreement, work patterns, rosters, whether she works only when work is
+    available, what both reasonably expected, and whether she'd have worked
+    but for the holiday (s12(2), (3)); any time she'd otherwise have worked
+    makes it a working day (s12(4)); a Labour Inspector decides if they
+    can't agree (s13). Employment NZ's factors sheet says to weigh these
+    together, not apply a formula. Tohyee can't decide this on its own: it
+    suggests from Cara's recent weeks (for example, she worked 3 of the
+    last 4 Mondays) and the person running pay confirms or changes it, and
+    the decision is recorded with the holiday (decision 21). Xero assigns
+    each employee a "holiday group" and adds public holidays in pay periods
+    automatically.
+- **HL31 Which day is the holiday** (s44, s45, s45A). For an employee who
+  doesn't work weekends (Aroha), 2026-27: Christmas Day **Fri 25 Dec**;
+  Boxing Day falls on Sat 26 Dec, so **Mon 28 Dec** (s45(1)(b)); New Year's
+  Day **Fri 1 Jan**; 2 January is a Saturday, so **Mon 4 Jan**; Waitangi Day
+  is Sat 6 Feb, so **Mon 8 Feb** (s45A(1)(b)); Good Friday **26 Mar**;
+  Easter Monday **29 Mar**; ANZAC Day is Sun 25 Apr, so **Mon 26 Apr**; the
+  Sovereign's birthday **Mon 7 Jun 2027** (the first Monday in June,
+  s44(1)(i)). For George, who would otherwise
+  work Saturday 26 Dec, Boxing Day stays **Sat 26 Dec** (s45(1)(a)). Two
+  holidays on the same day count as one (s44(4)). Matariki's date comes from
+  Schedule 1 of Te Kāhui o Matariki Public Holiday Act 2022 and anniversary
+  days from local observance (s44(1)(ia), (k)); neither was looked up here.
+  Public holiday dates are kept as dated data with their source, like the
+  IRD rates in P2. Anniversary day is set per employee, defaulting from the
+  organisation's; if not agreed, it's the one for the province where they
+  usually work (decision 22). Xero "Mondayises the holiday for you".
+- **HL32 Working on a public holiday** (s50, s56). Ben works his usual 8
+  hours on Labour Day, Mon 26 Oct 2026, an otherwise working day. His RDP
+  for the time worked is 8 × 30.00 + 10.00 = 250.00. He's paid the greater
+  of (a) that plus half again, **375.00**, or (b) that, 250.00 (s50(1)):
+  **375.00**, and gets an **alternative holiday** (s56).
+  - If his agreement paid double time on public holidays (an identifiable
+    penal rate of 30.00 an hour): (a) still leaves the penal rate out, 250.00
+    × 1.5 = 375.00 (s50(1)(a), (2)); (b) is his RDP for the time with it,
+    8 × 60.00 + 10.00 = 490.00. Paid **490.00**.
+  - Fiona works 6 hours on Labour Day, not otherwise a working day for her:
+    6 × 27.00 × 1.5 = **243.00** (s48(1)(b), s50) and **no** alternative
+    holiday (s56(1)(a)).
+  - Ben works only 4 of his 8 hours: (4 × 30.00 + 10.00) × 1.5 = **195.00**,
+    and still a whole alternative holiday (s57(1)(c)). Nothing is added
+    automatically for the 4 hours he didn't work (decision 23); where his
+    agreement gives more, the person running pay can type the extra in.
+  - Ben is rostered on Labour Day but is sick: the day stays a public
+    holiday, paid at RDP **250.00** (s49), not time and a half, no
+    alternative holiday, and no sick leave used (s61A).
+  - Pay for a public holiday goes in the pay for the period it falls in
+    (s55). Xero adds a "time and a half" pay item and an alternative holiday
+    accrual by hand.
+- **HL33 Alternative holidays** (s56, s57, s60, s61). Ben's alternative
+  holiday arose on Mon 26 Oct 2026 (the record keeps that date,
+  s81(2)(k)). It's a whole working day off, on a day that would otherwise be
+  a working day and isn't a public holiday (s57(1)); if they can't agree
+  when, the employer sets it with 14 days' notice (s57(2), (3)).
+  - He takes it on **Thu 12 Nov 2026**: paid his RDP for that day, **475.00**
+    (s60(1)), including his regular Thursday overtime. On a Wednesday it
+    would have been 250.00.
+  - Had it still been untaken when he left on Fri 18 Dec 2026, it would be
+    paid at his RDP for his last day (a Friday), **250.00**, in his final
+    pay (s60(2)(b)).
+  - Exchanging it for money (s61): only if Ben asks, only once 12 months
+    have passed since it arose (from 26 Oct 2027), and only if the employer
+    agrees, for "the amount agreed" (s61(3)). The Act gives no formula, so
+    Tohyee defaults the amount to his RDP (or ADP, decision 13) for the
+    exchange date, which can be changed to the amount agreed, and the
+    agreement is recorded (decision 24). Had he stayed and exchanged it on
+    Wed 27 Oct 2027 at his current rates, the default would be his
+    Wednesday RDP, 8 × 30.00 + 10.00 = **250.00**.
+  - Alternative holidays are counted in **days**, with that day's hours
+    stored (decision 25): taking it on Thu 12 Nov uses **1 day** (13 hours
+    stored); on a Wednesday it would be 1 day (8 hours). Xero keeps them in
+    hours, adding the "standard number of hours for a day" (8 for Ben),
+    which would leave him 5 hours short on a Thursday.
+
+### Holiday and leave records
+
+- **HL40 What the record must hold** (s81(2)). For each employee, kept in
+  writing or so it can easily be printed (s81(3)), for at least **6 years**
+  after each entry (s81(4)), and shown or copied when the employee, their
+  representative, their union or a Labour Inspector asks (s82). Where
+  Tohyee would get each item:
+
+  | s81(2) | Item | From |
+  | --- | --- | --- |
+  | (a), (b) | Name; date employment started | Employee record (P1) |
+  | (c) | Hours worked each day in a pay period and the pay for them (or the agreed usual hours, s81(3A)) | Pay runs (P3) |
+  | (d), (e) | Current annual holiday entitlement; date last entitled | Leave balances (P8) |
+  | (f) | Current sick leave entitlement | Leave balances (P8) |
+  | (g), (h) | Dates of annual holidays, sick, bereavement and family violence leave taken, and the pay for them | Leave taken (P8) and pay runs |
+  | (ha), (hb) | How much annual holiday was cashed up each entitlement year, with dates and amounts | Cash-ups (P8) |
+  | (i), (j) | Dates of public holidays worked, the pay for them and the hours worked | Pay runs |
+  | (ja) | Public holidays transferred (s44A, s44B) | Not supported yet |
+  | (k) | Date each alternative holiday arose | Leave balances (P8) |
+  | (l) | Dates of, and pay for, public and alternative holidays not worked but paid | Pay runs |
+  | (m) | Cash value of board or lodgings | Not supported yet |
+  | (n) | Payments in exchange for alternative holidays (s61(3)) | P8 |
+  | (o), (p) | Date employment ended; holiday pay on termination | Employee record (P1); final pay (P8) |
+
+  Posted pay and leave are never edited (corrections are new entries), and
+  employees are archived, never deleted, so the 6 years are kept. If the
+  record isn't kept, the Employment Relations Authority may accept the
+  employee's statements as proved (s83), so it has to be complete.
+- **HL41 Ben's record** after the examples above (a printable page per
+  employee, with a CSV export):
+
+  | Date | Entry | Amount |
+  | --- | --- | --- |
+  | 3 Mar 2025 | Employment started | |
+  | 3 Mar 2026 | Entitled to 4 weeks' annual holidays | |
+  | 26 Oct 2026 | Worked Labour Day, 8 hours; alternative holiday arose | 375.00 |
+  | 4-5 Nov 2026 | Sick leave, 2 days | 725.00 |
+  | 12 Nov 2026 | Alternative holiday taken | 475.00 |
+  | 18 Dec 2026 | Employment ended; holiday pay on termination (2 weeks untaken, 4 public holidays, 8%) | 9,256.19 |
+
+  (His 2 weeks' annual holidays earlier in 2026 and his sick leave
+  entitlement would also be listed.)
+- **HL42 Balances shown for Aroha** on Thu 1 Apr 2027: annual holidays
+  **4.4 weeks** (22 days of her week; last entitled 1 Apr 2027; 1 week
+  cashed up in the year to 31 Mar 2027); sick leave **17 days** less any
+  taken since 1 Oct 2026; family violence leave **8 days** (HL27); no
+  bereavement balance. Like Xero, Tohyee also shows a running "holiday pay"
+  amount, 8% of gross earnings since the last anniversary: what she'd be
+  owed for the part year if she left. On 1 Apr 2027 hers starts again from
+  **0.00**. For Ben on his last day, before his final pay, it was 8% ×
+  62,180.00 = **4,974.40** (HL16, step 3, before the untaken entitlement
+  and public holidays are added). These are shown on a leave liability
+  report; posting leave liability to the ledger waits for its own approved
+  worked example (decision 28).
+
+### Not supported yet (refused rather than guessed)
+
+- Anything under the **Employment Leave Act 2026** (from 6 Aug 2028).
+- Closedown periods (s29-s35).
+- Transferring public holidays (s44A-s44C), and the record of it
+  (s81(2)(ja)).
+- Being on call on a public holiday (s59).
+- Paying 8% with each pay (s28) for fixed-term employees under 12 months or
+  very irregular work.
+- Board or lodgings (s10), home and community support travel payments
+  (s10A).
+- ACC weekly compensation and first week compensation alongside sick leave
+  (s71(2)-(4)); parental leave and volunteers leave in the 12 months
+  (s16(2)).
+- More than the minimums (for example a fifth week), and special rates in
+  employment agreements (s8(3), s9(2)).
+- Labour Inspector determinations (s11, s13, s17(2), s28F, s54), and
+  re-employment within a month (s85).
+- Posting a leave liability to the ledger: waits for its own approved
+  worked example (decision 28).
+
+### Decided (Holidays Act leave)
+
+Jess asked Claude to research these questions and make the calls (1 Oct
+2026). Each decision, with its source, is in `docs/DECISIONS.md`
+("Holidays Act leave" and "The new leave law"); the examples above follow
+them. The examples themselves still need Jess's approval.
+
+- **7** Build for the 2003 Act now, as a dated rule-set ending at each
+  employee's first pay period starting on or after 6 Aug 2028.
+- **8** Entitlements in the Act's units (weeks, days), with hours stored on
+  every entry (HL8).
+- **9** Part weeks with unequal days valued by hours (HL13).
+- **10** AWE over the 12 calendar months ending at the end of the last pay
+  period (HL4, HL11-HL13, HL16).
+- **11** "Regular" items marked on the usual pay, changeable in a pay run
+  (HL2).
+- **12** The four-week OWP always worked out and shown, used only when OWP
+  can't be worked out (HL3).
+- **13** RDP or ADP set per employee, with the reason for ADP recorded (HL7,
+  HL24).
+- **14** Unpaid leave moves the anniversary only by the part beyond one
+  week; the AWE divisor is cut only under a recorded agreement (HL10).
+- **15** No hard limit on holidays in advance; a warning above what's been
+  earned, and a prompt for the written agreement (HL14).
+- **16** Advance leave worth more than the 8% is deducted only with written
+  consent attached (HL15).
+- **17** The 8% on leaving includes the s40(3) public holidays (HL16).
+- **18** Those holidays paid at each holiday's weekday RDP at the last pay
+  rate, or ADP (HL16).
+- **19** Part-day sick leave takes a whole day unless a part-day agreement
+  is recorded (HL23).
+- **20** "Month" in the hours test means calendar month (HL21).
+- **21** Otherwise a working day: Tohyee suggests, the person running pay
+  confirms, and it's recorded (HL30).
+- **22** Public holiday dates as dated data; anniversary day per employee,
+  defaulting from the organisation (HL31).
+- **23** Working part of a public holiday: time and a half for the time
+  worked and an alternative holiday, nothing automatic for the rest (HL32).
+- **24** Exchanging an alternative holiday defaults to RDP (or ADP) on the
+  exchange date, editable, with the agreement recorded (HL33).
+- **25** Alternative holidays counted in days, with that day's hours stored
+  (HL33).
+- **26** Exact rates; each payment rounded once to cents.
+- **27** Family violence leave included with sick leave, records kept
+  private (HL27).
+- **28** Leave liability and the running 8% shown as a report; posting to
+  the ledger waits for its own example (HL42).
+- **29** Cash-ups need the written request and answer attached, and the
+  one-week limit is enforced (HL12).

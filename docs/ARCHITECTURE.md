@@ -49,6 +49,11 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ purchase_orders, purchase_order_lines, purchase_order_numbering   purchase orders (post nothing; copied to bills)
 ├─ supplier_payments      money paid against bills
 ├─ expense_claims, expense_claim_receipts, expense_claim_payments   staff expense claims, their receipts and payments
+├─ payroll_employees        employee payroll details (IRD and bank details encrypted), job title, reports-to, pay and employee group
+├─ payroll_pay_rates        pay rate history: salary or hourly rate from a date (append-only)
+├─ payroll_cost_allocations, payroll_cost_allocation_lines   where pay is charged, split by % from a date (append-only; lines total 100.00%)
+├─ payroll_pay_groups, payroll_employee_groups   pay groups (with a pay frequency) and employee groups for reporting
+├─ payroll_access           who has payroll access, by core user id (grants and removals in audit_events)
 ├─ fixed_asset_types, fixed_assets, fixed_asset_numbering   the fixed asset register (archived, never deleted)
 ├─ fixed_asset_depreciation_runs, fixed_asset_disposals, fixed_asset_depreciation_lines   depreciation runs and disposals, and the months each charged
 ├─ projects, project_tasks, project_time_entries, project_expenses   projects, their tasks, time (whole minutes) and linked expense lines (post nothing; never deleted)
@@ -138,7 +143,9 @@ Creating an organisation (server admins only):
 3. applies the tenant migrations,
 4. seeds `organisation_settings`, a starting NZ chart of accounts and the
    standard NZ GST codes (each only if there are none yet),
-5. marks it `ready`.
+5. gives the first owner payroll access, once (`organisation_settings.payroll_access_started_at`
+   records it; also run after migrations at start-up so upgraded organisations get it),
+6. marks it `ready`.
 
 Every step is idempotent. If any step fails the organisation is marked
 `failed` with the error, and **Repair** (`POST /api/admin/organisations/:id/repair`)
@@ -154,6 +161,8 @@ re-runs the whole sequence.
   database, and is checksummed. **Never edit a released migration; add a new
   one.** An edited migration or a database newer than the code stops that
   database from being migrated.
+- Tenant migration numbers are unique across active branches; coordinate the
+  next number with the other open branches before adding a tenant migration.
 - The core database migrates first; if it fails, the server doesn't start.
 - Each organisation then migrates on its own. A failure marks that
   organisation `failed` and blocks it (not half-upgraded); others carry on.
@@ -244,6 +253,20 @@ Per organisation (lowest to highest):
 | bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add and archive exchange rates; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add notes and files, and edit, delete or remove their own |
 | admin | + approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, closing a month with checks that need attention (after confirming) and reopening months (with a reason) on Period close, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
+
+**Payroll access** is a separate permission, not a role (examples PE9-PE12).
+An admin gives it to, or removes it from, named members (Settings › Payroll
+access); it needs the bookkeeper role or higher, and admins and owners don't
+get it automatically. It's kept in the organisation's own database
+(`payroll_access`, keyed by the core user id), and every grant and removal is
+in `audit_events` with who did it. The first owner has it from the start, the
+last current member who has it and can use it (bookkeeper or higher)
+can't lose it, and someone removed from the
+organisation and added again starts without it. Every payroll service calls
+`requirePayrollAccess(tx)` (`src/lib/payroll/access.ts`) first, and payroll
+routes use `withPayrollAccess()` (`src/lib/api/http.ts`: bookkeeper and
+payroll access); pay runs and payroll reports must do the same. Audit
+details for payroll never include IRD numbers, bank accounts or pay amounts.
 
 People who aren't members get "not found", so organisation IDs can't be
 probed. Every audit record stores the signed-in user, never a name typed into
@@ -689,6 +712,16 @@ Enforced by the app (and covered by tests):
   (manual journals only); a trigger checks every key is a field for that
   kind of record, and `src/lib/custom-fields/` checks types, options and
   required fields. They never reach posting, reports or the GST return.
+  `custom_field_sections` (tenant migration 0053) are named, ordered groups
+  per kind of record (contact, document, person, opportunity); a field's
+  `section_id` must be a section for its own kind (trigger). CRM people and
+  opportunities have their own `custom_fields` column (kinds `person` and
+  `opportunity`), and contact fields can be used on prospects (the
+  migration leaves existing fields where they were). Each use needs its
+  module: prospects, people and opportunities need the CRM switch,
+  everything else Advanced reporting; with the switch off, kept values stay
+  but new ones are refused. Setting up a field needs the switch for each
+  place being added, and otherwise for one of the places it's already on.
 - Apps: Accounting (with Tax) is under `/operations`, the CRM under `/crm`.
   Each has its own layout (`src/app/operations/layout.tsx`,
   `src/app/crm/layout.tsx`) that loads the signed-in user and their
@@ -840,6 +873,20 @@ Enforced by the app (and covered by tests):
   The GST audit report (`gst-audit.ts`) only groups the GST return's own
   counted lines (`calculateGstReturn`, or a filed return's stored lines),
   so it can't disagree with the return.
+- IRD payroll rates (PR1-PR16, payroll stage P2) are national figures, the
+  same for every organisation, so they're versioned data in the code
+  (`src/lib/payroll/rates/`, one file per edition of IRD's Payroll
+  Calculations and Business Rules Specification), not a table in the core or
+  an organisation's database: no migration. Each value has its own
+  from/to dates and a source (section and page), and each edition records
+  the IRD documents' names, editions, URLs, read dates and SHA-256 hashes.
+  `payrollRatesOn(payDate)` picks the values in effect on the pay date and
+  refuses dates no edition covers. The calculations
+  (`src/lib/payroll/calculations.ts`: PAYE, ACC earners' levy, student loan,
+  KiwiSaver, ESCT) are pure functions (no database, no network) and
+  truncate as IRD's rules say, using `truncate` and `divideTruncated` in
+  `money/decimal.ts`. Adding a year is a new data file: see the README in
+  that folder. Nothing calls them yet; pay runs (P3) will.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 

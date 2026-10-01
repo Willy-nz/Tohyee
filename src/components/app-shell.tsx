@@ -15,7 +15,7 @@ import {
 } from "./workspace";
 
 /** An optional module a menu or link belongs to (example MOD1); shown only while it's on. */
-type ModuleKey = "crm" | "reporting";
+type ModuleKey = "crm" | "reporting" | "notForProfit";
 type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
 type MenuGroup = { heading?: string; links: MenuLink[] };
 /** `area`: the paths that show the menu as current (default: AREAS by its label). */
@@ -91,6 +91,18 @@ const MENUS: Menu[] = [
     ],
   },
   {
+    label: "Payroll",
+    groups: [
+      {
+        links: [
+          { href: "/operations/payroll/employees", label: "Employees", minRole: "bookkeeper" },
+          { href: "/operations/payroll/groups", label: "Pay groups and employee groups", minRole: "bookkeeper" },
+          { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
+        ],
+      },
+    ],
+  },
+  {
     label: "Reporting",
     groups: [
       {
@@ -119,6 +131,14 @@ const MENUS: Menu[] = [
           { href: "/operations/reports?view=drafts", label: "Drafts" },
           { href: "/operations/reports?view=published", label: "Published" },
           { href: "/operations/reports?view=archived", label: "Archived" },
+        ],
+      },
+      {
+        heading: "Not-for-profit",
+        links: [
+          { href: "/operations/settings/tracking", label: "Set up fund tracking", minRole: "admin", module: "notForProfit" },
+          { href: "/operations/reports?report=pnl", label: "Fund activity", module: "notForProfit" },
+          { href: "/operations/budgets", label: "Budgets by fund", module: "notForProfit" },
         ],
       },
     ],
@@ -151,6 +171,7 @@ const MENUS: Menu[] = [
           { href: "/operations/settings/import", label: "Import and export", minRole: "admin" },
           { href: "/operations/settings/email", label: "Email", minRole: "admin" },
           { href: "/operations/settings/sales-platforms", label: "Sales platforms" },
+          { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
           { href: "/operations/fixed-assets/types", label: "Fixed asset types", minRole: "admin" },
           { href: "/operations/members", label: "People and roles", minRole: "admin" },
         ],

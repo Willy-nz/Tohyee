@@ -5,6 +5,7 @@ import { type OrgRunner, type OrgTx, withOrganisationTransaction } from "@/lib/d
 import { HttpError, ValidationError } from "@/lib/errors";
 import type { Membership } from "@/lib/organisations/registry";
 import { parseOrganisationId } from "@/lib/organisations/registry";
+import { PAYROLL_MINIMUM_ROLE, requirePayrollAccess } from "@/lib/payroll/access";
 import { addPersonNames, loadMemberNames } from "@/lib/people/names";
 
 export function json(data: unknown, init: { status?: number; headers?: HeadersInit } = {}) {
@@ -100,6 +101,23 @@ export async function withOrganisation<T>(
     { people },
   );
   return addPersonNames(result, people);
+}
+
+/**
+ * `withOrganisation` for payroll: the bookkeeper role or higher and payroll
+ * access (examples PE9-PE12). Use it for every payroll route that reads or
+ * changes pay details, allocations, rate history, IRD numbers, bank
+ * accounts, pay runs or payroll reports.
+ */
+export async function withPayrollAccess<T>(
+  request: Request,
+  organisationIdInput: unknown,
+  work: (tx: OrgTx, context: { auth: AuthContext; membership: Membership }) => Promise<T>,
+): Promise<T> {
+  return withOrganisation(request, organisationIdInput, PAYROLL_MINIMUM_ROLE, async (tx, context) => {
+    await requirePayrollAccess(tx);
+    return work(tx, context);
+  });
 }
 
 /**

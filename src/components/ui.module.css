@@ -662,3 +662,32 @@
   border-radius: var(--radius-small);
   background: var(--success-soft);
 }
+
+/* A named group of custom fields on a record's page or form (CRMF6). */
+.fieldSection {
+  display: grid;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+}
+
+.fieldSection > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fieldValues {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.fieldValues dt {
+  color: var(--muted);
+}
+
+.fieldValues dd {
+  margin: 0;
+}

@@ -39,6 +39,22 @@ that something happened.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
+- **Payroll employee records** (PE1-PE12; examples not yet approved by Jess):
+  employee details, pay frequency, tax code, student loan and KiwiSaver
+  settings; IRD numbers and bank accounts are encrypted. Employees are
+  archived, never deleted. Job title, reports-to, pay groups (each with a pay
+  frequency) and employee groups. **Pay rate history**: salary or hourly rate
+  from a date, kept for ever; the current rate is the one in effect today.
+  **Cost allocation**: where each employee's pay is charged, split by % across
+  Department, Class, Location and a project (an R&D activity comes with the
+  RDTI register), totalling exactly 100.00%, from a date, keeping the history;
+  the employee list shows each person's primary department. Splitting an amount
+  shares out the cents so the parts always add back to the whole. **Payroll
+  access**: only members an admin has given it to (bookkeeper or higher) can
+  see or change any of this; the first owner has it to start with. Pay
+  calculation, pay runs (which will use the allocation and rate in effect),
+  approval, payment, payslips, payday filing, payroll reports and Holidays Act
+  leave are not built.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
@@ -545,9 +561,14 @@ that something happened.
   (7020); an account with postings from before gets its foreign balance
   entered once as at a date; revaluation uses the stored foreign balance
   (examples FXB1-FXB11, not yet approved by Jess).
-- **Modules**: Accounting and Tax are always on; the **CRM** and
-  **Advanced reporting** are switched on per organisation in Settings, and
-  their menus and screens show only while on (MOD1).
+- **Modules**: Accounting and Tax are always on; the **CRM**, **Advanced
+  reporting** and **Not-for-profit** modules are switched on per organisation
+  in Settings. Their module-specific menus show only while on (MOD1, NFP1).
+  Not-for-profit reuses tracking categories, budgets and custom reports for
+  fund activity. Fund equity carryforward, conditional grant accounting,
+  donation tax-credit receipts and compliant Tier 3/4 PBE reports are not
+  supported; see the NFP examples and questions in
+  `docs/ACCOUNTING-EXAMPLES.md`.
 - **CRM** (after [Twenty](https://github.com/twentyhq/twenty), built in):
   its **own app** at `/crm`, with its own top bar and tabs (Home, Companies,
   People, Pipeline, Tasks, Email and calendar; a ☰ menu on phones), the same
@@ -567,6 +588,22 @@ that something happened.
   assignees; logged **calls, meetings and notes**; and a **timeline** per
   company that also shows its invoices, credit notes, bills and payments.
   People, opportunities, tasks and activities are never deleted (CRM1-CRM9).
+  **CRM custom fields** (like Salesforce's): the organisation's own fields
+  on companies (contact fields used on prospects), people and
+  opportunities, with the same types, required fields, defaults and
+  archiving as other custom fields, in named, ordered **sections** per kind
+  of record (shown as groups that can be collapsed on the company page and
+  the people and opportunity forms; sections only group fields, they don't
+  hide them). Fields shown in lists are columns on the Companies and People
+  lists and lines on the pipeline cards, and changes are in each record's
+  history. Prospects only get the fields an admin turns on for prospects;
+  existing customer fields, required or not, stay off them. They need only
+  the CRM switch, not Advanced reporting (decided by Jess, 1 Oct 2026);
+  accounting fields still need Advanced reporting, and with it off behave
+  as before. A field that's already somewhere can be changed while one of
+  its places is switched on, so customer fields can still be changed with
+  the CRM off. They never change an amount, account, stage or the invoice
+  a won opportunity makes (CRMF1-CRMF12, not yet approved).
   **Email and calendar sync**: each member connects their own Gmail or
   Microsoft 365 mailbox (read-only, through the organisation's own Google or
   Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
@@ -588,8 +625,8 @@ that something happened.
   TC1-TC10. Admins can add up to 20 **custom segments** of their own (like
   Grant or Project) that work the same way and can be archived (CS1-CS3).
   **Custom fields** (like NetSuite's) add the organisation's own fields to
-  contacts (customers, suppliers or both), to the top of documents, or to
-  their lines: text, long text, whole and decimal numbers, money, percent,
+  contacts (customers, suppliers, prospects or a mix), to the top of
+  documents, or to their lines, grouped into named sections if wanted: text, long text, whole and decimal numbers, money, percent,
   date, check box, list, multiple select, email, phone and web address, each
   optionally required, with a default and shown as a column in lists.
   Fields and list options are archived, never deleted, and never reach the
@@ -771,6 +808,20 @@ that something happened.
     on a real Windows computer.
   Each shows the address with a QR code, Copy address, Open and Turn off.
 - **Update check** against GitHub releases.
+- **NZ payroll rates and calculations** (payroll stage P2, PR1-PR16, not yet
+  approved by Jess): IRD's payroll figures for pay dates 1 April 2025 to 31
+  March 2027, from IRD's Payroll Calculations and Business Rules
+  Specification (2025-26 and 2026-27 editions), as dated data in
+  `src/lib/payroll/rates/`, and pure functions for one pay's PAYE (tax codes
+  M, ME, SB, S, SH, ST, SA, ND, NSW, CAE, EDW and their SL versions,
+  including the ACC earners' levy and the independent earner tax credit),
+  student loan deductions, KiwiSaver employee and employer contributions,
+  the ESCT rate and ESCT. Weekly, fortnightly, four-weekly and monthly pays.
+  The tests use IRD's own examples (the specification, IR335, KS4) and 976
+  rows of IRD's PAYE deduction tables IR340 and IR341, which match exactly.
+  Refused rather than guessed: STC and WT tax codes, other pay frequencies,
+  pay dates outside those two years, ESCT threshold amounts between IRD's
+  bands. There's no screen, and nothing uses them yet: pay runs come next.
 
 ## Not built yet, on purpose
 
@@ -825,7 +876,9 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll.
+4. NZ payroll: pay runs, paying, payslips, payday filing and Holidays Act
+   leave (IRD rates and the PAYE, student loan, KiwiSaver and ESCT
+   calculations are built; employee records are in #62).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,
