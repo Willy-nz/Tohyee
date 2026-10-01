@@ -27,6 +27,7 @@ import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode } from "@/lib/invo
 import type { ItemList } from "@/lib/items/service";
 import type { PurchaseOrder, PurchaseOrderStatus } from "@/lib/purchase-orders/service";
 import type { TaxCode } from "@/lib/tax/codes";
+import { codesForSide } from "@/lib/tax/available-on";
 import type { TrackingSetup } from "@/lib/tracking/service";
 
 export function PurchaseOrderStatusBadge({ status }: { status: PurchaseOrderStatus }) {
@@ -85,7 +86,7 @@ export function PurchaseOrderEditor({
         accounts: accounts.data.accounts,
         items: items.data,
         contacts: contacts.data.contacts,
-        taxCodes: taxCodes.data.taxCodes,
+        taxCodes: codesForSide(taxCodes.data.taxCodes, "purchases"),
         tracking: tracking.data,
         customSetup: customSetup.data,
       }}

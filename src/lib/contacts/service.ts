@@ -18,6 +18,7 @@ import {
   resolveSupplierPaymentTerm,
 } from "@/lib/customers/service";
 import { findCountry, HOME_COUNTRY } from "@/lib/contacts/countries";
+import { type AvailableOn, isAvailableOn, onlyWords } from "@/lib/tax/available-on";
 import { parseCurrencyCode } from "@/lib/money/currency";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { resolveDefaultSalesperson } from "@/lib/salespeople/service";
@@ -204,9 +205,11 @@ function parseCountry(input: unknown, label: string, blank: string | null): stri
 /**
  * The contact's default sales tax code (EX5) or purchase tax code (EX16,
  * EX21): blank for none, else an active tax code (matched ignoring case; the
- * one it already has may be kept though inactive). Tohyee's tax codes aren't
- * split into sales and purchase codes, so any active code will do on either
- * side (EX22). Returns its id and code, or undefined when not sent.
+ * one it already has may be kept though inactive) available on that side:
+ * Sales or Both for the sales default, Purchases or Both for the purchase
+ * one (TAO7, like NetSuite: a vendor's default "must be available on purchase
+ * transactions"). The database checks it too. Returns its id and code, or
+ * undefined when not sent.
  */
 async function resolveDefaultTaxCode(
   tx: OrgTx,
@@ -217,14 +220,19 @@ async function resolveDefaultTaxCode(
   if (input === undefined) return undefined;
   const code = optionalString(input, side === "sales" ? "defaultSalesTaxCode" : "defaultPurchaseTaxCode", { maxLength: 20 });
   if (code === null) return null;
-  const found = await tx.query<{ id: string; code: string; is_active: boolean }>(
-    "select id, code, is_active from tax_codes where upper(code) = upper($1)",
+  const found = await tx.query<{ id: string; code: string; is_active: boolean; available_on: AvailableOn }>(
+    "select id, code, is_active, available_on from tax_codes where upper(code) = upper($1)",
     [code],
   );
   const row = found.rows[0];
   if (!row) throw new ValidationError(`There's no tax code ${code}.`);
   if (!row.is_active && row.code !== kept) {
     throw new ValidationError(`Tax code ${row.code} is inactive, so it can't be a contact's default ${side} tax code.`);
+  }
+  if (!isAvailableOn(row.available_on, side === "sales" ? "sales" : "purchases")) {
+    throw new ValidationError(
+      `Tax code ${row.code} is available on ${onlyWords(row.available_on)}, so it can't be a contact's default ${side} tax code. Choose a code available on ${side === "sales" ? "sales" : "purchases"}.`,
+    );
   }
   return { id: row.id, code: row.code };
 }

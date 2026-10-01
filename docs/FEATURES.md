@@ -214,6 +214,20 @@ that something happened.
   journals don't. A new organisation starts with the standard NZ codes
   (GST 15%, Zero rated, Exempt, No GST, from 1 Oct 2010); existing
   organisations with no codes at all were given them by migration 0031.
+- **A tax code's "Available on"** (built overnight 1 Oct 2026 following
+  NetSuite, examples TAO1-TAO12 not yet approved by Jess): **Sales**,
+  **Purchases** or **Both**, chosen when a code is added and changed by
+  admins on the Tax codes screen (audited). Every existing and starting NZ
+  code is Both. Sales lines (invoices, credit notes, quotes, repeating
+  invoices, receive money, project and CRM invoices) take only Sales or Both
+  codes, purchase lines (bills, supplier credit notes, purchase orders,
+  repeating bills, spend money, expense claims) only Purchases or Both,
+  checked on save and approval; approved documents are never checked again,
+  and a draft with a code no longer on its side is refused until it's
+  changed. Editors list only the codes for their side. Contact defaults,
+  items' codes, bank rules and the tax code for exports must be on their
+  side, and a code's Available on can't change while one of those uses it on
+  the side it would lose (the refusal lists them).
 - **Sales invoices** in the base currency (or the customer's currency, MC1-MC13): drafts that can be edited and
   deleted, tax-exclusive, tax-inclusive or no-tax amounts, GST worked out and
   rounded per line, approval that numbers the invoice (`INV-0001`, with no
@@ -466,7 +480,7 @@ that something happened.
 - **A supplier's default purchase tax code** (built overnight 1 Oct 2026
   following Xero's contact "Purchase defaults", examples EX16-EX25 not yet
   approved by Jess). Contacts have an optional **default purchase tax code**
-  (any active code; inactive ones refused; audited), separate from the
+  (any active code available on purchases; inactive ones refused; audited), separate from the
   default sales tax code. A new line on a bill, supplier credit note,
   purchase order, repeating bill or spend money starts with it, beating the
   item's and the account's usual code; without one, the usual default as

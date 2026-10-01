@@ -28,6 +28,7 @@ import {
   exchangeRateFor,
   parseRateInput,
 } from "@/lib/fx/documents";
+import { type AvailableOn, sideRefusal } from "@/lib/tax/available-on";
 import type { TaxCategory } from "@/lib/tax/categories";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
@@ -487,7 +488,8 @@ async function resolveDraft(
     is_active: boolean;
     effective_from: string;
     effective_to: string | null;
-  }>("select id, code, rate, category, is_active, effective_from, effective_to from tax_codes where code = any($1::text[])", [
+    available_on: AvailableOn;
+  }>("select id, code, rate, category, is_active, effective_from, effective_to, available_on from tax_codes where code = any($1::text[])", [
     wantedTaxCodes,
   ]);
   const taxCodesByCode = new Map(taxCodes.rows.map((row) => [row.code, row]));
@@ -517,6 +519,9 @@ async function resolveDraft(
       if (!taxCode.is_active) {
         throw new ValidationError(`${label}: tax code ${taxCode.code} is inactive.`);
       }
+      // Only codes available on sales (TAO2-TAO4); a draft with one that no longer is can't be saved or approved (TAO9).
+      const offSide = sideRefusal(label, taxCode.code, taxCode.available_on, "sales");
+      if (offSide) throw new ValidationError(offSide);
       if (
         taxCode.effective_from > draft.creditNoteDate ||
         (taxCode.effective_to !== null && taxCode.effective_to < draft.creditNoteDate)

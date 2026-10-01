@@ -13,6 +13,7 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
 import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode } from "@/lib/invoices/amounts";
 import type { TaxCode } from "@/lib/tax/codes";
+import { isAvailableOn, onlyWords, ruleSides } from "@/lib/tax/available-on";
 
 const DIRECTION_LABELS: Record<BankRule["direction"], string> = { any: "Money in or out", in: "Money in", out: "Money out" };
 const FIELD_LABELS: Record<BankRule["matchField"], string> = {
@@ -180,10 +181,15 @@ function RuleForm({
             <select value={current.taxCode} onChange={(event) => set({ taxCode: event.target.value })} required>
               <option value="">Choose</option>
               {taxCodes.data.taxCodes
-                .filter((taxCode) => taxCode.isActive || taxCode.code === current.taxCode)
+                // Money in is receive money (sales), out spend money (purchases); either needs a code for both (TAO8).
+                .filter(
+                  (taxCode) =>
+                    (taxCode.isActive && ruleSides(current.direction).every((side) => isAvailableOn(taxCode.availableOn, side))) ||
+                    taxCode.code === current.taxCode,
+                )
                 .map((taxCode) => (
                   <option key={taxCode.id} value={taxCode.code}>
-                    {taxCode.code} ({formatRate(taxCode.rate)})
+                    {taxCode.code} ({formatRate(taxCode.rate)}){taxCode.availableOn === "both" ? "" : ` (${onlyWords(taxCode.availableOn)})`}
                   </option>
                 ))}
             </select>

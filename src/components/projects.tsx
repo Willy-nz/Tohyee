@@ -25,6 +25,7 @@ import type {
   TimeReport,
 } from "@/lib/projects/service";
 import type { TaxCode } from "@/lib/tax/codes";
+import { codesForSide } from "@/lib/tax/available-on";
 import { useExportSettings } from "@/components/exports";
 import { contactSalesTaxCode } from "@/lib/tax/exports";
 
@@ -730,12 +731,14 @@ function InvoiceCard({ organisationId, project, onChanged }: { organisationId: s
   const exportSettings = useExportSettings(organisationId);
   if (project.status !== "in_progress" || !can("bookkeeper") || all.length === 0) return null;
   // GST on a foreign-currency invoice works as on an NZD one (MC71).
-  const activeTax = (taxCodes.data?.taxCodes ?? []).filter((code) => code.isActive);
+  // Only codes available on sales (TAO6).
+  const salesCodes = codesForSide(taxCodes.data?.taxCodes ?? [], "sales");
+  const activeTax = salesCodes.filter((code) => code.isActive);
   const account = accountCode ?? (accounts.data?.accounts ?? []).find((entry) => entry.isActive && entry.accountClass === "revenue")?.code ?? "";
   const customer = contacts.data?.contacts.find((contact) => contact.id === project.contactId);
   const tax =
     taxCode ??
-    contactSalesTaxCode(customer, exportSettings.data, taxCodes.data?.taxCodes ?? []) ??
+    contactSalesTaxCode(customer, exportSettings.data, salesCodes) ??
     (activeTax.find((code) => code.category === "standard") ?? activeTax[0])?.code ??
     "";
   const ticked = (id: string) => !unticked.has(id);

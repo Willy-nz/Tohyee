@@ -20,6 +20,7 @@ export const POST = route(async (request) => {
       rate: body.rate,
       effectiveFrom: body.effectiveFrom,
       effectiveTo: body.effectiveTo,
+      availableOn: body.availableOn,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

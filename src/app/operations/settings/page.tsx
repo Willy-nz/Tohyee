@@ -17,6 +17,7 @@ import type { OrganisationSettings } from "@/lib/organisations/settings";
 import { describeGstPeriodSetting, gstPeriodSetting } from "@/lib/reports/gst-boxes";
 import { GST_BASES, GST_BASIS_LABELS, type GstBasis } from "@/lib/tax/categories";
 import type { TaxCode } from "@/lib/tax/codes";
+import { codesForSide, unavailableNote } from "@/lib/tax/available-on";
 
 /** The GST filing frequency choices (GP1): "months:endMonth", or "" for not set. */
 const GST_PERIOD_CHOICES: Array<{ value: string; label: string }> = [
@@ -53,8 +54,10 @@ function SettingsForm({
   const [allowNegativeStock, setAllowNegativeStock] = useState(settings.allowNegativeStock);
   const [foreignTrade, setForeignTrade] = useState(settings.foreignTrade);
   const [exportTaxCode, setExportTaxCode] = useState(settings.exportTaxCode ?? "");
-  // Only zero-rated codes can be the tax code for exports (EX13).
-  const zeroRated = taxCodes.filter((code) => code.category === "zero_rated" && (code.isActive || code.code === settings.exportTaxCode));
+  // Only zero-rated codes available on sales can be the tax code for exports (EX13, TAO7).
+  const zeroRated = codesForSide(taxCodes, "sales").filter(
+    (code) => code.category === "zero_rated" && (code.isActive || code.code === settings.exportTaxCode),
+  );
   const [postalAddress, setPostalAddress] = useState(settings.postalAddress ?? "");
   const [gstNumber, setGstNumber] = useState(settings.gstNumber ? formatGstNumber(settings.gstNumber) : "");
   const [paymentDetails, setPaymentDetails] = useState(settings.paymentDetails ?? "");
@@ -156,7 +159,7 @@ function SettingsForm({
             {exportTaxCode === "" ? <option value="">None</option> : null}
             {zeroRated.map((code) => (
               <option key={code.id} value={code.code}>
-                {code.code} ({code.label}){code.isActive ? "" : " (inactive)"}
+                {code.code} ({code.label}){unavailableNote(code)}
               </option>
             ))}
           </select>

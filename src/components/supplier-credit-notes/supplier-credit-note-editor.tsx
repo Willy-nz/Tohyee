@@ -22,6 +22,7 @@ import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { SupplierCreditNote } from "@/lib/supplier-credit-notes/service";
 import type { TaxCode } from "@/lib/tax/codes";
+import { codesForSide, unavailableNote } from "@/lib/tax/available-on";
 import { retaxLines, usualWithContact } from "@/lib/tax/exports";
 import { contactPurchaseTaxCode } from "@/lib/tax/purchase-defaults";
 import { type CustomFieldSetup, type CustomValues, copyableValuesFor } from "@/lib/custom-fields/values";
@@ -408,7 +409,7 @@ function SupplierCreditNoteForm({
                         .filter((taxCode) => taxCode.isActive || taxCode.code === line.taxCode)
                         .map((taxCode) => (
                           <option key={taxCode.id} value={taxCode.code}>
-                            {taxCode.code} ({formatRate(taxCode.rate)}){taxCode.isActive ? "" : " (inactive)"}
+                            {taxCode.code} ({formatRate(taxCode.rate)}){unavailableNote(taxCode)}
                           </option>
                         ))}
                     </select>
@@ -499,7 +500,7 @@ export function SupplierCreditNoteEditor({
       accounts={accounts.data.accounts}
       items={items.data}
       suppliers={contacts.data.contacts}
-      taxCodes={taxCodes.data.taxCodes}
+      taxCodes={codesForSide(taxCodes.data.taxCodes, "purchases")}
       tracking={tracking.data}
       customSetup={customSetup.data}
       creditNote={creditNote}

@@ -7,6 +7,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { ITEM_TYPES, type ItemType, UNIT_FACTOR_SCALE } from "@/lib/items/pricing";
 import { cmp, dec, parseDecimalInput, toPlainString } from "@/lib/money/decimal";
+import { type AvailableOn, isAvailableOn, onlyWords } from "@/lib/tax/available-on";
 import { advancedFeaturesOn } from "@/lib/tracking/service";
 import {
   asRecord,
@@ -399,12 +400,22 @@ async function resolveAccount(
   return account.id;
 }
 
-async function resolveTaxCode(tx: OrgTx, code: string | null, keptId: string | null): Promise<string | null> {
+/** An item's sales tax code is available on sales, its purchase tax code on purchases (TAO7); the database checks it too. */
+async function resolveTaxCode(tx: OrgTx, code: string | null, keptId: string | null, side: "sales" | "purchases"): Promise<string | null> {
   if (code === null) return null;
-  const found = await tx.query<{ id: string; code: string; is_active: boolean }>("select id, code, is_active from tax_codes where code = $1", [code]);
+  const found = await tx.query<{ id: string; code: string; is_active: boolean; available_on: AvailableOn }>(
+    "select id, code, is_active, available_on from tax_codes where code = $1",
+    [code],
+  );
   const taxCode = found.rows[0];
   if (!taxCode) throw new ValidationError(`There's no tax code ${code}.`);
   if (!taxCode.is_active && taxCode.id !== keptId) throw new ValidationError(`Tax code ${taxCode.code} is inactive.`);
+  if (!isAvailableOn(taxCode.available_on, side)) {
+    const word = side === "sales" ? "sales" : "purchase";
+    throw new ValidationError(
+      `Tax code ${taxCode.code} is available on ${onlyWords(taxCode.available_on)}, so it can't be an item's ${word} tax code. Choose a code available on ${side}.`,
+    );
+  }
   return taxCode.id;
 }
 
@@ -570,8 +581,8 @@ export async function createItem(
   const refs: ResolvedRefs = {
     incomeAccountId: await resolveAccount(tx, parsed.incomeAccountCode, "income", null),
     purchaseAccountId: await resolveAccount(tx, parsed.purchaseAccountCode, "purchase", null),
-    salesTaxCodeId: await resolveTaxCode(tx, parsed.salesTaxCode, null),
-    purchaseTaxCodeId: await resolveTaxCode(tx, parsed.purchaseTaxCode, null),
+    salesTaxCodeId: await resolveTaxCode(tx, parsed.salesTaxCode, null, "sales"),
+    purchaseTaxCodeId: await resolveTaxCode(tx, parsed.purchaseTaxCode, null, "purchases"),
   };
   let itemId: string;
   try {
@@ -631,8 +642,8 @@ export async function updateItem(tx: OrgTx, itemIdInput: unknown, input: ItemInp
   const refs: ResolvedRefs = {
     incomeAccountId: await resolveAccount(tx, parsed.incomeAccountCode, "income", kept.incomeAccountId),
     purchaseAccountId: await resolveAccount(tx, parsed.purchaseAccountCode, "purchase", kept.purchaseAccountId),
-    salesTaxCodeId: await resolveTaxCode(tx, parsed.salesTaxCode, kept.salesTaxCodeId),
-    purchaseTaxCodeId: await resolveTaxCode(tx, parsed.purchaseTaxCode, kept.purchaseTaxCodeId),
+    salesTaxCodeId: await resolveTaxCode(tx, parsed.salesTaxCode, kept.salesTaxCodeId, "sales"),
+    purchaseTaxCodeId: await resolveTaxCode(tx, parsed.purchaseTaxCode, kept.purchaseTaxCodeId, "purchases"),
   };
   try {
     await tx.query(

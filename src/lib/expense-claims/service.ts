@@ -9,6 +9,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { calculateInvoice, invoicePaymentStatus, type PaidStatus } from "@/lib/invoices/amounts";
+import { type AvailableOn, sideRefusal } from "@/lib/tax/available-on";
 import { type ControlAccount, controlAccountCode, GST_ACCOUNT } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
@@ -377,8 +378,8 @@ async function resolveReceipts(tx: OrgTx, receipts: ReceiptInput[], kept: Readon
     [[...new Set(receipts.map((receipt) => receipt.accountCode.toLowerCase()))]],
   );
   const accountsByCode = new Map(accounts.rows.map((row) => [row.code.toLowerCase(), row]));
-  const taxCodes = await tx.query<{ id: string; code: string; rate: string; is_active: boolean; effective_from: string; effective_to: string | null }>(
-    "select id::text, code, rate::text, is_active, effective_from, effective_to from tax_codes where code = any($1::text[])",
+  const taxCodes = await tx.query<{ id: string; code: string; rate: string; is_active: boolean; effective_from: string; effective_to: string | null; available_on: AvailableOn }>(
+    "select id::text, code, rate::text, is_active, effective_from, effective_to, available_on from tax_codes where code = any($1::text[])",
     [[...new Set(receipts.flatMap((receipt) => (receipt.taxCode ? [receipt.taxCode] : [])))]],
   );
   const taxCodesByCode = new Map(taxCodes.rows.map((row) => [row.code, row]));
@@ -403,6 +404,9 @@ async function resolveReceipts(tx: OrgTx, receipts: ReceiptInput[], kept: Readon
       const taxCode = taxCodesByCode.get(receipt.taxCode);
       if (!taxCode) throw new ValidationError(`${label}: there's no tax code ${receipt.taxCode}.`);
       if (!taxCode.is_active) throw new ValidationError(`${label}: tax code ${taxCode.code} is inactive.`);
+      // Receipts are purchases (TAO4).
+      const offSide = sideRefusal(label, taxCode.code, taxCode.available_on, "purchases");
+      if (offSide) throw new ValidationError(offSide);
       if (taxCode.effective_from > receipt.receiptDate || (taxCode.effective_to !== null && taxCode.effective_to < receipt.receiptDate)) {
         throw new ValidationError(`${label}: tax code ${taxCode.code} isn't in effect on ${receipt.receiptDate}.`);
       }

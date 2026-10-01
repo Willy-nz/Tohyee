@@ -30,6 +30,7 @@ import type { RepeatingBill } from "@/lib/repeating/bills";
 import type { SaveAs } from "@/lib/repeating/runner";
 import { datesBetween, type RepeatPeriod } from "@/lib/repeating/schedule";
 import type { TaxCode } from "@/lib/tax/codes";
+import { codesForSide } from "@/lib/tax/available-on";
 import type { TrackingSetup } from "@/lib/tracking/service";
 
 /** Short enough for the select; the preview below spells out each due date. */
@@ -82,7 +83,7 @@ export function RepeatingBillEditor({
         accounts: accounts.data.accounts,
         items: items.data,
         contacts: contacts.data.contacts,
-        taxCodes: taxCodes.data.taxCodes,
+        taxCodes: codesForSide(taxCodes.data.taxCodes, "purchases"),
         tracking: tracking.data,
         customSetup: customSetup.data,
       }}

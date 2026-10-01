@@ -29,6 +29,7 @@ import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { COUNTRY_CHOICES, countryName, HOME_COUNTRY } from "@/lib/contacts/countries";
 import type { TaxCode } from "@/lib/tax/codes";
+import { codesForSide, unavailableNote } from "@/lib/tax/available-on";
 import { formatRate } from "@/lib/documents/format";
 import { exportLabel } from "@/lib/tax/exports";
 
@@ -331,11 +332,11 @@ function ContactForm({
           >
             <select value={draft.defaultSalesTaxCode} onChange={(event) => setDraft({ ...draft, defaultSalesTaxCode: event.target.value })}>
               <option value="">None (the usual default)</option>
-              {taxCodes
+              {codesForSide(taxCodes, "sales")
                 .filter((code) => code.isActive || code.code === draft.defaultSalesTaxCode)
                 .map((code) => (
                   <option key={code.id} value={code.code}>
-                    {code.code} ({formatRate(code.rate)}){code.isActive ? "" : " (inactive)"}
+                    {code.code} ({formatRate(code.rate)}){unavailableNote(code)}
                   </option>
                 ))}
             </select>
@@ -380,11 +381,11 @@ function ContactForm({
           >
             <select value={draft.defaultPurchaseTaxCode} onChange={(event) => setDraft({ ...draft, defaultPurchaseTaxCode: event.target.value })}>
               <option value="">None (the usual default)</option>
-              {taxCodes
+              {codesForSide(taxCodes, "purchases")
                 .filter((code) => code.isActive || code.code === draft.defaultPurchaseTaxCode)
                 .map((code) => (
                   <option key={code.id} value={code.code}>
-                    {code.code} ({formatRate(code.rate)}){code.isActive ? "" : " (inactive)"}
+                    {code.code} ({formatRate(code.rate)}){unavailableNote(code)}
                   </option>
                 ))}
             </select>
