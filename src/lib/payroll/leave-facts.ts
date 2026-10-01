@@ -4,7 +4,7 @@ import { ValidationError } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
 import { add, dec, type Decimal, isPositive, mul, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import type { PayFrequency } from "@/lib/payroll/groups";
-import { annualEntitlement, annualEntitlementDates, divisorReduction, employedTwelveMonths, entitlementYear, type UnpaidLeave } from "@/lib/payroll/leave/annual";
+import { annualEntitlement, divisorReduction, employedTwelveMonths, entitlementYear, type UnpaidLeave } from "@/lib/payroll/leave/annual";
 import { addDays, addMonths, eachDay, laterOf, weekdayIndex } from "@/lib/payroll/leave/dates";
 import {
   averageDailyPay,
@@ -18,9 +18,10 @@ import {
   type PeriodEarnings,
   twelveMonthsTo,
 } from "@/lib/payroll/leave/earnings";
-import { addLeave, type LeaveQuantity, leaveHours, NO_LEAVE, subtractLeave } from "@/lib/payroll/leave/quantity";
+import { annualDatesWithOpening, openingDaysBetween, type OpeningEarningsRow } from "@/lib/payroll/leave/opening";
+import { addLeave, type LeaveQuantity, leaveHours, leaveUnits, NO_LEAVE, subtractLeave } from "@/lib/payroll/leave/quantity";
 import { NOT_SUPPORTED } from "@/lib/payroll/leave/rules";
-import { familyViolenceLeaveBalance, hoursTestMet, sickEntitlementDates, sickLeaveBalance, type DayLeaveEvent } from "@/lib/payroll/leave/sick";
+import { type DayLeaveEvent, days, familyViolenceLeaveBalance, hoursTestMet, sickEntitlementDates, sickLeaveBalance } from "@/lib/payroll/leave/sick";
 import { ordinaryWeeklyPay, relevantDailyPay, usualHoursOn, weekHours, type PayRateBasis } from "@/lib/payroll/leave/work-pattern";
 import type { LeaveSettings } from "@/lib/payroll/leave-settings";
 import { payRateOn } from "@/lib/payroll/pay-rates";
@@ -69,7 +70,33 @@ export type LeaveLine = {
   basis: Record<string, unknown>;
 };
 
-export type ApprovedPeriod = PeriodEarnings & { payRunId: string; reference: string; payDate: string };
+export type ApprovedPeriod = PeriodEarnings & {
+  payRunId: string;
+  reference: string;
+  payDate: string;
+  /** An earnings row from opening balances (decision 168), not one of Tohyee's pay runs: its days worked or on paid leave (s 9A(2)). */
+  openingDays?: number;
+};
+
+/** Opening leave balances from another payroll (decision 168; HL43): as at the end of `asAt`. */
+export type OpeningFacts = {
+  id: string;
+  asAt: string;
+  annual: LeaveQuantity;
+  annualWeeks: string;
+  annualWeekHours: string;
+  annualLastEntitled: string | null;
+  annualCashedUpWeeks: string;
+  annualAdvancePaid: string;
+  sickDays: string;
+  familyViolenceDays: string;
+  alternativeHolidays: string[];
+  earnings: OpeningEarningsRow[];
+  source: string;
+  reportFileId: string;
+  createdAt: string;
+  createdByEmail: string;
+};
 
 export type EmployeeFacts = {
   id: string;
@@ -90,6 +117,10 @@ export type EmployeeFacts = {
   settings: LeaveSettings[];
   noCashUps: boolean;
   organisationRegion: string | null;
+  /** Opening balances, when the employee has them (decision 168). */
+  opening: OpeningFacts | null;
+  /** Why the opening balances can't be used (an approved pay period over their earnings rows), or null. */
+  openingProblem: string | null;
 };
 
 type LineRow = {
@@ -170,6 +201,7 @@ export async function loadEmployeeFacts(tx: OrgTx, employeeId: string, settings:
   const organisation = await tx.query<{ payroll_anniversary_region: string | null; payroll_no_cash_ups: boolean }>(
     "select payroll_anniversary_region, payroll_no_cash_ups from organisation_settings where id = true",
   );
+  const opening = await loadOpening(tx, employeeId);
   const timesheetHours = new Map<string, string>();
   const timesheetWeeks = new Set<string>();
   for (const entry of timesheets.rows) {
@@ -178,35 +210,120 @@ export async function loadEmployeeFacts(tx: OrgTx, employeeId: string, settings:
       timesheetWeeks.add(entry.week_start);
     }
   }
+  const approvedPeriods: ApprovedPeriod[] = periods.rows.map((period) => ({
+    payRunId: period.pay_run_id,
+    reference: payRunReference(period.run_number),
+    payDate: period.pay_date,
+    periodStart: period.period_start,
+    periodEnd: period.period_end,
+    gross: period.gross,
+    irregular: period.irregular,
+  }));
+  // Opening earnings rows count as pay periods before Tohyee's own (decision 168).
+  const openingRows: ApprovedPeriod[] = (opening?.earnings ?? []).map((earning) => ({
+    payRunId: "",
+    reference: "Opening balances",
+    payDate: earning.periodEnd,
+    periodStart: earning.periodStart,
+    periodEnd: earning.periodEnd,
+    gross: earning.gross,
+    irregular: earning.irregular,
+    openingDays: earning.days,
+  }));
+  let openingProblem: string | null = null;
+  for (const earning of openingRows) {
+    const over = approvedPeriods.find((period) => period.periodStart <= earning.periodEnd && period.periodEnd >= earning.periodStart);
+    if (over) {
+      openingProblem = `${NOT_SUPPORTED}: leave for ${row.name}, whose opening earnings row from ${formatDate(earning.periodStart)} overlaps ${over.reference} (${formatDate(over.periodStart)} to ${formatDate(over.periodEnd)}); replace the opening balances or void that pay run.`;
+      break;
+    }
+  }
+  const allPeriods = [...openingRows, ...approvedPeriods].sort((a, b) => (a.periodStart < b.periodStart ? -1 : a.periodStart > b.periodStart ? 1 : 0));
   return {
     id: row.id,
     name: row.name,
     startDate: row.start_date,
     finishDate: row.finish_date,
     payFrequency: row.pay_frequency,
-    recordsStart: periods.rows[0]?.period_start ?? null,
-    typedHolidayPay: periods.rows.filter((period) => period.typed_holiday_pay).map((period) => payRunReference(period.run_number)),
+    recordsStart: allPeriods[0]?.periodStart ?? null,
+    // Typed holiday pay on pay runs ending on or before the opening date is covered by the opening balances (decision 168).
+    typedHolidayPay: periods.rows
+      .filter((period) => period.typed_holiday_pay && (!opening || period.period_end > opening.asAt))
+      .map((period) => payRunReference(period.run_number)),
     unpaid: unpaid.rows.map((leave) => ({
       start: leave.start_date,
       end: leave.end_date,
       statutory: leave.reason !== "other",
       agreedToCount: leave.agreed_to_count,
     })),
-    periods: periods.rows.map((period) => ({
-      payRunId: period.pay_run_id,
-      reference: payRunReference(period.run_number),
-      payDate: period.pay_date,
-      periodStart: period.period_start,
-      periodEnd: period.period_end,
-      gross: period.gross,
-      irregular: period.irregular,
-    })),
+    periods: allPeriods,
     lines: lines.rows.map(toLeaveLine),
     timesheetHours,
     timesheetWeeks,
     settings,
     noCashUps: organisation.rows[0]?.payroll_no_cash_ups ?? false,
     organisationRegion: organisation.rows[0]?.payroll_anniversary_region ?? null,
+    opening,
+    openingProblem,
+  };
+}
+
+/** The employee's current opening balances (decision 168), or null. */
+export async function loadOpening(tx: OrgTx, employeeId: string): Promise<OpeningFacts | null> {
+  const result = await tx.query<{
+    id: string;
+    as_at: string;
+    annual_weeks: string;
+    annual_week_hours: string;
+    annual_last_entitled: string | null;
+    annual_cashed_up_weeks: string;
+    annual_advance_paid: string;
+    sick_days: string;
+    family_violence_days: string;
+    alternative_holidays: string[];
+    source: string;
+    report_file_id: string;
+    created_at: string;
+    created_by_email: string;
+  }>(
+    `select id::text, as_at::text, annual_weeks::text, annual_week_hours::text, annual_last_entitled::text, annual_cashed_up_weeks::text,
+            annual_advance_paid::text, sick_days::text, family_violence_days::text,
+            array(select d::text from unnest(alternative_holidays) d order by d) as alternative_holidays,
+            source, report_file_id::text, created_at::text, created_by_email
+       from payroll_leave_opening_balances where employee_id::text = $1 and status = 'current'`,
+    [employeeId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  const earnings = await tx.query<{ period_start: string; period_end: string; gross: string; irregular: string; days: number }>(
+    `select period_start::text, period_end::text, gross::text, irregular::text, days
+       from payroll_leave_opening_earnings where opening_id = $1 order by period_start`,
+    [row.id],
+  );
+  const weekHoursText = toPlainString(dec(row.annual_week_hours));
+  return {
+    id: row.id,
+    asAt: row.as_at,
+    annual: leaveUnits(toPlainString(dec(row.annual_weeks)), weekHoursText),
+    annualWeeks: toPlainString(dec(row.annual_weeks)),
+    annualWeekHours: weekHoursText,
+    annualLastEntitled: row.annual_last_entitled,
+    annualCashedUpWeeks: toPlainString(dec(row.annual_cashed_up_weeks)),
+    annualAdvancePaid: toFixedString(dec(row.annual_advance_paid), 2),
+    sickDays: toPlainString(dec(row.sick_days)),
+    familyViolenceDays: toPlainString(dec(row.family_violence_days)),
+    alternativeHolidays: row.alternative_holidays,
+    earnings: earnings.rows.map((earning) => ({
+      periodStart: earning.period_start,
+      periodEnd: earning.period_end,
+      gross: toFixedString(dec(earning.gross), 2),
+      irregular: toFixedString(dec(earning.irregular), 2),
+      days: Number(earning.days),
+    })),
+    source: row.source,
+    reportFileId: row.report_file_id,
+    createdAt: row.created_at,
+    createdByEmail: row.created_by_email,
   };
 }
 
@@ -252,8 +369,19 @@ export function requireSettingsOn(facts: EmployeeFacts, date: string): LeaveSett
  */
 export function whyLeaveNotKept(facts: EmployeeFacts, recordsStart: string | null): string | null {
   if (facts.settings.length === 0) return `Tohyee doesn't keep ${facts.name}'s leave: set their usual week under Employees › Leave first.`;
+  if (facts.opening) {
+    // Opening balances cover everything to the end of their date (decision 168).
+    if (facts.openingProblem) return facts.openingProblem;
+    if (facts.settings.some((settings) => settings.employmentType === "casual")) {
+      return `${NOT_SUPPORTED}: opening balances for ${facts.name}, who is set to casual (the s 63(1)(b) hours test needs approved timesheets for the 6 months, decision 145).`;
+    }
+    if (facts.typedHolidayPay.length > 0) {
+      return `${NOT_SUPPORTED}: leave for ${facts.name}, who was paid typed holiday pay on ${facts.typedHolidayPay.join(", ")}, after the opening balances' date (${formatDate(facts.opening.asAt)}); Tohyee doesn't know what leave it was for.`;
+    }
+    return null;
+  }
   if (facts.typedHolidayPay.length > 0) {
-    return `${NOT_SUPPORTED}: leave for ${facts.name}, who was paid typed holiday pay on ${facts.typedHolidayPay.join(", ")} (Tohyee doesn't know what leave it was for; opening leave balances need their own worked example).`;
+    return `${NOT_SUPPORTED}: leave for ${facts.name}, who was paid typed holiday pay on ${facts.typedHolidayPay.join(", ")} (Tohyee doesn't know what leave it was for); opening balances as at the end of the last of those pay periods would cover it (decision 168).`;
   }
   // With no pay records yet, Tohyee's records would start now.
   const start = recordsStart ?? facts.recordsStart ?? todayIsoDate();
@@ -262,7 +390,7 @@ export function whyLeaveNotKept(facts: EmployeeFacts, recordsStart: string | nul
     const firstSick = addMonths(facts.startDate, 6);
     const first = firstSick < firstAnnual ? firstSick : firstAnnual;
     if (first < start) {
-      return `${NOT_SUPPORTED}: leave for ${facts.name}, whose leave entitlements began before Tohyee's first pay run for them (${formatDate(start)}); opening leave balances need their own worked example.`;
+      return `${NOT_SUPPORTED}: leave for ${facts.name}, whose leave entitlements began before Tohyee's first pay run for them (${formatDate(start)}), without opening balances; enter them under Payroll › Leave (decision 168).`;
     }
   }
   return null;
@@ -308,7 +436,7 @@ export function assertEarningsKnown(facts: EmployeeFacts, from: string, windowEn
   const start = recordsStart ?? facts.recordsStart;
   if (!start || needed < start) {
     throw new ValidationError(
-      `${NOT_SUPPORTED}: ${what} for ${facts.name} needs pay from ${formatDate(needed)}, before Tohyee's first pay run for them${start ? ` (${formatDate(start)})` : ""}; earnings from before Tohyee need their own worked example.`,
+      `${NOT_SUPPORTED}: ${what} for ${facts.name} needs pay from ${formatDate(needed)}, before ${facts.opening ? "the first opening earnings row" : "Tohyee's first pay run"} for them${start ? ` (${formatDate(start)})` : ""}; ${facts.opening ? "add earlier rows to the opening balances" : "enter opening balances with the earlier earnings (decision 168)"}.`,
     );
   }
   const lastApproved = facts.periods.reduce<string | null>((latest, period) => (!latest || period.periodEnd > latest ? period.periodEnd : latest), null);
@@ -455,8 +583,13 @@ export function daysWorkedOrPaid(facts: EmployeeFacts, from: string, to: string)
   }
   const unpaid = new Set<string>();
   for (const leave of facts.unpaid) for (const date of eachDay(leave.start, leave.end)) unpaid.add(date);
-  let count = 0;
+  let count = openingDaysBetween(
+    facts.opening?.earnings.filter((row) => row.periodEnd >= from && row.periodStart <= to) ?? [],
+    from,
+    to,
+  );
   for (const period of facts.periods) {
+    if (period.openingDays !== undefined) continue;
     for (const date of eachDay(laterOf(period.periodStart, from), period.periodEnd < to ? period.periodEnd : to)) {
       if (date < facts.startDate || (facts.finishDate && date > facts.finishDate)) continue;
       const monday = addDays(date, -weekdayIndex(date));
@@ -483,7 +616,13 @@ export function grossEarningsBetween(facts: EmployeeFacts, from: string, to: str
 
 /** The dates each 4 weeks' annual holidays arose, to `until` (s 16; decision 14). */
 export function annualDates(facts: EmployeeFacts, until: string): string[] {
-  return annualEntitlementDates(facts.startDate, facts.unpaid, until);
+  return annualDatesWithOpening({
+    startDate: facts.startDate,
+    unpaid: facts.unpaid,
+    until,
+    asAt: facts.opening?.asAt ?? facts.startDate,
+    lastEntitled: facts.opening?.annualLastEntitled ?? null,
+  });
 }
 
 /** A leave line's quantity: its hours over its unit hours (decision 8). */
@@ -511,7 +650,7 @@ export type AnnualBalance = {
   nextEntitled: string;
   cashedUpThisYear: Decimal;
   entitlementYear: { from: string; to: string } | null;
-  events: Array<{ date: string; kind: "entitled" | "taken" | "cashed_up" | "paid_out"; quantity: LeaveQuantity; line: LeaveLine | null }>;
+  events: Array<{ date: string; kind: "opening" | "entitled" | "taken" | "cashed_up" | "paid_out"; quantity: LeaveQuantity; line: LeaveLine | null }>;
 };
 
 /**
@@ -522,7 +661,12 @@ export type AnnualBalance = {
  */
 export function annualBalance(facts: EmployeeFacts, on: string, extra: readonly LeaveLine[] = []): AnnualBalance {
   const dates = annualDates(facts, on);
-  const events: AnnualBalance["events"] = dates.map((date) => ({ date, kind: "entitled", quantity: annualEntitlement(weekHoursOn(facts, date)), line: null }));
+  const opening = facts.opening;
+  // With opening balances, entitlements on or before their date are in the opening balance (decision 168).
+  const events: AnnualBalance["events"] = dates
+    .filter((date) => !opening || date > opening.asAt)
+    .map((date) => ({ date, kind: "entitled", quantity: annualEntitlement(weekHoursOn(facts, date)), line: null }));
+  if (opening && opening.asAt <= on) events.push({ date: opening.asAt, kind: "opening", quantity: opening.annual, line: null });
   for (const line of [...facts.lines, ...extra]) {
     if (line.leaveType === "annual" && lineDate(line) <= on) events.push({ date: lineDate(line), kind: "taken", quantity: lineQuantity(line), line });
     if (line.leaveType === "cash_up" && lineDate(line) <= on) events.push({ date: lineDate(line), kind: "cashed_up", quantity: lineQuantity(line), line });
@@ -530,18 +674,21 @@ export function annualBalance(facts: EmployeeFacts, on: string, extra: readonly 
       events.push({ date: lineDate(line), kind: "paid_out", quantity: lineQuantity(line), line });
     }
   }
-  events.sort((a, b) => (a.date === b.date ? (a.kind === "entitled" ? -1 : b.kind === "entitled" ? 1 : 0) : a.date < b.date ? -1 : 1));
+  const order = (kind: string) => (kind === "opening" ? 0 : kind === "entitled" ? 1 : 2);
+  events.sort((a, b) => (a.date === b.date ? order(a.kind) - order(b.kind) : a.date < b.date ? -1 : 1));
   let balance: LeaveQuantity = NO_LEAVE;
-  for (const event of events) balance = event.kind === "entitled" ? addLeave(balance, event.quantity) : subtractLeave(balance, event.quantity);
+  for (const event of events) balance = event.kind === "entitled" || event.kind === "opening" ? addLeave(balance, event.quantity) : subtractLeave(balance, event.quantity);
   const year = entitlementYear(dates, on);
   let cashedUp = ZERO_DECIMAL;
+  // Cashed up before the opening date in the same entitlement year (s 28A(2)(b)).
+  if (year && opening && opening.asAt >= year.from && opening.asAt <= year.to && opening.asAt <= on) cashedUp = dec(opening.annualCashedUpWeeks);
   if (year) {
     for (const event of events) {
       if (event.kind === "cashed_up" && event.date >= year.from && event.date <= year.to) cashedUp = add(cashedUp, dec(event.line?.units ?? "0"));
     }
   }
   const last = dates.at(-1) ?? null;
-  const next = annualEntitlementDates(facts.startDate, facts.unpaid, addMonths(on, 25)).find((date) => date > on) ?? addMonths(on, 12);
+  const next = annualDates(facts, addMonths(on, 25)).find((date) => date > on) ?? addMonths(on, 12);
   return { balance, entitlementDates: dates, lastEntitled: last, nextEntitled: next, cashedUpThisYear: cashedUp, entitlementYear: year, events };
 }
 
@@ -580,7 +727,8 @@ export type DayLeaveBalance = { balance: LeaveQuantity; entitlementDates: string
 export function dayLeaveBalanceOf(facts: EmployeeFacts, type: "sick" | "family_violence", on: string, extra: readonly LeaveLine[] = []): DayLeaveBalance {
   const dates = sickDates(facts, on);
   const taken = [...facts.lines, ...extra].filter((line) => line.leaveType === type).map((line) => ({ date: lineDate(line), quantity: lineQuantity(line) }));
-  const result = type === "sick" ? sickLeaveBalance(dates, taken, on) : familyViolenceLeaveBalance(dates, taken, on);
+  const opening = facts.opening ? { date: facts.opening.asAt, balance: days(type === "sick" ? facts.opening.sickDays : facts.opening.familyViolenceDays) } : null;
+  const result = type === "sick" ? sickLeaveBalance(dates, taken, on, opening) : familyViolenceLeaveBalance(dates, taken, on, opening);
   return { ...result, entitlementDates: dates };
 }
 
@@ -598,10 +746,15 @@ export type AlternativeHoliday = {
  */
 export function alternativeHolidays(facts: EmployeeFacts, on: string, extra: readonly LeaveLine[] = []): AlternativeHoliday[] {
   const all = [...facts.lines, ...extra];
-  const holidays: AlternativeHoliday[] = all
-    .filter((line) => line.leaveType === "public_holiday_worked" && line.basis.alternativeHoliday === true && line.holidayDate && line.holidayDate <= on)
-    .map((line) => ({ arose: line.holidayDate!, payRunReference: line.reference, status: "untaken" as const, on: null }))
-    .sort((a, b) => (a.arose < b.arose ? -1 : 1));
+  const holidays: AlternativeHoliday[] = [
+    // Untaken alternative holidays in the opening balances (decision 168).
+    ...(facts.opening?.alternativeHolidays ?? [])
+      .filter((date) => date <= on)
+      .map((date) => ({ arose: date, payRunReference: "Opening balances", status: "untaken" as const, on: null })),
+    ...all
+      .filter((line) => line.leaveType === "public_holiday_worked" && line.basis.alternativeHoliday === true && line.holidayDate && line.holidayDate <= on)
+      .map((line) => ({ arose: line.holidayDate!, payRunReference: line.reference, status: "untaken" as const, on: null })),
+  ].sort((a, b) => (a.arose < b.arose ? -1 : 1));
   const uses = all
     .filter((line) => ["alternative", "exchange"].includes(line.leaveType) || (line.leaveType === "termination" && line.basis.part === "alternative_holidays"))
     .map((line) => ({ line, date: lineDate(line) }))
@@ -637,7 +790,9 @@ export function lastApprovedEnd(facts: EmployeeFacts): string | null {
 
 /** Leave taken but not yet covered by an entitlement: holiday pay in advance since the last anniversary (s 23(2)(a), s 25(2)(a)). */
 export function advancePaidSince(facts: EmployeeFacts, since: string, extra: readonly LeaveLine[] = []): Decimal {
+  // Holiday pay in advance before the opening date, since the same anniversary (decision 168).
+  const opening = facts.opening && since <= facts.opening.asAt ? dec(facts.opening.annualAdvancePaid) : ZERO_DECIMAL;
   return [...facts.lines, ...extra]
     .filter((line) => line.leaveType === "annual" && line.inAdvance && lineDate(line) >= since)
-    .reduce((total, line) => add(total, dec(line.amount)), ZERO_DECIMAL);
+    .reduce((total, line) => add(total, dec(line.amount)), opening);
 }

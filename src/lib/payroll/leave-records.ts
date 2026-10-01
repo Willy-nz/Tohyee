@@ -48,7 +48,7 @@ function uuid(input: unknown, what: string): string {
 
 export type UploadedFile = { fileName: string; content: Uint8Array };
 
-async function loadSettingsList(tx: OrgTx, employeeId: string): Promise<LeaveSettings[]> {
+export async function loadSettingsList(tx: OrgTx, employeeId: string): Promise<LeaveSettings[]> {
   const dates = await tx.query<{ effective_from: string }>(
     "select distinct effective_from::text from payroll_leave_settings where employee_id::text = $1 order by effective_from desc",
     [employeeId],
@@ -73,7 +73,7 @@ async function keptFacts(tx: OrgTx, employeeIdInput: unknown): Promise<EmployeeF
 }
 
 /** Stores a file kept with a leave record (s 81(4): kept at least 6 years; never deleted). */
-async function storeFile(tx: OrgTx, employeeId: string, purpose: string, file: UploadedFile): Promise<string> {
+export async function storeFile(tx: OrgTx, employeeId: string, purpose: string, file: UploadedFile): Promise<string> {
   const checked = checkAttachment(file.fileName, file.content);
   const inserted = await tx.query<{ id: string }>(
     `insert into payroll_leave_files (employee_id, purpose, file_name, content_type, byte_size, sha256, content, created_by_user_id, created_by_email)
@@ -93,7 +93,7 @@ async function storeFile(tx: OrgTx, employeeId: string, purpose: string, file: U
   return inserted.rows[0].id;
 }
 
-function fileHash(file: UploadedFile | null | undefined): string | null {
+export function fileHash(file: UploadedFile | null | undefined): string | null {
   return file ? `${file.fileName}:${createHash("sha256").update(file.content).digest("hex")}` : null;
 }
 

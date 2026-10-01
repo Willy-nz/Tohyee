@@ -192,6 +192,21 @@ export async function workOutLeave(tx: OrgTx, run: DraftRun, employeeId: string)
   if (notKept) {
     return { usualPay: null, leave: [], problem: pending ? `${pending} is booked, but ${notKept.replace(/\.$/, "")}.` : null, notes: [notKept], kept: false };
   }
+  // Opening balances are as at the end of a day: a pay period up to it is in them, one across it can't be split (decision 168; HL48).
+  if (facts.opening && run.period_start <= facts.opening.asAt) {
+    const asAt = formatDate(facts.opening.asAt);
+    if (run.period_end > facts.opening.asAt) {
+      return {
+        usualPay: null,
+        leave: [],
+        problem: `${NOT_SUPPORTED}: leave for ${facts.name} in a pay period across the opening balances' date (${asAt}); opening balances must be as at the end of a pay period. Replace them.`,
+        notes: [],
+        kept: true,
+      };
+    }
+    const note = `${facts.name}'s opening balances as at ${asAt} cover this pay period's leave, so Tohyee doesn't work it out here.`;
+    return { usualPay: null, leave: [], problem: pending ? `${pending} is booked, but ${note}` : null, notes: [note], kept: false };
+  }
   try {
     return await workOutKept(tx, run, facts, recordsStart, notes);
   } catch (error) {
