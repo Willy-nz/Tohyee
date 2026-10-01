@@ -545,9 +545,14 @@ that something happened.
   (7020); an account with postings from before gets its foreign balance
   entered once as at a date; revaluation uses the stored foreign balance
   (examples FXB1-FXB11, not yet approved by Jess).
-- **Modules**: Accounting and Tax are always on; the **CRM** and
-  **Advanced reporting** are switched on per organisation in Settings, and
-  their menus and screens show only while on (MOD1).
+- **Modules**: Accounting and Tax are always on; the **CRM**, **Advanced
+  reporting** and **Not-for-profit** modules are switched on per organisation
+  in Settings. Their module-specific menus show only while on (MOD1, NFP1).
+  Not-for-profit reuses tracking categories, budgets and custom reports for
+  fund activity. Fund equity carryforward, conditional grant accounting,
+  donation tax-credit receipts and compliant Tier 3/4 PBE reports are not
+  supported; see the NFP examples and questions in
+  `docs/ACCOUNTING-EXAMPLES.md`.
 - **CRM** (after [Twenty](https://github.com/twentyhq/twenty), built in):
   companies are the contacts, which can now also be **prospects**; **people**
   at each company; **opportunities** with Twenty's stages (plus Lost) on a

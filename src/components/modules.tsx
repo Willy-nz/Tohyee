@@ -8,10 +8,10 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { OrganisationSettings } from "@/lib/organisations/settings";
 
 /**
- * Tohyee's four modules (example MOD1): Accounting and Tax are always on; the
- * CRM and Advanced reporting are switched on per organisation.
+ * Accounting and Tax are always on; the other modules are switched on per
+ * organisation.
  */
-export type Modules = { crm: boolean; reporting: boolean };
+export type Modules = { crm: boolean; reporting: boolean; notForProfit: boolean };
 
 const CHANGED = "tohyee:modules-changed";
 
@@ -24,12 +24,16 @@ export function useModules(organisationId: string | null): Modules | null {
     return () => window.removeEventListener(CHANGED, reload);
   }, [reload]);
   if (!settings.data) return null;
-  return { crm: settings.data.settings.crmEnabled, reporting: settings.data.settings.advancedFeatures };
+  return {
+    crm: settings.data.settings.crmEnabled,
+    reporting: settings.data.settings.advancedFeatures,
+    notForProfit: settings.data.settings.notForProfitEnabled,
+  };
 }
 
 type ModuleRow = {
-  key: "crm" | "reporting";
-  setting: "crmEnabled" | "advancedFeatures";
+  key: keyof Modules;
+  setting: "crmEnabled" | "advancedFeatures" | "notForProfitEnabled";
   title: string;
   description: string;
   links: Array<{ href: string; label: string }>;
@@ -58,6 +62,19 @@ const OPTIONAL: ModuleRow[] = [
       { href: "/operations/settings/custom-fields", label: "Custom fields" },
       { href: "/operations/settings/salespeople", label: "Salespeople" },
       { href: "/operations/settings/customers", label: "Customers" },
+    ],
+  },
+  {
+    key: "notForProfit",
+    setting: "notForProfitEnabled",
+    title: "Not-for-profit",
+    description:
+      "Use a Fund tracking category to split income and expenses, and assign budgets to funds. Turn on Advanced reporting too to tag lines. Grant recognition, donation receipts, fund equity balances and PBE reports are not supported yet.",
+    links: [
+      { href: "/operations/settings/tracking", label: "Set up fund tracking" },
+      { href: "/operations/reports?report=pnl", label: "Profit and loss" },
+      { href: "/operations/budgets", label: "Budgets by fund" },
+      { href: "/operations/reports?view=custom", label: "Custom reports" },
     ],
   },
 ];

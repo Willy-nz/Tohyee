@@ -38,7 +38,7 @@ import {
 
 const noContext = undefined as unknown;
 
-/** Examples MOD1 and CRM1-CRM9 in docs/ACCOUNTING-EXAMPLES.md ("Modules and the CRM"). Each test gets its own organisation. */
+/** Examples MOD1, NFP1 and CRM1-CRM9 in docs/ACCOUNTING-EXAMPLES.md ("Modules and the CRM"). Each test gets its own organisation. */
 describeWithDatabase("modules and the CRM", () => {
   let server: TestServer;
   let owner: SessionUser;

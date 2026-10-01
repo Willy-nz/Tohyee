@@ -3731,6 +3731,8 @@ and [Xero's tracking categories](https://central.xero.com/s/article/Set-up-track
 both use transaction classifications to analyse financial activity; Tohyee
 uses its existing tracking tags rather than a duplicate fund dimension. Turn
 on Advanced reporting as well as Not-for-profit to create and use these tags.
+Fund labels are for analysis: they do not change a journal, GST treatment or
+the recognition policy for a grant.
 
 - **NFP1** In June 2026, the Community workshops fund (a value under
   Restricted) earns **1,000.00** in workshop fees and incurs **400.00** in
@@ -3752,20 +3754,30 @@ on Advanced reporting as well as Not-for-profit to create and use these tags.
   year-end schedule is calculated or posted.
 - **Grants and conditional funding**: no grant register, condition tracking,
   deferred-income release or grant-specific recognition is provided. XRB
-  distinguishes conditions from restrictions in [PBE IPSAS 23](https://www.xrb.govt.nz/dmsdocument/3959/);
-  the applicable current Tier 3 policy and documented expectations need
-  confirmation against [PBE SFR-A (NFP)](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/pbe-sfr-a-nfp/).
-  Do not use an ordinary journal as a claim that a grant has been recognised
-  correctly.
-- **Donation tax-credit receipts**: Tohyee does not produce these. Confirm
-  each required field and layout against [IRD's current receipt requirements](https://www.ird.govt.nz/roles/not-for-profits-and-charities/running-your-nfp/requirements-for-creating-donation-receipts)
-  before generating a receipt that donors could rely on.
+  distinguishes conditions from restrictions in [PBE IPSAS 23](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/pbe-ipsas-23/).
+  The predecessor [PBE SFR-A (NFP)](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/pbe-sfr-a-nfp/)
+  and [PBE SFR-C (NFP)](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/pbe-sfr-c-nfp/)
+  apply to earlier reporting periods;
+  XRB's Tier 3 and Tier 4 requirements apply to periods beginning on or after
+  1 April 2024. The current Tier 3 requirements include documented
+  expectations, so the older condition/restriction rule alone is not enough
+  to implement current grants. Confirm the entity's tier, period and grant
+  terms against [XRB Tier 3](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/reporting-requirements-for-tier-3-not-for-profit-entities/)
+  and [Tier 4](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/reporting-requirements-for-tier-4-not-for-profit-entities/)
+  before adding grant recognition. Do not use an ordinary journal as a claim
+  that a grant has been recognised correctly.
+- **Donation tax-credit receipts**: Tohyee does not produce these. IRD's
+  [receipt requirements](https://www.ird.govt.nz/roles/not-for-profits-and-charities/running-your-nfp/requirements-for-creating-donation-receipts)
+  (reviewed 1 Oct 2026) confirm the donor's name, donation amount and date,
+  that the payment is a donation, and the receiving organisation's name and
+  IRD number. Confirm any other particulars and layout against the current
+  IRD guidance before generating a receipt that donors could rely on.
 - **Tier 3 and Tier 4 performance reports**: the standard P&L and balance sheet
   are not PBE SFR-A (NFP) or PBE SFR-C (NFP) performance reports. Service
   performance measures, required statement layouts, accounting policies and
   disclosures are not implemented. Confirm the reporting tier and required
-  measures with Jess against the [XRB Tier 3](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/tier-3/)
-  and [Tier 4](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/tier-4/) requirements.
+  measures with Jess against the [XRB Tier 3](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/reporting-requirements-for-tier-3-not-for-profit-entities/)
+  and [Tier 4](https://www.xrb.govt.nz/standards/accounting-standards/not-for-profit-standards/standards-list/reporting-requirements-for-tier-4-not-for-profit-entities/) requirements.
 - **Incorporated societies**: no society-specific financial statements,
   filing dates or audit checks are implemented. Ask Jess which clients are
   societies, whether they are registered charities, and which reporting

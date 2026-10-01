@@ -8654,4 +8654,12 @@ create trigger tax_codes_available_on_guard
   for each row execute function tohyee_guard_tax_code_available_on();
 `,
   },
+  {
+    version: "0051",
+    name: "not_for_profit_module",
+    sql: `
+alter table organisation_settings
+  add column not_for_profit_enabled boolean not null default false;
+`,
+  },
 ];
