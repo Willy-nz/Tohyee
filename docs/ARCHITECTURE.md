@@ -687,6 +687,17 @@ Enforced by the app (and covered by tests):
   needs its module: prospects, people and opportunities need the CRM
   switch, everything else Advanced reporting; with the switch off, kept
   values stay but new ones are refused.
+- Apps: Accounting (with Tax) is under `/operations`, the CRM under `/crm`.
+  Each has its own layout (`src/app/operations/layout.tsx`,
+  `src/app/crm/layout.tsx`) that loads the signed-in user and their
+  organisations the same way (`src/lib/auth/page-workspace.ts`) and renders
+  `AppShell` for its app, with the app switcher
+  (`src/components/app-switcher.tsx`). The CRM is a sibling of `/operations`
+  rather than a nested layout because a nested layout can only add to the
+  accounting shell, not replace it. Old `/operations/crm/...` URLs redirect
+  (307, query kept) in `next.config.ts`. The CRM's Home reads
+  `GET /api/crm/home` (viewer), which uses `tx.actor`, never the request, for
+  whose work to show.
 - Modules: `organisation_settings.crm_enabled` and `advanced_features`
   (Advanced reporting). The CRM's tables are `crm_people`,
   `crm_opportunities`, `crm_tasks` and `crm_activities` (none deletable);

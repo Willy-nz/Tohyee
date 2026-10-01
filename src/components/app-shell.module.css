@@ -324,3 +324,35 @@
     padding: 16px;
   }
 }
+
+/* The app switcher (Accounting / CRM), beside the brand. */
+.appSwitcher {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  background: #1e293b;
+  padding: 2px;
+}
+
+.appLink {
+  border-radius: 8px;
+  padding: 5px 10px;
+  color: #cbd5e1;
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.appLink:hover {
+  background: rgba(148, 163, 184, 0.16);
+  color: #fff;
+  text-decoration: none;
+}
+
+.appLinkActive,
+.appLinkActive:hover {
+  background: #2563eb;
+  color: #fff;
+}

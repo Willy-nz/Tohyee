@@ -549,7 +549,16 @@ that something happened.
   **Advanced reporting** are switched on per organisation in Settings, and
   their menus and screens show only while on (MOD1).
 - **CRM** (after [Twenty](https://github.com/twentyhq/twenty), built in):
-  companies are the contacts, which can now also be **prospects**; **people**
+  its **own app** at `/crm`, with its own top bar and tabs (Home, Companies,
+  People, Pipeline, Tasks, Email and calendar; a ☰ menu on phones), the same
+  sign-in, organisations and roles. An **app switcher** (Accounting / CRM)
+  beside the Tohyee name in both apps replaces the old CRM menu; it shows
+  only while the CRM is on for the organisation, so people without it never
+  see it. Old `/operations/crm/...` links redirect to the same pages under
+  `/crm`. The CRM's **Home** shows the signed-in person's open opportunities
+  (with a total per currency), their tasks due today or overdue, and the
+  team's ten most recent calls, meetings and notes (CRM10, not yet approved
+  by Jess). Companies are the contacts, which can now also be **prospects**; **people**
   at each company; **opportunities** with Twenty's stages (plus Lost) on a
   drag-and-drop pipeline board, where a won one makes its draft invoice in
   one click (and makes a prospect a customer); an opportunity for a company

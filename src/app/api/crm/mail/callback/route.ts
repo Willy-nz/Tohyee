@@ -12,7 +12,7 @@ export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const origin = requestOrigin(request);
   const back = (query: Record<string, string>) =>
-    new Response(null, { status: 303, headers: { Location: `${origin}/operations/crm/mail?${new URLSearchParams(query)}` } });
+    new Response(null, { status: 303, headers: { Location: `${origin}/crm/mail?${new URLSearchParams(query)}` } });
   try {
     const providerError = url.searchParams.get("error_description") ?? url.searchParams.get("error");
     const state = url.searchParams.get("state");

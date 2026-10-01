@@ -24,6 +24,7 @@ import type {
   Activity,
   ActivityKind,
   CompanySummary,
+  CrmHome,
   Opportunity,
   OpportunityStage,
   Person,
@@ -219,7 +220,7 @@ export function CompaniesPage({ organisationId }: { organisationId: string }) {
         {adding ? (
           <NewProspectForm
             organisationId={organisationId}
-            onSaved={(contact) => router.push(`/operations/crm/companies/${contact.id}`)}
+            onSaved={(contact) => router.push(`/crm/companies/${contact.id}`)}
           />
         ) : null}
         <div className={ui.inlineForm}>
@@ -249,7 +250,7 @@ export function CompaniesPage({ organisationId }: { organisationId: string }) {
                 {companies.data.companies.map((company) => (
                   <tr key={company.contactId}>
                     <td>
-                      <Link href={`/operations/crm/companies/${company.contactId}`}>{company.name}</Link>
+                      <Link href={`/crm/companies/${company.contactId}`}>{company.name}</Link>
                     </td>
                     <td>{kindBadges(company)}</td>
                     <td className={ui.num}>{company.people}</td>
@@ -437,7 +438,7 @@ function PeopleTable({
                 </td>
                 <td>{person.jobTitle ?? ""}</td>
                 {showCompany ? (
-                  <td>{person.contactId ? <Link href={`/operations/crm/companies/${person.contactId}`}>{person.contactName}</Link> : ""}</td>
+                  <td>{person.contactId ? <Link href={`/crm/companies/${person.contactId}`}>{person.contactName}</Link> : ""}</td>
                 ) : null}
                 <td>{person.email ? <a href={`mailto:${person.email}`}>{person.email}</a> : ""}</td>
                 <td>{person.phone ? <a href={`tel:${person.phone}`}>{person.phone}</a> : ""}</td>
@@ -760,7 +761,7 @@ function OpportunityCard({
     >
       <strong>{opportunity.name}</strong>
       <div>
-        <Link href={`/operations/crm/companies/${opportunity.contactId}`}>{opportunity.contactName}</Link>
+        <Link href={`/crm/companies/${opportunity.contactId}`}>{opportunity.contactName}</Link>
         {opportunity.pointOfContactName ? <span className={ui.muted}> · {opportunity.pointOfContactName}</span> : null}
       </div>
       <div className={ui.muted}>
@@ -1028,7 +1029,7 @@ function TaskList({ organisationId, tasks, onChanged, showAbout }: { organisatio
               </td>
               {showAbout ? (
                 <td>
-                  {task.contactId ? <Link href={`/operations/crm/companies/${task.contactId}`}>{task.contactName}</Link> : null}
+                  {task.contactId ? <Link href={`/crm/companies/${task.contactId}`}>{task.contactName}</Link> : null}
                   {[task.personName, task.opportunityName].filter(Boolean).length > 0 ? (
                     <div className={ui.muted}>{[task.personName, task.opportunityName].filter(Boolean).join(" · ")}</div>
                   ) : null}
@@ -1109,6 +1110,129 @@ export function TasksPage({ organisationId }: { organisationId: string }) {
       {tasks.error ? <Notice tone="error">{tasks.error}</Notice> : null}
       {tasks.data ? <TaskList organisationId={organisationId} tasks={tasks.data.tasks} onChanged={tasks.reload} showAbout /> : null}
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The CRM's Home (CRM10)
+
+/** Your open opportunities with totals per currency, your tasks due or overdue, and recent activities. */
+export function CrmHomePage({ organisationId }: { organisationId: string }) {
+  const home = useApiData<CrmHome>("/api/crm/home", { organisationId });
+  const baseCurrency = useBaseCurrency();
+  if (home.error) return <Notice tone="error">{home.error}</Notice>;
+  if (!home.data) return <p className={ui.muted}>Loading…</p>;
+  const { today, opportunities, totals, tasks, activities } = home.data;
+  return (
+    <>
+      <Card title="My open opportunities" description="Opportunities you own that aren't won or lost, amounts excluding GST." actions={<Link href="/crm/pipeline">Pipeline</Link>}>
+        {opportunities.length === 0 ? (
+          <Empty>You have no open opportunities.</Empty>
+        ) : (
+          <div className={ui.tableWrap}>
+            <table className={ui.table}>
+              <thead>
+                <tr>
+                  <th>Opportunity</th>
+                  <th>Company</th>
+                  <th>Stage</th>
+                  <th>Closes</th>
+                  <th className={ui.num}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {opportunities.map((opportunity) => (
+                  <tr key={opportunity.id}>
+                    <td>{opportunity.name}</td>
+                    <td>
+                      <Link href={`/crm/companies/${opportunity.contactId}`}>{opportunity.contactName}</Link>
+                    </td>
+                    <td>
+                      <Badge tone={STAGE_TONES[opportunity.stage]}>{STAGE_LABELS[opportunity.stage]}</Badge>
+                    </td>
+                    <td>{opportunity.closeDate ? formatDate(opportunity.closeDate) : ""}</td>
+                    <td className={ui.num}>{amountIn(opportunity.amount, opportunity.currencyCode, baseCurrency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                {totals.map((total) => (
+                  <tr key={total.currencyCode}>
+                    <th colSpan={4}>
+                      Total{totals.length > 1 || total.currencyCode !== baseCurrency ? ` in ${total.currencyCode}` : ""} ({total.count})
+                    </th>
+                    <th className={ui.num}>{amountIn(total.amount, total.currencyCode, baseCurrency)}</th>
+                  </tr>
+                ))}
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card title="My tasks due" description="Your tasks that aren't done and are due today or earlier." actions={<Link href="/crm/tasks">All my tasks</Link>}>
+        {tasks.length === 0 ? (
+          <Empty>Nothing due.</Empty>
+        ) : (
+          <div className={ui.tableWrap}>
+            <table className={ui.table}>
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th>About</th>
+                  <th>Due</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tasks.map((task) => (
+                  <tr key={task.id}>
+                    <td>
+                      {task.title}
+                      {task.body ? <div className={ui.muted}>{task.body}</div> : null}
+                    </td>
+                    <td>
+                      {task.contactId ? <Link href={`/crm/companies/${task.contactId}`}>{task.contactName}</Link> : null}
+                      {[task.personName, task.opportunityName].filter(Boolean).length > 0 ? (
+                        <div className={ui.muted}>{[task.personName, task.opportunityName].filter(Boolean).join(" · ")}</div>
+                      ) : null}
+                    </td>
+                    <td>
+                      {task.dueDate ? formatDate(task.dueDate) : ""} {task.dueDate && task.dueDate < today ? <Badge tone="red">Overdue</Badge> : null}
+                    </td>
+                    <td>{TASK_LABELS[task.status]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Recent activities" description="The latest calls, meetings and notes logged by the team, newest first.">
+        {activities.length === 0 ? <Empty>Nothing logged yet.</Empty> : null}
+        <ol className={ui.crmTimeline}>
+          {activities.map((activity) => {
+            const by = (activity as Activity & { createdByName?: string }).createdByName ?? activity.createdByEmail;
+            return (
+              <li key={activity.id}>
+                <span className={ui.muted}>{formatDateTime(activity.happenedAt)}</span>
+                <div>
+                  <Badge>{ACTIVITY_LABELS[activity.kind]}</Badge> <strong>{activity.subject}</strong>
+                </div>
+                <div className={ui.muted}>
+                  {activity.contactId ? <Link href={`/crm/companies/${activity.contactId}`}>{activity.contactName}</Link> : null}
+                  {[activity.personName, activity.opportunityName].filter(Boolean).length > 0
+                    ? `${activity.contactId ? " · " : ""}${[activity.personName, activity.opportunityName].filter(Boolean).join(" · ")}`
+                    : null}
+                </div>
+                {by ? <div className={ui.muted}>by {by}</div> : null}
+              </li>
+            );
+          })}
+        </ol>
+      </Card>
+    </>
   );
 }
 
@@ -1311,7 +1435,7 @@ export function CompanyPage({ organisationId, contactId }: { organisationId: str
   return (
     <>
       <div className={ui.actions}>
-        <Link href="/operations/crm/companies">← Companies</Link>
+        <Link href="/crm/companies">← Companies</Link>
       </div>
       <Card
         title={contact.name}
