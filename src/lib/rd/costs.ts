@@ -10,9 +10,9 @@ import { todayIsoDate } from "@/lib/dates";
 /**
  * The tagged costs list: one income year's tags and asset depreciation shares
  * by activity, then by eligible category or ineligible reason. It totals what
- * is tagged; it isn't the claim. Limits, the overhead rule, grants and the
- * 15% credit are stage R3, so nothing here is called "claimable". Payroll isn't
- * tagged yet, so no pay appears.
+ * is tagged; it isn't the claim: the claim report (claim.ts, stage R3) adds
+ * pay, overhead rules, approvals, the limits and the 15% credit, so nothing
+ * here is called "claimable".
  */
 
 export type RdCostAssetShare = { assetId: string; assetNumber: string; assetName: string; hours: string; totalHours: string; amount: string };

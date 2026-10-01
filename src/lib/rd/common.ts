@@ -74,8 +74,8 @@ export function timeliness(workDate: string, enteredOn: string, changedOn: strin
   };
 }
 
-export type HistoryRecordType = "activity" | "approval" | "tag" | "asset_usage" | "asset_tax_depreciation" | "file";
-export type HistoryAction = "created" | "changed" | "archived" | "restored" | "withdrawn" | "removed" | "replaced";
+export type HistoryRecordType = "activity" | "approval" | "tag" | "asset_usage" | "asset_tax_depreciation" | "file" | "overhead_rule" | "claim_export";
+export type HistoryAction = "created" | "changed" | "archived" | "restored" | "withdrawn" | "removed" | "replaced" | "ended" | "exported";
 
 /** Appends a version of an R&D record to rd_history, stamped with the signed-in user and the server's time. */
 export async function writeHistory(
