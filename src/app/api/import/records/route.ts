@@ -8,15 +8,19 @@ import { importMasterRecords } from "@/lib/import/service";
  */
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const result = await withOrganisation(request, body.organisationId, "admin", (tx) =>
-    importMasterRecords(tx, {
-      kind: body.kind,
-      records: body.records,
-      options: body.options,
-      idempotencyKey: body.idempotencyKey,
-      commit: body.commit === true,
-      mapping: body.mapping,
-    }),
+  const result = await withOrganisation(request, body.organisationId, "admin", (tx, { membership }) =>
+    importMasterRecords(
+      tx,
+      {
+        kind: body.kind,
+        records: body.records,
+        options: body.options,
+        idempotencyKey: body.idempotencyKey,
+        commit: body.commit === true,
+        mapping: body.mapping,
+      },
+      { role: membership.role },
+    ),
   );
   return json({ result });
 });

@@ -691,3 +691,126 @@
 .fieldValues dd {
   margin: 0;
 }
+
+/*
+ * A CRM record page (CRT11), after Salesforce's record page: the header and
+ * highlights, then Details and Related tabs beside the Activity panel. On a
+ * phone the Activity panel goes below the tabs.
+ */
+.recordPage {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.recordMain,
+.recordAside {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .recordPage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.recordHighlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.recordHighlights dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.recordHighlights dd {
+  margin: 0;
+}
+
+.recordSections {
+  display: grid;
+  gap: 10px;
+}
+
+.recordFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.recordField {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.recordField dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.recordField dd {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.recordValue {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.requiredMark {
+  color: var(--danger);
+}
+
+.pencil {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.pencil:hover,
+.pencil:focus-visible {
+  color: var(--foreground);
+}
+
+.relatedList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.relatedList li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.activityMonth {
+  display: grid;
+  gap: 8px;
+}
+
+.activityMonth > summary {
+  cursor: pointer;
+  font-weight: 600;
+}

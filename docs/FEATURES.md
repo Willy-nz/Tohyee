@@ -46,8 +46,8 @@ that something happened.
   frequency) and employee groups. **Pay rate history**: salary or hourly rate
   from a date, kept for ever; the current rate is the one in effect today.
   **Cost allocation**: where each employee's pay is charged, split by % across
-  Department, Class, Location and a project (an R&D activity comes with the
-  RDTI register), totalling exactly 100.00%, from a date, keeping the history;
+  Department, Class, Location, a project and an R&D activity from the R&D
+  register, totalling exactly 100.00%, from a date, keeping the history;
   the employee list shows each person's primary department. Splitting an amount
   shares out the cents so the parts always add back to the whole. **Payroll
   access**: only members an admin has given it to (bookkeeper or higher) can
@@ -626,6 +626,31 @@ that something happened.
   its places is switched on, so customer fields can still be changed with
   the CRM off. They never change an amount, account, stage or the invoice
   a won opportunity makes (CRMF1-CRMF12, not yet approved).
+  **Record types and page layouts** (Salesforce's record types and page
+  layouts, NetSuite's custom forms): an admin sets up, in CRM › Record
+  types, several kinds of company, person and opportunity (like "Standard
+  account" and "Funding body"), one the default for each kind. Every record
+  has one; existing records got the default, "Standard". Each type's page
+  layout says which standard and custom fields show, in which sections and
+  order, and which are required or read-only on that type. Required fields
+  are checked by the server on every save of a record of that type (even a
+  stage move), so a field can be required on one type and not another;
+  read-only fields can be changed only by admins and owners. Changing a
+  record's type is in its history and needs the new type's required fields
+  filled in. Types are archived, never deleted (CRT1-CRT13, not yet
+  approved by Jess).
+  **Record page** for companies, people and opportunities (after
+  Salesforce's Lightning record page): a header with the name, record type
+  (changeable by bookkeepers and up) and key fields; a **Details** tab
+  showing the layout's sections, which collapse, with a pencil on each
+  field the person may change for inline edit (viewers read only); a
+  **Related** tab with people, opportunities, invoices, credit notes, tasks
+  and notes and files, each with its count and "View all"; and an
+  **Activity** panel with "Upcoming & overdue" tasks and planned meetings,
+  then past activity grouped by New Zealand month (the timeline), and
+  buttons to log a call, a meeting or a note and to add a task. On phones
+  the panel goes below the tabs. Not built: Salesforce's "Follow", and
+  cases, contracts and assets (Tohyee has none).
   **Email and calendar sync**: each member connects their own Gmail or
   Microsoft 365 mailbox (read-only, through the organisation's own Google or
   Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
@@ -877,6 +902,31 @@ that something happened.
   negative amounts, pay rate changes inside a period, tax codes and
   KiwiSaver rates IRD's rates don't support, and employer contributions
   other than KiwiSaver.
+
+- **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
+  RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;
+  decisions 30-50): Tax › R&D activities lists each organisation's core and
+  supporting activities (project, IR1240's descriptions, income years, New
+  Zealand or overseas, and the core activities a supporting one supports).
+  Bookkeepers add and change them; admins archive them, never delete them.
+  General approvals are entered with IRD's letter attached (required) and
+  show "not checked with IRD"; a later change to an approved activity is
+  flagged. Files on R&D records are replaced with a new version, never
+  deleted. Posted bill, expense claim, spend money and manual journal lines
+  are tagged to an activity from the document's page (or Tax › Tagged R&D
+  costs) with a share %, an IR1240 category or an ineligible reason, the
+  supplementary return flags, goods not used by year end and a contractor's
+  own ineligible costs. GST, exchange gains and losses, income and balance
+  sheet lines can't be tagged; foreign-currency lines use the document's
+  rate. A fixed asset's tax depreciation and Investment Boost are entered
+  per income year and split by a usage log of hours, R&D shares rounded down
+  to the cent. Everything is stamped by the server with who and when, kept
+  in its history, and flagged "entered late" when entered more than 14 days
+  after the work. Tagged R&D costs lists what's tagged by activity and
+  category for an income year. Not built: the claim report (limits, the
+  minimum, overhead apportionment, the 15% credit, supplementary return
+  figures), tagging payroll and timesheets, reminders, criteria and
+  methodologies approvals, and purging files after 7 years.
 
 ## Not built yet, on purpose
 

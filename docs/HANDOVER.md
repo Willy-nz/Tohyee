@@ -50,15 +50,14 @@ Set them in the Agents box before sending each task:
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
 | Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
-| Payroll P3: pay items and pay runs (calculate, approve, post one journal split by allocation, void; examples PRUN1-PRUN11) | #60 | #76 | `copilot/issue-60-pay-items-pay-runs` | 0058 |
-| CRM record types, page layouts and the Salesforce-style record page (CRM roadmap items 3-4, examples CRT1...) | none | not opened yet | (Agents tab) | 0059 |
-| RDTI R2: R&D activity register and tagging costs to activities | none | not opened yet | (Agents tab) | 0060 |
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
 0053), payroll rates P2 (#71), payroll P1b allocation and payroll access
 (#73, 0057), Holidays Act plan P7 (#68), RDTI plan R1 (#72), sales orders
-stage 1 (#69, 0055) and Shopify stage 1 (#70, 0056).
+stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
+and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
+pay runs P3 (#76, 0058).
 
 Next free tenant migration number: 0062 (0058-0061 reserved above).
 
@@ -70,9 +69,11 @@ Advanced features off (decided by Jess, 1 Oct 2026). Prospects only get the
 fields turned on for prospects; existing customer fields aren't added to
 them.
 
-CRM work waiting on custom fields: record types and page layouts, and the
-Salesforce-style record page. Claude will build these once custom fields is
-merged.
+CRM record types and page layouts, and the Salesforce-style record page,
+are in #74 (examples CRT1-CRT13, not yet approved by Jess; her questions are
+in the PR). Existing companies, people and opportunities get each kind's
+default record type, "Standard", whose layout shows what the old company
+page showed, so nothing changes until an admin sets up another type.
 
 ### Payroll: the plan (issue #60)
 
@@ -171,16 +172,49 @@ deadlines). Agents must check the current IR1240 and cite it, never memory.
       2026, read 1 Oct 2026). Its questions are decided (`docs/DECISIONS.md`
       30-50) and the examples follow them; waiting for Jess to approve the
       examples.
-- [ ] **R2 R&D activity register and tagging**: activities (core or
-      supporting, linked core activity, approval reference, income year, in NZ
-      or overseas); tag time, payroll costs (via P1b/P3/P9), bills, expense
-      claims and fixed asset depreciation to activities with an eligible or
-      ineligible category; GST never included; entries stamped when made.
-      Needs R1 approved.
+- [ ] **R2 R&D activity register and tagging** (draft PR #75, tenant
+      migration 0060; RD1-RD3, RD8, RD9, RD11-RD13, RD21-RD23 tested, the
+      examples still waiting for Jess):
+      - Register (Tax › R&D activities, `src/lib/rd/register.ts`): core or
+        supporting activities with project, IR1240's descriptions, income
+        years, NZ or overseas, and the core activities a supporting one
+        supports (decision 39). Archived by admins, never deleted. General
+        approvals need IRD's letter attached and show "not checked with IRD"
+        (decision 40); a change to an approved activity's descriptions,
+        type, place or links flags "changed since approval was entered".
+      - Files (`src/lib/rd/files.ts`): replaced with a new version, never
+        deleted (decision 45). Nothing purges them after 7 years yet.
+      - Tags (`src/lib/rd/tags.ts`): one tag per posted bill, expense claim,
+        spend money or manual journal line, with a share %, an eligible
+        category or an ineligible reason (IR1240), flags for the
+        supplementary return, goods not used by year end (decision 41) and a
+        contractor's own ineligible costs. Amounts exclude GST and use the
+        document's exchange rate; GST, exchange gains and losses, income and
+        balance sheet lines can't be tagged (decision 42). Tagging without an
+        approval warns (decision 47).
+      - Fixed assets (`src/lib/rd/assets.ts`): tax depreciation and
+        Investment Boost entered per income year (decision 33), split by a
+        usage log of hours; the split rounds R&D shares down to the cent.
+      - Every register change, tag and usage entry is stamped by the
+        database with who and when, kept in `rd_history`, and flagged
+        "entered late" when entered more than 14 days after the work
+        (decision 38).
+      - Payroll hook: `payroll_cost_allocation_lines.rd_activity_id` is now a
+        foreign key to `rd_activities`; an allocation line can name an
+        active activity. Pay runs (P3) don't tag yet; R3 must count an
+        employee's pay as R&D only for the R&D share of their allocation or
+        timesheets, with the 100% rule in decision 34 applied in the claim
+        report. The allocation screen doesn't offer the picker yet (it's in
+        the payroll area another agent is changing).
+      - Tagged costs (Tax › Tagged R&D costs): what's tagged by activity and
+        category for an income year, plus untagged lines to tag. Not the
+        claim.
 - [ ] **R3 RDTI claim report**: eligible expenditure by category and
-      activity, overhead apportionment with its method, the overseas limit,
-      the minimum check, the 15% credit, figures for the supplementary return,
-      and reminders for the approval and return deadlines. Needs R2.
+      activity, overhead apportionment with its method (RD10), the overseas
+      limit, the minimum check, the 15% credit, figures for the supplementary
+      return, payroll costs (RD5-RD7, RD22 with P3/P9), and reminders for the
+      approval and return deadlines. Build on `listTaggedCosts()` in
+      `src/lib/rd/costs.ts`. Needs R2.
 
 To do:
 

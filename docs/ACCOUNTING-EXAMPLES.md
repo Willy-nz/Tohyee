@@ -159,9 +159,12 @@ Tests: `tests/unit/payroll-allocation.test.ts` (PE3, PE4, PE5),
 An allocation has an **effective-from date** and one or more lines. Each line
 has a percentage (more than 0, at most 2 decimal places) and any of a
 Department, Class and Location value (the tracking categories), a project
-and, later, an R&D activity (the RDTI register is stage R2; until then the
-R&D activity is always empty and setting one is refused). A line needs at
-least one of the Department, Class, Location or project. Two lines can't
+and an R&D activity from the RDTI register (stage R2: an active activity in
+the register; an unknown or archived one is refused). A line needs at least
+one of the Department, Class, Location, project or R&D activity. The
+allocation only records where pay is charged: for the R&D claim (stage R3), a
+default split counts as R&D only when the employee's allocation is 100% R&D,
+and otherwise needs a time record (decision 34; RD7). Two lines can't
 have exactly the same Department, Class, Location, project and R&D activity.
 The lines must total exactly **100.00%**. Saving a new allocation never
 changes an earlier one: the allocation in effect on a date is the one with
@@ -181,7 +184,7 @@ original exactly.
 | --- | --- | --- |
 | PE3 | Aroha Ngata from 1 April 2026: 60% Department Sales, Location Wellington; 40% Department Operations, Location Auckland. Split **$1,234.57**. | Exact shares 740.742 and 493.828. Cut to cents: 740.74 + 493.82 = 1,234.56, so 1 cent is left. The 40% line had the larger part cut off (0.008 against 0.002), so it gets the cent: **Sales 740.74, Operations 493.83**, total 1,234.57. Split **−$1,234.57** (a reversal): **−740.74 and −493.83**. |
 | PE4 | Rounding cents: 33.33% / 33.33% / 33.34% of **$10.00**; 50% / 50% of **$0.01**; 33.33% / 33.33% / 33.34% of **$100.00**. | 3.333, 3.333, 3.334 cut to 3.33 each (9.99); the third line had the most cut off: **3.33, 3.33, 3.34**. Half a cent each ties, so the first line gets it: **0.01 and 0.00** (rounding each half up would give 0.02). 33.33, 33.33, 33.34 are exact: **33.33, 33.33, 33.34**, nothing left over. |
-| PE5 | Lines of 60% and 30% (90%); lines of 60% and 50% (110%); a line of 0%; a line of 33.333%; a 100% line with no Department, Class, Location or project; two 50% lines both Department Sales. | All refused: "The allocation lines total 90.00%. They must total exactly 100.00%." (and 110.00%); a 0% line, a third decimal place, an empty line ("Line 1 needs a Department, Class, Location or project") and a repeated line ("Line 2 is the same as line 1") are refused too. Nothing is saved. |
+| PE5 | Lines of 60% and 30% (90%); lines of 60% and 50% (110%); a line of 0%; a line of 33.333%; a 100% line with no Department, Class, Location or project; two 50% lines both Department Sales. | All refused: "The allocation lines total 90.00%. They must total exactly 100.00%." (and 110.00%); a 0% line, a third decimal place, an empty line ("Line 1 needs a Department, Class, Location, project or R&D activity"), an R&D activity not in the register ("Line 1: that R&D activity wasn't found") or archived ("Line 1: C1 is archived") and a repeated line ("Line 2 is the same as line 1") are refused too. Nothing is saved. |
 | PE6 | Aroha is 100% Department Sales from 1 April 2026. On 20 September 2026 she moves to Operations from **15 September 2026** (mid-month): a new allocation, 100% Operations, effective 15 September 2026. | The allocation in effect on 1 May and 14 September 2026 is still **100% Sales**; on 15 September 2026 and later it's **100% Operations**. Both stay in her history, oldest first. Her primary department in the employee list (the department of the biggest line in effect today) is Operations. How a pay period that spans the move is charged is a P3 question (below). |
 
 ### Pay rate history
@@ -221,8 +224,8 @@ rate events the effective date and pay basis.
 
 ### Not supported yet (refused rather than guessed)
 
-- Choosing an R&D activity on an allocation line (needs the RDTI register,
-  stage R2).
+- Choosing an R&D activity on the allocation screen: the API accepts one
+  (RDTI stage R2), but the screen doesn't offer it yet.
 - Allocations by pay item (e.g. overtime to a different department) and
   timesheets overriding the default split: stages P3 and P9.
 - Changing or deleting a saved allocation or pay rate: save a new one with
@@ -4471,6 +4474,211 @@ section).
   and is required on prospects (its prospect use needs only the CRM), but
   not on a customer-only contact.
 
+## CRM record types and page layouts (examples not yet approved by Jess)
+
+Jess asked (1 Oct 2026) for different kinds of company, person and
+opportunity to show and need different fields, and for a record page like a
+Salesforce account page. This follows Salesforce **record types** and **page
+layouts** (one layout per record type, which NetSuite calls a **custom
+form**), and Salesforce's Lightning record page for the page itself:
+
+- **Record types**: an admin can define several for companies (contacts in
+  the CRM), people and opportunities, e.g. "Standard" and "Funding body".
+  Each record has exactly one. One type per kind is the **default**: new
+  records get it unless another is chosen. Names are 1-60 characters,
+  unique for their kind ignoring case, with an optional description. Types
+  are never deleted: an archived type stays on its records (and they can
+  still be saved) but can't be given to another record; the default can't
+  be archived. A new type starts as a copy of another type's layout (the
+  default's unless one is chosen), as Salesforce clones a layout.
+- **Page layouts**: each type has one layout: named sections (up to 20,
+  each name unique on the layout ignoring case) in order, each with fields
+  in order. A field is a standard field of that kind of record or one of
+  its custom fields (CF1-CF10, CRMF1-CRMF12), at most once on the layout.
+  Each field on a layout can be **required** or **read-only** on that type
+  (not both, as Salesforce). Fields that every record of the kind needs
+  (company name, person's first name, opportunity name and company) must
+  stay on every layout, are always required and can't be read-only. Fields
+  Tohyee fills in (created, last changed) are always read-only. A field
+  that always has a value (opportunity amount and stage) or a check box
+  can't be made required. Leaving a field off a layout only hides it on
+  that type's record page: the values it already has are kept.
+- **Required** fields on a record's type are needed whenever the record is
+  saved, checked by the server on every save (the CRM, the Contacts screen,
+  imports and the API), while the CRM is on. A custom field counts only
+  where it applies, as before (a contact field only for the roles it's on
+  and switched on: CRMF11). So does a company's delivery address: only
+  customers have one, so it isn't required of (or shown on) a prospect or
+  supplier. A required field on one type isn't required on another.
+- **Read-only** fields on a record's type can be changed by admins and
+  owners only (as Salesforce's "Edit Read Only Fields" permission, which
+  its administrators have). For anyone else the server refuses a change to
+  the field on a record of that type, including giving it a value (other
+  than its default) on a new record. When a record's type changes, the
+  fields read-only on either the old or the new type can't be changed in
+  that same save.
+- **Changing a record's type** (bookkeepers and above) needs the new type's
+  required fields; nothing else changes, and the record keeps every value
+  (including ones the new layout doesn't show). The change is in the
+  record's history (from and to). Setting up types and layouts is for
+  admins and owners only, and each change (with the layout before and
+  after) is in the audit history.
+- **New custom fields** for companies, people or opportunities join every
+  layout of their kind (Salesforce's "add to page layouts"): at the end of
+  the layout's section with the same name as the field's custom field
+  section, or else at the end of the first section. An admin can then move
+  or remove them per layout. Custom field sections (CRMF6) still group the
+  fields on forms for new records elsewhere and in lists; on a CRM record
+  page the layout decides.
+- The upgrade gives every organisation a default type called "Standard"
+  for each kind, and every existing company (every contact, as any contact
+  can become a prospect), person and opportunity gets it.
+- Record types and layouts are CRM features: with the CRM off they don't
+  apply (nothing is required or read-only because of them) and can't be
+  changed; records keep their type.
+- Record types never change an amount, account, stage, invoice or GST box.
+
+Standard fields:
+
+| Kind | Standard fields (key) |
+| --- | --- |
+| Company | Company name (name, always required), Owner (ownerUserId), Email, Phone, GST number, Billing address (postalAddress), Delivery address, Created, Last changed |
+| Person | First name (always required), Last name, Job title, Company (contactId), Email, Phone, Created, Last changed |
+| Opportunity | Opportunity (name, always required), Company (contactId, always required), Point of contact, Owner, Amount (excl. GST), Expected close date, Stage, Created, Last changed |
+
+The record page (companies, and the same page for people and
+opportunities) follows Salesforce's Lightning record page: a header with
+the record's name, its type, its owner (a company's owner or an
+opportunity's owner; a person's company) and key fields (email and phone;
+amount, stage and expected close date); a **Details** tab with the layout's
+sections, each collapsible, every field with a pencil to change just that
+field (bookkeepers and above; read-only fields only for admins and
+owners); a **Related** tab with lists, each with its count and "View all";
+and an **Activity** panel to the right: quick add (log a call, a meeting, a
+note, a new task), then **Upcoming and overdue** (open tasks by due date,
+overdue first), then past activity grouped by month, newest first (the
+CRM10 timeline). On a phone the tabs stack and the activity panel comes
+below them.
+
+Setup: CRM on, Advanced reporting off; company Mānuka Vets (a prospect),
+person Aroha Ngata at Mānuka Vets and the opportunity "Memorial paw prints
+2027" for 2,400.00 (CRM2, CRM3). Contact fields on prospects: "Funder
+reference" (text, no section) and "Grant round" (list: 2026 Round 1, 2026
+Round 2; no section).
+
+- **CRT1** Upgrade: the organisation has one record type "Standard" for
+  each of companies, people and opportunities, each the default, and every
+  existing contact (customers and suppliers too), person and opportunity
+  has it. Standard's company layout is "Company information" (Company name
+  required, Owner, Email, Phone, GST number, then the contact custom fields
+  with no section, in their order), "Address information" (Billing address,
+  Delivery address), then one section per contact custom field section with
+  its fields, then "System information" (Created, Last changed). People
+  and opportunities get "Person information" and "Opportunity information"
+  sections with their standard fields and their custom fields the same
+  way, then "System information". A new company, person or opportunity
+  gets Standard.
+- **CRT2** Set-up rules: the admin adds the company type "Funding body"
+  (copied from Standard's layout). A second "funding body" for companies is
+  refused ("There's already a company record type called funding body."),
+  but "Funding body" for opportunities is fine. A bookkeeper can't add or
+  change a type (403); a viewer can read them. Making Funding body the
+  default makes Standard not the default (one default per kind); making
+  Standard the default again, then archiving the default is refused
+  ("Standard is the default, so it can't be archived."). Each change is in
+  the audit history.
+- **CRT3** Layout rules: Company name can't be taken off ("Company name
+  must stay on the layout.") or made read-only ("Company name can't be
+  read-only."); Phone twice is refused ("Phone is on the layout more than
+  once."); a people field "Preferred contact" on a company layout is
+  refused ("Preferred contact isn't a company field."); Phone required and
+  read-only is refused ("Phone can't be both required and read-only.");
+  Created can't be required ("Created is filled in by Tohyee, so it can't be
+  required."), and neither can a check box or Amount; two sections called
+  "Grants" and "grants" are refused; a 21st section is refused.
+- **CRT4** A field required on one type but not another: Funding body's
+  layout makes Phone and Funder reference required. Mānuka Vets (Standard)
+  is still saved without either. A new prospect "Lottery Grants Board" as
+  a Funding body without them is refused ("Phone is required on Funding
+  body companies."), with Phone 04 123 4567 but no Funder reference refused
+  ("Funder reference is required on Funding body companies."), and with
+  Funder reference "LGB-2026" too it's saved. Saving it again later without
+  Phone is refused; the same request to the API is refused the same way.
+  With Delivery address required on Standard, Mānuka Vets (a prospect) and
+  a new supplier are still saved without one, but a new customer isn't
+  ("Delivery address is required on Standard companies."), and nor is
+  marking Mānuka Vets a customer until it's given one.
+- **CRT5** Changing a record's type: changing Mānuka Vets to Funding body
+  is refused ("Phone is required on Funding body companies."); with Phone
+  09 555 0101 and Funder reference "MV-1" in the same save it's saved, and
+  its history says the record type changed from Standard to Funding body
+  (and Phone and Funder reference from nothing to their values). Changing
+  it back to Standard keeps both values. An archived company type "Old
+  grants" can't be chosen ("Old grants is archived, so it can't be
+  chosen."), but a company already of that type can still be saved. A
+  person type can't be given to a company ("That record type isn't for
+  companies."). A viewer can't change a type (403).
+- **CRT6** A read-only field: on Funding body, Grant round is read-only. A
+  bookkeeper changing Lottery Grants Board's Grant round to "2026 Round 2"
+  is refused (403: "Grant round is read-only on Funding body companies.
+  Ask an admin to change it."), and so is a bookkeeper making a new Funding
+  body company with a Grant round; an admin can change it (in its
+  history). On Mānuka Vets (Standard, where Grant round isn't read-only) a
+  bookkeeper can set it. A bookkeeper can't change Lottery Grants Board to
+  Standard and its Grant round in the same save.
+- **CRT7** A viewer can't edit inline: a viewer sees Mānuka Vets' record
+  page (header, details, related lists, activity) with no pencils, no quick
+  add and no type change, and a change sent anyway (a field, its type or
+  its owner) is refused (403). A bookkeeper sees a pencil on every field
+  except Created and Last changed and, on Funding body companies, Grant
+  round; an admin also on Grant round.
+- **CRT8** Inline edit: a bookkeeper changes only Mānuka Vets' Phone from
+  its page; nothing else changes and the history says Phone changed. The
+  owner is set to a member (Aroha Ngata's colleague, a bookkeeper) and is
+  in the history; an owner who isn't a member is refused ("The owner must
+  be a member of the organisation.").
+- **CRT9** New custom fields join the layouts: the admin has a contact
+  custom field section "Practice details" and adds a "Practice details"
+  section to Funding body's layout (not Standard's). Adding "Board meeting"
+  (date, on prospects, in the Practice details custom field section) puts
+  it at the end of Funding body's Practice details section and at the end
+  of Standard's first section (Company information). "Website" (url, on
+  prospects, no section) goes at the end of the first section of both.
+  Taking Website off Funding body's layout keeps the values companies
+  already have.
+- **CRT10** Opportunities: an opportunity type "Grant application" whose
+  layout makes Expected close date required. A new "Community grant 2027"
+  for 5,000.00 at Lottery Grants Board without a close date is refused
+  ("Expected close date is required on Grant application opportunities."),
+  and with 2027-03-31 it's saved. "Memorial paw prints 2027" (Standard)
+  is still saved without one. The New column totals **7,400.00**
+  (2,400.00 + 5,000.00); changing Community grant's type to Standard changes
+  neither its amount nor its stage. Making the invoice from Memorial paw
+  prints gives exactly the CRM5 invoice (total **2,760.00**).
+- **CRT11** Record page: after CRM5 (Memorial paw prints won and invoiced
+  2,760.00), a call logged in September 2026 and an open task "Send
+  sample" due yesterday plus one due next week, Mānuka Vets' page has the
+  header (Mānuka Vets, Standard, its owner, email and phone) and the
+  Standard layout's sections; Related: People 1 (Aroha Ngata),
+  Opportunities 1, Tasks 2, Invoices 1 (2,760.00), Credit notes 0, Notes
+  and Files with their counts; Activity: Upcoming and overdue lists "Send
+  sample" (overdue) before the one due next week, then October 2026 (the
+  invoice for 2,760.00 and the stage change to Won) before September 2026
+  (the call). Aroha's and the opportunity's pages show their own type,
+  layout, related lists (her opportunities and tasks; the opportunity's
+  tasks and invoice) and activity.
+- **CRT12** CRM off: with the CRM off, Lottery Grants Board (Funding body)
+  is saved from the Contacts screen without Phone, a bookkeeper can change
+  its Grant round, and it keeps its type; record types can't be added or
+  changed ("The CRM is off. An admin can turn it on in Settings."), and
+  neither can a record's type.
+- **CRT13** Over HTTP: every record type route needs a signed-in member: a
+  viewer reads the types and the record pages of companies, people and
+  opportunities (200), a bookkeeper changes a record's fields and type
+  (200) but not the set-up (403), an admin changes the set-up (201, 200).
+  Old URLs still work: /operations/crm/companies/5 opens /crm/companies/5,
+  and the new pages are /crm/people/{id} and /crm/opportunities/{id}.
+
 ## Notes, files and history
 
 Journals, sales invoices, bills, sales credit notes, supplier credit notes and
@@ -7079,7 +7287,14 @@ Stage R1 of the RDTI plan in [HANDOVER.md](HANDOVER.md): what Tohyee should
 **record** and **report** for New Zealand's Research and Development Tax
 Incentive, written so Jess can approve it before anything is built (R2: the
 activity register and tagging; R3: the claim report). **Nothing in this
-section is built, and there are no tests for it yet.** Every rule below cites
+section was built in R1.** Stage R2 (the register, approvals, tagging and
+asset usage) is now built and tested: RD1-RD3, RD8, RD9, RD11-RD13 and
+RD21-RD23 in `tests/integration/rd.test.ts` (and RD21-RD22's flag on screen in
+`tests/unit/rd-screens.test.ts`), RD7's hook (an allocation line naming an
+activity) there too. Payroll (RD5-RD7, RD22's timesheet), overheads (RD10),
+grants and feedstock (RD14, RD15), the cross-year and claim examples (RD4,
+RD16-RD20, RD24-RD27) are stage R3 or later. The examples are still waiting
+for Jess. Every rule below cites
 where it comes from. Where the guidance was unclear or left a choice, Jess
 asked Claude to research it and decide; those are decisions 30-50 in
 [DECISIONS.md](DECISIONS.md), applied in the examples below and listed at the
@@ -7354,6 +7569,11 @@ tags**, never a payroll calculation of its own (decision 37).
 - **RD9** Expense claim: Hana's receipt of 5 Aug 2026, "Potting mix and
   pots for soil trials", **230.00 including GST** with the GST tax code:
   posts 200.00 to expense and 30.00 GST. Tagged C1: **200.00** counts.
+  (Stage R2 behaviour, not part of the example: if the claim's journal is
+  later corrected in the ledger, the receipt's tag stops counting and is
+  listed as reversed, and the replacement journal's lines can't be tagged,
+  because only a manual journal or a correction of one is tagged; so the
+  200.00 is never counted twice.)
 - **RD10** Overheads by floor area (IR1240 p 15, p 63). Rent is **4,000.00
   + GST** a month for 200 m²; the lab is 30 m² and used only for R&D. Tohyee
   has one overhead rule, **"% of an account"**, and its **basis is

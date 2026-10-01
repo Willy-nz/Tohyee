@@ -33,10 +33,12 @@ export const PATCH = route<{ params: Promise<{ contactId: string }> }>(async (re
     deliveryCountry: body.deliveryCountry,
     defaultSalesTaxCode: body.defaultSalesTaxCode,
     defaultPurchaseTaxCode: body.defaultPurchaseTaxCode,
+    recordTypeId: body.recordTypeId,
+    ownerUserId: body.ownerUserId,
   };
-  const contact = await withOrganisation(request, body.organisationId, "bookkeeper", async (tx) => {
+  const contact = await withOrganisation(request, body.organisationId, "bookkeeper", async (tx, { membership }) => {
     if (body.isArchived === undefined) {
-      return updateContact(tx, contactId, details);
+      return updateContact(tx, contactId, details, { role: membership.role });
     }
     if (Object.values(details).some((value) => value !== undefined)) {
       throw new ValidationError("Archive or unarchive a contact on its own, then save any other changes separately.");

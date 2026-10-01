@@ -15,7 +15,7 @@ function pageFor(pathname: string): string | null {
       dir = path.join(dir, segment);
       continue;
     }
-    const dynamic = ["[contactId]"].find((name) => existsSync(path.join(dir, name)));
+    const dynamic = ["[contactId]", "[personId]", "[opportunityId]"].find((name) => existsSync(path.join(dir, name)));
     if (!dynamic) return null;
     dir = path.join(dir, dynamic);
   }
@@ -30,6 +30,8 @@ describe("old CRM URLs", () => {
     ["/operations/crm/companies", "/crm/companies"],
     ["/operations/crm/companies/42", "/crm/companies/42"],
     ["/operations/crm/people", "/crm/people"],
+    ["/operations/crm/people/7", "/crm/people/7"],
+    ["/operations/crm/opportunities/9", "/crm/opportunities/9"],
     ["/operations/crm/pipeline", "/crm/pipeline"],
     ["/operations/crm/tasks", "/crm/tasks"],
     ["/operations/crm/mail?connected=google", "/crm/mail?connected=google"],
@@ -43,7 +45,7 @@ describe("old CRM URLs", () => {
   });
 
   it("the CRM's Home and tabs are pages, and nothing else under /operations is redirected", async () => {
-    for (const tab of ["/crm", "/crm/companies", "/crm/people", "/crm/pipeline", "/crm/tasks", "/crm/mail"]) {
+    for (const tab of ["/crm", "/crm/companies", "/crm/people", "/crm/pipeline", "/crm/tasks", "/crm/mail", "/crm/record-types"]) {
       expect(pageFor(tab), tab).not.toBeNull();
     }
     expect(existsSync(path.join(APP, "crm/layout.tsx"))).toBe(true);

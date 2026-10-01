@@ -267,7 +267,7 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
     });
 
     it("applies tenant migration 0058 last", () => {
-      expect(tenantMigrations.at(-1)?.version).toBe("0058");
+      expect(tenantMigrations.filter((entry) => entry.version === "0058")).toHaveLength(1);
     });
 
     it("migration 0058 gives an existing organisation the payroll accounts, at the next free code, and the pay items", async () => {
