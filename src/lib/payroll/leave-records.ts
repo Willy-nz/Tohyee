@@ -602,12 +602,16 @@ export async function decidePublicHoliday(tx: OrgTx, input: Record<string, unkno
   if (penal && !hoursWorked) throw new ValidationError("A penal rate is only for hours worked on the holiday (s 50(1)(b)).");
   const extra = input.extraAmount === undefined || input.extraAmount === null || input.extraAmount === "" ? null : parseDecimalInput(input.extraAmount, "Extra under the agreement", { maxScale: 2 });
   if (extra && !hoursWorked) throw new ValidationError("A typed extra is for working part of the holiday under an agreement that gives more (decision 23).");
+  // An approved pay run for the day (or the weekday it moved to) has already paid it, or not.
   const used = await tx.query<{ run_number: string }>(
-    `select r.run_number::text from payroll_pay_run_lines l join payroll_pay_runs r on r.id = l.pay_run_id
-      where l.employee_id = $1 and l.holiday_date = $2 and r.status = 'approved' limit 1`,
-    [facts.id, holidayDate],
+    `select r.run_number::text from payroll_pay_run_employees pe join payroll_pay_runs r on r.id = pe.pay_run_id
+      where pe.employee_id = $1 and r.status = 'approved' and r.period_start <= $3 and r.period_end >= $2
+      order by r.run_number limit 1`,
+    [facts.id, holidayDate, addDays(holidayDate, 2)],
   );
-  if (used.rows[0]) throw new ConflictError(`PAYRUN-${used.rows[0].run_number} paid ${holiday.name} for ${facts.name}, so the decision can't change. Void it first.`);
+  if (used.rows[0]) {
+    throw new ConflictError(`PAYRUN-${used.rows[0].run_number} is approved for ${holiday.name} (${formatDate(holidayDate)}) for ${facts.name}, so the decision can't change. Void it first.`);
+  }
   const suggestion = optionalString(input.suggestion, "Suggestion", { maxLength: 200 });
   await tx.query("update payroll_public_holiday_decisions set status = 'replaced' where employee_id = $1 and holiday_date = $2 and status = 'current'", [facts.id, holidayDate]);
   const inserted = await tx.query<DecisionRow>(

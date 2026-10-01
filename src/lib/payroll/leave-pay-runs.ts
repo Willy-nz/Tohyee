@@ -302,6 +302,8 @@ async function workOutKept(tx: OrgTx, run: DraftRun, facts: EmployeeFacts, recor
         holidayDate: holiday.date,
         from: holiday.date,
         to: holiday.date,
+        hours: toPlainString(hoursWorked),
+        unitHours: toPlainString(hoursWorked),
         amount: payment(pay.amount),
         basis: {
           section: "s 50",
@@ -331,11 +333,14 @@ async function workOutKept(tx: OrgTx, run: DraftRun, facts: EmployeeFacts, recor
         );
         continue;
       }
+      const usual = pattern.kind === "fixed" ? usualHoursOn(pattern, holiday.date) : ZERO_DECIMAL;
       const line = leaveLine({
         leaveType: "public_holiday",
         holidayDate: holiday.date,
         from: holiday.date,
         to: holiday.date,
+        hours: isPositive(usual) ? toPlainString(usual) : null,
+        unitHours: isPositive(usual) ? toPlainString(usual) : null,
         amount: payment(daily.rate),
         basis: { section: "s 49", holiday: holiday.name, method: daily.method, rate: fixed(daily.rate, 6), ...daily.basis },
       });

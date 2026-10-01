@@ -8,7 +8,12 @@ import { createEmployee } from "@/lib/payroll/employees";
 import { createPayGroup } from "@/lib/payroll/groups";
 import { addDays } from "@/lib/payroll/leave/dates";
 import { addLeaveSettings, updateOrganisationLeaveSettings } from "@/lib/payroll/leave-settings";
-import { cancelLeaveBooking, createLeaveBooking, decidePublicHoliday } from "@/lib/payroll/leave-records";
+import { cancelLeaveBooking, createCashUp, createLeaveBooking, decidePublicHoliday } from "@/lib/payroll/leave-records";
+import { exportLeaveLiability, exportLeaveRecord, getLeaveRecord, getLeaveSummary, leaveLiabilityReport } from "@/lib/payroll/leave-reports";
+import { makePayRunPaydayFilingFile, updatePaydayFilingSettings } from "@/lib/payroll/payday-filing-service";
+import { payslipLayout } from "@/lib/payroll/payslip-layout";
+import { getPayslip } from "@/lib/payroll/payslips";
+import { approveTimesheet, openTimesheet, saveTimesheetEntries, submitTimesheet } from "@/lib/payroll/timesheets";
 import { createPayItem, listPayItems, type PayItem } from "@/lib/payroll/pay-items";
 import { addPayRate } from "@/lib/payroll/pay-rates";
 import {
@@ -18,6 +23,7 @@ import {
   type PayRun,
   type PayRunEmployee,
   type PayRunLine,
+  setPayRunEmployeeLines,
   updatePayRunLeave,
   voidPayRun,
 } from "@/lib/payroll/pay-runs";
@@ -70,7 +76,10 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
 
   const week = (days: Array<{ hours: string; extras?: unknown[] }>) => ({ kind: "fixed", days: days.map((day) => ({ ordinaryHours: day.hours, extras: day.extras ?? [] })) });
   const draft = (group: string, periodStart: string) =>
-    asJess((tx) => createPayRun(tx, { idempotencyKey: key("run"), payGroupId: groups[group], periodStart, payDate: addDays(periodStart, 9) })).then((result) => result.payRun);
+    // Paid the Wednesday after, or by 31 Mar 2027, the last pay date Tohyee has IRD's rates for.
+    asJess((tx) =>
+      createPayRun(tx, { idempotencyKey: key("run"), payGroupId: groups[group], periodStart, payDate: addDays(periodStart, 9) > "2027-03-31" ? "2027-03-31" : addDays(periodStart, 9) }),
+    ).then((result) => result.payRun);
   const approve = (runId: string) => asJess((tx) => approvePayRun(tx, runId, { idempotencyKey: key("approve") })).then((result) => result.payRun);
   const of = (run: PayRun, person: string): PayRunEmployee => run.employees.find((entry) => entry.employeeId === people[person])!;
   const lines = (run: PayRun, person: string) => of(run, person).lines.map((line) => [line.payItemName, line.quantity, line.amount, line.source] as const);
@@ -139,6 +148,44 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
     await asJess((tx) =>
       addPayRate(tx, people.ben, { idempotencyKey: key("rate"), effectiveFrom: "2026-06-15", payBasis: "hourly", hourlyRate: "30", ordinaryHoursPerWeek: "40", reason: "Pay rise" }),
     );
+
+    // Fiona (HL8, HL30, HL32): 27.00 an hour, Tuesday to Thursday, 6 hours a day.
+    people.fiona = await employee({ firstName: "Fiona", lastName: "Parttime", hourlyRate: "27", ordinaryHoursPerWeek: "18", startDate: "2026-09-07", payGroupId: groups.B });
+    await asJess((tx) =>
+      addLeaveSettings(tx, people.fiona, {
+        idempotencyKey: key("settings"),
+        pattern: week([{ hours: "0" }, { hours: "6" }, { hours: "6" }, { hours: "6" }, { hours: "0" }, { hours: "0" }, { hours: "0" }]),
+        annualPaidInPeriod: true,
+      }),
+    );
+
+    // Aroha (HL1, HL8, HL10-HL13, HL20, HL22, HL26, HL27, HL42): a salary of 62,400.00, Monday to Friday, 8 hours a day,
+    // from Tue 1 Apr 2025; Tohyee pays her from the week of Mon 7 Apr 2025 (a salary can't start part-way through a period, PRUN8).
+    people.aroha = await employee({
+      firstName: "Aroha",
+      lastName: "Salary",
+      payBasis: "salary",
+      annualSalary: "62400",
+      hourlyRate: undefined,
+      ordinaryHoursPerWeek: undefined,
+      startDate: "2025-04-01",
+      payGroupId: groups.A,
+    });
+    await asJess((tx) => addLeaveSettings(tx, people.aroha, { idempotencyKey: key("settings"), pattern: week(Array.from({ length: 7 }, (_, index) => ({ hours: index < 5 ? "8" : "0" }))), annualPaidInPeriod: true }));
+    // Eru (HL14, HL15): 25.00 an hour, Monday to Friday, from Mon 6 Apr 2026 to Fri 26 Feb 2027.
+    people.eru = await employee({ firstName: "Eru", lastName: "Advance", hourlyRate: "25", startDate: "2026-04-06", finishDate: "2027-02-26", payGroupId: groups.A });
+    await asJess((tx) => addLeaveSettings(tx, people.eru, { idempotencyKey: key("settings"), pattern: week(Array.from({ length: 7 }, (_, index) => ({ hours: index < 5 ? "8" : "0" }))), annualPaidInPeriod: true }));
+    // Cara (HL3, HL7, HL24, HL30): permanent, hours and days vary; average daily pay because her daily pay varies (decision 13).
+    people.cara = await employee({ firstName: "Cara", lastName: "Varies", hourlyRate: "25", ordinaryHoursPerWeek: "20", startDate: "2026-05-04", payGroupId: groups.C });
+    await asJess((tx) =>
+      addLeaveSettings(tx, people.cara, {
+        idempotencyKey: key("settings"),
+        pattern: { kind: "varies", weekHours: "20", weekDays: "3" },
+        dailyPay: "adp",
+        adpReason: "varies_within_period",
+        annualPaidInPeriod: true,
+      }),
+    );
   });
 
   afterAll(async () => {
@@ -203,7 +250,11 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
       const run = await draft("B", "2026-10-26");
       expect(leaveLines(run, "ben").map((line) => [line.payItemName, line.amount])).toEqual([["Public holiday", "250.00"]]);
       await asJess((tx) => decidePublicHoliday(tx, { employeeId: people.ben, holidayDate: "2026-10-26", otherwiseWorking: true, hoursWorked: "8" }));
+      // HL30, HL32: Fiona doesn't work Mondays, so Labour Day pays her nothing; working 6 hours on it pays 6 × 27.00 × 1.5 and no alternative holiday.
+      expect(leaveLines(run, "fiona")).toEqual([]);
+      await asJess((tx) => decidePublicHoliday(tx, { employeeId: people.fiona, holidayDate: "2026-10-26", otherwiseWorking: false, hoursWorked: "6" }));
       const after = await asJess((tx) => getPayRun(tx, run.id));
+      expect(leaveLines(after, "fiona").map((line) => [line.payItemName, line.amount, line.leave!.basis.alternativeHoliday])).toEqual([["Public holiday worked", "243.00", false]]);
       expect(leaveLines(after, "ben").map((line) => [line.payItemName, line.amount, line.description])).toEqual([
         ["Public holiday worked", "375.00", "Labour Day, 26 Oct 2026: worked 8 h; alternative holiday"],
       ]);
@@ -310,6 +361,314 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
     });
   });
 
+  describe("Aroha and Eru (HL10-HL15, HL20, HL22, HL26, HL27, HL42)", () => {
+    it("pays Aroha from 7 Apr 2025, with her December 2025 bonus, to the week before her holiday", async () => {
+      await payWeeks("A", "2025-04-07", "2026-07-06", async (run) => {
+        if (run.periodStart === "2025-12-15") {
+          return (await asJess((tx) => setPayRunEmployeeLines(tx, run.id, people.aroha, { lines: [{ payItemId: items.Bonus.id, amount: "2600", description: "Annual bonus (agreement)" }], keepUsualPay: true }))).payRun;
+        }
+        if (run.periodStart === "2026-03-09") {
+          await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.aroha, leaveType: "sick", startDate: "2026-03-10", endDate: "2026-03-11" }));
+          return asJess((tx) => getPayRun(tx, run.id));
+        }
+        if (run.periodStart === "2026-06-01") {
+          await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.aroha, leaveType: "sick", startDate: "2026-06-02" }));
+          return asJess((tx) => getPayRun(tx, run.id));
+        }
+      });
+      const easter = approved["A:2026-04-06"];
+      expect(lines(easter, "aroha")).toEqual([
+        ["Ordinary time", null, "960.00", "usual_pay"],
+        ["Public holiday", null, "240.00", "leave"],
+      ]);
+      expect(lines(easter, "eru")).toEqual([
+        ["Ordinary time", "32.00", "800.00", "usual_pay"],
+        ["Public holiday", null, "200.00", "leave"],
+      ]);
+    }, 120_000);
+
+    it("HL11 (corrected): a week's annual holiday at AWE 65,000.00 ÷ 52 = 1,250.00, balance 4 → 3 weeks, 40 hours stored", async () => {
+      await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.aroha, leaveType: "annual", startDate: "2026-07-13", endDate: "2026-07-17" }));
+      const run = await draft("A", "2026-07-13");
+      const [annual] = leaveLines(run, "aroha");
+      expect([annual.payItemName, annual.amount, annual.leave!.hours, annual.leave!.units]).toEqual(["Annual leave", "1250.00", "40", "1"]);
+      expect(annual.leave!.basis).toMatchObject({
+        rateUsed: "awe",
+        ordinaryWeeklyPay: "1200.000000",
+        averageWeeklyEarningsFrom: "2025-07-13",
+        averageWeeklyEarningsTo: "2026-07-12",
+        grossEarnings: "65000.000000",
+        divisor: "52",
+      });
+      expect(lines(run, "aroha")[0]).toEqual(["Ordinary time", null, "0.00", "usual_pay"]);
+      approved["A:2026-07-13"] = await approve(run.id);
+      expect((await asJess((tx) => getLeaveSummary(tx, people.aroha, "2026-07-17"))).annual).toMatchObject({ weeks: "3.0000", hours: "120.00", days: "15.00", lastEntitled: "2026-04-01" });
+      await payWeeks("A", "2026-07-20", "2026-08-03");
+    });
+
+    it("HL12, decision 29: a cash-up needs the written request and answer, pays 1,250.96, and a second one in the year is refused", async () => {
+      const letter = (text: string) => ({ fileName: `${text}.pdf`, content: new TextEncoder().encode(`%PDF-1.4\n${text}\n%%EOF`) });
+      await expect(
+        asJess((tx) => createCashUp(tx, { idempotencyKey: key("cash"), employeeId: people.aroha, requestedOn: "2026-08-10", weeks: "1", request: letter("request") })),
+      ).rejects.toThrow("Attach the written answer");
+      const { cashUp } = await asJess((tx) =>
+        createCashUp(tx, { idempotencyKey: key("cash"), employeeId: people.aroha, requestedOn: "2026-08-10", agreedOn: "2026-08-10", weeks: "1", request: letter("request"), answer: letter("answer") }),
+      );
+      expect(cashUp).toMatchObject({ weeks: "1", hours: "40", status: "agreed" });
+      await expect(
+        asJess((tx) =>
+          createCashUp(tx, { idempotencyKey: key("cash"), employeeId: people.aroha, requestedOn: "2026-08-11", hours: "24", request: letter("request 2"), answer: letter("answer 2") }),
+        ),
+      ).rejects.toThrow(`${REFUSED}: more than 1 week cashed up in an entitlement year`);
+      const run = await draft("A", "2026-08-10");
+      const [line] = leaveLines(run, "aroha");
+      expect([line.payItemName, line.amount, line.leave!.basis.averageWeeklyEarningsFrom]).toEqual(["Annual leave cashed up", "1250.96", "2025-08-10"]);
+      // A cash-up is an extra pay (decision 151), and isn't gross earnings for holiday pay (s 14(c)(iv)).
+      expect(of(run, "aroha").pay!.extraPay).toBe("1250.96");
+      approved["A:2026-08-10"] = await approve(run.id);
+      expect((await asJess((tx) => getLeaveSummary(tx, people.aroha, "2026-08-16"))).annual).toMatchObject({ weeks: "2.0000", cashedUpThisYear: "1.0000" });
+    });
+
+    it("HL22, HL26, HL27, HL30: sick leave carried over, bereavement, family violence leave as Special leave, Labour Day", async () => {
+      expect((await asJess((tx) => getLeaveSummary(tx, people.aroha, "2026-09-30"))).sick).toMatchObject({ days: "7.00", lastEntitled: "2025-10-01" });
+      await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.aroha, leaveType: "bereavement", bereavementKind: "close_family", startDate: "2026-11-09", endDate: "2026-11-11" }));
+      await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.aroha, leaveType: "family_violence", startDate: "2026-12-01", endDate: "2026-12-02" }));
+      await payWeeks("A", "2026-08-17", "2027-02-08", async (run) => {
+        if (run.periodStart === "2026-12-14") {
+          return (await asJess((tx) => setPayRunEmployeeLines(tx, run.id, people.aroha, { lines: [{ payItemId: items.Bonus.id, amount: "2600" }], keepUsualPay: true }))).payRun;
+        }
+        if (run.periodStart === "2026-12-07") {
+          return (await asJess((tx) => setPayRunEmployeeLines(tx, run.id, people.eru, { lines: [{ payItemId: items.Overtime.id, quantity: "40" }], keepUsualPay: true }))).payRun;
+        }
+      });
+      expect((await asJess((tx) => getLeaveSummary(tx, people.aroha, "2026-10-01"))).sick).toMatchObject({ days: "17.00", lastEntitled: "2026-10-01" });
+      expect(leaveLines(approved["A:2026-10-26"], "aroha").map((line) => [line.payItemName, line.amount])).toEqual([["Public holiday", "240.00"]]);
+      expect(leaveLines(approved["A:2026-11-09"], "aroha").map((line) => [line.payItemName, line.amount])).toEqual([
+        ["Bereavement leave", "240.00"],
+        ["Bereavement leave", "240.00"],
+        ["Bereavement leave", "240.00"],
+      ]);
+      expect(leaveLines(approved["A:2026-11-30"], "aroha").map((line) => [line.payItemName, line.amount, line.leave!.type])).toEqual([
+        ["Special leave", "240.00", "family_violence"],
+        ["Special leave", "240.00", "family_violence"],
+      ]);
+      const summary = await asJess((tx) => getLeaveSummary(tx, people.aroha, "2026-12-31"));
+      expect(summary.familyViolence).toEqual({ days: "8.00" });
+      expect(summary.sick).toMatchObject({ days: "17.00" });
+      // Eru's December overtime isn't regular (it isn't in his usual week; decision 11).
+      expect(of(approved["A:2026-12-07"], "eru").lines.find((line) => line.payItemName === "Overtime")).toMatchObject({ amount: "1500.00", regular: false });
+    }, 120_000);
+
+    it("HL14, decision 15: Eru's week in advance is paid at AWE since he started, 46,500.00 ÷ 45 = 1,033.33, with a warning to keep the agreement", async () => {
+      const booked = await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.eru, leaveType: "annual", startDate: "2027-02-15", endDate: "2027-02-19" }));
+      expect(booked.warnings).toEqual([
+        "This takes Eru Advance 1.00 weeks into annual holidays in advance (s 20). Keep a written agreement that lets you recover it if they leave (decision 15).",
+      ]);
+      const run = await draft("A", "2027-02-15");
+      const [annual] = leaveLines(run, "eru");
+      expect([annual.amount, annual.leave!.inAdvance, annual.leave!.basis.section, annual.leave!.basis.divisor, annual.leave!.basis.grossEarnings]).toEqual([
+        "1033.33",
+        true,
+        "s 22",
+        "45",
+        "46500.000000",
+      ]);
+      approved["A:2027-02-15"] = await approve(run.id);
+      expect((await asJess((tx) => getLeaveSummary(tx, people.eru, "2027-02-21"))).annual).toMatchObject({ weeks: "-1.0000" });
+    });
+
+    it("HL15: Eru leaves before 12 months: 8% of 48,533.33 less the 1,033.33 in advance = 2,849.34 (s 23)", async () => {
+      const run = await draft("A", "2027-02-22");
+      const termination = leaveLines(run, "eru");
+      expect(termination.map((line) => [line.payItemName, line.amount, line.leave!.basis.section])).toEqual([["Holiday pay owed on finishing", "2849.34", "s 23"]]);
+      expect(termination[0].leave!.basis).toMatchObject({ grossEarnings: "48533.330000", advancePaid: "1033.33", since: "2026-04-06" });
+      approved["A:2027-02-22"] = await approve(run.id);
+      await payWeeks("A", "2027-03-01", "2027-03-15");
+    });
+
+    it("HL13: 22 Mar to 2 Apr 2027 is 2 public holidays at RDP and 1.6 weeks of annual holidays = 2 × 1,000.77; 4.4 weeks on 1 Apr 2027 (HL42)", async () => {
+      await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.aroha, leaveType: "annual", startDate: "2027-03-22", endDate: "2027-04-02" }));
+      await payWeeks("A", "2027-03-22", "2027-03-29");
+      const first = leaveLines(approved["A:2027-03-22"], "aroha");
+      const second = leaveLines(approved["A:2027-03-29"], "aroha");
+      expect(first.map((line) => [line.payItemName, line.amount, line.leave!.hours])).toEqual([
+        ["Public holiday", "240.00", "8"],
+        ["Annual leave", "1000.77", "32"],
+      ]);
+      expect(second.map((line) => [line.payItemName, line.amount, line.leave!.hours])).toEqual([
+        ["Public holiday", "240.00", "8"],
+        ["Annual leave", "1000.77", "32"],
+      ]);
+      expect(first[1].leave!.basis).toMatchObject({ grossEarnings: "65050.000000", averageWeeklyEarningsTo: "2027-03-21", holidayStarts: "2027-03-22" });
+      const summary = await asJess((tx) => getLeaveSummary(tx, people.aroha, "2027-04-01"));
+      expect(summary.annual).toMatchObject({ weeks: "4.4000", days: "22.00", lastEntitled: "2027-04-01", cashedUpThisYear: "0.0000" });
+      expect(summary.sick).toMatchObject({ days: "17.00" });
+      expect(summary.familyViolence).toEqual({ days: "8.00" });
+      expect(summary.runningEightPercent).toMatchObject({ since: "2027-04-01", amount: "0.00" });
+    }, 60_000);
+  });
+
+  describe("Cara (HL3, HL7, HL24, HL30)", () => {
+    /** Cara's approved timesheet for a week: 6 hours Monday (unless `noMonday`), 8 Wednesday, 6 Friday; nothing on public holidays. */
+    const caraWeek = async (monday: string, options: { noMonday?: boolean; off?: string[] } = {}) => {
+      const hours: Record<string, string> = {};
+      const plan: Array<[number, string]> = [[0, "6"], [2, "8"], [4, "6"]];
+      for (const [offset, value] of plan) {
+        const date = addDays(monday, offset);
+        if (offset === 0 && options.noMonday) continue;
+        if (options.off?.includes(date)) continue;
+        hours[date] = value;
+      }
+      const opened = (await asJess((tx) => openTimesheet(tx, "owner", { idempotencyKey: key("sheet"), employeeId: people.cara, weekStart: monday }))).timesheet;
+      const saved = (await asJess((tx) => saveTimesheetEntries(tx, "owner", opened.id, { version: opened.version, rows: [{ hours }] }))).timesheet;
+      await asJess((tx) => submitTimesheet(tx, "owner", saved.id));
+      await asJess((tx) => approveTimesheet(tx, "owner", saved.id));
+    };
+    const holidays = ["2026-06-01", "2026-07-10", "2026-10-26"];
+
+    it("pays Cara from her approved timesheets, confirming the public holidays (decision 21)", async () => {
+      for (let monday = "2026-05-04"; monday <= "2026-10-19"; monday = addDays(monday, 7)) {
+        await caraWeek(monday, { noMonday: monday === "2026-10-12", off: holidays });
+        let run = await draft("C", monday);
+        const problem = of(run, "cara").problem;
+        const holiday = holidays.find((date) => date >= monday && date <= addDays(monday, 6));
+        if (holiday) {
+          expect(problem).toContain(`would otherwise have been a working day for Cara Varies (Tohyee suggests`);
+          await asJess((tx) => decidePublicHoliday(tx, { employeeId: people.cara, holidayDate: holiday, otherwiseWorking: true }));
+          run = await asJess((tx) => getPayRun(tx, run.id));
+        }
+        expect(of(run, "cara").problem).toBeNull();
+        approved[`C:${monday}`] = await approve(run.id);
+      }
+      expect(lines(approved["C:2026-05-11"], "cara")).toEqual([["Ordinary time", "20.00", "500.00", "typed"]]);
+    }, 60_000);
+
+    it("HL30, HL7, decisions 13, 21: on Labour Day Tohyee suggests from her last 4 Mondays; confirmed, she's paid average daily pay", async () => {
+      await caraWeek("2026-10-26", { off: holidays });
+      const run = await draft("C", "2026-10-26");
+      expect(of(run, "cara").problem).toBe(
+        "Confirm whether Labour Day on 26 Oct 2026 would otherwise have been a working day for Cara Varies (Tohyee suggests yes: worked 3 of the last 4 Mondays).",
+      );
+      await expect(approve(run.id)).rejects.toThrow("can't be approved yet: Confirm whether Labour Day");
+      await asJess((tx) => decidePublicHoliday(tx, { employeeId: people.cara, holidayDate: "2026-10-26", otherwiseWorking: true, suggestion: "worked 3 of the last 4 Mondays" }));
+      const after = await asJess((tx) => getPayRun(tx, run.id));
+      const [holiday] = leaveLines(after, "cara");
+      const basis = holiday.leave!.basis as Record<string, string | number>;
+      expect([holiday.payItemName, basis.method, basis.from]).toEqual(["Public holiday", "adp", "2025-10-27"]);
+      // 25 weeks of 3 days (less the Monday off and the holidays, which were paid) from her start.
+      expect(basis.days).toBe(75 - 1);
+      expect(holiday.amount).toBe(toFixedString(divide(dec(String(basis.gross)), dec(String(basis.days)), 2), 2));
+      approved["C:2026-10-26"] = await approve(after.id);
+    });
+
+    it("HL24: Cara's sick day is paid at average daily pay, and her hours vary, so Ordinary time isn't changed (a note says so)", async () => {
+      await caraWeek("2026-11-02", { off: ["2026-11-04"] });
+      await asJess((tx) =>
+        createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.cara, leaveType: "sick", startDate: "2026-11-04", dayHours: { "2026-11-04": "8" } }),
+      );
+      const run = await draft("C", "2026-11-02");
+      const [sick] = leaveLines(run, "cara");
+      expect([sick.payItemName, sick.leave!.basis.method, sick.leave!.units, sick.leave!.hours]).toEqual(["Sick leave", "adp", "1", "8"]);
+      expect(of(run, "cara").notes).toContain("Hours vary, so Tohyee didn't take leave and public holidays off Ordinary time: enter the hours worked.");
+      approved["C:2026-11-02"] = await approve(run.id);
+    });
+  });
+
+  describe("records, payslips and reports (HL40-HL42; decision 28)", () => {
+    it("HL41: Ben's holiday and leave record (s 81(2)), with a CSV export audited without figures", async () => {
+      const record = await asJess((tx) => getLeaveRecord(tx, people.ben));
+      const entries = record.entries.map((entry) => [entry.date, entry.item, entry.entry, entry.amount]);
+      expect(entries[0]).toEqual(["2025-03-03", "(b)", "Employment started", null]);
+      expect(entries).toContainEqual(["2026-03-03", "(d), (e)", "Entitled to 4 weeks' annual holidays", null]);
+      expect(entries).toContainEqual(["2026-10-26", "(i), (j)", "Worked Labour Day, 8 hours", "375.00"]);
+      expect(entries).toContainEqual(["2026-10-26", "(k)", "Alternative holiday arose", null]);
+      expect(entries).toContainEqual(["2026-11-04", "(g), (h)", "Sick leave, 1 day", "250.00"]);
+      expect(entries).toContainEqual(["2026-11-05", "(g), (h)", "Sick leave, 1 day", "475.00"]);
+      expect(entries).toContainEqual(["2026-11-12", "(l)", "Alternative holiday taken, 1 day", "475.00"]);
+      expect(entries.at(-1)).toEqual(["2026-12-18", "(o)", "Employment ended", null]);
+      const termination = record.entries.filter((entry) => entry.item === "(p)");
+      expect(termination).toHaveLength(3);
+      // Paid out on finishing, the balance is nothing.
+      expect((await asJess((tx) => getLeaveSummary(tx, people.ben, "2026-12-18"))).annual).toMatchObject({ weeks: "0.0000" });
+      expect(record.payPeriods[0]).toMatchObject({ periodStart: "2025-03-24", hours: "45.00", gross: "1380.00" });
+      const csv = await asJess((tx) => exportLeaveRecord(tx, people.ben));
+      expect(csv.csv.split("\r\n")[0]).toBe("Date,To,s 81(2),Entry,Hours,Amount,Pay run");
+      const audit = await asJess((tx) => tx.query<{ details: Record<string, unknown> }>("select details from audit_events where event_type = 'payroll_leave_record.exported' order by id desc limit 1"));
+      expect(Object.keys(audit.rows[0].details).sort()).toEqual(["rows", "sha256"]);
+    });
+
+    it("HL42, decision 28: the leave liability report shows the annual holidays' value and the running 8%, posting nothing", async () => {
+      const journals = await asJess((tx) => tx.query<{ count: string }>("select count(*)::text from ledger_journals"));
+      const report = await asJess((tx) => leaveLiabilityReport(tx, { asAt: "2026-12-13" }));
+      const ben = report.rows.find((row) => row.employeeId === people.ben)!;
+      // Ben before his final pay: 2 weeks, and 8% of his gross earnings since 3 Mar 2026.
+      expect(ben.annualWeeks).toBe("2.0000");
+      expect(ben.eightPercentSince).toBe("2026-03-03");
+      const aroha = report.rows.find((row) => row.employeeId === people.aroha)!;
+      expect(aroha).toMatchObject({ annualWeeks: "2.0000", eightPercentSince: "2026-04-01", problem: null });
+      expect(report.totals.total).toBe(toFixedString(sum(report.rows.map((row) => dec(row.total))), 2));
+      expect((await asJess((tx) => tx.query<{ count: string }>("select count(*)::text from ledger_journals"))).rows[0].count).toBe(journals.rows[0].count);
+      const exported = await asJess((tx) => exportLeaveLiability(tx, { asAt: "2026-12-13" }));
+      expect(exported.csv).toContain("Running 8%");
+    });
+
+    it("payslips show leave balances (the gap P5 left), never family violence leave (decision 27)", async () => {
+      const payslip = await asJess((tx) => getPayslip(tx, approved["A:2027-03-29"].id, people.aroha));
+      expect(payslip.leaveBalances).toEqual({ asAt: "2027-04-04", annualWeeks: "4.4000", annualHours: "176.00", sickDays: "17.00", alternativeHolidays: 0 });
+      const layout = payslipLayout(payslip);
+      expect(layout.leave).toEqual([
+        ["Annual holidays", "4.4 weeks (176.00 hours)"],
+        ["Sick leave", "17 days"],
+      ]);
+      expect(JSON.stringify(layout)).not.toMatch(/family violence/i);
+      const special = await asJess((tx) => getPayslip(tx, approved["A:2026-11-30"].id, people.aroha));
+      expect(payslipLayout(special).earnings.map((row) => row.label)).toContain("Special leave: Special leave 1 Dec 2026, 1 day");
+    });
+
+    it("decision 154: the employment information file's hours paid include leave hours", async () => {
+      await asJess((tx) => updatePaydayFilingSettings(tx, { employerIrdNumber: "123123123", contactName: "Jess", contactPhone: "034771234", contactEmail: "payroll@example.co.nz" }));
+      const file = await asJess((tx) => makePayRunPaydayFilingFile(tx, approved["A:2026-07-13"].id));
+      const aroha = file.content.split("\r\n").find((line) => line.split(",")[2] === "Aroha Salary")!.split(",");
+      expect(aroha[9]).toBe("4000");
+    });
+  });
+
+  describe("refused rather than guessed", () => {
+    it("typed holiday pay, typed leave items and typed holiday pay on finishing, for someone whose leave Tohyee keeps", async () => {
+      const run = await draft("C", "2026-11-09");
+      await expect(
+        asJess((tx) => setPayRunEmployeeLines(tx, run.id, people.cara, { lines: [{ payItemId: items["Holiday pay"].id, amount: "100" }] })),
+      ).rejects.toThrow("Tohyee keeps Cara Varies's leave, so book it under Payroll › Leave instead of typing holiday pay.");
+      await expect(
+        asJess((tx) => setPayRunEmployeeLines(tx, run.id, people.cara, { lines: [{ payItemId: items["Annual leave"].id, amount: "100" }] })),
+      ).rejects.toThrow("Annual leave is worked out by Tohyee from leave (Payroll › Leave), not typed.");
+      await asJess((tx) => updatePayRunLeave(tx, run.id));
+    });
+
+    it("leave from 6 Aug 2028 (Employment Leave Act 2026, decision 7), and leave for someone employed before Tohyee's records (opening balances, decision 143)", async () => {
+      await expect(
+        asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.cara, leaveType: "annual", startDate: "2028-08-07", dayHours: { "2028-08-07": "6" } })),
+      ).rejects.toThrow(`${REFUSED}: leave from 6 Aug 2028`);
+      people.old = await employee({ firstName: "Olive", lastName: "Longserving", startDate: "2019-02-04", payGroupId: groups.C });
+      await asJess((tx) => addLeaveSettings(tx, people.old, { idempotencyKey: key("settings"), pattern: week(Array.from({ length: 7 }, (_, index) => ({ hours: index < 5 ? "8" : "0" }))), annualPaidInPeriod: true }));
+      await expect(
+        asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.old, leaveType: "annual", startDate: "2026-11-16" })),
+      ).rejects.toThrow(`${REFUSED}: leave for Olive Longserving, whose leave entitlements began before Tohyee's first pay run for them`);
+    });
+
+    it("sick leave before 6 months without an agreement for leave in advance (s 63(3)) stops the pay run", async () => {
+      people.newbie = await employee({ firstName: "Nina", lastName: "New", startDate: "2026-11-16", payGroupId: groups.C });
+      await asJess((tx) => addLeaveSettings(tx, people.newbie, { idempotencyKey: key("settings"), pattern: week(Array.from({ length: 7 }, (_, index) => ({ hours: index < 5 ? "8" : "0" }))), annualPaidInPeriod: false }));
+      await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.newbie, leaveType: "sick", startDate: "2026-11-18" }));
+      await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.newbie, leaveType: "annual", startDate: "2026-11-20" }));
+      const run = await draft("C", "2026-11-16");
+      const problem = of(run, "newbie").problem!;
+      expect(problem).toContain("isn't entitled to sick leave yet on 18 Nov 2026 (6 months' employment, s 63)");
+      // Annual holidays are paid before they're taken unless agreed otherwise (s 27(1)).
+      expect(problem).toContain(`${REFUSED}: paying Nina New's annual holidays`);
+    });
+  });
+
   /** Gross earnings for holiday pay on approved pay runs for Ben between two dates (whole periods). */
   async function grossSince(from: string, to: string): Promise<string> {
     const result = await asJess((tx) =>
@@ -323,8 +682,4 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
     return result.rows[0].total;
   }
 
-  it("refuses typed holiday pay and leave items for someone whose leave Tohyee keeps", async () => {
-    void REFUSED;
-    void updatePayRunLeave;
-  });
 });

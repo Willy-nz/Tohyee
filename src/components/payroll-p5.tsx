@@ -270,6 +270,7 @@ export function PayslipView({ organisationId, payRunId, employeeId }: { organisa
         <Rows heading="Deductions" rows={layout.deductions} total={["Net pay", layout.netPay]} />
         {layout.employer.length ? <Rows heading="Paid by your employer" rows={layout.employer} /> : null}
         <Rows heading={layout.yearToDateHeading} rows={layout.yearToDate} />
+        {layout.leave.length > 0 ? <Rows heading={layout.leaveHeading} rows={layout.leave} /> : null}
         {layout.notes.map((note) => (
           <p key={note} className={ui.muted}>{note}</p>
         ))}

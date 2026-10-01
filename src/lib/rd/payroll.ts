@@ -33,6 +33,16 @@ export const RD_PAY_ITEM_KINDS = [
   "back_pay",
   "termination_holiday_pay",
   "kiwisaver_employer",
+  // Leave pay is salary or wages and holiday pay (IR1240 p 63; decision 155).
+  "annual_leave",
+  "sick_leave",
+  "bereavement_leave",
+  "family_violence_leave",
+  "public_holiday",
+  "public_holiday_worked",
+  "alternative_holiday",
+  "annual_leave_cash_up",
+  "alternative_holiday_payout",
 ] as const;
 
 export type RdPayShare = {

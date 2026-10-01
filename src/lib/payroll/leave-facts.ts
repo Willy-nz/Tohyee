@@ -1,3 +1,4 @@
+import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
@@ -254,8 +255,9 @@ export function whyLeaveNotKept(facts: EmployeeFacts, recordsStart: string | nul
   if (facts.typedHolidayPay.length > 0) {
     return `${NOT_SUPPORTED}: leave for ${facts.name}, who was paid typed holiday pay on ${facts.typedHolidayPay.join(", ")} (Tohyee doesn't know what leave it was for; opening leave balances need their own worked example).`;
   }
-  const start = recordsStart ?? facts.recordsStart;
-  if (start) {
+  // With no pay records yet, Tohyee's records would start now.
+  const start = recordsStart ?? facts.recordsStart ?? todayIsoDate();
+  {
     const firstAnnual = addMonths(facts.startDate, 12);
     const firstSick = addMonths(facts.startDate, 6);
     const first = firstSick < firstAnnual ? firstSick : firstAnnual;
