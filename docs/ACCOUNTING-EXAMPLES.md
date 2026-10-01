@@ -4809,7 +4809,9 @@ to 4000, GST).
   most 4 can be invoiced here"). Changing a linked line's item, changing
   the invoice's customer, and an invoice line naming an order line on an
   invoice that wasn't made from that order are all refused (the database
-  refuses them too). A line of its own, "Freight" 15.00 to 4000, can be
+  refuses them too). Two changes at the same moment that each fit but
+  together go over take turns, and the second is refused, in the database
+  as well. A line of its own, "Freight" 15.00 to 4000, can be
   added to the invoice, and a linked line's price can be changed to 11.50
   (the invoice posts 11.50; the order keeps 12.00, since invoiced counts
   quantities).

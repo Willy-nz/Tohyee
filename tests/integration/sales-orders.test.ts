@@ -38,6 +38,7 @@ import {
   sessionCookieFor,
   startTestServer,
   type TestServer,
+  waitForLockWaiters,
 } from "../helpers/test-server";
 
 const noContext = undefined as unknown;
@@ -359,6 +360,32 @@ describeWithDatabase("sales orders", () => {
     expect([billed.status, billed.lines[0].unitPrice]).toEqual(["billed", "12"]);
   });
 
+  it("SO6: two transactions can't both take what's left, even straight in the database", async () => {
+    const w = await setup();
+    const order = await w.approve((await w.draft()).id);
+    const widgetLine = order.lines[0];
+    const four = [{ salesOrderLineId: widgetLine.id, quantity: "4" }];
+    const first = (await w.invoice(order.id, "2026-08-05", { lines: four })).invoice;
+    const second = (await w.invoice(order.id, "2026-08-05", { lines: four })).invoice;
+    const raise = (invoiceId: string) => (tx: OrgTx) =>
+      tx.query("update sales_invoice_lines set quantity = 6, base_quantity = 6 where invoice_id = $1 and sales_order_line_id = $2", [
+        invoiceId,
+        widgetLine.id,
+      ]);
+    // 6 + 4 fits the 10 ordered; while that's uncommitted, the other transaction waits, then sees 6 + 6.
+    const { rival } = await w.as(async (tx) => {
+      await raise(first.id)(tx);
+      const queued = w.as(raise(second.id));
+      const settled = Promise.allSettled([queued]);
+      await waitForLockWaiters(tx, 1);
+      return { rival: settled };
+    });
+    const [outcome] = await rival;
+    expect(outcome.status).toBe("rejected");
+    expect(String((outcome as PromiseRejectedResult).reason)).toContain("Invoices can't add up to more than the sales order line ordered");
+    expect(w.billing(await w.reload(order.id))[0]).toEqual(["0", "10", "0"]);
+  });
+
   it("SO7: closing an order stops invoicing it", async () => {
     const w = await setup();
     const order = await w.approve((await w.draft()).id);
@@ -530,6 +557,18 @@ describeWithDatabase("sales orders", () => {
     const invoiceKey = key("inv");
     const made = await w.as((tx) => invoiceSalesOrder(tx, id, { idempotencyKey: invoiceKey, invoiceDate: "2026-08-05", lines: [{ salesOrderLineId: created.salesOrder.lines[0].id, quantity: "1" }] }));
     await expect(w.as((tx) => invoiceSalesOrder(tx, id, { idempotencyKey: invoiceKey, invoiceDate: "2026-08-06" }))).rejects.toThrow(/idempotency key/);
+    // The same date with other quantities, a due date or a rate is a different request too.
+    const sameDate = { idempotencyKey: invoiceKey, invoiceDate: "2026-08-05" };
+    await expect(
+      w.as((tx) => invoiceSalesOrder(tx, id, { ...sameDate, lines: [{ salesOrderLineId: created.salesOrder.lines[0].id, quantity: "2" }] })),
+    ).rejects.toThrow(/idempotency key/);
+    await expect(w.as((tx) => invoiceSalesOrder(tx, id, { ...sameDate, dueDate: "2026-08-31", lines: [{ salesOrderLineId: created.salesOrder.lines[0].id, quantity: "1" }] }))).rejects.toThrow(
+      /idempotency key/,
+    );
+    const replayed = await w.as((tx) =>
+      invoiceSalesOrder(tx, id, { ...sameDate, lines: [{ salesOrderLineId: created.salesOrder.lines[0].id, quantity: "1.000" }] }),
+    );
+    expect([replayed.created, replayed.invoice.id]).toEqual([false, made.invoice.id]);
     await w.approveInv(made.invoice.id);
     const closeKey = key("close");
     await w.as((tx) => closeSalesOrder(tx, id, { idempotencyKey: closeKey }));

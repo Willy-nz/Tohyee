@@ -9307,7 +9307,9 @@ create trigger sales_invoices_sales_order before insert or update of contact_id,
 -- An invoice line from a sales order line: that line is on the invoice's own
 -- sales order, which is approved, it has the same item and unit, and the
 -- invoices that aren't voided never add up to more than was ordered (SO6).
--- The order is locked for share so closing or cancelling it waits.
+-- The order is locked for update, so two transactions adding to the same
+-- order take turns and the second counts the first's lines once it commits;
+-- closing or cancelling it waits too.
 create function tohyee_check_invoice_line_sales_order() returns trigger
 language plpgsql as $$
 declare
@@ -9324,7 +9326,7 @@ begin
   if invoice_so is distinct from so_line.sales_order_id then
     raise exception 'An invoice line can only come from its own invoice''s sales order' using errcode = 'P0001';
   end if;
-  select status into so_status from sales_orders where id = so_line.sales_order_id for share;
+  select status into so_status from sales_orders where id = so_line.sales_order_id for update;
   if so_status <> 'approved' then
     raise exception 'Invoice lines can only come from an approved sales order' using errcode = 'P0001';
   end if;

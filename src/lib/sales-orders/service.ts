@@ -711,6 +711,18 @@ function parseQuantities(input: unknown, order: SalesOrder): Array<{ line: Sales
   return wanted.sort((a, b) => a.line.lineOrder - b.line.lineOrder);
 }
 
+/** The quantities asked for, normalised for the idempotency fingerprint (null: everything left). */
+function quantitiesForHash(input: unknown): Array<[string, string]> | null {
+  if (input === undefined || input === null) return null;
+  return requireArray(input, "lines")
+    .map((entry, index): [string, string] => {
+      const item = asRecord(entry, `Line ${index + 1}`);
+      const quantity = parseDecimalInput(item.quantity, `Line ${index + 1} quantity`, { maxScale: 4, allowZero: true });
+      return [requireId(item.salesOrderLineId, `Line ${index + 1} sales order line`), toPlainString(dec(quantity))];
+    })
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
 const INVOICE_SOURCE = "sales_order";
 
 /**
@@ -738,14 +750,22 @@ export async function invoiceSalesOrder(
   const dueDate = parseOptionalIsoDate(input.dueDate, "dueDate");
   const typedRate = parseRateInput(input.exchangeRate);
   const invoiceKey = `${id}:${source}:${idempotencyKey}`;
+  // The request as sent (SO12): a retry with the same key and anything different is refused.
+  const hash = requestHash("sales_order_invoice", {
+    salesOrderId: id,
+    invoiceDate,
+    dueDate,
+    exchangeRate: typedRate ?? null,
+    lines: quantitiesForHash(input.lines),
+  });
   const replay = async () => {
-    const found = await tx.query<{ id: string; sales_order_id: string | null; invoice_date: string }>(
-      "select id, sales_order_id, invoice_date from sales_invoices where command_source = $1 and idempotency_key = $2",
+    const found = await tx.query<{ id: string; sales_order_id: string | null; request_hash: string }>(
+      "select id, sales_order_id, request_hash from sales_invoices where command_source = $1 and idempotency_key = $2",
       [INVOICE_SOURCE, invoiceKey],
     );
     const row = found.rows[0];
     if (!row) return null;
-    if (row.sales_order_id !== id || row.invoice_date !== invoiceDate) {
+    if (row.sales_order_id !== id || row.request_hash !== hash) {
       throw new ConflictError("That idempotency key was already used for a different invoice from a sales order. Use a new key.");
     }
     return { created: false, salesOrder: await getSalesOrder(tx, id), invoice: await getInvoice(tx, row.id) };
@@ -794,7 +814,7 @@ export async function invoiceSalesOrder(
       ...(typedRate != null ? { exchangeRate: typedRate } : {}),
     },
     { foreignCurrency: true, feature: "Sales orders" },
-    { salesOrderId: current.id },
+    { salesOrderId: current.id, requestHash: hash },
   );
   await writeAuditEvent(tx, {
     eventType: "sales_order.invoiced",

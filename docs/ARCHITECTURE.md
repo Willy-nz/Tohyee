@@ -517,7 +517,8 @@ Enforced by the database itself, not just the app:
   `sales_order_line_id` must be a line of that order with the same item and
   unit, and the lines on invoices that aren't voided never add up to more
   than the order line's quantity (triggers; saving a linked invoice locks
-  the order first, so two invoices can't both take the last of a line). A quote's
+  the order first, and so does the trigger, so two invoices can't both take
+  the last of a line). A quote's
   `sales_order_id` is set when it's accepted as an order (an accepted quote
   has an invoice or a sales order, not both). What's invoiced per line and
   the status (pending billing, partly billed, billed) are worked out from

@@ -1049,17 +1049,22 @@ async function checkSalesOrderLinks(
   }
 }
 
-/** Saves a new draft. Drafts post nothing. `link` is for invoicing a sales order (SO3). */
+/**
+ * Saves a new draft. Drafts post nothing. `link` is for invoicing a sales
+ * order (SO3); its `requestHash` is the order's Invoice request, stored so a
+ * retry with the same key and different content is refused (SO12).
+ */
 export async function createInvoice(
   tx: OrgTx,
   input: InvoiceInput & { source?: unknown; idempotencyKey: unknown },
   foreign: ForeignOption = {},
-  link: { salesOrderId: string } | null = null,
+  link: { salesOrderId: string; requestHash?: string } | null = null,
 ): Promise<{ created: boolean; invoice: Invoice }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const draft = parseDraft(input, { dueFromTerms: true });
-  const hash = requestHash("sales_invoice", { ...hashPayload(draft), ...(link ? { salesOrderId: link.salesOrderId } : {}) });
+  const hash =
+    link?.requestHash ?? requestHash("sales_invoice", { ...hashPayload(draft), ...(link ? { salesOrderId: link.salesOrderId } : {}) });
 
   const existing = await findByKey(tx, "create", source, idempotencyKey);
   if (existing) {
