@@ -8,7 +8,7 @@ import { createEmployee } from "@/lib/payroll/employees";
 import { createPayGroup } from "@/lib/payroll/groups";
 import { addDays } from "@/lib/payroll/leave/dates";
 import { addLeaveSettings, updateOrganisationLeaveSettings } from "@/lib/payroll/leave-settings";
-import { cancelLeaveBooking, createCashUp, createLeaveBooking, decidePublicHoliday } from "@/lib/payroll/leave-records";
+import { addUnpaidLeave, cancelLeaveBooking, cancelUnpaidLeave, createCashUp, createLeaveBooking, decidePublicHoliday, exchangeAlternativeHoliday } from "@/lib/payroll/leave-records";
 import { exportLeaveLiability, exportLeaveRecord, getLeaveRecord, getLeaveSummary, leaveLiabilityReport } from "@/lib/payroll/leave-reports";
 import { makePayRunPaydayFilingFile, updatePaydayFilingSettings } from "@/lib/payroll/payday-filing-service";
 import { payslipLayout } from "@/lib/payroll/payslip-layout";
@@ -222,8 +222,13 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
       approved["B:2025-04-14"] = await approve(easter.id);
     });
 
-    it("pays Ben through to May 2026, public holidays included", async () => {
-      await payWeeks("B", "2025-04-21", "2026-05-04");
+    it("pays Ben through to May 2026, public holidays included; he works Labour Day 2025, so an alternative holiday arises", async () => {
+      await payWeeks("B", "2025-04-21", "2026-05-04", async (run) => {
+        if (run.periodStart !== "2025-10-27") return;
+        await asJess((tx) => decidePublicHoliday(tx, { employeeId: people.ben, holidayDate: "2025-10-27", otherwiseWorking: true, hoursWorked: "8" }));
+        return asJess((tx) => getPayRun(tx, run.id));
+      });
+      expect(leaveLines(approved["B:2025-10-27"], "ben").map((line) => [line.payItemName, line.amount])).toEqual([["Public holiday worked", "351.00"]]);
     }, 120_000);
 
     it("HL13, decision 9: two weeks of annual holidays (90 hours) at the greater of OWP and AWE, after his entitlement on Tue 3 Mar 2026", async () => {
@@ -266,10 +271,34 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
       approved["B:2026-10-26"] = await approve(run.id);
     });
 
+    it("HL33, decision 24: the alternative holiday from Labour Day 2025 is exchanged for money only after 12 months, at RDP by default", async () => {
+      await expect(
+        asJess((tx) =>
+          exchangeAlternativeHoliday(tx, { idempotencyKey: key("exchange"), employeeId: people.ben, aroseOn: "2025-10-27", requestedOn: "2026-10-20", agreementNote: "Ben asked by email" }),
+        ),
+      ).rejects.toThrow("only once 12 months have passed since it arose (s 61(2)(a)): from 27 Oct 2026");
+      const { exchange } = await asJess((tx) =>
+        exchangeAlternativeHoliday(tx, {
+          idempotencyKey: key("exchange"),
+          employeeId: people.ben,
+          aroseOn: "2025-10-27",
+          requestedOn: "2026-10-28",
+          agreedOn: "2026-10-28",
+          agreementNote: "Ben asked in writing on 28 Oct 2026; agreed the same day at his Wednesday's pay",
+        }),
+      );
+      // His Wednesday's relevant daily pay at 30.00 (decision 24).
+      expect([exchange.defaultAmount, exchange.amount]).toEqual(["250.00", "250.00"]);
+    });
+
     it("HL23: sick Wed 4 and Thu 5 Nov at RDP 250.00 and 475.00, 2 days off his balance", async () => {
       await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.ben, leaveType: "sick", startDate: "2026-11-04", endDate: "2026-11-05" }));
       const run = await draft("B", "2026-11-02");
-      expect(leaveLines(run, "ben").map((line) => [line.payItemName, line.amount, line.leave!.units, line.leave!.hours])).toEqual([
+      // The exchanged alternative holiday is paid in this pay as an extra pay (decision 151).
+      expect(leaveLines(run, "ben").filter((line) => line.leave!.type === "exchange").map((line) => [line.payItemName, line.amount])).toEqual([
+        ["Alternative holiday paid out", "250.00"],
+      ]);
+      expect(leaveLines(run, "ben").filter((line) => line.leave!.type === "sick").map((line) => [line.payItemName, line.amount, line.leave!.units, line.leave!.hours])).toEqual([
         ["Sick leave", "250.00", "1", "8"],
         ["Sick leave", "475.00", "1", "13"],
       ]);
@@ -559,6 +588,23 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
       expect(basis.days).toBe(75 - 1);
       expect(holiday.amount).toBe(toFixedString(divide(dec(String(basis.gross)), dec(String(basis.days)), 2), 2));
       approved["C:2026-10-26"] = await approve(after.id);
+    });
+
+    it("HL10, decision 14: 3 weeks' unpaid leave moves Cara's anniversary by 21 days, unless a written agreement to count it is attached", async () => {
+      expect((await asJess((tx) => getLeaveSummary(tx, people.cara, "2026-12-31"))).annual).toMatchObject({ nextEntitled: "2027-05-04" });
+      await expect(
+        asJess((tx) => addUnpaidLeave(tx, { idempotencyKey: key("unpaid"), employeeId: people.cara, startDate: "2027-01-04", endDate: "2027-01-24", agreedToCount: true })),
+      ).rejects.toThrow("Attach the written agreement");
+      const { unpaidLeave } = await asJess((tx) => addUnpaidLeave(tx, { idempotencyKey: key("unpaid"), employeeId: people.cara, startDate: "2027-01-04", endDate: "2027-01-24" }));
+      expect(unpaidLeave.movesAnniversary).toBe(true);
+      expect((await asJess((tx) => getLeaveSummary(tx, people.cara, "2026-12-31"))).annual).toMatchObject({ nextEntitled: "2027-05-25" });
+      await asJess((tx) => cancelUnpaidLeave(tx, unpaidLeave.id));
+      const agreement = { fileName: "agreement.pdf", content: new TextEncoder().encode("%PDF-1.4\nagreed\n%%EOF") };
+      const agreed = await asJess((tx) =>
+        addUnpaidLeave(tx, { idempotencyKey: key("unpaid"), employeeId: people.cara, startDate: "2027-01-04", endDate: "2027-01-24", agreedToCount: true, agreement }),
+      );
+      expect(agreed.unpaidLeave.movesAnniversary).toBe(false);
+      expect((await asJess((tx) => getLeaveSummary(tx, people.cara, "2026-12-31"))).annual).toMatchObject({ nextEntitled: "2027-05-04" });
     });
 
     it("HL24: Cara's sick day is paid at average daily pay, and her hours vary, so Ordinary time isn't changed (a note says so)", async () => {

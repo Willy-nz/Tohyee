@@ -342,6 +342,21 @@ describe("annual holidays (HL10-HL16)", () => {
     ]);
     expect(result.total).toBe("9256.19");
     expect(result.parts[0].basis.rateUsed).toBe("awe");
+    // An alternative holiday still untaken would be paid at his last day's RDP, 250.00 (s 60(2)(b); HL33).
+    const withAlternative = terminationHolidayPay({
+      entitled: true,
+      untaken,
+      weekHours: "45",
+      owp: ordinaryWeeklyPay(ben, benRate),
+      awe: awe.weekly,
+      publicHolidays: holidayPays,
+      grossSince: dec("62180"),
+      grossSinceDate: "2026-03-03",
+      advancePaid: dec("0"),
+      alternativeHolidays: [{ arose: "2026-10-26", pay: relevantDailyPay(ben, benRate, "2026-12-18")!, hours: "8" }],
+    });
+    expect(withAlternative.parts.at(-1)).toMatchObject({ kind: "alternative_holidays", amount: "250.00" });
+    expect(withAlternative.total).toBe("9506.19");
     // Leaving the public holidays out would have given 5,211.57.
     expect(money(mul(dec("65144.62"), dec("0.08")))).toBe("5211.57");
   });
