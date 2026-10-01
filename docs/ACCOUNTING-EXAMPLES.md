@@ -11471,7 +11471,7 @@ HL10-HL16, HL20-HL27, HL30-HL33, HL42, decision 7) and
 examples' own figures where Tohyee's records can hold them: Ben's usual
 pay, public holidays, Labour Day worked, sick leave, alternative holidays,
 holiday pay on finishing; Aroha's holidays, cash-up, bereavement, family
-violence leave and balances; Eru's holidays in advance and leaving; Fiona;
+violence leave and balances; Eru's holidays in advance and leaving; Fiona (HL25, HL32);
 Cara's ADP and the decision for her; unpaid leave; records, payslips, the
 liability report, the EI file and the API).
 
