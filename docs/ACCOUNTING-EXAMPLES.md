@@ -152,9 +152,12 @@ Tests: `tests/unit/payroll-allocation.test.ts` (PE3, PE4, PE5),
 An allocation has an **effective-from date** and one or more lines. Each line
 has a percentage (more than 0, at most 2 decimal places) and any of a
 Department, Class and Location value (the tracking categories), a project
-and, later, an R&D activity (the RDTI register is stage R2; until then the
-R&D activity is always empty and setting one is refused). A line needs at
-least one of the Department, Class, Location or project. Two lines can't
+and an R&D activity from the RDTI register (stage R2: an active activity in
+the register; an unknown or archived one is refused). A line needs at least
+one of the Department, Class, Location, project or R&D activity. The
+allocation only records where pay is charged: for the R&D claim (stage R3), a
+default split counts as R&D only when the employee's allocation is 100% R&D,
+and otherwise needs a time record (decision 34; RD7). Two lines can't
 have exactly the same Department, Class, Location, project and R&D activity.
 The lines must total exactly **100.00%**. Saving a new allocation never
 changes an earlier one: the allocation in effect on a date is the one with
@@ -174,7 +177,7 @@ original exactly.
 | --- | --- | --- |
 | PE3 | Aroha Ngata from 1 April 2026: 60% Department Sales, Location Wellington; 40% Department Operations, Location Auckland. Split **$1,234.57**. | Exact shares 740.742 and 493.828. Cut to cents: 740.74 + 493.82 = 1,234.56, so 1 cent is left. The 40% line had the larger part cut off (0.008 against 0.002), so it gets the cent: **Sales 740.74, Operations 493.83**, total 1,234.57. Split **−$1,234.57** (a reversal): **−740.74 and −493.83**. |
 | PE4 | Rounding cents: 33.33% / 33.33% / 33.34% of **$10.00**; 50% / 50% of **$0.01**; 33.33% / 33.33% / 33.34% of **$100.00**. | 3.333, 3.333, 3.334 cut to 3.33 each (9.99); the third line had the most cut off: **3.33, 3.33, 3.34**. Half a cent each ties, so the first line gets it: **0.01 and 0.00** (rounding each half up would give 0.02). 33.33, 33.33, 33.34 are exact: **33.33, 33.33, 33.34**, nothing left over. |
-| PE5 | Lines of 60% and 30% (90%); lines of 60% and 50% (110%); a line of 0%; a line of 33.333%; a 100% line with no Department, Class, Location or project; two 50% lines both Department Sales. | All refused: "The allocation lines total 90.00%. They must total exactly 100.00%." (and 110.00%); a 0% line, a third decimal place, an empty line ("Line 1 needs a Department, Class, Location or project") and a repeated line ("Line 2 is the same as line 1") are refused too. Nothing is saved. |
+| PE5 | Lines of 60% and 30% (90%); lines of 60% and 50% (110%); a line of 0%; a line of 33.333%; a 100% line with no Department, Class, Location or project; two 50% lines both Department Sales. | All refused: "The allocation lines total 90.00%. They must total exactly 100.00%." (and 110.00%); a 0% line, a third decimal place, an empty line ("Line 1 needs a Department, Class, Location, project or R&D activity"), an R&D activity not in the register ("Line 1: that R&D activity wasn't found") or archived ("Line 1: C1 is archived") and a repeated line ("Line 2 is the same as line 1") are refused too. Nothing is saved. |
 | PE6 | Aroha is 100% Department Sales from 1 April 2026. On 20 September 2026 she moves to Operations from **15 September 2026** (mid-month): a new allocation, 100% Operations, effective 15 September 2026. | The allocation in effect on 1 May and 14 September 2026 is still **100% Sales**; on 15 September 2026 and later it's **100% Operations**. Both stay in her history, oldest first. Her primary department in the employee list (the department of the biggest line in effect today) is Operations. How a pay period that spans the move is charged is a P3 question (below). |
 
 ### Pay rate history
@@ -214,8 +217,8 @@ rate events the effective date and pay basis.
 
 ### Not supported yet (refused rather than guessed)
 
-- Choosing an R&D activity on an allocation line (needs the RDTI register,
-  stage R2).
+- Choosing an R&D activity on the allocation screen: the API accepts one
+  (RDTI stage R2), but the screen doesn't offer it yet.
 - Allocations by pay item (e.g. overtime to a different department) and
   timesheets overriding the default split: stages P3 and P9.
 - Changing or deleting a saved allocation or pay rate: save a new one with
@@ -6659,7 +6662,14 @@ Stage R1 of the RDTI plan in [HANDOVER.md](HANDOVER.md): what Tohyee should
 **record** and **report** for New Zealand's Research and Development Tax
 Incentive, written so Jess can approve it before anything is built (R2: the
 activity register and tagging; R3: the claim report). **Nothing in this
-section is built, and there are no tests for it yet.** Every rule below cites
+section was built in R1.** Stage R2 (the register, approvals, tagging and
+asset usage) is now built and tested: RD1-RD3, RD8, RD9, RD11-RD13 and
+RD21-RD23 in `tests/integration/rd.test.ts` (and RD21-RD22's flag on screen in
+`tests/unit/rd-screens.test.ts`), RD7's hook (an allocation line naming an
+activity) there too. Payroll (RD5-RD7, RD22's timesheet), overheads (RD10),
+grants and feedstock (RD14, RD15), the cross-year and claim examples (RD4,
+RD16-RD20, RD24-RD27) are stage R3 or later. The examples are still waiting
+for Jess. Every rule below cites
 where it comes from. Where the guidance was unclear or left a choice, Jess
 asked Claude to research it and decide; those are decisions 30-50 in
 [DECISIONS.md](DECISIONS.md), applied in the examples below and listed at the

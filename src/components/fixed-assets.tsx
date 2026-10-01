@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { RdAssetPanel } from "@/components/rd";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { PrintButton } from "@/components/reports/ledger-reports";
 import { TrackingSelects, TrackingTagsText, useTracking } from "@/components/tracking";
@@ -595,6 +596,7 @@ export function FixedAssetView({ organisationId, assetId }: { organisationId: st
           </Button>
         </p>
       ) : null}
+      {asset.status !== "archived" ? <RdAssetPanel organisationId={organisationId} assetId={asset.id} /> : null}
       <RecordExtrasPanel key={`${asset.status}-${message ?? ""}`} organisationId={organisationId} recordType="fixed_asset" recordId={asset.id} />
       <p>
         <Link href="/operations/fixed-assets">Back to fixed assets</Link>

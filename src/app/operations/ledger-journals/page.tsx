@@ -22,6 +22,7 @@ const FX_KIND_TEXT: Record<"rate" | "implied" | "carrying_value" | "revaluation"
   revaluation: "(revaluation) at",
   document: "(document) at",
 };
+import { RdLineTags } from "@/components/rd";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 type JournalDetails = {
@@ -451,6 +452,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
           }}
         />
       ) : null}
+      {selected ? <RdLineTags key={`rd-journal-${selected}`} organisationId={organisationId} documentType="journal" documentId={selected} /> : null}
       {selected ? (
         <RecordExtrasPanel key={`journal-${selected}`} organisationId={organisationId} recordType="ledger_journal" recordId={selected} />
       ) : null}

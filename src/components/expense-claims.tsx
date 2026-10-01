@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { RdLineTags } from "@/components/rd";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { TrackingSelects, TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
@@ -576,6 +577,7 @@ export function ExpenseClaimView({ organisationId, claimId }: { organisationId: 
       </Card>
       <ClaimActions key={`${claim.status}-${claim.amountDue ?? ""}`} organisationId={organisationId} claim={claim} onChanged={changed} />
       <PaymentRows organisationId={organisationId} claim={claim} onChanged={changed} />
+      {claim.approvalJournalId ? <RdLineTags key={`rd-${claim.status}`} organisationId={organisationId} documentType="expense_claim" documentId={claim.id} /> : null}
       <RecordExtrasPanel key={`${claim.status}-${message ?? ""}`} organisationId={organisationId} recordType="expense_claim" recordId={claim.id} title="Receipt files, notes and history" />
       <p>
         <Link href="/operations/expense-claims">Back to expense claims</Link>

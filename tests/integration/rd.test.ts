@@ -582,7 +582,7 @@ describeWithDatabase("R&D activity register and tagging (RD1-RD3, RD7-RD9, RD11-
     expect(allocation.lines[0]).toMatchObject({ percentage: "60", rdActivityId: w.c1.id, rdActivityCode: "C1" });
     await expect(
       w.as((tx) => tx.query("insert into payroll_cost_allocation_lines (allocation_id, line_number, percentage, rd_activity_id) values ($1, 9, 1, gen_random_uuid())", [allocation.id])),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/foreign key/);
     const c2 = await w.activity({ code: "C2", name: "Archived core", kind: "core" });
     await w.as((tx) => setActivityArchived(tx, c2.id, true));
     await expect(add([{ percentage: "100", rdActivityId: c2.id }])).rejects.toThrow("C2 is archived");
