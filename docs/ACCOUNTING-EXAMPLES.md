@@ -39,6 +39,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM10) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
   `tests/integration/sales-platforms.test.ts` (SPC1-SPC10) and
+  `tests/integration/sales-platform-orders.test.ts` (SPC11-SPC23, not yet
+  approved) and
   `tests/integration/crm-custom-fields.test.ts` (CRMF1-CRMF12, not yet
   approved) and
   `tests/integration/reports-ledger.test.ts` (AGP1-AGP3, ATX1-ATX5,
@@ -88,7 +90,9 @@ proves it". Test names start with the example IDs they cover:
   the payroll % split (PE3-PE5), and `tests/unit/sales-platforms.test.ts`
   the webhook signature check, Shopify record shapes and which value is kept
   (SPC2, SPC3, SPC5, SPC6, SPC8), and `tests/unit/sales-platforms-screen.test.ts`
-  the sync log on the settings screen (SPC10)
+  the sync log on the settings screen (SPC10), and
+  `tests/unit/sales-platform-orders.test.ts` Shopify orders, refunds and
+  payouts worked out into Tohyee lines (SPC11-SPC17)
 
 ## NZ payroll — employee records (examples not yet approved by Jess)
 
@@ -4282,31 +4286,329 @@ Shopify store glimmers.myshopify.com, "Glimmers", NZD, prices exclude tax.
   disconnecting are refused (403); an admin can do them all. Nothing is
   posted to the ledger by any of this (no journals before or after).
 
+### Stage 2: Shopify orders into the accounts (examples not yet approved by Jess)
+
+Jess answered the stage 1 questions on 1 Oct 2026 (decisions 51-55 in
+`docs/DECISIONS.md`): orders reach the accounts **per order**, as
+NetSuite's Shopify connectors do; tax comes from Shopify's own tax lines;
+tracked products become stock items; the customer's country comes across.
+**None of this has been tried against a real Shopify store**: the tests use
+recorded Shopify-shaped responses and webhooks signed in the tests.
+
+What Shopify says (read on shopify.dev and help.shopify.com, Admin GraphQL
+API version 2026-07, 1 Oct 2026):
+
+- **Connecting a Dev Dashboard app**: the client ID and secret are
+  exchanged for a token by `POST https://{shop}.myshopify.com/admin/oauth/access_token`
+  with a form-encoded body `grant_type=client_credentials`, `client_id`,
+  `client_secret`; the answer has `access_token`, `scope` and `expires_in`
+  ("Always 86399 (24 hours)"). It only works when the app and store are in
+  the same Shopify organisation; otherwise Shopify answers
+  `shop_not_permitted` ("Client credentials cannot be performed on this
+  shop"), and a store outside the organisation needs the authorization code
+  grant
+  ([client credentials grant](https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant)).
+- **Scopes** ([access scopes](https://shopify.dev/docs/api/usage/access-scopes)):
+  `read_orders` (orders, their transactions and refunds; only the last 60
+  days of orders without `read_all_orders`, which Shopify must approve),
+  `read_shopify_payments_payouts` (payouts and balance transactions) and
+  `read_shopify_payments_accounts` (the Shopify Payments account the payouts
+  hang off). `read_products` also covers whether a variant's inventory is
+  tracked (`InventoryItem.tracked`). All read-only.
+- **Orders** ([Order](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/Order)):
+  `taxesIncluded` — "When `true`, the subtotal and line item prices include
+  tax amounts"; `totalPriceSet` is the total "before returns ... This
+  includes taxes and discounts"; `customer` is null for a guest checkout;
+  `test` marks test orders; `cancelledAt`; `displayFinancialStatus` (PAID,
+  PARTIALLY_PAID, PENDING, AUTHORIZED, PARTIALLY_REFUNDED, REFUNDED,
+  VOIDED, EXPIRED); `transactions` (kind SALE, CAPTURE, AUTHORIZATION,
+  REFUND...; status SUCCESS...).
+- **Lines** ([LineItem](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/LineItem)):
+  `originalTotalSet` "doesn't include discounts"; `discountAllocations` are
+  all the discounts allocated to the line (order-level ones too), so a
+  line's amount is its original total less its allocations; `taxLines`
+  (title, rate, `priceSet`); `taxable`; `isGiftCard`.
+  **Shipping** ([ShippingLine](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/ShippingLine)):
+  `discountedPriceSet` is "the shipping price after applying discounts. If
+  the parent order.taxesIncluded field is true, then this price includes
+  taxes", including cart-level discounts like free shipping; its own
+  `taxLines`; `isRemoved`.
+- **Refunds** ([Refund](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/Refund),
+  [RefundLineItem](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/RefundLineItem)):
+  each refunded line has `quantity`, `restocked`, `subtotalSet` and
+  `totalTaxSet`; refunded shipping has `subtotalAmountSet` and
+  `taxAmountSet`; `orderAdjustments`; and the refund's `transactions` are
+  the money returned. Shopify's page doesn't say whether a refund line's
+  subtotal includes tax on a taxes-included order; Tohyee takes it the same
+  way as the order's line prices and checks the result against the money
+  refunded (see below).
+- **Payouts** ([ShopifyPaymentsPayout](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/ShopifyPaymentsPayout),
+  [ShopifyPaymentsBalanceTransaction](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/ShopifyPaymentsBalanceTransaction)):
+  `shopifyPaymentsAccount.payouts` (status PAID, SCHEDULED, CANCELED, FAILED;
+  `issuedAt`; `net`; `transactionType` DEPOSIT or WITHDRAWAL) and
+  `shopifyPaymentsAccount.balanceTransactions(query: "payments_transfer_id:…")`
+  (type CHARGE, REFUND, ADJUSTMENT, CHARGEBACK…, each with `amount`, `fee`
+  and `net`). Shopify Payments takes its fees out of each transaction
+  before paying out
+  ([payout fees](https://help.shopify.com/en/manual/payments/shopify-payments/payouts/pay-periods-and-fees)),
+  and adds tax to them only for businesses in Switzerland, the European
+  Union, Australia or Singapore (same page), so a New Zealand store's fees
+  carry **no GST**.
+- **Webhooks** ([WebhookSubscriptionTopic](https://shopify.dev/docs/api/admin-graphql/2026-07/enums/WebhookSubscriptionTopic)):
+  `ORDERS_CREATE`, `ORDERS_UPDATED`, `ORDERS_PAID`, `ORDERS_CANCELLED` and
+  `REFUNDS_CREATE` (needing `read_orders`). There's no payout topic, so
+  payouts come with the catch-up sync.
+
+What NetSuite does (docs.oracle.com, NetSuite Connector for Shopify):
+orders come in as sales orders, billed as cash sales left in undeposited
+funds; the **Shopify Payout Report sync** then "creates a deposit record,
+deposits the corresponding cash sales and cash refunds, then adds lines to
+the deposit for the fees Shopify charges", with variances to a chosen
+account
+([Shopify Payout Report Sync](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_0630052659.html)).
+Tohyee has no undeposited funds account, so the "Shopify clearing" bank
+account plays that part (like Xero's Shopify clearing account), and the
+deposit is a transfer to the bank plus the fees. NetSuite maps discounts to
+a discount item; Tohyee's invoices have no negative lines, so each line
+carries Shopify's discount allocation instead (the amounts are the same).
+
+The rules (our choice where Shopify, NetSuite and Jess are silent):
+
+- **Connecting**: the admin gives either an existing admin-app access token
+  and API secret key (as in stage 1) or a Dev Dashboard app's client ID and
+  secret. Tokens from the client ID and secret are asked for again 5
+  minutes before they expire, stored encrypted with TOHYEE_SECRET_KEY and
+  never shown or logged. `shop_not_permitted` is refused with: "This app
+  and store aren't in the same Shopify organisation. Tohyee can only
+  connect a store with a Dev Dashboard app from the store's own
+  organisation (connecting someone else's store needs Shopify's
+  authorization code grant, which Tohyee doesn't do yet)."
+- **Settings** (admins): **Post to accounts** (off to start with; nothing is
+  fetched or posted while it's off), a **start date** (only orders
+  processed on or after it, and payouts issued on or after it, come in),
+  the **clearing account** (a bank account; set-up can add one called
+  "Shopify clearing"), the **bank account payouts arrive in**, the **fees
+  account** (an expense account, e.g. 6020 Bank fees), the **sales account**
+  and **shipping account** (revenue accounts, for lines whose item has no
+  income account and for shipping), the **tax code for each Shopify tax
+  rate** (e.g. 15% → GST) and the **code for untaxed sales** (zero-rated or
+  exempt, e.g. ZERO). Turning posting on needs the clearing, payout, fees,
+  sales and shipping accounts, a start date, and `read_orders` granted to
+  the app.
+- **Orders**: each Shopify order processed on or after the start date
+  becomes an **approved sales order** for the linked customer (stage 1's
+  customer sync runs for it first), reference the order's name ("#1001"),
+  dated the day it was processed in New Zealand time. It's remembered by
+  the store and order ID, kept after disconnecting, so a webhook sent again,
+  an overlapping sync or connecting the store again never makes a second.
+  **Paid** orders (Shopify says PAID, PARTIALLY_REFUNDED or REFUNDED) are
+  invoiced from the sales order (the whole order), approved, and the
+  successful sale and capture transactions are recorded as a **customer
+  payment into the clearing account**, dated the day of the last one.
+  Orders **cancelled before payment** cancel the sales order.
+- **Lines**: each order line's amount is Shopify's original total less its
+  discount allocations; quantity × unit price must give that amount
+  exactly, so when it doesn't divide (22.00 for 3) it's two lines (2 ×
+  7.33 and 1 × 7.34). Each non-removed shipping line is a line "Shipping:
+  {title}" at its discounted price to the shipping account. A line whose
+  variant is linked to an item carries the item (so stock items move
+  stock) and goes to the item's income account, else the sales account.
+- **Tax**: an organisation with a GST number in Settings is GST registered
+  (as on its tax invoices, PD2-PD7). Registered: the amounts are tax
+  inclusive when Shopify's `taxesIncluded` is true, else exclusive; a line
+  with a Shopify tax line takes the Tohyee code mapped to that rate (whose
+  rate must be the same); a line with none takes the export tax code when
+  Foreign trade is on and the customer is overseas (EX3, EX4), else the
+  untaxed code. Tohyee works GST out per line, as always; when a line's GST
+  differs from Shopify's tax line (by rounding), the sync log says so with
+  both amounts. **Not registered**: the amounts have no tax; any tax
+  Shopify charged is part of the sale and the log says so. If the invoice
+  total isn't Shopify's order total, the order isn't invoiced and the log
+  shows both totals.
+- **Country**: a new contact gets the customer's country (Shopify
+  customer's default address, else the order's billing address) as its
+  billing country; for a linked contact the country is a copied field like
+  name and email (SPC5's rules).
+- **Stock**: a new item from a variant whose inventory Shopify tracks is a
+  **stock** item, otherwise non-stock. Stock moves only through the
+  invoices and credit notes, by the existing rules (ST1-ST12): an invoice
+  for more than is on hand is refused unless negative stock is allowed, and
+  then the order waits (logged) until there's stock. Nothing is written
+  back to Shopify. A linked item keeps its type.
+- **Refunds**: each Shopify refund with money returned, on an order that
+  was invoiced, becomes an **approved credit note** against the invoice,
+  dated the refund's day: a line per refunded line (the quantity, and
+  Shopify's subtotal, plus its tax when the order's prices exclude tax), a
+  line per refunded shipping line; restocked stock items come back at the
+  sale's cost (ST5), others are a line without the item. The credit note's
+  total must equal the money refunded (the refund's successful REFUND
+  transactions), otherwise nothing is posted and the log shows both. The
+  credit note is then **refunded from the clearing account** for its total.
+- **Payouts**: each Shopify Payments payout with status PAID, issued on or
+  after the start date, is posted on its issue date (New Zealand time) as a
+  **transfer from the clearing account to the payouts bank account** for
+  its net amount, and a **spend money from the clearing account** to the
+  fees account for the fees and any adjustments (no GST; contact "Shopify",
+  added if there isn't one). Its balance transactions' nets must add up to
+  the payout's net, and only CHARGE, REFUND and ADJUSTMENT ones are posted;
+  anything else (chargebacks, reserves, advances...) is refused for that
+  payout and logged. So the payout's bank statement line matches the
+  transfer, and the clearing account is left with what Shopify still holds.
+- **Never twice, never silently**: everything posted is remembered by store
+  and Shopify ID; every order, refund and payout that's posted, refused or
+  waiting gets a sync log line, and a line that says the same thing isn't
+  repeated every 15 minutes. Posting follows the period lock: a date in a
+  locked period is refused and logged, and tried again next sync.
+
+Setup (on top of SPC1-SPC10's): Glimmers Ltd, base currency NZD, **GST
+number 123-456-789**, Foreign trade **off**, tax code for exports
+**EXPORT** (a zero-rated code, EX13). The store's prices **include tax**.
+Connection settings: post to accounts **on**, start date **2026-10-01**,
+clearing account **1010 Shopify clearing** (bank, added in set-up), payouts
+into **1000 Business bank account**, fees **6020 Bank fees**, sales and
+shipping **4000 Sales**, Shopify 15% → **GST**, untaxed → **ZERO**. Dates
+are New Zealand dates (NZDT, UTC+13).
+
+- **SPC11** A GST-registered organisation's taxes-included order: order
+  **#1001** (5001), processed 2026-10-02T01:30Z, customer 1001 Aroha Ngata,
+  2 × Large candle (CANDLE-L) at 23.00 = **46.00**, Shopify tax line GST 15%
+  **6.00**, paid by Shopify Payments 46.00. Sales order **SO-0001** (2 Oct,
+  approved, tax inclusive): 2 × 23.00 GST. Invoice **INV-0001** 2 Oct:
+  **Dr 1100 46.00 / Cr 4000 40.00 / Cr 2100 6.00**. Payment 2 Oct:
+  **Dr 1010 46.00 / Cr 1100 46.00**. The invoice is paid and the sales
+  order billed. The log has the order's "posted" line.
+- **SPC12** A non-GST-registered organisation's order (the Glimmers store
+  isn't GST registered, decision 53): no GST number; the same order with no
+  tax lines. SO and invoice have **no tax**: 2 × 23.00 = 46.00:
+  **Dr 1100 46.00 / Cr 4000 46.00**, payment **Dr 1010 46.00 / Cr 1100
+  46.00**. Had Shopify charged 6.00 tax, the amounts would be the same and
+  the log would say the 6.00 is part of the sale because the organisation
+  isn't GST registered.
+- **SPC13** Shipping and a discount: order **#1002** (5002), customer 1002
+  Tama Rewi, processed 2026-10-03T00:15Z, 3 × Wax melts - Vanilla
+  (MELT-VAN) at 9.00 = 27.00 with order discount WELCOME5 allocated **5.00**
+  → **22.00**, Shopify tax **2.87**; shipping "NZ Post standard" **6.90**,
+  tax **0.90**; total **28.90**, paid. Invoice lines: **2 × 7.33** (GST
+  1.91) and **1 × 7.34** (GST 0.96) MELT-VAN to 4000, and **Shipping: NZ
+  Post standard 1 × 6.90** (GST 0.90) to 4000; GST **3.77**, total
+  **28.90**: **Dr 1100 28.90 / Cr 4000 19.13 / Cr 4000 6.00 / Cr 2100
+  3.77**; payment **Dr 1010 28.90 / Cr 1100 28.90**.
+- **SPC14** A partial refund: on 2026-10-05T22:00Z (6 Oct) Shopify refunds
+  1 of #1001's 2 candles, not restocked: subtotal **23.00**, tax **3.00**,
+  REFUND transaction **23.00**. Credit note **CN-0001** 6 Oct against
+  INV-0001, 1 × 23.00 GST: **Dr 4000 20.00 / Dr 2100 3.00 / Cr 1100
+  23.00**; refund from clearing **Dr 1100 23.00 / Cr 1010 23.00**. A refund
+  whose lines don't add up to the money refunded (a 23.00 line but 20.00
+  refunded) posts nothing and the log shows 23.00 and 20.00.
+- **SPC15** A payout with fees matching a bank line: payout **70001**,
+  PAID, issued 2026-10-07T03:00Z, net **49.38**: CHARGE #1001 46.00 (fee
+  1.38, net 44.62), CHARGE #1002 28.90 (fee 1.14, net 27.76), REFUND #1001
+  −23.00 (fee 0.00, net −23.00). Posted 7 Oct: transfer **Dr 1000 49.38 /
+  Cr 1010 49.38**; spend money to Shopify **Dr 6020 2.52 / Cr 1010 2.52**
+  (no GST). The clearing account is then **0.00** (46.00 + 28.90 − 23.00 −
+  49.38 − 2.52). A statement line on 1000 dated 8 Oct, +49.38 "SHOPIFY
+  PAYOUT", is offered the transfer as its exact match. A second payout
+  **70002** issued 2026-10-14T03:00Z, net **17.33**: CHARGE #1003 23.00
+  (fee 0.67, net 22.33) and ADJUSTMENT −5.00 ("Shopify adjustment",
+  net −5.00): transfer **17.33**, spend money **Dr 6020 5.67** (fees 0.67
+  and the adjustment 5.00, each its own line) / Cr 1010 5.67. A payout with
+  a CHARGEBACK transaction, or whose balance transactions don't add up to
+  its net, posts nothing and is logged.
+- **SPC16** An overseas customer: Shopify customer 1005 Emma Clarke
+  (default address in AU) orders **#1003** (5003), processed
+  2026-10-08T02:00Z, 1 × Large candle 23.00 with **no tax lines**, paid.
+  The new contact Emma Clarke has billing country **AU**. Foreign trade
+  **off**: the line's tax code is the untaxed code **ZERO**, GST 0.00,
+  total 23.00: **Dr 1100 23.00 / Cr 4000 23.00**. With Foreign trade **on**
+  (the same order in another organisation), the line's code is **EXPORT**,
+  GST 0.00, the same journal.
+- **SPC17** A tracked product moving stock: Shopify product "Gift box"
+  (variant SKU GIFTBOX, inventory tracked) is added as **stock** item
+  GIFTBOX. A bill puts 10 into stock at 12.00 (**Dr 1400 120.00**). Order
+  **#1004** (5004), Aroha, processed 2026-10-09T01:00Z, 1 × GIFTBOX at
+  34.50, tax 4.50, paid: invoice **Dr 1100 34.50 / Cr 4000 30.00 / Cr 2100
+  4.50** and cost of sales **Dr 5000 12.00 / Cr 1400 12.00**; 9 left. An
+  order for 20 more (with negative stock off) is refused at the invoice and
+  logged; the sales order stays approved and nothing is posted.
+- **SPC18** A duplicate webhook: an `orders/paid` webhook for #1001
+  (signed, webhook ID W-1) brings it in as SPC11; the same delivery again is
+  acknowledged ("Already handled") and does nothing; an `orders/updated`
+  delivery (W-2) for the same unchanged order, and a catch-up sync, add no
+  sales order, invoice, payment or journal. A `refunds/create` webhook
+  posts SPC14's refund once.
+- **SPC19** A token refresh: a connection made with client ID and secret
+  holds a token expiring at 2026-10-02T00:03Z. A sync at 00:00Z (within 5
+  minutes of expiry) asks Shopify for a new one (form-encoded
+  `grant_type=client_credentials`), uses it, and stores it encrypted with
+  expiry 00:00Z + 86399 s; neither token appears in the connection, the
+  sync log or the audit trail. A sync an hour later uses the stored token
+  without asking again. Shopify answering `shop_not_permitted` on
+  connecting is refused with the "same Shopify organisation" message and
+  nothing is saved.
+- **SPC20** Cancelled before payment: order **#1005** (5005), pending
+  (bank deposit), processed 2026-10-10T00:00Z: sales order SO-000n
+  approved, not invoiced. Shopify cancels it (VOIDED, cancelledAt set): the
+  sales order is **cancelled**. No journals at any point.
+- **SPC21** The start date, the switch and the period lock: an order
+  processed 2026-09-30T10:00Z (30 Sep NZ) is before the start date and
+  isn't brought in. With **post to accounts off**, a sync and an order
+  webhook fetch and post nothing (no sales orders, no journals). Turning it
+  on without a clearing account, or when the app hasn't `read_orders`, is
+  refused. With October locked, a paid order dated in October is refused
+  at the invoice and logged; after unlocking, the next sync posts it once.
+- **SPC22** Roles: only admins change these settings (viewers and
+  bookkeepers get 403); everyone can read the log; the webhook address
+  takes only signed deliveries.
+- **SPC23** Refused rather than guessed (logged, nothing posted): a test
+  order; an order without a customer (guest checkout); an order in another
+  currency (store or presentment not NZD); an order with a gift card line;
+  a paid order whose total Tohyee can't reproduce (e.g. with a tip or
+  duties); a payment by a gift card; a partly paid order (it waits); a
+  refund with an order adjustment; a payout that's a withdrawal.
+
 ### Not supported yet (refused rather than guessed)
 
-- Shopify orders, refunds and payouts; WooCommerce, Square and Stripe.
+- WooCommerce, Square and Stripe.
 - Copying sale prices from a store whose prices include tax, or whose
   currency isn't the base currency.
-- Addresses, countries (which choose an export's tax code, EX1), stock
-  levels and costs.
+- Addresses (other than the country), stock levels and costs from Shopify;
+  writing anything back to Shopify (stock levels need write access).
+- Connecting a store owned by another Shopify organisation (Shopify's
+  authorization code grant).
+- Per-payout summary accounting (one journal per payout instead of per
+  order).
+- The cases in SPC23; Shopify locations (a stock item needs a Location once
+  locations are in use, so such orders are refused at the invoice); orders
+  edited after they came in (the sales order keeps the first version, and
+  the totals check refuses the invoice if they differ); more than 100 lines
+  or 10 shipping lines on an order, more than 10 refunds on an order or 50
+  lines on a refund.
 - Deleting or archiving a Tohyee record when it's deleted in Shopify (the
   link stays; nothing happens).
 - Matching by name, or anything other than one clear email or SKU match.
 
 ### Questions for Jess (sales platform connections)
 
-- Should Shopify orders reach the accounts **per order** (each order a
-  sales order, then an invoice) or **per payout** (a summary of the
-  payout's sales, fees and refunds)?
-- Your store's prices probably include GST. Should Tohyee work out the
-  price excluding GST (e.g. 23.00 → 20.00 at 15%), and what about products
-  that aren't taxed?
-- Should products with tracked inventory become **stock** items rather than
-  non-stock?
-- Should a customer's country come across, so overseas customers get the
-  tax code for exports?
-- Is your Shopify app an older one made in the store admin (an access
-  token), or a new one from the Dev Dashboard (client ID and secret)?
+Answered 1 Oct 2026 (decisions 51-55): per order; tax from Shopify's tax
+lines; tracked products as stock items; countries come across; both kinds
+of app. Still open:
+
+- **Guest checkouts**: an order without a Shopify customer is refused.
+  Should they go to one contact (e.g. "Shopify customers"), as some
+  connectors do?
+- **Chargebacks, reserves and other payout transactions**: only charges,
+  refunds and adjustments are posted; payouts with anything else are
+  refused for you to record by hand. Where should chargebacks go?
+- **Adjustments** in a payout go to the fees account. Is that right, or
+  should they have their own account?
+- **Invoice date**: a paid order is invoiced on the day it was paid (the
+  sales order keeps the order's date). Should it be the order's date?
+- **Refund line subtotals**: Shopify's docs don't say whether a refunded
+  line's subtotal includes tax on a taxes-included order. Tohyee assumes it
+  does (like the order's prices) and refuses a refund that doesn't add up
+  to the money refunded. Please check one real refund.
+- **Shipping**: shipping goes to the shipping account chosen in settings
+  (4000 Sales to start with). Should it be its own account?
 
 ## Custom fields on CRM records (examples not yet approved by Jess)
 
