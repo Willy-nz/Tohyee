@@ -26,13 +26,22 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 | --- | --- | --- | --- | --- |
 | NZ payroll, stage 1: employee records only (see the payroll list below for the rest) | #60 | #62 | `copilot/build-nz-payroll-tohyee` | 0051 |
 | Not-for-profit module, first stage: opt-in fund tracking | #61 | #63 | `copilot/not-for-profit-module-development` | 0052 (renumbered) |
-| Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | not opened yet | `copilot/extend-custom-fields-crm-records` | 0053 (renumbered) |
+| Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | #67 | `copilot/extend-custom-fields-crm-records` | 0053 (renumbered); merge after #62 and #63 |
+| Payroll P2: IRD payroll rates as dated data | #60 | none | `copilot/issue-60-ird-payroll-rates` | 0054 if needed. **Blocked**: the agent's sandbox can't reach ird.govt.nz; see below |
+| Payroll P7: Holidays Act leave worked examples (docs only) | #60 | #68 | `copilot/nz-payroll-stage-p7-holidays-act-leave` | none |
+| Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12) | none (Agents tab) | not opened yet | `copilot/sales-orders-stage-1` | 0055 |
+| Sales platform connections, stage 1: connector framework, Shopify customers and products (CRM roadmap items 27-28) | none (Agents tab) | not opened yet | `copilot/sales-platform-connections-stage-1` | 0056 |
+
+Next free tenant migration number: 0057.
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
 
-The CRM custom fields brief makes CRM custom fields available whenever the
-CRM module is on, even with Advanced features off. Jess to confirm.
+CRM custom fields: decided by Jess (1 Oct 2026) that prospects only get the
+fields someone deliberately turns on for prospects; existing customer fields
+are not added to prospects automatically. A review of #67 found the first
+version did add them (locking accounting fields when the CRM is off); Copilot
+was asked to fix it on the PR.
 
 CRM work waiting on custom fields: record types and page layouts, and the
 Salesforce-style record page. Claude will build these once custom fields is
@@ -68,6 +77,13 @@ calculates nothing. The rest of #60, in order, each its own branch and PR:
       `docs/ACCOUNTING-EXAMPLES.md`, docs only. Can start now.
 - [ ] **P8 Holidays Act leave, build** only what P7 specifies and Jess
       approves. Needs P3 and P7.
+
+**P2 is blocked**: GitHub's Copilot coding agent sandbox blocks
+www.ird.govt.nz, acc.co.nz and legislation.govt.nz, so it can't read IR340,
+IR335 or the payroll calculation specification, and it rightly refused to use
+figures from memory. Fix: add those sites to the repo's Copilot coding agent
+firewall allowlist, or attach the IRD PDFs to issue #60, then re-run P2. P3
+and P6 will need the same.
 
 P2 and P7 can run in parallel now; P4, P5 and P6 can run in parallel once P3
 is merged. Give each its own migration number up front.
