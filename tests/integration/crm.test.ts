@@ -20,7 +20,10 @@ import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { approveInvoice, createInvoice } from "@/lib/invoices/service";
+import { postJournal } from "@/lib/ledger/journals";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
+import { profitAndLossSplit } from "@/lib/reports/financial";
+import { createTrackingCategory, createTrackingValue } from "@/lib/tracking/service";
 import {
   apiRequest,
   createTestOrganisation,
@@ -96,6 +99,51 @@ describeWithDatabase("modules and the CRM", () => {
       tx.query<{ details: { crmEnabled: boolean } }>("select details from audit_events where event_type = 'organisation.settings_updated' order by id"),
     );
     expect(history.rows.map((row) => row.details.crmEnabled)).toEqual([true, false]);
+  });
+
+  it("NFP1: fund segment tags split activity and the module switch is kept in the organisation", async () => {
+    const w = await setup({ crm: false });
+    const initial = await w.as((tx) => tx.query<{ not_for_profit_enabled: boolean }>("select not_for_profit_enabled from organisation_settings"));
+    expect(initial.rows[0].not_for_profit_enabled).toBe(false);
+
+    await w.as((tx) => updateOrganisationSettings(tx, { notForProfitEnabled: true, advancedFeatures: true }));
+    let tracking = await w.as((tx) => createTrackingCategory(tx, { name: "Fund" }));
+    const fund = tracking.categories.find((category) => category.name === "Fund")!;
+    tracking = await w.as((tx) => createTrackingValue(tx, { categoryId: fund.id, name: "Restricted" }));
+    const restricted = tracking.categories.find((category) => category.id === fund.id)!.values[0];
+    tracking = await w.as((tx) =>
+      createTrackingValue(tx, { categoryId: fund.id, name: "Community workshops", parentId: restricted.id }),
+    );
+    const workshops = tracking.categories.find((category) => category.id === fund.id)!.values.find((value) => value.name === "Community workshops")!;
+    await w.as((tx) =>
+      postJournal(tx, {
+        idempotencyKey: key("journal"),
+        postingDate: "2026-06-15",
+        reference: "Community workshops",
+        lines: [
+          { accountCode: "1000", debitAmount: "1000.00" },
+          { accountCode: "4000", creditAmount: "1000.00", tracking: { [fund.id]: workshops.id } },
+          { accountCode: "6010", debitAmount: "400.00", tracking: { [fund.id]: workshops.id } },
+          { accountCode: "1000", creditAmount: "400.00" },
+        ],
+      }),
+    );
+    const split = await w.as((tx) => profitAndLossSplit(tx, { from: "2026-06-01", to: "2026-06-30", categoryId: fund.id }));
+    expect(split.revenue.totals[restricted.id]).toBe("1000.00");
+    expect(split.expenses.totals[restricted.id]).toBe("400.00");
+    expect(split.netProfit[restricted.id]).toBe("600.00");
+
+    await w.as((tx) => updateOrganisationSettings(tx, { notForProfitEnabled: false }));
+    const history = await w.as((tx) =>
+      tx.query<{ details: { notForProfitEnabled: boolean } }>("select details from audit_events where event_type = 'organisation.settings_updated' order by id"),
+    );
+    expect(history.rows.map((row) => row.details.notForProfitEnabled)).toEqual([true, false]);
+    const stillTagged = await w.as((tx) =>
+      tx.query<{ tracking: Record<string, string> }>(
+        "select tracking from ledger_journal_lines where account_id = (select id from accounts where code = '4000')",
+      ),
+    );
+    expect(stillTagged.rows[0].tracking).toEqual({ [fund.id]: workshops.id });
   });
 
   it("CRM1: prospects", async () => {
