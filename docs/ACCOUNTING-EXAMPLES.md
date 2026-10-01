@@ -10906,6 +10906,223 @@ share (the first line if two are equal), as on the employee list.
 7. **Exports** record who exported what and when, without figures. Should
    exports also need a second permission?
 
+## Workforce budgets (examples not yet approved by Jess)
+
+Stage P11 of payroll (#60), built by Claude on 2 Oct 2026; Jess hasn't
+approved these. **Payroll › Workforce budget** budgets wages by **employee**
+or by **position** (a job not filled yet, NetSuite/Oracle's "to be hired")
+and month, and **feeds** the wages and employer KiwiSaver amounts, split by
+Department, into the existing budgets (BU1-BU8). Workforce budgets post
+nothing. Decisions 112-123 in [DECISIONS.md](DECISIONS.md) say why each rule
+is as it is.
+
+Sources: NetSuite Planning and Budgeting says "Planning and Budgeting
+currently supports only the Financials module. A Workforce module is not
+currently available"
+([NetSuite Planning and Budgeting](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_8124016549.html),
+read 2 Oct 2026), so these follow Oracle's own Planning Workforce module,
+which NetSuite Planning and Budgeting is built on: a hiring requisition
+has a "Number of requisitions", an "FTE value for each", a "Start Date and
+optionally the End Date to set when the requisition's expenses are to be
+included in expense calculations", the job, "Salary Basis and Rate" and a
+"Merit Month"
+([Adding Hiring Requisitions](https://docs.oracle.com/en/cloud/saas/planning-budgeting-cloud/epbug/wf_adding_hiring_requisitions_100x94fdd820.html));
+and "the data maps push data to the correct accounts" from Workforce to
+Financials, mapped by entity
+([Customizing the Mapping for Integration between Workforce and Financials](https://docs.oracle.com/en/cloud/saas/planning-budgeting-cloud/epbca/wf_fin_integration.html)),
+both read 2 Oct 2026. **Xero**'s budget manager has no workforce or
+headcount budgeting that we know of; Xero Central couldn't be read by our
+tools (**unverified**).
+
+Tests: `tests/unit/payroll-workforce-budget.test.ts` (the monthly maths,
+WB1 and WB2's splits) and `tests/integration/payroll-workforce-budgets.test.ts`
+(WB1-WB7 against PostgreSQL and the API routes).
+
+**The rules**
+
+- A workforce budget has a name, a first month and 1 to 24 months, and
+  lines. A line is **an employee** or **a position** (a name such as
+  "Barista (to be hired)"), from a start month to an optional end month,
+  both whole months inside the workforce budget's months (decision 114).
+- Pay: **salary** (annual salary × FTE, FTE more than 0 and at most 1, 4
+  decimals) or **hourly** (hourly rate × hours a week × 52 ÷ 12), with
+  **pay rises from a month** (the new annual salary or hourly rate from that
+  month on; decision 116). An employee line starts with the employee's pay
+  rate in effect on its first month's 1st day (their first rate if they
+  haven't started), and their employer KiwiSaver rate if enrolled (0
+  otherwise); after that the line is what's typed.
+- **Employer KiwiSaver** = the month's wages × the line's employer rate,
+  **truncated** to the cent as pay runs do (decision 118). **ESCT is not
+  extra cost**: it's deducted from the employer contribution and paid to IRD
+  for the employee, so the contribution (gross, ESCT included) is the whole
+  cost, as pay runs post it (decision 103).
+- **Rounding** (decision 115): each line's wages for a month are worked
+  out exactly and **rounded once, half up, to the cent**; KiwiSaver is
+  then worked out from that rounded figure. Each of the two is then split
+  by the line's percentages with `splitByPercentages` (PE3: parts cut to
+  cents, the cents left over to the largest remainders), and every total
+  adds those split parts, so Departments always add up to the whole.
+- **Split** (decision 117): an employee line by the employee's **cost
+  allocation in effect on the 1st of each month** (PE6), all of it (Class,
+  Location and project as well as Department); with no allocation yet, all
+  to "No Department". A position line by its **own split**: lines of a %
+  with a Department and optionally a project, totalling 100.00%.
+- **Accounts** (decision 119): wages to the **Ordinary time** pay item's
+  account (6200 Wages and salaries in the starting chart) and employer
+  KiwiSaver to the **KiwiSaver employer contribution** pay item's account
+  (6210).
+- **Feeding budgets** (decisions 113, 120, 121): a workforce budget feeds
+  the budgets chosen on it; a budget is fed by at most one workforce
+  budget. A budget for a Department, Class or Location value gets only the
+  split parts tagged with that value or one under it; a budget with no
+  tracking value gets everything. In each fed budget the workforce budget
+  **owns** the wages and KiwiSaver accounts for every one of its months
+  (zero included): those amounts are written by the workforce budget, marked
+  "From workforce budget <name>" on the budget, and can't be typed or quick
+  filled (the database refuses too). They're rewritten every time the
+  workforce budget is saved and when someone with payroll access presses
+  **Update budgets** (allocations change on their own, so the screen says
+  when the fed amounts differ from today's figures). Each rewrite is in the
+  budget's history like any other change. Taking a budget off the list
+  leaves its amounts as they are, as ordinary typed amounts.
+- **Access** (decision 122): workforce budgets (per-employee lines, rates
+  and figures) need payroll access and the bookkeeper role. What they feed
+  is ordinary budget amounts by account, month and tracking value, which
+  anyone who can see budgets sees (decision 6: Department totals are fine).
+  The workforce budget's own audit events have no amounts and no names.
+- **Budget vs actual for wages** (decision 123): per month and Department,
+  the workforce budget's wages plus KiwiSaver against P10's **labour cost**
+  (PREP1: approved pay runs' earnings and employer KiwiSaver, not
+  reimbursements, by **pay date**), variance actual less budget.
+
+**The example company** is Harbour Cafe Ltd (the pay run and payroll report
+examples): advanced features on, Departments **Sales** and **Operations**,
+the project **Cafe rebrand**. Employees: **Hemi Walker**, salary 70,000.00,
+KiwiSaver enrolled at 3.5% employer, allocation 60% Sales / 40% Operations;
+**Kiri Tane**, salary 52,000.00, not in KiwiSaver, 100% Sales; **Sione
+Fifita**, hourly 22.50 for 32 hours a week, KiwiSaver 3.5% employer, 100%
+Operations on Cafe rebrand. Budgets: **Overall budget**, **Sales plan**
+(Department: Sales) and **Operations plan** (Department: Operations).
+
+- **WB1 Lines and monthly figures.** Workforce budget **"Wages Oct 2026 -
+  Mar 2027"**, 6 months from Oct 2026, feeding all three budgets:
+
+  | Line | Pay | Months | Wages a month | Employer KiwiSaver a month |
+  | --- | --- | --- | ---: | ---: |
+  | Hemi Walker | salary 70,000.00, FTE 1; rise to 73,500.00 from Jan 2027 | Oct-Mar | Oct-Dec **5,833.33**; Jan-Mar **6,125.00** | Oct-Dec **204.16**; Jan-Mar **214.37** |
+  | Kiri Tane | salary 52,000.00, FTE 1 | Oct-Mar | **4,333.33** | 0.00 (not in KiwiSaver) |
+  | Sione Fifita | hourly 22.50 × 32 hours | Oct-Mar | **3,120.00** | **109.20** |
+  | Barista (to be hired), position | hourly 24.00 × 25 hours, 3.5%, 50% Sales / 50% Operations | Jan-Mar | **2,600.00** | **91.00** |
+
+  70,000.00 ÷ 12 = 5,833.333… → 5,833.33 (half up); 5,833.33 × 3.5% =
+  204.16655 → **204.16** (truncated). 73,500.00 ÷ 12 = 6,125.00; × 3.5% =
+  214.375 → **214.37**. 52,000.00 ÷ 12 = 4,333.33. 22.50 × 32 × 52 ÷ 12 =
+  3,120.00; × 3.5% = 109.20. 24.00 × 25 × 52 ÷ 12 = 2,600.00; × 3.5% =
+  91.00. Adding Hemi's line fills in salary 70,000.00 and 3.5% from his
+  records. Totals: wages Oct-Dec **13,286.66** a month, Jan-Mar
+  **16,178.33** a month, six months **88,394.97**; employer KiwiSaver
+  Oct-Dec **313.36**, Jan-Mar **414.57**, six months **2,183.79**.
+  Nothing is posted (no journals).
+
+- **WB2 Split by Department and fed into the budgets.** Hemi's 5,833.33 by
+  60/40: 3,499.998 and 2,333.332 cut to 3,499.99 and 2,333.33, the cent
+  left goes to Sales (larger remainder): **3,500.00 / 2,333.33**. His
+  204.16: 122.496 / 81.664 → **122.50 / 81.66**. January: 6,125.00 →
+  **3,675.00 / 2,450.00**; 214.37: 128.622 / 85.748 → **128.62 / 85.75**.
+  The Barista's 2,600.00 → 1,300.00 / 1,300.00 and 91.00 → 45.50 / 45.50.
+
+  | Budget | Account | Oct, Nov, Dec 2026 (each) | Jan, Feb, Mar 2027 (each) |
+  | --- | --- | ---: | ---: |
+  | Sales plan | 6200 Wages and salaries | **7,833.33** (3,500.00 + 4,333.33) | **9,308.33** (3,675.00 + 4,333.33 + 1,300.00) |
+  | Sales plan | 6210 KiwiSaver employer | **122.50** | **174.12** (128.62 + 45.50) |
+  | Operations plan | 6200 | **5,453.33** (2,333.33 + 3,120.00) | **6,870.00** (2,450.00 + 3,120.00 + 1,300.00) |
+  | Operations plan | 6210 | **190.86** (81.66 + 109.20) | **240.45** (85.75 + 109.20 + 45.50) |
+  | Overall budget | 6200 | **13,286.66** | **16,178.33** |
+  | Overall budget | 6210 | **313.36** | **414.57** |
+
+  The Overall budget had 6200 Oct 2026 typed as **10,000.00** before; it
+  becomes 13,286.66 and its history shows 10,000.00 → 13,286.66. Each of
+  those cells shows "From workforce budget Wages Oct 2026 - Mar 2027" and
+  is read-only. Typing 6200 Oct 2026 on Sales plan, or quick filling 6210
+  for 12 months from Oct 2026, is refused ("comes from the workforce
+  budget"), and the database refuses changing a fed amount outside the
+  workforce budget. 6200 Sep 2026 and Apr 2027 (outside its months) and
+  6150 Rent in any month can still be typed.
+
+- **WB3 Changes rewrite the fed amounts.** The Barista's start moves to
+  Feb 2027 and the workforce budget is saved: January becomes Overall
+  6200 **13,578.33**, 6210 **323.57**; Sales plan 6200 **8,008.33**, 6210
+  **128.62**; Operations plan 6200 **5,570.00**, 6210 **194.95**
+  (February and March unchanged). Then Kiri gets a new allocation, 100%
+  Operations from 1 Feb 2027: the screen says the fed budgets are **out of
+  date** (today's figures differ) without changing them; **Update
+  budgets** moves Kiri's 4,333.33 for Feb and Mar from Sales plan to
+  Operations plan: Sales plan 6200 Feb **4,975.00** (3,675.00 + 1,300.00),
+  Operations plan 6200 Feb **11,203.33** (2,450.00 + 3,120.00 + 1,300.00
+  + 4,333.33); the Overall budget doesn't change. After that it says
+  they're up to date.
+
+- **WB4 Taking a budget off.** Operations plan is taken off the list: its
+  6200 and 6210 amounts stay as they were (Oct **5,453.33**) and can be
+  typed again; the others keep being fed. Refused: adding a budget that
+  another workforce budget feeds, an archived budget, and a budget for a
+  custom segment value (payroll doesn't tag custom segments).
+
+- **WB5 Budget vs actual for wages, October 2026.** One approved pay run
+  for Hemi and Kiri, fortnightly, pay date 14 Oct 2026 (PRUN1's figures:
+  Hemi 2,692.31 wages and 94.23 KiwiSaver split 60/40, Kiri 2,000.00):
+
+  | Department | Budget (wages + KiwiSaver) | Actual (labour cost, PREP1) | Variance |
+  | --- | ---: | ---: | ---: |
+  | Operations | 5,644.19 (5,453.33 + 190.86) | 1,114.61 | **-4,529.58** |
+  | Sales | 7,955.83 (7,833.33 + 122.50) | 3,671.93 (1,671.93 + 2,000.00) | **-4,283.90** |
+  | **Total** | **13,600.02** | **4,786.54** | **-8,813.48** |
+
+  November 2026 shows the same budget with actual 0.00. Labour cost counts
+  every earnings pay item (overtime and allowances too), so a variance can
+  come from pay the workforce budget doesn't plan.
+
+- **WB6 Access.** Ben (bookkeeper, payroll access) can do all of WB1-WB5.
+  Noah (bookkeeper, no payroll access) and Ana (admin, no payroll access)
+  get 403 from every workforce budget call and don't see the screen's
+  figures; Noah and Vic (viewer) see Sales plan's 6200 Oct **7,833.33**
+  marked "From workforce budget" on the budget and in budget vs actual,
+  with no names. The audit events `payroll_workforce_budget.*` have no
+  amounts and no names; the budgets' own `budget.amounts_changed` events
+  have the account totals as for any budget change.
+
+- **WB7 Refused, with nothing saved.** A line ending before it starts or
+  outside the workforce budget's months; a pay rise in a month outside the
+  line or not after its start month; a salary FTE of 0 or 1.5; an hourly
+  line without hours; a KiwiSaver rate over 100; a position's split not
+  totalling 100.00%; the same employee twice; an archived employee; more
+  than 24 months; a save against an older version (someone else changed
+  it); a budget fed by another workforce budget.
+
+### Not supported yet (refused rather than guessed)
+
+- Part months (a start or finish on the 15th counts the whole month), more
+  than one person per position line, overtime, allowances, holiday pay, ACC
+  levies and other on-costs, and any employer KiwiSaver minimum rate after
+  the rates Tohyee holds (2026-27): the rate is what's typed on the line.
+
+### Questions for Jess (workforce budgets)
+
+1. **Part months**: should a line starting on 15 Jan count half of
+   January (by days), rather than the whole month?
+2. **Pay rate changes**: an employee line keeps the pay it started with
+   plus the rises typed on it. Should a later pay rate on the employee's
+   record (P1b) flow into the workforce budget automatically?
+3. **KiwiSaver 4%**: the employer minimum is legislated to go up on
+   1 Apr 2028, but Tohyee only holds IRD's rates to 2026-27, so the rate on
+   each line is what's used. Add a planned rate change, or type it as a
+   rise?
+4. **On-costs**: budget holiday pay accrual, ACC levies or overtime too?
+5. **Positions**: one line per person, or a "number of people" as Oracle's
+   requisitions have?
+6. **Actuals by pay date**: compare by month of pay date (as P10), or by
+   the period worked?
+
 ## Holidays Act leave (examples not yet approved by Jess)
 
 **What gets built.** Tohyee builds this for the **Holidays Act 2003** as one

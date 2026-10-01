@@ -329,6 +329,12 @@ export function BudgetEditor({ organisationId, budgetId }: { organisationId: str
       >
         {error ? <Notice tone="error">{error}</Notice> : null}
         {message ? <Notice tone="success">{message}</Notice> : null}
+        {data.accounts.some((account) => account.fromWorkforce.some(Boolean)) ? (
+          <p className={ui.muted}>
+            * From workforce budget {[...new Set(data.accounts.flatMap((account) => account.fromWorkforce.filter((name): name is string => Boolean(name))))].join(", ")}: change
+            these in Payroll › Workforce budget.
+          </p>
+        ) : null}
         <div className={ui.tableWrap}>
           <table className={ui.table}>
             <thead>
@@ -353,7 +359,12 @@ export function BudgetEditor({ organisationId, budgetId }: { organisationId: str
                     const key = cellKey(account.code, month);
                     return (
                       <td key={month} className={ui.num}>
-                        {editable && account.isActive ? (
+                        {account.fromWorkforce[index] ? (
+                          <span title={`From workforce budget ${account.fromWorkforce[index]} (Payroll › Workforce budget)`}>
+                            <Money value={account.amounts[index]} blankZero />
+                            <span className={ui.muted}> *</span>
+                          </span>
+                        ) : editable && account.isActive ? (
                           <input
                             aria-label={`${account.code} ${monthLabel(month)}`}
                             inputMode="decimal"

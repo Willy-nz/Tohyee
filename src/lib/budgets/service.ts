@@ -56,6 +56,8 @@ export type BudgetGridAccount = {
   isActive: boolean;
   /** One per month of the grid. */
   amounts: string[];
+  /** Per month: the workforce budget that wrote the amount (WB2), or null when it's typed. */
+  fromWorkforce: Array<string | null>;
   total: string;
 };
 
@@ -270,12 +272,14 @@ export async function getBudget(tx: OrgTx, idInput: unknown, input: { from?: unk
   }
   const months = monthRange(from, count);
   const scale = currencyMinorUnits(tx.baseCurrency);
-  const stored = await tx.query<{ account_id: string; month: string; amount: string }>(
-    `select account_id::text, to_char(month, 'YYYY-MM') as month, amount::text from budget_amounts
-      where budget_id = $1 and month between $2::date and $3::date`,
+  const stored = await tx.query<{ account_id: string; month: string; amount: string; workforce_name: string | null }>(
+    `select ba.account_id::text, to_char(ba.month, 'YYYY-MM') as month, ba.amount::text, w.name as workforce_name
+       from budget_amounts ba left join payroll_workforce_budgets w on w.id = ba.workforce_budget_id
+      where ba.budget_id = $1 and ba.month between $2::date and $3::date`,
     [budget.id, monthStartDate(months[0]), monthStartDate(months[months.length - 1])],
   );
   const byKey = new Map(stored.rows.map((row) => [`${row.account_id}|${row.month}`, dec(row.amount)]));
+  const workforceByKey = new Map(stored.rows.map((row) => [`${row.account_id}|${row.month}`, row.workforce_name]));
   const totals = months.map(() => ZERO_DECIMAL);
   const accounts: BudgetGridAccount[] = [];
   for (const account of await profitAndLossAccounts(tx)) {
@@ -294,6 +298,7 @@ export async function getBudget(tx: OrgTx, idInput: unknown, input: { from?: unk
       accountType: account.account_type,
       isActive: account.is_active,
       amounts: amounts.map((amount) => toFixedString(amount, scale)),
+      fromWorkforce: months.map((month) => workforceByKey.get(`${account.id}|${month}`) ?? null),
       total: toFixedString(total, scale),
     });
   }
@@ -320,12 +325,23 @@ async function resolveAccounts(tx: OrgTx, codes: string[]): Promise<Map<string, 
 
 /** Writes changed amounts and records them, before and after, in the audit log. */
 async function applyAmounts(tx: OrgTx, budget: Budget, changes: AmountChange[], how: string): Promise<number> {
-  const current = await tx.query<{ account_id: string; month: string; amount: string }>(
-    `select account_id::text, to_char(month, 'YYYY-MM') as month, amount::text from budget_amounts
-      where budget_id = $1 and (account_id::text || '|' || to_char(month, 'YYYY-MM')) = any($2::text[])`,
+  const current = await tx.query<{ account_id: string; month: string; amount: string; workforce_name: string | null }>(
+    `select ba.account_id::text, to_char(ba.month, 'YYYY-MM') as month, ba.amount::text, w.name as workforce_name
+       from budget_amounts ba left join payroll_workforce_budgets w on w.id = ba.workforce_budget_id
+      where ba.budget_id = $1 and (ba.account_id::text || '|' || to_char(ba.month, 'YYYY-MM')) = any($2::text[])`,
     [budget.id, changes.map((change) => `${change.accountId}|${change.month}`)],
   );
   const before = new Map(current.rows.map((row) => [`${row.account_id}|${row.month}`, row.amount]));
+  const owner = new Map(current.rows.map((row) => [`${row.account_id}|${row.month}`, row.workforce_name]));
+  for (const change of changes) {
+    const key = `${change.accountId}|${change.month}`;
+    const workforce = owner.get(key);
+    if (workforce && cmp(dec(before.get(key) ?? "0"), dec(change.amount)) !== 0) {
+      throw new ValidationError(
+        `${change.accountCode} for ${change.month} comes from the workforce budget ${workforce}. Change it there (Payroll › Workforce budget).`,
+      );
+    }
+  }
   const scale = currencyMinorUnits(tx.baseCurrency);
   const changed: Array<{ account: string; month: string; from: string; to: string }> = [];
   for (const change of changes) {
@@ -482,4 +498,81 @@ export async function budgetTotals(tx: OrgTx, budgetId: string, from: string, to
     [budgetId, from, to],
   );
   return new Map(found.rows.map((row) => [row.account_id, dec(row.amount)]));
+}
+
+/** An amount a workforce budget writes into a budget it feeds (decision 113). */
+export type WorkforceAmount = { accountId: string; accountCode: string; month: string; amount: string };
+
+/**
+ * Writes a workforce budget's amounts into a budget it feeds and releases
+ * any it owned that aren't in `amounts` (WB2-WB4, decisions 113 and 121).
+ * Callers check payroll access and set `tohyee.workforce_budget_feed`
+ * for the transaction, which the database requires. Recorded in the
+ * budget's history like any change. Returns the number of amounts changed.
+ */
+export async function writeWorkforceAmounts(
+  tx: OrgTx,
+  budgetId: string,
+  workforceBudgetId: string,
+  workforceName: string,
+  amounts: readonly WorkforceAmount[],
+): Promise<number> {
+  const budget = await findBudget(tx, budgetId, true);
+  const scale = currencyMinorUnits(tx.baseCurrency);
+  const current = await tx.query<{ account_id: string; code: string; month: string; amount: string; workforce_budget_id: string | null }>(
+    `select ba.account_id::text, a.code, to_char(ba.month, 'YYYY-MM') as month, ba.amount::text, ba.workforce_budget_id::text
+       from budget_amounts ba join accounts a on a.id = ba.account_id
+      where ba.budget_id = $1 and (ba.workforce_budget_id = $2 or (ba.account_id::text || '|' || to_char(ba.month, 'YYYY-MM')) = any($3::text[]))`,
+    [budget.id, workforceBudgetId, amounts.map((amount) => `${amount.accountId}|${amount.month}`)],
+  );
+  const before = new Map(current.rows.map((row) => [`${row.account_id}|${row.month}`, row]));
+  const wanted = new Set(amounts.map((amount) => `${amount.accountId}|${amount.month}`));
+  const changed: Array<{ account: string; month: string; from: string; to: string }> = [];
+  let touched = 0;
+  for (const amount of amounts) {
+    const old = before.get(`${amount.accountId}|${amount.month}`);
+    if (old?.workforce_budget_id && old.workforce_budget_id !== workforceBudgetId) {
+      throw new ConflictError(`${amount.accountCode} for ${amount.month} in ${budget.name} comes from another workforce budget.`);
+    }
+    const sameAmount = old !== undefined && cmp(dec(old.amount), dec(amount.amount)) === 0;
+    if (sameAmount && old.workforce_budget_id === workforceBudgetId) continue;
+    await tx.query(
+      `insert into budget_amounts (budget_id, account_id, month, amount, updated_by_email, workforce_budget_id)
+       values ($1, $2, $3::date, $4::numeric, $5, $6)
+       on conflict (budget_id, account_id, month) do update
+         set amount = excluded.amount, updated_by_email = excluded.updated_by_email, updated_at = now(), workforce_budget_id = excluded.workforce_budget_id`,
+      [budget.id, amount.accountId, monthStartDate(amount.month), amount.amount, tx.actor.email, workforceBudgetId],
+    );
+    touched += 1;
+    if (!sameAmount) changed.push({ account: amount.accountCode, month: amount.month, from: toFixedString(dec(old?.amount ?? "0"), scale), to: amount.amount });
+  }
+  const released: Array<{ account: string; month: string }> = [];
+  for (const row of current.rows) {
+    if (row.workforce_budget_id !== workforceBudgetId || wanted.has(`${row.account_id}|${row.month}`)) continue;
+    await tx.query("update budget_amounts set workforce_budget_id = null, updated_at = now() where budget_id = $1 and account_id = $2 and month = $3::date", [
+      budget.id,
+      row.account_id,
+      monthStartDate(row.month),
+    ]);
+    released.push({ account: row.code, month: row.month });
+  }
+  if (touched > 0 || released.length > 0) {
+    await tx.query("update budgets set version = version + 1, updated_by_email = $2, updated_at = now() where id = $1", [budget.id, tx.actor.email]);
+    await writeAuditEvent(tx, {
+      eventType: "budget.amounts_changed",
+      entityType: "budget",
+      entityId: budget.id,
+      details: { name: budget.name, how: `workforce budget ${workforceName}`, changes: changed, released },
+    });
+  }
+  return changed.length + released.length;
+}
+
+/** The amounts a workforce budget owns in a budget, by "accountId|YYYY-MM". */
+export async function workforceOwnedAmounts(tx: OrgTx, budgetId: string, workforceBudgetId: string): Promise<Map<string, Decimal>> {
+  const found = await tx.query<{ account_id: string; month: string; amount: string }>(
+    `select account_id::text, to_char(month, 'YYYY-MM') as month, amount::text from budget_amounts where budget_id = $1 and workforce_budget_id = $2`,
+    [budgetId, workforceBudgetId],
+  );
+  return new Map(found.rows.map((row) => [`${row.account_id}|${row.month}`, dec(row.amount)]));
 }
