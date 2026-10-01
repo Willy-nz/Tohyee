@@ -11123,6 +11123,319 @@ Operations on Cafe rebrand. Budgets: **Overall budget**, **Sales plan**
 6. **Actuals by pay date**: compare by month of pay date (as P10), or by
    the period worked?
 
+## Extra pays, back pay and final pays (examples not yet approved by Jess)
+
+Stage P12 of payroll (#60), built by Claude on 2 Oct 2026; Jess hasn't
+approved these. Bonuses and other lump sums, back pay and the extra pays on
+an employee's last pay are taxed under IRD's **extra pay** rules instead of
+the ordinary PAYE calculation, and reported in the pay they're paid in.
+Decisions 124-137 in [DECISIONS.md](DECISIONS.md) say why each rule is as
+it is. Holiday pay owed on finishing is **not calculated** until leave (P8)
+is built (XP12).
+
+Sources, law first (all read 2 Oct 2026 through Claude's web fetch tool,
+which returns IRD's PDFs through a summarising model, so wording below is
+ours and each figure was asked for separately; check the PDFs before
+approving):
+
+- IRD's **Payroll Calculations & Business Rules Specification 2026-27**
+  ("the spec", the edition in `src/lib/payroll/rates/2026-27.ts`), section
+  **5.11 Extra pay (lump sum)** (5.11.1 primary income, 5.11.2 secondary
+  income, 5.11.3 lowest rate flag, from page 43) and **5.12 Taxation when
+  employment ends**; section **4.5.1** for what counts for KiwiSaver
+  ("bonuses, commissions, gratuities, overtime payments, and any other
+  remuneration"; not "Redundancy payments").
+  - 5.11.1 step 2 (student loan): "Calculate pay for pay period, including
+    normal pay and extra pay. Include lump sum payments which are paid as
+    annual or special bonuses, retiring or redundancy payments, gratuities
+    or back pay. Exclude non-taxable amounts", then the usual threshold,
+    truncating to whole dollars and the deduction to cents.
+  - Step 3.1: "the value of the PAYE income payments made in the four weeks
+    prior to, and inclusive of the day on which the extra pay is paid",
+    not including "any other amounts of extra pay"; four weekly pays, two
+    fortnightly pays or one four-weekly pay × 13, one monthly pay × 12,
+    "other circumstances" all payments in the four weeks × 13. Step 3.2:
+    "Drop cents from the grossed-up amount". Steps 3.3-3.11: the rate from
+    the grossed-up amount: up to $15,600 10.5%; $15,601-$53,500 17.5%;
+    $53,501-$78,100 30%; $78,101-$180,000 33%; over $180,000 39% (the
+    income tax brackets). The extra pay × the rate, "Do not round".
+  - Step 4 (ACC earners' levy, 1.75%, maximum liable earnings $156,641):
+    4.1 redundancy, retirement allowance or ESS: $0.00; 4.2 grossed-up
+    amount not over $156,641: extra pay × 1.75%; 4.3 annualised income
+    not over $156,641 and grossed-up over it: ($156,641 − annualised) ×
+    1.75%; 4.4 annualised over $156,641: $0.00.
+  - Step 5: "5.1 Add ACC Earners' Levy and tax deducted. Do not round this
+    figure. 5.2 Truncate amount to whole cents."
+  - 5.11.2: the same with the code's **low threshold amount** added to the
+    annualised income: SB $0, S $15,601, SH $53,501, ST $78,101,
+    SA $180,001.
+  - 5.11.3: if "the lowest rate of tax was used in the calculation of the
+    tax on an extra pay amount", enter "1" on the electronic return (the
+    employment information file's field 14, `docs/sources/ird-payday-filing-file-spec.md`).
+  - 5.12: "if the extra pay includes an amount that arises from the ending
+    of the employee's employment", the tax is on the extra pay plus "the
+    annualised value of the PAYE income payments for the last 2 pay periods
+    before the PAYE income payment for the extra pay", the "two most recent
+    paid pay periods", payments made out of cycle not included: weekly
+    × 26, fortnightly × 13, four-weekly × 6.5, monthly × 6; then the same
+    rate, levy and truncation steps.
+- IRD's **Employer's guide IR335** (September 2026, pages 37-42): extra
+  pays include "annual bonuses, special bonuses, retiring payments,
+  redundancy payments, back pay, holiday pay paid in addition to the
+  regular pay for the pay period, exit inducement payments, gratuities,
+  payments for accepting restrictive covenants, employee share scheme
+  benefits"; "Overtime or any regular payments are not lump sum payments";
+  "Unless the lump sum payment is for redundancy, deduct and pay employee
+  KiwiSaver deductions, net employer contributions and ESCT as usual"; and
+  an employee "may ask you to tax their lump sum payment at a higher rate".
+- IRD's pages
+  [Lump sum payments](https://www.ird.govt.nz/employing-staff/payday-filing/non-standard-filing-of-employment-information/lump-sum-payments)
+  (last updated 27 Jan 2026: back pay, including backpaid holiday pay, is
+  a lump sum, reported in the period it's paid),
+  [Calculate PAYE for a lump sum payment](https://www.ird.govt.nz/employing-staff/payday-filing/non-standard-filing-of-employment-information/lump-sum-payments/calculate-paye-for-a-lump-sum-payment)
+  (18 May 2026: "CAE/EDW: use the lump sum method"; "NSW, ND and
+  tailored tax codes: use the usual rate") and
+  [... at end of employment](https://www.ird.govt.nz/employing-staff/payday-filing/non-standard-filing-of-employment-information/lump-sum-payments/calculate-paye-for-a-lump-sum-payment-end-of-employment)
+  (20 Apr 2026: "you must calculate other lump sum payments together with
+  the lump sum paid when an employee ends employment").
+- NetSuite has no New Zealand payroll, so it has no answer here. Xero
+  Payroll NZ's help pages load by script and couldn't be read
+  (**unverified**).
+
+Tests: `tests/unit/payroll-extra-pays.test.ts` (IRD's examples, XP1-XP7,
+and the pure per-employee calculation) and
+`tests/integration/payroll-extra-pays.test.ts` (XP8-XP14, against
+PostgreSQL and the API routes).
+
+### Pay items (set-up)
+
+Admins with payroll access add these kinds under Payroll › Pay items, each
+with its own account (decision 125):
+
+| Kind | Taxed as | PAYE | ACC levy | Student loan | KiwiSaver, ESCT | Where |
+| --- | --- | --- | --- | --- | --- | --- |
+| Extra pay (bonus, gratuity, lump sum) | Extra pay (5.11) | Yes | Yes | Yes | Yes | Any pay that isn't a final pay with a termination item |
+| Back pay | Extra pay (5.11) | Yes | Yes | Yes | Yes | Typed, or worked out from pay rate history (XP10) |
+| Holiday pay on finishing (worked out outside Tohyee) | End of employment (5.12) | Yes | Yes | Yes | Yes | Only on a final pay (XP12) |
+| Redundancy | End of employment (5.12) | Yes | No (step 4.1) | Yes (step 2) | No (4.5.1) | Only on a final pay (XP13) |
+
+A regular bonus or commission (paid every pay) isn't an extra pay (IR335):
+it's an allowance.
+
+### IRD's own examples (pure calculation)
+
+The calculation's input is the extra pay, the part of it liable for the
+ACC levy, the annualised income (before the low threshold) and the tax
+code; its output is the tax on the extra pay (levy included), the rate and
+whether the lowest rate was used. All on pay dates in 2026-27.
+
+- **XP1 Bonus, levy partly over the maximum (spec 5.11.1 example 1).**
+  Tax code M. Last four weeks $10,000.00, bonus $30,000.56. Annualised
+  $10,000.00 × 13 = $130,000.00; grossed-up $160,000.56 → $160,000 → 33%.
+  Tax $30,000.56 × 33% = $9,900.1848. Levy: annualised $130,000 is under
+  $156,641 and grossed-up over it, so ($156,641 − $130,000) × 1.75% =
+  $466.2175. **Total $10,366.40** (step 5: $10,366.4023 truncated once).
+  **Conflict found:** IRD's printed example truncates each part and adds
+  them, "$9,900.18" + "$466.21" "= $10,366.39", one cent less than its own
+  steps 5.1-5.2. Tohyee follows the steps (decision 127); question 1.
+- **XP2 Bonus at 39%, no levy (example 2).** Last four weeks $15,000.00,
+  bonus $15,000.00: annualised $195,000 is over $156,641, so no levy;
+  grossed-up $210,000 → 39%. **Total $5,850.00.**
+- **XP3 Signing bonus with no pay before it (example 3).** No PAYE income
+  payments in the four weeks: annualised $0; bonus $10,000.00 →
+  grossed-up $10,000 → 10.5% = $1,050.00; levy $10,000 × 1.75% =
+  $175.00. **Total $1,225.00**, net $8,775.00, **lowest rate used**
+  (EI field 14 = 1, XP9).
+- **XP4 Secondary code SH (5.11.2 example 1).** Last four weeks $500.00,
+  bonus $1,000.00. $500 × 13 = $6,500 + SH's low threshold $53,501 =
+  $60,001; grossed-up $61,001 → 30% = $300.00; levy $17.50 (grossed-up
+  under $156,641). **Total $317.50.**
+- **XP5 Secondary code ST, levy partly over the maximum (5.11.2
+  example 2).** Two fortnightly pays $2,300 + $2,395 = $4,695 × 13 =
+  $61,035 + $78,101 = $139,136; bonus $40,000.00; grossed-up $179,136 →
+  33% = $13,200.00; levy ($156,641 − $139,136) = $17,505 × 1.75% =
+  $306.3375. **Total $13,506.33** (the spec prints $13,506.33; the two
+  ways of truncating agree here).
+- **XP6 End of employment (5.12 examples and IR335 page 40).**
+  - Connor, weekly, redundancy $1,000.00, last two paid weeks $550 and
+    $650: ($1,200) × 26 = $31,200; grossed-up $32,200 → 17.5% = $175.00;
+    redundancy has no levy. **Total $175.00.**
+  - Kelvin, weekly, $2,000.00 on leaving; the weeks ended 5 May $600 and
+    12 May $500 are his two most recent *paid* periods (19 May was unpaid
+    leave, $0, and 26 May is the final pay itself): $1,100 × 26 =
+    $28,600; grossed-up $30,600 → 17.5% = $350.00 + levy $35.00.
+    **Total $385.00.**
+  - Tama (IR335), weekly, $400.00 on leaving, last two pays $1,000 +
+    $1,000 × 26 = $52,000; grossed-up $52,400 → 17.5% + 1.75% =
+    **$77.00.**
+- **XP7 The rest of the pay (IR335 pages 40 and 42, and the codes).**
+  - Heidi (IR335 page 40): last four weeks $6,150 × 13 = $79,950 + bonus
+    $1,000 = $80,950 → 33% + 1.75%: **$347.50.**
+  - Rama (IR335 page 42), fortnightly, M SL: pay $1,700.00 + taxable
+    allowance $100.00 + lump sum $10,100.00. **Student loan on the pay for
+    the period, extra pay included**: $11,900 − $928 = $10,972 × 12% =
+    **$1,316.64**. (IR335 doesn't print Rama's tax; with his two
+    fortnights at $1,800.00 the extra pay's tax is $3,600 × 13 = $46,800
+    + $10,100 = $56,900 → 30% = $3,030.00 + levy $176.75 = $3,206.75, and
+    the ordinary PAYE on $1,800.00 is $304.50, so PAYE is $3,511.25.)
+  - **ND**: the usual flat rate, not the extra pay method (IRD's lump sum
+    page): a $1,000.00 bonus at 45% + 1.75% = **$467.50**, lowest rate
+    not flagged. **NSW** likewise at 10.5% + 1.75%.
+  - **ME** is primary income (5.11.1 step 1 names ME SL) and gets no
+    independent earner tax credit on the extra pay: Heidi on ME also pays
+    $347.50.
+
+### Extra pays and back pay in a pay run
+
+Weekly wages, periods Monday to Sunday, paid the Wednesday after: week 1
+5-11 Oct 2026 paid 14 Oct, week 2 12-18 Oct paid 21 Oct, week 3 19-25 Oct
+paid 28 Oct, week 4 26 Oct-1 Nov paid 4 Nov. Weeks 1-3 are approved
+before week 4 is made. Accounts: every pay item to 6200 Wages and salaries.
+Mere (admin, payroll access) adds "Bonus" (Extra pay), "Back pay" (Back
+pay), "Holiday pay on finishing" and "Redundancy".
+
+- **XP8 A bonus in a normal pay (Heidi).** Heidi is salaried at $79,950
+  a year ($1,537.50 a week), tax code M, KiwiSaver 3.5% / 3.5%, ESCT 30%.
+  Weeks 1-3: $1,537.50 each, PAYE $339.61. Week 4: ordinary time
+  $1,537.50 and a Bonus line $1,000.00. The four weeks to and including
+  4 Nov hold four weekly pays (14, 21 and 28 Oct and this one): $6,150.00
+  × 13 = $79,950.00 (the bonus isn't in it).
+  | | Amount |
+  | --- | --- |
+  | Gross | $2,537.50 |
+  | PAYE: ordinary pay $339.61 + extra pay $347.50 (33%) | $687.11 |
+  | KiwiSaver employee, 3.5% of $2,537.50 | $88.81 |
+  | Net pay | $1,761.58 |
+  | KiwiSaver employer $88.81, ESCT ($88 × 30%) $26.40, net $62.41 | |
+  The pay run shows "Extra pay $1,000.00 taxed at 33% (IRD's extra pay
+  rules, four weeks' pay annualised: $79,950.00)". The journal debits
+  Ordinary time and Bonus on separate lines (6200), as any pay item; P10's
+  labour cost and payroll summary show Bonus as its own pay item.
+- **XP9 Signing bonus in a first pay (Sam).** Sam starts 26 Oct, hourly.
+  Week 4's draft has his ordinary time; Ben replaces it with one Bonus line
+  $10,000.00 ("Signing bonus"). No PAYE income payments in the four weeks
+  (his pay run has no ordinary pay): PAYE $1,225.00 (XP3), net
+  $8,775.00. **EI file: field 14 (lump sum indicator) is 1** for Sam and 0
+  for everyone else; his gross earnings include the bonus.
+- **XP10 Back pay from a pay rate change (Rāwiri).** Rāwiri is hourly,
+  $30.00 for 40 hours, tax code M. Weeks 1-3 paid $1,200.00 each (PAYE
+  $231.39). After week 3 is approved, his new rate of $32.00 from 12 Oct
+  (week 2) is added under Employees. Week 4's draft pays $32.00 × 40 =
+  $1,280.00. **Add back pay** (pay item Back pay, the $32.00 rate):
+  Tohyee finds the approved pay periods the rate covers that were paid at
+  less (weeks 2 and 3, not week 1), and adds a line for each:
+  - "Back pay for PAYRUN-2 (12 Oct to 18 Oct 2026): 40.00 h at $32.00
+    instead of $30.00" $80.00;
+  - the same for PAYRUN-3 (19-25 Oct) $80.00.
+  Back pay is an extra pay (IR335), so: four weeks $1,200 × 3 + $1,280 =
+  $4,880 × 13 = $63,440 + $160 = $63,600 → 30%: $48.00 + levy $2.80 =
+  $50.80. PAYE $256.79 + $50.80 = **$307.59**; net **$1,132.41**.
+  Adding back pay again on the same draft, or on a later draft once week 4
+  is approved, is refused ("PAYRUN-2 already has back pay for this rate on
+  PAYRUN-4"). Editing the employee's other lines keeps the back pay lines;
+  "Remove back pay" takes them off. Back pay is worked out for **Ordinary
+  time** (hours × the new rate, or the new salary for the period) and
+  **Overtime paid at the old rate × its multiplier**; allowances aren't
+  changed by a pay rate.
+- **XP11 What back pay refuses.** "Not supported yet (refused rather than
+  guessed)": a pay period with **holiday pay** in it (holiday pay on back
+  pay needs leave, P8); a rate that starts **part-way through** a paid
+  period; a rate **lower** than what was paid; a **change of basis**
+  (hourly to salary); overtime at a typed rate; a period that already had
+  back pay. A rate that starts on or after this draft's period owes no back
+  pay ("No back pay is owed for that pay rate").
+
+### Final pays
+
+- **XP12 Holiday pay on finishing, worked out outside Tohyee (Tama).**
+  Tama is hourly, $25.00 for 40 hours, tax code M; his finish date is
+  1 Nov (week 4's last day). Drafts now include people finishing in the
+  period (P3 refused them). Weeks 1-3: $1,000.00 each. Week 4: ordinary
+  time $1,000.00 and "Holiday pay on finishing" $400.00, typed. The screen
+  and payslip say **"Final pay: employment finishes on 1 Nov 2026.
+  Holiday pay owed on finishing isn't calculated by Tohyee until leave
+  (P8) is built; work it out outside Tohyee and add it as Holiday pay on
+  finishing."** Because the extra pay arises from his employment ending,
+  the end-of-employment rule applies: his last two paid periods before
+  this one (weeks 2 and 3) $2,000 × 26 = $52,000 + $400 → 19.25%:
+  **$77.00** (XP6). PAYE $171.50 + $77.00 = $248.50; net $1,151.50.
+  **EI file: field 6 (finish date) is 20261101.** Tohyee doesn't stop the
+  pay run being approved without holiday pay (that would need a typed
+  "handled" tick, which Tohyee doesn't add, decision 135).
+- **XP13 Redundancy (Connor).** Connor is hourly, $25.00, KiwiSaver
+  3.5% / 3.5%, ESCT 17.5%; weeks 1-3 paid 22, 22 and 26 hours ($550,
+  $550, $650). He finishes on Wednesday 28 Oct, so week 4's draft gives
+  him **0 hours** with "Final pay: enter the hours worked to 28 Oct 2026"
+  (a salaried employee finishing before the period ends is refused, as a
+  part period). Ben enters 10 hours ($250.00) and Redundancy $1,000.00.
+  Last two paid periods: $550 + $650 (XP6) → $175.00, no levy.
+  | | Amount |
+  | --- | --- |
+  | Gross | $1,250.00 |
+  | PAYE: ordinary $30.62 + extra pay $175.00 (17.5%) | $205.62 |
+  | KiwiSaver employee, 3.5% of $250.00 (not the redundancy) | $8.75 |
+  | Net pay | $1,035.63 |
+  | KiwiSaver employer $8.75, ESCT $1.40, net $7.35 | |
+  EI field 6 is 20261028. Redundancy isn't an R&D employee cost
+  (IR1240's list has no redundancy), unlike Bonus, Back pay and Holiday
+  pay on finishing.
+- **XP14 Kelvin's unpaid week.** Kelvin, hourly $25.00: week 1 24 hours
+  ($600), week 2 20 hours ($500), week 3 his ordinary time is set to
+  $0.00 (unpaid leave); final pay week 4 (finishing 1 Nov) 22 hours
+  ($550.00) and Holiday pay on finishing $2,000.00. The last two **paid**
+  periods are weeks 2 and 1: $1,100 × 26 = $28,600 → $385.00 (XP6). PAYE
+  $84.87 + $385.00 = $469.87.
+
+### Not supported yet (refused rather than guessed)
+
+Each is refused with "Not supported yet (refused rather than guessed)" and
+what it is; on a draft it's that employee's problem, so the pay run can't
+be approved until it's fixed:
+
+- an extra pay whose four weeks don't hold a whole pattern of pays (for
+  weekly pay 1-3 pays, fortnightly 1, or more than expected), or pays of
+  another frequency: IRD's rules give two answers (the "other
+  circumstances" × 13 and "if there's only one pay period ... the amount
+  paid for that pay period is the amount to be annualised");
+- an end-of-employment extra pay with fewer than two paid periods before
+  the final pay, or one of them at another frequency;
+- an extra pay or back pay on a final pay without holiday pay on finishing
+  or redundancy (whether it "arises from the ending" decides the method);
+  holiday pay on finishing or redundancy on a pay that isn't the
+  employee's final pay;
+- extra pays for CAE and EDW codes (IRD says use the lump sum method but
+  not with which threshold), STC (already refused), redundancy for ND and
+  NSW (their flat rate includes the levy);
+- redundancy with other extra pays when the ACC levy's maximum falls inside
+  them (which part uses the room under the maximum isn't said);
+- a higher rate the employee asks for (IR335 allows it; not built);
+- a separate pay run just for an extra pay (one pay run per pay group and
+  period, decision 124), and anything paid after the final pay;
+- calculating holiday pay owed on finishing, and holiday pay on back pay
+  (leave, P8); back pay cases in XP11.
+
+### Questions for Jess (extra pays, back pay and final pays)
+
+1. **One cent in IRD's example (XP1).** IRD's steps add the tax and the
+   levy and truncate once ($10,366.40); its printed example truncates each
+   ($10,366.39). Tohyee follows the steps. Ask IRD, or follow the example?
+2. **Short four-week windows.** A weekly employee with only two pays in
+   the four weeks is refused. Should Tohyee use IRD's "other
+   circumstances" rule (all payments × 13), or annualise the pays it has?
+3. **Extra pays on a final pay** without a termination item are refused.
+   Is a bonus paid in someone's last pay usually "arising from the ending"
+   (end-of-employment rule), or should the person running pay choose?
+4. **Holiday pay on finishing** is typed and labelled "worked out outside
+   Tohyee" until P8. Is that enough, or should final pays wait for P8?
+5. **Back pay for holiday pay periods** is refused until P8. Would you
+   rather it paid back pay on the ordinary time and flagged the holiday
+   pay?
+6. **Hourly leavers start at 0 hours** when they finish before the period
+   ends (starters still get the full period's hours, as P3 did). Agreed?
+7. **Separate extra-pay pay runs** (a bonus paid on a different day) aren't
+   possible. Needed?
+8. **A higher rate on request** (IR335): add a per-employee elected rate?
+
 ## Holidays Act leave (examples not yet approved by Jess)
 
 **What gets built.** Tohyee builds this for the **Holidays Act 2003** as one

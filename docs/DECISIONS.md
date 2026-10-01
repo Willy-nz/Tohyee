@@ -879,3 +879,125 @@ know of; Xero Central couldn't be read (**unverified**).
      Department and month of pay date** (decisions 102-104): earnings and
      employer KiwiSaver, not reimbursements; variance = actual less budget,
      as budgets (BU5) (WB5).
+
+## Extra pays, back pay and final pays, payroll stage P12 (examples XP1-XP14)
+
+Made 2 Oct 2026 by Claude while building P12, by the rule law → NetSuite →
+Xero. The law here is IRD's: the *Payroll Calculations & Business Rules
+Specification* 2026-27 sections 4.5.1, 5.11 (extra pay) and 5.12
+(taxation when employment ends), the Employer's guide IR335 (September
+2026, pages 37-42) and IRD's lump sum pages (quoted under "Extra pays,
+back pay and final pays" in `docs/ACCOUNTING-EXAMPLES.md`). They were read
+through a summarising fetch tool, not saved; the figures were asked for
+one by one and IRD's own examples are the tests. NetSuite has no New
+Zealand payroll, so it answers none of these; Xero Payroll NZ's help pages
+load by script and couldn't be read (**unverified**).
+
+124. **An extra pay is a line in the employee's pay run for the period**,
+     not a pay run of its own. IRD lets either happen, but its student
+     loan step works on "pay for pay period, including normal pay and
+     extra pay" (spec 5.11.1 step 2), and Tohyee has one pay run per pay
+     group and period (P3). A bonus paid on another day isn't possible yet
+     (question for Jess).
+125. **Four new pay item kinds**: Extra pay (bonuses, gratuities, lump
+     sums), Back pay, Holiday pay on finishing (worked out outside Tohyee)
+     and Redundancy, each with its own account, added by admins. The kind
+     fixes the treatment: all are taxed; redundancy has no ACC earners'
+     levy (step 4.1) and doesn't count for KiwiSaver (4.5.1; IR335 "Unless
+     the lump sum payment is for redundancy"), the others count. Regular
+     bonuses and commission aren't extra pays (IR335: "any regular payments
+     are not lump sum payments") and stay allowances. The P3 typed
+     "Holiday pay" item is unchanged (leave taken in the period).
+126. **The four weeks are the pay dates from 27 days before the extra pay
+     to its own pay date** ("the four weeks prior to, and inclusive of the
+     day on which the extra pay is paid"), from approved pay runs and this
+     one, the taxable earnings less any extra pays. A pay with no regular
+     taxable pay isn't counted. Four weekly, two fortnightly, one
+     four-weekly pay → × 13; one monthly pay → × 12; none → $0 (spec
+     example 3). Any other pattern, or a pay of another frequency, is
+     refused: IRD's "other circumstances" rule (all payments × 13) and its
+     "only one pay period" sentence disagree for a short window (question
+     for Jess).
+127. **Tax on an extra pay follows the spec's steps exactly**: grossed-up
+     = annualised (plus the low threshold for a secondary code) + the
+     extra pay, cents dropped; the rate is the income tax bracket the
+     grossed-up amount falls in (the rates file's brackets, which are
+     IRD's extra pay table); extra pay × rate and the levy (steps 4.1-4.4,
+     the rates file's levy rate and maximum) are added unrounded and the
+     total truncated to cents (steps 5.1-5.2). **Conflict found:** IRD's
+     printed example 1 truncates the tax and the levy separately
+     ($10,366.39 instead of $10,366.40); the steps are followed and the
+     test records the difference (XP1, question for Jess). The ordinary pay
+     in the same pay is taxed as before; PAYE is the two added.
+128. **Tax codes.** M and ME use 5.11.1 (ME gets no independent earner
+     credit on the extra pay: the spec's extra pay steps have none);
+     secondary codes use 5.11.2 with their low threshold, which is the
+     start of the bracket at the code's rate (SB $0, S $15,601, SH $53,501,
+     ST $78,101, SA $180,001, as IRD prints them, tested); ND and NSW use
+     their usual flat rate on the extra pay (IRD's lump sum page; spec
+     5.5 and 5.8: the flat rate "also applies to extra pays"), not
+     flagged as lowest rate; CAE and EDW are refused (IRD says use the
+     lump sum method, not with which threshold); STC stays refused.
+129. **The lump sum indicator (EI field 14) is 1 when the extra pay's tax
+     rate was the lowest bracket's rate** (spec 5.11.3), worked out and
+     kept on the approved pay run per employee.
+130. **The end-of-employment rule applies when a final pay has Holiday pay
+     on finishing or Redundancy**, and then to every extra pay in that pay
+     (IRD: "calculate other lump sum payments together with the lump sum
+     paid when an employee ends employment"). Its base is the last two
+     approved pay runs for the employee whose period ended before this
+     one's started and that paid regular taxable pay (Kelvin's unpaid week
+     is skipped, spec 5.12 example 2), × 26, 13, 6.5 or 6. Fewer than two,
+     or another frequency, is refused (the spec's one-period sentence gives
+     no multiplier). An Extra pay or Back pay on a final pay without one of
+     those items is refused (whether it "arises from the ending" decides
+     the rule; question for Jess), and those two items on a pay that isn't
+     the employee's final pay are refused.
+131. **Redundancy with other extra pays** is calculated together; the
+     levy is on the levy-liable part, and refused only when the levy's
+     maximum falls between the annualised income and the grossed-up
+     amount (which part uses the room under the maximum isn't said).
+     Redundancy for ND and NSW is refused (their flat rate includes the
+     levy).
+132. **Student loan, KiwiSaver and ESCT on extra pays as on any pay**:
+     student loan on the period's pay including extra pays and redundancy
+     (5.11.1 step 2; IR335's Rama example); KiwiSaver deductions, employer
+     contributions and ESCT on everything that counts for KiwiSaver, so
+     not redundancy (4.5.1; IR335).
+133. **Back pay is worked out from pay rate history** (P1b) for approved
+     pay runs: choose a pay rate and a Back pay item; every approved pay
+     period on or after the rate's start, before this draft's period, whose
+     rate in effect is now that rate, gets a line: Ordinary time hours ×
+     the new rate less what was paid (each rounded half up as PRUN2), or
+     the new salary for the period less what was paid; Overtime paid at
+     the old rate × its multiplier at the new rate × the multiplier. It's
+     an extra pay (IR335; IRD's lump sum page: reported in the period it's
+     paid). Refused: holiday pay in the period (P8), a rate starting
+     part-way through a paid period, a lower rate, a change of basis,
+     overtime at another rate, a period already back-paid (the line keeps
+     the pay run it's for, and approving checks no other approved pay run
+     has paid it). NetSuite and Xero couldn't answer how back pay is
+     worked out (see above), so this is a design choice.
+134. **Final pays**: drafts include employees who finish in the period
+     (P3 refused them); an hourly employee finishing before the period
+     ends starts at 0 hours with a note to enter the hours (timesheets
+     covering every day to the finish date give the hours, as TS8); a
+     salaried one is refused as a part period, as starters are. The finish
+     date goes in the EI file (decision 61). Nothing is paid after a final
+     pay: later drafts leave the employee out (as before).
+135. **Holiday pay owed on finishing isn't calculated until leave (P8) is
+     built.** The honest minimum: a final pay can include a typed "Holiday
+     pay on finishing" amount, labelled as worked out outside Tohyee and
+     taxed by the end-of-employment rule; the pay run screen and payslip
+     always say Tohyee didn't calculate it. Approving isn't blocked: the
+     only way to block would be a typed "handled" tick, which the rules
+     forbid ("Don't add features that only record a status someone types
+     in") (question for Jess).
+136. **Reports, journals and R&D**: new items post like any pay item (own
+     account, own journal line) and count as labour cost in P10. For the
+     R&D claim, Extra pay, Back pay and Holiday pay on finishing count as
+     employee costs (IR1240 p 63 lists "bonuses", salaries and wages,
+     "holiday and long-service pay"); Redundancy doesn't (not in IRD's
+     list) (decisions 36, 66).
+137. **An employee's request for a higher rate on extra pays** (IR335 page
+     40) isn't built; it's listed as refused (question for Jess).
