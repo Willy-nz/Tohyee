@@ -75,7 +75,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/tax-available-on.test.ts` the tax code pickers and starting codes
   by side (TAO2-TAO4, TAO6, TAO8), and `tests/unit/sales-platforms.test.ts`
   the webhook signature check, Shopify record shapes and which value is kept
-  (SPC2, SPC3, SPC5, SPC6, SPC8)
+  (SPC2, SPC3, SPC5, SPC6, SPC8), and `tests/unit/sales-platforms-screen.test.ts`
+  the sync log on the settings screen (SPC10)
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.

@@ -998,6 +998,7 @@ export async function syncConnection(
       const current = await readConnection(tx, row.id, { lock: true });
       assertConnected(current);
       const apply: ApplyContext = { connection: current, source: "sync", counts: emptyCounts() };
+      const lastLine = await tx.query<{ id: string | null }>("select max(id)::text as id from sales_platform_sync_log where connection_id = $1", [row.id]);
       await applyRecords(tx, apply, {
         customers: current.sync_customers ? changes.customers : [],
         variants: current.sync_products ? changes.variants : [],
@@ -1015,8 +1016,13 @@ export async function syncConnection(
           where id = $1`,
         [row.id, changes.customersUntil, changes.productsUntil, now.toISOString(), tokenCiphertext, tokenExpiresAt],
       );
+      // A summary only when this sync logged something new, so an unchanged store adds nothing to the log (SPC4).
+      const newLines = await tx.query("select 1 from sales_platform_sync_log where connection_id = $1 and id > coalesce($2::bigint, 0) limit 1", [
+        row.id,
+        lastLine.rows[0].id,
+      ]);
       const summary = describeCounts(apply.counts);
-      if (summary !== "" || current.status === "paused") {
+      if (newLines.rowCount || current.status === "paused") {
         await writeLog(tx, row.id, { source: "sync", action: "sync", message: `Synced ${row.store_domain}: ${summary || "nothing changed"}.` });
       }
       return apply.counts;

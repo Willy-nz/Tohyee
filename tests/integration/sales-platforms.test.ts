@@ -415,9 +415,9 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     expect(again).toMatchObject({ created: 0, linked: 0, updated: 0, kept: 0, failed: 0 });
     // Only what changed since the last sync is asked for.
     expect(state.calls.some((call) => call.startsWith("customers:2026-09-30"))).toBe(true);
-    const entries = await log(w, connection.id);
-    // Only the sync itself is noted ("sync" lines), no record lines.
-    expect(entries.slice(0, entries.length - before).every((entry) => entry.action === "sync")).toBe(true);
+    // Nothing new in the log: 1003 and Lavender are still skipped, but their lines are already there.
+    expect(again.skipped).toBe(2);
+    expect(await log(w, connection.id)).toHaveLength(before);
     expect(await contactsNamed(w, "Tama Rewi")).toHaveLength(1);
     // The second run skips 1003 again (it's still unclear) but adds nothing.
     expect(await w.as(async (tx) => Number((await tx.query<{ n: string }>("select count(*)::text as n from items")).rows[0].n))).toBe(2);
