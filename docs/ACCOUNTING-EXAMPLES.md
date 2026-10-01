@@ -7610,8 +7610,10 @@ activity) there too. Stage R3 (the claim report) is built on its branch:
 RD3's credit rule, RD4, RD7, RD10, RD16-RD20 and RD23-RD27, plus the new
 examples RD28-RD42 at the end of this section, which say how R3 does payroll
 without timesheets, overhead rules, the overseas limit across categories,
-feedstock and commercial production, deadlines and exports. Timesheets (RD5,
-RD6's spreading, RD22's timesheet) wait for payroll P9; grants (RD15) are
+feedstock and commercial production, deadlines and exports. Timesheets came
+with payroll P9 (TS1-TS11 in "Timesheets" below; RD5's split on P3's
+figures is TS7); RD6's spreading of leave and RD22's reallocation still
+aren't built; grants (RD15) are
 tagged ineligible as in R2; feedstock values (RD14) aren't supported yet.
 The examples are still waiting for Jess. Every rule below cites
 where it comes from. Where the guidance was unclear or left a choice, Jess
@@ -8405,9 +8407,12 @@ allocation and keep the per-employee split; timesheets (P9) aren't built, so
 R3 works from **the allocation the pay run used**, never from a payroll
 calculation of its own (decision 37). An employee's R&D share counts only
 when the allocation is **100% R&D** (decision 34); otherwise it's listed as
-"default split, no time record" and left out. The report says so on screen:
-"Timesheets aren't built yet: pay counts only for employees whose cost
-allocation is 100% R&D."
+"default split, no time record" and left out. (Since payroll P9, pay runs
+keep the shares they split pay by, approved timesheets count for the days
+they cover (TS5-TS9), and the screen says "Pay counts from approved
+timesheets for the days they cover; for other days, only when the
+employee's cost allocation is 100% R&D." RD28-RD32 are pays with no
+timesheet, so they're unchanged.)
 
 - **RD28** Full-time R&D, from the allocation. Hana's allocation from 1 Apr
   2026 is 100% C1. Kea's fortnightly pay run for 6-19 Jul 2026, paid 22 Jul
@@ -8623,8 +8628,10 @@ above** (decision 75); per-employee pay only with payroll access (RD33);
 reminders only for owners and admins (decision 48). Overhead rules are set
 by bookkeepers and above.
 
-Not built in R3 (refused rather than guessed): timesheets (P9) and so RD5's
-hours split, RD6's spreading of leave and RD22's late timesheet;
+Not built in R3 (refused rather than guessed): timesheets (built since in
+payroll P9: TS5-TS9 replace the "100% R&D only" rule where timesheets
+exist), RD6's spreading of leave and RD22's reallocation to a late
+timesheet;
 reimbursements in a pay run as goods costs; feedstock output values (RD14);
 deciding "additional" costs in commercial production; supporting activity in
 the year after the core activity's year (LY 5(1)(ab)(ii), by variation);
@@ -10178,7 +10185,10 @@ default allocation, for those days only:
   = **300.00**; his 60/40 allocation isn't used. Journal debits for Ben:
   6200 "Ordinary time" (no tag) **900.00**, 6200 "Ordinary time"
   Operations **800.00**, 6200 "Ordinary time (project Taieri soil survey)"
-  (no tag) **300.00**. Ben's shares: C1 36.00 h (45.0000%), Operations
+  (no tag) **300.00** (in the pay run's journal, Ben's untagged 900.00 and
+  Hana's untagged ordinary time 2,400.00 are one line of **3,300.00**, since
+  lines are totalled by pay item, account and tracking). Ben's shares: C1
+  36.00 h (45.0000%), Operations
   32.00 h (40.0000%), Taieri soil survey 12.00 h (15.0000%), all from the
   timesheet. **R&D:** C1 gets 2,000.00 × 36 / 80 = **900.00**, counted as
   employee related costs (a timesheet is a time record, so decision 34's
@@ -10193,7 +10203,8 @@ default allocation, for those days only:
   timesheet C1 **500.00**, timesheet Operations **500.00**, allocation C1
   **600.00**, allocation Operations **400.00**. Journal for Ben: 6200
   "Ordinary time" (no tag) **1,100.00** (500.00 + 600.00, same account and
-  tracking), Operations **900.00**. **R&D:** C1 500.00 from the timesheet
+  tracking; with Hana's 2,400.00 the journal line is **3,500.00**),
+  Operations **900.00**. **R&D:** C1 500.00 from the timesheet
   counts; C1 600.00 from the 60% allocation is listed as "default split,
   no time record" and left out (decision 34 for the days with no time
   record).
@@ -10245,9 +10256,10 @@ default allocation, for those days only:
   voided it can be reopened. The week of 13 Jul, approved **after**
   PAYRUN-1, isn't used by it: the posted pay keeps its split (decision
   37), and the claim report says "Ben Tait: the timesheet for the week of
-  13 Jul 2026 was approved after PAYRUN-1, so its 16.00 R&D hours aren't
-  used (decision 37)." (people without payroll access see "1 timesheet
-  was approved after its pay run…" with no name). That timesheet can
+  Monday 13 Jul 2026 was approved after PAYRUN-1, so its 16.00 R&D hours
+  aren't used (decision 37)." (people without payroll access see "1
+  timesheet was approved after its pay run, so its R&D hours aren't used
+  (decision 37)." with no name). That timesheet can
   still be reopened, since no pay run used it. A pay run approved later
   for the next period uses whichever of its days fall in that period.
   Reallocating a posted pay to a late timesheet (RD22) isn't built.

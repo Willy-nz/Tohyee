@@ -959,6 +959,29 @@ that something happened.
   amendments, filing straight to IRD's gateway, and fields for things
   Tohyee doesn't pay yet (child support, extra pays, ESS: always 0). No
   file has been through myIR's checker yet.
+- **Timesheets** (payroll stage P9, TS1-TS11, not yet approved by Jess;
+  decisions 91-101; tenant migration 0067). Payroll › Timesheets: one
+  timesheet per employee per week (Monday to Sunday) of hours per day, to 2
+  decimal places, by R&D activity, Department, project, any combination, or
+  "other work" (spread by the default allocation); "Fill from project time"
+  suggests rows from the employee's project time. Every entry is stamped by
+  the database with who and when, a change replaces the entry (the old one is
+  kept) and clearing a cell removes it; entries made more than 14 days after
+  the work are flagged "entered late". Employees linked to their login fill
+  in and submit their own (viewers can; timesheets show hours, never pay);
+  their timesheet approver (bookkeeper or higher), or the login of their
+  reports-to manager, or anyone with payroll access approves or rejects with
+  a reason, never their own; approval locks the timesheet and only payroll
+  access can reopen it, never once an approved pay run used it. Pay runs
+  approved afterwards split each employee's costs by the approved hours for
+  the days covered and the default allocation for the rest (largest
+  remainder, as PE3), keep the shares and the timesheets used, and give an
+  hourly employee whose whole period is covered their timesheet hours as
+  Ordinary time; PAYE and the rest are calculated as before. The R&D claim
+  counts timesheet shares as time records (the 100% rule stays for the
+  allocation's share) and notes timesheets approved after their pay run. Not
+  built: leave and overtime from timesheets, reallocating a posted pay to a
+  late timesheet, copying timesheet hours into project time.
 
 - **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
   RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;
@@ -980,7 +1003,7 @@ that something happened.
   to the cent. Everything is stamped by the server with who and when, kept
   in its history, and flagged "entered late" when entered more than 14 days
   after the work. Tagged R&D costs lists what's tagged by activity and
-  category for an income year. Not built: timesheets, criteria and
+  category for an income year. (Timesheets came with payroll P9.) Not built: criteria and
   methodologies approvals, and purging files after 7 years.
 
 - **R&D claim report** (RDTI stage R3, on branch
@@ -995,9 +1018,11 @@ that something happened.
   maximum, the 15% credit rounded down, and per project the supplementary
   return's figures (categories, of which overseas, internal software,
   commercial production and supporting activity from the year before, and
-  the core share). Pay counts from the cost allocation each approved pay run
-  used, only when it's 100% R&D (timesheets aren't built); other splits are
-  listed as "default split, no time record". Each employee's pay only for
+  the core share). Pay counts from the shares each approved pay run kept:
+  from approved timesheets (payroll P9) always, and from the default
+  allocation only when it's 100% R&D; other splits are listed as "default
+  split, no time record" (pay runs approved before P9 use the allocation
+  they used). Each employee's pay only for
   people with payroll access; others see totals. Overhead rules ("% of an
   account" to an activity, with an IR1240 basis and workings attached) are
   set there by bookkeepers, applied when the report runs, changed by adding a
@@ -1010,7 +1035,7 @@ that something happened.
   days ahead for owners and admins on the home page. CSV export, which keeps
   the summary figures (never anyone's pay) so later changes show as
   differences. Read-only: it posts nothing, decides nothing is R&D and
-  records no "filed" status. Not built: timesheets, feedstock output values,
+  records no "filed" status. Not built: feedstock output values,
   refundability, supporting activity in the following year, other balance
   dates' deadlines, joint ventures.
 
@@ -1072,10 +1097,10 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: Holidays Act leave, timesheets, payroll reports and IRD's
+4. NZ payroll: Holidays Act leave, payroll reports and IRD's
    employee details file (employee records, IRD rates and calculations, pay
-   items, pay runs, paying wages and IRD, bank files, payslips and the payday
-   filing file are built).
+   items, pay runs, paying wages and IRD, bank files, payslips, the payday
+   filing file and timesheets are built).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,

@@ -51,6 +51,7 @@ Set them in the Agents box before sending each task:
 | --- | --- | --- | --- | --- |
 | Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
 | RDTI R3: the claim report (examples RD28-RD42, decisions 66-75) | none | not opened yet | `claude/rdti-r3-claim-report` (Claude) | 0065 |
+| Payroll P9: timesheets (examples TS1-TS11, decisions 91-101) | none | not opened yet | `claude/payroll-p9-timesheets` (Claude) | 0067 |
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
@@ -60,7 +61,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0065 (0058-0064 used or reserved: 0063 payslips and bank files P5, 0064 payday filing P6).
+Next free tenant migration number: 0068 (0058-0067 used or reserved: 0063 payslips and bank files P5, 0064 payday filing P6, 0065 RDTI R3, 0066 the CRM branch, 0067 timesheets P9). Decisions 76-90 are reserved for the CRM branch; timesheets use 91-101.
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -186,10 +187,32 @@ only be run by certain people. Each item is its own branch and PR.
       Jess to approve the examples.
 - [ ] **P8 Holidays Act leave, build** what P7 specifies and Jess approves,
       including leave liability by department. Needs P3 and P7.
-- [ ] **P9 Timesheets**: hours by project, department or R&D activity
-      (reusing project time tracking), approved by a manager, overriding the
-      default split for the hours they cover. Time is stamped when entered,
-      so it counts as contemporaneous for RDTI. Needs P3.
+- [ ] **P9 Timesheets** (tenant migration 0067), built in branch
+      `claude/payroll-p9-timesheets`, waiting for a PR and review; examples
+      TS1-TS11 await Jess (questions under TS11), decisions 91-101. Built:
+      - Payroll › Timesheets: one timesheet per employee per week (Monday to
+        Sunday), hours per day to 2 places by R&D activity, Department,
+        project, a combination or "other work"; "Fill from project time"
+        suggests rows from the employee's project time (timesheets are their
+        own record, decision 91). Every entry is stamped by the database;
+        changes replace entries and keep the old ones; entries more than 14
+        days after the work are flagged (decision 38).
+      - Employees linked to their login fill in their own (viewers can;
+        hours only, never pay); the timesheet approver (bookkeeper and up),
+        else the reports-to manager's login, or anyone with payroll access
+        approves or rejects with a reason, never their own (NetSuite). Only
+        payroll access reopens an approved timesheet, and never once an
+        approved pay run used it (the database refuses).
+      - Pay runs approved afterwards split costs by the approved hours for
+        the days covered and the default allocation for the rest, and keep
+        the shares; fully covered hourly employees get their timesheet hours
+        as Ordinary time. PAYE and the rest unchanged.
+      - The R&D claim counts timesheet shares as time records (decision 34's
+        100% rule stays for the allocation's share), and notes timesheets
+        approved after their pay run (decision 37).
+      Not built: leave and overtime from timesheets, reallocating a posted
+      pay to a late timesheet (RD22), copying hours into project time.
+      Screens weren't checked in a browser.
 - [ ] **P10 Payroll reports** (payroll access only): labour cost by
       department, project, R&D activity and pay item; payroll summary and
       reconciliation to the ledger; headcount and FTE; employee earnings
@@ -280,8 +303,10 @@ deadlines). Agents must check the current IR1240 and cite it, never memory.
         changed by a replacing rule with the earlier figure shown;
       - deadlines for 31 March balance dates only, reminders for owners and
         admins on the home page; CSV export keeping the summary figures.
-      When P9 timesheets arrive, the report should take hours from them
-      before the allocation (RD5, RD6, RD22).
+      Payroll P9 (branch `claude/payroll-p9-timesheets`) now does this: pay
+      runs keep their shares and the report takes timesheet hours before the
+      allocation (TS5-TS9; RD5 with P3's figures is TS7). RD6's spreading of
+      leave and RD22's reallocation still aren't built.
 
 To do:
 
@@ -378,14 +403,25 @@ wording. Still open:
   admins?
 
 **RDTI claim report** (R3, under RD42)
-- Until timesheets exist, part-time R&D staff earn no credit (only 100% R&D
-  allocations count): OK, or build P9 timesheets first?
+- Part-time R&D staff now earn credit from approved timesheets (P9, TS5);
+  without a timesheet only 100% R&D allocations count. OK?
 - Reimbursements on pay runs aren't counted anywhere: let them be tagged as
   materials later?
 - Feedstock: record the output's value at year end so the part over it can
   be claimed?
 - Exports keep the summary figures, not the file: keep the CSV too, for
   people with payroll access only?
+
+**Timesheets** (P9, under TS11)
+- Monday-to-Sunday weeks, or timesheets per pay period as Xero does?
+- Viewers fill in their own timesheets: OK, or a "time only" role?
+- Approvers can't change hours (NetSuite) but reject; or let them correct
+  and approve (Xero)?
+- Part-covered pay periods split by calendar days: or working days?
+- Hourly pay from timesheets only when the whole period is covered, Ordinary
+  time only: should extra hours become overtime?
+- Should approved project hours also become project time (to invoice)?
+- Build the reallocation of a posted pay to a late timesheet (RD22)?
 
 **Older lists still open** (see each section): repeating bills, quotes and
 repeating invoices and printed documents, purchase orders, stock transfers,
