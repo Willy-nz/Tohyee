@@ -8770,10 +8770,8 @@ here: net **2,590.50**; PAYE 589.72, student loan 197.28, KiwiSaver
 
 - **PPAY11 Refused rather than guessed.**
   - **A bank file for paying wages** (a direct credit or batch payment
-    file): Tohyee has no bank batch file format yet (supplier batch payments
-    don't make one either), so none is made; record the payments and pay
-    them in the bank's own screens. Which bank formats are wanted is a
-    question for Jess.
+    file): not made in P4. Stage P5 makes ANZ, ASB and BNZ files
+    (PBF1-PBF7); supplier batch payments still don't make one.
   - **Child support** and **payroll giving** (not deducted yet, PRUN8).
   - Working out **IRD's penalties and interest** for late payment, and
     **IRD's direct debit** or other ways of paying.
