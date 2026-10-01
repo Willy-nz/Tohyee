@@ -16,6 +16,7 @@ export const PATCH = route<Context>(async (request, context) => {
       amount: body.amount,
       closeDate: body.closeDate,
       stage: body.stage,
+      customFields: body.customFields,
     }),
   );
   return json({ opportunity });

@@ -8654,4 +8654,149 @@ create trigger tax_codes_available_on_guard
   for each row execute function tohyee_guard_tax_code_available_on();
 `,
   },
+  {
+    version: "0051",
+    name: "payroll_employees",
+    sql: `
+create table payroll_employees (
+  id uuid primary key default gen_random_uuid(),
+  idempotency_key text not null unique,
+  request_hash text not null,
+  first_name text not null check (length(btrim(first_name)) between 1 and 100),
+  last_name text not null check (length(btrim(last_name)) between 1 and 100),
+  email text check (email is null or length(email) <= 320),
+  phone text check (phone is null or length(phone) <= 50),
+  postal_address text check (postal_address is null or length(postal_address) <= 1000),
+  date_of_birth date,
+  tax_code text not null check (tax_code ~ '^[A-Z0-9]+( [A-Z0-9]+)*$' and length(tax_code) <= 20),
+  ird_number_ciphertext text not null,
+  kiwisaver_status text not null
+    check (kiwisaver_status in ('enrolled', 'not_enrolled', 'opted_out', 'savings_suspension', 'not_eligible')),
+  kiwisaver_employee_rate numeric(5,2) not null
+    check (kiwisaver_employee_rate between 0 and 100),
+  kiwisaver_employer_rate numeric(5,2) not null
+    check (kiwisaver_employer_rate between 0 and 100),
+  student_loan boolean not null,
+  pay_frequency text not null
+    check (pay_frequency in ('weekly', 'fortnightly', 'four_weekly', 'monthly')),
+  pay_basis text not null check (pay_basis in ('salary', 'hourly')),
+  annual_salary numeric(16,2),
+  hourly_rate numeric(16,2),
+  ordinary_hours_per_week numeric(7,2),
+  start_date date not null,
+  finish_date date,
+  bank_account_ciphertext text,
+  is_archived boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (finish_date is null or finish_date >= start_date),
+  check (
+    (pay_basis = 'salary' and annual_salary > 0 and hourly_rate is null and ordinary_hours_per_week is null)
+    or (pay_basis = 'hourly' and annual_salary is null and hourly_rate > 0 and ordinary_hours_per_week > 0)
+  )
+);
+
+create index payroll_employees_active_name
+  on payroll_employees (lower(last_name), lower(first_name))
+  where not is_archived;
+
+create function tohyee_payroll_employee_forbid_delete() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'Payroll employee records can''t be deleted or truncated; archive the employee instead' using errcode = 'P0001';
+end;
+$$;
+create trigger payroll_employees_no_delete
+  before delete on payroll_employees
+  for each row execute function tohyee_payroll_employee_forbid_delete();
+create trigger payroll_employees_no_truncate
+  before truncate on payroll_employees
+  for each statement execute function tohyee_payroll_employee_forbid_delete();
+`,
+  },
+  {
+    version: "0052",
+    name: "not_for_profit_module",
+    sql: `
+alter table organisation_settings
+  add column not_for_profit_enabled boolean not null default false;
+`,
+  },
+  {
+    version: "0053",
+    name: "crm_custom_fields",
+    sql: `
+-- Custom fields on CRM records (CRMF1-CRMF9): people and opportunities get
+-- their own kinds of field, contact fields can be used on prospects, and
+-- fields can be grouped into named, ordered sections. Values never change an
+-- amount, account, tag, stage or GST box.
+alter table custom_fields drop constraint custom_fields_record_check;
+alter table custom_fields add constraint custom_fields_record_check
+  check (record in ('contact', 'document', 'line', 'person', 'opportunity'));
+do $$
+declare
+  con_name text;
+begin
+  for con_name in
+    select conname from pg_constraint
+     where conrelid = 'custom_fields'::regclass and contype = 'c' and pg_get_constraintdef(oid) ilike '%used_on <@%'
+  loop
+    execute format('alter table custom_fields drop constraint %I', con_name);
+  end loop;
+end;
+$$;
+alter table custom_fields add constraint custom_fields_used_on_kind_check check (
+  (record = 'contact' and used_on <@ array['customer', 'supplier', 'prospect'])
+  or (record in ('document', 'line') and used_on <@ array['invoice', 'bill', 'credit_note', 'supplier_credit_note', 'spend', 'receive', 'journal'])
+  or (record = 'person' and used_on <@ array['person'])
+  or (record = 'opportunity' and used_on <@ array['opportunity'])
+);
+
+-- Existing contact fields stay where they are: prospects only get the fields
+-- an admin turns on for them (CRMF3, CRMF11).
+
+create table custom_field_sections (
+  id bigserial primary key,
+  record text not null check (record in ('contact', 'document', 'person', 'opportunity')),
+  name text not null check (length(name) between 1 and 60),
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index custom_field_sections_name_idx on custom_field_sections (record, lower(name));
+create trigger custom_field_sections_no_truncate before truncate on custom_field_sections
+  for each statement execute function tohyee_guard_custom_field();
+
+alter table custom_fields add column section_id bigint references custom_field_sections(id);
+create index custom_fields_section_idx on custom_fields (section_id) where section_id is not null;
+
+-- A field can only be in a section for its own kind of record, and a
+-- section's kind never changes.
+create function tohyee_check_custom_field_section() returns trigger
+language plpgsql as $$
+begin
+  if tg_table_name = 'custom_field_sections' then
+    if new.record <> old.record then
+      raise exception 'A custom field section''s kind of record can''t change' using errcode = 'P0001';
+    end if;
+  elsif new.section_id is not null
+        and not exists (select 1 from custom_field_sections s where s.id = new.section_id and s.record = new.record) then
+    raise exception 'A custom field can only be in a section for its own kind of record' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger custom_fields_section_check before insert or update of section_id, record on custom_fields
+  for each row execute function tohyee_check_custom_field_section();
+create trigger custom_field_sections_guard before update of record on custom_field_sections
+  for each row execute function tohyee_check_custom_field_section();
+
+alter table crm_people add column custom_fields jsonb not null default '{}'::jsonb;
+alter table crm_opportunities add column custom_fields jsonb not null default '{}'::jsonb;
+create trigger crm_people_custom_fields before insert or update on crm_people
+  for each row when (new.custom_fields <> '{}'::jsonb) execute function tohyee_check_custom_values('person');
+create trigger crm_opportunities_custom_fields before insert or update on crm_opportunities
+  for each row when (new.custom_fields <> '{}'::jsonb) execute function tohyee_check_custom_values('opportunity');
+`,
+  },
 ];

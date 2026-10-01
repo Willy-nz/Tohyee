@@ -23,7 +23,7 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
 import type { CustomerSetup } from "@/lib/customers/service";
 import type { SalespeopleSetup } from "@/lib/salespeople/service";
-import { type CustomFieldSetup, type CustomFieldUse, type CustomValues, fieldsFor } from "@/lib/custom-fields/values";
+import { contactUses, type CustomFieldSetup, type CustomValues, fieldsFor } from "@/lib/custom-fields/values";
 import { formatGstNumber } from "@/lib/format";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
@@ -119,14 +119,6 @@ function bodyFrom(draft: Draft): Record<string, unknown> {
   };
 }
 
-/** A prospect uses the customer fields, as on the server. */
-function rolesOf(draft: { isCustomer: boolean; isSupplier: boolean; isProspect?: boolean }): CustomFieldUse[] {
-  return [
-    ...(draft.isCustomer || draft.isProspect ? (["customer"] as const) : []),
-    ...(draft.isSupplier ? (["supplier"] as const) : []),
-  ];
-}
-
 /**
  * The values to save: only fields for the contact's roles (a supplier-only
  * contact doesn't get a customer field's default, CF3), plus values it
@@ -134,7 +126,7 @@ function rolesOf(draft: { isCustomer: boolean; isSupplier: boolean; isProspect?:
  */
 function valuesToSave(setup: CustomFieldSetup | null | undefined, draft: Draft, saved: CustomValues): CustomValues {
   if (!setup) return draft.customFields;
-  const allowed = new Set(fieldsFor(setup.fields, "contact", rolesOf(draft), saved).map((field) => field.id));
+  const allowed = new Set(fieldsFor(setup.fields, "contact", contactUses(draft), saved, setup).map((field) => field.id));
   return Object.fromEntries(Object.entries(draft.customFields).filter(([id]) => allowed.has(id)));
 }
 
@@ -197,7 +189,9 @@ function ContactForm({
   const typeLabelId = useId();
   // Values for fields the contact's roles use are shown; the rest (like a
   // customer field's default on a supplier) are kept aside and not saved.
-  const shownIds = new Set(fieldsFor(customSetup?.fields ?? [], "contact", rolesOf(draft), saved).map((field) => field.id));
+  const shownIds = new Set(
+    (customSetup ? fieldsFor(customSetup.fields, "contact", contactUses(draft), saved, customSetup) : []).map((field) => field.id),
+  );
   const shown = Object.fromEntries(Object.entries(draft.customFields).filter(([id]) => shownIds.has(id)));
   const hidden = Object.fromEntries(Object.entries(draft.customFields).filter(([id]) => !shownIds.has(id)));
 
@@ -395,7 +389,7 @@ function ContactForm({
       <CustomFieldInputs
         setup={customSetup}
         record="contact"
-        uses={rolesOf(draft)}
+        uses={contactUses(draft)}
         value={shown}
         onChange={(values) => setDraft({ ...draft, customFields: { ...hidden, ...values } })}
       />
@@ -474,7 +468,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
       {canEdit && createKey && (customSetup.data || customSetup.error) ? (
         <Card title="New contact">
           <ContactForm
-            initial={{ ...EMPTY_DRAFT, customFields: startingValues(customSetup.data, "contact", ["customer", "supplier"]) }}
+            initial={{ ...EMPTY_DRAFT, customFields: startingValues(customSetup.data, "contact", ["customer", "supplier", "prospect"]) }}
             saved={{}}
             taxCodes={taxCodes.data?.taxCodes ?? []}
             customSetup={customSetup.data}

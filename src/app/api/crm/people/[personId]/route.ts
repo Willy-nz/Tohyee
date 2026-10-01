@@ -17,6 +17,7 @@ export const PATCH = route<Context>(async (request, context) => {
       phone: body.phone,
       isPrimary: body.isPrimary,
       isArchived: body.isArchived,
+      customFields: body.customFields,
     }),
   );
   return json({ person });
