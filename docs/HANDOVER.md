@@ -24,17 +24,53 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 
 | Work | Issue | Draft PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| NZ payroll (PAYE, KiwiSaver, ESCT, student loan, payslips, payday filing file) | #60 | #62 | `copilot/build-nz-payroll-tohyee` | 0051 |
-| Not-for-profit module (funds, grants, donation receipts, PBE Tier 3/4 reports) | #61 | #63 | `copilot/not-for-profit-module-development` | 0052 (branch currently uses 0051; renumber before merging) |
-| CRM as its own app: app shell at `/crm`, Accounting ↔ CRM switcher, CRM Home (CRM roadmap item 1) | none (Agents tab) | not opened yet | `copilot/crm-app-shell-navigation-home-page` | none needed |
-| Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | not opened yet | `copilot/extend-custom-fields-crm-records` | 0053 (agent asked to renumber from 0051) |
+| NZ payroll, stage 1: employee records only (see the payroll list below for the rest) | #60 | #62 | `copilot/build-nz-payroll-tohyee` | 0051 |
+| Not-for-profit module, first stage: opt-in fund tracking | #61 | #63 | `copilot/not-for-profit-module-development` | 0052 (renumbered) |
+| Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | not opened yet | `copilot/extend-custom-fields-crm-records` | 0053 (renumbered) |
+
+Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
+and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
 
 The CRM custom fields brief makes CRM custom fields available whenever the
 CRM module is on, even with Advanced features off. Jess to confirm.
 
-CRM work waiting on those two: record types and page layouts (needs custom
-fields) and the Salesforce-style record page (needs both). Claude will build
-these once both are merged.
+CRM work waiting on custom fields: record types and page layouts, and the
+Salesforce-style record page. Claude will build these once custom fields is
+merged.
+
+### Payroll: what's left after #62
+
+#62 only adds employee records (pay basis, frequency, tax code, KiwiSaver and
+student loan status, dates; IRD number and bank account encrypted). It
+calculates nothing. The rest of #60, in order, each its own branch and PR:
+
+- [ ] **P1 Review and merge #62** (employee records, migration 0051).
+- [ ] **P2 IRD payroll rates as dated data**: PAYE brackets and tax codes,
+      ACC earners' levy rate and maximum, student loan rate and threshold,
+      KiwiSaver rates, ESCT brackets, each with its tax year and IRD source
+      (IR340/IR335, the payroll calculation specification). No pay runs yet.
+      Can start now; reserve migration 0054 if it needs a table.
+- [ ] **P3 Pay runs**: draft → approve; earnings (ordinary time, overtime,
+      allowances, bonuses) and deductions; PAYE incl. ACC earners' levy,
+      student loan, KiwiSaver employee and employer, ESCT. Approving posts one
+      journal (wages expense; PAYE, KiwiSaver, student loan and ESCT payable to
+      IRD; net wages payable). Needs P1 and P2.
+- [ ] **P4 Paying**: pay net wages from a bank account or match a bank line;
+      pay IRD. Needs P3.
+- [ ] **P5 Payslips**: PDF and email, using the existing document PDF and
+      email pieces. Needs P3.
+- [ ] **P6 Payday filing file**: the employment information file for myIR
+      upload, plus new and departing employee details, to IRD's current file
+      specification (cited). No IRD gateway connection. Needs P3.
+- [ ] **P7 Holidays Act leave, plan first**: worked examples and questions
+      for Jess (annual leave, sick leave, public holidays, alternative days,
+      average weekly earnings vs ordinary weekly pay) in
+      `docs/ACCOUNTING-EXAMPLES.md`, docs only. Can start now.
+- [ ] **P8 Holidays Act leave, build** only what P7 specifies and Jess
+      approves. Needs P3 and P7.
+
+P2 and P7 can run in parallel now; P4, P5 and P6 can run in parallel once P3
+is merged. Give each its own migration number up front.
 
 To do:
 
