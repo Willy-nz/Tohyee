@@ -1113,7 +1113,7 @@ export async function leaveOutOfDate(tx: OrgTx, run: DraftRun, employeeId: strin
     )
     .sort();
   if (want.length !== have.length || want.some((entry, index) => entry !== have[index])) {
-    return `${name}'s leave has changed since it was worked out on this draft (a booking, a decision, a cash-up or an earlier pay run). Press Update leave and check it again.`;
+    return `${name}'s leave has changed since it was worked out on this draft (a booking, a public holiday decision, a cash-up, an approved timesheet or an earlier pay run). Press Update leave and check it again.`;
   }
   return null;
 }

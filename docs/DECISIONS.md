@@ -1,4 +1,4 @@
-# Decisions (1 October 2026)
+# Decisions (1 October 2026; added to on 2 October 2026)
 
 Jess asked Claude to research the open questions on payroll rates, payroll
 access, Holidays Act leave and the R&D Tax Incentive and "make the call
@@ -977,7 +977,7 @@ load by script and couldn't be read (**unverified**).
      the new salary for the period less what was paid; Overtime paid at
      the old rate × its multiplier at the new rate × the multiplier. It's
      an extra pay (IR335; IRD's lump sum page: reported in the period it's
-     paid). Refused: holiday pay in the period (P8), a rate starting
+     paid). Refused: holiday pay in the period (still refused after P8: decision 152), a rate starting
      part-way through a paid period, a lower rate, a change of basis,
      overtime at another rate, a period already back-paid (the line keeps
      the pay run it's for, and approving checks no other approved pay run
@@ -997,7 +997,8 @@ load by script and couldn't be read (**unverified**).
      always say Tohyee didn't calculate it. Approving isn't blocked: the
      only way to block would be a typed "handled" tick, which the rules
      forbid ("Don't add features that only record a status someone types
-     in") (question for Jess).
+     in") (question for Jess). (Since P8, 2 Oct 2026, only for employees
+     whose leave Tohyee doesn't keep: decision 150.)
 136. **Reports, journals and R&D**: new items post like any pay item (own
      account, own journal line) and count as labour cost in P10. For the
      R&D claim, Extra pay, Back pay and Holiday pay on finishing count as
@@ -1006,3 +1007,191 @@ load by script and couldn't be read (**unverified**).
      list) (decisions 36, 66).
 137. **An employee's request for a higher rate on extra pays** (IR335 page
      40) isn't built; it's listed as refused (question for Jess).
+
+## Holidays Act leave build, payroll stage P8 (examples HL1-HL42)
+
+Made 2 Oct 2026 by Claude while building P8 on decisions 7-29, by the rule
+law → NetSuite → Xero (Jess said to go ahead and build leave on HL1-HL42;
+the examples still need her approval). The law is the Holidays Act 2003
+(`docs/sources/holidays-act-2003.md`, and s 17-s 19, s 27, s 28, s 36-s 39,
+s 44-s 48, s 61A read on 2 Oct 2026 from the same consolidation as at 20
+Dec 2023 in the `jonnonz1/nz-statute-book` repository). IRD and Employment
+NZ pages were read on 2 Oct 2026 through Claude's summarising fetch tool
+(quotes as it returned them; check the pages):
+IRD [Taxing holiday pay](https://www.ird.govt.nz/employing-staff/deductions-from-income/taxing-holiday-pay)
+(last updated 2 Jun 2020), [Holiday pay paid in advance](https://www.ird.govt.nz/employing-staff/payday-filing/non-standard-filing-of-employment-information/holiday-pay-paid-in-advance)
+(12 Aug 2025), [Lump sum payments](https://www.ird.govt.nz/employing-staff/payday-filing/non-standard-filing-of-employment-information/lump-sum-payments)
+(27 Jan 2026) and the [Commissioner's operational position on calculating PAYE on holiday pay](https://www.taxtechnical.ird.govt.nz/operational-positions/commissioners-operational-position-on-calculating-paye-on-holiday-pay)
+(11 Mar 2016); Employment NZ [Calculating holiday and leave pay](https://www.employment.govt.nz/pay-and-hours/pay-and-wages/leave-and-holiday-pay/calculating-holiday-and-leave-pay)
+(last modified 7 Aug 2026), [Public holidays and anniversary dates](https://www.employment.govt.nz/leave-and-holidays/public-holidays/public-holidays-and-anniversary-dates)
+(25 Sep 2026) and [Previous years](https://www.employment.govt.nz/leave-and-holidays/public-holidays/previous-years-public-holidays-and-anniversary-dates);
+Te Papa's [Dates for the Matariki public holiday](https://tepapa.govt.nz/discover-collections/read-watch-play/matariki-maori-new-year/dates-for-matariki-public-holiday).
+NetSuite's help has no New Zealand holiday pay rules (see the HL section);
+Xero Central couldn't be read again, so where Xero is cited it's from the
+HL section's earlier reading.
+
+138. **Leave pay items come with the organisation, one of each kind**
+     (Annual leave, Sick leave, Bereavement leave, Special leave, Public
+     holiday, Public holiday worked, Alternative holiday, Annual leave
+     cashed up, Alternative holiday paid out, Holiday pay owed on
+     finishing), to the wages account (6200) to start with, so journals
+     and P10's reports show each kind apart; admins can rename them and
+     change their accounts, never archive them or type their lines. Family
+     violence leave's item is called "Special leave" so payslips, journals
+     and reports don't say what it is (decision 27). Migration 0070 adds
+     them (a name already used gets " (2)").
+139. **Gross earnings for holiday pay (s 14) are marked on each pay item**
+     (`counts_for_holiday_pay`): taxable earnings count; reimbursements,
+     non-taxable allowances, redundancy and cash-ups don't. Redundancy
+     follows Employment NZ: "The law does not say if redundancy payments
+     are included in gross earnings. Our view is that redundancy would
+     generally be received as compensation and not earnings." Cash-ups:
+     s 14(c)(iv). An extra pay or allowance the agreement doesn't bind the
+     employer to pay is marked "discretionary" when it's added (s 14(b)(i);
+     HL4's Christmas voucher); it can't change later. Earnings count in the
+     pay period of the pay run that paid them (a December bonus, back pay).
+     Holiday pay on finishing isn't counted again after the end.
+140. **Hours worked on a public holiday beyond the usual day** are paid at
+     the ordinary hourly rate as part of "the portion of ... relevant daily
+     pay ... that relates to the time actually worked" (s 50(1)), then time
+     and a half; anything more an agreement gives is typed (decision 23).
+141. **Leave is worked out on drafts, kept as lines, and counts when the pay
+     run is approved.** A draft's leave lines (source "leave") carry the
+     dates, hours, units, whether it's in advance and the rate's inputs;
+     they're worked out when the draft is made and again whenever a
+     booking, decision, cash-up, exchange or setting changes ("Update
+     leave"). Approving works them out again and refuses if anything
+     changed, so what's approved is what the records say. Balances count
+     only approved pay runs; a voided pay run's leave doesn't count, and a
+     booking an approved pay run paid can't be cancelled until it's voided.
+     Typing leave items is refused; for an employee whose leave Tohyee
+     keeps, typing P3's "Holiday pay" or "Holiday pay on finishing" is too.
+142. **Leave settings are dated rows, never changed**: the usual week (each
+     weekday's ordinary hours and usual overtime and allowances, all
+     regular), or "varies" with the agreed week in hours and days (s 17);
+     RDP or ADP with the s 9A(1) reason; the s 27(1)(a) agreement to pay
+     annual holidays in the pay for the period they're taken; a part-day
+     sick leave agreement (decision 19); continuous or casual (s 63(1)(b));
+     the anniversary day region (decision 22). A setting that starts part
+     way through a pay period is refused on that pay run.
+143. **Tohyee keeps an employee's leave only from its own pay records.**
+     Opening leave balances and earnings from before Tohyee have no worked
+     example, so leave is refused (as "Not supported yet") for someone
+     whose first sick or annual entitlement arose before Tohyee's first pay
+     run for them, for anyone paid P3's typed "Holiday pay" on an approved
+     pay run, and for any calculation needing earnings from before that
+     first pay run. Holiday pay on finishing stays typed for them (decision
+     150). A rate needing the pay period before (AWE, ADP) also waits for
+     that period's pay run to be approved.
+144. **A pay period only partly inside an AWE, ADP or four-week window
+     counts for its hours inside** (HL4): the day's approved timesheet hours
+     in weeks with an approved timesheet, else the usual week's hours;
+     refused for hours that vary without timesheets. Rates are kept to 10
+     decimal places, which is exact for every cent paid (decision 26).
+145. **The hours test (s 63(1)(b); HL21)**: weeks are 7-day blocks from the
+     start of the 6 months; a calendar month only partly inside them needs
+     its share of 40 hours (decision 20 left partial months open). A casual
+     is entitled at the end of the first 6 months that meet the test on
+     approved timesheets, then each 12 months while the 6 months before
+     still meet it ("as long as the circumstances ... continue to apply",
+     s 63(2)(b)).
+146. **Otherwise a working day (decision 21): Tohyee suggests "yes" when the
+     employee worked the same weekday in at least 2 of the 4 weeks before**
+     (from approved timesheets), and the person running pay records the
+     decision with the suggestion. A fixed usual week decides it without
+     asking (s 12(2) applies only "If it is not clear"). Approved timesheet
+     hours on a public holiday count as hours worked on it unless a
+     decision says otherwise. A decision can't change once an approved pay
+     run covers the day.
+147. **Alternative holidays are used oldest first** (taken, exchanged or
+     paid out), and a booking needs one that isn't already booked.
+148. **The usual pay comes from the usual week.** For an employee with a
+     fixed usual week a draft's Ordinary time, regular overtime and
+     allowances are made day by day for the days worked, leaving out leave,
+     public holidays (paid by their own lines) and the part of a part day
+     not worked; a salary is the period's salary × the share of the usual
+     ordinary hours paid. An hourly employee finishing part way through a
+     period gets their usual hours to the finish date (P12 gave 0 hours);
+     one whose every day is covered by approved timesheets gets the
+     timesheets' hours less hours on public holidays (P9). Hours that vary
+     keep P3's or P9's Ordinary time, with a note to enter the hours.
+149. **Typing an employee's lines by hand takes the usual pay over** unless
+     "keep the usual pay" is ticked; Tohyee then stops changing it and
+     notes that leave wasn't taken off it.
+150. **Holiday pay owed on finishing is worked out by Tohyee** for an
+     employee whose leave it keeps: lines of the system "Holiday pay owed on
+     finishing" item for the untaken entitlement (s 24), the public holidays
+     it would have covered (s 40(3)), the 8% (s 25 or s 23) and untaken
+     alternative holidays (s 60(2)(b)), taxed by IRD's end-of-employment
+     rule (decision 130). The typed "Holiday pay on finishing (worked out
+     outside Tohyee)" stays only where Tohyee doesn't keep the leave
+     (decision 143); HL examples don't need it. Advance holiday pay worth
+     more than the 8% isn't deducted even with consent: how the recovery is
+     taxed has no worked example (a note says so; question for Jess).
+     Supersedes decision 135 for kept employees.
+151. **Tax on leave follows IRD's operational position on holiday pay**:
+     "Holiday pay that is linked to the work days within the pay period is
+     treated as salary or wages", so leave and public holidays paid in the
+     period they're taken are regular pay; cash-ups are extra pays (the
+     position: "should continue to be treated as an 'extra pay'"; IRD's lump
+     sum page: "cashed in annual leave"); an alternative holiday exchanged
+     for money is "holiday pay paid in addition to the regular pay for the
+     pay period" (IR335), so an extra pay too. P3's typed "Holiday pay"
+     stays regular pay and is relabelled "for leave in this pay period";
+     holiday pay paid in advance of the period isn't built (decision 157).
+152. **Back pay for a pay period with leave or holiday pay in it stays
+     refused.** By law back pay is gross earnings in the period it's paid
+     (it raises later AWE), and a backdated rate raises the ordinary weekly
+     pay that holidays taken after it were paid at; paying that difference
+     needs a worked example (XP question 5).
+153. **The leave liability report** (decision 28) values the annual
+     holidays entitled to (a positive balance) at the greater of OWP at the
+     date and AWE to the last approved pay period on or before it, adds the
+     running 8% of gross earnings since the last anniversary to that pay
+     period, and untaken alternative holidays at OWP ÷ the usual days a
+     week; by the Department on the biggest line of the cost allocation at
+     the date. Shown and exported only; nothing is posted.
+154. **The EI file's hours paid include leave and public holiday hours** in
+     the period ("hours paid for the paydate"); not cash-ups, exchanges or
+     holiday pay on finishing.
+155. **Leave pay is an R&D employee cost** (IR1240 p 63: salary and wages,
+     "holiday and long-service pay").
+156. **Payslips show leave balances at the end of the period**: annual
+     holidays in weeks and hours, sick leave in days, untaken alternative
+     holidays; never family violence leave (decision 27).
+157. **Annual holidays are paid in the pay for the period they're taken
+     only with the s 27(1)(a) agreement recorded**; without it they're
+     refused (paying before the holiday, s 27(1), isn't built).
+158. **A cash-up is paid at the s 21(2) rate on the date it was agreed**
+     (HL12) in the first draft whose period ends on or after that date;
+     cash-ups agreed but not yet paid count against the 1 week.
+159. **Annual holidays are one line per booking per pay period**, split
+     into the part covered by the balance and the part in advance, worked
+     out day by day against the balance on each day (so a new entitlement
+     during the leave covers the days after it, HL13). Sick, bereavement,
+     family violence leave and alternative holidays are a line per day.
+160. **Bereavement leave has no balance**: each booking is one bereavement,
+     at most 3 or 1 working days (s 70(1)); before 6 months only with leave
+     in advance agreed.
+161. **Sick or family violence leave beyond the balance stops the pay run**
+     unless the booking records that leave in advance was agreed (s 63(3),
+     s 72D(3)); unpaid sick leave is recorded as unpaid leave.
+162. **Public holiday dates are 2025-2027**, as Employment NZ publishes them
+     (2028 isn't published yet); a pay period touching a year Tohyee
+     doesn't have is refused until it's added.
+163. **The holiday and leave record (s 81(2))** lists employment start and
+     end, each entitlement, leave with dates, hours and pay, cash-ups,
+     public holidays worked and paid, alternative holidays arising and
+     their use, and holiday pay on finishing, with each pay period's hours
+     and pay (s 81(2)(c)); CSV export audited without figures. (ja) and (m)
+     aren't supported (no transfers, no board).
+164. **Employees' own leave requests aren't built in P8**: booking leave
+     needs payroll access, because a booking changes pay and family
+     violence leave must stay private. P9's employee self-service could be
+     followed later (question for Jess).
+165. **A part day's pay** is RDP less the pay for the time worked (HL23);
+     with ADP, ADP × the hours off ÷ the day's hours.
+166. **Leave for someone whose hours vary** is booked with the hours each
+     day; annual holidays are those hours ÷ the agreed week's hours (s 17).
+167. **The AWE divisor cut for agreed unpaid leave** is the whole or part
+     weeks over one week of the part of the leave inside the 12 months.

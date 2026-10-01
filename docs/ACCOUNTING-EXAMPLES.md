@@ -11130,8 +11130,10 @@ approved these. Bonuses and other lump sums, back pay and the extra pays on
 an employee's last pay are taxed under IRD's **extra pay** rules instead of
 the ordinary PAYE calculation, and reported in the pay they're paid in.
 Decisions 124-137 in [DECISIONS.md](DECISIONS.md) say why each rule is as
-it is. Holiday pay owed on finishing is **not calculated** until leave (P8)
-is built (XP12).
+it is. Holiday pay owed on finishing was **not calculated** until leave
+(P8) was built (XP12); since P8 (2 Oct 2026) Tohyee works it out for
+employees whose leave it keeps (HL15, HL16; decision 150), and it stays
+typed, as XP12 shows, only for employees whose leave it doesn't keep.
 
 Sources, law first (all read 2 Oct 2026 through Claude's web fetch tool,
 which returns IRD's PDFs through a summarising model, so wording below is
@@ -11354,9 +11356,11 @@ pay), "Holiday pay on finishing" and "Redundancy".
   period (P3 refused them). Weeks 1-3: $1,000.00 each. Week 4: ordinary
   time $1,000.00 and "Holiday pay on finishing" $400.00, typed. The screen
   and payslip say **"Final pay: employment finishes on 1 Nov 2026.
-  Holiday pay owed on finishing isn't calculated by Tohyee until leave
-  (P8) is built; work it out outside Tohyee and add it as Holiday pay on
-  finishing."** Because the extra pay arises from his employment ending,
+  Tohyee doesn't keep Tama Finishing's leave, so holiday pay owed on
+  finishing isn't calculated by Tohyee; work it out outside Tohyee and add
+  it as Holiday pay on finishing."** (Changed 2 Oct 2026 by P8: the note
+  said Tohyee didn't calculate it "until leave (P8) is built". Tama has no
+  usual week in Tohyee, so his leave isn't kept; decision 150.) Because the extra pay arises from his employment ending,
   the end-of-employment rule applies: his last two paid periods before
   this one (weeks 2 and 3) $2,000 × 26 = $52,000 + $400 → 19.25%:
   **$77.00** (XP6). PAYE $171.50 + $77.00 = $248.50; net $1,151.50.
@@ -11412,8 +11416,8 @@ be approved until it's fixed:
 - a higher rate the employee asks for (IR335 allows it; not built);
 - a separate pay run just for an extra pay (one pay run per pay group and
   period, decision 124), and anything paid after the final pay;
-- calculating holiday pay owed on finishing, and holiday pay on back pay
-  (leave, P8); back pay cases in XP11.
+- holiday pay on back pay (still refused after P8, decision 152); back pay
+  cases in XP11. (Calculating holiday pay owed on finishing came in P8.)
 
 ### Questions for Jess (extra pays, back pay and final pays)
 
@@ -11428,9 +11432,11 @@ be approved until it's fixed:
    (end-of-employment rule), or should the person running pay choose?
 4. **Holiday pay on finishing** is typed and labelled "worked out outside
    Tohyee" until P8. Is that enough, or should final pays wait for P8?
+   (Since P8 Tohyee works it out where it keeps the leave; typed only
+   where it doesn't, decision 150.)
 5. **Back pay for holiday pay periods** is refused until P8. Would you
    rather it paid back pay on the ordinary time and flagged the holiday
-   pay?
+   pay? (Still refused after P8, decision 152: leave question 4.)
 6. **Hourly leavers start at 0 hours** when they finish before the period
    ends (starters still get the full period's hours, as P3 did). Agreed?
 7. **Separate extra-pay pay runs** (a bonus paid on a different day) aren't
@@ -11450,11 +11456,24 @@ The questions these examples raised were decided on 1 Oct 2026: see
 "Decided (Holidays Act leave)" at the end of this section and
 `docs/DECISIONS.md`, decisions 7-29.
 
-Stage P7 of NZ payroll (#60). **This is a plan only: nothing here is built
-and there are no tests yet.** It sets out what Tohyee's leave calculations
-should do, with real numbers, so Jess can approve, change or refuse each
-example before stage P8 builds anything. P8 builds only the examples Jess
-approves, each with a test, and refuses the rest.
+Stage P7 of NZ payroll (#60) planned these; **stage P8 built them on 2 Oct
+2026** (branch `claude/payroll-p8-leave`, tenant migration 0070), because
+Jess said to go ahead and build leave on these examples and decisions 7-29
+before approving them. They are still **not approved by Jess**. Design
+calls the examples and decisions 7-29 didn't settle are decisions 138-167
+in `docs/DECISIONS.md`; Jess's questions are under "Questions for Jess
+(leave build)" at the end of this section. Where building showed an example
+was wrong or unclear, the text is corrected with a note saying so.
+
+Tests: `tests/unit/payroll-leave.test.ts` (the pure calculations: HL1-HL8,
+HL10-HL16, HL20-HL27, HL30-HL33, HL42, decision 7) and
+`tests/integration/payroll-leave.test.ts` (the database flows, with the
+examples' own figures where Tohyee's records can hold them: Ben's usual
+pay, public holidays, Labour Day worked, sick leave, alternative holidays,
+holiday pay on finishing; Aroha's holidays, cash-up, bereavement, family
+violence leave and balances; Eru's holidays in advance and leaving; Fiona;
+Cara's ADP and the decision for her; unpaid leave; records, payslips, the
+liability report, the EI file and the API).
 
 **Which law.** On 1 Oct 2026 the **Holidays Act 2003** is in force. Section
 numbers below (s16, s21 and so on) are that Act's, from the official
@@ -11659,12 +11678,16 @@ amount paid.
     a recorded agreement the divisor isn't cut. Xero's example lowers the
     divisor for unpaid weeks without mentioning an agreement; Tohyee doesn't
     follow it there.
-- **HL11 Taking annual holidays** (s21). Aroha takes Mon 6 to Fri 10 Jul
+- **HL11 Taking annual holidays** (s21). Aroha takes Mon 13 to Fri 17 Jul
   2026 (1 week). Paid at the greater of OWP at the start of the holiday
   (1,200.00) and AWE for the 12 calendar months to the end of the last pay
-  period before it (Sun 6 Jul 2025 to Sun 5 Jul 2026, decision 10: 52 ×
+  period before it (Sun 13 Jul 2025 to Sun 12 Jul 2026, decision 10: 52 ×
   1,200.00 + her December 2025 bonus 2,600.00 = 65,000.00; the Sunday at
-  the start adds nothing; ÷ 52 = 1,250.00): **1,250.00**. It's paid before
+  the start adds nothing; ÷ 52 = 1,250.00): **1,250.00**. (Corrected 2 Oct
+  2026 while building: the example had Mon 6 to Fri 10 Jul 2026, but Fri
+  10 Jul 2026 is Matariki, a public holiday that would have been paid as
+  one, not as an annual holiday (s 40(1); HL13). Moved a week later so the
+  figures here and in HL12, HL13 and HL42 stand.) It's paid before
   the holiday unless they agree it's paid in the usual pay (s27(1)). Balance
   4 → **3 weeks** (the entry stores 40 hours). Xero likewise works the rate out for the period the leave is
   taken in, not the one it's paid in.
@@ -11691,7 +11714,13 @@ amount paid.
     66,300.96 ÷ 52. Xero: "Cashed up annual leave payments aren't included
     in the employee's gross earnings and won't accrue holiday pay."
 - **HL13 Public holidays during annual holidays** (s40(1)). Aroha books Mon
-  22 Mar to Fri 2 Apr 2027. Good Friday (26 Mar) and Easter Monday (29 Mar)
+  22 Mar to Fri 2 Apr 2027. (Clarified 2 Oct 2026 while building: this
+  assumes her anniversary day isn't in those dates; Otago Anniversary Day
+  is Mon 22 Mar 2027, which would make it a third public holiday. The
+  tests set her anniversary day to Wellington's, decision 22; question 13
+  below.) Across two pay periods each pays its days at the rate worked out
+  for the holiday's start: 4 days (32 hours, 0.8 week) and Good Friday in
+  the first, Easter Monday and 4 days in the second, **1,000.77** each. Good Friday (26 Mar) and Easter Monday (29 Mar)
   are public holidays, not annual holidays: each is paid at her RDP, 240.00,
   so **480.00**. The other **8 days** are annual holidays: 64 hours ÷ her
   usual 40 a week = **1.6 weeks**, paid at the greater of OWP 1,200.00
@@ -11739,7 +11768,13 @@ amount paid.
     attached**; without it the deduction is refused (Wages Protection Act
     1983 s 5(1), checked 1 Oct 2026; Employment NZ, Deductions and premiums;
     decision 16). Xero takes it off the final pay without asking; Tohyee
-    doesn't follow it there.
+    doesn't follow it there. (Corrected 2 Oct 2026 while building: Tohyee
+    doesn't make that deduction yet, even with consent, because how the
+    recovered holiday pay is taxed (less gross pay, or an after-tax
+    deduction) has no worked example: the final pay pays no holiday pay
+    and a note gives the amount over the 8% and says it can be deducted
+    only with written consent; refused rather than guessed, decision 150,
+    question 3 below.)
 - **HL16 Leaving after an entitlement has arisen** (s24, s25, s26, s40(3)).
   Ben leaves on Fri 18 Dec 2026. His last entitlement arose Tue 3 Mar 2026
   (4 weeks) and he's taken 2 weeks of it.
@@ -11784,6 +11819,8 @@ amount paid.
   advance comes off the next entitlement (s63(3)). Xero adds sick leave
   "annually after 6 months" at the pay run that includes the date.
 - **HL21 Employees without 6 months' continuous employment** (s63(1)(b)).
+  Built for employees marked casual, from approved timesheets (decision
+  145).
   George, a casual, is entitled if over 6 months he worked an average of at
   least 10 hours a week, and at least 1 hour in every week or at least 40
   hours in every month. 312 hours over 26 weeks (12 a week on average) with
@@ -11856,7 +11893,9 @@ amount paid.
     together, not apply a formula. Tohyee can't decide this on its own: it
     suggests from Cara's recent weeks (for example, she worked 3 of the
     last 4 Mondays) and the person running pay confirms or changes it, and
-    the decision is recorded with the holiday (decision 21). Xero assigns
+    the decision is recorded with the holiday (decision 21). Tohyee
+    suggests "yes" from 2 of the last 4 (decision 146); until the decision
+    is recorded the pay run can't be approved. Xero assigns
     each employee a "holiday group" and adds public holidays in pay periods
     automatically.
 - **HL31 Which day is the holiday** (s44, s45, s45A). For an employee who
@@ -11870,7 +11909,12 @@ amount paid.
   work Saturday 26 Dec, Boxing Day stays **Sat 26 Dec** (s45(1)(a)). Two
   holidays on the same day count as one (s44(4)). Matariki's date comes from
   Schedule 1 of Te Kāhui o Matariki Public Holiday Act 2022 and anniversary
-  days from local observance (s44(1)(ia), (k)); neither was looked up here.
+  days from local observance (s44(1)(ia), (k)). (Added 2 Oct 2026 while
+  building: Tohyee has Employment NZ's dates for 2025-2027, Matariki
+  included (Fri 25 Jun 2027 in this list), decision 162; s 45 moves a
+  holiday that falls on a Saturday to the Monday and on a Sunday to the
+  Tuesday, so Christmas 2027 (Saturday) is Mon 27 Dec and Boxing Day
+  (Sunday) Tue 28 Dec.)
   Public holiday dates are kept as dated data with their source, like the
   IRD rates in P2. Anniversary day is set per employee, defaulting from the
   organisation's; if not agreed, it's the one for the province where they
@@ -12018,8 +12062,11 @@ them. The examples themselves still need Jess's approval.
   can't be worked out (HL3).
 - **13** RDP or ADP set per employee, with the reason for ADP recorded (HL7,
   HL24).
-- **14** Unpaid leave moves the anniversary only by the part beyond one
-  week; the AWE divisor is cut only under a recorded agreement (HL10).
+- **14** Unpaid leave of more than a week (a single period) moves the
+  anniversary by its whole length unless a written agreement to count it
+  is recorded, which cuts the AWE divisor instead (HL10). (Corrected 2 Oct
+  2026 while building: this summary still had the earlier call, "only by
+  the part beyond one week", which decision 14 replaced on 1 Oct 2026.)
 - **15** No hard limit on holidays in advance; a warning above what's been
   earned, and a prompt for the written agreement (HL14).
 - **16** Advance leave worth more than the 8% is deducted only with written
@@ -12047,3 +12094,60 @@ them. The examples themselves still need Jess's approval.
   the ledger waits for its own example (HL42).
 - **29** Cash-ups need the written request and answer attached, and the
   one-week limit is enforced (HL12).
+
+### Built, and refused rather than guessed (leave build)
+
+Each refusal says "Not supported yet (refused rather than guessed)" and
+what it is. As well as the list above:
+
+- leave for anyone whose first sick or annual entitlement arose before
+  Tohyee's first pay run for them, or who was paid P3's typed holiday pay,
+  and any calculation needing earnings from before Tohyee (opening
+  balances, decision 143); their holiday pay on finishing stays typed;
+- deducting advance holiday pay worth more than the 8% (HL15, decision 150);
+- back pay for a pay period with leave or holiday pay in it (decision 152);
+- paying annual holidays before they're taken, without the s 27(1)(a)
+  agreement (decision 157);
+- leave settings that change part way through a pay period (decision 142);
+- relevant daily pay for a public holiday for someone whose hours vary
+  (use ADP), and the s 40(3) public holidays for someone whose hours vary;
+- public holidays in years Tohyee has no dates for (2028 on, decision 162);
+- employees booking their own leave (decision 164).
+
+### Questions for Jess (leave build)
+
+1. **Opening balances.** Tohyee keeps leave only from its own pay runs, so
+   anyone employed before an organisation started payroll in Tohyee is
+   refused (decision 143). Most organisations will need opening balances
+   (annual weeks and the date last entitled, sick days, alternative
+   holidays) and the earlier 12 months' gross earnings and days worked.
+   Shall we write worked examples for them next?
+2. **Employees' own leave requests** (like P9's timesheets: hours only,
+   approved by a manager)? Decision 164 left them out.
+3. **Advance holiday pay over the 8% on leaving** (HL15): with written
+   consent, take it off gross pay (as Xero) or as an after-tax deduction?
+4. **Back pay over periods with leave** (XP question 5): pay the leave
+   difference at the new rate, or keep refusing?
+5. **Paying annual holidays before they're taken** (s 27(1)): needed, or
+   will every employee agree to be paid in the usual pay (decision 157)?
+6. **Suggesting "otherwise a working day"** from 2 of the last 4 weeks
+   (decision 146): right?
+7. **Hours worked on a public holiday beyond the usual day** at the
+   ordinary rate, time and a half (decision 140): right?
+8. **The usual pay from the usual week** replaces P3's Ordinary time for
+   people with a fixed week, and gives leavers their usual hours to the
+   finish date (decision 148). Agreed?
+9. **Redundancy isn't gross earnings** for holiday pay, following
+   Employment NZ's view (decision 139). Agreed?
+10. **The liability report** values alternative holidays at a usual day's
+    OWP (decision 153); posting the liability still waits for its own
+    example (decision 28). Want posting next?
+11. **Anniversary day** must be chosen for the organisation (or the
+    employee) before public holidays are paid. Fine?
+12. **2028's public holidays** aren't published yet; they'll need adding
+    before pay periods in 2028 (the Holidays Act runs to 6 Aug 2028).
+13. **Aroha's anniversary day** in HL13: which region? Otago's (Mon 22 Mar
+    2027) falls in her booking.
+14. **Cash-ups at the rate on the date agreed** (HL12, decision 158), not
+    the date paid: right?
+

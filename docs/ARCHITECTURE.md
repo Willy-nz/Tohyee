@@ -448,6 +448,51 @@ finish date, and works field 13 out from lines whose item is taxed but not
 levied. `notes` on each pay run employee (final pay, extra pay rate) are
 worked out, never stored.
 
+**Holidays Act leave** (payroll stage P8, examples HL1-HL42, decisions
+7-29 and 138-167, tenant migration 0070). The law is one dated rule-set:
+`src/lib/payroll/leave/rules.ts` refuses any pay period starting on or
+after 6 Aug 2028 (Employment Leave Act 2026; decision 7). Pure,
+browser-safe calculations in `src/lib/payroll/leave/`: `quantity.ts`
+keeps balances exactly as hours over unit hours (a week of the usual week,
+or a day), so part weeks add up; `work-pattern.ts` (the usual week, OWP
+s 8(1), RDP s 9, the pay for time worked on a public holiday);
+`earnings.ts` (gross earnings in a window with partial pay periods by
+hours, AWE over 12 calendar months, AWE since the start for holidays in
+advance, the four-week OWP, ADP); `annual.ts` (anniversaries moved by
+unpaid leave, holiday pay, cash-up limits, holiday pay on finishing);
+`sick.ts` (sick and family violence balances with carry-over, the hours
+test, part days); `public-holiday-dates.ts` (Employment NZ's dates as data)
+and `public-holidays.ts` (s 45/s 45A moves per employee, the otherwise
+working day suggestion, s 50, the s 40(3) walk). The database side:
+`leave-settings.ts` (dated usual week and settings, the organisation's
+anniversary region and cash-up policy); `leave-facts.ts` loads one
+employee's facts (approved pay runs' gross earnings by period from
+`payroll_pay_items.counts_for_holiday_pay`, approved timesheets' hours,
+unpaid leave, leave lines on approved pay runs) and works out rates and
+balances from them, including whether Tohyee keeps the employee's leave
+(decision 143); `leave-records.ts` (bookings, unpaid leave, public holiday
+decisions, cash-ups and exchanges with their files in
+`payroll_leave_files`, append-only); `leave-pay-runs.ts` works a draft's
+usual pay and leave lines out (`workOutLeave()`), saves them
+(`updateEmployeeLeave()`, called by `createPayRun()`,
+`setPayRunEmployeeLines()`, Update leave and every leave record change via
+`updateDraftsCovering()`), and on approval `leaveOutOfDate()` works them
+out again and compares. Pay run lines carry `source` (typed, usual_pay,
+leave), `regular`, and the leave columns (type, booking, dates, hours,
+unit hours, units, in advance, holiday date, cash-up, exchange, basis
+JSON); a leave problem is kept on `payroll_pay_run_employees.leave_problem`
+and blocks approval like any problem. Balances count only approved pay
+runs' lines, so voiding a pay run gives its leave back. `leave-reports.ts`
+has balances, the s 81 record (with CSV) and the liability report (with
+CSV; decision 28: nothing posted). Payslips read the balances at the
+period end; the EI file's hours include leave hours. Routes under
+`/api/payroll/leave/...`, `/api/payroll/employees/[employeeId]/leave`
+(and `/record`) and `/api/payroll/pay-runs/[payRunId]/leave`, all
+`withPayrollAccess()`; multipart bodies (cash-ups, agreements) go through
+`src/lib/api/json-or-form.ts`. Screens: `src/components/payroll-leave.tsx`
+(Payroll › Leave, the employee's leave, the record page) and leave on
+`payroll-pay-runs.tsx`.
+
 **Payday filing** (payroll stage P6, examples PF1-PF9, decisions 56-65):
 `src/lib/payroll/payday-filing.ts` is pure (no database): IRD's employment
 information file (HEI2 header, DEI lines, amounts in hundredths, CR LF),

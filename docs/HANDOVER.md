@@ -1,4 +1,4 @@
-# Handover (1 October 2026)
+# Handover (2 October 2026)
 
 Where Tohyee is up to, and what's left to do. This is for Jess and for the
 next person or coding agent picking the work up. Read `AGENTS.md` and
@@ -49,7 +49,7 @@ Set them in the Agents box before sending each task:
 
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| (nothing in progress, 2 Oct 2026) | | | | |
+| Payroll P8 Holidays Act leave (built by Claude, not merged) | #60 | none yet | `claude/payroll-p8-leave` | 0070 |
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
@@ -68,7 +68,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0070 (0058-0069 used or reserved: 0069 extra pays P12, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11).
+Next free tenant migration number: 0071 (0058-0070 used or reserved: 0070 Holidays Act leave P8 on `claude/payroll-p8-leave`, 0069 extra pays P12, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -151,7 +151,7 @@ only be run by certain people. Each item is its own branch and PR.
       activity tag (waits for the RDTI register); other employer
       contributions; adding an employee back to a draft once left out
       (delete and start the draft again). Refused rather than guessed:
-      extra pays, back pay and final pays (built in P12), leave (P8), child
+      extra pays, back pay and final pays (built in P12), leave (built in P8, on its branch), child
       support, payroll giving, pay rate changes inside a period.
 - [x] **P4 Paying wages and IRD** (#78, migration 0062), merged; examples
       PPAY1-PPAY12 await Jess (questions under PPAY12). Built:
@@ -186,8 +186,8 @@ only be run by certain people. Each item is its own branch and PR.
         date for the tax year and the bank account masked to its last 3
         digits. The email's text is fixed (no figures) and the audit log
         records only that it was queued and sent, to whom.
-      Not built: leave balances (P8), hours each day (P9), an employee
-      portal. ERA s 130's wording couldn't be read (legislation.govt.nz
+      Not built: hours each day (P9), an employee portal (leave balances
+      came in P8, on its branch). ERA s 130's wording couldn't be read (legislation.govt.nz
       blocks our tools); the payslip follows Holidays Act s 81 and
       Employment NZ's guidance.
 - [x] **P6 Payday filing file** for myIR (tenant migration 0064), merged 2 Oct 2026;
@@ -205,9 +205,36 @@ only be run by certain people. Each item is its own branch and PR.
       `docs/ACCOUNTING-EXAMPLES.md`, reworked to follow decisions 7-29 in
       `docs/DECISIONS.md` (built for the Holidays Act 2003 until each
       employee's first pay period on or after 6 Aug 2028). Waiting for
-      Jess to approve the examples.
-- [ ] **P8 Holidays Act leave, build** what P7 specifies and Jess approves,
-      including leave liability by department. Needs P3 and P7.
+      Jess to approve the examples (P8 was built on them anyway, with her
+      go-ahead; three were corrected while building: HL11's dates, HL15's
+      deduction and the "Decided" summary of decision 14).
+- [ ] **P8 Holidays Act leave, build** (tenant migration 0070), **built on
+      branch `claude/payroll-p8-leave`, 2 Oct 2026, not merged**; examples
+      HL1-HL42 still await Jess (questions at the end of the HL section),
+      decisions 138-167. Built:
+      - Each employee's usual week (hours each day with regular overtime
+        and allowances, or hours that vary) and leave settings, dated;
+        drafts make the usual pay from it.
+      - Leave bookings (annual, sick, bereavement, family violence as
+        "Special leave", alternative holidays), unpaid leave, public
+        holiday decisions, cash-ups with the written request and answer,
+        exchanged alternative holidays; pay runs pay them as leave lines
+        with hours, units and the rate's inputs, worked out again on
+        approval; balances count approved pay runs only.
+      - Annual holidays at max(OWP, AWE over 12 calendar months), part
+        weeks by hours, holidays in advance, cash-ups (extra pays),
+        public holidays (2025-2027 data, s 45/45A per employee, time and a
+        half, alternative holidays), holiday pay on finishing (s 23-s 26,
+        s 40(3), s 60(2)(b)) replacing P12's typed figure where Tohyee
+        keeps the leave.
+      - The s 81 record (print, CSV), balances, the leave liability report
+        by Department with the running 8% (shown only), payslip balances,
+        leave hours in the EI file, leave pay as R&D cost.
+      Refused: opening leave balances (so anyone employed before Tohyee's
+      first pay run for them; the biggest gap, question 1), deducting
+      advance holiday pay over the 8%, back pay over leave, paying holidays
+      before they're taken, employees booking their own leave, the
+      Employment Leave Act 2026. Screens weren't checked in a browser.
 - [x] **P9 Timesheets** (tenant migration 0067), merged 2 Oct 2026; examples
       TS1-TS11 await Jess (questions under TS11), decisions 91-101. Built:
       - Payroll › Timesheets: one timesheet per employee per week (Monday to
@@ -382,7 +409,9 @@ To do:
       data with sources; new tenant migrations numbered after 0050.
 - [ ] Check the questions each PR lists for Jess, and answer or decide them.
 - [ ] Holidays Act leave was planned in #60 but only clearly specified parts
-      should be built; expect it to be partly refused.
+      should be built; expect it to be partly refused. (Built in P8 on
+      `claude/payroll-p8-leave`, with the refusals listed there; review and
+      merge it, and decide the leave questions.)
 
 ## Things only Jess (or her computer) can do
 
@@ -513,6 +542,23 @@ wording. Still open:
 - A "number of people" on a position line?
 - Compare actuals by pay date (as now) or by period worked?
 
+**Holidays Act leave** (P8, end of the HL section: "Questions for Jess
+(leave build)")
+- Opening leave balances and earlier earnings: worked examples next? (Until
+  then leave is refused for anyone employed before Tohyee's first pay run
+  for them.)
+- Employees booking their own leave, like timesheets?
+- Advance holiday pay over the 8% on leaving: off gross pay or after tax?
+- Back pay over periods with leave (also XP question 5).
+- Paying annual holidays before they're taken (s 27(1)): needed?
+- "Otherwise a working day" suggested from 2 of the last 4 weeks; hours
+  beyond the usual day on a public holiday at the ordinary rate; the usual
+  pay from the usual week; redundancy not gross earnings; alternative
+  holidays in the liability at a usual day's pay; cash-ups at the rate on
+  the date agreed: agreed?
+- Aroha's anniversary day in HL13 (Otago's falls in her booking); 2028's
+  public holidays aren't published yet.
+
 **Extra pays, back pay and final pays** (P12, end of the XP section)
 - IRD's example 1 is a cent off its own steps ($10,366.39 vs $10,366.40):
   ask IRD, or follow the example?
@@ -521,7 +567,7 @@ wording. Still open:
 - A bonus on a final pay without a termination item: end-of-employment
   rule, or let the person running pay choose?
 - Holiday pay on finishing typed until P8: enough, or should final pays
-  wait for P8?
+  wait for P8? (Since P8 Tohyee works it out where it keeps the leave.)
 - Back pay for periods with holiday pay is refused: pay the ordinary time
   and flag the holiday pay instead?
 - Hourly leavers start at 0 hours (starters get the full period): agreed?
