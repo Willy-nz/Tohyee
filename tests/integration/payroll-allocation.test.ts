@@ -381,7 +381,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PE3
       ).rejects.toThrow(/already used/i);
     });
 
-    it("PE5: refuses lines that don't total 100.00%, zero lines, duplicate lines and R&D activities; the database refuses too", async () => {
+    it("PE5: refuses lines that don't total 100.00%, zero lines, duplicate lines and R&D activities not in the register; the database refuses too", async () => {
       const { employee } = await addEmployee();
       const add = (lines: unknown[]) =>
         asUser(jess, (tx) => addAllocation(tx, employee.id, { idempotencyKey: key("allocation"), effectiveFrom: "2026-04-01", lines }));
@@ -395,8 +395,9 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PE3
       await expect(add([{ percentage: "33.333", departmentId: v.Sales }])).rejects.toThrow(/at most 2 decimal places/);
       await expect(add([{ percentage: "50", departmentId: v.Sales }, { percentage: "50", departmentId: v.Sales }])).rejects.toThrow(/same as line 1/);
       await expect(add([{ percentage: "100", departmentId: v.Wellington }])).rejects.toThrow(/isn't a Department value/);
-      await expect(add([{ percentage: "100" }])).rejects.toThrow("Line 1 needs a Department, Class, Location or project.");
-      await expect(add([{ percentage: "100", rdActivityId: "00000000-0000-0000-0000-000000000001" }])).rejects.toThrow(/R&D activities/);
+      await expect(add([{ percentage: "100" }])).rejects.toThrow("Line 1 needs a Department, Class, Location, project or R&D activity.");
+      await expect(add([{ percentage: "100", rdActivityId: "00000000-0000-0000-0000-000000000001" }])).rejects.toThrow(/that R&D activity wasn't found/);
+      await expect(add([{ percentage: "100", rdActivityId: "C1" }])).rejects.toThrow(/isn't an R&D activity/);
       expect(await asUser(jess, (tx) => listAllocations(tx, employee.id))).toEqual([]);
 
       // The database refuses an allocation that doesn't total 100.00%, and changing a saved one.
@@ -589,8 +590,8 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PE3
     });
   });
 
-  it("applies tenant migration 0057 last", async () => {
+  it("applies tenant migration 0057", async () => {
     const { tenantMigrations } = await import("@/lib/db/migrations/tenant");
-    expect(tenantMigrations.at(-1)?.version).toBe("0057");
+    expect(tenantMigrations.map((migration) => migration.version)).toContain("0057");
   });
 });

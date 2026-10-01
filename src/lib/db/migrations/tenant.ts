@@ -9355,10 +9355,12 @@ create table rd_tags (
   request_hash text not null,
   source_type text not null
     check (source_type in ('bill_line', 'expense_claim_receipt', 'bank_transaction_line', 'journal_line')),
-  bill_line_id bigint references bill_lines(id),
-  expense_claim_receipt_id bigint references expense_claim_receipts(id),
-  bank_transaction_line_id bigint references bank_transaction_lines(id),
-  journal_line_id bigint references ledger_journal_lines(id),
+  -- Checked by tohyee_check_rd_tag_source rather than foreign keys, so the
+  -- source tables keep refusing TRUNCATE with their own messages.
+  bill_line_id bigint,
+  expense_claim_receipt_id bigint,
+  bank_transaction_line_id bigint,
+  journal_line_id bigint,
   activity_id uuid not null references rd_activities(id),
   work_date date not null,
   line_amount numeric not null check (line_amount > 0),
@@ -9429,6 +9431,25 @@ begin
   return new;
 end;
 $$;
+create function tohyee_check_rd_tag_source() returns trigger
+language plpgsql as $$
+declare
+  line_exists boolean;
+begin
+  line_exists := case new.source_type
+    when 'bill_line' then exists (select 1 from bill_lines where id = new.bill_line_id)
+    when 'expense_claim_receipt' then exists (select 1 from expense_claim_receipts where id = new.expense_claim_receipt_id)
+    when 'bank_transaction_line' then exists (select 1 from bank_transaction_lines where id = new.bank_transaction_line_id)
+    else exists (select 1 from ledger_journal_lines where id = new.journal_line_id)
+  end;
+  if not line_exists then
+    raise exception 'An R&D tag must be on an existing line' using errcode = '23503';
+  end if;
+  return new;
+end;
+$$;
+create trigger rd_tags_source before insert on rd_tags
+  for each row execute function tohyee_check_rd_tag_source();
 create trigger rd_tags_guard before update on rd_tags
   for each row execute function tohyee_guard_rd_tag();
 create trigger rd_tags_stamp before insert or update on rd_tags
@@ -9447,7 +9468,8 @@ create table rd_asset_tax_depreciation (
   entry_number bigserial not null unique,
   idempotency_key text not null unique,
   request_hash text not null,
-  asset_id bigint not null references fixed_assets(id),
+  -- Checked by tohyee_check_rd_asset, like rd_tags' lines.
+  asset_id bigint not null,
   income_year integer not null check (income_year between 2000 and 2999),
   tax_depreciation numeric not null check (tax_depreciation >= 0),
   investment_boost numeric not null check (investment_boost >= 0),
@@ -9458,6 +9480,17 @@ create table rd_asset_tax_depreciation (
   created_at timestamptz not null default now()
 );
 create index rd_asset_tax_depreciation_asset_idx on rd_asset_tax_depreciation (asset_id, income_year, entry_number);
+create function tohyee_check_rd_asset() returns trigger
+language plpgsql as $$
+begin
+  if not exists (select 1 from fixed_assets where id = new.asset_id) then
+    raise exception 'That fixed asset doesn''t exist' using errcode = '23503';
+  end if;
+  return new;
+end;
+$$;
+create trigger rd_asset_tax_depreciation_asset before insert on rd_asset_tax_depreciation
+  for each row execute function tohyee_check_rd_asset();
 create trigger rd_asset_tax_depreciation_stamp before insert on rd_asset_tax_depreciation
   for each row execute function tohyee_rd_stamp_created();
 create trigger rd_asset_tax_depreciation_append_only before update or delete on rd_asset_tax_depreciation
@@ -9471,7 +9504,7 @@ create table rd_asset_usage (
   id uuid primary key default gen_random_uuid(),
   idempotency_key text not null unique,
   request_hash text not null,
-  asset_id bigint not null references fixed_assets(id),
+  asset_id bigint not null,
   activity_id uuid references rd_activities(id),
   work_date date not null,
   hours numeric(9,2) not null check (hours > 0 and hours <= 100000),
@@ -9502,6 +9535,8 @@ begin
   return new;
 end;
 $$;
+create trigger rd_asset_usage_asset before insert on rd_asset_usage
+  for each row execute function tohyee_check_rd_asset();
 create trigger rd_asset_usage_guard before update on rd_asset_usage
   for each row execute function tohyee_guard_rd_asset_usage();
 create trigger rd_asset_usage_stamp before insert or update on rd_asset_usage
