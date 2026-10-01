@@ -1,9 +1,12 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { itemNameFor, mergeField, priceCopyable } from "@/lib/sales-platforms/merge";
 import {
   normaliseShopDomain,
   SHOPIFY_API_VERSION,
+  setSalesPlatformFetchForTests,
+  setSalesPlatformSleepForTests,
+  shopifyConnector,
   SHOPIFY_SCOPES,
   shopifyCustomerFromGraphql,
   shopifyCustomerFromWebhook,
@@ -179,5 +182,61 @@ describe("which value is kept (SPC2, SPC3, SPC5)", () => {
       reason: "the store's currency is AUD, not NZD",
     });
     expect(priceCopyable({ storeCurrency: null, pricesIncludeTax: null, baseCurrency: "NZD" }).copy).toBe(false);
+  });
+});
+
+describe("calling Shopify: rate limits and redirects", () => {
+  const context = { storeDomain: "glimmers.myshopify.com", credentials: { accessToken: "shpat_x", apiSecret: "s" }, cachedToken: null, now: new Date() };
+  const token = { token: "shpat_x", expiresAt: null };
+  const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+  const throttled = () =>
+    json({
+      errors: [{ message: "Throttled", extensions: { code: "THROTTLED" } }],
+      extensions: { cost: { requestedQueryCost: 302, actualQueryCost: null, throttleStatus: { maximumAvailable: 2000, currentlyAvailable: 52, restoreRate: 100 } } },
+    });
+  const page = json({
+    data: {
+      customers: {
+        nodes: [{ id: "gid://shopify/Customer/1001", firstName: "Aroha", lastName: "Ngata", updatedAt: "2026-10-01T00:00:00Z" }],
+        pageInfo: { hasNextPage: false, endCursor: null },
+      },
+    },
+  });
+  const request = { customers: true, products: false, customersSince: null, productsSince: null };
+
+  afterEach(() => {
+    setSalesPlatformFetchForTests(null);
+    setSalesPlatformSleepForTests(null);
+  });
+
+  it("waits for the cost bucket to refill and asks again when a query is throttled, instead of failing the sync", async () => {
+    const answers = [throttled(), json({ errors: "Exceeded 2 calls per second" }, 429, { "retry-after": "2" }), page];
+    const inits: RequestInit[] = [];
+    const waits: number[] = [];
+    setSalesPlatformFetchForTests(async (_url, init) => {
+      inits.push(init ?? {});
+      return answers.shift()!;
+    });
+    setSalesPlatformSleepForTests(async (ms) => {
+      waits.push(ms);
+    });
+    const changes = await shopifyConnector.fetchChanges(context, token, request);
+    expect(changes.customers.map((c) => c.name)).toEqual(["Aroha Ngata"]);
+    // (302 - 52) points at 100 a second is 2.5 seconds; then the 429's Retry-After.
+    expect(waits).toEqual([2500, 2000]);
+    // Redirects aren't followed, so the access token can't be sent anywhere else.
+    expect(inits.every((init) => init.redirect === "error")).toBe(true);
+  });
+
+  it("gives up after a few throttled answers", async () => {
+    let calls = 0;
+    setSalesPlatformFetchForTests(async () => {
+      calls += 1;
+      return throttled();
+    });
+    setSalesPlatformSleepForTests(async () => undefined);
+    await expect(shopifyConnector.fetchChanges(context, token, request)).rejects.toThrow(/Throttled/);
+    expect(calls).toBe(7);
   });
 });

@@ -56,6 +56,23 @@ export function setSalesPlatformFetchForTests(replacement: FetchLike | null): vo
   fetcher = replacement ?? ((input, init) => fetch(input, init));
 }
 
+/** Waiting for Shopify's rate limit to refill; tests swap it so they don't wait. */
+let sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+export function setSalesPlatformSleepForTests(replacement: ((ms: number) => Promise<void>) | null): void {
+  sleep = replacement ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+}
+
+/**
+ * Shopify's GraphQL rate limit is a bucket of query cost points that refills
+ * each second; a query that asks for more than is left is answered
+ * "THROTTLED" (or 429). Tohyee waits for the bucket to refill and asks again,
+ * a few times, rather than failing the whole sync (a big store's first sync
+ * needs more points than one bucket holds).
+ * https://shopify.dev/docs/api/usage/limits#graphql-admin-api-rate-limits
+ */
+const THROTTLE_RETRIES = 6;
+const MAX_THROTTLE_WAIT_MS = 30_000;
+
 // ---------------------------------------------------------------------------
 // Checking what an admin typed
 
@@ -202,7 +219,8 @@ async function call(url: string, init: RequestInit): Promise<unknown> {
   const host = new URL(url).host;
   let response: Response;
   try {
-    response = await fetcher(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    // Redirects aren't followed: the access token header would go with them, to wherever they point.
+    response = await fetcher(url, { ...init, redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (error) {
     throw new PlatformError(0, `Couldn't reach ${host}: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -221,25 +239,59 @@ async function call(url: string, init: RequestInit): Promise<unknown> {
       (typeof errors === "string" ? errors : Array.isArray(errors) ? errors.map((e) => text(record(e).message)).filter(Boolean).join("; ") : null) ??
       text(b.error) ??
       body.slice(0, 200);
-    throw new PlatformError(response.status, `${host} said ${response.status}: ${detail || "no details"}`);
+    const error = new PlatformError(response.status, `${host} said ${response.status}: ${detail || "no details"}`);
+    if (response.status === 429) {
+      const seconds = Number(response.headers.get("retry-after"));
+      throw Object.assign(error, { retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 2000 });
+    }
+    throw error;
   }
   return parsed;
 }
 
+/** How long to wait before asking again, when Shopify said the query was throttled (null: it wasn't). */
+function throttleWait(body: Record<string, unknown>): number | null {
+  const errors = Array.isArray(body.errors) ? body.errors : [];
+  if (!errors.some((e) => record(record(e).extensions).code === "THROTTLED")) return null;
+  const cost = record(record(body.extensions).cost);
+  const status = record(cost.throttleStatus);
+  const requested = typeof cost.requestedQueryCost === "number" ? cost.requestedQueryCost : null;
+  const available = typeof status.currentlyAvailable === "number" ? status.currentlyAvailable : null;
+  const restoreRate = typeof status.restoreRate === "number" && status.restoreRate > 0 ? status.restoreRate : null;
+  if (requested === null || available === null || restoreRate === null) return 2000;
+  return Math.max(1000, Math.ceil(((requested - available) / restoreRate) * 1000));
+}
+
 async function graphql(storeDomain: string, token: AccessToken, query: string, variables: Record<string, unknown> = {}) {
   const url = `https://${storeDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
-  const body = record(
-    await call(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json", "X-Shopify-Access-Token": token.token },
-      body: JSON.stringify({ query, variables }),
-    }),
-  );
-  if (Array.isArray(body.errors) && body.errors.length > 0) {
-    const messages = body.errors.map((e) => text(record(e).message) ?? "unknown error").join("; ");
-    throw new PlatformError(200, `${storeDomain} said: ${messages}`);
+  for (let attempt = 0; ; attempt += 1) {
+    let body: Record<string, unknown>;
+    let wait: number | null;
+    try {
+      body = record(
+        await call(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json", "X-Shopify-Access-Token": token.token },
+          body: JSON.stringify({ query, variables }),
+        }),
+      );
+      wait = throttleWait(body);
+    } catch (error) {
+      const retryAfterMs = (error as { retryAfterMs?: unknown }).retryAfterMs;
+      if (typeof retryAfterMs !== "number" || attempt >= THROTTLE_RETRIES) throw error;
+      await sleep(Math.min(retryAfterMs, MAX_THROTTLE_WAIT_MS));
+      continue;
+    }
+    if (wait !== null && attempt < THROTTLE_RETRIES) {
+      await sleep(Math.min(wait, MAX_THROTTLE_WAIT_MS));
+      continue;
+    }
+    if (Array.isArray(body.errors) && body.errors.length > 0) {
+      const messages = body.errors.map((e) => text(record(e).message) ?? "unknown error").join("; ");
+      throw new PlatformError(200, `${storeDomain} said: ${messages}`);
+    }
+    return record(body.data);
   }
-  return record(body.data);
 }
 
 function userErrors(result: Record<string, unknown>): string | null {
