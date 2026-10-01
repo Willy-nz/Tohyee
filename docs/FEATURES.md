@@ -52,8 +52,8 @@ that something happened.
   shares out the cents so the parts always add back to the whole. **Payroll
   access**: only members an admin has given it to (bookkeeper or higher) can
   see or change any of this; the first owner has it to start with. Pay runs
-  and paying wages and IRD are below; payslips, payday filing, payroll
-  reports and Holidays Act leave are not built.
+  and paying wages and IRD and the payday filing file are below; payslips,
+  payroll reports and Holidays Act leave are not built.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
@@ -922,6 +922,22 @@ that something happened.
   bank statement must be unreconciled first. Locked periods apply. Not built:
   a bank direct-credit file (no bank batch format exists yet), public
   holidays in due dates, IRD penalties and interest, child support.
+- **Payday filing file** (payroll stage P6, PF1-PF9, not yet approved by
+  Jess; decisions 56-65; bookkeeper role and payroll access). On an approved
+  pay run, "Payday filing" makes IRD's employment information file (the
+  2026-27 file upload specification's HEI2 header and a DEI line per
+  employee: IRD number, name, tax code, start date if in the period, pay
+  period, pay cycle, hours paid, taxable gross earnings, PAYE, student loan,
+  KiwiSaver deductions, net employer contributions and ESCT) to upload in
+  myIR, and shows its due date: 2 working days after the pay date, weekends
+  skipped, public holidays not yet. Employees starting in the period are
+  listed so their details can be given in myIR. The employer's IRD number
+  and payroll contact are set by admins under Payroll › Pay items. Making
+  the file posts nothing and records only an audit event with its SHA-256;
+  there's no "filed" tick. Not built: the employee details file, EI
+  amendments, filing straight to IRD's gateway, and fields for things
+  Tohyee doesn't pay yet (child support, extra pays, ESS: always 0). No
+  file has been through myIR's checker yet.
 
 - **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
   RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;
@@ -1006,9 +1022,10 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: payslips, payday filing, Holidays Act leave, timesheets and
-   payroll reports (employee records, IRD rates and calculations, pay items,
-   pay runs and paying wages and IRD are built).
+4. NZ payroll: payslips, Holidays Act leave, timesheets, payroll reports
+   and IRD's employee details file (employee records, IRD rates and
+   calculations, pay items, pay runs, paying wages and IRD and the payday
+   filing file are built).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,

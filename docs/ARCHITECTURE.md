@@ -322,6 +322,23 @@ unapproved run, and refuses voiding a pay run while it has active wage
 payments or an active IRD payment covers its pay date. Audit details hold no
 amounts, bank account numbers or IRD numbers.
 
+**Payday filing** (payroll stage P6, examples PF1-PF9, decisions 56-65):
+`src/lib/payroll/payday-filing.ts` is pure (no database): IRD's employment
+information file (HEI2 header, DEI lines, amounts in hundredths, CR LF),
+the settings field checks and the due date; the field list and its source
+are in `docs/sources/ird-payday-filing-file-spec.md`.
+`payday-filing-service.ts` reads an approved pay run's stored snapshot
+(`payroll_pay_run_employees`), hours from its lines, and each employee's
+IRD number (decrypted only there, after the payroll access check), and
+returns the file as text for the browser to save; it writes one audit event
+(file name, line count, SHA-256) and posts nothing. The header details are
+four columns on `organisation_settings` (tenant migration 0064:
+`payroll_employer_ird_number`, `payroll_contact_name`,
+`payroll_contact_phone`, `payroll_contact_email`, each with IRD's format as
+a check constraint). Routes: `/api/payroll/pay-runs/[payRunId]/payday-filing`
+(GET the card, POST make the file) and `/api/payroll/payday-filing-settings`
+(PUT admins only).
+
 People who aren't members get "not found", so organisation IDs can't be
 probed. Every audit record stores the signed-in user, never a name typed into
 a form.
