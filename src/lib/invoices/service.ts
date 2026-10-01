@@ -35,6 +35,7 @@ import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import {
   add,
+  cmp,
   dec,
   isZero,
   sub,
@@ -90,6 +91,8 @@ export type InvoiceLine = LineItemFields & {
   /** On a foreign-currency invoice: the net amount and GST in the base currency (MC2); null otherwise. */
   baseNetAmount: string | null;
   baseTaxAmount: string | null;
+  /** On an invoice: the sales order line it was made from (SO3), or null. Other sales documents leave it out. */
+  salesOrderLineId?: string | null;
 };
 
 export type InvoiceSummary = {
@@ -137,6 +140,9 @@ export type InvoiceSummary = {
   salespersonName: string | null;
   /** Owed at the conversion date when the books were brought in (IM5): keeps its old number, no GST. */
   isOpeningBalance: boolean;
+  /** The sales order it was made from (SO3), or null. */
+  salesOrderId: string | null;
+  salesOrderNumber: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -202,6 +208,8 @@ type InvoiceRow = {
   salesperson_id: string | null;
   salesperson_name: string | null;
   is_opening_balance: boolean;
+  sales_order_id: string | null;
+  so_number: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -210,7 +218,7 @@ const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name 
   i.due_date, i.reference, i.amounts_mode, i.currency_code, i.subtotal, i.tax_total, i.total,
   paid.amount_paid, credited.amount_credited, i.approval_journal_id, i.approved_at, i.approved_by_email, i.void_date, i.void_journal_id,
   i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at, i.custom_fields,
-  i.salesperson_id, sp.name as salesperson_name, i.is_opening_balance,
+  i.salesperson_id, sp.name as salesperson_name, i.is_opening_balance, i.sales_order_id, so.so_number,
   i.exchange_rate::text, i.base_subtotal::text, i.base_tax_total::text, i.base_total::text, base_settled.base_settled::text`;
 
 /**
@@ -221,6 +229,7 @@ const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name 
 const SUMMARY_FROM = `sales_invoices i
   join contacts c on c.id = i.contact_id
   left join salespeople sp on sp.id = i.salesperson_id
+  left join sales_orders so on so.id = i.sales_order_id
   cross join lateral (
     select coalesce(sum(p.amount - p.overpayment_amount), 0) as amount_paid
       from customer_payments p
@@ -254,6 +263,7 @@ type LineRow = LineItemRow & {
   custom_fields: CustomValues;
   base_net_amount: string | null;
   base_tax_amount: string | null;
+  sales_order_line_id?: string | null;
 };
 
 const baseMoney = (value: string | null) => (value === null ? null : toFixedString(dec(value), 2));
@@ -297,6 +307,8 @@ function toSummary(row: InvoiceRow): InvoiceSummary {
     salespersonId: row.salesperson_id,
     salespersonName: row.salesperson_name,
     isOpeningBalance: row.is_opening_balance,
+    salesOrderId: row.sales_order_id,
+    salesOrderNumber: row.so_number,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -322,6 +334,7 @@ function toLine(row: LineRow): InvoiceLine {
     customFields: row.custom_fields ?? {},
     baseNetAmount: baseMoney(row.base_net_amount),
     baseTaxAmount: baseMoney(row.base_tax_amount),
+    ...(row.sales_order_line_id !== undefined ? { salesOrderLineId: row.sales_order_line_id } : {}),
   };
 }
 
@@ -345,6 +358,8 @@ type DraftDetails = {
     customFields: Record<string, unknown> | undefined;
     itemId: string | null;
     unitId: string | null;
+    /** On an invoice made from a sales order (SO3): the order line; left out otherwise. */
+    salesOrderLineId?: string;
   }>;
   customInput: Record<string, unknown> | undefined;
   /** As sent: undefined when not sent (the customer's default applies), null for none. */
@@ -383,6 +398,7 @@ type ResolvedDraft = DraftDetails & {
     customFields: CustomValues;
     baseNetAmount: string | null;
     baseTaxAmount: string | null;
+    salesOrderLineId?: string;
   }>;
 };
 
@@ -390,10 +406,17 @@ export type SalesLineDraft = DraftDetails["lines"][number];
 
 /**
  * Parses sales document lines as sent, the same way for invoices, quotes
- * (QT1) and repeating invoice templates (RI2). `noun` names the document in
- * the "needs at least one line" message.
+ * (QT1), repeating invoice templates (RI2) and sales orders (SO1). `noun`
+ * names the document in the "needs at least one line" message. Only invoices
+ * take `salesOrderLineId` (SO3); it's left out of a line without one, so
+ * older requests hash the same.
  */
-export function parseSalesLines(input: unknown, amountsMode: AmountsMode, noun = "An invoice"): SalesLineDraft[] {
+export function parseSalesLines(
+  input: unknown,
+  amountsMode: AmountsMode,
+  noun = "An invoice",
+  options: { salesOrderLinks?: boolean } = {},
+): SalesLineDraft[] {
   const rawLines = requireArray(input, "lines", MAX_LINES);
   if (rawLines.length === 0) {
     throw new ValidationError(`${noun} needs at least one line.`);
@@ -414,6 +437,7 @@ export function parseSalesLines(input: unknown, amountsMode: AmountsMode, noun =
     if (amountsMode !== "no_tax" && taxCode === null && !fillable) {
       throw new ValidationError(`${label} needs a tax code (use a zero-rated code for sales without GST).`);
     }
+    const salesOrderLineId = options.salesOrderLinks ? optionalId(line.salesOrderLineId, `${label} sales order line`) : null;
     return {
       description: fillable && isBlank(line.description) ? "" : requireString(line.description, `${label} description`, { maxLength: 500 }),
       quantity: parseDecimalInput(line.quantity, `${label} quantity`, { maxScale: LINE_INPUT_SCALE }),
@@ -423,6 +447,7 @@ export function parseSalesLines(input: unknown, amountsMode: AmountsMode, noun =
       taxCode,
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
       customFields: parseCustomInput(line.customFields, `${label}: `),
+      ...(salesOrderLineId ? { salesOrderLineId } : {}),
     };
   });
 }
@@ -443,7 +468,7 @@ function parseDraft(input: InvoiceInput, options: { dueFromTerms?: boolean } = {
   }
   const reference = optionalString(input.reference, "reference", { maxLength: 100 });
   const amountsMode = requireOneOf(input.amountsMode, "amountsMode", AMOUNTS_MODES);
-  const lines = parseSalesLines(input.lines, amountsMode);
+  const lines = parseSalesLines(input.lines, amountsMode, "An invoice", { salesOrderLinks: true });
   return {
     contactId,
     invoiceDate,
@@ -650,6 +675,7 @@ async function resolveDraft(
       customFields: custom.lines[index],
       baseNetAmount: base?.lines[index].baseNetAmount ?? null,
       baseTaxAmount: base?.lines[index].baseTaxAmount ?? null,
+      ...(line.salesOrderLineId ? { salesOrderLineId: line.salesOrderLineId } : {}),
     })),
   };
 }
@@ -668,6 +694,7 @@ type StoredLine = {
   taxAmount: string;
   tracking: TrackingTags;
   customFields: CustomValues;
+  salesOrderLineId?: string | null;
 };
 
 type StoredHeader = {
@@ -723,6 +750,7 @@ export function linesState(lines: readonly StoredLine[]): string {
       customValuesKey(line.customFields),
       line.itemId ?? null,
       line.unitId ?? null,
+      line.salesOrderLineId ?? null,
     ]),
   );
 }
@@ -767,6 +795,7 @@ function draftOf(invoice: Invoice): DraftDetails {
       customFields: line.customFields,
       itemId: line.itemId,
       unitId: line.unitId,
+      ...(line.salesOrderLineId ? { salesOrderLineId: line.salesOrderLineId } : {}),
     })),
     customInput: invoice.customFields,
     salespersonInput: invoice.salespersonId,
@@ -796,12 +825,13 @@ export async function setBaseLineAmounts(
   }
 }
 
-/** The line tables that hold sales lines: invoices, quotes (QT1) and repeating invoice templates (RI2). */
-export type SalesLineTable = "sales_invoice_lines" | "quote_lines" | "repeating_invoice_lines";
+/** The line tables that hold sales lines: invoices, quotes (QT1), repeating invoice templates (RI2) and sales orders (SO1). */
+export type SalesLineTable = "sales_invoice_lines" | "quote_lines" | "repeating_invoice_lines" | "sales_order_lines";
 const SALES_LINE_PARENT: Record<SalesLineTable, string> = {
   sales_invoice_lines: "invoice_id",
   quote_lines: "quote_id",
   repeating_invoice_lines: "repeating_invoice_id",
+  sales_order_lines: "sales_order_id",
 };
 
 export async function insertSalesLines(
@@ -811,6 +841,9 @@ export async function insertSalesLines(
   lines: ResolvedDraft["resolvedLines"],
 ): Promise<void> {
   const parentColumn = SALES_LINE_PARENT[table];
+  // Only invoice lines name the sales order line they came from (SO3).
+  const invoice = table === "sales_invoice_lines";
+  const width = invoice ? 17 : 16;
   const values: unknown[] = [];
   const tuples = lines.map((line, index) => {
     values.push(
@@ -831,13 +864,14 @@ export async function insertSalesLines(
       line.unitId,
       line.baseQuantity,
     );
-    const base = index * 16;
+    if (invoice) values.push(line.salesOrderLineId ?? null);
+    const base = index * width;
     const p = (offset: number) => `$${base + offset}`;
-    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric)`;
+    return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}::numeric, ${p(5)}::numeric, ${p(6)}, ${p(7)}, ${p(8)}::numeric, ${p(9)}::numeric, ${p(10)}::numeric, ${p(11)}::numeric, ${p(12)}::jsonb, ${p(13)}::jsonb, ${p(14)}, ${p(15)}, ${p(16)}::numeric${invoice ? `, ${p(17)}` : ""})`;
   });
   await tx.query(
     `insert into ${table} (${parentColumn}, line_order, description, quantity, unit_price, account_id,
-                                      tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity)
+                                      tax_code_id, tax_rate, line_amount, net_amount, tax_amount, tracking, custom_fields, item_id, unit_id, base_quantity${invoice ? ", sales_order_line_id" : ""})
      values ${tuples.join(", ")}`,
     values,
   );
@@ -890,7 +924,7 @@ export async function loadSalesLines(tx: OrgTx, table: SalesLineTable, parentId:
     `select l.line_order, l.description, l.quantity, l.unit_price, l.account_id, a.code as account_code,
             a.name as account_name, l.tax_code_id, t.code as tax_code, l.tax_rate, l.line_amount,
             l.net_amount, l.tax_amount, l.tracking, l.custom_fields, ${LINE_ITEM_COLUMNS},
-            ${table === "sales_invoice_lines" ? "l.base_net_amount::text, l.base_tax_amount::text" : "null as base_net_amount, null as base_tax_amount"}
+            ${table === "sales_invoice_lines" ? "l.base_net_amount::text, l.base_tax_amount::text, l.sales_order_line_id" : "null as base_net_amount, null as base_tax_amount"}
        from ${table} l
        join accounts a on a.id = l.account_id
        left join tax_codes t on t.id = l.tax_code_id
@@ -951,16 +985,81 @@ export async function listInvoices(
   };
 }
 
-/** Saves a new draft. Drafts post nothing. */
+/**
+ * Checks an invoice's lines against the sales order it was made from (SO3,
+ * SO6): a line can only name an order line if the invoice was made from that
+ * order (approved, same customer), each linked line keeps its order line's
+ * item and unit, and the invoices that aren't voided never add up to more
+ * than was ordered on a line. Locks the order so two invoices can't both take
+ * what's left. The database checks the same.
+ */
+async function checkSalesOrderLinks(
+  tx: OrgTx,
+  salesOrderId: string | null,
+  draft: ResolvedDraft,
+  exceptInvoiceId: string | null,
+): Promise<void> {
+  const linked = draft.resolvedLines.flatMap((line, index) => (line.salesOrderLineId ? [{ line, index }] : []));
+  if (salesOrderId === null) {
+    if (linked.length > 0) {
+      throw new ValidationError(`Line ${linked[0].index + 1} is from a sales order line, but this invoice wasn't made from a sales order.`);
+    }
+    return;
+  }
+  const found = await tx.query<{ status: string; contact_id: string; so_number: string | null }>(
+    "select status, contact_id, so_number from sales_orders where id = $1 for update",
+    [salesOrderId],
+  );
+  const order = found.rows[0];
+  if (!order) throw new NotFoundError("Sales order not found.");
+  if (order.status !== "approved") {
+    throw new ConflictError(`Sales order ${order.so_number ?? `#${salesOrderId}`} is ${order.status}, so it can't be invoiced.`);
+  }
+  if (order.contact_id !== draft.contactId) {
+    throw new ValidationError(`This invoice is from sales order ${order.so_number}, so its customer can't change.`);
+  }
+  if (linked.length === 0) return;
+  const orderLines = await tx.query<{ id: string; line_order: number; quantity: string; item_id: string | null; unit_id: string | null; other_invoices: string }>(
+    `select l.id, l.line_order, l.quantity::text, l.item_id, l.unit_id,
+            coalesce((select sum(il.quantity) from sales_invoice_lines il join sales_invoices i on i.id = il.invoice_id
+                       where il.sales_order_line_id = l.id and i.status <> 'voided'
+                         and ($2::bigint is null or i.id <> $2)), 0)::text as other_invoices
+       from sales_order_lines l where l.sales_order_id = $1`,
+    [salesOrderId, exceptInvoiceId],
+  );
+  const byId = new Map(orderLines.rows.map((row) => [row.id, row]));
+  const onThisInvoice = new Map<string, Decimal>();
+  for (const { line, index } of linked) {
+    const label = `Line ${index + 1}`;
+    const orderLine = byId.get(line.salesOrderLineId!);
+    if (!orderLine) throw new ValidationError(`${label} isn't from ${order.so_number}'s lines.`);
+    if ((line.itemId ?? null) !== orderLine.item_id || (line.unitId ?? null) !== orderLine.unit_id) {
+      throw new ValidationError(
+        `${label} is from ${order.so_number} line ${orderLine.line_order}, so it keeps that line's item and unit. Remove the line and add a new one for something else.`,
+      );
+    }
+    const total = add(onThisInvoice.get(orderLine.id) ?? ZERO_DECIMAL, dec(line.quantity));
+    onThisInvoice.set(orderLine.id, total);
+    const left = sub(dec(orderLine.quantity), dec(orderLine.other_invoices));
+    if (cmp(total, left) > 0) {
+      throw new ValidationError(
+        `${label}: ${order.so_number} line ${orderLine.line_order} ordered ${toPlainString(dec(orderLine.quantity))}, and ${toPlainString(dec(orderLine.other_invoices))} of it is on other invoices, so at most ${toPlainString(left)} can be invoiced here. Put anything extra on a line of its own.`,
+      );
+    }
+  }
+}
+
+/** Saves a new draft. Drafts post nothing. `link` is for invoicing a sales order (SO3). */
 export async function createInvoice(
   tx: OrgTx,
   input: InvoiceInput & { source?: unknown; idempotencyKey: unknown },
   foreign: ForeignOption = {},
+  link: { salesOrderId: string } | null = null,
 ): Promise<{ created: boolean; invoice: Invoice }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const draft = parseDraft(input, { dueFromTerms: true });
-  const hash = requestHash("sales_invoice", hashPayload(draft));
+  const hash = requestHash("sales_invoice", { ...hashPayload(draft), ...(link ? { salesOrderId: link.salesOrderId } : {}) });
 
   const existing = await findByKey(tx, "create", source, idempotencyKey);
   if (existing) {
@@ -976,13 +1075,14 @@ export async function createInvoice(
   }
 
   const resolved = await resolveDraft(tx, draft, new Set(), new Set(), null, [], foreign);
+  await checkSalesOrderLinks(tx, link?.salesOrderId ?? null, resolved, null);
   const inserted = await tx.query<{ id: string }>(
     `insert into sales_invoices (command_source, idempotency_key, request_hash, contact_id, invoice_date, due_date,
                                  reference, amounts_mode, currency_code, subtotal, tax_total, total,
                                  created_by_user_id, created_by_email,
-                                 exchange_rate, base_subtotal, base_tax_total, base_total)
+                                 exchange_rate, base_subtotal, base_tax_total, base_total, sales_order_id)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14,
-             $15::numeric, $16::numeric, $17::numeric, $18::numeric)
+             $15::numeric, $16::numeric, $17::numeric, $18::numeric, $19)
      on conflict (command_source, idempotency_key) do nothing
      returning id`,
     [
@@ -1004,6 +1104,7 @@ export async function createInvoice(
       resolved.baseSubtotal,
       resolved.baseTaxTotal,
       resolved.baseTotal,
+      link?.salesOrderId ?? null,
     ],
   );
   const invoiceId = inserted.rows[0]?.id;
@@ -1032,6 +1133,7 @@ export async function createInvoice(
       amountsMode: resolved.amountsMode,
       total: resolved.total,
       lines: resolved.resolvedLines.length,
+      ...(link ? { salesOrderId: link.salesOrderId } : {}),
     },
   });
   return { created: true, invoice: await getInvoice(tx, invoiceId) };
@@ -1075,6 +1177,7 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
   if (same.header && same.lines) {
     return current;
   }
+  await checkSalesOrderLinks(tx, current.salesOrderId, resolved, current.id);
 
   const changed: string[] = (["contactId", "invoiceDate", "dueDate", "reference", "amountsMode", "exchangeRate"] as const).filter(
     (field) => resolved[field] !== current[field],
