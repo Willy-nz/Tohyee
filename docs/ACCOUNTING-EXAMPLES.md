@@ -8588,9 +8588,9 @@ no dates (decision 63).
   the year shows "changed since approval was entered"), each from 60 days
   before its date until the date (as moved) has passed, and only for an
   organisation with R&D activities. For **2026-27**: on **30 Apr 2027** none
-  show; on **1 May 2027** "General approval for 2026-27 due Wed 30 Jun 2027"
-  shows; once an approval covering 2026-27 is entered it stops; on **7 Jun
-  2027** "R&D supplementary return for 2026-27 due Fri 6 Aug 2027" shows; on
+  show; on **1 May 2027** "General approval for 2026-27 due Wednesday 30 Jun
+  2027" shows; once an approval covering 2026-27 is entered it stops; on **7 Jun
+  2027** "R&D supplementary return for 2026-27 due Friday 6 Aug 2027" shows; on
   **7 Aug 2027** it has passed and stops. The other dates (criteria and
   methodologies, approval to exceed the maximum, the following-year
   variation, the income tax return and the last filing date) are in the
