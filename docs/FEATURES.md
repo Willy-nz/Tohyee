@@ -943,10 +943,39 @@ that something happened.
   to the cent. Everything is stamped by the server with who and when, kept
   in its history, and flagged "entered late" when entered more than 14 days
   after the work. Tagged R&D costs lists what's tagged by activity and
-  category for an income year. Not built: the claim report (limits, the
-  minimum, overhead apportionment, the 15% credit, supplementary return
-  figures), tagging payroll and timesheets, reminders, criteria and
+  category for an income year. Not built: timesheets, criteria and
   methodologies approvals, and purging files after 7 years.
+
+- **R&D claim report** (RDTI stage R3, on branch
+  `claude/rdti-r3-claim-report`, tenant migration 0065; RD3, RD4, RD16-RD20,
+  RD24-RD27 and RD28-RD42 tested, examples not yet approved by Jess;
+  decisions 56-65): Tax › R&D claim report works out an income year's claim
+  from the tags, assets' tax depreciation, overhead rules and approved pay
+  runs, for activities with an approval covering the year: the counted
+  amounts by activity and category, the 10% overseas limit (rounded down and
+  shared across the overseas amounts), the $50,000 minimum after the limit
+  (approved research provider expenditure only below it), the $120 million
+  maximum, the 15% credit rounded down, and per project the supplementary
+  return's figures (categories, of which overseas, internal software,
+  commercial production and supporting activity from the year before, and
+  the core share). Pay counts from the cost allocation each approved pay run
+  used, only when it's 100% R&D (timesheets aren't built); other splits are
+  listed as "default split, no time record". Each employee's pay only for
+  people with payroll access; others see totals. Overhead rules ("% of an
+  account" to an activity, with an IR1240 basis and workings attached) are
+  set there by bookkeepers, applied when the report runs, changed by adding a
+  replacing rule (the earlier figure is shown), and never deleted. What's
+  left out is listed with why (no approval, no approved core activity,
+  supporting activity before its core activity, feedstock, commercial
+  production, goods not used, voided), with ineligible expenditure for the
+  return's evaluation questions. Deadlines for a 31 March balance date
+  (weekends moved to Monday; public holidays not checked) with reminders 60
+  days ahead for owners and admins on the home page. CSV export, which keeps
+  the summary figures (never anyone's pay) so later changes show as
+  differences. Read-only: it posts nothing, decides nothing is R&D and
+  records no "filed" status. Not built: timesheets, feedstock output values,
+  refundability, supporting activity in the following year, other balance
+  dates' deadlines, joint ventures.
 
 ## Not built yet, on purpose
 
