@@ -265,7 +265,7 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
   });
 
   it("applies the tenant migration used by employee records", async () => {
-    expect(tenantMigrations.at(-1)?.version).toBe("0051");
+    expect(tenantMigrations.map((migration) => migration.version)).toContain("0051");
     const table = await asUser(owner, (tx) => tx.query("select id from payroll_employees limit 1"));
     expect(table.rowCount).toBeGreaterThanOrEqual(0);
   });

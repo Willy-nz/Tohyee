@@ -8714,4 +8714,12 @@ create trigger payroll_employees_no_truncate
   for each statement execute function tohyee_payroll_employee_forbid_delete();
 `,
   },
+  {
+    version: "0052",
+    name: "not_for_profit_module",
+    sql: `
+alter table organisation_settings
+  add column not_for_profit_enabled boolean not null default false;
+`,
+  },
 ];
