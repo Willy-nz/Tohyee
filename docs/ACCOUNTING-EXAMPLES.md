@@ -12025,6 +12025,166 @@ amount paid.
   report; posting leave liability to the ledger waits for its own approved
   worked example (decision 28).
 
+### Opening balances, leave requests and posting the liability (added 2 Oct 2026, not yet approved by Jess)
+
+Written on 2 Oct 2026 for decisions 168, 169 and 177 (the leave build's
+questions 1, 2 and 10). Like the examples above they're **not approved by
+Jess**.
+
+**Hemi** joins the people above: 30.00 an hour, Monday to Friday, 8 hours a
+day (OWP 1,200.00, RDP 240.00 a day), paid weekly for pay periods Monday to
+Sunday, set to RDP, anniversary day Otago's, with annual holidays paid in
+the pay for the period they're taken (s 27(1)(a)); started **Mon 4 Mar
+2024**. His
+employer moves payroll to Tohyee from the pay period starting **Mon 5 Oct
+2026**.
+
+- **HL43 Entering opening balances** (decision 168). Someone with payroll
+  access enters Hemi's opening balances **as at Sun 4 Oct 2026** (the last
+  day before Tohyee's first pay period for him), with where they came from
+  ("Previous payroll's leave and earnings reports at 4 Oct 2026") and those
+  reports attached (both required):
+  - annual holidays **2.5 weeks** (100 hours of his 40-hour week); last
+    entitled **Wed 4 Mar 2026**; **0.5 week** already cashed up in that
+    entitlement year (June 2026); nothing taken in advance;
+  - sick leave **14 days**; family violence leave **10 days**;
+  - one untaken alternative holiday that arose on **Mon 27 Oct 2025** (he
+    worked Labour Day);
+  - his earnings for the 12 months, one row per weekly pay period of the
+    previous payroll, **Mon 6 Oct 2025 to Sun 4 Oct 2026** (52 rows, no
+    gaps, ending on the opening date): 1,200.00 and 5 days each, except
+    27 Oct-2 Nov 2025, **1,320.00** (Labour Day worked at time and a half),
+    and 15-21 Dec 2025, **2,200.00** (a 1,000.00 bonus his agreement binds
+    the employer to pay, entered as irregular). The June cash-up isn't
+    gross earnings (s 14(c)(iv)), so it isn't in the rows. Total
+    **63,520.00**, 260 days.
+
+  Shown on Mon 5 Oct 2026: annual holidays 2.5 weeks, last entitled 4 Mar
+  2026, next 4 Mar 2027, 0.5 week cashed up this entitlement year (so at
+  most 0.5 week more until Wed 3 Mar 2027, s 28A(2)(b)); sick leave 14
+  days, last entitled Fri 4 Sep 2026 (6 months after the start and each 12
+  months, s 63(2)(a)); family violence leave 10 days; 1 alternative
+  holiday. The running 8% since 4 Mar 2026 (HL42): Wed 4 to Sun 8 Mar is
+  part of the 2-8 Mar row, 24 of its 40 usual hours, so 1,200.00 × 24 ÷ 40
+  = 720.00, plus the 30 rows from 9 Mar, 36,000.00: 36,720.00 × 8% =
+  **2,937.60**. Hemi isn't refused any more (decision 143 no longer applies
+  to him). Had Tohyee already paid him for 21 Sep-4 Oct 2026 with P3's
+  typed "Holiday pay", the opening balances at 4 Oct would cover those pay
+  runs and his rows would end on Sun 20 Sep 2026, the day before them.
+- **HL44 Annual holidays after opening balances.** Tohyee's first pay run
+  for Hemi, 5-11 Oct 2026, pays 1,200.00 and is approved. He takes **Mon 12
+  to Fri 16 Oct 2026** (1 week, 40 hours). OWP 1,200.00; AWE for Sun 12 Oct
+  2025 to Sun 11 Oct 2026 (decision 10): the opening rows from 13 Oct 2025
+  (51 rows, 62,320.00; the 6-12 Oct 2025 row has only its Sunday inside,
+  which he doesn't work, so it adds nothing) and Tohyee's 5-11 Oct
+  (1,200.00) = 63,520.00 ÷ 52 = **1,221.54**, more than OWP: paid
+  **1,221.54**. Balance 2.5 → **1.5 weeks**.
+- **HL45 Sick leave after opening balances.** Hemi is sick Wed 21 Oct
+  2026: RDP **240.00**; sick leave 14 → **13 days**. If he used no more,
+  on Sat 4 Sep 2027 at most 10 would carry over: **20 days**, and 3 lapse
+  (s 66(2)).
+- **HL46 An alternative holiday from the opening balances.** He takes it
+  on Thu 22 Oct 2026: RDP **240.00**, 1 day (8 hours); it uses the one that
+  arose on 27 Oct 2025 (decision 147) and none are left. (Had he kept it,
+  he could have asked to exchange it from Tue 27 Oct 2026, s 61(2)(a).)
+- **HL47 Leaving after opening balances.** Hemi's last day is **Fri 30 Oct
+  2026**. His final pay, 26 Oct-1 Nov 2026, pays Labour Day (Mon 26 Oct,
+  not worked, RDP 240.00, s 49) and Tue-Fri worked (960.00): 1,200.00.
+  Holiday pay on finishing:
+  1. **Untaken entitlement** (s 24): 1.5 weeks at the greater of OWP on his
+     last day (1,200.00) and AWE for Sun 26 Oct 2025 to Sun 25 Oct 2026:
+     the 49 opening rows from 27 Oct 2025 (59,920.00) and Tohyee's
+     1,200.00 + 1,221.54 + 1,200.00 = 63,541.54 ÷ 52 = 1,221.95: 1.5 ×
+     63,541.54 ÷ 52 = **1,832.93**.
+  2. **Public holidays in that time** (s 40(3)): 60 hours from Mon 2 Nov
+     2026 run to Wed 11 Nov; none falls in them for Otago: **0.00**.
+  3. **8% since his last anniversary** (s 25, s 26): Wed 4 Mar to Fri 30
+     Oct 2026: 720.00 + 36,000.00 from the opening rows (HL43), Tohyee's
+     3,621.54 for 5-25 Oct and the final pay's 1,200.00 = 41,541.54, plus
+     the untaken entitlement 1,832.93 = 43,374.47; 8% = **3,469.96**.
+  4. No alternative holidays left (HL46); sick leave isn't paid out (s 67).
+
+  Holiday pay on finishing **5,302.89**, each part a line as in HL16.
+- **HL48 Refused rather than guessed (opening balances).**
+  - Opening balances as at **Wed 7 Oct 2026**, inside the pay period 5-11
+    Oct: the pay run for that period refuses Hemi's leave until they're as
+    at the end of a pay period (Sun 4 or Sun 11 Oct).
+  - Earnings rows with a gap (no row for 12-18 Jan 2026), rows that
+    overlap each other, a row after the opening date, or a row covering a
+    pay period Tohyee has already approved for him: not saved.
+  - A negative annual balance without the holiday pay paid in advance, or
+    that amount with a balance that isn't negative: not saved.
+  - Opening balances for an employee set to casual (s 63(1)(b)'s hours test
+    needs approved timesheets for the 6 months, decision 145): not saved.
+  - Replacing the opening balances after an approved pay run has paid Hemi
+    leave (HL44's PAYRUN): refused until that pay run is voided.
+  - P3's typed "Holiday pay" on a pay run for a period ending after the
+    opening date: leave stays refused for him (Tohyee doesn't know what it
+    was for).
+  - Rows only from Mon 5 Jan 2026: HL44's AWE needs pay from Sun 12 Oct
+    2025, so the holiday is refused, naming that date.
+  - Someone set to ADP whose 52 calendar weeks start part way through an
+    opening row (rows by month, say): refused, as the days worked in part
+    of a row aren't known; enter the rows by pay period.
+
+**Leave requests** (decision 169). Aroha (HL1) has a login linked to her
+employee record and no payroll access; her reports-to manager, Wiremu,
+has a bookkeeper login and no payroll access.
+
+- **HL49 Asking for leave and approving it.** On Mon 1 Feb 2027 Aroha asks
+  for annual holidays **Mon 1 to Fri 5 Mar 2027**. Tohyee shows her the
+  days (5) and hours (40) from her usual week and her annual holiday
+  balance in weeks and hours, never an amount of money. Wiremu sees the
+  request with her name, the dates, the type and the hours, approves it,
+  and Tohyee books the leave as him (LEAVE-n, linked to the request): the
+  pay run for 1-7 Mar 2027 pays it at the s 21(2) rate, as in HL11.
+- **HL50 Changing, withdrawing and rejecting.** Before it's decided, Aroha
+  changes the request to Mon 1 to Wed 3 Mar (24 hours) or withdraws it. A
+  rejection needs a reason, which she sees; a rejected request stays as it
+  was (she asks again if she wants to).
+- **HL51 Refused (leave requests).**
+  - Wiremu approving a request of his own, or anyone approving who isn't
+    the employee's timesheet approver, their reports-to manager's login or
+    someone with payroll access.
+  - A request for days that aren't working days for her, or that the
+    booking would refuse (another booking on the same days, a
+    bereavement over its days): the approval is refused with the
+    booking's reason, and the request stays waiting.
+  - Changing or withdrawing a request once it's decided; cancelling an
+    approved request is cancelling its booking, by someone with payroll
+    access, and never once an approved pay run has paid it.
+  - Family violence leave is asked for and shown to the approver as
+    "Special leave" (decision 27).
+  - Someone whose leave Tohyee doesn't keep (no usual week, or decision
+    143 without opening balances): the request can't be made.
+
+**Posting the leave liability** (decision 177; **designed, not built yet**:
+these are the acceptance tests for the next build). The organisation has
+a "Leave expense" account and an "Employee entitlements" current
+liability account; Hemi's cost allocation is 100% to the Workshop
+Department.
+
+- **HL52 The first posting.** After HL44's first pay run (period ending
+  Sun 11 Oct 2026), the liability report at Sun 11 Oct 2026 shows Hemi's
+  annual holidays 2.5 weeks × 1,221.54 (AWE 63,520.00 ÷ 52) = **3,053.85**,
+  the running 8% since 4 Mar 2026 to 11 Oct, (36,720.00 + 1,200.00) × 8% =
+  **3,033.60**, and 1 alternative holiday at OWP 1,200.00 ÷ 5 = **240.00**:
+  **6,327.45**. Nothing was posted before, so the journal dated 11 Oct
+  2026 is Dr Leave expense 6,327.45 (Workshop) / Cr Employee entitlements
+  6,327.45 (Workshop), described "Leave liability at 11 Oct 2026", never
+  naming Hemi.
+- **HL53 The next posting takes the fall.** Hemi's leave and final pay are
+  paid through pay runs to wages as usual (decision 138). At Sat 31 Oct
+  2026 he has finished, so the report has nothing for him: the posting is
+  0.00 − 6,327.45: Dr Employee entitlements 6,327.45 / Cr Leave expense
+  6,327.45 (Workshop). Sick, bereavement and family violence leave are
+  never in it.
+- **HL54 Refused or undone (posting).** A posting dated before the last
+  one; a posting while any employee's row in the report has a problem
+  (it names them); a posting without the two accounts set. A posting is
+  never edited: voiding it posts the reversing journal, and the next
+  posting measures from the last one not voided.
+
 ### Not supported yet (refused rather than guessed)
 
 - Anything under the **Employment Leave Act 2026** (from 6 Aug 2028).
@@ -12043,8 +12203,8 @@ amount paid.
   employment agreements (s8(3), s9(2)).
 - Labour Inspector determinations (s11, s13, s17(2), s28F, s54), and
   re-employment within a month (s85).
-- Posting a leave liability to the ledger: waits for its own approved
-  worked example (decision 28).
+- Posting a leave liability to the ledger: designed with examples
+  HL52-HL54 (decision 177), not built yet.
 
 ### Decided (Holidays Act leave)
 
