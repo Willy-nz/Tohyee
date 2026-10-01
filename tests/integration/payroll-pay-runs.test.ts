@@ -814,6 +814,22 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
       expect((await asUser(ben, (tx) => getPayRun(tx, runId))).status).toBe("draft");
     });
 
+    it("refuses paying someone moved between pay groups twice for the same days", async () => {
+      const first = await group("Mover first", "weekly");
+      const second = await group("Mover second", "weekly");
+      const moe = await employee({ firstName: "Moe", lastName: "Mover", payFrequency: "weekly", annualSalary: "52000", payGroupId: first });
+      const firstRun = await createRun(ben, { payGroupId: first, periodStart: "2026-10-05", payDate: "2026-10-14" });
+      expect(firstRun.status).toBe(201);
+      await asUser(jess, (tx) => updateEmployee(tx, moe, { payGroupId: second }));
+      const reference = (firstRun.body.payRun as PayRun).reference;
+      const again = await createRun(ben, { payGroupId: second, periodStart: "2026-10-05", payDate: "2026-10-14" });
+      expect(again.body.error).toBe(
+        `Moe Mover is already paid for 2026-10-05 to 2026-10-11 on ${reference}. Take them off one of the pay runs (or void it).`,
+      );
+      const nextWeek = await createRun(ben, { payGroupId: second, periodStart: "2026-10-12", payDate: "2026-10-21" });
+      expect(nextWeek.status).toBe(201);
+    });
+
     it("shows an employer contribution with no ESCT rate as a problem, and net pay below zero", async () => {
       const noEsct = await group("No ESCT", "weekly");
       const tui = await employee({

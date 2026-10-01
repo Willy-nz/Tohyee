@@ -391,6 +391,7 @@ async function calculateRun(tx: OrgTx, run: RunRow): Promise<Calculated[]> {
             run.period_start,
             run.period_end,
             run.pay_group_name,
+            run.id,
           )
         : null;
     calculated.push({ employee, lines: own, ...(later ? { pay: null, problem: later } : result) });
@@ -633,6 +634,7 @@ async function periodRefusal(
   periodStart: string,
   periodEnd: string,
   groupName: string,
+  payRunId: string | null = null,
 ): Promise<string | null> {
   if (employee.finish_date !== null && employee.finish_date < periodStart) {
     return `${employee.name} finished on ${employee.finish_date}, before this pay period. Take them off this pay run.`;
@@ -646,6 +648,19 @@ async function periodRefusal(
   );
   if (change.rows[0]) {
     return `${NOT_SUPPORTED}: a pay rate that changes part-way through a pay period. ${employee.name}'s pay rate changes on ${change.rows[0].effective_from}.`;
+  }
+  // Someone moved between pay groups mustn't be paid twice for the same days.
+  const other = await tx.query<{ run_number: string; period_start: string; period_end: string }>(
+    `select r.run_number::text, r.period_start::text, r.period_end::text
+       from payroll_pay_run_employees pe join payroll_pay_runs r on r.id = pe.pay_run_id
+      where pe.employee_id = $1 and r.status <> 'voided' and ($4::uuid is null or r.id <> $4::uuid)
+        and r.period_start <= $3 and r.period_end >= $2
+      order by r.period_start, r.run_number limit 1`,
+    [employee.id, periodStart, periodEnd, payRunId],
+  );
+  if (other.rows[0]) {
+    const run = other.rows[0];
+    return `${employee.name} is already paid for ${run.period_start} to ${run.period_end} on ${payRunReference(run.run_number)}. Take them off one of the pay runs (or void it).`;
   }
   return null;
 }

@@ -8269,7 +8269,11 @@ Payroll deductions payable**.
     period); a **pay rate that changes inside the period**; a monthly
     period that doesn't start on the 1st. A finish date or pay rate change
     inside the period entered after the draft was made shows as that
-    employee's problem on the draft, so it can't be approved;
+    employee's problem on the draft, so it can't be approved. Someone
+    moved to another pay group isn't paid twice: a pay run for days they're
+    already paid for on another pay run (not voided) is refused ("Moe Mover
+    is already paid for 2026-10-05 to 2026-10-11 on PAYRUN-7. Take them off
+    one of the pay runs (or void it).");
   - calculating an employee whose tax code the rates don't support (STC,
     WT; from P2), whose student loan box disagrees with their tax code, or
     whose employer KiwiSaver contribution has no ESCT rate set;
