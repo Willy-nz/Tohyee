@@ -25,6 +25,7 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 | Work | Issue | Draft PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
 | NZ payroll, stage 1: employee records only (see the payroll list below for the rest) | #60 | #62 | `copilot/build-nz-payroll-tohyee` | 0051 |
+| NZ payroll, stage P2: IRD payroll rates as dated data and pure PAYE, student loan, KiwiSaver and ESCT calculations (PR1-PR16) | #60 | #71 | `copilot/issue-60-ird-payroll-rates` | none (no table) |
 | Not-for-profit module, first stage: opt-in fund tracking | #61 | #63 | `copilot/not-for-profit-module-development` | 0052 (renumbered) |
 | Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | not opened yet | `copilot/extend-custom-fields-crm-records` | 0053 (renumbered) |
 
@@ -49,7 +50,11 @@ calculates nothing. The rest of #60, in order, each its own branch and PR:
       ACC earners' levy rate and maximum, student loan rate and threshold,
       KiwiSaver rates, ESCT brackets, each with its tax year and IRD source
       (IR340/IR335, the payroll calculation specification). No pay runs yet.
-      Can start now; reserve migration 0054 if it needs a table.
+      Draft PR #71 (`copilot/issue-60-ird-payroll-rates`): data files in
+      `src/lib/payroll/rates/` for 2025-26 and 2026-27 (no table, so
+      migration 0054 isn't used), pure calculations in
+      `src/lib/payroll/calculations.ts`, examples PR1-PR16 waiting for Jess.
+      Before each 1 April: add the next year's file (README in that folder).
 - [ ] **P3 Pay runs**: draft → approve; earnings (ordinary time, overtime,
       allowances, bonuses) and deductions; PAYE incl. ACC earners' levy,
       student loan, KiwiSaver employee and employer, ESCT. Approving posts one
