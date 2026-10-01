@@ -5,7 +5,6 @@ import {
   type Changes,
   type ChangesRequest,
   type ConnectInput,
-  type ConnectorContext,
   PlatformError,
   type PlatformCustomer,
   type PlatformVariant,

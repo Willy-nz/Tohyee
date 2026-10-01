@@ -78,6 +78,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ email_oauth_states     one-time states for signing in to the Microsoft or Google mailbox documents are sent from
 ├─ organisation_logo      the organisation's logo (PNG or JPEG, 512 KB at most), on emails, PDFs and print pages
 ├─ document_emails, document_email_batches   each email of a document or statement: queued, then sent or failed by the job
+├─ sales_platform_connections, sales_platform_mappings   connected stores (Shopify; credentials encrypted) and which contact or item each store record is
+├─ sales_platform_sync_log, sales_platform_webhook_deliveries   what each sync and webhook did (append-only), and webhook deliveries already handled
 └─ audit_events
 ```
 
@@ -192,6 +194,14 @@ re-runs the whole sequence.
   runs). A lockout message does reveal that the email has an account.
 - State-changing requests from another site are rejected (`Origin` /
   `Sec-Fetch-Site` check) on top of `SameSite` cookies.
+- Every API route needs a signed-in user and checks their role, except one:
+  the sales platform webhook address
+  (`/api/sales-platforms/webhooks/<organisation>/<random key>`), which a
+  store calls. It authenticates only by the platform's signature (Shopify:
+  HMAC-SHA256 of the raw body with the app's secret, compared in constant
+  time) with that connection's secret, before reading the body or writing
+  anything; every refusal is the same 401. The random key (32 bytes) only
+  finds the connection; it isn't the secret.
 - First-time setup creates the first server admin and needs `SETUP_TOKEN`
   from the server's environment. It only works while there are no users.
 - Command-line tool (`scripts/admin.ts`; `npm run admin`, or
@@ -709,6 +719,32 @@ Enforced by the app (and covered by tests):
   `crm_calendar_events`, linked through `crm_participant_links`.
   Disconnecting deletes those rows. Every 15 minutes, off with
   TOHYEE_MAIL_SYNC_SCHEDULER=off. The code is in `src/lib/crm/mail/`.
+- Sales platform connections (SPC1-SPC10, migration 0056; not tried against
+  a real store): a connector framework in `src/lib/sales-platforms/`
+  (`connector.ts` is what each platform provides; `shopify.ts` is the first,
+  on the Admin GraphQL API 2026-07 with only `read_customers` and
+  `read_products`; `service.ts` decides what happens in Tohyee; `merge.ts`
+  has the field rules). `sales_platform_connections` holds each store's
+  credentials as encrypted JSON (TOHYEE_SECRET_KEY), a short-lived access
+  token (encrypted) when the app hands those out, status, the last sync and
+  error, and how far each kind has been synced. `sales_platform_mappings`
+  links a platform record (customer, variant) to a contact or item, unique
+  both ways per connection, with the values last copied, so a value
+  someone changed in Tohyee is kept (and logged) rather than overwritten.
+  `sales_platform_sync_log` is append-only (triggers) and readable by
+  viewers. Like mail sync, connecting, testing, syncing and disconnecting
+  read in one short transaction, call the store with nothing open, then
+  write in a second, which locks the connection row and checks it's still
+  connected. Each record is applied in a savepoint, so a bad one is logged
+  as failed and the rest carry on. Webhooks are verified before any
+  transaction; the delivery id goes into `sales_platform_webhook_deliveries`
+  (primary key) in the same transaction as the changes, so a repeated
+  delivery does nothing. Contacts and items are made through
+  `createContact` / `createItem` (source `sales-platform`, an idempotency
+  key per platform record) and changed through `updateContact` /
+  `updateItem`, so the usual checks and audit apply. Nothing posts to the
+  ledger. Disconnecting deletes the mappings and the credentials and keeps
+  the contacts, items and log.
 - Salespeople: `salespeople` (never deleted), `contacts.default_salesperson_id`
   and `salesperson_id` on `sales_invoices` and `sales_credit_notes`, fixed
   with the rest of the document once approved. Sales by salesperson reads
@@ -911,6 +947,14 @@ organisation sends at most 100 an hour. The database refuses changes to
 what a queued email says and any change to a finished one. Every minute it
 works through organisations with emails waiting, and every 10 minutes it
 checks all of them (for retries and after a restart).
+
+The sales platform sync (`src/lib/sales-platforms/service.ts`, started from
+`src/instrumentation.ts`; `TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER=off` stops
+it) runs two minutes after start-up and then every 15 minutes, like mail
+sync: for each ready organisation, each active connection is synced one at
+a time, asking only for what changed since the last sync. A failure is kept
+on the connection; after three in a row it's paused until someone chooses
+Sync now. No network calls inside a database transaction.
 
 Still to come for other jobs: a general transactional outbox.
 

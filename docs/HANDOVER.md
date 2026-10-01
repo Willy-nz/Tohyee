@@ -27,6 +27,7 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 | NZ payroll, stage 1: employee records only (see the payroll list below for the rest) | #60 | #62 | `copilot/build-nz-payroll-tohyee` | 0051 |
 | Not-for-profit module, first stage: opt-in fund tracking | #61 | #63 | `copilot/not-for-profit-module-development` | 0052 (renumbered) |
 | Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | not opened yet | `copilot/extend-custom-fields-crm-records` | 0053 (renumbered) |
+| Sales platform connections, stage 1: connector framework, Shopify customers and products (examples SPC1-SPC10; not tried against a real store) | none (Agents tab) | #70 | `copilot/sales-platform-connections-stage-1` | 0056 |
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
