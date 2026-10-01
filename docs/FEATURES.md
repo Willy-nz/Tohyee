@@ -39,7 +39,7 @@ that something happened.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
-- **Payroll employee records** (PR1-PR2; examples not yet approved by Jess):
+- **Payroll employee records** (PE1-PE2; examples not yet approved by Jess):
   bookkeeper-only employee details, salary or hourly pay, pay frequency,
   tax code, student loan and KiwiSaver settings; IRD numbers and bank accounts
   are encrypted. Employees are archived, never deleted. Pay calculation,
@@ -770,6 +770,20 @@ that something happened.
     on a real Windows computer.
   Each shows the address with a QR code, Copy address, Open and Turn off.
 - **Update check** against GitHub releases.
+- **NZ payroll rates and calculations** (payroll stage P2, PR1-PR16, not yet
+  approved by Jess): IRD's payroll figures for pay dates 1 April 2025 to 31
+  March 2027, from IRD's Payroll Calculations and Business Rules
+  Specification (2025-26 and 2026-27 editions), as dated data in
+  `src/lib/payroll/rates/`, and pure functions for one pay's PAYE (tax codes
+  M, ME, SB, S, SH, ST, SA, ND, NSW, CAE, EDW and their SL versions,
+  including the ACC earners' levy and the independent earner tax credit),
+  student loan deductions, KiwiSaver employee and employer contributions,
+  the ESCT rate and ESCT. Weekly, fortnightly, four-weekly and monthly pays.
+  The tests use IRD's own examples (the specification, IR335, KS4) and 976
+  rows of IRD's PAYE deduction tables IR340 and IR341, which match exactly.
+  Refused rather than guessed: STC and WT tax codes, other pay frequencies,
+  pay dates outside those two years, ESCT threshold amounts between IRD's
+  bands. There's no screen, and nothing uses them yet: pay runs come next.
 
 ## Not built yet, on purpose
 
@@ -820,9 +834,9 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: calculate and approve pay runs, post journals and payments,
-   produce payslips and verify/implement the current IRD payday filing
-   specification; work through Holidays Act leave after Jess approves examples.
+4. NZ payroll: pay runs, paying, payslips, payday filing and Holidays Act
+   leave (IRD rates and the PAYE, student loan, KiwiSaver and ESCT
+   calculations are built; employee records are in #62).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,

@@ -42,9 +42,9 @@ Set them in the Agents box before sending each task:
 
 | Work | Issue | Draft PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
+| NZ payroll, stage P2: IRD payroll rates as dated data and pure PAYE, student loan, KiwiSaver and ESCT calculations (PR1-PR16) | #60 | #71 | `copilot/issue-60-ird-payroll-rates` | none (no table) |
 | Not-for-profit module, first stage: opt-in fund tracking | #61 | #63 | `copilot/not-for-profit-module-development` | 0052 (renumbered) |
 | Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | #67 | `copilot/extend-custom-fields-crm-records` | 0053 (renumbered); merge after #62 and #63 |
-| Payroll P2: IRD payroll rates as dated data | #60 | none | `copilot/issue-60-ird-payroll-rates` | 0054 if needed. Restarted 1 Oct after the IRD sites were allowlisted |
 | Payroll P7: Holidays Act leave worked examples (docs only) | #60 | #68 | `copilot/nz-payroll-stage-p7-holidays-act-leave` | none |
 | Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12) | none (Agents tab) | not opened yet | `copilot/sales-orders-stage-1` | 0055 |
 | Sales platform connections, stage 1: connector framework, Shopify customers and products (CRM roadmap items 27-28) | none (Agents tab) | not opened yet | `copilot/sales-platform-connections-stage-1` | 0056 |
@@ -83,7 +83,12 @@ only be run by certain people. Each item is its own branch and PR.
         (not a role). Only they can see employee pay details, pay runs and
         payroll reports. Everyone else sees payroll in the ledger only as
         totals by department and pay item, never per employee.
-- [ ] **P2 IRD payroll rates as dated data** (0054 if needed). Running.
+- [x] **P2 IRD payroll rates as dated data** (#71, no table so 0054 unused):
+      `src/lib/payroll/rates/` for 2025-26 and 2026-27 and pure calculations
+      in `src/lib/payroll/calculations.ts` (examples PR1-PR16, waiting for
+      Jess). Checked against IRD's site 1 Oct 2026. Before each 1 April, add
+      the next year's file (README in that folder; a scheduled task checks
+      every 5 April).
 - [ ] **P3 Pay runs**, now including:
       - **Pay items** (earnings, deductions, reimbursements, employer
         contributions), each with its own expense or liability account and

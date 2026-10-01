@@ -814,6 +814,20 @@ Enforced by the app (and covered by tests):
   The GST audit report (`gst-audit.ts`) only groups the GST return's own
   counted lines (`calculateGstReturn`, or a filed return's stored lines),
   so it can't disagree with the return.
+- IRD payroll rates (PR1-PR16, payroll stage P2) are national figures, the
+  same for every organisation, so they're versioned data in the code
+  (`src/lib/payroll/rates/`, one file per edition of IRD's Payroll
+  Calculations and Business Rules Specification), not a table in the core or
+  an organisation's database: no migration. Each value has its own
+  from/to dates and a source (section and page), and each edition records
+  the IRD documents' names, editions, URLs, read dates and SHA-256 hashes.
+  `payrollRatesOn(payDate)` picks the values in effect on the pay date and
+  refuses dates no edition covers. The calculations
+  (`src/lib/payroll/calculations.ts`: PAYE, ACC earners' levy, student loan,
+  KiwiSaver, ESCT) are pure functions (no database, no network) and
+  truncate as IRD's rules say, using `truncate` and `divideTruncated` in
+  `money/decimal.ts`. Adding a year is a new data file: see the README in
+  that folder. Nothing calls them yet; pay runs (P3) will.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 
