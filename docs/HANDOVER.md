@@ -146,8 +146,10 @@ the time, not backdated; general approval and the supplementary return have
 deadlines). Agents must check the current IR1240 and cite it, never memory.
 
 - [ ] **R1 Plan**: worked examples and questions for Jess, docs only.
-      Written (RD1-RD27 and 21 questions in `docs/ACCOUNTING-EXAMPLES.md`,
-      from IR1240 April 2026, read 1 Oct 2026); waiting for Jess.
+      Written (RD1-RD27 in `docs/ACCOUNTING-EXAMPLES.md`, from IR1240 April
+      2026, read 1 Oct 2026). Its questions are decided (`docs/DECISIONS.md`
+      30-50) and the examples follow them; waiting for Jess to approve the
+      examples.
 - [ ] **R2 R&D activity register and tagging**: activities (core or
       supporting, linked core activity, approval reference, income year, in NZ
       or overseas); tag time, payroll costs (via P1b/P3/P9), bills, expense
@@ -236,16 +238,6 @@ wording. Still open:
 **Year end and period close**
 - Can a bookkeeper close a month when every check passes, or only owners and
   admins?
-
-**R&D Tax Incentive** (21 questions in the RDTI section; the main ones)
-- Does exactly $50,000.00 qualify (the Act says "or more", IR1240 p 72
-  "must exceed")? Is the minimum tested after the 10% overseas limit?
-- Book depreciation (as Tohyee has) or tax depreciation, and the new DI 5
-  investment boost?
-- Does a default payroll % split without a timesheet count as a time
-  record? Should a late timesheet change R&D figures after the pay run?
-- Store IRD's approval reference (typed, with the letter attached, marked
-  "not checked with IRD")?
 
 **Older lists still open** (see each section): repeating bills, quotes and
 repeating invoices and printed documents, purchase orders, stock transfers,

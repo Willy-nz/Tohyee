@@ -6516,8 +6516,10 @@ Stage R1 of the RDTI plan in [HANDOVER.md](HANDOVER.md): what Tohyee should
 Incentive, written so Jess can approve it before anything is built (R2: the
 activity register and tagging; R3: the claim report). **Nothing in this
 section is built, and there are no tests for it yet.** Every rule below cites
-where it comes from; where the guidance is unclear or leaves a choice, it's a
-question for Jess at the end rather than a decision.
+where it comes from. Where the guidance was unclear or left a choice, Jess
+asked Claude to research it and decide; those are decisions 30-50 in
+[DECISIONS.md](DECISIONS.md), applied in the examples below and listed at the
+end. The rule for each of them: never overstate a claim.
 
 What Tohyee will and won't do:
 
@@ -6588,7 +6590,10 @@ cl 11" are clauses of Part A (eligible) and Part B (ineligible) of Schedule
   deduction on assets available for use from 22 May 2025 can be eligible
   R&D expenditure to the extent the asset is used for R&D, from the
   **2025-26 income year** for 31 March balance dates. IR1240 April 2026 doesn't
-  mention DI 5 anywhere. Tohyee doesn't calculate DI 5 (see question 4).
+  mention DI 5 anywhere. Tohyee doesn't calculate DI 5: the deduction is
+  entered per asset with its tax depreciation and counts as depreciation
+  (RD11; decision 33, not yet checked against the Act on
+  legislation.govt.nz).
 - Nothing found changes the 15% rate, the $50,000 minimum, the $120 million
   maximum or the 10% overseas limit; they're as in LY 4 and LY 7 (consolidation
   as at 7 May 2026) and IR1240 April 2026. IRD's "Research and development tax
@@ -6619,7 +6624,8 @@ category value, because it needs links, approvals and a place). It has:
   Zealand; LY 2(1); IR1240 p 11) or **supporting** (only or main purpose of
   supporting a core activity, and required for and integral to it; LY 2(3);
   IR1240 p 12, p 37-39). A supporting activity is **linked to the core
-  activity** it supports;
+  activity or activities** it supports (one supporting activity may support
+  several, decision 39);
 - **where it's performed**: New Zealand, or overseas. Only supporting
   activities can be overseas, and an overseas supporting activity is its
   own activity linked to a core activity (LY 2(1)(c); IR1240 p 12,
@@ -6628,31 +6634,38 @@ category value, because it needs links, approvals and a place). It has:
   methodologies approval for significant performers, TAA 68CB and 68CC;
   IR1240 p 19, p 108, p 113), the reference IRD gives, the date of IRD's
   letter, the **income years** it covers (general approval can cover the
-  activities for up to 3 years, TAA 68CB(2); IR1240 p 108), and the letter attached as a file.
+  activities for up to 3 years, TAA 68CB(2); IR1240 p 108), and the letter
+  attached as a file. The letter is **required**: approval details can't be
+  saved without it (decision 40).
 
 - **RD1** Register core activity **C1** "Prototype and field-test a
   low-power soil-moisture sensor": project "Low-power soil sensor", core,
   performed in New Zealand. Registering an activity posts nothing and
-  changes no amount. Hana can tag time to C1 from the day it's registered.
+  changes no amount. Hana can tag time to C1 from the day it's registered,
+  with a warning while no approval is entered (RD3).
 - **RD2** Register supporting activity **S1** "Literature and patent search
   for low-power sensing" (New Zealand), linked to C1, and **S2** "Sensor
   calibration at Calibra Labs, Australia" (overseas), linked to C1.
   Refused: a **core** activity performed overseas ("Core R&D must be
   performed in New Zealand"; LY 2(1)(c)); a supporting activity with **no
   core activity**; a supporting activity linked to **another supporting
-  activity**. Whether one supporting activity can link to several core
-  activities is question 10.
+  activity**. S1 could also be linked to a second core activity C2 if the
+  search served both (decision 39); each cost line is still tagged to one
+  activity, so S1's costs are counted once.
 - **RD3** Approval: on 20 May 2027 Jess enters "General approval", IRD's
   reference, the letter dated 18 May 2027, years **2026-27 to 2028-29**, and
-  attaches the letter, for C1, S1 and S2. The register shows the reference
-  as "entered by Jess on 20 May 2027 from IRD's letter; not checked with
-  IRD" (Tohyee can't check it; question 11). Until an approval covering
-  2026-27 is entered, the claim report shows C1, S1 and S2 as "no approval
-  entered for 2026-27"; after 30 June 2027 (the deadline, RD24) it adds
+  attaches the letter, for C1, S1 and S2. Without the letter attached the
+  approval isn't saved (decision 40). The register shows the reference as
+  "entered by Jess on 20 May 2027 from IRD's letter; not checked with IRD"
+  (Tohyee can't check it). Tagging costs to C1, S1 and S2 before then is
+  allowed, with the warning "no approval entered for 2026-27" on each tag
+  (decision 47). The claim report gives credit only for activities with an
+  approval covering the year: until one covering 2026-27 is entered, it
+  lists C1, S1 and S2 as "no approval entered for 2026-27" and their costs
+  earn no credit; after 30 June 2027 (the deadline, RD24) it adds
   "claimable only if general approval was applied for by 30 June 2027"
   (TAA 68CB(2B); IR1240 p 19: without that, "you will not be able to claim
-  R&D tax credits for that year"). Whether tagging is refused
-  or only warned about when no approval is entered is question 18.
+  R&D tax credits for that year").
 - **RD4** Supporting work in another year: S1's search started in
   **March 2026** (the 2025-26 year, before C1's work began in April), and 600.00 of Hana's
   pay was tagged to S1 then. Supporting activity done in the income year
@@ -6710,10 +6723,12 @@ they are.
 salary and wages including allowances, bonuses, employee share schemes,
 recruitment and relocation, overtime, holiday pay, long-service pay and
 superannuation contributions (IR1240 p 63), but only the share for time on
-R&D (IR1240 p 64). Unpaid time can't be claimed (IR1240 p 64). Tohyee's pay
-runs (P3) post each employee's cost split by their default allocation
-(P1b) unless timesheets (P9) cover the hours; R&D uses the pay run's posted
-cost, never a payroll calculation of its own.
+R&D (IR1240 p 64). Unpaid time can't be claimed (IR1240 p 64). Only the
+costs IRD lists count (decision 36): **ACC levies, FBT and other employer
+costs are left out** and are never tagged as employee related costs. Tohyee's
+pay runs (P3) post each employee's cost split by their default allocation
+(P1b) unless timesheets (P9) cover the hours; R&D uses the **posted pay run's
+tags**, never a payroll calculation of its own (decision 37).
 
 - **RD5** Timesheet split. Hana's fortnightly pay run to 12 Jul 2026 posts
   gross salary **2,400.00** and employer KiwiSaver contribution **72.00**
@@ -6723,24 +6738,36 @@ cost, never a payroll calculation of its own.
   - S1: 2,472.00 × 4 / 80 = **123.60**
   - not R&D: 2,472.00 − 1,483.20 − 123.60 = **865.20**
 
-  Each R&D share is rounded to the cent (half away from zero, R3) and the
-  remainder goes to the rest, so the parts add up to the pay (question 21).
-  Across the year's 26 pays her timesheets give **C1 36,500.00** and
-  **S1 1,300.00**.
+  Each R&D share is rounded **down** to the cent and the remainder goes to
+  non-R&D, so the parts add up to the pay and R&D is never overstated
+  (decision 50). Here the shares are exact. Had the same pay covered 77 hours
+  (48 h C1, 4 h S1, 25 h other):
+  - C1: 2,472.00 × 48 / 77 = 1,540.987… → **1,540.98**
+  - S1: 2,472.00 × 4 / 77 = 128.415… → **128.41**
+  - not R&D: 2,472.00 − 1,540.98 − 128.41 = **802.61**
+
+  An ACC levy invoice paid for Hana isn't part of the 2,472.00 and isn't
+  tagged (decision 36). Across the year's 26 pays her timesheets give
+  **C1 36,500.00** and **S1 1,300.00**.
 - **RD6** Leave and training (IR1240 p 64, Zach). Ben's cost for the year
   is **39,000.00**: 23 weeks on C1, 2 weeks on a project management course
   for all his work, 4 weeks annual leave and 23 weeks other work. Time that
   relates to both R&D and other work is taken out first: R&D share 23 / 46
   = 50%; then 50% of the course (1 week) and leave (2 weeks) count, so
-  (23 + 1 + 2) / 52 = 26 / 52 = 50% and **C1 gets 19,500.00**. Worked per
-  pay instead (leave in a fortnight with no R&D counts nothing), the answer
-  depends on when the leave was taken; which way Tohyee works is question 6.
-- **RD7** No timesheet. If Hana's 1 Mar 2027 pay has no timesheet, P3 splits
-  it by her default allocation (say 60% C1, set by Jess on 1 Apr 2026). The
-  report shows that pay's C1 share as "default split, no time record".
-  IR1240 p 100 accepts regular weekly or fortnightly estimates in project
-  documentation, and monthly records for staff on R&D full time, but
-  whether a default % counts is question 5.
+  (23 + 1 + 2) / 52 = 26 / 52 = 50% and **C1 gets 39,000.00 × 50% =
+  19,500.00**. Tohyee spreads leave and training over the year this way, not
+  per pay (decision 35): worked per pay, leave in a fortnight with no R&D
+  would count nothing and the answer would depend on when the leave was
+  taken.
+- **RD7** No timesheet (a variation; in Kea's totals every pay has a
+  timesheet). If Hana's 1 Mar 2027 pay has no timesheet, P3 splits it by her
+  default allocation (say 60% C1, set by Jess on 1 Apr 2026): C1 2,472.00 ×
+  60% = 1,483.20. A default split counts only when it's **100% R&D**
+  (decision 34), so the report lists the 1,483.20 under "default split, no
+  time record" and leaves it **out of the total**; Jess can see it but it
+  earns no credit. An employee on R&D full time whose default allocation is
+  100% C1 does count without a timesheet (IR1240 p 100 accepts monthly
+  records for staff on R&D full time).
 
 **Goods and services, including overheads** (Sch 21B A cl 2; IR1240 p 63).
 
@@ -6753,17 +6780,28 @@ cost, never a payroll calculation of its own.
   invoices and bills); IR1240 p 75's example deducts 1,304.34 from 10,000.00 where Tohyee
   would post 1,304.35, so its figure would be 8,695.65 rather than
   IRD's 8,695.66.
+
+  Goods not used by the end of the year aren't eligible for that year
+  (IR1240 p 63; decision 41). Had **1,000.00** of these components still
+  been unused on 31 Mar 2027 (Hana marks the tag "not used by year end",
+  stamped with who and when), only 4,000.00 − 1,000.00 = 3,000.00 would
+  count for 2026-27, and the report would list the 1,000.00 to be tagged in
+  the year they're used. (Not in Kea's totals: all were used.)
 - **RD9** Expense claim: Hana's receipt of 5 Aug 2026, "Potting mix and
   pots for soil trials", **230.00 including GST** with the GST tax code:
   posts 200.00 to expense and 30.00 GST. Tagged C1: **200.00** counts.
 - **RD10** Overheads by floor area (IR1240 p 15, p 63). Rent is **4,000.00
-  + GST** a month for 200 m²; the lab is 30 m² and used only for R&D. Jess
-  sets an apportionment rule on the rent account: **floor area, 30 of 200
-  m² = 15%, to C1, from 1 Apr 2026**, with the floor plan attached. Each
-  rent line dated in the period gets the tag: 4,000.00 × 15% = **600.00 a
-  month, 7,200.00 for the year**. The rule shows who set it and when;
-  changing it starts a new period and keeps the old one (RD23). Which
-  methods Tohyee offers is question 17.
+  + GST** a month for 200 m²; the lab is 30 m² and used only for R&D. Tohyee
+  has one overhead rule, **"% of an account"**, and its **basis is
+  required**, chosen from IR1240 p 15's list (time, floor area, usage,
+  volume, unit sales, dollar value, activity-based costing), with the
+  calculation attached (decision 46). Jess sets the rule on the rent
+  account: **15% to C1 from 1 Apr 2026, basis floor area, 30 m² of 200 m²**,
+  with the floor plan attached. A rule with no basis or no attachment isn't
+  saved. Each rent line dated in the period gets the tag: 4,000.00 × 15% =
+  **600.00 a month**, 600.00 × 12 = **7,200.00 for the year**. The rule shows
+  who set it and when; changing it starts a new period and keeps the old
+  one (RD23).
 
 So C1's materials, consumables and overheads are 4,000.00 + 200.00 +
 7,200.00 = **11,400.00**.
@@ -6773,13 +6811,25 @@ So C1's materials, consumables and overheads are 4,000.00 + 200.00 +
 - **RD11** Oscilloscope **FA-0007**, bought on a bill on 1 Apr 2026 for
   **6,000.00 + GST**. The bill line is **capital** and isn't eligible (Sch
   21B B cl 2; IR1240 p 76): it can only be tagged C1 as "ineligible:
-  acquiring depreciable property". Its 2026-27 depreciation runs post
-  **1,500.00** (the rate Kea typed for the asset type; Tohyee has no IRD
-  rates, see the fixed asset examples). Kea keeps a **usage log**: 300 hours
-  on C1 and 600 hours on other work; idle time doesn't count (IR1240 p 62:
-  share of use, not availability). C1 gets 1,500.00 × 300 / 900 =
-  **500.00**, category R&D tax depreciation. Whether book depreciation can
-  stand in for tax depreciation is question 4.
+  acquiring depreciable property". R&D uses **tax depreciation, entered per
+  asset for the year**, never the book depreciation Tohyee's fixed assets
+  post (decision 33; Tohyee has no IRD rates, see the fixed asset examples).
+  Its 2026-27 book depreciation of **1,500.00** (the rate Kea typed for the
+  asset type) is ignored. For FA-0007's 2026-27 year Kea enters, from its
+  tax workings:
+  - Investment Boost (DI 5): 20% × 6,000.00 = **1,200.00**, which counts as
+    depreciation (decision 33; **unverified** against the Act);
+  - tax depreciation: **1,200.00** (say 25% diminishing value on the
+    6,000.00 − 1,200.00 = 4,800.00 left after the boost; Tohyee doesn't
+    check the rate);
+  - total 1,200.00 + 1,200.00 = **2,400.00**, stamped with who entered it
+    and when.
+
+  Kea keeps a **usage log**: 300 hours on C1 and 600 hours on other work;
+  idle time doesn't count (IR1240 p 62: share of use, not availability). C1
+  gets 2,400.00 × 300 / (300 + 600) = 2,400.00 × 300 / 900 = **800.00**,
+  category R&D tax depreciation. (Using book depreciation would have given
+  1,500.00 × 300 / 900 = 500.00.)
 
 **Contracts** (LY 6; IR1240 p 68-69).
 
@@ -6797,8 +6847,12 @@ So C1's materials, consumables and overheads are 4,000.00 + 200.00 +
   expenditure, limited in RD18. Goods bought overseas and used in New
   Zealand aren't foreign (IR1240 p 70, p 96); payments for work done in New
   Zealand by a non-resident are foreign R&D expenditure (LY 7(1); IR1240
-  p 70), so contacts and employees need a "non-resident" flag. Which rate
-  and whether realised exchange gains or losses count is question 13.
+  p 70), so contacts and employees need a "non-resident" flag. Foreign
+  currency is counted at the **bill's rate**, and realised exchange gains
+  and losses are left out (decision 42): Kea pays the bill on 15 Aug 2026 at
+  1 NZD = 0.88 AUD, so the payment is AUD 8,100.00 ÷ 0.88 = 9,204.545… =
+  **9,204.55** and the realised exchange loss is 9,204.55 − 9,000.00 =
+  **204.55**. The loss isn't tagged; S2 stays at **9,000.00**.
 
 ### Eligible and ineligible expenditure
 
@@ -6831,13 +6885,17 @@ and so Jess can see what was left out. The reasons are Schedule 21B Part B
 | Government and local authority grants (including co-funding) | Sch 21B B cl 21; IR1240 p 82-84 | RD15. |
 | Feedstock, to the extent of the output's value | Sch 21B B cl 22; IR1240 p 81-82 | RD14. |
 | Expenditure that gets a foreign R&D tax credit | Sch 21B B cl 23; IR1240 p 84 | |
-| Overseas expenditure over the 10% limit | LY 7; IR1240 p 69-71 | 900.00 of S2 (RD16). |
+| Overseas expenditure over the 10% limit | LY 7; IR1240 p 69-71 | 866.67 of S2 (RD16). |
 | In commercial production, other than employee and additional costs | LY 5(1)(c); IR1240 p 64-68 | Not supported yet (Tohyee can't judge "additional"). |
-| Goods not used, or services not performed, by the end of the year | IR1240 p 63 | Question 12. |
+| Goods not used, or services not performed, by the end of the year | IR1240 p 63 | Ineligible for that year; listed to be tagged in the year they're used (RD8; decision 41). |
 | Unpaid time | IR1240 p 64 | Not a cost in Tohyee, so never tagged. |
+| Realised exchange gains and losses | Decision 42 | Not tagged; foreign lines count at the bill's rate (RD13). |
+
+ACC levies, FBT and other employer costs IRD doesn't list aren't tagged at
+all (decision 36), so they aren't in this list either.
 
 So Kea's ineligible amounts tagged to C1 in 2026-27 are 6,000.00 +
-1,200.00 + 1,800.00 = **9,000.00**, plus 900.00 of S2 over the overseas
+1,200.00 + 1,800.00 = **9,000.00**, plus 866.67 of S2 over the overseas
 limit.
 
 - **RD14** Feedstock (a different year, not in Kea's totals). Inputs
@@ -6862,15 +6920,20 @@ limit.
 ### Limits and the credit
 
 - The credit is **15%** of total eligible R&D expenditure: LY 4(2)
-  "0.15 × total eligible R&D expenditure"; IR1240 p 3, p 13.
+  "0.15 × total eligible R&D expenditure"; IR1240 p 3, p 13. It's **rounded
+  down to the cent** (decision 32).
 - **Maximum**: total eligible expenditure is capped at **$120 million** (or a
   higher amount IRD approves) (LY 4(3); IR1240 p 72-73).
 - **Minimum**: eligible expenditure must be **$50,000 or more** for the
   year, unless it's on an approved research provider, which counts
-  whatever the amount (LY 4(1)(a)-(b); IR1240 p 72, p 76, p 89).
+  whatever the amount (LY 4(1)(a)-(b); IR1240 p 72, p 76, p 89). Exactly
+  50,000.00 qualifies (RD19), and the minimum is tested **after** the
+  overseas limit (RD18).
 - **Overseas limit**: foreign R&D expenditure counts only up to 10% of
   total eligible R&D expenditure, i.e. at most 0.1 × NZ eligible ÷ 0.9 (LY
-  7(5)-(6); IR1240 p 71, SA Co).
+  7(5)-(6); IR1240 p 71, SA Co), **rounded down to the cent** (decision 32).
+- Only activities with an **approval covering the year** earn credit (RD3;
+  decision 47).
 - Expenditure on approved research providers isn't subject to the
   refundability cap (IR1240 p 89); refundability is out of scope here.
 
@@ -6878,17 +6941,28 @@ limit.
 
   | Activity | Employee related | Materials, consumables and overheads | Depreciation | Contract | Total |
   | --- | --- | --- | --- | --- | --- |
-  | C1 core, NZ | 56,000.00 (Hana 36,500.00, Ben 19,500.00) | 11,400.00 | 500.00 | 3,100.00 | 71,000.00 |
+  | C1 core, NZ | 56,000.00 (Hana 36,500.00, Ben 19,500.00) | 11,400.00 | 800.00 | 3,100.00 | 71,300.00 |
   | S1 supporting, NZ | 1,900.00 (Hana: 1,300.00 + 600.00 from 2025-26, RD4) | | | | 1,900.00 |
-  | **NZ eligible** | 57,900.00 | 11,400.00 | 500.00 | 3,100.00 | **72,900.00** |
-  | S2 supporting, overseas | | | | 9,000.00 spent, **8,100.00** counts | 8,100.00 |
-  | **Total eligible** | | | | | **81,000.00** |
+  | **NZ eligible** | 57,900.00 | 11,400.00 | 800.00 | 3,100.00 | **73,200.00** |
+  | S2 supporting, overseas | | | | 9,000.00 spent, **8,133.33** counts | 8,133.33 |
+  | **Total eligible** | 57,900.00 | 11,400.00 | 800.00 | 11,233.33 | **81,333.33** |
 
-  Overseas limit: 0.1 × 72,900.00 ÷ 0.9 = **8,100.00**, so 900.00 of S2's
-  9,000.00 doesn't count. Check: 8,100.00 is 10% of 81,000.00. 81,000.00 is
-  at least 50,000.00 and under 120,000,000.00. **Credit: 0.15 × 81,000.00 =
-  12,150.00.** The minimum is checked on the total **after** the overseas
-  limit (RD18; question 2).
+  C1: 56,000.00 + 11,400.00 + 800.00 + 3,100.00 = 71,300.00. NZ eligible:
+  71,300.00 + 1,900.00 = 73,200.00.
+
+  Overseas limit: 0.1 × 73,200.00 ÷ 0.9 = 8,133.333… → rounded down to the
+  cent, **8,133.33** (decision 32), so 9,000.00 − 8,133.33 = **866.67** of
+  S2 doesn't count. Total eligible: 73,200.00 + 8,133.33 = **81,333.33**.
+  Check: 10% of 81,333.33 is 8,133.333, and 8,133.33 is not more than that.
+  S2 is all contract expenditure, so the whole 866.67 comes off contract;
+  had S2 spent in more than one category, the 866.67 would come off each in
+  proportion to what it spent there (decision 43).
+
+  The minimum is tested on the total **after** the overseas limit (RD18;
+  decision 31): 81,333.33 is at least 50,000.00 and under 120,000,000.00.
+  C1, S1 and S2 have an approval covering 2026-27 (RD3).
+  **Credit: 0.15 × 81,333.33 = 12,199.9995 → rounded down to the cent,
+  12,199.99** (decision 32).
 - **RD17** Approved research provider (2027-28, a different year, like
   IR1240 p 72 "Hannah"): Kea's own eligible expenditure is **10,000.00**
   and it pays an approved research provider **20,000.00** (after the
@@ -6897,19 +6971,26 @@ limit.
   The return must then name the provider and give its IRD number (IR1060).
 - **RD18** Overseas limit before the minimum: NZ eligible **44,100.00**
   and foreign **6,000.00**. Limit 0.1 × 44,100.00 ÷ 0.9 = **4,900.00**, so
-  total eligible is **49,000.00**: under 50,000.00, **no credit**. Counting
-  the foreign spend in full would give 50,100.00, over the minimum. Tohyee
-  uses 49,000.00 because LY 4(1)(a) tests "eligible expenditure" and LY 7
-  limits what foreign expenditure is eligible, but IR1240 doesn't show this
-  case: question 2.
-- **RD19** Exactly 50,000.00: LY 4(1)(a) says "$50,000 or more", IR1240
-  p 9 says "at least", but p 17 says "more than" and p 72 "must exceed".
-  Tohyee would follow the Act: credit 0.15 × 50,000.00 = **7,500.00**.
-  Question 1.
-- **RD20** Rounding: total eligible **50,000.05** gives 0.15 × 50,000.05 =
-  **7,500.0075**. Neither LY 4 nor IR1240 says how to round the credit (or
-  the overseas limit, which can repeat, e.g. 0.1 × 50,000.00 ÷ 0.9 =
-  5,555.555…; IR1240 p 71's SA Co shows whole dollars, 55,556): question 3.
+  total eligible is 44,100.00 + 4,900.00 = **49,000.00**: under 50,000.00,
+  **no credit**. Counting the foreign spend in full would give 44,100.00 +
+  6,000.00 = 50,100.00, over the minimum. Tohyee uses 49,000.00: LY 4(1)(a)
+  tests "eligible expenditure", and IR1240 p 14 says the excess over the
+  limit isn't eligible (decision 31). The report shows "under the $50,000
+  minimum after the overseas limit".
+- **RD19** Exactly 50,000.00 **qualifies** (decision 30): LY 4(1)(a) and
+  IR1240 p 13 say "$50,000 or more" and IRD's web page "at least", even
+  though IR1240 p 17 says "more than" and p 72 "must exceed". Credit 0.15 ×
+  50,000.00 = **7,500.00**. 49,999.99 doesn't qualify.
+- **RD20** Rounding, always **down to the cent** so a claim is never
+  overstated (decision 32):
+  - credit: total eligible **50,000.05** gives 0.15 × 50,000.05 =
+    7,500.0075 → **7,500.00**;
+  - overseas limit: NZ eligible **50,000.00** gives 0.1 × 50,000.00 ÷ 0.9 =
+    5,555.555… → **5,555.55** (IR1240 p 71's SA Co shows its limit in whole
+    dollars, 55,556, rounded up; Tohyee's figure is never more than the
+    limit). Check: 10%
+    of 50,000.00 + 5,555.55 = 55,555.55 is 5,555.555, and 5,555.55 is not
+    more than that.
 
 What Tohyee can't see: an organisation and its **associates** share the
 $120 million maximum (IR1240 p 72-73), and each
@@ -6942,19 +7023,28 @@ log entry, apportionment rule, approval details) stores:
   A removed record stays in history and drops out of the totals.
 
 The claim report shows how long after the work each record was entered and
-marks records changed after they were first entered. Late or changed
+marks records changed after they were first entered. Records entered **more
+than 14 days** after the work are flagged (decision 38). Late or changed
 records aren't refused (IR1240 sets no fixed rule) but are listed
 separately with their hours and cost so Jess can decide whether to claim
 them.
 
 - **RD21** On time: Hana enters 6 h on C1 for Wed 1 Jul 2026 on Fri 3 Jul
-  2026 at 09:14. The report shows "entered 2 days after the work".
-- **RD22** Late: on 16 Mar 2027 Hana enters 40 h on C1 for the week of
-  10-14 Aug 2026. The report shows "entered **214 days** after the work (14
-  Aug 2026)" and lists it under "entered late" with its cost, because it's
-  over the lateness threshold (question 9). The pay for that week was posted
-  in August with the default split; whether a late timesheet changes the
-  R&D figures without touching the posted pay run is question 8.
+  2026 at 09:14. The report shows "entered 2 days after the work"; 2 is not
+  more than 14, so it isn't flagged.
+- **RD22** Late (a variation; in Kea's totals every pay has a timesheet):
+  on 16 Mar 2027 Hana enters 40 h on C1 for the week of 10-14 Aug 2026. The
+  report shows "entered **214 days** after the work (14 Aug 2026)" (17 days
+  left in August + 30 + 31 + 30 + 31 + 31 + 28 + 16 = 214), over 14 days, so
+  it's flagged. The pay for that fortnight was posted in August with the
+  default split (60% C1), so the R&D figures use the **posted pay run's
+  tags** (decision 37): the 60% split is listed under "default split, no
+  time record" and left out of the total (RD7). The timesheet is listed
+  under "entered late": 40 h × 30.90 an hour (2,472.00 ÷ 80) =
+  **1,236.00**, not in the total. It counts only if someone with payroll
+  access reallocates the posted pay's tags, which is a change with history
+  (who, when, old and new split); the reallocated line still shows "entered
+  late".
 - **RD23** Changed: on 20 Jul 2026 Hana changes her 1 Jul entry from 6 h to
   7 h. History: "6 h, entered 3 Jul 2026 09:14 by Hana; changed to 7 h on 20
   Jul 2026 by Hana". The report uses 7 h and marks it "changed 17 days after
@@ -6963,13 +7053,16 @@ them.
   both figures (7,200.00 and 9,600.00), who changed it and when, and marks
   the rule "changed after the period it covers".
 
-Files attached to R&D records (approval letters, statements, floor plans)
-are part of these records; whether they can be removed within the 7 years
-is question 16.
+Files attached to R&D records (approval letters, statements, floor plans,
+depreciation workings) are part of these records and are **kept for 7 years
+after the end of the income year** (decision 45): for 2026-27, until 31 Mar
+2034. A file can be **replaced**, with the old one kept in history (who
+replaced it and when), but **not deleted**.
 
 ### Deadlines for a 31 March balance date
 
-Reminders Tohyee could show owners and admins for Kea's **2026-27** year:
+Reminders Tohyee shows owners and admins for Kea's **2026-27** year (no-agent
+dates, RD24):
 
 | Reminder | Due | Source |
 | --- | --- | --- |
@@ -6990,8 +7083,10 @@ Reminders Tohyee could show owners and admins for Kea's **2026-27** year:
   p 19). With a **tax agent's extension of time** the supplementary return
   is due 30 days after the extended due date (IR1240 p 103: return due 31
   Mar 2026 → supplementary return 30 Apr 2026, and the income tax return
-  filed by 31 Mar 2027); Tohyee doesn't know about extensions, so question
-  20 asks how to get that date. Late applications and returns can't be
+  filed by 31 Mar 2027). Tohyee shows **only the no-agent dates**, with the
+  note "If you have a tax agent or an extension of time, your income tax
+  return, R&D supplementary return and last filing date are later; check
+  with your agent" (decision 49). Late applications and returns can't be
   accepted and the claim is declined (IR1240 p 104; IRD due dates page);
   a due date on a weekend or public holiday moves to the next working day
   (IRD due dates page). Both returns must be filed electronically (IR1240
@@ -6999,7 +7094,10 @@ Reminders Tohyee could show owners and admins for Kea's **2026-27** year:
 - **RD25** The reminders say what's due and link to myIR; they don't record
   that anything was filed. A reminder stops when its date has passed or, for
   general approval, when approval details covering the year are entered
-  (RD3). How far ahead reminders show is question 19.
+  (RD3). Reminders show **from 60 days before** each date, to **owners and
+  admins** (decision 48): general approval due Wed 30 Jun 2027 shows from
+  Sat 1 May 2027 (30 Jun − 60 days); the supplementary return due Fri 6 Aug
+  2027 shows from Mon 7 Jun 2027.
 
 ### The claim report (what R3 must produce)
 
@@ -7033,22 +7131,26 @@ claim); and the credit for the income tax return's R&D tax credit field
   | Figure | Amount |
   | --- | --- |
   | Materials, consumables and overheads | 11,400.00 |
-  | R&D tax depreciation | 500.00 |
+  | R&D tax depreciation (including Investment Boost) | 800.00 |
   | Employee related costs | 57,900.00 |
-  | Contract expenditure (NZ 3,100.00 + overseas 8,100.00 counted) | 11,200.00 |
+  | Contract expenditure (NZ 3,100.00 + overseas 8,133.33) | 11,233.33 |
+  | of which overseas (9,000.00 spent, 866.67 over the limit) | 8,133.33 |
   | Approved research provider | 0.00 |
-  | **Total eligible R&D expenditure** | **81,000.00** |
-  | Core activities' share: 71,000.00 / 81,000.00 | 87.65% |
-  | Of which overseas (9,000.00 spent) | 8,100.00 |
+  | **Total eligible R&D expenditure** | **81,333.33** |
+  | Core activities' share: 71,300.00 / 81,333.33 | 87.66% |
   | Of which internal software development, feedstock, commercial production | 0.00 each |
   | Of which supporting activity from 2025-26 (RD4) | 600.00 |
-  | Ineligible expenditure tagged to R&D | 9,000.00 (and 900.00 over the overseas limit) |
-  | **R&D tax credit** | **12,150.00** |
+  | Ineligible expenditure tagged to R&D | 9,000.00 (and 866.67 over the overseas limit) |
+  | Listed, not counted: default split, no time record; entered late; not used by year end | 0.00 each |
+  | **R&D tax credit** | **12,199.99** |
 
-  Which category shows the overseas amount, and how precise the core % is,
-  are questions 14 and 15. Labour-related taxes come from payroll (P10)
-  once it's built; Tohyee has no FBT, so the report leaves that for the
-  return.
+  Check: 11,400.00 + 800.00 + 57,900.00 + 11,233.33 + 0.00 = 81,333.33.
+  The overseas amount stays in the category it was spent in, with an "of
+  which overseas" line (decision 43). Core %: 71,300.00 ÷ 81,333.33 × 100 =
+  87.6639…% → to two decimals, rounded down, **87.66%** (decision 44);
+  supporting is the rest, 1,900.00 + 8,133.33 = 10,033.33. Labour-related
+  taxes come from payroll (P10) once it's built; Tohyee has no FBT, so the
+  report leaves that for the return.
 - **RD27** Every figure drills down to the lines and records behind it (who
   tagged what, when), with the apportionment rules and their bases, the
   hours per employee per activity with the hourly cost, exchange rates for
@@ -7098,75 +7200,59 @@ category value can't hold.
   R&D contractors): the organisation decides whether it can claim.
 - The internal software development $25 million cap (Sch 21B B cl 16).
 - Feedstock market values and the year-end valuation of unsold output.
-- Investment boost (DI 5) and IRD tax depreciation (question 4).
+- Calculating tax depreciation or Investment Boost (DI 5): they're entered
+  per asset for the year (RD11; decision 33).
+- A tax agent's extended due dates: only the no-agent dates are shown, with
+  a note (RD24; decision 49).
 - GST adjustments for a change of use (IR1240 p 75, James).
 - Approved research provider status, the R&D loss tax credit, and levy
   bodies.
 - Filing in myIR; payroll calculations.
 
-### Questions for Jess (R&D Tax Incentive)
+### Decided (R&D Tax Incentive)
 
-1. **Exactly $50,000.00** (RD19): qualifies (the Act's "$50,000 or more"),
-   or doesn't (IR1240 p 17 "more than", p 72 "must exceed")?
-2. **Minimum after the overseas limit** (RD18): test the $50,000 on the
-   total after the 10% limit (49,000.00, no credit), or before it
-   (50,100.00)?
-3. **Rounding** of the credit and the overseas limit (RD20): to the cent
-   (half away from zero, as R3), down to the cent, or to whole dollars (as
-   IR1240 p 71)?
-4. **Depreciation** (RD11): Tohyee's fixed assets use the method and rate
-   each organisation types, not IRD's. Use book depreciation, ask for the
-   tax depreciation per asset for the year, or leave depreciation to the
-   accountant? And DI 5 investment boost deductions: ask for them, or leave
-   them out?
-5. **Default % split without a timesheet** (RD7): count it, count it only
-   for staff marked as full time on R&D for the month, or count it but
-   list it as "no time record"?
-6. **Leave and training** (RD6): apportion over the year (IR1240 p 64's
-   Zach), or per pay?
-7. **Which employer costs**: IR1240 p 63 lists pay, allowances, bonuses,
-   share schemes, recruitment, relocation, overtime, holiday and
-   long-service pay and superannuation. Should ACC levies, FBT and other
-   employer costs posted by payroll be tagged as employee related costs,
-   left out, or left to Jess per pay item?
-8. **Late timesheets** (RD22): should a timesheet entered after its pay run
-   was posted change the R&D figures (worked from timesheets, apart from the
-   ledger), or should R&D use only the posted pay run's tags?
-9. **Lateness threshold** (RD22): flag records entered more than 7, 14 or
-   31 days after the work, or after the end of the month?
-10. **One supporting activity for several core activities** (RD2): allow,
-    or one core activity each (IR1240 p 104 asks for each core activity's
-    supporting activities)?
-11. **Approval reference** (RD3): Tohyee can't check it with IRD. Store it
-    with the letter attached and "entered by, not checked with IRD" (as
-    proposed), require the letter, or not store approvals at all?
-12. **Unused goods at year end** (IR1240 p 63): tag them "not used by year
-    end" for the next year, ask at year end, or leave them to Jess?
-13. **Foreign currency** (RD13): use the bill's rate, the payment's rate,
-    or the bill's rate with realised gains and losses added? (IR1240 p 102
-    asks for the conversion calculations but not which rate.)
-14. **Overseas amount in the categories** (RD26): show the counted 8,100.00
-    in the category it was spent in (contract here), spread the limit over
-    the categories, or show it on its own?
-15. **Core %** (RD26): two decimal places (87.65%), whole percent, or the
-    full figure?
-16. **Files on R&D records**: Tohyee lets people remove files today (NF). On
-    R&D records, keep them for 7 years after the year (IR1240 p 101),
-    allow removal by owners only with the history kept, or leave as now?
-17. **Overhead methods** (RD10): offer only "% of an account" with a stated
-    basis (floor area, usage, headcount, time), or the full IR1240 p 15
-    list?
-18. **Tagging without an approval** (RD3): allow with a warning (approval
-    can come after the year), or refuse after the general approval
-    deadline?
-19. **Reminders** (RD25): from how long before each date (30, 60 or 90
-    days), and to whom (owners and admins, or everyone with payroll access)?
-20. **Agent extensions** (RD24): let Jess type the income tax return's
-    extended due date for the year, or show only the no-agent dates with a
-    note?
-21. **Payroll split rounding** (RD5): round each R&D share and give the
-    remainder to non-R&D (as proposed), or put the remainder on the largest
-    share?
+Decided 1 Oct 2026 on Jess's instruction to research and make the call; see
+`docs/DECISIONS.md` (decisions 30-50) for sources. The examples above follow
+them; Jess hasn't approved the examples yet.
+
+- **Exactly $50,000.00 qualifies** (RD19; decision 30).
+- **The minimum is tested after the 10% overseas limit** (RD18; 31).
+- **Overseas limit and credit rounded down to the cent** (RD16, RD20; 32).
+- **Tax depreciation, entered per asset for the year and split by its usage
+  log; Investment Boost counts as depreciation**; never book depreciation
+  (RD11; 33, unverified against the Act).
+- **A default % split counts only when it's 100% R&D**; any other is listed
+  as "default split, no time record" and left out (RD7; 34).
+- **Leave and training are spread over the year** (RD6; 35).
+- **Employee costs are only those IRD lists**; ACC levies, FBT and other
+  employer costs are left out (RD5; 36).
+- **Only the posted pay run's tags count**; a late timesheet is listed as
+  "entered late" and changing it is a reallocation with history (RD22; 37).
+- **Records entered more than 14 days after the work are flagged** (RD21,
+  RD22; 38).
+- **One supporting activity may support several core activities**; each
+  cost line is tagged to one activity (RD2; 39).
+- **Approval reference stored with the letter attached (required), marked
+  "not checked with IRD"** (RD3; 40).
+- **Goods not used by year end are ineligible for that year** and listed to
+  tag in the year they're used (RD8; 41).
+- **Foreign currency at the bill's rate; realised exchange gains and losses
+  left out** (RD13; 42).
+- **Overseas spending stays in its category with an "of which overseas"
+  line**; a limit reduction is spread in proportion (RD16, RD26; 43).
+- **Core % to two decimals, rounded down** (RD26; 44).
+- **Files on R&D records kept 7 years after the year**; replaceable with
+  history, not deletable (45).
+- **One "% of an account" overhead rule with a required basis** from IR1240
+  p 15's list and the calculation attached (RD10; 46).
+- **Tagging allowed without an approval, with a warning**; credit only for
+  activities with an approval covering the year (RD3; 47).
+- **Deadline reminders from 60 days before, to owners and admins** (RD25;
+  48).
+- **Only the no-agent due dates, with a note** about agents and extensions
+  (RD24; 49).
+- **Payroll split: each R&D share rounded down to the cent, the remainder to
+  non-R&D** (RD5; 50).
 
 ## NZ payroll: IRD rates and calculations (examples not yet approved by Jess)
 
