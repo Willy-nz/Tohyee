@@ -6,6 +6,7 @@ import { type FormEvent, useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { PAY_FREQUENCY_LABELS } from "@/components/payroll-groups";
+import { PayRunWagePayments } from "@/components/payroll-payments";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
@@ -435,7 +436,7 @@ export function PayRunView({ organisationId, payRunId }: { organisationId: strin
         {run.status === "approved" ? (
           <form className={styles.stack} onSubmit={voidRun}>
             <div className={ui.grid2}>
-              <Field label="Void date" hint="The reversing journal's date. It can't be before the pay date or in a locked period.">
+              <Field label="Void date" hint="The reversing journal's date. It can't be before the pay date or in a locked period. Void its wage and IRD payments first.">
                 <input min={run.payDate} required type="date" value={voidDate} onChange={(event) => setVoidDate(event.target.value)} />
               </Field>
             </div>
@@ -445,6 +446,8 @@ export function PayRunView({ organisationId, payRunId }: { organisationId: strin
           </form>
         ) : null}
       </Card>
+
+      {run.status !== "draft" ? <PayRunWagePayments key={`${run.id}:${run.status}`} organisationId={organisationId} payRunId={run.id} /> : null}
 
       <Card title="Totals">
         <Figures figures={run.totals} />

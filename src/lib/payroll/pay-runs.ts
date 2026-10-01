@@ -822,11 +822,11 @@ export async function deletePayRun(tx: OrgTx, runIdInput: unknown): Promise<{ de
 
 // Approving and voiding
 
-const PAYE_ACCOUNT: ControlAccount = { systemKey: "paye_payable", label: "PAYE payable", accountClass: "liability" };
-const KIWISAVER_ACCOUNT: ControlAccount = { systemKey: "kiwisaver_payable", label: "KiwiSaver payable", accountClass: "liability" };
-const ESCT_ACCOUNT: ControlAccount = { systemKey: "esct_payable", label: "ESCT payable", accountClass: "liability" };
-const STUDENT_LOAN_ACCOUNT: ControlAccount = { systemKey: "student_loan_payable", label: "Student loan payable", accountClass: "liability" };
-const WAGES_ACCOUNT: ControlAccount = { systemKey: "wages_payable", label: "Wages payable", accountClass: "liability" };
+export const PAYE_ACCOUNT: ControlAccount = { systemKey: "paye_payable", label: "PAYE payable", accountClass: "liability" };
+export const KIWISAVER_ACCOUNT: ControlAccount = { systemKey: "kiwisaver_payable", label: "KiwiSaver payable", accountClass: "liability" };
+export const ESCT_ACCOUNT: ControlAccount = { systemKey: "esct_payable", label: "ESCT payable", accountClass: "liability" };
+export const STUDENT_LOAN_ACCOUNT: ControlAccount = { systemKey: "student_loan_payable", label: "Student loan payable", accountClass: "liability" };
+export const WAGES_ACCOUNT: ControlAccount = { systemKey: "wages_payable", label: "Wages payable", accountClass: "liability" };
 
 type ItemAccount = { id: string; name: string; rank: number; accountId: string; accountCode: string };
 
@@ -1177,6 +1177,26 @@ export async function voidPayRun(
   if (run.status === "voided") throw new ConflictError(`${reference} has already been voided.`);
   if (run.status !== "approved") throw new ConflictError(`${reference} isn't approved, so there's nothing to void. Delete the draft instead.`);
   if (voidDate < run.pay_date) throw new ValidationError(`The void date can't be before the pay date (${run.pay_date}).`);
+  // Undo in order (PPAY3, PPAY12): wage payments, then IRD payments for its period, then the pay run.
+  const wagePayments = await tx.query<{ payment_number: string }>(
+    "select payment_number::text from payroll_wage_payments where pay_run_id = $1 and status = 'active' order by payment_number",
+    [run.id],
+  );
+  if (wagePayments.rows.length > 0) {
+    throw new ConflictError(`${reference} has wage payments (${wagePayments.rows.map((row) => `WAGES-${row.payment_number}`).join(", ")}). Void them first.`);
+  }
+  const irdPayments = await tx.query<{ payment_number: string; period_start: string; period_end: string }>(
+    `select payment_number::text, period_start::text, period_end::text from payroll_ird_payments
+      where status = 'active' and period_start <= $1 and period_end >= $1 order by payment_number`,
+    [run.pay_date],
+  );
+  if (irdPayments.rows.length > 0) {
+    const first = irdPayments.rows[0];
+    const names = irdPayments.rows.map((row) => `IRD-${row.payment_number}`).join(", ");
+    throw new ConflictError(
+      `${names} ${irdPayments.rows.length === 1 ? "pays" : "pay"} ${first.period_start} to ${first.period_end}, which includes ${reference}'s pay date. Void ${irdPayments.rows.length === 1 ? "it" : "them"} first.`,
+    );
+  }
   const original = await getJournal(tx, run.approval_journal_id!);
   const posted = await postJournalBody(
     tx,

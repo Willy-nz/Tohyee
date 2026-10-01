@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { cmp, dec, parseDecimalInput, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { requirePayrollAccess } from "@/lib/payroll/access";
+import { type IrdPaymentFrequency, parseIrdPaymentFrequency } from "@/lib/payroll/ird-due-dates";
 import { NOT_SUPPORTED } from "@/lib/payroll/rates";
 import { requireBoolean, requireIdempotencyKey, requireString } from "@/lib/validation";
 
@@ -359,28 +360,48 @@ export async function updatePayItem(tx: OrgTx, id: string, input: Record<string,
   return { payItem: toPayItem(await findPayItem(tx, id)) };
 }
 
-/** Payroll settings (PRUN7). */
-export type PayrollSettings = { approverMustDiffer: boolean };
+/** Payroll settings (PRUN7, PPAY9). */
+export type PayrollSettings = { approverMustDiffer: boolean; irdPaymentFrequency: IrdPaymentFrequency };
+
+async function readPayrollSettings(tx: OrgTx): Promise<PayrollSettings> {
+  const result = await tx.query<{ payroll_approver_must_differ: boolean; payroll_ird_payment_frequency: IrdPaymentFrequency }>(
+    "select payroll_approver_must_differ, payroll_ird_payment_frequency from organisation_settings where id = true",
+  );
+  return {
+    approverMustDiffer: result.rows[0]?.payroll_approver_must_differ ?? false,
+    irdPaymentFrequency: result.rows[0]?.payroll_ird_payment_frequency ?? "monthly",
+  };
+}
 
 export async function getPayrollSettings(tx: OrgTx): Promise<PayrollSettings> {
   await requirePayrollAccess(tx);
-  const result = await tx.query<{ payroll_approver_must_differ: boolean }>(
-    "select payroll_approver_must_differ from organisation_settings where id = true",
-  );
-  return { approverMustDiffer: result.rows[0]?.payroll_approver_must_differ ?? false };
+  return readPayrollSettings(tx);
 }
 
-/** Changes payroll settings (admins with payroll access; the route checks the role). */
+/**
+ * Changes payroll settings (admins with payroll access; the route checks the
+ * role). Each setting left out stays as it is. How often IRD is paid is
+ * monthly, or twice a month for employers IRD has told to (PPAY9).
+ */
 export async function updatePayrollSettings(tx: OrgTx, input: Record<string, unknown>): Promise<PayrollSettings> {
   await requirePayrollAccess(tx);
-  const approverMustDiffer = requireBoolean(input.approverMustDiffer, "approverMustDiffer");
-  const updated = await tx.query("update organisation_settings set payroll_approver_must_differ = $1 where id = true", [approverMustDiffer]);
+  const current = await readPayrollSettings(tx);
+  if (input.approverMustDiffer === undefined && input.irdPaymentFrequency === undefined) {
+    throw new ValidationError("Give approverMustDiffer or irdPaymentFrequency.");
+  }
+  const approverMustDiffer = input.approverMustDiffer === undefined ? current.approverMustDiffer : requireBoolean(input.approverMustDiffer, "approverMustDiffer");
+  const irdPaymentFrequency =
+    input.irdPaymentFrequency === undefined ? current.irdPaymentFrequency : parseIrdPaymentFrequency(input.irdPaymentFrequency);
+  const updated = await tx.query(
+    "update organisation_settings set payroll_approver_must_differ = $1, payroll_ird_payment_frequency = $2 where id = true",
+    [approverMustDiffer, irdPaymentFrequency],
+  );
   if (updated.rowCount !== 1) throw new NotFoundError("The organisation's settings weren't found.");
   await writeAuditEvent(tx, {
     eventType: "payroll_settings.updated",
     entityType: "organisation_settings",
     entityId: "payroll",
-    details: { approverMustDiffer },
+    details: { approverMustDiffer, irdPaymentFrequency },
   });
-  return { approverMustDiffer };
+  return { approverMustDiffer, irdPaymentFrequency };
 }

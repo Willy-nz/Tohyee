@@ -21,6 +21,7 @@ export const ORIGIN_LABELS: Record<string, string> = {
   customer_overpayment_refund: "Overpayment refund",
   sales_credit_note_refund: "Credit note refund",
   supplier_credit_note_refund: "Supplier credit note refund",
+  payroll: "Payroll",
 };
 
 export function originLabel(origin: string): string {

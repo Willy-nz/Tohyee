@@ -3,18 +3,18 @@ import { roleAtLeast } from "@/lib/auth/roles";
 import { ForbiddenError } from "@/lib/errors";
 import { getPayrollSettings, updatePayrollSettings } from "@/lib/payroll/pay-items";
 
-/** Payroll settings (example PRUN7). Reading needs payroll access; changing needs payroll access and the admin role. */
+/** Payroll settings (examples PRUN7, PPAY9). Reading needs payroll access; changing needs payroll access and the admin role. */
 export const GET = route(async (request) => {
   const settings = await withPayrollAccess(request, searchParams(request).get("organisationId"), (tx) => getPayrollSettings(tx));
   return json({ settings });
 });
 
-/** Body: { organisationId, approverMustDiffer }. */
+/** Body: { organisationId, approverMustDiffer?, irdPaymentFrequency? ("monthly" or "twice_monthly") }. */
 export const PUT = route(async (request) => {
   const body = await readJson(request);
   const settings = await withPayrollAccess(request, body.organisationId, (tx, { membership }) => {
     if (!roleAtLeast(membership.role, "admin")) throw new ForbiddenError("Only admins can change payroll settings.");
-    return updatePayrollSettings(tx, { approverMustDiffer: body.approverMustDiffer });
+    return updatePayrollSettings(tx, { approverMustDiffer: body.approverMustDiffer, irdPaymentFrequency: body.irdPaymentFrequency });
   });
   return json({ settings });
 });

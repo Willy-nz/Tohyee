@@ -66,7 +66,8 @@ proves it". Test names start with the example IDs they cover:
   GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PE1, PE2)
   and `tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE13)
   and `tests/integration/payroll-pay-runs.test.ts` (PRUN1-PRUN11, not yet
-  approved), all against
+  approved) and `tests/integration/payroll-payments.test.ts` (PPAY1-PPAY12,
+  not yet approved), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6), `tests/unit/repeating-bill-rules.test.ts`
@@ -87,7 +88,9 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/payroll-ird-tables.test.ts` IRD's payroll rates and
   calculations (PR1-PR16), and `tests/unit/payroll-allocation.test.ts`
   the payroll % split (PE3-PE5), and `tests/unit/payroll-pay-calculation.test.ts`
-  one employee's pay in a pay run (PRUN1-PRUN4, PRUN8), and `tests/unit/sales-platforms.test.ts`
+  one employee's pay in a pay run (PRUN1-PRUN4, PRUN8), and
+  `tests/unit/payroll-ird-due-dates.test.ts` IRD payroll periods and due
+  dates (PPAY4, PPAY9), and `tests/unit/sales-platforms.test.ts`
   the webhook signature check, Shopify record shapes and which value is kept
   (SPC2, SPC3, SPC5, SPC6, SPC8), and `tests/unit/sales-platforms-screen.test.ts`
   the sync log on the settings screen (SPC10)
@@ -8545,6 +8548,267 @@ Payroll deductions payable**.
 13. **Splitting one pay item differently** from the employee's allocation
     (e.g. overtime always to one department) isn't built. Needed before
     timesheets (P9)?
+
+## NZ payroll — paying wages and IRD (examples not yet approved by Jess)
+
+Stage P4 of payroll (#60). Jess hasn't approved these. An approved pay run
+(P3) leaves net pay owing to employees on **2240 Wages payable** and the
+deductions owing to IRD on **2200 PAYE payable** (including the ACC
+earners' levy), **2230 Student loan payable**, **2210 KiwiSaver payable**
+(employee deductions and employer contributions net of ESCT) and **2220
+ESCT payable**. P4 records the money leaving the bank for both: a **wage
+payment** (Dr 2240, Cr the bank) from a pay run, and an **IRD payroll
+payment** (Dr each liability, Cr the bank) for an IRD period. Each posts
+one journal (origin "payroll"), so period locks apply, its bank line can be
+matched to a statement line like any other payment, and it's undone by
+voiding it (the exact reversal), never by correcting the journal.
+
+Sources, law first. **IRD**, [Paying deductions to Inland
+Revenue](https://www.ird.govt.nz/employing-staff/payday-filing/paying-deductions-to-inland-revenue)
+(last updated 23 Mar 2026, read 1 Oct 2026): "If your gross annual PAYE
+and ESCT is less than $500,000 you: need to pay deductions monthly, by the
+20th of the following month"; above $500,000 "twice a month": wages paid
+1st-15th "By the 20th of the same month", wages paid 16th-end of month "By
+the 5th of the following month. Note: For period 16-31 December pay by 15
+January not 5 January"; one payment to the EMP account can cover "pay as you
+earn, child support deductions, KiwiSaver deductions, KiwiSaver
+contributions, student loan deductions, Employer Superannuation
+Contribution". IRD, [When to pay](https://www.ird.govt.nz/managing-my-tax/make-a-payment/when-to-pay)
+(last updated 1 Apr 2026): "For due dates that fall on a weekend or public
+holiday, we need to receive your payment on or before the next working
+day." Employment information is a different deadline ("within 2 working
+days of each payday" when filing electronically,
+[Payday filing](https://www.ird.govt.nz/employing-staff/payday-filing),
+last updated 24 Feb 2026); filing it is stage P6, not here. Then
+**NetSuite** for paying liabilities: Pay Payroll Liabilities lists what's
+owing by payroll item for a date range and lets you tick the items to pay,
+so part payments are allowed
+([Making Payroll Liability Payments](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N954201.html)).
+NetSuite pays wages when a payroll batch is committed (US direct deposit),
+which has no NZ answer, so **Xero Payroll NZ** for wages: the pay run's net
+pay sits on Wages payable and the bank payment is coded to Wages payable,
+not wages expense ([a Xero partner's guide](https://www.livingbusiness.co.nz/blog/reconcile-wages-in-xero-payroll);
+Xero Central couldn't be opened by the agent's tools).
+
+Tests: `tests/unit/payroll-ird-due-dates.test.ts` (IRD periods and due
+dates, PPAY4, PPAY9) and `tests/integration/payroll-payments.test.ts`
+(PPAY1-PPAY12, against PostgreSQL and the API routes).
+
+The figures come from **PRUN1** (pay run PAYRUN-1, Fortnightly salaries,
+pay date 14 Oct 2026: Hemi Walker net 2,042.50, Kiri Tane net 1,657.00,
+total **3,699.50**; PAYE 898.58, KiwiSaver 160.26, ESCT 28.20) and **PRUN3**
+(Aroha Ngata, Four-weekly, pay date 14 Oct 2026, its pay run is PAYRUN-2
+here: net **2,590.50**; PAYE 589.72, student loan 197.28, KiwiSaver
+223.65, ESCT 21.35). The bank account is **1000** (base currency NZD).
+
+### Paying wages
+
+- **PPAY1 Pay PRUN1's net wages in one payment.** On PAYRUN-1, Ben (a
+  bookkeeper with payroll access) pays the wages: payment date **14 Oct
+  2026**, from **1000**, amount **3,699.50** (the screen fills in what's
+  unpaid). Tohyee posts journal **WAGES-1** dated 14 Oct 2026, origin
+  "payroll", description "Wages paid for pay run PAYRUN-1: Fortnightly
+  salaries, 2026-09-28 to 2026-10-11":
+
+  | Account | Description | Debit | Credit |
+  | --- | --- | --- | --- |
+  | 2240 Wages payable | Net pay | 3,699.50 | |
+  | 1000 Bank | Net pay | | 3,699.50 |
+
+  PAYRUN-1 then shows net pay 3,699.50, paid 3,699.50, **unpaid 0.00**,
+  and the payment in its list. Refused: 3,699.51 before the payment ("That's
+  more than the 3,699.50 of net pay left to pay on PAYRUN-1."), and 0.01
+  after it ("PAYRUN-1's net pay is already paid in full."); a payment dated
+  **13 Oct 2026**, before the pay date ("The payment date can't be before
+  PAYRUN-1's pay date (2026-10-14)."); a payment on a draft or voided pay
+  run; a payment from an account that isn't a bank or credit card account,
+  is archived, or isn't in NZD (as for supplier payments). PAYRUN-2's net
+  pay is paid the same way: **WAGES-4**, 14 Oct 2026, 2,590.50.
+
+- **PPAY2 Paying each employee separately (for matching).** When the bank
+  shows one line per person, wages can be paid per employee instead. After
+  WAGES-1 is voided (PPAY3), Ben pays PAYRUN-1 per employee on 14 Oct 2026:
+  Hemi Walker **2,042.50** (WAGES-2) and Kiri Tane **1,657.00** (WAGES-3).
+  Each journal is Dr 2240 / Cr 1000 for that amount with line description
+  "Net pay" and journal description "Wages paid for pay run PAYRUN-1:
+  Fortnightly salaries, 2026-09-28 to 2026-10-11 (one employee)": **never
+  the employee's name** (decision 6), since anyone who can see the bank
+  account sees its journal lines. The pay run's payment list (payroll access
+  only) shows whose each one is. Refused: Hemi 2,042.51 ("That's more than
+  the 2,042.50 of Hemi Walker's net pay left to pay on PAYRUN-1."); someone
+  who isn't on the pay run; and mixing the two ways on one pay run, because
+  a payment for the whole run can't say whose pay it was: "PAYRUN-1 is being
+  paid per employee. Pay the rest per employee too, or void those payments
+  first." (and the other way round, "PAYRUN-1 is being paid as a whole...").
+  Part payments are allowed either way, up to what's unpaid.
+
+- **PPAY3 Voiding a wage payment, and the order of undoing.** With WAGES-1
+  active, voiding PAYRUN-1 is refused: "PAYRUN-1 has wage payments
+  (WAGES-1). Void them first." (the database refuses it too). Ben voids
+  WAGES-1 dated **14 Oct 2026**: journal **VOID-WAGES-1**, the exact
+  reversal (Dr 1000 3,699.50 / Cr 2240 3,699.50), marked as WAGES-1's
+  reversal; PAYRUN-1 is unpaid 3,699.50 again. A void date before the
+  payment date is refused, and so is a payment voided twice. A payment
+  reconciled with a bank statement line can't be voided until it's
+  unreconciled (PPAY7). Once no active payments are left, the pay run can be
+  voided (PPAY12).
+
+### Paying IRD
+
+- **PPAY4 What's owing to IRD for October 2026.** The organisation pays IRD
+  **monthly** (Payroll › Pay items, "How often you pay IRD": monthly, or
+  twice a month for employers whose gross annual PAYE and ESCT is
+  $500,000 or more; IRD tells the employer which, Tohyee doesn't guess).
+  An IRD period counts approved pay runs (not voided) **by pay date**, as
+  IRD's rule does ("wages paid 1st-15th"). PAYRUN-1 and PAYRUN-2 are both
+  paid on 14 Oct 2026, so Payroll › IRD payments shows for **1 Oct to 31
+  Oct 2026**, **due Friday 20 Nov 2026**:
+
+  | Liability | Account | PAYRUN-1 | PAYRUN-2 | Owing |
+  | --- | --- | --- | --- | --- |
+  | PAYE (incl. ACC earners' levy) | 2200 | 898.58 | 589.72 | **1,488.30** |
+  | Student loan | 2230 | 0.00 | 197.28 | **197.28** |
+  | KiwiSaver (employee and employer) | 2210 | 160.26 | 223.65 | **383.91** |
+  | ESCT | 2220 | 28.20 | 21.35 | **49.55** |
+  | **Total** | | 1,087.04 | 1,032.00 | **2,119.04** |
+
+  The amounts are the pay runs' own credits to those accounts (their stored
+  totals), so they always agree with the journals. After-tax deductions
+  such as union fees (2250) aren't paid to IRD and aren't listed. Child
+  support isn't supported yet (PRUN8), so there's none to pay.
+
+- **PPAY5 A part payment, then the rest.** On **19 Nov 2026** Ben pays
+  **PAYE 1,000.00** only, from 1000: journal **IRD-1**, description "IRD
+  payroll payment for 2026-10-01 to 2026-10-31": Dr 2200 "PAYE" 1,000.00,
+  Cr 1000 "IRD payroll payment" 1,000.00. October then shows PAYE paid
+  1,000.00, owing **488.30**, total owing **1,119.04**. On **20 Nov 2026**
+  he pays the rest in one payment, **IRD-2**:
+
+  | Account | Description | Debit | Credit |
+  | --- | --- | --- | --- |
+  | 2200 PAYE payable | PAYE | 488.30 | |
+  | 2230 Student loan payable | Student loan | 197.28 | |
+  | 2210 KiwiSaver payable | KiwiSaver | 383.91 | |
+  | 2220 ESCT payable | ESCT | 49.55 | |
+  | 1000 Bank | IRD payroll payment | | 1,119.04 |
+
+  October is then owing 0.00 on every liability. The payment date can't be
+  before the period starts (1 Oct 2026). Paying after the due date is
+  allowed (the screen shows it as late); Tohyee doesn't work out IRD's
+  late payment penalties or interest.
+
+- **PPAY6 Overpaying is refused.** Before IRD-2, paying PAYE **488.31** for
+  October is refused: "That's more than the 488.30 of PAYE owing for
+  2026-10-01 to 2026-10-31." After IRD-2, any amount is refused the same
+  way, with 0.00. Paying for **November 2026**, with no pay runs, is refused
+  ("Nothing is owing to IRD for 2026-11-01 to 2026-11-30."), and so is a
+  period that isn't one of IRD's: for a monthly payer a period must start
+  on the 1st ("For monthly IRD payments the period starts on the 1st of a
+  month."). Each liability is checked on its own: a payment that's right in
+  total but too much on one liability is refused.
+
+- **PPAY7 Matching to the bank statement.** The bank statement for 1000 has
+  **14 Oct 2026, -2,042.50**, **14 Oct 2026, -1,657.00** and **20 Nov 2026,
+  -1,119.04**. On the -2,042.50 line, Tohyee suggests WAGES-2's bank line
+  first (exact amount, origin "Payroll", reference WAGES-2, description "Net
+  pay"), and matching it reconciles the line and posts nothing, like any
+  match (BK4). The -1,119.04 line is matched to IRD-2 the same way. While
+  matched, voiding WAGES-2 or IRD-2 is refused ("This is reconciled with a
+  bank statement line ... Unreconcile it first"); unreconcile, then void.
+
+- **PPAY8 Period locks.** With the lock date at **31 Oct 2026**, a wage
+  payment dated **30 Oct 2026** is refused ("2026-10-30 is in a locked
+  period (locked up to 2026-10-31). Use a later date, or ask an owner or
+  admin to reopen the period on Period close."), and so is voiding a payment
+  with a void date in the locked period and an IRD payment dated 30 Oct
+  2026. Nothing is posted. Dated 2 Nov 2026, the same wage payment (or a
+  void) is accepted: the pay run's journal stays in October and the payment
+  is in November.
+
+- **PPAY9 IRD's due dates.** From IRD's rules above, worked out per period:
+
+  | Pays IRD | Period (by pay date) | Due | Day |
+  | --- | --- | --- | --- |
+  | monthly | 1 Oct to 31 Oct 2026 | 20 Nov 2026 | Friday |
+  | monthly | 1 Nov to 30 Nov 2026 | 20 Dec 2026 | Sunday: IRD accepts it on Monday **21 Dec 2026** |
+  | monthly | 1 Dec to 31 Dec 2026 | 20 Jan 2027 | Wednesday |
+  | twice a month | 1 Oct to 15 Oct 2026 | 20 Oct 2026 | Tuesday |
+  | twice a month | 16 Oct to 31 Oct 2026 | 5 Nov 2026 | Thursday |
+  | twice a month | 16 Nov to 30 Nov 2026 | 5 Dec 2026 | Saturday: Monday **7 Dec 2026** |
+  | twice a month | 16 Dec to 31 Dec 2026 | **15 Jan 2027** (not 5 Jan) | Friday |
+
+  A due date on a Saturday or Sunday shows the Monday after as "IRD accepts
+  payment by". Public holidays aren't checked (Tohyee has no list of them
+  yet), so the screen says "If that day is a public holiday, IRD accepts
+  payment on the next working day." The due date is shown, not enforced.
+  For a twice-monthly payer, October 2026's pay runs on 14 Oct are in **1-15
+  Oct 2026, due 20 Oct 2026**. If the frequency changes, a new payment for
+  a period that overlaps one with active IRD payments but isn't the same
+  period is refused ("IRD-3 already pays 2026-10-01 to 2026-10-31. Pay that
+  period, or void IRD-3 first.").
+
+### Access, privacy and order
+
+- **PPAY10 Payroll access, decision 6 and the audit trail.** Paying wages
+  and IRD, and seeing either screen, needs the bookkeeper role and payroll
+  access: Noah (a bookkeeper without it) gets "You need payroll access to
+  see payroll…" (403), as does a viewer; changing how often IRD is paid
+  needs an admin. Journal lines and their descriptions never name an
+  employee (only "Net pay", the liability names and the WAGES-n, IRD-n and
+  PAYRUN-n references), so viewers see payroll in the ledger and the bank
+  only as these totals. Audit events for wage and IRD payments (recorded,
+  voided) hold the pay run, period, dates, bank account code, journal and
+  whether it was one employee's pay, never an amount, a bank account number
+  or an IRD number; the "journal posted" event leaves out the total for
+  payroll journals (PRUN9).
+
+- **PPAY11 Refused rather than guessed.**
+  - **A bank file for paying wages** (a direct credit or batch payment
+    file): Tohyee has no bank batch file format yet (supplier batch payments
+    don't make one either), so none is made; record the payments and pay
+    them in the bank's own screens. Which bank formats are wanted is a
+    question for Jess.
+  - **Child support** and **payroll giving** (not deducted yet, PRUN8).
+  - Working out **IRD's penalties and interest** for late payment, and
+    **IRD's direct debit** or other ways of paying.
+  - Paying wages **before the pay date** (a direct credit that leaves the
+    day before): the payment is dated the pay date or later; a bank line a
+    day or two earlier can still be matched to it (60-day window).
+  - **Foreign-currency bank accounts** for wages or IRD.
+
+- **PPAY12 Undoing in order.** Each step needs the one after it undone
+  first: a **pay run** can't be voided while it has active wage payments
+  (PPAY3) or while an active IRD payment pays the period its pay date is in
+  ("IRD-1, IRD-2 pay 2026-10-01 to 2026-10-31, which includes PAYRUN-2's
+  pay date. Void them first."), and a payment matched to a bank line can't
+  be voided until it's unreconciled (PPAY7). Voiding PAYRUN-2 on **25 Nov
+  2026** therefore goes: unreconcile the -1,119.04 line; void IRD-2 and
+  IRD-1 (25 Nov 2026); void WAGES-4 (already voided in PPAY8 here); then
+  void PAYRUN-2. October then owes PAYRUN-1's deductions only: PAYE 898.58,
+  student loan 0.00, KiwiSaver 160.26, ESCT 28.20, total **1,087.04**.
+
+### Questions for Jess (paying wages and IRD)
+
+1. **Bank files.** Which NZ bank batch formats should Tohyee make for
+   wages (and supplier payments): ASB, ANZ, BNZ, Westpac, Kiwibank? Each has
+   its own; none is built, so P4 makes no file.
+2. **Monthly or twice a month** is a setting chosen by the organisation, as
+   IRD tells each employer. Should Tohyee warn when the year's PAYE and
+   ESCT pass $500,000? (IRD's page says "less than" and "more than"
+   $500,000 and doesn't say which side exactly $500,000 is on.)
+3. **December for monthly payers**: IRD's page gives 15 January only for
+   twice-monthly payers' 16-31 December; monthly payers' December is shown
+   as due 20 January, following the page. Please confirm against IRD's
+   IR328 calendar.
+4. **Public holidays** move a due date to the next working day; Tohyee
+   moves weekends only, until it has a dated list of public holidays (P8).
+5. **Voiding a pay run IRD has already been paid for** is refused until the
+   IRD payment is voided (PPAY12). Should it instead leave a credit with
+   IRD to use in a later period?
+6. **Paying wages before the pay date** is refused (PPAY11). Allow it a few
+   days early?
+7. **Paid as a whole or per employee, not both** on one pay run (PPAY2).
+   OK?
 
 ## Holidays Act leave (examples not yet approved by Jess)
 

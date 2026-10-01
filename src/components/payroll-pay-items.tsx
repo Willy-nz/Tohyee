@@ -120,6 +120,13 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
       settings.reload,
     );
 
+  const changeIrdFrequency = (irdPaymentFrequency: string) =>
+    void run(
+      () => api("/api/payroll/settings", { method: "PUT", body: { organisationId, irdPaymentFrequency } }),
+      irdPaymentFrequency === "twice_monthly" ? "IRD payments are now twice a month." : "IRD payments are now monthly.",
+      settings.reload,
+    );
+
   const accountList = accounts.data?.accounts ?? [];
 
   return (
@@ -271,6 +278,25 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
             />
             Someone other than the person who prepared a pay run must approve it
           </label>
+        )}
+        {isAdmin ? null : <p className={ui.muted}>Only admins can change this.</p>}
+      </Card>
+
+      <Card title="Paying IRD">
+        {settings.loading ? <Empty>Loading…</Empty> : settings.error ? <Notice tone="error">{settings.error}</Notice> : (
+          <Field
+            label="How often you pay IRD"
+            hint="IRD: monthly by the 20th of the following month if your gross annual PAYE and ESCT is less than $500,000; otherwise twice a month (wages paid 1st-15th by the 20th, 16th-end by the 5th of the next month, 16-31 December by 15 January)."
+          >
+            <select
+              disabled={!isAdmin || busy}
+              value={settings.data?.settings.irdPaymentFrequency ?? "monthly"}
+              onChange={(event) => changeIrdFrequency(event.target.value)}
+            >
+              <option value="monthly">Monthly</option>
+              <option value="twice_monthly">Twice a month</option>
+            </select>
+          </Field>
         )}
         {isAdmin ? null : <p className={ui.muted}>Only admins can change this.</p>}
       </Card>

@@ -58,6 +58,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ payroll_pay_items        pay items: earnings, after-tax deductions and employer KiwiSaver, each with its account and tax treatment (archived, never deleted)
 ├─ payroll_pay_runs, payroll_pay_run_employees, payroll_pay_run_lines   pay runs: drafts, then approved (with a snapshot of each person's pay) or voided; frozen once approved
 ├─ payroll_pay_run_postings  how each approved pay run's earnings and employer KiwiSaver were split per employee by allocation, and which journal line each went to (append-only; payroll access only)
+├─ payroll_wage_payments    net wages paid from an approved pay run, as a whole or per employee (voided, never changed or deleted)
+├─ payroll_ird_payments, payroll_ird_payment_lines   payments to IRD for an IRD period, per liability (voided, never changed or deleted; lines append-only)
 ├─ rd_activities, rd_activity_supports   the R&D activity register (archived, never deleted) and which core activities each supporting one supports
 ├─ rd_approvals, rd_approval_activities   general approvals from IRD and the activities they cover (withdrawn, never deleted)
 ├─ rd_files               files on R&D records (append-only; a new version replaces, never deletes)
@@ -296,6 +298,29 @@ posts a reversing journal; payroll journals can't be corrected through the
 general ledger. When the organisation turns on
 `payroll_approver_must_differ`, anyone who created or changed a draft
 (`prepared_by_user_ids`) can't approve it.
+
+**Paying wages and IRD** (payroll stage P4, examples PPAY1-PPAY12) live in
+`src/lib/payroll/wage-payments.ts` and `ird-payments.ts`, with IRD's periods
+and due dates as pure functions in `ird-due-dates.ts` (sources in the file).
+A wage payment pays an approved pay run's net pay (its stored snapshot) as a
+whole or for one employee on it, never both on one run, never more than
+what's unpaid, dated on or after the pay date: one journal (origin
+`payroll`, reference WAGES-n), Dr the `wages_payable` account / Cr the bank,
+lines described "Net pay" so the bank account never names anyone (decision
+6). An IRD payment pays one IRD period (by pay date; monthly or twice a
+month from `organisation_settings.payroll_ird_payment_frequency`): what's
+owing per liability is worked out from the approved pay runs' stored PAYE,
+student loan, KiwiSaver (employee plus employer net of ESCT) and ESCT less
+active IRD payment lines for the same period, and each line is refused above
+it; recording takes the settings row lock so two can't overpay. One journal
+(reference IRD-n) debits each liability's control account and credits the
+bank. Both are matched to statement lines by the existing reconciliation
+(any journal line on the bank account is a suggestion). Voiding posts the
+exact reversal; the database refuses changing or deleting payments other
+than voiding once, refuses a wage payment above what's unpaid or on an
+unapproved run, and refuses voiding a pay run while it has active wage
+payments or an active IRD payment covers its pay date. Audit details hold no
+amounts, bank account numbers or IRD numbers.
 
 People who aren't members get "not found", so organisation IDs can't be
 probed. Every audit record stores the signed-in user, never a name typed into
