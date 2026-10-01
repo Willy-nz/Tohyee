@@ -57,7 +57,8 @@ payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
 overnight (each checked locally with typecheck, lint, unit tests, the full
 integration suite and the build, then by CI on main): P6 payday filing file
 (0064), RDTI R3 claim report (0065), CRM editable stages and forecasts
-(0066), P9 timesheets (0067) and P10 payroll reports (no migration).
+(0066), P9 timesheets (0067), P10 payroll reports (no migration) and P11
+workforce budgets (0068).
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
@@ -249,8 +250,7 @@ only be run by certain people. Each item is its own branch and PR.
       CSV export of each, audited without figures. Not built: leave reports
       (P8), reports by pay period, a view without payroll access. Screens
       weren't checked in a browser.
-- [x] **P11 Workforce budgets** (tenant migration 0068), built 2 Oct 2026 on
-      branch `claude/payroll-p11-workforce-budgets` (not merged yet);
+- [x] **P11 Workforce budgets** (tenant migration 0068), merged 2 Oct 2026;
       examples WB1-WB7 await Jess (questions at the end of the section),
       decisions 112-123. Payroll › Workforce budget, payroll access only:
       wages by employee or position (to be hired) and month, salary × FTE or
