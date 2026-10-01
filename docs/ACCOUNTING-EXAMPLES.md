@@ -8938,7 +8938,7 @@ PostgreSQL and the API routes).
 
 - **PBF2 ASB MT9 file for PAYRUN-1.** Bank account 1010 "ASB cheque" is set
   up as "ASB FastNet MT9", account number 12-3011-0333444-00. The file
-  `PAYRUN-1 ASB 2026-10-14.mt9` has four records of exactly 160 characters,
+  `PAYRUN-1 ASB 2026-10-14.txt` has four records of exactly 160 characters,
   each followed by CR (shown with `·` for each space and the record's
   pieces split up):
 
