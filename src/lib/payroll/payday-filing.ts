@@ -58,6 +58,10 @@ export type PaydayFilingEmployee = {
   /** Employer KiwiSaver contributions net of ESCT. */
   kiwiSaverEmployerNet: string;
   esct: string;
+  /** Taxable earnings not liable for the ACC earners' levy (field 13): redundancy (decision 129). */
+  notLiableForAccLevy?: string;
+  /** An extra pay taxed at the lowest rate (field 14; spec 5.11.3, decision 129). */
+  lumpSumLowestRate?: boolean;
 };
 
 export type PaydayFilingTotals = {
@@ -226,8 +230,8 @@ export function makeEmploymentInformationFile(input: {
       hundredths(employee.hours, `${label}'s hours`),
       hundredths(employee.grossEarnings, `${label}'s gross earnings`),
       zero, // prior period gross adjustments
-      zero, // earnings not liable for the ACC earners' levy (decision 58)
-      zero, // lump sum indicator
+      hundredths(employee.notLiableForAccLevy ?? "0", `${label}'s earnings not liable for the ACC earners' levy`),
+      employee.lumpSumLowestRate ? "1" : zero, // lump sum indicator
       hundredths(employee.paye, `${label}'s PAYE`),
       zero, // prior period PAYE adjustment
       zero, // child support
@@ -251,6 +255,7 @@ export function makeEmploymentInformationFile(input: {
   const kiwiSaver = total((employee) => employee.kiwiSaverDeductions);
   const employerNet = total((employee) => employee.kiwiSaverEmployerNet);
   const esct = total((employee) => employee.esct);
+  const notLiable = total((employee) => employee.notLiableForAccLevy ?? "0");
   const deducted = [paye, studentLoan, kiwiSaver, employerNet, esct].reduce(add, ZERO_DECIMAL);
   const money = (value: Decimal) => toFixedString(value, 2);
 
@@ -271,7 +276,7 @@ export function makeEmploymentInformationFile(input: {
     String(employees.length),
     hundredths(money(gross), "Total gross earnings"),
     zero, // prior period gross adjustments
-    zero, // earnings not liable for the ACC earners' levy
+    hundredths(money(notLiable), "Total earnings not liable for the ACC earners' levy"),
     hundredths(money(paye), "Total PAYE"),
     zero, // prior period PAYE adjustment
     zero, // child support

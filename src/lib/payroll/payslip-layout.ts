@@ -80,6 +80,13 @@ export function payslipLayout(payslip: Payslip): PayslipLayout {
       ["KiwiSaver employer", formatMoney(ytd.kiwiSaverEmployer)],
       ["ESCT", formatMoney(ytd.esct)],
     ],
-    notes: [`Pay run ${payslip.payRunReference}.`],
+    notes: [
+      `Pay run ${payslip.payRunReference}.`,
+      ...(payslip.extraPay
+        ? [`Extra pay of $${formatMoney(payslip.extraPay.amount)} taxed at ${payslip.extraPay.taxRate}% under IRD's extra pay rules.`]
+        : []),
+      ...(payslip.finishDate ? [`Final pay: employment finished on ${formatDate(payslip.finishDate)}.`] : []),
+      ...(payslip.holidayPayWorkedOutElsewhere ? ["Holiday pay on finishing was worked out outside Tohyee."] : []),
+    ],
   };
 }

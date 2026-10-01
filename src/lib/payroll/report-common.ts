@@ -1,6 +1,7 @@
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { add, dec, type Decimal, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { PAY_ITEM_KIND_ORDER_SQL } from "@/lib/payroll/pay-items";
 import { payRunReference } from "@/lib/payroll/pay-runs";
 import { assertReportRange, PAY_FIGURE_KEYS, type PayFigures } from "@/lib/payroll/report-figures";
 
@@ -101,7 +102,7 @@ export async function payItemsInOrder(tx: OrgTx): Promise<Array<{ id: string; na
   const result = await tx.query<{ id: string; name: string; category: string; kind: string; account_id: string | null }>(
     `select id::text, name, category, kind, account_id::text from payroll_pay_items
       order by array_position(array['earnings', 'deduction', 'employer_contribution'], category),
-               array_position(array['ordinary_time', 'overtime', 'allowance', 'holiday_pay', 'reimbursement', 'after_tax_deduction', 'kiwisaver_employer'], kind),
+               array_position(${PAY_ITEM_KIND_ORDER_SQL}, kind),
                lower(name), id`,
   );
   return result.rows.map((row) => ({ id: row.id, name: row.name, category: row.category, kind: row.kind, accountId: row.account_id }));

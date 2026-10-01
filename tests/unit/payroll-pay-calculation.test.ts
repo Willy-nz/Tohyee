@@ -60,6 +60,10 @@ describe("one employee's pay in a pay run", () => {
       esct: "28.20",
       kiwiSaverEmployerNet: "66.03",
       employerCost: "2786.54",
+      extraPay: "0.00",
+      extraPayTax: "0.00",
+      extraPayTaxRate: null,
+      lumpSumLowestRate: false,
     });
   });
 
@@ -94,6 +98,10 @@ describe("one employee's pay in a pay run", () => {
       esct: "5.25",
       kiwiSaverEmployerNet: "25.55",
       employerCost: "953.40",
+      extraPay: "0.00",
+      extraPayTax: "0.00",
+      extraPayTaxRate: null,
+      lumpSumLowestRate: false,
     });
   });
 

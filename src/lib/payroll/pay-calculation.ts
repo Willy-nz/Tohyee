@@ -1,8 +1,9 @@
 import { ValidationError } from "@/lib/errors";
 import { addDays, monthEndOf } from "@/lib/financial-year";
-import { add, cmp, dec, type Decimal, divide, isNegative, mul, roundHalfUp, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, type Decimal, divide, isNegative, isPositive, mul, roundHalfUp, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import {
   calculateEsct,
+  calculateExtraPayTax,
   calculatePaye,
   calculateStudentLoan,
   kiwiSaverEmployeeContribution,
@@ -31,6 +32,11 @@ const CALCULATION_FREQUENCY: Record<PayFrequency, string> = {
   four_weekly: "four-weekly",
   monthly: "monthly",
 };
+
+/** A pay group's frequency as IRD's calculations name it ("four_weekly" → "four-weekly"). */
+export function calculationFrequency(frequency: PayFrequency): string {
+  return CALCULATION_FREQUENCY[frequency];
+}
 
 const PERIODS_PER_YEAR: Record<PayFrequency, string> = { weekly: "52", fortnightly: "26", four_weekly: "13", monthly: "12" };
 const PERIOD_DAYS: Partial<Record<PayFrequency, number>> = { weekly: 7, fortnightly: 14, four_weekly: 28 };
@@ -73,6 +79,10 @@ export type PayLineInput = {
   taxable: boolean;
   /** Counts as gross salary or wages for KiwiSaver (spec 4.5.1). */
   kiwiSaver: boolean;
+  /** Taxed under IRD's extra pay rules (spec 5.11, 5.12; decision 125). */
+  extraPay?: boolean;
+  /** Liable for the ACC earners' levy; only redundancy isn't (spec 5.11.1 step 4.1). Defaults to taxable. */
+  accLevy?: boolean;
   amount: string;
 };
 
@@ -88,6 +98,11 @@ export type EmployeePayInput = {
   kiwiSaverEmployerRate: string;
   esctRate: string | null;
   lines: readonly PayLineInput[];
+  /**
+   * The annualised income the extra pays are taxed against (annualiseForExtraPay,
+   * decisions 126 and 130); needed only when a line is an extra pay.
+   */
+  extraPayAnnualised?: string | null;
 };
 
 export type EmployeePayResult = {
@@ -107,6 +122,14 @@ export type EmployeePayResult = {
   kiwiSaverEmployerNet: string;
   /** Gross plus the employer's gross KiwiSaver contribution. */
   employerCost: string;
+  /** Taxable extra pays in the pay (spec 5.11; decision 125). */
+  extraPay: string;
+  /** The part of PAYE that is the extra pays' tax, levy included. */
+  extraPayTax: string;
+  /** The extra pays' income tax rate (percent), or null without extra pays. */
+  extraPayTaxRate: string | null;
+  /** EI field 14: an extra pay taxed at the lowest rate (spec 5.11.3; decision 129). */
+  lumpSumLowestRate: boolean;
 };
 
 function sumOf(lines: readonly PayLineInput[], keep: (line: PayLineInput) => boolean): Decimal {
@@ -138,14 +161,34 @@ export function calculateEmployeePay(input: EmployeePayInput): EmployeePayResult
   }
 
   const taxable = sumOf(input.lines, (line) => line.category === "earnings" && line.taxable);
+  const extraPay = sumOf(input.lines, (line) => line.category === "earnings" && line.taxable && line.extraPay === true);
+  const extraPayAccLiable = sumOf(
+    input.lines,
+    (line) => line.category === "earnings" && line.taxable && line.extraPay === true && line.accLevy !== false,
+  );
   const nonTaxable = sumOf(input.lines, (line) => line.category === "earnings" && !line.taxable);
   const kiwiSaverEarnings = sumOf(input.lines, (line) => line.category === "earnings" && line.kiwiSaver);
   const deductions = sumOf(input.lines, (line) => line.category === "deduction");
   const gross = add(taxable, nonTaxable);
 
-  const pay = { gross: money(taxable), frequency, taxCode, payDate: input.payDate };
-  const paye = calculatePaye(pay);
-  const studentLoan = calculateStudentLoan(pay);
+  // The ordinary pay is taxed as before and the extra pays under IRD's extra pay rules; student loan is on the
+  // pay for the period, extra pays included (spec 5.11.1 step 2; decision 132).
+  const regular = { gross: money(sub(taxable, extraPay)), frequency, taxCode, payDate: input.payDate };
+  let extra: ReturnType<typeof calculateExtraPayTax> | null = null;
+  if (isPositive(extraPay)) {
+    if (input.extraPayAnnualised === undefined || input.extraPayAnnualised === null) {
+      throw new Error(`${input.name}'s extra pay has no annualised income to be taxed against.`);
+    }
+    extra = calculateExtraPayTax({
+      extraPay: money(extraPay),
+      accLiable: money(extraPayAccLiable),
+      annualised: input.extraPayAnnualised,
+      taxCode,
+      payDate: input.payDate,
+    });
+  }
+  const paye = money(add(dec(calculatePaye(regular)), dec(extra?.tax ?? "0")));
+  const studentLoan = calculateStudentLoan({ ...regular, gross: money(taxable) });
 
   let kiwiSaverEmployee = "0.00";
   let kiwiSaverEmployer = "0.00";
@@ -183,5 +226,9 @@ export function calculateEmployeePay(input: EmployeePayInput): EmployeePayResult
     esct,
     kiwiSaverEmployerNet,
     employerCost: money(add(gross, dec(kiwiSaverEmployer))),
+    extraPay: money(extraPay),
+    extraPayTax: extra?.tax ?? "0.00",
+    extraPayTaxRate: extra?.taxRate ?? null,
+    lumpSumLowestRate: extra?.lowestRate ?? false,
   };
 }

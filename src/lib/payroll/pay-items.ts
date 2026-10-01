@@ -12,10 +12,12 @@ import { requireBoolean, requireIdempotencyKey, requireString } from "@/lib/vali
  * Pay items (example PRUN10): the earnings, after-tax deductions and
  * employer contributions a pay run is made of, each with its account and
  * its tax treatment per IRD's Payroll Calculations and Business Rules
- * Specification (5.7, 5.11 and 4.5.1). Every organisation starts with a set
+ * Specification (5.7, 5.11, 5.12 and 4.5.1). Every organisation starts with a set
  * (migration 0058); admins with payroll access add more. "Taxable" means
- * PAYE, the ACC earners' levy and the student loan deduction together.
- * Archived, never deleted.
+ * PAYE, the ACC earners' levy and the student loan deduction together,
+ * except redundancy, which has no levy (decision 125). Extra pays, back pay,
+ * holiday pay on finishing and redundancy are taxed under IRD's extra pay
+ * rules (P12). Archived, never deleted.
  */
 
 export const PAY_ITEM_CATEGORIES = ["earnings", "deduction", "employer_contribution"] as const;
@@ -27,22 +29,40 @@ export const PAY_ITEM_KINDS = [
   "allowance",
   "holiday_pay",
   "reimbursement",
+  "extra_pay",
+  "back_pay",
+  "termination_holiday_pay",
+  "redundancy",
   "after_tax_deduction",
   "kiwisaver_employer",
 ] as const;
 export type PayItemKind = (typeof PAY_ITEM_KINDS)[number];
 
 /** The kinds an admin can add; the others come with the organisation. */
-export const ADDABLE_PAY_ITEM_KINDS = ["overtime", "allowance", "holiday_pay", "reimbursement", "after_tax_deduction"] as const;
+export const ADDABLE_PAY_ITEM_KINDS = [
+  "overtime",
+  "allowance",
+  "holiday_pay",
+  "reimbursement",
+  "extra_pay",
+  "back_pay",
+  "termination_holiday_pay",
+  "redundancy",
+  "after_tax_deduction",
+] as const;
+
+/** Kinds taxed under IRD's extra pay rules (spec 5.11, 5.12; decision 125). */
+export const EXTRA_PAY_KINDS: readonly PayItemKind[] = ["extra_pay", "back_pay", "termination_holiday_pay", "redundancy"];
+/** Kinds that arise from employment ending: only on a final pay, taxed by spec 5.12 (decision 130). */
+export const TERMINATION_KINDS: readonly PayItemKind[] = ["termination_holiday_pay", "redundancy"];
+
+/** The pay runs' order of kinds (journal lines, reports). */
+export const PAY_ITEM_KIND_ORDER_SQL = `array['ordinary_time', 'overtime', 'allowance', 'holiday_pay', 'extra_pay', 'back_pay',
+  'termination_holiday_pay', 'redundancy', 'reimbursement', 'after_tax_deduction', 'kiwisaver_employer']`;
 type AddableKind = (typeof ADDABLE_PAY_ITEM_KINDS)[number];
 
 /** Kinds that are refused rather than guessed (PRUN8), with what they are and when they come. */
 const REFUSED_KINDS: Record<string, string> = {
-  bonus: "bonuses and other extra pays (IRD's extra-pay rules, payroll stage P12)",
-  extra_pay: "bonuses and other extra pays (IRD's extra-pay rules, payroll stage P12)",
-  commission: "bonuses and other extra pays (IRD's extra-pay rules, payroll stage P12)",
-  back_pay: "back pay",
-  final_pay: "final pays",
   leave: "leave (Holidays Act, payroll stage P8; holiday pay is a typed amount for now)",
   annual_leave: "leave (Holidays Act, payroll stage P8; holiday pay is a typed amount for now)",
   sick_leave: "leave (Holidays Act, payroll stage P8; holiday pay is a typed amount for now)",
@@ -59,6 +79,10 @@ export const PAY_ITEM_KIND_LABELS: Record<PayItemKind, string> = {
   allowance: "Allowance",
   holiday_pay: "Holiday pay (typed amount)",
   reimbursement: "Reimbursement",
+  extra_pay: "Extra pay (bonus, gratuity, lump sum)",
+  back_pay: "Back pay",
+  termination_holiday_pay: "Holiday pay on finishing (worked out outside Tohyee)",
+  redundancy: "Redundancy",
   after_tax_deduction: "After-tax deduction",
   kiwisaver_employer: "KiwiSaver employer contribution",
 };
@@ -69,6 +93,10 @@ const CATEGORY_OF: Record<PayItemKind, PayItemCategory> = {
   allowance: "earnings",
   holiday_pay: "earnings",
   reimbursement: "earnings",
+  extra_pay: "earnings",
+  back_pay: "earnings",
+  termination_holiday_pay: "earnings",
+  redundancy: "earnings",
   after_tax_deduction: "deduction",
   kiwisaver_employer: "employer_contribution",
 };
@@ -151,8 +179,7 @@ export async function listPayItems(tx: OrgTx, options: { includeArchived?: boole
     `select ${PAY_ITEM_COLUMNS} from ${PAY_ITEM_FROM}
       where ($1::boolean or not p.is_archived)
       order by array_position(array['earnings', 'deduction', 'employer_contribution'], p.category),
-               array_position(array['ordinary_time', 'overtime', 'allowance', 'holiday_pay', 'reimbursement',
-                                    'after_tax_deduction', 'kiwisaver_employer'], p.kind),
+               array_position(${PAY_ITEM_KIND_ORDER_SQL}, p.kind),
                lower(p.name), p.id`,
     [options.includeArchived ?? false],
   );
@@ -168,7 +195,7 @@ function parseKind(input: unknown): AddableKind {
   }
   if (typeof input !== "string" || !(ADDABLE_PAY_ITEM_KINDS as readonly string[]).includes(input)) {
     throw new ValidationError(
-      `Kind must be one of: ${ADDABLE_PAY_ITEM_KINDS.join(", ")}. Bonuses, back pay, final pays, leave, child support and payroll giving are ${NOT_SUPPORTED.toLowerCase()}.`,
+      `Kind must be one of: ${ADDABLE_PAY_ITEM_KINDS.join(", ")} (bonuses and lump sums are extra_pay). Leave, child support and payroll giving are ${NOT_SUPPORTED.toLowerCase()}.`,
     );
   }
   return input as AddableKind;
@@ -225,17 +252,36 @@ function parseMultiplier(input: unknown): string {
   return text;
 }
 
-type Treatment = { paye: boolean; kiwiSaver: boolean };
+type Treatment = { paye: boolean; kiwiSaver: boolean; accLevy: boolean };
+
+/** Extra pays' fixed treatment (decision 125): redundancy has no levy and doesn't count for KiwiSaver. */
+const EXTRA_PAY_TREATMENT: Partial<Record<AddableKind, Treatment>> = {
+  extra_pay: { paye: true, kiwiSaver: true, accLevy: true },
+  back_pay: { paye: true, kiwiSaver: true, accLevy: true },
+  termination_holiday_pay: { paye: true, kiwiSaver: true, accLevy: true },
+  redundancy: { paye: true, kiwiSaver: false, accLevy: false },
+};
 
 /** What a kind is subject to (spec 5.7, 5.11, 4.5.1); only allowances vary. */
 function treatmentFor(kind: AddableKind, input: Record<string, unknown>): Treatment {
+  const extra = EXTRA_PAY_TREATMENT[kind];
+  if (extra) {
+    for (const [field, value] of [["taxable", extra.paye], ["countsForKiwiSaver", extra.kiwiSaver]] as const) {
+      if (input[field] !== undefined && requireBoolean(input[field], field) !== value) {
+        throw new ValidationError(
+          `${PAY_ITEM_KIND_LABELS[kind]} pay items are taxable and ${extra.kiwiSaver ? "count" : "don't count"} for KiwiSaver (decision 125).`,
+        );
+      }
+    }
+    return extra;
+  }
   if (kind === "allowance") {
     const paye = input.taxable === undefined ? true : requireBoolean(input.taxable, "Taxable");
     const kiwiSaver = input.countsForKiwiSaver === undefined ? paye : requireBoolean(input.countsForKiwiSaver, "Counts for KiwiSaver");
     if (kiwiSaver && !paye) {
       throw new ValidationError("An allowance that isn't taxable doesn't count for KiwiSaver either (spec 4.5.1).");
     }
-    return { paye, kiwiSaver };
+    return { paye, kiwiSaver, accLevy: paye };
   }
   if (input.taxable !== undefined || input.countsForKiwiSaver !== undefined) {
     const fixed = kind === "overtime" || kind === "holiday_pay";
@@ -250,7 +296,9 @@ function treatmentFor(kind: AddableKind, input: Record<string, unknown>): Treatm
       throw new ValidationError(`${PAY_ITEM_KIND_LABELS[kind]} pay items are ${fixed ? "always" : "never"} taxable and ${fixed ? "always" : "never"} count for KiwiSaver.`);
     }
   }
-  return kind === "overtime" || kind === "holiday_pay" ? { paye: true, kiwiSaver: true } : { paye: false, kiwiSaver: false };
+  return kind === "overtime" || kind === "holiday_pay"
+    ? { paye: true, kiwiSaver: true, accLevy: true }
+    : { paye: false, kiwiSaver: false, accLevy: false };
 }
 
 function assertAllTaxesTogether(input: Record<string, unknown>): void {
@@ -302,9 +350,9 @@ export async function createPayItem(tx: OrgTx, input: Record<string, unknown>): 
     `insert into payroll_pay_items (
        idempotency_key, request_hash, name, category, kind, account_id, rate_multiplier,
        subject_to_paye, subject_to_acc_levy, subject_to_student_loan, subject_to_kiwisaver, subject_to_esct
-     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $8, $8, $9, false)
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $10, $8, $9, false)
      on conflict (idempotency_key) do nothing returning id`,
-    [idempotencyKey, hash, name, category, kind, accountId, rateMultiplier, treatment.paye, treatment.kiwiSaver],
+    [idempotencyKey, hash, name, category, kind, accountId, rateMultiplier, treatment.paye, treatment.kiwiSaver, treatment.accLevy],
   );
   const id = inserted.rows[0]?.id;
   if (!id) {

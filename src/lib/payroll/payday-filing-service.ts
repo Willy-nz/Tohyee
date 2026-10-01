@@ -137,19 +137,26 @@ type EmployeeRow = {
   kiwisaver_employee: string | null;
   kiwisaver_employer_net: string | null;
   esct: string | null;
+  not_liable_for_acc_levy: string;
+  lump_sum_lowest_rate: boolean | null;
 };
 
 /** The pay run's employees in its own order (last name, first name), with the figures kept when it was approved. */
 async function loadEmployees(tx: OrgTx, runId: string): Promise<EmployeeRow[]> {
   const result = await tx.query<EmployeeRow>(
     `select pe.employee_id, pe.employee_name, e.first_name || ' ' || e.last_name as name_now, pe.tax_code,
-            e.start_date::text, e.finish_date::text, e.ird_number_ciphertext,
+            e.start_date::text, coalesce(pe.finish_date, e.finish_date)::text as finish_date, e.ird_number_ciphertext,
             (select coalesce(sum(l.quantity), 0)::text
                from payroll_pay_run_lines l join payroll_pay_items p on p.id = l.pay_item_id
               where l.pay_run_id = pe.pay_run_id and l.employee_id = pe.employee_id
                 and p.category = 'earnings' and l.quantity is not null) as hours,
             pe.taxable_earnings::text, pe.paye::text, pe.student_loan_deduction::text, pe.kiwisaver_employee::text,
-            pe.kiwisaver_employer_net::text, pe.esct::text
+            pe.kiwisaver_employer_net::text, pe.esct::text,
+            (select coalesce(sum(l.amount), 0)::text
+               from payroll_pay_run_lines l join payroll_pay_items p on p.id = l.pay_item_id
+              where l.pay_run_id = pe.pay_run_id and l.employee_id = pe.employee_id
+                and p.subject_to_paye and not p.subject_to_acc_levy) as not_liable_for_acc_levy,
+            pe.lump_sum_lowest_rate
        from payroll_pay_run_employees pe
        join payroll_employees e on e.id = pe.employee_id
       where pe.pay_run_id = $1
@@ -240,6 +247,8 @@ export async function makePayRunPaydayFilingFile(tx: OrgTx, runIdInput: unknown)
         kiwiSaverDeductions: row.kiwisaver_employee ?? "0",
         kiwiSaverEmployerNet: row.kiwisaver_employer_net ?? "0",
         esct: row.esct ?? "0",
+        notLiableForAccLevy: row.not_liable_for_acc_levy,
+        lumpSumLowestRate: row.lump_sum_lowest_rate ?? false,
       };
     }),
     fileStem: reference,

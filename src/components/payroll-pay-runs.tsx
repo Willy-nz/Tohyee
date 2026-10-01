@@ -14,6 +14,7 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { PayGroup } from "@/lib/payroll/groups";
 import type { PayItem } from "@/lib/payroll/pay-items";
+import type { PayRate } from "@/lib/payroll/pay-rates";
 import type { PayRun, PayRunEmployee, PayRunPosting, PayRunStatus, PayRunSummary, PayRunTotals } from "@/lib/payroll/pay-runs";
 import styles from "./payroll-employees.module.css";
 
@@ -145,8 +146,9 @@ export function PayRunList({ organisationId }: { organisationId: string }) {
 
 type DraftLine = { payItemId: string; quantity: string; rate: string; amount: string; description: string };
 
+/** Typed lines only: back pay worked out from pay rate history isn't edited here (XP10). */
 function draftLines(employee: PayRunEmployee): DraftLine[] {
-  return employee.lines.map((line) => ({
+  return employee.lines.filter((line) => line.backPayForPayRunId === null).map((line) => ({
     payItemId: line.payItemId,
     quantity: line.quantity ?? "",
     rate: line.quantity === null ? "" : line.rate ?? "",
@@ -218,6 +220,23 @@ function EmployeePay({
     }
   };
 
+  const backPayLines = employee.lines.filter((line) => line.backPayForPayRunId !== null);
+  const removeBackPay = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ payRun: PayRun }>(`/api/payroll/pay-runs/${run.id}/employees/${employee.employeeId}/back-pay`, {
+        method: "DELETE",
+        query: { organisationId },
+      });
+      onChanged(`Back pay taken off ${employee.name}'s pay.`, result.payRun);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const kiwiSaver =
     employee.kiwiSaverStatus === "enrolled"
       ? `KiwiSaver ${employee.kiwiSaverEmployeeRate}% / employer ${employee.kiwiSaverEmployerRate}%${employee.esctRate ? `, ESCT ${employee.esctRate}%` : ""}`
@@ -238,6 +257,7 @@ function EmployeePay({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {employee.problem ? <Notice tone="warning">{employee.problem}</Notice> : null}
+      {employee.notes.map((note) => <Notice key={note}>{note}</Notice>)}
       {employee.timesheets ? (
         <p className={ui.muted}>
           {employee.timesheets.count} approved timesheet{employee.timesheets.count === 1 ? "" : "s"} ({employee.timesheets.hours} h) cover{" "}
@@ -278,6 +298,11 @@ function EmployeePay({
               </div>
             </div>
           ))}
+          {backPayLines.length ? (
+            <p className={ui.muted}>
+              Back pay worked out from the pay rate history ({backPayLines.length} line{backPayLines.length === 1 ? "" : "s"}) stays as it is.
+            </p>
+          ) : null}
           <div className={ui.actions}>
             <Button
               variant="secondary"
@@ -322,8 +347,109 @@ function EmployeePay({
           </table>
         </div>
       ) : <Empty>No earnings yet.</Empty>}
+      {editable && !editing ? (
+        <BackPay
+          organisationId={organisationId}
+          run={run}
+          employee={employee}
+          payItems={payItems}
+          hasBackPay={backPayLines.length > 0}
+          busy={busy}
+          onRemove={() => void removeBackPay()}
+          onChanged={onChanged}
+        />
+      ) : null}
       {employee.pay ? <Figures figures={employee.pay} /> : null}
     </Card>
+  );
+}
+
+/** Adds back pay for approved pay periods from a pay rate in the employee's history (XP10). */
+function BackPay({
+  organisationId,
+  run,
+  employee,
+  payItems,
+  hasBackPay,
+  busy,
+  onRemove,
+  onChanged,
+}: {
+  organisationId: string;
+  run: PayRun;
+  employee: PayRunEmployee;
+  payItems: PayItem[];
+  hasBackPay: boolean;
+  busy: boolean;
+  onRemove: () => void;
+  onChanged: (message: string, payRun?: PayRun) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [payItemId, setPayItemId] = useState("");
+  const [payRateId, setPayRateId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const backPayItems = payItems.filter((item) => item.kind === "back_pay" && !item.isArchived);
+  const rates = useApiData<{ payRates: PayRate[] }>(open ? `/api/payroll/employees/${employee.employeeId}/pay-rates` : null, { organisationId });
+  const earlier = (rates.data?.payRates ?? []).filter((rate) => rate.effectiveFrom < run.periodStart);
+
+  const add = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await api<{ payRun: PayRun }>(`/api/payroll/pay-runs/${run.id}/employees/${employee.employeeId}/back-pay`, {
+        method: "POST",
+        body: { organisationId, payItemId, payRateId },
+      });
+      setOpen(false);
+      onChanged(`Back pay added to ${employee.name}'s pay.`, result.payRun);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div className={ui.actions}>
+        <Button disabled={busy} size="small" variant="secondary" onClick={() => setOpen(true)}>Add back pay</Button>
+        {hasBackPay ? <Button disabled={busy} size="small" variant="secondary" onClick={onRemove}>Remove back pay</Button> : null}
+      </div>
+    );
+  }
+  return (
+    <form className={styles.stack} onSubmit={add}>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <p className={ui.muted}>
+        Back pay for approved pay periods paid at less than a pay rate in {employee.name}&apos;s history. It&apos;s taxed as an extra pay.
+        Add the new pay rate under Employees first.
+      </p>
+      {backPayItems.length === 0 ? <Notice tone="warning">Add a pay item of the kind Back pay under Payroll › Pay items first.</Notice> : null}
+      <div className={ui.grid4}>
+        <Field label="Pay item">
+          <select required value={payItemId} onChange={(event) => setPayItemId(event.target.value)}>
+            <option value="">Choose</option>
+            {backPayItems.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Pay rate">
+          <select required value={payRateId} onChange={(event) => setPayRateId(event.target.value)}>
+            <option value="">Choose</option>
+            {earlier.map((rate) => (
+              <option key={rate.id} value={rate.id}>
+                From {formatDate(rate.effectiveFrom)}: {rate.payBasis === "salary" ? `$${formatMoney(rate.annualSalary)} a year` : `$${formatMoney(rate.hourlyRate)} an hour`}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <div className={ui.actions}>
+        <Button disabled={saving || busy} type="submit">Add back pay</Button>
+        <Button disabled={saving} variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+      </div>
+    </form>
   );
 }
 
