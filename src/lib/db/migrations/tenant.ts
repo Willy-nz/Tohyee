@@ -11177,7 +11177,9 @@ create trigger payroll_timesheet_entries_no_truncate
 create function tohyee_check_payroll_pay_run_timesheet() returns trigger
 language plpgsql as $$
 begin
-  if not exists (select 1 from payroll_timesheets where id = new.timesheet_id and status = 'approved') then
+  -- Locked, so a reopen can't slip in before the pay run commits.
+  perform 1 from payroll_timesheets where id = new.timesheet_id and status = 'approved' for share;
+  if not found then
     raise exception 'A pay run can only use approved timesheets' using errcode = 'P0001';
   end if;
   return new;
