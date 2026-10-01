@@ -833,7 +833,7 @@ Enforced by the app (and covered by tests):
   companies are `contacts`, which can be prospects (`is_prospect`). Owners
   and assignees are user ids from the core database, checked against the
   organisation's members when set. An opportunity's `invoice_id` is set once
-  and a trigger keeps it won from then on. The rules are in
+  and a trigger keeps it in its (Closed won) stage from then on. The rules are in
   `src/lib/crm/service.ts`; only the invoice it makes ever reaches the ledger.
 - CRM record types (tenant migration 0059, CRT1-CRT13): `crm_record_types`
   holds each type's kind (`contact`, `person` or `opportunity`), name,
@@ -860,6 +860,36 @@ Enforced by the app (and covered by tests):
   grouping (layout sections, upcoming and overdue, past activity by NZ
   month). Record types are set up through `/api/crm/record-types` (GET
   viewer; POST and PATCH admin).
+- CRM stages and forecasts (tenant migration 0066, CRMS1-CRMS11, decisions
+  76-90): `crm_opportunity_stages` holds the organisation's stages (a fixed
+  `key`, name unique ignoring case, `sort_order`, `stage_type` open / won /
+  lost, a whole-per-cent `probability`, `forecast_category`, `is_active`).
+  Check constraints keep a won stage 100% Closed, a lost one 0% Omitted and
+  an open one out of Closed; triggers refuse deleting a stage, changing its
+  key, or changing its type while opportunities are in it, and a deferred
+  constraint trigger keeps one active stage of each type. The upgrade made
+  the six old stages the starting rows with their old keys, so
+  `crm_opportunities.stage` (now a foreign key to the key instead of a
+  check) didn't change. Opportunities got `probability` and
+  `forecast_category` (filled from the stage on insert when missing); a
+  trigger enforces the stage type's rules and that only an opportunity in a
+  Closed won stage has an invoice, and the old guard now keeps an invoiced
+  opportunity in whatever stage it was in. `crm_record_types.stage_keys`
+  (opportunity types only, null = every active stage) is the sales
+  process. `crm_forecast_quotas` holds one quota per owner per month (base
+  currency). The pure rules (stage and opportunity rules, weighted
+  amount rounding, cumulative rollups, periods of the financial year,
+  attainment) are in `src/lib/crm/forecast-figures.ts` (browser-safe); set-up
+  and the stage choice for a save (archived and sales-process checks) in
+  `src/lib/crm/stages.ts`; the forecast and quotas in
+  `src/lib/crm/forecast.ts`, worked out live from the opportunities. Stage
+  history is read from `audit_events` (opportunity created and updated
+  events now carry probability and forecast category). Routes:
+  `/api/crm/stages` (GET viewer, POST admin), `/api/crm/stages/:id` (PATCH
+  admin), `/api/crm/sales-processes/:recordTypeId` (PUT admin),
+  `/api/crm/forecasts` (GET viewer) and `/api/crm/forecasts/quotas` (PUT
+  admin); the opportunity routes take `probability` and `forecastCategory`
+  (bookkeeper) and the opportunity's GET returns `stageHistory`.
 - CRM mail sync: the organisation's Google/Microsoft app is in
   `crm_mail_settings` (secrets encrypted with TOHYEE_SECRET_KEY); each
   member's mailbox in `crm_connected_accounts` (tokens encrypted). OAuth uses

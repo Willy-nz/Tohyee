@@ -51,6 +51,7 @@ Set them in the Agents box before sending each task:
 | --- | --- | --- | --- | --- |
 | Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
 | Payroll P5: payslips and bank files for wages (examples PBF1-PBF7, PSLIP1-PSLIP6) | #60 | not opened yet | `claude/payroll-bank-files-payslips` (Claude) | 0063 |
+| CRM editable opportunity stages, probability, stage history, sales processes, forecasts and quotas (examples CRMS1-CRMS11, decisions 76-90) | none | not opened yet | `claude/crm-stages-forecasting` (Claude) | 0066 |
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
@@ -60,7 +61,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0064 (0058-0063 used or reserved above).
+Next free tenant migration number: 0067 (0058-0063 used or reserved above; 0064 and 0065 are taken by other branches and 0066 by the CRM stages branch).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -69,6 +70,22 @@ CRM custom fields are available whenever the CRM module is on, even with
 Advanced features off (decided by Jess, 1 Oct 2026). Prospects only get the
 fields turned on for prospects; existing customer fields aren't added to
 them.
+
+CRM opportunity stages and forecasting (branch `claude/crm-stages-forecasting`,
+tenant migration 0066, examples CRMS1-CRMS11 not yet approved, decisions
+76-90): the six fixed stages became the organisation's own editable stages
+(same keys, so saved opportunities and the API are unchanged), with type,
+probability and forecast category; opportunities have their own
+probability and forecast category; stage history comes from the audit
+history; sales processes per opportunity record type; CRM › Forecasts by
+month or financial-year quarter, owner and currency with Salesforce's
+cumulative rollups, weighted pipeline, drill-down and monthly quotas.
+"Won" now means a stage of type Closed won (the invoice and "open" follow
+the type). There's no "won opportunity → sales order" yet (still on the
+sales orders list of things not built); when it's built it must check
+`stageType === "won"`, not the stage key. help.salesforce.com couldn't be
+read by our tools, so decisions marked (unverified) should be checked.
+Jess's questions are under CRMS11.
 
 CRM record types and page layouts, and the Salesforce-style record page,
 are in #74 (examples CRT1-CRT13, not yet approved by Jess; her questions are

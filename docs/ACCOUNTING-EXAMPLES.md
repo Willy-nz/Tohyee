@@ -3989,7 +3989,8 @@ email and phone. People are archived, never deleted.
 its people), an owner (a member of the organisation), an amount excluding
 GST, an expected close date and a **stage**: New, Screening, Meeting,
 Proposal, Won or Lost (Twenty's stages, with its "Customer" called Won, and
-Lost added). Stages change freely until an opportunity has made an invoice.
+Lost added; since CRMS1 these are the organisation's starting stages, which
+an admin can change, and "Won" means any Closed won stage). Stages change freely until an opportunity has made an invoice.
 A **won opportunity can make a draft invoice** for its company: one line with
 the opportunity's name and amount, the first active revenue account and the
 standard GST code, dated today and due on the customer's payment terms (in
