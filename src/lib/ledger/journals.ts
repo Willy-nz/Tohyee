@@ -927,6 +927,17 @@ export async function correctJournal(
     );
   }
   if (original.origin === "payroll") {
+    const payment = await tx.query<{ reference: string }>(
+      `select 'WAGES-' || payment_number as reference from payroll_wage_payments where journal_id = $1 or void_journal_id = $1
+       union all
+       select 'IRD-' || payment_number from payroll_ird_payments where journal_id = $1 or void_journal_id = $1`,
+      [original.id],
+    );
+    if (payment.rows[0]) {
+      throw new ValidationError(
+        `Journal #${original.id} was posted by a payroll payment (${payment.rows[0].reference}), so it can't be corrected in the ledger. To undo it, void the payment under Payroll.`,
+      );
+    }
     throw new ValidationError(
       `Journal #${original.id} was posted by a pay run (${original.reference}), so it can't be corrected in the ledger. To undo it, void the pay run.`,
     );
