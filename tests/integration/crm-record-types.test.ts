@@ -6,6 +6,7 @@ import * as personRoute from "@/app/api/crm/people/[personId]/route";
 import * as recordTypeRoute from "@/app/api/crm/record-types/[recordTypeId]/route";
 import * as recordTypesRoute from "@/app/api/crm/record-types/route";
 import * as contactRoute from "@/app/api/contacts/[contactId]/route";
+import * as importRoute from "@/app/api/import/records/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createContact, getContact, updateContact } from "@/lib/contacts/service";
 import {
@@ -425,6 +426,23 @@ describeWithDatabase("CRM record types and page layouts", () => {
       params({ contactId: board.id }),
     );
     expect(response.status).toBe(403);
+    // An admin's import may change it, like an admin's save.
+    const imported = await importRoute.POST(
+      apiRequest("/api/import/records", {
+        method: "POST",
+        cookie: await sessionCookieFor(owner),
+        body: {
+          organisationId: w.org,
+          kind: "contacts",
+          idempotencyKey: key("import"),
+          commit: true,
+          records: [{ row: 2, values: { name: "Lottery Grants Board", [`custom:${w.fields.grantRound.id}`]: "2026 Round 1" } }],
+        },
+      }),
+      params({}),
+    );
+    expect(imported.status).toBe(200);
+    expect((await w.as((tx) => getContact(tx, board.id))).customFields[w.fields.grantRound.id]).toBe(w.option("2026 Round 1"));
   });
 
   it("CRT7: a viewer can't edit inline", async () => {

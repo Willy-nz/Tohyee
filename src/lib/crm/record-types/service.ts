@@ -170,9 +170,11 @@ export async function updateRecordType(
   input: { name?: unknown; description?: unknown; isActive?: unknown; isDefault?: unknown; layout?: unknown; move?: unknown },
 ): Promise<RecordType> {
   await requireCrm(tx);
-  const current = await getRecordType(tx, idInput);
-  await tx.query("select pg_advisory_xact_lock(hashtext('crm_record_types:' || $1))", [current.record]);
-  await tx.query("select id from crm_record_types where id = $1 for update", [current.id]);
+  const found = await getRecordType(tx, idInput);
+  await tx.query("select pg_advisory_xact_lock(hashtext('crm_record_types:' || $1))", [found.record]);
+  await tx.query("select id from crm_record_types where id = $1 for update", [found.id]);
+  // Read again under the lock, so a change committed while waiting isn't undone.
+  const current = await getRecordType(tx, found.id);
   const name = input.name === undefined ? current.name : parseName(input.name);
   const description = input.description === undefined ? current.description : parseDescription(input.description);
   const isActive = optionalBoolean(input.isActive, "isActive") ?? current.isActive;
@@ -324,6 +326,7 @@ export async function addFieldToLayouts(tx: OrgTx, field: { id: string; record: 
   const section = field.sectionId
     ? ((await tx.query<{ name: string }>("select name from custom_field_sections where id = $1", [field.sectionId])).rows[0]?.name ?? null)
     : null;
+  await tx.query("select pg_advisory_xact_lock(hashtext('crm_record_types:' || $1))", [field.record]);
   for (const type of await listRecordTypes(tx, { record: field.record })) {
     const layout = withFieldAdded(type.layout, field.id, section);
     if (layout !== type.layout) {
