@@ -5,6 +5,7 @@ import { applyMigrations, type MigrationRunResult } from "@/lib/db/migrations/ru
 import { tenantMigrations } from "@/lib/db/migrations/tenant";
 import { connectAsAdmin } from "@/lib/db/pools";
 import { coreQuery } from "@/lib/db/transactions";
+import { startPayrollAccess } from "@/lib/payroll/access";
 
 export const LATEST_TENANT_VERSION = tenantMigrations[tenantMigrations.length - 1].version;
 
@@ -51,6 +52,8 @@ export async function migrateOrganisation(organisation: {
 }): Promise<OrganisationMigrationResult> {
   try {
     const result = await applyTenantMigrations(organisation.database_name);
+    // The first owner starts with payroll access, once (example PR9).
+    await startPayrollAccess({ id: organisation.id, databaseName: organisation.database_name });
     await coreQuery(
       `update organisations
           set migration_status = 'current', migration_error = null,

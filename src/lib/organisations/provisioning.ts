@@ -6,6 +6,7 @@ import { connectAsAdmin, getAdminPool } from "@/lib/db/pools";
 import { quoteSqlIdentifier } from "@/lib/db/sql";
 import { coreQuery, wrapClient } from "@/lib/db/transactions";
 import { NotFoundError } from "@/lib/errors";
+import { startPayrollAccess } from "@/lib/payroll/access";
 import { defaultTaxCodeKey, NZ_DEFAULT_TAX_CODES } from "@/lib/tax/default-codes";
 
 type ProvisioningRow = {
@@ -58,6 +59,7 @@ export async function provisionOrganisation(organisationId: string): Promise<voi
 
     const migrated = await applyTenantMigrations(organisation.database_name);
     await seedOrganisationDatabase(organisation);
+    await startPayrollAccess({ id: organisation.id, databaseName: organisation.database_name });
 
     await coreQuery(
       `update organisations

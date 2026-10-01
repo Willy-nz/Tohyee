@@ -87,6 +87,16 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
       viewer.id,
       "viewer",
     ]);
+    // Payroll access (PR9-PR12) is given separately; the owner has it from the start.
+    await asUser(owner, async (tx) => {
+      for (const user of [bookkeeper, viewer]) {
+        await tx.query("insert into payroll_access (user_id, granted_by_user_id, granted_by_email) values ($1, $2, $3)", [
+          user.id,
+          owner.id,
+          owner.email,
+        ]);
+      }
+    });
   });
 
   afterAll(async () => {
@@ -217,10 +227,13 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
     await expect(
       asUser(owner, (tx) => tx.query("delete from payroll_employees where id = $1", [employee.id])),
     ).rejects.toThrow(/can't be deleted or truncated/i);
-    await expect(asUser(owner, (tx) => tx.query("truncate payroll_employees"))).rejects.toThrow(/can't be deleted or truncated/i);
+    // Since 0057, pay rates and allocations reference employees, so PostgreSQL refuses the truncate before the trigger runs.
+    await expect(asUser(owner, (tx) => tx.query("truncate payroll_employees"))).rejects.toThrow(
+      /can't be deleted or truncated|referenced in a foreign key constraint/i,
+    );
   });
 
-  it("requires bookkeeper access even to list employee records", async () => {
+  it("requires the bookkeeper role even to list employee records, with payroll access", async () => {
     const viewerCookie = await sessionCookieFor(viewer);
     const response = await employeesRoute.GET(
       apiRequest(`/api/payroll/employees?organisationId=${ORG}`, { cookie: viewerCookie }),
@@ -265,7 +278,7 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
   });
 
   it("applies the tenant migration used by employee records", async () => {
-    expect(tenantMigrations.at(-1)?.version).toBe("0051");
+    expect(tenantMigrations.map((migration) => migration.version)).toContain("0051");
     const table = await asUser(owner, (tx) => tx.query("select id from payroll_employees limit 1"));
     expect(table.rowCount).toBeGreaterThanOrEqual(0);
   });

@@ -3,7 +3,10 @@ import type { AuthContext } from "@/lib/auth/guard";
 import { isRole, type Role } from "@/lib/auth/roles";
 import { normaliseEmail } from "@/lib/auth/service";
 import { coreQuery, type DbClient, withCoreTransaction } from "@/lib/db/transactions";
+import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import { getOrganisation } from "@/lib/organisations/registry";
+import { removePayrollAccessOnJoin } from "@/lib/payroll/access";
 
 export type Member = {
   userId: string;
@@ -82,6 +85,7 @@ export async function addMember(
   const email = normaliseEmail(input.email);
   const role = parseRole(input.role);
   assertCanManage(actorRole, null, role);
+  await clearPayrollAccessBeforeJoining(auth, organisationId, email);
 
   return withCoreTransaction(async (client) => {
     const user = await client.query<{ id: string }>(
@@ -117,6 +121,29 @@ export async function addMember(
     );
     return toMember(row.rows[0]);
   });
+}
+
+/**
+ * Someone added (back) to an organisation starts without payroll access, even
+ * if they had it before they were removed (example PR12). Done in the
+ * organisation's database before the membership is added, so a failure here
+ * adds nobody.
+ */
+async function clearPayrollAccessBeforeJoining(auth: AuthContext, organisationId: string, email: string) {
+  const user = await coreQuery<{ id: string; is_member: boolean }>(
+    `select u.id, exists (
+       select 1 from organisation_members m where m.organisation_id = $1 and m.user_id = u.id
+     ) as is_member
+       from users u where u.email = $2`,
+    [organisationId, email],
+  );
+  const found = user.rows[0];
+  if (!found || found.is_member) return;
+  const organisation = await getOrganisation(organisationId);
+  if (!organisation || organisation.provisioningStatus !== "ready") return;
+  await withOrganisationTransaction(organisation, { userId: auth.user.id, email: auth.user.email }, (tx) =>
+    removePayrollAccessOnJoin(tx, found.id, email),
+  );
 }
 
 async function lockMember(client: DbClient, organisationId: string, userId: string) {

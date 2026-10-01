@@ -154,6 +154,15 @@ export function roundHalfUp(value: Decimal, scale: number): Decimal {
   return { units: divideRounded(value.units, factor), scale };
 }
 
+/** Cuts to `scale` decimal places towards zero: 740.748 -> 740.74, -493.828 -> -493.82. */
+export function truncate(value: Decimal, scale: number): Decimal {
+  if (value.scale <= scale) {
+    return { units: widen(value, scale), scale };
+  }
+  // BigInt division already truncates towards zero.
+  return { units: value.units / pow10(value.scale - scale), scale };
+}
+
 /**
  * numerator / denominator, rounded half up to `scale` places. Both operands can
  * have any scale; this is exact up to the final rounding.

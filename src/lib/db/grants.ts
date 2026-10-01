@@ -21,6 +21,9 @@ const APPEND_ONLY_TABLES = [
   "fixed_asset_depreciation_lines",
   "bank_reconciliation_splits",
   "ledger_foreign_opening_balances",
+  "payroll_pay_rates",
+  "payroll_cost_allocations",
+  "payroll_cost_allocation_lines",
 ];
 
 function quoteRole(role: string): string {
