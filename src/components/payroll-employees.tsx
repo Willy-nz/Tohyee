@@ -3,6 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { describePay, EmployeeAllocation, EmployeePayRates } from "@/components/payroll-employee-pay";
+import { EmployeeLeave } from "@/components/payroll-leave";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { cmp, dec } from "@/lib/money/decimal";
@@ -370,6 +371,7 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
             }}
           />
           <EmployeeAllocation key={`allocation-${selectedId}`} organisationId={organisationId} employeeId={selectedId} onSaved={reload} />
+          <EmployeeLeave key={`leave-${selectedId}`} organisationId={organisationId} employeeId={selectedId} />
         </>
       ) : null}
 
