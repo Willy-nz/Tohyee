@@ -37,12 +37,14 @@ import { optionalSource, requireId, requireIdempotencyKey, requireOneOf } from "
 export const MAX_EMAILS_PER_DAY = 500;
 
 /** The record history each kind's email events belong to (audit entity type). */
-export const EMAIL_HISTORY_ENTITY: Record<EmailDocumentKind, string> = {
+export const EMAIL_HISTORY_ENTITY: Record<EmailDocumentKind | "payslip", string> = {
   invoice: "sales_invoice",
   credit_note: "sales_credit_note",
   quote: "quote",
   purchase_order: "purchase_order",
   statement: "contact",
+  // Payslip emails (PSLIP5) go in the pay run's history.
+  payslip: "payroll_pay_run",
 };
 
 const DOCUMENT_TABLES: Record<PrintKind, string> = {
@@ -317,7 +319,8 @@ function toEmail(row: EmailRow): DocumentEmail {
   };
 }
 
-async function checkDailyLimit(tx: OrgTx, adding: number): Promise<void> {
+/** Refuses queueing more than an organisation's daily limit of emails (payslips use it too). */
+export async function checkDailyLimit(tx: OrgTx, adding: number): Promise<void> {
   const recent = await tx.query<{ count: string }>("select count(*)::text as count from document_emails where created_at > now() - interval '24 hours'");
   if (Number(recent.rows[0].count) + adding > MAX_EMAILS_PER_DAY) {
     throw new TooManyRequestsError(
@@ -326,7 +329,8 @@ async function checkDailyLimit(tx: OrgTx, adding: number): Promise<void> {
   }
 }
 
-async function requireAccount(tx: OrgTx): Promise<void> {
+/** Refuses (503) when the organisation's email account isn't set up (payslips use it too). */
+export async function requireAccount(tx: OrgTx): Promise<void> {
   const account = await getOrganisationEmailSettings(tx);
   if (!account.configured) {
     throw new UnavailableError(account.hasPassword ? "The saved email password can't be read on this server any more. An admin needs to enter it again in Settings > Email." : NOT_SET_UP);
