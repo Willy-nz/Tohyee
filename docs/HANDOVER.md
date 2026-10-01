@@ -56,6 +56,7 @@ Set them in the Agents box before sending each task:
 | Payroll P1b: cost allocation, pay rate history and payroll access (examples PE3-PE12) | #60 | #73 | `copilot/60-employee-cost-allocation` | 0057 |
 | Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12) | none (Agents tab) | not opened yet | `copilot/sales-orders-stage-1` | 0055 |
 | Sales platform connections, stage 1: connector framework, Shopify customers and products (CRM roadmap items 27-28) | none (Agents tab) | not opened yet | `copilot/sales-platform-connections-stage-1` | 0056 |
+| RDTI R1: R&D Tax Incentive worked examples and questions (docs only, RD1-RD27) | none (Agents tab) | #72 | `copilot/rdti-stage-r1-plan-tracking` | none |
 
 Next free tenant migration number: 0058 (0057 reserved for payroll P1b).
 
@@ -151,8 +152,11 @@ depreciation and apportioned overhead costs; contemporaneous records kept at
 the time, not backdated; general approval and the supplementary return have
 deadlines). Agents must check the current IR1240 and cite it, never memory.
 
-- [ ] **R1 Plan**: worked examples and questions for Jess, docs only. Can
-      start now.
+- [ ] **R1 Plan**: worked examples and questions for Jess, docs only.
+      Written (RD1-RD27 in `docs/ACCOUNTING-EXAMPLES.md`, from IR1240 April
+      2026, read 1 Oct 2026). Its questions are decided (`docs/DECISIONS.md`
+      30-50) and the examples follow them; waiting for Jess to approve the
+      examples.
 - [ ] **R2 R&D activity register and tagging**: activities (core or
       supporting, linked core activity, approval reference, income year, in NZ
       or overseas); tag time, payroll costs (via P1b/P3/P9), bills, expense
