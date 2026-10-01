@@ -6,6 +6,8 @@ import { type FormEvent, useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { PAY_FREQUENCY_LABELS } from "@/components/payroll-groups";
+import { PayRunPaydayFilingCard } from "@/components/payroll-payday-filing";
+import { PayRunBankFileCard, PayRunPayslips } from "@/components/payroll-p5";
 import { PayRunWagePayments } from "@/components/payroll-payments";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -447,7 +449,12 @@ export function PayRunView({ organisationId, payRunId }: { organisationId: strin
         ) : null}
       </Card>
 
+      {run.status === "approved" ? <PayRunPaydayFilingCard key={`${run.id}:payday-filing`} organisationId={organisationId} payRunId={run.id} /> : null}
+      {run.status === "approved" ? <PayRunBankFileCard key={`${run.id}:bank-file`} organisationId={organisationId} payRunId={run.id} payDate={run.payDate} /> : null}
+
       {run.status !== "draft" ? <PayRunWagePayments key={`${run.id}:${run.status}`} organisationId={organisationId} payRunId={run.id} /> : null}
+
+      {run.status === "approved" ? <PayRunPayslips key={`${run.id}:payslips`} organisationId={organisationId} payRunId={run.id} /> : null}
 
       <Card title="Totals">
         <Figures figures={run.totals} />

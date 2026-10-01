@@ -13,7 +13,9 @@ import { listAllOrganisations } from "@/lib/organisations/admin";
 import { emailLogo, getLogo } from "@/lib/organisations/logo";
 import { getOrganisation, type OrganisationRecord } from "@/lib/organisations/registry";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
+import { getPayslip } from "@/lib/payroll/payslips";
 import { renderDocumentPdf, renderStatementPdf } from "@/lib/pdf/documents";
+import { renderPayslipPdf } from "@/lib/pdf/payslip";
 import { loadMemberNames, type PeopleNames } from "@/lib/people/names";
 
 /**
@@ -51,9 +53,12 @@ const JOB_ACTOR: Actor = { userId: null, email: "email job" };
 
 type ClaimedRow = {
   id: string;
-  document_kind: EmailDocumentKind;
+  document_kind: EmailDocumentKind | "payslip";
+  /** For a payslip (PSLIP5), its pay run's id (the history it goes in). */
   document_id: string;
-  contact_id: string;
+  contact_id: string | null;
+  /** Payslips only: whose payslip. */
+  employee_id: string | null;
   statement: StatementOptions | null;
   to_addresses: string[];
   cc_addresses: string[];
@@ -71,12 +76,18 @@ function actorFor(row: Pick<ClaimedRow, "requested_by_user_id" | "requested_by_e
   return { userId: row.requested_by_user_id, email: row.requested_by_email };
 }
 
-async function auditEmail(tx: OrgTx, row: Pick<ClaimedRow, "id" | "document_kind" | "document_id">, eventType: string, details: Record<string, unknown>): Promise<void> {
+async function auditEmail(
+  tx: OrgTx,
+  row: Pick<ClaimedRow, "id" | "document_kind" | "document_id" | "employee_id">,
+  eventType: string,
+  details: Record<string, unknown>,
+): Promise<void> {
   await writeAuditEvent(tx, {
     eventType,
     entityType: EMAIL_HISTORY_ENTITY[row.document_kind],
     entityId: row.document_id,
-    details: { emailId: row.id, kind: row.document_kind, ...details },
+    // A payslip's history says whose it was, never its figures (PSLIP5).
+    details: { emailId: row.id, kind: row.document_kind, ...(row.employee_id ? { employeeId: row.employee_id } : {}), ...details },
   });
 }
 
@@ -86,7 +97,8 @@ async function failStale(tx: OrgTx, now: Date): Promise<void> {
     `update document_emails set status = 'failed', finished_at = now(),
             last_error = 'Tohyee stopped while this email was being sent, so it may or may not have gone. Check with the recipient before sending it again.'
       where status = 'sending' and claimed_at < $1::timestamptz - make_interval(mins => $2)
-      returning id::text, document_kind, document_id::text, requested_by_user_id::text, requested_by_email, to_addresses`,
+      returning id::text, document_kind, coalesce(document_id::text, pay_run_id::text) as document_id, employee_id::text,
+                requested_by_user_id::text, requested_by_email, to_addresses`,
     [now.toISOString(), STALE_MINUTES],
   );
   for (const row of stale.rows) {
@@ -106,7 +118,8 @@ async function claim(tx: OrgTx, now: Date): Promise<ClaimedRow[]> {
     `update document_emails set status = 'sending', claimed_at = $1::timestamptz, attempts = attempts + 1
       where id in (select id from document_emails where status = 'queued' and next_attempt_at <= $1::timestamptz
                     order by next_attempt_at, id limit $2 for update skip locked)
-      returning id::text, document_kind, document_id::text, contact_id::text, statement, to_addresses, cc_addresses, subject, body,
+      returning id::text, document_kind, coalesce(document_id::text, pay_run_id::text) as document_id, contact_id::text, employee_id::text,
+                statement, to_addresses, cc_addresses, subject, body,
                 attachment_name, attempts, requested_by_user_id::text, requested_by_email`,
     [now.toISOString(), room],
   );
@@ -166,11 +179,13 @@ type Content = { attachment: { fileName: string; bytes: Uint8Array }; html: stri
  * version with the organisation's logo as an inline image.
  */
 async function contentFor(organisation: OrganisationRecord, people: PeopleNames, account: SendingAccount, row: ClaimedRow): Promise<Content> {
+  if (row.document_kind === "payslip") return payslipContentFor(organisation, people, account, row);
+  const kind = row.document_kind as EmailDocumentKind;
   const loaded = await withOrganisationTransaction(
     organisation,
     actorFor(row),
     async (tx) => {
-      const subject = await loadEmailSubject(tx, row.document_kind, row.document_id, row.statement ?? undefined);
+      const subject = await loadEmailSubject(tx, kind, row.document_id, row.statement ?? undefined);
       return { subject, settings: await getOrganisationSettings(tx), logo: await getLogo(tx) };
     },
     { people },
@@ -189,7 +204,7 @@ async function contentFor(organisation: OrganisationRecord, people: PeopleNames,
       gstNumber: settings.gstNumber ? formatGstNumber(settings.gstNumber) : null,
       email: account.replyTo ?? account.fromAddress,
     },
-    summary: emailSummary(row.document_kind, subject.values),
+    summary: emailSummary(kind, subject.values),
     logo: image?.html ?? null,
   });
   return {
@@ -198,6 +213,35 @@ async function contentFor(organisation: OrganisationRecord, people: PeopleNames,
     html,
     inline: image ? [image.inline] : [],
   };
+}
+
+/**
+ * A payslip email (PSLIP5): the payslip is loaded as the person who asked
+ * (so it needs their payroll access now, not just when they asked) and its
+ * PDF written. The email itself shows no figures.
+ */
+async function payslipContentFor(organisation: OrganisationRecord, people: PeopleNames, account: SendingAccount, row: ClaimedRow): Promise<Content> {
+  const loaded = await withOrganisationTransaction(
+    organisation,
+    actorFor(row),
+    async (tx) => ({ payslip: await getPayslip(tx, row.document_id, row.employee_id), settings: await getOrganisationSettings(tx), logo: await getLogo(tx) }),
+    { people },
+  );
+  const pdf = await renderPayslipPdf(loaded.payslip, { logo: loaded.logo });
+  const image = emailLogo(loaded.logo);
+  const html = renderEmailHtml({
+    subject: row.subject,
+    body: row.body,
+    organisation: {
+      name: loaded.settings.displayName,
+      postalAddress: loaded.settings.postalAddress,
+      gstNumber: null,
+      email: account.replyTo ?? account.fromAddress,
+    },
+    summary: [],
+    logo: image?.html ?? null,
+  });
+  return { attachment: { fileName: row.attachment_name, bytes: pdf.bytes }, html, inline: image ? [image.inline] : [] };
 }
 
 async function sendOne(organisation: OrganisationRecord, people: PeopleNames, account: SendingAccount, sender: Sender, row: ClaimedRow): Promise<Outcome> {

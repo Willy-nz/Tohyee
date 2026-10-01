@@ -81,7 +81,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ supplier_credit_note_applications   credit applied to bills
 ├─ supplier_credit_note_refunds        credit paid back by suppliers
 ├─ gst_returns, gst_return_adjustments, gst_return_lines   filed GST returns
-├─ bank_account_settings  per bank/card account: statement balance, import layout, Akahu feed link
+├─ bank_account_settings  per bank/card account: statement balance, import layout, Akahu feed link, bank file format and account number (P5)
 ├─ akahu_connections      the organisation's own Akahu personal app (tokens encrypted)
 ├─ bank_statement_imports, bank_statement_lines   statement files and bank feed syncs
 ├─ bank_reconciliations, bank_reconciliation_items   which journal lines each statement line is
@@ -95,7 +95,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ organisation_email_settings, email_templates   the organisation's own email account (SMTP password or Microsoft or Google tokens encrypted) and templates
 ├─ email_oauth_states     one-time states for signing in to the Microsoft or Google mailbox documents are sent from
 ├─ organisation_logo      the organisation's logo (PNG or JPEG, 512 KB at most), on emails, PDFs and print pages
-├─ document_emails, document_email_batches   each email of a document or statement: queued, then sent or failed by the job
+├─ document_emails, document_email_batches   each email of a document, statement or payslip (pay run and employee): queued, then sent or failed by the job
 ├─ sales_platform_connections, sales_platform_mappings   connected stores (Shopify; credentials encrypted) and which contact or item each store record is
 ├─ sales_platform_sync_log, sales_platform_webhook_deliveries   what each sync and webhook did (append-only), and webhook deliveries already handled
 └─ audit_events
@@ -322,6 +322,43 @@ than voiding once, refuses a wage payment above what's unpaid or on an
 unapproved run, and refuses voiding a pay run while it has active wage
 payments or an active IRD payment covers its pay date. Audit details hold no
 amounts, bank account numbers or IRD numbers.
+
+**Bank files and payslips** (payroll stage P5, examples PBF1-PBF7 and
+PSLIP1-PSLIP6, tenant migration 0063). Direct credit files are pure
+functions in `src/lib/payroll/bank-files.ts` (ANZ domestic extended, ASB
+FastNet MT9, BNZ IB4B, each written to its bank's published specification in
+`docs/sources/nz-bank-direct-credit-formats.md`; Westpac and Kiwibank
+refused), with account-number shape checks in `bank-account-number.ts`.
+`bank-file-service.ts` reads the pay run's unpaid net pay per employee
+(`listWagePayments`), decrypts employees' bank accounts after
+`requirePayrollAccess`, and returns the file; it posts nothing, marks nothing
+paid and its audit event holds no amounts or account numbers. Each bank
+account's format and number are in `bank_account_settings` (admins set them,
+Settings › Bank files). Payslips (`payslips.ts`) are built from the approved
+pay run's snapshot with the year to date summed from approved runs in the tax
+year (`payslip-figures.ts`); `payslip-layout.ts` (browser-safe) lays out
+the rows both the page and the PDF (`src/lib/pdf/payslip.ts`) show. Payslip
+emails are `document_emails` rows of kind `payslip` (pay run and employee,
+no contact): the text is fixed and has no figures, and the outbox writes the
+PDF when it sends, loading the payslip as the person who asked, so it needs
+their payroll access then.
+
+**Payday filing** (payroll stage P6, examples PF1-PF9, decisions 56-65):
+`src/lib/payroll/payday-filing.ts` is pure (no database): IRD's employment
+information file (HEI2 header, DEI lines, amounts in hundredths, CR LF),
+the settings field checks and the due date; the field list and its source
+are in `docs/sources/ird-payday-filing-file-spec.md`.
+`payday-filing-service.ts` reads an approved pay run's stored snapshot
+(`payroll_pay_run_employees`), hours from its lines, and each employee's
+IRD number (decrypted only there, after the payroll access check), and
+returns the file as text for the browser to save; it writes one audit event
+(file name, line count, SHA-256) and posts nothing. The header details are
+four columns on `organisation_settings` (tenant migration 0064:
+`payroll_employer_ird_number`, `payroll_contact_name`,
+`payroll_contact_phone`, `payroll_contact_email`, each with IRD's format as
+a check constraint). Routes: `/api/payroll/pay-runs/[payRunId]/payday-filing`
+(GET the card, POST make the file) and `/api/payroll/payday-filing-settings`
+(PUT admins only).
 
 People who aren't members get "not found", so organisation IDs can't be
 probed. Every audit record stores the signed-in user, never a name typed into
@@ -1122,7 +1159,7 @@ then SMTP, then the other mailbox.
 has an HTML part (`html.ts`: escaped text, a summary box, the contact
 details, and the logo as an inline `cid:` attachment, no remote images)
 and the plain text as typed. Asking to send only inserts a
-`document_emails` row (the outbox) and nudges the job; each email is then
+`document_emails` row (the outbox; payslips too) and nudges the job; each email is then
 claimed in one transaction (`for update skip locked`, so two processes
 never send the same one), its document loaded and checked in another, its
 PDF written (`src/lib/pdf`, pdf-lib with Liberation Sans, from the same

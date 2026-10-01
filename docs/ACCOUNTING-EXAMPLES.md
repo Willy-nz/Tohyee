@@ -69,7 +69,9 @@ proves it". Test names start with the example IDs they cover:
   and `tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE13)
   and `tests/integration/payroll-pay-runs.test.ts` (PRUN1-PRUN11, not yet
   approved) and `tests/integration/payroll-payments.test.ts` (PPAY1-PPAY12,
-  not yet approved), all against
+  not yet approved) and `tests/integration/payroll-bank-files.test.ts`
+  (PBF1-PBF7, not yet approved) and `tests/integration/payroll-payslips.test.ts`
+  (PSLIP1-PSLIP6, not yet approved), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6), `tests/unit/repeating-bill-rules.test.ts`
@@ -92,7 +94,10 @@ proves it". Test names start with the example IDs they cover:
   the payroll % split (PE3-PE5), and `tests/unit/payroll-pay-calculation.test.ts`
   one employee's pay in a pay run (PRUN1-PRUN4, PRUN8), and
   `tests/unit/payroll-ird-due-dates.test.ts` IRD payroll periods and due
-  dates (PPAY4, PPAY9), and `tests/unit/sales-platforms.test.ts`
+  dates (PPAY4, PPAY9), and `tests/unit/payroll-bank-files.test.ts` the
+  bank direct credit files byte for byte (PBF1-PBF4, PBF6), and
+  `tests/unit/payroll-payslips.test.ts` the payslip's masked account, tax
+  year and year to date (PSLIP1, PSLIP2), and `tests/unit/sales-platforms.test.ts`
   the webhook signature check, Shopify record shapes and which value is kept
   (SPC2, SPC3, SPC5, SPC6, SPC8), and `tests/unit/sales-platforms-screen.test.ts`
   the sync log on the settings screen (SPC10), and
@@ -9364,10 +9369,8 @@ here: net **2,590.50**; PAYE 589.72, student loan 197.28, KiwiSaver
 
 - **PPAY11 Refused rather than guessed.**
   - **A bank file for paying wages** (a direct credit or batch payment
-    file): Tohyee has no bank batch file format yet (supplier batch payments
-    don't make one either), so none is made; record the payments and pay
-    them in the bank's own screens. Which bank formats are wanted is a
-    question for Jess.
+    file): not made in P4. Stage P5 makes ANZ, ASB and BNZ files
+    (PBF1-PBF7); supplier batch payments still don't make one.
   - **Child support** and **payroll giving** (not deducted yet, PRUN8).
   - Working out **IRD's penalties and interest** for late payment, and
     **IRD's direct debit** or other ways of paying.
@@ -9409,6 +9412,600 @@ here: net **2,590.50**; PAYE 589.72, student loan 197.28, KiwiSaver
    days early?
 7. **Paid as a whole or per employee, not both** on one pay run (PPAY2).
    OK?
+
+## NZ payroll — bank files for paying wages (examples not yet approved by Jess)
+
+Part of payroll stage P5 (#60). Jess hasn't approved these. After a pay run
+is approved (P3), Tohyee can make a **direct credit file** of the net wages
+still to pay, in the format the organisation's bank takes, to upload in the
+bank's business internet banking. Making a file **posts nothing and marks
+nothing paid**: the money is recorded as paid with a wage payment (P4,
+PPAY1-PPAY2), which is the screen's next step ("Make bank file", then
+"Record as paid").
+
+Sources, each bank's own published specification (summaries in
+`docs/sources/nz-bank-direct-credit-formats.md`, re-read on the banks'
+sites on 1 Oct 2026):
+
+- **ANZ** "Domestic extended format"
+  ([anz.co.nz](https://www.anz.co.nz/banking-with-anz/ways-to-bank/guides/domestic-extended-format/),
+  no version or date shown): comma-separated, CR LF after each record;
+  header `1`, transactions `2`, control `3`. The page's own example header is
+  `1,,,,,,20060725,20060725,` (fields 2 to 6 empty, due date then creation
+  date YYYYMMDD, and a comma at the end) and its control record example is
+  `3, 503400,4,70192802466`. Transaction code **50** (the only one the page
+  gives). Account numbers 16 digits with a 3-digit suffix ("00→000, 25→025";
+  the suffix can't be more than 99). Amount in cents, up to 11 digits. The
+  other party's reference and analysis code are marked required; the hash
+  total is the sum of each account's branch (4) and base number (7),
+  dropping the extra digits on the left past 11.
+- **ASB** FastNet Business "Standard Bulk Payments", **MT9** fixed-length
+  format ([FastNet Business File Formats Technical Guide, November 2012](https://www.asb.co.nz/content/dam/asb/documents/banking-with-asb/2012/asb-fnb-file-formats-technical-guide-nov-2012.pdf),
+  section 2). Every record 160 characters, padded with spaces; "The header
+  and all detail records must be completed with a carriage return. The
+  carriage return at the end of the trailer record is optional." Header:
+  file type `12`, the payer's bank (2), branch (4), unique number (7) and
+  suffix ("01 expressed as 01¤", a space after a 2-digit suffix), due date
+  DDMMCCYY then 5 spaces ("Correct"), client short name X(20), 109 spaces.
+  Detail: `13`, the payee's bank, branch, unique number and suffix ("01
+  expressed as 001"), transaction code **052** (salary/wages), amount
+  9(10) "Align right and pad to the left with zeros", payee name X(20),
+  internal reference X(12) (not sent to the bank), payee code, payee
+  reference and payee particulars X(12), 1 space, payer name X(20), payer
+  code, reference and particulars X(12), 4 spaces. Trailer: `13`, `99`,
+  the check total 9(11) ("the sum of all the detail records' branch and
+  unique numbers. If the number exceeds 11 characters, the remaining
+  characters are not used. For example, if the sum is 123456789123, then
+  the import file check total is shortened to 23456789123."), 6 spaces, the
+  total amount 9(10), 129 spaces. Characters allowed: letters, numerals,
+  spaces and `( ) * + - = ? [ ] _ { } ~ / & , . '`. ASB's CSV format isn't
+  made (MT9 is ASB's preferred format and is fully specified).
+- **BNZ** Internet Banking for Business "Payment file format guide"
+  ([PDF, October 2024](https://www.bnz.co.nz/assets/business-banking-help-support/internet-banking/ib4b-file-format-guide.pdf)),
+  file type **7** (direct credit; payroll is the same layout): comma
+  delimited, "Each record must terminate with a carriage return line feed
+  character (CRLF)", no trailing spaces, no commas in fields, extension
+  `.afi` or `.txt`. Header `1,,,,<your account>,7,<due YYMMDD>,<created
+  YYMMDD>,<indicator>` (the due date "cannot be earlier than today"; the
+  indicator blank = one line on your statement for the whole file, I = a
+  line per payment with your own details); transactions with code **52**
+  (payroll; one code for the whole file), amount in cents, other party
+  name (required), reference, code, a blank alpha reference, particulars,
+  your name (required), your code, reference and particulars; control
+  `3,<total>,<count>,<hash>` where the hash is the sum of digits 3 to 13 of
+  each account, the rightmost 11 digits kept, "If the number is less than
+  eleven digits then zero fill to eleven".
+- **Westpac** and **Kiwibank**: no field-level specification is published
+  on their own sites (Westpac One Business lists the formats it accepts;
+  Kiwibank says files can be uploaded but doesn't publish a layout). Both
+  are **refused rather than guessed**.
+
+What goes on the statements (the same for every bank): the payee's
+**particulars** are `Wages`, their **code** the pay run's reference
+(`PAYRUN-1`) and their **reference** the pay date (`2026-10-14`); the
+organisation's own statement details are the same three, and its name is
+the organisation's name. Text is cut to the field's length (12, or 20 for
+names) with trailing spaces removed; macrons are written without them
+(Ōtepoti → Otepoti); any other character outside ASB's list above (a comma
+included) is refused rather than changed.
+
+Account numbers are checked before any file is made: bank (2 digits),
+branch (4), account (7) and suffix (2 or 3), written with or without
+hyphens or spaces (15 or 16 digits). Tohyee doesn't check the banks' check
+digits (question 3 below).
+
+The figures are PRUN1's and PRUN3's (PAYRUN-1: Kiri Tane net **1,657.00**,
+Hemi Walker net **2,042.50**, total **3,699.50**; PAYRUN-2: Aroha Ngata net
+**2,590.50**, pay date 14 Oct 2026). Employees are listed by last name.
+The organisation is **Harbour Cafe Ltd**; the file is made on **13 Oct
+2026** with due date **14 Oct 2026** (the pay date, unless changed).
+
+| Employee | Bank account | Branch and account (hash part) |
+| --- | --- | --- |
+| Kiri Tane | 12-3191-0654321-01 | 31910654321 |
+| Hemi Walker | 01-0242-0123456-00 | 02420123456 |
+| Aroha Ngata | 02-0108-0987654-000 | 01080987654 |
+
+PAYRUN-1's hash total is 31,910,654,321 + 2,420,123,456 = **34330777777**.
+
+Tests: `tests/unit/payroll-bank-files.test.ts` (the files byte for byte,
+hash totals, account numbers: PBF1-PBF4, PBF6) and
+`tests/integration/payroll-bank-files.test.ts` (PBF1-PBF7 against
+PostgreSQL and the API routes).
+
+- **PBF1 ANZ file for PAYRUN-1.** Bank account 1000 is set up (Settings ›
+  Bank files) with the format "ANZ domestic extended" and the account
+  number 01-0505-0111222-00 (ANZ's file doesn't carry it). Ben (a
+  bookkeeper with payroll access) makes the file on PAYRUN-1, from 1000,
+  due 14 Oct 2026. The file, `PAYRUN-1 ANZ 2026-10-14.csv`, each line ending
+  CR LF:
+
+  ```
+  1,,,,,,20261014,20261013,
+  2,1231910654321001,50,165700,Kiri Tane,2026-10-14,PAYRUN-1,,Wages,Harbour Cafe Ltd,PAYRUN-1,2026-10-14,Wages
+  2,0102420123456000,50,204250,Hemi Walker,2026-10-14,PAYRUN-1,,Wages,Harbour Cafe Ltd,PAYRUN-1,2026-10-14,Wages
+  3,369950,2,34330777777
+  ```
+
+  Fields in a transaction: account, code 50, cents, name, reference, analysis
+  code, alpha reference (blank), particulars, the organisation's name,
+  analysis code, reference, particulars. The screen shows 2 payments,
+  3,699.50, hash total 34330777777. PAYRUN-1 still shows **unpaid
+  3,699.50** and no journal is posted.
+
+- **PBF2 ASB MT9 file for PAYRUN-1.** Bank account 1010 "ASB cheque" is set
+  up as "ASB FastNet MT9", account number 12-3011-0333444-00. The file
+  `PAYRUN-1 ASB 2026-10-14.txt` has four records of exactly 160 characters,
+  each followed by CR (shown with `·` for each space and the record's
+  pieces split up):
+
+  | Record | Pieces |
+  | --- | --- |
+  | Header | `12` `12` `3011` `0333444` `00·` `14102026·····` `Harbour·Cafe·Ltd····` + 109 spaces |
+  | Kiri | `13` `12` `3191` `0654321` `001` `052` `0000165700` `Kiri·Tane···········` `PAYRUN-1····` `PAYRUN-1····` `2026-10-14··` `Wages·······` `·` `Harbour·Cafe·Ltd····` `PAYRUN-1····` `2026-10-14··` `Wages·······` `····` |
+  | Hemi | `13` `01` `0242` `0123456` `000` `052` `0000204250` `Hemi·Walker·········` `PAYRUN-1····` `PAYRUN-1····` `2026-10-14··` `Wages·······` `·` `Harbour·Cafe·Ltd····` `PAYRUN-1····` `2026-10-14··` `Wages·······` `····` |
+  | Trailer | `13` `99` `34330777777` `······` `0000369950` + 129 spaces |
+
+  The detail's pieces are: payee bank, branch, unique number, suffix,
+  transaction code, cents, payee name, internal reference, payee code,
+  payee reference, payee particulars, a space, payer name, payer code,
+  payer reference, payer particulars, 4 spaces.
+
+- **PBF3 BNZ file for PAYRUN-1.** Bank account 1020 "BNZ wages" is set up
+  as "BNZ IB4B", account number 02-0100-0555666-000. Made with "one line on
+  our statement for the whole file" (the indicator blank), the file
+  `PAYRUN-1 BNZ 2026-10-14.txt`, each line ending CR LF:
+
+  ```
+  1,,,,0201000555666000,7,261014,261013,
+  2,1231910654321001,52,165700,Kiri Tane,2026-10-14,PAYRUN-1,,Wages,Harbour Cafe Ltd,PAYRUN-1,2026-10-14,Wages
+  2,0102420123456000,52,204250,Hemi Walker,2026-10-14,PAYRUN-1,,Wages,Harbour Cafe Ltd,PAYRUN-1,2026-10-14,Wages
+  3,369950,2,34330777777
+  ```
+
+  With "a line on our statement for each employee" the header ends `,I`
+  instead (`1,,,,0201000555666000,7,261014,261013,I`) and nothing else
+  changes. A due date before the day the file is made is refused: "BNZ
+  won't take a due date before the day the file is made (2026-10-13)."
+
+- **PBF4 One employee, and the hash total's zeros.** PAYRUN-2 (Aroha Ngata
+  only, 2,590.50). BNZ, a line each: 
+
+  ```
+  1,,,,0201000555666000,7,261014,261013,I
+  2,0201080987654000,52,259050,Aroha Ngata,2026-10-14,PAYRUN-2,,Wages,Harbour Cafe Ltd,PAYRUN-2,2026-10-14,Wages
+  3,259050,1,01080987654
+  ```
+
+  BNZ zero-fills the hash total to 11 digits (01080987654). ANZ's page gives
+  the hash total a maximum of 11 digits and writes its other numbers
+  without leading zeros, so ANZ's control record is `3,259050,1,1080987654`;
+  ASB's check total is a fixed 9(11) field, `01080987654`. When the hash
+  total is more than 11 digits, the digits on the left are dropped by all
+  three (ASB's own example: 123456789123 → 23456789123).
+
+- **PBF5 What's left to pay, then "Record as paid".** The file has each
+  employee's **unpaid net pay**: all of it before any payment; after
+  per-employee payments (PPAY2), only what each still has unpaid. Ben pays
+  Hemi's 2,042.50 per employee (a WAGES payment, PPAY2); the ANZ file for
+  PAYRUN-1 then has Kiri only: `3,165700,1,31910654321`. Ben uploads it and
+  records Kiri's 1,657.00 as paid; making a file again is refused: "Nothing
+  is left to pay on PAYRUN-1." A pay run paid **in part as a whole**
+  (PPAY1) can't say whose pay is left, so it's refused: "PAYRUN-1 has been
+  paid in part as a whole, so Tohyee can't tell whose pay is left. Void
+  that payment, or pay the rest in your bank's own screens." Employees with
+  nothing to pay are left out.
+
+- **PBF6 Refused rather than guessed.** Each of these makes no file:
+  - **Westpac** and **Kiwibank**: "Not supported yet (refused rather than
+    guessed): Westpac doesn't publish a field-level specification of its
+    payment files. Ask Westpac for it." (and the same for Kiwibank). Settings
+    › Bank files doesn't offer them, and says why.
+  - an employee with **no bank account**: "Kiri Tane has no bank account.
+    Add it under Payroll › Employees."; one that **isn't an NZ bank account
+    number**: "Kiri Tane's bank account isn't a New Zealand bank account
+    number (bank 2 digits, branch 4, account 7, suffix 2 or 3). Fix it under
+    Payroll › Employees." The number itself isn't repeated in the message.
+  - a **3-digit suffix over 99** on an ANZ or BNZ file (ANZ: "can't exceed
+    99"; BNZ's 16-digit form is a 2-digit suffix with a zero in front):
+    "Kiri Tane's account suffix 100 can't go in an ANZ file (ANZ takes
+    suffixes up to 99)."
+  - a name or text with a character outside the allowed list: "Kiri Tane's
+    name has characters a bank file can't carry (@). Change it under
+    Payroll › Employees."
+  - a bank account that isn't set up for bank files: "Set up 1000 (Bank)
+    for bank files first: an admin enters its account number and bank under
+    Settings › Bank files."; a foreign-currency account; a draft or voided
+    pay run ("PAYRUN-3 is a draft, so it has no bank file. Approve it
+    first.").
+  - an amount past the field (ANZ 11 digits, ASB 10, BNZ 12) or more than
+    the file can hold (ANZ 99,999 payments, the 5-digit count; BNZ 99,998).
+  - ASB's **CSV** format (its page 49 wasn't read; MT9 is fully specified).
+
+- **PBF7 Settings, access and privacy.** Settings › Bank files lists each
+  NZD bank account with its account number and format; only admins change
+  them (bookkeepers can see them), and the number is checked as above.
+  Making a file needs the bookkeeper role and payroll access (Noah, a
+  bookkeeper without it, gets "You need payroll access to see payroll…",
+  403). Employees' bank accounts are decrypted only while the file is made,
+  inside that check, and are never logged or written to the audit log: the
+  audit event "payroll_bank_file.made" holds the pay run, the bank
+  account's code, the format, the due date and how many payments, never an
+  amount or an account number (decision 6, PPAY10).
+
+### Questions for Jess (bank files)
+
+1. **ANZ's examples** end the header with a comma (`...,20060725,`) and put
+   a space in the control record's total (`3, 503400,...`). Tohyee follows
+   the header example and writes the total without the space (it's a
+   number field). Please check one upload with ANZ.
+2. **Leading zeros**: ANZ's page doesn't say whether the hash total is
+   zero-filled (Tohyee doesn't, PBF4); ASB's check total is a fixed 9(11)
+   field, which Tohyee zero-fills. And ASB says each record ends with "a
+   carriage return": Tohyee writes CR only, not CR LF. Confirm with a test
+   upload?
+3. **Check digits**: the banks' check-digit rules for account numbers
+   aren't in the sources, so only the shape is checked. Should Tohyee check
+   them (the published algorithm would need a source)?
+4. **Statement details**: particulars "Wages", code PAYRUN-n, reference the
+   pay date. Would clients rather have the employee's own code (e.g. a
+   staff number)?
+5. **ANZ transaction code**: the page gives only 50 (standard credit), so
+   ANZ files use 50, not 52 (payroll). Ask ANZ?
+6. **Westpac and Kiwibank**: ask each bank for its specification, or wait?
+
+## NZ payroll — payslips (examples not yet approved by Jess)
+
+Payroll stage P5 (#60). Jess hasn't approved these. A **payslip** is made
+for each employee on an **approved** pay run, from what the pay run kept
+when it was approved, as a page to print, a PDF to download, or an email
+to the employee with the PDF attached. Nothing is posted or changed.
+
+Sources, law first:
+
+- **Holidays Act 2003 s 81(2)** (holiday and leave record, from
+  `docs/sources/holidays-act-2003.md`, read on legislation.govt.nz 1 Oct
+  2026): "(a) the name of the employee: (b) the date on which the
+  employee's employment commenced: (c) the number of hours worked each day
+  in a pay period and the pay for those hours", then leave entitlements and
+  leave taken (d)-(p); s 81(5): it "may be kept so as to form part of the
+  wages and time record required to be kept under section 130 of the
+  Employment Relations Act 2000"; s 82: the employee can ask for a copy.
+- **Employment Relations Act 2000 s 130** (wages and time record): **not
+  confirmed**. legislation.govt.nz returned 403 to our tools on 1 Oct 2026
+  and the section isn't in `docs/sources/`. Employment NZ's
+  [Record-keeping](https://www.employment.govt.nz/starting-employment/rights-and-responsibilities/record-keeping)
+  page (updated 6 Nov 2025) summarises it as "the days the employee worked
+  and the number of hours worked on those days" and "the wages paid in each
+  pay period and how these have been calculated", kept for 6 years.
+- **Employment NZ**, [Payslips](https://www.employment.govt.nz/pay-and-hours/pay-and-wages/payslips)
+  (updated 4 Dec 2024): an employer doesn't have to give a payslip unless
+  the employment agreement says so; without one the employee can ask for
+  their wages and time and holiday and leave records. A payslip "may
+  contain" name, start date, the bank account "if they're paid directly into
+  their bank account", the pay date and pay period, leave balances, the pay
+  rate, allowances, deductions, reimbursements, gross and net pay for the
+  period and for the year to date, and the hours worked.
+- Then **Xero Payroll NZ** for the layout (earnings, deductions, employer
+  contributions, year to date); NetSuite (a US payroll) has no NZ payslip.
+
+What a payslip shows, and why:
+
+| On the payslip | Why |
+| --- | --- |
+| Employer's name; employee's name and start date | HA s 81(2)(a), (b) |
+| Pay period, pay frequency and pay date | ERA s 130 as summarised by Employment NZ; Employment NZ payslips |
+| Each earnings line: pay item, hours and rate (where it has them), amount; total hours | HA s 81(2)(c) (hours in the period and their pay); "how these have been calculated" |
+| Gross pay; PAYE (including the ACC earners' levy); student loan; KiwiSaver employee (with the rate); other deductions by name; reimbursements (not taxed) | Wages paid and how they were calculated; Wages Protection Act s 4-5 (deductions) |
+| Net pay and the bank account it's paid into, masked to its last 3 digits | Employment NZ payslips; masked for privacy |
+| Employer KiwiSaver contribution and ESCT | Xero's payslip; IRD spec 5.20-5.21 |
+| Year to date for the tax year (1 April to 31 March, by pay date) | Employment NZ payslips ("for the year to date") |
+| Tax code | So the employee can check their PAYE |
+
+Not on the payslip yet: **leave balances** (there's no leave until stage
+P8) and **hours worked each day** (HA s 81(2)(c); there are no timesheets
+until P9, so only the period's hours show). The IRD number isn't shown.
+
+Tests: `tests/unit/payroll-payslips.test.ts` (the bank account mask, the
+tax year and the year-to-date sums) and
+`tests/integration/payroll-payslips.test.ts` (PSLIP1-PSLIP6 against
+PostgreSQL, the API routes, the PDF and a real SMTP server).
+
+- **PSLIP1 Hemi's payslip for PAYRUN-1** (PRUN1's figures).
+
+  | | |
+  | --- | --- |
+  | Employer | Harbour Cafe Ltd |
+  | Employee | Hemi Walker, started 1 Apr 2026 |
+  | Pay period | 28 Sep 2026 to 11 Oct 2026 (fortnightly) |
+  | Pay date | 14 Oct 2026 |
+  | Tax code | M |
+
+  | Earnings | Hours | Rate | Amount |
+  | --- | --- | --- | --- |
+  | Ordinary time | | | 2,692.31 |
+  | **Gross pay** | | | **2,692.31** |
+
+  | Deductions | Amount |
+  | --- | --- |
+  | PAYE (incl. ACC earners' levy) | 555.58 |
+  | KiwiSaver employee (3.50%) | 94.23 |
+  | **Net pay** | **2,042.50** |
+
+  Paid into **-****-******6-00 (the bank account 01-0242-0123456-00 with
+  everything but its last 3 digits hidden). Employer contributions:
+  KiwiSaver employer (3.50%) 94.23, ESCT 28.20 (so 66.03 goes to his
+  KiwiSaver). Lines that are 0.00 (student loan, other deductions) are
+  left out. Year to date (1 Apr 2026 to 31 Mar 2027): gross 2,692.31, PAYE
+  555.58, student loan 0.00, KiwiSaver employee 94.23, other deductions
+  0.00, net pay 2,042.50, employer KiwiSaver 94.23, ESCT 28.20.
+
+- **PSLIP2 Year to date.** A second fortnightly pay run, **PAYRUN-3**,
+  period 12 Oct to 25 Oct 2026, pay date 28 Oct 2026, pays Hemi and Kiri
+  the same again. Hemi's PAYRUN-3 payslip's year to date: gross
+  **5,384.62**, PAYE **1,111.16**, KiwiSaver employee **188.46**, net pay
+  **4,085.00**, employer KiwiSaver **188.46**, ESCT **56.40**; Kiri's:
+  gross **4,000.00**, PAYE **686.00**, net pay **3,314.00**. The year to
+  date counts approved pay runs (not voided ones) with a pay date in the
+  same tax year, up to this pay run (on the same pay date, by pay run
+  number), so PAYRUN-1's payslip still shows PSLIP1's year to date. If
+  PAYRUN-3 is voided it has no payslip ("PAYRUN-3 is voided, so it has no
+  payslips."), and a new PAYRUN-4 for the same period gives the same year
+  to date as PAYRUN-3 did (the voided one isn't counted). A draft has no
+  payslips either ("PAYRUN-4 is a draft, so it has no payslips. Approve it
+  first."). The tax year runs 1 April to 31 March: a pay dated 31 Mar 2027
+  is in 2026-27 and one dated 1 Apr 2027 starts 2027-28.
+
+- **PSLIP3 Hours, an allowance, a reimbursement and a deduction** (PRUN2's
+  figures). Sione Fifita, weekly, 5 Oct to 11 Oct 2026, pay date 14 Oct
+  2026, tax code M, KiwiSaver 4%:
+
+  | Earnings | Hours | Rate | Amount |
+  | --- | --- | --- | --- |
+  | Ordinary time | 32.00 | 22.50 | 720.00 |
+  | Overtime | 4.00 | 33.75 | 135.00 |
+  | Tool allowance | | | 25.00 |
+  | Reimbursement: Fuel receipt (not taxed) | | | 42.60 |
+  | **Gross pay** (36.00 hours) | | | **922.60** |
+
+  Deductions: PAYE (incl. ACC earners' levy) 148.40, KiwiSaver employee
+  (4.00%) 35.20, Union fees 8.50; **net pay 730.50**. Employer KiwiSaver
+  (3.50%) 30.80, ESCT 5.25.
+
+- **PSLIP4 Print and PDF.** The payslip page (Payroll › Pay runs ›
+  PAYRUN-1 › Payslips › Hemi Walker) has Print and Download PDF. The PDF,
+  `Payslip Hemi Walker 2026-10-14.pdf`, shows the same items and figures
+  as the page (written by the same PDF pieces as invoices).
+
+- **PSLIP5 Email.** Hemi's email address is hemi@harbourcafe.test; Kiri has
+  none. Ben emails PAYRUN-1's payslips: Hemi's is queued to
+  hemi@harbourcafe.test with the subject "Payslip for 14 Oct 2026 from
+  Harbour Cafe Ltd" and the message "Kia ora Hemi, Your payslip for 28 Sep
+  2026 to 11 Oct 2026, paid on 14 Oct 2026, is attached. Harbour Cafe Ltd"
+  (no amounts in the email itself, so the stored message and the audit log
+  never hold pay), and sent by the email job from the organisation's email
+  account with the PDF attached; Kiri is skipped: "Kiri Tane has no email
+  address. Add it under Payroll › Employees.". Emailing only Kiri is
+  refused with that message. The audit log records on the pay run that a
+  payslip email was queued and then sent, with the employee, the address,
+  the subject and the attachment's name, never the payslip's figures. A
+  draft pay run's payslips can't be emailed, and with no email account set
+  up it's refused (503) as for invoices. The PDF is written when the email
+  is sent, as the person who asked, so someone who has lost payroll access
+  by then doesn't send it.
+
+- **PSLIP6 Access.** Payslips (seeing, printing, downloading, emailing)
+  need the bookkeeper role and payroll access: Noah (a bookkeeper without
+  it) gets "You need payroll access to see payroll…" (403) and a viewer
+  "This needs the bookkeeper role or higher in this organisation." (403).
+  There's no employee self-service portal: employees get their payslip by
+  email or on paper.
+
+### Questions for Jess (payslips)
+
+1. **ERA s 130**: its wording couldn't be read (legislation.govt.nz
+   blocks our tools). Please save the section to `docs/sources/` so the
+   payslip can be checked against it.
+2. **Hours each day** (HA s 81(2)(c)) need timesheets (P9). Until then only
+   the period's hours show. OK?
+3. **The bank account** shown is the employee's current one (the pay run
+   doesn't keep a copy). Should a pay run keep the account it paid into?
+4. Should payslips show the **IRD number** or an **employee number**
+   (Employment NZ lists both as things a payslip may show)?
+5. Should the payslip email's text be editable (a template, like
+   invoices)? It's fixed now so pay never ends up in a stored message.
+
+## Payday filing file (examples not yet approved by Jess)
+
+Stage P6 of payroll (#60). Jess hasn't approved these. From an **approved**
+pay run Tohyee makes IRD's **employment information (EI) file**, a CSV file
+to upload in myIR (myIR › Employment information › file upload), and shows
+when it's due. Making the file posts nothing to the ledger and marks
+nothing as filed (decision 65).
+
+Sources, law first: IRD's **Payday Filing File Upload Specification
+2026-27** ("version 2027", July 2026), its section 3.4 (the EI file, header
+record `HEI2` and employee records `DEI`), summarised field by field in
+`docs/sources/ird-payday-filing-file-spec.md`, with what couldn't be read
+(the appendix: attribute definitions, the tax code table and the IRD number
+check). Due dates: spec 3.4 and IRD's
+[Payday filing](https://www.ird.govt.nz/employing-staff/payday-filing) page
+("within 2 working days of each payday", last updated 24 Feb 2026, read
+2 Oct 2026). The design calls are decisions 56-65 in `docs/DECISIONS.md`
+(NetSuite has no NZ payroll; Xero files each pay run straight to IRD). The
+figures are PRUN1-PRUN3's. **No file here has been through myIR yet**: run
+one through myIR's "Check your employment information file" service
+(spec 2.5) before approving.
+
+Tests: `tests/unit/payroll-payday-filing.test.ts` (the file byte for byte,
+due dates, settings checks) and `tests/integration/payroll-payday-filing.test.ts`
+(made from approved pay runs through the API).
+
+The examples use these **payroll settings** (Payroll › Pay items › Payday
+filing, admins with payroll access, decision 62): employer IRD number
+**123-123-123** (IRD's own example number), payroll contact **Mere Tipene**,
+work phone **03 477 1234** (kept as `034771234`), email
+**payroll@harbourcafe.co.nz**. Tohyee's version is 0.3.1, so the package
+identifier is `Tohyee_Tohyee_v0.3.1`. Employees' IRD numbers: Kiri Tane
+87-654-321, Hemi Walker 123-456-789, Sione Fifita 100-200-300, Aroha Ngata
+112-233-445, Sina Fifita 100-200-301 (none checked with IRD's modulus 11
+rule).
+
+How the file is written (decisions 57-61): one header line then one line
+per employee in the pay run's order (last name, first name), fields
+separated by commas, each line ending CR LF (including the last). Dates
+are `CCYYMMDD`. Amounts and hours are in hundredths with no decimal point
+and no padding (2,692.31 → `269231`, 36 hours → `3600`, nil → `0`).
+Gross earnings are **taxable** earnings; fields for things Tohyee doesn't
+do yet are 0 and the child support code is blank. The file is named
+`EI-<pay date>-<pay run>.csv`.
+
+- **PF1 Fortnightly salaries (PRUN1).** PAYRUN-1, Fortnightly salaries,
+  period 28 Sep to 11 Oct 2026, pay date Wednesday 14 Oct 2026. File
+  `EI-20261014-PAYRUN-1.csv`:
+
+  ```
+  HEI2,123123123,20261014,N,N,,Mere Tipene,034771234,payroll@harbourcafe.co.nz,2,469231,0,0,89858,0,0,0,0,0,9423,6603,2820,108704,0,0,0,Tohyee_Tohyee_v0.3.1,0001
+  DEI,087654321,Kiri Tane,M,,,20260928,20261011,FT,0,200000,0,0,0,34300,0,0,,0,0,0,0,0,0,0,0,0
+  DEI,123456789,Hemi Walker,M,,,20260928,20261011,FT,0,269231,0,0,0,55558,0,0,,0,0,0,9423,6603,2820,0,0,0
+  ```
+
+  Header: 2 employee lines; total gross 2,000.00 + 2,692.31 = **4,692.31**;
+  PAYE 343.00 + 555.58 = **898.58**; KiwiSaver deductions **94.23**; net
+  employer contributions **66.03** (94.23 less ESCT); ESCT **28.20**; total
+  amounts deducted 898.58 + 94.23 + 66.03 + 28.20 = **1,087.04** (what
+  PAYRUN-1 owes IRD in PPAY12). Pay cycle `FT`; hours 0 because
+  both are on a salary (decision 59). Kiri's 8-digit IRD number gets a
+  leading 0. Final return N, nil return N, no PAYE intermediary.
+
+- **PF2 Hourly, overtime, allowance, reimbursement and a deduction
+  (PRUN2).** PAYRUN-2, Weekly wages, period 5 to 11 Oct 2026, pay date
+  14 Oct 2026. Sione's lines: 32 hours ordinary time, 4 hours overtime,
+  Tool allowance 25.00, Reimbursement 42.60, Union fees 8.50. File
+  `EI-20261014-PAYRUN-2.csv`:
+
+  ```
+  HEI2,123123123,20261014,N,N,,Mere Tipene,034771234,payroll@harbourcafe.co.nz,1,88000,0,0,14840,0,0,0,0,0,3520,2555,525,21440,0,0,0,Tohyee_Tohyee_v0.3.1,0001
+  DEI,100200300,Sione Fifita,M,,,20261005,20261011,WK,3600,88000,0,0,0,14840,0,0,,0,0,0,3520,2555,525,0,0,0
+  ```
+
+  Hours paid **36.00** (32 + 4; the allowance and reimbursement are
+  amounts). Gross earnings **880.00**, the taxable earnings: the 42.60
+  reimbursement isn't taxable so it's left out (spec field 11), and the
+  union fees are an after-tax deduction IRD isn't told about. PAYE 148.40,
+  KiwiSaver 35.20, net employer 25.55, ESCT 5.25; total deducted
+  148.40 + 35.20 + 25.55 + 5.25 = **214.40**.
+
+- **PF3 Student loan (PRUN3).** PAYRUN-3, Four-weekly, period 14 Sep to
+  11 Oct 2026, pay date 14 Oct 2026. File `EI-20261014-PAYRUN-3.csv`:
+
+  ```
+  HEI2,123123123,20261014,N,N,,Mere Tipene,034771234,payroll@harbourcafe.co.nz,1,350000,0,0,58972,0,0,19728,0,0,12250,10115,2135,103200,0,0,0,Tohyee_Tohyee_v0.3.1,0001
+  DEI,112233445,Aroha Ngata,M SL,,,20260914,20261011,4W,0,350000,0,0,0,58972,0,0,,19728,0,0,12250,10115,2135,0,0,0
+  ```
+
+  Tax code `M SL` as stored (the spec's own example writes it that way).
+  Student loan **197.28** goes in its own field, not in PAYE. Total
+  deducted 589.72 + 197.28 + 122.50 + 101.15 + 21.35 = **1,032.00**.
+
+- **PF4 Three pay runs on one pay date.** PF1, PF2 and PF3 all have pay
+  date 14 Oct 2026. Each pay run makes its own file with its own header
+  totals; IRD accepts several EIs for one paydate (decision 56). Uploading
+  all three files tells IRD about gross earnings of 4,692.31 + 880.00 +
+  3,500.00 = **9,072.31** and deductions of 1,087.04 + 214.40 + 1,032.00 =
+  **2,333.44** for 14 Oct 2026. Making a file again gives the same bytes
+  (unless the payroll settings or an employee's IRD number changed since).
+
+- **PF5 A new employee in the pay period.** Sina Fifita starts on
+  **Wednesday 7 Oct 2026** in pay group "Weekly casuals", paid exactly as
+  Sione in PF2 (same rate, lines, KiwiSaver and ESCT rate), so the figures
+  are PF2's. PAYRUN-4, period 5 to 11 Oct 2026, pay date 14 Oct 2026. Her
+  line has the start date in field 5 because it's inside her pay period:
+
+  ```
+  DEI,100200301,Sina Fifita,M,20261007,,20261005,20261011,WK,3600,88000,0,0,0,14840,0,0,,0,0,0,3520,2555,525,0,0,0
+  ```
+
+  The payday filing card also lists her under "Starting in this pay
+  period": IRD wants a new employee's details (address and date of birth
+  if given) "on or before a new employee's first payday", and Tohyee
+  doesn't make the employee details file (decision 64), so they're entered
+  in myIR. Someone who started before the period (Sione) has field 5
+  blank.
+
+- **PF6 Due dates.** Due 2 working days after the pay date, skipping
+  Saturdays and Sundays (decision 63):
+
+  | Pay date | Shown as due | Note |
+  | --- | --- | --- |
+  | Wed 14 Oct 2026 | **Fri 16 Oct 2026** | |
+  | Fri 23 Oct 2026 | **Tue 27 Oct 2026** | Mon 26 Oct is Labour Day, so IRD's due date is Wed 28 Oct; Tohyee's is a day early, never late |
+  | Sat 24 Oct 2026 | **Tue 27 Oct 2026** | Monday and Tuesday are the 2 working days (again before counting Labour Day) |
+  | Fri 30 Oct 2026 | **Tue 3 Nov 2026** | |
+
+  The card says: "Due within 2 working days of the pay date (IRD). Public
+  holidays aren't counted yet, so if one falls in between, IRD's due date
+  is later." Paper filers' 10 working days aren't shown (a file is
+  electronic).
+
+- **PF7 Settings and refused files.** Making a file is refused, with what
+  to do, when:
+  - the pay run is a **draft** ("PAYRUN-5 is a draft, so it has no
+    employment information file. Approve it first.") or **voided**
+    ("PAYRUN-1 is voided, so it has no employment information file. If you
+    filed it, amend it in myIR.");
+  - the **payday filing settings** aren't filled in ("Set up payday
+    filing first: an admin enters the employer's IRD number and the
+    payroll contact under Payroll › Pay items.").
+  Saving the settings refuses: an employer IRD number that isn't 8 or 9
+  digits, or is all zeros; a contact name over 20 characters or with a
+  comma; a phone that isn't 1 to 12 letters and digits once spaces,
+  dashes, brackets and a leading + are dropped (`03 477 1234` →
+  `034771234`); an email over 60 characters, without `@` and a domain,
+  with two dots in a row, or with characters other than A-Z, a-z, 0-9,
+  @, -, _ and . (IRD's list). An 8-digit employer IRD number (`49-091-850`)
+  is written `049091850`. A comma in an employee's name becomes a
+  space, with spaces collapsed (last name typed "Tane, Jr" → "Kiri Tane
+  Jr"), because an approved pay run can't be changed (decision 60).
+
+- **PF8 Access, and nothing posted.** Making the file and reading the
+  settings need payroll access and the bookkeeper role (decision 6); Noah
+  (bookkeeper, no payroll access) gets "You need payroll access to see
+  payroll…" (403), Vic (viewer) 403. Only admins with payroll access change
+  the settings. Making a file posts no journal and changes nothing on the
+  pay run. It writes one audit event, "payroll_payday_filing.made", with
+  the pay run, file name, number of employee lines and the file's SHA-256,
+  never an amount or IRD number.
+
+- **PF9 Not built (refused rather than guessed).**
+  - The **employee details file** (HED2/DED/TED) for new and departing
+    employees (decision 64).
+  - **Amendments** to an EI already filed (the spec's EI amendments file,
+    3.5): amend in myIR. Voiding a pay run doesn't tell IRD.
+  - **Filing straight to IRD** (IRD's gateway services, as Xero does): it
+    needs IRD's onboarding as a software provider.
+  - Child support, SLCIR/SLBOR, payroll giving, extra pays (lump sum
+    indicator), schedular payments, the Employee Share Scheme and prior
+    period adjustments: Tohyee doesn't pay these yet (PRUN8), so their
+    fields are 0.
+
+### Questions for Jess (payday filing file)
+
+1. **Try a file in myIR.** Please run PF1's file (or a real pay run's)
+   through myIR's "Check your employment information file" service. It
+   checks things the spec's appendix (not read) defines: whether amounts
+   in cents without a decimal point, CR LF line endings, a final CR LF,
+   macrons in names and 3.5% KiwiSaver deductions are accepted.
+2. **Employee details file.** Do you want Tohyee to make it? That needs
+   employee addresses split into street, suburb, city and post code, a
+   mobile and a daytime phone, and each new employee's KiwiSaver
+   eligibility (NE, EE or EA) and status (AE, AK, OK, NK or CT).
+3. **One file per pay run** (decision 56), or one file per pay date
+   combining pay runs (IRD allows both)?
+4. **Employer IRD number** is its own setting. Should it start from the GST
+   number when that's set?
+5. **Hours paid** for salaried staff are 0 (decision 59). Would you rather
+   use their usual hours for the period?
 
 ## Holidays Act leave (examples not yet approved by Jess)
 

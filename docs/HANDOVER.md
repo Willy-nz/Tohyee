@@ -50,7 +50,6 @@ Set them in the Agents box before sending each task:
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
 | Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
-| Payroll P4: paying wages and IRD (examples PPAY1-PPAY12) | #60 | not opened yet | `claude/payroll-p4-paying` (Claude) | 0062 |
 | RDTI R3: the claim report (examples RD28-RD42, decisions 66-75) | none | not opened yet | `claude/rdti-r3-claim-report` (Claude) | 0065 |
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
@@ -61,7 +60,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0063 (0058-0062 used or reserved above).
+Next free tenant migration number: 0065 (0058-0064 used or reserved: 0063 payslips and bank files P5, 0064 payday filing P6).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -130,8 +129,7 @@ only be run by certain people. Each item is its own branch and PR.
       (delete and start the draft again). Refused rather than guessed:
       extra pays (P12), back pay and final pays (P12), leave (P8), child
       support, payroll giving, pay rate changes inside a period.
-- [ ] **P4 Paying wages and IRD** (migration 0062), done in branch
-      `claude/payroll-p4-paying`, waiting for a PR and review; examples
+- [x] **P4 Paying wages and IRD** (#78, migration 0062), merged; examples
       PPAY1-PPAY12 await Jess (questions under PPAY12). Built:
       - **Wages**: from an approved pay run, payments of net pay from a bank
         account (Dr Wages payable, Cr bank), for the whole run or per
@@ -148,11 +146,39 @@ only be run by certain people. Each item is its own branch and PR.
         refused. Monthly or twice a month is a setting (Payroll › Pay items).
       - Undo order enforced: a pay run can't be voided while it has wage
         payments or IRD payments for its period.
-      Not built: a bank direct-credit file (Tohyee has no bank batch file
-      format; question for Jess), public holidays in due dates, IRD
-      penalties, child support.
-- [ ] **P5 Payslips** (PDF and email). Needs P3.
-- [ ] **P6 Payday filing file** for myIR. Needs P3.
+      Not built: public holidays in due dates, IRD penalties, child
+      support. (Bank files came in P5.)
+- [ ] **P5 Payslips and bank files** (migration 0063), done in branch
+      `claude/payroll-bank-files-payslips`, waiting for a PR and review;
+      examples PBF1-PBF7 and PSLIP1-PSLIP6 await Jess (questions under each).
+      Built:
+      - **Bank files** for an approved pay run's unpaid net wages: ANZ
+        domestic extended, ASB FastNet MT9 and BNZ IB4B, from each bank's
+        own published specification (`docs/sources/nz-bank-direct-credit-formats.md`),
+        tested byte for byte with hash totals. Each bank account's number and
+        format are set by an admin (Settings › Bank files). Making a file
+        posts nothing; "Record as paid" is the P4 wage payment. Westpac and
+        Kiwibank refused (no published specification); ASB CSV not made.
+      - **Payslips**: print, PDF and email to the employee, with the year to
+        date for the tax year and the bank account masked to its last 3
+        digits. The email's text is fixed (no figures) and the audit log
+        records only that it was queued and sent, to whom.
+      Not built: leave balances (P8), hours each day (P9), an employee
+      portal. ERA s 130's wording couldn't be read (legislation.govt.nz
+      blocks our tools); the payslip follows Holidays Act s 81 and
+      Employment NZ's guidance.
+- [ ] **P6 Payday filing file** for myIR (tenant migration 0064), built in
+      branch `claude/payroll-p6-payday-filing`, waiting for a PR and review;
+      examples PF1-PF9 await Jess (questions under PF9), decisions 56-65.
+      From an approved pay run: IRD's employment information file (file
+      upload specification 2026-27, `docs/sources/ird-payday-filing-file-spec.md`)
+      to upload in myIR, its due date (2 working days after the pay date;
+      weekends skipped, public holidays not), and who starts in the period.
+      Employer IRD number and payroll contact under Payroll › Pay items.
+      Posts nothing; audit event with the file's hash. Not built: the
+      employee details file (decision 64), EI amendments, gateway filing.
+      **No file has been through myIR's "Check your employment information
+      file" service yet**: do that before relying on it.
 - [ ] **P7 Holidays Act leave, plan** (#68): HL1-HL42 in
       `docs/ACCOUNTING-EXAMPLES.md`, reworked to follow decisions 7-29 in
       `docs/DECISIONS.md` (built for the Holidays Act 2003 until each
@@ -278,6 +304,8 @@ To do:
       - Income Tax Act 2007: subpart LY (R&D tax incentive) and schedule 1
         part D (ESCT rates)
       - Wages Protection Act 1983 (section 5)
+      - Employment Relations Act 2000, section 130 (wages and time record),
+        for checking payslips (P5)
       - IRD's IR1240 R&D tax incentive guidance, April 2026 (the whole PDF;
         our tools only read the first 49 pages)
       - When MBIE publishes it (due Nov 2026 to Jan 2027): its technical
