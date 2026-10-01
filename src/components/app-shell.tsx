@@ -173,6 +173,7 @@ const MENUS: Menu[] = [
           { href: "/operations/settings/tracking", label: "Tracking categories", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/custom-fields", label: "Custom fields", minRole: "admin", module: "reporting" },
           { href: "/crm/record-types", label: "CRM record types", minRole: "admin", module: "crm" },
+          { href: "/crm/stages", label: "CRM opportunity stages", minRole: "admin", module: "crm" },
           { href: "/operations/settings/salespeople", label: "Salespeople", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/customers", label: "Payment terms and customers", minRole: "admin" },
           { href: "/operations/settings/import", label: "Import and export", minRole: "admin" },
@@ -226,9 +227,11 @@ const CRM_MENUS: Menu[] = [
   { label: "Companies", href: "/crm/companies", area: ["/crm/companies"] },
   { label: "People", href: "/crm/people", area: ["/crm/people"] },
   { label: "Pipeline", href: "/crm/pipeline", area: ["/crm/pipeline", "/crm/opportunities"] },
+  { label: "Forecasts", href: "/crm/forecasts", area: ["/crm/forecasts"] },
   { label: "Tasks", href: "/crm/tasks", area: ["/crm/tasks"] },
   { label: "Email and calendar", href: "/crm/mail", area: ["/crm/mail"] },
   { label: "Record types", href: "/crm/record-types", area: ["/crm/record-types"], minRole: "admin" as const },
+  { label: "Stages", href: "/crm/stages", area: ["/crm/stages"], minRole: "admin" as const },
 ].map((menu) => ({ ...menu, groups: [], module: "crm" as const }));
 
 /** The paths a menu covers, so its button shows as the current area. */
