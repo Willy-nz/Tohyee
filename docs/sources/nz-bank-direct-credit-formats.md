@@ -74,6 +74,18 @@ digits dropped on the left. Transaction code 50 (standard credit) or 52
   line); amount (decimal point optional, otherwise cents); payee particulars,
   code and reference (≤12 each, may be empty); destination account; payer
   particulars (≤12); further payer fields on page 49 (not read).
+- Re-read 1 Oct 2026 (the PDF through WebFetch, for payroll P5): MT9 header
+  suffix "Acceptable: 01 expressed as 010 Better: 01 expressed as 01¤";
+  due date "Correct: DDMMCCYY¤¤¤¤¤"; detail amount "Align right and pad to
+  the left with zeros. Correct: $123.45 expressed as 0000012345"; check
+  total "If the number exceeds 11 characters, the remaining characters are
+  not used. For example, if the sum is 123456789123, then the import file
+  check total is shortened to 23456789123", and "FastNet Business only
+  validates this field when it is populated"; client short name and payer
+  name "not used by FastNet Business". The guide gives no complete example
+  MT9 lines. CSV fields 9-12 as the tool read them: payer particulars, payer
+  code, payer reference (≤12 each) and payee name (≤32); not used, as MT9 is
+  what Tohyee makes.
 
 ## BNZ — Internet Banking for Business (IB4B) "Direct Credits" / "Payroll" file
 

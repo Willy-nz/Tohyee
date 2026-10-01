@@ -51,9 +51,9 @@ that something happened.
   the employee list shows each person's primary department. Splitting an amount
   shares out the cents so the parts always add back to the whole. **Payroll
   access**: only members an admin has given it to (bookkeeper or higher) can
-  see or change any of this; the first owner has it to start with. Pay runs
-  and paying wages and IRD are below; payslips, payday filing, payroll
-  reports and Holidays Act leave are not built.
+  see or change any of this; the first owner has it to start with. Pay runs,
+  paying wages and IRD, bank files and payslips are below; payday filing,
+  payroll reports and Holidays Act leave are not built.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
@@ -920,8 +920,29 @@ that something happened.
   void payments. Undo in order: a pay run can't be voided while it has wage
   payments or its IRD period has IRD payments, and a payment matched on the
   bank statement must be unreconciled first. Locked periods apply. Not built:
-  a bank direct-credit file (no bank batch format exists yet), public
-  holidays in due dates, IRD penalties and interest, child support.
+  public holidays in due dates, IRD penalties and interest, child support.
+- **Bank files for paying wages** (payroll stage P5, PBF1-PBF7, not yet
+  approved by Jess; bookkeeper role and payroll access). On an approved pay
+  run, "Make bank file" writes a direct credit file of each employee's
+  unpaid net pay, from a bank account set up under Settings › Bank files
+  (admins enter its account number and bank): ANZ domestic extended, ASB
+  FastNet MT9 or BNZ IB4B (one statement line or one per employee), each to
+  the bank's published specification, with the hash total. Employees' bank
+  accounts are checked (bank-branch-account-suffix) first. Making a file
+  posts nothing; record the payment under Wages paid after uploading it.
+  Westpac and Kiwibank are refused (no published file specification), as is
+  ASB's CSV format.
+- **Payslips** (payroll stage P5, PSLIP1-PSLIP6, not yet approved by Jess;
+  bookkeeper role and payroll access). For each employee on an approved pay
+  run: employer, employee and start date, pay period and pay date, tax
+  code, earnings with hours and rates, gross, PAYE (incl. ACC earners'
+  levy), student loan, KiwiSaver, other deductions, net pay, the bank
+  account masked to its last 3 digits, employer KiwiSaver and ESCT, and the
+  year to date for the tax year. Print, download as a PDF, or email to the
+  employee (one or everyone with an email address) from the organisation's
+  email account; the email's text and the audit log have no figures. Not
+  shown yet: leave balances (no leave until P8) and hours each day (no
+  timesheets until P9). No employee self-service portal.
 
 - **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
   RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;
@@ -1006,9 +1027,9 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: payslips, payday filing, Holidays Act leave, timesheets and
-   payroll reports (employee records, IRD rates and calculations, pay items,
-   pay runs and paying wages and IRD are built).
+4. NZ payroll: payday filing, Holidays Act leave, timesheets and payroll
+   reports (employee records, IRD rates and calculations, pay items, pay
+   runs, paying wages and IRD, bank files and payslips are built).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,
