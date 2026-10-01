@@ -27,10 +27,12 @@ import {
   createCustomFieldSection,
   deleteCustomFieldSection,
   getCustomFieldSetup,
+  addCustomFieldOption,
   updateCustomField,
+  updateCustomFieldOption,
   updateCustomFieldSection,
 } from "@/lib/custom-fields/service";
-import { type CustomFieldSetup, groupBySection } from "@/lib/custom-fields/values";
+import { type CustomFieldSetup, fieldsFor, groupBySection } from "@/lib/custom-fields/values";
 import { applyMigrations } from "@/lib/db/migrations/runner";
 import { tenantMigrations } from "@/lib/db/migrations/tenant";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -246,7 +248,7 @@ describeWithDatabase("custom fields on CRM records", () => {
     );
   });
 
-  it("CRMF3: the upgrade puts existing customer fields on prospects too", async () => {
+  it("CRMF3: the upgrade leaves existing contact fields off prospects", async () => {
     const database = `${server.coreDatabase}_org_upgrade`;
     const admin = new pg.Client({ connectionString: testDatabaseUrl! });
     await admin.connect();
@@ -266,9 +268,9 @@ describeWithDatabase("custom fields on CRM records", () => {
       await applyMigrations(client, tenantMigrations, "crmf-upgrade");
       const fields = await client.query<{ label: string; used_on: string[] }>("select label, used_on from custom_fields order by id");
       expect(fields.rows).toEqual([
-        { label: "Channel", used_on: ["customer", "prospect"] },
+        { label: "Channel", used_on: ["customer"] },
         { label: "Account no", used_on: ["supplier"] },
-        { label: "Region", used_on: ["customer", "supplier", "prospect"] },
+        { label: "Region", used_on: ["customer", "supplier"] },
       ]);
     } finally {
       await client.end();
@@ -479,5 +481,81 @@ describeWithDatabase("custom fields on CRM records", () => {
     const sectionPath = "/api/custom-fields/sections";
     expect((await sectionsRoute.POST(apiRequest(sectionPath, { method: "POST", cookie: bookkeeperCookie, body: sectionBody }), noContext)).status).toBe(403);
     expect((await sectionsRoute.POST(apiRequest(sectionPath, { method: "POST", cookie: ownerCookie, body: sectionBody }), noContext)).status).toBe(201);
+  });
+
+  it("CRMF10: older customer fields can still be changed with the CRM off", async () => {
+    const w = await setup();
+    await w.as((tx) => updateOrganisationSettings(tx, { advancedFeatures: true }));
+    await w.as((tx) => updateOrganisationSettings(tx, { crmEnabled: false }));
+    const channel = await w.field({ record: "contact", label: "Channel", type: "text", usedOn: ["customer"] });
+    const region = await w.field({ record: "contact", label: "Region", type: "list", usedOn: ["customer", "supplier"], options: ["North", "South"] });
+    const renamed = await w.as((tx) => updateCustomField(tx, channel.id, { label: "Sales channel", isRequired: true }));
+    expect(renamed.fields.find((f) => f.id === channel.id)).toMatchObject({ label: "Sales channel", isRequired: true, usedOn: ["customer"] });
+    expect((await w.as((tx) => updateCustomField(tx, channel.id, { isActive: false }))).fields.find((f) => f.id === channel.id)!.isActive).toBe(false);
+    expect((await w.as((tx) => updateCustomField(tx, channel.id, { isActive: true }))).fields.find((f) => f.id === channel.id)!.isActive).toBe(true);
+    await w.as((tx) => addCustomFieldOption(tx, region.id, { name: "Islands" }));
+    const options = await w.as((tx) => updateCustomFieldOption(tx, w.option(region, "South"), { name: "South Island" }));
+    expect(options.fields.find((f) => f.id === region.id)!.options.map((o) => o.name)).toEqual(["North", "South Island", "Islands"]);
+    await expect(w.as((tx) => updateCustomField(tx, channel.id, { usedOn: ["customer", "prospect"] }))).rejects.toThrow(
+      "The CRM is off, so a field can't be on prospects.",
+    );
+    await expect(w.as((tx) => updateCustomField(tx, w.fields.practiceSize.id, { label: "Vets" }))).rejects.toThrow(
+      "The CRM is off. Turn it on in Settings › Modules first.",
+    );
+    await w.as((tx) => updateOrganisationSettings(tx, { advancedFeatures: false }));
+    await expect(w.as((tx) => updateCustomField(tx, channel.id, { label: "Channel" }))).rejects.toThrow(
+      "Advanced reporting is off. Turn it on in Settings › Modules first.",
+    );
+    await expect(w.as((tx) => addCustomFieldOption(tx, region.id, { name: "Chathams" }))).rejects.toThrow(
+      "Advanced reporting is off. Turn it on in Settings › Modules first.",
+    );
+  });
+
+  it("CRMF11: a required customer field doesn't block prospects", async () => {
+    const w = await setup();
+    const { practiceSize, species } = w.fields;
+    await w.as((tx) => updateOrganisationSettings(tx, { advancedFeatures: true }));
+    const manager = await w.field({ record: "contact", label: "Account manager", type: "text", usedOn: ["customer"], isRequired: true });
+    const vets = await w.as((tx) => updateContact(tx, w.vets.id, { customFields: { [practiceSize.id]: "12" } }));
+    expect(vets.customFields).toEqual({ [practiceSize.id]: "12" });
+    const rata = (await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Rata Clinic", isProspect: true }))).contact;
+    expect(rata.customFields).toEqual({});
+    const s = await w.as((tx) => getCustomFieldSetup(tx));
+    expect(fieldsFor(s.fields, "contact", ["prospect"], {}, s).map((f) => f.id)).toEqual([practiceSize.id, species.id]);
+    await expect(w.as((tx) => updateContact(tx, w.vets.id, { isCustomer: true }))).rejects.toThrow("Account manager is required.");
+    const customer = await w.as((tx) => updateContact(tx, w.vets.id, { isCustomer: true, customFields: { [practiceSize.id]: "12", [manager.id]: "Hemi" } }));
+    expect(customer.customFields).toEqual({ [practiceSize.id]: "12", [manager.id]: "Hemi" });
+
+    await w.as((tx) => updateOrganisationSettings(tx, { advancedFeatures: false }));
+    const tui = (await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Tui Kennels", isCustomer: true }))).contact;
+    expect(tui.customFields).toEqual({});
+    const off = await w.as((tx) => getCustomFieldSetup(tx));
+    expect(fieldsFor(off.fields, "contact", ["customer"], {}, off)).toEqual([]);
+    const both = (await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Kea Vets", isCustomer: true, isProspect: true }))).contact;
+    expect(both.customFields).toEqual({});
+  });
+
+  it("CRMF12: a field turned on for prospects shows and is required there", async () => {
+    const w = await setup();
+    const { practiceSize, species } = w.fields;
+    await w.as((tx) => updateOrganisationSettings(tx, { advancedFeatures: true }));
+    const manager = await w.field({ record: "contact", label: "Account manager", type: "text", usedOn: ["customer"], isRequired: true });
+    const rata = (await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Rata Clinic", isProspect: true }))).contact;
+    const s = await w.as((tx) => updateCustomField(tx, manager.id, { usedOn: ["customer", "prospect"] }));
+    expect(fieldsFor(s.fields, "contact", ["prospect"], {}, s).map((f) => f.id)).toEqual([practiceSize.id, species.id, manager.id]);
+    await expect(w.as((tx) => updateContact(tx, rata.id, { phone: "03 000 0000" }))).rejects.toThrow("Account manager is required.");
+    const saved = await w.as((tx) => updateContact(tx, rata.id, { customFields: { [manager.id]: "Hemi" } }));
+    expect(saved.customFields).toEqual({ [manager.id]: "Hemi" });
+    expect((await w.as((tx) => getContact(tx, rata.id))).customFields).toEqual({ [manager.id]: "Hemi" });
+
+    await w.as((tx) => updateOrganisationSettings(tx, { advancedFeatures: false }));
+    const off = await w.as((tx) => getCustomFieldSetup(tx));
+    expect(fieldsFor(off.fields, "contact", ["prospect"], {}, off).map((f) => f.id)).toEqual([practiceSize.id, species.id, manager.id]);
+    expect(fieldsFor(off.fields, "contact", ["customer"], {}, off)).toEqual([]);
+    await expect(w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Kiwi Vets", isProspect: true, customFields: {} }))).rejects.toThrow(
+      "Account manager is required.",
+    );
+    const tui = (await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Tui Kennels", isCustomer: true, customFields: {} }))).contact;
+    expect(tui.customFields).toEqual({});
   });
 });

@@ -38,7 +38,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/stock.test.ts` (ST1-ST12) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM10) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
-  `tests/integration/crm-custom-fields.test.ts` (CRMF1-CRMF9, not yet
+  `tests/integration/crm-custom-fields.test.ts` (CRMF1-CRMF12, not yet
   approved) and
   `tests/integration/reports-ledger.test.ts` (AGP1-AGP3, ATX1-ATX5,
   JR1-JR3) and `tests/integration/gst-audit.test.ts` (GA1-GA4) and
@@ -3889,18 +3889,26 @@ fields above (CF1-CF10), extended:
 - A contact field can now be on **prospects** as well as customers and
   suppliers (any of the three). A contact uses the fields for each of its
   roles: a prospect-only company gets only prospect fields, a company that
-  is a customer and a prospect gets both. Before this, prospects used the
-  customer fields, so the upgrade puts every existing contact field on
-  customers onto prospects too; nothing a company shows changes until an
-  admin unticks it.
-- **Which switch** (to confirm with Jess): a field on prospects, people or
-  opportunities is a CRM field, usable while the **CRM** is on even with
-  Advanced reporting off. Fields on customers, suppliers, documents and
-  lines keep their rule: only with **Advanced reporting** on. A contact
-  field on both customers and prospects works on a company through
-  whichever of its roles is switched on. Setting a field up (adding,
-  changing, archiving it or its options) needs every place it's used on to
-  be switched on.
+  is a customer and a prospect gets both. Prospects only get the fields an
+  admin deliberately turns on for prospects (Jess, 1 Oct 2026): the upgrade
+  leaves existing contact fields where they were, so a customer field, even
+  a required one, isn't shown on and doesn't block a prospect-only company
+  until an admin ticks prospects for it. (Before this, prospects used the
+  customer fields while Advanced reporting was on; values a prospect
+  already has stay on it.)
+- **Which switch** (decided by Jess, 1 Oct 2026): a field on prospects,
+  people or opportunities is a CRM field, usable while the **CRM** is on
+  even with Advanced reporting off. Fields on customers, suppliers,
+  documents and lines keep their rule: only with **Advanced reporting** on,
+  and with it off they behave exactly as before (not shown, not required,
+  can't be set or changed). A contact field on both customers and prospects
+  works on a company through whichever of its roles is switched on. Adding
+  a field, or adding a place to an existing one, needs that place's switch
+  on. Changing a field that's already somewhere (renaming, archiving,
+  required, default, list column, section, moving it, its options, or
+  taking it off a place) only needs one of the places it's on to be
+  switched on, so an organisation with the CRM off can still change its
+  customer fields.
 - Up to 100 fields on contacts, documents and lines together (as before),
   and up to 100 more each on people and on opportunities.
 - People and opportunity values follow the contact rules: checked by type,
@@ -3959,9 +3967,9 @@ section).
   12 to 14). Marking it a customer too keeps them. With Advanced reporting
   on, a contact field on customers only ("Pet name") can't be given to a
   prospect-only company ("Pet name isn't used on prospects."), and a
-  supplier-only contact can't be given Practice size. A contact field that
-  was on customers before the upgrade is on customers and prospects after
-  it.
+  supplier-only contact can't be given Practice size. The upgrade leaves
+  existing contact fields where they were: one on customers is still only
+  on customers after it, and one on suppliers only on suppliers.
 - **CRMF4** People: Aroha starts with Preferred contact = Email (the
   default); clearing it is refused ("Preferred contact is required.");
   "2026-02-30" for Birthday is refused; changing Preferred contact from
@@ -4001,6 +4009,35 @@ section).
   the people and pipeline lists with their values, but can't change a
   person's values (403); a bookkeeper can; adding a field or section is for
   admins only (403 for a bookkeeper, 201 for an admin).
+- **CRMF10** Older customer fields with the CRM off: with Advanced
+  reporting on and the CRM off, the admin has a contact field "Channel"
+  (text, on customers) and a list "Region" (North, South; on customers and
+  suppliers), as an organisation would have from before the CRM. They can
+  rename Channel to "Sales channel", make it required, archive and restore
+  it, add an option "Islands" to Region and rename "South" to "South
+  Island". Adding prospects to Sales channel is refused ("The CRM is off,
+  so a field can't be on prospects."). Practice size (on prospects only)
+  can't be changed ("The CRM is off. Turn it on in Settings › Modules
+  first."). With Advanced reporting off as well, Sales channel can't be
+  changed either ("Advanced reporting is off. Turn it on in Settings ›
+  Modules first.").
+- **CRMF11** A required customer field doesn't block prospects: with both
+  switches on, "Account manager" (text, on customers, required). Mānuka
+  Vets (a prospect only) is saved with its Practice size and no Account
+  manager, and a new prospect "Rata Clinic" is made with no values; the
+  fields for a prospect are Practice size and Species seen only. Marking
+  Mānuka Vets a customer too without one is refused ("Account manager is
+  required."); with Account manager "Hemi" it's saved. With Advanced
+  reporting off, a new customer "Tui Kennels" is saved without one, as
+  before (not required, not shown), and a customer and prospect is saved
+  without one too.
+- **CRMF12** Turning a field on for prospects: the admin ticks prospects
+  on Account manager. Now it's one of the fields for a prospect (after
+  Practice size and Species seen), it's required there: saving Rata Clinic
+  without one is refused ("Account manager is required."), and with
+  "Hemi" it's saved and kept. With Advanced reporting off, it still shows
+  and is required on prospects (its prospect use needs only the CRM), but
+  not on a customer-only contact.
 
 ## Notes, files and history
 

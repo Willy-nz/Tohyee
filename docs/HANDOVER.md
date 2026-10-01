@@ -31,8 +31,10 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
 
-The CRM custom fields brief makes CRM custom fields available whenever the
-CRM module is on, even with Advanced features off. Jess to confirm.
+CRM custom fields are available whenever the CRM module is on, even with
+Advanced features off (decided by Jess, 1 Oct 2026). Prospects only get the
+fields turned on for prospects; existing customer fields aren't added to
+them.
 
 CRM work waiting on custom fields: record types and page layouts, and the
 Salesforce-style record page. Claude will build these once custom fields is

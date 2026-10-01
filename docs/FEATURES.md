@@ -575,9 +575,14 @@ that something happened.
   the people and opportunity forms; sections only group fields, they don't
   hide them). Fields shown in lists are columns on the Companies and People
   lists and lines on the pipeline cards, and changes are in each record's
-  history. They need only the CRM switch, not Advanced reporting, and never
-  change an amount, account, stage or the invoice a won opportunity makes
-  (CRMF1-CRMF9, not yet approved).
+  history. Prospects only get the fields an admin turns on for prospects;
+  existing customer fields, required or not, stay off them. They need only
+  the CRM switch, not Advanced reporting (decided by Jess, 1 Oct 2026);
+  accounting fields still need Advanced reporting, and with it off behave
+  as before. A field that's already somewhere can be changed while one of
+  its places is switched on, so customer fields can still be changed with
+  the CRM off. They never change an amount, account, stage or the invoice
+  a won opportunity makes (CRMF1-CRMF12, not yet approved).
   **Email and calendar sync**: each member connects their own Gmail or
   Microsoft 365 mailbox (read-only, through the organisation's own Google or
   Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the

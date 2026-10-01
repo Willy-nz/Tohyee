@@ -570,6 +570,8 @@ function FieldRow({
   const [busy, setBusy] = useState(false);
   const hasOptions = field.type === "list" || field.type === "multi_select";
   const sectionName = sections.find((section) => section.id === field.sectionId)?.name ?? "";
+  // A field can be changed while one of the places it's on is switched on (CRMF10).
+  const live = field.usedOn.some((use) => isSwitchedOn(setup, use));
 
   async function run(work: () => Promise<CustomFieldSetup>, message: string) {
     setBusy(true);
@@ -708,37 +710,43 @@ function FieldRow({
             {field.showInList ? <Badge tone="blue">In lists</Badge> : null}
           </td>
           <td className={ui.num}>
-            <span className={ui.rowButtons}>
-              <Button
-                size="small"
-                variant="secondary"
-                disabled={busy || !canMoveUp}
-                aria-label={`Move ${field.label} up`}
-                onClick={() => void patch({ move: "up" }, `Moved ${field.label} up.`)}
-              >
-                ↑
-              </Button>
-              <Button
-                size="small"
-                variant="secondary"
-                disabled={busy || !canMoveDown}
-                aria-label={`Move ${field.label} down`}
-                onClick={() => void patch({ move: "down" }, `Moved ${field.label} down.`)}
-              >
-                ↓
-              </Button>
-              <Button size="small" variant="secondary" disabled={busy} onClick={() => setEditing(true)}>
-                Edit
-              </Button>
-              <Button
-                size="small"
-                variant="secondary"
-                disabled={busy}
-                onClick={() => void patch({ isActive: !field.isActive }, field.isActive ? `Archived ${field.label}.` : `Restored ${field.label}.`)}
-              >
-                {field.isActive ? "Archive" : "Restore"}
-              </Button>
-            </span>
+            {live ? (
+              <span className={ui.rowButtons}>
+                <Button
+                  size="small"
+                  variant="secondary"
+                  disabled={busy || !canMoveUp}
+                  aria-label={`Move ${field.label} up`}
+                  onClick={() => void patch({ move: "up" }, `Moved ${field.label} up.`)}
+                >
+                  ↑
+                </Button>
+                <Button
+                  size="small"
+                  variant="secondary"
+                  disabled={busy || !canMoveDown}
+                  aria-label={`Move ${field.label} down`}
+                  onClick={() => void patch({ move: "down" }, `Moved ${field.label} down.`)}
+                >
+                  ↓
+                </Button>
+                <Button size="small" variant="secondary" disabled={busy} onClick={() => setEditing(true)}>
+                  Edit
+                </Button>
+                <Button
+                  size="small"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => void patch({ isActive: !field.isActive }, field.isActive ? `Archived ${field.label}.` : `Restored ${field.label}.`)}
+                >
+                  {field.isActive ? "Archive" : "Restore"}
+                </Button>
+              </span>
+            ) : (
+              <span className={ui.muted}>
+                {isSwitchedOn({ advancedFeatures: true, crmEnabled: false }, field.usedOn[0]) ? "Advanced reporting is off" : "The CRM is off"}
+              </span>
+            )}
           </td>
         </>
       )}

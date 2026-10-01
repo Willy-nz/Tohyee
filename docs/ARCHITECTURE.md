@@ -683,10 +683,12 @@ Enforced by the app (and covered by tests):
   per kind of record (contact, document, person, opportunity); a field's
   `section_id` must be a section for its own kind (trigger). CRM people and
   opportunities have their own `custom_fields` column (kinds `person` and
-  `opportunity`), and contact fields can be used on prospects. Each use
-  needs its module: prospects, people and opportunities need the CRM
-  switch, everything else Advanced reporting; with the switch off, kept
-  values stay but new ones are refused.
+  `opportunity`), and contact fields can be used on prospects (the
+  migration leaves existing fields where they were). Each use needs its
+  module: prospects, people and opportunities need the CRM switch,
+  everything else Advanced reporting; with the switch off, kept values stay
+  but new ones are refused. Setting up a field needs the switch for each
+  place being added, and otherwise for one of the places it's already on.
 - Apps: Accounting (with Tax) is under `/operations`, the CRM under `/crm`.
   Each has its own layout (`src/app/operations/layout.tsx`,
   `src/app/crm/layout.tsx`) that loads the signed-in user and their

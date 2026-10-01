@@ -8684,10 +8684,8 @@ alter table custom_fields add constraint custom_fields_used_on_kind_check check 
   or (record = 'opportunity' and used_on <@ array['opportunity'])
 );
 
--- A company in the CRM was a customer for its fields; it's a prospect now,
--- so fields already on customers are on prospects too (CRMF3).
-update custom_fields set used_on = used_on || array['prospect'], updated_at = now()
- where record = 'contact' and 'customer' = any(used_on) and not 'prospect' = any(used_on);
+-- Existing contact fields stay where they are: prospects only get the fields
+-- an admin turns on for them (CRMF3, CRMF11).
 
 create table custom_field_sections (
   id bigserial primary key,
