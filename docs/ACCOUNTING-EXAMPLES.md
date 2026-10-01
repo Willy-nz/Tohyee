@@ -9199,7 +9199,8 @@ PostgreSQL, the API routes, the PDF and a real SMTP server).
 
 - **PSLIP6 Access.** Payslips (seeing, printing, downloading, emailing)
   need the bookkeeper role and payroll access: Noah (a bookkeeper without
-  it) and viewers get "You need payroll access to see payroll…" (403).
+  it) gets "You need payroll access to see payroll…" (403) and a viewer
+  "This needs the bookkeeper role or higher in this organisation." (403).
   There's no employee self-service portal: employees get their payslip by
   email or on paper.
 
