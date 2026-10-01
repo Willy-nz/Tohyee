@@ -794,3 +794,88 @@ none of these.
      headcount use today's name.
 111. **A report covers at most 5 years** of pay dates, to keep it fast and
      its export a sensible size (a design choice).
+
+## Workforce budgets, payroll stage P11 (examples WB1-WB7)
+
+Made 2 Oct 2026 by Claude while building P11, by the rule law → NetSuite →
+Xero. No law says how to budget wages; IRD's rules decide what employer
+KiwiSaver and ESCT are (decisions 2-3). NetSuite Planning and Budgeting
+"currently supports only the Financials module. A Workforce module is not
+currently available"
+([NetSuite Planning and Budgeting](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_8124016549.html),
+read 2 Oct 2026), so NetSuite's answer is taken from Oracle's Planning
+Workforce module, the platform NetSuite Planning and Budgeting is built on:
+[Adding Hiring Requisitions](https://docs.oracle.com/en/cloud/saas/planning-budgeting-cloud/epbug/wf_adding_hiring_requisitions_100x94fdd820.html)
+(number of requisitions, "FTE value for each", "Start Date and optionally
+the End Date to set when the requisition's expenses are to be included in
+expense calculations", "Salary Basis and Rate", "Merit Month") and
+[Customizing the Mapping for Integration between Workforce and Financials](https://docs.oracle.com/en/cloud/saas/planning-budgeting-cloud/epbca/wf_fin_integration.html)
+("the data maps push data to the correct accounts", mapped by entity), both
+read 2 Oct 2026. Xero's budget manager has no workforce budgeting that we
+know of; Xero Central couldn't be read (**unverified**).
+
+112. **Follow Oracle Planning Workforce, as NetSuite has no workforce
+     module of its own.** Employees and planned positions ("to be hired")
+     are budgeted by month and pushed into the financial budget by account
+     and Department (WB1, WB2).
+113. **Workforce budgets write budget amounts, not a figure shown
+     alongside.** Oracle pushes workforce expense into the financial plan's
+     accounts, so budget vs actual, custom report budget columns and
+     department budgets all see it without changes. The written amounts are
+     marked with the workforce budget that owns them, can't be typed or
+     quick filled (the app refuses, and a database trigger refuses any
+     change to an owned amount unless the workforce budget's own rewrite is
+     running), and are rewritten on every save of the workforce budget and
+     on "Update budgets" (WB2, WB3).
+114. **Lines by employee or position, in whole months.** Start and end
+     months inside the workforce budget's 1-24 months; salary = annual
+     salary × FTE ÷ 12 (FTE more than 0, at most 1, 4 decimals); hourly =
+     rate × hours a week × 52 ÷ 12 (52 weeks, as IRD's annualising of a
+     weekly pay). Part months count whole (question for Jess) (WB1, WB7).
+115. **Rounding: once per line per month.** Wages rounded half up to the
+     cent; employer KiwiSaver from that rounded figure, truncated to the
+     cent like pay runs (spec 5.20.2, `kiwiSaverEmployerContribution`);
+     each split with `splitByPercentages` (PE3) and every total adds the
+     split parts, so Departments add up to the whole (WB1, WB2).
+116. **An employee line copies the employee's pay when it's added**
+     (the pay rate in effect on the first month's 1st, else their first
+     rate; the employer KiwiSaver rate if enrolled, else 0); after that the
+     line's own figures and its **pay rises from a month** (Oracle's merit
+     month) are used. Later pay rates on the employee aren't followed
+     (question for Jess) (WB1).
+117. **Split: an employee by their cost allocation in effect on the 1st of
+     each month** (PE6), read when figures are worked out; a position by
+     its own % split (Department and optional project, totalling 100.00%).
+     Because allocations change without the workforce budget being saved,
+     the screen compares the fed amounts with today's figures and says
+     "out of date"; this is worked out, never a stored status (WB3).
+118. **Employer KiwiSaver is the line's employer rate; ESCT adds no cost.**
+     ESCT is deducted from the employer's contribution (decision 3), so the
+     gross contribution is the whole cost, as pay runs post it (decision
+     103). No future minimum rate is assumed beyond IRD's rate files
+     (question for Jess about 1 Apr 2028) (WB1).
+119. **Accounts: the Ordinary time pay item's account for wages and the
+     KiwiSaver employer contribution pay item's account for KiwiSaver**
+     (the system pay items, PRUN10). Without an account on either, saving
+     is refused (WB1).
+120. **A workforce budget feeds the budgets chosen on it; a budget is fed
+     by at most one.** A budget for a Department, Class or Location value
+     gets the split parts tagged with that value or one under it; a budget
+     without a value gets all; custom segment budgets and archived budgets
+     are refused (payroll doesn't tag custom segments) (WB2, WB4).
+121. **The workforce budget owns the wages and KiwiSaver accounts for all
+     its months in each fed budget**, zeros included, so it's clear where
+     every wages figure came from; a typed amount there is replaced (the
+     budget's history shows before and after). Taking a budget off the list
+     releases its amounts as they are (they become ordinary typed amounts)
+     (WB2, WB4). A fed budget that's later archived is skipped, as
+     archived budgets can't change.
+122. **Workforce budgets need payroll access and the bookkeeper role**
+     (decision 105); the fed amounts are ordinary budget amounts by
+     account, month and tracking value, visible to whoever sees budgets
+     (decision 6). Workforce budget audit events record no amounts and no
+     names (as decision 109) (WB6).
+123. **Budget vs actual for wages compares with P10's labour cost by
+     Department and month of pay date** (decisions 102-104): earnings and
+     employer KiwiSaver, not reimbursements; variance = actual less budget,
+     as budgets (BU5) (WB5).
