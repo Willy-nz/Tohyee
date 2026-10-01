@@ -8,6 +8,7 @@ import {
   kiwiSaverEmployeeContribution,
   kiwiSaverEmployerContribution,
 } from "@/lib/payroll/calculations";
+import { PAYROLL_RATE_EDITIONS } from "@/lib/payroll/rates";
 
 type Table = {
   document: string;
@@ -69,6 +70,21 @@ describe("PR16: IRD's PAYE deduction tables IR340 and IR341", () => {
         "IR341 April 2026 monthly main",
       ]),
     );
+    for (const edition of PAYROLL_RATE_EDITIONS) {
+      const kinds = fixture.tables
+        .filter((table) => table.ratesEdition === edition.id)
+        .map((table) => `${table.document} ${table.frequency} ${table.kind}`);
+      expect(kinds.sort(), edition.id).toEqual([
+        "IR340 fortnightly main",
+        "IR340 fortnightly secondary",
+        "IR340 weekly main",
+        "IR340 weekly secondary",
+        "IR341 four-weekly main",
+        "IR341 four-weekly secondary",
+        "IR341 monthly main",
+        "IR341 monthly secondary",
+      ]);
+    }
     expect(fixture.tables).toHaveLength(16);
     expect(fixture.tables.reduce((count, table) => count + table.rows.length, 0)).toBe(976);
   });

@@ -68,9 +68,9 @@ IRD usually publishes the next specification in February or March. For
    tests check every value covers the year exactly once.
 7. Add the new file to `PAYROLL_RATE_EDITIONS` in `index.ts`.
 8. Tests (write them before trusting the file):
-   - `tests/unit/payroll-rates.test.ts`: add the new year to the "combined
-     rates" and "KiwiSaver rates by year" checks, and to PR1's edition
-     lookup.
+   - `tests/unit/payroll-rates.test.ts`: add the new year to the list of
+     edition ids, the "combined rates" and "KiwiSaver rates by year"
+     checks, and PR1's edition lookup.
    - `tests/unit/payroll-calculations.test.ts`: add every worked example the
      new specification prints with numbers (in 2026-27: ESS example 4 in
      5.10, Mike's NSW example in 5.5, the RD 68 example in 5.20.2, and the
@@ -80,7 +80,9 @@ IRD usually publishes the next specification in February or March. For
    - `tests/fixtures/ird-paye-tables.json`: add sample rows from the new
      IR340 and IR341 (including rows either side of each bracket limit, the
      levy maximum and the student loan threshold), with a pay date in the
-     new year. `tests/unit/payroll-ird-tables.test.ts` checks every row.
+     new year (the test checks every edition has all eight tables).
+     `tests/unit/payroll-ird-tables.test.ts` checks every row; update its
+     expected numbers of tables and rows and its list of table editions.
 9. Add worked examples for anything new to the "NZ payroll" section of
    `docs/ACCOUNTING-EXAMPLES.md` (not approved until Jess approves them), and
    anything the new rules don't clearly specify to its "Not supported yet"
