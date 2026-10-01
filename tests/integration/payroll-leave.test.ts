@@ -27,10 +27,28 @@ import {
   updatePayRunLeave,
   voidPayRun,
 } from "@/lib/payroll/pay-runs";
-import { createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, key, startTestServer, type TestServer } from "../helpers/test-server";
+import * as balancesRoute from "@/app/api/payroll/leave/balances/route";
+import * as cancelCashUpRoute from "@/app/api/payroll/leave/cash-ups/[cashUpId]/cancel/route";
+import * as cashUpsRoute from "@/app/api/payroll/leave/cash-ups/route";
+import * as fileRoute from "@/app/api/payroll/leave/files/[fileId]/route";
+import * as liabilityRoute from "@/app/api/payroll/leave/liability/route";
+import * as publicHolidaysRoute from "@/app/api/payroll/leave/public-holidays/route";
+import {
+  apiRequest,
+  createTestOrganisation,
+  createTestUser,
+  describeWithDatabase,
+  inOrganisation,
+  key,
+  params,
+  sessionCookieFor,
+  startTestServer,
+  type TestServer,
+} from "../helpers/test-server";
 
 const ORG = "payroll-leave-co";
 const REFUSED = "Not supported yet (refused rather than guessed)";
+const noContext = undefined as never;
 
 /**
  * Examples HL1-HL42 in docs/ACCOUNTING-EXAMPLES.md ("Holidays Act leave"),
@@ -712,6 +730,49 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
       expect(problem).toContain("isn't entitled to sick leave yet on 18 Nov 2026 (6 months' employment, s 63)");
       // Annual holidays are paid before they're taken unless agreed otherwise (s 27(1)).
       expect(problem).toContain(`${REFUSED}: paying Nina New's annual holidays`);
+    });
+  });
+
+  describe("API routes (payroll access)", () => {
+    it("balances, public holidays and the liability report need payroll access", async () => {
+      const vic = await createTestUser("vic@payrollleave.test");
+      await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'bookkeeper')", [ORG, vic.id]);
+      const get = async (user: SessionUser, path: string, handler: (request: Request) => Promise<Response>) => {
+        const response = await handler(apiRequest(`${path}${path.includes("?") ? "&" : "?"}organisationId=${ORG}`, { cookie: await sessionCookieFor(user) }));
+        return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+      };
+      const balances = await get(mere, "/api/payroll/leave/balances?asAt=2027-04-01", (request) => balancesRoute.GET(request, noContext));
+      expect(balances.status).toBe(200);
+      expect((balances.body.balances as Array<{ name: string; annual: { weeks: string } | null }>).find((row) => row.name === "Aroha Salary")!.annual!.weeks).toBe("4.4000");
+      expect((await get(vic, "/api/payroll/leave/balances", (request) => balancesRoute.GET(request, noContext))).status).toBe(403);
+      expect((await get(vic, "/api/payroll/leave/liability", (request) => liabilityRoute.GET(request, noContext))).status).toBe(403);
+      const holidays = await get(mere, "/api/payroll/leave/public-holidays", (request) => publicHolidaysRoute.GET(request, noContext));
+      expect((holidays.body.years as Array<{ year: number }>).map((year) => year.year)).toEqual([2025, 2026, 2027]);
+    });
+
+    it("a cash-up through the API is a form with the written request and answer (decision 29)", async () => {
+      const form = new FormData();
+      form.set("data", JSON.stringify({ organisationId: ORG, idempotencyKey: key("cash"), employeeId: people.aroha, requestedOn: "2027-04-05", weeks: "0.5" }));
+      form.set("request", new File([new TextEncoder().encode("%PDF-1.4\nrequest\n%%EOF")], "request.pdf", { type: "application/pdf" }));
+      form.set("answer", new File([new TextEncoder().encode("%PDF-1.4\nanswer\n%%EOF")], "answer.pdf", { type: "application/pdf" }));
+      const response = await cashUpsRoute.POST(
+        new Request("http://tohyee.test/api/payroll/leave/cash-ups", { method: "POST", headers: { cookie: await sessionCookieFor(mere), origin: "http://tohyee.test" }, body: form }),
+        noContext,
+      );
+      expect(response.status).toBe(201);
+      const created = (await response.json()) as { cashUp: { id: string; weeks: string; hours: string; requestFileId: string } };
+      expect(created.cashUp).toMatchObject({ weeks: "0.5", hours: "20" });
+      const file = await fileRoute.GET(
+        apiRequest(`/api/payroll/leave/files/${created.cashUp.requestFileId}?organisationId=${ORG}`, { cookie: await sessionCookieFor(mere) }),
+        params({ fileId: created.cashUp.requestFileId }) as never,
+      );
+      expect(file.status).toBe(200);
+      expect(file.headers.get("content-type")).toBe("application/pdf");
+      const cancelled = await cancelCashUpRoute.POST(
+        apiRequest(`/api/payroll/leave/cash-ups/${created.cashUp.id}/cancel`, { method: "POST", cookie: await sessionCookieFor(mere), body: { organisationId: ORG } }),
+        params({ cashUpId: created.cashUp.id }) as never,
+      );
+      expect(cancelled.status).toBe(200);
     });
   });
 
