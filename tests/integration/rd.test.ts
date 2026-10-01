@@ -13,6 +13,8 @@ import * as tagRoute from "@/app/api/rd/tags/[tagId]/route";
 import * as tagsRoute from "@/app/api/rd/tags/route";
 import * as usageRoute from "@/app/api/rd/assets/[assetId]/usage/route";
 import type { SessionUser } from "@/lib/auth/sessions";
+import { listBankAccounts } from "@/lib/bank/accounts";
+import { createBankTransaction, voidBankTransaction } from "@/lib/bank/transactions";
 import { approveBill, createBill, voidBill } from "@/lib/bills/service";
 import { recordSupplierPayment } from "@/lib/bills/payments";
 import { createContact } from "@/lib/contacts/service";
@@ -21,7 +23,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { approveExpenseClaim, createExpenseClaim, submitExpenseClaim } from "@/lib/expense-claims/service";
 import { createFixedAsset, createFixedAssetType, listBillLinesForAssets } from "@/lib/fixed-assets/service";
-import { postJournal } from "@/lib/ledger/journals";
+import { correctJournal, postJournal } from "@/lib/ledger/journals";
 import { addAllocation } from "@/lib/payroll/allocations";
 import { createEmployee } from "@/lib/payroll/employees";
 import { daysBetween } from "@/lib/rd/amounts";
@@ -277,6 +279,7 @@ describeWithDatabase("R&D activity register and tagging (RD1-RD3, RD7-RD9, RD11-
     await expect(w.as((tx) => tx.query("truncate rd_activities cascade"))).rejects.toThrow();
     const detail = await w.call(vic, activityRoute.GET, `/api/rd/activities/${s2.id}?organisationId=${w.org}`, { activityId: s2.id });
     expect((await body<{ activity: RdActivityDetail }>(detail)).activity.history.map((entry) => entry.action)).toEqual(["created", "archived", "restored"]);
+
   });
 
   it("RD3: an approval needs IRD's letter, is shown as not checked with IRD, and tags warn until one covers the year", async () => {
@@ -411,6 +414,107 @@ describeWithDatabase("R&D activity register and tagging (RD1-RD3, RD7-RD9, RD11-
     expect(line).toMatchObject({ amount: "200.00", taggable: true });
     const tagged = await w.tag(line, { activityId: w.c1.id, eligibility: "eligible", category: "materials_overheads" });
     expect(tagged).toMatchObject({ amount: "200.00", countedAmount: "200.00", documentType: "expense_claim" });
+  });
+
+  it("RD8, RD9: tax-inclusive bill and spend money lines count excluding GST; voided spend money stops counting", async () => {
+    const w = await setup();
+    const sensor = await w.supplier("Sensor Parts Ltd");
+    // A tax-inclusive bill line of 4,600.00 posts 4,000.00 to expense and 600.00 GST.
+    const b = await w.bill(sensor.id, "2026-07-20", [{ description: "Sensor components", quantity: "1", unitPrice: "4600.00", accountCode: "6140", taxCode: "GST" }], {
+      amountsMode: "inclusive",
+    });
+    expect(b.total).toBe("4600.00");
+    const [billLine] = await w.linesOf("bill", b.id);
+    expect(billLine.amount).toBe("4000.00");
+    expect(await w.tag(billLine, { activityId: w.c1.id, eligibility: "eligible", category: "materials_overheads" })).toMatchObject({
+      amount: "4000.00",
+      countedAmount: "4000.00",
+    });
+
+    // Spend money, 230.00 including GST: 200.00 counts, tagged from the transaction or its journal.
+    const bank = (await w.as((tx) => listBankAccounts(tx))).find((account) => account.code === "1000")!;
+    const spend = (
+      await w.as((tx) =>
+        createBankTransaction(tx, {
+          idempotencyKey: key("spend"),
+          kind: "spend",
+          accountId: bank.id,
+          contactId: sensor.id,
+          date: "2026-08-05",
+          amountsMode: "inclusive",
+          lines: [{ description: "Potting mix and pots for soil trials", accountCode: "6140", taxCode: "GST", amount: "230.00" }],
+        }),
+      )
+    ).bankTransaction;
+    const [spendLine] = await w.linesOf("journal", spend.journalId);
+    expect(spendLine).toMatchObject({ sourceType: "bank_transaction_line", amount: "200.00", taggable: true });
+    const tagged = await w.tag(spendLine, { activityId: w.c1.id, eligibility: "eligible", category: "materials_overheads", percentage: "50" });
+    expect(tagged).toMatchObject({ amount: "100.00", countedAmount: "100.00", documentType: "bank_transaction" });
+    expect((await w.costs()).countedAmount).toBe("4100.00");
+
+    await w.as((tx) => voidBankTransaction(tx, spend.id, { idempotencyKey: key("void"), voidDate: "2026-08-06" }));
+    const after = await w.costs();
+    expect(after.countedAmount).toBe("4000.00");
+    expect(after.voidedTags.map((t) => t.id)).toEqual([tagged.id]);
+  });
+
+
+  it("RD9: a corrected expense claim journal is counted once: the claim's receipt stops counting and the replacement journal isn't tagged", async () => {
+    const w = await setup();
+    const { claim } = await w.asHana((tx) =>
+      createExpenseClaim(tx, {
+        idempotencyKey: key("claim"),
+        receipts: [{ receiptDate: "2026-08-05", supplierName: "Garden Centre", description: "Potting mix and pots for soil trials", accountCode: "6140", taxCode: "GST", amount: "230.00" }],
+      }),
+    );
+    await w.asHana((tx) => submitExpenseClaim(tx, claim.id));
+    const approved = await w.as((tx) => approveExpenseClaim(tx, "owner", claim.id, { idempotencyKey: key("approve"), claimDate: "2026-08-06" }));
+    const [receipt] = await w.linesOf("expense_claim", claim.id);
+    const tagged = await w.tag(receipt, { activityId: w.c1.id, eligibility: "eligible", category: "materials_overheads" });
+    expect((await w.costs()).countedAmount).toBe("200.00");
+
+    // The claim's journal is corrected in the ledger (reversed and replaced).
+    const corrected = await w.as((tx) =>
+      correctJournal(tx, {
+        idempotencyKey: key("correct"),
+        originalJournalId: approved.claim.approvalJournalId,
+        postingDate: "2026-08-07",
+        reference: "Claim fix",
+        lines: [
+          { accountCode: "6140", debitAmount: "200.00" },
+          { accountCode: "2100", debitAmount: "30.00" },
+          { accountCode: "2010", creditAmount: "230.00" },
+        ],
+      }),
+    );
+    // The replacement's expense line isn't a manual journal's line, so it can't be tagged a second time.
+    const replacementLine = (await w.linesOf("journal", corrected.replacementJournal.id)).find((line) => line.accountCode === "6140")!;
+    expect(replacementLine.taggable).toBe(false);
+    await expect(w.tag(replacementLine, { activityId: w.c1.id, eligibility: "eligible", category: "materials_overheads" })).rejects.toThrow("Only manual journals");
+    // The receipt's tag drops out of the totals, listed apart as reversed.
+    const after = await w.costs();
+    expect(after.countedAmount).toBe("0.00");
+    expect(after.voidedTags.map((t) => t.id)).toEqual([tagged.id]);
+    expect((await w.as((tx) => getTag(tx, tagged.id))).warnings.join(" ")).toContain("reversed");
+
+    // A manual journal's replacement, even corrected twice, is still a manual journal's line.
+    const manual = await w.as((tx) =>
+      postJournal(tx, { idempotencyKey: key("j"), postingDate: "2026-08-10", reference: "LAB", lines: [{ accountCode: "6140", debitAmount: "50.00" }, { accountCode: "1000", creditAmount: "50.00" }] }),
+    );
+    const fix = (originalJournalId: string, amount: string) =>
+      w.as((tx) =>
+        correctJournal(tx, {
+          idempotencyKey: key("fix"),
+          originalJournalId,
+          postingDate: "2026-08-11",
+          reference: "LAB fix",
+          lines: [{ accountCode: "6140", debitAmount: amount }, { accountCode: "1000", creditAmount: amount }],
+        }),
+      );
+    const first = await fix(manual.journal.id, "60.00");
+    const second = await fix(first.replacementJournal.id, "70.00");
+    expect((await w.linesOf("journal", first.replacementJournal.id)).find((line) => line.accountCode === "6140")).toMatchObject({ taggable: false });
+    expect((await w.linesOf("journal", second.replacementJournal.id)).find((line) => line.accountCode === "6140")).toMatchObject({ amount: "70.00", taggable: true });
   });
 
   it("RD11: the oscilloscope's bill line is only ineligible; tax depreciation and Investment Boost 2,400.00 split by usage gives C1 800.00", async () => {

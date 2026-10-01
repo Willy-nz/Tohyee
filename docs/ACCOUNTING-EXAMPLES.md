@@ -7362,6 +7362,11 @@ tags**, never a payroll calculation of its own (decision 37).
 - **RD9** Expense claim: Hana's receipt of 5 Aug 2026, "Potting mix and
   pots for soil trials", **230.00 including GST** with the GST tax code:
   posts 200.00 to expense and 30.00 GST. Tagged C1: **200.00** counts.
+  (Stage R2 behaviour, not part of the example: if the claim's journal is
+  later corrected in the ledger, the receipt's tag stops counting and is
+  listed as reversed, and the replacement journal's lines can't be tagged,
+  because only a manual journal or a correction of one is tagged; so the
+  200.00 is never counted twice.)
 - **RD10** Overheads by floor area (IR1240 p 15, p 63). Rent is **4,000.00
   + GST** a month for 200 m²; the lab is 30 m² and used only for R&D. Tohyee
   has one overhead rule, **"% of an account"**, and its **basis is

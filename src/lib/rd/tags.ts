@@ -62,6 +62,20 @@ const UNTAGGABLE_SYSTEM_KEYS = new Set([
 ]);
 
 /**
+ * A manual journal, or a replacement in a correction chain that started from
+ * a manual journal. A replacement of a journal posted by an expense claim or
+ * another document isn't one: that document's own lines are tagged, so
+ * tagging the replacement too would count the cost twice.
+ */
+const MANUAL_JOURNAL = `(j.origin = 'manual' or (j.origin = 'correction' and j.correction_kind = 'replacement' and (
+    with recursive chain (origin, related_journal_id) as (
+      select o.origin, o.related_journal_id from ledger_journals o where o.id = j.related_journal_id
+      union all
+      select p.origin, p.related_journal_id from chain join ledger_journals p on p.id = chain.related_journal_id where chain.origin = 'correction'
+    )
+    select origin from chain where origin <> 'correction' limit 1) = 'manual'))`;
+
+/**
  * Every line that can be (or is) tagged, with its document. `amount` is the
  * base-currency amount excluding GST as posted to the line's account; a
  * journal line's is its debit (journals are in the base currency). `usable`
@@ -77,7 +91,10 @@ const SOURCES = `(
   union all
   select 'expense_claim_receipt', r.id, 'expense_claim', x.id, 'Expense claim CLAIM-' || x.id, r.supplier_name, coalesce(x.claim_date, r.receipt_date),
          r.description, a.code, a.name, a.account_type, a.account_class, a.system_key,
-         r.net_amount, null, r.net_amount, null, x.status = 'approved', x.status
+         r.net_amount, null, r.net_amount, null,
+         x.status = 'approved' and not exists (select 1 from ledger_journals rv where rv.related_journal_id = x.approval_journal_id and rv.correction_kind = 'reversal'),
+         case when exists (select 1 from ledger_journals rv where rv.related_journal_id = x.approval_journal_id and rv.correction_kind = 'reversal')
+              then 'reversed' else x.status end
     from expense_claim_receipts r join expense_claims x on x.id = r.claim_id join accounts a on a.id = r.account_id
   union all
   select 'bank_transaction_line', l.id, 'bank_transaction', t.id, 'Spend money' || coalesce(' ' || t.reference, ' #' || t.id), c.name, t.transaction_date,
@@ -90,10 +107,9 @@ const SOURCES = `(
   select 'journal_line', l.id, 'journal', j.id, 'Journal #' || j.id || ' ' || j.reference, null, j.posting_date,
          coalesce(l.description, j.description, j.reference), a.code, a.name, a.account_type, a.account_class, a.system_key,
          l.debit_amount, null, l.debit_amount, null,
-         (j.origin = 'manual' or (j.origin = 'correction' and j.correction_kind = 'replacement'))
-           and not exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal'),
+         ${MANUAL_JOURNAL} and not exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal'),
          case when exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal') then 'reversed'
-              when j.origin = 'manual' or (j.origin = 'correction' and j.correction_kind = 'replacement') then 'posted'
+              when ${MANUAL_JOURNAL} then 'posted'
               else 'not manual' end
     from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id join accounts a on a.id = l.account_id
 )`;
@@ -138,6 +154,7 @@ export function taggability(row: Pick<SourceRow, "usable" | "account_type" | "ac
       );
     }
     if (row.source_type === "bank_transaction_line") return no(row.document_status === "receive money" ? "Receive money isn't a cost." : "That spend money has been voided.");
+    if (row.document_status === "reversed") return no(`${row.document_label}'s journal has been reversed in the ledger.`);
     return no(`${row.document_label} isn't approved, or has been voided.`);
   }
   if (cmp(dec(row.amount), ZERO_DECIMAL) <= 0) return no("Only debits (costs) are tagged; credits and refunds aren't.");
