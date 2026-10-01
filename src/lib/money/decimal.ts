@@ -170,8 +170,8 @@ export function divide(numerator: Decimal, denominator: Decimal, scale: number):
 
 /**
  * Drops the digits after `scale` decimal places (towards zero, no rounding):
- * truncate(dec("75.678"), 2) is 75.67. IRD's payroll calculations truncate
- * rather than round.
+ * truncate(dec("75.678"), 2) is 75.67, and towards zero for negatives
+ * (-493.828 -> -493.82). IRD's payroll calculations truncate rather than round.
  */
 export function truncate(value: Decimal, scale: number): Decimal {
   if (value.scale <= scale) {

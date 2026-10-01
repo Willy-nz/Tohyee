@@ -61,7 +61,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/tax-available-on.test.ts` (TAO1-TAO5, TAO7-TAO12) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
-  GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PE1, PE2),
+  GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PE1, PE2)
+  and `tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE13),
   all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
@@ -81,7 +82,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/payroll-rates.test.ts`,
   `tests/unit/payroll-calculations.test.ts` and
   `tests/unit/payroll-ird-tables.test.ts` IRD's payroll rates and
-  calculations (PR1-PR16)
+  calculations (PR1-PR16), and `tests/unit/payroll-allocation.test.ts`
+  the payroll % split (PE3-PE5)
 
 ## NZ payroll — employee records (examples not yet approved by Jess)
 
@@ -100,6 +102,148 @@ The rates in PE1 are copied from the employee's current instructions; see [IRD's
 - Payday filing exports. Use IRD's [file upload service](https://www.ird.govt.nz/digital-service-providers/services-catalogue/returns-and-information/payday-filing/payday-filing-through-file-upload-services) and its [2026–27 file upload specification](https://www.ird.govt.nz/-/media/project/ir/home/documents/digital-service-providers/iir-file-upload-specification/payday-filing-file-upload-specification-2026-2027.pdf); the exact required records and output layout have not yet been verified against the specification.
 - Holidays Act leave calculations. Annual leave, sick leave, public holidays, alternative days, ordinary weekly pay and average weekly earnings need Jess-approved worked examples and decisions first.
 - Questions for Jess: which pay frequencies and KiwiSaver status values are needed in practice; which payroll bank account and payable/expense accounts to use; and how payroll corrections should fit the period-close workflow.
+
+## NZ payroll — cost allocation, pay rates, job details and payroll access (examples not yet approved by Jess)
+
+Stage P1b. Each employee gets a default **cost allocation** (where their pay
+is charged, split by %), a **pay rate history**, job details, and payroll
+data is only open to people an admin has given **payroll access**. Nothing
+here posts to the ledger or calculates pay; pay runs (P3) will use the
+allocation and rate in effect on each date.
+
+Sources followed (NetSuite first, then Xero Payroll NZ where NetSuite has no
+answer). The agent sandbox couldn't open docs.oracle.com or Xero Central, so
+these were found by web search and not read in full; check them before
+approving:
+
+- Splitting pay by % across Department, Class and Location: NetSuite's
+  [Labor Expense Allocation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_159118277665.html) and
+  [Classifying Individual Paycheck Lines](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1543951211.html)
+  (paycheck lines take the employee's Department, Class and Location by
+  default). NetSuite's percentage allocation schedules
+  ([Creating Expense Allocation Schedules](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1483674.html))
+  require the percentages to total 100%. Neither page says how leftover
+  cents are shared out; the largest-remainder rule below is ours (question
+  for Jess).
+- Effective-dated changes kept as history: NetSuite's
+  [Effective Dating for Employee Information](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_4659236711.html)
+  (an effective date and a reason, with a change log) and
+  [Compensation Tracking](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_157489167446.html); Xero's
+  [pay and work pattern effective date](https://central.xero.com/s/article/Change-an-employee-s-salary-and-wages-details).
+- Job title and supervisor (reports-to): NetSuite's
+  [Human Resources information on the employee record](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N895403.html).
+- Pay frequency and employee groups: NetSuite's
+  [Including an Employee in Payroll](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N921988.html) (pay
+  frequency on the employee) and [Creating a Payroll Batch](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N947366.html)
+  (run per pay frequency); Xero's [pay frequencies](https://central.xero.com/0/article/Add-a-pay-calendar)
+  and [employee groups for payroll tracking](https://central.xero.com/s/article/Payroll-tracking-in-Xero).
+- Payroll access separate from accounting roles: NetSuite's
+  [Advanced Employee Permissions](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_1494536002.html) (an
+  "Employee Compensation" permission apart from the rest of the employee
+  record) and Xero's [user role access to payroll](https://central.xero.com/s/article/User-role-access-to-payroll-in-Xero)
+  (only payroll admins and advisers see employee pay and bank details).
+
+Tests: `tests/unit/payroll-allocation.test.ts` (PE3, PE4, PE5),
+`tests/unit/payroll-access-screen.test.ts` (PE10's message) and
+`tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE13).
+
+### Cost allocation
+
+An allocation has an **effective-from date** and one or more lines. Each line
+has a percentage (more than 0, at most 2 decimal places) and any of a
+Department, Class and Location value (the tracking categories), a project
+and, later, an R&D activity (the RDTI register is stage R2; until then the
+R&D activity is always empty and setting one is refused). A line needs at
+least one of the Department, Class, Location or project. Two lines can't
+have exactly the same Department, Class, Location, project and R&D activity.
+The lines must total exactly **100.00%**. Saving a new allocation never
+changes an earlier one: the allocation in effect on a date is the one with
+the latest effective-from date on or before it (if two were saved for the
+same date, the later one saved). The database refuses an allocation that
+doesn't total 100.00% and refuses changing or deleting a saved one.
+
+**Splitting an amount** by the allocation: each line's exact share (amount ×
+% ÷ 100) is cut to whole cents (towards zero). The cents left over (fewer
+than the number of lines) go one each to the lines with the largest part
+cut off; when two lines tie, the earlier line gets the cent. So the parts
+always add back to exactly the amount. A negative amount is split as if it
+were positive and each part made negative, so a reversal mirrors the
+original exactly.
+
+| ID | Allocation and amount | Result |
+| --- | --- | --- |
+| PE3 | Aroha Ngata from 1 April 2026: 60% Department Sales, Location Wellington; 40% Department Operations, Location Auckland. Split **$1,234.57**. | Exact shares 740.742 and 493.828. Cut to cents: 740.74 + 493.82 = 1,234.56, so 1 cent is left. The 40% line had the larger part cut off (0.008 against 0.002), so it gets the cent: **Sales 740.74, Operations 493.83**, total 1,234.57. Split **−$1,234.57** (a reversal): **−740.74 and −493.83**. |
+| PE4 | Rounding cents: 33.33% / 33.33% / 33.34% of **$10.00**; 50% / 50% of **$0.01**; 33.33% / 33.33% / 33.34% of **$100.00**. | 3.333, 3.333, 3.334 cut to 3.33 each (9.99); the third line had the most cut off: **3.33, 3.33, 3.34**. Half a cent each ties, so the first line gets it: **0.01 and 0.00** (rounding each half up would give 0.02). 33.33, 33.33, 33.34 are exact: **33.33, 33.33, 33.34**, nothing left over. |
+| PE5 | Lines of 60% and 30% (90%); lines of 60% and 50% (110%); a line of 0%; a line of 33.333%; a 100% line with no Department, Class, Location or project; two 50% lines both Department Sales. | All refused: "The allocation lines total 90.00%. They must total exactly 100.00%." (and 110.00%); a 0% line, a third decimal place, an empty line ("Line 1 needs a Department, Class, Location or project") and a repeated line ("Line 2 is the same as line 1") are refused too. Nothing is saved. |
+| PE6 | Aroha is 100% Department Sales from 1 April 2026. On 20 September 2026 she moves to Operations from **15 September 2026** (mid-month): a new allocation, 100% Operations, effective 15 September 2026. | The allocation in effect on 1 May and 14 September 2026 is still **100% Sales**; on 15 September 2026 and later it's **100% Operations**. Both stay in her history, oldest first. Her primary department in the employee list (the department of the biggest line in effect today) is Operations. How a pay period that spans the move is charged is a P3 question (below). |
+
+### Pay rate history
+
+| ID | Rate changes | Result |
+| --- | --- | --- |
+| PE7 | Aroha starts on 1 April 2026 on a salary of **$70,000.00** a year (PE1), which becomes her first pay rate, effective 1 April 2026. On 20 September 2026 she's given **$74,000.00** a year from 1 October 2026, with the reason "Annual review". On 15 December 2026 she moves to **$38.50 an hour for 37.5 hours a week** from 1 January 2027. | Her rate on 20 September and 30 September 2026 is $70,000.00; on 1 October 2026, $74,000.00; on 1 January 2027, $38.50 an hour, 37.5 hours a week. Her current rate is the one in effect today. All three stay in her history. Saving another rate for 1 October 2026 (to correct a typo) replaces the earlier one from that date; both stay in the history. A rate before her start date, a zero rate, or a salary with an hourly rate is refused. The audit log records that a rate was added and from when, never the amount. |
+
+### Job details, pay groups and employee groups
+
+| ID | Details | Result |
+| --- | --- | --- |
+| PE8 | Pay groups "Weekly wages" (weekly) and "Monthly salaries" (monthly); employee groups "Wellington office" and "Field staff". Aroha (fortnightly) is given the job title "Payroll officer", reports to Mere Tane, and joins employee group "Wellington office". She's then put in pay group "Monthly salaries". | Job title, reports-to and employee group are saved. "Monthly salaries" is **refused** because her pay frequency is fortnightly ("Aroha is paid fortnightly but Monthly salaries is monthly"). Changing her to monthly in the same save puts her in it. An employee can't report to themselves or to someone who (directly or further up) reports to them. A pay group's frequency can't change while employees are in it. Groups are archived, never deleted. |
+
+### Payroll access
+
+Payroll access is a separate permission, not a role: an admin (or owner)
+gives it to, or takes it from, named members of the organisation. Without
+it, nobody (admins and owners included) can see or change employees' pay,
+allocations, rate history, IRD numbers or bank accounts, and later pay runs
+and payroll reports. Having it also needs the bookkeeper role or higher.
+It's kept in the organisation's own database against the person's user ID,
+and every grant and removal goes in the organisation's audit log with who
+did it and when.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| PE9 | Jess creates the organisation (or it's upgraded to this version); she's its first owner. Mere is an admin, Ben a bookkeeper. | **Jess has payroll access** from the start, recorded in the audit log as given by "system". Mere and Ben don't, even though Mere is an admin. |
+| PE10 | Ben (bookkeeper, no payroll access) opens Payroll › Employees, and tries the employee, pay rate, allocation and group APIs. | He sees "You need payroll access to see payroll. Ask an admin to give it to you in Settings › Payroll access." and no data; every payroll API answers 403 with that message, for reading and changing. |
+| PE11 | Mere (admin) opens Settings › Payroll access and gives it to herself, then to Ben. Later she removes Ben's. Ben tries to give himself access. A viewer is given access. | Mere and then Ben can see payroll once given it; the audit log shows "payroll access given" to each, by Mere, with the time. After removal Ben is refused again (PE10), and the audit log shows it. Ben can't give access (admins only, 403). Giving it to a viewer is refused ("needs the bookkeeper role or higher"). Removing access from the last member who has it (and the bookkeeper role or higher to use it) is refused, so there's always someone. |
+| PE12 | Ben, who has payroll access, is removed from the organisation and added again later. | When he's added again **he has no payroll access** until an admin gives it to him again; the removal is in the audit log. |
+| PE13 | Ben, who has payroll access, is moved from bookkeeper to viewer and later back to bookkeeper; separately, he is removed from the organisation. | Moving him below bookkeeper or removing him **takes his payroll access away at once**, with the reason in the audit log, so moving him back doesn't bring it back; an admin has to give it again. Trying to make a change you're not allowed to (an admin removing an owner) changes nothing, including payroll access. |
+
+No IRD number, bank account or pay amount is ever written into an audit
+event: allocation events record the effective date and the percentages,
+rate events the effective date and pay basis.
+
+### Not supported yet (refused rather than guessed)
+
+- Choosing an R&D activity on an allocation line (needs the RDTI register,
+  stage R2).
+- Allocations by pay item (e.g. overtime to a different department) and
+  timesheets overriding the default split: stages P3 and P9.
+- Changing or deleting a saved allocation or pay rate: save a new one with
+  the same effective date instead.
+
+### Questions for Jess (allocation, pay rates and payroll access)
+
+- A pay period that spans an allocation change (PE6, a monthly pay with a
+  move on 15 September): charge the whole pay by the allocation in effect on
+  the period's end date, its pay date, or split it by days in each part?
+- Once pay runs exist, should an allocation or rate dated before the last
+  posted pay run be refused, or treated as back pay (P12)?
+- One employee group per employee (as built, like Xero's employee group), or
+  several groups each?
+- Should a pay group set the employee's pay frequency (and later their pay
+  calendar), rather than having to match it as built?
+- Should removing the last person with payroll access be allowed if an
+  owner does it (it's refused as built)?
+- Should a viewer with payroll access be able to read payroll (refused as
+  built: payroll needs bookkeeper as well)?
+- Leftover cents in a split go to the lines with the largest part cut off,
+  the earlier line first on a tie (PE3, PE4). Is that right, or should they
+  always go to the biggest line, or the last line?
+- Should a line be allowed with no Department, Class, Location or project
+  (refused as built, PE5)?
+- When someone with payroll access is moved down to viewer, should their
+  access be removed then (as built it stays, unused, until an admin removes
+  it or they're moved back up)?
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.

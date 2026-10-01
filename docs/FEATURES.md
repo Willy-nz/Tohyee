@@ -39,12 +39,22 @@ that something happened.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
-- **Payroll employee records** (PE1-PE2; examples not yet approved by Jess):
-  bookkeeper-only employee details, salary or hourly pay, pay frequency,
-  tax code, student loan and KiwiSaver settings; IRD numbers and bank accounts
-  are encrypted. Employees are archived, never deleted. Pay calculation,
-  approval, payment, payslips, payday filing and Holidays Act leave are not
-  built.
+- **Payroll employee records** (PE1-PE12; examples not yet approved by Jess):
+  employee details, pay frequency, tax code, student loan and KiwiSaver
+  settings; IRD numbers and bank accounts are encrypted. Employees are
+  archived, never deleted. Job title, reports-to, pay groups (each with a pay
+  frequency) and employee groups. **Pay rate history**: salary or hourly rate
+  from a date, kept for ever; the current rate is the one in effect today.
+  **Cost allocation**: where each employee's pay is charged, split by % across
+  Department, Class, Location and a project (an R&D activity comes with the
+  RDTI register), totalling exactly 100.00%, from a date, keeping the history;
+  the employee list shows each person's primary department. Splitting an amount
+  shares out the cents so the parts always add back to the whole. **Payroll
+  access**: only members an admin has given it to (bookkeeper or higher) can
+  see or change any of this; the first owner has it to start with. Pay
+  calculation, pay runs (which will use the allocation and rate in effect),
+  approval, payment, payslips, payday filing, payroll reports and Holidays Act
+  leave are not built.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on

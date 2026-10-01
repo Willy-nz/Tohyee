@@ -4,12 +4,16 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAuditEvent } from "@/lib/audit";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { cmp, dec, parseDecimalInput, toPlainString } from "@/lib/money/decimal";
+import { requirePayrollAccess } from "@/lib/payroll/access";
+import { primaryDepartments } from "@/lib/payroll/allocations";
+import { checkGroupForEmployee, PAY_FREQUENCIES, PAY_FREQUENCY_WORDS } from "@/lib/payroll/groups";
+import { currentPay, firstPayRate, insertStartingPayRate, PAY_BASES, type PayDetails, parsePayDetails } from "@/lib/payroll/pay-rates";
 import { decryptSecret, encryptSecret, keyedSecretHash } from "@/lib/secrets";
 import { optionalString, requireBoolean, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
 
 const KIWI_SAVER_STATUSES = ["enrolled", "not_enrolled", "opted_out", "savings_suspension", "not_eligible"] as const;
-const PAY_FREQUENCIES = ["weekly", "fortnightly", "four_weekly", "monthly"] as const;
-const PAY_BASES = ["salary", "hourly"] as const;
+const PAY_FIELDS = ["payBasis", "annualSalary", "hourlyRate", "ordinaryHoursPerWeek"] as const;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type Employee = {
   id: string;
@@ -34,6 +38,15 @@ export type Employee = {
   finishDate: string | null;
   bankAccount: string | null;
   isArchived: boolean;
+  jobTitle: string | null;
+  reportsToId: string | null;
+  reportsToName: string | null;
+  payGroupId: string | null;
+  payGroupName: string | null;
+  employeeGroupId: string | null;
+  employeeGroupName: string | null;
+  /** The Department on the biggest line of the cost allocation in effect today (PE6). */
+  primaryDepartment: { id: string; name: string } | null;
 };
 
 export type EmployeeSummary = Omit<Employee, "irdNumber" | "bankAccount"> & {
@@ -64,8 +77,19 @@ type EmployeeRow = {
   finish_date: string | null;
   bank_account_ciphertext: string | null;
   is_archived: boolean;
+  job_title: string | null;
+  reports_to_id: string | null;
+  pay_group_id: string | null;
+  employee_group_id: string | null;
   idempotency_key: string;
   request_hash: string;
+};
+
+/** What an employee's details show beside their row: current pay, names and primary department. */
+type Extras = {
+  pay: Map<string, PayDetails>;
+  names: Map<string, { reports_to_name: string | null; pay_group_name: string | null; employee_group_name: string | null }>;
+  departments: Map<string, { id: string; name: string } | null>;
 };
 
 const EMPLOYEE_COLUMNS = `
@@ -74,9 +98,16 @@ const EMPLOYEE_COLUMNS = `
   kiwisaver_employer_rate::text, student_loan, pay_frequency, pay_basis,
   annual_salary::text, hourly_rate::text, ordinary_hours_per_week::text,
   start_date::text, finish_date::text, bank_account_ciphertext, is_archived,
+  job_title, reports_to_id, pay_group_id, employee_group_id,
   idempotency_key, request_hash`;
 
 type ParsedEmployee = Omit<EmployeeRow, "id" | "idempotency_key" | "request_hash">;
+
+function optionalUuid(value: unknown, field: string): string | null {
+  if (value === null || value === "") return null;
+  if (typeof value !== "string" || !UUID_PATTERN.test(value.trim())) throw new ValidationError(`${field} wasn't found.`);
+  return value.trim().toLowerCase();
+}
 
 function decimalField(value: unknown, field: string, maxScale: number, allowZero: boolean): string {
   if (value === undefined || value === null || value === "") throw new ValidationError(`${field} is required.`);
@@ -129,32 +160,22 @@ function parseEmployee(input: Record<string, unknown>, current?: EmployeeRow): P
   );
   const studentLoan = requireBoolean(currentValue(input, "studentLoan", current?.student_loan), "Student loan");
   const payFrequency = requireOneOf(currentValue(input, "payFrequency", current?.pay_frequency), "Pay frequency", PAY_FREQUENCIES);
-  const payBasis = requireOneOf(currentValue(input, "payBasis", current?.pay_basis), "Pay basis", PAY_BASES);
-  const annualSalary =
-    payBasis === "salary"
-      ? decimalField(currentValue(input, "annualSalary", current?.annual_salary), "Annual salary", 2, false)
-      : null;
-  const hourlyRate =
-    payBasis === "hourly" ? decimalField(currentValue(input, "hourlyRate", current?.hourly_rate), "Hourly rate", 2, false) : null;
-  const ordinaryHoursPerWeek =
-    payBasis === "hourly"
-      ? decimalField(currentValue(input, "ordinaryHoursPerWeek", current?.ordinary_hours_per_week), "Ordinary hours per week", 2, false)
-      : null;
-  for (const [field, value] of [
-    ["Annual salary", annualSalary],
-    ["Hourly rate", hourlyRate],
-  ] as const) {
-    if (value !== null && cmp(dec(value), dec("99999999999999.99")) > 0) throw new ValidationError(`${field} is too large.`);
+  // Pay is set once here, as the starting pay; after that it changes under Pay rates, with a date (PE7).
+  if (current && PAY_FIELDS.some((field) => input[field] !== undefined)) {
+    throw new ValidationError("Change pay under Pay rates, with the date the new rate starts.");
   }
-  if (ordinaryHoursPerWeek && cmp(dec(ordinaryHoursPerWeek), dec("99999.99")) > 0) {
-    throw new ValidationError("Ordinary hours per week is too large.");
-  }
-  if (payBasis === "salary" && (input.hourlyRate != null || input.ordinaryHoursPerWeek != null)) {
-    throw new ValidationError("Salary employees can't also have an hourly rate or ordinary hours.");
-  }
-  if (payBasis === "hourly" && input.annualSalary != null) {
-    throw new ValidationError("Hourly employees can't also have an annual salary.");
-  }
+  const pay: PayDetails = current
+    ? {
+        payBasis: current.pay_basis,
+        annualSalary: current.annual_salary,
+        hourlyRate: current.hourly_rate,
+        ordinaryHoursPerWeek: current.ordinary_hours_per_week,
+      }
+    : parsePayDetails(input);
+  const jobTitle = optionalString(currentValue(input, "jobTitle", current?.job_title), "Job title", { maxLength: 100 });
+  const reportsToId = optionalUuid(currentValue(input, "reportsToId", current?.reports_to_id) ?? null, "The manager");
+  const payGroupId = optionalUuid(currentValue(input, "payGroupId", current?.pay_group_id) ?? null, "That pay group");
+  const employeeGroupId = optionalUuid(currentValue(input, "employeeGroupId", current?.employee_group_id) ?? null, "That employee group");
   const startDate = parseIsoDate(currentValue(input, "startDate", current?.start_date), "Start date");
   const finishDate = parseOptionalIsoDate(currentValue(input, "finishDate", current?.finish_date), "Finish date");
   if (finishDate && finishDate < startDate) throw new ValidationError("Finish date can't be before the start date.");
@@ -183,18 +204,34 @@ function parseEmployee(input: Record<string, unknown>, current?: EmployeeRow): P
     kiwisaver_employer_rate: kiwiSaverEmployerRate,
     student_loan: studentLoan,
     pay_frequency: payFrequency,
-    pay_basis: payBasis,
-    annual_salary: annualSalary,
-    hourly_rate: hourlyRate,
-    ordinary_hours_per_week: ordinaryHoursPerWeek,
+    pay_basis: pay.payBasis,
+    annual_salary: pay.annualSalary,
+    hourly_rate: pay.hourlyRate,
+    ordinary_hours_per_week: pay.ordinaryHoursPerWeek,
     start_date: startDate,
     finish_date: finishDate,
     bank_account_ciphertext: bankAccountCiphertext,
     is_archived: current?.is_archived ?? false,
+    job_title: jobTitle,
+    reports_to_id: reportsToId,
+    pay_group_id: payGroupId,
+    employee_group_id: employeeGroupId,
   };
 }
 
-function toEmployee(row: EmployeeRow): Employee {
+function plain(value: string | null): string | null {
+  return value === null ? null : toPlainString(dec(value));
+}
+
+function toEmployeeWithoutSecrets(row: EmployeeRow, extras: Extras): Omit<Employee, "irdNumber" | "bankAccount"> {
+  // Pay comes from the rate history (PE7); the row keeps the starting pay.
+  const pay = extras.pay.get(row.id) ?? {
+    payBasis: row.pay_basis,
+    annualSalary: row.annual_salary,
+    hourlyRate: row.hourly_rate,
+    ordinaryHoursPerWeek: row.ordinary_hours_per_week,
+  };
+  const names = extras.names.get(row.id);
   return {
     id: row.id,
     firstName: row.first_name,
@@ -204,54 +241,71 @@ function toEmployee(row: EmployeeRow): Employee {
     postalAddress: row.postal_address,
     dateOfBirth: row.date_of_birth,
     taxCode: row.tax_code,
-    irdNumber: decryptSecret(row.ird_number_ciphertext),
     kiwiSaverStatus: row.kiwisaver_status,
     kiwiSaverEmployeeRate: toPlainString(dec(row.kiwisaver_employee_rate)),
     kiwiSaverEmployerRate: toPlainString(dec(row.kiwisaver_employer_rate)),
     studentLoan: row.student_loan,
     payFrequency: row.pay_frequency,
-    payBasis: row.pay_basis,
-    annualSalary: row.annual_salary === null ? null : toPlainString(dec(row.annual_salary)),
-    hourlyRate: row.hourly_rate === null ? null : toPlainString(dec(row.hourly_rate)),
-    ordinaryHoursPerWeek: row.ordinary_hours_per_week === null ? null : toPlainString(dec(row.ordinary_hours_per_week)),
+    payBasis: pay.payBasis,
+    annualSalary: plain(pay.annualSalary),
+    hourlyRate: plain(pay.hourlyRate),
+    ordinaryHoursPerWeek: plain(pay.ordinaryHoursPerWeek),
     startDate: row.start_date,
     finishDate: row.finish_date,
-    bankAccount: row.bank_account_ciphertext === null ? null : decryptSecret(row.bank_account_ciphertext),
     isArchived: row.is_archived,
+    jobTitle: row.job_title,
+    reportsToId: row.reports_to_id,
+    reportsToName: names?.reports_to_name ?? null,
+    payGroupId: row.pay_group_id,
+    payGroupName: names?.pay_group_name ?? null,
+    employeeGroupId: row.employee_group_id,
+    employeeGroupName: names?.employee_group_name ?? null,
+    primaryDepartment: extras.departments.get(row.id) ?? null,
   };
 }
 
-function toSummary(row: EmployeeRow): EmployeeSummary {
+function toEmployee(row: EmployeeRow, extras: Extras): Employee {
   return {
-    ...toEmployeeWithoutSecrets(row),
+    ...toEmployeeWithoutSecrets(row, extras),
+    irdNumber: decryptSecret(row.ird_number_ciphertext),
+    bankAccount: row.bank_account_ciphertext === null ? null : decryptSecret(row.bank_account_ciphertext),
+  };
+}
+
+function toSummary(row: EmployeeRow, extras: Extras): EmployeeSummary {
+  return {
+    ...toEmployeeWithoutSecrets(row, extras),
     hasIrdNumber: Boolean(row.ird_number_ciphertext),
     hasBankAccount: Boolean(row.bank_account_ciphertext),
   };
 }
 
-function toEmployeeWithoutSecrets(row: EmployeeRow): Omit<Employee, "irdNumber" | "bankAccount"> {
+async function loadExtras(tx: OrgTx, rows: readonly EmployeeRow[]): Promise<Extras> {
+  const ids = rows.map((row) => row.id);
+  if (ids.length === 0) return { pay: new Map(), names: new Map(), departments: new Map() };
+  const names = await tx.query<{
+    id: string;
+    reports_to_name: string | null;
+    pay_group_name: string | null;
+    employee_group_name: string | null;
+  }>(
+    `select e.id, m.first_name || ' ' || m.last_name as reports_to_name, pg.name as pay_group_name, eg.name as employee_group_name
+       from payroll_employees e
+       left join payroll_employees m on m.id = e.reports_to_id
+       left join payroll_pay_groups pg on pg.id = e.pay_group_id
+       left join payroll_employee_groups eg on eg.id = e.employee_group_id
+      where e.id = any($1::uuid[])`,
+    [ids],
+  );
   return {
-    id: row.id,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    email: row.email,
-    phone: row.phone,
-    postalAddress: row.postal_address,
-    dateOfBirth: row.date_of_birth,
-    taxCode: row.tax_code,
-    kiwiSaverStatus: row.kiwisaver_status,
-    kiwiSaverEmployeeRate: toPlainString(dec(row.kiwisaver_employee_rate)),
-    kiwiSaverEmployerRate: toPlainString(dec(row.kiwisaver_employer_rate)),
-    studentLoan: row.student_loan,
-    payFrequency: row.pay_frequency,
-    payBasis: row.pay_basis,
-    annualSalary: row.annual_salary === null ? null : toPlainString(dec(row.annual_salary)),
-    hourlyRate: row.hourly_rate === null ? null : toPlainString(dec(row.hourly_rate)),
-    ordinaryHoursPerWeek: row.ordinary_hours_per_week === null ? null : toPlainString(dec(row.ordinary_hours_per_week)),
-    startDate: row.start_date,
-    finishDate: row.finish_date,
-    isArchived: row.is_archived,
+    pay: await currentPay(tx, ids),
+    names: new Map(names.rows.map((row) => [row.id, row])),
+    departments: await primaryDepartments(tx, ids),
   };
+}
+
+async function decorate(tx: OrgTx, row: EmployeeRow): Promise<Employee> {
+  return toEmployee(row, await loadExtras(tx, [row]));
 }
 
 async function findEmployee(tx: OrgTx, id: string, forUpdate = false): Promise<EmployeeRow> {
@@ -264,26 +318,30 @@ async function findEmployee(tx: OrgTx, id: string, forUpdate = false): Promise<E
 }
 
 export async function getEmployee(tx: OrgTx, id: string): Promise<Employee> {
-  return toEmployee(await findEmployee(tx, id));
+  await requirePayrollAccess(tx);
+  return decorate(tx, await findEmployee(tx, id));
 }
 
 export async function listEmployees(
   tx: OrgTx,
   options: { includeArchived?: boolean } = {},
 ): Promise<EmployeeSummary[]> {
+  await requirePayrollAccess(tx);
   const result = await tx.query<EmployeeRow>(
     `select ${EMPLOYEE_COLUMNS} from payroll_employees
       where ($1::boolean or not is_archived)
       order by lower(last_name), lower(first_name), id`,
     [options.includeArchived ?? false],
   );
-  return result.rows.map(toSummary);
+  const extras = await loadExtras(tx, result.rows);
+  return result.rows.map((row) => toSummary(row, extras));
 }
 
 export async function createEmployee(
   tx: OrgTx,
   input: Record<string, unknown> & { idempotencyKey?: unknown },
 ): Promise<{ created: boolean; employee: Employee }> {
+  await requirePayrollAccess(tx);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const hash = keyedSecretHash(requestHash("payroll_employee", input));
   const earlier = await tx.query<EmployeeRow>(
@@ -292,18 +350,20 @@ export async function createEmployee(
   );
   if (earlier.rows[0]) {
     assertSameRequest(earlier.rows[0].request_hash, hash, "employee");
-    return { created: false, employee: toEmployee(earlier.rows[0]) };
+    return { created: false, employee: await decorate(tx, earlier.rows[0]) };
   }
 
   const parsed = parseEmployee(input);
+  await checkJobDetails(tx, null, parsed);
   const inserted = await tx.query<EmployeeRow>(
     `insert into payroll_employees (
        idempotency_key, request_hash, first_name, last_name, email, phone, postal_address, date_of_birth,
        tax_code, ird_number_ciphertext, kiwisaver_status, kiwisaver_employee_rate, kiwisaver_employer_rate,
        student_loan, pay_frequency, pay_basis, annual_salary, hourly_rate, ordinary_hours_per_week,
-       start_date, finish_date, bank_account_ciphertext
+       start_date, finish_date, bank_account_ciphertext, job_title, reports_to_id, pay_group_id, employee_group_id
      ) values (
-       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+       $23, $24, $25, $26
      )
      on conflict (idempotency_key) do nothing
      returning ${EMPLOYEE_COLUMNS}`,
@@ -330,6 +390,10 @@ export async function createEmployee(
       parsed.start_date,
       parsed.finish_date,
       parsed.bank_account_ciphertext,
+      parsed.job_title,
+      parsed.reports_to_id,
+      parsed.pay_group_id,
+      parsed.employee_group_id,
     ],
   );
   const row = inserted.rows[0];
@@ -340,7 +404,7 @@ export async function createEmployee(
     );
     if (winner.rows[0]) {
       assertSameRequest(winner.rows[0].request_hash, hash, "employee");
-      return { created: false, employee: toEmployee(winner.rows[0]) };
+      return { created: false, employee: await decorate(tx, winner.rows[0]) };
     }
     throw new ConflictError("The employee couldn't be saved. Try again with a new idempotency key.");
   }
@@ -350,20 +414,33 @@ export async function createEmployee(
     entityId: row.id,
     details: { payFrequency: row.pay_frequency, payBasis: row.pay_basis },
   });
-  return { created: true, employee: toEmployee(row) };
+  await insertStartingPayRate(tx, row.id, row.start_date, {
+    payBasis: row.pay_basis,
+    annualSalary: row.annual_salary,
+    hourlyRate: row.hourly_rate,
+    ordinaryHoursPerWeek: row.ordinary_hours_per_week,
+  });
+  return { created: true, employee: await decorate(tx, row) };
 }
 
 export async function updateEmployee(tx: OrgTx, id: string, input: Record<string, unknown>): Promise<Employee> {
+  await requirePayrollAccess(tx);
+  if (input.reportsToId !== undefined) {
+    // Two people changing who reports to whom at once could make a loop; take turns.
+    await tx.query("lock table payroll_employees in share row exclusive mode");
+  }
   const current = await findEmployee(tx, id, true);
   const parsed = parseEmployee(input, current);
+  await checkJobDetails(tx, current, parsed);
+  if (parsed.start_date !== current.start_date) await checkStartDate(tx, id, parsed.start_date);
   const changedFields = Object.keys(input).filter((field) => field !== "source");
   const result = await tx.query<EmployeeRow>(
     `update payroll_employees set
        first_name = $2, last_name = $3, email = $4, phone = $5, postal_address = $6, date_of_birth = $7,
        tax_code = $8, ird_number_ciphertext = $9, kiwisaver_status = $10, kiwisaver_employee_rate = $11,
-       kiwisaver_employer_rate = $12, student_loan = $13, pay_frequency = $14, pay_basis = $15,
-       annual_salary = $16, hourly_rate = $17, ordinary_hours_per_week = $18, start_date = $19,
-       finish_date = $20, bank_account_ciphertext = $21, updated_at = now()
+       kiwisaver_employer_rate = $12, student_loan = $13, pay_frequency = $14, start_date = $15,
+       finish_date = $16, bank_account_ciphertext = $17, job_title = $18, reports_to_id = $19,
+       pay_group_id = $20, employee_group_id = $21, updated_at = now()
      where id = $1
      returning ${EMPLOYEE_COLUMNS}`,
     [
@@ -381,28 +458,36 @@ export async function updateEmployee(tx: OrgTx, id: string, input: Record<string
       parsed.kiwisaver_employer_rate,
       parsed.student_loan,
       parsed.pay_frequency,
-      parsed.pay_basis,
-      parsed.annual_salary,
-      parsed.hourly_rate,
-      parsed.ordinary_hours_per_week,
       parsed.start_date,
       parsed.finish_date,
       parsed.bank_account_ciphertext,
+      parsed.job_title,
+      parsed.reports_to_id,
+      parsed.pay_group_id,
+      parsed.employee_group_id,
     ],
   );
   const row = result.rows[0];
+  if (row.start_date !== current.start_date) {
+    // Their pay from the new start date is their first rate (PE7).
+    const first = await firstPayRate(tx, id);
+    if (first && row.start_date < first.effectiveFrom) {
+      await insertStartingPayRate(tx, id, row.start_date, first, `starting-pay:${id}:${row.start_date}`);
+    }
+  }
   await writeAuditEvent(tx, {
     eventType: "payroll_employee.updated",
     entityType: "payroll_employee",
     entityId: id,
     details: { changedFields },
   });
-  return toEmployee(row);
+  return decorate(tx, row);
 }
 
 export async function setEmployeeArchived(tx: OrgTx, id: string, isArchived: boolean): Promise<Employee> {
+  await requirePayrollAccess(tx);
   const current = await findEmployee(tx, id, true);
-  if (current.is_archived === isArchived) return toEmployee(current);
+  if (current.is_archived === isArchived) return decorate(tx, current);
   const result = await tx.query<EmployeeRow>(
     `update payroll_employees set is_archived = $2, updated_at = now()
       where id = $1 returning ${EMPLOYEE_COLUMNS}`,
@@ -413,5 +498,67 @@ export async function setEmployeeArchived(tx: OrgTx, id: string, isArchived: boo
     entityType: "payroll_employee",
     entityId: id,
   });
-  return toEmployee(result.rows[0]);
+  return decorate(tx, result.rows[0]);
+}
+
+/**
+ * Reports-to, pay group and employee group (PE8): the manager is another
+ * employee, never themselves or someone who reports to them; a pay group's
+ * frequency must be the employee's. Archived managers and groups can be kept
+ * but not newly chosen.
+ */
+async function checkJobDetails(tx: OrgTx, current: EmployeeRow | null, parsed: ParsedEmployee): Promise<void> {
+  if (parsed.reports_to_id !== null && parsed.reports_to_id !== current?.reports_to_id) {
+    if (current && parsed.reports_to_id === current.id) throw new ValidationError(`${parsed.first_name} can't report to themselves.`);
+    const manager = await tx.query<{ first_name: string; last_name: string; is_archived: boolean }>(
+      "select first_name, last_name, is_archived from payroll_employees where id = $1",
+      [parsed.reports_to_id],
+    );
+    const found = manager.rows[0];
+    if (!found) throw new ValidationError("The manager wasn't found.");
+    const managerName = `${found.first_name} ${found.last_name}`;
+    if (found.is_archived) throw new ValidationError(`${managerName} is archived.`);
+    if (current) {
+      const loop = await tx.query(
+        `with recursive chain(id) as (
+           select reports_to_id from payroll_employees where id = $1
+           union
+           select e.reports_to_id from payroll_employees e join chain on e.id = chain.id where e.reports_to_id is not null
+         )
+         select 1 from chain where id = $2 limit 1`,
+        [parsed.reports_to_id, current.id],
+      );
+      if (loop.rows[0]) {
+        throw new ValidationError(`${parsed.first_name} can't report to ${managerName}, because ${managerName} reports to them (directly or further up).`);
+      }
+    }
+  }
+  if (parsed.pay_group_id !== null) {
+    const group = await checkGroupForEmployee(tx, "pay", parsed.pay_group_id, current?.pay_group_id ?? null);
+    if (group.payFrequency !== parsed.pay_frequency) {
+      throw new ValidationError(
+        `${parsed.first_name} is paid ${PAY_FREQUENCY_WORDS[parsed.pay_frequency]} but ${group.name} is ${PAY_FREQUENCY_WORDS[group.payFrequency!]}.`,
+      );
+    }
+  }
+  if (parsed.employee_group_id !== null) {
+    await checkGroupForEmployee(tx, "employee", parsed.employee_group_id, current?.employee_group_id ?? null);
+  }
+}
+
+/** Pay rates and cost allocations can't start before the employee does (PE6, PE7). */
+async function checkStartDate(tx: OrgTx, id: string, startDate: string): Promise<void> {
+  const earliest = await tx.query<{ effective_from: string }>(
+    `select min(effective_from)::text as effective_from from (
+       select effective_from from payroll_pay_rates
+        where employee_id = $1 and request_hash not in ('starting-pay', 'migration-0057')
+       union all
+       select effective_from from payroll_cost_allocations where employee_id = $1
+     ) dates`,
+    [id],
+  );
+  const first = earliest.rows[0]?.effective_from;
+  if (first && startDate > first) {
+    throw new ValidationError(`The start date can't be after ${first}, when a pay rate or cost allocation already starts.`);
+  }
 }
