@@ -280,7 +280,7 @@ can't lose it, and someone removed from the
 organisation and added again starts without it. Every payroll service calls
 `requirePayrollAccess(tx)` (`src/lib/payroll/access.ts`) first, and payroll
 routes use `withPayrollAccess()` (`src/lib/api/http.ts`: bookkeeper and
-payroll access); pay runs do, and payroll reports must too. Audit
+payroll access); pay runs and payroll reports do. Audit
 details for payroll never include IRD numbers, bank accounts or pay amounts.
 
 **Pay runs** (payroll stage P3, examples PRUN1-PRUN11) live in
@@ -370,6 +370,29 @@ a trigger then refuses reopening a timesheet an approved pay run used. A
 draft for an hourly employee whose whole period is covered takes Ordinary
 time hours from the timesheets (decision 99). Postings' percentage is kept
 to 4 places (decision 101).
+
+**Payroll reports** (payroll stage P10, examples PREP1-PREP8, decisions
+102-111, no tables of their own) read approved pay runs only and post
+nothing. `src/lib/payroll/report-figures.ts` is pure and browser-safe (the
+report names, months, FTE, splitting to any number of places, grouping
+labour cost, CSV); `report-common.ts` parses the pay date range (at most 5
+years) and filters and lists voided pay runs; `reports.ts` has labour cost
+(`payroll_pay_run_postings` joined to the `payroll_pay_run_shares` row each
+posting's `share_number` names, for the Department, project and R&D
+activity; pay runs from before P9 fall back to the posting's Department tag
+and show the R&D activity as not recorded), the payroll summary and
+earnings history (`payroll_pay_run_employees` and `payroll_pay_run_lines`
+as approving stored them) and the PAYE summary (by month of pay date, IRD
+payments by period, each pay run's EI file from the
+`payroll_payday_filing.made` audit events); `report-reconciliation.ts`
+compares each payroll account's payroll figure with its ledger movement and
+lists every journal not from a counted pay run or active payment, labelled
+with `journalSource()`; `report-headcount.ts` works headcount and FTE out
+in memory from employees' dates, pay rate history and allocations.
+`report-export.ts` writes the CSV and the `payroll_report.exported` audit
+event (report, dates, filter ids, row count, SHA-256; no figures). Routes:
+`GET /api/payroll/reports?report=...` and `POST /api/payroll/reports/export`,
+both `withPayrollAccess()`. Screen: `src/components/payroll-reports.tsx`.
 
 **Payday filing** (payroll stage P6, examples PF1-PF9, decisions 56-65):
 `src/lib/payroll/payday-filing.ts` is pure (no database): IRD's employment

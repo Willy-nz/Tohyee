@@ -738,7 +738,8 @@ none of these.
      Department, project, R&D activity, employee and pay item together; the
      payroll summary and the PAYE summary only employee (PAYE and net pay
      aren't split by Department); earnings history employee and pay item;
-     headcount Department and employee.
+     headcount Department (people whose biggest allocation line on the date
+     is that Department, or one under it) and employee.
 106. **The reconciliation compares period movements, account by account,
      and lists the journals that explain the difference.** Payroll accounts
      are each pay item's account, the accounts approved pay runs posted to

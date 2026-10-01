@@ -51,6 +51,7 @@ Set them in the Agents box before sending each task:
 | --- | --- | --- | --- | --- |
 | Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
 | Payroll P9: timesheets (examples TS1-TS11, decisions 91-101) | none | not opened yet | `claude/payroll-p9-timesheets` (Claude) | 0067 |
+| Payroll P10: payroll reports (examples PREP1-PREP8, decisions 102-111) | none | not opened yet | `claude/payroll-p10-reports` (Claude) | none (0068 still free) |
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
@@ -228,10 +229,24 @@ only be run by certain people. Each item is its own branch and PR.
       Not built: leave and overtime from timesheets, reallocating a posted
       pay to a late timesheet (RD22), copying hours into project time.
       Screens weren't checked in a browser.
-- [ ] **P10 Payroll reports** (payroll access only): labour cost by
-      department, project, R&D activity and pay item; payroll summary and
-      reconciliation to the ledger; headcount and FTE; employee earnings
-      history; PAYE, KiwiSaver and student loan summaries. Needs P3.
+- [ ] **P10 Payroll reports** (no migration), built in branch
+      `claude/payroll-p10-reports`, waiting for a PR and review; examples
+      PREP1-PREP8 await Jess (questions under PREP8), decisions 102-111.
+      Payroll › Reports, payroll access only, read-only, by pay date, from
+      approved pay runs' stored figures and the shares each used:
+      - labour cost by Department, project, R&D activity, pay item or
+        employee, all five as filters together; reimbursements apart;
+      - payroll summary (gross to net per pay run, totals by pay item);
+      - reconciliation of each payroll account to its ledger movement, with
+        the journals that explain each difference (voided pay runs and
+        payments, manual journals, other documents);
+      - headcount and FTE at a date and by month (usual hours ÷ a standard
+        week of 40 unless typed; salaries 1, assumed);
+      - employee earnings history; PAYE, KiwiSaver and student loan by
+        month, tied to EI files (from the audit log) and IRD payments.
+      CSV export of each, audited without figures. Not built: leave reports
+      (P8), reports by pay period, a view without payroll access. Screens
+      weren't checked in a browser.
 - [ ] **P11 Workforce budgets**: budget wages by employee or position and
       month, feeding budgets by department (existing budgets). Needs P3.
 - [ ] **P12 Back pay, extra pays and final pays** (bonuses under IRD's extra
@@ -437,6 +452,17 @@ wording. Still open:
   time only: should extra hours become overtime?
 - Should approved project hours also become project time (to invoice)?
 - Build the reallocation of a posted pay to a late timesheet (RD22)?
+
+**Payroll reports** (P10, under PREP8)
+- FTE's standard week: 40 hours typed on the report; save one per
+  organisation (or pay group)?
+- Salaried staff count 1.0000 FTE (assumed): record their usual hours?
+- FTE capped at 1 (45 hours = 1.0000): OK?
+- Reimbursements left out of labour cost: agreed?
+- Reports by pay date only: labour cost by period worked too?
+- Pay runs approved before P9 show "R&D activity not recorded": work it out
+  from the allocation they used, as the R&D claim does?
+- Exports audited without figures: need a second permission too?
 
 **Older lists still open** (see each section): repeating bills, quotes and
 repeating invoices and printed documents, purchase orders, stock transfers,
