@@ -4580,9 +4580,10 @@ are New Zealand dates (NZDT, UTC+13).
 - The cases in SPC23; Shopify locations (a stock item needs a Location once
   locations are in use, so such orders are refused at the invoice); orders
   edited after they came in (the sales order keeps the first version, and
-  the totals check refuses the invoice if they differ); more than 100 lines
-  or 10 shipping lines on an order, more than 10 refunds on an order or 50
-  lines on a refund.
+  the totals check refuses the invoice if they differ); more than 50 lines
+  or 10 shipping lines on an order, 50 or more payment transactions or 10
+  or more refunds on an order, or more than 50 lines on a refund (kept
+  small so each query stays under Shopify's query cost limit of 1,000).
 - Deleting or archiving a Tohyee record when it's deleted in Shopify (the
   link stays; nothing happens).
 - Matching by name, or anything other than one clear email or SKU match.

@@ -67,7 +67,9 @@ function fakeShopify(state: ShopState) {
     const url = new URL(input);
     if (url.host !== DOMAIN) return json({ errors: "Not Found" }, 404);
     if (state.fail) return json({ errors: "Internal error" }, 500);
-    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    // The token request is form-encoded (Shopify's client credentials grant); everything else is JSON.
+    const raw = init?.body ? String(init.body) : "";
+    const body = !raw ? {} : raw.startsWith("{") ? JSON.parse(raw) : Object.fromEntries(new URLSearchParams(raw));
     if (url.pathname === "/admin/oauth/access_token") {
       state.calls.push("token");
       if (body.client_id !== "client-glimmers" || body.client_secret !== SECRET || body.grant_type !== "client_credentials") {

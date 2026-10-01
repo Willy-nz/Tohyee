@@ -73,6 +73,8 @@ describe("Shopify record shapes (SPC2, SPC3)", () => {
       name: "Aroha Ngata",
       email: "AROHA@manukavets.nz",
       phone: "+64 21 555 0101",
+      // No default address asked for here, so no country (SPC16).
+      country: null,
       updatedAt: "2026-09-30T01:00:00.000Z",
     });
     // No names: Shopify's display name (often the email) is used.
@@ -100,7 +102,7 @@ describe("Shopify record shapes (SPC2, SPC3)", () => {
         updated_at: "2026-10-01T09:00:00+13:00",
         admin_graphql_api_id: "gid://shopify/Customer/1004",
       }),
-    ).toEqual({ externalId: "1004", name: "Mere Tane", email: "mere@example.co.nz", phone: null, updatedAt: "2026-09-30T20:00:00.000Z" });
+    ).toEqual({ externalId: "1004", name: "Mere Tane", email: "mere@example.co.nz", phone: null, country: null, updatedAt: "2026-09-30T20:00:00.000Z" });
     expect(() => shopifyCustomerFromWebhook({ email: "x@example.co.nz" })).toThrow();
   });
 
@@ -118,8 +120,8 @@ describe("Shopify record shapes (SPC2, SPC3)", () => {
       },
     });
     expect(variants.records).toEqual([
-      { externalId: "3002", productId: "2002", productTitle: "Wax melts", variantTitle: "Vanilla", sku: "MELT-VAN", price: "8.50", updatedAt: "2026-09-30T02:00:00.000Z" },
-      { externalId: "3003", productId: "2002", productTitle: "Wax melts", variantTitle: "Lavender", sku: null, price: "8.50", updatedAt: "2026-09-30T03:00:00.000Z" },
+      { externalId: "3002", productId: "2002", productTitle: "Wax melts", variantTitle: "Vanilla", sku: "MELT-VAN", price: "8.50", tracked: false, updatedAt: "2026-09-30T02:00:00.000Z" },
+      { externalId: "3003", productId: "2002", productTitle: "Wax melts", variantTitle: "Lavender", sku: null, price: "8.50", tracked: false, updatedAt: "2026-09-30T03:00:00.000Z" },
     ]);
     expect(variants.moreVariants).toBe(false);
   });
@@ -133,7 +135,7 @@ describe("Shopify record shapes (SPC2, SPC3)", () => {
         variants: [{ id: 3001, product_id: 2001, title: "Default Title", sku: "candle-l", price: "22.00", updated_at: "2026-09-01T00:00:00Z" }],
       }),
     ).toEqual([
-      { externalId: "3001", productId: "2001", productTitle: "Large candle", variantTitle: "Default Title", sku: "candle-l", price: "22.00", updatedAt: "2026-10-01T00:00:00.000Z" },
+      { externalId: "3001", productId: "2001", productTitle: "Large candle", variantTitle: "Default Title", sku: "candle-l", price: "22.00", tracked: null, updatedAt: "2026-10-01T00:00:00.000Z" },
     ]);
   });
 
