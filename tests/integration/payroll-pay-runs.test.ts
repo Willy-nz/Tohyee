@@ -788,6 +788,32 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
       expect(employer.body.error).toBe("Line 1: KiwiSaver employer contribution is calculated by Tohyee, not entered.");
     });
 
+    it("refuses a finish date or pay rate change entered inside the period after the draft was made", async () => {
+      const late = await group("Late changes", "weekly");
+      const lou = await employee({ firstName: "Lou", lastName: "Leaver", payFrequency: "weekly", annualSalary: "52000", payGroupId: late });
+      const rai = await employee({ firstName: "Rai", lastName: "Riser", payFrequency: "weekly", annualSalary: "52000", payGroupId: late });
+      const created = await createRun(ben, { payGroupId: late, periodStart: "2026-10-05", payDate: "2026-10-14" });
+      const runId = (created.body.payRun as PayRun).id;
+      expect((created.body.payRun as PayRun).problemCount).toBe(0);
+
+      await asUser(jess, (tx) => updateEmployee(tx, lou, { finishDate: "2026-10-07" }));
+      await asUser(jess, (tx) =>
+        addPayRate(tx, rai, { idempotencyKey: key("rate"), effectiveFrom: "2026-10-08", payBasis: "salary", annualSalary: "56000" }),
+      );
+      const draft = await asUser(ben, (tx) => getPayRun(tx, runId));
+      expect(pay(draft, lou)).toMatchObject({
+        pay: null,
+        problem: `${NOT_SUPPORTED}: final pays. Lou Leaver finishes on 2026-10-07, inside this pay period; move them out of Late changes to pay everyone else.`,
+      });
+      expect(pay(draft, rai)).toMatchObject({
+        pay: null,
+        problem: `${NOT_SUPPORTED}: a pay rate that changes part-way through a pay period. Rai Riser's pay rate changes on 2026-10-08.`,
+      });
+      const refused = await approve(ben, runId);
+      expect(refused.status).toBe(400);
+      expect((await asUser(ben, (tx) => getPayRun(tx, runId))).status).toBe("draft");
+    });
+
     it("shows an employer contribution with no ESCT rate as a problem, and net pay below zero", async () => {
       const noEsct = await group("No ESCT", "weekly");
       const tui = await employee({

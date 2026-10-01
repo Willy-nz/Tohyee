@@ -227,6 +227,7 @@ type EmployeeRow = {
   esct_rate: string | null;
   is_archived: boolean;
   start_date: string;
+  finish_date: string | null;
   gross: string | null;
   taxable_earnings: string | null;
   non_taxable_earnings: string | null;
@@ -258,7 +259,7 @@ async function loadEmployees(tx: OrgTx, run: RunRow): Promise<EmployeeRow[]> {
             ${pick("kiwisaver_employee_rate", "::text")} as kiwisaver_employee_rate,
             ${pick("kiwisaver_employer_rate", "::text")} as kiwisaver_employer_rate,
             ${pick("esct_rate", "::text")} as esct_rate,
-            e.is_archived, e.start_date::text,
+            e.is_archived, e.start_date::text, e.finish_date::text,
             pe.gross::text, pe.taxable_earnings::text, pe.non_taxable_earnings::text, pe.kiwisaver_earnings::text,
             pe.paye::text, pe.student_loan_deduction::text, pe.kiwisaver_employee::text, pe.deductions::text,
             pe.net_pay::text, pe.kiwisaver_employer::text, pe.esct::text, pe.kiwisaver_employer_net::text,
@@ -377,10 +378,24 @@ type Calculated = { employee: EmployeeRow; lines: LineRow[]; pay: EmployeePayRes
 async function calculateRun(tx: OrgTx, run: RunRow): Promise<Calculated[]> {
   const employees = await loadEmployees(tx, run);
   const lines = await loadLines(tx, run.id);
-  return employees.map((employee) => {
+  const calculated: Calculated[] = [];
+  for (const employee of employees) {
     const own = lines.filter((line) => line.employee_id === employee.employee_id);
-    return { employee, lines: own, ...calculate(run, employee, own) };
-  });
+    const result = calculate(run, employee, own);
+    // A finish date or pay rate change entered after the draft was made is refused here too (PRUN8).
+    const later =
+      run.status === "draft" && !employee.is_archived
+        ? await periodRefusal(
+            tx,
+            { id: employee.employee_id, name: employee.name, start_date: employee.start_date, finish_date: employee.finish_date },
+            run.period_start,
+            run.period_end,
+            run.pay_group_name,
+          )
+        : null;
+    calculated.push({ employee, lines: own, ...(later ? { pay: null, problem: later } : result) });
+  }
+  return calculated;
 }
 
 function totalsOf(calculated: Calculated[]): PayRunTotals {
@@ -545,9 +560,7 @@ export async function createPayRun(
   const drafts: Array<{ employeeId: string; quantity: string | null; rate: string | null; amount: string }> = [];
   for (const employee of employees.rows) {
     if (employee.finish_date !== null && employee.finish_date <= periodEnd) {
-      throw new ValidationError(
-        `${NOT_SUPPORTED}: final pays. ${employee.name} finishes on ${employee.finish_date}, inside this pay period; move them out of ${groupName} to pay everyone else.`,
-      );
+      throw new ValidationError(finalPayRefusal(employee, groupName));
     }
     const rate = await rateForPeriod(tx, employee.id, periodStart, employee.start_date);
     if (!rate) throw new ValidationError(`${employee.name} has no pay rate for ${periodStart}. Add one under Employees.`);
@@ -556,17 +569,8 @@ export async function createPayRun(
         `${NOT_SUPPORTED}: part of a pay period on a salary. ${employee.name} starts on ${employee.start_date}, after the period starts.`,
       );
     }
-    const change = await tx.query<{ effective_from: string }>(
-      `select effective_from::text from payroll_pay_rates
-        where employee_id = $1 and effective_from > $2 and effective_from <= $3
-        order by effective_from limit 1`,
-      [employee.id, employee.start_date > periodStart ? employee.start_date : periodStart, periodEnd],
-    );
-    if (change.rows[0]) {
-      throw new ValidationError(
-        `${NOT_SUPPORTED}: a pay rate that changes part-way through a pay period. ${employee.name}'s pay rate changes on ${change.rows[0].effective_from}.`,
-      );
-    }
+    const refused = await periodRefusal(tx, employee, periodStart, periodEnd, groupName);
+    if (refused) throw new ValidationError(refused);
     if (rate.payBasis === "salary") {
       drafts.push({ employeeId: employee.id, quantity: null, rate: null, amount: salaryForPeriod(rate.annualSalary!, frequency) });
     } else {
@@ -611,6 +615,39 @@ export async function createPayRun(
     details: { reference: payRun.reference, payGroupId: groupId, periodStart, periodEnd, payDate, employeeCount: drafts.length },
   });
   return { created: true, payRun };
+}
+
+function finalPayRefusal(employee: GroupEmployee, groupName: string): string {
+  return `${NOT_SUPPORTED}: final pays. ${employee.name} finishes on ${employee.finish_date}, inside this pay period; move them out of ${groupName} to pay everyone else.`;
+}
+
+/**
+ * Why an employee can't be paid on a pay run for this period (PRUN8): they
+ * finish inside it (a final pay) or their pay rate changes part-way through.
+ * Checked when the draft is made and again every time it's calculated, so a
+ * finish date or pay rate entered afterwards isn't missed on approval.
+ */
+async function periodRefusal(
+  tx: OrgTx,
+  employee: GroupEmployee,
+  periodStart: string,
+  periodEnd: string,
+  groupName: string,
+): Promise<string | null> {
+  if (employee.finish_date !== null && employee.finish_date < periodStart) {
+    return `${employee.name} finished on ${employee.finish_date}, before this pay period. Take them off this pay run.`;
+  }
+  if (employee.finish_date !== null && employee.finish_date <= periodEnd) return finalPayRefusal(employee, groupName);
+  const change = await tx.query<{ effective_from: string }>(
+    `select effective_from::text from payroll_pay_rates
+      where employee_id = $1 and effective_from > $2 and effective_from <= $3
+      order by effective_from limit 1`,
+    [employee.id, employee.start_date > periodStart ? employee.start_date : periodStart, periodEnd],
+  );
+  if (change.rows[0]) {
+    return `${NOT_SUPPORTED}: a pay rate that changes part-way through a pay period. ${employee.name}'s pay rate changes on ${change.rows[0].effective_from}.`;
+  }
+  return null;
 }
 
 // Changing a draft

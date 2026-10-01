@@ -8267,7 +8267,9 @@ Payroll deductions payable**.
     (a final pay; move them out of the pay group to pay everyone else);
     someone on a salary who **starts after the period starts** (part of a
     period); a **pay rate that changes inside the period**; a monthly
-    period that doesn't start on the 1st;
+    period that doesn't start on the 1st. A finish date or pay rate change
+    inside the period entered after the draft was made shows as that
+    employee's problem on the draft, so it can't be approved;
   - calculating an employee whose tax code the rates don't support (STC,
     WT; from P2), whose student loan box disagrees with their tax code, or
     whose employer KiwiSaver contribution has no ESCT rate set;
