@@ -4469,6 +4469,211 @@ section).
   and is required on prospects (its prospect use needs only the CRM), but
   not on a customer-only contact.
 
+## CRM record types and page layouts (examples not yet approved by Jess)
+
+Jess asked (1 Oct 2026) for different kinds of company, person and
+opportunity to show and need different fields, and for a record page like a
+Salesforce account page. This follows Salesforce **record types** and **page
+layouts** (one layout per record type, which NetSuite calls a **custom
+form**), and Salesforce's Lightning record page for the page itself:
+
+- **Record types**: an admin can define several for companies (contacts in
+  the CRM), people and opportunities, e.g. "Standard" and "Funding body".
+  Each record has exactly one. One type per kind is the **default**: new
+  records get it unless another is chosen. Names are 1-60 characters,
+  unique for their kind ignoring case, with an optional description. Types
+  are never deleted: an archived type stays on its records (and they can
+  still be saved) but can't be given to another record; the default can't
+  be archived. A new type starts as a copy of another type's layout (the
+  default's unless one is chosen), as Salesforce clones a layout.
+- **Page layouts**: each type has one layout: named sections (up to 20,
+  each name unique on the layout ignoring case) in order, each with fields
+  in order. A field is a standard field of that kind of record or one of
+  its custom fields (CF1-CF10, CRMF1-CRMF12), at most once on the layout.
+  Each field on a layout can be **required** or **read-only** on that type
+  (not both, as Salesforce). Fields that every record of the kind needs
+  (company name, person's first name, opportunity name and company) must
+  stay on every layout, are always required and can't be read-only. Fields
+  Tohyee fills in (created, last changed) are always read-only. A field
+  that always has a value (opportunity amount and stage) or a check box
+  can't be made required. Leaving a field off a layout only hides it on
+  that type's record page: the values it already has are kept.
+- **Required** fields on a record's type are needed whenever the record is
+  saved, checked by the server on every save (the CRM, the Contacts screen,
+  imports and the API), while the CRM is on. A custom field counts only
+  where it applies, as before (a contact field only for the roles it's on
+  and switched on: CRMF11). So does a company's delivery address: only
+  customers have one, so it isn't required of (or shown on) a prospect or
+  supplier. A required field on one type isn't required on another.
+- **Read-only** fields on a record's type can be changed by admins and
+  owners only (as Salesforce's "Edit Read Only Fields" permission, which
+  its administrators have). For anyone else the server refuses a change to
+  the field on a record of that type, including giving it a value (other
+  than its default) on a new record. When a record's type changes, the
+  fields read-only on either the old or the new type can't be changed in
+  that same save.
+- **Changing a record's type** (bookkeepers and above) needs the new type's
+  required fields; nothing else changes, and the record keeps every value
+  (including ones the new layout doesn't show). The change is in the
+  record's history (from and to). Setting up types and layouts is for
+  admins and owners only, and each change (with the layout before and
+  after) is in the audit history.
+- **New custom fields** for companies, people or opportunities join every
+  layout of their kind (Salesforce's "add to page layouts"): at the end of
+  the layout's section with the same name as the field's custom field
+  section, or else at the end of the first section. An admin can then move
+  or remove them per layout. Custom field sections (CRMF6) still group the
+  fields on forms for new records elsewhere and in lists; on a CRM record
+  page the layout decides.
+- The upgrade gives every organisation a default type called "Standard"
+  for each kind, and every existing company (every contact, as any contact
+  can become a prospect), person and opportunity gets it.
+- Record types and layouts are CRM features: with the CRM off they don't
+  apply (nothing is required or read-only because of them) and can't be
+  changed; records keep their type.
+- Record types never change an amount, account, stage, invoice or GST box.
+
+Standard fields:
+
+| Kind | Standard fields (key) |
+| --- | --- |
+| Company | Company name (name, always required), Owner (ownerUserId), Email, Phone, GST number, Billing address (postalAddress), Delivery address, Created, Last changed |
+| Person | First name (always required), Last name, Job title, Company (contactId), Email, Phone, Created, Last changed |
+| Opportunity | Opportunity (name, always required), Company (contactId, always required), Point of contact, Owner, Amount (excl. GST), Expected close date, Stage, Created, Last changed |
+
+The record page (companies, and the same page for people and
+opportunities) follows Salesforce's Lightning record page: a header with
+the record's name, its type, its owner (a company's owner or an
+opportunity's owner; a person's company) and key fields (email and phone;
+amount, stage and expected close date); a **Details** tab with the layout's
+sections, each collapsible, every field with a pencil to change just that
+field (bookkeepers and above; read-only fields only for admins and
+owners); a **Related** tab with lists, each with its count and "View all";
+and an **Activity** panel to the right: quick add (log a call, a meeting, a
+note, a new task), then **Upcoming and overdue** (open tasks by due date,
+overdue first), then past activity grouped by month, newest first (the
+CRM10 timeline). On a phone the tabs stack and the activity panel comes
+below them.
+
+Setup: CRM on, Advanced reporting off; company Mānuka Vets (a prospect),
+person Aroha Ngata at Mānuka Vets and the opportunity "Memorial paw prints
+2027" for 2,400.00 (CRM2, CRM3). Contact fields on prospects: "Funder
+reference" (text, no section) and "Grant round" (list: 2026 Round 1, 2026
+Round 2; no section).
+
+- **CRT1** Upgrade: the organisation has one record type "Standard" for
+  each of companies, people and opportunities, each the default, and every
+  existing contact (customers and suppliers too), person and opportunity
+  has it. Standard's company layout is "Company information" (Company name
+  required, Owner, Email, Phone, GST number, then the contact custom fields
+  with no section, in their order), "Address information" (Billing address,
+  Delivery address), then one section per contact custom field section with
+  its fields, then "System information" (Created, Last changed). People
+  and opportunities get "Person information" and "Opportunity information"
+  sections with their standard fields and their custom fields the same
+  way, then "System information". A new company, person or opportunity
+  gets Standard.
+- **CRT2** Set-up rules: the admin adds the company type "Funding body"
+  (copied from Standard's layout). A second "funding body" for companies is
+  refused ("There's already a company record type called funding body."),
+  but "Funding body" for opportunities is fine. A bookkeeper can't add or
+  change a type (403); a viewer can read them. Making Funding body the
+  default makes Standard not the default (one default per kind); making
+  Standard the default again, then archiving the default is refused
+  ("Standard is the default, so it can't be archived."). Each change is in
+  the audit history.
+- **CRT3** Layout rules: Company name can't be taken off ("Company name
+  must stay on the layout.") or made read-only ("Company name can't be
+  read-only."); Phone twice is refused ("Phone is on the layout more than
+  once."); a people field "Preferred contact" on a company layout is
+  refused ("Preferred contact isn't a company field."); Phone required and
+  read-only is refused ("Phone can't be both required and read-only.");
+  Created can't be required ("Created is filled in by Tohyee, so it can't be
+  required."), and neither can a check box or Amount; two sections called
+  "Grants" and "grants" are refused; a 21st section is refused.
+- **CRT4** A field required on one type but not another: Funding body's
+  layout makes Phone and Funder reference required. Mānuka Vets (Standard)
+  is still saved without either. A new prospect "Lottery Grants Board" as
+  a Funding body without them is refused ("Phone is required on Funding
+  body companies."), with Phone 04 123 4567 but no Funder reference refused
+  ("Funder reference is required on Funding body companies."), and with
+  Funder reference "LGB-2026" too it's saved. Saving it again later without
+  Phone is refused; the same request to the API is refused the same way.
+  With Delivery address required on Standard, Mānuka Vets (a prospect) and
+  a new supplier are still saved without one, but a new customer isn't
+  ("Delivery address is required on Standard companies."), and nor is
+  marking Mānuka Vets a customer until it's given one.
+- **CRT5** Changing a record's type: changing Mānuka Vets to Funding body
+  is refused ("Phone is required on Funding body companies."); with Phone
+  09 555 0101 and Funder reference "MV-1" in the same save it's saved, and
+  its history says the record type changed from Standard to Funding body
+  (and Phone and Funder reference from nothing to their values). Changing
+  it back to Standard keeps both values. An archived company type "Old
+  grants" can't be chosen ("Old grants is archived, so it can't be
+  chosen."), but a company already of that type can still be saved. A
+  person type can't be given to a company ("That record type isn't for
+  companies."). A viewer can't change a type (403).
+- **CRT6** A read-only field: on Funding body, Grant round is read-only. A
+  bookkeeper changing Lottery Grants Board's Grant round to "2026 Round 2"
+  is refused (403: "Grant round is read-only on Funding body companies.
+  Ask an admin to change it."), and so is a bookkeeper making a new Funding
+  body company with a Grant round; an admin can change it (in its
+  history). On Mānuka Vets (Standard, where Grant round isn't read-only) a
+  bookkeeper can set it. A bookkeeper can't change Lottery Grants Board to
+  Standard and its Grant round in the same save.
+- **CRT7** A viewer can't edit inline: a viewer sees Mānuka Vets' record
+  page (header, details, related lists, activity) with no pencils, no quick
+  add and no type change, and a change sent anyway (a field, its type or
+  its owner) is refused (403). A bookkeeper sees a pencil on every field
+  except Created and Last changed and, on Funding body companies, Grant
+  round; an admin also on Grant round.
+- **CRT8** Inline edit: a bookkeeper changes only Mānuka Vets' Phone from
+  its page; nothing else changes and the history says Phone changed. The
+  owner is set to a member (Aroha Ngata's colleague, a bookkeeper) and is
+  in the history; an owner who isn't a member is refused ("The owner must
+  be a member of the organisation.").
+- **CRT9** New custom fields join the layouts: the admin has a contact
+  custom field section "Practice details" and adds a "Practice details"
+  section to Funding body's layout (not Standard's). Adding "Board meeting"
+  (date, on prospects, in the Practice details custom field section) puts
+  it at the end of Funding body's Practice details section and at the end
+  of Standard's first section (Company information). "Website" (url, on
+  prospects, no section) goes at the end of the first section of both.
+  Taking Website off Funding body's layout keeps the values companies
+  already have.
+- **CRT10** Opportunities: an opportunity type "Grant application" whose
+  layout makes Expected close date required. A new "Community grant 2027"
+  for 5,000.00 at Lottery Grants Board without a close date is refused
+  ("Expected close date is required on Grant application opportunities."),
+  and with 2027-03-31 it's saved. "Memorial paw prints 2027" (Standard)
+  is still saved without one. The New column totals **7,400.00**
+  (2,400.00 + 5,000.00); changing Community grant's type to Standard changes
+  neither its amount nor its stage. Making the invoice from Memorial paw
+  prints gives exactly the CRM5 invoice (total **2,760.00**).
+- **CRT11** Record page: after CRM5 (Memorial paw prints won and invoiced
+  2,760.00), a call logged in September 2026 and an open task "Send
+  sample" due yesterday plus one due next week, Mānuka Vets' page has the
+  header (Mānuka Vets, Standard, its owner, email and phone) and the
+  Standard layout's sections; Related: People 1 (Aroha Ngata),
+  Opportunities 1, Tasks 2, Invoices 1 (2,760.00), Credit notes 0, Notes
+  and Files with their counts; Activity: Upcoming and overdue lists "Send
+  sample" (overdue) before the one due next week, then October 2026 (the
+  invoice for 2,760.00 and the stage change to Won) before September 2026
+  (the call). Aroha's and the opportunity's pages show their own type,
+  layout, related lists (her opportunities and tasks; the opportunity's
+  tasks and invoice) and activity.
+- **CRT12** CRM off: with the CRM off, Lottery Grants Board (Funding body)
+  is saved from the Contacts screen without Phone, a bookkeeper can change
+  its Grant round, and it keeps its type; record types can't be added or
+  changed ("The CRM is off. An admin can turn it on in Settings."), and
+  neither can a record's type.
+- **CRT13** Over HTTP: every record type route needs a signed-in member: a
+  viewer reads the types and the record pages of companies, people and
+  opportunities (200), a bookkeeper changes a record's fields and type
+  (200) but not the set-up (403), an admin changes the set-up (201, 200).
+  Old URLs still work: /operations/crm/companies/5 opens /crm/companies/5,
+  and the new pages are /crm/people/{id} and /crm/opportunities/{id}.
+
 ## Notes, files and history
 
 Journals, sales invoices, bills, sales credit notes, supplier credit notes and

@@ -1,6 +1,7 @@
 import { type Account, createAccount, listAccounts, parseAccountCodeInput, updateAccount } from "@/lib/accounts/service";
 import { ACCOUNT_TYPES, type AccountType, type SystemKey } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
+import type { Role } from "@/lib/auth/roles";
 import { type Contact, type ContactInput, createContact, listContacts, updateContact } from "@/lib/contacts/service";
 import { loadCustomFieldContext } from "@/lib/custom-fields/service";
 import type { CustomField } from "@/lib/custom-fields/values";
@@ -265,7 +266,7 @@ function customValue(field: CustomField, text: string, dateOrder: ImportOptions[
   }
 }
 
-async function contactsApplier(tx: OrgTx, options: ImportOptions, idempotencyKey: string): Promise<Applier> {
+async function contactsApplier(tx: OrgTx, options: ImportOptions, idempotencyKey: string, saver: Role | undefined): Promise<Applier> {
   const contacts = await listContacts(tx);
   const byName = new Map(contacts.map((contact) => [contact.name.toLowerCase(), contact]));
   const terms = await tx.query<{ id: string; name: string }>("select id, name from payment_terms where is_active");
@@ -301,7 +302,7 @@ async function contactsApplier(tx: OrgTx, options: ImportOptions, idempotencyKey
     const existing = byName.get(name.toLowerCase());
     if (existing) {
       if (Object.keys(custom).length > 0) input.customFields = { ...existing.customFields, ...custom };
-      const updated = await updateContact(tx, existing.id, input);
+      const updated = await updateContact(tx, existing.id, input, { role: saver });
       byName.set(updated.name.toLowerCase(), updated);
       const same = JSON.stringify(updated) === JSON.stringify(existing);
       return { row, label: name, action: same ? "unchanged" : "update" };
@@ -317,7 +318,7 @@ async function contactsApplier(tx: OrgTx, options: ImportOptions, idempotencyKey
       ...input,
       ...flags,
       ...(Object.keys(custom).length > 0 ? { customFields: custom } : {}),
-    });
+    }, { role: saver });
     byName.set(created.contact.name.toLowerCase(), created.contact);
     return { row, label: name, action: "create" };
   };
@@ -394,6 +395,8 @@ async function itemsApplier(tx: OrgTx, idempotencyKey: string, taxCodes: TaxCode
 export async function importMasterRecords(
   tx: OrgTx,
   input: { kind: unknown; records: unknown; options?: unknown; idempotencyKey: unknown; commit: boolean; mapping?: unknown },
+  /** The importer's role, for the CRM layout's read-only fields (CRT6). */
+  saveOptions: { role?: Role } = {},
 ): Promise<ImportResult> {
   const kind = requireOneOf(input.kind, "kind", MASTER_KINDS);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
@@ -407,7 +410,7 @@ export async function importMasterRecords(
     apply = accountsApplier(tx, await listAccounts(tx, { includeArchived: true }), await TaxCodeFinder.load(tx));
     earlier = duplicates(records, "code", "Code");
   } else if (kind === "contacts") {
-    apply = await contactsApplier(tx, options, idempotencyKey);
+    apply = await contactsApplier(tx, options, idempotencyKey, saveOptions.role);
     earlier = duplicates(records, "name", "Contact");
   } else {
     apply = await itemsApplier(tx, idempotencyKey, await TaxCodeFinder.load(tx));

@@ -51,7 +51,7 @@ Set them in the Agents box before sending each task:
 | --- | --- | --- | --- | --- |
 | Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
 | Payroll P3: pay items and pay runs, one journal split by each employee's allocation (examples PRUN1...) | #60 | not opened yet | (Agents tab) | 0058 |
-| CRM record types, page layouts and the Salesforce-style record page (CRM roadmap items 3-4, examples CRT1...) | none | not opened yet | (Agents tab) | 0059 |
+| CRM record types, page layouts and the Salesforce-style record page (CRM roadmap items 3-4, examples CRT1-CRT13) | none | #74 | `copilot/crm-record-types-page-layouts` | 0059 (keep it last) |
 | RDTI R2: R&D activity register and tagging costs to activities | none | not opened yet | (Agents tab) | 0060 |
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
@@ -70,9 +70,11 @@ Advanced features off (decided by Jess, 1 Oct 2026). Prospects only get the
 fields turned on for prospects; existing customer fields aren't added to
 them.
 
-CRM work waiting on custom fields: record types and page layouts, and the
-Salesforce-style record page. Claude will build these once custom fields is
-merged.
+CRM record types and page layouts, and the Salesforce-style record page,
+are in #74 (examples CRT1-CRT13, not yet approved by Jess; her questions are
+in the PR). Existing companies, people and opportunities get each kind's
+default record type, "Standard", whose layout shows what the old company
+page showed, so nothing changes until an admin sets up another type.
 
 ### Payroll: the plan (issue #60)
 

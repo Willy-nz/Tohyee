@@ -2,7 +2,10 @@ import { writeAuditEvent } from "@/lib/audit";
 import { updateContact } from "@/lib/contacts/service";
 import { dueDateFromTerms } from "@/lib/customers/service";
 import { keptCustom, loadCustomFieldContext, missingRequiredField, parseCustomInput, resolveCustomValues } from "@/lib/custom-fields/service";
-import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
+import { type CustomValues, customValuesKey, defaultValues, isSwitchedOn } from "@/lib/custom-fields/values";
+import type { Role } from "@/lib/auth/roles";
+import { checkAgainstLayout, chooseRecordType, getRecordType, type LayoutValues } from "@/lib/crm/record-types/service";
+import type { RecordType } from "@/lib/crm/record-types/layout";
 import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -66,6 +69,9 @@ export type Person = {
   isArchived: boolean;
   /** Custom field values (CRMF4); they never change anything else. */
   customFields: CustomValues;
+  /** The CRM record type (CRT1): its page layout and required and read-only fields. */
+  recordTypeId: string;
+  recordTypeName: string;
 };
 
 export type Opportunity = {
@@ -86,6 +92,9 @@ export type Opportunity = {
   invoiceNumber: string | null;
   /** Custom field values (CRMF5); they never change the amount, stage or invoice. */
   customFields: CustomValues;
+  /** The CRM record type (CRT1, CRT10); it never changes the amount, stage or invoice. */
+  recordTypeId: string;
+  recordTypeName: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -171,6 +180,37 @@ async function crmCustomValues(
   return values;
 }
 
+/** Who is saving: read-only fields on a record type are for admins and owners (CRT6). */
+export type SaveOptions = { role?: Role };
+
+/**
+ * Checks a person's or opportunity's values against its record type's page
+ * layout (CRT3, CRT6): required fields on that type, and read-only ones for
+ * anyone but an admin or owner. A new record's "before" values are what it
+ * would get without them being sent.
+ */
+async function checkCrmLayout(
+  tx: OrgTx,
+  record: "person" | "opportunity",
+  type: RecordType,
+  values: LayoutValues,
+  before: { type: RecordType; values: LayoutValues } | null,
+  options: SaveOptions,
+): Promise<void> {
+  const ctx = await loadCustomFieldContext(tx);
+  const uses = [record] as const;
+  const standardDefaults: Record<string, unknown> = record === "opportunity" ? { amount: "0.00", stage: "new" } : {};
+  await checkAgainstLayout(tx, {
+    record,
+    type,
+    values,
+    before: before ?? { type: null, values: { standard: standardDefaults, custom: defaultValues([...ctx.fields.values()], record, uses, ctx) } },
+    role: options.role,
+    ctx,
+    applies: (field) => field.usedOn.includes(record) && isSwitchedOn(ctx, record),
+  });
+}
+
 /** The values for the history: the new ones, and the old ones only when they changed (CRMF4). */
 function customHistory(values: CustomValues, saved: CustomValues | null): { customFields: CustomValues; customFieldsFrom?: CustomValues } {
   if (saved === null || customValuesKey(values) === customValuesKey(saved)) return { customFields: values };
@@ -187,8 +227,8 @@ async function requireContact(tx: OrgTx, id: string): Promise<{ id: string; name
 // People (CRM2)
 
 const PERSON_SELECT = `select p.id, p.contact_id, c.name as contact_name, p.first_name, p.last_name, p.job_title, p.email, p.phone, p.is_primary, p.is_archived,
-    p.custom_fields
-  from crm_people p left join contacts c on c.id = p.contact_id`;
+    p.custom_fields, p.record_type_id, t.name as record_type_name
+  from crm_people p left join contacts c on c.id = p.contact_id join crm_record_types t on t.id = p.record_type_id`;
 
 type PersonRow = {
   id: string;
@@ -202,6 +242,8 @@ type PersonRow = {
   is_primary: boolean;
   is_archived: boolean;
   custom_fields: CustomValues;
+  record_type_id: string;
+  record_type_name: string;
 };
 
 function toPerson(row: PersonRow): Person {
@@ -218,6 +260,8 @@ function toPerson(row: PersonRow): Person {
     isPrimary: row.is_primary,
     isArchived: row.is_archived,
     customFields: row.custom_fields ?? {},
+    recordTypeId: row.record_type_id,
+    recordTypeName: row.record_type_name,
   };
 }
 
@@ -255,7 +299,14 @@ type PersonInput = {
   isPrimary?: unknown;
   isArchived?: unknown;
   customFields?: unknown;
+  /** A CRM record type for people (CRT5); the default for a new person. */
+  recordTypeId?: unknown;
 };
+
+function personLayoutValues(values: { firstName: string; lastName: string | null; jobTitle: string | null; contactId: string | null; email: string | null; phone: string | null }, custom: CustomValues): LayoutValues {
+  const { firstName, lastName, jobTitle, contactId, email, phone } = values;
+  return { standard: { firstName, lastName, jobTitle, contactId, email, phone }, custom };
+}
 
 async function personValues(tx: OrgTx, input: PersonInput, current: Person | null) {
   const contactId = input.contactId === undefined ? (current?.contactId ?? null) : optionalId(input.contactId === "" ? null : input.contactId, "contactId");
@@ -290,30 +341,57 @@ async function clearOtherPrimary(tx: OrgTx, contactId: string | null, personId: 
   ]);
 }
 
-export async function createPerson(tx: OrgTx, input: PersonInput): Promise<Person> {
+export async function createPerson(tx: OrgTx, input: PersonInput, options: SaveOptions = {}): Promise<Person> {
   await requirePeople(tx);
   const values = await personValues(tx, input, null);
   const customFields = await crmCustomValues(tx, "person", input.customFields, null);
+  const recordType = await chooseRecordType(tx, "person", input.recordTypeId, null);
+  await checkCrmLayout(tx, "person", recordType, personLayoutValues(values, customFields), null, options);
   if (values.isPrimary) await clearOtherPrimary(tx, values.contactId, null);
   const inserted = await tx.query<{ id: string }>(
-    `insert into crm_people (contact_id, first_name, last_name, job_title, email, phone, is_primary, custom_fields)
-     values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) returning id`,
-    [values.contactId, values.firstName, values.lastName, values.jobTitle, values.email, values.phone, values.isPrimary, JSON.stringify(customFields)],
+    `insert into crm_people (contact_id, first_name, last_name, job_title, email, phone, is_primary, custom_fields, record_type_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9) returning id`,
+    [
+      values.contactId,
+      values.firstName,
+      values.lastName,
+      values.jobTitle,
+      values.email,
+      values.phone,
+      values.isPrimary,
+      JSON.stringify(customFields),
+      recordType.id,
+    ],
   );
   const id = inserted.rows[0].id;
-  await writeAuditEvent(tx, { eventType: "crm.person_created", entityType: "crm_person", entityId: id, details: { ...values, customFields } });
+  await writeAuditEvent(tx, {
+    eventType: "crm.person_created",
+    entityType: "crm_person",
+    entityId: id,
+    details: { ...values, customFields, recordType: recordType.name },
+  });
   return getPerson(tx, id);
 }
 
-export async function updatePerson(tx: OrgTx, idInput: unknown, input: PersonInput): Promise<Person> {
+export async function updatePerson(tx: OrgTx, idInput: unknown, input: PersonInput, options: SaveOptions = {}): Promise<Person> {
   await requirePeople(tx);
   const current = await getPerson(tx, idInput);
   const values = await personValues(tx, input, current);
   const customFields = await crmCustomValues(tx, "person", input.customFields, current.customFields);
+  const recordType = await chooseRecordType(tx, "person", input.recordTypeId, current.recordTypeId);
+  const currentType = recordType.id === current.recordTypeId ? recordType : await getRecordType(tx, current.recordTypeId);
+  await checkCrmLayout(
+    tx,
+    "person",
+    recordType,
+    personLayoutValues(values, customFields),
+    { type: currentType, values: personLayoutValues(current, current.customFields) },
+    options,
+  );
   if (values.isPrimary) await clearOtherPrimary(tx, values.contactId, current.id);
   await tx.query(
     `update crm_people set contact_id = $2, first_name = $3, last_name = $4, job_title = $5, email = $6, phone = $7, is_archived = $8,
-            is_primary = $9, custom_fields = $10::jsonb, updated_at = now()
+            is_primary = $9, custom_fields = $10::jsonb, record_type_id = $11, updated_at = now()
       where id = $1`,
     [
       current.id,
@@ -326,13 +404,19 @@ export async function updatePerson(tx: OrgTx, idInput: unknown, input: PersonInp
       values.isArchived,
       values.isPrimary,
       JSON.stringify(customFields),
+      recordType.id,
     ],
   );
   await writeAuditEvent(tx, {
     eventType: "crm.person_updated",
     entityType: "crm_person",
     entityId: current.id,
-    details: { ...values, ...customHistory(customFields, current.customFields) },
+    details: {
+      ...values,
+      ...customHistory(customFields, current.customFields),
+      recordType: recordType.name,
+      ...(recordType.id !== current.recordTypeId ? { recordTypeFrom: current.recordTypeName } : {}),
+    },
   });
   return getPerson(tx, current.id);
 }
@@ -342,9 +426,11 @@ export async function updatePerson(tx: OrgTx, idInput: unknown, input: PersonInp
 
 const OPPORTUNITY_SELECT = `select o.id, o.name, o.contact_id, c.name as contact_name, o.point_of_contact_id,
     nullif(concat_ws(' ', p.first_name, p.last_name), '') as point_of_contact_name, o.owner_user_id, o.amount::text, o.currency_code,
-    o.close_date::text, o.stage, o.position, o.invoice_id, i.invoice_number, o.custom_fields, o.created_at, o.updated_at
+    o.close_date::text, o.stage, o.position, o.invoice_id, i.invoice_number, o.custom_fields, o.created_at, o.updated_at,
+    o.record_type_id, t.name as record_type_name
   from crm_opportunities o
   join contacts c on c.id = o.contact_id
+  join crm_record_types t on t.id = o.record_type_id
   left join crm_people p on p.id = o.point_of_contact_id
   left join sales_invoices i on i.id = o.invoice_id`;
 
@@ -366,6 +452,8 @@ type OpportunityRow = {
   custom_fields: CustomValues;
   created_at: string;
   updated_at: string;
+  record_type_id: string;
+  record_type_name: string;
 };
 
 function toOpportunity(row: OpportunityRow): Opportunity {
@@ -385,6 +473,8 @@ function toOpportunity(row: OpportunityRow): Opportunity {
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
     customFields: row.custom_fields ?? {},
+    recordTypeId: row.record_type_id,
+    recordTypeName: row.record_type_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -433,7 +523,17 @@ type OpportunityInput = {
   closeDate?: unknown;
   stage?: unknown;
   customFields?: unknown;
+  /** A CRM record type for opportunities (CRT10); the default for a new one. */
+  recordTypeId?: unknown;
 };
+
+function opportunityLayoutValues(
+  values: { name: string; contactId: string; pointOfContactId: string | null; ownerUserId: string | null; amount: string; closeDate: string | null; stage: OpportunityStage },
+  custom: CustomValues,
+): LayoutValues {
+  const { name, contactId, pointOfContactId, ownerUserId, amount, closeDate, stage } = values;
+  return { standard: { name, contactId, pointOfContactId, ownerUserId, amount, closeDate, stage }, custom };
+}
 
 async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Opportunity | null) {
   const contactId = input.contactId === undefined && current ? current.contactId : requireId(input.contactId, "contactId");
@@ -470,14 +570,16 @@ async function nextPosition(tx: OrgTx, stage: OpportunityStage): Promise<number>
   return Number(result.rows[0].position);
 }
 
-export async function createOpportunity(tx: OrgTx, input: OpportunityInput): Promise<Opportunity> {
+export async function createOpportunity(tx: OrgTx, input: OpportunityInput, options: SaveOptions = {}): Promise<Opportunity> {
   await requireCrm(tx);
   const values = await opportunityValues(tx, input, null);
   const customFields = await crmCustomValues(tx, "opportunity", input.customFields, null);
+  const recordType = await chooseRecordType(tx, "opportunity", input.recordTypeId, null);
+  await checkCrmLayout(tx, "opportunity", recordType, opportunityLayoutValues(values, customFields), null, options);
   const inserted = await tx.query<{ id: string }>(
     `insert into crm_opportunities (name, contact_id, point_of_contact_id, owner_user_id, amount, close_date, stage, position, created_by_email, currency_code,
-                                    custom_fields)
-     values ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::jsonb) returning id`,
+                                    custom_fields, record_type_id)
+     values ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::jsonb, $12) returning id`,
     [
       values.name,
       values.contactId,
@@ -490,15 +592,21 @@ export async function createOpportunity(tx: OrgTx, input: OpportunityInput): Pro
       tx.actor.email,
       values.currencyCode,
       JSON.stringify(customFields),
+      recordType.id,
     ],
   );
   const id = inserted.rows[0].id;
-  await writeAuditEvent(tx, { eventType: "crm.opportunity_created", entityType: "crm_opportunity", entityId: id, details: { ...values, customFields } });
+  await writeAuditEvent(tx, {
+    eventType: "crm.opportunity_created",
+    entityType: "crm_opportunity",
+    entityId: id,
+    details: { ...values, customFields, recordType: recordType.name },
+  });
   return getOpportunity(tx, id);
 }
 
 /** Changes an opportunity; a new stage puts it at the end of that column (CRM4). Refused once it has made an invoice. */
-export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: OpportunityInput): Promise<Opportunity> {
+export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: OpportunityInput, options: SaveOptions = {}): Promise<Opportunity> {
   await requireCrm(tx);
   const current = await getOpportunity(tx, idInput);
   await tx.query("select id from crm_opportunities where id = $1 for update", [current.id]);
@@ -507,10 +615,20 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
     throw new ConflictError("This opportunity has made an invoice, so its stage can't change.");
   }
   const customFields = await crmCustomValues(tx, "opportunity", input.customFields, current.customFields);
+  const recordType = await chooseRecordType(tx, "opportunity", input.recordTypeId, current.recordTypeId);
+  const currentType = recordType.id === current.recordTypeId ? recordType : await getRecordType(tx, current.recordTypeId);
+  await checkCrmLayout(
+    tx,
+    "opportunity",
+    recordType,
+    opportunityLayoutValues(values, customFields),
+    { type: currentType, values: opportunityLayoutValues(current, current.customFields) },
+    options,
+  );
   const position = values.stage === current.stage ? current.position : await nextPosition(tx, values.stage);
   await tx.query(
     `update crm_opportunities set name = $2, contact_id = $3, point_of_contact_id = $4, owner_user_id = $5, amount = $6::numeric,
-            close_date = $7, stage = $8, position = $9, currency_code = $10, custom_fields = $11::jsonb, updated_at = now()
+            close_date = $7, stage = $8, position = $9, currency_code = $10, custom_fields = $11::jsonb, record_type_id = $12, updated_at = now()
       where id = $1`,
     [
       current.id,
@@ -524,6 +642,7 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
       position,
       values.currencyCode,
       JSON.stringify(customFields),
+      recordType.id,
     ],
   );
   await writeAuditEvent(tx, {
@@ -534,6 +653,8 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
       ...values,
       ...(values.stage !== current.stage ? { stageFrom: current.stage } : {}),
       ...customHistory(customFields, current.customFields),
+      recordType: recordType.name,
+      ...(recordType.id !== current.recordTypeId ? { recordTypeFrom: current.recordTypeName } : {}),
     },
   });
   return getOpportunity(tx, current.id);
@@ -1045,8 +1166,36 @@ export type TimelineEntry = {
 export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promise<TimelineEntry[]> {
   const contactId = requireId(contactIdInput, "contactId");
   await requireContact(tx, contactId);
+  return timelineFor(tx, { contactId });
+}
+
+/**
+ * A person's timeline for their record page (CRT11): their activities,
+ * tasks, the opportunities they're the point of contact for, and their
+ * synced emails and meetings.
+ */
+export async function personTimeline(tx: OrgTx, personIdInput: unknown): Promise<TimelineEntry[]> {
+  const person = await getPerson(tx, personIdInput);
+  return timelineFor(tx, { personId: person.id });
+}
+
+/**
+ * An opportunity's timeline for its record page (CRT11): its activities,
+ * tasks, stage changes, and its invoice once approved and paid.
+ */
+export async function opportunityTimeline(tx: OrgTx, opportunityIdInput: unknown): Promise<TimelineEntry[]> {
+  const opportunity = await getOpportunity(tx, opportunityIdInput);
+  return timelineFor(tx, { opportunityId: opportunity.id });
+}
+
+type TimelineTarget = { contactId: string } | { personId: string } | { opportunityId: string };
+
+async function timelineFor(tx: OrgTx, target: TimelineTarget): Promise<TimelineEntry[]> {
+  const contactId = "contactId" in target ? target.contactId : null;
+  const personId = "personId" in target ? target.personId : null;
+  const opportunityId = "opportunityId" in target ? target.opportunityId : null;
   const entries: TimelineEntry[] = [];
-  for (const activity of await listActivities(tx, { contactId })) {
+  for (const activity of await listActivities(tx, target)) {
     entries.push({
       kind: "activity",
       at: activity.happenedAt,
@@ -1057,7 +1206,7 @@ export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promi
       by: activity.createdByEmail,
     });
   }
-  for (const task of await listTasks(tx, { contactId })) {
+  for (const task of await listTasks(tx, target)) {
     entries.push({
       kind: "task",
       at: task.completedAt ? new Date(task.completedAt).toISOString() : new Date(task.createdAt).toISOString(),
@@ -1071,9 +1220,10 @@ export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promi
   const events = await tx.query<{ entity_id: string; event_type: string; details: Record<string, unknown>; actor_email: string | null; created_at: string; name: string }>(
     `select e.entity_id, e.event_type, e.details, e.actor_email, e.created_at, o.name
        from audit_events e join crm_opportunities o on o.id::text = e.entity_id
-      where e.entity_type = 'crm_opportunity' and o.contact_id = $1
+      where e.entity_type = 'crm_opportunity'
+        and (o.contact_id = $1 or o.point_of_contact_id = $2 or o.id = $3)
         and (e.event_type = 'crm.opportunity_created' or (e.event_type = 'crm.opportunity_updated' and e.details ? 'stageFrom'))`,
-    [contactId],
+    [contactId, personId, opportunityId],
   );
   for (const event of events.rows) {
     const stage = event.details.stage as OpportunityStage;
@@ -1084,7 +1234,7 @@ export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promi
       title: event.event_type === "crm.opportunity_created" ? `Opportunity added: ${event.name}` : `Opportunity ${event.name}: ${OPPORTUNITY_STAGE_LABELS[from!]} → ${OPPORTUNITY_STAGE_LABELS[stage]}`,
       detail: event.event_type === "crm.opportunity_created" ? OPPORTUNITY_STAGE_LABELS[stage] : null,
       amount: event.event_type === "crm.opportunity_created" ? toFixedString(dec(String(event.details.amount ?? "0")), 2) : null,
-      href: "/crm/pipeline",
+      href: `/crm/opportunities/${event.entity_id}`,
       by: event.actor_email,
     });
   }
@@ -1102,8 +1252,15 @@ export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promi
        from bills where contact_id = $1 and approved_at is not null
      union all
      select 'supplier_payment', p.bill_id::text, b.supplier_invoice_number, p.created_at, p.amount::text, p.created_by_email
-       from supplier_payments p join bills b on b.id = p.bill_id where b.contact_id = $1 and p.status = 'active'`,
-    [contactId],
+       from supplier_payments p join bills b on b.id = p.bill_id where b.contact_id = $1 and p.status = 'active'
+     union all
+     select 'invoice', i.id::text, coalesce(i.invoice_number, 'Invoice'), i.approved_at, i.total::text, i.approved_by_email
+       from crm_opportunities o join sales_invoices i on i.id = o.invoice_id where o.id = $2 and i.approved_at is not null
+     union all
+     select 'customer_payment', p.invoice_id::text, coalesce(i.invoice_number, 'Invoice'), p.created_at, p.amount::text, p.created_by_email
+       from crm_opportunities o join sales_invoices i on i.id = o.invoice_id join customer_payments p on p.invoice_id = i.id
+      where o.id = $2 and p.status = 'active'`,
+    [contactId, opportunityId],
   );
   const titles: Record<string, string> = {
     invoice: "Invoice approved",
@@ -1131,7 +1288,7 @@ export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promi
     });
   }
   // Synced emails and meetings (MAIL6), hidden where their mailbox's owner chose so (MAIL7).
-  const synced = await syncedFor(tx, { contactId });
+  const synced = opportunityId ? { emails: [], meetings: [] } : await syncedFor(tx, { contactId, personId });
   for (const email of synced.emails) {
     entries.push({
       kind: "email",
@@ -1157,4 +1314,74 @@ export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promi
     });
   }
   return entries.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
+// ---------------------------------------------------------------------------
+// Record pages (CRT11)
+
+export type RelatedDocument = {
+  id: string;
+  number: string | null;
+  date: string;
+  dueDate: string | null;
+  status: "draft" | "approved" | "voided";
+  currencyCode: string;
+  total: string;
+};
+
+export type CompanyRelated = {
+  /** The newest 50 invoices, drafts included; `invoiceCount` counts them all. */
+  invoices: RelatedDocument[];
+  invoiceCount: number;
+  creditNotes: RelatedDocument[];
+  creditNoteCount: number;
+  notesCount: number;
+  filesCount: number;
+};
+
+const RELATED_LIMIT = 50;
+
+/**
+ * A company's related lists for its record page (CRT11), after Salesforce's
+ * related lists on an account: its invoices and credit notes (drafts too, as
+ * the operations lists show them) and how many notes and files it has.
+ */
+export async function companyRelated(tx: OrgTx, contactIdInput: unknown): Promise<CompanyRelated> {
+  const contactId = requireId(contactIdInput, "contactId");
+  await requireContact(tx, contactId);
+  type Row = { id: string; number: string | null; date: string; due_date: string | null; status: RelatedDocument["status"]; currency_code: string; total: string };
+  const toDocument = (row: Row): RelatedDocument => ({
+    id: row.id,
+    number: row.number,
+    date: row.date,
+    dueDate: row.due_date,
+    status: row.status,
+    currencyCode: row.currency_code,
+    total: toFixedString(dec(row.total), 2),
+  });
+  const invoices = await tx.query<Row>(
+    `select id, invoice_number as number, invoice_date::text as date, due_date::text, status, currency_code, total::text
+       from sales_invoices where contact_id = $1 order by invoice_date desc, id desc limit ${RELATED_LIMIT}`,
+    [contactId],
+  );
+  const creditNotes = await tx.query<Row>(
+    `select id, credit_note_number as number, credit_note_date::text as date, null as due_date, status, currency_code, total::text
+       from sales_credit_notes where contact_id = $1 order by credit_note_date desc, id desc limit ${RELATED_LIMIT}`,
+    [contactId],
+  );
+  const counts = await tx.query<{ invoices: number; credit_notes: number; notes: number; files: number }>(
+    `select (select count(*)::int from sales_invoices where contact_id = $1) as invoices,
+            (select count(*)::int from sales_credit_notes where contact_id = $1) as credit_notes,
+            (select count(*)::int from record_notes where record_type = 'contact' and record_id = $1 and deleted_at is null) as notes,
+            (select count(*)::int from record_attachments where record_type = 'contact' and record_id = $1 and removed_at is null) as files`,
+    [contactId],
+  );
+  return {
+    invoices: invoices.rows.map(toDocument),
+    invoiceCount: counts.rows[0].invoices,
+    creditNotes: creditNotes.rows.map(toDocument),
+    creditNoteCount: counts.rows[0].credit_notes,
+    notesCount: counts.rows[0].notes,
+    filesCount: counts.rows[0].files,
+  };
 }

@@ -15,8 +15,10 @@ export const GET = route(async (request) => {
 
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
-    createContact(tx, {
+  const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx, { membership }) =>
+    createContact(
+      tx,
+      {
       source: body.source,
       idempotencyKey: body.idempotencyKey,
       name: body.name,
@@ -41,7 +43,11 @@ export const POST = route(async (request) => {
       deliveryCountry: body.deliveryCountry,
       defaultSalesTaxCode: body.defaultSalesTaxCode,
       defaultPurchaseTaxCode: body.defaultPurchaseTaxCode,
-    }),
+      recordTypeId: body.recordTypeId,
+      ownerUserId: body.ownerUserId,
+      },
+      { role: membership.role },
+    ),
   );
   return json(result, { status: result.created ? 201 : 200 });
 });

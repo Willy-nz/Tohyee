@@ -12,8 +12,10 @@ export const GET = route(async (request) => {
 
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const opportunity = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
-    createOpportunity(tx, {
+  const opportunity = await withOrganisation(request, body.organisationId, "bookkeeper", (tx, { membership }) =>
+    createOpportunity(
+      tx,
+      {
       name: body.name,
       contactId: body.contactId,
       pointOfContactId: body.pointOfContactId,
@@ -22,7 +24,10 @@ export const POST = route(async (request) => {
       closeDate: body.closeDate,
       stage: body.stage,
       customFields: body.customFields,
-    }),
+      recordTypeId: body.recordTypeId,
+      },
+      { role: membership.role },
+    ),
   );
   return json({ opportunity }, { status: 201 });
 });
