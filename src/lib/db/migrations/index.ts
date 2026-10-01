@@ -52,7 +52,7 @@ export async function migrateOrganisation(organisation: {
 }): Promise<OrganisationMigrationResult> {
   try {
     const result = await applyTenantMigrations(organisation.database_name);
-    // The first owner starts with payroll access, once (example PR9).
+    // The first owner starts with payroll access, once (example PE9).
     await startPayrollAccess({ id: organisation.id, databaseName: organisation.database_name });
     await coreQuery(
       `update organisations

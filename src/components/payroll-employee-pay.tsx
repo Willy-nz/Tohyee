@@ -20,7 +20,7 @@ export function describePay(rate: Pick<PayRate, "payBasis" | "annualSalary" | "h
     : `$${rate.hourlyRate} an hour, ${rate.ordinaryHoursPerWeek} hours a week`;
 }
 
-/** Pay rate history and adding a new rate from a date (example PR7). */
+/** Pay rate history and adding a new rate from a date (example PE7). */
 export function EmployeePayRates({ organisationId, employeeId, onSaved }: { organisationId: string; employeeId: string; onSaved: () => void }) {
   const { data, error, loading, reload } = useApiData<{ payRates: PayRate[] }>(`/api/payroll/employees/${employeeId}/pay-rates`, {
     organisationId,
@@ -140,7 +140,7 @@ function describeLine(line: CostAllocation["lines"][number]): string {
   return [line.departmentName, line.className, line.locationName, line.projectName].filter(Boolean).join(" · ") || "Not tagged";
 }
 
-/** Cost allocation: where the employee's pay is charged, split by % (examples PR3-PR6). */
+/** Cost allocation: where the employee's pay is charged, split by % (examples PE3-PE6). */
 export function EmployeeAllocation({ organisationId, employeeId, onSaved }: { organisationId: string; employeeId: string; onSaved: () => void }) {
   const { data, error, loading, reload } = useApiData<{ allocations: CostAllocation[] }>(
     `/api/payroll/employees/${employeeId}/allocations`,

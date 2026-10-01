@@ -28,7 +28,7 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 | Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | #67 | `copilot/extend-custom-fields-crm-records` | 0053 (renumbered); merge after #62 and #63 |
 | Payroll P2: IRD payroll rates as dated data | #60 | none | `copilot/issue-60-ird-payroll-rates` | 0054 if needed. Restarted 1 Oct after the IRD sites were allowlisted |
 | Payroll P7: Holidays Act leave worked examples (docs only) | #60 | #68 | `copilot/nz-payroll-stage-p7-holidays-act-leave` | none |
-| Payroll P1b: cost allocation, pay rate history and payroll access (examples PR3-PR12) | #60 | #73 | `copilot/60-employee-cost-allocation` | 0057 |
+| Payroll P1b: cost allocation, pay rate history and payroll access (examples PE3-PE12) | #60 | #73 | `copilot/60-employee-cost-allocation` | 0057 |
 | Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12) | none (Agents tab) | not opened yet | `copilot/sales-orders-stage-1` | 0055 |
 | Sales platform connections, stage 1: connector framework, Shopify customers and products (CRM roadmap items 27-28) | none (Agents tab) | not opened yet | `copilot/sales-platform-connections-stage-1` | 0056 |
 
@@ -56,7 +56,7 @@ only be run by certain people. Each item is its own branch and PR.
 
 - [x] **P1 Employee records** (#62, migration 0051), merged 1 Oct 2026.
 - [ ] **P1b Cost allocation, pay rate history and payroll access** (migration
-      0057). Draft PR #73; examples PR3-PR12 await Jess. Pay runs use
+      0057). Draft PR #73; examples PE3-PE12 await Jess. Pay runs use
       `allocationOn()`, `payRateOn()`, `splitByPercentages()` and
       `requirePayrollAccess()`.
       - Each employee's default cost split by %: Department, Class, Location

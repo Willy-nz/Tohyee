@@ -72,7 +72,7 @@ function draftFrom(employee: Employee): Draft {
   return draft as Draft;
 }
 
-/** A new employee's pay is their starting pay; after that pay changes under Pay rates (PR7). */
+/** A new employee's pay is their starting pay; after that pay changes under Pay rates (PE7). */
 function fieldsFrom(draft: Draft, isNew: boolean) {
   const job = {
     jobTitle: draft.jobTitle || null,

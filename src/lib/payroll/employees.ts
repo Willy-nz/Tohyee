@@ -45,7 +45,7 @@ export type Employee = {
   payGroupName: string | null;
   employeeGroupId: string | null;
   employeeGroupName: string | null;
-  /** The Department on the biggest line of the cost allocation in effect today (PR6). */
+  /** The Department on the biggest line of the cost allocation in effect today (PE6). */
   primaryDepartment: { id: string; name: string } | null;
 };
 
@@ -160,7 +160,7 @@ function parseEmployee(input: Record<string, unknown>, current?: EmployeeRow): P
   );
   const studentLoan = requireBoolean(currentValue(input, "studentLoan", current?.student_loan), "Student loan");
   const payFrequency = requireOneOf(currentValue(input, "payFrequency", current?.pay_frequency), "Pay frequency", PAY_FREQUENCIES);
-  // Pay is set once here, as the starting pay; after that it changes under Pay rates, with a date (PR7).
+  // Pay is set once here, as the starting pay; after that it changes under Pay rates, with a date (PE7).
   if (current && PAY_FIELDS.some((field) => input[field] !== undefined)) {
     throw new ValidationError("Change pay under Pay rates, with the date the new rate starts.");
   }
@@ -224,7 +224,7 @@ function plain(value: string | null): string | null {
 }
 
 function toEmployeeWithoutSecrets(row: EmployeeRow, extras: Extras): Omit<Employee, "irdNumber" | "bankAccount"> {
-  // Pay comes from the rate history (PR7); the row keeps the starting pay.
+  // Pay comes from the rate history (PE7); the row keeps the starting pay.
   const pay = extras.pay.get(row.id) ?? {
     payBasis: row.pay_basis,
     annualSalary: row.annual_salary,
@@ -469,7 +469,7 @@ export async function updateEmployee(tx: OrgTx, id: string, input: Record<string
   );
   const row = result.rows[0];
   if (row.start_date !== current.start_date) {
-    // Their pay from the new start date is their first rate (PR7).
+    // Their pay from the new start date is their first rate (PE7).
     const first = await firstPayRate(tx, id);
     if (first && row.start_date < first.effectiveFrom) {
       await insertStartingPayRate(tx, id, row.start_date, first, `starting-pay:${id}:${row.start_date}`);
@@ -502,7 +502,7 @@ export async function setEmployeeArchived(tx: OrgTx, id: string, isArchived: boo
 }
 
 /**
- * Reports-to, pay group and employee group (PR8): the manager is another
+ * Reports-to, pay group and employee group (PE8): the manager is another
  * employee, never themselves or someone who reports to them; a pay group's
  * frequency must be the employee's. Archived managers and groups can be kept
  * but not newly chosen.
@@ -546,7 +546,7 @@ async function checkJobDetails(tx: OrgTx, current: EmployeeRow | null, parsed: P
   }
 }
 
-/** Pay rates and cost allocations can't start before the employee does (PR6, PR7). */
+/** Pay rates and cost allocations can't start before the employee does (PE6, PE7). */
 async function checkStartDate(tx: OrgTx, id: string, startDate: string): Promise<void> {
   const earliest = await tx.query<{ effective_from: string }>(
     `select min(effective_from)::text as effective_from from (

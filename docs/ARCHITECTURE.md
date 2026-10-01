@@ -242,7 +242,7 @@ Per organisation (lowest to highest):
 | admin | + approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, closing a month with checks that need attention (after confirming) and reopening months (with a reason) on Period close, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
-**Payroll access** is a separate permission, not a role (examples PR9-PR12).
+**Payroll access** is a separate permission, not a role (examples PE9-PE12).
 An admin gives it to, or removes it from, named members (Settings › Payroll
 access); it needs the bookkeeper role or higher, and admins and owners don't
 get it automatically. It's kept in the organisation's own database

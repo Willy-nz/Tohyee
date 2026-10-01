@@ -10,7 +10,7 @@ import { advancedFeaturesOn } from "@/lib/tracking/service";
 import { asRecord, optionalId, requireArray, requireIdempotencyKey } from "@/lib/validation";
 
 /**
- * Employee cost allocation (examples PR3-PR6): where an employee's pay is
+ * Employee cost allocation (examples PE3-PE6): where an employee's pay is
  * charged, split by % across Department, Class and Location values, a project
  * and (later, with the RDTI register) an R&D activity. Lines total exactly
  * 100.00%. Each allocation starts on a date and is never changed; saving a
@@ -128,7 +128,7 @@ async function employeeStartDate(tx: OrgTx, employeeId: string, forUpdate = fals
   return result.rows[0].start_date;
 }
 
-/** Every allocation the employee has had, oldest first (PR6). */
+/** Every allocation the employee has had, oldest first (PE6). */
 export async function listAllocations(tx: OrgTx, employeeId: string): Promise<CostAllocation[]> {
   await requirePayrollAccess(tx);
   await employeeStartDate(tx, employeeId);
@@ -140,7 +140,7 @@ export async function listAllocations(tx: OrgTx, employeeId: string): Promise<Co
 }
 
 /**
- * The allocation in effect on `date` (PR6): the one with the latest start on
+ * The allocation in effect on `date` (PE6): the one with the latest start on
  * or before it; for the same start, the one saved last. Null before the
  * first. For pay runs (P3).
  */
@@ -277,7 +277,7 @@ async function checkLineTargets(tx: OrgTx, lines: ParsedLine[]): Promise<void> {
   }
 }
 
-/** Saves a new allocation from `effectiveFrom` (PR3-PR6); earlier ones stay as they were. */
+/** Saves a new allocation from `effectiveFrom` (PE3-PE6); earlier ones stay as they were. */
 export async function addAllocation(
   tx: OrgTx,
   employeeId: string,

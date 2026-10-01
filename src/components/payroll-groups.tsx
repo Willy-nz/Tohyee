@@ -16,7 +16,7 @@ export const PAY_FREQUENCY_LABELS: Record<PayFrequency, string> = {
 
 type Groups = { payGroups: PayGroup[]; employeeGroups: EmployeeGroup[] };
 
-/** Pay groups and employee groups (example PR8), for people with payroll access. */
+/** Pay groups and employee groups (example PE8), for people with payroll access. */
 export function PayrollGroups({ organisationId }: { organisationId: string }) {
   const [includeArchived, setIncludeArchived] = useState(false);
   const { data, error, loading, reload } = useApiData<Groups>("/api/payroll/groups", { organisationId, includeArchived });

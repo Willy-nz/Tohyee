@@ -8,13 +8,13 @@ import { api, errorMessage } from "@/lib/client/api";
 import { formatDateTime } from "@/lib/format";
 import type { PayrollAccessPerson } from "@/lib/payroll/access";
 
-/** Shown instead of payroll data to someone without payroll access (example PR10). */
+/** Shown instead of payroll data to someone without payroll access (example PE10). */
 export const NO_PAYROLL_ACCESS =
   "You need payroll access to see payroll. Ask an admin to give it to you in Settings › Payroll access.";
 
 /**
  * Shows `children` only to people with payroll access; everyone else sees a
- * short message and no data (PR10). The APIs refuse them too.
+ * short message and no data (PE10). The APIs refuse them too.
  */
 export function PayrollAccessGate({ organisationId, children }: { organisationId: string; children: ReactNode }) {
   const { data, error, loading } = useApiData<{ hasPayrollAccess: boolean; canManagePayrollAccess: boolean }>(
@@ -46,7 +46,7 @@ const ROLE_LABELS: Record<PayrollAccessPerson["role"], string> = {
   viewer: "Viewer",
 };
 
-/** Settings › Payroll access, for admins (PR11). */
+/** Settings › Payroll access, for admins (PE11). */
 export function PayrollAccessSettings({ organisationId }: { organisationId: string }) {
   const { data, error, loading, reload } = useApiData<{ people: PayrollAccessPerson[] }>("/api/payroll/access", { organisationId });
   const [busy, setBusy] = useState(false);

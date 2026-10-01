@@ -4,7 +4,7 @@ import { listMembers } from "@/lib/organisations/members";
 import { parseOrganisationId } from "@/lib/organisations/registry";
 import { listPayrollAccess, setPayrollAccess } from "@/lib/payroll/access";
 
-/** Who has payroll access, and giving or removing it (examples PR9-PR12). Admins only. */
+/** Who has payroll access, and giving or removing it (examples PE9-PE12). Admins only. */
 
 async function adminMembers(request: Request, organisationIdInput: unknown) {
   const auth = await requireAuth(request);

@@ -8718,14 +8718,14 @@ create trigger payroll_employees_no_truncate
     version: "0057",
     name: "payroll_allocation_rates_access",
     sql: `
--- Payroll stage P1b (examples PR3-PR12): payroll access, pay groups and
+-- Payroll stage P1b (examples PE3-PE12): payroll access, pay groups and
 -- employee groups, job details, pay rate history and cost allocations.
 -- Nothing here posts to the ledger.
 
--- Payroll access (PR9-PR12): a permission an admin gives named members, kept
+-- Payroll access (PE9-PE12): a permission an admin gives named members, kept
 -- against their core user id. Grants and removals are in audit_events.
 -- payroll_access_started_at records that the first owner was given it, so
--- it's only done once (PR9).
+-- it's only done once (PE9).
 alter table organisation_settings add column payroll_access_started_at timestamptz;
 
 create table payroll_access (
@@ -8744,7 +8744,7 @@ end;
 $$;
 
 -- Pay groups (e.g. "Weekly wages", each with a pay frequency) and employee
--- groups for reporting (PR8).
+-- groups for reporting (PE8).
 create table payroll_pay_groups (
   id uuid primary key default gen_random_uuid(),
   idempotency_key text not null unique,
@@ -8781,7 +8781,7 @@ create trigger payroll_employee_groups_no_truncate
   before truncate on payroll_employee_groups
   for each statement execute function tohyee_payroll_forbid_delete('Employee groups can''t be deleted; archive them instead');
 
--- Job details (PR8).
+-- Job details (PE8).
 alter table payroll_employees
   add column job_title text check (job_title is null or length(btrim(job_title)) between 1 and 100),
   add column reports_to_id uuid references payroll_employees(id),
@@ -8791,7 +8791,7 @@ alter table payroll_employees
 create index payroll_employees_pay_group_idx on payroll_employees (pay_group_id) where pay_group_id is not null;
 
 -- An employee in a pay group is paid at the group's frequency, and a group's
--- frequency can't change while employees are in it (PR8).
+-- frequency can't change while employees are in it (PE8).
 create function tohyee_check_payroll_pay_group() returns trigger
 language plpgsql as $$
 declare
@@ -8826,7 +8826,7 @@ begin
 end;
 $$;
 
--- Pay rate history (PR7). The rate in effect on a date is the one with the
+-- Pay rate history (PE7). The rate in effect on a date is the one with the
 -- latest effective_from on or before it; for the same date, the latest
 -- entry_number (a correction).
 create table payroll_pay_rates (
@@ -8870,7 +8870,7 @@ select id, start_date, pay_basis, annual_salary, hourly_rate, ordinary_hours_per
   from payroll_employees
  order by created_at, id;
 
--- Cost allocations (PR3-PR6): where an employee's pay is charged, split by %
+-- Cost allocations (PE3-PE6): where an employee's pay is charged, split by %
 -- across Department, Class and Location values, a project and (from the RDTI
 -- register, a later stage) an R&D activity. Lines total exactly 100.00%,
 -- checked at commit.

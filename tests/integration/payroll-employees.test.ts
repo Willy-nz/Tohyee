@@ -34,7 +34,7 @@ async function body(response: Response) {
   return (await response.json()) as Record<string, unknown>;
 }
 
-describeWithDatabase("payroll employee records (PR1, PR2)", () => {
+describeWithDatabase("payroll employee records (PE1, PE2)", () => {
   let server: TestServer;
   let owner: SessionUser;
   let bookkeeper: SessionUser;
@@ -87,7 +87,7 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
       viewer.id,
       "viewer",
     ]);
-    // Payroll access (PR9-PR12) is given separately; the owner has it from the start.
+    // Payroll access (PE9-PE12) is given separately; the owner has it from the start.
     await asUser(owner, async (tx) => {
       for (const user of [bookkeeper, viewer]) {
         await tx.query("insert into payroll_access (user_id, granted_by_user_id, granted_by_email) values ($1, $2, $3)", [
@@ -105,7 +105,7 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
     else process.env.TOHYEE_SECRET_KEY = previousSecret;
   });
 
-  it("PR1: saves a payroll profile with IRD and bank details encrypted, and no secret in list or audit output", async () => {
+  it("PE1: saves a payroll profile with IRD and bank details encrypted, and no secret in list or audit output", async () => {
     const commandKey = key("employee");
     const created = await addEmployee(commandKey);
     expect(created.created).toBe(true);
@@ -152,7 +152,7 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
     expect(JSON.stringify(events.rows)).not.toContain("03-1234-0123456-00");
   });
 
-  it("PR1: hourly employees require a positive hourly rate and ordinary hours, and reject salary fields", async () => {
+  it("PE1: hourly employees require a positive hourly rate and ordinary hours, and reject salary fields", async () => {
     await expect(
       asUser(bookkeeper, (tx) =>
         createEmployee(tx, {
@@ -199,7 +199,7 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
     ).rejects.toThrow(/at most 2 decimal places/i);
   });
 
-  it("PR1: retries are idempotent and updates retain secrets when secret fields are omitted", async () => {
+  it("PE1: retries are idempotent and updates retain secrets when secret fields are omitted", async () => {
     const commandKey = key("employee");
     const first = await asUser(bookkeeper, (tx) => createEmployee(tx, { idempotencyKey: commandKey, ...employeeInput }));
     const retry = await asUser(bookkeeper, (tx) => createEmployee(tx, { idempotencyKey: commandKey, ...employeeInput }));
@@ -215,7 +215,7 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
     expect((await asUser(bookkeeper, (tx) => getEmployee(tx, first.employee.id))).irdNumber).toBe("123456789");
   });
 
-  it("PR2: archives and restores an employee without deleting their record", async () => {
+  it("PE2: archives and restores an employee without deleting their record", async () => {
     const { employee } = await addEmployee();
     await asUser(bookkeeper, (tx) => updateEmployee(tx, employee.id, { finishDate: "2026-09-30" }));
     expect((await asUser(bookkeeper, (tx) => setEmployeeArchived(tx, employee.id, true))).isArchived).toBe(true);

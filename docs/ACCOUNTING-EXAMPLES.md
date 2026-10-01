@@ -59,8 +59,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/tax-available-on.test.ts` (TAO1-TAO5, TAO7-TAO12) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
-  GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PR1, PR2)
-  and `tests/integration/payroll-allocation.test.ts` (PR3, PR5-PR12),
+  GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PE1, PE2)
+  and `tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE12),
   all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
@@ -75,7 +75,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/import-fields.test.ts` the import column matching (IM2-IM5, IM16), and
   `tests/unit/tax-available-on.test.ts` the tax code pickers and starting codes
   by side (TAO2-TAO4, TAO6, TAO8), and `tests/unit/payroll-allocation.test.ts`
-  the payroll % split (PR3-PR5)
+  the payroll % split (PE3-PE5)
 
 ## NZ payroll — employee records (examples not yet approved by Jess)
 
@@ -83,10 +83,10 @@ This first stage follows [NetSuite's employee payroll record](https://docs.oracl
 
 | ID | Employee details | Result |
 | --- | --- | --- |
-| PR1 | Add Aroha Ngata, starting 1 April 2026, fortnightly salary of NZD 70,000.00 a year, tax code M, student loan, and her IRD and bank details. Record the current KiwiSaver status and the employee and employer rates supplied for her. | Her payroll profile is saved; the IRD number and bank account are encrypted in the organisation database. No tax or net-pay amount is calculated and no journal is posted. |
-| PR2 | Set Aroha's finish date to 30 September 2026, then archive her. | Her profile remains in the database and audit trail, is hidden from the active list and can be restored; it is never deleted. |
+| PE1 | Add Aroha Ngata, starting 1 April 2026, fortnightly salary of NZD 70,000.00 a year, tax code M, student loan, and her IRD and bank details. Record the current KiwiSaver status and the employee and employer rates supplied for her. | Her payroll profile is saved; the IRD number and bank account are encrypted in the organisation database. No tax or net-pay amount is calculated and no journal is posted. |
+| PE2 | Set Aroha's finish date to 30 September 2026, then archive her. | Her profile remains in the database and audit trail, is hidden from the active list and can be restored; it is never deleted. |
 
-The rates in PR1 are copied from the employee's current instructions; see [IRD's KiwiSaver employer guidance](https://www.ird.govt.nz/kiwisaver/kiwisaver-employers). This example does not prescribe KiwiSaver rates or calculate deductions. Entering an employee is not authority to run payroll.
+The rates in PE1 are copied from the employee's current instructions; see [IRD's KiwiSaver employer guidance](https://www.ird.govt.nz/kiwisaver/kiwisaver-employers). This example does not prescribe KiwiSaver rates or calculate deductions. Entering an employee is not authority to run payroll.
 
 ### Not supported yet (refused rather than guessed)
 
@@ -135,9 +135,9 @@ approving:
   record) and Xero's [user role access to payroll](https://central.xero.com/s/article/User-role-access-to-payroll-in-Xero)
   (only payroll admins and advisers see employee pay and bank details).
 
-Tests: `tests/unit/payroll-allocation.test.ts` (PR3, PR4, PR5),
-`tests/unit/payroll-access-screen.test.ts` (PR10's message) and
-`tests/integration/payroll-allocation.test.ts` (PR3, PR5-PR12).
+Tests: `tests/unit/payroll-allocation.test.ts` (PE3, PE4, PE5),
+`tests/unit/payroll-access-screen.test.ts` (PE10's message) and
+`tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE12).
 
 ### Cost allocation
 
@@ -164,22 +164,22 @@ original exactly.
 
 | ID | Allocation and amount | Result |
 | --- | --- | --- |
-| PR3 | Aroha Ngata from 1 April 2026: 60% Department Sales, Location Wellington; 40% Department Operations, Location Auckland. Split **$1,234.57**. | Exact shares 740.742 and 493.828. Cut to cents: 740.74 + 493.82 = 1,234.56, so 1 cent is left. The 40% line had the larger part cut off (0.008 against 0.002), so it gets the cent: **Sales 740.74, Operations 493.83**, total 1,234.57. Split **−$1,234.57** (a reversal): **−740.74 and −493.83**. |
-| PR4 | Rounding cents: 33.33% / 33.33% / 33.34% of **$10.00**; 50% / 50% of **$0.01**; 33.33% / 33.33% / 33.34% of **$100.00**. | 3.333, 3.333, 3.334 cut to 3.33 each (9.99); the third line had the most cut off: **3.33, 3.33, 3.34**. Half a cent each ties, so the first line gets it: **0.01 and 0.00** (rounding each half up would give 0.02). 33.33, 33.33, 33.34 are exact: **33.33, 33.33, 33.34**, nothing left over. |
-| PR5 | Lines of 60% and 30% (90%); lines of 60% and 50% (110%); a line of 0%; a line of 33.333%; a 100% line with no Department, Class, Location or project; two 50% lines both Department Sales. | All refused: "The allocation lines total 90.00%. They must total exactly 100.00%." (and 110.00%); a 0% line, a third decimal place, an empty line ("Line 1 needs a Department, Class, Location or project") and a repeated line ("Line 2 is the same as line 1") are refused too. Nothing is saved. |
-| PR6 | Aroha is 100% Department Sales from 1 April 2026. On 20 September 2026 she moves to Operations from **15 September 2026** (mid-month): a new allocation, 100% Operations, effective 15 September 2026. | The allocation in effect on 1 May and 14 September 2026 is still **100% Sales**; on 15 September 2026 and later it's **100% Operations**. Both stay in her history, oldest first. Her primary department in the employee list (the department of the biggest line in effect today) is Operations. How a pay period that spans the move is charged is a P3 question (below). |
+| PE3 | Aroha Ngata from 1 April 2026: 60% Department Sales, Location Wellington; 40% Department Operations, Location Auckland. Split **$1,234.57**. | Exact shares 740.742 and 493.828. Cut to cents: 740.74 + 493.82 = 1,234.56, so 1 cent is left. The 40% line had the larger part cut off (0.008 against 0.002), so it gets the cent: **Sales 740.74, Operations 493.83**, total 1,234.57. Split **−$1,234.57** (a reversal): **−740.74 and −493.83**. |
+| PE4 | Rounding cents: 33.33% / 33.33% / 33.34% of **$10.00**; 50% / 50% of **$0.01**; 33.33% / 33.33% / 33.34% of **$100.00**. | 3.333, 3.333, 3.334 cut to 3.33 each (9.99); the third line had the most cut off: **3.33, 3.33, 3.34**. Half a cent each ties, so the first line gets it: **0.01 and 0.00** (rounding each half up would give 0.02). 33.33, 33.33, 33.34 are exact: **33.33, 33.33, 33.34**, nothing left over. |
+| PE5 | Lines of 60% and 30% (90%); lines of 60% and 50% (110%); a line of 0%; a line of 33.333%; a 100% line with no Department, Class, Location or project; two 50% lines both Department Sales. | All refused: "The allocation lines total 90.00%. They must total exactly 100.00%." (and 110.00%); a 0% line, a third decimal place, an empty line ("Line 1 needs a Department, Class, Location or project") and a repeated line ("Line 2 is the same as line 1") are refused too. Nothing is saved. |
+| PE6 | Aroha is 100% Department Sales from 1 April 2026. On 20 September 2026 she moves to Operations from **15 September 2026** (mid-month): a new allocation, 100% Operations, effective 15 September 2026. | The allocation in effect on 1 May and 14 September 2026 is still **100% Sales**; on 15 September 2026 and later it's **100% Operations**. Both stay in her history, oldest first. Her primary department in the employee list (the department of the biggest line in effect today) is Operations. How a pay period that spans the move is charged is a P3 question (below). |
 
 ### Pay rate history
 
 | ID | Rate changes | Result |
 | --- | --- | --- |
-| PR7 | Aroha starts on 1 April 2026 on a salary of **$70,000.00** a year (PR1), which becomes her first pay rate, effective 1 April 2026. On 20 September 2026 she's given **$74,000.00** a year from 1 October 2026, with the reason "Annual review". On 15 December 2026 she moves to **$38.50 an hour for 37.5 hours a week** from 1 January 2027. | Her rate on 20 September and 30 September 2026 is $70,000.00; on 1 October 2026, $74,000.00; on 1 January 2027, $38.50 an hour, 37.5 hours a week. Her current rate is the one in effect today. All three stay in her history. Saving another rate for 1 October 2026 (to correct a typo) replaces the earlier one from that date; both stay in the history. A rate before her start date, a zero rate, or a salary with an hourly rate is refused. The audit log records that a rate was added and from when, never the amount. |
+| PE7 | Aroha starts on 1 April 2026 on a salary of **$70,000.00** a year (PE1), which becomes her first pay rate, effective 1 April 2026. On 20 September 2026 she's given **$74,000.00** a year from 1 October 2026, with the reason "Annual review". On 15 December 2026 she moves to **$38.50 an hour for 37.5 hours a week** from 1 January 2027. | Her rate on 20 September and 30 September 2026 is $70,000.00; on 1 October 2026, $74,000.00; on 1 January 2027, $38.50 an hour, 37.5 hours a week. Her current rate is the one in effect today. All three stay in her history. Saving another rate for 1 October 2026 (to correct a typo) replaces the earlier one from that date; both stay in the history. A rate before her start date, a zero rate, or a salary with an hourly rate is refused. The audit log records that a rate was added and from when, never the amount. |
 
 ### Job details, pay groups and employee groups
 
 | ID | Details | Result |
 | --- | --- | --- |
-| PR8 | Pay groups "Weekly wages" (weekly) and "Monthly salaries" (monthly); employee groups "Wellington office" and "Field staff". Aroha (fortnightly) is given the job title "Payroll officer", reports to Mere Tane, and joins employee group "Wellington office". She's then put in pay group "Monthly salaries". | Job title, reports-to and employee group are saved. "Monthly salaries" is **refused** because her pay frequency is fortnightly ("Aroha is paid fortnightly but Monthly salaries is monthly"). Changing her to monthly in the same save puts her in it. An employee can't report to themselves or to someone who (directly or further up) reports to them. A pay group's frequency can't change while employees are in it. Groups are archived, never deleted. |
+| PE8 | Pay groups "Weekly wages" (weekly) and "Monthly salaries" (monthly); employee groups "Wellington office" and "Field staff". Aroha (fortnightly) is given the job title "Payroll officer", reports to Mere Tane, and joins employee group "Wellington office". She's then put in pay group "Monthly salaries". | Job title, reports-to and employee group are saved. "Monthly salaries" is **refused** because her pay frequency is fortnightly ("Aroha is paid fortnightly but Monthly salaries is monthly"). Changing her to monthly in the same save puts her in it. An employee can't report to themselves or to someone who (directly or further up) reports to them. A pay group's frequency can't change while employees are in it. Groups are archived, never deleted. |
 
 ### Payroll access
 
@@ -194,10 +194,10 @@ did it and when.
 
 | ID | What happens | Result |
 | --- | --- | --- |
-| PR9 | Jess creates the organisation (or it's upgraded to this version); she's its first owner. Mere is an admin, Ben a bookkeeper. | **Jess has payroll access** from the start, recorded in the audit log as given by "system". Mere and Ben don't, even though Mere is an admin. |
-| PR10 | Ben (bookkeeper, no payroll access) opens Payroll › Employees, and tries the employee, pay rate, allocation and group APIs. | He sees "You need payroll access to see payroll. Ask an admin to give it to you in Settings › Payroll access." and no data; every payroll API answers 403 with that message, for reading and changing. |
-| PR11 | Mere (admin) opens Settings › Payroll access and gives it to herself, then to Ben. Later she removes Ben's. Ben tries to give himself access. A viewer is given access. | Mere and then Ben can see payroll once given it; the audit log shows "payroll access given" to each, by Mere, with the time. After removal Ben is refused again (PR10), and the audit log shows it. Ben can't give access (admins only, 403). Giving it to a viewer is refused ("needs the bookkeeper role or higher"). Removing access from the last member who has it (and the bookkeeper role or higher to use it) is refused, so there's always someone. |
-| PR12 | Ben, who has payroll access, is removed from the organisation and added again later. | When he's added again **he has no payroll access** until an admin gives it to him again; the removal is in the audit log. |
+| PE9 | Jess creates the organisation (or it's upgraded to this version); she's its first owner. Mere is an admin, Ben a bookkeeper. | **Jess has payroll access** from the start, recorded in the audit log as given by "system". Mere and Ben don't, even though Mere is an admin. |
+| PE10 | Ben (bookkeeper, no payroll access) opens Payroll › Employees, and tries the employee, pay rate, allocation and group APIs. | He sees "You need payroll access to see payroll. Ask an admin to give it to you in Settings › Payroll access." and no data; every payroll API answers 403 with that message, for reading and changing. |
+| PE11 | Mere (admin) opens Settings › Payroll access and gives it to herself, then to Ben. Later she removes Ben's. Ben tries to give himself access. A viewer is given access. | Mere and then Ben can see payroll once given it; the audit log shows "payroll access given" to each, by Mere, with the time. After removal Ben is refused again (PE10), and the audit log shows it. Ben can't give access (admins only, 403). Giving it to a viewer is refused ("needs the bookkeeper role or higher"). Removing access from the last member who has it (and the bookkeeper role or higher to use it) is refused, so there's always someone. |
+| PE12 | Ben, who has payroll access, is removed from the organisation and added again later. | When he's added again **he has no payroll access** until an admin gives it to him again; the removal is in the audit log. |
 
 No IRD number, bank account or pay amount is ever written into an audit
 event: allocation events record the effective date and the percentages,
@@ -214,7 +214,7 @@ rate events the effective date and pay basis.
 
 ### Questions for Jess (allocation, pay rates and payroll access)
 
-- A pay period that spans an allocation change (PR6, a monthly pay with a
+- A pay period that spans an allocation change (PE6, a monthly pay with a
   move on 15 September): charge the whole pay by the allocation in effect on
   the period's end date, its pay date, or split it by days in each part?
 - Once pay runs exist, should an allocation or rate dated before the last
@@ -228,10 +228,10 @@ rate events the effective date and pay basis.
 - Should a viewer with payroll access be able to read payroll (refused as
   built: payroll needs bookkeeper as well)?
 - Leftover cents in a split go to the lines with the largest part cut off,
-  the earlier line first on a tie (PR3, PR4). Is that right, or should they
+  the earlier line first on a tie (PE3, PE4). Is that right, or should they
   always go to the biggest line, or the last line?
 - Should a line be allowed with no Department, Class, Location or project
-  (refused as built, PR5)?
+  (refused as built, PE5)?
 - When someone with payroll access is moved down to viewer, should their
   access be removed then (as built it stays, unused, until an admin removes
   it or they're moved back up)?

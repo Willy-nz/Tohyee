@@ -20,20 +20,20 @@ import {
 
 /**
  * Splitting an amount across an employee's cost allocation lines (examples
- * PR3-PR5). Browser-safe: no server imports.
+ * PE3-PE5). Browser-safe: no server imports.
  */
 
 const ONE_HUNDRED = dec("100");
 const CENT = dec("0.01");
 
-/** A line's percentage: more than 0, at most 100, at most 2 decimal places (PR5). */
+/** A line's percentage: more than 0, at most 100, at most 2 decimal places (PE5). */
 export function parseAllocationPercentage(input: unknown, label: string): string {
   const value = parseDecimalInput(input, `${label} percentage`, { maxScale: 2 });
   if (cmp(dec(value), ONE_HUNDRED) > 0) throw new ValidationError(`${label} percentage can't be more than 100%.`);
   return value;
 }
 
-/** Lines must total exactly 100.00% (PR5). */
+/** Lines must total exactly 100.00% (PE5). */
 export function assertTotalsOneHundred(percentages: readonly string[]): void {
   if (percentages.length === 0) throw new ValidationError("An allocation needs at least one line.");
   const total = sum(percentages.map(dec));
@@ -44,7 +44,7 @@ export function assertTotalsOneHundred(percentages: readonly string[]): void {
 
 /**
  * Splits `amount` (at most 2 decimal places) by `percentages` (totalling
- * 100.00%) into parts that add back to exactly the amount (PR3, PR4).
+ * 100.00%) into parts that add back to exactly the amount (PE3, PE4).
  *
  * Each exact share is cut to whole cents towards zero; the cents left over go
  * one each to the lines with the largest part cut off, the earlier line first

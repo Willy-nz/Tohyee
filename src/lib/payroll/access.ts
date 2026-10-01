@@ -7,7 +7,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { requireBoolean } from "@/lib/validation";
 
 /**
- * Payroll access (examples PR9-PR12): a permission, separate from roles, that
+ * Payroll access (examples PE9-PE12): a permission, separate from roles, that
  * an admin gives named members of the organisation. Only people with it (and
  * the bookkeeper role or higher) can read or change employees' pay details,
  * allocations, rate history, IRD numbers and bank accounts, and later pay runs
@@ -18,7 +18,7 @@ import { requireBoolean } from "@/lib/validation";
 export const PAYROLL_ACCESS_MESSAGE =
   "You need payroll access to see payroll. Ask an admin to give it to you in Settings › Payroll access.";
 
-/** The role payroll access needs as well (PR11). */
+/** The role payroll access needs as well (PE11). */
 export const PAYROLL_MINIMUM_ROLE: Role = "bookkeeper";
 
 export async function hasPayrollAccess(tx: OrgTx): Promise<boolean> {
@@ -31,7 +31,7 @@ export async function hasPayrollAccess(tx: OrgTx): Promise<boolean> {
 }
 
 /**
- * Throws 403 unless the signed-in person has payroll access (PR10). Every
+ * Throws 403 unless the signed-in person has payroll access (PE10). Every
  * payroll service calls this first, so pay runs and payroll reports (P3,
  * P10) must too.
  */
@@ -74,7 +74,7 @@ export async function listPayrollAccess(tx: OrgTx, members: readonly PayrollAcce
 }
 
 /**
- * Gives or removes payroll access (PR11). The route checks the caller is an
+ * Gives or removes payroll access (PE11). The route checks the caller is an
  * admin; `members` are the organisation's current members from the core
  * database, read before this transaction.
  */
@@ -131,7 +131,7 @@ export async function setPayrollAccess(
 
 /**
  * Someone joining (or rejoining) the organisation starts without payroll
- * access, even if they had it before they were removed (PR12).
+ * access, even if they had it before they were removed (PE12).
  */
 export async function removePayrollAccessOnJoin(tx: OrgTx, userId: string, email: string): Promise<void> {
   const removed = await tx.query("delete from payroll_access where user_id = $1", [userId]);
@@ -147,7 +147,7 @@ export async function removePayrollAccessOnJoin(tx: OrgTx, userId: string, email
 
 /**
  * The organisation's first owner starts with payroll access, so there's
- * always someone (PR9). Runs after migrations when an organisation is created
+ * always someone (PE9). Runs after migrations when an organisation is created
  * or upgraded, once: `payroll_access_started_at` records that it's been done.
  * Reads the core database first, then uses its own transaction on the
  * organisation's database.

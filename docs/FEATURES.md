@@ -39,7 +39,7 @@ that something happened.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
-- **Payroll employee records** (PR1-PR12; examples not yet approved by Jess):
+- **Payroll employee records** (PE1-PE12; examples not yet approved by Jess):
   employee details, pay frequency, tax code, student loan and KiwiSaver
   settings; IRD numbers and bank accounts are encrypted. Employees are
   archived, never deleted. Job title, reports-to, pay groups (each with a pay

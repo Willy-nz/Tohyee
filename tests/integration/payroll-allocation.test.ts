@@ -48,10 +48,10 @@ async function body(response: Response) {
 }
 
 /**
- * Examples PR3 and PR5-PR12 in docs/ACCOUNTING-EXAMPLES.md ("NZ payroll —
+ * Examples PE3 and PE5-PE12 in docs/ACCOUNTING-EXAMPLES.md ("NZ payroll —
  * cost allocation, pay rates, job details and payroll access").
  */
-describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3, PR5-PR12)", () => {
+describeWithDatabase("payroll cost allocation, pay rates and payroll access (PE3, PE5-PE12)", () => {
   let server: TestServer;
   let jess: SessionUser; // first owner
   let mere: SessionUser; // admin
@@ -134,7 +134,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
   });
 
   describe("payroll access", () => {
-    it("PR9: the first owner has payroll access from the start, given by system; admins and bookkeepers don't", async () => {
+    it("PE9: the first owner has payroll access from the start, given by system; admins and bookkeepers don't", async () => {
       expect(await asUser(jess, (tx) => hasPayrollAccess(tx))).toBe(true);
       expect(await asUser(mere, (tx) => hasPayrollAccess(tx))).toBe(false);
       expect(await asUser(ben, (tx) => hasPayrollAccess(tx))).toBe(false);
@@ -146,7 +146,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
       expect(events.rows).toEqual([{ event_type: "payroll_access.granted", entity_id: jess.id, actor_email: "system" }]);
     });
 
-    it("PR9: an organisation upgraded to this version gives the first owner payroll access once", async () => {
+    it("PE9: an organisation upgraded to this version gives the first owner payroll access once", async () => {
       // Simulate a database from before payroll access: nobody has it and it hasn't started.
       await asUser(jess, async (tx) => {
         await tx.query("delete from payroll_access");
@@ -162,7 +162,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
       await asUser(jess, (tx) => tx.query("insert into payroll_access (user_id, granted_by_email) values ($1, 'system')", [jess.id]));
     });
 
-    it("PR10: a bookkeeper without payroll access is refused every payroll API, reading and changing", async () => {
+    it("PE10: a bookkeeper without payroll access is refused every payroll API, reading and changing", async () => {
       const { employee } = await addEmployee();
       const cookie = await sessionCookieFor(ben);
       const responses = [
@@ -206,7 +206,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
       await expect(asUser(ben, (tx) => requirePayrollAccess(tx))).rejects.toThrow(/You need payroll access/);
     });
 
-    it("PR11: an admin gives payroll access to herself and others, removes it, and it's audited", async () => {
+    it("PE11: an admin gives payroll access to herself and others, removes it, and it's audited", async () => {
       const mereCookie = await sessionCookieFor(mere);
       const benCookie = await sessionCookieFor(ben);
       // Mere is an admin but can't see payroll yet.
@@ -250,7 +250,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
       expect(events.rows[0].created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
-    it("PR11: the last member with payroll access can't have it removed", async () => {
+    it("PE11: the last member with payroll access can't have it removed", async () => {
       expect((await giveAccess(mere, mere, false)).status).toBe(200);
       const refused = await giveAccess(jess, mere, false);
       expect(refused.status).toBe(400);
@@ -273,7 +273,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
       expect((await giveAccess(ben, jess, false)).status).toBe(200);
     });
 
-    it("PR12: someone removed from the organisation and added again starts without payroll access", async () => {
+    it("PE12: someone removed from the organisation and added again starts without payroll access", async () => {
       expect((await giveAccess(ben, jess)).status).toBe(200);
       expect(await asUser(ben, (tx) => hasPayrollAccess(tx))).toBe(true);
       const jessCookie = await sessionCookieFor(jess);
@@ -294,7 +294,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
   });
 
   describe("cost allocation", () => {
-    it("PR3: saves a 60/40 allocation by department and location; the audit has percentages, not pay", async () => {
+    it("PE3: saves a 60/40 allocation by department and location; the audit has percentages, not pay", async () => {
       const { employee } = await addEmployee();
       const saved = await asUser(jess, (tx) =>
         addAllocation(tx, employee.id, {
@@ -337,7 +337,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
       ).rejects.toThrow(/already used/i);
     });
 
-    it("PR5: refuses lines that don't total 100.00%, zero lines, duplicate lines and R&D activities; the database refuses too", async () => {
+    it("PE5: refuses lines that don't total 100.00%, zero lines, duplicate lines and R&D activities; the database refuses too", async () => {
       const { employee } = await addEmployee();
       const add = (lines: unknown[]) =>
         asUser(jess, (tx) => addAllocation(tx, employee.id, { idempotencyKey: key("allocation"), effectiveFrom: "2026-04-01", lines }));
@@ -375,7 +375,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
       ).rejects.toThrow(/can't be changed or deleted/);
     });
 
-    it("PR6: a mid-month department move keeps the earlier allocation for earlier dates", async () => {
+    it("PE6: a mid-month department move keeps the earlier allocation for earlier dates", async () => {
       const { employee } = await addEmployee();
       const save = (effectiveFrom: string, departmentId: string) =>
         asUser(jess, (tx) =>
@@ -405,7 +405,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
       await expect(save("2026-03-01", v.Sales)).rejects.toThrow(/can't be before .* start date/);
     });
 
-    it("PR6: the allocation route answers with the history for someone with payroll access", async () => {
+    it("PE6: the allocation route answers with the history for someone with payroll access", async () => {
       const { employee } = await addEmployee();
       const cookie = await sessionCookieFor(jess);
       const created = await allocationsRoute.POST(
@@ -434,7 +434,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
   });
 
   describe("pay rates", () => {
-    it("PR7: keeps the rate history and finds the rate in effect on each date", async () => {
+    it("PE7: keeps the rate history and finds the rate in effect on each date", async () => {
       const { employee } = await addEmployee();
       const first = await asUser(jess, (tx) => listPayRates(tx, employee.id));
       expect(first).toMatchObject([{ effectiveFrom: "2026-04-01", payBasis: "salary", annualSalary: "70000" }]);
@@ -478,7 +478,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
       ).rejects.toThrow(/can't be changed or deleted/);
     });
 
-    it("PR7: the employee shows the rate in effect today", async () => {
+    it("PE7: the employee shows the rate in effect today", async () => {
       const { employee } = await addEmployee({ startDate: "2020-01-01" });
       await asUser(jess, (tx) =>
         addPayRate(tx, employee.id, { idempotencyKey: key("rate"), effectiveFrom: "2021-01-01", payBasis: "hourly", hourlyRate: "30", ordinaryHoursPerWeek: "40" }),
@@ -497,7 +497,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
   });
 
   describe("job details and groups", () => {
-    it("PR8: job title, reports-to, pay group and employee group", async () => {
+    it("PE8: job title, reports-to, pay group and employee group", async () => {
       const mereEmployee = (await addEmployee({ firstName: "Mere", lastName: "Tane" })).employee;
       const { employee } = await addEmployee();
       const monthly = await asUser(jess, (tx) => createPayGroup(tx, { idempotencyKey: key("g"), name: "Monthly salaries", payFrequency: "monthly" }));

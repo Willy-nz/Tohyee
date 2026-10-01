@@ -125,7 +125,7 @@ export async function addMember(
 
 /**
  * Someone added (back) to an organisation starts without payroll access, even
- * if they had it before they were removed (example PR12). Done in the
+ * if they had it before they were removed (example PE12). Done in the
  * organisation's database before the membership is added, so a failure here
  * adds nobody.
  */

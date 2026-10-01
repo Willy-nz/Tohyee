@@ -105,7 +105,7 @@ export async function withOrganisation<T>(
 
 /**
  * `withOrganisation` for payroll: the bookkeeper role or higher and payroll
- * access (examples PR9-PR12). Use it for every payroll route that reads or
+ * access (examples PE9-PE12). Use it for every payroll route that reads or
  * changes pay details, allocations, rate history, IRD numbers, bank
  * accounts, pay runs or payroll reports.
  */

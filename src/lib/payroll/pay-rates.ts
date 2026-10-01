@@ -9,7 +9,7 @@ import { keyedSecretHash } from "@/lib/secrets";
 import { optionalString, requireIdempotencyKey, requireOneOf } from "@/lib/validation";
 
 /**
- * Pay rate history (example PR7): each change of salary or hourly rate is a
+ * Pay rate history (example PE7): each change of salary or hourly rate is a
  * new row with the date it starts. Rows are never changed; the rate in effect
  * on a date is the one with the latest start on or before it (for the same
  * start date, the one saved last, which is how a mistake is corrected).
@@ -73,7 +73,7 @@ function required(value: unknown, field: string): unknown {
   return value;
 }
 
-/** Salary needs an annual salary; hourly needs a rate and ordinary hours (PR1, PR7). */
+/** Salary needs an annual salary; hourly needs a rate and ordinary hours (PE1, PE7). */
 export function parsePayDetails(input: Record<string, unknown>): PayDetails {
   const payBasis = requireOneOf(input.payBasis, "Pay basis", PAY_BASES);
   if (payBasis === "salary" && (input.hourlyRate != null || input.ordinaryHoursPerWeek != null)) {
@@ -108,7 +108,7 @@ async function employeeStartDate(tx: OrgTx, employeeId: string, forUpdate = fals
 }
 
 /**
- * The pay an employee starts on, saved with them (PR1, PR7). Called by
+ * The pay an employee starts on, saved with them (PE1, PE7). Called by
  * createEmployee, and when a start date moves earlier than their first rate.
  */
 export async function insertStartingPayRate(
@@ -153,7 +153,7 @@ export async function listPayRates(tx: OrgTx, employeeId: string): Promise<PayRa
   return result.rows.map(toPayRate);
 }
 
-/** The rate in effect on `date`, or null before the first one (PR7). For pay runs (P3). */
+/** The rate in effect on `date`, or null before the first one (PE7). For pay runs (P3). */
 export async function payRateOn(tx: OrgTx, employeeId: string, dateInput: unknown): Promise<PayRate | null> {
   await requirePayrollAccess(tx);
   const date = parseIsoDate(dateInput, "Date");

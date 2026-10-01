@@ -6,7 +6,7 @@ import { requirePayrollAccess } from "@/lib/payroll/access";
 import { requireBoolean, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
 
 /**
- * Pay groups and employee groups (example PR8). A pay group is the people
+ * Pay groups and employee groups (example PE8). A pay group is the people
  * paid together on one frequency ("Weekly wages", "Monthly salaries"); pay
  * runs (P3) will pick employees by pay group. An employee group is for
  * reporting ("Wellington office"). Groups are archived, never deleted.
