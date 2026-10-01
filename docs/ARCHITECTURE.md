@@ -49,6 +49,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ purchase_orders, purchase_order_lines, purchase_order_numbering   purchase orders (post nothing; copied to bills)
 ├─ supplier_payments      money paid against bills
 ├─ expense_claims, expense_claim_receipts, expense_claim_payments   staff expense claims, their receipts and payments
+├─ payroll_employees        employee payroll details (IRD and bank details encrypted)
 ├─ fixed_asset_types, fixed_assets, fixed_asset_numbering   the fixed asset register (archived, never deleted)
 ├─ fixed_asset_depreciation_runs, fixed_asset_disposals, fixed_asset_depreciation_lines   depreciation runs and disposals, and the months each charged
 ├─ projects, project_tasks, project_time_entries, project_expenses   projects, their tasks, time (whole minutes) and linked expense lines (post nothing; never deleted)

@@ -59,7 +59,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/tax-available-on.test.ts` (TAO1-TAO5, TAO7-TAO12) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
-  GP3, GP5, GP6), all against
+  GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PR1, PR2),
+  all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6), `tests/unit/repeating-bill-rules.test.ts`
@@ -73,6 +74,24 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/import-fields.test.ts` the import column matching (IM2-IM5, IM16), and
   `tests/unit/tax-available-on.test.ts` the tax code pickers and starting codes
   by side (TAO2-TAO4, TAO6, TAO8)
+
+## NZ payroll — employee records (examples not yet approved by Jess)
+
+This first stage follows [NetSuite's employee payroll record](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N921988.html) for keeping payroll details on the employee, and [Xero's NZ employee setup](https://central.xero.com/s/article/Set-up-a-fixed-term-employee) for salary or hourly pay details. This stage stores employee details only; it does not calculate or post payroll.
+
+| ID | Employee details | Result |
+| --- | --- | --- |
+| PR1 | Add Aroha Ngata, starting 1 April 2026, fortnightly salary of NZD 70,000.00 a year, tax code M, student loan, and her IRD and bank details. Record the current KiwiSaver status and the employee and employer rates supplied for her. | Her payroll profile is saved; the IRD number and bank account are encrypted in the organisation database. No tax or net-pay amount is calculated and no journal is posted. |
+| PR2 | Set Aroha's finish date to 30 September 2026, then archive her. | Her profile remains in the database and audit trail, is hidden from the active list and can be restored; it is never deleted. |
+
+The rates in PR1 are copied from the employee's current instructions; see [IRD's KiwiSaver employer guidance](https://www.ird.govt.nz/kiwisaver/kiwisaver-employers). This example does not prescribe KiwiSaver rates or calculate deductions. Entering an employee is not authority to run payroll.
+
+### Not supported yet (refused rather than guessed)
+
+- Pay calculations, approval and journal posting; payment to employees or Inland Revenue; and payslips. The current sources to verify before building calculations are [IRD's 2026 IR340 PAYE tables](https://www.ird.govt.nz/-/media/project/ir/home/documents/forms-and-guides/ir300---ir399/ir340/ir340-apr-2026.pdf), [Payroll Calculations and Business Rules](https://www.ird.govt.nz/employing-staff/payroll-calculations-and-business-rules), and [Employer's guide IR335](https://www.ird.govt.nz/forms-guides).
+- Payday filing exports. Use IRD's [file upload service](https://www.ird.govt.nz/digital-service-providers/services-catalogue/returns-and-information/payday-filing/payday-filing-through-file-upload-services) and its [2026–27 file upload specification](https://www.ird.govt.nz/-/media/project/ir/home/documents/digital-service-providers/iir-file-upload-specification/payday-filing-file-upload-specification-2026-2027.pdf); the exact required records and output layout have not yet been verified against the specification.
+- Holidays Act leave calculations. Annual leave, sick leave, public holidays, alternative days, ordinary weekly pay and average weekly earnings need Jess-approved worked examples and decisions first.
+- Questions for Jess: which pay frequencies and KiwiSaver status values are needed in practice; which payroll bank account and payable/expense accounts to use; and how payroll corrections should fit the period-close workflow.
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.

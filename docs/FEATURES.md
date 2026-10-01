@@ -39,6 +39,12 @@ that something happened.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
+- **Payroll employee records** (PR1-PR2; examples not yet approved by Jess):
+  bookkeeper-only employee details, salary or hourly pay, pay frequency,
+  tax code, student loan and KiwiSaver settings; IRD numbers and bank accounts
+  are encrypted. Employees are archived, never deleted. Pay calculation,
+  approval, payment, payslips, payday filing and Holidays Act leave are not
+  built.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
@@ -793,7 +799,9 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll.
+4. NZ payroll: calculate and approve pay runs, post journals and payments,
+   produce payslips and verify/implement the current IRD payday filing
+   specification; work through Holidays Act leave after Jess approves examples.
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,
