@@ -2,7 +2,9 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { add, dec, type Decimal, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { payRunReference } from "@/lib/payroll/pay-runs";
-import { assertReportRange } from "@/lib/payroll/report-figures";
+import { assertReportRange, PAY_FIGURE_KEYS, type PayFigures } from "@/lib/payroll/report-figures";
+
+export { PAY_FIGURE_KEYS, PAY_FIGURE_LABELS, type PayFigures } from "@/lib/payroll/report-figures";
 import { parseReportPeriod } from "@/lib/reports/account-transactions";
 import { valueWithDescendants } from "@/lib/tracking/service";
 import { optionalId } from "@/lib/validation";
@@ -104,52 +106,6 @@ export async function payItemsInOrder(tx: OrgTx): Promise<Array<{ id: string; na
   );
   return result.rows.map((row) => ({ id: row.id, name: row.name, category: row.category, kind: row.kind, accountId: row.account_id }));
 }
-
-/** An employee's figures as approving stored them (PRUN1), added up (PREP3, PREP6). */
-export type PayFigures = {
-  gross: string;
-  taxableEarnings: string;
-  nonTaxableEarnings: string;
-  paye: string;
-  studentLoan: string;
-  kiwiSaverEmployee: string;
-  deductions: string;
-  netPay: string;
-  kiwiSaverEmployer: string;
-  esct: string;
-  kiwiSaverEmployerNet: string;
-  employerCost: string;
-};
-
-export const PAY_FIGURE_KEYS: ReadonlyArray<keyof PayFigures> = [
-  "gross",
-  "taxableEarnings",
-  "nonTaxableEarnings",
-  "paye",
-  "studentLoan",
-  "kiwiSaverEmployee",
-  "deductions",
-  "netPay",
-  "kiwiSaverEmployer",
-  "esct",
-  "kiwiSaverEmployerNet",
-  "employerCost",
-];
-
-export const PAY_FIGURE_LABELS: Record<keyof PayFigures, string> = {
-  gross: "Gross",
-  taxableEarnings: "Taxable earnings",
-  nonTaxableEarnings: "Not taxable",
-  paye: "PAYE (incl. ACC earners' levy)",
-  studentLoan: "Student loan",
-  kiwiSaverEmployee: "KiwiSaver employee",
-  deductions: "Other deductions",
-  netPay: "Net pay",
-  kiwiSaverEmployer: "KiwiSaver employer (gross)",
-  esct: "ESCT",
-  kiwiSaverEmployerNet: "KiwiSaver employer, net of ESCT",
-  employerCost: "Employer cost",
-};
 
 /** The stored columns of payroll_pay_run_employees, in PayFigures order. */
 export const PAY_FIGURE_COLUMNS = `pe.gross::text as gross, pe.taxable_earnings::text as taxable_earnings,

@@ -236,6 +236,52 @@ export function groupLabourCost(
   };
 }
 
+/** An employee's figures as approving stored them (PRUN1), added up (PREP3, PREP6). */
+export type PayFigures = {
+  gross: string;
+  taxableEarnings: string;
+  nonTaxableEarnings: string;
+  paye: string;
+  studentLoan: string;
+  kiwiSaverEmployee: string;
+  deductions: string;
+  netPay: string;
+  kiwiSaverEmployer: string;
+  esct: string;
+  kiwiSaverEmployerNet: string;
+  employerCost: string;
+};
+
+export const PAY_FIGURE_KEYS: ReadonlyArray<keyof PayFigures> = [
+  "gross",
+  "taxableEarnings",
+  "nonTaxableEarnings",
+  "paye",
+  "studentLoan",
+  "kiwiSaverEmployee",
+  "deductions",
+  "netPay",
+  "kiwiSaverEmployer",
+  "esct",
+  "kiwiSaverEmployerNet",
+  "employerCost",
+];
+
+export const PAY_FIGURE_LABELS: Record<keyof PayFigures, string> = {
+  gross: "Gross",
+  taxableEarnings: "Taxable earnings",
+  nonTaxableEarnings: "Not taxable",
+  paye: "PAYE (incl. ACC earners' levy)",
+  studentLoan: "Student loan",
+  kiwiSaverEmployee: "KiwiSaver employee",
+  deductions: "Other deductions",
+  netPay: "Net pay",
+  kiwiSaverEmployer: "KiwiSaver employer (gross)",
+  esct: "ESCT",
+  kiwiSaverEmployerNet: "KiwiSaver employer, net of ESCT",
+  employerCost: "Employer cost",
+};
+
 const NUMBER = /^-?\d+(\.\d+)?$/;
 
 /** One CSV cell: quoted when needed; text that a spreadsheet would run as a formula gets an apostrophe (decision 109). */
