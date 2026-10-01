@@ -5,8 +5,10 @@ import { useApiData } from "@/components/hooks";
 import { describePay, EmployeeAllocation, EmployeePayRates } from "@/components/payroll-employee-pay";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
+import { cmp, dec } from "@/lib/money/decimal";
 import type { Employee, EmployeeSummary } from "@/lib/payroll/employees";
 import type { EmployeeGroup, PayGroup } from "@/lib/payroll/groups";
+import { PAYROLL_RATE_EDITIONS } from "@/lib/payroll/rates";
 import styles from "./payroll-employees.module.css";
 
 /** Shown beside the employee, not saved from the form. */
@@ -31,6 +33,7 @@ const EMPTY_DRAFT: Draft = {
   kiwiSaverStatus: "",
   kiwiSaverEmployeeRate: "",
   kiwiSaverEmployerRate: "",
+  esctRate: null,
   studentLoan: null,
   payFrequency: "",
   payBasis: "",
@@ -45,6 +48,11 @@ const EMPTY_DRAFT: Draft = {
   payGroupId: null,
   employeeGroupId: null,
 };
+
+/** IRD's ESCT rates (spec 5.21), from the rates Tohyee has. */
+const ESCT_RATES = [
+  ...new Set(PAYROLL_RATE_EDITIONS.flatMap((edition) => edition.esct.flatMap((dated) => dated.value.map((band) => band.rate)))),
+].sort((a, b) => cmp(dec(a), dec(b)));
 
 const STATUS_LABELS: Record<Employee["kiwiSaverStatus"], string> = {
   enrolled: "Enrolled",
@@ -89,6 +97,7 @@ function fieldsFrom(draft: Draft, isNew: boolean) {
     return {
       ...rest,
       ...job,
+      esctRate: draft.esctRate || null,
       email: draft.email || null,
       phone: draft.phone || null,
       postalAddress: draft.postalAddress || null,
@@ -99,6 +108,7 @@ function fieldsFrom(draft: Draft, isNew: boolean) {
   return {
     ...draft,
     ...job,
+    esctRate: draft.esctRate || null,
     email: draft.email || null,
     phone: draft.phone || null,
     postalAddress: draft.postalAddress || null,
@@ -245,6 +255,12 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
             </Field>
             <Field label="KiwiSaver employer rate (%)" hint="Enter the current rate; no default is applied.">
               <input inputMode="decimal" required value={draft.kiwiSaverEmployerRate} onChange={(event) => change("kiwiSaverEmployerRate", event.target.value)} />
+            </Field>
+            <Field label="ESCT rate (%)" hint="From last year's pay plus employer contributions (IRD's ESCT bands). Needed for employer KiwiSaver contributions.">
+              <select value={draft.esctRate ?? ""} onChange={(event) => change("esctRate", event.target.value || null)}>
+                <option value="">Not set</option>
+                {ESCT_RATES.map((rate) => <option key={rate} value={rate}>{rate}%</option>)}
+              </select>
             </Field>
             <Field label="Pay frequency">
               <select required value={draft.payFrequency} onChange={(event) => change("payFrequency", event.target.value as Draft["payFrequency"])}>
