@@ -15,7 +15,7 @@ import {
 } from "./workspace";
 
 /** An optional module a menu or link belongs to (example MOD1); shown only while it's on. */
-type ModuleKey = "crm" | "reporting";
+type ModuleKey = "crm" | "reporting" | "notForProfit";
 type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
 type MenuGroup = { heading?: string; links: MenuLink[] };
 /** `area`: the paths that show the menu as current (default: AREAS by its label). */
@@ -131,6 +131,14 @@ const MENUS: Menu[] = [
           { href: "/operations/reports?view=drafts", label: "Drafts" },
           { href: "/operations/reports?view=published", label: "Published" },
           { href: "/operations/reports?view=archived", label: "Archived" },
+        ],
+      },
+      {
+        heading: "Not-for-profit",
+        links: [
+          { href: "/operations/settings/tracking", label: "Set up fund tracking", minRole: "admin", module: "notForProfit" },
+          { href: "/operations/reports?report=pnl", label: "Fund activity", module: "notForProfit" },
+          { href: "/operations/budgets", label: "Budgets by fund", module: "notForProfit" },
         ],
       },
     ],

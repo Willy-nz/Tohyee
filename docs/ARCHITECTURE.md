@@ -159,6 +159,8 @@ re-runs the whole sequence.
   database, and is checksummed. **Never edit a released migration; add a new
   one.** An edited migration or a database newer than the code stops that
   database from being migrated.
+- Tenant migration numbers are unique across active branches; coordinate the
+  next number with the other open branches before adding a tenant migration.
 - The core database migrates first; if it fails, the server doesn't start.
 - Each organisation then migrates on its own. A failure marks that
   organisation `failed` and blocks it (not half-upgraded); others carry on.
@@ -700,6 +702,16 @@ Enforced by the app (and covered by tests):
   (manual journals only); a trigger checks every key is a field for that
   kind of record, and `src/lib/custom-fields/` checks types, options and
   required fields. They never reach posting, reports or the GST return.
+  `custom_field_sections` (tenant migration 0053) are named, ordered groups
+  per kind of record (contact, document, person, opportunity); a field's
+  `section_id` must be a section for its own kind (trigger). CRM people and
+  opportunities have their own `custom_fields` column (kinds `person` and
+  `opportunity`), and contact fields can be used on prospects (the
+  migration leaves existing fields where they were). Each use needs its
+  module: prospects, people and opportunities need the CRM switch,
+  everything else Advanced reporting; with the switch off, kept values stay
+  but new ones are refused. Setting up a field needs the switch for each
+  place being added, and otherwise for one of the places it's already on.
 - Apps: Accounting (with Tax) is under `/operations`, the CRM under `/crm`.
   Each has its own layout (`src/app/operations/layout.tsx`,
   `src/app/crm/layout.tsx`) that loads the signed-in user and their
@@ -822,6 +834,20 @@ Enforced by the app (and covered by tests):
   The GST audit report (`gst-audit.ts`) only groups the GST return's own
   counted lines (`calculateGstReturn`, or a filed return's stored lines),
   so it can't disagree with the return.
+- IRD payroll rates (PR1-PR16, payroll stage P2) are national figures, the
+  same for every organisation, so they're versioned data in the code
+  (`src/lib/payroll/rates/`, one file per edition of IRD's Payroll
+  Calculations and Business Rules Specification), not a table in the core or
+  an organisation's database: no migration. Each value has its own
+  from/to dates and a source (section and page), and each edition records
+  the IRD documents' names, editions, URLs, read dates and SHA-256 hashes.
+  `payrollRatesOn(payDate)` picks the values in effect on the pay date and
+  refuses dates no edition covers. The calculations
+  (`src/lib/payroll/calculations.ts`: PAYE, ACC earners' levy, student loan,
+  KiwiSaver, ESCT) are pure functions (no database, no network) and
+  truncate as IRD's rules say, using `truncate` and `divideTruncated` in
+  `money/decimal.ts`. Adding a year is a new data file: see the README in
+  that folder. Nothing calls them yet; pay runs (P3) will.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 

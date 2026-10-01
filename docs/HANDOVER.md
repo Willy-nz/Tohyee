@@ -20,13 +20,31 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
+## Choosing the Copilot agent's model and reasoning level
+
+Jess asked Claude to choose these (1 Oct 2026) to keep Copilot credits down.
+Set them in the Agents box before sending each task:
+
+| Kind of task | Model | Reasoning |
+| --- | --- | --- |
+| Accounting, tax, payroll or RDTI calculations; anything that posts to the ledger; migrations that change existing tables; permissions and security | Claude Opus 5.5 | High |
+| Ordinary features: screens, records and their APIs, connectors, reports that don't calculate tax | Claude Sonnet 5.5 | Medium |
+| Docs-only planning and worked examples (research and citing) | Claude Sonnet 5.5 | Medium |
+| Small fixes: renumbering migrations, fixing a test, doc updates, adding next year's rates from IRD's specification | Claude Sonnet 5.5 | Low |
+
+- Don't use X-High or Max unless a task has already failed at High.
+- Prefer Claude doing small fixes, reviews and merges directly in its own
+  session (no Copilot credits) over starting an agent.
+- Give agents everything they need up front (sources, allowlisted sites,
+  migration number) so a session isn't spent stopping to ask.
+
 ## In progress (GitHub Copilot coding agents)
 
 | Work | Issue | Draft PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
+| NZ payroll, stage P2: IRD payroll rates as dated data and pure PAYE, student loan, KiwiSaver and ESCT calculations (PR1-PR16) | #60 | #71 | `copilot/issue-60-ird-payroll-rates` | none (no table) |
 | Not-for-profit module, first stage: opt-in fund tracking | #61 | #63 | `copilot/not-for-profit-module-development` | 0052 (renumbered) |
 | Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | #67 | `copilot/extend-custom-fields-crm-records` | 0053 (renumbered); merge after #62 and #63 |
-| Payroll P2: IRD payroll rates as dated data | #60 | none | `copilot/issue-60-ird-payroll-rates` | 0054 if needed. Restarted 1 Oct after the IRD sites were allowlisted |
 | Payroll P7: Holidays Act leave worked examples (docs only) | #60 | #68 | `copilot/nz-payroll-stage-p7-holidays-act-leave` | none |
 | Payroll P1b: cost allocation, pay rate history and payroll access (examples PE3-PE12) | #60 | #73 | `copilot/60-employee-cost-allocation` | 0057 |
 | Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12) | none (Agents tab) | not opened yet | `copilot/sales-orders-stage-1` | 0055 |
@@ -37,11 +55,10 @@ Next free tenant migration number: 0058 (0057 reserved for payroll P1b).
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
 
-CRM custom fields: decided by Jess (1 Oct 2026) that prospects only get the
-fields someone deliberately turns on for prospects; existing customer fields
-are not added to prospects automatically. A review of #67 found the first
-version did add them (locking accounting fields when the CRM is off); Copilot
-was asked to fix it on the PR.
+CRM custom fields are available whenever the CRM module is on, even with
+Advanced features off (decided by Jess, 1 Oct 2026). Prospects only get the
+fields turned on for prospects; existing customer fields aren't added to
+them.
 
 CRM work waiting on custom fields: record types and page layouts, and the
 Salesforce-style record page. Claude will build these once custom fields is
@@ -69,7 +86,12 @@ only be run by certain people. Each item is its own branch and PR.
         (not a role). Only they can see employee pay details, pay runs and
         payroll reports. Everyone else sees payroll in the ledger only as
         totals by department and pay item, never per employee.
-- [ ] **P2 IRD payroll rates as dated data** (0054 if needed). Running.
+- [x] **P2 IRD payroll rates as dated data** (#71, no table so 0054 unused):
+      `src/lib/payroll/rates/` for 2025-26 and 2026-27 and pure calculations
+      in `src/lib/payroll/calculations.ts` (examples PR1-PR16, waiting for
+      Jess). Checked against IRD's site 1 Oct 2026. Before each 1 April, add
+      the next year's file (README in that folder; a scheduled task checks
+      every 5 April).
 - [ ] **P3 Pay runs**, now including:
       - **Pay items** (earnings, deductions, reimbursements, employer
         contributions), each with its own expense or liability account and

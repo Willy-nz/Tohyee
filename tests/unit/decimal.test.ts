@@ -11,6 +11,8 @@ import {
   sub,
   toFixedString,
   toPlainString,
+  truncate,
+  divideTruncated,
 } from "@/lib/money/decimal";
 
 const s = (value: ReturnType<typeof dec>) => toPlainString(value);
@@ -48,6 +50,18 @@ describe("exact decimals", () => {
     // 1 unit out of 3 worth $10.00 -> $3.33; 2 units -> $6.67
     expect(s(mulDiv(dec("1"), dec("10"), dec("3"), 2))).toBe("3.33");
     expect(s(mulDiv(dec("2"), dec("10"), dec("3"), 2))).toBe("6.67");
+  });
+
+  it("truncates towards zero, as IRD's payroll calculations do", () => {
+    expect(toFixedString(truncate(dec("75.678"), 2), 2)).toBe("75.67");
+    expect(s(truncate(dec("26001.56"), 0))).toBe("26001");
+    expect(s(truncate(dec("-2.349"), 2))).toBe("-2.34");
+    expect(toFixedString(truncate(dec("3.5"), 2), 2)).toBe("3.50");
+    expect(toFixedString(divideTruncated(dec("3934.84"), dec("12"), 2), 2)).toBe("327.90");
+    expect(toFixedString(divideTruncated(dec("20"), dec("3"), 2), 2)).toBe("6.66");
+    expect(toFixedString(divideTruncated(dec("-20"), dec("3"), 2), 2)).toBe("-6.66");
+    expect(s(divideTruncated(dec("10"), dec("2.5"), 4))).toBe("4");
+    expect(() => divideTruncated(dec("1"), dec("0"), 2)).toThrow("Cannot divide by zero.");
   });
 
   it("compares and formats", () => {

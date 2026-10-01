@@ -21,6 +21,7 @@ export const POST = route(async (request) => {
       amount: body.amount,
       closeDate: body.closeDate,
       stage: body.stage,
+      customFields: body.customFields,
     }),
   );
   return json({ opportunity }, { status: 201 });

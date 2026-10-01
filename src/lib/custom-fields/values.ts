@@ -40,23 +40,51 @@ export const CUSTOM_FIELD_TYPE_LABELS: Record<CustomFieldType, string> = {
   url: "Web address",
 };
 
-export const CUSTOM_FIELD_RECORDS = ["contact", "document", "line"] as const;
+export const CUSTOM_FIELD_RECORDS = ["contact", "document", "line", "person", "opportunity"] as const;
 export type CustomFieldRecord = (typeof CUSTOM_FIELD_RECORDS)[number];
 
 export const CUSTOM_FIELD_RECORD_LABELS: Record<CustomFieldRecord, string> = {
   contact: "Contacts",
   document: "Documents",
   line: "Lines",
+  person: "People",
+  opportunity: "Opportunities",
 };
 
-export const CONTACT_USES = ["customer", "supplier"] as const;
+/** One record of the kind, for messages: "a person field", "an opportunity field". */
+export const CUSTOM_FIELD_RECORD_NAMES: Record<CustomFieldRecord, string> = {
+  contact: "a contact",
+  document: "a document",
+  line: "a line",
+  person: "a person",
+  opportunity: "an opportunity",
+};
+
+export const CONTACT_USES = ["customer", "supplier", "prospect"] as const;
 export const DOCUMENT_KINDS = ["invoice", "bill", "credit_note", "supplier_credit_note", "spend", "receive", "journal"] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
-export type CustomFieldUse = (typeof CONTACT_USES)[number] | DocumentKind;
+export type CustomFieldUse = (typeof CONTACT_USES)[number] | DocumentKind | "person" | "opportunity";
+
+/** What a field of each kind can be used on. */
+export const USES_BY_RECORD: Record<CustomFieldRecord, readonly CustomFieldUse[]> = {
+  contact: CONTACT_USES,
+  document: DOCUMENT_KINDS,
+  line: DOCUMENT_KINDS,
+  person: ["person"],
+  opportunity: ["opportunity"],
+};
+
+/** Uses that belong to the CRM: they need the CRM switched on, not Advanced reporting (CRMF1). */
+export const CRM_USES: readonly CustomFieldUse[] = ["prospect", "person", "opportunity"];
+
+/** Kinds of record whose fields can be grouped into sections (CRMF6). Lines are a table, so they don't. */
+export const SECTION_RECORDS = ["contact", "document", "person", "opportunity"] as const;
+export type SectionRecord = (typeof SECTION_RECORDS)[number];
 
 export const CUSTOM_FIELD_USE_LABELS: Record<CustomFieldUse, string> = {
   customer: "customers",
   supplier: "suppliers",
+  prospect: "prospects",
   invoice: "invoices",
   bill: "bills",
   credit_note: "credit notes",
@@ -64,6 +92,8 @@ export const CUSTOM_FIELD_USE_LABELS: Record<CustomFieldUse, string> = {
   spend: "spend money",
   receive: "receive money",
   journal: "journals",
+  person: "people",
+  opportunity: "opportunities",
 };
 
 /** "invoice lines", "bill lines", "spend money lines". */
@@ -79,7 +109,26 @@ export function useLabel(record: CustomFieldRecord, use: CustomFieldUse): string
     journal: "journal lines",
     customer: "customers",
     supplier: "suppliers",
+    prospect: "prospects",
+    person: "people",
+    opportunity: "opportunities",
   }[use];
+}
+
+/** Which switches are on. CRM fields follow the CRM; the rest follow Advanced reporting. */
+export type CustomFieldSwitches = { advancedFeatures: boolean; crmEnabled: boolean };
+
+export function isSwitchedOn(switches: CustomFieldSwitches, use: CustomFieldUse): boolean {
+  return CRM_USES.includes(use) ? switches.crmEnabled : switches.advancedFeatures;
+}
+
+/** What a contact's fields are used on: one use for each role it has (CRMF3). */
+export function contactUses(contact: { isCustomer: boolean; isSupplier: boolean; isProspect?: boolean }): CustomFieldUse[] {
+  const uses: CustomFieldUse[] = [];
+  if (contact.isCustomer) uses.push("customer");
+  if (contact.isSupplier) uses.push("supplier");
+  if (contact.isProspect) uses.push("prospect");
+  return uses;
 }
 
 export type CustomValue = string | boolean | string[];
@@ -100,10 +149,14 @@ export type CustomField = {
   showInList: boolean;
   isActive: boolean;
   sortOrder: number;
+  sectionId: string | null;
   options: CustomFieldOption[];
 };
 
-export type CustomFieldSetup = { advancedFeatures: boolean; fields: CustomField[] };
+/** A named group of fields on a record's page and form (CRMF6). Only groups fields; it never hides them. */
+export type CustomFieldSection = { id: string; record: SectionRecord; name: string; sortOrder: number };
+
+export type CustomFieldSetup = CustomFieldSwitches & { sections: CustomFieldSection[]; fields: CustomField[] };
 
 export const CUSTOM_FIELD_LIMITS = { text: 300, longText: 4000, email: 254, phone: 32, url: 999, digits: 15 } as const;
 
@@ -212,25 +265,66 @@ export function customValueText(field: Pick<CustomField, "type" | "options">, va
   return String(value);
 }
 
-/** Fields that belong on a record: active ones for the use, plus any it already has a value for. */
+/**
+ * Fields that belong on a record: active ones for the use, plus any it
+ * already has a value for. With `switches`, a use whose switch is off doesn't
+ * count (CRMF8).
+ */
 export function fieldsFor(
   fields: readonly CustomField[],
   record: CustomFieldRecord,
   uses: readonly CustomFieldUse[],
   values: CustomValues = {},
+  switches?: CustomFieldSwitches,
 ): CustomField[] {
+  const live = switches ? uses.filter((use) => isSwitchedOn(switches, use)) : uses;
   return fields.filter(
-    (field) => field.record === record && (values[field.id] !== undefined || (field.isActive && field.usedOn.some((use) => uses.includes(use)))),
+    (field) => field.record === record && (values[field.id] !== undefined || (field.isActive && field.usedOn.some((use) => live.includes(use)))),
   );
 }
 
-/** Each active field's default for a new record (CF3, CF5). */
-export function defaultValues(fields: readonly CustomField[], record: CustomFieldRecord, uses: readonly CustomFieldUse[]): CustomValues {
+/** Each active field's default for a new record (CF3, CF5, CRMF4). */
+export function defaultValues(
+  fields: readonly CustomField[],
+  record: CustomFieldRecord,
+  uses: readonly CustomFieldUse[],
+  switches?: CustomFieldSwitches,
+): CustomValues {
   const out: CustomValues = {};
-  for (const field of fieldsFor(fields, record, uses)) {
+  for (const field of fieldsFor(fields, record, uses, {}, switches)) {
     if (field.defaultValue !== null) out[field.id] = field.defaultValue;
   }
   return out;
+}
+
+/** Fields shown as list columns for records with these uses (CF8, CRMF7). */
+export function listColumnsFor(
+  fields: readonly CustomField[],
+  record: CustomFieldRecord,
+  uses: readonly CustomFieldUse[],
+  switches?: CustomFieldSwitches,
+): CustomField[] {
+  return fieldsFor(fields, record, uses, {}, switches).filter((field) => field.showInList);
+}
+
+export type CustomFieldGroup = { section: CustomFieldSection | null; fields: CustomField[] };
+
+/**
+ * Fields grouped for a page or form (CRMF6): fields with no section first,
+ * then each section in its order. Empty groups are left out. A field whose
+ * section isn't in `sections` goes with the unsectioned ones.
+ */
+export function groupBySection(fields: readonly CustomField[], sections: readonly CustomFieldSection[]): CustomFieldGroup[] {
+  const byOrder = (a: { sortOrder: number; id: string }, b: { sortOrder: number; id: string }) =>
+    a.sortOrder - b.sortOrder || Number(a.id) - Number(b.id);
+  const known = new Map(sections.map((section) => [section.id, section]));
+  const groups: CustomFieldGroup[] = [{ section: null, fields: [] }];
+  for (const section of [...sections].sort(byOrder)) groups.push({ section, fields: [] });
+  for (const field of [...fields].sort(byOrder)) {
+    const section = field.sectionId ? known.get(field.sectionId) : undefined;
+    groups.find((group) => (group.section?.id ?? null) === (section?.id ?? null))!.fields.push(field);
+  }
+  return groups.filter((group) => group.fields.length > 0);
 }
 
 /** Values keyed in id order, so the same values always look the same. */

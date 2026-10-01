@@ -154,15 +154,6 @@ export function roundHalfUp(value: Decimal, scale: number): Decimal {
   return { units: divideRounded(value.units, factor), scale };
 }
 
-/** Cuts to `scale` decimal places towards zero: 740.748 -> 740.74, -493.828 -> -493.82. */
-export function truncate(value: Decimal, scale: number): Decimal {
-  if (value.scale <= scale) {
-    return { units: widen(value, scale), scale };
-  }
-  // BigInt division already truncates towards zero.
-  return { units: value.units / pow10(value.scale - scale), scale };
-}
-
 /**
  * numerator / denominator, rounded half up to `scale` places. Both operands can
  * have any scale; this is exact up to the final rounding.
@@ -175,6 +166,31 @@ export function divide(numerator: Decimal, denominator: Decimal, scale: number):
   const top = numerator.units * pow10(denominator.scale + scale);
   const bottom = denominator.units * pow10(numerator.scale);
   return { units: divideRounded(top, bottom), scale };
+}
+
+/**
+ * Drops the digits after `scale` decimal places (towards zero, no rounding):
+ * truncate(dec("75.678"), 2) is 75.67, and towards zero for negatives
+ * (-493.828 -> -493.82). IRD's payroll calculations truncate rather than round.
+ */
+export function truncate(value: Decimal, scale: number): Decimal {
+  if (value.scale <= scale) {
+    return { units: widen(value, scale), scale };
+  }
+  return { units: value.units / pow10(value.scale - scale), scale };
+}
+
+/**
+ * numerator / denominator truncated (towards zero) to `scale` places, exact
+ * up to that point: divideTruncated(dec("3934.84"), dec("12"), 2) is 327.90.
+ */
+export function divideTruncated(numerator: Decimal, denominator: Decimal, scale: number): Decimal {
+  if (denominator.units === ZERO) {
+    throw new ValidationError("Cannot divide by zero.");
+  }
+  const top = numerator.units * pow10(denominator.scale + scale);
+  const bottom = denominator.units * pow10(numerator.scale);
+  return { units: top / bottom, scale };
 }
 
 /**
