@@ -1,13 +1,24 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { ValidationError } from "@/lib/errors";
+import { dec, sum, toPlainString } from "@/lib/money/decimal";
 import {
   type AccessToken,
   type Changes,
   type ChangesRequest,
   type ConnectInput,
+  type OrdersRequest,
+  type OrdersResult,
   PlatformError,
+  type PlatformBalanceTransaction,
   type PlatformCustomer,
+  type PlatformOrder,
+  type PlatformPayout,
+  type PlatformRefund,
+  type PlatformTaxLine,
+  type PlatformTransaction,
   type PlatformVariant,
+  type PayoutsRequest,
+  type PayoutsResult,
   type SalesPlatformConnector,
   type StoreInfo,
   type WebhookRecords,
@@ -16,36 +27,59 @@ import { SHOPIFY_AUTH_METHODS } from "@/lib/sales-platforms/types";
 import { requireOneOf, requireString } from "@/lib/validation";
 
 /**
- * The Shopify connector (examples SPC1-SPC10). Not tried against a real
+ * The Shopify connector (examples SPC1-SPC23). Not tried against a real
  * store: the tests use recorded Shopify-shaped responses.
  *
  * - Access: a custom app's Admin API access token (apps made in the store
  *   admin before 1 Jan 2026), or a Dev Dashboard app's client ID and
- *   secret, exchanged for a token that lasts about a day (the client
- *   credentials grant):
- *   https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/client-credentials-grant
+ *   secret, exchanged for a token that lasts 24 hours with a form-encoded
+ *   POST to /admin/oauth/access_token (the client credentials grant, which
+ *   only works for a store in the app's own Shopify organisation):
+ *   https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant
  * - The Admin GraphQL API, version 2026-07:
  *   https://shopify.dev/docs/api/admin-graphql/2026-07
- * - Read-only scopes: read_customers, read_products
- *   (https://shopify.dev/docs/api/usage/access-scopes).
+ * - Read-only scopes (https://shopify.dev/docs/api/usage/access-scopes):
+ *   read_customers and read_products always; read_orders for orders, their
+ *   transactions and refunds (the last 60 days only, without
+ *   read_all_orders); read_shopify_payments_payouts and
+ *   read_shopify_payments_accounts for payouts and balance transactions.
  * - Webhooks are signed with the app's secret: X-Shopify-Hmac-SHA256 is the
  *   base64 HMAC-SHA256 of the raw body
  *   (https://shopify.dev/docs/apps/build/webhooks/subscribe/https).
- *
- * shopify.dev couldn't be opened where this was written; the request shapes
- * follow Shopify's own library, github.com/Shopify/shopify-app-js.
  */
 export const SHOPIFY_API_VERSION = "2026-07";
 export const SHOPIFY_SCOPES = ["read_customers", "read_products"] as const;
+/** Needed to bring orders into the accounts (decision 52). */
+export const SHOPIFY_ORDER_SCOPES = ["read_orders"] as const;
+/** Needed for Shopify Payments payouts; without them payouts are left out and the log says so. */
+export const SHOPIFY_PAYOUT_SCOPES = ["read_shopify_payments_payouts", "read_shopify_payments_accounts"] as const;
 const WEBHOOK_TOPICS = ["CUSTOMERS_CREATE", "CUSTOMERS_UPDATE", "PRODUCTS_CREATE", "PRODUCTS_UPDATE"] as const;
+// https://shopify.dev/docs/api/admin-graphql/2026-07/enums/WebhookSubscriptionTopic (all need read_orders).
+const ORDER_WEBHOOK_TOPICS = ["ORDERS_CREATE", "ORDERS_UPDATED", "ORDERS_PAID", "ORDERS_CANCELLED", "REFUNDS_CREATE"] as const;
+const ORDER_TOPICS = ["orders/create", "orders/updated", "orders/paid", "orders/cancelled"];
 
 const TIMEOUT_MS = 30_000;
 const CUSTOMERS_PER_PAGE = 100;
 const MAX_CUSTOMER_PAGES = 20;
-// Each product asks for up to 100 variants, so few products per page keeps the query under Shopify's cost limit.
-const PRODUCTS_PER_PAGE = 8;
-const MAX_PRODUCT_PAGES = 50;
+// Each product asks for up to 100 variants, each with its inventory item (about 2 points a variant), so few
+// products per page keeps the query under Shopify's cost limit: 4 x (2 + 100 x 2) is about 810.
+const PRODUCTS_PER_PAGE = 4;
+const MAX_PRODUCT_PAGES = 100;
 const VARIANTS_PER_PRODUCT = 100;
+// Shopify refuses a query whose requested cost is over 1,000 (each object 1, each connection sized by `first`:
+// https://shopify.dev/docs/apps/build/apis/graphql-admin/rate-limits). An order with 50 lines (about 10 each),
+// 10 shipping lines and 50 transactions asks for about 730; each refund is asked for on its own (about 370).
+const LINES_PER_ORDER = 50;
+const SHIPPING_LINES_PER_ORDER = 10;
+const TRANSACTIONS_PER_ORDER = 50;
+const REFUNDS_PER_ORDER = 10;
+const LINES_PER_REFUND = 50;
+const ORDERS_PER_PAGE = 50;
+const MAX_ORDER_PAGES = 4;
+const PAYOUTS_PER_PAGE = 50;
+const MAX_PAYOUT_PAGES = 4;
+const BALANCE_TRANSACTIONS_PER_PAGE = 100;
+const MAX_BALANCE_TRANSACTION_PAGES = 5;
 /** A cached token this close to expiring is renewed first. */
 const RENEW_BEFORE_MS = 5 * 60 * 1000;
 
@@ -77,6 +111,10 @@ const MAX_THROTTLE_WAIT_MS = 30_000;
 // Checking what an admin typed
 
 const SHOP_DOMAIN = /^[a-z0-9][a-z0-9-]{0,62}\.myshopify\.com$/;
+
+/** Shopify answers shop_not_permitted when the app and the store aren't in the same Shopify organisation. */
+export const SHOP_NOT_PERMITTED =
+  "This app and store aren't in the same Shopify organisation. Tohyee can only connect a store with a Dev Dashboard app from the store's own organisation (connecting someone else's store needs Shopify's authorization code grant, which Tohyee doesn't do yet).";
 
 /** The store's permanent address, e.g. "glimmers.myshopify.com" (a bare "glimmers" is accepted). */
 export function normaliseShopDomain(input: unknown): string {
@@ -158,8 +196,15 @@ export function shopifyCustomerFromGraphql(node: unknown): PlatformCustomer {
     name: joinName(n.firstName, n.lastName) ?? text(n.displayName) ?? email ?? phone,
     email,
     phone,
+    country: countryCode(record(n.defaultAddress).countryCodeV2),
     updatedAt: timestamp(n.updatedAt),
   };
+}
+
+/** A two-letter country code ("AU"), or null. */
+function countryCode(value: unknown): string | null {
+  const code = text(value)?.toUpperCase() ?? null;
+  return code && /^[A-Z]{2}$/.test(code) ? code : null;
 }
 
 /** A customer from a customers/create or customers/update webhook (REST-shaped JSON). */
@@ -172,6 +217,7 @@ export function shopifyCustomerFromWebhook(body: unknown): PlatformCustomer {
     name: joinName(b.first_name, b.last_name) ?? email ?? phone,
     email,
     phone,
+    country: countryCode(record(b.default_address).country_code),
     updatedAt: timestamp(b.updated_at),
   };
 }
@@ -180,6 +226,7 @@ function variant(
   product: { id: string; title: string; updatedAt: string | null },
   raw: Record<string, unknown>,
   updatedAt: unknown,
+  tracked: boolean | null,
 ): PlatformVariant {
   return {
     externalId: shopifyId(raw.id, "product variant"),
@@ -188,6 +235,7 @@ function variant(
     variantTitle: text(raw.title),
     sku: text(raw.sku),
     price: text(raw.price),
+    tracked,
     updatedAt: later(product.updatedAt, timestamp(updatedAt)),
   };
 }
@@ -199,7 +247,8 @@ export function shopifyVariantsFromGraphql(node: unknown): { records: PlatformVa
   const variants = record(n.variants);
   const nodes = Array.isArray(variants.nodes) ? variants.nodes : [];
   return {
-    records: nodes.map((raw) => variant(product, record(raw), record(raw).updatedAt)),
+    // InventoryItem.tracked: "Whether inventory levels are tracked for the item" (SPC17).
+    records: nodes.map((raw) => variant(product, record(raw), record(raw).updatedAt, record(record(raw).inventoryItem).tracked === true)),
     moreVariants: record(variants.pageInfo).hasNextPage === true,
   };
 }
@@ -209,7 +258,162 @@ export function shopifyVariantsFromWebhook(body: unknown): PlatformVariant[] {
   const b = record(body);
   const product = { id: shopifyId(b.id, "product"), title: text(b.title) ?? "Untitled product", updatedAt: timestamp(b.updated_at) };
   const variants = Array.isArray(b.variants) ? b.variants : [];
-  return variants.map((raw) => variant(product, record(raw), record(raw).updated_at));
+  // The webhook doesn't say whether Shopify tracks the variant's stock.
+  return variants.map((raw) => variant(product, record(raw), record(raw).updated_at, null));
+}
+
+const amountOf = (bag: unknown): string => {
+  const raw = text(record(record(bag).shopMoney).amount);
+  if (raw === null || !/^-?\d+(\.\d+)?$/.test(raw)) return "0";
+  return toPlainString(dec(raw));
+};
+const currencyOf = (bag: unknown): string | null => text(record(record(bag).shopMoney).currencyCode);
+const nodesOf = (connection: unknown): Record<string, unknown>[] => {
+  const c = record(connection);
+  const list = Array.isArray(c.nodes) ? c.nodes : Array.isArray(connection) ? (connection as unknown[]) : [];
+  return list.map(record);
+};
+const hasMore = (connection: unknown): boolean => record(record(connection).pageInfo).hasNextPage === true;
+
+function taxLines(value: unknown): PlatformTaxLine[] {
+  return (Array.isArray(value) ? value : []).map((raw) => {
+    const t = record(raw);
+    const rate = typeof t.rate === "number" && Number.isFinite(t.rate) ? toPlainString(dec(t.rate.toFixed(6))) : "0";
+    return { title: text(t.title), rate, amount: amountOf(t.priceSet) };
+  });
+}
+
+function transaction(raw: Record<string, unknown>): PlatformTransaction {
+  return {
+    externalId: shopifyId(raw.id, "transaction"),
+    kind: text(raw.kind) ?? "UNKNOWN",
+    status: text(raw.status) ?? "UNKNOWN",
+    gateway: text(raw.gateway),
+    amount: amountOf(raw.amountSet),
+    currency: currencyOf(raw.amountSet),
+    processedAt: timestamp(raw.processedAt),
+    test: raw.test === true,
+  };
+}
+
+function refund(raw: Record<string, unknown>): PlatformRefund {
+  return {
+    externalId: shopifyId(raw.id, "refund"),
+    createdAt: timestamp(raw.createdAt),
+    processedAt: timestamp(raw.processedAt),
+    lines: nodesOf(raw.refundLineItems).map((line) => ({
+      lineItemId: shopifyId(record(line.lineItem).id, "refunded line"),
+      quantity: String(typeof line.quantity === "number" ? line.quantity : 0),
+      restocked: line.restocked === true,
+      subtotal: amountOf(line.subtotalSet),
+      tax: amountOf(line.totalTaxSet),
+    })),
+    shipping: nodesOf(raw.refundShippingLines).map((line) => ({
+      shippingLineId: text(record(line.shippingLine).id) ? shopifyId(record(line.shippingLine).id, "shipping line") : null,
+      subtotal: amountOf(line.subtotalAmountSet),
+      tax: amountOf(line.taxAmountSet),
+    })),
+    adjustments: nodesOf(raw.orderAdjustments).length,
+    transactions: nodesOf(raw.transactions).map(transaction),
+    incomplete: hasMore(raw.refundLineItems) || hasMore(raw.refundShippingLines) || hasMore(raw.transactions),
+  };
+}
+
+/**
+ * An order from the Admin GraphQL API (Order, LineItem, ShippingLine,
+ * OrderTransaction, Refund: https://shopify.dev/docs/api/admin-graphql/2026-07/objects/Order).
+ */
+export function shopifyOrderFromGraphql(node: unknown): PlatformOrder {
+  const n = record(node);
+  const lineItems = record(n.lineItems);
+  const shippingLines = record(n.shippingLines);
+  const transactions = Array.isArray(n.transactions) ? n.transactions.map(record) : [];
+  const refunds = Array.isArray(n.refunds) ? n.refunds.map(record) : [];
+  const processedAt = timestamp(n.processedAt) ?? timestamp(n.createdAt);
+  if (!processedAt) throw new ValidationError("Shopify sent an order without a date.");
+  const incomplete = hasMore(lineItems)
+    ? `has more than ${LINES_PER_ORDER} lines; orders that big aren't supported yet.`
+    : hasMore(shippingLines)
+      ? `has more than ${SHIPPING_LINES_PER_ORDER} shipping lines; that isn't supported yet.`
+      : transactions.length >= TRANSACTIONS_PER_ORDER
+        ? `has ${TRANSACTIONS_PER_ORDER} or more payment transactions; that isn't supported yet.`
+        : refunds.length >= REFUNDS_PER_ORDER
+          ? `has ${REFUNDS_PER_ORDER} or more refunds; that isn't supported yet.`
+          : null;
+  return {
+    externalId: shopifyId(n.id, "order"),
+    name: text(n.name) ?? `order ${shopifyId(n.id, "order")}`,
+    processedAt,
+    updatedAt: timestamp(n.updatedAt),
+    cancelledAt: timestamp(n.cancelledAt),
+    test: n.test === true,
+    taxesIncluded: n.taxesIncluded === true,
+    currency: text(n.currencyCode) ?? currencyOf(n.totalPriceSet) ?? "",
+    presentmentCurrency: text(n.presentmentCurrencyCode),
+    financialStatus: text(n.displayFinancialStatus),
+    total: amountOf(n.totalPriceSet),
+    customer: n.customer && typeof n.customer === "object" ? shopifyCustomerFromGraphql(n.customer) : null,
+    billingCountry: countryCode(record(n.billingAddress).countryCodeV2),
+    lines: nodesOf(lineItems).map((line) => ({
+      externalId: shopifyId(line.id, "order line"),
+      variantId: text(record(line.variant).id) ? shopifyId(record(line.variant).id, "variant") : null,
+      sku: text(line.sku),
+      name: text(line.name) ?? "Item",
+      quantity: String(typeof line.quantity === "number" ? line.quantity : 0),
+      originalTotal: amountOf(line.originalTotalSet),
+      discount: toPlainString(sum((Array.isArray(line.discountAllocations) ? line.discountAllocations : []).map((a) => dec(amountOf(record(a).allocatedAmountSet))))),
+      taxLines: taxLines(line.taxLines),
+      isGiftCard: line.isGiftCard === true,
+    })),
+    shipping: nodesOf(shippingLines).map((line) => ({
+      externalId: shopifyId(line.id, "shipping line"),
+      title: text(line.title) ?? "Shipping",
+      amount: amountOf(line.discountedPriceSet),
+      taxLines: taxLines(line.taxLines),
+      removed: line.isRemoved === true,
+    })),
+    transactions: transactions.map(transaction),
+    refunds: refunds.map(refund),
+    incomplete,
+  };
+}
+
+const moneyOf = (value: unknown): string => {
+  const raw = text(record(value).amount);
+  return raw !== null && /^-?\d+(\.\d+)?$/.test(raw) ? toPlainString(dec(raw)) : "0";
+};
+
+/** A balance transaction (https://shopify.dev/docs/api/admin-graphql/2026-07/objects/ShopifyPaymentsBalanceTransaction). */
+export function shopifyBalanceTransactionFromGraphql(node: unknown): PlatformBalanceTransaction {
+  const n = record(node);
+  return {
+    externalId: shopifyId(n.id, "balance transaction"),
+    type: text(n.type) ?? "UNKNOWN",
+    amount: moneyOf(n.amount),
+    fee: moneyOf(n.fee),
+    net: moneyOf(n.net),
+    currency: text(record(n.amount).currencyCode),
+    orderName: text(record(n.associatedOrder).name),
+    adjustmentReason: text(n.adjustmentReason),
+    test: n.test === true,
+  };
+}
+
+/** A payout (https://shopify.dev/docs/api/admin-graphql/2026-07/objects/ShopifyPaymentsPayout), without its transactions. */
+export function shopifyPayoutFromGraphql(node: unknown): PlatformPayout {
+  const n = record(node);
+  const issuedAt = timestamp(n.issuedAt);
+  if (!issuedAt) throw new ValidationError("Shopify sent a payout without a date.");
+  return {
+    externalId: text(n.legacyResourceId) ?? shopifyId(n.id, "payout"),
+    issuedAt,
+    status: text(n.status) ?? "UNKNOWN",
+    direction: text(n.transactionType) ?? "DEPOSIT",
+    net: moneyOf(n.net),
+    currency: text(record(n.net).currencyCode) ?? "",
+    transactions: [],
+    incomplete: false,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -304,27 +508,101 @@ const SHOP_QUERY = `query TohyeeShop {
   currentAppInstallation { accessScopes { handle } }
 }`;
 
+const CUSTOMER_FIELDS = `id displayName firstName lastName updatedAt
+      defaultEmailAddress { emailAddress }
+      defaultPhoneNumber { phoneNumber }
+      defaultAddress { countryCodeV2 }`;
+
 const CUSTOMERS_QUERY = `query TohyeeCustomers($first: Int!, $after: String, $query: String) {
   customers(first: $first, after: $after, query: $query, sortKey: UPDATED_AT) {
     nodes {
-      id displayName firstName lastName updatedAt
-      defaultEmailAddress { emailAddress }
-      defaultPhoneNumber { phoneNumber }
+      ${CUSTOMER_FIELDS}
     }
     pageInfo { hasNextPage endCursor }
   }
 }`;
+
 
 const PRODUCTS_QUERY = `query TohyeeProducts($first: Int!, $after: String, $query: String) {
   products(first: $first, after: $after, query: $query, sortKey: UPDATED_AT) {
     nodes {
       id title updatedAt
       variants(first: ${VARIANTS_PER_PRODUCT}) {
-        nodes { id title sku price updatedAt }
+        nodes { id title sku price updatedAt inventoryItem { tracked } }
         pageInfo { hasNextPage }
       }
     }
     pageInfo { hasNextPage endCursor }
+  }
+}`;
+
+const MONEY = "shopMoney { amount currencyCode }";
+const TAX_LINES = `taxLines { title rate priceSet { ${MONEY} } }`;
+const TRANSACTION_FIELDS = `id kind status gateway test processedAt amountSet { ${MONEY} }`;
+
+const ORDER_QUERY = `query TohyeeOrder($id: ID!) {
+  order(id: $id) {
+    id name createdAt processedAt updatedAt cancelledAt test taxesIncluded currencyCode presentmentCurrencyCode displayFinancialStatus
+    totalPriceSet { ${MONEY} }
+    customer { ${CUSTOMER_FIELDS} }
+    billingAddress { countryCodeV2 }
+    lineItems(first: ${LINES_PER_ORDER}) {
+      nodes {
+        id name sku quantity isGiftCard
+        variant { id }
+        originalTotalSet { ${MONEY} }
+        discountAllocations { allocatedAmountSet { ${MONEY} } }
+        ${TAX_LINES}
+      }
+      pageInfo { hasNextPage }
+    }
+    shippingLines(first: ${SHIPPING_LINES_PER_ORDER}, includeRemovals: true) {
+      nodes { id title isRemoved discountedPriceSet { ${MONEY} } ${TAX_LINES} }
+      pageInfo { hasNextPage }
+    }
+    transactions(first: ${TRANSACTIONS_PER_ORDER}) { ${TRANSACTION_FIELDS} }
+    refunds(first: ${REFUNDS_PER_ORDER}) { id }
+  }
+}`;
+
+const REFUND_QUERY = `query TohyeeRefund($id: ID!) {
+  refund(id: $id) {
+    id createdAt processedAt
+    refundLineItems(first: ${LINES_PER_REFUND}) {
+      nodes { lineItem { id } quantity restocked subtotalSet { ${MONEY} } totalTaxSet { ${MONEY} } }
+      pageInfo { hasNextPage }
+    }
+    refundShippingLines(first: 5) {
+      nodes { shippingLine { id } subtotalAmountSet { ${MONEY} } taxAmountSet { ${MONEY} } }
+      pageInfo { hasNextPage }
+    }
+    orderAdjustments(first: 5) { nodes { id } }
+    transactions(first: 10) { nodes { ${TRANSACTION_FIELDS} } pageInfo { hasNextPage } }
+  }
+}`;
+
+const ORDERS_QUERY = `query TohyeeOrders($first: Int!, $after: String, $query: String) {
+  orders(first: $first, after: $after, query: $query, sortKey: UPDATED_AT) {
+    nodes { id updatedAt }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+
+const PAYOUTS_QUERY = `query TohyeePayouts($first: Int!, $after: String, $query: String) {
+  shopifyPaymentsAccount {
+    payouts(first: $first, after: $after, query: $query, sortKey: ISSUED_AT) {
+      nodes { id legacyResourceId issuedAt status transactionType net { amount currencyCode } }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+}`;
+
+const BALANCE_TRANSACTIONS_QUERY = `query TohyeePayoutTransactions($first: Int!, $after: String, $query: String) {
+  shopifyPaymentsAccount {
+    balanceTransactions(first: $first, after: $after, query: $query) {
+      nodes { id type test adjustmentReason amount { amount currencyCode } fee { amount } net { amount } associatedOrder { name } }
+      pageInfo { hasNextPage endCursor }
+    }
   }
 }`;
 
@@ -342,9 +620,43 @@ const WEBHOOK_DELETE = `mutation TohyeeWebhookDelete($id: ID!) {
   }
 }`;
 
+const searchTime = (instant: string) => new Date(instant).toISOString().replace(/\.\d{3}Z$/, "Z");
+
 /** Shopify's search syntax for "changed since". */
 function changedSince(since: string | null): string | null {
-  return since ? `updated_at:>='${new Date(since).toISOString().replace(/\.\d{3}Z$/, "Z")}'` : null;
+  return since ? `updated_at:>='${searchTime(since)}'` : null;
+}
+
+/** An order by its ID with each of its refunds (asked for one at a time, to keep each query's cost down), or null if Shopify doesn't have it. */
+async function fetchOneOrder(storeDomain: string, token: AccessToken, orderId: string): Promise<PlatformOrder | null> {
+  const data = await graphql(storeDomain, token, ORDER_QUERY, { id: `gid://shopify/Order/${orderId}` });
+  if (!data.order || typeof data.order !== "object") return null;
+  const order = record(data.order);
+  const refunds: unknown[] = [];
+  for (const summary of Array.isArray(order.refunds) ? order.refunds.map(record) : []) {
+    const found = await graphql(storeDomain, token, REFUND_QUERY, { id: summary.id });
+    refunds.push(found.refund && typeof found.refund === "object" ? found.refund : summary);
+  }
+  return shopifyOrderFromGraphql({ ...order, refunds });
+}
+
+/** All of a payout's balance transactions (payments_transfer_id is the payout's ID). */
+async function payoutTransactions(storeDomain: string, token: AccessToken, payout: PlatformPayout): Promise<PlatformPayout> {
+  const transactions: PlatformBalanceTransaction[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < MAX_BALANCE_TRANSACTION_PAGES; page += 1) {
+    const data = await graphql(storeDomain, token, BALANCE_TRANSACTIONS_QUERY, {
+      first: BALANCE_TRANSACTIONS_PER_PAGE,
+      after,
+      query: `payments_transfer_id:${payout.externalId}`,
+    });
+    const connection = record(record(data.shopifyPaymentsAccount).balanceTransactions);
+    transactions.push(...nodesOf(connection).map(shopifyBalanceTransactionFromGraphql));
+    const info = record(connection.pageInfo);
+    if (info.hasNextPage !== true || !text(info.endCursor)) return { ...payout, transactions };
+    after = text(info.endCursor);
+  }
+  return { ...payout, transactions, incomplete: true };
 }
 
 async function pages(
@@ -401,13 +713,22 @@ export const shopifyConnector: SalesPlatformConnector = {
     if (cachedToken?.expiresAt && Date.parse(cachedToken.expiresAt) - RENEW_BEFORE_MS > now.getTime()) {
       return { token: cachedToken, renewed: false };
     }
-    const body = record(
-      await call(`https://${context.storeDomain}/admin/oauth/access_token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ client_id: credentials.clientId, client_secret: credentials.clientSecret, grant_type: "client_credentials" }),
-      }),
-    );
+    // Shopify's client credentials grant: a form-encoded body (SPC19).
+    let body: Record<string, unknown>;
+    try {
+      body = record(
+        await call(`https://${context.storeDomain}/admin/oauth/access_token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+          body: new URLSearchParams({ grant_type: "client_credentials", client_id: credentials.clientId ?? "", client_secret: credentials.clientSecret ?? "" }).toString(),
+        }),
+      );
+    } catch (error) {
+      if (error instanceof PlatformError && /shop_not_permitted|cannot be performed on this shop/i.test(error.message)) {
+        throw new ValidationError(SHOP_NOT_PERMITTED);
+      }
+      throw error;
+    }
     const token = text(body.access_token);
     if (!token) throw new PlatformError(200, `${context.storeDomain} didn't send an access token.`);
     const seconds = typeof body.expires_in === "number" && body.expires_in > 0 ? body.expires_in : 3600;
@@ -423,7 +744,7 @@ export const shopifyConnector: SalesPlatformConnector = {
     const writes = scopes.filter((scope) => scope.startsWith("write_"));
     if (writes.length > 0) {
       throw new ValidationError(
-        `This app can change the store (${writes.join(", ")}). Tohyee only reads, so give the app only ${SHOPIFY_SCOPES.join(" and ")}.`,
+        `This app can change the store (${writes.join(", ")}). Tohyee only reads, so give the app only read access: ${[...SHOPIFY_SCOPES, ...SHOPIFY_ORDER_SCOPES, ...SHOPIFY_PAYOUT_SCOPES].join(", ")}.`,
       );
     }
     const missing = SHOPIFY_SCOPES.filter((scope) => !scopes.includes(scope));
@@ -434,7 +755,7 @@ export const shopifyConnector: SalesPlatformConnector = {
     if (!currency || !/^[A-Z]{3}$/.test(currency) || typeof shop.taxesIncluded !== "boolean") {
       throw new PlatformError(200, `${context.storeDomain} didn't say its currency and tax setting.`);
     }
-    return { storeName: text(shop.name) ?? context.storeDomain, currency, pricesIncludeTax: shop.taxesIncluded };
+    return { storeName: text(shop.name) ?? context.storeDomain, currency, pricesIncludeTax: shop.taxesIncluded, scopes: [...new Set(scopes)].sort() };
   },
 
   async fetchChanges(context, token, request: ChangesRequest): Promise<Changes> {
@@ -463,10 +784,68 @@ export const shopifyConnector: SalesPlatformConnector = {
     return changes;
   },
 
-  async registerWebhooks(context, token, callbackUrl) {
+  async fetchOrders(context, token, request: OrdersRequest): Promise<OrdersResult> {
+    const result: OrdersResult = { orders: [], until: null, notes: [] };
+    const ids: string[] = [];
+    let after: string | null = null;
+    const filters = [`processed_at:>='${searchTime(request.processedFrom)}'`, changedSince(request.updatedSince)].filter(Boolean).join(" ");
+    for (let page = 0; page < MAX_ORDER_PAGES; page += 1) {
+      const data = await graphql(context.storeDomain, token, ORDERS_QUERY, { first: ORDERS_PER_PAGE, after, query: filters });
+      const connection = record(data.orders);
+      for (const node of nodesOf(connection)) {
+        ids.push(shopifyId(node.id, "order"));
+        result.until = later(result.until, timestamp(node.updatedAt));
+      }
+      const info = record(connection.pageInfo);
+      if (info.hasNextPage !== true || !text(info.endCursor)) break;
+      after = text(info.endCursor);
+      if (page === MAX_ORDER_PAGES - 1) result.notes.push(`More than ${ORDERS_PER_PAGE * MAX_ORDER_PAGES} orders changed; the rest come with the next sync.`);
+    }
+    for (const id of [...new Set([...ids, ...request.retryIds])]) {
+      const order = await fetchOneOrder(context.storeDomain, token, id);
+      if (order) result.orders.push(order);
+    }
+    return result;
+  },
+
+  fetchOrder(context, token, orderId) {
+    return fetchOneOrder(context.storeDomain, token, orderId);
+  },
+
+  async fetchPayouts(context, token, request: PayoutsRequest): Promise<PayoutsResult> {
+    const result: PayoutsResult = { payouts: [], notes: [] };
+    let after: string | null = null;
+    for (let page = 0; page < MAX_PAYOUT_PAGES; page += 1) {
+      const data = await graphql(context.storeDomain, token, PAYOUTS_QUERY, {
+        first: PAYOUTS_PER_PAGE,
+        after,
+        query: `issued_at:>='${searchTime(request.issuedFrom)}'`,
+      });
+      const account = data.shopifyPaymentsAccount;
+      if (!account || typeof account !== "object") {
+        result.notes.push("The store has no Shopify Payments account, so there are no payouts to bring in.");
+        return result;
+      }
+      const connection = record(record(account).payouts);
+      for (const node of nodesOf(connection)) {
+        const payout = shopifyPayoutFromGraphql(node);
+        if (payout.status !== "PAID" || request.alreadyPosted(payout.externalId)) {
+          result.payouts.push(payout);
+          continue;
+        }
+        result.payouts.push(await payoutTransactions(context.storeDomain, token, payout));
+      }
+      const info = record(connection.pageInfo);
+      if (info.hasNextPage !== true || !text(info.endCursor)) break;
+      after = text(info.endCursor);
+    }
+    return result;
+  },
+
+  async registerWebhooks(context, token, callbackUrl, options = {}) {
     const ids: string[] = [];
     try {
-      for (const topic of WEBHOOK_TOPICS) {
+      for (const topic of [...WEBHOOK_TOPICS, ...(options.orders ? ORDER_WEBHOOK_TOPICS : [])]) {
         const data = await graphql(context.storeDomain, token, WEBHOOK_CREATE, { topic, webhookSubscription: { callbackUrl, format: "JSON" } });
         const result = record(data.webhookSubscriptionCreate);
         const problem = userErrors(result);
@@ -510,6 +889,9 @@ export const shopifyConnector: SalesPlatformConnector = {
     if (topic === "products/create" || topic === "products/update") {
       return { kind: "variants", records: shopifyVariantsFromWebhook(body) };
     }
+    // The order is fetched again with GraphQL, so only its ID is read from the body.
+    if (ORDER_TOPICS.includes(topic)) return { kind: "order", orderId: shopifyId(record(body).id, "order") };
+    if (topic === "refunds/create") return { kind: "order", orderId: shopifyId(record(body).order_id, "order") };
     return null;
   },
 };

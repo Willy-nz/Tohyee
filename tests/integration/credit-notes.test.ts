@@ -1070,7 +1070,8 @@ describeWithDatabase("sales credit notes", () => {
     await expect(sql("delete from sales_credit_note_refunds where id = $1", [refund.id])).rejects.toThrow(
       "Credit note refunds can't be deleted; void them instead",
     );
-    await expect(sql("truncate sales_credit_note_refunds")).rejects.toThrow("sales_credit_note_refunds can't be truncated");
+    // Cascade: sales_platform_documents (0061) refers to the refunds, so a plain truncate is refused for that first.
+    await expect(sql("truncate sales_credit_note_refunds cascade")).rejects.toThrow("sales_credit_note_refunds can't be truncated");
     await expect(
       sql(
         `insert into sales_credit_note_refunds (command_source, idempotency_key, request_hash, credit_note_id, refund_date,

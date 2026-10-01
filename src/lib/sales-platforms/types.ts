@@ -1,5 +1,5 @@
 /**
- * Sales platform connections (examples SPC1-SPC10): names and shapes shared
+ * Sales platform connections (examples SPC1-SPC23): names and shapes shared
  * with the browser. No server imports here.
  */
 
@@ -41,7 +41,25 @@ export type SalesPlatformConnection = {
   connectedAt: string;
   disconnectedByEmail: string | null;
   disconnectedAt: string | null;
+  /** Stage 2 (SPC11-SPC23): orders, refunds and payouts into the accounts. Nothing is fetched or posted while it's off. */
+  postToAccounts: boolean;
+  /** Only orders processed, and payouts issued, on or after this date (New Zealand time) come in. */
+  startDate: string | null;
+  clearingAccountCode: string | null;
+  payoutAccountCode: string | null;
+  feesAccountCode: string | null;
+  salesAccountCode: string | null;
+  shippingAccountCode: string | null;
+  untaxedTaxCode: string | null;
+  /** Shopify's tax rate as a percentage ("15") -> the Tohyee tax code. */
+  taxCodes: Array<{ rate: string; taxCode: string }>;
+  /** The access scopes the store gave the app, as it last said. */
+  grantedScopes: string[];
 };
+
+/** The scopes stage 2 reads with: orders (with their transactions and refunds), and Shopify Payments payouts. */
+export const ORDER_SCOPE = "read_orders";
+export const PAYOUT_SCOPES = ["read_shopify_payments_payouts", "read_shopify_payments_accounts"] as const;
 
 export type SyncLogAction =
   | "connected"
@@ -55,7 +73,10 @@ export type SyncLogAction =
   | "updated"
   | "kept"
   | "skipped"
-  | "failed";
+  | "failed"
+  | "posted"
+  | "cancelled"
+  | "waiting";
 
 export const SYNC_LOG_ACTION_LABELS: Record<SyncLogAction, string> = {
   connected: "Connected",
@@ -70,17 +91,27 @@ export const SYNC_LOG_ACTION_LABELS: Record<SyncLogAction, string> = {
   kept: "Kept Tohyee's value",
   skipped: "Skipped",
   failed: "Failed",
+  posted: "Posted",
+  cancelled: "Cancelled",
+  waiting: "Waiting",
 };
+
+export type SyncRecordKind = "customer" | "product_variant" | "order" | "refund" | "payout";
+
+export type SyncDocumentType = "sales_order" | "invoice" | "customer_payment" | "credit_note" | "credit_note_refund" | "transfer" | "bank_transaction";
 
 export type SyncLogEntry = {
   id: string;
   loggedAt: string;
   source: "sync" | "webhook" | "connection";
   action: SyncLogAction;
-  recordKind: "customer" | "product_variant" | null;
+  recordKind: SyncRecordKind | null;
   externalId: string | null;
   contactId: string | null;
   itemId: string | null;
+  /** The Tohyee document the line is about, if any (stage 2). */
+  documentType?: SyncDocumentType | null;
+  documentId?: string | null;
   message: string;
   actorEmail: string;
 };
@@ -92,4 +123,8 @@ export type SyncResult = {
   kept: number;
   skipped: number;
   failed: number;
+  /** Orders, refunds and payouts posted to the accounts (stage 2). */
+  posted?: number;
+  /** Orders waiting (not paid yet, or posting stopped on Tohyee's side and tried again next sync). */
+  waiting?: number;
 };
