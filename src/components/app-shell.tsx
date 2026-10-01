@@ -19,7 +19,7 @@ type ModuleKey = "crm" | "reporting" | "notForProfit";
 type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
 type MenuGroup = { heading?: string; links: MenuLink[] };
 /** `area`: the paths that show the menu as current (default: AREAS by its label). */
-type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey; area?: string[] };
+type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey; area?: string[]; minRole?: Role };
 
 /**
  * The accounting menus: Home, Sales, Purchases, Reporting, Accounting, Tax,
@@ -166,6 +166,7 @@ const MENUS: Menu[] = [
           { href: "/operations/settings", label: "Settings", minRole: "admin" },
           { href: "/operations/settings/tracking", label: "Tracking categories", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/custom-fields", label: "Custom fields", minRole: "admin", module: "reporting" },
+          { href: "/crm/record-types", label: "CRM record types", minRole: "admin", module: "crm" },
           { href: "/operations/settings/salespeople", label: "Salespeople", minRole: "admin", module: "reporting" },
           { href: "/operations/settings/customers", label: "Payment terms and customers", minRole: "admin" },
           { href: "/operations/settings/import", label: "Import and export", minRole: "admin" },
@@ -209,9 +210,10 @@ const CRM_MENUS: Menu[] = [
   { label: "Home", href: "/crm", area: ["/crm"] },
   { label: "Companies", href: "/crm/companies", area: ["/crm/companies"] },
   { label: "People", href: "/crm/people", area: ["/crm/people"] },
-  { label: "Pipeline", href: "/crm/pipeline", area: ["/crm/pipeline"] },
+  { label: "Pipeline", href: "/crm/pipeline", area: ["/crm/pipeline", "/crm/opportunities"] },
   { label: "Tasks", href: "/crm/tasks", area: ["/crm/tasks"] },
   { label: "Email and calendar", href: "/crm/mail", area: ["/crm/mail"] },
+  { label: "Record types", href: "/crm/record-types", area: ["/crm/record-types"], minRole: "admin" as const },
 ].map((menu) => ({ ...menu, groups: [], module: "crm" as const }));
 
 /** The paths a menu covers, so its button shows as the current area. */
@@ -267,7 +269,7 @@ function isCurrent(pathname: string, search: URLSearchParams, href: string): boo
 function useVisibleMenus(app: AppKey, modules: Modules | null): Menu[] {
   const { can } = useWorkspace();
   const moduleOn = (key: ModuleKey | undefined) => !key || Boolean(modules?.[key]);
-  return (app === "crm" ? CRM_MENUS : MENUS).filter((menu) => moduleOn(menu.module)).map((menu) => ({
+  return (app === "crm" ? CRM_MENUS : MENUS).filter((menu) => moduleOn(menu.module) && (!menu.minRole || can(menu.minRole))).map((menu) => ({
     ...menu,
     groups: menu.groups
       .map((group) => ({ ...group, links: group.links.filter((link) => (!link.minRole || can(link.minRole)) && moduleOn(link.module)) }))

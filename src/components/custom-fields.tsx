@@ -78,7 +78,7 @@ function isBlank(value: CustomValue | undefined): boolean {
   return value === undefined || value === "" || value === false || (Array.isArray(value) && value.length === 0);
 }
 
-function FieldInput({
+export function FieldInput({
   field,
   value,
   onChange,
