@@ -325,3 +325,84 @@ connection details checked against Shopify's docs.
     customers get the export tax code only when the organisation's existing
     "Foreign Trade" setting is on (examples EX3, EX4), so it's switched per
     organisation.
+
+## Payday filing file (examples PF1-PF9)
+
+Made by Claude on 2 Oct 2026 while building payroll stage P6, by the rule
+law → IRD's specification → NetSuite → Xero. Source for the file:
+IRD's *Payday Filing File Upload Specification* 2026-27 ("version 2027",
+July 2026), summarised in `docs/sources/ird-payday-filing-file-spec.md`
+with what couldn't be read. NetSuite has no New Zealand payroll, so it has
+no answer on any of these. Xero Payroll NZ files employment information
+"automatically every time a pay run is completed"
+([Xero, Payday filing](https://www.xero.com/nz/accounting-software/payroll/payday-filing/),
+read 2 Oct 2026); it files through IRD's gateway, not a file, so it
+answers only decision 56.
+
+56. **One employment information (EI) file per approved pay run.** IRD's
+    spec: "Multiple EIs can be filed for the same paydate." Xero files each
+    pay run as it's completed. Drafts and voided pay runs are refused.
+57. **Amounts and hours in hundredths with no decimal point; CR LF after
+    every line; UTF-8; names as typed.** The spec's attribute definitions
+    (appendix 5.1) couldn't be read; its example file writes money as whole
+    cents (`143257`) and "Hours paid" says "37.5 hours = 3750". No line
+    terminator or character set was found, so Tohyee ends each line with
+    CR LF (what Notepad saves, which IRD recommends) and keeps macrons.
+    **(unverified)** until a file passes myIR's "Check your employment
+    information file" service.
+58. **What goes in each field** (all from the approved pay run's stored
+    figures): gross earnings = taxable earnings (spec field 11: "taxable
+    gross earnings ... Non-taxable allowances not included", so
+    reimbursements and non-taxable allowances are left out); PAYE includes
+    the ACC earners' levy (payroll spec 5.2, as in PRUN1); student
+    loan, KiwiSaver deductions, net employer KiwiSaver contributions and
+    ESCT as calculated. Fields for things Tohyee refuses (PRUN8) are 0:
+    prior period adjustments, lump sum indicator, child support (code left
+    blank), SLCIR, SLBOR, payroll donations, family tax credits and the
+    Employee Share Scheme. **Earnings not liable for the ACC earners' levy
+    are 0**: every taxable pay item is subject to the levy (PRUN10), and the
+    field "excludes earnings over maximum liable threshold".
+59. **Hours paid = the hours on the employee's earnings lines** (lines
+    entered as hours × rate: ordinary time, overtime and so on); lines
+    entered as an amount (a salary, allowances) add none, so salaried
+    staff show 0, which the spec allows ("default 0 if not held").
+60. **Employee name: the name kept on the approved pay run, "first last",
+    with any comma replaced by a space** (the spec forbids embedded commas;
+    an approved pay run can't be changed, so refusing would leave no way to
+    file). **IRD number: the employee's current one**, 8 digits written with
+    a leading 0 (as in the spec's example `074444444`). Tohyee doesn't run
+    IRD's modulus 11 check (spec 5.8 wasn't read); myIR does.
+    **Tax code as stored** (`M SL`, as in the spec's example).
+61. **Start and finish dates only when they fall inside that employee's pay
+    period** (spec fields 5 and 6). Final pays are refused (PRUN8), so a
+    finish date is rare.
+62. **Header details are payroll settings**: the employer's IRD number and
+    the payroll contact's name (up to 20 characters), work phone (up to 12
+    letters and digits; spaces and punctuation dropped) and email (up to
+    60, IRD's characters only), set by admins with payroll access under
+    Payroll › Pay items. The employer's IRD number is its own setting, not
+    the GST number, because not every employer is GST registered. Final
+    return is always N (stopping employing is a myIR matter) and nil return
+    is N (an approved pay run always has someone on it) and the PAYE intermediary is blank. Package
+    identifier `Tohyee_Tohyee_v<version>` (the spec's "Vendor_Package_v1.0"
+    shape, no employer information); IR form version `0001`.
+63. **Due date: the pay date plus 2 working days, skipping Saturdays and
+    Sundays but not public holidays** (spec 3.4 and IRD's "Payday filing"
+    page: "within 2 working days of each payday"). Tohyee has no list of
+    public holidays yet (as P4's IRD payment due dates), so the date it
+    shows is never later than IRD's; the screen says public holidays aren't
+    counted. The Tax Administration Act's definition of "working day" wasn't
+    read **(unverified)**.
+64. **No employee details file yet.** The spec has one (HED2/DED/TED), but
+    Tohyee's employee record has the address as one block of text (the file
+    needs it split into street, suburb, city, post code and country), one
+    phone number (the file needs mobile and daytime, each with a country
+    code) and no KiwiSaver eligibility code, and how tax codes are written
+    in TED records wasn't clear from what could be read (`TED,M` and
+    `TED,SL` in the example). Refused rather than guessed: the payday filing
+    card lists the employees who start in the pay period, so their details
+    can be entered in myIR (question for Jess).
+65. **Making a file posts nothing and records only an audit event**: the
+    file name, the SHA-256 of the file and the number of employee lines,
+    never amounts or IRD numbers. There's no "filed" tick (Tohyee can't
+    know the upload worked); myIR is the record of what was filed.
