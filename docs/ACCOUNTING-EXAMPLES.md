@@ -6663,29 +6663,24 @@ contributions (under 16 or over 65, savings suspensions, complying funds),
 payroll giving, child support. Pay runs, journals, payslips and payday
 filing are later stages.
 
-### Questions for Jess (NZ payroll rates)
+### Decided (NZ payroll rates)
+
+Decided 1 Oct 2026 on Jess's instruction to research and make the call; see
+`docs/DECISIONS.md` (decisions 1-5) for sources.
 
 - **Out-of-date IRD examples.** The 2026-27 spec's RD 68 example (page 88)
-  still shows PAYE of $74.85 and $77.72, and KS4 (April 2026, page 11) PAYE
-  of $94.02 on $600: all 2025-26 figures (1.67% levy). With 2026-27 rates
-  they're $75.25, $78.14 and $94.50 (IR340 April 2026 agrees on $94.50).
-  The tests use them for 2025-26 only. Agreed?
-- **ESCT rounding.** KS4 page 13 shows $91 x 17.5% = $15.93 (rounded) and a
-  net $75.07; IR335 page 27 works ESCT on $204.17 (with cents, rounded:
-  $35.73). The spec (5.20.6, 5.21.3) says whole dollars and truncate, and
-  IR341 April 2026 page 116 gives $15.92 and $75.08. Tohyee follows the spec
-  and the tables. Agreed?
-- **When the 3.5% employer minimum starts.** The spec says both "payday's
-  on or after 1 April 2026" (2.3, 4.3) and "from their first full pay after
-  1 April 2026" (2.3, and KS4 page 12 "from the first full pay period").
-  Tohyee uses the pay date: a pay dated 1 Apr 2026 or later needs 3.5% even
-  if most of its period was in March. Is that right?
-- **Rates by pay date.** IR340 and IR341 say "pay periods between 1 April
-  and March"; Tohyee picks every rate by the pay date (as the spec does for
-  KiwiSaver). Is that right for PAYE too?
-- **ESCT threshold amounts between bands.** IRD's bands are whole dollars
-  ($0-$18,720, $18,721-$64,200 ...). An estimate like $18,720.50 is refused
-  for now. Should it be truncated to whole dollars first?
-- **4% from 1 April 2028.** The 2026-27 spec (2.3) says employee and
-  employer minimums rise to 4% for paydays from 1 April 2028. That isn't in
-  the files: it'll come with the edition that covers it.
+  and KS4 (April 2026, page 11) still show 2025-26 figures; the tests use
+  them for 2025-26 only.
+- **ESCT rounding** follows the spec (5.20.6, 5.21.3) and IR341: the
+  contribution in whole dollars, truncated ($15.92, net $75.08), not KS4's or
+  IR335's rounded worked examples.
+- **The 3.5% employer minimum** applies to every pay dated 1 April 2026 or
+  later, even if most of its period was in March. The spec also says "first
+  full pay", but IRD's KiwiSaver changes page settles it: "all pay days from
+  1 April ... even if your pay period covers before and after 1 April".
+- **Every rate is picked by the pay date**, PAYE included (IR340 Aug 2024
+  applied new rates to pay "paid on or after 31 July 2024").
+- **ESCT threshold amounts between bands** (e.g. $18,720.50) stay refused;
+  IRD's bands are whole dollars, so enter a whole-dollar estimate.
+- **4% from 1 April 2028** (spec 2.3) will come with the edition that covers
+  it.

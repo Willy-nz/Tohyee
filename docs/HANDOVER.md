@@ -20,6 +20,13 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
+## Decisions
+
+`docs/DECISIONS.md` has the calls made on 1 Oct 2026 for payroll rates,
+payroll access, Holidays Act leave (built for the 2003 Act now, designed for
+the Employment Leave Act 2026 from 6 Aug 2028) and the R&D Tax Incentive,
+with sources. Jess asked Claude to research and decide them.
+
 ## Choosing the Copilot agent's model and reasoning level
 
 Jess asked Claude to choose these (1 Oct 2026) to keep Copilot credits down.
