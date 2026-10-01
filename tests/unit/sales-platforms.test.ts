@@ -172,7 +172,7 @@ describe("which value is kept (SPC2, SPC3, SPC5)", () => {
     expect(priceCopyable({ storeCurrency: "NZD", pricesIncludeTax: false, baseCurrency: "NZD" })).toEqual({ copy: true });
     expect(priceCopyable({ storeCurrency: "NZD", pricesIncludeTax: true, baseCurrency: "NZD" })).toEqual({
       copy: false,
-      reason: "Shopify's prices include tax and Tohyee's item prices exclude GST",
+      reason: "the store's prices include tax and Tohyee's item prices exclude GST",
     });
     expect(priceCopyable({ storeCurrency: "AUD", pricesIncludeTax: false, baseCurrency: "NZD" })).toEqual({
       copy: false,
