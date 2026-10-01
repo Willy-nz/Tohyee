@@ -58,7 +58,8 @@ overnight (each checked locally with typecheck, lint, unit tests, the full
 integration suite and the build, then by CI on main): P6 payday filing file
 (0064), RDTI R3 claim report (0065), CRM editable stages and forecasts
 (0066), P9 timesheets (0067), P10 payroll reports (no migration) and P11
-workforce budgets (0068), and P12 extra pays, back pay and final pays (0069).
+workforce budgets (0068), P12 extra pays, back pay and final pays (0069), and P8 Holidays Act leave
+(0070).
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
@@ -208,8 +209,8 @@ only be run by certain people. Each item is its own branch and PR.
       Jess to approve the examples (P8 was built on them anyway, with her
       go-ahead; three were corrected while building: HL11's dates, HL15's
       deduction and the "Decided" summary of decision 14).
-- [ ] **P8 Holidays Act leave, build** (tenant migration 0070), **built on
-      branch `claude/payroll-p8-leave`, 2 Oct 2026, not merged**; examples
+- [x] **P8 Holidays Act leave, build** (tenant migration 0070), merged 2 Oct
+      2026; examples
       HL1-HL42 still await Jess (questions at the end of the HL section),
       decisions 138-167. Built:
       - Each employee's usual week (hours each day with regular overtime
