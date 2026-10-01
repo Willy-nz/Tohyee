@@ -687,3 +687,109 @@ page (all read 2 Oct 2026).
      2), since a timesheet's share of a pay (36 of 80 hours = 45%, but 6.5
      of 36.5 = 17.8082…%) is rarely a whole hundredth; the amounts are
      split from the exact weights, so the percentage is for display only.
+
+## Payroll reports, payroll stage P10 (examples PREP1-PREP8)
+
+Made 2 Oct 2026 by Claude while building P10, by the rule law → NetSuite →
+Xero. No law prescribes payroll reports; IRD's rules fix what PAYE,
+KiwiSaver and student loan are and that IRD periods go by pay date
+(decisions 1, 58; PPAY4). NetSuite's payroll reports (read 2 Oct 2026):
+[Payroll Summary](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N962618.html)
+("the sum of paycheck amounts for each payroll item within the specified
+date range ... grouped by payroll item type"),
+[Payroll Summary by Employee](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N962835.html)
+("does the gross-to-net calculation", "can group employees by department"),
+[Payroll Liability](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N960606.html)
+("total unpaid liability for each payroll item"),
+[Payroll Journal](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N962405.html)
+("the journal entries made for each paycheck") and the
+[list of payroll reports](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_N959965.html),
+which has no headcount or FTE report. Xero Central's payroll report pages
+load with script and couldn't be read (**unverified**), so Xero answers
+none of these.
+
+102. **Reports read approved pay runs' stored figures, by pay date.**
+     Each employee's totals, lines and postings as approving kept them, and
+     the shares the pay run used (P3 allocation or P9 timesheets); nothing
+     is recalculated from today's rates, allocations or timesheets. A date
+     range means pay dates in it, as NetSuite's paycheck date range, IRD's
+     periods (PPAY4) and the pay run's journal (dated the pay date).
+     Drafts are left out; voided pay runs are left out and listed as
+     "voided, not counted" (PREP1, PREP3).
+103. **Labour cost is what pay runs charged for earnings and the employer
+     KiwiSaver contribution, not reimbursements.** The postings (each
+     employee's share of each debit line of the journal), with employer
+     KiwiSaver gross (ESCT is part of it, as posted). A reimbursement repays
+     a cost the employee paid (decision 66), so it's shown on its own line,
+     and labour cost plus reimbursements equals the pay runs' employer cost
+     and their journals' debits (PREP1). Question for Jess.
+104. **Department, project and R&D activity come from the share each
+     posting came from** (payroll_pay_run_shares, decision 98), so a
+     timesheet's split shows as posted (PREP2). Pay runs approved before P9
+     kept no shares: their Department is the posting's Department tag and
+     their project the posting's project; their R&D activity is shown as
+     "Not recorded (pay run approved before timesheets)" rather than
+     re-derived (the R&D claim does that under decision 67; question for
+     Jess).
+105. **Payroll reports need payroll access and the bookkeeper role, with
+     no other view.** Decision 6 lets everyone else see payroll only in the
+     ledger, as totals by account, pay item and Department; it defines no
+     payroll report for them, so none is added. Filters: labour cost takes
+     Department, project, R&D activity, employee and pay item together; the
+     payroll summary and the PAYE summary only employee (PAYE and net pay
+     aren't split by Department); earnings history employee and pay item;
+     headcount Department and employee.
+106. **The reconciliation compares period movements, account by account,
+     and lists the journals that explain the difference.** Payroll accounts
+     are each pay item's account, the accounts approved pay runs posted to
+     in the dates, and the PAYE, student loan, KiwiSaver, ESCT and wages
+     payable accounts. The payroll figure is the counted pay runs' postings
+     (expenses), their credits less IRD payments dated in the dates (IRD
+     liabilities), their net pay less wage payments dated in the dates
+     (wages payable) and their deductions (deduction accounts). The ledger
+     figure is the account's movement over the same dates (debits less
+     credits for expenses, credits less debits for liabilities, as the
+     trial balance). Every journal on the account in the dates that isn't
+     a counted pay run's or an active payment's is listed with where it came
+     from (voided pay run or payment, manual journal, another document); any
+     difference those don't cover is shown as "not explained". NetSuite's
+     Payroll Journal and Liability reports give the pieces; it has no single
+     reconciliation, so this is a design choice (PREP4).
+107. **FTE = usual weekly hours ÷ a standard week, at most 1.** The
+     standard week is 40.00 hours unless another (more than 0, at most 168,
+     2 decimals) is entered on the report; it isn't stored (question for
+     Jess). No NZ law defines FTE or a full-time week (the Minimum Wage
+     Act's 40-hour default couldn't be read, **unverified**). FTE is
+     rounded half up to 4 places, and totals add the rounded figures.
+     Usual hours are the pay rate's ordinary hours in effect on the date
+     (PE7); salaried employees have none, so they count as 1.0000, marked
+     "assumed (salary)". Who's employed is from start and finish dates (an
+     archived employee without a finish date is counted and flagged). By
+     Department: FTE split by the allocation in effect on the date, and
+     headcount to its biggest line (the first if two are equal, as the
+     employee list's primary Department). By month: figures at the month's
+     last day, starters and leavers in the month, and employees paid on
+     approved pay runs in it (PREP5).
+108. **PAYE, KiwiSaver and student loan by month tie to the employment
+     information files and IRD payments.** Deducted = the counted pay runs'
+     stored figures, which is what their EI files contain (decision 58), by
+     the month of the pay date. Whether a file was made comes from the audit
+     log ("payroll_payday_filing.made"); Tohyee can't know what was uploaded
+     (decision 65), so it says "file made" or "no file made in Tohyee", and
+     flags a voided pay run that had a file made (amend in myIR). Paid =
+     active IRD payments for IRD periods in the month (both halves for a
+     twice-monthly payer), KiwiSaver as one figure since IRD pays it as one
+     (PREP7).
+109. **An export is a CSV of what's shown, audited without figures**: one
+     audit event "payroll_report.exported" with the report, dates, the
+     filters' record ids, the row count and the file's SHA-256, never an
+     amount or a name (as P6's file event, decision 65, and so no payroll
+     detail reaches the audit log that admins without payroll access can
+     read). Amounts are plain numbers with 2 decimals; CR LF line ends;
+     cells starting with =, +, - or @ that aren't numbers are prefixed with
+     an apostrophe so spreadsheets don't run them.
+110. **Names are as kept on each pay run** (decision 60), so a renamed
+     employee's history shows the name each payslip had; filters and
+     headcount use today's name.
+111. **A report covers at most 5 years** of pay dates, to keep it fast and
+     its export a sensible size (a design choice).
