@@ -58,6 +58,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ payroll_pay_items        pay items: earnings, after-tax deductions and employer KiwiSaver, each with its account and tax treatment (archived, never deleted)
 ├─ payroll_pay_runs, payroll_pay_run_employees, payroll_pay_run_lines   pay runs: drafts, then approved (with a snapshot of each person's pay) or voided; frozen once approved
 ├─ payroll_pay_run_postings  how each approved pay run's earnings and employer KiwiSaver were split per employee by allocation, and which journal line each went to (append-only; payroll access only)
+├─ payroll_pay_run_shares, payroll_pay_run_timesheets   each employee's shares on an approved pay run (timesheet row or allocation line, hours, weight, tags, R&D activity) and the approved timesheets it used (append-only)
+├─ payroll_timesheets, payroll_timesheet_entries, payroll_timesheet_history   weekly timesheets (draft, submitted, approved), hours per day stamped by the database (replaced or removed, never changed or deleted) and each step with who and when
 ├─ payroll_wage_payments    net wages paid from an approved pay run, as a whole or per employee (voided, never changed or deleted)
 ├─ payroll_ird_payments, payroll_ird_payment_lines   payments to IRD for an IRD period, per liability (voided, never changed or deleted; lines append-only)
 ├─ rd_activities, rd_activity_supports   the R&D activity register (archived, never deleted) and which core activities each supporting one supports
@@ -262,7 +264,7 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, sales orders (with their invoices), repeating invoices, repeating bills and purchase orders, projects (with profitability, the time report and staff cost rates), the R&D activity register, tags, tagged R&D costs, overhead rules and the R&D claim report (each employee's pay only with payroll access), and export the claim report as CSV; print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
+| viewer | fill in and submit their own timesheets when linked to an employee (Payroll › Timesheets; hours only); read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, sales orders (with their invoices), repeating invoices, repeating bills and purchase orders, projects (with profitability, the time report and staff cost rates), the R&D activity register, tags, tagged R&D costs, overhead rules and the R&D claim report (each employee's pay only with payroll access), and export the claim report as CSV; print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
 | bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add and archive exchange rates; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept (as an invoice or a sales order), decline, copy and delete draft quotes; save, approve, invoice, close, cancel and delete draft sales orders; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add and change R&D activities, enter approvals, tag lines to R&D activities, enter assets' tax depreciation and log their use, set, change and end R&D overhead rules, and add or replace R&D files; add notes and files, and edit, delete or remove their own |
 | admin | + archive and restore R&D activities and withdraw R&D approvals; see R&D deadline reminders; approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, closing a month with checks that need attention (after confirming) and reopening months (with a reason) on Period close, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
@@ -342,6 +344,32 @@ emails are `document_emails` rows of kind `payslip` (pay run and employee,
 no contact): the text is fixed and has no figures, and the outbox writes the
 PDF when it sends, loading the payslip as the person who asked, so it needs
 their payroll access then.
+
+**Timesheets** (payroll stage P9, examples TS1-TS11, decisions 91-101,
+tenant migration 0067) live in `src/lib/payroll/timesheets.ts`, with the
+pure week, hours, weights and split rules in `timesheet-split.ts`
+(browser-safe). They're their own record, not project time entries
+(decision 91): `payroll_timesheets` (one per employee per Monday-to-Sunday
+week; draft, submitted, approved), `payroll_timesheet_entries` (one active
+entry per day and row; a trigger sets `entered_at` to the database's time,
+allows entries only on a draft timesheet's week, and lets an entry change
+only by being marked replaced or removed; no deletes) and
+`payroll_timesheet_history` (append-only steps). Access isn't payroll
+access (decision 95): `payroll_employees.user_id` links an employee to a
+member's login, who can fill in their own (viewer and up);
+`timesheet_approver_user_id` (bookkeeper and up), else the login of the
+reports-to manager, approves; people with payroll access can do both, never
+for their own. Timesheet APIs (`/api/payroll/timesheets/...`) return hours,
+never pay. When a pay run is approved, `timesheetCoverage()` gives each
+employee's approved hours on the period's days; the pay run weights each
+timesheet row and allocation line (decision 98), splits every amount with
+`splitByWeights` (PE3's largest-remainder rule; identical to
+`splitByPercentages` when there are no timesheets), and keeps the shares in
+`payroll_pay_run_shares` and the timesheets in `payroll_pay_run_timesheets`;
+a trigger then refuses reopening a timesheet an approved pay run used. A
+draft for an hourly employee whose whole period is covered takes Ordinary
+time hours from the timesheets (decision 99). Postings' percentage is kept
+to 4 places (decision 101).
 
 **Payday filing** (payroll stage P6, examples PF1-PF9, decisions 56-65):
 `src/lib/payroll/payday-filing.ts` is pure (no database): IRD's employment
@@ -1084,9 +1112,14 @@ Enforced by the app (and covered by tests):
   (`loadTags`), asset tax depreciation (`assetSharesForYear`), overhead rules
   (`overheads.ts`, applied to the same posted lines tags use, through the
   exported `SOURCES` query, skipping lines with their own tag) and pay
-  (`payroll.ts`: approved pay runs' postings, split by the allocation in
-  force on the pay date that was entered before the pay run was approved, so
-  a later backdated allocation never changes a posted pay). The route decides
+  (`payroll.ts`: approved pay runs' postings, split by the shares each pay
+  run kept (payroll P9): a timesheet share counts, an allocation share only
+  when the allocation is 100% R&D; each R&D share is the cost × weight ÷
+  all weights, rounded down. Pay runs approved before P9 kept no shares and
+  use the allocation in force on the pay date that was entered before the
+  pay run was approved. Either way a later timesheet or backdated
+  allocation never changes a posted pay; timesheets approved after their
+  pay run are listed). The route decides
   whether the viewer gets each employee's pay (`hasPayrollAccess` and
   bookkeeper or above) and reminders (admins); without payroll access pay is
   folded into totals before it leaves the server. An export writes the

@@ -71,7 +71,9 @@ proves it". Test names start with the example IDs they cover:
   approved) and `tests/integration/payroll-payments.test.ts` (PPAY1-PPAY12,
   not yet approved) and `tests/integration/payroll-bank-files.test.ts`
   (PBF1-PBF7, not yet approved) and `tests/integration/payroll-payslips.test.ts`
-  (PSLIP1-PSLIP6, not yet approved), all against
+  (PSLIP1-PSLIP6, not yet approved) and
+  `tests/integration/payroll-timesheets.test.ts` (TS1-TS11, not yet
+  approved), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6), `tests/unit/repeating-bill-rules.test.ts`
@@ -97,7 +99,9 @@ proves it". Test names start with the example IDs they cover:
   dates (PPAY4, PPAY9), and `tests/unit/payroll-bank-files.test.ts` the
   bank direct credit files byte for byte (PBF1-PBF4, PBF6), and
   `tests/unit/payroll-payslips.test.ts` the payslip's masked account, tax
-  year and year to date (PSLIP1, PSLIP2), and `tests/unit/sales-platforms.test.ts`
+  year and year to date (PSLIP1, PSLIP2), and
+  `tests/unit/payroll-timesheets.test.ts` timesheet weeks, weights, splits
+  and lateness (TS2, TS3, TS5-TS8), and `tests/unit/sales-platforms.test.ts`
   the webhook signature check, Shopify record shapes and which value is kept
   (SPC2, SPC3, SPC5, SPC6, SPC8), and `tests/unit/sales-platforms-screen.test.ts`
   the sync log on the settings screen (SPC10), and
@@ -7819,8 +7823,10 @@ activity) there too. Stage R3 (the claim report) is built on its branch:
 RD3's credit rule, RD4, RD7, RD10, RD16-RD20 and RD23-RD27, plus the new
 examples RD28-RD42 at the end of this section, which say how R3 does payroll
 without timesheets, overhead rules, the overseas limit across categories,
-feedstock and commercial production, deadlines and exports. Timesheets (RD5,
-RD6's spreading, RD22's timesheet) wait for payroll P9; grants (RD15) are
+feedstock and commercial production, deadlines and exports. Timesheets came
+with payroll P9 (TS1-TS11 in "Timesheets" below; RD5's split on P3's
+figures is TS7); RD6's spreading of leave and RD22's reallocation still
+aren't built; grants (RD15) are
 tagged ineligible as in R2; feedstock values (RD14) aren't supported yet.
 The examples are still waiting for Jess. Every rule below cites
 where it comes from. Where the guidance was unclear or left a choice, Jess
@@ -8614,9 +8620,12 @@ allocation and keep the per-employee split; timesheets (P9) aren't built, so
 R3 works from **the allocation the pay run used**, never from a payroll
 calculation of its own (decision 37). An employee's R&D share counts only
 when the allocation is **100% R&D** (decision 34); otherwise it's listed as
-"default split, no time record" and left out. The report says so on screen:
-"Timesheets aren't built yet: pay counts only for employees whose cost
-allocation is 100% R&D."
+"default split, no time record" and left out. (Since payroll P9, pay runs
+keep the shares they split pay by, approved timesheets count for the days
+they cover (TS5-TS9), and the screen says "Pay counts from approved
+timesheets for the days they cover; for other days, only when the
+employee's cost allocation is 100% R&D." RD28-RD32 are pays with no
+timesheet, so they're unchanged.)
 
 - **RD28** Full-time R&D, from the allocation. Hana's allocation from 1 Apr
   2026 is 100% C1. Kea's fortnightly pay run for 6-19 Jul 2026, paid 22 Jul
@@ -8832,8 +8841,10 @@ above** (decision 75); per-employee pay only with payroll access (RD33);
 reminders only for owners and admins (decision 48). Overhead rules are set
 by bookkeepers and above.
 
-Not built in R3 (refused rather than guessed): timesheets (P9) and so RD5's
-hours split, RD6's spreading of leave and RD22's late timesheet;
+Not built in R3 (refused rather than guessed): timesheets (built since in
+payroll P9: TS5-TS9 replace the "100% R&D only" rule where timesheets
+exist), RD6's spreading of leave and RD22's reallocation to a late
+timesheet;
 reimbursements in a pay run as goods costs; feedstock output values (RD14);
 deciding "additional" costs in commercial production; supporting activity in
 the year after the core activity's year (LY 5(1)(ab)(ii), by variation);
@@ -10219,6 +10230,307 @@ do yet are 0 and the child support code is blank. The file is named
    number when that's set?
 5. **Hours paid** for salaried staff are 0 (decision 59). Would you rather
    use their usual hours for the period?
+
+## Timesheets (examples not yet approved by Jess)
+
+Stage P9 of payroll (#60), built by Claude on 2 Oct 2026; Jess hasn't
+approved these. A **timesheet** is one employee's hours for one week
+(Monday to Sunday), by day, against an **R&D activity**, a **Department**,
+a **project**, a combination of those, or "**other work**" (spread by the
+employee's default cost allocation). Each entry is stamped by the database
+with who entered it and when, and changing it keeps the old entry. Someone
+**approves** it; approval locks it, and from then on pay runs approved
+afterwards split the employee's pay by its hours for the days it covers
+instead of by their default allocation, and the R&D claim takes the
+employee's R&D share from it (it's the contemporaneous record IR1240
+p 100 asks for). Timesheets show **hours only, never pay**. Decisions
+91-101 in [DECISIONS.md](DECISIONS.md) say why each rule is as it is.
+
+Sources (law first):
+
+- **Holidays Act 2003 s 81(2)(c)**: the holiday and leave record must show
+  "the number of hours worked each day in a pay period and the pay for
+  those hours" (`docs/sources/holidays-act-2003.md`, read 1 Oct 2026).
+  Employment NZ's
+  [Record-keeping](https://www.employment.govt.nz/starting-employment/rights-and-responsibilities/record-keeping)
+  page (last modified 6 Nov 2025, read 2 Oct 2026) says wage and time
+  records must show "the days the employee worked and the number of hours
+  worked on those days", kept "for 6 years (even if the employee has
+  left)", and employees can see their records. The Employment Relations
+  Act 2000 s 130 itself couldn't be read (legislation.govt.nz blocks our
+  tools), so it's cited through Employment NZ.
+- **IR1240 p 100** (April 2026, `docs/sources/ir1240-pages-49-on.md`):
+  records "should be kept on a contemporaneous or timely basis"; time
+  "regularly estimated and reported … for example on a weekly or
+  fortnightly basis"; "If the expenditure on eligible activities is
+  apportioned, the basis for apportionment must be reasonable and be
+  supported by an audit trail." IR1240 p 64: only the share of pay for
+  time on R&D counts.
+- **NetSuite** [Approving or Rejecting a Time Transaction](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N907404.html)
+  (read 2 Oct 2026): "If no time approver is selected, then the employee's
+  supervisor approves time entries"; statuses Open, Pending Approval,
+  Approved, Rejected; "Time approvers can't edit or delete existing time
+  entries". NetSuite's [Weekly Timesheets](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4671374137.html)
+  capture "time entries in a weekly format".
+- **Xero** [Payroll timesheets](https://www.xero.com/nz/accounting-software/payroll/timesheet/)
+  (read 2 Oct 2026): "Your employees fill in and submit timesheets";
+  "Once you've approved your employees' timesheets, this data
+  automatically syncs with … payroll … ready for your pay runs."
+
+Tests: `tests/unit/payroll-timesheets.test.ts` (the pure week, weights,
+split and lateness rules: TS2, TS3, TS5-TS8) and
+`tests/integration/payroll-timesheets.test.ts` (TS1-TS11, against
+PostgreSQL and the API routes).
+
+**The example company** is Kea Sensors Ltd from the R&D examples (RD28):
+advanced features on, a Department "Operations", R&D activities **C1**
+(core) and **S1** (supporting C1), both with a general approval covering
+2026-27, and a project **Taieri soil survey** for its customer Taieri
+Growers Ltd. Pay group "Fortnightly salaries", period **6-19 Jul 2026**,
+pay date **22 Jul 2026**:
+
+| Employee | Pay | Default cost allocation from 1 Apr 2026 |
+| --- | --- | --- |
+| Hana Rewi | salary 62,400.00 (2,400.00 a fortnight), KiwiSaver employer 3.5% (84.00) | 100% C1 |
+| Ben Tait | salary 52,000.00 (2,000.00 a fortnight), not in KiwiSaver | 60% C1, 40% Operations |
+
+Members: **Jess** (owner, payroll access), **Sam** (bookkeeper, no payroll
+access), **Ana** (admin, no payroll access), **Ben** (viewer; Ben Tait's
+own login) and **Vic** (viewer).
+
+### Setting up, entering and history
+
+- **TS1 Who enters and who approves.** Jess (payroll access) links the
+  employee Ben Tait to Ben's login and makes **Sam** Ben's **timesheet
+  approver** (Payroll › Timesheets › People). Ben (a viewer) can then open
+  and fill in **his own** timesheets, and only his; Sam can open Ben's
+  timesheets and approve or reject them, but can't change their hours;
+  Jess can open, fill in and approve anyone's. Refused: linking a login
+  that's already linked to another employee ("Ben is already linked to
+  Hana Rewi"), someone who isn't a member, an approver below bookkeeper
+  ("A timesheet approver needs the bookkeeper role or higher"), and Sam
+  or Ben making either change (payroll access only, 403). With no approver
+  set, the member linked to the employee's **reports-to** manager (P1b)
+  approves, as NetSuite's supervisor does; people with payroll access
+  always can.
+- **TS2 A week.** On Fri **10 Jul 2026** Ben fills in the week starting
+  **Mon 6 Jul 2026**, and on Fri **17 Jul** the week starting **Mon 13
+  Jul**:
+
+  | Row | Mon | Tue | Wed | Thu | Fri | Week |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+  | 6-12 Jul: C1 | 8.00 | 8.00 | 4.00 | | | 20.00 |
+  | 6-12 Jul: Department Operations | | | 4.00 | 8.00 | 8.00 | 20.00 |
+  | 13-19 Jul: C1 | 8.00 | 8.00 | | | | 16.00 |
+  | 13-19 Jul: Department Operations | | | 8.00 | 4.00 | | 12.00 |
+  | 13-19 Jul: project Taieri soil survey | | | | 4.00 | 8.00 | 12.00 |
+
+  Each week totals **40.00** hours; the fortnight **80.00** (C1 36.00,
+  Operations 32.00, Taieri soil survey 12.00). Every entry stores its
+  date, row, hours, who entered it and **when, set by the database** (an
+  "enteredAt" in the request is ignored). The 8.00 h for Mon 6 Jul,
+  entered 10 Jul, is "entered 4 days after the work". Hours are decimals
+  to 2 places (7.5 h is 7.50; 7 h 20 min is entered as 7.33). If Ben is
+  linked to a member who records project time (PJ3), "Fill from project
+  time" suggests rows from that week's project time (minutes ÷ 60, to 2
+  places): suggestions only, saved and stamped like any entry.
+- **TS3 Changing an entry keeps the old one; late entries are flagged.**
+  On **11 Jul** Ben changes Wed 8 Jul C1 from 4.00 to **3.50** and adds
+  **0.50** to Operations. The 4.00 entry isn't changed: it's marked
+  "replaced" (by Ben, 11 Jul) and a new 3.50 entry is stamped 11 Jul. The
+  timesheet's history shows "C1, Wed 8 Jul: 4.00 h entered 10 Jul 2026 by
+  Ben; changed to 3.50 h on 11 Jul 2026 by Ben". Clearing a cell marks its
+  entry "removed"; nothing is ever deleted (the database refuses). Had Ben
+  entered Mon 13 Jul's 8.00 h on **Wed 5 Aug 2026**, it's "entered **23
+  days** after the work" (18 days left in July + 5), more than 14, so it's
+  flagged **entered late** (decision 38); it still counts. (The rest of
+  these examples use TS2's hours as first entered.)
+
+### Submitting and approving
+
+- **TS4 Submit, approve, reject, reopen.** Ben **submits** the week of 6
+  Jul: it can't be changed now (by anyone), and Sam sees it under "To
+  approve". Ben can't approve his own ("Someone else approves your
+  timesheet."), and neither can Vic or Ana (403: they can't see it). Sam
+  **rejects** it with the reason "Wednesday's Operations hours look
+  short": it's a draft again, Ben corrects it and submits again. Sam
+  **approves** it: its entries are locked (the database refuses new,
+  changed or removed entries on a submitted or approved timesheet) and
+  pay runs approved from now on use it. Only someone with payroll access
+  can **reopen** an approved timesheet (with a reason, back to draft),
+  and not once a pay run that isn't voided has used it (TS9). Submitting
+  an empty week is refused ("There are no hours to submit."). Every step
+  is in the timesheet's history and the audit log, with who and when.
+  Approving posts nothing.
+
+### What pay runs do with approved timesheets
+
+When a pay run is **approved**, each employee's costs are split by the
+**approved timesheets covering days in the pay period** instead of their
+default allocation, for those days only:
+
+- A day is **covered** when it's in the pay period and in the week of a
+  timesheet that's approved when the pay run is approved (and the
+  timesheet has hours in the period). Of a period of **P** days, **c** are
+  covered; **H** is the covered hours, **hₜ** those on each row and **h₀**
+  those on "other work".
+- Each timesheet row gets the weight **c × hₜ × 100**; each line of the
+  default allocation in effect on the pay date gets **((P − c) × H + c ×
+  h₀) × its %**. The weights add up to **P × H × 100**. With no covered
+  hours (H = 0) the whole pay is split by the allocation, as before.
+- Each pay item's amount is split in proportion to the weights with PE3's
+  rule: cut to cents, leftover cents to the largest part cut off, the
+  earlier share first on a tie. Timesheet rows come first, ordered by R&D
+  activity code, then Department, then project; then the allocation's
+  lines in their order. Journal lines are still totalled by pay item,
+  account and tracking (never by employee), and a row's Department is its
+  tracking tag (a row with only an R&D activity or a project has none, as
+  an allocation line with only those has none).
+- The pay run keeps each employee's shares (source, hours, weight,
+  Department, project, R&D activity) with its postings, for people with
+  payroll access. **PAYE, KiwiSaver, student loan and ESCT don't change**:
+  only where the cost is charged (and, for hourly staff, TS8's hours).
+
+- **TS5 Fully covered.** Both of Ben's weeks are approved before the pay
+  run is approved: P = 14, c = 14, H = 80.00. Ben's ordinary time
+  **2,000.00** is split C1 2,000.00 × 36 / 80 = **900.00**, Operations
+  2,000.00 × 32 / 80 = **800.00**, Taieri soil survey 2,000.00 × 12 / 80
+  = **300.00**; his 60/40 allocation isn't used. Journal debits for Ben:
+  6200 "Ordinary time" (no tag) **900.00**, 6200 "Ordinary time"
+  Operations **800.00**, 6200 "Ordinary time (project Taieri soil survey)"
+  (no tag) **300.00** (in the pay run's journal, Ben's untagged 900.00 and
+  Hana's untagged ordinary time 2,400.00 are one line of **3,300.00**, since
+  lines are totalled by pay item, account and tracking). Ben's shares: C1
+  36.00 h (45.0000%), Operations
+  32.00 h (40.0000%), Taieri soil survey 12.00 h (15.0000%), all from the
+  timesheet. **R&D:** C1 gets 2,000.00 × 36 / 80 = **900.00**, counted as
+  employee related costs (a timesheet is a time record, so decision 34's
+  100% rule doesn't apply); before timesheets the report listed 1,200.00
+  as "default split, no time record" and counted nothing (RD29).
+- **TS6 Partly covered.** Only the week of 6 Jul is approved when the pay
+  run is approved (the week of 13 Jul is still submitted). P = 14, c = 7,
+  H = 40.00 (C1 20.00, Operations 20.00), h₀ = 0. Weights: timesheet C1 7
+  × 20 × 100 = **14,000**, timesheet Operations **14,000**, allocation C1
+  (7 × 40 + 0) × 60 = **16,800**, allocation Operations (7 × 40) × 40 =
+  **11,200**; total 14 × 40 × 100 = 56,000. Ordinary time 2,000.00:
+  timesheet C1 **500.00**, timesheet Operations **500.00**, allocation C1
+  **600.00**, allocation Operations **400.00**. Journal for Ben: 6200
+  "Ordinary time" (no tag) **1,100.00** (500.00 + 600.00, same account and
+  tracking; with Hana's 2,400.00 the journal line is **3,500.00**),
+  Operations **900.00**. **R&D:** C1 500.00 from the timesheet
+  counts; C1 600.00 from the 60% allocation is listed as "default split,
+  no time record" and left out (decision 34 for the days with no time
+  record).
+- **TS7 Cents and rounding (RD5 on P3's figures).** Hana's approved
+  timesheets for the fortnight have **80.00** h: **C1 48.00**, **S1 4.00**,
+  **Operations 28.00**. Her ordinary time 2,400.00 splits 1,440.00 /
+  120.00 / 840.00 and employer KiwiSaver 84.00 splits 50.40 / 4.20 /
+  29.40, cost **2,484.00**. R&D (each share rounded down, decision 50): C1
+  2,484.00 × 48 / 80 = **1,490.40**, S1 2,484.00 × 4 / 80 = **124.20**,
+  not R&D 869.40; both count although her allocation is 100% C1 (the
+  timesheet is used instead). Had the fortnight been **77.00** h (C1 48,
+  S1 4, Operations 25):
+  - journal split of 2,400.00: exact 1,496.1038…, 124.6753…, 779.2207…;
+    cut to 1,496.10 + 124.67 + 779.22 = 2,399.99; the cent goes to S1
+    (0.0053 cut off, the largest): **1,496.10, 124.68, 779.22**;
+  - of 84.00: exact 52.3636…, 4.3636…, 27.2727…; cut to 52.36 + 4.36 +
+    27.27 = 83.99; C1 and S1 tie (0.0036…), so the earlier, C1, gets the
+    cent: **52.37, 4.36, 27.27**;
+  - R&D, rounded down from the cost 2,484.00: C1 2,484.00 × 48 / 77 =
+    1,548.4675… → **1,548.46**, S1 2,484.00 × 4 / 77 = 129.0389… →
+    **129.03**, not R&D **806.51**. (The journal's C1 total is 1,496.10 +
+    52.37 = 1,548.47; R&D uses the rounded-down share so it's never
+    overstated, as in RD30.)
+- **TS8 Hourly pay from timesheets.** Sione Fifita is paid weekly in pay
+  group "Weekly wages", **22.50** an hour, 32 ordinary hours a week, tax
+  code M, not in KiwiSaver, allocation 100% Operations. His approved
+  timesheet for the week of 6 Jul has **36.50** h: Operations 7.50 a day
+  Mon-Thu (30.00) and C1 **6.50** on Fri. A draft pay run for **6-12 Jul
+  2026** (pay date 15 Jul) made **after** that approval gives him Ordinary
+  time **36.50 × 22.50 = 821.25**, described "From approved timesheets",
+  instead of 32 × 22.50 = 720.00; PAYE and the rest are calculated on
+  821.25 as P3 always does. Approving splits the 821.25 Operations
+  821.25 × 30 / 36.5 = **675.00**, C1 821.25 × 6.5 / 36.5 = **146.25**;
+  R&D counts **146.25** to C1. Only an hourly employee whose **every day**
+  of the period is covered gets their hours from timesheets, and only
+  Ordinary time (hours over 32 aren't made overtime: that depends on the
+  employment agreement); a period not fully covered (the week of 13 Jul,
+  not approved) gets 32 × 22.50 = **720.00** as in PRUN11. Hours are taken
+  when the draft is made; a timesheet approved later still changes the
+  split when the pay run is approved but not the hours (edit the draft's
+  hours, or delete and start it again). Salaried pay never changes.
+
+### Locks, late approval and access
+
+- **TS9 Locks and timesheets approved after the pay run.** In TS6 the pay
+  run (PAYRUN-1) used the week of 6 Jul. Reopening that timesheet is then
+  refused ("PAYRUN-1 used this timesheet, so it can't be reopened. Void
+  PAYRUN-1 first."), and the database refuses it too; after PAYRUN-1 is
+  voided it can be reopened. The week of 13 Jul, approved **after**
+  PAYRUN-1, isn't used by it: the posted pay keeps its split (decision
+  37), and the claim report says "Ben Tait: the timesheet for the week of
+  Monday 13 Jul 2026 was approved after PAYRUN-1, so its 16.00 R&D hours
+  aren't used (decision 37)." (people without payroll access see "1
+  timesheet was approved after its pay run, so its R&D hours aren't used
+  (decision 37)." with no name). That timesheet can
+  still be reopened, since no pay run used it. A pay run approved later
+  for the next period uses whichever of its days fall in that period.
+  Reallocating a posted pay to a late timesheet (RD22) isn't built.
+- **TS10 Access and privacy.** Timesheet screens and APIs show hours,
+  rows, who and when, never pay rates or amounts; the split in money is
+  only on the pay run (payroll access). Ben sees only his own; Sam only
+  those he approves; Jess everyone's; Vic and Ana nobody's (403, "You can
+  only see your own timesheets, the ones you approve, or everyone's with
+  payroll access."). Who did each step comes from the signed-in user,
+  never the request. Audit events record the employee, the week and the
+  step, not hours.
+- **TS11 Refused.** Each of these is refused and nothing is saved: hours
+  of 0, 24.01, 7.333 or "abc"; a day whose rows total more than 24.00; a
+  date outside the timesheet's week; a day before Ben's start date or
+  after his finish date; a week that doesn't start on a Monday; an
+  archived R&D activity, a closed project, a value that isn't a
+  Department; two rows with the same R&D activity, Department and
+  project; a timesheet for an archived employee; a second timesheet for
+  the same employee and week (the first is returned); changing a
+  submitted or approved timesheet; approving one that isn't submitted;
+  saving over a newer version ("Ben's timesheet was changed by someone
+  else. Reload it."). Leave on timesheets (P8) and overtime from
+  timesheets are refused rather than guessed.
+
+### Not supported yet (refused rather than guessed)
+
+- **Leave** on timesheets (annual, sick, public holidays): stage P8. Until
+  then a week of leave is a week with fewer hours (or none), and TS6's
+  rule spreads the uncovered days by the allocation.
+- **Overtime from timesheets**: hours over the ordinary hours aren't
+  turned into overtime (it depends on the agreement); add overtime on the
+  pay run.
+- **Reallocating a posted pay** to a timesheet approved after it (RD22's
+  "reallocation with history"): listed in the claim report, not built.
+- Copying approved project hours into **project time** (to invoice them):
+  "Fill from project time" goes the other way only.
+- A start/stop timer, mobile clock-in, and timesheets for people who aren't
+  employees (contractors).
+
+### Questions for Jess (timesheets)
+
+1. **Week start.** Timesheets run Monday to Sunday (decision 92). Do any
+   clients need another day, or timesheets per pay period as Xero does?
+2. **Viewers fill in their own timesheets** (decision 95), so staff who
+   only enter time can be viewers. OK, or do you want a "time only" role
+   (the projects question too)?
+3. **Approvers can't change hours** (NetSuite; decision 96); they reject
+   with a reason. Xero lets the approver correct and approve. Which?
+4. **Part-covered pay periods** are split by calendar days covered (TS6).
+   Would working days be better for monthly salaries?
+5. **Hourly pay from timesheets** only when every day of the period is
+   covered, Ordinary time only (TS8). Should hours over the ordinary hours
+   become overtime, and should a timesheet approved after the draft update
+   the draft's hours?
+6. **Project hours**: should approved project hours also become project
+   time entries (to invoice them and show them in profitability)?
+7. **A late timesheet after the pay was posted** (TS9, RD22): build the
+   reallocation of the posted pay's R&D share, or keep listing it?
 
 ## Holidays Act leave (examples not yet approved by Jess)
 

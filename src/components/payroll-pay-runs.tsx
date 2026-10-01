@@ -238,6 +238,14 @@ function EmployeePay({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {employee.problem ? <Notice tone="warning">{employee.problem}</Notice> : null}
+      {employee.timesheets ? (
+        <p className={ui.muted}>
+          {employee.timesheets.count} approved timesheet{employee.timesheets.count === 1 ? "" : "s"} ({employee.timesheets.hours} h) cover{" "}
+          {employee.timesheets.coveredDays} of {employee.timesheets.periodDays} days: costs for those days follow the timesheets
+          {employee.timesheets.allDaysCovered ? "" : ", the rest the default cost allocation"}.
+          {run.status === "draft" ? " Worked out again when the pay run is approved." : ""}
+        </p>
+      ) : null}
       {editing ? (
         <form className={styles.stack} onSubmit={save}>
           {lines.map((line, index) => (

@@ -276,7 +276,7 @@ export async function buildClaimReport(tx: OrgTx, incomeYearInput: unknown, opti
     }
   }
 
-  // Pay (RD28-RD32): only 100% R&D allocations count (decision 34).
+  // Pay (RD28-RD32, TS5-TS9): timesheet shares count; allocation shares only when 100% R&D (decisions 34, 100).
   const pays = await loadRdPays(tx, previous.start, end);
   let payrollLate = 0;
   let excluded: Decimal = ZERO_DECIMAL;
@@ -292,17 +292,20 @@ export async function buildClaimReport(tx: OrgTx, incomeYearInput: unknown, opti
         recordId: pay.payRunId,
         category: "employee",
         date: pay.payDate,
-        label: `${pay.payRunReference} paid ${pay.payDate}: ${share.percentage}% of ${pay.cost}`,
+        label:
+          share.source === "timesheet"
+            ? `${pay.payRunReference} paid ${pay.payDate}: ${share.hours} h on the approved timesheet, ${share.percentage}% of ${pay.cost}`
+            : `${pay.payRunReference} paid ${pay.payDate}: ${share.percentage}% of ${pay.cost}`,
         amount: share.amount,
         overseas: activity.place === "overseas",
         internalSoftware: false,
         commercialProduction: false,
         feedstock: false,
-        enteredLate: pay.enteredLate,
-        timelinessText: pay.timelinessText,
+        enteredLate: share.enteredLate,
+        timelinessText: share.timelinessText,
         employeeName: pay.employeeName,
       });
-      if (!pay.fullTimeRd) {
+      if (!share.counts) {
         if (inYear) listNotCounted("default_split", item);
         continue;
       }
@@ -467,6 +470,19 @@ export async function buildClaimReport(tx: OrgTx, incomeYearInput: unknown, opti
   if (cmp(dec(payroll.excluded), ZERO_DECIMAL) > 0) {
     notes.push(`Reimbursements of ${payroll.excluded} on pay runs aren't employee costs and aren't counted (decision 66).`);
   }
+  // Timesheets approved after the pay run they'd have covered aren't used (TS9; decision 37).
+  const laterTimesheets = yearPays.flatMap((pay) => pay.laterTimesheets.map((later) => ({ pay, later })));
+  if (options.payrollDetail) {
+    for (const { pay, later } of laterTimesheets) {
+      notes.push(
+        `${pay.employeeName}: the timesheet for the week of ${longDate(later.weekStart)} was approved after ${pay.payRunReference}, so its ${later.rdHours} R&D hours aren't used (decision 37).`,
+      );
+    }
+  } else if (laterTimesheets.length > 0) {
+    notes.push(
+      `${laterTimesheets.length} timesheet${laterTimesheets.length === 1 ? " was" : "s were"} approved after ${laterTimesheets.length === 1 ? "its pay run" : "their pay runs"}, so ${laterTimesheets.length === 1 ? "its" : "their"} R&D hours aren't used (decision 37).`,
+    );
+  }
 
   const lateCount =
     counted.concat([...notCounted.values()].flat()).filter((item) => item.enteredLate && item.incomeYear === year && item.source === "tag").length +
@@ -519,7 +535,9 @@ async function claimYears(tx: OrgTx, settings: RdSettings, year: number): Promis
         where r.status = 'approved' and exists (
           select 1 from payroll_pay_run_employees e join payroll_cost_allocations a on a.employee_id = e.employee_id
             join payroll_cost_allocation_lines l on l.allocation_id = a.id
-           where e.pay_run_id = r.id and l.rd_activity_id is not null)`,
+           where e.pay_run_id = r.id and l.rd_activity_id is not null
+          union all
+          select 1 from payroll_pay_run_shares s where s.pay_run_id = r.id and s.rd_activity_id is not null)`,
       [settings.yearEndMonth],
     )
   ).rows.map((row) => incomeYearOf(row.day, settings.yearEndMonth));
