@@ -56,7 +56,7 @@ describeWithDatabase("workforce budgets (WB1-WB7)", () => {
   const people: Record<string, string> = {};
   const budgets: Record<string, string> = {};
   let fortnightly = "";
-  let projectId: string | null = null;
+  const projectId: string | null = null;
   let wb: WorkforceBudget;
 
   const asUser = <T>(user: SessionUser, work: (tx: OrgTx) => Promise<T>) => inOrganisation(ORG, { userId: user.id, email: user.email }, work);
