@@ -358,6 +358,11 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
             Made by accepting quote <Link href={`/operations/quotes/${fromQuote.id}`}>{fromQuote.quoteNumber}</Link>.
           </div>
         ) : null}
+        {invoice.salesOrderId ? (
+          <div className={ui.muted}>
+            Made from sales order <Link href={`/operations/sales-orders/${invoice.salesOrderId}`}>{invoice.salesOrderNumber}</Link>.
+          </div>
+        ) : null}
         {fromRepeating ? (
           <div className={ui.muted}>
             Made by a <Link href={`/operations/repeating-invoices/${fromRepeating.id}`}>repeating invoice</Link> for{" "}

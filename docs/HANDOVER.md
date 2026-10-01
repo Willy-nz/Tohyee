@@ -47,19 +47,20 @@ Set them in the Agents box before sending each task:
 
 ## In progress (GitHub Copilot coding agents)
 
-| Work | Issue | Draft PR | Branch | Tenant migration |
+| Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| NZ payroll, stage P2: IRD payroll rates as dated data and pure PAYE, student loan, KiwiSaver and ESCT calculations (PR1-PR16) | #60 | #71 | `copilot/issue-60-ird-payroll-rates` | none (no table) |
-| Not-for-profit module, first stage: opt-in fund tracking | #61 | #63 | `copilot/not-for-profit-module-development` | 0052 (renumbered) |
-| Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | #67 | `copilot/extend-custom-fields-crm-records` | 0053 (renumbered); merge after #62 and #63 |
-| Payroll P7: Holidays Act leave worked examples (docs only) | #60 | #68 | `copilot/nz-payroll-stage-p7-holidays-act-leave` | none |
-| Payroll P1b: cost allocation, pay rate history and payroll access (examples PE3-PE12) | #60 | #73 | `copilot/60-employee-cost-allocation` | 0057 |
-| Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12) | none (Agents tab) | not opened yet | `copilot/sales-orders-stage-1` | 0055 |
-| Sales platform connections, stage 1: connector framework, Shopify customers and products (CRM roadmap items 27-28) | none (Agents tab) | not opened yet | `copilot/sales-platform-connections-stage-1` | 0056 |
-| RDTI R1: R&D Tax Incentive worked examples and questions (docs only, RD1-RD27) | none (Agents tab) | #72 | `copilot/rdti-stage-r1-plan-tracking` | none |
+| Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
 | Payroll P3: pay items and pay runs (calculate, approve, post one journal split by allocation, void; examples PRUN1-PRUN11) | #60 | #76 | `copilot/issue-60-pay-items-pay-runs` | 0058 |
+| CRM record types, page layouts and the Salesforce-style record page (CRM roadmap items 3-4, examples CRT1...) | none | not opened yet | (Agents tab) | 0059 |
+| RDTI R2: R&D activity register and tagging costs to activities | none | not opened yet | (Agents tab) | 0060 |
 
-Next free tenant migration number: 0059 (0057 reserved for payroll P1b, 0058 for payroll P3).
+Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
+tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
+0053), payroll rates P2 (#71), payroll P1b allocation and payroll access
+(#73, 0057), Holidays Act plan P7 (#68), RDTI plan R1 (#72), sales orders
+stage 1 (#69, 0055) and Shopify stage 1 (#70, 0056).
+
+Next free tenant migration number: 0062 (0058-0061 reserved above).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
