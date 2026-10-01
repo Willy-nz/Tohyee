@@ -48,10 +48,10 @@ async function body(response: Response) {
 }
 
 /**
- * Examples PE3 and PE5-PE12 in docs/ACCOUNTING-EXAMPLES.md ("NZ payroll —
+ * Examples PE3 and PE5-PE13 in docs/ACCOUNTING-EXAMPLES.md ("NZ payroll —
  * cost allocation, pay rates, job details and payroll access").
  */
-describeWithDatabase("payroll cost allocation, pay rates and payroll access (PE3, PE5-PE12)", () => {
+describeWithDatabase("payroll cost allocation, pay rates and payroll access (PE3, PE5-PE13)", () => {
   let server: TestServer;
   let jess: SessionUser; // first owner
   let mere: SessionUser; // admin
@@ -290,6 +290,50 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PE3
       expect(await asUser(ben, (tx) => hasPayrollAccess(tx))).toBe(false);
       const benCookie = await sessionCookieFor(ben);
       expect((await employeesRoute.GET(apiRequest(`/api/payroll/employees?organisationId=${ORG}`, { cookie: benCookie }), noContext)).status).toBe(403);
+    });
+
+    it("PE13: moving someone below bookkeeper takes payroll access away, so moving them back doesn't restore it", async () => {
+      expect((await giveAccess(ben, jess)).status).toBe(200);
+      const jessCookie = await sessionCookieFor(jess);
+      const setRole = (role: string) =>
+        memberRoute.PATCH(
+          apiRequest(`/api/organisations/${ORG}/members/${ben.id}`, { method: "PATCH", cookie: jessCookie, body: { role } }),
+          params({ organisationId: ORG, userId: ben.id }),
+        );
+      expect((await setRole("viewer")).status).toBe(200);
+      expect((await setRole("bookkeeper")).status).toBe(200);
+      expect(await asUser(ben, (tx) => hasPayrollAccess(tx))).toBe(false);
+      const audit = await asUser(jess, (tx) =>
+        tx.query<{ details: { reason: string } }>(
+          "select details from audit_events where event_type = 'payroll_access.removed' and entity_id = $1 order by id desc limit 1",
+          [ben.id],
+        ),
+      );
+      expect(audit.rows[0]?.details.reason).toBe("Role changed below bookkeeper");
+    });
+
+    it("PE13: removing someone takes payroll access away at once; an admin can't strip an owner's access by trying to remove them", async () => {
+      expect((await giveAccess(ben, jess)).status).toBe(200);
+      const jessCookie = await sessionCookieFor(jess);
+      const removed = await memberRoute.DELETE(
+        apiRequest(`/api/organisations/${ORG}/members/${ben.id}`, { method: "DELETE", cookie: jessCookie }),
+        params({ organisationId: ORG, userId: ben.id }),
+      );
+      expect(removed.status).toBe(200);
+      const left = await asUser(jess, (tx) => tx.query("select 1 from payroll_access where user_id = $1", [ben.id]));
+      expect(left.rowCount).toBe(0);
+      await membersRoute.POST(
+        apiRequest(`/api/organisations/${ORG}/members`, { method: "POST", cookie: jessCookie, body: { email: ben.email, role: "bookkeeper" } }),
+        params({ organisationId: ORG }),
+      );
+
+      // Mere (an admin) can't remove Jess (an owner), and Jess keeps payroll access.
+      const refused = await memberRoute.DELETE(
+        apiRequest(`/api/organisations/${ORG}/members/${jess.id}`, { method: "DELETE", cookie: await sessionCookieFor(mere) }),
+        params({ organisationId: ORG, userId: jess.id }),
+      );
+      expect(refused.status).toBe(403);
+      expect(await asUser(jess, (tx) => hasPayrollAccess(tx))).toBe(true);
     });
   });
 

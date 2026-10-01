@@ -134,13 +134,22 @@ export async function setPayrollAccess(
  * access, even if they had it before they were removed (PE12).
  */
 export async function removePayrollAccessOnJoin(tx: OrgTx, userId: string, email: string): Promise<void> {
+  await removePayrollAccess(tx, userId, email, "Added to the organisation again");
+}
+
+/**
+ * Takes payroll access away from someone, with an audit event, when they're
+ * added back, removed from the organisation or moved below bookkeeper
+ * (PE12, PE13). Does nothing if they didn't have it.
+ */
+export async function removePayrollAccess(tx: OrgTx, userId: string, email: string, reason: string): Promise<void> {
   const removed = await tx.query("delete from payroll_access where user_id = $1", [userId]);
   if (removed.rowCount > 0) {
     await writeAuditEvent(tx, {
       eventType: "payroll_access.removed",
       entityType: "payroll_access",
       entityId: userId,
-      details: { email, reason: "Added to the organisation again" },
+      details: { email, reason },
     });
   }
 }

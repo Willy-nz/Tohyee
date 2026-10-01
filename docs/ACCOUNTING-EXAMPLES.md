@@ -62,7 +62,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/tax-available-on.test.ts` (TAO1-TAO5, TAO7-TAO12) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
   GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PE1, PE2)
-  and `tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE12),
+  and `tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE13),
   all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
@@ -145,7 +145,7 @@ approving:
 
 Tests: `tests/unit/payroll-allocation.test.ts` (PE3, PE4, PE5),
 `tests/unit/payroll-access-screen.test.ts` (PE10's message) and
-`tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE12).
+`tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE13).
 
 ### Cost allocation
 
@@ -206,6 +206,7 @@ did it and when.
 | PE10 | Ben (bookkeeper, no payroll access) opens Payroll › Employees, and tries the employee, pay rate, allocation and group APIs. | He sees "You need payroll access to see payroll. Ask an admin to give it to you in Settings › Payroll access." and no data; every payroll API answers 403 with that message, for reading and changing. |
 | PE11 | Mere (admin) opens Settings › Payroll access and gives it to herself, then to Ben. Later she removes Ben's. Ben tries to give himself access. A viewer is given access. | Mere and then Ben can see payroll once given it; the audit log shows "payroll access given" to each, by Mere, with the time. After removal Ben is refused again (PE10), and the audit log shows it. Ben can't give access (admins only, 403). Giving it to a viewer is refused ("needs the bookkeeper role or higher"). Removing access from the last member who has it (and the bookkeeper role or higher to use it) is refused, so there's always someone. |
 | PE12 | Ben, who has payroll access, is removed from the organisation and added again later. | When he's added again **he has no payroll access** until an admin gives it to him again; the removal is in the audit log. |
+| PE13 | Ben, who has payroll access, is moved from bookkeeper to viewer and later back to bookkeeper; separately, he is removed from the organisation. | Moving him below bookkeeper or removing him **takes his payroll access away at once**, with the reason in the audit log, so moving him back doesn't bring it back; an admin has to give it again. Trying to make a change you're not allowed to (an admin removing an owner) changes nothing, including payroll access. |
 
 No IRD number, bank account or pay amount is ever written into an audit
 event: allocation events record the effective date and the percentages,

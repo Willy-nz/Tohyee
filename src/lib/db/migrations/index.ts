@@ -52,8 +52,14 @@ export async function migrateOrganisation(organisation: {
 }): Promise<OrganisationMigrationResult> {
   try {
     const result = await applyTenantMigrations(organisation.database_name);
-    // The first owner starts with payroll access, once (example PE9).
-    await startPayrollAccess({ id: organisation.id, databaseName: organisation.database_name });
+    // The first owner starts with payroll access, once (example PE9). A
+    // failure here doesn't fail the organisation: it's retried on the next
+    // migrate, since payroll_access_started_at is only set when it works.
+    try {
+      await startPayrollAccess({ id: organisation.id, databaseName: organisation.database_name });
+    } catch (error) {
+      console.error(`Couldn't start payroll access for organisation ${organisation.id}:`, error);
+    }
     await coreQuery(
       `update organisations
           set migration_status = 'current', migration_error = null,
