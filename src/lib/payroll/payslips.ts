@@ -6,7 +6,7 @@ import { MAX_SUBJECT_LENGTH } from "@/lib/email/templates";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { add, dec, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, dec, isZero, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { safeFileName } from "@/lib/pdf/documents";
 import { requirePayrollAccess } from "@/lib/payroll/access";
@@ -65,6 +65,12 @@ export type Payslip = {
   /** The account net pay goes into, all but its last 3 digits hidden; null if none is on file. */
   bankAccount: string | null;
   fileName: string;
+  /** The employee's last day when this is their final pay (XP12). */
+  finishDate: string | null;
+  /** Extra pays in this pay and the rate they were taxed at (XP8). */
+  extraPay: { amount: string; taxRate: string | null } | null;
+  /** The pay includes holiday pay on finishing, worked out outside Tohyee (XP12, decision 135). */
+  holidayPayWorkedOutElsewhere: boolean;
 };
 
 export type PayslipSummary = {
@@ -154,6 +160,7 @@ async function buildPayslip(tx: OrgTx, run: PayRun, employeeId: string, employee
     "select id, subject_to_paye from payroll_pay_items where id = any($1::uuid[])",
     [[...new Set(entry.lines.map((line) => line.payItemId))]],
   );
+  const extraPay = entry.pay && !isZero(dec(entry.pay.extraPay)) ? { amount: entry.pay.extraPay, taxRate: entry.pay.extraPayTaxRate } : null;
   const isTaxed = new Map(taxed.rows.map((item) => [item.id, item.subject_to_paye]));
   const earnings: PayslipLine[] = [];
   const deductions: PayslipLine[] = [];
@@ -214,6 +221,9 @@ async function buildPayslip(tx: OrgTx, run: PayRun, employeeId: string, employee
     yearToDate: ytd.figures,
     bankAccount,
     fileName: payslipFileName(entry.name, run.payDate),
+    finishDate: entry.finishDate,
+    extraPay,
+    holidayPayWorkedOutElsewhere: entry.lines.some((line) => line.kind === "termination_holiday_pay"),
   };
 }
 

@@ -165,6 +165,18 @@ describe("employment information file (PF1-PF5)", () => {
     expect(file.content.split("\r\n")[1].split(",")[2]).toBe("Kiri Tane Jr");
   });
 
+  it("XP9, XP13: the lump sum indicator and earnings not liable for the ACC earners' levy (redundancy)", () => {
+    const sam = { ...kiri, irdNumber: "100200302", name: "Sam Signing", grossEarnings: "10000.00", paye: "1225.00", lumpSumLowestRate: true };
+    const connor = { ...kiri, irdNumber: "100200303", name: "Connor Redundant", grossEarnings: "1250.00", paye: "205.62", notLiableForAccLevy: "1000.00" };
+    const file = makeEmploymentInformationFile({ header, employees: [sam, connor, kiri], fileStem: "X" });
+    const lines = file.content.split("\r\n");
+    expect(lines[1].split(",").slice(10, 15)).toEqual(["1000000", "0", "0", "1", "122500"]);
+    expect(lines[2].split(",").slice(10, 15)).toEqual(["125000", "0", "100000", "0", "20562"]);
+    expect(lines[3].split(",")[13]).toBe("0");
+    // Header field 13 totals the employees' field 13.
+    expect(lines[0].split(",")[12]).toBe("100000");
+  });
+
   it("refuses a file with nobody on it, negative amounts and more than 2 decimal places", () => {
     expect(() => makeEmploymentInformationFile({ header, employees: [], fileStem: "X" })).toThrow("nobody on this pay run");
     expect(() => makeEmploymentInformationFile({ header, employees: [{ ...kiri, paye: "-1.00" }], fileStem: "X" })).toThrow("can't be below zero");
