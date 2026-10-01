@@ -489,6 +489,105 @@ in `docs/sources/`.
     (decision 6 accepts a total that's one person's pay; RD33). Overhead
     rules are set by bookkeepers and above, like tags.
 
+## CRM opportunity stages and forecasts (examples CRMS1-CRMS11)
+
+Jess wants a Salesforce-level CRM (2 Oct 2026): follow Salesforce where it
+has an answer, then Twenty or HubSpot. help.salesforce.com pages couldn't be
+read by our tools (they load with script), so the Salesforce sources are
+its Trailhead modules, one Salesforce knowledge article and a Salesforce Ben
+guide, all fetched on 2 Oct 2026. Calls marked **(unverified)** rest on how
+Salesforce is generally known to behave and should be checked against
+Salesforce's own help before relying on them. HubSpot's knowledge base
+refused our fetches, so nothing here rests on it.
+
+76. **Stages are the organisation's own list**, each with a name, an order,
+    a type (Open, Closed won, Closed lost), a default probability and a
+    forecast category, as Salesforce's Stage picklist values: "Type ...
+    Probability ... Forecast Category" are set for each stage
+    ([Trailhead: Create and manage stages and sales processes](https://trailhead.salesforce.com/content/learn/projects/create-an-opportunity-record-type-for-npsp/create-and-manage-stages-and-sales-processes));
+    the three types are Open, Closed/Won and Closed/Lost
+    ([Salesforce Ben, updated 19 Oct 2023](https://www.salesforceben.com/complete-guide-tutorial-to-salesforce-opportunity-stages/)).
+    Probabilities are whole per cents, as Salesforce's Probability (%) field.
+77. **A stage has a fixed key** (Salesforce's picklist API name, separate
+    from its label). The six existing stages keep their keys (`new` ...
+    `lost`), so every saved opportunity, API call and history entry keeps
+    working; a new stage's key is made from its first name.
+78. **Starting probabilities** New 10%, Screening 20%, Meeting 50%,
+    Proposal 75%, Won 100%, Lost 0%, every open stage in Pipeline: the
+    probabilities of the Salesforce standard stages nearest in meaning
+    (Prospecting 10%, Needs Analysis 20%, Value Proposition 50%,
+    Proposal/Price Quote 75%, Closed Won 100%, Closed Lost 0%)
+    **(unverified)**. Jess is asked to confirm them.
+79. **Forecast category rules**: a Closed lost stage is Omitted ("Any stage
+    with a Type of Closed/Lost must be set to Omitted",
+    [Salesforce knowledge article 000232642](https://help.salesforce.com/s/articleView?id=000232642&language=en_US&type=1)),
+    and 0%; a Closed won stage is Closed and 100%; an Open stage is never
+    Closed (Closed is "the total for closed-won opportunities",
+    [Salesforce for Beginners, O'Reilly](https://www.oreilly.com/library/view/salesforce-for-beginners/9781838986094/1d32a37d-da56-4684-9334-41b9044fba4c.xhtml)).
+    The won-is-100% and open-never-Closed parts are **(unverified)**.
+80. **An opportunity's probability and forecast category can be changed
+    without changing its stage**, within rule 79: "Salesforce adds a
+    probability based on the stage selected. If the probability isn't
+    accurate, you can change it"
+    ([Trailhead: Work your opportunities](https://trailhead.salesforce.com/content/learn/modules/leads_opportunities_lightning_experience/work-your-opportunities));
+    "users can change the mapped category on an Opportunity without changing
+    the stage" ([Salesforce Ben, updated 27 Dec 2023](https://www.salesforceben.com/forecast-categories-in-salesforce-everything-you-need-to-know/)).
+    **Moving to another stage sets both to the new stage's defaults** unless
+    they're sent in the same save, as Salesforce does when the stage changes
+    **(unverified)**.
+81. **Stages are archived, never deleted**, as Salesforce deactivates
+    picklist values and record types here are archived (CRT2). An archived
+    stage keeps its opportunities but can't be chosen. At least one active
+    Open, Closed won and Closed lost stage must stay, so opportunities can
+    always be opened, won and lost. **A stage's type can't change while
+    opportunities are in it** (a design call: otherwise invoiced or
+    forecast opportunities would silently change meaning).
+82. **The invoice follows the stage type**: only an opportunity in a Closed
+    won stage makes an invoice, whatever the stage is called, and "open"
+    everywhere means a stage of type Open. The database enforces that an
+    invoiced opportunity is in a Closed won stage.
+83. **Stage history comes from the audit history**, not a new table: a row
+    whenever the stage, amount, probability, forecast category or expected
+    close date changes, with who and when, newest first, after
+    Salesforce's Stage History related list (field list **(unverified)**).
+    Changes made before the upgrade show without a probability or category,
+    which weren't kept.
+84. **Sales processes** belong to opportunity record types: "a filtered list
+    of opportunity stages" ([Trailhead: Create and manage stages and sales processes](https://trailhead.salesforce.com/content/learn/projects/create-an-opportunity-record-type-for-npsp/create-and-manage-stages-and-sales-processes)).
+    A type without one uses every active stage. A process needs at least one
+    stage of each type. An opportunity already in a stage its process
+    doesn't list can still be saved without moving.
+85. **Forecast totals are Salesforce's cumulative rollups**: "the Best Case
+    category includes all the best case opportunities, plus the
+    opportunities in the Most Likely, Commit, and Closed categories"
+    ([Trailhead: Configure Sales Forecasting](https://trailhead.salesforce.com/content/learn/modules/sales-forecasting/configure-sales-forecasting-in-salesforce));
+    "Best Case – Best Case + Commit + Closed" and "Open Pipeline – Pipeline
+    + Best Case + Commit" ([Salesforce Ben](https://www.salesforceben.com/forecast-categories-in-salesforce-everything-you-need-to-know/)).
+    So Closed = Closed; Commit = Commit + Closed; Best case = Best case +
+    Commit + Closed; Open pipeline = Pipeline + Best case + Commit. Omitted
+    is in none. Salesforce's optional "Most Likely" category isn't offered.
+86. **Forecasts are by expected close date, per month or per quarter, per
+    owner**, as Salesforce's opportunity forecast by close date. Quarters
+    follow the organisation's financial year (Salesforce uses the fiscal
+    year). Opportunities without a close date are left out and counted;
+    ones without an owner show as "No owner".
+87. **Currencies are never added together** in a forecast: a row per
+    currency, as Home and the pipeline (MC68, CRM10). Salesforce converts to
+    one forecast currency; whether to do that is a question for Jess.
+88. **Weighted amount = amount × probability, rounded half up to the
+    currency's smallest unit for each opportunity, then added**, so the
+    drill-down rows add up to the total. Weighted pipeline counts open
+    opportunities not Omitted (Salesforce's expected revenue on the
+    pipeline).
+89. **Quotas are per owner per month in the base currency**, set by admins
+    (Salesforce quotas are per user per forecast period); a quarter's quota
+    is its months' added. Attainment is Closed in the base currency ÷ quota,
+    as a percentage to 2 decimal places, rounded half up.
+90. **Forecasts are read-only and worked out live**; Salesforce's manager
+    adjustments, forecast hierarchy and submitted snapshots are a later
+    stage (none of them would be a status typed in: they'd need the
+    hierarchy built first).
+
 ## Timesheets, payroll stage P9 (examples TS1-TS11)
 
 Made 2 Oct 2026 by Claude while building P9, by the rule law → NetSuite →

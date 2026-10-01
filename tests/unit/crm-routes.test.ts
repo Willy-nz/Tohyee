@@ -45,7 +45,7 @@ describe("old CRM URLs", () => {
   });
 
   it("the CRM's Home and tabs are pages, and nothing else under /operations is redirected", async () => {
-    for (const tab of ["/crm", "/crm/companies", "/crm/people", "/crm/pipeline", "/crm/tasks", "/crm/mail", "/crm/record-types"]) {
+    for (const tab of ["/crm", "/crm/companies", "/crm/people", "/crm/pipeline", "/crm/tasks", "/crm/mail", "/crm/record-types", "/crm/stages", "/crm/forecasts"]) {
       expect(pageFor(tab), tab).not.toBeNull();
     }
     expect(existsSync(path.join(APP, "crm/layout.tsx"))).toBe(true);

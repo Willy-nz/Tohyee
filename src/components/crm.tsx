@@ -32,6 +32,14 @@ import type {
   TeamMember,
 } from "@/lib/crm/service";
 import { type CustomFieldSetup, type CustomValues, customValueText } from "@/lib/custom-fields/values";
+import {
+  categoriesFor,
+  FORECAST_CATEGORY_LABELS,
+  type ForecastCategory,
+  type OpportunityStageSetup,
+  type StageType,
+} from "@/lib/crm/forecast-figures";
+import type { SalesProcess } from "@/lib/crm/stages";
 import { formatDate, formatDateTime, formatMoney, todayInBrowser } from "@/lib/format";
 import type { Invoice } from "@/lib/invoices/service";
 import { add, dec, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
@@ -64,24 +72,31 @@ export function useBaseCurrency(): string {
  * opportunities board, tasks and timeline.
  */
 
-// These mirror the server's lists (src/lib/crm/service.ts), which can't be imported into the browser.
-export const STAGES: OpportunityStage[] = ["new", "screening", "meeting", "proposal", "won", "lost"];
-export const STAGE_LABELS: Record<OpportunityStage, string> = {
-  new: "New",
-  screening: "Screening",
-  meeting: "Meeting",
-  proposal: "Proposal",
-  won: "Won",
-  lost: "Lost",
-};
-export const STAGE_TONES: Record<OpportunityStage, "neutral" | "blue" | "green" | "amber" | "red"> = {
-  new: "neutral",
-  screening: "blue",
-  meeting: "blue",
-  proposal: "amber",
-  won: "green",
-  lost: "red",
-};
+/** The organisation's stages (archived too, in order) and sales processes (CRMS2, CRMS7). */
+export function useStages(organisationId: string | null) {
+  return useApiData<{ stages: OpportunityStageSetup[]; salesProcesses: SalesProcess[] }>(organisationId ? "/api/crm/stages" : null, { organisationId: organisationId ?? "" });
+}
+
+const STAGE_TYPE_TONES: Record<StageType, "blue" | "green" | "red"> = { open: "blue", won: "green", lost: "red" };
+
+/** A stage's name, coloured by its type: open blue, won green, lost red. */
+export function StageBadge({ name, type }: { name: string; type: StageType }) {
+  return <Badge tone={STAGE_TYPE_TONES[type]}>{name}</Badge>;
+}
+
+/**
+ * The stages an opportunity can be moved to (CRMS3, CRMS7): the active ones
+ * in its record type's sales process, plus the one it's in.
+ */
+export function stageChoices(
+  data: { stages: OpportunityStageSetup[]; salesProcesses: SalesProcess[] } | null | undefined,
+  recordTypeId: string | null,
+  current: string | null,
+): OpportunityStageSetup[] {
+  if (!data) return [];
+  const process = recordTypeId ? data.salesProcesses.find((p) => p.recordTypeId === recordTypeId)?.stageKeys : null;
+  return data.stages.filter((stage) => stage.key === current || (stage.isActive && (!process || process.includes(stage.key))));
+}
 const TASK_LABELS: Record<TaskStatus, string> = { todo: "To do", in_progress: "In progress", done: "Done" };
 const ACTIVITY_LABELS: Record<ActivityKind, string> = { call: "Call", meeting: "Meeting", note: "Note" };
 
@@ -554,6 +569,9 @@ type OpportunityDraft = {
   amount: string;
   closeDate: string;
   stage: OpportunityStage;
+  /** "" means the stage's (CRMS5). */
+  probability: string;
+  forecastCategory: ForecastCategory | "";
 };
 
 export function OpportunityForm({
@@ -583,8 +601,11 @@ export function OpportunityForm({
     ownerUserId: opportunity ? (opportunity.ownerUserId ?? "") : user.id,
     amount: opportunity?.amount ?? "",
     closeDate: opportunity?.closeDate ?? "",
-    stage: opportunity?.stage ?? "new",
+    stage: opportunity?.stage ?? "",
+    probability: opportunity ? String(opportunity.probability) : "",
+    forecastCategory: opportunity?.forecastCategory ?? "",
   });
+  const stages = useStages(organisationId);
   const people = useApiData<{ people: Person[] }>(draft.contactId ? "/api/crm/people" : null, { organisationId, contactId: draft.contactId });
   const customSetup = useCustomFields(organisationId);
   // A new opportunity starts with each field's default (CRMF5).
@@ -595,6 +616,10 @@ export function OpportunityForm({
   const [recordTypeId, setRecordTypeId] = useState("");
   const { busy, error, run } = useBusy();
   const set = (patch: Partial<OpportunityDraft>) => setDraft({ ...draft, ...patch });
+  const typeForStages = opportunity?.recordTypeId ?? (recordTypeId || recordTypes.data?.recordTypes.find((t) => t.isDefault)?.id || null);
+  const choices = stageChoices(stages.data, typeForStages, opportunity?.stage ?? null);
+  // A new opportunity starts in its type's first Open stage (CRMS7) unless one is picked.
+  const stage = choices.find((s) => s.key === draft.stage) ?? choices.find((s) => s.type === "open") ?? null;
   // The amount is in the company's currency (MC68).
   const chosen = contacts.data?.contacts.find((contact) => contact.id === draft.contactId);
   const amountCurrency = chosen ? (chosen.currencyCode ?? baseCurrency) : draft.contactId === opportunity?.contactId ? opportunity?.currencyCode : fixedCurrency;
@@ -612,7 +637,9 @@ export function OpportunityForm({
             ownerUserId: draft.ownerUserId || null,
             amount: draft.amount || "0",
             closeDate: draft.closeDate || null,
-            stage: draft.stage,
+            stage: draft.stage || stage?.key || undefined,
+            probability: draft.probability === "" ? undefined : draft.probability,
+            forecastCategory: draft.forecastCategory || undefined,
             customFields,
             ...(opportunity ? {} : { recordTypeId: recordTypeId || null }),
           };
@@ -668,10 +695,40 @@ export function OpportunityForm({
           </select>
         </Field>
         <Field label="Stage">
-          <select value={draft.stage} disabled={Boolean(opportunity?.invoiceId)} onChange={(event) => set({ stage: event.target.value as OpportunityStage })}>
-            {STAGES.map((stage) => (
-              <option key={stage} value={stage}>
-                {STAGE_LABELS[stage]}
+          <select
+            value={stage?.key ?? ""}
+            disabled={Boolean(opportunity?.invoiceId)}
+            // A new stage brings its own probability and forecast category (CRMS5).
+            onChange={(event) => set({ stage: event.target.value, probability: "", forecastCategory: "" })}
+          >
+            {choices.map((choice) => (
+              <option key={choice.key} value={choice.key}>
+                {choice.name}
+                {choice.isActive ? "" : " (archived)"}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Probability (%)" hint={stage ? `${stage.name}: ${stage.probability}%` : undefined}>
+          <input
+            inputMode="numeric"
+            className={ui.num}
+            value={draft.probability}
+            placeholder={stage ? String(stage.probability) : ""}
+            disabled={!stage || stage.type !== "open"}
+            onChange={(event) => set({ probability: event.target.value })}
+          />
+        </Field>
+        <Field label="Forecast category">
+          <select
+            value={draft.forecastCategory}
+            disabled={!stage || stage.type !== "open"}
+            onChange={(event) => set({ forecastCategory: event.target.value as ForecastCategory | "" })}
+          >
+            <option value="">{stage ? `The stage's (${FORECAST_CATEGORY_LABELS[stage.forecastCategory]})` : "The stage's"}</option>
+            {(stage ? categoriesFor(stage.type) : []).map((category) => (
+              <option key={category} value={category}>
+                {FORECAST_CATEGORY_LABELS[category]}
               </option>
             ))}
           </select>
@@ -706,7 +763,8 @@ export function InvoiceAction({ organisationId, opportunity, onChanged }: { orga
   if (opportunity.invoiceId) {
     return <Link href={`/operations/invoices/${opportunity.invoiceId}`}>{opportunity.invoiceNumber ?? "Draft invoice"}</Link>;
   }
-  if (opportunity.stage !== "won" || !can("bookkeeper")) return null;
+  // A Closed won stage, whatever it's called (CRMS4).
+  if (opportunity.stageType !== "won" || !can("bookkeeper")) return null;
   const make = () =>
     void run(async () => {
       const result = await api<{ invoice: Invoice }>(`/api/crm/opportunities/${opportunity.id}/invoice`, {
@@ -743,6 +801,7 @@ export function OpportunityCard({
   customSetup,
   onChanged,
   onDragStart,
+  stages,
 }: {
   organisationId: string;
   opportunity: Opportunity;
@@ -750,6 +809,8 @@ export function OpportunityCard({
   customSetup: CustomFieldSetup | null | undefined;
   onChanged: () => void;
   onDragStart?: () => void;
+  /** The stages it can move to; without them its stage only shows. */
+  stages?: OpportunityStageSetup[];
 }) {
   const { can } = useWorkspace();
   const baseCurrency = useBaseCurrency();
@@ -792,10 +853,14 @@ export function OpportunityCard({
         {opportunity.closeDate ? ` · closes ${formatDate(opportunity.closeDate)}` : ""}
         {opportunity.ownerUserId ? ` · ${memberName(team, opportunity.ownerUserId)}` : ""}
       </div>
+      <div className={ui.muted}>
+        {opportunity.probability}% · {FORECAST_CATEGORY_LABELS[opportunity.forecastCategory]} · weighted{" "}
+        {amountIn(opportunity.weightedAmount, opportunity.currencyCode, baseCurrency)}
+      </div>
       <CardValues setup={customSetup} values={opportunity.customFields} />
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.actions}>
-        {editable && !opportunity.invoiceId ? (
+        {editable && !opportunity.invoiceId && stages ? (
           <select
             aria-label={`Stage of ${opportunity.name}`}
             value={opportunity.stage}
@@ -806,14 +871,14 @@ export function OpportunityCard({
               })
             }
           >
-            {STAGES.map((stage) => (
-              <option key={stage} value={stage}>
-                {STAGE_LABELS[stage]}
+            {stages.map((stage) => (
+              <option key={stage.key} value={stage.key}>
+                {stage.name}
               </option>
             ))}
           </select>
         ) : (
-          <Badge tone={STAGE_TONES[opportunity.stage]}>{STAGE_LABELS[opportunity.stage]}</Badge>
+          <StageBadge name={opportunity.stageName} type={opportunity.stageType} />
         )}
         {editable ? (
           <Button size="small" variant="secondary" onClick={() => setEditing(true)}>
@@ -826,22 +891,28 @@ export function OpportunityCard({
   );
 }
 
-/** The pipeline board: a column per stage with its total; drag a card or pick its stage to move it (CRM4, CRM9). */
+/**
+ * The pipeline board: a column per active stage in order, and an archived
+ * stage only while it has opportunities, each with its total; drag a card or
+ * pick its stage to move it (CRM4, CRM9, CRMS7).
+ */
 export function PipelinePage({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const [adding, setAdding] = useState(false);
   const [over, setOver] = useState<OpportunityStage | null>(null);
   const opportunities = useApiData<{ opportunities: Opportunity[] }>("/api/crm/opportunities", { organisationId });
+  const stages = useStages(organisationId);
   const customSetup = useCustomFields(organisationId);
   const team = useTeam(organisationId);
   const { error, run } = useBusy();
   const all = opportunities.data?.opportunities ?? [];
   const baseCurrency = useBaseCurrency();
   const total = (stage: OpportunityStage) => totalAmounts(all.filter((o) => o.stage === stage), baseCurrency);
+  const columns = (stages.data?.stages ?? []).filter((stage) => stage.isActive || all.some((o) => o.stage === stage.key));
   function drop(stage: OpportunityStage, id: string) {
     const card = all.find((o) => o.id === id);
     setOver(null);
-    if (!card || card.stage === stage) return;
+    if (!card || card.stage === stage || card.invoiceId) return;
     void run(async () => {
       await api(`/api/crm/opportunities/${id}`, { method: "PATCH", body: { organisationId, stage } });
       opportunities.reload();
@@ -872,15 +943,17 @@ export function PipelinePage({ organisationId }: { organisationId: string }) {
         ) : null}
         {error ? <Notice tone="error">{error}</Notice> : null}
         {opportunities.error ? <Notice tone="error">{opportunities.error}</Notice> : null}
+        {stages.error ? <Notice tone="error">{stages.error}</Notice> : null}
       </Card>
       <div className={ui.crmBoard}>
-        {STAGES.map((stage) => {
+        {columns.map((column) => {
+          const stage = column.key;
           const cards = all.filter((o) => o.stage === stage);
           return (
             <section
               key={stage}
               className={`${ui.crmColumn} ${over === stage ? ui.crmColumnOver : ""}`}
-              aria-label={STAGE_LABELS[stage]}
+              aria-label={column.name}
               onDragOver={(event) => {
                 event.preventDefault();
                 setOver(stage);
@@ -892,7 +965,7 @@ export function PipelinePage({ organisationId }: { organisationId: string }) {
               }}
             >
               <header className={ui.crmColumnHeader}>
-                <Badge tone={STAGE_TONES[stage]}>{STAGE_LABELS[stage]}</Badge>
+                <StageBadge name={column.isActive ? column.name : `${column.name} (archived)`} type={column.type} />
                 <span className={ui.muted}>
                   {cards.length} · {total(stage)}
                 </span>
@@ -905,6 +978,7 @@ export function PipelinePage({ organisationId }: { organisationId: string }) {
                   team={team.data?.team}
                   customSetup={customSetup.data}
                   onChanged={opportunities.reload}
+                  stages={stageChoices(stages.data, opportunity.recordTypeId, opportunity.stage)}
                 />
               ))}
             </section>
@@ -1183,7 +1257,7 @@ export function CrmHomePage({ organisationId }: { organisationId: string }) {
                       <Link href={`/crm/companies/${opportunity.contactId}`}>{opportunity.contactName}</Link>
                     </td>
                     <td>
-                      <Badge tone={STAGE_TONES[opportunity.stage]}>{STAGE_LABELS[opportunity.stage]}</Badge>
+                      <StageBadge name={opportunity.stageName} type={opportunity.stageType} />
                     </td>
                     <td>{opportunity.closeDate ? formatDate(opportunity.closeDate) : ""}</td>
                     <td className={ui.num}>{amountIn(opportunity.amount, opportunity.currencyCode, baseCurrency)}</td>
