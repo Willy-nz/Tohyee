@@ -4,6 +4,79 @@ Where Tohyee is up to, and what's left to do. This is for Jess and for the
 next person or coding agent picking the work up. Read `AGENTS.md` and
 `.github/copilot-instructions.md` first; they still apply.
 
+## Start here (end of the 1-2 Oct 2026 Claude session)
+
+Wound up at Jess's request on Fri 2 Oct 2026, 12:30 NZ time, because usage
+was getting high. Nothing is half-done on a branch: everything below is
+merged into main, and every merge passed typecheck, lint, unit tests, the
+full integration suite (1,014 tests at the end) and the build, then CI on
+main.
+
+**Merged in this session** (most without a pull request page: the browser
+was asleep overnight, and later the connected Chrome wasn't signed in to
+GitHub; each merge commit says so):
+
+| Work | Tenant migration | Examples | Decisions |
+| --- | --- | --- | --- |
+| Shopify stage 2 (#77) | 0061 | SPC11... | 51-55 |
+| Payroll P5 bank files and payslips (#79) | 0063 | PBF1-7, PSLIP1-6 | - |
+| Payroll P6 payday filing file | 0064 | PF1-PF9 | 56-65 |
+| RDTI R3 claim report | 0065 | RD28-RD42 | 66-75 |
+| CRM editable stages, forecasts, quotas | 0066 | CRMS1-CRMS11 | 76-90 |
+| Payroll P9 timesheets | 0067 | TS1-TS11 | 91-101 |
+| Payroll P10 payroll reports | none | PREP1-PREP8 | 102-111 |
+| Payroll P11 workforce budgets | 0068 | WB1-WB7 | 112-123 |
+| Payroll P12 extra pays, back pay, final pays | 0069 | XP1-XP14 | 124-137 |
+| Payroll P8 Holidays Act leave | 0070 | HL1-HL42 (tested) | 138-167 |
+| Leave calls, opening balances, leave requests | 0071 | HL43-HL51 | 168-181 |
+| Leave liability posting | 0072 | HL52-HL56 | 182-187 |
+
+**Next free tenant migration: 0073. Next decision number: 188.**
+
+No worked example is marked approved; Jess still needs to approve them.
+Jess asked for open questions to be decided by law, then NetSuite, then
+Xero, and recorded in `docs/DECISIONS.md` rather than left for her.
+
+**The next job (not started):** the four leave liability questions under
+HL56. A builder researched them (PBE IPSAS 39, read 2 Oct 2026 through a
+summarising fetch tool, xrb.govt.nz/dmsdocument/5446) and proposed these
+calls; record them as decisions 188+, write examples HL57+, then build:
+1. **Sick leave stays out of the liability**: PBE IPSAS 39 para 17 says it's
+   material only if unused sick leave can be taken as annual leave, which
+   NZ law doesn't allow. Document only.
+2. **Finished employees stay in the liability** until their final pay run
+   is approved and its pay date is on or before the posting date, valued at
+   the holiday pay owed on finishing stored on that final pay; with no
+   approved final pay, the row is a problem that blocks posting. HL53's
+   figures need rewriting (Hemi's 5,302.89 at 31 Oct). Source: para 11.
+3. **Employer KiwiSaver on leave is included** (paras 9, 53-54), at the
+   employee's employer rate, gross of ESCT, enrolled employees only, as its
+   own line pair. Needs migration 0073.
+4. **Month-end reminder: yes**, shown where existing reminders appear, to
+   bookkeepers with payroll access, worked out from the postings (no typed
+   status). Find where the RDTI reminders and Period close live first.
+
+**Still waiting on Jess or the outside world:**
+- Put a payday filing file through myIR's "Check your employment
+  information file" service before relying on it.
+- Ask IRD how recovering advance holiday pay over the 8% on leaving is
+  taxed (decision on Q3 in 168-181; still refused until then).
+- IRD's extra pay example 1 is a cent off its own steps (Tohyee follows the
+  steps; XP questions).
+- Add 2028 public holidays once Employment NZ publishes them (Matariki is
+  Fri 14 Jul 2028).
+- None of the new screens has been opened in a browser yet: click through
+  Payroll (pay runs, bank files, payslips, payday filing, timesheets,
+  reports, workforce budget, leave, leave requests, liability), Tax › R&D
+  claim report and CRM › Stages / Forecasts.
+- Some sources (IRD PDFs, Employment NZ, legislation.govt.nz) were read
+  only through a summarising fetch tool; check the quoted figures against
+  the real pages.
+
+**Open questions still listed in the docs** (each section's "Questions for
+Jess"): mostly agree-or-change calls; the payroll ones are after PF9, TS11,
+PREP8, WB7, XP14 and the HL section.
+
 ## Where things stand
 
 - **Latest release: v0.3.0** (1 Oct 2026), published with the Windows
@@ -69,7 +142,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0073 (0058-0072 used or reserved: 0072 posting the leave liability on `claude/payroll-leave-liability-posting`, 0071 opening leave balances and leave requests P8b (merged), 0070 Holidays Act leave P8, 0069 extra pays P12, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11).
+Next free tenant migration number: 0073 (0058-0072 used: 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -202,7 +275,7 @@ only be run by certain people. Each item is its own branch and PR.
       employee details file (decision 64), EI amendments, gateway filing.
       **No file has been through myIR's "Check your employment information
       file" service yet**: do that before relying on it.
-- [ ] **P7 Holidays Act leave, plan** (#68): HL1-HL42 in
+- [x] **P7 Holidays Act leave, plan** (#68): HL1-HL42 in
       `docs/ACCOUNTING-EXAMPLES.md`, reworked to follow decisions 7-29 in
       `docs/DECISIONS.md` (built for the Holidays Act 2003 until each
       employee's first pay period on or after 6 Aug 2028). Waiting for
