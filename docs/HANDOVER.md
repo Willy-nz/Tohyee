@@ -115,7 +115,11 @@ only be run by certain people. Each item is its own branch and PR.
 - [ ] **P4 Paying** wages and IRD. Needs P3.
 - [ ] **P5 Payslips** (PDF and email). Needs P3.
 - [ ] **P6 Payday filing file** for myIR. Needs P3.
-- [ ] **P7 Holidays Act leave, plan** (#68). Running.
+- [ ] **P7 Holidays Act leave, plan** (#68): HL1-HL42 in
+      `docs/ACCOUNTING-EXAMPLES.md`, reworked to follow decisions 7-29 in
+      `docs/DECISIONS.md` (built for the Holidays Act 2003 until each
+      employee's first pay period on or after 6 Aug 2028). Waiting for
+      Jess to approve the examples.
 - [ ] **P8 Holidays Act leave, build** what P7 specifies and Jess approves,
       including leave liability by department. Needs P3 and P7.
 - [ ] **P9 Timesheets**: hours by project, department or R&D activity
