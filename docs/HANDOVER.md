@@ -57,8 +57,9 @@ Set them in the Agents box before sending each task:
 | Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12) | none (Agents tab) | not opened yet | `copilot/sales-orders-stage-1` | 0055 |
 | Sales platform connections, stage 1: connector framework, Shopify customers and products (CRM roadmap items 27-28) | none (Agents tab) | not opened yet | `copilot/sales-platform-connections-stage-1` | 0056 |
 | RDTI R1: R&D Tax Incentive worked examples and questions (docs only, RD1-RD27) | none (Agents tab) | #72 | `copilot/rdti-stage-r1-plan-tracking` | none |
+| Payroll P3: pay items and pay runs (calculate, approve, post one journal split by allocation, void; examples PRUN1-PRUN11) | #60 | #76 | `copilot/issue-60-pay-items-pay-runs` | 0058 |
 
-Next free tenant migration number: 0058 (0057 reserved for payroll P1b).
+Next free tenant migration number: 0059 (0057 reserved for payroll P1b, 0058 for payroll P3).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -100,19 +101,31 @@ only be run by certain people. Each item is its own branch and PR.
       Jess). Checked against IRD's site 1 Oct 2026. Before each 1 April, add
       the next year's file (README in that folder; a scheduled task checks
       every 5 April).
-- [ ] **P3 Pay runs**, now including:
-      - **Pay items** (earnings, deductions, reimbursements, employer
-        contributions), each with its own expense or liability account and
-        its tax treatment from IRD's specification, so wages, overtime,
-        allowances, bonuses, holiday pay, employer KiwiSaver and ESCT report
-        separately.
-      - Posting split by each employee's allocation (or a per-pay-item
-        override), tagged with Department/Class/Location/project/R&D
-        activity, so profit and loss and **budget vs actual by department**
-        work from the existing budgets.
-      - Draft → approve, with the approver different from the preparer when
-        the organisation turns that on.
-      Needs P1b and P2.
+- [ ] **P3 Pay runs** (migration 0058). Draft PR #76; examples
+      PRUN1-PRUN11 await Jess (questions in the PR and under PRUN11).
+      Built:
+      - **Pay items** (earnings, after-tax deductions, reimbursements,
+        employer KiwiSaver), each with its own expense or liability account
+        and its tax treatment from IRD's specification, so wages, overtime,
+        allowances, holiday pay, employer KiwiSaver and ESCT report
+        separately. Admins add allowances, overtime, holiday pay,
+        reimbursements and deductions.
+      - Pay runs per pay group and period: draft (calculated live) →
+        approve, posting one journal dated the pay date, split by each
+        employee's allocation on the pay date, tagged with
+        Department/Class/Location/project, so profit and loss and **budget
+        vs actual by department** work from the existing budgets. Journal
+        lines never name employees; the per-employee split is in
+        `payroll_pay_run_postings` (payroll access only). Void with a
+        reversing journal.
+      - The approver different from the preparer when the organisation turns
+        that on (Payroll › Pay items).
+      Not built in P3: a per-pay-item allocation override and the R&D
+      activity tag (waits for the RDTI register); other employer
+      contributions; adding an employee back to a draft once left out
+      (delete and start the draft again). Refused rather than guessed:
+      extra pays (P12), back pay and final pays (P12), leave (P8), child
+      support, payroll giving, pay rate changes inside a period.
 - [ ] **P4 Paying** wages and IRD. Needs P3.
 - [ ] **P5 Payslips** (PDF and email). Needs P3.
 - [ ] **P6 Payday filing file** for myIR. Needs P3.

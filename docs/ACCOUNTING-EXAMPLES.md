@@ -7896,6 +7896,11 @@ Payroll deductions payable**.
     on other days (e.g. the 15th to the 14th)?
 11. **Pay date before the period ends** (paying in advance) is allowed; a
     pay date before the period starts is refused. Agreed?
+12. **Leaving someone out of a draft** can't be undone on that draft (delete
+    the draft and start again). Is a way to add someone back needed?
+13. **Splitting one pay item differently** from the employee's allocation
+    (e.g. overtime always to one department) isn't built. Needed before
+    timesheets (P9)?
 
 ## Holidays Act leave (examples not yet approved by Jess)
 
