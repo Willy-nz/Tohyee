@@ -138,6 +138,7 @@ describeWithDatabase("ledger", () => {
         "ledger_fx_revaluation_runs",
         "ledger_journal_lines",
         "ledger_journals",
+        "sales_platform_sync_log",
         "stock_transfers",
       ].map((table) => [table, UPDATE_DELETE_TRUNCATE]),
     );

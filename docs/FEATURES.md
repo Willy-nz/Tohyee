@@ -768,6 +768,34 @@ that something happened.
   Not built: attachments over 3 MB through Microsoft
   (Graph's upload sessions), and tracking whether the email was opened
   (never: no tracking pixels).
+- **Sales platform connections, stage 1: Shopify customers and products**
+  (Settings › Sales platforms; SPC1-SPC10, examples not yet approved by
+  Jess). **Not tried against a real Shopify store**: the tests use
+  Shopify-shaped responses (Admin GraphQL API 2026-07) and webhooks signed
+  in the tests. A general connector framework (Shopify is the first
+  connector): per-organisation connections with the credentials encrypted
+  with TOHYEE_SECRET_KEY, status, last sync and last error; links from the
+  platform's records to contacts and items so nothing is brought in twice;
+  a sync log everyone can read; a webhook address per connection that
+  checks the platform's signature before anything else; and a catch-up
+  sync every 15 minutes (off with TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER=off)
+  that pauses a store after three failures in a row. Admins connect a store
+  with a Dev Dashboard app's client ID and secret (Shopify's way since
+  1 Jan 2026) or an older custom app's Admin API access token and API secret
+  key; only `read_customers` and `read_products` are accepted, and a token
+  that can change the store is refused. Then: test the connection, choose
+  customers and/or products, **Sync now**, and **Disconnect** (the contacts,
+  items and log stay; the credentials, the links and Shopify's webhooks
+  go). Customers become contacts marked as customers, linked to an existing
+  contact with the same email (ignoring case); variants become non-stock
+  items, linked to an existing item with the SKU as its code. Unclear ones
+  are skipped with the reason (two contacts with the email, a contact with
+  the name but another email, no SKU). Shopify's changes are copied unless
+  someone changed that value in Tohyee, which is kept and logged. Prices
+  are copied only from a store in the base currency whose prices exclude
+  tax. Customer and product create/update webhooks are handled once each
+  (a repeated delivery does nothing) and need a public https address
+  (Settings › Remote access). Nothing posts to the ledger.
 - **Phone access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):
@@ -854,6 +882,10 @@ isn't acceptable, because people would trust it:
 - an import or reverse-charge tax code (imported services under the
   reverse charge, EX16-EX25), and a default purchase tax code on expense
   claims (their suppliers aren't contacts), cash coding and bank rules
+- sales platforms (SPC1-SPC10): Shopify orders, refunds and payouts (orders
+  will become sales orders, then invoices, once sales orders are built),
+  WooCommerce, Square and Stripe, customers' addresses and companies,
+  stock levels, and anything written back to the store
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)
 - on sales orders (SO1-SO12, stage 1): reserving stock (committed

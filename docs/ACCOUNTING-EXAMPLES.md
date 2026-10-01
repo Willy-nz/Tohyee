@@ -38,6 +38,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/stock.test.ts` (ST1-ST12) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM10) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
+  `tests/integration/sales-platforms.test.ts` (SPC1-SPC10) and
   `tests/integration/crm-custom-fields.test.ts` (CRMF1-CRMF12, not yet
   approved) and
   `tests/integration/reports-ledger.test.ts` (AGP1-AGP3, ATX1-ATX5,
@@ -84,7 +85,10 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/payroll-calculations.test.ts` and
   `tests/unit/payroll-ird-tables.test.ts` IRD's payroll rates and
   calculations (PR1-PR16), and `tests/unit/payroll-allocation.test.ts`
-  the payroll % split (PE3-PE5)
+  the payroll % split (PE3-PE5), and `tests/unit/sales-platforms.test.ts`
+  the webhook signature check, Shopify record shapes and which value is kept
+  (SPC2, SPC3, SPC5, SPC6, SPC8), and `tests/unit/sales-platforms-screen.test.ts`
+  the sync log on the settings screen (SPC10)
 
 ## NZ payroll — employee records (examples not yet approved by Jess)
 
@@ -4107,6 +4111,199 @@ Ngata (aroha@manukavets.nz); Jess connects jess@glimmers.nz.
 - **MAIL9** Disconnecting removes the account and its synced emails and
   meetings from the timeline. Three failed syncs in a row pause it with the
   last error shown.
+
+## Sales platform connections (examples not yet approved by Jess)
+
+Jess sells through Shopify and asked (1 Oct 2026) for Tohyee to connect to
+sales platforms: Shopify first, then WooCommerce, Square and Stripe. The
+plan is Shopify order → sales order → invoice, but sales orders are being
+built separately, so **this first stage brings in only customers and
+products, and posts nothing to the ledger**. The connector framework
+(connections, the record links, the sync log, webhooks and the catch-up
+sync) is shared, so other platforms can be added as more connectors.
+
+The IDs are **SPC1-SPC10**: the brief suggested SP1, SP2..., but SP1-SP8
+are already the supplier payment examples.
+
+**This hasn't been tried against a real Shopify store.** The tests use
+recorded Shopify-shaped responses and webhooks signed in the tests, like the
+mail sync's.
+
+What Shopify says (shopify.dev and help.shopify.com can't be opened from the
+sandbox these were written in; the rules below come from Shopify's own
+open-source app library,
+[Shopify/shopify-app-js](https://github.com/Shopify/shopify-app-js), and
+web searches of Shopify's pages, so check them against the pages linked):
+
+- **Access**: a store owner makes a custom app and gives it an Admin API
+  access token
+  ([custom apps](https://help.shopify.com/en/manual/apps/app-types/custom-apps)).
+  Shopify stopped new custom apps being made in the store admin from
+  1 January 2026; ones made before then keep their access token (it starts
+  `shpat_`) and API secret key. New custom apps are made in Shopify's Dev
+  Dashboard, which gives a **client ID and client secret**; the app then
+  asks the store for an access token itself (the
+  [client credentials grant](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/client-credentials-grant),
+  which lasts about 24 hours and only works when the app and store belong
+  to the same organisation). Tohyee accepts either: an access token with
+  the app's API secret key, or a client ID and secret.
+- **API**: the Admin GraphQL API, version **2026-07**
+  ([Admin GraphQL API](https://shopify.dev/docs/api/admin-graphql/2026-07)),
+  at `https://{store}.myshopify.com/admin/api/2026-07/graphql.json` with the
+  `X-Shopify-Access-Token` header. Customer `email` and `phone` are
+  deprecated in this version, so Tohyee reads `defaultEmailAddress` and
+  `defaultPhoneNumber`.
+- **Scopes** (read-only only): `read_customers` and `read_products`
+  ([access scopes](https://shopify.dev/docs/api/usage/access-scopes)). Tohyee
+  never asks for a write scope and never changes anything in the store.
+- **Webhooks**: Shopify signs each delivery with the app's secret (the API
+  secret key, or the client secret): the `X-Shopify-Hmac-SHA256` header is
+  the base64 HMAC-SHA256 of the raw body
+  ([verifying webhooks](https://shopify.dev/docs/apps/build/webhooks/subscribe/https)).
+  Each delivery has an `X-Shopify-Webhook-Id`, which is the same if Shopify
+  sends it again. Webhooks set up by hand in the store's notification
+  settings are signed with a different key, so Tohyee subscribes itself
+  (`webhookSubscriptionCreate`), and only when the server has a public
+  https address (Settings › Remote access). Without one, the catch-up sync
+  still runs every 15 minutes.
+
+The rules (our choice where Shopify and Jess are silent):
+
+- An admin connects a store with its address (`name.myshopify.com`) and
+  either an access token and API secret key, or a client ID and secret.
+  Tohyee checks them by reading the shop's name, currency and whether its
+  prices include tax before saving anything; then they're stored encrypted
+  with TOHYEE_SECRET_KEY (without it, connecting is refused) and never shown
+  again. A store can only be connected once at a time.
+- The admin chooses what to sync: **customers** (into contacts, as
+  customers) and **products** (each variant into an item). Each Tohyee
+  record linked to a Shopify record is remembered, so nothing is brought in
+  twice.
+- **Matching**: a Shopify customer links to the one active contact with
+  the same email (ignoring case). A variant links to the item whose code is
+  the variant's SKU (ignoring case). Anything else that isn't clear is
+  skipped and logged, never guessed: no email match and a contact with the
+  same name already exists; more than one contact with that email; a
+  record already linked to another Shopify record; a variant with no SKU,
+  or a SKU that can't be an item code; an archived contact or item.
+  Otherwise a new contact (a customer) or a new **non-stock** item is
+  added. A new item's name is the product's title, followed by " - " and
+  the variant's title unless Shopify calls it "Default Title".
+- **What's copied**: a contact's name, email and phone; an item's name and
+  sale price. The **sale price is only copied when the store's currency is
+  the organisation's base currency and its prices exclude tax**, because
+  Tohyee's item prices exclude GST; otherwise it's logged as not copied
+  (see the questions below). Addresses, countries and stock levels aren't
+  copied. An item's code isn't changed after it's linked.
+- **Never overwriting what someone changed**: Tohyee remembers the value
+  Shopify last had for each copied field. When Shopify changes a field and
+  Tohyee still has the value Shopify last had, Tohyee's is updated; when
+  someone changed it in Tohyee, Tohyee's is kept and the log says so. When
+  a record is first linked, blank Tohyee fields are filled and different
+  ones kept (and logged).
+- **Webhooks** (customer and product create and update) are checked
+  against the connection's secret before anything is read from them; a
+  delivery that fails the check is refused (401) and nothing is stored or
+  logged. A delivery already received (same webhook ID) is acknowledged
+  and does nothing. A change older than the last one seen is ignored.
+- **The sync log** lists, newest first, what each sync and webhook did:
+  created, linked, updated, kept Tohyee's value, skipped (with why) and
+  errors. Syncs run every 15 minutes (off with
+  TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER=off) or on **Sync now**; each fetches
+  what changed since the last one. A failed sync records its error and is
+  tried again next time; three failures in a row pause the connection until
+  an admin syncs it successfully.
+- **Disconnecting** removes the credentials, the cached access token and
+  the links between Shopify and Tohyee records, and unsubscribes the
+  webhooks it can. Contacts and items brought in stay, and so does the
+  sync log. Connecting the same store again matches by email and SKU again.
+- Admins (and owners) connect, test, change what's synced, sync now and
+  disconnect; everyone in the organisation (viewers up) can see the
+  connections and the sync log. Nothing here touches the ledger.
+
+Setup: base currency NZD. Active contact **Aroha Ngata**
+(aroha@manukavets.nz, a customer, no phone) and **Kiri Walker** (no email).
+Item **CANDLE-L** "Large soy candle", non-stock, sale price **20.00**.
+Shopify store glimmers.myshopify.com, "Glimmers", NZD, prices exclude tax.
+
+- **SPC1** Connecting checks the credentials (the shop's name, Glimmers,
+  is read back) and stores the access token and secret encrypted; the
+  connection shows the store, its currency, "prices exclude tax" and what's
+  synced, never the secrets. Wrong credentials (Shopify says 401) are
+  refused and nothing is stored; without TOHYEE_SECRET_KEY connecting is
+  refused; connecting glimmers.myshopify.com a second time is refused.
+  If the store refuses one of the four webhooks (PRODUCTS_CREATE), the two
+  already made are removed again, the connection is still connected with a
+  note saying why webhooks aren't on, and testing the connection later sets
+  up all four once (testing again doesn't add more).
+- **SPC2** Customers sync: Shopify customer 1001 "Aroha Ngata",
+  AROHA@manukavets.nz, +64 21 555 0101 links to the existing contact Aroha
+  Ngata (email ignoring case) and fills her blank phone; 1002 "Tama Rewi",
+  tama@example.co.nz, adds a new customer contact Tama Rewi; 1003 "Kiri
+  Walker" with no email is skipped (there's already a Kiri Walker and
+  nothing to match them by). The log has linked, updated (phone), created
+  and skipped lines.
+- **SPC3** Products sync: product "Large candle" with one variant
+  (Default Title, SKU candle-l, 20.00) links to CANDLE-L and keeps its name
+  "Large soy candle" (logged as kept); product "Wax melts" with variants
+  Vanilla (SKU MELT-VAN, 8.50) and Lavender (no SKU) adds non-stock item
+  MELT-VAN "Wax melts - Vanilla" at **8.50** and skips Lavender (no SKU).
+- **SPC4** Syncing again with nothing changed in Shopify changes nothing
+  and adds nothing: no new contacts, items or log lines.
+- **SPC5** Changes on both sides: someone renames Tama Rewi in Tohyee to
+  "Tama Rewi (wholesale)". Shopify then changes Tama's last name to
+  "Rewi-Smith" and phone to +64 22 555 0102, and Large candle's price to
+  22.00. The next sync updates Tama's phone and CANDLE-L's sale price to
+  **22.00**, and keeps "Tama Rewi (wholesale)", logging that Tohyee's name
+  was kept because it was changed in Tohyee.
+- **SPC6** A store whose prices include tax: MELT-VAN is added with **no
+  sale price** and the log says the price wasn't copied because Shopify's
+  prices include tax. The same for a store in AUD.
+- **SPC7** Webhooks: a `customers/create` webhook for customer 1004 "Mere
+  Tane", signed with the connection's secret, adds the contact; the same
+  delivery again (same webhook ID) is acknowledged and does nothing; a
+  `products/update` webhook for "Wax melts" with Vanilla at 9.00 updates
+  MELT-VAN's price to **9.00**. A webhook whose change is older than the
+  last one seen for that record changes nothing.
+- **SPC8** A bad signature is refused: a webhook signed with another
+  secret, one whose body was changed after signing, one with no signature,
+  one for another store's domain and one to an unknown connection address
+  are all refused with 401, and no contact is added and nothing is logged.
+- **SPC9** Disconnecting keeps records: Aroha, Tama, Mere, CANDLE-L and
+  MELT-VAN stay as they are, the credentials and links are gone, the log is
+  kept with a "disconnected" line, and the old webhook address refuses
+  deliveries. Connecting the store again and syncing links Aroha and
+  CANDLE-L again by email and SKU, without adding duplicates.
+- **SPC10** Roles: a viewer sees the connection and its sync log, but
+  connecting, testing, changing what's synced, syncing now and
+  disconnecting are refused (403); an admin can do them all. Nothing is
+  posted to the ledger by any of this (no journals before or after).
+
+### Not supported yet (refused rather than guessed)
+
+- Shopify orders, refunds and payouts; WooCommerce, Square and Stripe.
+- Copying sale prices from a store whose prices include tax, or whose
+  currency isn't the base currency.
+- Addresses, countries (which choose an export's tax code, EX1), stock
+  levels and costs.
+- Deleting or archiving a Tohyee record when it's deleted in Shopify (the
+  link stays; nothing happens).
+- Matching by name, or anything other than one clear email or SKU match.
+
+### Questions for Jess (sales platform connections)
+
+- Should Shopify orders reach the accounts **per order** (each order a
+  sales order, then an invoice) or **per payout** (a summary of the
+  payout's sales, fees and refunds)?
+- Your store's prices probably include GST. Should Tohyee work out the
+  price excluding GST (e.g. 23.00 → 20.00 at 15%), and what about products
+  that aren't taxed?
+- Should products with tracked inventory become **stock** items rather than
+  non-stock?
+- Should a customer's country come across, so overseas customers get the
+  tax code for exports?
+- Is your Shopify app an older one made in the store admin (an access
+  token), or a new one from the Dev Dashboard (client ID and secret)?
 
 ## Custom fields on CRM records (examples not yet approved by Jess)
 
