@@ -52,8 +52,8 @@ that something happened.
   shares out the cents so the parts always add back to the whole. **Payroll
   access**: only members an admin has given it to (bookkeeper or higher) can
   see or change any of this; the first owner has it to start with. Pay runs
-  are below; paying wages and IRD, payslips, payday filing, payroll reports
-  and Holidays Act leave are not built.
+  and paying wages and IRD are below; payslips, payday filing, payroll
+  reports and Holidays Act leave are not built.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
@@ -902,6 +902,26 @@ that something happened.
   negative amounts, pay rate changes inside a period, tax codes and
   KiwiSaver rates IRD's rates don't support, and employer contributions
   other than KiwiSaver.
+- **Paying wages and IRD** (payroll stage P4, PPAY1-PPAY12, not yet approved
+  by Jess; bookkeeper role and payroll access). **Wages** (on an approved pay
+  run, "Wages paid"): record the net pay leaving a bank or credit card
+  account in NZD, dated on or after the pay date, as one payment for the
+  pay run or one per employee (so each bank line matches), in full or in
+  part, never more than what's unpaid. Each posts Dr Wages payable / Cr the
+  bank (WAGES-n), its lines saying "Net pay", never whose; it shows as a
+  match suggestion on the bank statement like any payment. Voiding posts the
+  exact reversal. **IRD** (Payroll › IRD payments): per IRD period (monthly,
+  or twice a month, set under Payroll › Pay items), what the approved pay
+  runs paid in it owe for PAYE (incl. the ACC earners' levy), student loan,
+  KiwiSaver and ESCT, what's been paid and what's owing, with IRD's due date
+  (20th of the next month; twice a month: 20th and 5th, 16-31 December by
+  15 January; a weekend shows the Monday IRD accepts). Pay any part of each
+  liability up to what's owing (IRD-n: Dr each liability, Cr the bank), and
+  void payments. Undo in order: a pay run can't be voided while it has wage
+  payments or its IRD period has IRD payments, and a payment matched on the
+  bank statement must be unreconciled first. Locked periods apply. Not built:
+  a bank direct-credit file (no bank batch format exists yet), public
+  holidays in due dates, IRD penalties and interest, child support.
 
 - **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
   RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;
@@ -986,9 +1006,9 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: paying wages and IRD, payslips, payday filing, Holidays Act
-   leave, timesheets and payroll reports (employee records, IRD rates and
-   calculations, pay items and pay runs are built).
+4. NZ payroll: payslips, payday filing, Holidays Act leave, timesheets and
+   payroll reports (employee records, IRD rates and calculations, pay items,
+   pay runs and paying wages and IRD are built).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,
