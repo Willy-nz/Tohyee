@@ -938,6 +938,15 @@ export async function correctJournal(
         `Journal #${original.id} was posted by a payroll payment (${payment.rows[0].reference}), so it can't be corrected in the ledger. To undo it, void the payment under Payroll.`,
       );
     }
+    const liability = await tx.query<{ reference: string }>(
+      "select 'LEAVELIAB-' || posting_number as reference from payroll_leave_liability_postings where journal_id = $1 or void_journal_id = $1",
+      [original.id],
+    );
+    if (liability.rows[0]) {
+      throw new ValidationError(
+        `Journal #${original.id} was posted by a leave liability posting (${liability.rows[0].reference}), so it can't be corrected in the ledger. To undo it, void the posting under Payroll › Leave.`,
+      );
+    }
     throw new ValidationError(
       `Journal #${original.id} was posted by a pay run (${original.reference}), so it can't be corrected in the ledger. To undo it, void the pay run.`,
     );

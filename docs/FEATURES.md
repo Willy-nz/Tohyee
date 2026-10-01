@@ -1171,7 +1171,7 @@ that something happened.
   leave moves the anniversary unless a written agreement to count it is
   attached. Payroll › Leave: balances, bookings, public holidays and
   decisions, cash-ups, the **leave liability report** by Department with
-  the running 8% (shown, never posted), settings; each employee's
+  the running 8% (posted to the ledger since 2 Oct 2026, below), settings; each employee's
   printable **holiday and leave record** (s 81) with CSV. Refused rather
   than guessed: deducting advance holiday pay over the 8% (IRD's tax
   treatment not confirmed, decision 170), back pay over leave (decision
@@ -1201,6 +1201,23 @@ that something happened.
   approver (the next pay run pays it), or rejects it with a reason; the
   employee changes or withdraws it until then. Days and hours only, never
   pay; family violence leave shows as "Special leave" to approvers.
+- **Posting the leave liability** (2 Oct 2026, HL52-HL56, decisions 177
+  and 182-187, tenant migration 0072; payroll access and the bookkeeper
+  role). Payroll › Leave › Liability: "Post leave liability" at a date
+  makes one journal (LEAVELIAB-n) for the change since the last posting
+  not voided: the liability report's total (annual holidays entitled to,
+  the running 8%, untaken alternative holidays; never sick, bereavement
+  or family violence leave) by Department, Dr leave expense / Cr employee
+  entitlements, or the other way when it falls, tagged with the
+  Department, never naming anyone. Leave paid in pay runs still goes to
+  wages; the next posting takes the fall. The two accounts are payroll
+  settings (Payroll › Pay items, admins); the entitlements account is
+  locked while a posting has left a liability in it. Refused: a date
+  before the last posting, a locked period, no accounts, a problem on any
+  row of the report (named), nothing to post. Only the latest posting is
+  voided, with the reversing journal; the ledger won't correct them.
+  Audited without figures. Not in it: sick leave carried over and the
+  employer KiwiSaver on the leave (questions for Jess).
 
 ## Not built yet, on purpose
 
@@ -1260,12 +1277,12 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: posting the leave liability to the ledger (designed,
-   examples HL52-HL54, decision 177), IRD's employee details file, and
+4. NZ payroll: IRD's employee details file, and
    the Employment Leave Act 2026 from 6 Aug 2028 once MBIE's guidance is
    out (employee records, IRD rates and calculations, pay items, pay runs,
    paying wages and IRD, bank files, payslips, the payday filing file,
-   timesheets, payroll reports and Holidays Act leave are built).
+   timesheets, payroll reports, Holidays Act leave and posting the leave
+   liability are built).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,

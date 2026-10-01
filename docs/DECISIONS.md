@@ -1393,7 +1393,8 @@ address below; Xero may have changed them since.
      expects to pay as a result of the unused entitlement that has
      accumulated at the end of the reporting period". (PBE IPSAS 39, for
      not-for-profits, has the same rules for short-term employee benefits:
-     not read here, **unverified**.) NetSuite has no NZ leave; Xero NZ only
+     not read here, **unverified**; read on 2 Oct 2026 for the build,
+     decision 187.) NetSuite has no NZ leave; Xero NZ only
      reports it ([Leave Liability report](https://central.xero.com/s/article/Employee-Leave-Liability-report):
      "summarises what you owe an employee on a specific date"), leaving the
      journal to the bookkeeper. Design: "Post leave liability" at a date
@@ -1449,3 +1450,80 @@ address below; Xero may have changed them since.
      agreement is the cash-up's event, the way the start of the holiday is
      for s 21(2), so OWP is taken at the date agreed and AWE to the end of
      the last pay period before it. Unchanged.
+
+## Posting the leave liability, built (2 Oct 2026; decisions 182-187; examples HL52-HL56)
+
+Decision 177 and HL52-HL54 settled what the journal is. Building it left
+the calls below, made by the rule law → NetSuite → Xero. Neither NetSuite
+(no NZ leave) nor Xero NZ (the [Leave Liability report](https://central.xero.com/s/article/Employee-Leave-Liability-report)
+only reports; the journal is the bookkeeper's) posts it, so beyond the
+standards these follow how Tohyee's other payroll postings behave (pay
+runs, wage and IRD payments: P3, P4). HL55 and HL56 were added for them;
+like HL52-HL54 they're **not approved by Jess**.
+
+182. **A posting is the change since the last posting not voided, by
+     Department.** For each Department the report's total at the date
+     less what that posting left for it; Departments only in the earlier
+     posting fall to 0.00 (HL53). The journal is dated the posting's date,
+     reference LEAVELIAB-n, described "Leave liability at 11 Oct 2026",
+     lines "Leave expense" and "Employee entitlements" (HL52). A date
+     before the last posting not voided is refused (the same date is
+     allowed, after a pay run is voided and approved again, say); a date
+     when nothing has changed is refused as "Nothing to post" (HL55), so
+     there are no empty journals. When only the split between Departments
+     changed, the journal moves it and the posting's change is 0.00.
+     Adjusting by the change (not reversing the last posting and posting
+     the whole liability again) is what decision 177 asked for and keeps
+     one journal per date.
+183. **Undone in order, never edited (HL54, HL55).** Only the latest
+     posting not voided can be voided (the later one measured from it),
+     like wage payments before their pay run (PPAY12): the exact reversal
+     of its journal on the void date, which can't be before the posting's
+     date or in a locked period. The next posting then measures from the
+     one before it. The ledger refuses to correct these journals (as pay
+     runs' journals), and the database refuses changes and deletes except
+     voiding.
+184. **The accounts are payroll settings, set by admins** (Payroll › Pay
+     items, beside the other payroll settings), like pay items' accounts
+     (PRUN10). The leave expense is an expense or direct costs account;
+     the employee entitlements account a current liability (para 11 of
+     NZ IAS 19 and PBE IPSAS 39 recognises a liability; asking for a
+     current one because the benefits are short-term is a design choice);
+     neither a control account, both in the base currency. Each posting
+     keeps the accounts it used. The employee entitlements account can't
+     change while the last posting not voided left a liability in it
+     (the next posting would measure from a balance in another account);
+     post to 0.00 or void first (HL56). The leave expense account can
+     change at any time: it only moves where later changes go.
+185. **Departments are the report's (decision 153: the biggest line of the
+     cost allocation at the date), as tracking tags on both lines** when
+     advanced features are on, so profit and loss and the balance sheet by
+     Department both see it (HL52 tags both). With advanced features off
+     every Department is one untagged pair of lines. When expense lines
+     need a Department and someone in the report has none, the posting is
+     refused naming them (as pay runs do, PRUN1).
+186. **Who and what's recorded.** Posting and voiding need payroll access
+     and the bookkeeper role (as payroll reports, decision 105); viewing
+     the postings needs the same, as they hold totals by Department, which
+     can be one person's. Audit events record the reference, date,
+     journal and number of Departments, never an amount, and the journal's
+     own audit event leaves its total out (origin payroll, as PRUN9).
+187. **What's in the liability (checked).** PBE IPSAS 39 (XRB, issued May
+     2017, amended to 28 Feb 2025, [dmsdocument/5446](https://www.xrb.govt.nz/dmsdocument/5446/),
+     read 2 Oct 2026 through the summarising fetch tool, its quotes as
+     returned) has the same rules as NZ IAS 19: para 11 recognises "the
+     undiscounted amount of short-term employee benefits expected to be
+     paid in exchange for that service", para 13 accumulating paid
+     absences "when the employees render service that increases their
+     entitlement", para 16 measures "the additional amount that the entity
+     expects to pay as a result of the unused entitlement that has
+     accumulated at the end of the reporting period". So not-for-profits
+     post the same journal; decision 177's "unverified" is lifted for
+     these paragraphs. Para 15 says accumulating absences that don't vest
+     (sick leave carried over) are an obligation too, measured for the
+     chance they're used: Tohyee still leaves sick leave out (decision 177:
+     the estimate is the organisation's); that's a question for Jess. The
+     posting is refused while any row of the report has a problem (HL54),
+     so a part of the liability is never quietly left out. Someone who
+     finished on or before the date isn't in the report (what they're
+     owed is in their final pay), as built in P8.

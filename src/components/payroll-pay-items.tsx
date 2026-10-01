@@ -153,6 +153,13 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
       settings.reload,
     );
 
+  const changeLeaveAccount = (field: "leaveExpenseAccountCode" | "leaveLiabilityAccountCode", code: string) =>
+    void run(
+      () => api("/api/payroll/settings", { method: "PUT", body: { organisationId, [field]: code || null } }),
+      field === "leaveExpenseAccountCode" ? "Leave expense account saved." : "Employee entitlements account saved.",
+      settings.reload,
+    );
+
   const accountList = accounts.data?.accounts ?? [];
 
   return (
@@ -352,6 +359,43 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
           </Field>
         )}
         {isAdmin ? null : <p className={ui.muted}>Only admins can change this.</p>}
+      </Card>
+
+      <Card
+        title="Leave liability accounts"
+        description="Where Payroll › Leave › Liability posts the leave liability (decision 177): annual holidays, the running 8% and alternative holidays owed, not sick, bereavement or family violence leave. The employee entitlements account can't change while a posting has left a liability in it."
+      >
+        {settings.loading ? <Empty>Loading…</Empty> : settings.error ? <Notice tone="error">{settings.error}</Notice> : (
+          <div className={ui.grid2}>
+            <Field label="Leave expense">
+              {isAdmin ? (
+                <AccountSelect
+                  accounts={accountList}
+                  filter={(account) => account.accountClass === "expense" && account.systemKey === null}
+                  placeholder="Not chosen"
+                  value={settings.data?.settings.leaveExpenseAccountCode ?? ""}
+                  onChange={(code) => changeLeaveAccount("leaveExpenseAccountCode", code)}
+                />
+              ) : (
+                <input disabled value={settings.data?.settings.leaveExpenseAccountCode ?? "Not chosen"} />
+              )}
+            </Field>
+            <Field label="Employee entitlements (current liability)">
+              {isAdmin ? (
+                <AccountSelect
+                  accounts={accountList}
+                  filter={(account) => account.accountType === "current_liability" && account.systemKey === null}
+                  placeholder="Not chosen"
+                  value={settings.data?.settings.leaveLiabilityAccountCode ?? ""}
+                  onChange={(code) => changeLeaveAccount("leaveLiabilityAccountCode", code)}
+                />
+              ) : (
+                <input disabled value={settings.data?.settings.leaveLiabilityAccountCode ?? "Not chosen"} />
+              )}
+            </Field>
+          </div>
+        )}
+        {isAdmin ? null : <p className={ui.muted}>Only admins can change these.</p>}
       </Card>
     </div>
   );

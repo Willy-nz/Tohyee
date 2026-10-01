@@ -549,7 +549,7 @@ describeWithDatabase("payroll: paying wages and IRD (PPAY1-PPAY12)", () => {
       expect((await put(ben, "twice_monthly")).status).toBe(403);
       const changed = await put(mere, "twice_monthly");
       expect(changed.status).toBe(200);
-      expect(changed.body.settings).toEqual({ approverMustDiffer: false, irdPaymentFrequency: "twice_monthly" });
+      expect(changed.body.settings).toEqual({ approverMustDiffer: false, irdPaymentFrequency: "twice_monthly", leaveExpenseAccountCode: null, leaveLiabilityAccountCode: null });
       const first = await period(ben, "2026-10-01");
       expect(first).toMatchObject({ frequency: "twice_monthly", start: "2026-10-01", end: "2026-10-15", dueDate: "2026-10-20", totalFromPayRuns: "1087.04" });
       const overlap = await payIrd(ben, { paymentDate: "2026-11-20", lines: [{ liability: "paye", amount: "1.00" }] });

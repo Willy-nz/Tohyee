@@ -49,7 +49,7 @@ Set them in the Agents box before sending each task:
 
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| Payroll P8b: the leave build's questions decided (168-181), opening balances, leave requests (built by Claude, not merged) | #60 | none yet | `claude/payroll-p8b-leave-calls` | 0071 |
+| Payroll: posting the leave liability (decisions 177, 182-187, HL52-HL56; built by Claude, not merged) | #60 | none yet | `claude/payroll-leave-liability-posting` | 0072 |
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
@@ -58,8 +58,8 @@ overnight (each checked locally with typecheck, lint, unit tests, the full
 integration suite and the build, then by CI on main): P6 payday filing file
 (0064), RDTI R3 claim report (0065), CRM editable stages and forecasts
 (0066), P9 timesheets (0067), P10 payroll reports (no migration) and P11
-workforce budgets (0068), P12 extra pays, back pay and final pays (0069), and P8 Holidays Act leave
-(0070).
+workforce budgets (0068), P12 extra pays, back pay and final pays (0069), P8 Holidays Act leave
+(0070), and P8b opening leave balances and leave requests (0071).
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
@@ -69,7 +69,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0072 (0058-0071 used or reserved: 0071 opening leave balances and leave requests P8b on `claude/payroll-p8b-leave-calls`, 0070 Holidays Act leave P8, 0069 extra pays P12, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11).
+Next free tenant migration number: 0073 (0058-0072 used or reserved: 0072 posting the leave liability on `claude/payroll-leave-liability-posting`, 0071 opening leave balances and leave requests P8b (merged), 0070 Holidays Act leave P8, 0069 extra pays P12, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -237,7 +237,7 @@ only be run by certain people. Each item is its own branch and PR.
       before they're taken, employees booking their own leave (requests
       built in P8b, decision 169), the Employment Leave Act 2026. Screens weren't checked in a browser.
 - [x] **P8b The leave build's questions, opening balances and leave
-      requests** (tenant migration 0071), on `claude/payroll-p8b-leave-calls`
+      requests** (tenant migration 0071), merged from `claude/payroll-p8b-leave-calls`
       (2 Oct 2026). Jess asked Claude to research and decide the 14 leave
       build questions: decisions 168-181 in `docs/DECISIONS.md`
       ("Decided (leave build)" at the end of the HL section). Built, with
@@ -254,11 +254,22 @@ only be run by certain people. Each item is its own branch and PR.
         day to Wellington's (decision 180).
       Still refused (decisions 170-172): advance holiday pay over the 8%
       (ask IRD how the recovery is taxed), back pay over leave (the law
-      isn't clear), paying holidays before they're taken. **Next:** posting
-      the leave liability to the ledger (decision 177, examples
-      HL52-HL54, designed, not built), then 2028's public holidays when
-      Employment NZ publishes them (decision 179). Screens weren't checked
-      in a browser.
+      isn't clear), paying holidays before they're taken. **Next:** 2028's
+      public holidays when Employment NZ publishes them (decision 179).
+      Screens weren't checked in a browser.
+- [x] **Posting the leave liability** (tenant migration 0072), on
+      `claude/payroll-leave-liability-posting` (2 Oct 2026), decisions
+      182-187, examples HL52-HL56 (not approved by Jess; questions at the
+      end of the HL section). Payroll › Leave › Liability: one journal at
+      a date for the change since the last posting not voided, by
+      Department, Dr leave expense / Cr employee entitlements (the other
+      way for a fall), never naming anyone; accounts in payroll settings;
+      refused before the last posting, in a locked period, without the
+      accounts, with a problem on any report row, or with nothing to
+      post; only the latest posting voided (reversing journal). PBE IPSAS
+      39 paras 11, 13, 15 and 16 read (decision 187). Not in it: sick leave carried
+      over, employer KiwiSaver on the leave. Screens weren't checked in a
+      browser.
 - [x] **P9 Timesheets** (tenant migration 0067), merged 2 Oct 2026; examples
       TS1-TS11 await Jess (questions under TS11), decisions 91-101. Built:
       - Payroll › Timesheets: one timesheet per employee per week (Monday to
@@ -575,6 +586,14 @@ wording. Still open:
 - Budget on-costs too (holiday pay, ACC levies, overtime)?
 - A "number of people" on a position line?
 - Compare actuals by pay date (as now) or by period worked?
+
+**Posting the leave liability** (end of the HL section)
+- Sick leave carried over: accrue a typed estimate (PBE IPSAS 39 para 15)
+  or keep it out?
+- Someone finished whose final pay is dated after the posting: keep them
+  in the report until it's approved, or accept the cut-off?
+- Add the employer KiwiSaver on the leave to the liability?
+- A reminder to post at each month end or on Period close?
 
 **Holidays Act leave** (P8): the 14 leave build questions were decided on
 2 Oct 2026 at Jess's request (decisions 168-181, "Decided (leave build)" at

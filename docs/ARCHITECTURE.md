@@ -484,7 +484,7 @@ JSON); a leave problem is kept on `payroll_pay_run_employees.leave_problem`
 and blocks approval like any problem. Balances count only approved pay
 runs' lines, so voiding a pay run gives its leave back. `leave-reports.ts`
 has balances, the s 81 record (with CSV) and the liability report (with
-CSV; decision 28: nothing posted). Payslips read the balances at the
+CSV), which `leave-liability.ts` posts (below). Payslips read the balances at the
 period end; the EI file's hours include leave hours. Routes under
 `/api/payroll/leave/...`, `/api/payroll/employees/[employeeId]/leave`
 (and `/record`) and `/api/payroll/pay-runs/[payRunId]/leave`, all
@@ -509,6 +509,26 @@ balance), `alternativeHolidays()` and `advancePaidSince()` start from them,
 `daysWorkedOrPaid()` counts whole rows' days, and `whyLeaveNotKept()` no
 longer refuses for decision 143 when they exist. A draft for a pay period
 up to the opening date leaves leave alone; one across it is refused.
+
+**Posting the leave liability** (HL52-HL56, decisions 177 and 182-187,
+tenant migration 0072): `src/lib/payroll/leave/liability-posting.ts` is
+pure (the change by Department since the last posting, and the journal
+lines, netted per tracking group); `src/lib/payroll/leave-liability.ts`
+runs `leaveLiabilityReport()` at the date, refuses on any row's problem,
+compares with the last `active` row of `payroll_leave_liability_postings`
+and its append-only `payroll_leave_liability_departments`, and posts one
+journal (origin `payroll`, command source `payroll:leave_liability`,
+reference LEAVELIAB-n, Department tags on both lines) under an advisory
+lock. Voiding only the latest active posting posts the exact reversal
+(`payroll:leave_liability_void`); a trigger allows only that change, and
+`correctJournal()` refuses these journals. The accounts are
+`organisation_settings.payroll_leave_expense_account_id` and
+`payroll_leave_liability_account_id`, read and set through
+`getPayrollSettings()` / `updatePayrollSettings()` in `pay-items.ts`.
+Routes: `/api/payroll/leave/liability/postings` (GET, POST) and
+`/postings/[postingId]/void`, `withPayrollAccess()`. Screens: the
+Liability tab of `payroll-leave.tsx`, and the accounts on
+`payroll-pay-items.tsx`.
 
 **Leave requests** (HL49-HL51, decision 169, migration 0071's
 `payroll_leave_requests`): `src/lib/payroll/leave-requests.ts`, routes
