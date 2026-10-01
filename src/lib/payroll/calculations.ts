@@ -6,6 +6,7 @@ import {
   type Decimal,
   divideTruncated,
   isNegative,
+  isZero,
   mul,
   significantScale,
   sub,
@@ -357,4 +358,177 @@ export function calculateEsct(input: { employerContribution: string; esctRate: s
   }
   const esct = truncate(mul(truncate(contribution, 0), percent(input.esctRate)), 2);
   return { esct: money(esct), netContribution: money(sub(contribution, esct)) };
+}
+
+// Extra pays (payroll stage P12; examples XP1-XP7; decisions 126-131)
+
+/** How an extra pay's income is annualised: the four weeks to its pay date (spec 5.11.1) or the last 2 paid periods on leaving (5.12). */
+export type ExtraPayMethod = "four_weeks" | "end_of_employment";
+
+/** Pays in four weeks that IRD's rules annualise (spec 5.11.1 step 3.1), and by what. */
+const FOUR_WEEK_PAYS: Record<PayFrequency, { count: number; multiplier: string }> = {
+  weekly: { count: 4, multiplier: "13" },
+  fortnightly: { count: 2, multiplier: "13" },
+  "four-weekly": { count: 1, multiplier: "13" },
+  monthly: { count: 1, multiplier: "12" },
+};
+
+/** The last 2 paid periods' multipliers on leaving (spec 5.12; IR335 page 40). */
+const END_OF_EMPLOYMENT_MULTIPLIER: Record<PayFrequency, string> = {
+  weekly: "26",
+  fortnightly: "13",
+  "four-weekly": "6.5",
+  monthly: "6",
+};
+
+const FREQUENCY_WORDS: Record<PayFrequency, string> = {
+  weekly: "weekly",
+  fortnightly: "fortnightly",
+  "four-weekly": "four-weekly",
+  monthly: "monthly",
+};
+
+function pays(count: number, frequency: PayFrequency): string {
+  return `${count} ${FREQUENCY_WORDS[frequency]} pay${count === 1 ? "" : "s"}`;
+}
+
+/** A figure with at least 2 decimal places and no trailing zeros past them. */
+function atLeastCents(value: Decimal): string {
+  return toFixedString(value, Math.max(2, significantScale(value)));
+}
+
+/**
+ * The annualised income an extra pay is taxed against (decisions 126, 130):
+ * the regular PAYE income payments (extra pays left out) × 13, or × 12 for
+ * one monthly pay, when the four weeks hold IRD's pattern of pays (none
+ * gives $0, spec example 3); on leaving, the last 2 paid periods × 26, 13,
+ * 6.5 or 6. Any other pattern is refused. Not rounded (spec 3.2 drops cents
+ * only from the grossed-up amount).
+ */
+export function annualiseForExtraPay(input: { method: ExtraPayMethod; frequency: string; pays: readonly string[] }): string {
+  const frequency = parseFrequency(input.frequency);
+  const amounts = input.pays.map((pay, index) => parseAmount(pay, `Pay ${index + 1}`));
+  const total = amounts.reduce((sumSoFar, amount) => add(sumSoFar, amount), ZERO_DECIMAL);
+  if (input.method === "four_weeks") {
+    if (amounts.length === 0) return "0.00";
+    const expected = FOUR_WEEK_PAYS[frequency];
+    if (amounts.length !== expected.count) {
+      throw new ValidationError(
+        `${NOT_SUPPORTED}: an extra pay when the four weeks before it hold ${pays(amounts.length, frequency)} (IRD's rules annualise ${pays(expected.count, frequency)}, or none).`,
+      );
+    }
+    return atLeastCents(mul(total, dec(expected.multiplier)));
+  }
+  if (amounts.length !== 2) {
+    throw new ValidationError(
+      `${NOT_SUPPORTED}: an extra pay on leaving with ${amounts.length} paid pay period${amounts.length === 1 ? "" : "s"} before the final pay (IRD's rule annualises the last 2).`,
+    );
+  }
+  return atLeastCents(mul(total, dec(END_OF_EMPLOYMENT_MULTIPLIER[frequency])));
+}
+
+/**
+ * A secondary tax code's low threshold amount (spec 5.11.2): the start of
+ * the income tax bracket taxed at the code's rate (SB $0, S $15,601, SH
+ * $53,501, ST $78,101, SA $180,001 in 2026-27).
+ */
+export function secondaryLowThreshold(code: SecondaryTaxCode, payDate: string): string {
+  const rates = payrollRatesOn(payDate);
+  const rate = dec(rates.secondaryTaxRates[code]);
+  const bracket = rates.incomeTax.find((entry) => cmp(dec(entry.rate), rate) === 0);
+  if (!bracket) throw new Error(`IRD payroll rates ${rates.edition.id} have no income tax bracket at ${code}'s rate.`);
+  return bracket.from;
+}
+
+export type ExtraPayTaxInput = {
+  /** All the extra pays in the pay, e.g. "1000.00". */
+  extraPay: string;
+  /** The part liable for the ACC earners' levy (all but redundancy). */
+  accLiable: string;
+  /** From annualiseForExtraPay. */
+  annualised: string;
+  taxCode: string;
+  payDate: string;
+};
+
+export type ExtraPayTaxResult = {
+  /** Tax on the extra pays, the ACC earners' levy included. */
+  tax: string;
+  /** The income tax rate used (percent, without the levy). */
+  taxRate: string;
+  /** Whole dollars; null for a flat rate. */
+  grossedUp: string | null;
+  /** The lowest rate was used: EI field 14 (spec 5.11.3). */
+  lowestRate: boolean;
+  method: "extra_pay" | "flat_rate";
+};
+
+/**
+ * Tax on an employee's extra pays in one pay (spec 5.11.1 steps 3-5,
+ * 5.11.2, 5.12): the grossed-up amount (annualised income, plus a
+ * secondary code's low threshold, plus the extra pays) with its cents
+ * dropped picks the rate; extra pays × rate and the levy (steps 4.1-4.4)
+ * are added unrounded and truncated to cents once (decision 127). ND and
+ * NSW use their flat rate (decision 128); CAE, EDW and STC are refused.
+ */
+export function calculateExtraPayTax(input: ExtraPayTaxInput): ExtraPayTaxResult {
+  const rates = payrollRatesOn(input.payDate);
+  const extraPay = parseAmount(input.extraPay, "Extra pay");
+  const accLiable = parseAmount(input.accLiable, "Extra pay liable for the ACC earners' levy");
+  if (cmp(accLiable, extraPay) > 0) {
+    throw new ValidationError("The extra pay liable for the ACC earners' levy can't be more than the extra pay.");
+  }
+  const annualisedInput = dec(input.annualised);
+  if (isNegative(annualisedInput)) throw new ValidationError("Annualised income can't be below zero.");
+  const code = parseTaxCode(input.taxCode);
+  const codeText = input.taxCode.trim().replace(/\s+/g, " ").toUpperCase();
+  if (code.kind === "flat") {
+    if (code.code === "CAE" || code.code === "EDW") {
+      throw new ValidationError(
+        `${NOT_SUPPORTED}: extra pays for tax code ${code.code} (IRD says to use the lump sum method but not with which threshold).`,
+      );
+    }
+    if (cmp(accLiable, extraPay) !== 0) {
+      throw new ValidationError(`${NOT_SUPPORTED}: redundancy for tax code ${code.code} (its flat rate includes the ACC earners' levy).`);
+    }
+    return {
+      tax: money(flatRatePaye(extraPay, rates.flatTaxRates[code.code], rates)),
+      taxRate: rates.flatTaxRates[code.code],
+      grossedUp: null,
+      lowestRate: false,
+      method: "flat_rate",
+    };
+  }
+  const threshold = code.kind === "secondary" ? dec(secondaryLowThreshold(code.code, input.payDate)) : ZERO_DECIMAL;
+  const annualised = add(annualisedInput, threshold);
+  const grossedUp = truncate(add(annualised, extraPay), 0);
+  const bracket = rates.incomeTax.find(
+    (entry) => cmp(grossedUp, dec(entry.from)) >= 0 && (entry.to === null || cmp(grossedUp, dec(entry.to)) <= 0),
+  );
+  if (!bracket) {
+    throw new Error(`IRD payroll rates ${rates.edition.id} have no income tax bracket for ${toPlainString(grossedUp)} (${codeText}).`);
+  }
+  const incomeTax = mul(extraPay, percent(bracket.rate));
+  const maximum = dec(rates.accEarnersLevy.maximumLiableEarnings);
+  const levyRate = percent(rates.accEarnersLevy.rate);
+  let levy: Decimal;
+  if (isZero(accLiable)) {
+    levy = ZERO_DECIMAL; // step 4.1: redundancy
+  } else if (cmp(grossedUp, maximum) <= 0) {
+    levy = mul(accLiable, levyRate); // step 4.2
+  } else if (cmp(annualised, maximum) <= 0) {
+    if (cmp(accLiable, extraPay) !== 0) {
+      throw new ValidationError(`${NOT_SUPPORTED}: redundancy with other extra pays when the ACC earners' levy's maximum falls inside them.`);
+    }
+    levy = mul(sub(maximum, annualised), levyRate); // step 4.3
+  } else {
+    levy = ZERO_DECIMAL; // step 4.4
+  }
+  return {
+    tax: money(add(incomeTax, levy)),
+    taxRate: bracket.rate,
+    grossedUp: toPlainString(grossedUp),
+    lowestRate: cmp(dec(bracket.rate), dec(rates.incomeTax[0].rate)) === 0,
+    method: "extra_pay",
+  };
 }
