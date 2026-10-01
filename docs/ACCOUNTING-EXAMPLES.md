@@ -74,6 +74,23 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/tax-available-on.test.ts` the tax code pickers and starting codes
   by side (TAO2-TAO4, TAO6, TAO8)
 
+## NZ payroll — employee records (examples not yet approved by Jess)
+
+This first stage follows [NetSuite's employee payroll record](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N921988.html) for keeping payroll details on the employee, and [Xero's NZ employee setup](https://central.xero.com/s/article/Set-up-a-fixed-term-employee) for salary or hourly pay details. This stage stores employee details only; it does not calculate or post payroll.
+
+| ID | Employee details | Result |
+| --- | --- | --- |
+| PR1 | Add Aroha Ngata, starting 1 April 2026, fortnightly salary of NZD 70,000.00 a year, tax code M, student loan, and her IRD and bank details. Record the current KiwiSaver status and the employee and employer rates supplied for her. | Her payroll profile is saved; the IRD number and bank account are encrypted in the organisation database. No tax or net-pay amount is calculated and no journal is posted. |
+| PR2 | Archive Aroha from 30 September 2026. | Her profile remains in the database and audit trail, is hidden from the active list and can be restored; it is never deleted. |
+
+The rates in PR1 are copied from the employee's current instructions; this example does not prescribe KiwiSaver rates or calculate deductions. Entering an employee is not authority to run payroll.
+
+### Not supported yet (refused rather than guessed)
+
+- Pay calculations, approval and journal posting; payment to employees or Inland Revenue; payslips; and payday filing exports. Current dated IRD payroll calculation and file-upload specifications must be verified and encoded before these are enabled.
+- Holidays Act leave calculations. Annual leave, sick leave, public holidays, alternative days, ordinary weekly pay and average weekly earnings need Jess-approved worked examples and decisions first.
+- Questions for Jess: which pay frequencies and KiwiSaver status values are needed in practice; which payroll bank account and payable/expense accounts to use; and how payroll corrections should fit the period-close workflow.
+
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
 
