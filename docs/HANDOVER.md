@@ -49,9 +49,15 @@ Set them in the Agents box before sending each task:
 
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
-| Payroll P9: timesheets (examples TS1-TS11, decisions 91-101) | none | not opened yet | `claude/payroll-p9-timesheets` (Claude) | 0067 |
-| Payroll P10: payroll reports (examples PREP1-PREP8, decisions 102-111) | none | not opened yet | `claude/payroll-p10-reports` (Claude) | none (0068 still free) |
+| (nothing in progress, 2 Oct 2026) | | | | |
+
+Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
+payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
+0063), and, without pull request pages because the browser was unavailable
+overnight (each checked locally with typecheck, lint, unit tests, the full
+integration suite and the build, then by CI on main): P6 payday filing file
+(0064), RDTI R3 claim report (0065), CRM editable stages and forecasts
+(0066), P9 timesheets (0067) and P10 payroll reports (no migration).
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
@@ -71,7 +77,7 @@ Advanced features off (decided by Jess, 1 Oct 2026). Prospects only get the
 fields turned on for prospects; existing customer fields aren't added to
 them.
 
-CRM opportunity stages and forecasting (branch `claude/crm-stages-forecasting`,
+CRM opportunity stages and forecasting (merged 2 Oct 2026,
 tenant migration 0066, examples CRMS1-CRMS11 not yet approved, decisions
 76-90): the six fixed stages became the organisation's own editable stages
 (same keys, so saved opportunities and the API are unchanged), with type,
@@ -101,7 +107,7 @@ and split the parts of pay out for reports and budgets. Payroll reports must
 only be run by certain people. Each item is its own branch and PR.
 
 - [x] **P1 Employee records** (#62, migration 0051), merged 1 Oct 2026.
-- [ ] **P1b Cost allocation, pay rate history and payroll access** (migration
+- [x] **P1b Cost allocation, pay rate history and payroll access** (migration
       0057). Draft PR #73; examples PE3-PE12 await Jess. Pay runs use
       `allocationOn()`, `payRateOn()`, `splitByPercentages()` and
       `requirePayrollAccess()`.
@@ -121,7 +127,7 @@ only be run by certain people. Each item is its own branch and PR.
       Jess). Checked against IRD's site 1 Oct 2026. Before each 1 April, add
       the next year's file (README in that folder; a scheduled task checks
       every 5 April).
-- [ ] **P3 Pay runs** (migration 0058). Draft PR #76; examples
+- [x] **P3 Pay runs** (migration 0058). Merged (#76); examples
       PRUN1-PRUN11 await Jess (questions in the PR and under PRUN11).
       Built:
       - **Pay items** (earnings, after-tax deductions, reimbursements,
@@ -165,8 +171,7 @@ only be run by certain people. Each item is its own branch and PR.
         payments or IRD payments for its period.
       Not built: public holidays in due dates, IRD penalties, child
       support. (Bank files came in P5.)
-- [ ] **P5 Payslips and bank files** (migration 0063), done in branch
-      `claude/payroll-bank-files-payslips`, waiting for a PR and review;
+- [x] **P5 Payslips and bank files** (migration 0063), merged (#79);
       examples PBF1-PBF7 and PSLIP1-PSLIP6 await Jess (questions under each).
       Built:
       - **Bank files** for an approved pay run's unpaid net wages: ANZ
@@ -184,8 +189,7 @@ only be run by certain people. Each item is its own branch and PR.
       portal. ERA s 130's wording couldn't be read (legislation.govt.nz
       blocks our tools); the payslip follows Holidays Act s 81 and
       Employment NZ's guidance.
-- [ ] **P6 Payday filing file** for myIR (tenant migration 0064), built in
-      branch `claude/payroll-p6-payday-filing`, waiting for a PR and review;
+- [x] **P6 Payday filing file** for myIR (tenant migration 0064), merged 2 Oct 2026;
       examples PF1-PF9 await Jess (questions under PF9), decisions 56-65.
       From an approved pay run: IRD's employment information file (file
       upload specification 2026-27, `docs/sources/ird-payday-filing-file-spec.md`)
@@ -203,8 +207,7 @@ only be run by certain people. Each item is its own branch and PR.
       Jess to approve the examples.
 - [ ] **P8 Holidays Act leave, build** what P7 specifies and Jess approves,
       including leave liability by department. Needs P3 and P7.
-- [ ] **P9 Timesheets** (tenant migration 0067), built in branch
-      `claude/payroll-p9-timesheets`, waiting for a PR and review; examples
+- [x] **P9 Timesheets** (tenant migration 0067), merged 2 Oct 2026; examples
       TS1-TS11 await Jess (questions under TS11), decisions 91-101. Built:
       - Payroll › Timesheets: one timesheet per employee per week (Monday to
         Sunday), hours per day to 2 places by R&D activity, Department,
@@ -229,8 +232,7 @@ only be run by certain people. Each item is its own branch and PR.
       Not built: leave and overtime from timesheets, reallocating a posted
       pay to a late timesheet (RD22), copying hours into project time.
       Screens weren't checked in a browser.
-- [ ] **P10 Payroll reports** (no migration), built in branch
-      `claude/payroll-p10-reports`, waiting for a PR and review; examples
+- [x] **P10 Payroll reports** (no migration), merged 2 Oct 2026; examples
       PREP1-PREP8 await Jess (questions under PREP8), decisions 102-111.
       Payroll › Reports, payroll access only, read-only, by pay date, from
       approved pay runs' stored figures and the shares each used:
@@ -268,12 +270,12 @@ depreciation and apportioned overhead costs; contemporaneous records kept at
 the time, not backdated; general approval and the supplementary return have
 deadlines). Agents must check the current IR1240 and cite it, never memory.
 
-- [ ] **R1 Plan**: worked examples and questions for Jess, docs only.
+- [x] **R1 Plan**: worked examples and questions for Jess, docs only.
       Written (RD1-RD27 in `docs/ACCOUNTING-EXAMPLES.md`, from IR1240 April
       2026, read 1 Oct 2026). Its questions are decided (`docs/DECISIONS.md`
       30-50) and the examples follow them; waiting for Jess to approve the
       examples.
-- [ ] **R2 R&D activity register and tagging** (draft PR #75, tenant
+- [x] **R2 R&D activity register and tagging** (merged, #75, tenant
       migration 0060; RD1-RD3, RD8, RD9, RD11-RD13, RD21-RD23 tested, the
       examples still waiting for Jess):
       - Register (Tax › R&D activities, `src/lib/rd/register.ts`): core or
@@ -310,9 +312,7 @@ deadlines). Agents must check the current IR1240 and cite it, never memory.
       - Tagged costs (Tax › Tagged R&D costs): what's tagged by activity and
         category for an income year, plus untagged lines to tag. Not the
         claim.
-- [ ] **R3 RDTI claim report**: built on branch
-      `claude/rdti-r3-claim-report` (tenant migration **0065**), waiting for
-      a PR and review; examples RD28-RD42 (and RD3, RD4, RD16-RD20,
+- [x] **R3 RDTI claim report**: merged 2 Oct 2026 (tenant migration **0065**); examples RD28-RD42 (and RD3, RD4, RD16-RD20,
       RD24-RD27 now tested) await Jess, with "Questions for Jess (claim
       report)" under RD42; decisions 66-75 in `docs/DECISIONS.md`. Tax › R&D
       claim report (`src/lib/rd/claim.ts`, `claim-figures.ts`,
@@ -375,6 +375,11 @@ To do:
 - [ ] **Tohyee address relay** (the no-sign-up phone access option): needs a
       domain, Cloudflare's written OK, and setting up the Worker in `relay/`
       (see `relay/README.md`).
+- [ ] **Check a payday filing file in myIR**: make the file from a real
+      approved pay run (Payroll › Pay runs › Payday filing) and put it
+      through myIR's "Check your employment information file" service before
+      filing with it. It's the only way to confirm amounts in cents, line
+      endings, macrons and the 3.5% KiwiSaver rate (decisions 56-65).
 - [ ] **Approve the worked examples.** Every section marked "(examples not yet
       approved by Jess)" in `docs/ACCOUNTING-EXAMPLES.md` is waiting, most
       importantly the newest: multi-currency (MC1-MC83), exports and tax codes
