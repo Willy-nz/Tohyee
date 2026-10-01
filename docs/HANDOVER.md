@@ -58,7 +58,7 @@ overnight (each checked locally with typecheck, lint, unit tests, the full
 integration suite and the build, then by CI on main): P6 payday filing file
 (0064), RDTI R3 claim report (0065), CRM editable stages and forecasts
 (0066), P9 timesheets (0067), P10 payroll reports (no migration) and P11
-workforce budgets (0068).
+workforce budgets (0068), and P12 extra pays, back pay and final pays (0069).
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
@@ -267,7 +267,7 @@ only be run by certain people. Each item is its own branch and PR.
       per position line, on-costs, following later pay rate changes. The
       screen wasn't checked in a browser.
 - [x] **P12 Back pay, extra pays and final pays** (tenant migration 0069),
-      branch `claude/payroll-p12-extra-back-final-pays`; examples XP1-XP14
+      merged 2 Oct 2026; examples XP1-XP14
       await Jess (questions at the end of the section), decisions 124-137.
       Built:
       - Pay items Extra pay, Back pay, Holiday pay on finishing (worked out
