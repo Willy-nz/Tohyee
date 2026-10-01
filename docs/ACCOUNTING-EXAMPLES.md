@@ -11476,7 +11476,9 @@ HL10-HL16, HL20-HL27, HL30-HL33, HL42, decision 7),
 `tests/integration/payroll-leave-opening.test.ts` (opening balances,
 HL43-HL48, and HL52's liability figures),
 `tests/integration/payroll-leave-requests.test.ts` (leave requests,
-HL49-HL51) and
+HL49-HL51), `tests/unit/payroll-leave-liability.test.ts` and
+`tests/integration/payroll-leave-liability.test.ts` (posting the
+liability, HL52-HL56) and
 `tests/integration/payroll-leave.test.ts` (the database flows, with the
 examples' own figures where Tohyee's records can hold them: Ben's usual
 pay, public holidays, Labour Day worked, sick leave, alternative holidays,
@@ -12167,11 +12169,14 @@ has a bookkeeper login and no payroll access.
   - Someone whose leave Tohyee doesn't keep (no usual week, or decision
     143 without opening balances): the request can't be made.
 
-**Posting the leave liability** (decision 177; **designed, not built yet**:
-these are the acceptance tests for the next build). The organisation has
-a "Leave expense" account and an "Employee entitlements" current
-liability account; Hemi's cost allocation is 100% to the Workshop
-Department.
+**Posting the leave liability** (decision 177; designed as the acceptance
+tests for the build, **built on 2 Oct 2026** with decisions 182-187, which
+added HL55 and HL56). The organisation has a "Leave expense" account
+(6220) and an "Employee entitlements" current liability account (2260),
+chosen under Payroll › Pay items; Hemi's cost allocation is 100% to the
+Workshop Department. Postings are LEAVELIAB-1, -2 and so on, made under
+Payroll › Leave › Liability by someone with payroll access and the
+bookkeeper role.
 
 - **HL52 The first posting.** After HL44's first pay run (period ending
   Sun 11 Oct 2026), the liability report at Sun 11 Oct 2026 shows Hemi's
@@ -12192,7 +12197,37 @@ Department.
   one; a posting while any employee's row in the report has a problem
   (it names them); a posting without the two accounts set. A posting is
   never edited: voiding it posts the reversing journal, and the next
-  posting measures from the last one not voided.
+  posting measures from the last one not voided. (Built: also a posting
+  in a locked period; voiding a posting that a later one measured from,
+  "Void it first"; a void date before the posting's date; and correcting
+  its journal in the ledger. Decisions 182, 183.)
+- **HL55 A posting after leave is taken, then voided** (decisions 182,
+  183). After the pay run for 12-18 Oct 2026 (HL44's week of annual
+  holidays, 1,221.54 to wages), the report at Sun 18 Oct 2026 shows Hemi's
+  annual holidays 1.5 weeks at AWE for Sun 19 Oct 2025 to Sun 18 Oct 2026:
+  the opening rows from 20 Oct 2025 (50 rows, 61,120.00; the 13-19 Oct
+  2025 row has only its Sunday inside) and Tohyee's 1,200.00 + 1,221.54 =
+  63,541.54 ÷ 52 = 1,221.95, so 1.5 × 63,541.54 ÷ 52 = **1,832.93**; the
+  running 8% since 4 Mar 2026, (36,720.00 + 1,200.00 + 1,221.54) × 8% =
+  39,141.54 × 8% = **3,131.32**; and the alternative holiday (taken 22
+  Oct) still **240.00**: **5,204.25**. The posting LEAVELIAB-2 measures
+  from LEAVELIAB-1 (HL52): 5,204.25 − 6,327.45 = −1,123.20, so Dr Employee
+  entitlements 1,123.20 / Cr Leave expense 1,123.20 (Workshop). Posting
+  again at 18 Oct is refused: "Nothing to post". LEAVELIAB-2 is then
+  voided on 18 Oct (VOID-LEAVELIAB-2, the exact reversal); voiding
+  LEAVELIAB-1 first is refused, because LEAVELIAB-2 measured from it. With
+  LEAVELIAB-2 voided, HL53's posting at 31 Oct (LEAVELIAB-3) measures from
+  LEAVELIAB-1, 0.00 − 6,327.45, and the Employee entitlements account
+  comes to 0.00: 6,327.45 − 1,123.20 + 1,123.20 − 6,327.45.
+- **HL56 The accounts** (decision 184). An admin with payroll access sets
+  them under Payroll › Pay items. Refused: Employee entitlements (2260) as
+  the leave expense ("isn't an expense account"), Term loan (2800, a
+  non-current liability) or Wages payable (2240, a control account) as
+  the employee entitlements account, and a bookkeeper changing them.
+  While LEAVELIAB-1 has left 6,327.45 in 2260, changing the employee
+  entitlements account to 2270 is refused; after LEAVELIAB-3 brings it to
+  0.00 it's allowed. The leave expense account can change at any time (to
+  6200 and back): it only moves where later changes go.
 
 ### Not supported yet (refused rather than guessed)
 
@@ -12212,8 +12247,10 @@ Department.
   employment agreements (s8(3), s9(2)).
 - Labour Inspector determinations (s11, s13, s17(2), s28F, s54), and
   re-employment within a month (s85).
-- Posting a leave liability to the ledger: designed with examples
-  HL52-HL54 (decision 177), not built yet.
+- Posting a leave liability to the ledger: **built on 2 Oct 2026**
+  (decisions 177, 182-187, HL52-HL56). Still not in it: sick leave
+  carried over (decision 187), and the employer KiwiSaver contribution on
+  the leave.
 
 ### Decided (Holidays Act leave)
 
@@ -12264,7 +12301,8 @@ them. The examples themselves still need Jess's approval.
 - **27** Family violence leave included with sick leave, records kept
   private (HL27).
 - **28** Leave liability and the running 8% shown as a report; posting to
-  the ledger waits for its own example (HL42).
+  the ledger waits for its own example (HL42). (Since 2 Oct 2026 posted:
+  decision 177, HL52-HL56.)
 - **29** Cash-ups need the written request and answer attached, and the
   one-week limit is enforced (HL12).
 
@@ -12294,7 +12332,7 @@ what it is. As well as the list above:
   as leave requests** (decision 169, HL49-HL51), approved by their
   approver or payroll access;
 - posting the leave liability to the ledger: designed (decision 177,
-  HL52-HL54), built next.
+  HL52-HL54) and **built on 2 Oct 2026** (decisions 182-187, HL52-HL56).
 
 ### Decided (leave build)
 
@@ -12341,7 +12379,8 @@ asked is kept under each.
    "Redundancy isn't gross earnings for holiday pay, following Employment
    NZ's view (decision 139). Agreed?"
 10. **Posting the liability: yes, designed, built next** (decision 177;
-    examples HL52-HL54). Asked: "The liability report values alternative
+    examples HL52-HL54; built 2 Oct 2026 with decisions 182-187 and
+    HL55-HL56). Asked: "The liability report values alternative
     holidays at a usual day's OWP (decision 153); posting the liability
     still waits for its own example (decision 28). Want posting next?"
 11. **The anniversary day must be chosen: as built** (decision 178).
@@ -12358,3 +12397,24 @@ asked is kept under each.
     Asked: "Cash-ups at the rate on the date agreed (HL12, decision 158),
     not the date paid: right?"
 
+
+### Questions for Jess (posting the leave liability)
+
+Built on 2 Oct 2026 (decisions 182-187, HL52-HL56); these were left open:
+
+1. **Sick leave carried over.** PBE IPSAS 39 and NZ IAS 19 para 15 treat
+   accumulating sick leave that doesn't vest as an obligation too,
+   measured for the chance it's used (decision 187). Tohyee leaves it out
+   (decision 177: it needs the organisation's own estimate). Add a typed
+   estimate per organisation, or keep it out?
+2. **Finished, final pay not yet paid.** Someone who finished on or before
+   the posting's date isn't in the report, and their final pay's journal
+   is dated its pay date. If the pay date is after the posting's date
+   (Hemi's final pay for 26 Oct-1 Nov is paid on 4 Nov; HL53 posts at 31
+   Oct), neither account holds his holiday pay owed on finishing at 31
+   Oct. Keep finished employees in the report until their final pay is
+   approved, or accept the cut-off?
+3. **On-costs.** The employer KiwiSaver contribution that will be paid
+   on the leave isn't in the liability. Add it?
+4. **Month-end routine.** Postings are made by hand at any date. Should
+   Tohyee remind (or offer) a posting at each month end or on Period close?
