@@ -11,6 +11,7 @@ import type { EmployeeSummary } from "@/lib/payroll/employees";
 import { ANNIVERSARY_REGION_LABELS, ANNIVERSARY_REGIONS, type PublicHolidayYear } from "@/lib/payroll/leave/public-holiday-dates";
 import { LEAVE_TYPE_LABELS, LEAVE_TYPES, type LeaveType } from "@/lib/payroll/leave/rules";
 import { BEREAVEMENT_LABELS, type BereavementKind } from "@/lib/payroll/leave/sick";
+import type { OpeningBalances } from "@/lib/payroll/leave-opening";
 import type { CashUp, LeaveBooking, PublicHolidayDecision, UnpaidLeaveRecord } from "@/lib/payroll/leave-records";
 import type { LeaveLiabilityReport, LeaveRecord, LeaveSummary } from "@/lib/payroll/leave-reports";
 import type { LeaveSettings, OrganisationLeaveSettings } from "@/lib/payroll/leave-settings";
@@ -754,8 +755,156 @@ export function EmployeeLeave({ organisationId, employeeId }: { organisationId: 
         </label>
         <div className={ui.actions}><Button disabled={busy} type="submit">Save leave settings</Button></div>
       </form>
+      <OpeningBalancesForm organisationId={organisationId} employeeId={employeeId} onSaved={data.reload} />
       <UnpaidLeave organisationId={organisationId} employeeId={employeeId} records={data.data?.unpaidLeave ?? []} onSaved={data.reload} />
     </Card>
+  );
+}
+
+/** Reads earnings rows pasted one per line: from, to, gross, irregular, days (dates as YYYY-MM-DD). */
+function parseEarningsRows(text: string): Array<{ periodStart: string; periodEnd: string; gross: string; irregular: string; days: number }> {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !/^from\b/i.test(line))
+    .map((line, index) => {
+      const cells = line.split(/[,\t]/).map((cell) => cell.trim());
+      if (cells.length < 5) throw new Error(`Earnings line ${index + 1} needs 5 columns: from, to, gross, irregular, days.`);
+      return { periodStart: cells[0], periodEnd: cells[1], gross: cells[2].replace(/[$,]/g, ""), irregular: cells[3].replace(/[$,]/g, "") || "0", days: Number(cells[4]) };
+    });
+}
+
+/**
+ * Opening leave balances from another payroll (decision 168; HL43): as at
+ * the end of the last day before Tohyee's first pay period for the
+ * employee, with the earlier earnings by pay period and the previous
+ * payroll's report attached.
+ */
+function OpeningBalancesForm({ organisationId, employeeId, onSaved }: { organisationId: string; employeeId: string; onSaved: () => void }) {
+  const current = useApiData<{ opening: (OpeningBalances & { replaced: unknown[] }) | null }>("/api/payroll/leave/opening", { organisationId, employeeId });
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({
+    asAt: "",
+    annualWeeks: "",
+    annualLastEntitled: "",
+    annualCashedUpWeeks: "0",
+    annualAdvancePaid: "0",
+    sickDays: "",
+    familyViolenceDays: "",
+    alternativeHolidays: "",
+    earnings: "",
+    source: "",
+  });
+  const [report, setReport] = useState<File | null>(null);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const set = (field: string, value: string) => setValues({ ...values, [field]: value });
+  const opening = current.data?.opening ?? null;
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMessage(null);
+    if (!report) {
+      setMessage({ tone: "error", text: "Attach the previous payroll's leave and earnings report." });
+      return;
+    }
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.set(
+        "data",
+        JSON.stringify({
+          organisationId,
+          idempotencyKey: newIdempotencyKey("opening"),
+          employeeId,
+          asAt: values.asAt,
+          annualWeeks: values.annualWeeks,
+          annualLastEntitled: values.annualLastEntitled || null,
+          annualCashedUpWeeks: values.annualCashedUpWeeks || "0",
+          annualAdvancePaid: values.annualAdvancePaid || "0",
+          sickDays: values.sickDays,
+          familyViolenceDays: values.familyViolenceDays,
+          alternativeHolidays: values.alternativeHolidays.split(/[\s,]+/).filter(Boolean),
+          earnings: parseEarningsRows(values.earnings),
+          source: values.source,
+        }),
+      );
+      form.set("report", report, report.name);
+      const result = await postForm<{ payRuns: string[] }>("/api/payroll/leave/opening", form);
+      setOpen(false);
+      setReport(null);
+      current.reload();
+      onSaved();
+      setMessage({ tone: "success", text: `Opening balances saved.${result.payRuns.length ? ` Leave worked out again on ${result.payRuns.join(", ")}.` : ""}` });
+    } catch (cause) {
+      setMessage({ tone: "error", text: errorMessage(cause) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <h3>Opening balances</h3>
+      <p className={ui.muted}>
+        For someone employed before Tohyee&apos;s first pay run for them: their leave and earlier earnings from the previous payroll, as at the end of the
+        day before Tohyee&apos;s first pay period for them (decision 168). Enter the earnings one row per pay period of the previous payroll for at least the
+        last 12 months (or since they started), without gaps, as Xero asks for them.
+      </p>
+      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+      {current.error ? <Notice tone="error">{current.error}</Notice> : null}
+      {opening ? (
+        <p>
+          As at {formatDate(opening.asAt)}: annual holidays {trim(opening.annualWeeks)} weeks
+          {opening.annualLastEntitled ? ` (last entitled ${formatDate(opening.annualLastEntitled)})` : ""}, sick leave {trim(opening.sickDays)} days, family violence
+          leave {trim(opening.familyViolenceDays)} days, {opening.alternativeHolidays.length} untaken alternative holiday
+          {opening.alternativeHolidays.length === 1 ? "" : "s"}; {opening.earnings.length} earnings rows from {formatDate(opening.earnings[0]?.periodStart ?? opening.asAt)}.
+          Source: {opening.source} (<a href={`/api/payroll/leave/files/${opening.reportFileId}?organisationId=${organisationId}`}>report</a>; entered by{" "}
+          {opening.createdByEmail}).
+        </p>
+      ) : null}
+      {!open ? (
+        <div className={ui.actions}>
+          <Button size="small" variant="secondary" onClick={() => setOpen(true)}>{opening ? "Replace opening balances…" : "Enter opening balances…"}</Button>
+        </div>
+      ) : (
+        <form className={styles.stack} onSubmit={save}>
+          <div className={ui.grid4}>
+            <Field label="As at the end of" hint="The last day of a pay period, before Tohyee's first for them.">
+              <input required type="date" value={values.asAt} onChange={(event) => set("asAt", event.target.value)} />
+            </Field>
+            <Field label="Annual holidays (weeks)" hint="Negative if taken in advance.">
+              <input inputMode="decimal" required value={values.annualWeeks} onChange={(event) => set("annualWeeks", event.target.value)} />
+            </Field>
+            <Field label="Last entitled to annual holidays" hint="Blank if not yet 12 months.">
+              <input type="date" value={values.annualLastEntitled} onChange={(event) => set("annualLastEntitled", event.target.value)} />
+            </Field>
+            <Field label="Weeks cashed up that entitlement year" hint="s 28A(2)(b)">
+              <input inputMode="decimal" value={values.annualCashedUpWeeks} onChange={(event) => set("annualCashedUpWeeks", event.target.value)} />
+            </Field>
+            <Field label="Holiday pay paid in advance" hint="Only with a negative balance (s 23(2)(a), s 25(2)(a)).">
+              <input inputMode="decimal" value={values.annualAdvancePaid} onChange={(event) => set("annualAdvancePaid", event.target.value)} />
+            </Field>
+            <Field label="Sick leave (days)"><input inputMode="decimal" required value={values.sickDays} onChange={(event) => set("sickDays", event.target.value)} /></Field>
+            <Field label="Family violence leave (days)"><input inputMode="decimal" required value={values.familyViolenceDays} onChange={(event) => set("familyViolenceDays", event.target.value)} /></Field>
+            <Field label="Untaken alternative holidays" hint="The date each arose, YYYY-MM-DD, separated by commas.">
+              <input value={values.alternativeHolidays} onChange={(event) => set("alternativeHolidays", event.target.value)} />
+            </Field>
+          </div>
+          <Field label="Earnings by pay period" hint="One line each: from, to, gross earnings, irregular or one-off part, days worked or on paid leave (e.g. 2025-10-06, 2025-10-12, 1200.00, 0, 5).">
+            <textarea required rows={8} value={values.earnings} onChange={(event) => set("earnings", event.target.value)} />
+          </Field>
+          <div className={ui.grid4}>
+            <Field label="Where the figures came from"><input required value={values.source} onChange={(event) => set("source", event.target.value)} /></Field>
+            <Field label="The previous payroll's report"><input required type="file" onChange={(event) => setReport(event.target.files?.[0] ?? null)} /></Field>
+          </div>
+          <div className={ui.actions}>
+            <Button disabled={busy} type="submit">Save opening balances</Button>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+          </div>
+        </form>
+      )}
+    </>
   );
 }
 

@@ -1074,7 +1074,8 @@ HL section's earlier reading.
      sick leave agreement (decision 19); continuous or casual (s 63(1)(b));
      the anniversary day region (decision 22). A setting that starts part
      way through a pay period is refused on that pay run.
-143. **Tohyee keeps an employee's leave only from its own pay records.**
+143. **Tohyee keeps an employee's leave only from its own pay records**
+     (since 2 Oct 2026, or from opening balances: decision 168).
      Opening leave balances and earnings from before Tohyee have no worked
      example, so leave is refused (as "Not supported yet") for someone
      whose first sick or annual entitlement arose before Tohyee's first pay
@@ -1185,7 +1186,8 @@ HL section's earlier reading.
      their use, and holiday pay on finishing, with each pay period's hours
      and pay (s 81(2)(c)); CSV export audited without figures. (ja) and (m)
      aren't supported (no transfers, no board).
-164. **Employees' own leave requests aren't built in P8**: booking leave
+164. **Employees' own leave requests aren't built in P8** (built since as
+     leave requests, decision 169): booking leave
      needs payroll access, because a booking changes pay and family
      violence leave must stay private. P9's employee self-service could be
      followed later (question for Jess).
@@ -1195,3 +1197,255 @@ HL section's earlier reading.
      day; annual holidays are those hours ÷ the agreed week's hours (s 17).
 167. **The AWE divisor cut for agreed unpaid leave** is the whole or part
      weeks over one week of the part of the leave inside the 12 months.
+
+## The leave build's questions, decided (2 Oct 2026; decisions 168-181)
+
+Jess asked Claude to "look up what you need to and make the calls
+yourself" on the 14 "Questions for Jess (leave build)" at the end of the HL
+section of `docs/ACCOUNTING-EXAMPLES.md`, by the rule law → NetSuite →
+Xero, never guessing a rule and never overstating. One decision per
+question, in the questions' order. The examples they lead to (HL43 on)
+still need her approval; none is marked approved.
+
+How the sources were read on 2 Oct 2026: legislation.govt.nz, ird.govt.nz
+and employment.govt.nz refuse direct downloads from this computer, so the
+Acts are quoted from the extracts saved under `docs/sources/` on 1 Oct 2026,
+and web pages were read through Claude's summarising fetch tool (its
+quotes, as it returned them; check the pages). Pages read that way:
+Employment NZ [Public holidays and anniversary dates](https://www.employment.govt.nz/leave-and-holidays/public-holidays/public-holidays-and-anniversary-dates)
+(last modified 25 Sep 2026), [Calculating holiday and leave pay](https://www.employment.govt.nz/pay-and-hours/pay-and-wages/leave-and-holiday-pay/calculating-holiday-and-leave-pay)
+(7 Aug 2026), [Annual holiday pay](https://www.employment.govt.nz/pay-and-hours/pay-and-wages/leave-and-holiday-pay/annual-holiday-pay)
+(7 Aug 2026), [Final pay](https://www.employment.govt.nz/pay-and-hours/pay-and-wages/final-pay)
+(2 Sep 2026), [Managing public holidays as an employer](https://www.employment.govt.nz/leave-and-holidays/public-holidays/managing-public-holidays-as-an-employer)
+(7 Aug 2026) and [Cashing up annual holidays](https://www.employment.govt.nz/leave-and-holidays/annual-holidays/cashing-up-annual-holidays);
+IRD's [Employer's guide IR335](https://www.ird.govt.nz/-/media/project/ir/home/documents/forms-and-guides/ir300---ir399/ir335/ir335.pdf)
+(April 2026) and the officials' [regulatory impact statement on PAYE error correction](https://www.taxpolicy.ird.govt.nz/-/media/project/ir/tp/publications/2019/2019-ria-paye-error-correction/2019-ria-paye-error-correction-pdf.pdf)
+(2019); NetSuite's help [Time-Off Management Setup](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4607408864.html),
+[Time-Off Management Overview](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1519931238.html),
+[Time-Off Management for Employees or Managers](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1503583942.html)
+and [Canceling Time-Off Requests](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1509720113.html);
+the External Reporting Board's [NZ IAS 19](https://www.xrb.govt.nz/dmsdocument/272/)
+(incorporating amendments to 28 Feb 2014); Te Papa's [Dates for the
+Matariki public holiday](https://tepapa.govt.nz/discover-collections/read-watch-play/matariki-maori-new-year/dates-for-matariki-public-holiday).
+Xero Central articles were read from the same undated copies as before
+(the `web-arena-x/webarena-infinity` repository,
+`apps/user-manuals/xero/payroll/`), each named with its Xero Central
+address below; Xero may have changed them since.
+
+168. **Opening leave balances: yes, built (question 1).** Anyone moving from
+     another payroll needs them, and the Act needs the earlier earnings:
+     AWE is 1/52 of "gross earnings" for "the 12 months immediately before
+     the end of the last pay period" (s 5, s 21(2)(b)(ii)), ADP uses "the
+     52 calendar weeks" before it (s 9A(2)), and the 8% on leaving uses
+     gross earnings "since the employee last became entitled" (s 25(2)).
+     Xero asks for the same things: leave balances per leave type with
+     "the Date when entitled to annual leave" and sick leave's date, the
+     alternative holiday balance "from your previous payroll system"
+     ([Set up a permanent employee's leave entitlements](https://central.xero.com/s/article/Set-up-a-permanent-employee-s-leave-entitlements-and-opening-balances)),
+     and past earnings per pay period: "Pay period end dates", "Days
+     paid", "Unpaid weeks", "Gross earnings", "for the last 12 months (or
+     from when they started work)" ([Enter past earnings from another
+     payroll system](https://central.xero.com/s/article/Transfer-past-earnings-from-your-previous-payroll-system)).
+     NetSuite's help has nothing on New Zealand holiday pay. So Tohyee
+     keeps, once per employee, entered by someone with payroll access with
+     where the figures came from and the previous system's report attached
+     (both required; audited; kept like other leave files, s 81(4)):
+     - the **opening date**: balances as at the end of that day, the last
+       day before the first pay period whose leave Tohyee keeps;
+     - **annual holidays**: the balance in weeks (negative when taken in
+       advance), the date the employee last became entitled (none if not
+       yet 12 months), the weeks already cashed up in that entitlement
+       year (s 28A(2)(b)), and, when the balance is negative, the holiday
+       pay already paid for the holidays taken in advance (s 23(2)(a),
+       s 25(2)(a));
+     - **sick leave** and **family violence leave** balances in days (their
+       dates follow from the start date, s 63(2)(a); refused for casual
+       employees, whose hours test needs approved timesheets, s 63(1)(b));
+     - each **untaken alternative holiday** and the date it arose (s 61,
+       s 81(2)(k));
+     - the **earlier earnings**, one row per pay period of the previous
+       payroll (Xero's layout), each with its dates, gross earnings (s 14),
+       the part that's irregular or one-off (s 8(2) "b"), and the days
+       worked or on paid leave (s 9A(2)); rows run without gaps to the
+       opening date (or to Tohyee's first approved pay period for the
+       employee). Xero's "unpaid weeks" column isn't copied: unpaid leave
+       is recorded as unpaid leave, and only an agreement to count it cuts
+       the AWE divisor (decision 14).
+     Tohyee then uses them exactly as its own records: the opening balances
+     at the end of the opening date, later entitlements from the last
+     entitlement date (s 16(1)) and the start date (s 63(2)(a)), the
+     earnings rows inside AWE, ADP, four-week and 8% windows (a row only
+     partly inside counts by hours, as decision 144 does; for ADP a row
+     must be wholly inside, or it's refused and the rows should be by pay
+     period). Typed holiday pay (P3) on pay runs ending on or before the
+     opening date is covered by the opening balances, which removes
+     decision 143's refusal for employees who have them. An opening
+     balance can be replaced (the old one kept) until an approved pay run
+     has paid leave for the employee; after that, void that pay run first.
+     Refused: an opening date inside a pay period Tohyee works out, typed
+     holiday pay after it, earnings rows that overlap Tohyee's own pay
+     periods or each other, or leave the rows don't reach back far enough
+     for (named in the refusal). Examples HL43-HL48. Built 2 Oct 2026
+     (tenant migration 0071).
+169. **Employees' own leave requests: yes, built like P9's timesheets
+     (question 2).** NetSuite: "You can create and submit time-off requests
+     using the Book Time Off button in the Time-Off portlet on your Employee
+     Center home page", "Managers can review and approve time-off requests",
+     "you can cancel pending and approved time-off requests", but
+     "Approved time-off requests that are associated with a locked
+     timesheet can't be canceled". Xero Me does the same, with "Authorised
+     to approve leave" employees and payroll admins approving, and
+     "Xero automatically includes approved leave requests in the next pay
+     run" ([Approve, reject or edit a leave request as a payroll admin](https://central.xero.com/s/article/Approve-leave-as-a-Payroll-Admin)).
+     So: an employee linked to their login asks for leave (dates, the type
+     from a short list, hours each day where their hours vary, a note); it
+     shows **hours and days only, never pay or balances in dollars**; they
+     can change or withdraw it until it's decided; the approver is the
+     employee's timesheet approver, else their reports-to manager's login,
+     or anyone with payroll access, never the employee themselves (decision
+     96); a rejection needs a reason. Approving books the leave (a booking
+     like decision 141's, made by the approver and linked to the request),
+     so the next pay run pays it; anything the booking would refuse
+     refuses the approval with the same reason. Family violence leave is
+     asked for and shown to the approver as "Special leave" (decision 27).
+     Cancelling once approved is the booking's cancel, by payroll access,
+     and never after an approved pay run paid it. Examples HL49-HL51.
+     Built 2 Oct 2026 (Payroll › Leave requests; tenant migration 0071).
+170. **Advance holiday pay over the 8% stays refused (question 3).** The
+     law allows the deduction only "with the written consent of the
+     worker" (Wages Protection Act 1983 s 5(1)(a); s 23(2) and s 25(2) only
+     subtract advance holiday pay from the 8%, down to nil). How the
+     recovery is taxed couldn't be confirmed from IRD: IR335 (April 2026)
+     has nothing on recovering holiday pay paid in advance or on wages
+     repaid, and the 2019 regulatory impact statement on PAYE error
+     correction only says that before 2019 "Some employers ... seek a
+     refund of PAYE and other deductions, when they obtain agreement from
+     the employee that the net amount will be repaid", for overpayments
+     made in error, which advance holiday pay isn't. PayHero (a NZ payroll)
+     adds "'Annual Leave Taken in Advance' pay lines ... to deduct the
+     amounts owing" "at the same rate it was originally paid at" without
+     saying how they're taxed ([Final Pay](https://support.payhero.co.nz/hc/en-us/articles/360002666936-Final-Pay));
+     Employment NZ's Final pay page doesn't cover it. Without IRD's
+     treatment Tohyee keeps the note (the amount over the 8%, deductible
+     only with written consent) and refuses the deduction (decision 150
+     stands). Ask IRD (or an accountant) whether recovering it in the same
+     tax year reduces the final pay's gross (PAYE income) or is an
+     after-tax deduction, and what happens across a tax year.
+171. **Back pay over periods with leave stays refused (question 4).**
+     s 21(2)(b)(i) uses "ordinary weekly pay as at the beginning of the
+     annual holiday", which is "the amount of pay that the employee
+     receives under his or her employment agreement for an ordinary
+     working week" (s 8(1)(a)); whether a later agreement to backdate a
+     rise changes that amount for holidays already taken isn't said by the
+     Act, by Employment NZ's Annual holiday pay or Calculating holiday and
+     leave pay pages (neither mentions back pay), or by the Holidays Act
+     Taskforce's final report (2019). The rule isn't clear, so decision 152
+     stands: back pay for a pay period with leave or holiday pay in it is
+     refused, with the reason. (Back pay itself still counts as gross
+     earnings in the period it's paid, decision 139.)
+172. **Paying annual holidays before they're taken stays not built
+     (question 5).** s 27(1) pays annual holiday pay before the holiday
+     unless the employment agreement or the employee agrees to it being
+     paid in the pay that relates to the period of the holiday; Tohyee
+     records that agreement per employee (decision 142) and refuses annual
+     holidays without it (decision 157), so nobody is paid the wrong way;
+     the refusal says to record the agreement. Xero's only "in advance"
+     help is paying whole pay runs early ([Process pay runs in advance](https://central.xero.com/s/article/Process-holiday-pay-runs-in-advance)),
+     which Tohyee can already do by approving a pay run with a later pay
+     date. Build it only if an organisation needs it.
+173. **"Otherwise a working day" stays a suggestion from 2 of the last 4
+     weeks (question 6)**, and the screen now says it's only a suggestion.
+     Employment NZ (Managing public holidays as an employer): "You and
+     your employee must consider all these factors when trying to reach an
+     agreement. For example, you cannot just rely on one and then conclude
+     that the day is not an otherwise working day", and it sets no
+     frequency rule. Tohyee's figure is one factor (s 12(3)(b), work
+     patterns); the person recording the decision is reminded of the
+     others (s 12(3): the agreement, rosters, working only when work is
+     available, reasonable expectations, whether they'd have worked but
+     for the holiday), and the decision is theirs (decision 21).
+174. **Hours worked on a public holiday beyond the usual day: the ordinary
+     rate, then time and a half (question 7)**, as decision 140: s 50(1)(a)
+     pays "the portion of the employee's relevant daily pay or average
+     daily pay (less any penal rates) that relates to the time actually
+     worked on the day plus half that amount again", and relevant daily pay
+     includes "payments for overtime if those payments would have otherwise
+     been received had the employee worked on the day concerned"
+     (s 9(1)(b)(ii); checked against `docs/sources/holidays-act-2003.md`).
+     Unchanged.
+175. **The usual pay from the usual week (question 8)**, as decision 148:
+     unchanged. Xero likewise pays from a pay template of regular earnings
+     and a working pattern ([Set regular earnings and a working pattern for
+     an employee](https://central.xero.com/s/article/Set-regular-earnings-and-a-working-pattern-for-an-employee)).
+176. **Redundancy isn't gross earnings for holiday pay (question 9)**, as
+     decision 139. Employment NZ (Calculating holiday and leave pay, read
+     2 Oct 2026, last modified 7 Aug 2026): "The law does not say if
+     redundancy payments are included in gross earnings. Our view is that
+     redundancy would generally be received as compensation and not
+     earnings." Unchanged.
+177. **Post the leave liability to the ledger: yes, designed now, built
+     next (question 10).** NZ IAS 19 para 11: "When an employee has
+     rendered service to an entity during an accounting period, the entity
+     shall recognise the undiscounted amount of short-term employee
+     benefits expected to be paid in exchange for that service", para 13
+     for "paid absences", and para 16: "measure the expected cost of
+     accumulating paid absences as the additional amount that the entity
+     expects to pay as a result of the unused entitlement that has
+     accumulated at the end of the reporting period". (PBE IPSAS 39, for
+     not-for-profits, has the same rules for short-term employee benefits:
+     not read here, **unverified**.) NetSuite has no NZ leave; Xero NZ only
+     reports it ([Leave Liability report](https://central.xero.com/s/article/Employee-Leave-Liability-report):
+     "summarises what you owe an employee on a specific date"), leaving the
+     journal to the bookkeeper. Design: "Post leave liability" at a date
+     (payroll access and the bookkeeper role), one journal for the change
+     since the last posting: the liability report's total at that date
+     (annual holidays entitled, the running 8%, alternative holidays,
+     decision 153) less the total last posted, Dr a leave expense account
+     and Cr an employee entitlements liability account, split by the
+     report's Departments, never naming employees; a posting can be voided
+     with a reversing journal, never edited. Sick, bereavement and family
+     violence leave aren't accrued: they don't vest and lapse or cap
+     (s 66, s 72H), and para 16 measures only what the entity "expects to
+     pay" because of unused entitlement, which needs an estimate Tohyee
+     can't make. Leave paid in pay runs keeps posting to wages (decision
+     138); the next liability posting takes the fall. Examples HL52-HL54;
+     the liability report's valuation of alternative holidays at a usual
+     day's OWP (decision 153) stays.
+178. **The anniversary day must be chosen before public holidays are paid
+     (question 11)**, as decision 22: the Act's anniversary day is the one
+     observed locally (s 44(1)(k), as HL31 reads it; that section isn't in
+     the saved extract) and Employment NZ says that for someone working
+     away from home "you and the employee should agree which Anniversary
+     Day will be observed". Tohyee can't pick it. Unchanged.
+179. **2028's public holidays aren't added yet (question 12).** Employment
+     NZ's page (last modified 25 Sep 2026) lists 2026 and 2027 only.
+     Anniversary days aren't set by any Act (they're the day observed
+     locally) and every employee needs one (decision 178), so a year
+     without them can't be paid; national dates alone would change nothing.
+     What is fixed by law for the part of 2028 the Holidays Act covers (to
+     the first pay period on or after 6 Aug 2028): New Year's Day and
+     2 January (Saturday and Sunday in 2028, so Monday 3
+     and Tuesday 4 January for most, s 45), Waitangi Day (6 February, a
+     Sunday: Monday 7 February, s 45A), Good Friday and Easter Monday,
+     ANZAC Day (Tuesday 25 April), the Sovereign's birthday (the first
+     Monday in June, s 44(1)(i)) and Matariki, **Friday 14 July 2028** in
+     Te Papa's list of the dates the Matariki Advisory Committee set
+     (Schedule 1 of Te Kāhui o Matariki Public Holiday Act 2022 couldn't be
+     read: legislation.govt.nz refused). Add 2028 to
+     `src/lib/payroll/leave/public-holiday-dates.ts` when Employment NZ
+     publishes it, checking these; until then a pay period touching 2028
+     is refused (decision 162). HANDOVER has the reminder.
+180. **Aroha's anniversary day in HL13 is Wellington's (question 13):**
+     Monday 25 January 2027 (Employment NZ, read 2 Oct 2026), outside her
+     booking of 22 March to 2 April 2027. Otago's (Monday 22 March 2027)
+     and Southland's (Tuesday 30 March 2027) fall in it. The tests already
+     set her to Wellington; HL13 now says so.
+181. **Cash-ups at the s 21(2) rate on the date agreed (question 14)**, as
+     decision 158. s 28B(1) pays the portion "in accordance with section
+     21(2)" and "as soon as practicable after the employer has agreed to
+     the employee's request"; Employment NZ (Cashing up annual holidays)
+     says the payment "must be at least the same amount as if the employee
+     had taken the holidays" and is "usually the next pay day". The
+     agreement is the cash-up's event, the way the start of the holiday is
+     for s 21(2), so OWP is taken at the date agreed and AWE to the end of
+     the last pay period before it. Unchanged.

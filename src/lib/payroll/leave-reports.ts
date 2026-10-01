@@ -3,7 +3,8 @@ import { writeAuditEvent } from "@/lib/audit";
 import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
-import { add, dec, divide, isPositive, mul, sum, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { formatDate } from "@/lib/format";
+import { add, dec, divide, isPositive, isZero, mul, sum, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { requirePayrollAccess } from "@/lib/payroll/access";
 import { annualEntitlement } from "@/lib/payroll/leave/annual";
 import { laterOf } from "@/lib/payroll/leave/dates";
@@ -217,14 +218,34 @@ export async function getLeaveRecord(tx: OrgTx, employeeIdInput: unknown): Promi
   const until = facts.finishDate && facts.finishDate < today ? facts.finishDate : today;
   const entries: LeaveRecordEntry[] = [{ date: facts.startDate, to: null, item: "(b)", entry: "Employment started", hours: null, amount: null, payRun: null }];
   const kept = whyLeaveNotKept(facts, recordsStartWith(facts, null)) === null;
+  const opening = facts.opening;
+  // Entitlements on or before the opening balances' date are in them (decision 168).
+  const afterOpening = (date: string) => !opening || date > opening.asAt;
+  if (kept && opening) {
+    const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+    entries.push({
+      date: opening.asAt,
+      to: null,
+      item: "(d), (e), (f), (k)",
+      entry:
+        `Opening balances (${opening.source}): annual holidays ${opening.annualWeeks} weeks` +
+        `${opening.annualLastEntitled ? `, last entitled ${formatDate(opening.annualLastEntitled)}` : ""}` +
+        `${!isZero(dec(opening.annualCashedUpWeeks)) ? `, ${opening.annualCashedUpWeeks} week cashed up that entitlement year` : ""}` +
+        `; sick leave ${opening.sickDays} days; family violence leave ${opening.familyViolenceDays} days; ` +
+        `${plural(opening.alternativeHolidays.length, "untaken alternative holiday")}${opening.alternativeHolidays.length ? ` (arose ${opening.alternativeHolidays.map(formatDate).join(", ")})` : ""}`,
+      hours: null,
+      amount: null,
+      payRun: null,
+    });
+  }
   if (kept) {
-    for (const date of annualBalance(facts, until).entitlementDates) {
+    for (const date of annualBalance(facts, until).entitlementDates.filter(afterOpening)) {
       const settings = settingsOn(facts, date) ?? facts.settings.at(-1)!;
       const hours = [...annualEntitlement(toPlainString(weekHours(settings.pattern))).values()][0];
       entries.push({ date, to: null, item: "(d), (e)", entry: "Entitled to 4 weeks' annual holidays", hours: toPlainString(hours), amount: null, payRun: null });
     }
     for (const event of dayLeaveBalanceOf(facts, "sick", until).events) {
-      if (event.kind !== "entitled") continue;
+      if (event.kind !== "entitled" || !afterOpening(event.date)) continue;
       const carried = toFixedString(unitsOf(event.carried, 4), 2);
       const lapsed = toFixedString(unitsOf(event.lapsed, 4), 2);
       entries.push({
@@ -237,7 +258,7 @@ export async function getLeaveRecord(tx: OrgTx, employeeIdInput: unknown): Promi
         payRun: null,
       });
     }
-    for (const date of sickDates(facts, until)) {
+    for (const date of sickDates(facts, until).filter(afterOpening)) {
       entries.push({ date, to: null, item: "(f)", entry: "Entitled to 10 days' family violence leave", hours: null, amount: null, payRun: null });
     }
   }

@@ -48,7 +48,7 @@ function uuid(input: unknown, what: string): string {
 
 export type UploadedFile = { fileName: string; content: Uint8Array };
 
-async function loadSettingsList(tx: OrgTx, employeeId: string): Promise<LeaveSettings[]> {
+export async function loadSettingsList(tx: OrgTx, employeeId: string): Promise<LeaveSettings[]> {
   const dates = await tx.query<{ effective_from: string }>(
     "select distinct effective_from::text from payroll_leave_settings where employee_id::text = $1 order by effective_from desc",
     [employeeId],
@@ -73,7 +73,7 @@ async function keptFacts(tx: OrgTx, employeeIdInput: unknown): Promise<EmployeeF
 }
 
 /** Stores a file kept with a leave record (s 81(4): kept at least 6 years; never deleted). */
-async function storeFile(tx: OrgTx, employeeId: string, purpose: string, file: UploadedFile): Promise<string> {
+export async function storeFile(tx: OrgTx, employeeId: string, purpose: string, file: UploadedFile): Promise<string> {
   const checked = checkAttachment(file.fileName, file.content);
   const inserted = await tx.query<{ id: string }>(
     `insert into payroll_leave_files (employee_id, purpose, file_name, content_type, byte_size, sha256, content, created_by_user_id, created_by_email)
@@ -93,7 +93,7 @@ async function storeFile(tx: OrgTx, employeeId: string, purpose: string, file: U
   return inserted.rows[0].id;
 }
 
-function fileHash(file: UploadedFile | null | undefined): string | null {
+export function fileHash(file: UploadedFile | null | undefined): string | null {
   return file ? `${file.fileName}:${createHash("sha256").update(file.content).digest("hex")}` : null;
 }
 
@@ -191,6 +191,10 @@ function toBooking(row: BookingRow): LeaveBooking {
 
 export async function getLeaveBooking(tx: OrgTx, idInput: unknown): Promise<LeaveBooking> {
   await requirePayrollAccess(tx);
+  return loadBooking(tx, idInput);
+}
+
+async function loadBooking(tx: OrgTx, idInput: unknown): Promise<LeaveBooking> {
   const result = await tx.query<BookingRow>(`${BOOKING_SELECT} where b.id = $1`, [uuid(idInput, "leave booking")]);
   if (!result.rows[0]) throw new NotFoundError("That leave booking wasn't found.");
   return toBooking(result.rows[0]);
@@ -223,8 +227,10 @@ export type BookingWarnings = string[];
 export async function createLeaveBooking(
   tx: OrgTx,
   input: Record<string, unknown> & { advanceAgreement?: UploadedFile | null },
+  /** Booking an employee's approved leave request (decision 169): the approver needn't have payroll access. Never from a route's body. */
+  options: { fromApprovedRequest?: boolean } = {},
 ): Promise<{ created: boolean; booking: LeaveBooking; warnings: BookingWarnings; payRuns: string[] }> {
-  await requirePayrollAccess(tx);
+  if (!options.fromApprovedRequest) await requirePayrollAccess(tx);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const { advanceAgreement, ...fields } = input;
   const hash = requestHash("payroll_leave_booking", { ...fields, advanceAgreement: fileHash(advanceAgreement) });
@@ -356,7 +362,7 @@ export async function createLeaveBooking(
     details: { employeeId: facts.id, leaveType: leaveType === "family_violence" ? "special" : leaveType, startDate, endDate },
   });
   const payRuns = await updateDraftsCovering(tx, facts.id, startDate, endDate);
-  return { created: true, booking: await getLeaveBooking(tx, id), warnings, payRuns };
+  return { created: true, booking: await loadBooking(tx, id), warnings, payRuns };
 }
 
 /** Cancels a booking no approved pay run has paid (payroll access). Drafts that paid it are worked out again. */

@@ -85,7 +85,11 @@ export type DayLeaveTaken = { date: string; quantity: LeaveQuantity };
 
 export type DayLeaveEvent =
   | { date: string; kind: "entitled"; quantity: LeaveQuantity; carried: LeaveQuantity; lapsed: LeaveQuantity; balance: LeaveQuantity }
-  | { date: string; kind: "taken"; quantity: LeaveQuantity; balance: LeaveQuantity };
+  | { date: string; kind: "taken"; quantity: LeaveQuantity; balance: LeaveQuantity }
+  | { date: string; kind: "opening"; quantity: LeaveQuantity; balance: LeaveQuantity };
+
+/** An opening balance (decision 168; HL43): the balance at the end of the opening date, from another payroll. */
+export type DayLeaveOpening = { date: string; balance: LeaveQuantity };
 
 /**
  * A sick leave balance over time (s 65, s 66; HL22): 10 days each
@@ -93,7 +97,7 @@ export type DayLeaveEvent =
  * days, to at most 20; the rest lapses. Sick leave taken in advance (a
  * negative balance, s 63(3)) comes off the next 10.
  */
-export function sickLeaveBalance(entitlementDates: readonly string[], taken: readonly DayLeaveTaken[], on: string): {
+export function sickLeaveBalance(entitlementDates: readonly string[], taken: readonly DayLeaveTaken[], on: string, opening: DayLeaveOpening | null = null): {
   balance: LeaveQuantity;
   events: DayLeaveEvent[];
 } {
@@ -101,20 +105,21 @@ export function sickLeaveBalance(entitlementDates: readonly string[], taken: rea
     if (signOfLeave(before) <= 0) return { carried: before, lapsed: NO_LEAVE };
     const carried = minLeave(before, days(SICK_CARRY_OVER_LIMIT));
     return { carried, lapsed: subtractLeave(before, carried) };
-  }, days(SICK_DAYS_A_YEAR));
+  }, days(SICK_DAYS_A_YEAR), opening);
 }
 
 /**
  * A family violence leave balance (s 72H; HL27): 10 days each anniversary,
  * not carried over; leave taken in advance (s 72D(3)) comes off the next 10.
+ * Both start from an opening balance when one is given (decision 168).
  */
-export function familyViolenceLeaveBalance(entitlementDates: readonly string[], taken: readonly DayLeaveTaken[], on: string): {
+export function familyViolenceLeaveBalance(entitlementDates: readonly string[], taken: readonly DayLeaveTaken[], on: string, opening: DayLeaveOpening | null = null): {
   balance: LeaveQuantity;
   events: DayLeaveEvent[];
 } {
   return dayLeaveBalance(entitlementDates, taken, on, (before) =>
     signOfLeave(before) <= 0 ? { carried: before, lapsed: NO_LEAVE } : { carried: NO_LEAVE, lapsed: before },
-  days(FAMILY_VIOLENCE_DAYS_A_YEAR));
+  days(FAMILY_VIOLENCE_DAYS_A_YEAR), opening);
 }
 
 function dayLeaveBalance(
@@ -123,13 +128,28 @@ function dayLeaveBalance(
   on: string,
   carry: (before: LeaveQuantity) => { carried: LeaveQuantity; lapsed: LeaveQuantity },
   yearly: LeaveQuantity,
+  opening: DayLeaveOpening | null,
 ): { balance: LeaveQuantity; events: DayLeaveEvent[] } {
   type Step = { date: string; order: number; apply: () => void };
   let balance: LeaveQuantity = NO_LEAVE;
   const events: DayLeaveEvent[] = [];
+  // With an opening balance, entitlements and leave on or before its date are in it.
+  const after = (date: string) => !opening || date > opening.date;
   const steps: Step[] = [
+    ...(opening && opening.date <= on
+      ? [
+          {
+            date: opening.date,
+            order: -1,
+            apply: () => {
+              balance = opening.balance;
+              events.push({ date: opening.date, kind: "opening" as const, quantity: opening.balance, balance });
+            },
+          },
+        ]
+      : []),
     ...entitlementDates
-      .filter((date) => date <= on)
+      .filter((date) => date <= on && after(date))
       .map((date) => ({
         date,
         order: 0,
@@ -140,7 +160,7 @@ function dayLeaveBalance(
         },
       })),
     ...taken
-      .filter((entry) => entry.date <= on)
+      .filter((entry) => entry.date <= on && after(entry.date))
       .map((entry) => ({
         date: entry.date,
         order: 1,

@@ -181,7 +181,7 @@ function money2(value: Decimal): string {
 }
 
 /** Who the signed-in person is to an employee's timesheets (decisions 95, 96). */
-type Access = { payroll: boolean; own: boolean; approver: boolean };
+export type Access = { payroll: boolean; own: boolean; approver: boolean };
 
 async function payrollFor(tx: OrgTx, role: Role): Promise<boolean> {
   return roleAtLeast(role, PAYROLL_MINIMUM_ROLE) && (await hasPayrollAccess(tx));
@@ -205,6 +205,38 @@ async function findEmployee(tx: OrgTx, idInput: unknown, forUpdate = false): Pro
   const result = await tx.query<EmployeeRow>(`${EMPLOYEE_SELECT} where e.id = $1`, [id]);
   if (!result.rows[0]) throw new NotFoundError("That employee wasn't found.");
   return result.rows[0];
+}
+
+/**
+ * Who the signed-in person is to an employee (decisions 95, 96): the
+ * employee themselves, their timesheet approver (else their reports-to
+ * manager's login, bookkeeper or higher), or someone with payroll access.
+ * Leave requests use the same rules (decision 169).
+ */
+export async function employeeAccess(
+  tx: OrgTx,
+  role: Role,
+  employeeIdInput: unknown,
+  forUpdate = false,
+): Promise<{ employee: { id: string; name: string; startDate: string; finishDate: string | null; isArchived: boolean }; access: Access }> {
+  const employee = await findEmployee(tx, employeeIdInput, forUpdate);
+  const access = accessTo(employee, tx.actor.userId, role, await payrollFor(tx, role));
+  return {
+    employee: { id: employee.id, name: employee.name, startDate: employee.start_date, finishDate: employee.finish_date, isArchived: employee.is_archived },
+    access,
+  };
+}
+
+/** The employees the signed-in person is linked to, or approves for (decision 96). */
+export async function employeesForActor(tx: OrgTx): Promise<{ own: string[]; approves: string[] }> {
+  if (!tx.actor.userId) return { own: [], approves: [] };
+  const result = await tx.query<{ id: string; own: boolean }>(
+    `select e.id::text, e.user_id = $1 as own
+       from payroll_employees e left join payroll_employees m on m.id = e.reports_to_id
+      where e.user_id = $1 or coalesce(e.timesheet_approver_user_id, m.user_id) = $1`,
+    [tx.actor.userId],
+  );
+  return { own: result.rows.filter((row) => row.own).map((row) => row.id), approves: result.rows.filter((row) => !row.own).map((row) => row.id) };
 }
 
 async function findSheet(tx: OrgTx, idInput: unknown, forUpdate = false): Promise<SheetRow> {
