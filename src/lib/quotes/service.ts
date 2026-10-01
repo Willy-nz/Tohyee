@@ -24,6 +24,7 @@ import {
 } from "@/lib/invoices/service";
 import { parseRateInput } from "@/lib/fx/documents";
 import { dec, toPlainString } from "@/lib/money/decimal";
+import { createSalesOrder, getSalesOrder, type SalesOrder } from "@/lib/sales-orders/service";
 import { parseSalespersonInput } from "@/lib/salespeople/service";
 import { keptValues } from "@/lib/tracking/service";
 import {
@@ -70,6 +71,9 @@ export type QuoteSummary = {
   copiedFromQuoteId: string | null;
   invoiceId: string | null;
   invoiceNumber: string | null;
+  /** The sales order made by accepting it as an order (SO9). */
+  salesOrderId: string | null;
+  salesOrderNumber: string | null;
   finalisedAt: string | null;
   finalisedByEmail: string | null;
   closedAt: string | null;
@@ -114,6 +118,8 @@ type QuoteRow = {
   copied_from_quote_id: string | null;
   invoice_id: string | null;
   invoice_number: string | null;
+  sales_order_id: string | null;
+  so_number: string | null;
   finalised_at: string | null;
   finalised_by_email: string | null;
   closed_at: string | null;
@@ -126,11 +132,12 @@ type QuoteRow = {
 const SUMMARY_SQL = `select q.id, q.status, q.quote_number, q.contact_id, c.name as contact_name, q.quote_date, q.expiry_date,
        q.reference, q.terms, q.amounts_mode, q.currency_code, q.subtotal, q.tax_total, q.total, q.custom_fields,
        q.salesperson_id, sp.name as salesperson_name, q.copied_from_quote_id, q.invoice_id, i.invoice_number,
-       q.finalised_at, q.finalised_by_email, q.closed_at, q.closed_by_email, q.created_by_email, q.created_at, q.updated_at
+       q.sales_order_id, so.so_number, q.finalised_at, q.finalised_by_email, q.closed_at, q.closed_by_email, q.created_by_email, q.created_at, q.updated_at
   from quotes q
   join contacts c on c.id = q.contact_id
   left join salespeople sp on sp.id = q.salesperson_id
-  left join sales_invoices i on i.id = q.invoice_id`;
+  left join sales_invoices i on i.id = q.invoice_id
+  left join sales_orders so on so.id = q.sales_order_id`;
 
 /** Whether a quote shows as expired on `today` (QT5): finalised, not yet accepted or declined, and past its expiry date. */
 export function isQuoteExpired(quote: { status: QuoteStatus; expiryDate: string | null }, today: string): boolean {
@@ -160,6 +167,8 @@ function toSummary(row: QuoteRow, today: string): QuoteSummary {
     copiedFromQuoteId: row.copied_from_quote_id,
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
+    salesOrderId: row.sales_order_id,
+    salesOrderNumber: row.so_number,
     finalisedAt: row.finalised_at,
     finalisedByEmail: row.finalised_by_email,
     closedAt: row.closed_at,
@@ -529,7 +538,7 @@ export async function finaliseQuote(
 async function closeCommand(
   tx: OrgTx,
   quoteId: string,
-  kind: "accept" | "decline",
+  kind: "accept" | "accept_sales_order" | "decline",
   command: { source?: unknown; idempotencyKey: unknown },
   payload: Record<string, unknown>,
 ) {
@@ -614,6 +623,68 @@ export async function acceptQuote(
     details: { quoteId: current.id, quoteNumber: current.quoteNumber },
   });
   return { created: true, quote: await getQuote(tx, current.id), invoice };
+}
+
+/**
+ * Accepts a finalised quote as a sales order (SO9; NetSuite's "Converting an
+ * Estimate to a Sales Order"): makes a draft sales order to the same customer
+ * dated `orderDate`, carrying the quote's lines, amounts, custom fields and
+ * salesperson, with the quote number as its reference unless the quote had
+ * one. The quote is accepted and the two point to each other. Accepting again
+ * with the same key returns the same order; an accepted or declined quote
+ * can't be accepted.
+ */
+export async function acceptQuoteAsSalesOrder(
+  tx: OrgTx,
+  quoteIdInput: unknown,
+  input: { source?: unknown; idempotencyKey: unknown; orderDate: unknown },
+): Promise<{ created: boolean; quote: Quote; salesOrder: SalesOrder }> {
+  const quoteId = requireId(quoteIdInput, "quoteId");
+  const orderDate = parseIsoDate(input.orderDate, "orderDate");
+  const command = await closeCommand(tx, quoteId, "accept_sales_order", input, { orderDate });
+  const earlier = await command.replay();
+  if (earlier) return { created: false, quote: earlier, salesOrder: await orderOf(tx, earlier) };
+  const current = await lockQuote(tx, quoteId);
+  const meanwhile = await command.replay();
+  if (meanwhile) return { created: false, quote: meanwhile, salesOrder: await orderOf(tx, meanwhile) };
+  if (current.status === "draft") throw new ConflictError("Finalise this quote before it's accepted.");
+  if (current.status !== "finalised") throw new ConflictError(`${quoteLabel(current)} is already ${current.status}.`);
+  if (orderDate < current.quoteDate) throw new ValidationError(`The order date can't be before the quote date (${current.quoteDate}).`);
+  const { salesOrder } = await createSalesOrder(tx, {
+    source: "quote",
+    idempotencyKey: `quote-${current.id}-sales-order`,
+    contactId: current.contactId,
+    orderDate,
+    reference: current.reference ?? current.quoteNumber,
+    amountsMode: current.amountsMode,
+    lines: linesAsSent(current.lines),
+    customFields: current.customFields,
+    salespersonId: current.salespersonId,
+  });
+  await tx.query(
+    `update quotes set status = 'accepted', sales_order_id = $2, close_command_source = $3, close_idempotency_key = $4,
+            close_request_hash = $5, closed_by_user_id = $6, closed_by_email = $7, closed_at = now(), updated_at = now()
+      where id = $1`,
+    [current.id, salesOrder.id, command.source, command.idempotencyKey, command.hash, tx.actor.userId, tx.actor.email],
+  );
+  await writeAuditEvent(tx, {
+    eventType: "quote.accepted",
+    entityType: "quote",
+    entityId: current.id,
+    details: { quoteNumber: current.quoteNumber, salesOrderId: salesOrder.id },
+  });
+  await writeAuditEvent(tx, {
+    eventType: "sales_order.created_from_quote",
+    entityType: "sales_order",
+    entityId: salesOrder.id,
+    details: { quoteId: current.id, quoteNumber: current.quoteNumber },
+  });
+  return { created: true, quote: await getQuote(tx, current.id), salesOrder: await getSalesOrder(tx, salesOrder.id) };
+}
+
+async function orderOf(tx: OrgTx, quote: Quote): Promise<SalesOrder> {
+  if (!quote.salesOrderId) throw new ConflictError(`${quoteLabel(quote)} was accepted as an invoice, not a sales order.`);
+  return getSalesOrder(tx, quote.salesOrderId);
 }
 
 /** Declines a finalised quote (QT4): it's closed and can't be accepted or invoiced. */

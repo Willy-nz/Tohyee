@@ -13,6 +13,7 @@ const SALES_LINKS: AreaLink[] = [
   { href: "/operations/invoices?show=awaiting", label: "Awaiting payment", description: "Approved invoices with something still due." },
   { href: "/operations/credit-notes", label: "Credit notes", description: "Credit for customers: apply it to invoices or refund it." },
   { href: "/operations/quotes", label: "Quotes", description: "Prices offered to customers; accept one to make its invoice." },
+  { href: "/operations/sales-orders", label: "Sales orders", description: "What customers have ordered; invoice it all at once or in parts." },
   { href: "/operations/repeating-invoices", label: "Repeating invoices", description: "Invoices made every so many weeks or months." },
   { href: "/operations/projects", label: "Projects", description: "Time and expenses for customer work, and invoicing what's unbilled." },
 ];

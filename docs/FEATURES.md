@@ -83,7 +83,7 @@ that something happened.
   credit notes are in the document's currency at their own rate, realising
   the difference on 7020 (MC14-MC19); one payment can pay several of a
   contact's foreign documents at one rate, each with its own gain or loss
-  (MC20-MC24); quotes, repeating invoices and bills and purchase orders are
+  (MC20-MC24); quotes, sales orders, repeating invoices and bills and purchase orders are
   in the contact's currency with no rate, and the invoice or bill made from
   them takes a rate for its own date (MC25-MC28; repeating ones are approved
   automatically only at a rate from the exchange rates list); stock items on foreign-currency documents are valued in NZD at
@@ -258,7 +258,30 @@ that something happened.
   closes it; a finalised quote past its expiry date shows as expired;
   copying makes a new draft. Quotes post nothing. A quote shows **Sent**
   only once an email of it has been accepted by the email server (below); its
-  status doesn't change.
+  status doesn't change. A finalised quote can instead be **accepted as a
+  sales order** (SO9).
+- **Sales orders, stage 1** (Sales; SO1-SO12, not yet approved by Jess),
+  following NetSuite's sales orders: drafts to a customer with the same
+  lines as an invoice (items, units, price levels, tracking, custom fields,
+  salesperson), an order date, an optional expected date, a reference and a
+  memo; made by hand or by accepting a quote. Approving numbers them
+  (`SO-0001`, no gaps) and locks them (the database refuses changes). They
+  post nothing and don't change stock or GST. **Invoice** makes a draft
+  invoice for what's left on each line, or less for a part invoice, each
+  line linked back to its order line. What's invoiced per line is worked out
+  from approved linked invoices (draft ones shown separately), never typed;
+  voiding an invoice or deleting a draft gives its quantities back. Linked
+  invoice lines keep their item and unit, the invoice keeps its customer,
+  and invoices can't add up to more than was ordered on a line (the
+  database refuses too). The status (draft, pending billing, partly billed,
+  billed, closed, cancelled) is worked out from those figures; an approved
+  order can be **closed** (nothing more to invoice; not while it has draft
+  invoices) or **cancelled** (only with no invoices other than voided
+  ones). In the customer's currency with no rate; each invoice takes a rate
+  for its own date (SO10). Cost of sales is still posted when the invoice is
+  approved. Not yet: reserving stock, deliveries, line discounts, editing an
+  approved order, closing single lines, printing or emailing orders, and CRM
+  or Shopify orders.
 - **Repeating invoices** (Sales; RI1-RI10, not yet approved): a template
   with invoice lines, every N weeks or months from a start date to an
   optional end date, due by payment terms or N days, and each invoice saved
@@ -833,6 +856,11 @@ isn't acceptable, because people would trust it:
   claims (their suppliers aren't contacts), cash coding and bank rules
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)
+- on sales orders (SO1-SO12, stage 1): reserving stock (committed
+  quantities), deliveries and moving cost of sales to delivery, making
+  orders from won CRM opportunities or Shopify, line discounts, editing an
+  approved order, closing single lines or reopening a closed order, credit
+  notes giving quantities back, and printing or emailing orders
 
 ## Next, in rough order
 

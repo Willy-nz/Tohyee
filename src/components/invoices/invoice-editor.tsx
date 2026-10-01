@@ -78,6 +78,8 @@ export type EditorLine = {
   usualTaxCode?: string;
   /** Chosen by hand, or saved: the customer's defaults leave it alone (EX7, EX8). */
   taxTyped?: boolean;
+  /** An invoice line made from a sales order line (SO3); it keeps that line's item and unit. */
+  salesOrderLineId?: string;
 };
 
 let lineKey = 0;
@@ -186,6 +188,7 @@ function InvoiceForm({
           tracking: line.tracking ?? {},
           customFields: line.customFields ?? {},
           taxTyped: true,
+          ...(line.salesOrderLineId ? { salesOrderLineId: line.salesOrderLineId } : {}),
         }))
       : [blankLine(defaults, lineDefaults)],
   );
@@ -226,6 +229,7 @@ function InvoiceForm({
         taxCode: hasTax ? line.taxCode || null : null,
         tracking: line.tracking,
         customFields: line.customFields,
+        ...(line.salesOrderLineId ? { salesOrderLineId: line.salesOrderLineId } : {}),
       })),
       customFields,
       salespersonId: salespersonId || null,
@@ -264,8 +268,8 @@ function InvoiceForm({
         </Notice>
       ) : null}
       <div className={ui.grid3}>
-        <Field label="Customer">
-          <select value={contactId} onChange={(event) => {
+        <Field label="Customer" hint={invoice?.salesOrderNumber ? `From sales order ${invoice.salesOrderNumber}, so the customer stays.` : undefined}>
+          <select value={contactId} disabled={Boolean(invoice?.salesOrderId)} onChange={(event) => {
               const next = customers.find((contact) => contact.id === event.target.value);
               if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
               setContactId(event.target.value);
@@ -486,19 +490,23 @@ export function SalesLines({
                     maxLength={500}
                     required
                   />
-                  <LineItemPicker
-                    organisationId={organisationId}
-                    items={items}
-                    side="sale"
-                    contactId={contactId}
-                    itemId={line.itemId}
-                    unitId={line.unitId}
-                    labelPrefix={`Line ${index + 1}`}
-                    onPick={(patch) => {
-                      const { taxCode, ...rest } = patch;
-                      update(line.key, { ...rest, ...usualWithContact(taxCode, contactTaxCode) });
-                    }}
-                  />
+                  {line.salesOrderLineId ? (
+                    <div className={ui.muted}>From the sales order (keeps its item)</div>
+                  ) : (
+                    <LineItemPicker
+                      organisationId={organisationId}
+                      items={items}
+                      side="sale"
+                      contactId={contactId}
+                      itemId={line.itemId}
+                      unitId={line.unitId}
+                      labelPrefix={`Line ${index + 1}`}
+                      onPick={(patch) => {
+                        const { taxCode, ...rest } = patch;
+                        update(line.key, { ...rest, ...usualWithContact(taxCode, contactTaxCode) });
+                      }}
+                    />
+                  )}
                 </td>
                 <td data-label="Quantity">
                   <input
