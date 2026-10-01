@@ -679,6 +679,14 @@ Enforced by the app (and covered by tests):
   (manual journals only); a trigger checks every key is a field for that
   kind of record, and `src/lib/custom-fields/` checks types, options and
   required fields. They never reach posting, reports or the GST return.
+  `custom_field_sections` (tenant migration 0051) are named, ordered groups
+  per kind of record (contact, document, person, opportunity); a field's
+  `section_id` must be a section for its own kind (trigger). CRM people and
+  opportunities have their own `custom_fields` column (kinds `person` and
+  `opportunity`), and contact fields can be used on prospects. Each use
+  needs its module: prospects, people and opportunities need the CRM
+  switch, everything else Advanced reporting; with the switch off, kept
+  values stay but new ones are refused.
 - Modules: `organisation_settings.crm_enabled` and `advanced_features`
   (Advanced reporting). The CRM's tables are `crm_people`,
   `crm_opportunities`, `crm_tasks` and `crm_activities` (none deletable);

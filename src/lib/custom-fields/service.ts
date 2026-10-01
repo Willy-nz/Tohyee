@@ -6,6 +6,7 @@ import {
   CUSTOM_FIELD_RECORD_NAMES,
   CUSTOM_FIELD_RECORDS,
   CUSTOM_FIELD_TYPES,
+  CUSTOM_FIELD_USE_LABELS,
   type CustomField,
   type CustomFieldRecord,
   type CustomFieldSection,
@@ -98,11 +99,11 @@ export async function getCustomFieldSetup(tx: OrgTx): Promise<CustomFieldSetup> 
 }
 
 /** Set-up of a field needs the switch for every use it's on (CRMF1). */
-function requireSwitchedOn(switches: CustomFieldSwitches, record: CustomFieldRecord, uses: readonly CustomFieldUse[]): void {
+function requireSwitchedOn(switches: CustomFieldSwitches, uses: readonly CustomFieldUse[]): void {
   for (const use of uses) {
     if (isSwitchedOn(switches, use)) continue;
-    const module = isSwitchedOn({ advancedFeatures: true, crmEnabled: false }, use) ? "Advanced reporting is" : "The CRM is";
-    throw new ConflictError(`${module} off, so a field can't be on ${useLabel(record, use)}.`);
+    const what = isSwitchedOn({ advancedFeatures: true, crmEnabled: false }, use) ? "Advanced reporting is" : "The CRM is";
+    throw new ConflictError(`${what} off, so a field can't be on ${CUSTOM_FIELD_USE_LABELS[use]}.`);
   }
 }
 
@@ -208,7 +209,7 @@ export async function createCustomField(
   const label = parseText(input.label, "The label", 60);
   const help = parseHelp(input.help);
   const usedOn = parseUsedOn(input.usedOn, record);
-  requireSwitchedOn(await loadSwitches(tx), record, usedOn);
+  requireSwitchedOn(await loadSwitches(tx), usedOn);
   const sectionId = await parseSectionId(tx, input.sectionId, record);
   const isRequired = parseBool(input.isRequired, "isRequired") ?? false;
   const showInList = parseBool(input.showInList, "showInList") ?? false;
@@ -304,7 +305,7 @@ export async function updateCustomField(
   const label = input.label === undefined ? field.label : parseText(input.label, "The label", 60);
   const help = input.help === undefined ? field.help : parseHelp(input.help);
   const usedOn = input.usedOn === undefined ? field.usedOn : parseUsedOn(input.usedOn, field.record);
-  requireSwitchedOn(await loadSwitches(tx), field.record, [...new Set([...field.usedOn, ...usedOn])]);
+  requireSwitchedOn(await loadSwitches(tx), [...new Set([...field.usedOn, ...usedOn])]);
   const sectionId = input.sectionId === undefined ? field.sectionId : await parseSectionId(tx, input.sectionId, field.record);
   const move = input.move === undefined ? undefined : requireOneOf(input.move, "move", ["up", "down"] as const);
   const isRequired = parseBool(input.isRequired, "isRequired") ?? field.isRequired;
@@ -491,7 +492,7 @@ export async function deleteCustomFieldSection(tx: OrgTx, idInput: unknown): Pro
 /** Adds an option to a list or multiple select. */
 export async function addCustomFieldOption(tx: OrgTx, fieldIdInput: unknown, input: { name: unknown }): Promise<CustomFieldSetup> {
   const field = await loadField(tx, requireId(fieldIdInput, "fieldId"));
-  requireSwitchedOn(await loadSwitches(tx), field.record, field.usedOn);
+  requireSwitchedOn(await loadSwitches(tx), field.usedOn);
   if (field.type !== "list" && field.type !== "multi_select") throw new ValidationError("Only a list or multiple select has options.");
   const name = parseText(input.name, "The option's name", 100);
   if (field.options.length >= 200) throw new ConflictError("A list can have at most 200 options.");
@@ -528,7 +529,7 @@ export async function updateCustomFieldOption(
   const option = found.rows[0];
   if (!option) throw new NotFoundError("Option not found.");
   const field = await loadField(tx, option.field_id);
-  requireSwitchedOn(await loadSwitches(tx), field.record, field.usedOn);
+  requireSwitchedOn(await loadSwitches(tx), field.usedOn);
   const name = input.name === undefined ? option.name : parseText(input.name, "The option's name", 100);
   const isActive = parseBool(input.isActive, "isActive") ?? option.is_active;
   try {

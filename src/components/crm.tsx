@@ -6,6 +6,15 @@ import { type FormEvent, type ReactNode, useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
+import {
+  CustomFieldInputs,
+  CustomValueCell,
+  CustomValuesList,
+  listColumns,
+  startingValues,
+  useCustomFields,
+  visibleFields,
+} from "@/components/custom-fields";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { ExchangeRateField, useLastRate } from "@/components/fx";
@@ -23,6 +32,7 @@ import type {
   TeamMember,
   TimelineEntry,
 } from "@/lib/crm/service";
+import { contactUses, type CustomFieldSetup, type CustomValues, customValueText } from "@/lib/custom-fields/values";
 import { formatDate, formatDateTime, formatMoney, todayInBrowser } from "@/lib/format";
 import type { Invoice } from "@/lib/invoices/service";
 import { add, dec, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
@@ -142,34 +152,43 @@ function NewProspectForm({ organisationId, onSaved }: { organisationId: string; 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [key] = useState(() => newIdempotencyKey("prospect"));
+  const customSetup = useCustomFields(organisationId);
+  // Each prospect field's default, until someone changes a value (CRMF3).
+  const [custom, setCustom] = useState<CustomValues | null>(null);
+  const customFields = custom ?? startingValues(customSetup.data, "contact", ["prospect"]);
   const { busy, error, run } = useBusy();
   return (
     <form
-      className={ui.actions}
+      style={{ display: "grid", gap: 10 }}
       onSubmit={(event) => {
         event.preventDefault();
         void run(async () => {
           const result = await api<{ contact: Contact }>("/api/contacts", {
             method: "POST",
-            body: { organisationId, source: "ui", idempotencyKey: key, name, email: email || null, phone: phone || null, isProspect: true },
+            body: { organisationId, source: "ui", idempotencyKey: key, name, email: email || null, phone: phone || null, isProspect: true, customFields },
           });
           onSaved(result.contact);
         });
       }}
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <Field label="Company name">
-        <input value={name} maxLength={150} onChange={(event) => setName(event.target.value)} required />
-      </Field>
-      <Field label="Email">
-        <input type="email" value={email} maxLength={254} onChange={(event) => setEmail(event.target.value)} />
-      </Field>
-      <Field label="Phone">
-        <input type="tel" value={phone} maxLength={50} onChange={(event) => setPhone(event.target.value)} />
-      </Field>
-      <Button type="submit" disabled={busy || !name.trim()}>
-        {busy ? "Adding…" : "Add prospect"}
-      </Button>
+      <div className={ui.actions}>
+        <Field label="Company name">
+          <input value={name} maxLength={150} onChange={(event) => setName(event.target.value)} required />
+        </Field>
+        <Field label="Email">
+          <input type="email" value={email} maxLength={254} onChange={(event) => setEmail(event.target.value)} />
+        </Field>
+        <Field label="Phone">
+          <input type="tel" value={phone} maxLength={50} onChange={(event) => setPhone(event.target.value)} />
+        </Field>
+      </div>
+      <CustomFieldInputs setup={customSetup.data} record="contact" uses={["prospect"]} value={customFields} onChange={setCustom} disabled={busy} />
+      <div className={ui.actions}>
+        <Button type="submit" disabled={busy || !name.trim()}>
+          {busy ? "Adding…" : "Add prospect"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -181,6 +200,9 @@ export function CompaniesPage({ organisationId }: { organisationId: string }) {
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const companies = useApiData<{ companies: CompanySummary[] }>("/api/crm/companies", { organisationId, search: search || null });
+  const customSetup = useCustomFields(organisationId);
+  // Contact fields marked "show in lists", for whichever roles are switched on (CRMF7).
+  const columns = listColumns(customSetup.data, "contact", ["customer", "supplier", "prospect"]);
   return (
     <>
       <Card
@@ -218,6 +240,9 @@ export function CompaniesPage({ organisationId }: { organisationId: string }) {
                   <th className={ui.num}>Open tasks</th>
                   <th className={ui.num}>Open pipeline</th>
                   <th>Last activity</th>
+                  {columns.map((field) => (
+                    <th key={field.id}>{field.label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -237,6 +262,9 @@ export function CompaniesPage({ organisationId }: { organisationId: string }) {
                       )}
                     </td>
                     <td>{company.lastActivityAt ? formatDateTime(company.lastActivityAt) : ""}</td>
+                    {columns.map((field) => (
+                      <CustomValueCell key={field.id} field={field} values={company.customFields} />
+                    ))}
                   </tr>
                 ))}
               </tbody>
@@ -275,6 +303,10 @@ function PersonForm({
     email: person?.email ?? "",
     phone: person?.phone ?? "",
   });
+  const customSetup = useCustomFields(organisationId);
+  // A new person starts with each field's default (CRMF4).
+  const [custom, setCustom] = useState<CustomValues | null>(person ? person.customFields : null);
+  const customFields = custom ?? startingValues(customSetup.data, "person", ["person"]);
   const { busy, error, run } = useBusy();
   const set = (patch: Partial<PersonDraft>) => setDraft({ ...draft, ...patch });
   return (
@@ -291,6 +323,7 @@ function PersonForm({
             jobTitle: draft.jobTitle || null,
             email: draft.email || null,
             phone: draft.phone || null,
+            customFields,
           };
           const result = person
             ? await api<{ person: Person }>(`/api/crm/people/${person.id}`, { method: "PATCH", body })
@@ -329,6 +362,7 @@ function PersonForm({
           </Field>
         )}
       </div>
+      <CustomFieldInputs setup={customSetup.data} record="person" uses={["person"]} value={customFields} onChange={setCustom} disabled={busy} />
       <div className={ui.actions}>
         <Button type="submit" disabled={busy || !draft.firstName.trim()}>
           {busy ? "Saving…" : person ? "Save" : "Add person"}
@@ -347,16 +381,20 @@ function PeopleTable({
   organisationId,
   people,
   showCompany,
+  customSetup,
   onChanged,
 }: {
   organisationId: string;
   people: Person[];
   showCompany: boolean;
+  customSetup: CustomFieldSetup | null | undefined;
   onChanged: () => void;
 }) {
   const { can } = useWorkspace();
   const [editing, setEditing] = useState<string | null>(null);
   const { error, run } = useBusy();
+  // People fields marked "show in lists" (CRMF7).
+  const columns = listColumns(customSetup, "person", ["person"]);
   if (people.length === 0) return <Empty>No people yet.</Empty>;
   return (
     <div className={ui.tableWrap}>
@@ -369,6 +407,9 @@ function PeopleTable({
             {showCompany ? <th>Company</th> : null}
             <th>Email</th>
             <th>Phone</th>
+            {columns.map((field) => (
+              <th key={field.id}>{field.label}</th>
+            ))}
             <th />
           </tr>
         </thead>
@@ -376,7 +417,7 @@ function PeopleTable({
           {people.map((person) =>
             editing === person.id ? (
               <tr key={person.id}>
-                <td colSpan={showCompany ? 6 : 5}>
+                <td colSpan={(showCompany ? 6 : 5) + columns.length}>
                   <PersonForm
                     organisationId={organisationId}
                     person={person}
@@ -400,6 +441,9 @@ function PeopleTable({
                 ) : null}
                 <td>{person.email ? <a href={`mailto:${person.email}`}>{person.email}</a> : ""}</td>
                 <td>{person.phone ? <a href={`tel:${person.phone}`}>{person.phone}</a> : ""}</td>
+                {columns.map((field) => (
+                  <CustomValueCell key={field.id} field={field} values={person.customFields} />
+                ))}
                 <td className={ui.num}>
                   {can("bookkeeper") ? (
                     <span className={ui.rowButtons}>
@@ -438,6 +482,7 @@ export function PeoplePage({ organisationId }: { organisationId: string }) {
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [adding, setAdding] = useState(false);
+  const customSetup = useCustomFields(organisationId);
   const people = useApiData<{ people: Person[] }>("/api/crm/people", {
     organisationId,
     search: search || null,
@@ -476,7 +521,7 @@ export function PeoplePage({ organisationId }: { organisationId: string }) {
         </Field>
       </div>
       {people.error ? <Notice tone="error">{people.error}</Notice> : null}
-      {people.data ? <PeopleTable organisationId={organisationId} people={people.data.people} showCompany onChanged={people.reload} /> : null}
+      {people.data ? <PeopleTable organisationId={organisationId} people={people.data.people} showCompany customSetup={customSetup.data} onChanged={people.reload} /> : null}
     </Card>
   );
 }
@@ -524,6 +569,10 @@ function OpportunityForm({
     stage: opportunity?.stage ?? "new",
   });
   const people = useApiData<{ people: Person[] }>(draft.contactId ? "/api/crm/people" : null, { organisationId, contactId: draft.contactId });
+  const customSetup = useCustomFields(organisationId);
+  // A new opportunity starts with each field's default (CRMF5).
+  const [custom, setCustom] = useState<CustomValues | null>(opportunity ? opportunity.customFields : null);
+  const customFields = custom ?? startingValues(customSetup.data, "opportunity", ["opportunity"]);
   const { busy, error, run } = useBusy();
   const set = (patch: Partial<OpportunityDraft>) => setDraft({ ...draft, ...patch });
   // The amount is in the company's currency (MC68).
@@ -544,6 +593,7 @@ function OpportunityForm({
             amount: draft.amount || "0",
             closeDate: draft.closeDate || null,
             stage: draft.stage,
+            customFields,
           };
           const result = opportunity
             ? await api<{ opportunity: Opportunity }>(`/api/crm/opportunities/${opportunity.id}`, { method: "PATCH", body })
@@ -605,6 +655,7 @@ function OpportunityForm({
           </select>
         </Field>
       </div>
+      <CustomFieldInputs setup={customSetup.data} record="opportunity" uses={["opportunity"]} value={customFields} onChange={setCustom} disabled={busy} />
       <div className={ui.actions}>
         <Button type="submit" disabled={busy || !draft.name.trim() || !draft.contactId}>
           {busy ? "Saving…" : opportunity ? "Save" : "Add opportunity"}
@@ -656,16 +707,25 @@ function InvoiceAction({ organisationId, opportunity, onChanged }: { organisatio
   );
 }
 
+/** An opportunity's "show in lists" values on its card, like "Lead source: Website" (CRMF7). */
+function CardValues({ setup, values }: { setup: CustomFieldSetup | null | undefined; values: CustomValues }) {
+  const shown = listColumns(setup, "opportunity", ["opportunity"]).filter((field) => values[field.id] !== undefined);
+  if (shown.length === 0) return null;
+  return <div className={ui.muted}>{shown.map((field) => `${field.label}: ${customValueText(field, values[field.id])}`).join(" · ")}</div>;
+}
+
 function OpportunityCard({
   organisationId,
   opportunity,
   team,
+  customSetup,
   onChanged,
   onDragStart,
 }: {
   organisationId: string;
   opportunity: Opportunity;
   team: TeamMember[] | undefined;
+  customSetup: CustomFieldSetup | null | undefined;
   onChanged: () => void;
   onDragStart?: () => void;
 }) {
@@ -708,6 +768,7 @@ function OpportunityCard({
         {opportunity.closeDate ? ` · closes ${formatDate(opportunity.closeDate)}` : ""}
         {opportunity.ownerUserId ? ` · ${memberName(team, opportunity.ownerUserId)}` : ""}
       </div>
+      <CardValues setup={customSetup} values={opportunity.customFields} />
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.actions}>
         {editable && !opportunity.invoiceId ? (
@@ -747,6 +808,7 @@ export function PipelinePage({ organisationId }: { organisationId: string }) {
   const [adding, setAdding] = useState(false);
   const [over, setOver] = useState<OpportunityStage | null>(null);
   const opportunities = useApiData<{ opportunities: Opportunity[] }>("/api/crm/opportunities", { organisationId });
+  const customSetup = useCustomFields(organisationId);
   const team = useTeam(organisationId);
   const { error, run } = useBusy();
   const all = opportunities.data?.opportunities ?? [];
@@ -817,6 +879,7 @@ export function PipelinePage({ organisationId }: { organisationId: string }) {
                   organisationId={organisationId}
                   opportunity={opportunity}
                   team={team.data?.team}
+                  customSetup={customSetup.data}
                   onChanged={opportunities.reload}
                 />
               ))}
@@ -1155,12 +1218,90 @@ function ActivityForm({ organisationId, contactId, people, opportunities, onSave
   );
 }
 
+/** The company's custom field values in their sections, and a form to change them (CRMF3, CRMF6). */
+function CompanyFields({
+  organisationId,
+  contact,
+  setup,
+  editing,
+  onEdit,
+  onSaved,
+}: {
+  organisationId: string;
+  contact: Contact;
+  setup: CustomFieldSetup | null | undefined;
+  editing: boolean;
+  onEdit: (editing: boolean) => void;
+  onSaved: () => void;
+}) {
+  const { can } = useWorkspace();
+  const [values, setValues] = useState<CustomValues>(contact.customFields);
+  const { busy, error, run } = useBusy();
+  const uses = contactUses(contact);
+  const hasValues = Object.keys(contact.customFields).length > 0;
+  const canEdit = can("bookkeeper") && visibleFields(setup, "contact", uses, contact.customFields).length > 0;
+  const admin = can("admin");
+  if (!hasValues && !canEdit && !admin) return null;
+  return (
+    <Card
+      title="Fields"
+      description="Your organisation's own fields on this company. They never change an amount, an account or a GST box."
+      actions={
+        <span className={ui.actions}>
+          {canEdit && !editing ? (
+            <Button size="small" variant="secondary" onClick={() => onEdit(true)}>
+              Edit fields
+            </Button>
+          ) : null}
+          {admin ? <Link href="/operations/settings/custom-fields">Set up fields</Link> : null}
+        </span>
+      }
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {editing ? (
+        <form
+          style={{ display: "grid", gap: 10 }}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(async () => {
+              await api(`/api/contacts/${contact.id}`, { method: "PATCH", body: { organisationId, customFields: values } });
+              onSaved();
+            });
+          }}
+        >
+          <CustomFieldInputs setup={setup} record="contact" uses={uses} value={values} onChange={setValues} disabled={busy} />
+          <div className={ui.actions}>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setValues(contact.customFields);
+                onEdit(false);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : hasValues ? (
+        <CustomValuesList setup={setup} record="contact" values={contact.customFields} />
+      ) : (
+        <Empty>{canEdit ? "None filled in yet." : "No fields for this company yet."}</Empty>
+      )}
+    </Card>
+  );
+}
+
 export function CompanyPage({ organisationId, contactId }: { organisationId: string; contactId: string }) {
   const { can } = useWorkspace();
   const data = useApiData<CompanyData>(`/api/crm/companies/${contactId}`, { organisationId });
   const baseCurrency = useBaseCurrency();
   const team = useTeam(organisationId);
+  const customSetup = useCustomFields(organisationId);
   const [adding, setAdding] = useState<"person" | "opportunity" | "task" | null>(null);
+  const [editingFields, setEditingFields] = useState(false);
   const { busy, error, run } = useBusy();
   if (data.error) return <Notice tone="error">{data.error}</Notice>;
   if (!data.data) return <p className={ui.muted}>Loading…</p>;
@@ -1212,6 +1353,19 @@ export function CompanyPage({ organisationId, contactId }: { organisationId: str
         </div>
       </Card>
 
+      <CompanyFields
+        key={JSON.stringify(contact.customFields)}
+        organisationId={organisationId}
+        contact={contact}
+        setup={customSetup.data}
+        editing={editingFields}
+        onEdit={setEditingFields}
+        onSaved={() => {
+          setEditingFields(false);
+          data.reload();
+        }}
+      />
+
       {editable ? (
         <Card title="Log a call, meeting or note">
           <ActivityForm organisationId={organisationId} contactId={contact.id} people={people} opportunities={opportunities} onSaved={data.reload} />
@@ -1239,7 +1393,7 @@ export function CompanyPage({ organisationId, contactId }: { organisationId: str
             onCancel={() => setAdding(null)}
           />
         ) : null}
-        <PeopleTable organisationId={organisationId} people={people} showCompany={false} onChanged={data.reload} />
+        <PeopleTable organisationId={organisationId} people={people} showCompany={false} customSetup={customSetup.data} onChanged={data.reload} />
       </Card>
 
       <Card
@@ -1272,6 +1426,7 @@ export function CompanyPage({ organisationId, contactId }: { organisationId: str
               organisationId={organisationId}
               opportunity={opportunity}
               team={team.data?.team}
+              customSetup={customSetup.data}
               onChanged={data.reload}
             />
           ))}
