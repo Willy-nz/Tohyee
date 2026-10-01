@@ -731,6 +731,31 @@ Enforced by the app (and covered by tests):
   organisation's members when set. An opportunity's `invoice_id` is set once
   and a trigger keeps it won from then on. The rules are in
   `src/lib/crm/service.ts`; only the invoice it makes ever reaches the ledger.
+- CRM record types (tenant migration 0059, CRT1-CRT13): `crm_record_types`
+  holds each type's kind (`contact`, `person` or `opportunity`), name,
+  default flag, order and its page layout as JSON (sections, each with
+  ordered `{ key, required, readOnly }` fields; keys are standard field
+  names or `custom:<id>`). Types are never deleted and never change kind
+  (trigger); one default per kind (partial unique index). `contacts`,
+  `crm_people` and `crm_opportunities` have a not-null `record_type_id`
+  (existing rows got the default; a trigger fills in the default on insert
+  and refuses a type of another kind); `contacts.owner_user_id` is the
+  company's owner (a member, checked like other CRM owners). The pure
+  layout rules (standard fields per kind, locked and system fields,
+  normalising a layout) are in `src/lib/crm/record-types/layout.ts`; the
+  service (`src/lib/crm/record-types/service.ts`) checks a save against
+  the record's type: required fields must be filled in (server-side, on
+  every save of that record, stage moves included, only while the CRM is
+  on) and read-only ones are refused (403) for anyone below admin. A new
+  custom field joins every layout of its kind. Type changes and inline
+  edits go into the record's history like other CRM changes. The record
+  page (`src/components/crm-record-page.tsx`) reads
+  `GET /api/crm/companies/:id`, `/api/crm/people/:id` and
+  `/api/crm/opportunities/:id` (viewer) and saves one field at a time with
+  the existing PATCH routes; `src/lib/crm/record-page.ts` holds its pure
+  grouping (layout sections, upcoming and overdue, past activity by NZ
+  month). Record types are set up through `/api/crm/record-types` (GET
+  viewer; POST and PATCH admin).
 - CRM mail sync: the organisation's Google/Microsoft app is in
   `crm_mail_settings` (secrets encrypted with TOHYEE_SECRET_KEY); each
   member's mailbox in `crm_connected_accounts` (tokens encrypted). OAuth uses

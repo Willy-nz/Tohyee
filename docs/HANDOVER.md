@@ -57,8 +57,9 @@ Set them in the Agents box before sending each task:
 | Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12) | none (Agents tab) | not opened yet | `copilot/sales-orders-stage-1` | 0055 |
 | Sales platform connections, stage 1: connector framework, Shopify customers and products (CRM roadmap items 27-28) | none (Agents tab) | not opened yet | `copilot/sales-platform-connections-stage-1` | 0056 |
 | RDTI R1: R&D Tax Incentive worked examples and questions (docs only, RD1-RD27) | none (Agents tab) | #72 | `copilot/rdti-stage-r1-plan-tracking` | none |
+| CRM record types with page layouts, and the Salesforce-style record page (CRM roadmap items 3 and 4, examples CRT1-CRT13) | none (Agents tab) | #74 | `copilot/crm-record-types-page-layouts` | 0059 (keep it last) |
 
-Next free tenant migration number: 0058 (0057 reserved for payroll P1b).
+Next free tenant migration number: 0060 (0051-0058 are taken or reserved; 0059 is CRM record types, #74).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -68,9 +69,11 @@ Advanced features off (decided by Jess, 1 Oct 2026). Prospects only get the
 fields turned on for prospects; existing customer fields aren't added to
 them.
 
-CRM work waiting on custom fields: record types and page layouts, and the
-Salesforce-style record page. Claude will build these once custom fields is
-merged.
+CRM record types and page layouts, and the Salesforce-style record page,
+are in #74 (examples CRT1-CRT13, not yet approved by Jess; her questions are
+in the PR). Existing companies, people and opportunities get each kind's
+default record type, "Standard", whose layout shows what the old company
+page showed, so nothing changes until an admin sets up another type.
 
 ### Payroll: the plan (issue #60)
 
