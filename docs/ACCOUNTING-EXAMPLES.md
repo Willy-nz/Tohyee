@@ -38,6 +38,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/stock.test.ts` (ST1-ST12) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM9) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
+  `tests/integration/crm-custom-fields.test.ts` (CRMF1-CRMF9, not yet
+  approved) and
   `tests/integration/reports-ledger.test.ts` (AGP1-AGP3, ATX1-ATX5,
   JR1-JR3) and `tests/integration/gst-audit.test.ts` (GA1-GA4) and
   `tests/integration/customer-statements.test.ts` (CST1-CST5) and
@@ -72,7 +74,9 @@ proves it". Test names start with the example IDs they cover:
   rate and file currency pieces of FXB2-FXB10, and
   `tests/unit/import-fields.test.ts` the import column matching (IM2-IM5, IM16), and
   `tests/unit/tax-available-on.test.ts` the tax code pickers and starting codes
-  by side (TAO2-TAO4, TAO6, TAO8)
+  by side (TAO2-TAO4, TAO6, TAO8), and
+  `tests/unit/custom-field-sections.test.ts` the grouping of fields into
+  sections and which switch a field needs (CRMF1, CRMF6, CRMF8)
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -3856,6 +3860,133 @@ Ngata (aroha@manukavets.nz); Jess connects jess@glimmers.nz.
 - **MAIL9** Disconnecting removes the account and its synced emails and
   meetings from the timeline. Three failed syncs in a row pause it with the
   last error shown.
+
+## Custom fields on CRM records (examples not yet approved by Jess)
+
+The owner asked (1 Oct 2026) for the CRM's records to carry many fields of
+the organisation's own, the way Salesforce accounts do. They're the custom
+fields above (CF1-CF10), extended:
+
+- Two more kinds of record: **people** and **opportunities**, alongside
+  contacts, documents and lines. Same types, required, defaults, show in
+  list, archiving, options and history. A people field is always on people
+  and an opportunity field on opportunities (there's nothing else to
+  choose).
+- A contact field can now be on **prospects** as well as customers and
+  suppliers (any of the three). A contact uses the fields for each of its
+  roles: a prospect-only company gets only prospect fields, a company that
+  is a customer and a prospect gets both. Before this, prospects used the
+  customer fields, so the upgrade puts every existing contact field on
+  customers onto prospects too; nothing a company shows changes until an
+  admin unticks it.
+- **Which switch** (to confirm with Jess): a field on prospects, people or
+  opportunities is a CRM field, usable while the **CRM** is on even with
+  Advanced reporting off. Fields on customers, suppliers, documents and
+  lines keep their rule: only with **Advanced reporting** on. A contact
+  field on both customers and prospects works on a company through
+  whichever of its roles is switched on. Setting a field up (adding,
+  changing, archiving it or its options) needs every place it's used on to
+  be switched on.
+- Up to 100 fields on contacts, documents and lines together (as before),
+  and up to 100 more each on people and on opportunities.
+- People and opportunity values follow the contact rules: checked by type,
+  a required one needed whenever the record is saved (while the CRM is on),
+  a new record starts with the defaults, leaving the values out keeps them,
+  and they can be changed at any time (also after an opportunity has made
+  its invoice), each change in the record's history. Archived fields and
+  options stay on records that have them. With the CRM off a record keeps
+  its values and can be saved with them, but can't be given new ones.
+- Values never change an amount, account, tag, stage or GST box: an
+  opportunity's values don't reach the pipeline totals or the invoice it
+  makes, and nothing is posted.
+- **Sections**: an admin can add named sections for contacts, documents,
+  people and opportunities (not lines, whose fields sit on the line), up to
+  20 per kind, each name unique for its kind ignoring case. Sections are
+  renamed and moved up or down; an empty one can be removed, one with
+  fields in it (even archived ones) can't. A field is in at most one
+  section, of its own kind, and can be moved up or down among its section's
+  fields. A record's page and form show the fields with no section first,
+  then each section that has fields to show, in order, as a group that can
+  be collapsed (open to start). Sections only group fields: they don't hide
+  them from anyone (a section called "Admin only" is seen by everyone who
+  can see the record).
+- **Lists**: fields shown in lists are columns on the CRM's Companies list
+  (contact fields for the roles that are switched on), its People list,
+  and lines on the pipeline's cards (opportunity fields).
+
+Setup: CRM on, Advanced reporting off; company Mānuka Vets (a prospect),
+person Aroha Ngata at Mānuka Vets and the opportunity "Memorial paw prints
+2027" for 2,400.00 (CRM2, CRM3). Sections: "Practice details" (contacts),
+"Preferences" and "Personal" (people), "Marketing" (opportunities). Fields:
+contact "Practice size" (whole number, on prospects, shown in lists,
+Practice details); contact "Species seen" (multiple select: Dogs, Cats,
+Horses; on prospects, Practice details); person "Preferred contact" (list:
+Email, Phone, Text; required, default Email, shown in lists, Preferences);
+person "Birthday" (date, Personal); opportunity "Lead source" (list:
+Referral, Website, Expo; shown in lists, Marketing); opportunity "Discount
+offered" (percent, Marketing); opportunity "Sample kit sent" (check box, no
+section).
+
+- **CRMF1** Which switch: with Advanced reporting off and the CRM on, the
+  admin adds the seven fields and four sections. A contact field "Pet name"
+  on customers is refused ("Advanced reporting is off, so a field can't be
+  on customers."), and so is a document field on invoices. With the CRM
+  off as well, a people field is refused ("The CRM is off, so a field can't
+  be on people.") and so is a section for opportunities.
+- **CRMF2** Set-up rules: "Lead source" can be on people as well as
+  opportunities, but a second "lead source" on opportunities is refused
+  ("There's already an opportunity field called lead source."); a people
+  field can't be "used on" customers; a field's type and kind still can't
+  change; a 101st opportunity field is refused while people can still have
+  their own.
+- **CRMF3** Prospects: Mānuka Vets saved with Practice size 12 and Species
+  seen Dogs and Cats keeps them; "12.5" is refused ("Practice size: must
+  be a whole number"). Changing Practice size to 14 is in its history (from
+  12 to 14). Marking it a customer too keeps them. With Advanced reporting
+  on, a contact field on customers only ("Pet name") can't be given to a
+  prospect-only company ("Pet name isn't used on prospects."), and a
+  supplier-only contact can't be given Practice size. A contact field that
+  was on customers before the upgrade is on customers and prospects after
+  it.
+- **CRMF4** People: Aroha starts with Preferred contact = Email (the
+  default); clearing it is refused ("Preferred contact is required.");
+  "2026-02-30" for Birthday is refused; changing Preferred contact from
+  Email to Phone is in her history (from Email to Phone); saving a new job
+  title without sending the values keeps them.
+- **CRMF5** Opportunities: the opportunity with Lead source Referral,
+  Discount offered 10 and Sample kit sent ticked still has amount
+  **2,400.00** and the New column's total is still **2,400.00**; "101" for
+  Discount offered is refused. Marking it Won and making the invoice gives
+  exactly the CRM5 invoice: one line "Memorial paw prints 2027" 1 ×
+  2,400.00 to 4000 with GST, total **2,760.00**, and no custom values on
+  the invoice or its line. After that Lead source can still be changed to
+  Expo (in its history), and the stage still can't change.
+- **CRMF6** Sections: moving "Personal" up puts it before "Preferences";
+  a second "preferences" for people is refused ("There's already a section
+  called preferences for people.") but "Preferences" for opportunities is
+  fine; a section for lines is refused; Lead source can't go in
+  "Preferences" ("Preferences is a section for people, not
+  opportunities."); "Marketing" can't be removed while it has fields ("Move
+  Marketing's fields out first.") but an empty section can be; a 21st
+  section for people is refused. Moving Discount offered up puts it before
+  Lead source. The opportunity form shows Sample kit sent (no section)
+  first, then Marketing with Discount offered and Lead source.
+- **CRMF7** Lists: the Companies list gives Mānuka Vets' values, with
+  Practice size as a column and Species seen not (it isn't shown in
+  lists); the People list has a Preferred contact column (Aroha: Phone);
+  the pipeline card shows Lead source.
+- **CRMF8** Switching off: with the CRM off and Advanced reporting on,
+  Aroha (a contact person) can still be saved with her values, but giving
+  her a new Birthday is refused ("the CRM is off, so Birthday can't be
+  set.") and Preferred contact isn't required; Mānuka Vets keeps Practice
+  size and can be saved with it, but not given a new one. With the CRM on
+  and Advanced reporting off, a company that is a customer and a prospect
+  can be given Practice size but not a new "Pet name" (customers only:
+  "advanced reporting is off, so Pet name can't be set.").
+- **CRMF9** Over HTTP: a viewer reads the setup, the company page and
+  the people and pipeline lists with their values, but can't change a
+  person's values (403); a bookkeeper can; adding a field or section is for
+  admins only (403 for a bookkeeper, 201 for an admin).
 
 ## Notes, files and history
 
