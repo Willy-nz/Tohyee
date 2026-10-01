@@ -66,6 +66,10 @@ calculates nothing. The rest of #60, in order, each its own branch and PR:
       for Jess (annual leave, sick leave, public holidays, alternative days,
       average weekly earnings vs ordinary weekly pay) in
       `docs/ACCOUNTING-EXAMPLES.md`, docs only. Can start now.
+      Written in draft PR #68: "Holidays Act leave (examples not yet
+      approved by Jess)", HL1-HL42 and 23 questions. The Holidays Act 2003
+      is replaced by the Employment Leave Act 2026 from 6 Aug 2028, so
+      question 1 there asks whether to build for the 2003 Act at all.
 - [ ] **P8 Holidays Act leave, build** only what P7 specifies and Jess
       approves. Needs P3 and P7.
 
@@ -149,6 +153,10 @@ wording. Still open:
 **Year end and period close**
 - Can a bookkeeper close a month when every check passes, or only owners and
   admins?
+
+**Holidays Act leave** (payroll P7, draft PR #68)
+- 23 questions, starting with whether to build for the Holidays Act 2003
+  at all before the Employment Leave Act 2026 replaces it on 6 Aug 2028.
 
 **Older lists still open** (see each section): repeating bills, quotes and
 repeating invoices and printed documents, purchase orders, stock transfers,

@@ -6255,5 +6255,519 @@ Decided (following NetSuite, 1 Oct 2026):
 
 ## Holidays Act leave (examples not yet approved by Jess)
 
-Stage P7 of NZ payroll (#60): a plan only, being written. Nothing here is
-built.
+Stage P7 of NZ payroll (#60). **This is a plan only: nothing here is built
+and there are no tests yet.** It sets out what Tohyee's leave calculations
+should do, with real numbers, so Jess can approve, change or refuse each
+example before stage P8 builds anything. P8 builds only the examples Jess
+approves, each with a test, and refuses the rest.
+
+**Which law.** On 1 Oct 2026 the **Holidays Act 2003** is in force. Section
+numbers below (s16, s21 and so on) are that Act's, from the official
+consolidation **as at 20 December 2023**
+([legislation.govt.nz, Holidays Act 2003](https://www.legislation.govt.nz/act/public/2003/0129/latest/DLM236387.html)).
+A search on 1 Oct 2026 found no later version.
+
+**Due to change.** The **Employment Leave Act 2026** (2026 No 48, Royal
+assent 6 August 2026) replaces the Holidays Act 2003 from **6 August 2028**
+(for each employee, from the start of their first pay period starting on or
+after that date). Under it leave is counted in hours and builds up from the
+start of employment, instead of the 12-month and 6-month waits below.
+Sources: [MBIE, Holidays Act reform: Employment Leave Act](https://www.mbie.govt.nz/business-and-employment/employment-and-skills/employment-legislation-reviews/holidays-act-reform-employment-leave-act),
+[Employment NZ, Employment Leave Act 2026](https://www.employment.govt.nz/news-and-updates/employment-leave-act-2026)
+and [the Act](https://www.legislation.govt.nz/act/public/2026/48/en/latest/)
+(found 1 Oct 2026). Nothing here covers the new Act, and no example uses a
+date on or after 6 Aug 2028. Anything P8 builds for the 2003 Act will stop
+applying then (question 1).
+
+**How the sources were read (please check them).** The computer these
+were written on couldn't open legislation.govt.nz, employment.govt.nz,
+mbie.govt.nz, Xero Central or NetSuite's help directly, so:
+
+- the Act's wording was read on 1 Oct 2026 from a copy of the 20 December
+  2023 consolidation (the `jonnonz1/nz-statute-book` repository on GitHub,
+  `acts/public/2003/holidays-act-2003.md`). Every rule below comes from a
+  section of the Act, except the two marked as Employment NZ's (HL15,
+  HL30), which are questions;
+- Employment NZ and MBIE pages were found and summarised through a web
+  search on 1 Oct 2026, so their exact wording wasn't seen. Links are given;
+  where guidance seems to go further than the Act, it's a question, not a
+  rule;
+- Xero Central articles were read on 1 Oct 2026 from undated copies (the
+  `web-arena-x/webarena-infinity` repository, `apps/user-manuals/xero/payroll/`),
+  each giving its Xero Central address. Xero may have changed them since.
+
+Please open the linked pages before approving.
+
+**NetSuite and Xero** (Jess's rule: follow NetSuite where it has an
+answer, otherwise Xero). NetSuite's help covers general time-off plans
+(accrual per period or per hour worked, in hours or days, with carryover
+limits: [Time-Off Management Setup](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4607408864.html),
+[Time-Off Rules](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1494524322.html))
+but says nothing about the Holidays Act's pay rates; NZ payroll on NetSuite
+comes from another company's add-on, not NetSuite's help. So **Xero Payroll
+NZ** is followed where the Act leaves room. Xero Central articles used
+(read 1 Oct 2026 as above):
+
+- [How annual leave rates are calculated](https://central.xero.com/s/article/Understand-how-annual-leave-rates-are-calculated)
+  and [Calculate an employee's four week average ordinary weekly pay](https://central.xero.com/s/article/How-to-manually-calculate-annual-leave-rates)
+- [How holiday pay and annual leave works](https://central.xero.com/s/article/Manage-annual-leave-and-holiday-pay-for-employees)
+- [Cash up an employee's annual leave](https://central.xero.com/s/article/Cash-up-an-employee-s-annual-leave)
+- [Delete an employee or end their employment](https://central.xero.com/s/article/Delete-an-employee-and-end-their-employment)
+  (final pay)
+- [Process employee sick leave](https://central.xero.com/s/article/Manage-sick-leave-for-employees)
+  and [Leave for employees working irregular hours explained](https://central.xero.com/s/article/Leave-for-employees-working-irregular-hours-explained)
+- [Pay an employee for working a public holiday](https://central.xero.com/s/article/Pay-an-employee-for-working-a-public-holiday)
+- [Track leave in days](https://central.xero.com/s/article/Track-leave-in-days)
+
+Employment NZ pages used (found 1 Oct 2026 as above):
+[Annual holidays](https://www.employment.govt.nz/leave-and-holidays/annual-holidays),
+[Managing annual holidays](https://www.employment.govt.nz/leave-and-holidays/annual-holidays/managing-annual-holidays),
+[Sick leave](https://www.employment.govt.nz/leave-and-holidays/sick-leave),
+[Public holidays rights for employees](https://www.employment.govt.nz/leave-and-holidays/public-holidays/public-holidays-rights-for-employees),
+[Factors to use to decide whether a day is an otherwise working day](https://www.employment.govt.nz/assets/uploads/documents/leave-and-holidays/Factors-to-use-to-decide-whether-a-day-is-an-otherwise-working-day.pdf),
+[Alternative holidays](https://www.employment.govt.nz/leave-and-holidays/public-holidays/alternative-holidays),
+[Relevant daily pay vs average daily pay](https://www.employment.govt.nz/assets/uploads/documents/pay-and-hours/Relevant-daily-pay-vs-average-daily-pay.pdf),
+[Final pay](https://www.employment.govt.nz/pay-and-hours/pay-and-wages/final-pay),
+[Holidays Act guidance tools: termination pay](https://www.employment.govt.nz/assets/uploads/documents/pay-and-hours/Holiday-Act-Guidance-tools-Termination-Pay.pdf)
+and [Deductions and premiums](https://www.employment.govt.nz/pay-and-hours/pay-and-wages/deductions).
+
+**The people in the examples.** Everyone is paid weekly, for pay periods
+Monday to Sunday.
+
+| Who | Pay | Usual week | Started |
+| --- | --- | --- | --- |
+| Aroha | Salary 62,400.00 a year (1,200.00 a week); a bonus of 2,600.00 each December that her agreement binds the employer to pay if targets are met | Mon-Fri, 8 hours a day | Tue 1 Apr 2025 |
+| Ben | 28.00 an hour, **30.00 from Mon 15 Jun 2026**; 5 hours' overtime at time and a half every Thursday (rostered); shift allowance 10.00 for each shift worked | Mon-Fri, 8 hours a day, plus the Thursday overtime | Mon 3 Mar 2025; last day Fri 18 Dec 2026 |
+| Cara | Permanent, hours and days vary week to week (not casual) | Varies | 2024 |
+| Dan | 25.00 an hour, **32.00 for the 4 weeks before his leave** | Mon-Fri, 8 hours a day | 2025 |
+| Eru | 25.00 an hour (1,000.00 a week) | Mon-Fri, 8 hours a day | Mon 6 Apr 2026; last day Fri 26 Feb 2027 |
+| Fiona | 27.00 an hour, part-time | Tue, Wed, Thu, 6 hours a day | 2025 |
+| George | Casual, as needed; often works Saturdays | Varies | 2026 |
+
+**Rounding.** Rates are kept exact; each payment is rounded to cents once
+(R3). Xero also keeps rates unrounded (its example shows an average weekly
+earnings figure of $843.137255). See question 20.
+
+### The pay rates
+
+- **HL1 Ordinary weekly pay (OWP), salary** (s8(1)). Aroha's OWP is her
+  pay for an ordinary working week: **1,200.00**. Her December bonus isn't a
+  regular part of her pay, so it's left out (s8(1)(c)(i)); so is employer
+  KiwiSaver (s8(1)(c)(v)).
+- **HL2 OWP with regular overtime and an allowance** (s8(1)(b)). Ben's
+  overtime is rostered every week, so it's a regular part of his pay
+  (s8(1)(b)(ii)). From 15 Jun 2026: 40 × 30.00 = 1,200.00, overtime 5 × 45.00
+  = 225.00, shift allowance 5 × 10.00 = 50.00: OWP **1,475.00**. If his
+  overtime were occasional it would be left out (s8(1)(c)(ii)) and his OWP
+  would be 1,250.00. Xero counts "regular allowances" and "regular overtime"
+  in OWP and takes them from the employee's pay template. Who decides what's
+  regular: question 5.
+- **HL3 OWP by the four-week formula** (s8(2)). Where OWP can't be worked
+  out under s8(1) (Cara's hours vary), OWP = (a − b) ÷ 4: a is gross
+  earnings for the 4 calendar weeks before the end of the last pay period
+  before the calculation, and b is the irregular incentive payments,
+  irregular overtime and one-off payments in them (s8(1)(c)(i)-(iii)).
+  Cara's last 4 weeks: gross 3,600.00, of which a one-off payment 200.00
+  and irregular overtime 120.00. OWP = (3,600.00 − 320.00) ÷ 4 =
+  **820.00**. Xero's four-week page uses this when "weekly days and hours
+  vary significantly". When to use it: question 6.
+- **HL4 Average weekly earnings (AWE), with a pay rise, overtime, an
+  allowance and a bonus** (s5 "average weekly earnings", s14). AWE is 1/52
+  of gross earnings for the 12 months. Ben's 52 weekly pay periods from Mon
+  15 Dec 2025 to Sun 13 Dec 2026 (the 12 months before the end of the last
+  pay period before his last day; question 4):
+
+  | Gross earnings (s14) | Amount |
+  | --- | --- |
+  | Ordinary time, 26 weeks at 28.00 (including paid holidays and leave in those weeks, s14(a)(iii)) | 29,120.00 |
+  | Ordinary time, 26 weeks at 30.00 (likewise) | 31,200.00 |
+  | Overtime, 26 × 5 hours at 42.00 (s14(a)(v)) | 5,460.00 |
+  | Overtime, 26 × 5 hours at 45.00 | 5,850.00 |
+  | Shift allowance, 245 shifts at 10.00 (s14(a)(ii)) | 2,450.00 |
+  | Bonus his agreement binds the employer to pay (s14(a)(iv)) | 3,000.00 |
+  | **Total** | **77,080.00** |
+
+  Left out: a 120.00 reimbursement for tools he bought (actual costs,
+  s14(c)(i)), employer KiwiSaver (s14(c)(iii)) and a 100.00 Christmas
+  voucher the employer didn't have to give (discretionary, s14(b)(i)).
+  AWE = 77,080.00 ÷ 52 = **1,482.3077** (1,482.31). It mixes both pay
+  rates; OWP uses only the rate on the day (HL5).
+- **HL5 A pay rise just before leave: OWP wins.** Dan's 52 weeks: 48 at
+  1,000.00 and 4 at 1,280.00 = 53,120.00, so AWE = **1,021.54**. His OWP at
+  the start of his leave is 40 × 32.00 = **1,280.00**. A week's annual
+  holiday is paid at the greater (s21(2)(b)): **1,280.00**. After a pay cut
+  it works the other way and AWE protects the employee.
+- **HL6 Relevant daily pay (RDP)** (s9). What the employee would have been
+  paid had they worked that day, including overtime and incentive payments
+  they'd have had that day (s9(1)(b)), not employer KiwiSaver (s9(1)(c)).
+  For a public holiday it doesn't include the extra half (s9(3)).
+  - Ben, a Wednesday: 8 × 30.00 + 10.00 = **250.00**.
+  - Ben, a Thursday: 8 × 30.00 + 5 × 45.00 + 10.00 = **475.00**.
+  - Ben, a Saturday: not a working day, so no RDP.
+  - Aroha, any weekday: 1,200.00 ÷ 5 = **240.00**.
+- **HL7 Average daily pay (ADP)** (s9A). The employer may use ADP instead
+  of RDP if RDP can't practicably be worked out, or the employee's daily pay
+  varies within the pay period (s9A(1)). ADP = gross earnings for the 52
+  calendar weeks before the end of the last pay period ÷ the number of whole
+  or part days worked or on paid holidays or leave in them (s9A(2)). Cara:
+  41,600.00 ÷ 208 days = **200.00**. Days she didn't work and wasn't paid
+  for aren't counted. Like AWE, ADP is slow to reflect a pay rise. Xero lets
+  you switch between RDP and ADP on the payslip to compare them. Who
+  chooses: question 7.
+- **HL8 Units.** Annual holidays are an entitlement in **weeks** (s16);
+  sick, bereavement and alternative holidays are in **days** (s65, s70,
+  s56). The employer and employee agree what genuinely makes up a working
+  week (s17): Aroha's is 5 days of 8 hours, Fiona's 3 days of 6 hours. Xero
+  keeps every balance in **hours** ("Leave can only be accrued and displayed
+  in hours", Track leave in days). Proposed: keep the Act's units and show
+  days and hours alongside, worked out from the agreed week (question 2).
+
+### Annual holidays
+
+- **HL10 Entitlement** (s16). After each completed 12 months of continuous
+  employment, at least 4 weeks' paid annual holidays (s16(1)).
+  - Aroha started Tue 1 Apr 2025, completed 12 months at the end of Tue 31
+    Mar 2026, and is entitled to **4 weeks on Wed 1 Apr 2026**, then 4 more
+    each 1 April. For Fiona, 4 weeks is 12 of her working days (s17).
+  - An entitlement doesn't lapse: it stays until it's taken or paid out
+    (s16(4)), and the employer must let it be taken within 12 months of it
+    arising (s18(1)), so balances can build up past 4 weeks.
+  - Unpaid leave of 1 week or less counts towards the 12 months
+    (s16(2)(a)(vi)); longer unpaid leave doesn't, unless agreed
+    (s16(2)(b)). Had Aroha taken unpaid leave from Mon 2 to Sun 22 Feb 2026
+    (3 weeks), her anniversary would move to **Wed 22 Apr 2026** if all 21
+    days are left out, or **Wed 15 Apr 2026** if the first week still
+    counts: the Act doesn't say which (question 8). If they agree to count
+    the whole 3 weeks, the anniversary stays 1 Apr and her AWE divisor drops
+    from 52 to **50** (weeks over 1 week, s16(3)). Xero's example lowers the
+    divisor for unpaid weeks without mentioning an agreement.
+- **HL11 Taking annual holidays** (s21). Aroha takes Mon 6 to Fri 10 Jul
+  2026 (1 week). Paid at the greater of OWP at the start of the holiday
+  (1,200.00) and AWE for the 12 months to the end of the last pay period
+  before it (to Sun 5 Jul 2026: 52 × 1,200.00 + her December 2025 bonus
+  2,600.00 = 65,000.00 ÷ 52 = 1,250.00): **1,250.00**. It's paid before the
+  holiday unless they agree it's paid in the usual pay (s27(1)). Balance 4 →
+  **3 weeks**. Xero likewise works the rate out for the period the leave is
+  taken in, not the one it's paid in.
+- **HL12 Cashing up** (s28A-s28F). On Mon 10 Aug 2026 Aroha asks in
+  writing to be paid out 1 week; her employer agrees in writing (s28A(2),
+  (3)). Paid at the s21(2) rate (s28B(1)(a)): OWP 1,200.00; AWE to Sun 9 Aug
+  2026 = (51 × 1,200.00 + 1,250.00 holiday pay from HL11 + 2,600.00 bonus)
+  ÷ 52 = 65,050.00 ÷ 52 = **1,250.96**. Paid **1,250.96** as soon as
+  practicable (s28B(1)(b)). Balance 3 → **2 weeks**.
+  - Refused: a second week cashed up in the same entitlement year (1 Apr
+    2026 to 31 Mar 2027; at most 1 week a year, s28A(2)(b)); cashing up when
+    the organisation has a policy not to (s28E); cashing up annual holidays
+    taken in advance (not yet an entitlement, s28A(1)). Tohyee never starts
+    a cash-up itself: the employee asks (s28C, s28D).
+  - Part of a week can be cashed up: 3 days = 0.6 week = **750.58**, and the
+    rest of the week later in the same year.
+  - The cash-up isn't gross earnings (s14(c)(iv)), so it doesn't raise
+    later AWE, ADP or 8% figures: Aroha's AWE in HL13 is 65,050.00 ÷ 52, not
+    66,300.96 ÷ 52. Xero: "Cashed up annual leave payments aren't included
+    in the employee's gross earnings and won't accrue holiday pay."
+- **HL13 Public holidays during annual holidays** (s40(1)). Aroha books Mon
+  22 Mar to Fri 2 Apr 2027. Good Friday (26 Mar) and Easter Monday (29 Mar)
+  are public holidays, not annual holidays: each is paid at her RDP, 240.00,
+  so **480.00**. The other **8 days** are annual holidays: 8 of her 5-day
+  week = **1.6 weeks**, paid at the greater of OWP 1,200.00 and AWE to Sun
+  21 Mar 2027 (51 × 1,200.00 + 1,250.00 + December 2026 bonus 2,600.00 =
+  65,050.00; the cash-up is left out) ÷ 52 = 1,250.96: 1.6 × 65,050.00 ÷
+  52 = **2,001.54**. Balance 2 → 0.4 weeks, then **4.4 weeks** on Thu 1 Apr
+  2027 when her next 4 weeks arise. Valuing part weeks when the days aren't
+  equal (Ben's Thursday is longer): question 3.
+- **HL14 Annual holidays in advance** (s20, s22). Eru's employer lets him
+  take Mon 15 to Fri 19 Feb 2027 before his first anniversary (Tue 6 Apr
+  2027). Paid at the greater of OWP (1,000.00) and AWE over the time he's
+  worked, with the divisor cut to the whole or part weeks worked (s22(2)(b)(ii)(B),
+  s22(3)): Mon 6 Apr 2026 to Sun 14 Feb 2027 is **45 weeks**, gross
+  45 × 1,000.00 + 1,500.00 occasional overtime in December 2026 =
+  46,500.00, so AWE = 46,500.00 ÷ 45 = **1,033.33**. Paid **1,033.33**.
+  His balance shows **−1 week** (taken in advance); had he stayed, he'd have
+  3 weeks left on 6 Apr 2027. Xero shows a cautious "available to take in
+  advance" estimate (days since the anniversary ÷ 365 × the yearly
+  entitlement, rounded down to whole days); the Act only says "an agreed
+  portion". Whether Tohyee limits it: question 9.
+- **HL15 Leaving before 12 months** (s23). Eru leaves on Fri 26 Feb 2027.
+  He's paid **8% of his gross earnings since he started**, less holiday pay
+  for annual holidays taken in advance (s23(2)). Gross earnings: 46,500.00
+  + 1,033.33 (the week in advance is holiday pay, so it counts,
+  s14(a)(iii)) + 1,000.00 (22-26 Feb) = 48,533.33. 8% = 3,882.67, less
+  1,033.33 = **2,849.34**, paid in his final pay (s27(2)). If the leave
+  taken in advance had been worth more than the 8%, getting the difference
+  back from final pay needs the employee's written consent (Employment NZ,
+  Deductions and premiums); Xero takes it off the final pay. Question 10.
+- **HL16 Leaving after an entitlement has arisen** (s24, s25, s26, s40(3)).
+  Ben leaves on Fri 18 Dec 2026. His last entitlement arose Tue 3 Mar 2026
+  (4 weeks) and he's taken 2 weeks of it.
+  1. **Untaken entitlement** (s24): 2 weeks at the greater of OWP on his
+     last day (1,475.00, HL2) and AWE for the 12 months to the end of the
+     last pay period before it (to Sun 13 Dec 2026, HL4: 1,482.3077): 2 ×
+     77,080.00 ÷ 52 = **2,964.62**.
+  2. **Public holidays in that untaken time** (s40(3)): had Ben taken his
+     10 days straight after leaving, from Mon 21 Dec 2026, they'd have run
+     to Thu 7 Jan 2027, skipping Christmas Day (Fri 25 Dec), Boxing Day
+     (Sat 26 Dec, his holiday is Mon 28 Dec, s45(1)(b)), New Year's Day (Fri
+     1 Jan) and 2 January (Sat, his holiday is Mon 4 Jan). All four would
+     have been working days for him, so he's paid for each at his RDP for a
+     Friday or Monday, 250.00: **1,000.00**. Xero's final pay page says the
+     same. Which day's RDP: question 12.
+  3. **8% since his last anniversary** (s25): gross earnings from 3 Mar to
+     18 Dec 2026 were 62,180.00 (wages, overtime, allowances and the holiday
+     pay for the 2 weeks he took). The untaken entitlement in 1 is added
+     (s26(a)): 62,180.00 + 2,964.62 = 65,144.62; 8% = **5,211.57**. Whether
+     the 1,000.00 in 2 is also added (making 5,291.57): question 11.
+  4. His alternative holiday was taken on 12 Nov (HL33), and sick leave
+     isn't paid out (s67), so nothing else.
+
+  Holiday pay in his final pay: 2,964.62 + 1,000.00 + 5,211.57 =
+  **9,176.19** (s27(2)). Xero's final pay pays the annual leave balance
+  plus its running 8% "holiday pay" since the last anniversary.
+
+### Sick leave and bereavement leave
+
+- **HL20 When it starts** (s63, s65). After 6 months' current continuous
+  employment (s63(1)(a)), 10 days' sick leave for each 12 months from then
+  (s63(2)(a), s65(2)). Aroha (started Tue 1 Apr 2025) completed 6 months at
+  the end of Tue 30 Sep 2025: **10 days on Wed 1 Oct 2025**, 10 more on Thu
+  1 Oct 2026, and so on. Bereavement leave starts on the same day (s63).
+  Before then, only if they agree to leave in advance; sick leave taken in
+  advance comes off the next entitlement (s63(3)). Xero adds sick leave
+  "annually after 6 months" at the pay run that includes the date.
+- **HL21 Employees without 6 months' continuous employment** (s63(1)(b)).
+  George, a casual, is entitled if over 6 months he worked an average of at
+  least 10 hours a week, and at least 1 hour in every week or at least 40
+  hours in every month. 312 hours over 26 weeks (12 a week on average) with
+  some work every week: entitled from the end of those 6 months
+  (s63(2)(b)). With one week of no work, the weekly test fails and the
+  monthly test decides; the Act doesn't define "month" (question 14).
+- **HL22 Carrying sick leave over** (s66). Aroha used 3 days in the year to
+  30 Sep 2026, so 7 carry over: **17 days** on 1 Oct 2026. If she uses none
+  by 30 Sep 2027, up to 10 carry over to a maximum of 20 (s66(2)): **20
+  days** on 1 Oct 2027, and 7 lapse. Unused sick leave isn't paid out when
+  employment ends (s67).
+- **HL23 Paying sick leave** (s71, s72). Ben is sick Wed 4 and Thu 5 Nov
+  2026: RDP 250.00 + 475.00 = **725.00** (s71(1)), paid in that week's pay
+  (s72(1)); **2 days** come off his balance. A sick Saturday isn't a working
+  day for him: no pay, nothing off the balance. If he's away 3 or more
+  consecutive calendar days the employer may ask for proof (s68(1)) and may
+  hold the pay until it's given (s72(2)). Taking part of a day off sick:
+  question 13.
+- **HL24 Sick leave at ADP** (s9A). Cara's daily pay varies within the pay
+  period, so her employer uses ADP: **200.00** a day (HL7). Xero's example
+  for an employee with uneven days: Moana's 10-hour Thursday on sick leave
+  is paid as 10 hours (her RDP for that day), not as her 7-hour "standard"
+  day.
+- **HL25 Sick leave and annual holidays** (s36, s38, s39). Sick during
+  annual holidays: those days can be sick leave if the employer agrees
+  (s36). Sick before booked annual holidays: the employer must let those
+  days be sick leave (s38). Sick leave used up: the employer can't make the
+  employee use annual holidays, but may agree if the employee asks (s39).
+- **HL26 Bereavement leave** (s69, s70, s71). Aroha's grandmother dies; she
+  takes Mon 9 to Wed 11 Nov 2026: **3 days** (s69(2)(a)(v), s70(1)(a)) at
+  RDP 240.00 = **720.00**. It doesn't come off her sick leave, and there's
+  no yearly balance: each bereavement has its own days, and two at the same
+  time give 3 days each (s70(2)). A miscarriage or still-birth is also 3
+  days (s69(2)(c), (d)). For anyone else's death it's **1 day**, if the
+  employer accepts the employee has suffered a bereavement (s69(2)(b), with
+  the factors in s69(3)). Bereavement during annual holidays must be
+  allowed instead of annual holidays (s37). Not paid out when employment
+  ends.
+
+### Public holidays and alternative holidays
+
+- **HL30 Otherwise a working day** (s12, s49). A public holiday is paid only
+  if it would otherwise have been a working day for the employee. Labour
+  Day, Mon 26 Oct 2026:
+  - Aroha (Mon-Fri) doesn't work it: paid her RDP, **240.00** (s49).
+  - Fiona (Tue-Thu) doesn't work Mondays: **no pay**.
+  - Cara (varies): if it's not clear, employer and employee consider her
+    agreement, work patterns, rosters, whether she works only when work is
+    available, what both reasonably expected, and whether she'd have worked
+    but for the holiday (s12(2), (3)); any time she'd otherwise have worked
+    makes it a working day (s12(4)); a Labour Inspector decides if they
+    can't agree (s13). Employment NZ's factors sheet says to weigh these
+    together, not apply a formula. Tohyee can't decide this on its own
+    (question 15). Xero assigns each employee a "holiday group" and adds
+    public holidays in pay periods automatically.
+- **HL31 Which day is the holiday** (s44, s45, s45A). For an employee who
+  doesn't work weekends (Aroha), 2026-27: Christmas Day **Fri 25 Dec**;
+  Boxing Day falls on Sat 26 Dec, so **Mon 28 Dec** (s45(1)(b)); New Year's
+  Day **Fri 1 Jan**; 2 January is a Saturday, so **Mon 4 Jan**; Waitangi Day
+  is Sat 6 Feb, so **Mon 8 Feb** (s45A(1)(b)); Good Friday **26 Mar**;
+  Easter Monday **29 Mar**; ANZAC Day is Sun 25 Apr, so **Mon 26 Apr**; the
+  Sovereign's birthday **Mon 7 Jun 2027** (the first Monday in June,
+  s44(1)(i)). For George, who would otherwise
+  work Saturday 26 Dec, Boxing Day stays **Sat 26 Dec** (s45(1)(a)). Two
+  holidays on the same day count as one (s44(4)). Matariki's date comes from
+  Schedule 1 of Te Kāhui o Matariki Public Holiday Act 2022 and anniversary
+  days from local observance (s44(1)(ia), (k)); neither was looked up here.
+  Proposed: public holiday dates as dated data with their source, like the
+  IRD rates in P2 (question 16). Xero "Mondayises the holiday for you".
+- **HL32 Working on a public holiday** (s50, s56). Ben works his usual 8
+  hours on Labour Day, Mon 26 Oct 2026, an otherwise working day. His RDP
+  for the time worked is 8 × 30.00 + 10.00 = 250.00. He's paid the greater
+  of (a) that plus half again, **375.00**, or (b) that, 250.00 (s50(1)):
+  **375.00**, and gets an **alternative holiday** (s56).
+  - If his agreement paid double time on public holidays (an identifiable
+    penal rate of 30.00 an hour): (a) still leaves the penal rate out, 250.00
+    × 1.5 = 375.00 (s50(1)(a), (2)); (b) is his RDP for the time with it,
+    8 × 60.00 + 10.00 = 490.00. Paid **490.00**.
+  - Fiona works 6 hours on Labour Day, not otherwise a working day for her:
+    6 × 27.00 × 1.5 = **243.00** (s48(1)(b), s50) and **no** alternative
+    holiday (s56(1)(a)).
+  - Ben works only 4 of his 8 hours: (4 × 30.00 + 10.00) × 1.5 = **195.00**,
+    and still a whole alternative holiday (s57(1)(c)). Whether he's also
+    paid for the 4 hours he didn't work: question 17.
+  - Ben is rostered on Labour Day but is sick: the day stays a public
+    holiday, paid at RDP **250.00** (s49), not time and a half, no
+    alternative holiday, and no sick leave used (s61A).
+  - Pay for a public holiday goes in the pay for the period it falls in
+    (s55). Xero adds a "time and a half" pay item and an alternative holiday
+    accrual by hand.
+- **HL33 Alternative holidays** (s56, s57, s60, s61). Ben's alternative
+  holiday arose on Mon 26 Oct 2026 (the record keeps that date,
+  s81(2)(k)). It's a whole working day off, on a day that would otherwise be
+  a working day and isn't a public holiday (s57(1)); if they can't agree
+  when, the employer sets it with 14 days' notice (s57(2), (3)).
+  - He takes it on **Thu 12 Nov 2026**: paid his RDP for that day, **475.00**
+    (s60(1)), including his regular Thursday overtime. On a Wednesday it
+    would have been 250.00.
+  - Had it still been untaken when he left on Fri 18 Dec 2026, it would be
+    paid at his RDP for his last day (a Friday), **250.00**, in his final
+    pay (s60(2)(b)).
+  - Exchanging it for money (s61): only if Ben asks, only once 12 months
+    have passed since it arose (from 26 Oct 2027), and only if the employer
+    agrees, for "the amount agreed" (s61(3)). The Act gives no formula
+    (question 18).
+  - Xero keeps alternative holidays in hours, adding the "standard number
+    of hours for a day". For Ben that's 8 hours, but his Thursday is 13: by
+    the Act it's a whole day either way (question 19).
+
+### Holiday and leave records
+
+- **HL40 What the record must hold** (s81(2)). For each employee, kept in
+  writing or so it can easily be printed (s81(3)), for at least **6 years**
+  after each entry (s81(4)), and shown or copied when the employee, their
+  representative, their union or a Labour Inspector asks (s82). Where
+  Tohyee would get each item:
+
+  | s81(2) | Item | From |
+  | --- | --- | --- |
+  | (a), (b) | Name; date employment started | Employee record (P1) |
+  | (c) | Hours worked each day in a pay period and the pay for them (or the agreed usual hours, s81(3A)) | Pay runs (P3) |
+  | (d), (e) | Current annual holiday entitlement; date last entitled | Leave balances (P8) |
+  | (f) | Current sick leave entitlement | Leave balances (P8) |
+  | (g), (h) | Dates of annual holidays, sick, bereavement and family violence leave taken, and the pay for them | Leave taken (P8) and pay runs |
+  | (ha), (hb) | How much annual holiday was cashed up each entitlement year, with dates and amounts | Cash-ups (P8) |
+  | (i), (j) | Dates of public holidays worked, the pay for them and the hours worked | Pay runs |
+  | (ja) | Public holidays transferred (s44A, s44B) | Not supported yet |
+  | (k) | Date each alternative holiday arose | Leave balances (P8) |
+  | (l) | Dates of, and pay for, public and alternative holidays not worked but paid | Pay runs |
+  | (m) | Cash value of board or lodgings | Not supported yet |
+  | (n) | Payments in exchange for alternative holidays (s61(3)) | P8 |
+  | (o), (p) | Date employment ended; holiday pay on termination | Employee record (P1); final pay (P8) |
+
+  Posted pay and leave are never edited (corrections are new entries), and
+  employees are archived, never deleted, so the 6 years are kept. If the
+  record isn't kept, the Employment Relations Authority may accept the
+  employee's statements as proved (s83), so it has to be complete.
+- **HL41 Ben's record** after the examples above (a printable page per
+  employee, with a CSV export):
+
+  | Date | Entry | Amount |
+  | --- | --- | --- |
+  | 3 Mar 2025 | Employment started | |
+  | 3 Mar 2026 | Entitled to 4 weeks' annual holidays | |
+  | 26 Oct 2026 | Worked Labour Day, 8 hours; alternative holiday arose | 375.00 |
+  | 4-5 Nov 2026 | Sick leave, 2 days | 725.00 |
+  | 12 Nov 2026 | Alternative holiday taken | 475.00 |
+  | 18 Dec 2026 | Employment ended; holiday pay on termination (2 weeks untaken, 4 public holidays, 8%) | 9,176.19 |
+
+  (His 2 weeks' annual holidays earlier in 2026 and his sick leave
+  entitlement would also be listed.)
+- **HL42 Balances shown for Aroha** on Thu 1 Apr 2027: annual holidays
+  **4.4 weeks** (22 days of her week; last entitled 1 Apr 2027; 1 week
+  cashed up in the year to 31 Mar 2027); sick leave **17 days** less any
+  taken since 1 Oct 2026; no bereavement balance. Xero also shows a running
+  "holiday pay" amount (8% of gross earnings since the last anniversary),
+  what she'd be owed for the part year if she left; question 22.
+
+### Not supported yet (refused rather than guessed)
+
+- Anything under the **Employment Leave Act 2026** (from 6 Aug 2028).
+- Closedown periods (s29-s35).
+- Transferring public holidays (s44A-s44C), and the record of it
+  (s81(2)(ja)).
+- Being on call on a public holiday (s59).
+- Family violence leave (s72A-s72J): paid like sick leave (s72I), 10 days a
+  year, not carried over (s72H); not in this stage's brief (question 21).
+- Paying 8% with each pay (s28) for fixed-term employees under 12 months or
+  very irregular work.
+- Board or lodgings (s10), home and community support travel payments
+  (s10A).
+- ACC weekly compensation and first week compensation alongside sick leave
+  (s71(2)-(4)); parental leave and volunteers leave in the 12 months
+  (s16(2)).
+- More than the minimums (for example a fifth week), and special rates in
+  employment agreements (s8(3), s9(2)).
+- Labour Inspector determinations (s11, s13, s17(2), s28F, s54), and
+  re-employment within a month (s85).
+- Posting a leave liability to the balance sheet (question 22).
+
+### Questions for Jess (Holidays Act leave)
+
+1. **Build for the 2003 Act at all?** It's replaced from 6 Aug 2028. Options:
+   (a) build the approved examples now and replace them for the new Act;
+   (b) build only the records, balances and leave dates (HL40-HL42), with
+   leave pay typed into pay runs; (c) wait and build for the Employment
+   Leave Act.
+2. **Units**: keep annual holidays in weeks and the rest in days, showing
+   hours alongside (the Act, HL8), or keep everything in hours like Xero?
+3. **Part weeks with unequal days** (Ben's 13-hour Thursday): value a day
+   as the weekly rate ÷ days in the week, or by hours (Xero: weekly rate ÷
+   hours a week × hours that day)?
+4. **The 12 months for AWE** with weekly or fortnightly pay: the last 52
+   weeks of pay periods (as in HL4, like Xero), or calendar 12 months (which
+   can catch a 53rd weekly pay)?
+5. **"Regular" overtime, allowances and commission** in OWP (HL2): mark
+   pay items as regular on the employee's usual pay (Xero's pay template),
+   or decide each time?
+6. **Four-week OWP formula** (HL3): offer it only when someone says OWP
+   can't be worked out, or work it out every time and show it?
+7. **RDP or ADP** (HL7): the person running pay chooses each time (Xero), or
+   a setting per employee?
+8. **Unpaid leave over a week** (HL10): does the anniversary move by all of
+   it or only the part over a week? Record an agreement to count it (and
+   then cut the AWE divisor), or follow Xero, which cuts the divisor anyway?
+9. **Annual holidays in advance** (HL14): no limit (the Act), a warning
+   above Xero's estimate, or a hard limit?
+10. **Leave taken in advance worth more than the 8% on leaving** (HL15):
+    refuse to take it off the final pay, take it off only with the written
+    consent attached, or take it off like Xero?
+11. **The 8% on leaving** (HL16, step 3): add the public holidays paid under
+    s40(3) to the gross earnings (5,291.57) or not (5,211.57)?
+12. **RDP for those public holidays** (HL16, step 2): the RDP for each
+    holiday's weekday at the employee's last pay rate (as in HL16), or ADP?
+    The Act says they're paid but not at what rate or date.
+13. **Part-day sick leave**: a whole day off the balance, the part day only,
+    or the employer's choice? The Act counts days.
+14. **The hours test's "month"** (HL21): calendar months, or 4-week blocks?
+15. **Otherwise a working day** (HL30): the person running pay decides for
+    each employee and holiday, or Tohyee suggests from recent weeks for them
+    to confirm?
+16. **Public holiday dates**: kept as dated data with sources (proposed);
+    which region's anniversary day, per organisation or per employee?
+17. **Working part of a public holiday** (HL32): is the rest of an
+    otherwise working day paid as well?
+18. **Exchanging an alternative holiday** (HL33): default the amount to the
+    RDP or ADP on the day it's exchanged, or have it typed in?
+19. **Alternative holidays in days** (the Act) or hours (Xero)?
+20. **Rounding**: exact rates, each payment rounded once to cents (as
+    above)?
+21. **Family violence leave**: include it in P8 alongside sick leave?
+22. **Leave liability**: should P8 post accrued leave as a liability (Xero
+    has an Employee Leave Liability report), and show the running 8%
+    "holiday pay" amount? Either needs its own worked examples.
+23. **Cash-up requests** (HL12): must the written request and the written
+    answer be attached to the cash-up?
