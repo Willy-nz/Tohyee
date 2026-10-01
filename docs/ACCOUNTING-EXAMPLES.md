@@ -11436,7 +11436,11 @@ be approved until it's fixed:
    where it doesn't, decision 150.)
 5. **Back pay for holiday pay periods** is refused until P8. Would you
    rather it paid back pay on the ordinary time and flagged the holiday
-   pay? (Still refused after P8, decision 152: leave question 4.)
+   pay? (Still refused after P8, decision 152; the leave question was
+   decided on 2 Oct 2026, decision 171: refused, because the law doesn't
+   say whether a backdated rise changes holiday pay already paid. Paying
+   only the ordinary time would leave that unanswered, so it stays
+   refused too.)
 6. **Hourly leavers start at 0 hours** when they finish before the period
    ends (starters still get the full period's hours, as P3 did). Agreed?
 7. **Separate extra-pay pay runs** (a bonus paid on a different day) aren't
@@ -11461,8 +11465,9 @@ Stage P7 of NZ payroll (#60) planned these; **stage P8 built them on 2 Oct
 Jess said to go ahead and build leave on these examples and decisions 7-29
 before approving them. They are still **not approved by Jess**. Design
 calls the examples and decisions 7-29 didn't settle are decisions 138-167
-in `docs/DECISIONS.md`; Jess's questions are under "Questions for Jess
-(leave build)" at the end of this section. Where building showed an example
+in `docs/DECISIONS.md`. The questions building raised were decided on 2
+Oct 2026 (decisions 168-181; "Decided (leave build)" at the end of this
+section), which added examples HL43-HL54. Where building showed an example
 was wrong or unclear, the text is corrected with a note saying so.
 
 Tests: `tests/unit/payroll-leave.test.ts` (the pure calculations: HL1-HL8,
@@ -11714,11 +11719,10 @@ amount paid.
     66,300.96 ÷ 52. Xero: "Cashed up annual leave payments aren't included
     in the employee's gross earnings and won't accrue holiday pay."
 - **HL13 Public holidays during annual holidays** (s40(1)). Aroha books Mon
-  22 Mar to Fri 2 Apr 2027. (Clarified 2 Oct 2026 while building: this
-  assumes her anniversary day isn't in those dates; Otago Anniversary Day
-  is Mon 22 Mar 2027, which would make it a third public holiday. The
-  tests set her anniversary day to Wellington's, decision 22; question 13
-  below.) Across two pay periods each pays its days at the rate worked out
+  22 Mar to Fri 2 Apr 2027. Her anniversary day is **Wellington's, Mon 25
+  Jan 2027** (Employment NZ), outside these dates (decision 180). (Clarified
+  2 Oct 2026 while building: Otago's, Mon 22 Mar 2027, or Southland's, Tue
+  30 Mar 2027, would add a public holiday inside them.) Across two pay periods each pays its days at the rate worked out
   for the holiday's start: 4 days (32 hours, 0.8 week) and Good Friday in
   the first, Easter Monday and 4 days in the second, **1,000.77** each. Good Friday (26 Mar) and Easter Monday (29 Mar)
   are public holidays, not annual holidays: each is paid at her RDP, 240.00,
@@ -11774,7 +11778,7 @@ amount paid.
     deduction) has no worked example: the final pay pays no holiday pay
     and a note gives the amount over the 8% and says it can be deducted
     only with written consent; refused rather than guessed, decision 150,
-    question 3 below.)
+    question 3, now decision 170: still refused.)
 - **HL16 Leaving after an entitlement has arisen** (s24, s25, s26, s40(3)).
   Ben leaves on Fri 18 Dec 2026. His last entitlement arose Tue 3 Mar 2026
   (4 weeks) and he's taken 2 weeks of it.
@@ -12114,40 +12118,65 @@ what it is. As well as the list above:
 - public holidays in years Tohyee has no dates for (2028 on, decision 162);
 - employees booking their own leave (decision 164).
 
-### Questions for Jess (leave build)
+### Decided (leave build)
 
-1. **Opening balances.** Tohyee keeps leave only from its own pay runs, so
-   anyone employed before an organisation started payroll in Tohyee is
-   refused (decision 143). Most organisations will need opening balances
-   (annual weeks and the date last entitled, sick days, alternative
-   holidays) and the earlier 12 months' gross earnings and days worked.
-   Shall we write worked examples for them next?
-2. **Employees' own leave requests** (like P9's timesheets: hours only,
-   approved by a manager)? Decision 164 left them out.
-3. **Advance holiday pay over the 8% on leaving** (HL15): with written
-   consent, take it off gross pay (as Xero) or as an after-tax deduction?
-4. **Back pay over periods with leave** (XP question 5): pay the leave
-   difference at the new rate, or keep refusing?
-5. **Paying annual holidays before they're taken** (s 27(1)): needed, or
-   will every employee agree to be paid in the usual pay (decision 157)?
-6. **Suggesting "otherwise a working day"** from 2 of the last 4 weeks
-   (decision 146): right?
-7. **Hours worked on a public holiday beyond the usual day** at the
-   ordinary rate, time and a half (decision 140): right?
-8. **The usual pay from the usual week** replaces P3's Ordinary time for
+Jess asked Claude to "look up what you need to and make the calls
+yourself" (2 Oct 2026). Each call, with its sources, is a decision in
+`docs/DECISIONS.md` ("The leave build's questions, decided"). What was
+asked is kept under each.
+
+1. **Opening balances: yes, built** (decision 168; examples HL43-HL48).
+   Asked: "Tohyee keeps leave only from its own pay runs, so anyone
+   employed before an organisation started payroll in Tohyee is refused
+   (decision 143). Most organisations will need opening balances (annual
+   weeks and the date last entitled, sick days, alternative holidays) and
+   the earlier 12 months' gross earnings and days worked. Shall we write
+   worked examples for them next?"
+2. **Employees' own leave requests: yes, like P9's timesheets** (decision
+   169; examples HL49-HL51). Asked: "Employees' own leave requests (like
+   P9's timesheets: hours only, approved by a manager)? Decision 164 left
+   them out."
+3. **Advance holiday pay over the 8%: still refused**, because IRD's tax
+   treatment of the recovery couldn't be confirmed (decision 170). Asked:
+   "Advance holiday pay over the 8% on leaving (HL15): with written
+   consent, take it off gross pay (as Xero) or as an after-tax deduction?"
+4. **Back pay over periods with leave: still refused**; the law doesn't
+   say whether a backdated rise changes holiday pay already paid
+   (decision 171). Asked: "Back pay over periods with leave (XP question
+   5): pay the leave difference at the new rate, or keep refusing?"
+5. **Paying annual holidays before they're taken: not built**; the s 27(1)
+   agreement is recorded instead (decision 172). Asked: "Paying annual
+   holidays before they're taken (s 27(1)): needed, or will every employee
+   agree to be paid in the usual pay (decision 157)?"
+6. **"Otherwise a working day" from 2 of the last 4 weeks: kept as a
+   suggestion only**, with Employment NZ's other factors shown beside it
+   (decision 173). Asked: "Suggesting 'otherwise a working day' from 2 of
+   the last 4 weeks (decision 146): right?"
+7. **Hours beyond the usual day on a public holiday: as built** (decision
+   174). Asked: "Hours worked on a public holiday beyond the usual day at
+   the ordinary rate, time and a half (decision 140): right?"
+8. **The usual pay from the usual week: as built** (decision 175). Asked:
+   "The usual pay from the usual week replaces P3's Ordinary time for
    people with a fixed week, and gives leavers their usual hours to the
-   finish date (decision 148). Agreed?
-9. **Redundancy isn't gross earnings** for holiday pay, following
-   Employment NZ's view (decision 139). Agreed?
-10. **The liability report** values alternative holidays at a usual day's
-    OWP (decision 153); posting the liability still waits for its own
-    example (decision 28). Want posting next?
-11. **Anniversary day** must be chosen for the organisation (or the
-    employee) before public holidays are paid. Fine?
-12. **2028's public holidays** aren't published yet; they'll need adding
-    before pay periods in 2028 (the Holidays Act runs to 6 Aug 2028).
-13. **Aroha's anniversary day** in HL13: which region? Otago's (Mon 22 Mar
-    2027) falls in her booking.
-14. **Cash-ups at the rate on the date agreed** (HL12, decision 158), not
-    the date paid: right?
+   finish date (decision 148). Agreed?"
+9. **Redundancy isn't gross earnings: as built** (decision 176). Asked:
+   "Redundancy isn't gross earnings for holiday pay, following Employment
+   NZ's view (decision 139). Agreed?"
+10. **Posting the liability: yes, designed, built next** (decision 177;
+    examples HL52-HL54). Asked: "The liability report values alternative
+    holidays at a usual day's OWP (decision 153); posting the liability
+    still waits for its own example (decision 28). Want posting next?"
+11. **The anniversary day must be chosen: as built** (decision 178).
+    Asked: "Anniversary day must be chosen for the organisation (or the
+    employee) before public holidays are paid. Fine?"
+12. **2028's public holidays: not added until Employment NZ publishes
+    them** (decision 179). Asked: "2028's public holidays aren't published
+    yet; they'll need adding before pay periods in 2028 (the Holidays Act
+    runs to 6 Aug 2028)."
+13. **Aroha's anniversary day is Wellington's** (Mon 25 Jan 2027; decision
+    180; HL13 says so). Asked: "Aroha's anniversary day in HL13: which
+    region? Otago's (Mon 22 Mar 2027) falls in her booking."
+14. **Cash-ups at the rate on the date agreed: as built** (decision 181).
+    Asked: "Cash-ups at the rate on the date agreed (HL12, decision 158),
+    not the date paid: right?"
 

@@ -543,22 +543,16 @@ wording. Still open:
 - A "number of people" on a position line?
 - Compare actuals by pay date (as now) or by period worked?
 
-**Holidays Act leave** (P8, end of the HL section: "Questions for Jess
-(leave build)")
-- Opening leave balances and earlier earnings: worked examples next? (Until
-  then leave is refused for anyone employed before Tohyee's first pay run
-  for them.)
-- Employees booking their own leave, like timesheets?
-- Advance holiday pay over the 8% on leaving: off gross pay or after tax?
-- Back pay over periods with leave (also XP question 5).
-- Paying annual holidays before they're taken (s 27(1)): needed?
-- "Otherwise a working day" suggested from 2 of the last 4 weeks; hours
-  beyond the usual day on a public holiday at the ordinary rate; the usual
-  pay from the usual week; redundancy not gross earnings; alternative
-  holidays in the liability at a usual day's pay; cash-ups at the rate on
-  the date agreed: agreed?
-- Aroha's anniversary day in HL13 (Otago's falls in her booking); 2028's
-  public holidays aren't published yet.
+**Holidays Act leave** (P8): the 14 leave build questions were decided on
+2 Oct 2026 at Jess's request (decisions 168-181, "Decided (leave build)" at
+the end of the HL section). Still for Jess or IRD:
+- Advance holiday pay over the 8% on leaving (decision 170): ask IRD how
+  recovering it is taxed (less gross pay, or after tax; same or a later
+  tax year). Refused until then.
+- Back pay over periods with leave (decision 171): the law doesn't say
+  whether a backdated rise changes holiday pay already paid. Refused.
+- 2028's public holidays (decision 179): add them when Employment NZ
+  publishes them, before any pay period touching 2028.
 
 **Extra pays, back pay and final pays** (P12, end of the XP section)
 - IRD's example 1 is a cent off its own steps ($10,366.39 vs $10,366.40):
