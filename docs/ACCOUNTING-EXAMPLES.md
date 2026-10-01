@@ -72,7 +72,10 @@ proves it". Test names start with the example IDs they cover:
   rate and file currency pieces of FXB2-FXB10, and
   `tests/unit/import-fields.test.ts` the import column matching (IM2-IM5, IM16), and
   `tests/unit/tax-available-on.test.ts` the tax code pickers and starting codes
-  by side (TAO2-TAO4, TAO6, TAO8)
+  by side (TAO2-TAO4, TAO6, TAO8), and `tests/unit/payroll-rates.test.ts`,
+  `tests/unit/payroll-calculations.test.ts` and
+  `tests/unit/payroll-ird-tables.test.ts` IRD's payroll rates and
+  calculations (PR1-PR16)
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -6252,3 +6255,184 @@ Decided (following NetSuite, 1 Oct 2026):
   NetSuite's close checklist has no bank reconciliation task.
 - **GST check**: uses the GST period setting (GP1-GP6) when it's set, and
   the latest filed return's length only when it isn't.
+
+## NZ payroll: IRD rates and calculations (examples not yet approved by Jess)
+
+Stage P2 of payroll (#60). Jess hasn't approved these. They cover IRD's
+rates and the calculations for **one ordinary pay**; there are no pay runs,
+journals or payslips yet. Every figure comes from IRD's **Payroll
+Calculations & Business Rules Specification** ("the spec") for the pay
+date's tax year, read on 1 Oct 2026 (the 2025-26 edition, version 1.0 of 1
+April 2025, and the 2026-27 edition, version 1.0 of 24 March 2026). The
+documents' names, editions, URLs and SHA-256 hashes are in
+`src/lib/payroll/rates/2025-26.ts` and `2026-27.ts`. The examples are
+IRD's own wherever IRD gives one: from the spec, the PAYE deduction tables
+**IR340** (weekly and fortnightly) and **IR341** (four-weekly and monthly),
+April 2025 and April 2026 editions, the **IR335** Employer's guide
+(September 2026) and the **KS4** KiwiSaver employer guide (April 2026).
+Page numbers are the printed ones. "Truncate" means drop the digits, as
+IRD's rules say: never round.
+
+Tests: `tests/unit/payroll-rates.test.ts` (PR1, and checks on the data
+files), `tests/unit/payroll-calculations.test.ts` (PR2-PR15) and
+`tests/unit/payroll-ird-tables.test.ts` (PR16).
+
+- **PR1 Rates by pay date.** Each edition covers pay dates 1 April to 31
+  March: a pay dated 31 Mar 2026 uses 2025-26 rates and one dated 1 Apr 2026
+  uses 2026-27 rates. Each value in a file also has its own date range, so a
+  rate IRD changes part way through a year is a second entry. Pay dates
+  before 1 Apr 2025 or after 31 Mar 2027 are refused ("Not supported yet
+  (refused rather than guessed): Tohyee has no IRD payroll rates for pay
+  dates on 2027-04-01"), never carried forward.
+  Rates in the files (spec section 2 and 5):
+
+  | | 2025-26 | 2026-27 |
+  | --- | --- | --- |
+  | Income tax (from 31 July 2024, both) | 10.5% to $15,600; 17.5% to $53,500 (less $1,092.00); 30% to $78,100 (less $7,779.50); 33% to $180,000 (less $10,122.50); 39% above (less $20,922.50) | same |
+  | ACC earners' levy | 1.67%, maximum liable earnings $152,790, maximum levy $2,551.59 | 1.75%, $156,641, $2,741.22 |
+  | IETC (ME codes) | $520 from $24,000; reduces by 13c a dollar above $66,000; none from $70,000 | same |
+  | Secondary codes SB, S, SH, ST, SA | 10.5%, 17.5%, 30%, 33%, 39% plus the levy (12.17%, 19.17%, 31.67%, 34.67%, 40.67%) | plus the levy (12.25%, 19.25%, 31.75%, 34.75%, 40.75%) |
+  | ND, NSW, CAE and EDW | 45%, 10.5%, 17.5%, 17.5% plus the levy (46.67%, 12.17%, 19.17%) | plus the levy (46.75%, 12.25%, 19.25%) |
+  | Student loan | 12% over $24,128 a year: $464 a week, $928 a fortnight, $1,856 four-weekly, $2,010.66 a month | same |
+  | KiwiSaver employee rates | 3% (default), 4%, 6%, 8%, 10% | 3.5% (default), 4%, 6%, 8%, 10%; 3% with a temporary rate reduction |
+  | KiwiSaver employer minimum | 3% | 3.5% (3% allowed with a temporary rate reduction) |
+  | ESCT (from 1 April 2025, both) | 10.5% to $18,720; 17.5% to $64,200; 30% to $93,720; 33% to $216,000; 39% above | same |
+
+- **PR2 M and M SL (spec 5.2).** IRD's ESS example 4 (2026-27 spec page 42;
+  2025-26 spec page 37): tax code M SL, four-weekly salary $3,500.00.
+  Annual income $3,500 x 13 = $45,500 (cents dropped). Tax $45,500 x 17.5% -
+  $1,092 = $6,870.50; ACC levy $45,500 x 1.75% = $796.25; total $7,666.75; a
+  week $7,666.75 / 52 = $147.4375, truncated **$147.43**; four-weekly
+  $147.43 x 52 / 13 = **$589.72 PAYE**, as IRD shows. With the 2025-26
+  levy (1.67%, $759.85) the same pay is $146.73 a week and **$586.92**, as
+  the 2025-26 spec shows. M SL's PAYE is the same as M's.
+- **PR3 More M pays from IRD.** Weekly, 2025-26: $500.03 is **$74.85** and
+  $515.03 is **$77.72** (spec 5.20.2: the RD 68 example, 2025-26 page 83);
+  $600.00 is **$94.02** (KS4 page 11). Weekly, 2026-27: $600.00 is **$94.50**
+  (IR340 April 2026 page 20); $880.00 is **$148.40** (IR335 page 28, Lani).
+  Fortnightly, 2026-27: $2,000.00 is **$343.00** (IR340 page 128).
+- **PR4 ACC earners' levy.** The annual levy is annual income x the rate,
+  not rounded, below the maximum liable earnings, and the maximum levy from
+  it (spec 5.2 step 4): 2026-27, $45,500 is **796.25**, $156,640 is
+  **2741.2** and $156,641 or more is **2741.22**; 2025-26, $45,500 is
+  **759.85** and $26,001 is **434.2167**. Annual income must be whole
+  dollars. IRD's rules include the levy in PAYE and never split a pay's PAYE
+  into tax and levy, so neither does Tohyee. Above the maximum: IR341 April
+  2026 page 103, four-weekly $15,504.00 on M: annual $201,552, tax
+  $57,682.78 + levy $2,741.22 = $60,424.00, $1,162.00 a week, **$4,648.00**
+  four-weekly, as IRD's example shows.
+- **PR5 ME (spec 5.3).** As M, less the IETC. Weekly, 2026-27: $600.00 is
+  annual $31,200, IETC $520: ($4,368.00 + $546.00 - $520) / 52 =
+  **$84.50** (IR340 page 20). $1,280.00 is annual $66,560, IETC $520 - $560
+  x 13% = $447.20: **$248.19** against M's $256.79 (IR340 page 37). From
+  $70,000 a year ME is the same as M ($3,013.00 a week: **$852.34** both,
+  IR340 page 81).
+- **PR6 Secondary codes (spec 5.6).** Pay truncated to whole dollars x (the
+  code's rate + the levy), truncated to cents; no annualising. IR340 April
+  2026 page 213, weekly $457.00: SB **55.98**, S **87.97**, SH **145.09**, ST
+  **158.80**, SA **186.22**. IR341 April 2026 page 286: four-weekly
+  $15,504.00 on SA is $15,504 x 40.75% = **$6,317.88**. Each SL code's PAYE
+  is the same as its code without SL.
+- **PR7 ND (spec 5.8).** 46.75% of whole dollars in 2026-27: IR335 page 13,
+  Brad's $860 week is **$402.05**. In 2025-26 (46.67%) the same pay is
+  **$401.36**.
+- **PR8 NSW (spec 5.5).** 10.5% plus the levy, on whole dollars: Mike's
+  $960.00 in 2026-27 is $100.80 tax + $16.80 levy = **$117.60** (2026-27 spec
+  page 26); his $800.00 in 2025-26 is $84.00 + $13.36 = **$97.36** (2025-26
+  spec page 20).
+- **PR9 CAE and EDW (spec 5.7).** 17.5% plus the levy, on whole dollars:
+  $457.89 is $457 x 19.25% = **$87.97** in 2026-27 and $457 x 19.17% =
+  **$87.60** in 2025-26.
+- **PR10 Student loan on main income (spec 5.4).** Pay truncated to whole
+  dollars; nothing at or below the pay period threshold; otherwise 12% of
+  the excess, truncated to cents. Four-weekly $3,500.00: ($3,500 - $1,856) x
+  12% = **$197.28** (ESS example 4, both years). Weekly $464.00 is **0.00**,
+  $464.99 is **0.00** (cents dropped) and $465.00 is **0.12** (IR340 April
+  2026 page 17). Monthly $2,600.00: ($2,600 - $2,010.66) x 12% = $70.7208,
+  **$70.72** (IR341 April 2026 page 116). Four-weekly $15,504.00:
+  **$1,637.76** (IR341 page 103).
+- **PR11 Student loan on secondary income (spec 5.6).** 12% of whole
+  dollars, no threshold: weekly $457.00 on S SL is **$54.84** (IR340 page
+  213); four-weekly $15,504.00 on SA SL is **$1,860.48** (IR341 page 286).
+  Codes without SL (M, ME, SB-SA, ND, NSW, CAE, EDW) deduct **0.00**.
+- **PR12 KiwiSaver employee deductions.** Gross (with its cents) x the rate,
+  truncated to cents: 4% of $500.03 is $20.00012, **$20.00** (spec 5.20.2);
+  3.5% of $3,500.00 is **$122.50** (ESS example 4); 3.5% of $600.00 is
+  **$21.00** (KS4 page 11); 3.5% of $465.00 is $16.275, **$16.27** (IR340
+  page 17). Only IRD's rates are accepted: 3.5% is refused for a pay dated
+  in 2025-26; in 2026-27, 3% is refused unless the employee has a temporary
+  rate reduction (then only 3% is accepted).
+- **PR13 KiwiSaver employer contributions.** Gross x the rate, truncated to
+  cents: 3% of $500.03 is $15.0009, **$15.00** (spec 5.20.2, 2025-26); 3.5% of
+  $2,600.00 is **$91.00** (KS4 page 12); 10% of $800.00 is **$80.00** (IR335
+  page 28). Below the minimum is refused: 3% for a pay dated 1 Apr 2026 or
+  later, unless the employee has a temporary rate reduction (KS4 page 16:
+  the employer can then reduce to 3%). Higher (voluntary) rates are allowed.
+- **PR14 ESCT rate.** The ESCT rate threshold amount (last year's salary or
+  wages plus gross employer contributions, or the employer's estimate) is an
+  input; Tohyee doesn't estimate it. $54,216.00 is **17.5%** (spec 5.21.1);
+  $14,425.88 is **10.5%**, $23,577.43 and $38,625.00 are **17.5%** (spec
+  5.21.2); $48,300 is **17.5%** and $72,450 is **30%** (IR335 page 27).
+  $18,720.00 is 10.5% and $18,721.00 is 17.5%; $18,720.50 falls between two
+  of IRD's bands and is refused. $216,001 is 39%.
+- **PR15 ESCT on a contribution (spec 5.21.3).** The contribution truncated
+  to whole dollars x the ESCT rate, truncated to cents; the net contribution
+  is the contribution with its cents less the ESCT. $122.50 at 17.5%: $122 x
+  17.5% = **$21.35**, net **$101.15** (ESS example 4, 2026-27); $105.00 at
+  17.5%: **$18.37**, net **$86.63** (2025-26). $79.04 at 17.5%: $79 x 17.5% =
+  $13.825, **$13.82**, and $39.52: **$6.82** (spec 5.21.4). $24.00 at 17.5%:
+  **$4.20**, net **$19.80** (spec 5.21.5). $91.00 at 17.5%: **$15.92**, net
+  **$75.08**, and $91.17: **$15.92**, net **$75.25** (IR341 April 2026 pages
+  116-117).
+- **PR16 IRD's PAYE tables.** 976 rows of IR340 and IR341 (April 2025 and
+  April 2026; every 97th row of each table, its last row and the rows either
+  side of each tax, levy, IETC and student loan threshold) are in
+  `tests/fixtures/ird-paye-tables.json` with their page numbers. For each
+  row Tohyee's M, ME and SL (or SB-SA and SL), KiwiSaver at every rate, and
+  net employer contribution and ESCT at every ESCT rate match IRD's figures
+  exactly.
+
+### Not supported yet (refused rather than guessed)
+
+- Pay dates outside 1 Apr 2025 to 31 Mar 2027 (no edition covers them).
+- Tax codes STC (tailored tax codes, which need the IR23 certificate's
+  rate) and WT (schedular payments); student loan special deduction rates
+  (SDR), Commissioner (SLCIR) and voluntary (SLBOR) deductions.
+- Pay frequencies other than weekly, fortnightly, four-weekly and monthly.
+- Gross pay, contributions or threshold amounts below zero.
+- ESCT rate threshold amounts between two bands (e.g. $18,720.50).
+
+Not built in this stage (not refusals: there's no function for them yet):
+extra pays (bonuses, lump sums, back pay, pay on leaving), employee share
+schemes, employer contributions taxed as salary (RD 68), estimating the
+ESCT rate threshold amount, which employees must have employer
+contributions (under 16 or over 65, savings suspensions, complying funds),
+payroll giving, child support. Pay runs, journals, payslips and payday
+filing are later stages.
+
+### Questions for Jess (NZ payroll rates)
+
+- **Out-of-date IRD examples.** The 2026-27 spec's RD 68 example (page 88)
+  still shows PAYE of $74.85 and $77.72, and KS4 (April 2026, page 11) PAYE
+  of $94.02 on $600: all 2025-26 figures (1.67% levy). With 2026-27 rates
+  they're $75.25, $78.14 and $94.50 (IR340 April 2026 agrees on $94.50).
+  The tests use them for 2025-26 only. Agreed?
+- **ESCT rounding.** KS4 page 13 shows $91 x 17.5% = $15.93 (rounded) and a
+  net $75.07; IR335 page 27 works ESCT on $204.17 (with cents, rounded:
+  $35.73). The spec (5.20.6, 5.21.3) says whole dollars and truncate, and
+  IR341 April 2026 page 116 gives $15.92 and $75.08. Tohyee follows the spec
+  and the tables. Agreed?
+- **When the 3.5% employer minimum starts.** The spec says both "payday's
+  on or after 1 April 2026" (2.3, 4.3) and "from their first full pay after
+  1 April 2026" (2.3, and KS4 page 12 "from the first full pay period").
+  Tohyee uses the pay date: a pay dated 1 Apr 2026 or later needs 3.5% even
+  if most of its period was in March. Is that right?
+- **Rates by pay date.** IR340 and IR341 say "pay periods between 1 April
+  and March"; Tohyee picks every rate by the pay date (as the spec does for
+  KiwiSaver). Is that right for PAYE too?
+- **ESCT threshold amounts between bands.** IRD's bands are whole dollars
+  ($0-$18,720, $18,721-$64,200 ...). An estimate like $18,720.50 is refused
+  for now. Should it be truncated to whole dollars first?
+- **4% from 1 April 2028.** The 2026-27 spec (2.3) says employee and
+  employer minimums rise to 4% for paydays from 1 April 2028. That isn't in
+  the files: it'll come with the edition that covers it.
