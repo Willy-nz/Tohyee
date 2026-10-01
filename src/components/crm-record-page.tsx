@@ -12,14 +12,14 @@ import {
   OpportunityForm,
   PersonForm,
   PeopleTable,
-  STAGE_LABELS,
-  STAGE_TONES,
-  STAGES,
+  StageBadge,
+  stageChoices,
   TaskForm,
   TaskList,
   totalAmounts,
   useBaseCurrency,
   useBusy,
+  useStages,
   useTeam,
 } from "@/components/crm";
 import { RecordDetails } from "@/components/crm-record-details";
@@ -33,7 +33,8 @@ import { api } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
 import { type DetailField, detailSections, pastByMonth, upcomingAndOverdue } from "@/lib/crm/record-page";
 import { customIdOf, LAYOUT_RECORD_NAMES, type LayoutRecord, type RecordType, standardFieldApplies } from "@/lib/crm/record-types/layout";
-import type { Activity, ActivityKind, Opportunity, OpportunityStage, Person, RelatedDocument, Task, TimelineEntry } from "@/lib/crm/service";
+import { FORECAST_CATEGORY_LABELS } from "@/lib/crm/forecast-figures";
+import type { Activity, ActivityKind, Opportunity, Person, RelatedDocument, StageHistoryEntry, Task, TimelineEntry } from "@/lib/crm/service";
 import { contactUses, type CustomFieldUse, type CustomValue, type CustomValues, customValueText } from "@/lib/custom-fields/values";
 import { formatDate, formatDateTime, formatMoney, todayInBrowser } from "@/lib/format";
 import type { Invoice } from "@/lib/invoices/service";
@@ -72,6 +73,8 @@ type OpportunityData = {
   tasks: Task[];
   activities: Activity[];
   timeline: TimelineEntry[];
+  /** Newest first (CRMS6). */
+  stageHistory: StageHistoryEntry[];
   invoice: Invoice | null;
 };
 
@@ -217,6 +220,7 @@ function StandardEditor({
   field,
   value,
   contactId,
+  recordTypeId,
   onChange,
 }: {
   organisationId: string;
@@ -224,10 +228,13 @@ function StandardEditor({
   value: string;
   /** The opportunity's company, for its point of contact. */
   contactId: string | null;
+  /** The record's type, for an opportunity's sales process (CRMS7). */
+  recordTypeId?: string | null;
   onChange: (value: string) => void;
 }) {
   const kind = field.standard?.kind;
   const team = useTeam(organisationId);
+  const stages = useStages(kind === "stage" ? organisationId : null);
   const contacts = useApiData<{ contacts: Contact[] }>(kind === "company" ? "/api/contacts" : null, { organisationId });
   const people = useApiData<{ people: Person[] }>(kind === "person" && contactId ? "/api/crm/people" : null, { organisationId, contactId });
   const common = { "aria-label": field.label, value, autoFocus: true };
@@ -278,9 +285,9 @@ function StandardEditor({
     case "stage":
       return (
         <select {...common} onChange={(event) => onChange(event.target.value)}>
-          {STAGES.map((stage) => (
-            <option key={stage} value={stage}>
-              {STAGE_LABELS[stage]}
+          {stageChoices(stages.data, recordTypeId ?? null, value).map((stage) => (
+            <option key={stage.key} value={stage.key}>
+              {stage.name}
             </option>
           ))}
         </select>
@@ -298,6 +305,7 @@ function InlineEditor({
   field,
   values,
   contactId,
+  recordTypeId,
   onDone,
   onSaved,
 }: {
@@ -307,6 +315,7 @@ function InlineEditor({
   field: DetailField;
   values: RecordValues;
   contactId: string | null;
+  recordTypeId: string;
   onDone: () => void;
   onSaved: () => void;
 }) {
@@ -344,7 +353,7 @@ function InlineEditor({
       {field.custom ? (
         <FieldInput field={field.custom} value={custom} onChange={setCustom} disabled={busy} ariaLabel={field.label} />
       ) : (
-        <StandardEditor organisationId={organisationId} field={field} value={text} contactId={contactId} onChange={setText} />
+        <StandardEditor organisationId={organisationId} field={field} value={text} contactId={contactId} recordTypeId={recordTypeId} onChange={setText} />
       )}
       <span className={ui.rowButtons}>
         <Button type="submit" size="small" disabled={busy}>
@@ -410,6 +419,7 @@ function DetailsTab({
             field={field}
             values={values}
             contactId={contactId}
+            recordTypeId={recordType.id}
             onDone={() => setEditing(null)}
             onSaved={onSaved}
           />
@@ -629,7 +639,7 @@ export function CompanyRecordPage({ organisationId, contactId }: { organisationI
   const page = data.data;
   const { contact, people, opportunities, tasks } = page;
   const editable = can("bookkeeper");
-  const open = opportunities.filter((o) => ["new", "screening", "meeting", "proposal"].includes(o.stage));
+  const open = opportunities.filter((o) => o.stageType === "open");
   const values: RecordValues = {
     standard: {
       name: contact.name,
@@ -1012,7 +1022,6 @@ export function OpportunityRecordPage({ organisationId, opportunityId }: { organ
     },
     custom: opportunity.customFields,
   };
-  const stageBadge = (stage: OpportunityStage) => <Badge tone={STAGE_TONES[stage]}>{STAGE_LABELS[stage]}</Badge>;
   const display = (key: string): ReactNode => {
     switch (key) {
       case "contactId":
@@ -1026,7 +1035,7 @@ export function OpportunityRecordPage({ organisationId, opportunityId }: { organ
       case "closeDate":
         return opportunity.closeDate ? formatDate(opportunity.closeDate) : "";
       case "stage":
-        return stageBadge(opportunity.stage);
+        return <StageBadge name={opportunity.stageName} type={opportunity.stageType} />;
       case "createdAt":
         return formatDateTime(opportunity.createdAt);
       case "updatedAt":
@@ -1050,6 +1059,8 @@ export function OpportunityRecordPage({ organisationId, opportunityId }: { organ
             ["Company", display("contactId")],
             ["Amount (excl. GST)", display("amount")],
             ["Stage", display("stage")],
+            ["Probability", `${opportunity.probability}% · ${FORECAST_CATEGORY_LABELS[opportunity.forecastCategory]}`],
+            ["Weighted", amountIn(opportunity.weightedAmount, opportunity.currencyCode, baseCurrency)],
             ["Expected close date", display("closeDate")],
             ["Owner", display("ownerUserId")],
           ]}
@@ -1100,6 +1111,13 @@ export function OpportunityRecordPage({ organisationId, opportunityId }: { organ
                 label="invoice"
               />
             )}
+          />
+          <RelatedCard
+            title="Stage history"
+            count={page.stageHistory.length}
+            items={page.stageHistory}
+            empty="No changes yet."
+            render={(shown) => <StageHistoryTable rows={shown} currencyCode={opportunity.currencyCode} baseCurrency={baseCurrency} />}
           />
           <TasksRelated
             organisationId={organisationId}
@@ -1155,5 +1173,41 @@ export function OpportunityRecordPage({ organisationId, opportunityId }: { organ
         />
       }
     />
+  );
+}
+
+/** An opportunity's stage history (CRMS6), after Salesforce's Stage History related list. */
+function StageHistoryTable({ rows, currencyCode, baseCurrency }: { rows: readonly StageHistoryEntry[]; currencyCode: string; baseCurrency: string }) {
+  return (
+    <div className={ui.tableWrap}>
+      <table className={ui.table}>
+        <thead>
+          <tr>
+            <th>Stage</th>
+            <th className={ui.num}>Amount</th>
+            <th className={ui.num}>Probability</th>
+            <th>Forecast category</th>
+            <th className={ui.num}>Weighted</th>
+            <th>Expected close</th>
+            <th>Changed by</th>
+            <th>When</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={`${row.at}-${index}`}>
+              <td>{row.stageName}</td>
+              <td className={ui.num}>{amountIn(row.amount, currencyCode, baseCurrency)}</td>
+              <td className={ui.num}>{row.probability === null ? "" : `${row.probability}%`}</td>
+              <td>{row.forecastCategory ? FORECAST_CATEGORY_LABELS[row.forecastCategory] : ""}</td>
+              <td className={ui.num}>{row.weightedAmount === null ? "" : amountIn(row.weightedAmount, currencyCode, baseCurrency)}</td>
+              <td>{row.closeDate ? formatDate(row.closeDate) : ""}</td>
+              <td>{row.by ?? ""}</td>
+              <td>{formatDateTime(row.at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

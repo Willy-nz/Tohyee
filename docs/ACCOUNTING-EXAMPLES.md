@@ -3989,7 +3989,8 @@ email and phone. People are archived, never deleted.
 its people), an owner (a member of the organisation), an amount excluding
 GST, an expected close date and a **stage**: New, Screening, Meeting,
 Proposal, Won or Lost (Twenty's stages, with its "Customer" called Won, and
-Lost added). Stages change freely until an opportunity has made an invoice.
+Lost added; since CRMS1 these are the organisation's starting stages, which
+an admin can change, and "Won" means any Closed won stage). Stages change freely until an opportunity has made an invoice.
 A **won opportunity can make a draft invoice** for its company: one line with
 the opportunity's name and amount, the first active revenue account and the
 standard GST code, dated today and due on the customer's payment terms (in
@@ -4989,6 +4990,218 @@ Round 2; no section).
   (200) but not the set-up (403), an admin changes the set-up (201, 200).
   Old URLs still work: /operations/crm/companies/5 opens /crm/companies/5,
   and the new pages are /crm/people/{id} and /crm/opportunities/{id}.
+
+## Opportunity stages, probability and forecasts (examples not yet approved by Jess)
+
+Jess wants a Salesforce-level CRM (2 Oct 2026). This follows Salesforce's
+opportunity **Stage** picklist (each stage has a type, a probability and a
+forecast category), **sales processes** (which stages a record type uses),
+the opportunity's **Probability** and **Forecast Category** fields, the
+**Stage History** related list and **Collaborative Forecasts** with
+cumulative rollups and quotas. Decisions 76-90 in `docs/DECISIONS.md` give
+the sources.
+
+- **Stages** are the organisation's own list, in order. Each has a name
+  (1-40 characters, unique ignoring case), a **type** (Open, Closed won or
+  Closed lost), a default **probability** (a whole number of per cent,
+  0-100) and a **forecast category** (Pipeline, Best case, Commit, Closed or
+  Omitted). A Closed won stage is always 100% and Closed; a Closed lost
+  stage is always 0% and Omitted; an Open stage is never Closed. Each stage
+  also has a fixed **key** (like Salesforce's API name) that the API uses;
+  renaming a stage doesn't change it. Setting up stages is for admins and
+  owners; everyone can read them.
+- Stages are **archived, never deleted**. An archived stage keeps its
+  opportunities (they can still be saved) but can't be chosen for another
+  one. At least one active Open, one active Closed won and one active
+  Closed lost stage must stay. A stage's type can't change while any
+  opportunity is in it.
+- A **won opportunity** is one in a Closed won stage, whatever it's called:
+  that's what can make the invoice (CRM5) and what "open" means everywhere
+  (Home, the company list's open pipeline, the record page).
+- **Sales processes**: an opportunity record type (CRT10) can use a chosen
+  list of stages, with at least one of each type; a type without a list
+  uses every active stage. A new opportunity starts in the first active
+  Open stage of its type's process.
+- An opportunity's **probability** and **forecast category** start as its
+  stage's. Moving it to another stage sets both to the new stage's, unless
+  they're sent in the same save. They can be changed without changing the
+  stage (bookkeepers and above), within the stage type's rules. The
+  **weighted amount** is amount × probability, rounded half up to the
+  currency's smallest unit.
+- **Stage history** (Salesforce's Stage History): a row each time the
+  stage, amount, probability, forecast category or expected close date
+  changes, with who and when, newest first.
+- **Forecasts**: opportunities with an expected close date in each month or
+  quarter (quarters of the organisation's financial year), per owner and
+  per currency (never added across currencies, MC68), with Salesforce's
+  cumulative totals:
+  - **Closed** = Closed
+  - **Commit** = Commit + Closed
+  - **Best case** = Best case + Commit + Closed
+  - **Open pipeline** = Pipeline + Best case + Commit (open opportunities)
+  - **Weighted pipeline** = the weighted amounts of open opportunities not
+    Omitted, each rounded first, then added.
+
+  Omitted opportunities (including all lost ones) are in none of them.
+  Opportunities without an expected close date are left out and counted.
+  Each figure opens the list of opportunities it's made of. Forecasts are
+  read-only: they're worked out from the opportunities and change nothing.
+- **Quotas**: an admin can set a quota per owner per month, in the base
+  currency. A quarter's quota is its months' quotas added. **Attainment** is
+  Closed (base currency) ÷ quota, as a percentage to 2 decimal places,
+  rounded half up.
+
+Starting stages (the upgrade):
+
+| Key | Stage | Type | Probability | Forecast category |
+| --- | --- | --- | --- | --- |
+| new | New | Open | 10% | Pipeline |
+| screening | Screening | Open | 20% | Pipeline |
+| meeting | Meeting | Open | 50% | Pipeline |
+| proposal | Proposal | Open | 75% | Pipeline |
+| won | Won | Closed won | 100% | Closed |
+| lost | Lost | Closed lost | 0% | Omitted |
+
+Setup for CRMS2-CRMS7: as CRT (Mānuka Vets, Aroha Ngata, "Memorial paw
+prints 2027" for 2,400.00 closing 2026-12-15, owner Jess, NZD base).
+
+- **CRMS1** Upgrade: before it, the organisation has "Clinic display"
+  (Proposal, 600.00), "Menu reprint" (Won, 500.00) and "Old prints" (Lost,
+  200.00), and "Clinic display" was moved New → Proposal. Afterwards there
+  are the six stages above; Clinic display is 75% Pipeline (weighted
+  450.00), Menu reprint 100% Closed (weighted 500.00), Old prints 0%
+  Omitted, and the opportunities list in the stages' order. Clinic display's
+  stage history shows the move to Proposal (by whoever did it, then) with
+  no probability (it wasn't kept). A stage that doesn't exist ("nonsense")
+  is refused by the database ("There's no stage called nonsense"). A new
+  opportunity starts in New at 10%
+  Pipeline.
+- **CRMS2** Set-up rules: the admin adds "Negotiation" (Open, 90%, Commit)
+  and moves it up to sit between Proposal and Won. "proposal" is refused
+  ("There's already a stage called proposal."), as are 101% ("The
+  probability must be a whole number from 0 to 100."), 12.5%, an Open stage
+  in Closed ("Only a Closed won stage can be in the Closed forecast
+  category."), a Closed won stage at 90% ("A Closed won stage is 100%
+  and in the Closed forecast category.") and a Closed lost stage in
+  Pipeline ("A Closed lost stage is 0% and in the Omitted forecast
+  category."). Its key is "negotiation"; renaming it "Negotiation/review"
+  keeps the key. A bookkeeper can't add or change a stage (403); a viewer
+  can read them. Each change is in the audit history.
+- **CRMS3** Archiving and types: with Memorial paw prints in Screening,
+  archiving Screening works; Memorial paw prints stays in Screening and can
+  still be saved (its amount changed to 2,500.00), but another opportunity
+  can't be moved there ("Screening is archived, so it can't be chosen.").
+  Archiving Lost, the only Closed lost stage, is refused ("Lost is the only
+  active Closed lost stage. Add or restore another first."), and so is
+  changing Won's type to Open. Changing Screening's type to Closed lost is
+  refused while Memorial paw prints is in it ("Screening has
+  opportunities, so its type can't change."); Proposal (empty) can change
+  type. Restoring Screening works. Stages can't be deleted (the database
+  refuses).
+- **CRMS4** The invoice follows the stage's type: Won renamed "Closed won"
+  still makes the CRM5 invoice (total **2,760.00**) when Memorial paw
+  prints is in it. A second Closed won stage "Won – renewal" makes one too
+  (a 1,000.00 opportunity: total **1,150.00**). An opportunity in Lost or
+  any Open stage can't ("Only a won opportunity can make an invoice.").
+  Once invoiced, its stage can't change, and the database refuses an
+  invoiced opportunity in a stage that isn't Closed won.
+- **CRMS5** Probability and forecast category: Memorial paw prints (New) is
+  10% Pipeline, weighted **240.00**. Moved to Proposal: 75% Pipeline,
+  **1,800.00**. Changed to 80% and Commit without moving: **1,920.00**.
+  Moved to Negotiation: 90% Commit (the stage's), **2,160.00**; moved back
+  to Proposal with 70% in the same save: 70% Pipeline, **1,680.00**. An
+  Open opportunity can be Omitted but not Closed ("Only a won opportunity
+  can be in the Closed forecast category."); 101% is refused. Moved to Won
+  it's 100% Closed (**2,400.00**), and 90% or Commit on a won one are
+  refused ("A won opportunity is 100% and in the Closed forecast
+  category."); Lost makes it 0% Omitted (**0.00**). Rounding: "Window
+  decals" for 333.33 at 15% is 49.9995, weighted **50.00**. A viewer can't
+  change them (403).
+- **CRMS6** Stage history: Memorial paw prints is added (New, 10%,
+  Pipeline, 2,400.00, 2026-12-15), moved to Proposal (75%), changed to 80%
+  Commit, renamed "Memorial paw prints 2027/28" (no row), changed to
+  2,600.00 (weighted 2,080.00) and its close date to 2027-01-15. Its stage
+  history has five rows, newest first: 2027-01-15 / 2,600.00 / 80% /
+  Commit / Proposal; 2026-12-15 / 2,600.00 / 80% / Commit / Proposal;
+  2026-12-15 / 2,400.00 / 80% / Commit / Proposal; 2026-12-15 / 2,400.00 /
+  75% / Pipeline / Proposal; 2026-12-15 / 2,400.00 / 10% / Pipeline / New,
+  each with Jess's email and when. A viewer can read it.
+- **CRMS7** Sales processes: the opportunity type "Grant application"
+  uses New, Proposal, Won and Lost. A new Grant application opportunity
+  starts in New; moving it to Meeting is refused ("Meeting isn't in the
+  Grant application sales process."); Proposal is fine. A process without a
+  Closed lost stage is refused ("A sales process needs at least one Open,
+  one Closed won and one Closed lost stage."), as is an unknown stage.
+  Changing Memorial paw prints (Standard, in Meeting) to Grant application
+  is refused for the same reason, and works moved to Proposal in the same
+  save. Taking the list off (Standard behaviour: every stage) works. Only
+  admins set processes (403 for a bookkeeper); each change is in the
+  history. The pipeline board shows the active stages in their order, and
+  an archived stage only while it has opportunities.
+- **CRMS8** Forecast by month and owner, from 1 Oct 2026 for three months.
+  Jess owns, closing in October: "Clinic display" 600.00 (Won), "Memorial
+  paw prints 2027" 2,400.00 (Negotiation, 90%, Commit), "Kennel cards"
+  900.00 (Proposal, 75%, changed to Best case), "Brochure" 1,000.00
+  (Meeting, 50%, Pipeline), "Old prints" 500.00 (Lost), "Sponsorship"
+  300.00 (Screening, 20%, changed to Omitted), and Acme Inc's "Logo licence"
+  USD 100.00 (Proposal, 75%, changed to Commit); in November "Christmas
+  cards" 1,500.00 (Proposal, 75%, Pipeline); and "Website" 700.00 (New, no
+  close date). Ben owns, in October, "Menu reprint" 1,250.00 (Won) and
+  "Window decals" 333.33 (New, changed to 15%). "September deal" closes
+  2026-09-30. The forecast:
+
+  | Month | Owner | Currency | Closed | Commit | Best case | Open pipeline | Weighted |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Oct 2026 | Ben | NZD | 1,250.00 | 1,250.00 | 1,250.00 | 333.33 | 50.00 |
+  | Oct 2026 | Jess | NZD | 600.00 | 3,000.00 | 3,900.00 | 4,300.00 | 3,335.00 |
+  | Oct 2026 | Jess | USD | 0.00 | 100.00 | 100.00 | 100.00 | 75.00 |
+  | Nov 2026 | Jess | NZD | 0.00 | 0.00 | 0.00 | 1,500.00 | 1,125.00 |
+
+  October's NZD total is Closed **1,850.00**, Commit **4,250.00**, Best case
+  **5,150.00**, Open pipeline **4,633.33**, Weighted **3,385.00**; USD is
+  totalled on its own (**100.00** Commit). December has nothing. "Website"
+  is counted as 1 opportunity with no close date; "September deal" isn't in
+  the range. Asking for Ben only gives his row.
+- **CRMS9** By quarter and drill-down: with a 31 March year end, Oct-Dec
+  2026 is a quarter; Jess's NZD row for it is Closed 600.00, Commit
+  3,000.00, Best case 3,900.00, Open pipeline **5,800.00**, Weighted
+  **4,460.00**. Drilling into Jess's October NZD Best case lists Clinic
+  display, Kennel cards and Memorial paw prints 2027; her Open pipeline
+  lists Brochure, Kennel cards and Memorial paw prints 2027; her Closed
+  lists Clinic display; her Weighted lists Brochure (500.00), Kennel cards
+  (675.00) and Memorial paw prints 2027 (2,160.00). With a 30 June year end
+  the quarter containing October is Oct-Dec too, and with a 31 May year
+  end it's Sep-Nov.
+- **CRMS10** Quotas: the admin sets Jess 5,000.00 for October and November
+  and Ben 1,000.00 for October. Jess's October attainment is **12.00%**,
+  November **0.00%**, Ben's October **125.00%**; December has no quota (no
+  attainment). By quarter, Jess's quota is **10,000.00** (**6.00%**) and
+  Ben's **1,000.00** (**125.00%**). A negative quota, a quota for someone
+  who isn't a member, or a month given as 2026-10-15 is refused; a
+  bookkeeper can't set one (403). Clearing Jess's November quota removes
+  it. Each change is in the history.
+- **CRMS11** Over HTTP and with the CRM off: every stage, sales process,
+  forecast and quota route needs a signed-in member (401 without, 404 for
+  someone outside the organisation, as for other organisation routes): a viewer reads stages and forecasts
+  (200), a bookkeeper changes an opportunity's probability (200) but not
+  stages or quotas (403), an admin adds and changes stages (201, 200) and
+  sets quotas (200). With the CRM off, stages, processes and quotas can't
+  be changed ("The CRM is off. An admin can turn it on in Settings.").
+
+### Questions for Jess (stages and forecasts)
+
+- Are the starting probabilities (New 10%, Screening 20%, Meeting 50%,
+  Proposal 75%) right for you, and should any start in Best case or
+  Commit rather than Pipeline?
+- Salesforce converts every currency into one forecast currency. Tohyee
+  keeps currencies apart (MC68). Do you want forecasts converted to NZD
+  too (at which rate: today's, or the rate on the close date)?
+- Quotas are in NZD and only NZD Closed counts toward them. Should foreign
+  currency won work count (converted), and do you want quotas per quarter
+  as well as per month?
+- Salesforce lets managers adjust their team's forecast figures and
+  forecasts roll up a role hierarchy. Do you want teams/managers and
+  adjustments (a later stage), or is per-owner enough?
 
 ## Notes, files and history
 

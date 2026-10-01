@@ -602,8 +602,8 @@ that something happened.
   (with a total per currency), their tasks due today or overdue, and the
   team's ten most recent calls, meetings and notes (CRM10, not yet approved
   by Jess). Companies are the contacts, which can now also be **prospects**; **people**
-  at each company; **opportunities** with Twenty's stages (plus Lost) on a
-  drag-and-drop pipeline board, where a won one makes its draft invoice in
+  at each company; **opportunities** with the organisation's own stages
+  (starting with Twenty's, plus Lost) on a drag-and-drop pipeline board, where a won one makes its draft invoice in
   one click (and makes a prospect a customer); an opportunity for a company
   in another currency is in it, amount and invoice (MC68, MC69), and the
   board totals each currency on its own; **tasks** with due dates and
@@ -651,6 +651,31 @@ that something happened.
   buttons to log a call, a meeting or a note and to add a task. On phones
   the panel goes below the tabs. Not built: Salesforce's "Follow", and
   cases, contracts and assets (Tohyee has none).
+  **Opportunity stages and forecasts** (after Salesforce; CRMS1-CRMS11,
+  not yet approved by Jess; decisions 76-90): an admin sets up, in CRM ›
+  Stages, the organisation's stages in order, each with a type (Open,
+  Closed won, Closed lost), a default probability and a forecast category
+  (Pipeline, Best case, Commit, Closed, Omitted); the old six stages are
+  the starting ones (New 10%, Screening 20%, Meeting 50%, Proposal 75%, Won
+  100% Closed, Lost 0% Omitted), so nothing saved changed. Stages are
+  archived, never deleted (their opportunities stay); one active stage of
+  each type always stays; a stage's type can't change while opportunities
+  are in it. Whatever it's called, a Closed won stage is what makes the
+  invoice and what's not "open". **Sales processes**: each opportunity
+  record type can use a chosen list of stages. Each opportunity has a
+  **probability** and **forecast category** (the stage's, changed by
+  bookkeepers within the stage type's rules) and a **weighted amount**
+  (amount × probability, rounded half up), shown on cards and the record
+  page, and a **Stage history** related list (each change of stage, amount,
+  probability, category or close date, with who and when). **Forecasts**
+  (CRM › Forecasts): by expected close month or financial-year quarter, per
+  owner and currency (never added together), Salesforce's cumulative
+  Closed, Commit, Best case and Open pipeline, the weighted pipeline, and
+  each figure opens its opportunities; admins set **quotas** per owner per
+  month (base currency) and see attainment. Not built: forecast manager
+  adjustments, a forecast hierarchy (teams) and submitted forecast
+  snapshots, converting currencies in forecasts, and quotas by quarter or
+  in other currencies (questions for Jess under CRMS11).
   **Email and calendar sync**: each member connects their own Gmail or
   Microsoft 365 mailbox (read-only, through the organisation's own Google or
   Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
