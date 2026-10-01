@@ -13,6 +13,7 @@ import { LEAVE_TYPE_LABELS, LEAVE_TYPES, type LeaveType } from "@/lib/payroll/le
 import { BEREAVEMENT_LABELS, type BereavementKind } from "@/lib/payroll/leave/sick";
 import type { OpeningBalances } from "@/lib/payroll/leave-opening";
 import type { CashUp, LeaveBooking, PublicHolidayDecision, UnpaidLeaveRecord } from "@/lib/payroll/leave-records";
+import type { LeaveLiabilityPosting } from "@/lib/payroll/leave-liability";
 import type { LeaveLiabilityReport, LeaveRecord, LeaveSummary } from "@/lib/payroll/leave-reports";
 import type { LeaveSettings, OrganisationLeaveSettings } from "@/lib/payroll/leave-settings";
 import type { PayItem } from "@/lib/payroll/pay-items";
@@ -193,89 +194,89 @@ function Bookings({ organisationId }: { organisationId: string }) {
   const set = <K extends keyof BookingDraft>(field: K, value: BookingDraft[K]) => setDraft((current) => ({ ...current, [field]: value }));
   return (
     <>
-      <Card
-        title="Book leave"
-        description="Pay runs for the days booked pay it. Public holidays in the leave are paid as public holidays (s 40(1)); sick, bereavement and family violence leave can be booked over annual holidays (s 36-s 38)."
-      >
-        {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
-        <form className={styles.stack} onSubmit={book}>
-          <div className={ui.grid4}>
-            <Field label="Employee">
-              <select required value={draft.employeeId} onChange={(event) => set("employeeId", event.target.value)}>
-                <option value="">Choose</option>
-                {(employees.data?.employees ?? []).filter((employee) => !employee.isArchived).map((employee) => (
-                  <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Leave">
-              <select value={draft.leaveType} onChange={(event) => set("leaveType", event.target.value as LeaveType)}>
-                {LEAVE_TYPES.map((type) => <option key={type} value={type}>{LEAVE_TYPE_LABELS[type]}</option>)}
-              </select>
-            </Field>
-            <Field label="From">
-              <input required type="date" value={draft.startDate} onChange={(event) => set("startDate", event.target.value)} />
-            </Field>
-            <Field label="To">
-              <input type="date" value={draft.endDate} onChange={(event) => set("endDate", event.target.value)} />
-            </Field>
-            {draft.leaveType === "bereavement" ? (
-              <Field label="Bereavement">
-                <select value={draft.bereavementKind} onChange={(event) => set("bereavementKind", event.target.value as BereavementKind)}>
-                  {Object.entries(BEREAVEMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        <Card
+          title="Book leave"
+          description="Pay runs for the days booked pay it. Public holidays in the leave are paid as public holidays (s 40(1)); sick, bereavement and family violence leave can be booked over annual holidays (s 36-s 38)."
+        >
+          {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+          <form className={styles.stack} onSubmit={book}>
+            <div className={ui.grid4}>
+              <Field label="Employee">
+                <select required value={draft.employeeId} onChange={(event) => set("employeeId", event.target.value)}>
+                  <option value="">Choose</option>
+                  {(employees.data?.employees ?? []).filter((employee) => !employee.isArchived).map((employee) => (
+                    <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>
+                  ))}
                 </select>
               </Field>
-            ) : null}
-            {draft.leaveType === "sick" || draft.leaveType === "family_violence" ? (
-              <Field label="Hours worked that day" hint="Only for part of one day. A whole day comes off unless a part-day agreement is recorded (decision 19).">
-                <input inputMode="decimal" value={draft.hoursWorked} onChange={(event) => set("hoursWorked", event.target.value)} />
+              <Field label="Leave">
+                <select value={draft.leaveType} onChange={(event) => set("leaveType", event.target.value as LeaveType)}>
+                  {LEAVE_TYPES.map((type) => <option key={type} value={type}>{LEAVE_TYPE_LABELS[type]}</option>)}
+                </select>
               </Field>
+              <Field label="From">
+                <input required type="date" value={draft.startDate} onChange={(event) => set("startDate", event.target.value)} />
+              </Field>
+              <Field label="To">
+                <input type="date" value={draft.endDate} onChange={(event) => set("endDate", event.target.value)} />
+              </Field>
+              {draft.leaveType === "bereavement" ? (
+                <Field label="Bereavement">
+                  <select value={draft.bereavementKind} onChange={(event) => set("bereavementKind", event.target.value as BereavementKind)}>
+                    {Object.entries(BEREAVEMENT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </Field>
+              ) : null}
+              {draft.leaveType === "sick" || draft.leaveType === "family_violence" ? (
+                <Field label="Hours worked that day" hint="Only for part of one day. A whole day comes off unless a part-day agreement is recorded (decision 19).">
+                  <input inputMode="decimal" value={draft.hoursWorked} onChange={(event) => set("hoursWorked", event.target.value)} />
+                </Field>
+              ) : null}
+              <Field label="Hours each day" hint="Only for someone whose hours vary: e.g. 2026-11-04=8, 2026-11-05=6.">
+                <input value={draft.dayHours} onChange={(event) => set("dayHours", event.target.value)} />
+              </Field>
+              <Field label="Note">
+                <input maxLength={1000} value={draft.note} onChange={(event) => set("note", event.target.value)} />
+              </Field>
+            </div>
+            {draft.leaveType === "annual" ? (
+              <Field label="Written agreement to recover holidays in advance" hint="Attach it when the leave goes beyond the balance (decision 15).">
+                <input type="file" onChange={(event) => setAgreement(event.target.files?.[0] ?? null)} />
+              </Field>
+            ) : draft.leaveType !== "alternative" ? (
+              <label className={ui.checkbox}>
+                <input checked={draft.inAdvanceAgreed} type="checkbox" onChange={(event) => set("inAdvanceAgreed", event.target.checked)} />
+                Leave in advance agreed (s 63(3), s 72D(3))
+              </label>
             ) : null}
-            <Field label="Hours each day" hint="Only for someone whose hours vary: e.g. 2026-11-04=8, 2026-11-05=6.">
-              <input value={draft.dayHours} onChange={(event) => set("dayHours", event.target.value)} />
-            </Field>
-            <Field label="Note">
-              <input maxLength={1000} value={draft.note} onChange={(event) => set("note", event.target.value)} />
-            </Field>
-          </div>
-          {draft.leaveType === "annual" ? (
-            <Field label="Written agreement to recover holidays in advance" hint="Attach it when the leave goes beyond the balance (decision 15).">
-              <input type="file" onChange={(event) => setAgreement(event.target.files?.[0] ?? null)} />
-            </Field>
-          ) : draft.leaveType !== "alternative" ? (
-            <label className={ui.checkbox}>
-              <input checked={draft.inAdvanceAgreed} type="checkbox" onChange={(event) => set("inAdvanceAgreed", event.target.checked)} />
-              Leave in advance agreed (s 63(3), s 72D(3))
-            </label>
-          ) : null}
-          <div className={ui.actions}>
-            <Button disabled={busy} type="submit">Book leave</Button>
-          </div>
-        </form>
-      </Card>
-      <Card title="Bookings">
-        {bookings.loading ? <Empty>Loading…</Empty> : bookings.data?.bookings.length ? (
-          <div className={ui.tableWrap}>
-            <table className={ui.stackOnPhone}>
-              <thead><tr><th>Booking</th><th>Employee</th><th>Leave</th><th>Dates</th><th>Paid by</th><th>Actions</th></tr></thead>
-              <tbody>
-                {bookings.data.bookings.map((booking) => (
-                  <tr key={booking.id}>
-                    <td data-label="Booking">{booking.reference} {booking.status === "cancelled" ? <Badge>Cancelled</Badge> : null}</td>
-                    <td data-label="Employee">{booking.employeeName}</td>
-                    <td data-label="Leave">{LEAVE_TYPE_LABELS[booking.leaveType]}{booking.hoursWorked ? ` (part day: ${booking.hoursWorked} h worked)` : ""}</td>
-                    <td data-label="Dates">{formatDate(booking.startDate)}{booking.endDate !== booking.startDate ? ` to ${formatDate(booking.endDate)}` : ""}</td>
-                    <td data-label="Paid by">{booking.payRuns.map((run) => `${run.reference} (${run.status})`).join(", ") || "—"}</td>
-                    <td data-label="Actions">
-                      {booking.status === "booked" ? <Button size="small" variant="secondary" onClick={() => void cancel(booking)}>Cancel</Button> : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : <Empty>No leave booked.</Empty>}
-      </Card>
+            <div className={ui.actions}>
+              <Button disabled={busy} type="submit">Book leave</Button>
+            </div>
+          </form>
+        </Card>
+        <Card title="Bookings">
+          {bookings.loading ? <Empty>Loading…</Empty> : bookings.data?.bookings.length ? (
+            <div className={ui.tableWrap}>
+              <table className={ui.stackOnPhone}>
+                <thead><tr><th>Booking</th><th>Employee</th><th>Leave</th><th>Dates</th><th>Paid by</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {bookings.data.bookings.map((booking) => (
+                    <tr key={booking.id}>
+                      <td data-label="Booking">{booking.reference} {booking.status === "cancelled" ? <Badge>Cancelled</Badge> : null}</td>
+                      <td data-label="Employee">{booking.employeeName}</td>
+                      <td data-label="Leave">{LEAVE_TYPE_LABELS[booking.leaveType]}{booking.hoursWorked ? ` (part day: ${booking.hoursWorked} h worked)` : ""}</td>
+                      <td data-label="Dates">{formatDate(booking.startDate)}{booking.endDate !== booking.startDate ? ` to ${formatDate(booking.endDate)}` : ""}</td>
+                      <td data-label="Paid by">{booking.payRuns.map((run) => `${run.reference} (${run.status})`).join(", ") || "—"}</td>
+                      <td data-label="Actions">
+                        {booking.status === "booked" ? <Button size="small" variant="secondary" onClick={() => void cancel(booking)}>Cancel</Button> : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <Empty>No leave booked.</Empty>}
+        </Card>
     </>
   );
 }
@@ -462,9 +463,10 @@ function Liability({ organisationId }: { organisationId: string }) {
   };
   const data = report.data?.report;
   return (
+    <>
     <Card
       title="Leave liability"
-      description="Annual holidays entitled to, at the greater of ordinary weekly pay and average weekly earnings; the running 8% since the last anniversary; untaken alternative holidays. A report only: nothing is posted to the ledger (decision 28)."
+      description="Annual holidays entitled to, at the greater of ordinary weekly pay and average weekly earnings; the running 8% since the last anniversary; untaken alternative holidays. Sick, bereavement and family violence leave aren't in it. Post it to the ledger below (decision 177)."
       actions={
         <div className={ui.actions}>
           <Field label="As at"><input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>
@@ -517,6 +519,93 @@ function Liability({ organisationId }: { organisationId: string }) {
           </div>
         </>
       ) : report.loading ? <Empty>Loading…</Empty> : null}
+    </Card>
+    <LiabilityPostings organisationId={organisationId} asAt={asAt} total={data && data.rows.every((row) => row.problem === null) ? data.totals.total : null} onChanged={report.reload} />
+    </>
+  );
+}
+
+/** Posting the liability to the ledger (decision 177; HL52-HL56) and the postings so far. */
+function LiabilityPostings({ organisationId, asAt, total, onChanged }: { organisationId: string; asAt: string; total: string | null; onChanged: () => void }) {
+  const postings = useApiData<{ postings: LeaveLiabilityPosting[] }>("/api/payroll/leave/liability/postings", { organisationId });
+  const [voidDate, setVoidDate] = useState(todayInBrowser());
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const list = postings.data?.postings ?? [];
+  const last = list.find((posting) => posting.status === "active") ?? null;
+
+  const act = async (work: () => Promise<{ posting: LeaveLiabilityPosting }>, success: (posting: LeaveLiabilityPosting) => string) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await work();
+      setMessage({ tone: "success", text: success(result.posting) });
+      postings.reload();
+      onChanged();
+    } catch (cause) {
+      setMessage({ tone: "error", text: errorMessage(cause) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const post = () => {
+    if (!window.confirm(`Post the leave liability at ${formatDate(asAt)}? The journal is the change since ${last ? last.reference : "nothing posted"}.`)) return;
+    void act(
+      () => api("/api/payroll/leave/liability/postings", { method: "POST", body: { organisationId, idempotencyKey: newIdempotencyKey("leave-liability"), asAt } }),
+      (posting) => `${posting.reference} posted: the liability at ${formatDate(posting.asAt)} is $${formatMoney(posting.liability)}, a change of $${formatMoney(posting.change)}.`,
+    );
+  };
+  const voidPosting = (posting: LeaveLiabilityPosting) => {
+    if (!window.confirm(`Void ${posting.reference} on ${formatDate(voidDate)}? Its journal is reversed on that date.`)) return;
+    void act(
+      () => api(`/api/payroll/leave/liability/postings/${posting.id}/void`, { method: "POST", body: { organisationId, idempotencyKey: newIdempotencyKey("leave-liability-void"), voidDate } }),
+      (voided) => `${voided.reference} voided.`,
+    );
+  };
+
+  return (
+    <Card
+      title="Post to the ledger"
+      description="One journal at the date for the change since the last posting not voided: Dr the leave expense account, Cr the employee entitlements account (the other way when it falls), by Department, never naming anyone. Leave paid in pay runs still goes to wages; the next posting takes the fall. The accounts are under Payroll › Pay items."
+    >
+      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+      {postings.error ? <Notice tone="error">{postings.error}</Notice> : null}
+      <p>
+        {last ? `Last posted: ${last.reference} at ${formatDate(last.asAt)}, $${formatMoney(last.liability)}.` : "Nothing posted yet."}
+        {total !== null ? ` At ${formatDate(asAt)}: $${formatMoney(total)}.` : ""}
+      </p>
+      <div className={ui.actions}>
+        <Button disabled={busy || total === null} onClick={post}>Post leave liability at {formatDate(asAt)}</Button>
+      </div>
+      {list.length ? (
+        <>
+          <div className={ui.tableWrap}>
+            <table className={ui.stackOnPhone}>
+              <thead><tr><th>Posting</th><th>As at</th><th>Liability</th><th>Change</th><th>By Department</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {list.map((posting) => (
+                  <tr key={posting.id}>
+                    <td data-label="Posting"><Link href={`/operations/ledger-journals?journal=${posting.journalId}`}>{posting.reference}</Link></td>
+                    <td data-label="As at">{formatDate(posting.asAt)}</td>
+                    <td data-label="Liability" className={ui.num}>{formatMoney(posting.liability)}</td>
+                    <td data-label="Change" className={ui.num}>{formatMoney(posting.change)}{posting.previousReference ? <><br /><small>from {posting.previousReference}</small></> : null}</td>
+                    <td data-label="By Department">{posting.departments.length ? posting.departments.map((entry) => `${entry.department ?? "No Department"} ${formatMoney(entry.liability)}`).join("; ") : "—"}</td>
+                    <td data-label="Status">{posting.status === "voided" ? <Badge>Voided {formatDate(posting.voidDate)}</Badge> : "Posted"}</td>
+                    <td data-label="Actions">
+                      {last && posting.id === last.id ? <Button disabled={busy} size="small" variant="secondary" onClick={() => voidPosting(posting)}>Void</Button> : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {last ? (
+            <Field label="Void date" hint="Only the latest posting can be voided; the next posting then measures from the one before it.">
+              <input type="date" value={voidDate} onChange={(event) => setVoidDate(event.target.value)} />
+            </Field>
+          ) : null}
+        </>
+      ) : null}
     </Card>
   );
 }
