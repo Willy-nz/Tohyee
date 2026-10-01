@@ -280,6 +280,15 @@ describeWithDatabase("R&D activity register and tagging (RD1-RD3, RD7-RD9, RD11-
     const detail = await w.call(vic, activityRoute.GET, `/api/rd/activities/${s2.id}?organisationId=${w.org}`, { activityId: s2.id });
     expect((await body<{ activity: RdActivityDetail }>(detail)).activity.history.map((entry) => entry.action)).toEqual(["created", "archived", "restored"]);
 
+    // A supporting activity can't be restored while a core activity it supports is archived.
+    expect((await archive(ana, s1.id)).status).toBe(200);
+    expect((await archive(ana, s2.id)).status).toBe(200);
+    expect((await archive(ana, c2.id)).status).toBe(200);
+    const refused = await archive(ana, s1.id, false);
+    expect(refused.status).toBe(400);
+    expect(JSON.stringify(await body(refused))).toContain("C2, which is archived");
+    expect((await archive(ana, c2.id, false)).status).toBe(200);
+    expect((await archive(ana, s1.id, false)).status).toBe(200);
   });
 
   it("RD3: an approval needs IRD's letter, is shown as not checked with IRD, and tags warn until one covers the year", async () => {

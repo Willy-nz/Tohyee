@@ -468,6 +468,17 @@ export async function setActivityArchived(tx: OrgTx, idInput: unknown, archivedI
       [id, tx.actor.userId, tx.actor.email],
     );
   } else {
+    // A restored supporting activity must support active core activities only, as when it's linked (RD2).
+    const archivedCores = await tx.query<{ code: string }>(
+      `select a.code from rd_activity_supports s join rd_activities a on a.id = s.core_id
+        where s.supporting_id = $1 and a.status <> 'active' order by lower(a.code) for share of a`,
+      [id],
+    );
+    if (archivedCores.rows[0]) {
+      throw new ValidationError(
+        `${current.code} supports ${archivedCores.rows.map((row) => row.code).join(", ")}, which ${archivedCores.rows.length === 1 ? "is" : "are"} archived. Restore ${archivedCores.rows.length === 1 ? "it" : "them"} first.`,
+      );
+    }
     await tx.query(
       `update rd_activities set status = 'active', archived_at = null, archived_by_user_id = null, archived_by_email = null,
               version = version + 1, updated_by_user_id = $2, updated_by_email = $3 where id = $1`,
