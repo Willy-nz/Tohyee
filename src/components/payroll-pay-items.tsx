@@ -13,14 +13,23 @@ export const PAY_ITEM_KIND_NAMES: Record<PayItemKind, string> = {
   ordinary_time: "Ordinary time",
   overtime: "Overtime",
   allowance: "Allowance",
-  holiday_pay: "Holiday pay (typed amount)",
+  holiday_pay: "Holiday pay for leave in this pay period (typed amount)",
   reimbursement: "Reimbursement",
   extra_pay: "Extra pay (bonus, gratuity, lump sum)",
   back_pay: "Back pay",
-  termination_holiday_pay: "Holiday pay on finishing (worked out outside Tohyee)",
+  termination_holiday_pay: "Holiday pay on finishing",
   redundancy: "Redundancy",
   after_tax_deduction: "After-tax deduction",
   kiwisaver_employer: "KiwiSaver employer contribution",
+  annual_leave: "Annual holidays taken",
+  sick_leave: "Sick leave",
+  bereavement_leave: "Bereavement leave",
+  family_violence_leave: "Family violence leave",
+  public_holiday: "Public holiday not worked",
+  public_holiday_worked: "Public holiday worked (time and a half)",
+  alternative_holiday: "Alternative holiday taken",
+  annual_leave_cash_up: "Annual holidays cashed up",
+  alternative_holiday_payout: "Alternative holiday exchanged for payment",
 };
 
 const ADDABLE: PayItemKind[] = [
@@ -49,6 +58,7 @@ export function describeTreatment(item: PayItem): string {
   if (item.category === "employer_contribution") return "ESCT is deducted";
   const parts = [item.subjectToPaye ? "PAYE, ACC levy and student loan" : "Not taxed"];
   parts.push(item.subjectToKiwiSaver ? "KiwiSaver" : "no KiwiSaver");
+  if (item.subjectToPaye) parts.push(item.countsForHolidayPay ? "gross earnings for holiday pay" : "not gross earnings for holiday pay");
   return parts.join("; ");
 }
 
