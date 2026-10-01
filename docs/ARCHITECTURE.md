@@ -49,6 +49,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ purchase_orders, purchase_order_lines, purchase_order_numbering   purchase orders (post nothing; copied to bills)
 ├─ supplier_payments      money paid against bills
 ├─ expense_claims, expense_claim_receipts, expense_claim_payments   staff expense claims, their receipts and payments
+├─ payroll_employees        employee payroll details (IRD and bank details encrypted)
 ├─ fixed_asset_types, fixed_assets, fixed_asset_numbering   the fixed asset register (archived, never deleted)
 ├─ fixed_asset_depreciation_runs, fixed_asset_disposals, fixed_asset_depreciation_lines   depreciation runs and disposals, and the months each charged
 ├─ projects, project_tasks, project_time_entries, project_expenses   projects, their tasks, time (whole minutes) and linked expense lines (post nothing; never deleted)
@@ -681,6 +682,17 @@ Enforced by the app (and covered by tests):
   (manual journals only); a trigger checks every key is a field for that
   kind of record, and `src/lib/custom-fields/` checks types, options and
   required fields. They never reach posting, reports or the GST return.
+- Apps: Accounting (with Tax) is under `/operations`, the CRM under `/crm`.
+  Each has its own layout (`src/app/operations/layout.tsx`,
+  `src/app/crm/layout.tsx`) that loads the signed-in user and their
+  organisations the same way (`src/lib/auth/page-workspace.ts`) and renders
+  `AppShell` for its app, with the app switcher
+  (`src/components/app-switcher.tsx`). The CRM is a sibling of `/operations`
+  rather than a nested layout because a nested layout can only add to the
+  accounting shell, not replace it. Old `/operations/crm/...` URLs redirect
+  (307, query kept) in `next.config.ts`. The CRM's Home reads
+  `GET /api/crm/home` (viewer), which uses `tx.actor`, never the request, for
+  whose work to show.
 - Modules: `organisation_settings.crm_enabled` and `advanced_features`
   (Advanced reporting). The CRM's tables are `crm_people`,
   `crm_opportunities`, `crm_tasks` and `crm_activities` (none deletable);

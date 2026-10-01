@@ -7,7 +7,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { parseRateInput } from "@/lib/fx/documents";
 import { createInvoice, getInvoice, type Invoice } from "@/lib/invoices/service";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { cmp, dec, toFixedString } from "@/lib/money/decimal";
+import { add, cmp, dec, type Decimal, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { parseOptionalIsoDate } from "@/lib/dates";
 import { listMembers } from "@/lib/organisations/members";
 import { syncedFor } from "@/lib/crm/mail/service";
@@ -815,6 +815,62 @@ export async function updateActivity(tx: OrgTx, idInput: unknown, input: Activit
 }
 
 // ---------------------------------------------------------------------------
+// The CRM's Home (CRM10)
+
+export type CrmHome = {
+  /** The business date the tasks were judged due by. */
+  today: string;
+  /** The signed-in person's open opportunities, in pipeline order. */
+  opportunities: Opportunity[];
+  /** Their amounts per currency, base currency first; never added across currencies (MC68). */
+  totals: Array<{ currencyCode: string; amount: string; count: number }>;
+  /** The signed-in person's tasks that aren't done and are due today or earlier, oldest due first. */
+  tasks: Task[];
+  /** The organisation's most recent calls, meetings and notes, newest first. */
+  activities: Activity[];
+};
+
+const HOME_ACTIVITIES = 10;
+
+/** What the signed-in person (`tx.actor`) has on: read-only (example CRM10). */
+export async function crmHome(tx: OrgTx): Promise<CrmHome> {
+  const today = todayIsoDate();
+  const me = tx.actor.userId;
+  const opportunities = me
+    ? (
+        await tx.query<OpportunityRow>(
+          `${OPPORTUNITY_SELECT}
+            where o.owner_user_id = $1 and o.stage = any($2::text[])
+            order by array_position(array['new','screening','meeting','proposal','won','lost'], o.stage), o.position, o.id`,
+          [me, OPEN_STAGES],
+        )
+      ).rows.map(toOpportunity)
+    : [];
+  const sums = new Map<string, { amount: Decimal; count: number }>();
+  for (const opportunity of opportunities) {
+    const sum = sums.get(opportunity.currencyCode) ?? { amount: ZERO_DECIMAL, count: 0 };
+    sums.set(opportunity.currencyCode, { amount: add(sum.amount, dec(opportunity.amount)), count: sum.count + 1 });
+  }
+  const totals = [...sums.entries()]
+    .sort(([a], [b]) => (a === tx.baseCurrency ? -1 : b === tx.baseCurrency ? 1 : a.localeCompare(b)))
+    .map(([currencyCode, sum]) => ({ currencyCode, amount: toFixedString(sum.amount, 2), count: sum.count }));
+  const tasks = me
+    ? (
+        await tx.query<TaskRow>(
+          `${TASK_SELECT}
+            where x.assignee_user_id = $1 and x.status <> 'done' and x.due_date <= $2::date
+            order by x.due_date, x.id`,
+          [me, today],
+        )
+      ).rows.map(toTask)
+    : [];
+  const activities = (
+    await tx.query<ActivityRow>(`${ACTIVITY_SELECT} order by x.happened_at desc, x.id desc limit $1`, [HOME_ACTIVITIES])
+  ).rows.map(toActivity);
+  return { today, opportunities, totals, tasks, activities };
+}
+
+// ---------------------------------------------------------------------------
 // Companies and the timeline (CRM8)
 
 export type CompanySummary = {
@@ -926,7 +982,7 @@ export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promi
       title: `Task ${task.status === "done" ? "done" : "added"}: ${task.title}`,
       detail: [task.dueDate ? `due ${task.dueDate}` : null, TASK_STATUS_LABELS[task.status]].filter(Boolean).join(" · "),
       amount: null,
-      href: "/operations/crm/tasks",
+      href: "/crm/tasks",
       by: task.createdByEmail,
     });
   }
@@ -946,7 +1002,7 @@ export async function companyTimeline(tx: OrgTx, contactIdInput: unknown): Promi
       title: event.event_type === "crm.opportunity_created" ? `Opportunity added: ${event.name}` : `Opportunity ${event.name}: ${OPPORTUNITY_STAGE_LABELS[from!]} → ${OPPORTUNITY_STAGE_LABELS[stage]}`,
       detail: event.event_type === "crm.opportunity_created" ? OPPORTUNITY_STAGE_LABELS[stage] : null,
       amount: event.event_type === "crm.opportunity_created" ? toFixedString(dec(String(event.details.amount ?? "0")), 2) : null,
-      href: "/operations/crm/pipeline",
+      href: "/crm/pipeline",
       by: event.actor_email,
     });
   }

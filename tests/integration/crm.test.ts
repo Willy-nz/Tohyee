@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as companyRoute from "@/app/api/crm/companies/[contactId]/route";
+import * as homeRoute from "@/app/api/crm/home/route";
 import * as peopleRoute from "@/app/api/crm/people/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createContact, getContact, updateContact } from "@/lib/contacts/service";
@@ -9,6 +10,7 @@ import {
   createOpportunity,
   createPerson,
   createTask,
+  type CrmHome,
   listCompanies,
   listOpportunities,
   makeInvoiceFromOpportunity,
@@ -305,5 +307,71 @@ describeWithDatabase("modules and the CRM", () => {
       noContext,
     );
     expect(post.status).toBe(403);
+  });
+
+  it("CRM10: Home shows only the signed-in person's open opportunities and tasks due or overdue", async () => {
+    const { org, as, vets, deal } = await withVets();
+    const acme = (await as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Acme Inc", isCustomer: true, currencyCode: "USD" }))).contact;
+    const today = todayIsoDate();
+    const day = (offset: number) => {
+      const d = new Date(`${today}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + offset);
+      return d.toISOString().slice(0, 10);
+    };
+    const opportunity = (name: string, contactId: string, amount: string, stage: string, ownerUserId: string | null) =>
+      as((tx) => createOpportunity(tx, { name, contactId, amount, stage, ownerUserId }));
+    await opportunity("Clinic display", vets.id, "600", "proposal", owner.id);
+    await opportunity("Logo licence", acme.id, "100", "meeting", owner.id);
+    await opportunity("Menu reprint", vets.id, "500", "won", owner.id);
+    await opportunity("Kennel cards", vets.id, "900", "new", viewer.id);
+    await opportunity("Nobody's", vets.id, "50", "new", null);
+    const task = (title: string, dueDate: string | null, status: string, assigneeUserId: string | null) =>
+      as((tx) => createTask(tx, { title, dueDate, status, assigneeUserId, contactId: vets.id }));
+    await task("Post brochure", day(1), "todo", owner.id);
+    await task("Call Aroha", today, "in_progress", owner.id);
+    await task("Send sample kit", day(-1), "todo", owner.id);
+    await task("Already sent", day(-1), "done", owner.id);
+    await task("Some day", null, "todo", owner.id);
+    await task("Ben's task", day(-1), "todo", viewer.id);
+    await task("Unassigned", day(-1), "todo", null);
+    for (let n = 1; n <= 11; n += 1) {
+      await as((tx) => createActivity(tx, { kind: "note", happenedAt: `2026-09-${String(n + 10).padStart(2, "0")}T10:00:00Z`, subject: `Note ${n}`, contactId: vets.id }));
+    }
+
+    const home = async (user: SessionUser) => {
+      const response = await homeRoute.GET(apiRequest(`/api/crm/home?organisationId=${org}`, { cookie: await sessionCookieFor(user) }), noContext);
+      expect(response.status).toBe(200);
+      return (await response.json()) as CrmHome;
+    };
+
+    const jess = await home(owner);
+    expect(jess.today).toBe(today);
+    expect(jess.opportunities.map((o) => [o.name, o.stage, o.currencyCode, o.amount])).toEqual([
+      [deal.name, "new", "NZD", "2400.00"],
+      ["Logo licence", "meeting", "USD", "100.00"],
+      ["Clinic display", "proposal", "NZD", "600.00"],
+    ]);
+    expect(jess.totals).toEqual([
+      { currencyCode: "NZD", amount: "3000.00", count: 2 },
+      { currencyCode: "USD", amount: "100.00", count: 1 },
+    ]);
+    expect(jess.tasks.map((t) => [t.title, t.dueDate, t.status])).toEqual([
+      ["Send sample kit", day(-1), "todo"],
+      ["Call Aroha", today, "in_progress"],
+    ]);
+    expect(jess.activities.map((a) => a.subject)).toEqual(["Note 11", "Note 10", "Note 9", "Note 8", "Note 7", "Note 6", "Note 5", "Note 4", "Note 3", "Note 2"]);
+
+    // Ben, a viewer, sees only his own work, and the same recent activities.
+    const ben = await home(viewer);
+    expect(ben.opportunities.map((o) => o.name)).toEqual(["Kennel cards"]);
+    expect(ben.totals).toEqual([{ currencyCode: "NZD", amount: "900.00", count: 1 }]);
+    expect(ben.tasks.map((t) => t.title)).toEqual(["Ben's task"]);
+    expect(ben.activities.map((a) => a.id)).toEqual(jess.activities.map((a) => a.id));
+
+    // Someone outside the organisation, or not signed in, gets nothing.
+    const outside = await homeRoute.GET(apiRequest(`/api/crm/home?organisationId=${org}`, { cookie: await sessionCookieFor(outsider) }), noContext);
+    expect([403, 404]).toContain(outside.status);
+    const anonymous = await homeRoute.GET(apiRequest(`/api/crm/home?organisationId=${org}`), noContext);
+    expect(anonymous.status).toBe(401);
   });
 });

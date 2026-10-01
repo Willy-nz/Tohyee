@@ -39,6 +39,12 @@ that something happened.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.
+- **Payroll employee records** (PR1-PR2; examples not yet approved by Jess):
+  bookkeeper-only employee details, salary or hourly pay, pay frequency,
+  tax code, student loan and KiwiSaver settings; IRD numbers and bank accounts
+  are encrypted. Employees are archived, never deleted. Pay calculation,
+  approval, payment, payslips, payday filing and Holidays Act leave are not
+  built.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
@@ -554,7 +560,16 @@ that something happened.
   supported; see the NFP examples and questions in
   `docs/ACCOUNTING-EXAMPLES.md`.
 - **CRM** (after [Twenty](https://github.com/twentyhq/twenty), built in):
-  companies are the contacts, which can now also be **prospects**; **people**
+  its **own app** at `/crm`, with its own top bar and tabs (Home, Companies,
+  People, Pipeline, Tasks, Email and calendar; a ☰ menu on phones), the same
+  sign-in, organisations and roles. An **app switcher** (Accounting / CRM)
+  beside the Tohyee name in both apps replaces the old CRM menu; it shows
+  only while the CRM is on for the organisation, so people without it never
+  see it. Old `/operations/crm/...` links redirect to the same pages under
+  `/crm`. The CRM's **Home** shows the signed-in person's open opportunities
+  (with a total per currency), their tasks due today or overdue, and the
+  team's ten most recent calls, meetings and notes (CRM10, not yet approved
+  by Jess). Companies are the contacts, which can now also be **prospects**; **people**
   at each company; **opportunities** with Twenty's stages (plus Lost) on a
   drag-and-drop pipeline board, where a won one makes its draft invoice in
   one click (and makes a prospect a customer); an opportunity for a company
@@ -789,7 +804,9 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll.
+4. NZ payroll: calculate and approve pay runs, post journals and payments,
+   produce payslips and verify/implement the current IRD payday filing
+   specification; work through Holidays Act leave after Jess approves examples.
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,
