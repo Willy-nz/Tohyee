@@ -3995,6 +3995,10 @@ Shopify store glimmers.myshopify.com, "Glimmers", NZD, prices exclude tax.
   synced, never the secrets. Wrong credentials (Shopify says 401) are
   refused and nothing is stored; without TOHYEE_SECRET_KEY connecting is
   refused; connecting glimmers.myshopify.com a second time is refused.
+  If the store refuses one of the four webhooks (PRODUCTS_CREATE), the two
+  already made are removed again, the connection is still connected with a
+  note saying why webhooks aren't on, and testing the connection later sets
+  up all four once (testing again doesn't add more).
 - **SPC2** Customers sync: Shopify customer 1001 "Aroha Ngata",
   AROHA@manukavets.nz, +64 21 555 0101 links to the existing contact Aroha
   Ngata (email ignoring case) and fills her blank phone; 1002 "Tama Rewi",

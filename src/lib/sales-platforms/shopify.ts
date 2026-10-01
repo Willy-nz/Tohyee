@@ -413,13 +413,19 @@ export const shopifyConnector: SalesPlatformConnector = {
 
   async registerWebhooks(context, token, callbackUrl) {
     const ids: string[] = [];
-    for (const topic of WEBHOOK_TOPICS) {
-      const data = await graphql(context.storeDomain, token, WEBHOOK_CREATE, { topic, webhookSubscription: { callbackUrl, format: "JSON" } });
-      const result = record(data.webhookSubscriptionCreate);
-      const problem = userErrors(result);
-      if (problem) throw new PlatformError(200, `${context.storeDomain} didn't accept the ${topic} webhook: ${problem}`);
-      const id = text(record(result.webhookSubscription).id);
-      if (id) ids.push(id);
+    try {
+      for (const topic of WEBHOOK_TOPICS) {
+        const data = await graphql(context.storeDomain, token, WEBHOOK_CREATE, { topic, webhookSubscription: { callbackUrl, format: "JSON" } });
+        const result = record(data.webhookSubscriptionCreate);
+        const problem = userErrors(result);
+        if (problem) throw new PlatformError(200, `${context.storeDomain} didn't accept the ${topic} webhook: ${problem}`);
+        const id = text(record(result.webhookSubscription).id);
+        if (id) ids.push(id);
+      }
+    } catch (error) {
+      // All or nothing: the ones already made are removed again (best effort), so none are left behind unrecorded.
+      await shopifyConnector.removeWebhooks(context, token, ids).catch(() => undefined);
+      throw error;
     }
     return ids;
   },

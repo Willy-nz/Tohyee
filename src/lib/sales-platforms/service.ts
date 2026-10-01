@@ -311,15 +311,20 @@ async function setUpWebhooks(
       logMessage = note;
     }
   }
-  await withOrganisationTransaction(organisation, actor, async (tx) => {
+  const unwanted = await withOrganisationTransaction(organisation, actor, async (tx) => {
     const current = await readConnection(tx, row.id, { lock: true });
-    if (current.status === "disconnected") return;
+    // Disconnected meanwhile, or another request already set them up: the new ones aren't kept.
+    if (current.status === "disconnected" || current.webhook_subscription_ids.length > 0) return ids;
     await tx.query(
       "update sales_platform_connections set webhook_subscription_ids = $2, webhooks_note = $3, updated_at = now() where id = $1",
       [row.id, ids, note?.slice(0, 1000) ?? null],
     );
     if (logMessage) await writeLog(tx, row.id, { source: "connection", action: "webhooks", message: logMessage });
+    return [];
   });
+  if (unwanted.length > 0) {
+    await connector.removeWebhooks(context, token, unwanted).catch(() => undefined);
+  }
 }
 
 async function assertNotConnected(tx: OrgTx, platform: SalesPlatform, storeDomain: string): Promise<void> {

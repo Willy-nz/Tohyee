@@ -739,7 +739,10 @@ Enforced by the app (and covered by tests):
   as failed and the rest carry on. Webhooks are verified before any
   transaction; the delivery id goes into `sales_platform_webhook_deliveries`
   (primary key) in the same transaction as the changes, so a repeated
-  delivery does nothing. Contacts and items are made through
+  delivery does nothing. Webhook subscriptions are set up all or none (if
+  one topic is refused, the ones already made are removed again), and
+  subscriptions made after the connection was disconnected or set up by
+  another request are removed rather than saved. Contacts and items are made through
   `createContact` / `createItem` (source `sales-platform`, an idempotency
   key per platform record) and changed through `updateContact` /
   `updateItem`, so the usual checks and audit apply. Nothing posts to the

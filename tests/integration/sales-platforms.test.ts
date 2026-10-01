@@ -18,6 +18,7 @@ import {
   listConnections,
   listSyncLog,
   syncConnection,
+  testConnection,
   updateConnectionSettings,
 } from "@/lib/sales-platforms/service";
 import { setSalesPlatformFetchForTests } from "@/lib/sales-platforms/shopify";
@@ -50,6 +51,8 @@ type ShopState = {
   customers: FakeCustomer[];
   products: FakeProduct[];
   webhooks: Array<{ id: string; topic: string; callbackUrl: string }>;
+  /** A webhook topic the fake store refuses (as Shopify refuses one already subscribed at the same address). */
+  rejectTopic?: string;
   deletedWebhooks: string[];
   calls: string[];
   fail: boolean;
@@ -89,6 +92,10 @@ function fakeShopify(state: ShopState) {
       return { nodes, pageInfo: { hasNextPage: end < rows.length, endCursor: String(end) } };
     };
     if (query.includes("webhookSubscriptionCreate")) {
+      const taken = state.webhooks.some((hook) => hook.topic === variables.topic && hook.callbackUrl === variables.webhookSubscription.callbackUrl);
+      if (taken || variables.topic === state.rejectTopic) {
+        return json({ data: { webhookSubscriptionCreate: { webhookSubscription: null, userErrors: [{ field: ["callbackUrl"], message: "Address for this topic has already been taken" }] } } });
+      }
       webhookCounter += 1;
       const id = `gid://shopify/WebhookSubscription/${webhookCounter}`;
       state.webhooks.push({ id, topic: variables.topic, callbackUrl: variables.webhookSubscription.callbackUrl });
@@ -97,6 +104,7 @@ function fakeShopify(state: ShopState) {
     }
     if (query.includes("webhookSubscriptionDelete")) {
       state.deletedWebhooks.push(variables.id);
+      state.webhooks = state.webhooks.filter((hook) => hook.id !== variables.id);
       return json({ data: { webhookSubscriptionDelete: { deletedWebhookSubscriptionId: variables.id, userErrors: [] } } });
     }
     if (query.includes("customers(")) {
@@ -348,6 +356,26 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     await expect(
       connect(other, { authMethod: "client_credentials", accessToken: undefined, apiSecret: undefined, clientId: "client-glimmers", clientSecret: "wrong" }),
     ).rejects.toThrow(/refused|Client authentication failed/);
+  });
+
+  it("SPC1: webhooks are set up all or none, and testing the connection tries again", async () => {
+    const w = await setup();
+    const state = shop({ rejectTopic: "PRODUCTS_CREATE" });
+    const connection = await connect(w, {}, "https://books.glimmers.nz");
+    // The two made before the refusal were removed again, so none are left unrecorded in the store.
+    expect(state.deletedWebhooks).toHaveLength(2);
+    expect(state.webhooks).toEqual([]);
+    expect(connection).toMatchObject({ status: "active", webhooksActive: false });
+    expect(connection.webhooksNote).toContain("Address for this topic has already been taken");
+
+    state.rejectTopic = undefined;
+    const tested = await testConnection(w.record, w.actor, connection.id, { webhookOrigin: "https://books.glimmers.nz" });
+    expect(tested).toMatchObject({ ok: true, connection: { webhooksActive: true, webhooksNote: null } });
+    expect(state.webhooks).toHaveLength(4);
+    // Testing again doesn't subscribe twice.
+    await testConnection(w.record, w.actor, connection.id, { webhookOrigin: "https://books.glimmers.nz" });
+    expect(state.webhooks).toHaveLength(4);
+    expect((await log(w, connection.id)).map((entry) => entry.action)).toEqual(["tested", "webhooks", "tested", "webhooks", "connected"]);
   });
 
   it("SPC2: customers link by email or are added; unclear ones are skipped", async () => {
