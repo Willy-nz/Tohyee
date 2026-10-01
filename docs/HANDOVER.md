@@ -180,6 +180,20 @@ To do:
 
 ## Things only Jess (or her computer) can do
 
+- [ ] **Download the legal texts our tools couldn't read** (legislation.govt.nz
+      blocks them), so the "(unverified)" decisions in `docs/DECISIONS.md` can
+      be checked. Save the PDFs (or "print to PDF") and attach them to a chat
+      or put them in the repo under `docs/sources/`:
+      - Holidays Act 2003 (current version)
+      - Employment Leave Act 2026 (as enacted, 2026/48)
+      - Income Tax Act 2007: subpart LY (R&D tax incentive) and schedule 1
+        part D (ESCT rates)
+      - Wages Protection Act 1983 (section 5)
+      - IRD's IR1240 R&D tax incentive guidance, April 2026 (the whole PDF;
+        our tools only read the first 49 pages)
+      - When MBIE publishes it (due Nov 2026 to Jan 2027): its technical
+        guidance for the Employment Leave Act, including how to convert
+        existing leave balances.
 - [ ] **Test on a real Windows computer**: install from TohyeeSetup, the
       server app, backups to OneDrive.
 - [ ] **Akahu bank feeds** with a real Akahu app.
