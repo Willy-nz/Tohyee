@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
 import { UnavailableError } from "@/lib/errors";
 
 /**
@@ -49,4 +49,9 @@ export function decryptSecret(stored: string): string {
       "A stored secret can't be read with this server's TOHYEE_SECRET_KEY (was the key changed?). It has to be set up again.",
     );
   }
+}
+
+/** A deterministic, keyed digest for command hashes that contain secret fields. */
+export function keyedSecretHash(value: string): string {
+  return createHmac("sha256", key()).update("tohyee-secret-hash\0", "utf8").update(value, "utf8").digest("hex");
 }

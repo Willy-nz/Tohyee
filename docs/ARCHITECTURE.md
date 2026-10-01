@@ -49,6 +49,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ purchase_orders, purchase_order_lines, purchase_order_numbering   purchase orders (post nothing; copied to bills)
 ├─ supplier_payments      money paid against bills
 ├─ expense_claims, expense_claim_receipts, expense_claim_payments   staff expense claims, their receipts and payments
+├─ payroll_employees        employee payroll details (IRD and bank details encrypted)
 ├─ fixed_asset_types, fixed_assets, fixed_asset_numbering   the fixed asset register (archived, never deleted)
 ├─ fixed_asset_depreciation_runs, fixed_asset_disposals, fixed_asset_depreciation_lines   depreciation runs and disposals, and the months each charged
 ├─ projects, project_tasks, project_time_entries, project_expenses   projects, their tasks, time (whole minutes) and linked expense lines (post nothing; never deleted)
@@ -152,6 +153,8 @@ re-runs the whole sequence.
   database, and is checksummed. **Never edit a released migration; add a new
   one.** An edited migration or a database newer than the code stops that
   database from being migrated.
+- Tenant migration numbers are unique across active branches; coordinate the
+  next number with the other open branches before adding a tenant migration.
 - The core database migrates first; if it fails, the server doesn't start.
 - Each organisation then migrates on its own. A failure marks that
   organisation `failed` and blocks it (not half-upgraded); others carry on.
