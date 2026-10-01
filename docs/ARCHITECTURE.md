@@ -394,6 +394,34 @@ event (report, dates, filter ids, row count, SHA-256; no figures). Routes:
 `GET /api/payroll/reports?report=...` and `POST /api/payroll/reports/export`,
 both `withPayrollAccess()`. Screen: `src/components/payroll-reports.tsx`.
 
+**Workforce budgets** (payroll stage P11, examples WB1-WB7, decisions
+112-123, tenant migration 0068): `payroll_workforce_budgets` (name, first
+month, 1-24 months, version), `payroll_workforce_budget_lines` (an employee
+or a position, salary with FTE or hourly with hours, KiwiSaver rate, start
+and end months) with `..._line_rates` (pay from a month) and
+`..._line_splits` (a position's split), replaced as a set on each save, and
+`payroll_workforce_budget_targets` (the budgets each feeds; `budget_id`
+unique). `budget_amounts.workforce_budget_id` marks the amounts a workforce
+budget wrote; the trigger `tohyee_guard_budget_amount_workforce` refuses
+writing, changing or releasing such an amount unless
+`tohyee.workforce_budget_feed` is set (for the transaction) to that
+workforce budget's id, which only its own rewrite does.
+`src/lib/payroll/workforce-figures.ts` is pure and browser-safe (monthly
+wages half up, KiwiSaver truncated, splitting with `splitByPercentages`);
+`workforce-budgets.ts` loads lines, splits each month by the employee's
+allocation in effect on the 1st (or the position's split), filters split
+parts by a fed budget's tracking value (Department, Class or Location and
+values under it), and writes them through `writeWorkforceAmounts()` in
+`src/lib/budgets/service.ts`, which records `budget.amounts_changed` like
+any budget change; typed and quick-fill changes to an owned amount are
+refused there. "Out of date" is worked out by comparing owned amounts with
+today's figures. Budget vs actual calls P10's `labourCostReport()` per
+month by Department. Routes under `/api/payroll/workforce-budgets`
+(list/create, `[id]` get/put, `[id]/lines` put, `[id]/update-budgets`
+post, `[id]/vs-actual` get), all `withPayrollAccess()`. Screen:
+`src/components/payroll-workforce.tsx`; the budget grid shows fed amounts
+read-only (`fromWorkforce`).
+
 **Payday filing** (payroll stage P6, examples PF1-PF9, decisions 56-65):
 `src/lib/payroll/payday-filing.ts` is pure (no database): IRD's employment
 information file (HEI2 header, DEI lines, amounts in hundredths, CR LF),

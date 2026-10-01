@@ -1025,8 +1025,31 @@ that something happened.
   loan** by month, tied to each pay run's employment information file (made
   or not, from the audit log) and IRD payments. Voided pay runs are listed,
   not counted. Each exports as CSV, recorded in the audit log without
-  figures or names. Not built: leave reports (P8), wage budgets (P11),
+  figures or names. Not built: leave reports (P8), (wage budgets are P11, below),
   reports by pay period, a view for people without payroll access.
+- **Workforce budgets** (payroll stage P11, WB1-WB7, not yet approved by
+  Jess; decisions 112-123; tenant migration 0068). Payroll › Workforce
+  budget, for people with payroll access (bookkeeper or higher): wages by
+  **employee** or **position** (to be hired) and month over 1-24 months,
+  salary × FTE ÷ 12 or hourly rate × hours × 52 ÷ 12, whole months from a
+  start to an optional end month, **pay rises from a month**, employer
+  KiwiSaver at the line's rate (truncated as pay runs do; ESCT adds no
+  cost). An employee line copies their pay and KiwiSaver rate when added
+  and is split by their cost allocation on the 1st of each month; a
+  position has its own % split by Department and project. Each line's
+  month is rounded once to the cent and split with the allocation rule, so
+  Departments add up. A workforce budget **feeds** chosen budgets (each
+  budget fed by at most one): it writes the Ordinary time and KiwiSaver
+  employer accounts for all its months, only the shares tagged with a
+  Department, Class or Location budget's value, and those amounts are
+  read-only on the budget (the database refuses other changes); they're
+  rewritten on every save and on **Update budgets**, and the screen says
+  when they're out of date (an allocation changed). Taking a budget off
+  leaves its amounts as typed amounts. **Budget vs actual for wages** by
+  month and Department against P10's labour cost by pay date. Audit events
+  without amounts or names. Not built: part months, more than one person
+  per position line, overtime, holiday pay and other on-costs, a future
+  KiwiSaver minimum rate, following later pay rate changes automatically.
 
 - **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
   RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;

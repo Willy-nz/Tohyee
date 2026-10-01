@@ -67,7 +67,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0068 (0058-0067 used or reserved: 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9).
+Next free tenant migration number: 0069 (0058-0068 used or reserved: 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -249,8 +249,23 @@ only be run by certain people. Each item is its own branch and PR.
       CSV export of each, audited without figures. Not built: leave reports
       (P8), reports by pay period, a view without payroll access. Screens
       weren't checked in a browser.
-- [ ] **P11 Workforce budgets**: budget wages by employee or position and
-      month, feeding budgets by department (existing budgets). Needs P3.
+- [x] **P11 Workforce budgets** (tenant migration 0068), built 2 Oct 2026 on
+      branch `claude/payroll-p11-workforce-budgets` (not merged yet);
+      examples WB1-WB7 await Jess (questions at the end of the section),
+      decisions 112-123. Payroll › Workforce budget, payroll access only:
+      wages by employee or position (to be hired) and month, salary × FTE or
+      hourly × hours, pay rises from a month, employer KiwiSaver (ESCT adds
+      no cost), split by the employee's allocation on the 1st of each month
+      or a position's own split; written into the budgets it feeds (overall
+      or a Department, Class or Location budget) as read-only wages and
+      KiwiSaver amounts the database protects, rewritten on save and on
+      "Update budgets" (the screen says when an allocation change made them
+      out of date); budget vs actual for wages against P10 labour cost by
+      Department and month. NetSuite has no workforce module ("A Workforce
+      module is not currently available"), so this follows Oracle Planning
+      Workforce; Xero unverified. Not built: part months, several people
+      per position line, on-costs, following later pay rate changes. The
+      screen wasn't checked in a browser.
 - [ ] **P12 Back pay, extra pays and final pays** (bonuses under IRD's extra
       pay rules, retrospective rate changes, termination pays). Needs P3,
       and P8 for holiday pay on termination.
@@ -468,6 +483,14 @@ wording. Still open:
 - Pay runs approved before P9 show "R&D activity not recorded": work it out
   from the allocation they used, as the R&D claim does?
 - Exports audited without figures: need a second permission too?
+
+**Workforce budgets** (P11, end of the WB section)
+- Part months: count a line starting mid-month by days?
+- Follow later pay rate changes on the employee automatically?
+- KiwiSaver employer minimum after 2026-27: a planned rate change, or typed?
+- Budget on-costs too (holiday pay, ACC levies, overtime)?
+- A "number of people" on a position line?
+- Compare actuals by pay date (as now) or by period worked?
 
 **Older lists still open** (see each section): repeating bills, quotes and
 repeating invoices and printed documents, purchase orders, stock transfers,
