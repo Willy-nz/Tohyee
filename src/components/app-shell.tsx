@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, Suspense, useEffect, useId, useRef, useState } from "react";
-import { useModules } from "@/components/modules";
+import { type AppKey, AppSwitcher } from "@/components/app-switcher";
+import { type Modules, useModules } from "@/components/modules";
 import { ROLE_LABELS, type Role } from "@/lib/auth/roles";
 import styles from "./app-shell.module.css";
 import {
@@ -17,7 +18,8 @@ import {
 type ModuleKey = "crm" | "reporting";
 type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
 type MenuGroup = { heading?: string; links: MenuLink[] };
-type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey };
+/** `area`: the paths that show the menu as current (default: AREAS by its label). */
+type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey; area?: string[] };
 
 /**
  * The accounting menus: Home, Sales, Purchases, Reporting, Accounting, Tax,
@@ -179,22 +181,17 @@ const MENUS: Menu[] = [
       },
     ],
   },
-  {
-    label: "CRM",
-    module: "crm",
-    groups: [
-      {
-        links: [
-          { href: "/operations/crm/companies", label: "Companies" },
-          { href: "/operations/crm/people", label: "People" },
-          { href: "/operations/crm/pipeline", label: "Pipeline" },
-          { href: "/operations/crm/tasks", label: "Tasks" },
-          { href: "/operations/crm/mail", label: "Email and calendar" },
-        ],
-      },
-    ],
-  },
 ];
+
+/** The CRM's tabs (its own app, under /crm); shown only while the CRM is on (MOD1). */
+const CRM_MENUS: Menu[] = [
+  { label: "Home", href: "/crm", area: ["/crm"] },
+  { label: "Companies", href: "/crm/companies", area: ["/crm/companies"] },
+  { label: "People", href: "/crm/people", area: ["/crm/people"] },
+  { label: "Pipeline", href: "/crm/pipeline", area: ["/crm/pipeline"] },
+  { label: "Tasks", href: "/crm/tasks", area: ["/crm/tasks"] },
+  { label: "Email and calendar", href: "/crm/mail", area: ["/crm/mail"] },
+].map((menu) => ({ ...menu, groups: [], module: "crm" as const }));
 
 /** The paths a menu covers, so its button shows as the current area. */
 const AREAS: Record<string, string[]> = {
@@ -227,12 +224,11 @@ const AREAS: Record<string, string[]> = {
   ],
   Tax: ["/operations/gst-return", "/operations/gst-audit", "/operations/tax"],
   Contacts: ["/operations/contacts", "/operations/customer-statements"],
-  CRM: ["/operations/crm"],
 };
 
-function inArea(pathname: string, label: string): boolean {
-  return (AREAS[label] ?? []).some((path) =>
-    path === "/operations" ? pathname === path : pathname === path || pathname.startsWith(`${path}/`),
+function inArea(pathname: string, menu: Menu): boolean {
+  return (menu.area ?? AREAS[menu.label] ?? []).some((path) =>
+    path === "/operations" || path === "/crm" ? pathname === path : pathname === path || pathname.startsWith(`${path}/`),
   );
 }
 
@@ -247,11 +243,10 @@ function isCurrent(pathname: string, search: URLSearchParams, href: string): boo
   return [...wanted.entries()].every(([key, value]) => search.get(key) === value);
 }
 
-function useVisibleMenus(): Menu[] {
-  const { can, current } = useWorkspace();
-  const modules = useModules(current?.id ?? null);
+function useVisibleMenus(app: AppKey, modules: Modules | null): Menu[] {
+  const { can } = useWorkspace();
   const moduleOn = (key: ModuleKey | undefined) => !key || Boolean(modules?.[key]);
-  return MENUS.filter((menu) => moduleOn(menu.module)).map((menu) => ({
+  return (app === "crm" ? CRM_MENUS : MENUS).filter((menu) => moduleOn(menu.module)).map((menu) => ({
     ...menu,
     groups: menu.groups
       .map((group) => ({ ...group, links: group.links.filter((link) => (!link.minRole || can(link.minRole)) && moduleOn(link.module)) }))
@@ -259,10 +254,9 @@ function useVisibleMenus(): Menu[] {
   }));
 }
 
-function DesktopMenus() {
+function DesktopMenus({ menus }: { menus: Menu[] }) {
   const pathname = usePathname();
   const search = useSearchParams();
-  const menus = useVisibleMenus();
   const [open, setOpen] = useState<string | null>(null);
   const bar = useRef<HTMLElement>(null);
   const idPrefix = useId();
@@ -286,7 +280,7 @@ function DesktopMenus() {
   return (
     <nav aria-label="Main" className={styles.menuBar} ref={bar}>
       {menus.map((menu) => {
-        const active = inArea(pathname, menu.label);
+        const active = inArea(pathname, menu);
         if (menu.href) {
           return (
             <Link
@@ -344,10 +338,9 @@ function DesktopMenus() {
 }
 
 /** Phones: a ☰ button opens every section as a full-screen list. */
-function PhoneMenu({ onSignOut }: { onSignOut: () => void }) {
+function PhoneMenu({ menus, onSignOut }: { menus: Menu[]; onSignOut: () => void }) {
   const pathname = usePathname();
   const search = useSearchParams();
-  const menus = useVisibleMenus();
   const { user } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -398,12 +391,18 @@ function PhoneMenu({ onSignOut }: { onSignOut: () => void }) {
             {menus.map((menu) => {
               if (menu.href) {
                 return (
-                  <Link key={menu.label} href={menu.href} className={styles.phoneSection} onClick={close}>
+                  <Link
+                    key={menu.label}
+                    href={menu.href}
+                    className={styles.phoneSection}
+                    aria-current={inArea(pathname, menu) ? "page" : undefined}
+                    onClick={close}
+                  >
                     {menu.label}
                   </Link>
                 );
               }
-              const isExpanded = expanded === menu.label || (expanded === null && inArea(pathname, menu.label));
+              const isExpanded = expanded === menu.label || (expanded === null && inArea(pathname, menu));
               return (
                 <div key={menu.label}>
                   <button
@@ -478,9 +477,11 @@ function OrganisationPicker() {
   );
 }
 
-function Shell({ children, warnings }: { children: ReactNode; warnings: string[] }) {
+function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; warnings: string[] }) {
   const router = useRouter();
-  const { user } = useWorkspace();
+  const { user, current } = useWorkspace();
+  const modules = useModules(current?.id ?? null);
+  const menus = useVisibleMenus(app, modules);
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
@@ -499,6 +500,7 @@ function Shell({ children, warnings }: { children: ReactNode; warnings: string[]
             <span className={styles.brandDot} aria-hidden />
             Tohyee
           </Link>
+          <AppSwitcher current={app} modules={modules} />
           <OrganisationPicker />
           <div className={styles.user}>
             <Link href="/operations/profile" className={styles.userName}>
@@ -509,11 +511,11 @@ function Shell({ children, warnings }: { children: ReactNode; warnings: string[]
             </button>
           </div>
           <Suspense fallback={null}>
-            <PhoneMenu onSignOut={() => void signOut()} />
+            <PhoneMenu menus={menus} onSignOut={() => void signOut()} />
           </Suspense>
         </div>
         <Suspense fallback={<nav aria-label="Main" className={styles.menuBar} />}>
-          <DesktopMenus />
+          <DesktopMenus menus={menus} />
         </Suspense>
       </header>
       <main id="main-content" className={styles.content} tabIndex={-1}>
@@ -529,12 +531,15 @@ function Shell({ children, warnings }: { children: ReactNode; warnings: string[]
 }
 
 export function AppShell({
+  app = "accounting",
   user,
   organisations,
   serverSettingsUrl = null,
   warnings = [],
   children,
 }: {
+  /** Which app's top bar and menus to show. */
+  app?: AppKey;
   user: WorkspaceUser;
   organisations: WorkspaceOrganisation[];
   /** Where server settings open on the server computer (passed for server admins). */
@@ -545,7 +550,9 @@ export function AppShell({
 }) {
   return (
     <WorkspaceProvider user={user} organisations={organisations} serverSettingsUrl={serverSettingsUrl}>
-      <Shell warnings={warnings}>{children}</Shell>
+      <Shell app={app} warnings={warnings}>
+        {children}
+      </Shell>
     </WorkspaceProvider>
   );
 }

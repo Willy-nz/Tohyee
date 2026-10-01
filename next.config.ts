@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/**": ["src/lib/pdf/fonts/*.ttf", "src/lib/pdf/fonts/OFL.txt"],
   },
+  // The CRM moved from /operations/crm to its own app at /crm; old links and
+  // bookmarks still reach the same pages (with their ?query). /operations/crm
+  // itself listed the companies.
+  async redirects() {
+    return [
+      { source: "/operations/crm", destination: "/crm/companies", permanent: false },
+      { source: "/operations/crm/:path+", destination: "/crm/:path+", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

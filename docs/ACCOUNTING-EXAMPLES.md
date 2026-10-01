@@ -36,7 +36,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/customers.test.ts` (RC1-RC12) and
   `tests/integration/items.test.ts` (IT1-IT9) and
   `tests/integration/stock.test.ts` (ST1-ST12) and
-  `tests/integration/crm.test.ts` (MOD1, CRM1-CRM9) and
+  `tests/integration/crm.test.ts` (MOD1, CRM1-CRM10) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
   `tests/integration/reports-ledger.test.ts` (AGP1-AGP3, ATX1-ATX5,
   JR1-JR3) and `tests/integration/gst-audit.test.ts` (GA1-GA4) and
@@ -3786,6 +3786,20 @@ when approved.
   won; open means not Won or Lost).
 - **CRM9** The pipeline board groups open and closed opportunities by stage
   with a total per stage (amounts excluding GST).
+- **CRM10** The CRM's Home (not yet approved by Jess) shows the signed-in
+  person's own work. On 1 Oct 2026 Jess owns "Memorial paw prints 2027"
+  (Mānuka Vets, 2,400.00, New), "Clinic display" (Mānuka Vets, 600.00,
+  Proposal), "Logo licence" (Acme Inc, which deals in USD, USD 100.00,
+  Meeting) and "Menu reprint" (500.00, Won); Ben owns "Kennel cards"
+  (900.00, New). Jess's open opportunities are the first three, totalling
+  **NZD 3,000.00** and **USD 100.00** (never added together; Won and Lost
+  aren't open). Jess's tasks due or overdue are "Send sample kit" (due 30 Sep,
+  To do, overdue) and "Call Aroha" (due 1 Oct, In progress), in due-date
+  order; not "Post brochure" (due 2 Oct), a done task due 30 Sep, a task with
+  no due date, or Ben's task due 30 Sep. Ben's Home shows only "Kennel cards"
+  (**900.00**) and his task. Both see the organisation's ten most recent
+  calls, meetings and notes, newest first. Viewers can read it; it changes
+  nothing.
 
 ## CRM email and calendar sync
 

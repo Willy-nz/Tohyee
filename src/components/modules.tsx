@@ -43,8 +43,8 @@ const OPTIONAL: ModuleRow[] = [
     description:
       "Companies and the people who work there, prospects, an opportunities pipeline that turns won work into invoices, tasks, calls, meetings and notes, and a timeline for every company.",
     links: [
-      { href: "/operations/crm/companies", label: "Companies" },
-      { href: "/operations/crm/pipeline", label: "Pipeline" },
+      { href: "/crm/companies", label: "Companies" },
+      { href: "/crm/pipeline", label: "Pipeline" },
     ],
   },
   {
