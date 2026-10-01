@@ -127,26 +127,17 @@ s 72A-s 72J (not s 72N); records s 81, s 82.
     "not possible or practicable to determine ... relevant daily pay" or
     "daily pay varies within the pay period when the holiday or leave
     falls", on 1 Oct 2026.)
-14. **Unpaid leave: the anniversary moves only by the unpaid leave beyond one
-    week.** The AWE divisor is reduced only where an agreement to keep the
-    anniversary is recorded (not as Xero does). (Divisor rule checked against
-    Holidays Act s 16(3) on 1 Oct 2026.)
-
-    **Conflict found:** the Act's wording may not support moving the
-    anniversary only by the part beyond one week. Holidays Act s 16(2) says
-    the 12 months "(a) includes any period during which the employee was ...
-    (vi) on unpaid leave for any other reason for a period of no more than 1
-    week; but (b) unless otherwise agreed, does not include any other unpaid
-    leave". Read literally, a single period of unpaid leave longer than a
-    week isn't "a period of no more than 1 week", so the whole period (not
-    just the part beyond a week) would be left out of the 12 months, moving
-    the anniversary by the full length (HL10's 3 weeks would move it 21
-    days, not 14). Only s 16(3), about the AWE divisor where the leave is
-    agreed to count, speaks of "weeks greater than 1 week". The Employment
-    Leave Act's conversion formula uses the same words (sch 1 cl 12(3): "any
-    other unpaid leave for a period of no more than 1 week"). Source:
-    `docs/sources/holidays-act-2003.md`. Jess to decide; HL10 and its test
-    follow the decision as it stands until she does.
+14. **Unpaid leave: a single period of unpaid leave longer than one week
+    doesn't count towards the 12 months at all**, so the anniversary moves by
+    the whole period, unless the employer and employee agree in writing that
+    it counts (Holidays Act s 16(2)(a)(vi) and (b): unpaid leave "for a
+    period of no more than 1 week" counts; "unless otherwise agreed, does not
+    include any other unpaid leave"). Where it's agreed to count, the
+    anniversary doesn't move and the AWE divisor is reduced by the weeks over
+    one week (s 16(3)); without a recorded agreement the divisor isn't
+    reduced (not as Xero does). Changed 1 Oct 2026 after reading the Act: the
+    earlier call (move only by the part beyond a week) didn't match its
+    wording. Source: `docs/sources/holidays-act-2003.md`. HL10 follows this.
 15. **No hard limit on holidays in advance**; a warning above what's been
     earned since the anniversary, and a prompt for the written agreement to
     recover it. (Checked against Holidays Act s 20, "An employer may allow
@@ -204,16 +195,14 @@ s 72A-s 72J (not s 72N); records s 81, s 82.
     stored.** (s 57(1)(c): "a whole working day off work ... regardless of
     the amount of time the employee actually worked on the public holiday";
     checked 1 Oct 2026.)
-26. **Exact rates; each payment rounded once to cents.** (Under the 2028 Act,
-    building up leave rounds up.)
-
-    **Conflict found:** the Employment Leave Act 2026 as enacted has no
-    rounding rule. A search of the whole Act for "round" found nothing;
-    s 24(1) says leave accrues at "not less than 0.0769 of an hour of annual
-    leave for each standard hour or part of a standard hour" (s 73(1): 0.0385
-    for sick leave), and its own example keeps five decimals ("37.5 × 0.0769
-    = 2.88375"). "Rounds up" may come from MBIE guidance; it isn't in the
-    Act. Source: `docs/sources/employment-leave-act-2026.md`.
+26. **Exact rates; each payment rounded once to cents.** Under the
+    Employment Leave Act 2026 (from 6 Aug 2028) leave accrues at "not less
+    than" 0.0769 hour of annual leave (s 24(1)) and 0.0385 hour of sick
+    leave (s 73(1)) per standard hour; the Act has no rounding rule and its
+    own example keeps five decimals (2.88375), so accrued hours will be kept
+    to at least five decimals and never rounded down. (Corrected 1 Oct 2026:
+    an earlier note said "rounds up", which isn't in the Act. Source:
+    `docs/sources/employment-leave-act-2026.md`.)
 27. **Family violence leave is included with sick leave**, with its records
     kept private. (Checked against Holidays Act s 72C, s 72D, s 72H, s 72I on
     1 Oct 2026: its own 10 days a year, not carried forward, paid at RDP or

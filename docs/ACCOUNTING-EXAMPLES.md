@@ -9023,9 +9023,10 @@ amount paid.
   - Unpaid leave of 1 week or less counts towards the 12 months
     (s16(2)(a)(vi)); longer unpaid leave doesn't, unless agreed
     (s16(2)(b)). Had Aroha taken unpaid leave from Mon 2 to Sun 22 Feb 2026
-    (3 weeks), the first week still counts and her anniversary moves only by
-    the 2 weeks beyond it (14 days), from Wed 1 Apr to **Wed 15 Apr 2026**
-    (decision 14). Her AWE divisor stays 52.
+    (3 weeks), that single period is longer than 1 week, so none of it
+    counts: her anniversary moves by the whole 21 days, from Wed 1 Apr to
+    **Wed 22 Apr 2026** (decision 14, following the Act's wording). Her AWE
+    divisor stays 52.
   - If they agree, in writing, to count the whole 3 weeks, Tohyee records
     the agreement, the anniversary stays **Wed 1 Apr 2026** and her AWE
     divisor drops from 52 to **50** (the weeks over 1 week, s16(3)). Without
