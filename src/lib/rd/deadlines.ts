@@ -3,9 +3,9 @@ import { incomeYearLabel } from "@/lib/rd/amounts";
 
 /**
  * R&D Tax Incentive due dates and reminders (examples RD24, RD25, RD41;
- * decisions 48, 49, 63). Pure and browser-safe.
+ * decisions 48, 49, 73). Pure and browser-safe.
  *
- * Worked out only for a 31 March balance date (decision 63). Sources:
+ * Worked out only for a 31 March balance date (decision 73). Sources:
  * - IRD, "R&D tax incentive due dates" (last updated 1 Apr 2026, read 1 Oct
  *   2026): general approval "due no later than the last day of the 3rd month
  *   following the end of the 1st income year" (31 March: 30 June); criteria

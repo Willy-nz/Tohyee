@@ -8355,7 +8355,7 @@ What stage R3 builds, in the order the report works it out (Tax › R&D claim
 report). It's **read-only**: it posts nothing and changes no amount, and it
 never says an activity "qualifies". Rules already pinned down above (RD3,
 RD4, RD7, RD10, RD16-RD27, decisions 30-50) are followed as written; where
-they left a choice, the call is a new decision (56-65 in
+they left a choice, the call is a new decision (66-75 in
 [DECISIONS.md](DECISIONS.md)). Extra sources read for R3:
 
 - IRD, "R&D tax incentive due dates"
@@ -8408,7 +8408,7 @@ allocation is 100% R&D."
   cost is 2,400.00 + 84.00 = **2,484.00**, all C1, employee related costs
   (100% of 2,484.00, rounded down to the cent: decision 50). The 50.00
   reimbursement isn't pay, so it isn't an employee cost (IR1240 p 63's list;
-  decision 56) and isn't counted; it's a goods cost, which a pay run line
+  decision 66) and isn't counted; it's a goods cost, which a pay run line
   can't be tagged as yet. ACC levies aren't in a pay run at all (decision
   36).
 - **RD29** Part-time on R&D, no time record (RD7 as built). Ben's allocation
@@ -8431,7 +8431,7 @@ allocation is 100% R&D."
   Jess adds an allocation for Hana effective from **1 Apr 2026** of 50% C1
   and 50% Operations (backdated). The 22 Jul pay was approved before it was
   entered, so it keeps the allocation it was posted with: Hana's 2,484.00
-  still counts (decision 57). Pay runs approved after the new allocation
+  still counts (decision 67). Pay runs approved after the new allocation
   was entered use it.
 - **RD32** Late records. A pay counts from the allocation it used; that
   allocation was **entered** (the server's date it was saved) some days
@@ -8439,7 +8439,7 @@ allocation is 100% R&D."
   flagged "entered late" like a tag (decision 38): an allocation entered on
   1 Oct 2026 for the period ending 19 Jul 2026 is "entered 74 days after the
   pay period" (12 days left in July + 31 + 30 + 1 = 74) and flagged; it still
-  counts, and the report lists it so Jess can decide (decision 57). An
+  counts, and the report lists it so Jess can decide (decision 67). An
   allocation entered before the period ended is "entered before the pay
   period ended" and never flagged.
 - **RD33** Payroll access (decision 6; P1b). Jess (payroll access) sees each
@@ -8451,7 +8451,7 @@ allocation is 100% R&D."
   payroll access. A department total that's one person's pay is accepted
   (decision 6), and so is an activity total.
 
-**Overhead rules** (RD10, RD23; decisions 46, 58). Set under the claim
+**Overhead rules** (RD10, RD23; decisions 46, 68). Set under the claim
 report, by bookkeepers and above. A rule is "**% of an account** to an
 activity, from a date (to a date)", with a **basis** from IR1240 p 15's list
 and a **description of the calculation** (e.g. "lab 30 m² of 200 m²"), and
@@ -8479,7 +8479,7 @@ nothing and adds no tag.
   A rent bill dated **1 Jul 2026** that Sam has **tagged** by hand (20% to
   S1: **800.00**) keeps its tag: the rule skips lines with their own tag and
   lists them as "has its own tag", so a line is never counted twice
-  (decision 58). The 1 Jul line counts 800.00 to S1, not 600.00 to C1.
+  (decision 68). The 1 Jul line counts 800.00 to S1, not 600.00 to C1.
 - **RD35** Changing a rule (RD23 as built). Jess changes the rule to **20%**
   with effect from the **same date, 1 Apr 2026**, attaching new workings.
   Tohyee keeps the 15% rule (marked "replaced", with who and when) and adds
@@ -8493,7 +8493,7 @@ nothing and adds no tag.
   and a rule entered more than 14 days after the start of its period is
   flagged "entered late" (decision 38).
 
-**The overseas limit across categories** (RD16; decision 43, 60).
+**The overseas limit across categories** (RD16; decision 43, 70).
 
 - **RD36** Had S2 (overseas) spent **5,000.00** on contract expenditure and
   **4,000.00** on materials (9,000.00 in all), with NZ eligible 73,200.00,
@@ -8501,7 +8501,7 @@ nothing and adds no tag.
   between the two in proportion to what was spent, each rounded down to the
   cent, and the cents left over go to the largest remainder (the earlier
   category first on a tie), so the parts add up to the limit exactly
-  (decision 60):
+  (decision 70):
   - contract: 5,000.00 × 8,133.33 ÷ 9,000.00 = 4,518.5166… → 4,518.51
   - materials: 4,000.00 × 8,133.33 ÷ 9,000.00 = 3,614.8133… → 3,614.81
   - 4,518.51 + 3,614.81 = 8,133.32, so the 0.01 left goes to contract
@@ -8512,7 +8512,7 @@ nothing and adds no tag.
   4,000.00 − 3,614.81 = **385.19**, together 866.67 as in RD16.
 
 **Supporting activities and the core activity's year** (RD4; LY 5(1)(ab);
-IR1240 p 38, p 118-119; decision 59).
+IR1240 p 38, p 118-119; decision 69).
 
 - **RD37** RD4 as built. S1 supports C1 only, and C1's first income year is
   2026-27. S1's 600.00 tagged on **15 Mar 2026** (2025-26) shows in the
@@ -8525,10 +8525,10 @@ IR1240 p 38, p 118-119; decision 59).
   approval for 2026-27; S3 itself is in an approval. S3's **450.00** tagged
   in 2026-27 is listed as "supporting activity: none of the core activities
   it supports has an approval for 2026-27" and **not counted** (IR1240 p 38:
-  a year with only supporting activity claims nothing; decision 59).
+  a year with only supporting activity claims nothing; decision 69).
 
 **Feedstock and commercial production** (RD14; LY 5(1)(c); Sch 21B B cl 22;
-decision 61).
+decision 71).
 
 - **RD39** A tag flagged **feedstock** (trial-batch components **2,500.00**,
   materials) is listed as "feedstock: the output's value isn't recorded, so
@@ -8541,7 +8541,7 @@ decision 61).
   commercial production tag on **employee related costs** (**500.00**)
   counts, and shows as "of which commercial production: 500.00".
 
-**The claim** (RD16-RD20, RD26; decisions 30-32, 44, 47, 62). The report
+**The claim** (RD16-RD20, RD26; decisions 30-32, 44, 47, 72). The report
 works it out in this order, from the counted amounts of activities with an
 approval covering the year:
 
@@ -8560,13 +8560,13 @@ approval covering the year:
   120,000,000.00 = **18,000,000.00**, and the report shows "**10,000,000.00
   over the $120 million maximum**; an organisation and its associates share
   the maximum (IR1240 p 72-73); approval to exceed it is due 7 May". The
-  figures by category stay as spent (decision 62); the return's total is
+  figures by category stay as spent (decision 72); the return's total is
   the claimed amount.
 
-**Deadlines** (RD24, RD25; decisions 48, 49, 63). Worked out for a **31
+**Deadlines** (RD24, RD25; decisions 48, 49, 73). Worked out for a **31
 March balance date** only; any other balance date shows "Tohyee works these
 dates out only for a 31 March balance date; see IRD's due dates page" and
-no dates (decision 63).
+no dates (decision 73).
 
 - **RD41** For **2027-28** (1 Apr 2027 - 31 Mar 2028): general approval
   **Fri 30 Jun 2028**; income tax return Fri 7 Jul 2028; the supplementary
@@ -8594,9 +8594,9 @@ no dates (decision 63).
   **7 Aug 2027** it has passed and stops. The other dates (criteria and
   methodologies, approval to exceed the maximum, the following-year
   variation, the income tax return and the last filing date) are in the
-  list but not reminded about (decision 63).
+  list but not reminded about (decision 73).
 
-**Exporting** (RD27; decision 64).
+**Exporting** (RD27; decision 74).
 
 - **RD42** Jess exports the 2026-27 report as CSV. Tohyee records the export
   (who, when, the income year and the report's summary figures: by project
@@ -8610,7 +8610,7 @@ no dates (decision 63).
   employee only for someone with payroll access.
 
 Who sees what: the claim report, like tagged costs, is for **viewers and
-above** (decision 65); per-employee pay only with payroll access (RD33);
+above** (decision 75); per-employee pay only with payroll access (RD33);
 reminders only for owners and admins (decision 48). Overhead rules are set
 by bookkeepers and above.
 

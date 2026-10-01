@@ -338,7 +338,7 @@ page (updated 1 Apr 2026), IRD's
 page (updated 28 Apr 2021), and the saved extracts of IR1240 and subpart LY
 in `docs/sources/`.
 
-56. **Pay items that count as employee costs**: ordinary time, overtime,
+66. **Pay items that count as employee costs**: ordinary time, overtime,
     allowances, holiday pay and the employer KiwiSaver contribution (gross,
     before ESCT, as the pay run posts it). Reimbursements and deductions
     don't. IR1240 p 63 and IRD's eligible expenditure page list "salaries
@@ -346,7 +346,7 @@ in `docs/sources/`.
     relation costs, overtime, holiday and long-service pay, superannuation
     contributions"; a reimbursement repays a cost the employee paid and
     isn't pay (RD28).
-57. **A pay's R&D share comes from the allocation the pay run used**: the
+67. **A pay's R&D share comes from the allocation the pay run used**: the
     employee's latest allocation effective on the pay date that was entered
     before the pay run was approved. An allocation entered later, even if
     backdated, doesn't change a posted pay (decision 37: the posted pay
@@ -355,7 +355,7 @@ in `docs/sources/`.
     than 14 days after the pay period ended (decision 38; RD32); it still
     counts and is listed. Until timesheets (P9) exist this is the only time
     record, and the report says so.
-58. **Overhead rules are applied when the report runs**, never posted or
+68. **Overhead rules are applied when the report runs**, never posted or
     turned into tags. A line with its own tag keeps its tag and the rule
     skips it (a line is never counted twice). On any day an account's rules
     total at most 100%, with one rule per activity. Changing a rule adds a
@@ -365,28 +365,28 @@ in `docs/sources/`.
     made after the rule's period began (RD23, RD35). Workings must be
     attached (decision 46; IR1240 p 15, p 102: "Be prepared to explain the
     basis ... and the calculation method").
-59. **Supporting activity counts only in a year when a core activity it
+69. **Supporting activity counts only in a year when a core activity it
     supports has an approval covering that year**; otherwise it's listed and
     left out (IR1240 p 38; LY 5(1)(ab)). Its costs in the income year
     immediately before the first income year of every core activity it
     supports move to that first year (RD4, RD37; LY 5(1)(ab)(i); IR1240
     p 118-119). Supporting activity in the year after (LY 5(1)(ab)(ii), by
     variation) isn't supported yet.
-60. **The overseas limit is shared across the overseas amounts in proportion,
+70. **The overseas limit is shared across the overseas amounts in proportion,
     rounded down, with the leftover cents to the largest remainders** (the
     earlier first on a tie), so the parts add up to exactly the limit
     (decision 43; RD36). The limit itself is still rounded down (decision 32).
-61. **Feedstock and commercial production are listed and left out where
+71. **Feedstock and commercial production are listed and left out where
     Tohyee can't work out the eligible part**: feedstock-flagged tags
     (eligible only over the output's value, Sch 21B B cl 22; IR1240 p 81-82)
     and commercial production tags other than employee related costs
     (LY 5(1)(c): only an employee's contribution, or costs shown to be
     additional, count; IRD's eligible expenditure page). Commercial
     production tags on employee related costs count (RD39).
-62. **Over the $120 million maximum, $120 million is claimed** (LY 4(3)) and
+72. **Over the $120 million maximum, $120 million is claimed** (LY 4(3)) and
     the amount over it is shown; the figures by category aren't scaled down
     (RD40). The associates' shared maximum is only a reminder.
-63. **Deadlines are worked out only for a 31 March balance date**: IRD's
+73. **Deadlines are worked out only for a 31 March balance date**: IRD's
     page gives 15 January (not the last day of the 3rd month) for a 30
     September balance date, so other balance dates need rules Tohyee
     doesn't have; it says so rather than guessing. A date on a weekend is
@@ -396,13 +396,13 @@ in `docs/sources/`.
     worked from the unmoved date before it. Reminders (decision 48) cover
     general approval, the supplementary return and the material change
     variation; the other dates are listed only (RD41).
-64. **An export keeps the report's summary figures, not the file**: who
+74. **An export keeps the report's summary figures, not the file**: who
     exported, when, the year, and the figures by project and category, the
     total, the overseas limit and the credit, in the R&D history, with no
     employee's pay, so no payroll detail ends up where every viewer can read
     it (decision 6). The report shows what changed since the last export.
     Nothing records a "filed" status (RD42).
-65. **The claim report is for viewers and above**, like tagged costs; each
+75. **The claim report is for viewers and above**, like tagged costs; each
     employee's pay is shown only to people with payroll access, and others
     see employee related costs per activity and the "default split" total
     (decision 6 accepts a total that's one person's pay; RD33). Overhead

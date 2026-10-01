@@ -15,7 +15,7 @@ import { SOURCES, UNTAGGABLE_SYSTEM_KEYS, type RdSourceType } from "@/lib/rd/tag
 import { asRecord, optionalString, requireIdempotencyKey, requireOneOf, requireString } from "@/lib/validation";
 
 /**
- * Overhead rules (examples RD10, RD23, RD34, RD35; decisions 46, 58): "% of
+ * Overhead rules (examples RD10, RD23, RD34, RD35; decisions 46, 68): "% of
  * an account" to an R&D activity over a period, with a basis from IR1240
  * p 15's list, a description of the calculation and the workings attached.
  * Applied when the claim report runs to every posted line on the account in
@@ -191,7 +191,7 @@ async function requireActiveActivity(tx: OrgTx, activityId: string): Promise<{ c
 
 /**
  * On any day, an account's rules total at most 100%, with one rule per
- * activity (decision 58). `ignoreId` is the rule being replaced.
+ * activity (decision 68). `ignoreId` is the rule being replaced.
  */
 async function assertFits(tx: OrgTx, accountId: string, activityId: string, fields: RuleFields, ignoreIds: string[]): Promise<void> {
   // Lock the account's rules so two people can't both add 60%.
@@ -393,7 +393,7 @@ export type RdOverheadApplied = {
   rule: RdOverheadRule;
   shares: RdOverheadShare[];
   amount: string;
-  /** Lines in the rule's period with their own tag, which the rule skips (decision 58). */
+  /** Lines in the rule's period with their own tag, which the rule skips (decision 68). */
   skipped: RdOverheadLine[];
   /** The replaced rule's figure on the same lines, when this rule replaced one from the same start (RD35). */
   previous: { rule: RdOverheadRule; amount: string } | null;
@@ -401,7 +401,7 @@ export type RdOverheadApplied = {
 
 /**
  * Applies the overhead rules to the posted lines dated `start` to `end`
- * (decision 58): each active rule to the untagged lines on its account in
+ * (decision 68): each active rule to the untagged lines on its account in
  * its period, rounded down per line; and, for a rule that replaced one from
  * the same start, the replaced rule's figure for comparison.
  */

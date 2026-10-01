@@ -16,7 +16,7 @@ import { rdSettings, timeZone } from "@/lib/rd/common";
  * them only to people with payroll access (decision 6).
  */
 
-/** Pay item kinds that are employee costs IRD lists (IR1240 p 63; decision 56). */
+/** Pay item kinds that are employee costs IRD lists (IR1240 p 63; decision 66). */
 export const RD_PAY_ITEM_KINDS = ["ordinary_time", "overtime", "allowance", "holiday_pay", "kiwisaver_employer"] as const;
 
 export type RdPayShare = {
@@ -33,7 +33,7 @@ export type RdPay = {
   periodEnd: string;
   employeeId: string;
   employeeName: string;
-  /** Pay items IRD lists, as posted (decision 56). */
+  /** Pay items IRD lists, as posted (decision 66). */
   cost: string;
   /** Posted but not an employee cost (reimbursements). */
   excluded: string;

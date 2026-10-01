@@ -258,7 +258,7 @@ describeWithDatabase("R&D claim report (RD28-RD42)", () => {
     const defaultSplit = r.notCounted.find((group) => group.reason === "default_split")!;
     expect(defaultSplit).toMatchObject({ label: "Default split, no time record", amount: "1200.00" });
     expect(defaultSplit.items).toMatchObject([{ employeeName: "Ben Tait", amount: "1200.00", activityCode: "C1" }]);
-    expect(r.notes).toContain("Reimbursements of 50.00 on pay runs aren't employee costs and aren't counted (decision 56).");
+    expect(r.notes).toContain("Reimbursements of 50.00 on pay runs aren't employee costs and aren't counted (decision 66).");
 
     // RD32: the allocations were entered today, after the period ending 19 Jul 2026.
     const days = daysBetween("2026-07-19", todayIsoDate());
@@ -311,7 +311,7 @@ describeWithDatabase("R&D claim report (RD28-RD42)", () => {
     expect(samCsv).toContain("Pay runs (each employee's pay needs payroll access)");
     const jessCsv = await exportAs(jess);
     expect(jessCsv).toContain("Hana Rewi");
-    // The export kept in history has no employee in it either (decision 64).
+    // The export kept in history has no employee in it either (decision 74).
     const history = await w.as((tx) => tx.query<{ snapshot: unknown }>("select snapshot from rd_history where record_type = 'claim_export'"));
     expect(history.rows).toHaveLength(2);
     expect(JSON.stringify(history.rows)).not.toContain("Hana");

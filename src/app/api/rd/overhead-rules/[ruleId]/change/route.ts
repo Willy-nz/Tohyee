@@ -6,7 +6,7 @@ type Context = { params: Promise<{ ruleId: string }> };
 
 /**
  * POST (multipart form): changes a rule by adding one that replaces it, with
- * new workings as `file` (bookkeepers and above; RD35, decision 58). Fields:
+ * new workings as `file` (bookkeepers and above; RD35, decision 68). Fields:
  * `organisationId`, `idempotencyKey`, `percentage`, `basis`, `basisDetail`,
  * `effectiveFrom`.
  */

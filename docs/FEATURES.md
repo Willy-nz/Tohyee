@@ -949,7 +949,7 @@ that something happened.
 - **R&D claim report** (RDTI stage R3, on branch
   `claude/rdti-r3-claim-report`, tenant migration 0065; RD3, RD4, RD16-RD20,
   RD24-RD27 and RD28-RD42 tested, examples not yet approved by Jess;
-  decisions 56-65): Tax › R&D claim report works out an income year's claim
+  decisions 66-75): Tax › R&D claim report works out an income year's claim
   from the tags, assets' tax depreciation, overhead rules and approved pay
   runs, for activities with an approval covering the year: the counted
   amounts by activity and category, the 10% overseas limit (rounded down and

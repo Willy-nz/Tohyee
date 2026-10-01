@@ -14,7 +14,7 @@ import { loadTags } from "@/lib/rd/tags";
 
 /**
  * The RDTI claim report for an income year (stage R3; examples RD3, RD4,
- * RD7, RD10, RD16-RD20, RD23-RD42; decisions 30-50, 56-65). Read-only: it
+ * RD7, RD10, RD16-RD20, RD23-RD42; decisions 30-50, 66-75). Read-only: it
  * posts nothing and changes no amount (an export only records its summary).
  * Built on the R2 tags, asset tax depreciation, the overhead rules and
  * posted pay runs. Tohyee never says an activity qualifies: IRD decides.
@@ -77,7 +77,7 @@ export type RdClaimPayroll = {
   pays: RdPay[] | null;
   counted: string;
   defaultSplit: string;
-  /** Reimbursements on the pay runs: not employee costs (decision 56). */
+  /** Reimbursements on the pay runs: not employee costs (decision 66). */
   excluded: string;
   lateCount: number;
 };
@@ -151,7 +151,7 @@ type Candidate = { item: RdClaimItem; activity: RdActivity };
 
 export type ClaimOptions = { payrollDetail: boolean; showReminders: boolean; today?: string };
 
-/** The claim report for an income year (viewers and above; decision 65). */
+/** The claim report for an income year (viewers and above; decision 75). */
 export async function buildClaimReport(tx: OrgTx, incomeYearInput: unknown, options: ClaimOptions): Promise<RdClaimReport> {
   const settings = await rdSettings(tx);
   const today = options.today ?? todayIsoDate();
@@ -310,7 +310,7 @@ export async function buildClaimReport(tx: OrgTx, incomeYearInput: unknown, opti
     }
   }
 
-  // Which candidates count (decisions 47, 59, 61; RD3, RD4, RD37-RD39).
+  // Which candidates count (decisions 47, 69, 71; RD3, RD4, RD37-RD39).
   const counted: RdClaimItem[] = [];
   const cores = (activity: RdActivity) => activity.supports.map((ref) => byId.get(ref.id)).filter((core): core is RdActivity => core != null);
   for (const { item, activity } of candidates) {
@@ -368,7 +368,7 @@ export async function buildClaimReport(tx: OrgTx, incomeYearInput: unknown, opti
   );
   const figures = calculateClaim(ordered, scale);
 
-  // Hide each employee's pay from people without payroll access (decision 65).
+  // Hide each employee's pay from people without payroll access (decision 75).
   const shown = (items: RdClaimItem[]): RdClaimItem[] => {
     if (options.payrollDetail) return items;
     const others = items.filter((item) => item.source !== "payroll");
@@ -465,7 +465,7 @@ export async function buildClaimReport(tx: OrgTx, incomeYearInput: unknown, opti
   }
   notes.push("An organisation and its associates share the $120 million maximum (IR1240 p 72-73); Tohyee can't see associates' figures.");
   if (cmp(dec(payroll.excluded), ZERO_DECIMAL) > 0) {
-    notes.push(`Reimbursements of ${payroll.excluded} on pay runs aren't employee costs and aren't counted (decision 56).`);
+    notes.push(`Reimbursements of ${payroll.excluded} on pay runs aren't employee costs and aren't counted (decision 66).`);
   }
 
   const lateCount =
@@ -526,7 +526,7 @@ async function claimYears(tx: OrgTx, settings: RdSettings, year: number): Promis
   return [...new Set([year, ...dates])].sort((a, b) => b - a).map((incomeYear) => ({ incomeYear, label: yearLabel(settings, incomeYear) }));
 }
 
-/** The figures an export keeps (decision 64): no employee's pay. */
+/** The figures an export keeps (decision 74): no employee's pay. */
 export function summaryFigures(report: Pick<RdClaimReport, "figures">): Record<string, string> {
   const figures = report.figures;
   const result: Record<string, string> = {};
@@ -604,7 +604,7 @@ export function claimCsv(report: RdClaimReport): string {
 
 /**
  * Exports the report as CSV and records the export's summary figures with
- * who and when in the R&D history (decision 64; RD42). Nothing is filed.
+ * who and when in the R&D history (decision 74; RD42). Nothing is filed.
  */
 export async function exportClaim(tx: OrgTx, incomeYearInput: unknown, options: ClaimOptions): Promise<{ fileName: string; csv: string }> {
   const report = await buildClaimReport(tx, incomeYearInput, options);

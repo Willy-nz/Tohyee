@@ -4,7 +4,7 @@ import { hasPayrollAccess } from "@/lib/payroll/access";
 import { exportClaim } from "@/lib/rd/claim";
 
 /**
- * POST: the claim report as CSV (viewers and above; RD42, decision 64). The
+ * POST: the claim report as CSV (viewers and above; RD42, decision 74). The
  * export's summary figures are kept in the R&D history with who exported it
  * and when; rows naming an employee only for people with payroll access.
  */

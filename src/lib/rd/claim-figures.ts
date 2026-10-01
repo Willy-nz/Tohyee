@@ -3,7 +3,7 @@ import type { RdActivityKind, RdCategory } from "@/lib/rd/amounts";
 
 /**
  * The R&D tax credit worked out from the amounts that count (examples RD16-RD20,
- * RD26, RD36, RD40; decisions 30-32, 43, 44, 60, 62). Pure and browser-safe.
+ * RD26, RD36, RD40; decisions 30-32, 43, 44, 70, 72). Pure and browser-safe.
  *
  * Income Tax Act 2007 (checked 1 Oct 2026, docs/sources/income-tax-act-ly-and-esct.md):
  * - LY 4(1)(a): eligible expenditure "is $50,000 or more for the year";
@@ -98,7 +98,7 @@ function percentDown(part: Decimal, whole: Decimal): string | null {
 /**
  * Shares `limit` across `amounts` in proportion, each rounded down to the
  * cent, with the cents left over going one each to the largest remainders
- * (the earlier first on a tie) so the parts add up to the limit (decision 60).
+ * (the earlier first on a tie) so the parts add up to the limit (decision 70).
  */
 function shareOut(amounts: Decimal[], limit: Decimal, scale: number): Decimal[] {
   const total = sum(amounts);

@@ -51,7 +51,7 @@ Set them in the Agents box before sending each task:
 | --- | --- | --- | --- | --- |
 | Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
 | Payroll P4: paying wages and IRD (examples PPAY1-PPAY12) | #60 | not opened yet | `claude/payroll-p4-paying` (Claude) | 0062 |
-| RDTI R3: the claim report (examples RD28-RD42, decisions 56-65) | none | not opened yet | `claude/rdti-r3-claim-report` (Claude) | 0065 |
+| RDTI R3: the claim report (examples RD28-RD42, decisions 66-75) | none | not opened yet | `claude/rdti-r3-claim-report` (Claude) | 0065 |
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
@@ -235,7 +235,7 @@ deadlines). Agents must check the current IR1240 and cite it, never memory.
       `claude/rdti-r3-claim-report` (tenant migration **0065**), waiting for
       a PR and review; examples RD28-RD42 (and RD3, RD4, RD16-RD20,
       RD24-RD27 now tested) await Jess, with "Questions for Jess (claim
-      report)" under RD42; decisions 56-65 in `docs/DECISIONS.md`. Tax › R&D
+      report)" under RD42; decisions 66-75 in `docs/DECISIONS.md`. Tax › R&D
       claim report (`src/lib/rd/claim.ts`, `claim-figures.ts`,
       `deadlines.ts`, `overheads.ts`, `payroll.ts`):
       - eligible expenditure by activity and category for activities with an
@@ -246,7 +246,7 @@ deadlines). Agents must check the current IR1240 and cite it, never memory.
         left out and why;
       - **pay from cost allocations, not timesheets** (P9 isn't built): a pay
         counts only when the allocation the pay run used is 100% R&D
-        (decisions 34, 57); others are listed as "default split, no time
+        (decisions 34, 67); others are listed as "default split, no time
         record". Pay runs still don't tag; the report reads their postings
         and the allocation entered before approval. Each employee's pay only
         with payroll access;
