@@ -89,6 +89,14 @@ const MENUS: Menu[] = [
     ],
   },
   {
+    label: "Payroll",
+    groups: [
+      {
+        links: [{ href: "/operations/payroll/employees", label: "Employees", minRole: "bookkeeper" }],
+      },
+    ],
+  },
+  {
     label: "Reporting",
     groups: [
       {

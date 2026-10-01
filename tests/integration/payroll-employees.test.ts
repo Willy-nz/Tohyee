@@ -9,6 +9,8 @@ import {
   setEmployeeArchived,
   updateEmployee,
 } from "@/lib/payroll/employees";
+import { requestHash } from "@/lib/idempotency";
+import { keyedSecretHash } from "@/lib/secrets";
 import { tenantMigrations } from "@/lib/db/migrations/tenant";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
@@ -51,7 +53,7 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
     dateOfBirth: "1990-02-03",
     taxCode: "M",
     irdNumber: "123456789",
-    kiwiSaverStatus: "member",
+    kiwiSaverStatus: "enrolled",
     kiwiSaverEmployeeRate: "4",
     kiwiSaverEmployerRate: "3.5",
     studentLoan: true,
@@ -94,14 +96,15 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
   });
 
   it("PR1: saves a payroll profile with IRD and bank details encrypted, and no secret in list or audit output", async () => {
-    const created = await addEmployee();
+    const commandKey = key("employee");
+    const created = await addEmployee(commandKey);
     expect(created.created).toBe(true);
     expect(created.employee).toMatchObject({
       firstName: "Aroha",
       lastName: "Ngata",
       taxCode: "M",
       irdNumber: "123456789",
-      kiwiSaverStatus: "member",
+      kiwiSaverStatus: "enrolled",
       kiwiSaverEmployeeRate: "4",
       kiwiSaverEmployerRate: "3.5",
       studentLoan: true,
@@ -113,13 +116,16 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
     });
 
     const stored = await asUser(owner, (tx) =>
-      tx.query<{ ird_number_ciphertext: string; bank_account_ciphertext: string }>(
-        "select ird_number_ciphertext, bank_account_ciphertext from payroll_employees where id = $1",
+      tx.query<{ ird_number_ciphertext: string; bank_account_ciphertext: string; request_hash: string }>(
+        "select ird_number_ciphertext, bank_account_ciphertext, request_hash from payroll_employees where id = $1",
         [created.employee.id],
       ),
     );
     expect(stored.rows[0].ird_number_ciphertext).not.toContain("123456789");
     expect(stored.rows[0].bank_account_ciphertext).not.toContain("03-1234-0123456-00");
+    const unhashed = requestHash("payroll_employee", { idempotencyKey: commandKey, ...employeeInput });
+    expect(stored.rows[0].request_hash).toBe(keyedSecretHash(unhashed));
+    expect(stored.rows[0].request_hash).not.toBe(unhashed);
 
     const summary = (await asUser(viewer, (tx) => listEmployees(tx))).find((employee) => employee.id === created.employee.id);
     expect(summary).toMatchObject({ firstName: "Aroha", hasIrdNumber: true, hasBankAccount: true });
@@ -162,6 +168,25 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
         }),
       ),
     ).rejects.toThrow(/ordinary hours per week is required/i);
+
+    await expect(
+      asUser(bookkeeper, (tx) =>
+        createEmployee(tx, {
+          idempotencyKey: key("employee"),
+          ...employeeInput,
+          payBasis: "hourly",
+          annualSalary: "70000",
+          hourlyRate: "25",
+          ordinaryHoursPerWeek: "30",
+        }),
+      ),
+    ).rejects.toThrow(/hourly employees can't also have an annual salary/i);
+
+    await expect(
+      asUser(bookkeeper, (tx) =>
+        createEmployee(tx, { idempotencyKey: key("employee"), ...employeeInput, annualSalary: "70000.001" }),
+      ),
+    ).rejects.toThrow(/at most 2 decimal places/i);
   });
 
   it("PR1: retries are idempotent and updates retain secrets when secret fields are omitted", async () => {
@@ -182,13 +207,17 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
 
   it("PR2: archives and restores an employee without deleting their record", async () => {
     const { employee } = await addEmployee();
+    await asUser(bookkeeper, (tx) => updateEmployee(tx, employee.id, { finishDate: "2026-09-30" }));
     expect((await asUser(bookkeeper, (tx) => setEmployeeArchived(tx, employee.id, true))).isArchived).toBe(true);
-    expect(await asUser(viewer, (tx) => listEmployees(tx))).toEqual([]);
-    expect((await asUser(viewer, (tx) => listEmployees(tx, { includeArchived: true })))[0].isArchived).toBe(true);
+    expect((await asUser(viewer, (tx) => listEmployees(tx))).map((row) => row.id)).not.toContain(employee.id);
+    expect(
+      (await asUser(viewer, (tx) => listEmployees(tx, { includeArchived: true }))).find((row) => row.id === employee.id),
+    ).toMatchObject({ isArchived: true, finishDate: "2026-09-30" });
     expect((await asUser(bookkeeper, (tx) => setEmployeeArchived(tx, employee.id, false))).isArchived).toBe(false);
     await expect(
       asUser(owner, (tx) => tx.query("delete from payroll_employees where id = $1", [employee.id])),
-    ).rejects.toThrow(/can't be deleted/i);
+    ).rejects.toThrow(/can't be deleted or truncated/i);
+    await expect(asUser(owner, (tx) => tx.query("truncate payroll_employees"))).rejects.toThrow(/can't be deleted or truncated/i);
   });
 
   it("requires bookkeeper access even to list employee records", async () => {
@@ -213,6 +242,14 @@ describeWithDatabase("payroll employee records (PR1, PR2)", () => {
     );
     expect(createdResponse.status).toBe(201);
     const employee = (await body(createdResponse)).employee as { id: string };
+
+    const summaries = await employeesRoute.GET(
+      apiRequest(`/api/payroll/employees?organisationId=${ORG}`, { cookie: bookkeeperCookie }),
+      noContext,
+    );
+    const summaryBody = JSON.stringify(await body(summaries));
+    expect(summaryBody).not.toContain("123456789");
+    expect(summaryBody).not.toContain("03-1234-0123456-00");
 
     const detail = await employeeRoute.GET(
       apiRequest(`/api/payroll/employees/${employee.id}?organisationId=${ORG}`, { cookie: bookkeeperCookie }),
