@@ -9519,6 +9519,198 @@ PostgreSQL, the API routes, the PDF and a real SMTP server).
 5. Should the payslip email's text be editable (a template, like
    invoices)? It's fixed now so pay never ends up in a stored message.
 
+## Payday filing file (examples not yet approved by Jess)
+
+Stage P6 of payroll (#60). Jess hasn't approved these. From an **approved**
+pay run Tohyee makes IRD's **employment information (EI) file**, a CSV file
+to upload in myIR (myIR › Employment information › file upload), and shows
+when it's due. Making the file posts nothing to the ledger and marks
+nothing as filed (decision 65).
+
+Sources, law first: IRD's **Payday Filing File Upload Specification
+2026-27** ("version 2027", July 2026), its section 3.4 (the EI file, header
+record `HEI2` and employee records `DEI`), summarised field by field in
+`docs/sources/ird-payday-filing-file-spec.md`, with what couldn't be read
+(the appendix: attribute definitions, the tax code table and the IRD number
+check). Due dates: spec 3.4 and IRD's
+[Payday filing](https://www.ird.govt.nz/employing-staff/payday-filing) page
+("within 2 working days of each payday", last updated 24 Feb 2026, read
+2 Oct 2026). The design calls are decisions 56-65 in `docs/DECISIONS.md`
+(NetSuite has no NZ payroll; Xero files each pay run straight to IRD). The
+figures are PRUN1-PRUN3's. **No file here has been through myIR yet**: run
+one through myIR's "Check your employment information file" service
+(spec 2.5) before approving.
+
+Tests: `tests/unit/payroll-payday-filing.test.ts` (the file byte for byte,
+due dates, settings checks) and `tests/integration/payroll-payday-filing.test.ts`
+(made from approved pay runs through the API).
+
+The examples use these **payroll settings** (Payroll › Pay items › Payday
+filing, admins with payroll access, decision 62): employer IRD number
+**123-123-123** (IRD's own example number), payroll contact **Mere Tipene**,
+work phone **03 477 1234** (kept as `034771234`), email
+**payroll@harbourcafe.co.nz**. Tohyee's version is 0.3.1, so the package
+identifier is `Tohyee_Tohyee_v0.3.1`. Employees' IRD numbers: Kiri Tane
+87-654-321, Hemi Walker 123-456-789, Sione Fifita 100-200-300, Aroha Ngata
+112-233-445, Sina Fifita 100-200-301 (none checked with IRD's modulus 11
+rule).
+
+How the file is written (decisions 57-61): one header line then one line
+per employee in the pay run's order (last name, first name), fields
+separated by commas, each line ending CR LF (including the last). Dates
+are `CCYYMMDD`. Amounts and hours are in hundredths with no decimal point
+and no padding (2,692.31 → `269231`, 36 hours → `3600`, nil → `0`).
+Gross earnings are **taxable** earnings; fields for things Tohyee doesn't
+do yet are 0 and the child support code is blank. The file is named
+`EI-<pay date>-<pay run>.csv`.
+
+- **PF1 Fortnightly salaries (PRUN1).** PAYRUN-1, Fortnightly salaries,
+  period 28 Sep to 11 Oct 2026, pay date Wednesday 14 Oct 2026. File
+  `EI-20261014-PAYRUN-1.csv`:
+
+  ```
+  HEI2,123123123,20261014,N,N,,Mere Tipene,034771234,payroll@harbourcafe.co.nz,2,469231,0,0,89858,0,0,0,0,0,9423,6603,2820,108704,0,0,0,Tohyee_Tohyee_v0.3.1,0001
+  DEI,087654321,Kiri Tane,M,,,20260928,20261011,FT,0,200000,0,0,0,34300,0,0,,0,0,0,0,0,0,0,0,0
+  DEI,123456789,Hemi Walker,M,,,20260928,20261011,FT,0,269231,0,0,0,55558,0,0,,0,0,0,9423,6603,2820,0,0,0
+  ```
+
+  Header: 2 employee lines; total gross 2,000.00 + 2,692.31 = **4,692.31**;
+  PAYE 343.00 + 555.58 = **898.58**; KiwiSaver deductions **94.23**; net
+  employer contributions **66.03** (94.23 less ESCT); ESCT **28.20**; total
+  amounts deducted 898.58 + 94.23 + 66.03 + 28.20 = **1,087.04** (what
+  PAYRUN-1 owes IRD in PPAY12). Pay cycle `FT`; hours 0 because
+  both are on a salary (decision 59). Kiri's 8-digit IRD number gets a
+  leading 0. Final return N, nil return N, no PAYE intermediary.
+
+- **PF2 Hourly, overtime, allowance, reimbursement and a deduction
+  (PRUN2).** PAYRUN-2, Weekly wages, period 5 to 11 Oct 2026, pay date
+  14 Oct 2026. Sione's lines: 32 hours ordinary time, 4 hours overtime,
+  Tool allowance 25.00, Reimbursement 42.60, Union fees 8.50. File
+  `EI-20261014-PAYRUN-2.csv`:
+
+  ```
+  HEI2,123123123,20261014,N,N,,Mere Tipene,034771234,payroll@harbourcafe.co.nz,1,88000,0,0,14840,0,0,0,0,0,3520,2555,525,21440,0,0,0,Tohyee_Tohyee_v0.3.1,0001
+  DEI,100200300,Sione Fifita,M,,,20261005,20261011,WK,3600,88000,0,0,0,14840,0,0,,0,0,0,3520,2555,525,0,0,0
+  ```
+
+  Hours paid **36.00** (32 + 4; the allowance and reimbursement are
+  amounts). Gross earnings **880.00**, the taxable earnings: the 42.60
+  reimbursement isn't taxable so it's left out (spec field 11), and the
+  union fees are an after-tax deduction IRD isn't told about. PAYE 148.40,
+  KiwiSaver 35.20, net employer 25.55, ESCT 5.25; total deducted
+  148.40 + 35.20 + 25.55 + 5.25 = **214.40**.
+
+- **PF3 Student loan (PRUN3).** PAYRUN-3, Four-weekly, period 14 Sep to
+  11 Oct 2026, pay date 14 Oct 2026. File `EI-20261014-PAYRUN-3.csv`:
+
+  ```
+  HEI2,123123123,20261014,N,N,,Mere Tipene,034771234,payroll@harbourcafe.co.nz,1,350000,0,0,58972,0,0,19728,0,0,12250,10115,2135,103200,0,0,0,Tohyee_Tohyee_v0.3.1,0001
+  DEI,112233445,Aroha Ngata,M SL,,,20260914,20261011,4W,0,350000,0,0,0,58972,0,0,,19728,0,0,12250,10115,2135,0,0,0
+  ```
+
+  Tax code `M SL` as stored (the spec's own example writes it that way).
+  Student loan **197.28** goes in its own field, not in PAYE. Total
+  deducted 589.72 + 197.28 + 122.50 + 101.15 + 21.35 = **1,032.00**.
+
+- **PF4 Three pay runs on one pay date.** PF1, PF2 and PF3 all have pay
+  date 14 Oct 2026. Each pay run makes its own file with its own header
+  totals; IRD accepts several EIs for one paydate (decision 56). Uploading
+  all three files tells IRD about gross earnings of 4,692.31 + 880.00 +
+  3,500.00 = **9,072.31** and deductions of 1,087.04 + 214.40 + 1,032.00 =
+  **2,333.44** for 14 Oct 2026. Making a file again gives the same bytes
+  (unless the payroll settings or an employee's IRD number changed since).
+
+- **PF5 A new employee in the pay period.** Sina Fifita starts on
+  **Wednesday 7 Oct 2026** in pay group "Weekly casuals", paid exactly as
+  Sione in PF2 (same rate, lines, KiwiSaver and ESCT rate), so the figures
+  are PF2's. PAYRUN-4, period 5 to 11 Oct 2026, pay date 14 Oct 2026. Her
+  line has the start date in field 5 because it's inside her pay period:
+
+  ```
+  DEI,100200301,Sina Fifita,M,20261007,,20261005,20261011,WK,3600,88000,0,0,0,14840,0,0,,0,0,0,3520,2555,525,0,0,0
+  ```
+
+  The payday filing card also lists her under "Starting in this pay
+  period": IRD wants a new employee's details (address and date of birth
+  if given) "on or before a new employee's first payday", and Tohyee
+  doesn't make the employee details file (decision 64), so they're entered
+  in myIR. Someone who started before the period (Sione) has field 5
+  blank.
+
+- **PF6 Due dates.** Due 2 working days after the pay date, skipping
+  Saturdays and Sundays (decision 63):
+
+  | Pay date | Shown as due | Note |
+  | --- | --- | --- |
+  | Wed 14 Oct 2026 | **Fri 16 Oct 2026** | |
+  | Fri 23 Oct 2026 | **Tue 27 Oct 2026** | Mon 26 Oct is Labour Day, so IRD's due date is Wed 28 Oct; Tohyee's is a day early, never late |
+  | Sat 24 Oct 2026 | **Tue 27 Oct 2026** | Monday and Tuesday are the 2 working days (again before counting Labour Day) |
+  | Fri 30 Oct 2026 | **Tue 3 Nov 2026** | |
+
+  The card says: "Due within 2 working days of the pay date (IRD). Public
+  holidays aren't counted yet, so if one falls in between, IRD's due date
+  is later." Paper filers' 10 working days aren't shown (a file is
+  electronic).
+
+- **PF7 Settings and refused files.** Making a file is refused, with what
+  to do, when:
+  - the pay run is a **draft** ("PAYRUN-5 is a draft, so it has no
+    employment information file. Approve it first.") or **voided**
+    ("PAYRUN-1 is voided, so it has no employment information file. If you
+    filed it, amend it in myIR.");
+  - the **payday filing settings** aren't filled in ("Set up payday
+    filing first: an admin enters the employer's IRD number and the
+    payroll contact under Payroll › Pay items.").
+  Saving the settings refuses: an employer IRD number that isn't 8 or 9
+  digits, or is all zeros; a contact name over 20 characters or with a
+  comma; a phone that isn't 1 to 12 letters and digits once spaces,
+  dashes, brackets and a leading + are dropped (`03 477 1234` →
+  `034771234`); an email over 60 characters, without `@` and a domain,
+  with two dots in a row, or with characters other than A-Z, a-z, 0-9,
+  @, -, _ and . (IRD's list). An 8-digit employer IRD number (`49-091-850`)
+  is written `049091850`. A comma in an employee's name becomes a
+  space, with spaces collapsed (last name typed "Tane, Jr" → "Kiri Tane
+  Jr"), because an approved pay run can't be changed (decision 60).
+
+- **PF8 Access, and nothing posted.** Making the file and reading the
+  settings need payroll access and the bookkeeper role (decision 6); Noah
+  (bookkeeper, no payroll access) gets "You need payroll access to see
+  payroll…" (403), Vic (viewer) 403. Only admins with payroll access change
+  the settings. Making a file posts no journal and changes nothing on the
+  pay run. It writes one audit event, "payroll_payday_filing.made", with
+  the pay run, file name, number of employee lines and the file's SHA-256,
+  never an amount or IRD number.
+
+- **PF9 Not built (refused rather than guessed).**
+  - The **employee details file** (HED2/DED/TED) for new and departing
+    employees (decision 64).
+  - **Amendments** to an EI already filed (the spec's EI amendments file,
+    3.5): amend in myIR. Voiding a pay run doesn't tell IRD.
+  - **Filing straight to IRD** (IRD's gateway services, as Xero does): it
+    needs IRD's onboarding as a software provider.
+  - Child support, SLCIR/SLBOR, payroll giving, extra pays (lump sum
+    indicator), schedular payments, the Employee Share Scheme and prior
+    period adjustments: Tohyee doesn't pay these yet (PRUN8), so their
+    fields are 0.
+
+### Questions for Jess (payday filing file)
+
+1. **Try a file in myIR.** Please run PF1's file (or a real pay run's)
+   through myIR's "Check your employment information file" service. It
+   checks things the spec's appendix (not read) defines: whether amounts
+   in cents without a decimal point, CR LF line endings, a final CR LF,
+   macrons in names and 3.5% KiwiSaver deductions are accepted.
+2. **Employee details file.** Do you want Tohyee to make it? That needs
+   employee addresses split into street, suburb, city and post code, a
+   mobile and a daytime phone, and each new employee's KiwiSaver
+   eligibility (NE, EE or EA) and status (AE, AK, OK, NK or CT).
+3. **One file per pay run** (decision 56), or one file per pay date
+   combining pay runs (IRD allows both)?
+4. **Employer IRD number** is its own setting. Should it start from the GST
+   number when that's set?
+5. **Hours paid** for salaried staff are 0 (decision 59). Would you rather
+   use their usual hours for the period?
+
 ## Holidays Act leave (examples not yet approved by Jess)
 
 **What gets built.** Tohyee builds this for the **Holidays Act 2003** as one
