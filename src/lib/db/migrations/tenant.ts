@@ -8655,7 +8655,7 @@ create trigger tax_codes_available_on_guard
 `,
   },
   {
-    version: "0051",
+    version: "0053",
     name: "crm_custom_fields",
     sql: `
 -- Custom fields on CRM records (CRMF1-CRMF9): people and opportunities get

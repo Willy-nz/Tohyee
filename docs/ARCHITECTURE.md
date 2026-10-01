@@ -679,7 +679,7 @@ Enforced by the app (and covered by tests):
   (manual journals only); a trigger checks every key is a field for that
   kind of record, and `src/lib/custom-fields/` checks types, options and
   required fields. They never reach posting, reports or the GST return.
-  `custom_field_sections` (tenant migration 0051) are named, ordered groups
+  `custom_field_sections` (tenant migration 0053) are named, ordered groups
   per kind of record (contact, document, person, opportunity); a field's
   `section_id` must be a section for its own kind (trigger). CRM people and
   opportunities have their own `custom_fields` column (kinds `person` and

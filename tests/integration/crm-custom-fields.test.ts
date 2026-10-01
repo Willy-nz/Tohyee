@@ -255,9 +255,9 @@ describeWithDatabase("custom fields on CRM records", () => {
     const client = new pg.Client({ connectionString: withDb(testDatabaseUrl!, database) });
     await client.connect();
     try {
-      const migration = tenantMigrations.find((entry) => entry.version === "0051")!;
+      const migration = tenantMigrations.find((entry) => entry.version === "0053")!;
       expect(migration.name).toBe("crm_custom_fields");
-      await applyMigrations(client, tenantMigrations.filter((entry) => entry.version < "0051"), "crmf-upgrade");
+      await applyMigrations(client, tenantMigrations.filter((entry) => entry.version < "0053"), "crmf-upgrade");
       await client.query(
         `insert into custom_fields (record, label, field_type, used_on) values
            ('contact', 'Channel', 'text', array['customer']), ('contact', 'Account no', 'text', array['supplier']),
