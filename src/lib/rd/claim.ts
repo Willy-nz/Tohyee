@@ -119,8 +119,6 @@ const NOT_COUNTED_ORDER: RdNotCountedReason[] = [
   "voided",
 ];
 
-export const RD_PAYROLL_NOTE = "Timesheets aren't built yet: pay counts only for employees whose cost allocation is 100% R&D.";
-
 const SIGNIFICANT_PERFORMER = dec("2000000");
 
 function emptyCategories(zero: string): Record<RdCategory, string> {

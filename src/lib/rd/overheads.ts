@@ -5,7 +5,9 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { addDays } from "@/lib/financial-year";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { add, cmp, dec, parseDecimalInput, sum, toFixedString } from "@/lib/money/decimal";
-import { rdShare } from "@/lib/rd/amounts";
+import { RD_OVERHEAD_BASES, RD_OVERHEAD_BASIS_CODES, rdShare, type RdOverheadBasis } from "@/lib/rd/amounts";
+
+export { RD_OVERHEAD_BASES, RD_OVERHEAD_BASIS_CODES, type RdOverheadBasis };
 import { iso, loadHistories, rdSettings, requireUuid, timeliness, timeZone, writeHistory, type HistoryEntry, type Timeliness } from "@/lib/rd/common";
 import { insertRdFile, listRdFiles, type RdFile } from "@/lib/rd/files";
 import type { RdActivityRef } from "@/lib/rd/register";
@@ -21,19 +23,6 @@ import { asRecord, optionalString, requireIdempotencyKey, requireOneOf, requireS
  * keeps its tag. Nothing is posted or tagged, and rules are never deleted:
  * changing one adds a rule that replaces it.
  */
-
-/** IR1240 p 15: "a percentage of time; floor area used for the R&D; days/units of usage; volume used; unit sales; dollar value; activity-based costing principles". */
-export const RD_OVERHEAD_BASES = {
-  time: "Percentage of time",
-  floor_area: "Floor area used for the R&D",
-  usage: "Days or units of usage",
-  volume: "Volume used",
-  unit_sales: "Unit sales",
-  dollar_value: "Dollar value",
-  activity_based_costing: "Activity-based costing",
-} as const;
-export type RdOverheadBasis = keyof typeof RD_OVERHEAD_BASES;
-export const RD_OVERHEAD_BASIS_CODES = Object.keys(RD_OVERHEAD_BASES) as RdOverheadBasis[];
 
 const HUNDRED = dec("100");
 

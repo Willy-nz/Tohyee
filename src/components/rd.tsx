@@ -37,7 +37,7 @@ import type { RdDocumentType, RdLine, RdTag, RdTagDetail } from "@/lib/rd/tags";
  * RD11-RD13, RD21-RD23): the activity register, approvals with their letters,
  * the tag picker used on bills, expense claims and journals, an asset's tax
  * depreciation and usage log, and tagged costs by activity and category. The
- * claim itself (limits, the minimum, the 15% credit) is stage R3.
+ * claim itself (limits, the minimum, the 15% credit) is in rd-claim.tsx (R3).
  */
 
 type ActivitiesResponse = { activities: RdActivity[]; yearEndMonth: number };
@@ -81,24 +81,24 @@ export function useRdActivities(organisationId: string | null, includeArchived =
   return useApiData<ActivitiesResponse>(organisationId ? "/api/rd/activities" : null, { organisationId, includeArchived: includeArchived ? "1" : null });
 }
 
-function activityText(activity: Pick<RdActivityRef, "code" | "name">): string {
+export function activityText(activity: Pick<RdActivityRef, "code" | "name">): string {
   return `${activity.code} ${activity.name}`;
 }
 
-function fileUrl(organisationId: string, fileId: string, download = false): string {
+export function fileUrl(organisationId: string, fileId: string, download = false): string {
   const query = new URLSearchParams({ organisationId });
   if (download) query.set("download", "1");
   return `/api/rd/files/${fileId}?${query.toString()}`;
 }
 
-async function postForm<T>(path: string, form: FormData): Promise<T> {
+export async function postForm<T>(path: string, form: FormData): Promise<T> {
   const response = await fetch(path, { method: "POST", body: form, credentials: "same-origin" });
   const payload = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
   if (!response.ok) throw new ApiError(payload?.error ?? `Upload failed (${response.status}).`, response.status);
   return payload as T;
 }
 
-function tooBig(file: File): string | null {
+export function tooBig(file: File): string | null {
   return file.size > MAX_FILE_BYTES ? `${file.name} is more than 10 MB. Files can be at most 10 MB.` : null;
 }
 
@@ -1372,8 +1372,8 @@ export function RdCostsView({ organisationId }: { organisationId: string }) {
   return (
     <>
       <Notice tone="info">
-        This lists what&apos;s tagged; it isn&apos;t the claim. The claim report (the minimum and maximum, the overseas limit and the 15% credit) comes
-        later. Payroll isn&apos;t tagged yet.
+        This lists what&apos;s tagged; it isn&apos;t the claim. The <Link href="/operations/rd/claim">R&amp;D claim report</Link> adds pay, overhead
+        rules, approvals, the overseas limit, the minimum and maximum, and the 15% credit.
       </Notice>
       <Card
         title={`Tagged R&D costs, ${data.incomeYearLabel} income year`}
