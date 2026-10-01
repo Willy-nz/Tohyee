@@ -149,7 +149,7 @@ describeWithDatabase("CRM record types and page layouts", () => {
     try {
       const migration = tenantMigrations.find((entry) => entry.version === "0059")!;
       expect(migration.name).toBe("crm_record_types");
-      expect(tenantMigrations.at(-1)?.version).toBe("0059");
+      expect(tenantMigrations.filter((entry) => entry.version === "0059")).toHaveLength(1);
       await applyMigrations(client, tenantMigrations.filter((entry) => entry.version < "0059"), "crt-upgrade");
       await client.query(
         `insert into contacts (command_source, idempotency_key, request_hash, name, is_customer) values ('api', 'k1', 'h', 'Old customer', true);

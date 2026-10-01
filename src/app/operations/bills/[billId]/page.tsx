@@ -19,6 +19,7 @@ import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { SupplierCreditNoteApplication } from "@/lib/supplier-credit-notes/applications";
 import type { SupplierCreditNoteSummary } from "@/lib/supplier-credit-notes/service";
+import { RdLineTags } from "@/components/rd";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 
 function journalHref(journalId: string): string {
@@ -398,6 +399,9 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
             setMessage(text);
           }}
         />
+      ) : null}
+      {bill.status === "approved" || bill.status === "voided" ? (
+        <RdLineTags key={`rd-${bill.status}`} organisationId={organisationId} documentType="bill" documentId={bill.id} />
       ) : null}
       <RecordExtrasPanel
         key={`${bill.status}-${message ?? ""}`}

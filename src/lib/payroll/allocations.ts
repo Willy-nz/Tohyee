@@ -12,7 +12,7 @@ import { asRecord, optionalId, requireArray, requireIdempotencyKey } from "@/lib
 /**
  * Employee cost allocation (examples PE3-PE6): where an employee's pay is
  * charged, split by % across Department, Class and Location values, a project
- * and (later, with the RDTI register) an R&D activity. Lines total exactly
+ * and an R&D activity from the RDTI register (R2). Lines total exactly
  * 100.00%. Each allocation starts on a date and is never changed; saving a
  * new one keeps the old, so moving someone between departments doesn't change
  * how their earlier pay was charged. Pay runs (P3) use `allocationOn` and
@@ -31,6 +31,8 @@ export type AllocationLine = {
   projectId: string | null;
   projectName: string | null;
   rdActivityId: string | null;
+  rdActivityCode: string | null;
+  rdActivityName: string | null;
 };
 
 export type CostAllocation = {
@@ -63,6 +65,8 @@ type LineRow = {
   project_id: string | null;
   project_name: string | null;
   rd_activity_id: string | null;
+  rd_activity_code: string | null;
+  rd_activity_name: string | null;
 };
 
 const ALLOCATION_COLUMNS = "id, employee_id, effective_from::text, created_at, created_by_email, request_hash";
@@ -82,12 +86,13 @@ async function loadAllocations(tx: OrgTx, rows: AllocationRow[]): Promise<CostAl
             l.class_id::text, c.name as class_name,
             l.location_id::text, lo.name as location_name,
             l.project_id::text, p.name as project_name,
-            l.rd_activity_id::text
+            l.rd_activity_id::text, r.code as rd_activity_code, r.name as rd_activity_name
        from payroll_cost_allocation_lines l
        left join tracking_values d on d.id = l.department_id
        left join tracking_values c on c.id = l.class_id
        left join tracking_values lo on lo.id = l.location_id
        left join projects p on p.id = l.project_id
+       left join rd_activities r on r.id = l.rd_activity_id
       where l.allocation_id = any($1::uuid[])
       order by l.allocation_id, l.line_number`,
     [rows.map((row) => row.id)],
@@ -107,6 +112,8 @@ async function loadAllocations(tx: OrgTx, rows: AllocationRow[]): Promise<CostAl
       projectId: line.project_id,
       projectName: line.project_name,
       rdActivityId: line.rd_activity_id,
+      rdActivityCode: line.rd_activity_code,
+      rdActivityName: line.rd_activity_name,
     });
     byAllocation.set(line.allocation_id, list);
   }
@@ -196,31 +203,43 @@ type ParsedLine = {
   classId: string | null;
   locationId: string | null;
   projectId: string | null;
+  rdActivityId: string | null;
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A line's R&D activity, from the RDTI register (R2). The pay run (P3) splits
+ * pay by these lines; for the R&D claim (R3) a default split counts only when
+ * the employee's allocation is 100% R&D, and otherwise needs a time record
+ * (decision 34; RD7). The allocation only records where pay is charged.
+ */
+function optionalRdActivity(input: unknown, label: string): string | null {
+  if (input === undefined || input === null || input === "") return null;
+  if (typeof input !== "string" || !UUID.test(input)) throw new ValidationError(`${label}: that isn't an R&D activity.`);
+  return input.toLowerCase();
+}
 
 function parseLines(input: unknown): ParsedLine[] {
   const lines = requireArray(input, "lines", 100).map((raw, index) => {
     const label = `Line ${index + 1}`;
     const line = asRecord(raw, label);
-    const rdActivity = line.rdActivityId;
-    if (rdActivity !== undefined && rdActivity !== null && rdActivity !== "") {
-      throw new ValidationError(`${label}: R&D activities come with the RDTI register, a later stage. Leave it empty for now.`);
-    }
     const parsed = {
       percentage: parseAllocationPercentage(line.percentage, label),
       departmentId: optionalId(line.departmentId, `${label} department`),
       classId: optionalId(line.classId, `${label} class`),
       locationId: optionalId(line.locationId, `${label} location`),
       projectId: optionalId(line.projectId, `${label} project`),
+      rdActivityId: optionalRdActivity(line.rdActivityId, label),
     };
-    if (!parsed.departmentId && !parsed.classId && !parsed.locationId && !parsed.projectId) {
-      throw new ValidationError(`${label} needs a Department, Class, Location or project.`);
+    if (!parsed.departmentId && !parsed.classId && !parsed.locationId && !parsed.projectId && !parsed.rdActivityId) {
+      throw new ValidationError(`${label} needs a Department, Class, Location, project or R&D activity.`);
     }
     return parsed;
   });
   const seen = new Map<string, number>();
   lines.forEach((line, index) => {
-    const same = [line.departmentId, line.classId, line.locationId, line.projectId].join("|");
+    const same = [line.departmentId, line.classId, line.locationId, line.projectId, line.rdActivityId].join("|");
     const earlier = seen.get(same);
     if (earlier !== undefined) {
       throw new ValidationError(`Line ${index + 1} is the same as line ${earlier + 1}. Combine them into one line.`);
@@ -275,6 +294,21 @@ async function checkLineTargets(tx: OrgTx, lines: ParsedLine[]): Promise<void> {
       if (project.status !== "in_progress") throw new ValidationError(`Line ${index + 1}: ${project.name} is closed.`);
     });
   }
+
+  const rdActivityIds = lines.map((line) => line.rdActivityId).filter((id): id is string => id !== null);
+  if (rdActivityIds.length > 0) {
+    const activities = await tx.query<{ id: string; code: string; status: string }>(
+      "select id::text, code, status from rd_activities where id = any($1::uuid[]) for share",
+      [rdActivityIds],
+    );
+    const found = new Map(activities.rows.map((row) => [row.id, row]));
+    lines.forEach((line, index) => {
+      if (line.rdActivityId === null) return;
+      const activity = found.get(line.rdActivityId);
+      if (!activity) throw new ValidationError(`Line ${index + 1}: that R&D activity wasn't found.`);
+      if (activity.status !== "active") throw new ValidationError(`Line ${index + 1}: ${activity.code} is archived.`);
+    });
+  }
 }
 
 /** Saves a new allocation from `effectiveFrom` (PE3-PE6); earlier ones stay as they were. */
@@ -319,9 +353,9 @@ export async function addAllocation(
     throw new ConflictError("The cost allocation couldn't be saved. Try again with a new idempotency key.");
   }
   await tx.query(
-    `insert into payroll_cost_allocation_lines (allocation_id, line_number, percentage, department_id, class_id, location_id, project_id)
-     select $1, n, p, d, c, l, pr
-       from unnest($2::int[], $3::numeric[], $4::bigint[], $5::bigint[], $6::bigint[], $7::bigint[]) as t(n, p, d, c, l, pr)`,
+    `insert into payroll_cost_allocation_lines (allocation_id, line_number, percentage, department_id, class_id, location_id, project_id, rd_activity_id)
+     select $1, n, p, d, c, l, pr, rd
+       from unnest($2::int[], $3::numeric[], $4::bigint[], $5::bigint[], $6::bigint[], $7::bigint[], $8::uuid[]) as t(n, p, d, c, l, pr, rd)`,
     [
       row.id,
       lines.map((_, index) => index + 1),
@@ -330,6 +364,7 @@ export async function addAllocation(
       lines.map((line) => line.classId),
       lines.map((line) => line.locationId),
       lines.map((line) => line.projectId),
+      lines.map((line) => line.rdActivityId),
     ],
   );
   await writeAuditEvent(tx, {

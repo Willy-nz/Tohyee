@@ -15,7 +15,7 @@
 - Code that runs in the browser may import **types** from server modules, but
   **values** only from browser-safe modules (`money/decimal`, `money/currency`, `money/fx`, `fx/rate-text`,
   `accounts/types`, `auth/roles`, `tax/categories`, `tax/exports`, `tax/purchase-defaults`, `tax/available-on`, `contacts/countries`, `invoices/amounts`,
-  `bills/accounts`, `customers/terms`, `repeating/schedule`, `repeating/bill-rules`, `reports/gst-boxes`, `items/pricing`, `budgets/fill`, `fixed-assets/depreciation`, `projects/amounts`, `import/fields`, `financial-year`, `format`, `errors`, `documents/format`,
+  `bills/accounts`, `rd/amounts`, `customers/terms`, `repeating/schedule`, `repeating/bill-rules`, `reports/gst-boxes`, `items/pricing`, `budgets/fill`, `fixed-assets/depreciation`, `projects/amounts`, `import/fields`, `financial-year`, `format`, `errors`, `documents/format`,
   `documents/tax-invoice`, `email/addresses`, `email/templates`).
 
 ## Organisation data

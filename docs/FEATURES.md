@@ -46,8 +46,8 @@ that something happened.
   frequency) and employee groups. **Pay rate history**: salary or hourly rate
   from a date, kept for ever; the current rate is the one in effect today.
   **Cost allocation**: where each employee's pay is charged, split by % across
-  Department, Class, Location and a project (an R&D activity comes with the
-  RDTI register), totalling exactly 100.00%, from a date, keeping the history;
+  Department, Class, Location, a project and an R&D activity from the R&D
+  register, totalling exactly 100.00%, from a date, keeping the history;
   the employee list shows each person's primary department. Splitting an amount
   shares out the cents so the parts always add back to the whole. **Payroll
   access**: only members an admin has given it to (bookkeeper or higher) can
@@ -870,6 +870,31 @@ that something happened.
   Refused rather than guessed: STC and WT tax codes, other pay frequencies,
   pay dates outside those two years, ESCT threshold amounts between IRD's
   bands. There's no screen, and nothing uses them yet: pay runs come next.
+
+- **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
+  RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;
+  decisions 30-50): Tax › R&D activities lists each organisation's core and
+  supporting activities (project, IR1240's descriptions, income years, New
+  Zealand or overseas, and the core activities a supporting one supports).
+  Bookkeepers add and change them; admins archive them, never delete them.
+  General approvals are entered with IRD's letter attached (required) and
+  show "not checked with IRD"; a later change to an approved activity is
+  flagged. Files on R&D records are replaced with a new version, never
+  deleted. Posted bill, expense claim, spend money and manual journal lines
+  are tagged to an activity from the document's page (or Tax › Tagged R&D
+  costs) with a share %, an IR1240 category or an ineligible reason, the
+  supplementary return flags, goods not used by year end and a contractor's
+  own ineligible costs. GST, exchange gains and losses, income and balance
+  sheet lines can't be tagged; foreign-currency lines use the document's
+  rate. A fixed asset's tax depreciation and Investment Boost are entered
+  per income year and split by a usage log of hours, R&D shares rounded down
+  to the cent. Everything is stamped by the server with who and when, kept
+  in its history, and flagged "entered late" when entered more than 14 days
+  after the work. Tagged R&D costs lists what's tagged by activity and
+  category for an income year. Not built: the claim report (limits, the
+  minimum, overhead apportionment, the 15% credit, supplementary return
+  figures), tagging payroll and timesheets, reminders, criteria and
+  methodologies approvals, and purging files after 7 years.
 
 ## Not built yet, on purpose
 

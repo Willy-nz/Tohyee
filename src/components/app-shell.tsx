@@ -191,6 +191,13 @@ const MENUS: Menu[] = [
           { href: "/operations/tax", label: "Tax codes" },
         ],
       },
+      {
+        heading: "R&D Tax Incentive",
+        links: [
+          { href: "/operations/rd", label: "R&D activities" },
+          { href: "/operations/rd/costs", label: "Tagged R&D costs" },
+        ],
+      },
     ],
   },
   {
@@ -249,7 +256,7 @@ const AREAS: Record<string, string[]> = {
     "/operations/settings",
     "/operations/members",
   ],
-  Tax: ["/operations/gst-return", "/operations/gst-audit", "/operations/tax"],
+  Tax: ["/operations/gst-return", "/operations/gst-audit", "/operations/tax", "/operations/rd"],
   Contacts: ["/operations/contacts", "/operations/customer-statements"],
 };
 

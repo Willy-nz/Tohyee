@@ -55,6 +55,12 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ payroll_cost_allocations, payroll_cost_allocation_lines   where pay is charged, split by % from a date (append-only; lines total 100.00%)
 ├─ payroll_pay_groups, payroll_employee_groups   pay groups (with a pay frequency) and employee groups for reporting
 ├─ payroll_access           who has payroll access, by core user id (grants and removals in audit_events)
+├─ rd_activities, rd_activity_supports   the R&D activity register (archived, never deleted) and which core activities each supporting one supports
+├─ rd_approvals, rd_approval_activities   general approvals from IRD and the activities they cover (withdrawn, never deleted)
+├─ rd_files               files on R&D records (append-only; a new version replaces, never deletes)
+├─ rd_tags                one tag per posted cost line: activity, share, category or ineligible reason (removed, never deleted)
+├─ rd_asset_tax_depreciation, rd_asset_usage   a fixed asset's tax depreciation per income year (append-only) and its usage log
+├─ rd_history             every version of every R&D record, stamped by the database (append-only)
 ├─ fixed_asset_types, fixed_assets, fixed_asset_numbering   the fixed asset register (archived, never deleted)
 ├─ fixed_asset_depreciation_runs, fixed_asset_disposals, fixed_asset_depreciation_lines   depreciation runs and disposals, and the months each charged
 ├─ projects, project_tasks, project_time_entries, project_expenses   projects, their tasks, time (whole minutes) and linked expense lines (post nothing; never deleted)
@@ -250,9 +256,9 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, sales orders (with their invoices), repeating invoices, repeating bills and purchase orders, projects (with profitability, the time report and staff cost rates); print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add and archive exchange rates; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept (as an invoice or a sales order), decline, copy and delete draft quotes; save, approve, invoice, close, cancel and delete draft sales orders; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add notes and files, and edit, delete or remove their own |
-| admin | + approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, closing a month with checks that need attention (after confirming) and reopening months (with a reason) on Period close, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
+| viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, sales orders (with their invoices), repeating invoices, repeating bills and purchase orders, projects (with profitability, the time report and staff cost rates), the R&D activity register, tags and tagged R&D costs; print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
+| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add and archive exchange rates; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept (as an invoice or a sales order), decline, copy and delete draft quotes; save, approve, invoice, close, cancel and delete draft sales orders; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add and change R&D activities, enter approvals, tag lines to R&D activities, enter assets' tax depreciation and log their use, and add or replace R&D files; add notes and files, and edit, delete or remove their own |
+| admin | + archive and restore R&D activities and withdraw R&D approvals; approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, closing a month with checks that need attention (after confirming) and reopening months (with a reason) on Period close, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
 **Payroll access** is a separate permission, not a role (examples PE9-PE12).
@@ -933,6 +939,26 @@ Enforced by the app (and covered by tests):
   truncate as IRD's rules say, using `truncate` and `divideTruncated` in
   `money/decimal.ts`. Adding a year is a new data file: see the README in
   that folder. Nothing calls them yet; pay runs (P3) will.
+- R&D Tax Incentive records (RDTI stage R2, `src/lib/rd/`, migration 0060)
+  post nothing and change no amount. They're contemporaneous records
+  (decision 38), so the database does the stamping: `created_at` and
+  `updated_at` come from `now()` in triggers whatever an insert says, the
+  user comes from the session (`tx.actor`), and every version goes to
+  `rd_history` (append-only, its time forced by the database). A tag's
+  line, work date (the document's date) and line amount can't change; the
+  "entered late" flag compares the day it was entered, in the business time
+  zone, with the work date (more than 14 days). Tags point at bill lines,
+  expense claim receipts, spend money lines and journal lines through
+  nullable columns checked by a trigger (`tohyee_check_rd_tag_source`)
+  rather than foreign keys, as fixed assets do, so those tables keep their
+  own protections. Amounts come from the documents in base currency at the
+  document's rate, excluding GST; shares use `divideTruncated` so they're
+  rounded down to the cent. `rd_files` keeps every version (no delete; a
+  replacement points back at the version it replaced; decision 45). Approvals
+  need at least one activity and an approval letter, checked by a deferred
+  constraint trigger. `payroll_cost_allocation_lines.rd_activity_id` is a
+  foreign key to `rd_activities`. R&D screens aren't behind payroll access
+  and never show an individual's pay.
 - Dates are plain `YYYY-MM-DD` strings end to end (the `pg` DATE parser is
   overridden), so there are no time-zone shifts.
 
