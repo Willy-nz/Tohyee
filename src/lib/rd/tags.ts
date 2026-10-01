@@ -45,7 +45,7 @@ const SOURCE_COLUMN: Record<RdSourceType, string> = {
 };
 
 /** System accounts whose lines are never R&D costs: GST (LY 1(6)), exchange gains and losses (decision 42), control accounts. */
-const UNTAGGABLE_SYSTEM_KEYS = new Set([
+export const UNTAGGABLE_SYSTEM_KEYS = new Set([
   "bank",
   "accounts_receivable",
   "accounts_payable",
@@ -81,16 +81,16 @@ const MANUAL_JOURNAL = `(j.origin = 'manual' or (j.origin = 'correction' and j.c
  * journal line's is its debit (journals are in the base currency). `usable`
  * is false for drafts and voided or reversed documents.
  */
-const SOURCES = `(
+export const SOURCES = `(
   select 'bill_line'::text as source_type, l.id as line_id, 'bill'::text as document_type, b.id as document_id,
          'Bill ' || coalesce(b.supplier_invoice_number, '#' || b.id) as document_label, c.name as contact_name, b.bill_date as posted_on,
-         l.description, a.code as account_code, a.name as account_name, a.account_type, a.account_class, a.system_key,
+         l.description, a.id as account_id, a.code as account_code, a.name as account_name, a.account_type, a.account_class, a.system_key,
          coalesce(l.base_net_amount, l.net_amount) as amount, b.currency_code, l.net_amount as document_amount, b.exchange_rate,
          b.status = 'approved' as usable, b.status as document_status
     from bill_lines l join bills b on b.id = l.bill_id join contacts c on c.id = b.contact_id join accounts a on a.id = l.account_id
   union all
   select 'expense_claim_receipt', r.id, 'expense_claim', x.id, 'Expense claim CLAIM-' || x.id, r.supplier_name, coalesce(x.claim_date, r.receipt_date),
-         r.description, a.code, a.name, a.account_type, a.account_class, a.system_key,
+         r.description, a.id, a.code, a.name, a.account_type, a.account_class, a.system_key,
          r.net_amount, null, r.net_amount, null,
          x.status = 'approved' and not exists (select 1 from ledger_journals rv where rv.related_journal_id = x.approval_journal_id and rv.correction_kind = 'reversal'),
          case when exists (select 1 from ledger_journals rv where rv.related_journal_id = x.approval_journal_id and rv.correction_kind = 'reversal')
@@ -98,14 +98,14 @@ const SOURCES = `(
     from expense_claim_receipts r join expense_claims x on x.id = r.claim_id join accounts a on a.id = r.account_id
   union all
   select 'bank_transaction_line', l.id, 'bank_transaction', t.id, 'Spend money' || coalesce(' ' || t.reference, ' #' || t.id), c.name, t.transaction_date,
-         l.description, a.code, a.name, a.account_type, a.account_class, a.system_key,
+         l.description, a.id, a.code, a.name, a.account_type, a.account_class, a.system_key,
          coalesce(l.base_net_amount, l.net_amount), t.currency_code, l.net_amount, t.exchange_rate,
          t.kind = 'spend' and t.status = 'posted', case when t.kind = 'spend' then t.status else 'receive money' end
     from bank_transaction_lines l join bank_transactions t on t.id = l.bank_transaction_id
     join contacts c on c.id = t.contact_id join accounts a on a.id = l.account_id
   union all
   select 'journal_line', l.id, 'journal', j.id, 'Journal #' || j.id || ' ' || j.reference, null, j.posting_date,
-         coalesce(l.description, j.description, j.reference), a.code, a.name, a.account_type, a.account_class, a.system_key,
+         coalesce(l.description, j.description, j.reference), a.id, a.code, a.name, a.account_type, a.account_class, a.system_key,
          l.debit_amount, null, l.debit_amount, null,
          ${MANUAL_JOURNAL} and not exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal'),
          case when exists (select 1 from ledger_journals r where r.related_journal_id = j.id and r.correction_kind = 'reversal') then 'reversed'

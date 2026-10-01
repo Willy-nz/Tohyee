@@ -14,7 +14,7 @@ import { requireId, requireIdempotencyKey, requireOneOf } from "@/lib/validation
  * stays, with who replaced it and when) but never deleted.
  */
 
-export const RD_FILE_RECORD_TYPES = ["activity", "approval", "tag", "asset"] as const;
+export const RD_FILE_RECORD_TYPES = ["activity", "approval", "tag", "asset", "overhead_rule"] as const;
 export type RdFileRecordType = (typeof RD_FILE_RECORD_TYPES)[number];
 export const RD_FILE_PURPOSES = ["approval_letter", "contractor_statement", "workings", "other"] as const;
 export type RdFilePurpose = (typeof RD_FILE_PURPOSES)[number];
@@ -72,9 +72,9 @@ export async function requireFileRecord(tx: OrgTx, recordTypeInput: unknown, rec
     return { recordType, recordId };
   }
   const recordId = requireUuid(recordIdInput, "recordId");
-  const table = { activity: "rd_activities", approval: "rd_approvals", tag: "rd_tags" }[recordType];
+  const table = { activity: "rd_activities", approval: "rd_approvals", tag: "rd_tags", overhead_rule: "rd_overhead_rules" }[recordType];
   const found = await tx.query(`select 1 from ${table} where id = $1`, [recordId]);
-  if (!found.rows[0]) throw new NotFoundError(`That R&D ${recordType} doesn't exist.`);
+  if (!found.rows[0]) throw new NotFoundError(`That R&D ${recordType === "overhead_rule" ? "overhead rule" : recordType} doesn't exist.`);
   return { recordType, recordId };
 }
 

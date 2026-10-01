@@ -542,6 +542,8 @@ const ACTION_LABELS: Record<HistoryEntry["action"], string> = {
   withdrawn: "Withdrawn",
   removed: "Removed",
   replaced: "Replaced",
+  ended: "Ended",
+  exported: "Exported",
 };
 
 function HistoryCard({ history, title = "History" }: { history: HistoryEntry[]; title?: string }) {
