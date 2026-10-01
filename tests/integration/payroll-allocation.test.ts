@@ -597,5 +597,7 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PE3
     expect(new Set(versions).size).toBe(versions.length);
     expect(versions.indexOf("0057")).toBeGreaterThan(versions.indexOf("0051"));
     expect(versions.indexOf("0051")).toBeGreaterThanOrEqual(0);
+    // Payroll P3 (0058, pay runs) builds on 0057.
+    expect(versions.indexOf("0058")).toBeGreaterThan(versions.indexOf("0057"));
   });
 });

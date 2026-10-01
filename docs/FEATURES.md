@@ -51,10 +51,9 @@ that something happened.
   the employee list shows each person's primary department. Splitting an amount
   shares out the cents so the parts always add back to the whole. **Payroll
   access**: only members an admin has given it to (bookkeeper or higher) can
-  see or change any of this; the first owner has it to start with. Pay
-  calculation, pay runs (which will use the allocation and rate in effect),
-  approval, payment, payslips, payday filing, payroll reports and Holidays Act
-  leave are not built.
+  see or change any of this; the first owner has it to start with. Pay runs
+  are below; paying wages and IRD, payslips, payday filing, payroll reports
+  and Holidays Act leave are not built.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
@@ -869,7 +868,40 @@ that something happened.
   rows of IRD's PAYE deduction tables IR340 and IR341, which match exactly.
   Refused rather than guessed: STC and WT tax codes, other pay frequencies,
   pay dates outside those two years, ESCT threshold amounts between IRD's
-  bands. There's no screen, and nothing uses them yet: pay runs come next.
+  bands. There's no screen of their own; pay runs (below) use them.
+- **NZ payroll pay items and pay runs** (payroll stage P3, PRUN1-PRUN11, not
+  yet approved by Jess; everything needs payroll access and the bookkeeper
+  role, reading too). **Pay items** (Payroll › Pay items): ordinary time,
+  overtime (a multiple of the hourly rate), allowances (taxable or not),
+  holiday pay typed as an amount, reimbursements, after-tax deductions (e.g.
+  union fees) and the employer's KiwiSaver contribution, each with its own
+  account and its tax treatment (taxable items are subject to PAYE, the ACC
+  earners' levy and student loan together; whether it counts for KiwiSaver).
+  Every organisation starts with a set mapped to its chart (wages 6200,
+  employer KiwiSaver 6210, and new liability accounts PAYE payable 2200,
+  KiwiSaver payable, ESCT payable, Student loan payable, Wages payable and
+  Payroll deductions payable at the next free codes); admins add more and
+  archive them. **Pay runs** (Payroll › Pay runs): a draft for a pay group,
+  period and pay date with a line per employee working in the period, from
+  their pay rate (salary per period, or hours for hourly staff); add or change
+  earnings and deductions per person. Each person's gross, PAYE, student
+  loan, KiwiSaver, deductions, net pay, employer KiwiSaver, ESCT and employer
+  cost, and the run's totals, are worked out with IRD's rates for the pay
+  date; anyone whose pay can't be worked out is shown with the reason, and the
+  run can't be approved until it's fixed. **Approve** posts one journal dated
+  the pay date: each earnings and employer KiwiSaver item to its account,
+  split by each person's cost allocation on the pay date (cents exact), with
+  PAYE, student loan, KiwiSaver (employee plus employer net of ESCT), ESCT,
+  deductions and net wages credited to their liability accounts. Journal
+  lines show totals by account and tracking, never a person; the per-person
+  split is kept separately for people with payroll access. Locked and closed
+  periods are respected, and an organisation can require someone other than
+  the preparer to approve. Approved pay runs can't be changed, only voided
+  with a reversing journal. Refused rather than guessed: bonuses and other
+  extra pays, back pay, final pays, leave, child support, payroll giving,
+  negative amounts, pay rate changes inside a period, tax codes and
+  KiwiSaver rates IRD's rates don't support, and employer contributions
+  other than KiwiSaver.
 
 - **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
   RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;
@@ -954,9 +986,9 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: pay runs, paying, payslips, payday filing and Holidays Act
-   leave (IRD rates and the PAYE, student loan, KiwiSaver and ESCT
-   calculations are built; employee records are in #62).
+4. NZ payroll: paying wages and IRD, payslips, payday filing, Holidays Act
+   leave, timesheets and payroll reports (employee records, IRD rates and
+   calculations, pay items and pay runs are built).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,

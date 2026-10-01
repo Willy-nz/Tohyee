@@ -97,8 +97,10 @@ const MENUS: Menu[] = [
     groups: [
       {
         links: [
+          { href: "/operations/payroll/pay-runs", label: "Pay runs", minRole: "bookkeeper" },
           { href: "/operations/payroll/employees", label: "Employees", minRole: "bookkeeper" },
           { href: "/operations/payroll/groups", label: "Pay groups and employee groups", minRole: "bookkeeper" },
+          { href: "/operations/payroll/pay-items", label: "Pay items", minRole: "bookkeeper" },
           { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
         ],
       },

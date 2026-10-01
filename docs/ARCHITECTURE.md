@@ -55,6 +55,9 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ payroll_cost_allocations, payroll_cost_allocation_lines   where pay is charged, split by % from a date (append-only; lines total 100.00%)
 ├─ payroll_pay_groups, payroll_employee_groups   pay groups (with a pay frequency) and employee groups for reporting
 ├─ payroll_access           who has payroll access, by core user id (grants and removals in audit_events)
+├─ payroll_pay_items        pay items: earnings, after-tax deductions and employer KiwiSaver, each with its account and tax treatment (archived, never deleted)
+├─ payroll_pay_runs, payroll_pay_run_employees, payroll_pay_run_lines   pay runs: drafts, then approved (with a snapshot of each person's pay) or voided; frozen once approved
+├─ payroll_pay_run_postings  how each approved pay run's earnings and employer KiwiSaver were split per employee by allocation, and which journal line each went to (append-only; payroll access only)
 ├─ rd_activities, rd_activity_supports   the R&D activity register (archived, never deleted) and which core activities each supporting one supports
 ├─ rd_approvals, rd_approval_activities   general approvals from IRD and the activities they cover (withdrawn, never deleted)
 ├─ rd_files               files on R&D records (append-only; a new version replaces, never deletes)
@@ -272,8 +275,27 @@ can't lose it, and someone removed from the
 organisation and added again starts without it. Every payroll service calls
 `requirePayrollAccess(tx)` (`src/lib/payroll/access.ts`) first, and payroll
 routes use `withPayrollAccess()` (`src/lib/api/http.ts`: bookkeeper and
-payroll access); pay runs and payroll reports must do the same. Audit
+payroll access); pay runs do, and payroll reports must too. Audit
 details for payroll never include IRD numbers, bank accounts or pay amounts.
+
+**Pay runs** (payroll stage P3, examples PRUN1-PRUN11) live in
+`src/lib/payroll/pay-runs.ts`, with pay items and the approver setting in
+`pay-items.ts`. One person's pay is worked out by the pure
+`calculateEmployeePay()` (`pay-calculation.ts`), which calls the P2
+calculations with the rates in effect on the pay date (decision 1). A draft
+is calculated live from each person's current details; approving stores a
+snapshot of every figure on `payroll_pay_run_employees`, and triggers then
+refuse changes to the run, its people and its lines. Approving posts one
+journal (origin `payroll`, dated the pay date) through the ledger service, so
+locks and period close apply as for any journal; earnings and employer
+KiwiSaver are split with `allocationOn()` and `splitByPercentages()` per
+person, then summed per pay item, account, tracking and project, so journal
+lines never name or single out a person (decision 6). The per-person split is
+kept in `payroll_pay_run_postings`, readable only with payroll access. Voiding
+posts a reversing journal; payroll journals can't be corrected through the
+general ledger. When the organisation turns on
+`payroll_approver_must_differ`, anyone who created or changed a draft
+(`prepared_by_user_ids`) can't approve it.
 
 People who aren't members get "not found", so organisation IDs can't be
 probed. Every audit record stores the signed-in user, never a name typed into
@@ -938,7 +960,7 @@ Enforced by the app (and covered by tests):
   KiwiSaver, ESCT) are pure functions (no database, no network) and
   truncate as IRD's rules say, using `truncate` and `divideTruncated` in
   `money/decimal.ts`. Adding a year is a new data file: see the README in
-  that folder. Nothing calls them yet; pay runs (P3) will.
+  that folder. Pay runs (P3) call them through `calculateEmployeePay()`.
 - R&D Tax Incentive records (RDTI stage R2, `src/lib/rd/`, migration 0060)
   post nothing and change no amount. They're contemporaneous records
   (decision 38), so the database does the stamping: `created_at` and
