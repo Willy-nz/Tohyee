@@ -488,3 +488,103 @@ in `docs/sources/`.
     see employee related costs per activity and the "default split" total
     (decision 6 accepts a total that's one person's pay; RD33). Overhead
     rules are set by bookkeepers and above, like tags.
+
+## Timesheets, payroll stage P9 (examples TS1-TS11)
+
+Made 2 Oct 2026 by Claude while building P9, by the rule law → NetSuite →
+Xero (decisions 76-90 are kept for the CRM branch). Sources: Holidays Act
+2003 s 81(2)(c) ("the number of hours worked each day in a pay period and
+the pay for those hours", `docs/sources/holidays-act-2003.md`); Employment
+NZ's [Record-keeping](https://www.employment.govt.nz/starting-employment/rights-and-responsibilities/record-keeping)
+page (last modified 6 Nov 2025, read 2 Oct 2026: "the days the employee
+worked and the number of hours worked on those days", kept 6 years, and
+employees can see them; the Employment Relations Act s 130 itself wasn't
+read **(unverified)**); IR1240 p 64 and p 100 (`docs/sources/ir1240-pages-49-on.md`);
+NetSuite's [Approving or Rejecting a Time Transaction](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N907404.html)
+and [Weekly Timesheets](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4671374137.html);
+Xero's [payroll timesheets](https://www.xero.com/nz/accounting-software/payroll/timesheet/)
+page (all read 2 Oct 2026).
+
+91. **Timesheets are their own record that names the same projects, not
+    project time entries.** NetSuite has one time record for project
+    billing and payroll, but Tohyee's project time follows Xero Projects
+    (PJ3): it belongs to a member (a login), needs a task, can be changed
+    until it's invoiced and keeps no history, while payroll needs hours per
+    employee per day (s 81(2)(c)), for people without a login, against a
+    Department or R&D activity as well, stamped and never overwritten (IR1240
+    p 100). Changing project time's rules would change PJ1-PJ13. Xero keeps
+    payroll timesheets apart from Projects time too. What's reused: the
+    projects (and the Department and R&D activity lists) as rows, and "Fill
+    from project time", which suggests a week's rows from the linked
+    member's project time (TS2). Whether approved project hours should also
+    become project time is a question for Jess.
+92. **One timesheet per employee per week, Monday to Sunday.** NetSuite's
+    weekly timesheets start on its "first day of week" preference; Tohyee
+    has no such setting, so the ISO week (Monday) is used. A pay period
+    uses each day of the weeks it overlaps (TS6).
+93. **Hours are decimals to 2 places**, more than 0 and at most 24 an
+    entry, and a day's rows at most 24 together, through
+    `src/lib/money/decimal.ts`. A row is an R&D activity, a Department, a
+    project, any combination of them, or "other work" (spread by the
+    default allocation). The pay run's line quantity and IRD's "hours paid"
+    are already hundredths of an hour (decision 57).
+94. **The database stamps every entry** with who entered it and when
+    (`entered_at` is set by PostgreSQL and can't be typed or changed). A
+    change marks the old entry "replaced" and adds a new one; clearing a
+    cell marks it "removed"; nothing is deleted. Entries are flagged
+    "entered late" more than 14 days after the work (decision 38) and still
+    count. IR1240 p 100: records "kept on a contemporaneous or timely
+    basis" and apportionment "supported by an audit trail".
+95. **Employees fill in their own timesheets without payroll access**,
+    deliberately: an employee linked to a member's login (any role,
+    viewers included) can enter and submit their own; people with payroll
+    access can for anyone. Timesheets show hours only, never a rate or an
+    amount, so no pay detail reaches someone without payroll access
+    (decision 6). Employment NZ: employees can see their records. Linking
+    a login and choosing the approver need payroll access.
+96. **Who approves: the employee's timesheet approver, else the member
+    linked to their reports-to manager, and anyone with payroll access;
+    never their own.** NetSuite: "If no time approver is selected, then the
+    employee's supervisor approves time entries". An approver needs the
+    bookkeeper role or higher (approving changes where pay is charged).
+    Approvers can't change hours: they reject with a reason (NetSuite:
+    "Time approvers can't edit or delete existing time entries"; Xero lets
+    them correct, a question for Jess).
+97. **Draft → submitted → approved, rejected back to draft with a reason;
+    an approved timesheet is reopened only by someone with payroll access,
+    and never once a pay run that isn't voided has used it** (the database
+    refuses it). Submitted and approved timesheets can't change. Approving
+    posts nothing; its effect is on pay runs approved afterwards and the R&D
+    claim. Every step is in the timesheet's history and the audit log.
+98. **Pay runs split cost by approved timesheets for the days they cover,
+    and by the default allocation for the rest** (TS5, TS6). The
+    timesheets are the ones approved when the pay run is approved; covered
+    days are the pay period's days in their weeks, by calendar day; the
+    weights are c × hours × 100 per row and ((P − c) × H + c × other
+    hours) × % per allocation line; amounts are split with PE3's
+    largest-remainder rule. The pay run keeps the shares (source, hours,
+    weight, tags, R&D activity) and the timesheets it used. PAYE, KiwiSaver,
+    student loan and ESCT aren't touched. A Department, Class or Location
+    the organisation requires on expense lines is still required, so a row
+    without a Department in such an organisation stops the pay run with
+    the reason.
+99. **Approved timesheets give hourly employees their Ordinary time hours
+    when every day of the pay period is covered** (TS8), when the draft is
+    made. Xero: approved timesheets are "ready for your pay runs"; NetSuite's
+    payroll adds approved time to paychecks. Only Ordinary time (overtime
+    depends on the agreement, and leave is P8); salaried pay is never
+    changed; a part-covered period uses the usual hours.
+100. **For the R&D claim, timesheet hours are the time record.** A pay's
+     R&D share from a timesheet is the cost × that activity's weight ÷ all
+     weights, rounded down to the cent (decision 50), and counts whatever
+     the %; the share from the default allocation for uncovered days still
+     counts only when the allocation is 100% R&D (decision 34). The claim
+     reads the shares the pay run kept, so a timesheet approved after the
+     pay was posted doesn't change it (decision 37): it's listed by name
+     for people with payroll access, as a count for others. Pay runs
+     approved before this version keep R3's way (decision 67). The R3
+     screen's "Timesheets aren't built yet" note is replaced.
+101. **A pay run posting's percentage is kept to 4 decimal places** (it was
+     2), since a timesheet's share of a pay (36 of 80 hours = 45%, but 6.5
+     of 36.5 = 17.8082…%) is rarely a whole hundredth; the amounts are
+     split from the exact weights, so the percentage is for display only.
