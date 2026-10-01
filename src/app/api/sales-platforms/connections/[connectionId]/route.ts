@@ -3,7 +3,7 @@ import { disconnectStore, updateConnectionSettings } from "@/lib/sales-platforms
 
 type Context = { params: Promise<{ connectionId: string }> };
 
-/** Chooses what to sync (admins). */
+/** Chooses what to sync and the posting settings (admins, SPC22). */
 export const PATCH = route<Context>(async (request, context) => {
   const { connectionId } = await context.params;
   const body = await readJson(request);

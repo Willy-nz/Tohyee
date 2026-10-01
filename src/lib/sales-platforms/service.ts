@@ -1,23 +1,35 @@
 import { randomBytes } from "node:crypto";
+import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { writeAuditEvent } from "@/lib/audit";
+import { createBankAccount } from "@/lib/bank/accounts";
 import { createContact, updateContact } from "@/lib/contacts/service";
+import { parseOptionalIsoDate } from "@/lib/dates";
 import { type Actor, type OrgTx, assertOrganisationUsable, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ConflictError, HttpError, NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
+import { isCountryCode } from "@/lib/contacts/countries";
 import { ITEM_CODE_PATTERN, createItem, updateItem } from "@/lib/items/service";
-import { dec, toPlainString } from "@/lib/money/decimal";
+import { cmp, dec, divideTruncated, isPositive, mul, parseDecimalInput, toPlainString } from "@/lib/money/decimal";
 import { listAllOrganisations } from "@/lib/organisations/admin";
+import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { type OrganisationRecord, getOrganisation, parseOrganisationId } from "@/lib/organisations/registry";
 import {
   type AccessToken,
   type ConnectorContext,
+  type OrdersResult,
+  type PayoutsResult,
   type PlatformCustomer,
   type PlatformVariant,
   PlatformError,
   type SalesPlatformConnector,
 } from "@/lib/sales-platforms/connector";
+import { writeLog } from "@/lib/sales-platforms/log";
 import { itemNameFor, mergeField, priceCopyable } from "@/lib/sales-platforms/merge";
+import { startOfLocalDate } from "@/lib/sales-platforms/orders";
+import { type PostingContext, loadPosting, ordersToRetry, postOrder, postPayout, postedPayoutIds } from "@/lib/sales-platforms/posting";
 import { shopifyConnector } from "@/lib/sales-platforms/shopify";
 import {
+  ORDER_SCOPE,
+  PAYOUT_SCOPES,
   SALES_PLATFORMS,
   SALES_PLATFORM_LABELS,
   type SalesPlatform,
@@ -27,13 +39,15 @@ import {
   type SyncResult,
 } from "@/lib/sales-platforms/types";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
-import { optionalBoolean, requireId, requireOneOf } from "@/lib/validation";
+import { asRecord, optionalBoolean, optionalString, requireArray, requireId, requireOneOf } from "@/lib/validation";
 
 /**
- * Sales platform connections (examples SPC1-SPC10 in
+ * Sales platform connections (examples SPC1-SPC23 in
  * docs/ACCOUNTING-EXAMPLES.md): connecting a store, the catch-up sync,
  * webhooks and disconnecting. Customers become contacts and products'
- * variants become items; nothing here posts to the ledger.
+ * variants become items (stage 1). With "post to accounts" on, orders,
+ * refunds and payouts are posted through Tohyee's own documents
+ * (posting.ts, stage 2).
  *
  * Like CRM mail sync, nothing calls the platform inside a database
  * transaction: what's needed is read in one short transaction, the platform
@@ -76,13 +90,38 @@ type ConnectionRow = {
   connected_at: string;
   disconnected_by_email: string | null;
   disconnected_at: string | null;
+  post_to_accounts: boolean;
+  start_date: string | null;
+  clearing_account_id: string | null;
+  payout_account_id: string | null;
+  fees_account_id: string | null;
+  sales_account_id: string | null;
+  shipping_account_id: string | null;
+  untaxed_tax_code_id: string | null;
+  granted_scopes: string[];
+  orders_synced_until: string | null;
+  payouts_synced_until: string | null;
+  clearing_account_code: string | null;
+  payout_account_code: string | null;
+  fees_account_code: string | null;
+  sales_account_code: string | null;
+  shipping_account_code: string | null;
+  untaxed_tax_code: string | null;
+  tax_codes: Array<{ rate: string; taxCode: string }>;
 };
+
+const accountCode = (column: string) => `(select a.code from accounts a where a.id = ${column}) as ${column.replace(/_id$/, "_code")}`;
 
 const COLUMNS =
   "id, platform, store_domain, store_name, store_currency, prices_include_tax, auth_method, credentials_ciphertext, " +
   "access_token_ciphertext, access_token_expires_at, webhook_key, webhook_subscription_ids, webhooks_note, sync_customers, " +
   "sync_products, status, customers_synced_until, products_synced_until, last_sync_at, last_error, failures, connected_by_email, " +
-  "connected_at, disconnected_by_email, disconnected_at";
+  "connected_at, disconnected_by_email, disconnected_at, post_to_accounts, start_date, clearing_account_id, payout_account_id, " +
+  "fees_account_id, sales_account_id, shipping_account_id, untaxed_tax_code_id, granted_scopes, orders_synced_until, payouts_synced_until, " +
+  ["clearing_account_id", "payout_account_id", "fees_account_id", "sales_account_id", "shipping_account_id"].map(accountCode).join(", ") +
+  ", (select t.code from tax_codes t where t.id = untaxed_tax_code_id) as untaxed_tax_code" +
+  ", (select coalesce(json_agg(json_build_object('rate', m.rate::text, 'taxCode', t.code) order by m.rate), '[]'::json)" +
+  "     from sales_platform_tax_codes m join tax_codes t on t.id = m.tax_code_id where m.connection_id = sales_platform_connections.id) as tax_codes";
 
 const iso = (value: string | null): string | null => (value === null ? null : new Date(value).toISOString());
 
@@ -107,6 +146,16 @@ function toConnection(row: ConnectionRow): SalesPlatformConnection {
     connectedAt: iso(row.connected_at)!,
     disconnectedByEmail: row.disconnected_by_email,
     disconnectedAt: iso(row.disconnected_at),
+    postToAccounts: row.post_to_accounts,
+    startDate: row.start_date,
+    clearingAccountCode: row.clearing_account_code,
+    payoutAccountCode: row.payout_account_code,
+    feesAccountCode: row.fees_account_code,
+    salesAccountCode: row.sales_account_code,
+    shippingAccountCode: row.shipping_account_code,
+    untaxedTaxCode: row.untaxed_tax_code,
+    taxCodes: row.tax_codes.map((entry) => ({ rate: toPlainString(mul(dec(entry.rate), dec("100"))), taxCode: entry.taxCode })),
+    grantedScopes: [...row.granted_scopes].sort(),
   };
 }
 
@@ -142,50 +191,6 @@ function assertConnected(row: ConnectionRow): void {
   }
 }
 
-type LogInput = {
-  source: SyncLogEntry["source"];
-  action: SyncLogAction;
-  message: string;
-  recordKind?: "customer" | "product_variant" | null;
-  externalId?: string | null;
-  contactId?: string | null;
-  itemId?: string | null;
-};
-
-/**
- * Adds a line to the sync log. A skipped or failed record whose last line
- * says the same thing isn't logged again, so the catch-up sync doesn't fill
- * the log with the same line every 15 minutes (SPC4).
- */
-async function writeLog(tx: OrgTx, connectionId: string, entry: LogInput): Promise<boolean> {
-  const message = entry.message.length > 1000 ? `${entry.message.slice(0, 997)}...` : entry.message;
-  if ((entry.action === "skipped" || entry.action === "failed" || entry.action === "kept") && entry.externalId) {
-    const last = await tx.query<{ action: string; message: string }>(
-      `select action, message from sales_platform_sync_log
-        where connection_id = $1 and record_kind is not distinct from $2 and external_id = $3
-        order by id desc limit 1`,
-      [connectionId, entry.recordKind ?? null, entry.externalId],
-    );
-    if (last.rows[0]?.action === entry.action && last.rows[0].message === message) return false;
-  }
-  await tx.query(
-    `insert into sales_platform_sync_log (connection_id, source, action, record_kind, external_id, contact_id, item_id, message, actor_email)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [
-      connectionId,
-      entry.source,
-      entry.action,
-      entry.recordKind ?? null,
-      entry.externalId ?? null,
-      entry.contactId ?? null,
-      entry.itemId ?? null,
-      message,
-      tx.actor.email,
-    ],
-  );
-  return true;
-}
-
 /** The sync log, newest first (viewers can read it). */
 export async function listSyncLog(
   tx: OrgTx,
@@ -203,10 +208,12 @@ export async function listSyncLog(
     external_id: string | null;
     contact_id: string | null;
     item_id: string | null;
+    document_type: SyncLogEntry["documentType"];
+    document_id: string | null;
     message: string;
     actor_email: string;
   }>(
-    `select id, logged_at, source, action, record_kind, external_id, contact_id, item_id, message, actor_email
+    `select id, logged_at, source, action, record_kind, external_id, contact_id, item_id, document_type, document_id, message, actor_email
        from sales_platform_sync_log
       where connection_id = $1 and ($2::bigint is null or id < $2::bigint)
       order by id desc limit ${LOG_PAGE}`,
@@ -223,6 +230,8 @@ export async function listSyncLog(
       externalId: row.external_id,
       contactId: row.contact_id,
       itemId: row.item_id,
+      documentType: row.document_type,
+      documentId: row.document_id,
       message: row.message,
       actorEmail: row.actor_email,
     })),
@@ -295,6 +304,7 @@ async function setUpWebhooks(
   context: ConnectorContext,
   token: AccessToken,
   origin: string | null,
+  scopes: readonly string[],
 ): Promise<void> {
   const connector = connectorFor(row.platform);
   const address = webhookAddress(origin, organisation.id, row.webhook_key);
@@ -303,9 +313,10 @@ async function setUpWebhooks(
   let logMessage: string | null = null;
   if (address) {
     try {
-      ids = await connector.registerWebhooks(context, token, address);
+      const orders = scopes.includes(ORDER_SCOPE);
+      ids = await connector.registerWebhooks(context, token, address, { orders });
       note = null;
-      logMessage = `Asked ${label(row.platform)} to send customer and product changes to this server as they happen (${ids.length} webhooks).`;
+      logMessage = `Asked ${label(row.platform)} to send customer${orders ? ", product and order" : " and product"} changes to this server as they happen (${ids.length} webhooks).`;
     } catch (error) {
       note = `Webhooks couldn't be set up: ${error instanceof Error ? error.message : String(error)}. The catch-up sync still runs every 15 minutes.`;
       logMessage = note;
@@ -377,8 +388,8 @@ export async function connectStore(
       inserted = await tx.query<ConnectionRow>(
         `insert into sales_platform_connections (platform, store_domain, store_name, store_currency, prices_include_tax, auth_method,
                                                  credentials_ciphertext, access_token_ciphertext, access_token_expires_at, webhook_key,
-                                                 sync_customers, sync_products, connected_by_email)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                                                 sync_customers, sync_products, connected_by_email, granted_scopes)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          returning ${COLUMNS}`,
         [
           platform,
@@ -394,6 +405,7 @@ export async function connectStore(
           syncCustomers,
           syncProducts,
           actor.email,
+          store.scopes,
         ],
       );
     } catch (error) {
@@ -416,7 +428,7 @@ export async function connectStore(
   });
 
   // 4. Webhooks (network again, nothing open).
-  await setUpWebhooks(organisation, actor, row, context, token, options.webhookOrigin);
+  await setUpWebhooks(organisation, actor, row, context, token, options.webhookOrigin, store.scopes);
   return withOrganisationTransaction(organisation, actor, async (tx) => toConnection(await readConnection(tx, row.id)));
 }
 
@@ -461,43 +473,218 @@ export async function testConnection(
       await tx.query(
         `update sales_platform_connections
             set store_name = $2, store_currency = $3, prices_include_tax = $4,
-                access_token_ciphertext = $5, access_token_expires_at = $6, updated_at = now()
+                access_token_ciphertext = $5, access_token_expires_at = $6, granted_scopes = $7, updated_at = now()
           where id = $1`,
-        [row.id, store.storeName.slice(0, 255), store.currency, store.pricesIncludeTax, tokenCiphertext, tokenExpiresAt],
+        [row.id, store.storeName.slice(0, 255), store.currency, store.pricesIncludeTax, tokenCiphertext, tokenExpiresAt, store.scopes],
       );
     }
     await writeLog(tx, row.id, { source: "connection", action: "tested", message });
   });
   if (store && token && row.webhook_subscription_ids.length === 0 && options.webhookOrigin !== undefined) {
-    await setUpWebhooks(organisation, actor, row, context, token, options.webhookOrigin);
+    await setUpWebhooks(organisation, actor, row, context, token, options.webhookOrigin, store.scopes);
   }
   const connection = await withOrganisationTransaction(organisation, actor, async (tx) => toConnection(await readConnection(tx, row.id)));
   return { ok: store !== null, storeName: store?.storeName ?? null, message, connection };
 }
 
-/** What to sync (admins). */
+type AccountChoice = { id: string; code: string; name: string };
+
+/** An account chosen in the posting settings, checked for what it's used for. */
+async function chooseAccount(
+  tx: OrgTx,
+  input: unknown,
+  field: string,
+  what: string,
+  allowed: (row: { account_class: string; account_type: string; currency_code: string | null }) => string | null,
+): Promise<AccountChoice | null> {
+  if (input === null || input === "") return null;
+  const code = parseAccountCodeInput(input, field);
+  const found = await tx.query<{ id: string; code: string; name: string; account_class: string; account_type: string; currency_code: string | null; is_active: boolean }>(
+    "select id, code, name, account_class, account_type, currency_code, is_active from accounts where lower(code) = lower($1)",
+    [code],
+  );
+  const row = found.rows[0];
+  if (!row) throw new ValidationError(`There's no account ${code} for the ${what}.`);
+  if (!row.is_active) throw new ValidationError(`Account ${row.code} (${row.name}) is archived, so it can't be the ${what}.`);
+  const problem = allowed(row);
+  if (problem) throw new ValidationError(`Account ${row.code} (${row.name}) can't be the ${what}: ${problem}`);
+  return { id: row.id, code: row.code, name: row.name };
+}
+
+const bankInBase = (baseCurrency: string) => (row: { account_type: string; currency_code: string | null }) =>
+  row.account_type !== "bank"
+    ? "it isn't a bank account."
+    : row.currency_code && row.currency_code !== baseCurrency
+      ? `it's in ${row.currency_code}, and Shopify orders come in ${baseCurrency}.`
+      : null;
+
+type TaxCodeChoice = { id: string; code: string; rate: string; category: string };
+
+async function chooseTaxCode(tx: OrgTx, input: unknown, field: string): Promise<TaxCodeChoice | null> {
+  const code = optionalString(input, field, { maxLength: 20 });
+  if (code === null) return null;
+  const found = await tx.query<TaxCodeChoice & { is_active: boolean; available_on: string }>(
+    "select id, code, rate::text as rate, category, is_active, available_on from tax_codes where code = upper($1)",
+    [code],
+  );
+  const row = found.rows[0];
+  if (!row) throw new ValidationError(`There's no tax code ${code.toUpperCase()}.`);
+  if (!row.is_active) throw new ValidationError(`Tax code ${row.code} is archived.`);
+  if (row.available_on === "purchases") throw new ValidationError(`Tax code ${row.code} is for purchases only, so it can't be used on sales.`);
+  return row;
+}
+
+/** Shopify's rate typed as a percentage ("15") -> the fraction stored ("0.15"). */
+function parsePercent(input: unknown, field: string): string {
+  const percent = dec(parseDecimalInput(input, field, { maxScale: 4 }));
+  if (!isPositive(percent) || cmp(percent, dec("100")) >= 0) throw new ValidationError(`${field} must be more than 0 and less than 100 (a percentage).`);
+  return toPlainString(divideTruncated(percent, dec("100"), 6));
+}
+
+/**
+ * What to sync, and the posting settings (admins; SPC11-SPC23 setup,
+ * SPC21): the switch, the start date, the accounts, and which Tohyee tax
+ * code each Shopify tax rate is. `newClearingAccount` ({ code, name }) adds
+ * a bank account to use as the clearing account. Turning posting on needs
+ * every account, a start date and read_orders granted to the app.
+ */
 export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unknown, body: Record<string, unknown>): Promise<SalesPlatformConnection> {
   const row = await readConnection(tx, connectionIdInput, { lock: true });
   assertConnected(row);
   const syncCustomers = optionalBoolean(body.syncCustomers, "syncCustomers") ?? row.sync_customers;
   const syncProducts = optionalBoolean(body.syncProducts, "syncProducts") ?? row.sync_products;
-  if (syncCustomers === row.sync_customers && syncProducts === row.sync_products) return toConnection(row);
-  const updated = await tx.query<ConnectionRow>(
-    `update sales_platform_connections set sync_customers = $2, sync_products = $3, updated_at = now() where id = $1 returning ${COLUMNS}`,
-    [row.id, syncCustomers, syncProducts],
+  const postToAccounts = optionalBoolean(body.postToAccounts, "postToAccounts") ?? row.post_to_accounts;
+  const startDate = body.startDate === undefined ? row.start_date : parseOptionalIsoDate(body.startDate, "startDate");
+  const shop = label(row.platform);
+  const changes: string[] = [];
+
+  let clearing: AccountChoice | null | undefined;
+  if (body.newClearingAccount !== undefined && body.newClearingAccount !== null) {
+    if (body.clearingAccountCode !== undefined) throw new ValidationError("Choose a clearing account or add one, not both.");
+    const fresh = asRecord(body.newClearingAccount, "newClearingAccount");
+    const account = await createBankAccount(tx, { code: fresh.code, name: fresh.name ?? `${shop} clearing`, accountType: "bank" });
+    clearing = { id: account.id, code: account.code, name: account.name };
+    changes.push(`added bank account ${account.code} (${account.name})`);
+  } else if (body.clearingAccountCode !== undefined) {
+    clearing = await chooseAccount(tx, body.clearingAccountCode, "clearingAccountCode", "clearing account", bankInBase(tx.baseCurrency));
+  }
+  const payout =
+    body.payoutAccountCode === undefined
+      ? undefined
+      : await chooseAccount(tx, body.payoutAccountCode, "payoutAccountCode", "account payouts arrive in", bankInBase(tx.baseCurrency));
+  const fees =
+    body.feesAccountCode === undefined
+      ? undefined
+      : await chooseAccount(tx, body.feesAccountCode, "feesAccountCode", "fees account", (a) => (a.account_class === "expense" ? null : "it isn't an expense account."));
+  const revenue = (a: { account_class: string }) => (a.account_class === "revenue" ? null : "it isn't a revenue account.");
+  const sales = body.salesAccountCode === undefined ? undefined : await chooseAccount(tx, body.salesAccountCode, "salesAccountCode", "sales account", revenue);
+  const shipping =
+    body.shippingAccountCode === undefined ? undefined : await chooseAccount(tx, body.shippingAccountCode, "shippingAccountCode", "shipping account", revenue);
+
+  let untaxed: TaxCodeChoice | null | undefined;
+  if (body.untaxedTaxCode !== undefined) {
+    untaxed = await chooseTaxCode(tx, body.untaxedTaxCode, "untaxedTaxCode");
+    if (untaxed && (!(untaxed.category === "zero_rated" || untaxed.category === "exempt") || isPositive(dec(untaxed.rate)))) {
+      throw new ValidationError(`Tax code ${untaxed.code} isn't zero-rated or exempt, so it can't be the code for untaxed sales.`);
+    }
+  }
+
+  let taxCodes: Array<{ rate: string; code: TaxCodeChoice }> | undefined;
+  if (body.taxCodes !== undefined) {
+    taxCodes = [];
+    for (const [index, raw] of requireArray(body.taxCodes, "taxCodes", 20).entries()) {
+      const entry = asRecord(raw, `Tax rate ${index + 1}`);
+      const rate = parsePercent(entry.rate, `Tax rate ${index + 1}`);
+      const code = await chooseTaxCode(tx, entry.taxCode, `Tax rate ${index + 1} taxCode`);
+      if (!code) throw new ValidationError(`Choose a tax code for tax rate ${index + 1}.`);
+      if (cmp(dec(code.rate), dec(rate)) !== 0) {
+        throw new ValidationError(
+          `Tax code ${code.code} is ${toPlainString(mul(dec(code.rate), dec("100")))}%, so it can't be ${shop}'s ${toPlainString(mul(dec(rate), dec("100")))}% tax.`,
+        );
+      }
+      if (taxCodes.some((other) => cmp(dec(other.rate), dec(rate)) === 0)) throw new ValidationError(`${toPlainString(mul(dec(rate), dec("100")))}% is listed twice.`);
+      taxCodes.push({ rate, code });
+    }
+  }
+
+  const pick = <T,>(chosen: T | null | undefined, current: string | null) => (chosen === undefined ? current : chosen === null ? null : chosen);
+  const next = {
+    clearing: pick(clearing?.id ?? clearing, row.clearing_account_id),
+    payout: pick(payout?.id ?? payout, row.payout_account_id),
+    fees: pick(fees?.id ?? fees, row.fees_account_id),
+    sales: pick(sales?.id ?? sales, row.sales_account_id),
+    shipping: pick(shipping?.id ?? shipping, row.shipping_account_id),
+    untaxed: pick(untaxed?.id ?? untaxed, row.untaxed_tax_code_id),
+  };
+  if (next.clearing !== null && next.clearing === next.payout) {
+    throw new ValidationError("The clearing account and the account payouts arrive in must be different accounts.");
+  }
+  if (postToAccounts) {
+    const missing = [
+      [next.clearing, "a clearing account"],
+      [next.payout, "the account payouts arrive in"],
+      [next.fees, "a fees account"],
+      [next.sales, "a sales account"],
+      [next.shipping, "a shipping account"],
+      [startDate, "a start date"],
+    ]
+      .filter(([value]) => value === null)
+      .map(([, text]) => text);
+    if (missing.length > 0) throw new ValidationError(`Posting to the accounts needs ${missing.join(", ")}.`);
+    if (!row.granted_scopes.includes(ORDER_SCOPE)) {
+      throw new ValidationError(
+        `${shop} hasn't given the app the ${ORDER_SCOPE} scope, so orders can't be read. Add it to the app's access scopes in ${shop}, then test the connection and try again.`,
+      );
+    }
+    if ((await getOrganisationSettings(tx)).gstNumber && next.untaxed === null) {
+      throw new ValidationError("The organisation is GST registered, so posting needs a tax code for untaxed sales (zero-rated or exempt).");
+    }
+  }
+
+  if (syncCustomers !== row.sync_customers || syncProducts !== row.sync_products) {
+    changes.push(`syncing customers: ${syncCustomers ? "on" : "off"}; products: ${syncProducts ? "on" : "off"}`);
+  }
+  if (postToAccounts !== row.post_to_accounts) changes.push(`posting to the accounts: ${postToAccounts ? "on" : "off"}`);
+  if (startDate !== row.start_date) changes.push(`start date: ${startDate ?? "none"}`);
+  const named = (choice: AccountChoice | null | undefined, current: string | null, text: string) => {
+    if (choice !== undefined && (choice?.id ?? null) !== current) changes.push(`${text}: ${choice ? `${choice.code} ${choice.name}` : "none"}`);
+  };
+  named(clearing, row.clearing_account_id, "clearing account");
+  named(payout, row.payout_account_id, "payouts into");
+  named(fees, row.fees_account_id, "fees account");
+  named(sales, row.sales_account_id, "sales account");
+  named(shipping, row.shipping_account_id, "shipping account");
+  if (untaxed !== undefined && (untaxed?.id ?? null) !== row.untaxed_tax_code_id) changes.push(`untaxed sales: ${untaxed?.code ?? "none"}`);
+  if (taxCodes !== undefined) {
+    const before = row.tax_codes.map((entry) => `${toPlainString(dec(entry.rate))}=${entry.taxCode}`).join(",");
+    const after = [...taxCodes].sort((a, b) => cmp(dec(a.rate), dec(b.rate))).map((entry) => `${toPlainString(dec(entry.rate))}=${entry.code.code}`).join(",");
+    if (before !== after) {
+      changes.push(
+        `${shop} tax rates: ${taxCodes.length === 0 ? "none" : taxCodes.map((entry) => `${toPlainString(mul(dec(entry.rate), dec("100")))}% → ${entry.code.code}`).join(", ")}`,
+      );
+      await tx.query("delete from sales_platform_tax_codes where connection_id = $1", [row.id]);
+      for (const entry of taxCodes) {
+        await tx.query("insert into sales_platform_tax_codes (connection_id, rate, tax_code_id) values ($1, $2::numeric, $3)", [row.id, entry.rate, entry.code.id]);
+      }
+    }
+  }
+  if (changes.length === 0) return toConnection(row);
+  await tx.query(
+    `update sales_platform_connections
+        set sync_customers = $2, sync_products = $3, post_to_accounts = $4, start_date = $5, clearing_account_id = $6, payout_account_id = $7,
+            fees_account_id = $8, sales_account_id = $9, shipping_account_id = $10, untaxed_tax_code_id = $11, updated_at = now()
+      where id = $1`,
+    [row.id, syncCustomers, syncProducts, postToAccounts, startDate, next.clearing, next.payout, next.fees, next.sales, next.shipping, next.untaxed],
   );
-  await writeLog(tx, row.id, {
-    source: "connection",
-    action: "settings",
-    message: `Syncing customers: ${syncCustomers ? "on" : "off"}; products: ${syncProducts ? "on" : "off"}.`,
-  });
+  const message = changes.join("; ");
+  await writeLog(tx, row.id, { source: "connection", action: "settings", message: `${message.charAt(0).toUpperCase()}${message.slice(1)}.` });
   await writeAuditEvent(tx, {
     eventType: "sales_platform.settings_changed",
     entityType: "sales_platform_connection",
     entityId: row.id,
-    details: { syncCustomers, syncProducts },
+    details: { changes, syncCustomers, syncProducts, postToAccounts, startDate },
   });
-  return toConnection(updated.rows[0]);
+  return toConnection(await readConnection(tx, row.id));
 }
 
 /**
@@ -693,18 +880,38 @@ async function skip(tx: OrgTx, context: ApplyContext, kind: "customer" | "produc
   await writeLog(tx, context.connection.id, { source: context.source, action: "skipped", recordKind: kind, externalId, message });
 }
 
-type ContactNow = { id: string; name: string; email: string | null; phone: string | null; is_customer: boolean; is_archived: boolean };
+type ContactNow = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  billing_country: string;
+  is_customer: boolean;
+  is_archived: boolean;
+};
+
+const CONTACT_COLUMNS = "id, name, email, phone, billing_country, is_customer, is_archived";
 
 async function readContact(tx: OrgTx, id: string): Promise<ContactNow> {
-  const result = await tx.query<ContactNow>("select id, name, email, phone, is_customer, is_archived from contacts where id = $1", [id]);
+  const result = await tx.query<ContactNow>(`select ${CONTACT_COLUMNS} from contacts where id = $1`, [id]);
   return result.rows[0];
 }
 
-/** A customer (SPC2, SPC5, SPC7): linked by email, added, or skipped when unclear. */
+/**
+ * A customer (SPC2, SPC5, SPC7, SPC16): linked by email, added, or skipped
+ * when unclear. The country (a country code Tohyee knows) is copied like
+ * the other fields; a country the platform doesn't give is left alone.
+ */
 async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: PlatformCustomer): Promise<void> {
   const platform = label(context.connection.platform);
   const connectionId = context.connection.id;
-  const snapshot = { name: customer.name, email: customer.email, phone: customer.phone };
+  const country = customer.country && isCountryCode(customer.country) ? customer.country : null;
+  const snapshot: Record<string, string | null> = {
+    name: customer.name,
+    email: customer.email,
+    phone: customer.phone,
+    ...(country ? { country } : {}),
+  };
   const who = customer.name ?? customer.email ?? `customer ${customer.externalId}`;
   const mapping = await findMapping(tx, connectionId, "customer", customer.externalId);
 
@@ -714,13 +921,15 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
         { key: "name", label: "name", tohyee: contact.name, incoming: customer.name },
         { key: "email", label: "email", tohyee: contact.email, incoming: customer.email, same: sameIgnoringCase },
         { key: "phone", label: "phone", tohyee: contact.phone, incoming: customer.phone },
+        ...(country ? [{ key: "country", label: "country", tohyee: contact.billing_country, incoming: country }] : []),
       ],
       last,
       platform,
     );
     // A contact's name can't be blank.
     if ("name" in result.changes && result.changes.name === null) delete result.changes.name;
-    const changes: Record<string, unknown> = { ...result.changes };
+    const { country: countryChange, ...changes }: Record<string, unknown> = { ...result.changes };
+    if (typeof countryChange === "string") changes.billingCountry = countryChange;
     if (!contact.is_customer) changes.isCustomer = true;
     if (Object.keys(changes).length > 0) await updateContact(tx, contact.id, changes);
     await logMerge(tx, context, result, { kind: "customer", externalId: customer.externalId, contactId: contact.id, what: `contact ${contact.name}` });
@@ -742,7 +951,7 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
 
   if (customer.email) {
     const matches = await tx.query<ContactNow>(
-      "select id, name, email, phone, is_customer, is_archived from contacts where not is_archived and lower(email) = lower($1) order by id",
+      `select ${CONTACT_COLUMNS} from contacts where not is_archived and lower(email) = lower($1) order by id`,
       [customer.email],
     );
     if (matches.rows.length > 1) {
@@ -816,6 +1025,7 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
     name: customer.name,
     email: customer.email,
     phone: customer.phone,
+    ...(country ? { billingCountry: country } : {}),
     isCustomer: true,
   });
   context.counts.created += 1;
@@ -825,7 +1035,7 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
     recordKind: "customer",
     externalId: customer.externalId,
     contactId: contact.id,
-    message: `Added contact ${contact.name} from ${platform} customer ${customer.externalId}.`,
+    message: `Added contact ${contact.name} from ${platform} customer ${customer.externalId}${country ? ` (billing country ${country})` : ""}.`,
   });
   await saveMapping(tx, connectionId, "customer", customer.externalId, { contactId: contact.id }, snapshot, customer.updatedAt);
 }
@@ -834,7 +1044,11 @@ type ItemNow = { id: string; code: string; name: string; sale_price: string | nu
 
 const plainPrice = (value: string | null): string | null => (value === null ? null : toPlainString(dec(value)));
 
-/** A product's variant (SPC3, SPC5, SPC6, SPC7): linked by SKU, added as a non-stock item, or skipped. */
+/**
+ * A product's variant (SPC3, SPC5, SPC6, SPC7, SPC17): linked by SKU, added
+ * as an item (a stock item when the platform tracks its inventory, else
+ * non-stock), or skipped. A linked item keeps its type.
+ */
 async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformVariant): Promise<void> {
   const platform = label(context.connection.platform);
   const connectionId = context.connection.id;
@@ -929,12 +1143,15 @@ async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformV
     return;
   }
 
+  // Webhooks don't say whether inventory is tracked; the catch-up sync adds the item once it knows.
+  if (variant.tracked === null) return;
+  const itemType = variant.tracked ? "stock" : "non_stock";
   const { item } = await createItem(tx, {
     idempotencyKey: `sp-${connectionId}-variant-${variant.externalId}`,
     source: SOURCE,
     code: variant.sku,
     name,
-    itemType: "non_stock",
+    itemType,
     salePrice: pricing.copy ? price : null,
   });
   context.counts.created += 1;
@@ -951,7 +1168,7 @@ async function applyVariant(tx: OrgTx, context: ApplyContext, variant: PlatformV
     recordKind: "product_variant",
     externalId: variant.externalId,
     itemId: item.id,
-    message: `Added non-stock item ${item.code} "${item.name}" from ${platform}${priceText}.`,
+    message: `Added ${itemType === "stock" ? "stock" : "non-stock"} item ${item.code} "${item.name}" from ${platform}${itemType === "stock" ? " (its inventory is tracked there)" : ""}${priceText}.`,
   });
   await saveMapping(tx, connectionId, "product_variant", variant.externalId, { itemId: item.id }, snapshot, variant.updatedAt);
 }
@@ -978,6 +1195,8 @@ function describeCounts(counts: SyncResult): string {
     [counts.linked, "linked"],
     [counts.updated, "updated"],
     [counts.kept, "kept Tohyee's value"],
+    [counts.posted ?? 0, "posted"],
+    [counts.waiting ?? 0, "waiting"],
     [counts.skipped, "skipped"],
     [counts.failed, "failed"],
   ]
@@ -986,8 +1205,41 @@ function describeCounts(counts: SyncResult): string {
   return parts.join(", ");
 }
 
+/** A note about the sync as a whole, not repeated within a day (so "no payouts scope" isn't logged every 15 minutes). */
+async function writeNote(tx: OrgTx, connectionId: string, source: "sync" | "webhook", message: string): Promise<void> {
+  const recent = await tx.query(
+    "select 1 from sales_platform_sync_log where connection_id = $1 and message = $2 and logged_at > now() - interval '1 day' limit 1",
+    [connectionId, message],
+  );
+  if (!recent.rowCount) await writeLog(tx, connectionId, { source, action: "skipped", message });
+}
+
+/** Posting through the same customer rules as the sync (decision 52: the order's customer comes across first). */
+function postingContext(tx: OrgTx, apply: ApplyContext, posting: NonNullable<Awaited<ReturnType<typeof loadPosting>>>): PostingContext {
+  return {
+    posting,
+    source: apply.source,
+    counts: apply.counts,
+    contactFor: async (customer) => {
+      await applyOne(tx, apply, "customer", customer.externalId, () => applyCustomer(tx, apply, customer));
+      const mapped = await tx.query<{ contact_id: string | null }>(
+        "select contact_id from sales_platform_mappings where connection_id = $1 and record_kind = 'customer' and external_id = $2",
+        [apply.connection.id, customer.externalId],
+      );
+      return mapped.rows[0]?.contact_id ?? null;
+    },
+  };
+}
+
+/** Whether a connection fetches and posts orders: the switch is on and it has a start date (SPC21). */
+const posts = (row: ConnectionRow) => row.post_to_accounts && row.start_date !== null;
+const readsPayouts = (row: ConnectionRow) => PAYOUT_SCOPES.every((scope) => row.granted_scopes.includes(scope));
+
+const NO_PAYOUT_SCOPES = `Payouts aren't brought in: the app hasn't been given ${PAYOUT_SCOPES.join(" and ")}. Add them to the app's access scopes and test the connection, or record payouts by hand.`;
+
 /**
- * Copies what changed in the store since the last sync. Reads the
+ * Copies what changed in the store since the last sync and, with posting
+ * on, posts orders, refunds and payouts (SPC11-SPC21). Reads the
  * connection, calls the platform with nothing open, then writes. A
  * failure is recorded on the connection; after three in a row it's paused.
  */
@@ -998,10 +1250,14 @@ export async function syncConnection(
   now: Date = new Date(),
 ): Promise<SyncResult> {
   requireSecrets();
-  const row = await withOrganisationTransaction(organisation, actor, async (tx) => {
+  const { row, retryIds, postedPayouts } = await withOrganisationTransaction(organisation, actor, async (tx) => {
     const found = await readConnection(tx, connectionIdInput);
     assertConnected(found);
-    return found;
+    return {
+      row: found,
+      retryIds: posts(found) ? await ordersToRetry(tx, found.id) : [],
+      postedPayouts: posts(found) && readsPayouts(found) ? await postedPayoutIds(tx, found.platform, found.store_domain) : new Set<string>(),
+    };
   });
   const connector = connectorFor(row.platform);
   try {
@@ -1013,6 +1269,17 @@ export async function syncConnection(
       customersSince: iso(row.customers_synced_until),
       productsSince: iso(row.products_synced_until),
     });
+    let orders: OrdersResult | null = null;
+    let payouts: PayoutsResult | null = null;
+    if (posts(row)) {
+      const startInstant = startOfLocalDate(row.start_date!);
+      orders = await connector.fetchOrders(context, token, { updatedSince: iso(row.orders_synced_until), processedFrom: startInstant, retryIds });
+      if (readsPayouts(row)) {
+        const cursor = iso(row.payouts_synced_until);
+        const issuedFrom = cursor && Date.parse(cursor) > Date.parse(startInstant) ? cursor : startInstant;
+        payouts = await connector.fetchPayouts(context, token, { issuedFrom, alreadyPosted: (id) => postedPayouts.has(id) });
+      }
+    }
     return await withOrganisationTransaction(organisation, actor, async (tx) => {
       const current = await readConnection(tx, row.id, { lock: true });
       assertConnected(current);
@@ -1025,15 +1292,49 @@ export async function syncConnection(
       for (const note of changes.notes) {
         await writeLog(tx, row.id, { source: "sync", action: "skipped", message: note });
       }
+      // Posting (stage 2): only if it's still on now the store has answered.
+      const posting = orders && posts(current) ? await loadPosting(tx, current.id, startOfLocalDate) : null;
+      let payoutsUntil: string | null = null;
+      if (posting && orders) {
+        const postContext = postingContext(tx, apply, posting);
+        for (const order of orders.orders) await postOrder(tx, postContext, order);
+        for (const note of orders.notes) await writeNote(tx, row.id, "sync", note);
+        if (payouts) {
+          // The next sync starts at the first payout not finished with (not paid yet, or stopped on Tohyee's side).
+          let firstOpen: string | null = null;
+          let last: string | null = null;
+          for (const payout of [...payouts.payouts].sort((a, b) => Date.parse(a.issuedAt) - Date.parse(b.issuedAt))) {
+            const outcome = await postPayout(tx, postContext, payout);
+            if ((outcome === "waiting" || outcome === "failed") && firstOpen === null) firstOpen = payout.issuedAt;
+            last = payout.issuedAt;
+          }
+          payoutsUntil = firstOpen ?? last;
+          for (const note of payouts.notes) await writeNote(tx, row.id, "sync", note);
+        } else {
+          await writeNote(tx, row.id, "sync", NO_PAYOUT_SCOPES);
+        }
+      }
       const [tokenCiphertext, tokenExpiresAt] = tokenColumns(token);
       await tx.query(
         `update sales_platform_connections
             set customers_synced_until = greatest(customers_synced_until, $2::timestamptz),
                 products_synced_until = greatest(products_synced_until, $3::timestamptz),
+                orders_synced_until = case when $7::boolean then greatest(orders_synced_until, $8::timestamptz) else orders_synced_until end,
+                payouts_synced_until = coalesce($9::timestamptz, payouts_synced_until),
                 last_sync_at = $4, last_error = null, failures = 0, status = 'active',
                 access_token_ciphertext = $5, access_token_expires_at = $6, updated_at = now()
           where id = $1`,
-        [row.id, changes.customersUntil, changes.productsUntil, now.toISOString(), tokenCiphertext, tokenExpiresAt],
+        [
+          row.id,
+          changes.customersUntil,
+          changes.productsUntil,
+          now.toISOString(),
+          tokenCiphertext,
+          tokenExpiresAt,
+          posting !== null,
+          orders?.until ?? null,
+          payoutsUntil,
+        ],
       );
       // A summary only when this sync logged something new, so an unchanged store adds nothing to the log (SPC4).
       const newLines = await tx.query("select 1 from sales_platform_sync_log where connection_id = $1 and id > coalesce($2::bigint, 0) limit 1", [
@@ -1184,6 +1485,7 @@ export async function receiveWebhook(
     if (error instanceof ValidationError) return { status: 400, message: error.message };
     throw error;
   }
+  if (records?.kind === "order") return receiveOrderWebhook(organisation, row, connector, delivery, records.orderId);
 
   // 3. Apply it, once.
   return withOrganisationTransaction(organisation, SALES_PLATFORM_ACTOR, async (tx) => {
@@ -1200,7 +1502,71 @@ export async function receiveWebhook(
       return { status: 200, message: "Syncing these is switched off." };
     }
     const apply: ApplyContext = { connection: current, source: "webhook", counts: emptyCounts() };
-    await applyRecords(tx, apply, records.kind === "customers" ? { customers: records.records, variants: [] } : { customers: [], variants: records.records });
+    if (records.kind === "customers") await applyRecords(tx, apply, { customers: records.records, variants: [] });
+    else if (records.kind === "variants") await applyRecords(tx, apply, { customers: [], variants: records.records });
+    return { status: 200, message: "Done." };
+  });
+}
+
+const POSTING_OFF: WebhookOutcome = { status: 200, message: "Posting to the accounts is switched off." };
+
+/**
+ * An order or refund webhook (SPC18): the delivery only says which order
+ * changed, so the whole order is fetched from the platform (nothing open),
+ * then posted once. A delivery seen before, or with posting off, does
+ * nothing and asks nothing of the platform (SPC21).
+ */
+async function receiveOrderWebhook(
+  organisation: OrganisationRecord,
+  row: ConnectionRow,
+  connector: SalesPlatformConnector,
+  delivery: { deliveryId: string; topic: string },
+  orderId: string,
+): Promise<WebhookOutcome> {
+  const deliveryId = delivery.deliveryId.slice(0, 200);
+  const remember = (tx: OrgTx) =>
+    tx.query(
+      `insert into sales_platform_webhook_deliveries (connection_id, delivery_id, topic) values ($1, $2, $3)
+       on conflict do nothing returning delivery_id`,
+      [row.id, deliveryId, delivery.topic.slice(0, 100)],
+    );
+  // 1. Seen before, or posting off: no call to the platform.
+  const ready = await withOrganisationTransaction(organisation, SALES_PLATFORM_ACTOR, async (tx): Promise<WebhookOutcome | null> => {
+    const current = await readConnection(tx, row.id, { lock: true });
+    if (current.status === "disconnected") return REFUSED;
+    const seen = await tx.query("select 1 from sales_platform_webhook_deliveries where connection_id = $1 and delivery_id = $2", [row.id, deliveryId]);
+    if (seen.rowCount) return { status: 200, message: "Already handled." };
+    if (!posts(current) || !current.granted_scopes.includes(ORDER_SCOPE)) {
+      await remember(tx);
+      return POSTING_OFF;
+    }
+    return null;
+  });
+  if (ready) return ready;
+
+  // 2. The order, with nothing open.
+  const context = contextFor(row, new Date());
+  const { token, renewed } = await connector.accessToken(context);
+  const order = await connector.fetchOrder(context, token, orderId);
+
+  // 3. Post it, once.
+  return withOrganisationTransaction(organisation, SALES_PLATFORM_ACTOR, async (tx) => {
+    const current = await readConnection(tx, row.id, { lock: true });
+    if (current.status === "disconnected") return REFUSED;
+    if (renewed) {
+      const [tokenCiphertext, tokenExpiresAt] = tokenColumns(token);
+      await tx.query("update sales_platform_connections set access_token_ciphertext = $2, access_token_expires_at = $3, updated_at = now() where id = $1", [
+        row.id,
+        tokenCiphertext,
+        tokenExpiresAt,
+      ]);
+    }
+    if (!(await remember(tx)).rowCount) return { status: 200, message: "Already handled." };
+    if (!order) return { status: 200, message: "The order wasn't found." };
+    const posting = posts(current) ? await loadPosting(tx, current.id, startOfLocalDate) : null;
+    if (!posting) return POSTING_OFF;
+    const apply: ApplyContext = { connection: current, source: "webhook", counts: emptyCounts() };
+    await postOrder(tx, postingContext(tx, apply, posting), order);
     return { status: 200, message: "Done." };
   });
 }

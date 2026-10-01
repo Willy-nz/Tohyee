@@ -2,7 +2,7 @@ import { HttpError } from "@/lib/errors";
 import type { SalesPlatform } from "@/lib/sales-platforms/types";
 
 /**
- * The connector framework (examples SPC1-SPC10): what Tohyee needs from each
+ * The connector framework (examples SPC1-SPC23): what Tohyee needs from each
  * sales platform. Shopify is the first; WooCommerce, Square and Stripe would
  * each be another connector. Connectors only talk to the platform; the
  * service decides what happens in Tohyee, and network calls never happen
@@ -15,6 +15,8 @@ export type PlatformCustomer = {
   name: string | null;
   email: string | null;
   phone: string | null;
+  /** ISO 3166-1 alpha-2 country of the customer's default address (SPC16), if the platform said. */
+  country?: string | null;
   /** ISO timestamp of the platform's last change. */
   updatedAt: string | null;
 };
@@ -28,6 +30,8 @@ export type PlatformVariant = {
   sku: string | null;
   /** As the platform sends it, e.g. "8.50"; tax inclusive or not depends on the store. */
   price: string | null;
+  /** Whether the platform tracks its stock (SPC17); null when it didn't say (e.g. a webhook). */
+  tracked?: boolean | null;
   updatedAt: string | null;
 };
 
@@ -35,6 +39,8 @@ export type StoreInfo = {
   storeName: string;
   currency: string;
   pricesIncludeTax: boolean;
+  /** The access scopes the store gave the app. */
+  scopes: string[];
 };
 
 export type AccessToken = { token: string; expiresAt: string | null };
@@ -65,7 +71,129 @@ export type Changes = {
   notes: string[];
 };
 
-export type WebhookRecords = { kind: "customers"; records: PlatformCustomer[] } | { kind: "variants"; records: PlatformVariant[] };
+/** A tax the platform charged on an order line or shipping line. Amounts are decimal strings in the store's currency. */
+export type PlatformTaxLine = { title: string | null; rate: string; amount: string };
+
+export type PlatformOrderLine = {
+  externalId: string;
+  variantId: string | null;
+  sku: string | null;
+  name: string;
+  quantity: string;
+  /** Before discounts (Shopify's originalTotalSet). */
+  originalTotal: string;
+  /** All the discounts allocated to the line. */
+  discount: string;
+  taxLines: PlatformTaxLine[];
+  isGiftCard: boolean;
+};
+
+export type PlatformShippingLine = {
+  externalId: string;
+  title: string;
+  /** After discounts (Shopify's discountedPriceSet). */
+  amount: string;
+  taxLines: PlatformTaxLine[];
+  removed: boolean;
+};
+
+export type PlatformTransaction = {
+  externalId: string;
+  /** Shopify's kinds: SALE, CAPTURE, AUTHORIZATION, VOID, REFUND, CHANGE, EMV_AUTHORIZATION, SUGGESTED_REFUND. */
+  kind: string;
+  /** SUCCESS, PENDING, FAILURE, ERROR, AWAITING_RESPONSE, UNKNOWN. */
+  status: string;
+  gateway: string | null;
+  amount: string;
+  currency: string | null;
+  processedAt: string | null;
+  test: boolean;
+};
+
+export type PlatformRefund = {
+  externalId: string;
+  createdAt: string | null;
+  processedAt: string | null;
+  lines: Array<{ lineItemId: string; quantity: string; restocked: boolean; subtotal: string; tax: string }>;
+  shipping: Array<{ shippingLineId: string | null; subtotal: string; tax: string }>;
+  /** Order adjustments (refund discrepancies): Tohyee refuses refunds with any. */
+  adjustments: number;
+  transactions: PlatformTransaction[];
+  /** More lines or transactions than were asked for. */
+  incomplete: boolean;
+};
+
+export type PlatformOrder = {
+  externalId: string;
+  name: string;
+  processedAt: string;
+  updatedAt: string | null;
+  cancelledAt: string | null;
+  test: boolean;
+  taxesIncluded: boolean;
+  currency: string;
+  presentmentCurrency: string | null;
+  /** Shopify's displayFinancialStatus: PAID, PENDING, PARTIALLY_PAID, REFUNDED, VOIDED... */
+  financialStatus: string | null;
+  /** The total before returns, with taxes and discounts (Shopify's totalPriceSet). */
+  total: string;
+  customer: PlatformCustomer | null;
+  billingCountry: string | null;
+  lines: PlatformOrderLine[];
+  shipping: PlatformShippingLine[];
+  transactions: PlatformTransaction[];
+  refunds: PlatformRefund[];
+  /** More lines, shipping lines, transactions or refunds than were asked for. */
+  incomplete: string | null;
+};
+
+export type PlatformBalanceTransaction = {
+  externalId: string;
+  /** Shopify's ShopifyPaymentsTransactionType: CHARGE, REFUND, ADJUSTMENT, CHARGEBACK... */
+  type: string;
+  amount: string;
+  fee: string;
+  net: string;
+  currency: string | null;
+  orderName: string | null;
+  adjustmentReason: string | null;
+  test: boolean;
+};
+
+export type PlatformPayout = {
+  externalId: string;
+  issuedAt: string;
+  /** SCHEDULED, IN_TRANSIT, PAID, FAILED, CANCELED. */
+  status: string;
+  /** DEPOSIT or WITHDRAWAL. */
+  direction: string;
+  net: string;
+  currency: string;
+  transactions: PlatformBalanceTransaction[];
+  /** More balance transactions than were asked for. */
+  incomplete: boolean;
+};
+
+export type OrdersRequest = {
+  /** Orders changed since (exclusive of nothing: overlapping is fine, posting is idempotent). */
+  updatedSince: string | null;
+  /** Only orders processed on or after this instant. */
+  processedFrom: string;
+  /** Orders to fetch again whatever their change time (ones that stopped part way). */
+  retryIds: string[];
+};
+
+export type OrdersResult = { orders: PlatformOrder[]; until: string | null; notes: string[] };
+
+export type PayoutsRequest = { issuedFrom: string; alreadyPosted: (externalId: string) => boolean };
+
+export type PayoutsResult = { payouts: PlatformPayout[]; notes: string[] };
+
+export type WebhookRecords =
+  | { kind: "customers"; records: PlatformCustomer[] }
+  | { kind: "variants"; records: PlatformVariant[] }
+  /** An order changed or was refunded: the order is fetched again from the platform. */
+  | { kind: "order"; orderId: string };
 
 export type ConnectInput = {
   storeDomain: string;
@@ -83,8 +211,14 @@ export interface SalesPlatformConnector {
   checkStore(context: ConnectorContext, token: AccessToken): Promise<StoreInfo>;
   /** Customers and variants changed since the last sync. Network. */
   fetchChanges(context: ConnectorContext, token: AccessToken, request: ChangesRequest): Promise<Changes>;
-  /** Subscribes the platform's webhooks to `callbackUrl`; returns their IDs. Network. */
-  registerWebhooks(context: ConnectorContext, token: AccessToken, callbackUrl: string): Promise<string[]>;
+  /** Orders changed since the last sync, with their lines, transactions and refunds (SPC11-SPC23). Network. */
+  fetchOrders(context: ConnectorContext, token: AccessToken, request: OrdersRequest): Promise<OrdersResult>;
+  /** One order, or null when the platform doesn't have it. Network. */
+  fetchOrder(context: ConnectorContext, token: AccessToken, orderId: string): Promise<PlatformOrder | null>;
+  /** Payouts issued since `issuedFrom` with their balance transactions (SPC15). Network. */
+  fetchPayouts(context: ConnectorContext, token: AccessToken, request: PayoutsRequest): Promise<PayoutsResult>;
+  /** Subscribes the platform's webhooks to `callbackUrl` (order topics too when `orders`); returns their IDs. Network. */
+  registerWebhooks(context: ConnectorContext, token: AccessToken, callbackUrl: string, options?: { orders?: boolean }): Promise<string[]>;
   removeWebhooks(context: ConnectorContext, token: AccessToken, ids: readonly string[]): Promise<void>;
   /** The secret the platform signs webhooks with. */
   webhookSecret(credentials: Record<string, string>): string;
