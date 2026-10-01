@@ -419,14 +419,24 @@ export function RdClaimView({ organisationId }: { organisationId: string }) {
                       <td data-label="R&D shares">
                         {pay.shares.length === 0 ? <span className={ui.muted}>Not R&amp;D</span> : null}
                         {pay.shares.map((share) => (
-                          <div key={share.activityId}>
-                            {share.percentage}%: <Money value={share.amount} />
+                          <div key={`${share.source}-${share.activityId}`}>
+                            {share.percentage}%{share.hours ? ` (${share.hours} h on timesheets)` : ""}: <Money value={share.amount} />{" "}
+                            {share.counts ? null : <Badge tone="amber">Default split, no time record</Badge>}
                           </div>
                         ))}
-                        {pay.shares.length > 0 && !pay.fullTimeRd ? <Badge tone="amber">Default split, no time record</Badge> : null}
+                        {pay.laterTimesheets.map((later) => (
+                          <div key={later.weekStart} className={ui.muted}>
+                            Timesheet for the week of {formatDate(later.weekStart)} approved after this pay: {later.rdHours} R&amp;D hours not used
+                          </div>
+                        ))}
                       </td>
                       <td data-label="Time record">
-                        {pay.enteredLate ? <Badge tone="amber">Entered late</Badge> : null} <span className={ui.muted}>{pay.timelinessText}</span>
+                        {pay.shares.map((share) => (
+                          <div key={`${share.source}-${share.activityId}`}>
+                            {share.enteredLate ? <Badge tone="amber">Entered late</Badge> : null} <span className={ui.muted}>{share.timelinessText}</span>
+                          </div>
+                        ))}
+                        {pay.shares.length === 0 ? <span className={ui.muted}>{pay.timelinessText}</span> : null}
                       </td>
                     </tr>
                   ))}
