@@ -5,7 +5,7 @@ import { buildClaimReport } from "@/lib/rd/claim";
 
 /**
  * GET: the RDTI claim report for an income year (viewers and above; decision
- * 65). Each employee's pay only for people with payroll access; reminders
+ * 75). Each employee's pay only for people with payroll access; reminders
  * only for owners and admins (decision 48). Read-only.
  */
 export const GET = route(async (request) => {
