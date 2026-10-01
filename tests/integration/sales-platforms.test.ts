@@ -7,7 +7,7 @@ import * as testRoute from "@/app/api/sales-platforms/connections/[connectionId]
 import * as connectionsRoute from "@/app/api/sales-platforms/connections/route";
 import * as webhookRoute from "@/app/api/sales-platforms/webhooks/[organisationId]/[webhookKey]/route";
 import type { SessionUser } from "@/lib/auth/sessions";
-import { createContact, getContact, updateContact } from "@/lib/contacts/service";
+import { archiveContact, createContact, getContact, updateContact } from "@/lib/contacts/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { createItem, getItem } from "@/lib/items/service";
@@ -408,6 +408,19 @@ describeWithDatabase("Sales platform connections (Shopify)", () => {
     expect(skipped.action).toBe("skipped");
     expect(skipped.message).toContain("more than one");
     expect((await other.as((tx) => getContact(tx, other.aroha.id))).phone).toBeNull();
+
+    // The only contact with the email is archived: skipped, not added again under another name.
+    const third = await setup();
+    await third.as(async (tx) => {
+      await updateContact(tx, third.aroha.id, { name: "Aroha Ngata (old)" });
+      await archiveContact(tx, third.aroha.id);
+    });
+    const thirdConnection = await connect(third, { syncProducts: false });
+    await syncConnection(third.record, thirdConnection.id);
+    const archivedSkip = (await log(third, thirdConnection.id)).find((entry) => entry.externalId === "1001")!;
+    expect(archivedSkip.action).toBe("skipped");
+    expect(archivedSkip.message).toContain("archived");
+    expect(await contactsNamed(third, "Aroha Ngata")).toHaveLength(0);
   });
 
   it("SPC3: variants link by SKU or are added as non-stock items; no SKU is skipped", async () => {

@@ -777,6 +777,20 @@ async function applyCustomer(tx: OrgTx, context: ApplyContext, customer: Platfor
       await merge(contact, undefined);
       return;
     }
+    // Only an archived contact has this email: that's not clear enough to add another one or to bring it back.
+    const archived = await tx.query<{ name: string }>("select name from contacts where is_archived and lower(email) = lower($1) order by id limit 1", [
+      customer.email,
+    ]);
+    if (archived.rows[0]) {
+      await skip(
+        tx,
+        context,
+        "customer",
+        customer.externalId,
+        `${platform} customer ${who} wasn't linked or added: contact ${archived.rows[0].name} has the same email but is archived.`,
+      );
+      return;
+    }
   }
 
   if (!customer.name) {
