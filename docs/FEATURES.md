@@ -1173,12 +1173,34 @@ that something happened.
   decisions, cash-ups, the **leave liability report** by Department with
   the running 8% (shown, never posted), settings; each employee's
   printable **holiday and leave record** (s 81) with CSV. Refused rather
-  than guessed: opening leave balances and earnings from before Tohyee
-  (so anyone employed before Tohyee's first pay run for them), deducting
-  advance holiday pay over the 8%, back pay over leave, paying holidays
-  before they're taken, employees booking their own leave, and the
+  than guessed: deducting advance holiday pay over the 8% (IRD's tax
+  treatment not confirmed, decision 170), back pay over leave (decision
+  171), paying holidays before they're taken (decision 172), and the
   section's own list (closedowns, transfers, being on call, pay-as-you-go
   8%, board, ACC, more than the minimums).
+- **Opening leave balances** (2 Oct 2026, HL43-HL48, decision 168, tenant
+  migration 0071; payroll access). For someone employed before Tohyee's
+  first pay run for them: on the employee's leave, their balances as at the
+  end of a pay period (annual weeks and the last entitlement date, weeks
+  cashed up that entitlement year, advance holiday pay, sick and family
+  violence days, untaken alternative holidays with the dates they arose)
+  and their earlier earnings one row per pay period (gross, the irregular
+  part, days worked or on paid leave), with the source and the previous
+  payroll's report attached, both required. Tohyee then treats them as its
+  own records, so annual holidays, AWE, ADP, the running 8%, the liability
+  report and holiday pay on finishing work for them; typed holiday pay up
+  to the opening date is covered. Replaceable (the old one kept) until a
+  pay run has paid them leave. Refused: casual employees, an opening date
+  inside a pay period, gaps or overlaps in the rows, and leave whose
+  window starts before the first row.
+- **Employees' own leave requests** (2 Oct 2026, HL49-HL51, decision 169;
+  Payroll › Leave requests, viewers and up, like Timesheets). An employee
+  linked to their login asks for leave and sees their annual and sick
+  balances in weeks and days; their timesheet approver, reports-to
+  manager's login or payroll access approves, which books the leave as the
+  approver (the next pay run pays it), or rejects it with a reason; the
+  employee changes or withdraws it until then. Days and hours only, never
+  pay; family violence leave shows as "Special leave" to approvers.
 
 ## Not built yet, on purpose
 
@@ -1238,7 +1260,8 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: opening leave balances, IRD's employee details file, and
+4. NZ payroll: posting the leave liability to the ledger (designed,
+   examples HL52-HL54, decision 177), IRD's employee details file, and
    the Employment Leave Act 2026 from 6 Aug 2028 once MBIE's guidance is
    out (employee records, IRD rates and calculations, pay items, pay runs,
    paying wages and IRD, bank files, payslips, the payday filing file,

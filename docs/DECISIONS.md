@@ -1074,7 +1074,8 @@ HL section's earlier reading.
      sick leave agreement (decision 19); continuous or casual (s 63(1)(b));
      the anniversary day region (decision 22). A setting that starts part
      way through a pay period is refused on that pay run.
-143. **Tohyee keeps an employee's leave only from its own pay records.**
+143. **Tohyee keeps an employee's leave only from its own pay records**
+     (since 2 Oct 2026, or from opening balances: decision 168).
      Opening leave balances and earnings from before Tohyee have no worked
      example, so leave is refused (as "Not supported yet") for someone
      whose first sick or annual entitlement arose before Tohyee's first pay
@@ -1185,7 +1186,8 @@ HL section's earlier reading.
      their use, and holiday pay on finishing, with each pay period's hours
      and pay (s 81(2)(c)); CSV export audited without figures. (ja) and (m)
      aren't supported (no transfers, no board).
-164. **Employees' own leave requests aren't built in P8**: booking leave
+164. **Employees' own leave requests aren't built in P8** (built since as
+     leave requests, decision 169): booking leave
      needs payroll access, because a booking changes pay and family
      violence leave must stay private. P9's employee self-service could be
      followed later (question for Jess).
@@ -1283,7 +1285,8 @@ address below; Xero may have changed them since.
      Refused: an opening date inside a pay period Tohyee works out, typed
      holiday pay after it, earnings rows that overlap Tohyee's own pay
      periods or each other, or leave the rows don't reach back far enough
-     for (named in the refusal). Examples HL43-HL48.
+     for (named in the refusal). Examples HL43-HL48. Built 2 Oct 2026
+     (tenant migration 0071).
 169. **Employees' own leave requests: yes, built like P9's timesheets
      (question 2).** NetSuite: "You can create and submit time-off requests
      using the Book Time Off button in the Time-Off portlet on your Employee
@@ -1307,7 +1310,7 @@ address below; Xero may have changed them since.
      asked for and shown to the approver as "Special leave" (decision 27).
      Cancelling once approved is the booking's cancel, by payroll access,
      and never after an approved pay run paid it. Examples HL49-HL51.
-     (Built or not: see the HL section's "Built" list.)
+     Built 2 Oct 2026 (Payroll › Leave requests; tenant migration 0071).
 170. **Advance holiday pay over the 8% stays refused (question 3).** The
      law allows the deduction only "with the written consent of the
      worker" (Wages Protection Act 1983 s 5(1)(a); s 23(2) and s 25(2) only

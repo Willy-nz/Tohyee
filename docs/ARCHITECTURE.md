@@ -493,6 +493,31 @@ period end; the EI file's hours include leave hours. Routes under
 (Payroll › Leave, the employee's leave, the record page) and leave on
 `payroll-pay-runs.tsx`.
 
+**Opening leave balances** (HL43-HL48, decision 168, tenant migration
+0071): `payroll_leave_opening_balances` (one `current` row per employee; a
+replacement marks the old one `replaced`) and its append-only
+`payroll_leave_opening_earnings` rows, with the report in
+`payroll_leave_files` (purpose `opening_balances_report`). Pure checks and
+helpers in `src/lib/payroll/leave/opening.ts`; the service is
+`src/lib/payroll/leave-opening.ts` (`/api/payroll/leave/opening`, payroll
+access). `loadEmployeeFacts()` reads them into `facts.opening` and puts the
+earnings rows into `facts.periods` (marked with `openingDays`) ahead of
+Tohyee's own pay periods, so every window calculation uses them unchanged;
+`annualDates()` runs from the last entitlement date, `annualBalance()`,
+the sick and family violence balances (`sick.ts` takes an opening
+balance), `alternativeHolidays()` and `advancePaidSince()` start from them,
+`daysWorkedOrPaid()` counts whole rows' days, and `whyLeaveNotKept()` no
+longer refuses for decision 143 when they exist. A draft for a pay period
+up to the opening date leaves leave alone; one across it is refused.
+
+**Leave requests** (HL49-HL51, decision 169, migration 0071's
+`payroll_leave_requests`): `src/lib/payroll/leave-requests.ts`, routes
+under `/api/payroll/leave/requests` with the viewer role, the service
+deciding who sees what with `employeeAccess()` from `timesheets.ts`
+(decisions 95, 96). Approving calls `createLeaveBooking()` with
+`fromApprovedRequest`, the one way a booking is made without payroll
+access. Screen: `src/components/payroll-leave-requests.tsx`.
+
 **Payday filing** (payroll stage P6, examples PF1-PF9, decisions 56-65):
 `src/lib/payroll/payday-filing.ts` is pure (no database): IRD's employment
 information file (HEI2 header, DEI lines, amounts in hundredths, CR LF),

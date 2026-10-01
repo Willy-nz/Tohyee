@@ -11471,7 +11471,12 @@ section), which added examples HL43-HL54. Where building showed an example
 was wrong or unclear, the text is corrected with a note saying so.
 
 Tests: `tests/unit/payroll-leave.test.ts` (the pure calculations: HL1-HL8,
-HL10-HL16, HL20-HL27, HL30-HL33, HL42, decision 7) and
+HL10-HL16, HL20-HL27, HL30-HL33, HL42, decision 7),
+`tests/unit/payroll-leave-opening.test.ts` and
+`tests/integration/payroll-leave-opening.test.ts` (opening balances,
+HL43-HL48, and HL52's liability figures),
+`tests/integration/payroll-leave-requests.test.ts` (leave requests,
+HL49-HL51) and
 `tests/integration/payroll-leave.test.ts` (the database flows, with the
 examples' own figures where Tohyee's records can hold them: Ben's usual
 pay, public holidays, Labour Day worked, sick leave, alternative holidays,
@@ -12266,8 +12271,13 @@ what it is. As well as the list above:
 
 - leave for anyone whose first sick or annual entitlement arose before
   Tohyee's first pay run for them, or who was paid P3's typed holiday pay,
-  and any calculation needing earnings from before Tohyee (opening
-  balances, decision 143); their holiday pay on finishing stays typed;
+  and any calculation needing earnings from before Tohyee, **unless they
+  have opening balances** (decision 143; since 2 Oct 2026 decision 168,
+  HL43-HL48, built); their holiday pay on finishing stays typed;
+- with opening balances: casual employees, an opening date inside a pay
+  period, gaps or overlaps in the earnings rows, typed holiday pay after
+  the opening date, ADP over a row only partly inside the 52 weeks, and
+  leave needing earnings from before the first row (HL48);
 - deducting advance holiday pay worth more than the 8% (HL15, decision 150);
 - back pay for a pay period with leave or holiday pay in it (decision 152);
 - paying annual holidays before they're taken, without the s 27(1)(a)
@@ -12276,7 +12286,11 @@ what it is. As well as the list above:
 - relevant daily pay for a public holiday for someone whose hours vary
   (use ADP), and the s 40(3) public holidays for someone whose hours vary;
 - public holidays in years Tohyee has no dates for (2028 on, decision 162);
-- employees booking their own leave (decision 164).
+- employees booking their own leave (decision 164): **built on 2 Oct 2026
+  as leave requests** (decision 169, HL49-HL51), approved by their
+  approver or payroll access;
+- posting the leave liability to the ledger: designed (decision 177,
+  HL52-HL54), built next.
 
 ### Decided (leave build)
 

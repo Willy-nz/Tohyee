@@ -49,7 +49,7 @@ Set them in the Agents box before sending each task:
 
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| Payroll P8 Holidays Act leave (built by Claude, not merged) | #60 | none yet | `claude/payroll-p8-leave` | 0070 |
+| Payroll P8b: the leave build's questions decided (168-181), opening balances, leave requests (built by Claude, not merged) | #60 | none yet | `claude/payroll-p8b-leave-calls` | 0071 |
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
@@ -69,7 +69,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0071 (0058-0070 used or reserved: 0070 Holidays Act leave P8 on `claude/payroll-p8-leave`, 0069 extra pays P12, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11).
+Next free tenant migration number: 0072 (0058-0071 used or reserved: 0071 opening leave balances and leave requests P8b on `claude/payroll-p8b-leave-calls`, 0070 Holidays Act leave P8, 0069 extra pays P12, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -232,10 +232,33 @@ only be run by certain people. Each item is its own branch and PR.
         by Department with the running 8% (shown only), payslip balances,
         leave hours in the EI file, leave pay as R&D cost.
       Refused: opening leave balances (so anyone employed before Tohyee's
-      first pay run for them; the biggest gap, question 1), deducting
+      first pay run for them; built in P8b, decision 168), deducting
       advance holiday pay over the 8%, back pay over leave, paying holidays
-      before they're taken, employees booking their own leave, the
-      Employment Leave Act 2026. Screens weren't checked in a browser.
+      before they're taken, employees booking their own leave (requests
+      built in P8b, decision 169), the Employment Leave Act 2026. Screens weren't checked in a browser.
+- [x] **P8b The leave build's questions, opening balances and leave
+      requests** (tenant migration 0071), on `claude/payroll-p8b-leave-calls`
+      (2 Oct 2026). Jess asked Claude to research and decide the 14 leave
+      build questions: decisions 168-181 in `docs/DECISIONS.md`
+      ("Decided (leave build)" at the end of the HL section). Built, with
+      examples HL43-HL51 (not approved by Jess):
+      - **Opening leave balances** (decision 168): entered once per employee
+        on their leave screen, as at the end of a pay period, with the
+        source and the previous payroll's report; the earlier earnings by
+        pay period. This lifts decision 143's refusal, the biggest gap.
+      - **Employees' own leave requests** (decision 169): Payroll › Leave
+        requests, approved by the timesheet approver, reports-to manager or
+        payroll access; approving books the leave.
+      - The public holiday decision shows s 12(3)'s other factors beside
+        Tohyee's suggestion (decision 173); HL13 sets Aroha's anniversary
+        day to Wellington's (decision 180).
+      Still refused (decisions 170-172): advance holiday pay over the 8%
+      (ask IRD how the recovery is taxed), back pay over leave (the law
+      isn't clear), paying holidays before they're taken. **Next:** posting
+      the leave liability to the ledger (decision 177, examples
+      HL52-HL54, designed, not built), then 2028's public holidays when
+      Employment NZ publishes them (decision 179). Screens weren't checked
+      in a browser.
 - [x] **P9 Timesheets** (tenant migration 0067), merged 2 Oct 2026; examples
       TS1-TS11 await Jess (questions under TS11), decisions 91-101. Built:
       - Payroll › Timesheets: one timesheet per employee per week (Monday to
@@ -432,6 +455,16 @@ To do:
       - When MBIE publishes it (due Nov 2026 to Jan 2027): its technical
         guidance for the Employment Leave Act, including how to convert
         existing leave balances.
+- [ ] **Ask IRD how recovering advance holiday pay is taxed** (decision
+      170): an employee leaves having taken more annual holidays in advance
+      than the 8% covers, and consents in writing to the excess coming off
+      the final pay. Does it reduce the final pay's gross (PAYE income), or
+      is it an after-tax deduction, and what if the holiday pay was in an
+      earlier tax year? Tohyee refuses the deduction until this is known.
+- [ ] **2028 public holidays** (decision 179): when Employment NZ publishes
+      2028's dates (anniversary days included), add them to
+      `src/lib/payroll/leave/public-holiday-dates.ts` before any pay period
+      touching 2028; check Matariki is Fri 14 Jul 2028 (Te Papa's list).
 - [ ] **Test on a real Windows computer**: install from TohyeeSetup, the
       server app, backups to OneDrive.
 - [ ] **Akahu bank feeds** with a real Akahu app.
