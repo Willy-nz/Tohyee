@@ -61,9 +61,10 @@ const ORDER_TOPICS = ["orders/create", "orders/updated", "orders/paid", "orders/
 const TIMEOUT_MS = 30_000;
 const CUSTOMERS_PER_PAGE = 100;
 const MAX_CUSTOMER_PAGES = 20;
-// Each product asks for up to 100 variants, so few products per page keeps the query under Shopify's cost limit.
-const PRODUCTS_PER_PAGE = 8;
-const MAX_PRODUCT_PAGES = 50;
+// Each product asks for up to 100 variants, each with its inventory item (about 2 points a variant), so few
+// products per page keeps the query under Shopify's cost limit: 4 x (2 + 100 x 2) is about 810.
+const PRODUCTS_PER_PAGE = 4;
+const MAX_PRODUCT_PAGES = 100;
 const VARIANTS_PER_PRODUCT = 100;
 // Shopify refuses a query whose requested cost is over 1,000 (each object 1, each connection sized by `first`:
 // https://shopify.dev/docs/apps/build/apis/graphql-admin/rate-limits). An order with 50 lines (about 10 each),
