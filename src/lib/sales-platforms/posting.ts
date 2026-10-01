@@ -290,14 +290,20 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       else context.counts.waiting = (context.counts.waiting ?? 0) + 1;
     }
   };
+  // Nothing more will happen to it unless Shopify changes it: it no longer holds a retry place.
+  const settle = async () => {
+    if (doc?.retry) await saveDocument(tx, posting, kind, id, { retry: false });
+  };
+
   // Refused because of what the order is: tried again only if Shopify changes it.
   const refuse = async (message: string) => {
-    if (doc?.retry) await saveDocument(tx, posting, kind, id, { retry: false });
+    await settle();
     await refused(tx, context, kind, id, message);
   };
 
   if (!doc || doc.sales_order_id === null) {
     if (Date.parse(order.processedAt) < Date.parse(posting.startInstant)) {
+      await settle();
       await log(tx, context, {
         action: "skipped",
         recordKind: kind,
@@ -307,6 +313,7 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       return;
     }
     if (order.cancelledAt && !paid) {
+      await settle();
       await log(tx, context, {
         action: "skipped",
         recordKind: kind,

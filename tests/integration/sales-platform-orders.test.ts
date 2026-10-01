@@ -447,6 +447,27 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     expect((await logFor(w, "5015"))[0]).toMatchObject({ action: "skipped" });
   });
 
+  it("SPC20: a waiting order that's then cancelled before payment stops being fetched again", async () => {
+    const w = await setup();
+    // Two contacts share Tama's email, so her order can't be linked to a contact and waits.
+    await w.as(async (tx) => {
+      await createContact(tx, { idempotencyKey: key("tama-1"), name: "Tama Rewi", email: "tama@example.co.nz", isCustomer: true });
+      await createContact(tx, { idempotencyKey: key("tama-2"), name: "T Rewi", email: "tama@example.co.nz", isCustomer: true });
+    });
+    w.state.orders.push(order1005());
+    await w.sync("2026-10-10T01:00:00Z");
+    expect(await doc(w, "order", "5005")).toMatchObject({ retry: true, sales_order_id: null });
+    w.state.orders[0] = order1005({ financialStatus: "VOIDED", cancelledAt: "2026-10-11T00:00:00Z", updatedAt: "2026-10-11T00:00:00Z" });
+    await w.sync("2026-10-11T01:00:00Z");
+    expect((await logFor(w, "5005")).at(-1)).toMatchObject({ action: "skipped" });
+    expect(await doc(w, "order", "5005")).toMatchObject({ retry: false, sales_order_id: null });
+    // It no longer holds one of the sync's retry places (it would have for good), and nothing is posted.
+    await w.sync("2026-10-11T02:00:00Z");
+    const retrying = await w.as((tx) => tx.query("select 1 from sales_platform_documents where retry"));
+    expect(retrying.rowCount).toBe(0);
+    expect(await count(w, "sales_orders")).toBe(0);
+  });
+
   it("SPC21: the start date, the switch and the period lock", async () => {
     const w = await setup({ post: false });
     await w.sync("2026-10-01T01:00:00Z");
