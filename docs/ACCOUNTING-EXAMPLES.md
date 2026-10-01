@@ -59,7 +59,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/import.test.ts` (IM1-IM16) and
   `tests/integration/tax-available-on.test.ts` (TAO1-TAO5, TAO7-TAO12) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
-  GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PR1, PR2),
+  GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PR1, PR2)
+  and `tests/integration/payroll-allocation.test.ts` (PR3, PR5-PR12),
   all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
@@ -73,7 +74,8 @@ proves it". Test names start with the example IDs they cover:
   rate and file currency pieces of FXB2-FXB10, and
   `tests/unit/import-fields.test.ts` the import column matching (IM2-IM5, IM16), and
   `tests/unit/tax-available-on.test.ts` the tax code pickers and starting codes
-  by side (TAO2-TAO4, TAO6, TAO8)
+  by side (TAO2-TAO4, TAO6, TAO8), and `tests/unit/payroll-allocation.test.ts`
+  the payroll % split (PR3-PR5)
 
 ## NZ payroll — employee records (examples not yet approved by Jess)
 
@@ -99,9 +101,42 @@ Stage P1b. Each employee gets a default **cost allocation** (where their pay
 is charged, split by %), a **pay rate history**, job details, and payroll
 data is only open to people an admin has given **payroll access**. Nothing
 here posts to the ledger or calculates pay; pay runs (P3) will use the
-allocation and rate in effect on each date. SOURCES-PLACEHOLDER
+allocation and rate in effect on each date.
 
-Tests: `tests/unit/payroll-allocation.test.ts` (PR3, PR4, PR5) and
+Sources followed (NetSuite first, then Xero Payroll NZ where NetSuite has no
+answer). The agent sandbox couldn't open docs.oracle.com or Xero Central, so
+these were found by web search and not read in full; check them before
+approving:
+
+- Splitting pay by % across Department, Class and Location: NetSuite's
+  [Labor Expense Allocation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_159118277665.html) and
+  [Classifying Individual Paycheck Lines](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1543951211.html)
+  (paycheck lines take the employee's Department, Class and Location by
+  default). NetSuite's percentage allocation schedules
+  ([Creating Expense Allocation Schedules](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N1483674.html))
+  require the percentages to total 100%. Neither page says how leftover
+  cents are shared out; the largest-remainder rule below is ours (question
+  for Jess).
+- Effective-dated changes kept as history: NetSuite's
+  [Effective Dating for Employee Information](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_4659236711.html)
+  (an effective date and a reason, with a change log) and
+  [Compensation Tracking](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_157489167446.html); Xero's
+  [pay and work pattern effective date](https://central.xero.com/s/article/Change-an-employee-s-salary-and-wages-details).
+- Job title and supervisor (reports-to): NetSuite's
+  [Human Resources information on the employee record](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N895403.html).
+- Pay frequency and employee groups: NetSuite's
+  [Including an Employee in Payroll](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N921988.html) (pay
+  frequency on the employee) and [Creating a Payroll Batch](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N947366.html)
+  (run per pay frequency); Xero's [pay frequencies](https://central.xero.com/0/article/Add-a-pay-calendar)
+  and [employee groups for payroll tracking](https://central.xero.com/s/article/Payroll-tracking-in-Xero).
+- Payroll access separate from accounting roles: NetSuite's
+  [Advanced Employee Permissions](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_1494536002.html) (an
+  "Employee Compensation" permission apart from the rest of the employee
+  record) and Xero's [user role access to payroll](https://central.xero.com/s/article/User-role-access-to-payroll-in-Xero)
+  (only payroll admins and advisers see employee pay and bank details).
+
+Tests: `tests/unit/payroll-allocation.test.ts` (PR3, PR4, PR5),
+`tests/unit/payroll-access-screen.test.ts` (PR10's message) and
 `tests/integration/payroll-allocation.test.ts` (PR3, PR5-PR12).
 
 ### Cost allocation
@@ -192,6 +227,11 @@ rate events the effective date and pay basis.
   owner does it (it's refused as built)?
 - Should a viewer with payroll access be able to read payroll (refused as
   built: payroll needs bookkeeper as well)?
+- Leftover cents in a split go to the lines with the largest part cut off,
+  the earlier line first on a tie (PR3, PR4). Is that right, or should they
+  always go to the biggest line, or the last line?
+- Should a line be allowed with no Department, Class, Location or project
+  (refused as built, PR5)?
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.

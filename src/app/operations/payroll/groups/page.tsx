@@ -2,20 +2,20 @@
 
 import { RequireOrganisation } from "@/components/books";
 import { PayrollAccessGate } from "@/components/payroll-access";
-import { PayrollEmployees } from "@/components/payroll-employees";
+import { PayrollGroups } from "@/components/payroll-groups";
 import { Page, PageHeader } from "@/components/ui";
 
-export default function PayrollEmployeesPage() {
+export default function PayrollGroupsPage() {
   return (
     <Page>
       <PageHeader
-        title="Payroll employees"
-        description="Employee payroll details, pay rates and where their pay is charged. Pay calculations, payments, payslips and payday filing are not supported yet."
+        title="Pay groups and employee groups"
+        description="Pay groups are the people paid together on one frequency. Employee groups are for reporting."
       />
       <RequireOrganisation>
         {(organisationId) => (
           <PayrollAccessGate key={organisationId} organisationId={organisationId}>
-            <PayrollEmployees organisationId={organisationId} />
+            <PayrollGroups organisationId={organisationId} />
           </PayrollAccessGate>
         )}
       </RequireOrganisation>

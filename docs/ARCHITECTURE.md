@@ -49,7 +49,11 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ purchase_orders, purchase_order_lines, purchase_order_numbering   purchase orders (post nothing; copied to bills)
 ├─ supplier_payments      money paid against bills
 ├─ expense_claims, expense_claim_receipts, expense_claim_payments   staff expense claims, their receipts and payments
-├─ payroll_employees        employee payroll details (IRD and bank details encrypted)
+├─ payroll_employees        employee payroll details (IRD and bank details encrypted), job title, reports-to, pay and employee group
+├─ payroll_pay_rates        pay rate history: salary or hourly rate from a date (append-only)
+├─ payroll_cost_allocations, payroll_cost_allocation_lines   where pay is charged, split by % from a date (append-only; lines total 100.00%)
+├─ payroll_pay_groups, payroll_employee_groups   pay groups (with a pay frequency) and employee groups for reporting
+├─ payroll_access           who has payroll access, by core user id (grants and removals in audit_events)
 ├─ fixed_asset_types, fixed_assets, fixed_asset_numbering   the fixed asset register (archived, never deleted)
 ├─ fixed_asset_depreciation_runs, fixed_asset_disposals, fixed_asset_depreciation_lines   depreciation runs and disposals, and the months each charged
 ├─ projects, project_tasks, project_time_entries, project_expenses   projects, their tasks, time (whole minutes) and linked expense lines (post nothing; never deleted)
@@ -137,7 +141,9 @@ Creating an organisation (server admins only):
 3. applies the tenant migrations,
 4. seeds `organisation_settings`, a starting NZ chart of accounts and the
    standard NZ GST codes (each only if there are none yet),
-5. marks it `ready`.
+5. gives the first owner payroll access, once (`organisation_settings.payroll_access_started_at`
+   records it; also run after migrations at start-up so upgraded organisations get it),
+6. marks it `ready`.
 
 Every step is idempotent. If any step fails the organisation is marked
 `failed` with the error, and **Repair** (`POST /api/admin/organisations/:id/repair`)
@@ -235,6 +241,19 @@ Per organisation (lowest to highest):
 | bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add and archive exchange rates; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add notes and files, and edit, delete or remove their own |
 | admin | + approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, closing a month with checks that need attention (after confirming) and reopening months (with a reason) on Period close, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
+
+**Payroll access** is a separate permission, not a role (examples PR9-PR12).
+An admin gives it to, or removes it from, named members (Settings › Payroll
+access); it needs the bookkeeper role or higher, and admins and owners don't
+get it automatically. It's kept in the organisation's own database
+(`payroll_access`, keyed by the core user id), and every grant and removal is
+in `audit_events` with who did it. The first owner has it from the start, the
+last current member with it can't lose it, and someone removed from the
+organisation and added again starts without it. Every payroll service calls
+`requirePayrollAccess(tx)` (`src/lib/payroll/access.ts`) first, and payroll
+routes use `withPayrollAccess()` (`src/lib/api/http.ts`: bookkeeper and
+payroll access); pay runs and payroll reports must do the same. Audit
+details for payroll never include IRD numbers, bank accounts or pay amounts.
 
 People who aren't members get "not found", so organisation IDs can't be
 probed. Every audit record stores the signed-in user, never a name typed into

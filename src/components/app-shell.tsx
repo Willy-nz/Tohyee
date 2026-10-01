@@ -94,7 +94,11 @@ const MENUS: Menu[] = [
     label: "Payroll",
     groups: [
       {
-        links: [{ href: "/operations/payroll/employees", label: "Employees", minRole: "bookkeeper" }],
+        links: [
+          { href: "/operations/payroll/employees", label: "Employees", minRole: "bookkeeper" },
+          { href: "/operations/payroll/groups", label: "Pay groups and employee groups", minRole: "bookkeeper" },
+          { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
+        ],
       },
     ],
   },
@@ -158,6 +162,7 @@ const MENUS: Menu[] = [
           { href: "/operations/settings/customers", label: "Payment terms and customers", minRole: "admin" },
           { href: "/operations/settings/import", label: "Import and export", minRole: "admin" },
           { href: "/operations/settings/email", label: "Email", minRole: "admin" },
+          { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
           { href: "/operations/fixed-assets/types", label: "Fixed asset types", minRole: "admin" },
           { href: "/operations/members", label: "People and roles", minRole: "admin" },
         ],

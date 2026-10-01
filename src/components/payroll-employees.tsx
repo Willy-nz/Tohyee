@@ -2,12 +2,17 @@
 
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
+import { describePay, EmployeeAllocation, EmployeePayRates } from "@/components/payroll-employee-pay";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Employee, EmployeeSummary } from "@/lib/payroll/employees";
+import type { EmployeeGroup, PayGroup } from "@/lib/payroll/groups";
 import styles from "./payroll-employees.module.css";
 
-type Draft = Omit<Employee, "id" | "isArchived" | "kiwiSaverStatus" | "payFrequency" | "payBasis" | "studentLoan"> & {
+/** Shown beside the employee, not saved from the form. */
+type ReadOnly = "reportsToName" | "payGroupName" | "employeeGroupName" | "primaryDepartment";
+
+type Draft = Omit<Employee, "id" | "isArchived" | "kiwiSaverStatus" | "payFrequency" | "payBasis" | "studentLoan" | ReadOnly> & {
   kiwiSaverStatus: Employee["kiwiSaverStatus"] | "";
   payFrequency: Employee["payFrequency"] | "";
   payBasis: Employee["payBasis"] | "";
@@ -35,6 +40,10 @@ const EMPTY_DRAFT: Draft = {
   startDate: "",
   finishDate: "",
   bankAccount: "",
+  jobTitle: "",
+  reportsToId: null,
+  payGroupId: null,
+  employeeGroupId: null,
 };
 
 const STATUS_LABELS: Record<Employee["kiwiSaverStatus"], string> = {
@@ -56,12 +65,40 @@ function draftFrom(employee: Employee): Draft {
   const draft = { ...employee } as Partial<Employee>;
   delete draft.id;
   delete draft.isArchived;
+  delete draft.reportsToName;
+  delete draft.payGroupName;
+  delete draft.employeeGroupName;
+  delete draft.primaryDepartment;
   return draft as Draft;
 }
 
-function fieldsFrom(draft: Draft) {
+/** A new employee's pay is their starting pay; after that pay changes under Pay rates (PR7). */
+function fieldsFrom(draft: Draft, isNew: boolean) {
+  const job = {
+    jobTitle: draft.jobTitle || null,
+    reportsToId: draft.reportsToId || null,
+    payGroupId: draft.payGroupId || null,
+    employeeGroupId: draft.employeeGroupId || null,
+  };
+  if (!isNew) {
+    const rest: Partial<Draft> = { ...draft };
+    delete rest.payBasis;
+    delete rest.annualSalary;
+    delete rest.hourlyRate;
+    delete rest.ordinaryHoursPerWeek;
+    return {
+      ...rest,
+      ...job,
+      email: draft.email || null,
+      phone: draft.phone || null,
+      postalAddress: draft.postalAddress || null,
+      dateOfBirth: draft.dateOfBirth || null,
+      finishDate: draft.finishDate || null,
+    };
+  }
   return {
     ...draft,
+    ...job,
     email: draft.email || null,
     phone: draft.phone || null,
     postalAddress: draft.postalAddress || null,
@@ -83,12 +120,18 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
     organisationId,
     includeArchived,
   });
+  const groups = useApiData<{ payGroups: PayGroup[]; employeeGroups: EmployeeGroup[] }>("/api/payroll/groups", {
+    organisationId,
+    includeArchived: true,
+  });
+  const [current, setCurrent] = useState<Employee | null>(null);
 
   const change = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
   const startNew = () => {
     setSelectedId(null);
+    setCurrent(null);
     setDraft(EMPTY_DRAFT);
     setMessage(null);
   };
@@ -101,6 +144,7 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
         query: { organisationId },
       });
       setSelectedId(id);
+      setCurrent(response.employee);
       setDraft(draftFrom(response.employee));
     } catch (cause) {
       setMessage({ tone: "error", text: errorMessage(cause) });
@@ -114,7 +158,7 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
     setBusy(true);
     setMessage(null);
     try {
-      const fields = fieldsFrom(draft);
+      const fields = fieldsFrom(draft, !selectedId);
       const response = selectedId
         ? await api<{ employee: Employee }>(`/api/payroll/employees/${selectedId}`, {
             method: "PATCH",
@@ -125,6 +169,7 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
             body: { organisationId, idempotencyKey: newIdempotencyKey("employee"), ...fields },
           });
       setSelectedId(response.employee.id);
+      setCurrent(response.employee);
       setDraft(draftFrom(response.employee));
       setMessage({ tone: "success", text: "Employee details saved." });
       reload();
@@ -183,7 +228,7 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
             <Field label="Date of birth">
               <input autoComplete="bday" type="date" value={draft.dateOfBirth ?? ""} onChange={(event) => change("dateOfBirth", event.target.value)} />
             </Field>
-            <Field label="IRD number" hint="Encrypted when saved. Only payroll bookkeepers can view it.">
+            <Field label="IRD number" hint="Encrypted when saved. Only people with payroll access can see it.">
               <input autoComplete="off" inputMode="numeric" required value={draft.irdNumber} onChange={(event) => change("irdNumber", event.target.value)} />
             </Field>
             <Field label="Tax code">
@@ -207,27 +252,35 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
                 {Object.entries(FREQUENCY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </Field>
-            <Field label="Ordinary pay">
-              <select required value={draft.payBasis} onChange={(event) => change("payBasis", event.target.value as Draft["payBasis"])}>
-                <option value="">Choose a pay type</option>
-                <option value="salary">Salary</option>
-                <option value="hourly">Hourly</option>
-              </select>
-            </Field>
-            {draft.payBasis === "salary" ? (
-              <Field label="Annual salary (NZD)">
-                <input inputMode="decimal" required value={draft.annualSalary ?? ""} onChange={(event) => change("annualSalary", event.target.value)} />
+            {selectedId ? (
+              <Field label="Current pay" hint="Change pay under Pay rates below, with the date the new rate starts.">
+                <input readOnly value={current ? describePay(current) : ""} />
               </Field>
-            ) : draft.payBasis === "hourly" ? (
+            ) : (
               <>
-                <Field label="Hourly rate (NZD)">
-                  <input inputMode="decimal" required value={draft.hourlyRate ?? ""} onChange={(event) => change("hourlyRate", event.target.value)} />
+                <Field label="Ordinary pay">
+                  <select required value={draft.payBasis} onChange={(event) => change("payBasis", event.target.value as Draft["payBasis"])}>
+                    <option value="">Choose a pay type</option>
+                    <option value="salary">Salary</option>
+                    <option value="hourly">Hourly</option>
+                  </select>
                 </Field>
-                <Field label="Ordinary hours per week">
-                  <input inputMode="decimal" required value={draft.ordinaryHoursPerWeek ?? ""} onChange={(event) => change("ordinaryHoursPerWeek", event.target.value)} />
-                </Field>
+                {draft.payBasis === "salary" ? (
+                  <Field label="Annual salary (NZD)">
+                    <input inputMode="decimal" required value={draft.annualSalary ?? ""} onChange={(event) => change("annualSalary", event.target.value)} />
+                  </Field>
+                ) : draft.payBasis === "hourly" ? (
+                  <>
+                    <Field label="Hourly rate (NZD)">
+                      <input inputMode="decimal" required value={draft.hourlyRate ?? ""} onChange={(event) => change("hourlyRate", event.target.value)} />
+                    </Field>
+                    <Field label="Ordinary hours per week">
+                      <input inputMode="decimal" required value={draft.ordinaryHoursPerWeek ?? ""} onChange={(event) => change("ordinaryHoursPerWeek", event.target.value)} />
+                    </Field>
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
             <Field label="Start date">
               <input required type="date" value={draft.startDate} onChange={(event) => change("startDate", event.target.value)} />
             </Field>
@@ -236,6 +289,39 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
             </Field>
             <Field label="Bank account" hint="Encrypted when saved. Leave blank if no account has been supplied.">
               <input autoComplete="off" value={draft.bankAccount ?? ""} onChange={(event) => change("bankAccount", event.target.value)} />
+            </Field>
+          </div>
+          <h3>Job</h3>
+          <div className={ui.grid2}>
+            <Field label="Job title">
+              <input maxLength={100} value={draft.jobTitle ?? ""} onChange={(event) => change("jobTitle", event.target.value)} />
+            </Field>
+            <Field label="Reports to">
+              <select value={draft.reportsToId ?? ""} onChange={(event) => change("reportsToId", event.target.value || null)}>
+                <option value="">No one</option>
+                {(data?.employees ?? [])
+                  .filter((employee) => employee.id !== selectedId && (!employee.isArchived || employee.id === draft.reportsToId))
+                  .map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
+                {draft.reportsToId && current?.reportsToId === draft.reportsToId && !data?.employees.some((employee) => employee.id === draft.reportsToId) ? (
+                  <option value={draft.reportsToId}>{current.reportsToName}</option>
+                ) : null}
+              </select>
+            </Field>
+            <Field label="Pay group" hint="Everyone in a pay group is paid on its frequency.">
+              <select value={draft.payGroupId ?? ""} onChange={(event) => change("payGroupId", event.target.value || null)}>
+                <option value="">None</option>
+                {(groups.data?.payGroups ?? [])
+                  .filter((group) => !group.isArchived || group.id === draft.payGroupId)
+                  .map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Employee group" hint="For reporting.">
+              <select value={draft.employeeGroupId ?? ""} onChange={(event) => change("employeeGroupId", event.target.value || null)}>
+                <option value="">None</option>
+                {(groups.data?.employeeGroups ?? [])
+                  .filter((group) => !group.isArchived || group.id === draft.employeeGroupId)
+                  .map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+              </select>
             </Field>
           </div>
           <Field label="Student loan">
@@ -256,6 +342,21 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
         </form>
       </Card>
 
+      {selectedId ? (
+        <>
+          <EmployeePayRates
+            key={`rates-${selectedId}`}
+            organisationId={organisationId}
+            employeeId={selectedId}
+            onSaved={() => {
+              reload();
+              void edit(selectedId);
+            }}
+          />
+          <EmployeeAllocation key={`allocation-${selectedId}`} organisationId={organisationId} employeeId={selectedId} onSaved={reload} />
+        </>
+      ) : null}
+
       <Card
         title="Employees"
         actions={
@@ -269,13 +370,18 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
           <div className={ui.tableWrap}>
             <table className={ui.stackOnPhone}>
               <thead>
-                <tr><th>Employee</th><th>Pay</th><th>IRD details</th><th>Status</th><th>Actions</th></tr>
+                <tr><th>Employee</th><th>Department</th><th>Pay</th><th>IRD details</th><th>Status</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {data.employees.map((employee) => (
                   <tr key={employee.id}>
-                    <td data-label="Employee">{employee.firstName} {employee.lastName}<br /><small>Starts {employee.startDate}</small></td>
-                    <td data-label="Pay">{employee.payBasis === "salary" ? `$${employee.annualSalary} a year` : `$${employee.hourlyRate} an hour`}<br /><small>{FREQUENCY_LABELS[employee.payFrequency]}</small></td>
+                    <td data-label="Employee">
+                      {employee.firstName} {employee.lastName}
+                      <br />
+                      <small>{[employee.jobTitle, employee.reportsToName ? `reports to ${employee.reportsToName}` : null, `starts ${employee.startDate}`].filter(Boolean).join(" · ")}</small>
+                    </td>
+                    <td data-label="Department">{employee.primaryDepartment?.name ?? "—"}{employee.employeeGroupName ? <><br /><small>{employee.employeeGroupName}</small></> : null}</td>
+                    <td data-label="Pay">{employee.payBasis === "salary" ? `$${employee.annualSalary} a year` : `$${employee.hourlyRate} an hour`}<br /><small>{FREQUENCY_LABELS[employee.payFrequency]}{employee.payGroupName ? ` · ${employee.payGroupName}` : ""}</small></td>
                     <td data-label="IRD details">{employee.hasIrdNumber ? "IRD number saved" : "No IRD number"}<br />{employee.hasBankAccount ? "Bank account saved" : "No bank account"}</td>
                     <td data-label="Status">{employee.isArchived ? <Badge tone="neutral">Archived</Badge> : <Badge tone="green">Active</Badge>}</td>
                     <td data-label="Actions">
