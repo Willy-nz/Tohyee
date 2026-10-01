@@ -10532,6 +10532,380 @@ default allocation, for those days only:
 7. **A late timesheet after the pay was posted** (TS9, RD22): build the
    reallocation of the posted pay's R&D share, or keep listing it?
 
+## Payroll reports (examples not yet approved by Jess)
+
+Stage P10 of payroll (#60), built by Claude on 2 Oct 2026; Jess hasn't
+approved these. **Payroll › Reports** has six reports, all read-only (they
+post nothing and change nothing), all for people with **payroll access**
+(and the bookkeeper role or higher): labour cost, the payroll summary, the
+reconciliation to the ledger, headcount and FTE, each employee's earnings
+history, and the PAYE, KiwiSaver and student loan summary. Every figure
+comes from **approved pay runs' stored figures** (what approving kept:
+each employee's totals, lines and postings) and the **shares each pay run
+used** to split its costs (the default allocation, P3, or approved
+timesheets, P9); nothing is recalculated from today's rates, allocations
+or timesheets. Dates are **pay dates** (decision 102). Each report can be
+exported as CSV; an export is recorded in the audit log without any
+figures (decision 109). Decisions 102-111 in [DECISIONS.md](DECISIONS.md)
+say why each rule is as it is.
+
+Sources: there's no law on payroll reports beyond keeping the records
+(Holidays Act s 81, the wage and time record, the payday filing rules);
+IRD's rules decide the PAYE, KiwiSaver and student loan figures (decision
+58, PF1-PF4) and IRD periods by pay date (PPAY4). Then **NetSuite**: "The
+Payroll Summary report displays the sum of paycheck amounts for each
+payroll item within the specified date range. The items are grouped by
+payroll item type."
+([Payroll Summary Report](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N962618.html));
+the Payroll Summary by Employee report "lists amounts for earnings,
+employee-paid taxes, other deductions, company contributions, and does the
+gross-to-net calculation" and "can group employees by department or roll up
+payroll activity for each department into a single line"
+([Payroll Summary by Employee](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N962835.html));
+the Payroll Liability report shows "your total unpaid liability for each
+payroll item" and "does not include previously paid liability"
+([Payroll Liability Report](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N960606.html));
+the Payroll Journal report "lists the journal entries made for each
+paycheck"
+([Payroll Journal Report](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N962405.html));
+all read 2 Oct 2026. NetSuite has no headcount or FTE report in that list
+([Payroll Reports and Workbooks](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_N959965.html)).
+**Xero** Payroll NZ has a "Payroll Activity Summary" and a "Payroll
+Employee Summary" report, but Xero Central's pages
+([Payroll Activity Summary report](https://central.xero.com/0/article/Payroll-Activity-Summary-report))
+load with script and couldn't be read by our tools on 2 Oct 2026, so
+nothing here rests on what they say (**unverified**).
+
+Tests: `tests/unit/payroll-reports.test.ts` (the pure rules: FTE, months,
+grouping and CSV) and `tests/integration/payroll-reports.test.ts`
+(PREP1-PREP8, against PostgreSQL and the API routes).
+
+**The example company** is Harbour Cafe Ltd from the pay run examples:
+advanced features on, Departments **Sales** and **Operations**, the project
+**Cafe rebrand**, the "Tool allowance" pay item (PRUN10), payday filing set
+up as in PF1, paying IRD monthly, bank account **1000**. Allocations: Hemi
+Walker 60% Sales, 40% Operations; Kiri Tane 100% Sales; Sione Fifita 100%
+Operations on Cafe rebrand; Aroha Ngata 100% Sales. In **October 2026**:
+
+| Pay run | Pay group | Pay date | What it is | Status |
+| --- | --- | --- | --- | --- |
+| PAYRUN-1 | Fortnightly salaries | 14 Oct 2026 | PRUN1 (Hemi and Kiri) | approved, its EI file made on 14 Oct (PF1), then **voided on 20 Oct 2026** (PRUN6) |
+| PAYRUN-2 | Weekly wages | 14 Oct 2026 | PRUN2 (Sione) | approved, EI file made |
+| PAYRUN-3 | Four-weekly | 14 Oct 2026 | PRUN3 (Aroha) | approved, EI file made |
+| PAYRUN-4 | Fortnightly salaries | 14 Oct 2026 | PRUN1 run again after the void: the same figures | approved 20 Oct, **no EI file made yet** |
+
+Wages paid (P4): **WAGES-1** PAYRUN-2's 730.50 on 14 Oct, **WAGES-2**
+PAYRUN-3's 2,590.50 on 14 Oct, **WAGES-3** PAYRUN-4's 3,699.50 on 21 Oct.
+IRD paid for October on **20 Nov 2026** (**IRD-1**, 2,333.44: PAYE
+1,636.70, student loan 197.28, KiwiSaver 444.66, ESCT 54.80). One manual
+journal, **ACCRUAL-OCT** on 31 Oct 2026: Dr 6200 Wages and salaries 500.00,
+Cr 2240 Wages payable 500.00 ("Wages accrued 26-31 Oct").
+
+### Labour cost
+
+Labour cost is what approved pay runs **charged** (their postings: each
+employee's share of each debit line of the pay run's journal), for
+earnings and the employer KiwiSaver contribution (gross, ESCT included, as
+posted), **not reimbursements**, which are shown on their own line
+(decision 103). Grouped by Department, project, R&D activity, pay item or
+employee, with a column for each pay item, and filtered by any of
+Department, project, R&D activity, employee and pay item together. The
+Department, project and R&D activity are those of the share each posting
+came from (decision 104).
+
+- **PREP1 Labour cost by Department, October 2026.** 1-31 Oct 2026, by
+  Department. PAYRUN-1 is voided, so it's left out (PAYRUN-4 has the same
+  figures); the screen lists it under "Voided pay runs, not counted".
+
+  | Department | Ordinary time | Overtime | Tool allowance | KiwiSaver employer contribution | Labour cost |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | Operations | 1,796.92 | 135.00 | 25.00 | 68.49 | **2,025.41** |
+  | Sales | 7,115.39 | | | 179.04 | **7,294.43** |
+  | **Total** | **8,912.31** | **135.00** | **25.00** | **247.53** | **9,319.84** |
+
+  Sales: ordinary time Hemi 1,615.39 (60%) + Kiri 2,000.00 + Aroha
+  3,500.00 = 7,115.39; employer KiwiSaver Hemi 56.54 + Aroha 122.50 =
+  179.04. Operations: Hemi 1,076.92 (40%) + Sione 720.00 = 1,796.92;
+  Sione's overtime 135.00 and tool allowance 25.00; employer KiwiSaver Hemi
+  37.69 + Sione 30.80 = 68.49. **Reimbursements (not labour cost): 42.60**
+  (Sione's fuel, Operations). Labour cost plus reimbursements, 9,362.44, is
+  the three pay runs' employer cost (4,786.54 + 953.40 + 3,622.50) and
+  their journals' debits.
+  - **By project**: Cafe rebrand **910.80** (720.00 + 135.00 + 25.00 +
+    30.80), No project **8,409.04**; total 9,319.84.
+  - **By pay item**: Ordinary time 8,912.31, Overtime 135.00, Tool
+    allowance 25.00, KiwiSaver employer contribution 247.53.
+  - **By employee**: Aroha Ngata 3,622.50, Hemi Walker 2,786.54, Kiri Tane
+    2,000.00, Sione Fifita 910.80.
+  - **Filters together**: Department Operations and pay item Ordinary time
+    gives **1,796.92**; employee Hemi Walker by Department gives Operations
+    **1,114.61** (1,076.92 + 37.69), Sales **1,671.93** (1,615.39 +
+    56.54), total 2,786.54; Department Sales and project Cafe rebrand gives
+    nothing ("No labour cost matches").
+  - Groups are in name order with "No Department" (or "No project", "No
+    R&D activity") last; pay item columns are in the pay items' order and
+    only those with an amount are shown.
+
+- **PREP2 Labour cost by R&D activity, from timesheet shares (TS5).** Kea
+  Sensors Ltd (the timesheet examples): pay run for 6-19 Jul 2026, pay date
+  22 Jul 2026, with both of Ben Tait's weeks approved first (TS5). Hana
+  Rewi's pay was split by her allocation (100% C1); Ben's by his
+  timesheets, not his 60/40 allocation. 1-31 Jul 2026, by R&D activity:
+
+  | R&D activity | Ordinary time | KiwiSaver employer contribution | Labour cost |
+  | --- | ---: | ---: | ---: |
+  | C1 Prototype and field-test a low-power soil-moisture sensor | 3,300.00 | 84.00 | **3,384.00** |
+  | No R&D activity | 1,100.00 | | **1,100.00** |
+  | **Total** | **4,400.00** | **84.00** | **4,484.00** |
+
+  C1 is Hana's 2,400.00 + 84.00 and Ben's 900.00 (36 of his 80 timesheet
+  hours); "No R&D activity" is Ben's Operations 800.00 and Taieri soil
+  survey 300.00. By Department: Operations **800.00**, No Department
+  **3,684.00**. By project: Taieri soil survey **300.00**, No project
+  **4,184.00**. Filtered to C1 and Ben Tait: **900.00**. Had Ben's
+  timesheets been approved after the pay run (TS9), the report would still
+  show what was posted (his allocation's 1,200.00 to C1): it reads the
+  shares the pay run kept, never today's timesheets or allocation. These
+  are what was charged, not the R&D claim: the claim (Tax › R&D claim
+  report) rounds each R&D share down and applies decision 34's 100% rule
+  (TS5-TS7).
+
+  Pay runs approved before timesheets (P9) kept no shares: their
+  Department is the posting's Department tag and their project the
+  posting's project, and their R&D activity shows as "Not recorded (pay
+  run approved before timesheets)" (decision 104).
+
+### Payroll summary
+
+- **PREP3 Payroll summary, October 2026.** Each approved pay run paid
+  1-31 Oct 2026 with its stored totals, gross to net and the employer's
+  costs, then the totals, then the totals by pay item:
+
+  | | PAYRUN-2 | PAYRUN-3 | PAYRUN-4 | **Total** |
+  | --- | ---: | ---: | ---: | ---: |
+  | Pay group | Weekly wages | Four-weekly | Fortnightly salaries | |
+  | Employees | 1 | 1 | 2 | 4 |
+  | Gross | 922.60 | 3,500.00 | 4,692.31 | **9,114.91** |
+  | of which taxable | 880.00 | 3,500.00 | 4,692.31 | **9,072.31** |
+  | of which not taxable | 42.60 | 0.00 | 0.00 | **42.60** |
+  | PAYE (incl. ACC earners' levy) | 148.40 | 589.72 | 898.58 | **1,636.70** |
+  | Student loan | 0.00 | 197.28 | 0.00 | **197.28** |
+  | KiwiSaver employee | 35.20 | 122.50 | 94.23 | **251.93** |
+  | Other deductions | 8.50 | 0.00 | 0.00 | **8.50** |
+  | **Net pay** | 730.50 | 2,590.50 | 3,699.50 | **7,020.50** |
+  | KiwiSaver employer (gross) | 30.80 | 122.50 | 94.23 | **247.53** |
+  | ESCT | 5.25 | 21.35 | 28.20 | **54.80** |
+  | KiwiSaver employer, net of ESCT | 25.55 | 101.15 | 66.03 | **192.73** |
+  | **Employer cost** | 953.40 | 3,622.50 | 4,786.54 | **9,362.44** |
+
+  Gross less PAYE, student loan, KiwiSaver and deductions is net pay
+  (9,114.91 − 1,636.70 − 197.28 − 251.93 − 8.50 = 7,020.50); employer
+  cost is gross plus the employer KiwiSaver contribution (9,114.91 +
+  247.53). By pay item: Ordinary time **8,912.31** (32.00 hours, Sione's;
+  salaries are amounts), Overtime **135.00** (4.00 hours), Tool allowance
+  **25.00**, Reimbursement **42.60**, Union fees (deduction) **8.50**,
+  KiwiSaver employer contribution **247.53**. "Voided pay runs, not
+  counted": PAYRUN-1, pay date 14 Oct 2026, voided 20 Oct 2026. With the
+  employee filter Sione Fifita, only his figures (PAYRUN-2's column) are
+  counted. The other filters (Department, project, R&D activity) don't
+  apply: PAYE and net pay aren't split by Department (decision 105).
+
+### Reconciliation to the ledger
+
+- **PREP4 Payroll against the ledger, October 2026.** For each payroll
+  account (each pay item's account, the accounts approved pay runs
+  posted to, and the PAYE, student loan, KiwiSaver, ESCT and wages
+  payable accounts), the **payroll figure** for 1-31 Oct 2026 against the
+  account's **ledger movement** in the same dates, the difference, and
+  every journal that explains it (decision 106). Expense accounts are
+  debits less credits; liability accounts credits less debits. The payroll
+  figure is: for expense accounts, the postings of approved pay runs paid
+  in the dates; for IRD liabilities, what those pay runs credited less IRD
+  payments dated in the dates; for wages payable, their net pay less wage
+  payments dated in the dates; for deduction accounts, the deductions.
+
+  | Account | Payroll | Ledger | Difference | Explained by |
+  | --- | ---: | ---: | ---: | --- |
+  | 6070 General expenses | 42.60 | 42.60 | 0.00 | |
+  | 6200 Wages and salaries | 9,072.31 | 9,572.31 | **500.00** | PAYRUN-1 (voided pay run) 4,692.31; VOID-PAYRUN-1 (voided pay run) −4,692.31; Manual journal ACCRUAL-OCT 500.00 |
+  | 6210 KiwiSaver employer contributions | 247.53 | 247.53 | 0.00 | PAYRUN-1 94.23; VOID-PAYRUN-1 −94.23 |
+  | 2200 PAYE payable | 1,636.70 | 1,636.70 | 0.00 | PAYRUN-1 898.58; VOID-PAYRUN-1 −898.58 |
+  | 2210 KiwiSaver payable | 444.66 | 444.66 | 0.00 | PAYRUN-1 160.26; VOID-PAYRUN-1 −160.26 |
+  | 2220 ESCT payable | 54.80 | 54.80 | 0.00 | PAYRUN-1 28.20; VOID-PAYRUN-1 −28.20 |
+  | 2230 Student loan payable | 197.28 | 197.28 | 0.00 | |
+  | 2240 Wages payable | 0.00 | 500.00 | **500.00** | PAYRUN-1 3,699.50; VOID-PAYRUN-1 −3,699.50; Manual journal ACCRUAL-OCT 500.00 |
+  | 2250 Payroll deductions payable | 8.50 | 8.50 | 0.00 | |
+
+  Wages payable's payroll figure is net pay 7,020.50 less WAGES-1, WAGES-2
+  and WAGES-3 (7,020.50) = 0.00. KiwiSaver payable's 444.66 is the
+  employees' 251.93 plus the employer's 192.73 net. **Not explained: 0.00
+  on every account.** The journals from the counted pay runs (PAYRUN-2,
+  -3, -4) and payments (WAGES-1 to -3) aren't listed: they are the payroll
+  figure. A journal on a payroll account from anything else is listed with
+  its date, reference, where it came from and its amount on that account:
+  a voided pay run or payment (both its journals, which cancel when both
+  fall in the dates), a manual journal, or another document (a bill coded
+  to 6070, say, which shows that 6070 is also used outside payroll). If a
+  difference isn't covered by those journals (for example a deduction pay
+  item whose account was changed after pay runs used the old one), the
+  rest is shown as **not explained**, with that reason as a hint.
+  For **1 Oct to 30 Nov 2026**, IRD-1 (20 Nov) counts too: PAYE's payroll
+  figure is 1,636.70 − 1,636.70 = 0.00 and so is its ledger movement, and
+  likewise student loan, KiwiSaver and ESCT.
+
+### Headcount and FTE
+
+FTE is an employee's usual weekly hours ÷ the **standard week** (40.00
+hours unless another is entered on the report), to 4 decimal places,
+rounded half up, at most 1.0000. Employees on a salary have no usual hours
+in Tohyee, so they count as **1.0000, marked "assumed (salary)"**
+(decision 107). Who's employed on a date is from their start and finish
+dates; their usual hours from the pay rate in effect on that date (PE7);
+their Department from the allocation in effect on that date: FTE is split
+by its percentages, and headcount goes to the Department with the biggest
+share (the first line if two are equal), as on the employee list.
+
+- **PREP5 Headcount and FTE.** Sione Fifita's finish date is set to **15
+  Nov 2026**, and **Tama Rangi** (hourly, **20.00** hours a week, 100%
+  Operations, Weekly wages) starts on **2 Nov 2026**.
+
+  **At 14 Oct 2026** (standard week 40.00):
+
+  | Employee | Pay | Usual hours | FTE | Department |
+  | --- | --- | ---: | ---: | --- |
+  | Aroha Ngata | salary | | 1.0000 (assumed) | Sales |
+  | Hemi Walker | salary | | 1.0000 (assumed) | Sales 60%, Operations 40% |
+  | Kiri Tane | salary | | 1.0000 (assumed) | Sales |
+  | Sione Fifita | hourly | 32.00 | 0.8000 | Operations |
+  | **Total** | | | **3.8000**, headcount **4** | |
+
+  By Department: Sales headcount **3**, FTE **2.6000** (Hemi 0.6000 +
+  Kiri 1.0000 + Aroha 1.0000); Operations headcount **1**, FTE **1.2000**
+  (Hemi 0.4000 + Sione 0.8000). With a standard week of **37.50**, Sione is
+  32 ÷ 37.5 = 0.85333… → **0.8533** and the total **3.8533**. Someone on
+  45.00 hours counts **1.0000**.
+
+  **By month, October to November 2026** (each month's figures at its last
+  day):
+
+  | Month | Headcount | FTE | Started | Finished | Paid in the month |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | Oct 2026 | 4 | 3.8000 | 0 | 0 | 4 |
+  | Nov 2026 | 4 | 3.5000 | 1 (Tama Rangi) | 1 (Sione Fifita) | 0 |
+
+  November: Hemi, Kiri and Aroha 1.0000 each and Tama 20 ÷ 40 = 0.5000;
+  Sione finished on 15 Nov. "Paid in the month" counts the employees on
+  approved pay runs paid in it (none in November here). An archived
+  employee with no finish date is still counted and is flagged "archived
+  but no finish date" so it can be fixed.
+
+### Employee earnings history
+
+- **PREP6 Earnings history, October 2026.** For each employee (or one,
+  with the employee filter), each approved pay run paid in the dates: pay
+  date, pay run, period, each pay item line as stored (hours × rate or an
+  amount), then gross, taxable, PAYE, student loan, KiwiSaver, deductions,
+  net pay, employer KiwiSaver, ESCT and employer cost, and the employee's
+  totals. Names are as kept on each pay run. **Sione Fifita**:
+
+  | Pay date | Pay run | Period | Pay item | Hours | Rate | Amount |
+  | --- | --- | --- | --- | ---: | ---: | ---: |
+  | 14 Oct 2026 | PAYRUN-2 | 5-11 Oct 2026 | Ordinary time | 32.00 | 22.50 | 720.00 |
+  | | | | Overtime | 4.00 | 33.75 | 135.00 |
+  | | | | Tool allowance | | | 25.00 |
+  | | | | Reimbursement (Fuel receipt) | | | 42.60 |
+  | | | | Union fees (deduction) | | | 8.50 |
+
+  Gross 922.60, taxable 880.00, PAYE 148.40, student loan 0.00, KiwiSaver
+  35.20, deductions 8.50, **net pay 730.50**, employer KiwiSaver 30.80,
+  ESCT 5.25, **employer cost 953.40**. **Hemi Walker**: PAYRUN-4 only
+  (14 Oct 2026, Ordinary time 2,692.31; gross 2,692.31, PAYE 555.58,
+  KiwiSaver 94.23, net pay 2,042.50, employer KiwiSaver 94.23, ESCT 28.20,
+  employer cost 2,786.54); PAYRUN-1 is listed as voided, not counted. With
+  the pay item filter Overtime, only Sione's overtime line is shown and his
+  totals are unchanged (they're the pay run's stored totals).
+
+### PAYE, KiwiSaver and student loan
+
+- **PREP7 By month, tied to the payday filing files and IRD payments.**
+  For each month (by pay date), what approved pay runs deducted and owe IRD,
+  which is what each pay run's employment information file says (decision
+  58: the same stored figures), and what was paid to IRD for the IRD
+  periods in that month (decision 108). October 2026, paying IRD monthly:
+
+  | | Deducted (EI files) | Paid to IRD (IRD-1, 20 Nov) | Owing |
+  | --- | ---: | ---: | ---: |
+  | Taxable gross earnings | 9,072.31 | | |
+  | PAYE (incl. ACC earners' levy) | 1,636.70 | 1,636.70 | 0.00 |
+  | Student loan | 197.28 | 197.28 | 0.00 |
+  | KiwiSaver employee deductions | 251.93 | | |
+  | KiwiSaver employer, net of ESCT | 192.73 | | |
+  | KiwiSaver together | 444.66 | 444.66 | 0.00 |
+  | ESCT | 54.80 | 54.80 | 0.00 |
+  | **Total deducted** | **2,333.44** | **2,333.44** | **0.00** |
+
+  2,333.44 is PF4's total for 14 Oct 2026 and PPAY4's shape. IRD pays
+  KiwiSaver as one liability, so it's compared together. The month lists
+  each pay run's file: PAYRUN-2 and PAYRUN-3 "file made", **PAYRUN-4 "no
+  employment information file made in Tohyee"**, and **PAYRUN-1 "voided
+  after its file was made: amend the employment information in myIR"**
+  (from the audit log's "payroll_payday_filing.made" events; Tohyee
+  doesn't know what was uploaded, decision 65). Before IRD-1, October owes
+  2,333.44 and the due date 20 Nov 2026 is shown. November 2026 has nothing
+  deducted or paid. For a twice-monthly payer, a month's paid figure is the
+  IRD payments for both of its halves.
+
+### Access, exports and refusals
+
+- **PREP8 Access, exports and what's refused.** Every report and export
+  needs the bookkeeper role and payroll access: Noah (bookkeeper, no
+  payroll access) and Vic (viewer) get "You need payroll access to see
+  payroll…" (403); Mere (admin with payroll access) can. People without
+  payroll access see payroll only in the ledger, as totals by pay item,
+  account and Department (decision 6). Exporting a report gives a CSV file
+  (`payroll-labour-cost-2026-10-01-to-2026-10-31.csv` for PREP1; one row
+  per line shown, amounts as plain numbers) and records one audit event,
+  "payroll_report.exported", with the report, the dates, the filters'
+  record ids, the number of rows and the file's SHA-256, **never an amount
+  or a name**. Running or exporting a report posts nothing. Refused with a
+  reason: a start date after the end date ("The start date must be on or
+  before the end date."); a range over 5 years ("Choose 5 years or less.");
+  a standard week of 0, over 168 hours or with more than 2 decimals; an
+  unknown report, Department, project, R&D activity, employee or pay item.
+
+### Not built yet (refused rather than guessed)
+
+- **Leave reports** (balances, liability by Department): stage P8.
+- **Budgets for wages** (workforce budgets): stage P11.
+- Reports **by pay period** (accruing pay to the period it was earned in)
+  rather than by pay date.
+- **Hours** by Department or activity from timesheets on the labour cost
+  report (the timesheets screen has them).
+- A view of department totals for people without payroll access beyond
+  the profit and loss (decision 105).
+- Recording that an employment information file was **uploaded** or
+  accepted by IRD (decision 65).
+
+### Questions for Jess (payroll reports)
+
+1. **Standard week.** FTE uses 40.00 hours a week unless another is typed
+   on the report. Should each organisation save its own (and could it
+   differ by pay group)?
+2. **Salaried staff's hours.** Salaried employees count as 1.0000 FTE
+   ("assumed") because Tohyee doesn't record their usual hours. Add usual
+   hours to salaried employees' pay rates so part-time salaries count
+   properly?
+3. **FTE over 1.** Someone on 45 hours counts 1.0000, not 1.1250. OK?
+4. **Reimbursements** are left out of labour cost (shown on their own
+   line). Agreed?
+5. **Pay date or pay period?** Every report is by pay date (as IRD and the
+   ledger are). Do you want labour cost by the period worked as well?
+6. **Pay runs approved before timesheets** show "R&D activity not
+   recorded" here; the R&D claim works their R&D share out from the
+   allocation they used (decision 67). Should labour cost do the same?
+7. **Exports** record who exported what and when, without figures. Should
+   exports also need a second permission?
+
 ## Holidays Act leave (examples not yet approved by Jess)
 
 **What gets built.** Tohyee builds this for the **Holidays Act 2003** as one

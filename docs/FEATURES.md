@@ -52,8 +52,8 @@ that something happened.
   shares out the cents so the parts always add back to the whole. **Payroll
   access**: only members an admin has given it to (bookkeeper or higher) can
   see or change any of this; the first owner has it to start with. Pay runs,
-  paying wages and IRD, bank files, payslips and the payday filing file are
-  below; payroll reports and Holidays Act leave are not built.
+  paying wages and IRD, bank files, payslips, the payday filing file,
+  timesheets and payroll reports are below; Holidays Act leave is not built.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
@@ -1007,6 +1007,26 @@ that something happened.
   allocation's share) and notes timesheets approved after their pay run. Not
   built: leave and overtime from timesheets, reallocating a posted pay to a
   late timesheet, copying timesheet hours into project time.
+- **Payroll reports** (payroll stage P10, PREP1-PREP8, not yet approved by
+  Jess; decisions 102-111; no migration). Payroll › Reports, for people with
+  payroll access (bookkeeper or higher) only, read-only, by pay date, from
+  approved pay runs' stored figures and the shares each used (allocation or
+  timesheets), never recalculated: **labour cost** by Department, project,
+  R&D activity, pay item or employee with a column per pay item, filtered by
+  any of those together (reimbursements on their own line); the **payroll
+  summary** (each pay run gross to net, employer KiwiSaver and ESCT, totals
+  by pay item); the **reconciliation to the ledger** (each payroll account's
+  payroll figure against its ledger movement, with every other journal that
+  explains the difference: voided pay runs and payments, manual journals,
+  other documents); **headcount and FTE** at a date and by month (usual
+  hours ÷ a standard week, 40.00 unless typed; salaries count 1, marked
+  assumed; by Department from the allocation; starters, leavers and who was
+  paid); **employee earnings history**; and **PAYE, KiwiSaver and student
+  loan** by month, tied to each pay run's employment information file (made
+  or not, from the audit log) and IRD payments. Voided pay runs are listed,
+  not counted. Each exports as CSV, recorded in the audit log without
+  figures or names. Not built: leave reports (P8), wage budgets (P11),
+  reports by pay period, a view for people without payroll access.
 
 - **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
   RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;
@@ -1122,10 +1142,10 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: Holidays Act leave, payroll reports and IRD's
-   employee details file (employee records, IRD rates and calculations, pay
-   items, pay runs, paying wages and IRD, bank files, payslips, the payday
-   filing file and timesheets are built).
+4. NZ payroll: Holidays Act leave and IRD's employee details file
+   (employee records, IRD rates and calculations, pay items, pay runs,
+   paying wages and IRD, bank files, payslips, the payday filing file,
+   timesheets and payroll reports are built).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,
