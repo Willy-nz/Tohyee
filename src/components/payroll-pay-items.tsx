@@ -13,14 +13,23 @@ export const PAY_ITEM_KIND_NAMES: Record<PayItemKind, string> = {
   ordinary_time: "Ordinary time",
   overtime: "Overtime",
   allowance: "Allowance",
-  holiday_pay: "Holiday pay (typed amount)",
+  holiday_pay: "Holiday pay for leave in this pay period (typed amount)",
   reimbursement: "Reimbursement",
   extra_pay: "Extra pay (bonus, gratuity, lump sum)",
   back_pay: "Back pay",
-  termination_holiday_pay: "Holiday pay on finishing (worked out outside Tohyee)",
+  termination_holiday_pay: "Holiday pay on finishing",
   redundancy: "Redundancy",
   after_tax_deduction: "After-tax deduction",
   kiwisaver_employer: "KiwiSaver employer contribution",
+  annual_leave: "Annual holidays taken",
+  sick_leave: "Sick leave",
+  bereavement_leave: "Bereavement leave",
+  family_violence_leave: "Family violence leave",
+  public_holiday: "Public holiday not worked",
+  public_holiday_worked: "Public holiday worked (time and a half)",
+  alternative_holiday: "Alternative holiday taken",
+  annual_leave_cash_up: "Annual holidays cashed up",
+  alternative_holiday_payout: "Alternative holiday exchanged for payment",
 };
 
 const ADDABLE: PayItemKind[] = [
@@ -49,6 +58,7 @@ export function describeTreatment(item: PayItem): string {
   if (item.category === "employer_contribution") return "ESCT is deducted";
   const parts = [item.subjectToPaye ? "PAYE, ACC levy and student loan" : "Not taxed"];
   parts.push(item.subjectToKiwiSaver ? "KiwiSaver" : "no KiwiSaver");
+  if (item.subjectToPaye) parts.push(item.countsForHolidayPay ? "gross earnings for holiday pay" : "not gross earnings for holiday pay");
   return parts.join("; ");
 }
 
@@ -70,6 +80,7 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
   const [rateMultiplier, setRateMultiplier] = useState("1.5");
   const [taxable, setTaxable] = useState(true);
   const [countsForKiwiSaver, setCountsForKiwiSaver] = useState(true);
+  const [discretionary, setDiscretionary] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
 
   const run = async (work: () => Promise<unknown>, success: string, reload: () => void) => {
@@ -97,6 +108,7 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
       body.taxable = taxable;
       body.countsForKiwiSaver = taxable && countsForKiwiSaver;
     }
+    if ((kind === "allowance" && taxable) || kind === "extra_pay") body.discretionary = discretionary;
     const saved = await run(() => api("/api/payroll/pay-items", { method: "POST", body }), `${trimmed} added.`, items.reload);
     if (saved) {
       setName("");
@@ -268,8 +280,22 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
                 </label>
               </div>
             ) : null}
+            {(kind === "allowance" && taxable) || kind === "extra_pay" ? (
+              <label className={ui.checkbox}>
+                <input checked={discretionary} type="checkbox" onChange={(event) => setDiscretionary(event.target.checked)} />
+                Discretionary: the employment agreement doesn&apos;t bind the employer to pay it, so it isn&apos;t gross earnings for holiday pay
+                (Holidays Act s 14(b)(i))
+              </label>
+            ) : null}
             {kind === "reimbursement" ? <p className={ui.muted}>Reimbursements of actual costs aren&apos;t taxed and don&apos;t count for KiwiSaver.</p> : null}
-            {kind === "overtime" || kind === "holiday_pay" ? <p className={ui.muted}>Taxable, and counts for KiwiSaver.</p> : null}
+            {kind === "overtime" ? <p className={ui.muted}>Taxable, and counts for KiwiSaver.</p> : null}
+            {kind === "holiday_pay" ? (
+              <p className={ui.muted}>
+                Taxable, and counts for KiwiSaver. Only for leave taken in this pay period, which IRD treats as salary or wages; holiday pay
+                paid in advance or on top of the regular pay is an extra pay. For employees whose leave Tohyee keeps, book leave under
+                Payroll › Leave instead.
+              </p>
+            ) : null}
             {kind === "after_tax_deduction" ? <p className={ui.muted}>Taken from net pay after tax, for example union fees.</p> : null}
             {kind === "extra_pay" || kind === "back_pay" ? (
               <p className={ui.muted}>
@@ -279,14 +305,14 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
             ) : null}
             {kind === "termination_holiday_pay" ? (
               <p className={ui.muted}>
-                Only on a final pay. Tohyee doesn&apos;t work out holiday pay owed on finishing until leave is built: type the amount
-                you worked out. Taxed under IRD&apos;s rule for extra pays when employment ends.
+                Only on a final pay, for employees whose leave Tohyee doesn&apos;t keep: type the amount you worked out. Where Tohyee keeps
+                the leave it works holiday pay on finishing out itself. Taxed under IRD&apos;s rule for extra pays when employment ends.
               </p>
             ) : null}
             {kind === "redundancy" ? (
               <p className={ui.muted}>Only on a final pay. Taxed with no ACC earners&apos; levy, and doesn&apos;t count for KiwiSaver.</p>
             ) : null}
-            <p className={ui.muted}>Leave, child support and payroll giving aren&apos;t supported yet.</p>
+            <p className={ui.muted}>Leave pay items come with the organisation (one of each). Child support and payroll giving aren&apos;t supported yet.</p>
             <div className={ui.actions}>
               <Button disabled={busy} type="submit">Add pay item</Button>
             </div>

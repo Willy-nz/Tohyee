@@ -53,7 +53,7 @@ that something happened.
   access**: only members an admin has given it to (bookkeeper or higher) can
   see or change any of this; the first owner has it to start with. Pay runs,
   paying wages and IRD, bank files, payslips, the payday filing file,
-  timesheets and payroll reports are below; Holidays Act leave is not built.
+  timesheets, payroll reports and Holidays Act leave are below.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
@@ -922,11 +922,11 @@ that something happened.
   split is kept separately for people with payroll access. Locked and closed
   periods are respected, and an organisation can require someone other than
   the preparer to approve. Approved pay runs can't be changed, only voided
-  with a reversing journal. Refused rather than guessed: leave, child
+  with a reversing journal. Refused rather than guessed: child
   support, payroll giving, negative amounts, pay rate changes inside a
   period, tax codes and KiwiSaver rates IRD's rates don't support, and
   employer contributions other than KiwiSaver. (Extra pays, back pay and
-  final pays came in P12, below.)
+  final pays came in P12, and leave in P8, below.)
 - **Paying wages and IRD** (payroll stage P4, PPAY1-PPAY12, not yet approved
   by Jess; bookkeeper role and payroll access). **Wages** (on an approved pay
   run, "Wages paid"): record the net pay leaving a bank or credit card
@@ -965,9 +965,10 @@ that something happened.
   account masked to its last 3 digits, employer KiwiSaver and ESCT, and the
   year to date for the tax year. Print, download as a PDF, or email to the
   employee (one or everyone with an email address) from the organisation's
-  email account; the email's text and the audit log have no figures. Not
-  shown yet: leave balances (no leave until P8) and hours each day (no
-  timesheets until P9). No employee self-service portal.
+  email account; the email's text and the audit log have no figures. Since
+  P8, leave balances at the end of the period (annual holidays, sick
+  leave, alternative holidays; never family violence leave). Not shown:
+  hours each day. No employee self-service portal.
 - **Payday filing file** (payroll stage P6, PF1-PF9, not yet approved by
   Jess; decisions 56-65; bookkeeper role and payroll access). On an approved
   pay run, "Payday filing" makes IRD's employment information file (the
@@ -1007,7 +1008,8 @@ that something happened.
   Ordinary time; PAYE and the rest are calculated as before. The R&D claim
   counts timesheet shares as time records (the 100% rule stays for the
   allocation's share) and notes timesheets approved after their pay run. Not
-  built: leave and overtime from timesheets, reallocating a posted pay to a
+  built: leave and overtime from timesheets (since P8 hours on a public
+  holiday count as hours worked on it), reallocating a posted pay to a
   late timesheet, copying timesheet hours into project time.
 - **Payroll reports** (payroll stage P10, PREP1-PREP8, not yet approved by
   Jess; decisions 102-111; no migration). Payroll › Reports, for people with
@@ -1027,7 +1029,7 @@ that something happened.
   loan** by month, tied to each pay run's employment information file (made
   or not, from the audit log) and IRD payments. Voided pay runs are listed,
   not counted. Each exports as CSV, recorded in the audit log without
-  figures or names. Not built: leave reports (P8), (wage budgets are P11, below),
+  figures or names. (Leave reports are under Payroll › Leave since P8; wage budgets are P11, below.) Not built:
   reports by pay period, a view for people without payroll access.
 - **Workforce budgets** (payroll stage P11, WB1-WB7, not yet approved by
   Jess; decisions 112-123; tenant migration 0068). Payroll › Workforce
@@ -1070,8 +1072,9 @@ that something happened.
   approved pay period it covers that was paid at less (Ordinary time, and
   overtime at the old rate × its multiplier), never twice. Drafts include
   people finishing in the period (hourly leavers start at 0 hours to fill
-  in); the screen says holiday pay owed on finishing isn't calculated until
-  leave (P8). The EI file has the lump sum indicator, the finish date and
+  in, or since P8 their usual hours to the finish date); since P8 Tohyee
+  works out holiday pay owed on finishing where it keeps the employee's
+  leave, and the screen says so where it doesn't. The EI file has the lump sum indicator, the finish date and
   redundancy as not liable for the levy; payslips note extra pays and final
   pays; reports and journals show each new pay item; the R&D claim counts
   bonuses, back pay and holiday pay on finishing. Refused rather than
@@ -1139,6 +1142,44 @@ that something happened.
   refundability, supporting activity in the following year, other balance
   dates' deadlines, joint ventures.
 
+- **Holidays Act leave** (payroll stage P8, HL1-HL42, not yet approved by
+  Jess; decisions 7-29 and 138-167; tenant migration 0070; bookkeeper role
+  and payroll access). Built for the Holidays Act 2003 until each
+  employee's first pay period starting on or after 6 Aug 2028 (refused
+  after that: the Employment Leave Act 2026 comes later). Each employee's
+  **usual week** (hours each day, regular overtime and allowances, or hours
+  that vary with the agreed week), RDP or ADP with the reason, the
+  agreement to pay annual holidays in the usual pay, a part-day sick leave
+  agreement, casual or not, and their anniversary day, dated. Drafts get
+  the usual pay from the usual week and Tohyee's **leave lines**: annual
+  holidays at the greater of ordinary weekly pay and average weekly
+  earnings over 12 calendar months (in advance at AWE since the start
+  before 12 months, with a warning), sick, bereavement and family
+  violence leave ("Special leave") and alternative holidays at relevant or
+  average daily pay, public holidays not worked at RDP or ADP and worked
+  at time and a half with an alternative holiday, part days, agreed
+  **cash-ups** (written request and answer attached, at most 1 week a
+  year, an extra pay) and **exchanged alternative holidays**; a final pay
+  gets **holiday pay owed on finishing** (untaken weeks, the public
+  holidays they'd have covered, the 8%, untaken alternative holidays).
+  Every entry keeps its hours, units and the rate's inputs; balances count
+  approved pay runs (voiding gives leave back); approving works leave out
+  again and stops if it changed. **Public holidays** 2025-2027 as dated
+  data with Employment NZ as the source, moved off weekends per employee;
+  for hours that vary Tohyee suggests whether a holiday would otherwise
+  have been a working day and the person running pay records it. Unpaid
+  leave moves the anniversary unless a written agreement to count it is
+  attached. Payroll › Leave: balances, bookings, public holidays and
+  decisions, cash-ups, the **leave liability report** by Department with
+  the running 8% (shown, never posted), settings; each employee's
+  printable **holiday and leave record** (s 81) with CSV. Refused rather
+  than guessed: opening leave balances and earnings from before Tohyee
+  (so anyone employed before Tohyee's first pay run for them), deducting
+  advance holiday pay over the 8%, back pay over leave, paying holidays
+  before they're taken, employees booking their own leave, and the
+  section's own list (closedowns, transfers, being on call, pay-as-you-go
+  8%, board, ACC, more than the minimums).
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status
@@ -1197,10 +1238,11 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: Holidays Act leave and IRD's employee details file
-   (employee records, IRD rates and calculations, pay items, pay runs,
+4. NZ payroll: opening leave balances, IRD's employee details file, and
+   the Employment Leave Act 2026 from 6 Aug 2028 once MBIE's guidance is
+   out (employee records, IRD rates and calculations, pay items, pay runs,
    paying wages and IRD, bank files, payslips, the payday filing file,
-   timesheets and payroll reports are built).
+   timesheets, payroll reports and Holidays Act leave are built).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,

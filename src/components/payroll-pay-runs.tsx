@@ -144,17 +144,50 @@ export function PayRunList({ organisationId }: { organisationId: string }) {
   );
 }
 
-type DraftLine = { payItemId: string; quantity: string; rate: string; amount: string; description: string };
+type DraftLine = { payItemId: string; quantity: string; rate: string; amount: string; description: string; regular: boolean | null };
 
-/** Typed lines only: back pay worked out from pay rate history isn't edited here (XP10). */
-function draftLines(employee: PayRunEmployee): DraftLine[] {
-  return employee.lines.filter((line) => line.backPayForPayRunId === null).map((line) => ({
-    payItemId: line.payItemId,
-    quantity: line.quantity ?? "",
-    rate: line.quantity === null ? "" : line.rate ?? "",
-    amount: line.quantity === null ? line.amount : "",
-    description: line.description ?? "",
-  }));
+/** Pay item kinds Tohyee works out from leave (P8): never typed. */
+const LEAVE_KINDS = new Set([
+  "annual_leave",
+  "sick_leave",
+  "bereavement_leave",
+  "family_violence_leave",
+  "public_holiday",
+  "public_holiday_worked",
+  "alternative_holiday",
+  "annual_leave_cash_up",
+  "alternative_holiday_payout",
+]);
+
+/**
+ * Typed lines (and, unless the usual pay stays Tohyee's, the usual pay):
+ * back pay worked out from pay rate history (XP10) and leave Tohyee worked
+ * out (P8) aren't edited here.
+ */
+function draftLines(employee: PayRunEmployee, keepUsualPay: boolean): DraftLine[] {
+  return employee.lines
+    .filter((line) => line.backPayForPayRunId === null && line.source !== "leave" && (line.source === "typed" || !keepUsualPay))
+    .map((line) => ({
+      payItemId: line.payItemId,
+      quantity: line.quantity ?? "",
+      rate: line.quantity === null ? "" : line.rate ?? "",
+      amount: line.quantity === null ? line.amount : "",
+      description: line.description ?? "",
+      regular: line.regular,
+    }));
+}
+
+const SOURCE_LABELS: Record<string, string> = { usual_pay: "Usual week", leave: "Leave" };
+
+/** A leave line's dates and units, for the table (decision 8). */
+function leaveDetail(line: PayRunEmployee["lines"][number]): string {
+  const leave = line.leave;
+  if (!leave) return "";
+  const parts: string[] = [];
+  if (leave.units && leave.hours) parts.push(`${leave.units} ${["annual", "cash_up"].includes(leave.type) ? "weeks" : "days"}, ${leave.hours} h`);
+  else if (leave.hours) parts.push(`${leave.hours} h`);
+  if (leave.inAdvance) parts.push("in advance");
+  return parts.join(" · ");
 }
 
 function EmployeePay({
@@ -171,12 +204,16 @@ function EmployeePay({
   onChanged: (message: string, payRun?: PayRun) => void;
 }) {
   const editable = run.status === "draft";
-  const [lines, setLines] = useState<DraftLine[]>(() => draftLines(employee));
+  const hasUsualPay = employee.lines.some((line) => line.source === "usual_pay");
+  const [keepUsualPay, setKeepUsualPay] = useState(hasUsualPay);
+  const [lines, setLines] = useState<DraftLine[]>(() => draftLines(employee, hasUsualPay));
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const used = new Set(employee.lines.map((line) => line.payItemId));
-  const choices = payItems.filter((item) => item.category !== "employer_contribution" && (!item.isArchived || used.has(item.id)));
+  const choices = payItems.filter(
+    (item) => item.category !== "employer_contribution" && !LEAVE_KINDS.has(item.kind) && (!item.isArchived || used.has(item.id)),
+  );
 
   const change = (index: number, field: keyof DraftLine, value: string) =>
     setLines((current) => current.map((line, at) => (at === index ? { ...line, [field]: value } : line)));
@@ -188,10 +225,12 @@ function EmployeePay({
     try {
       const body = {
         organisationId,
+        keepUsualPay: hasUsualPay && keepUsualPay,
         lines: lines.map((line) => ({
           payItemId: line.payItemId,
           ...(line.quantity.trim() ? { quantity: line.quantity.trim(), rate: line.rate.trim() || null } : { amount: line.amount.trim() }),
           description: line.description.trim() || null,
+          ...(line.regular === null ? {} : { regular: line.regular }),
         })),
       };
       const result = await api<{ payRun: PayRun }>(`/api/payroll/pay-runs/${run.id}/employees/${employee.employeeId}`, { method: "PUT", body });
@@ -268,6 +307,19 @@ function EmployeePay({
       ) : null}
       {editing ? (
         <form className={styles.stack} onSubmit={save}>
+          {hasUsualPay ? (
+            <label className={ui.checkbox}>
+              <input
+                checked={keepUsualPay}
+                type="checkbox"
+                onChange={(event) => {
+                  setKeepUsualPay(event.target.checked);
+                  setLines(draftLines(employee, event.target.checked));
+                }}
+              />
+              Keep the usual pay from the usual week (Tohyee takes leave and public holidays off it). Untick to change it by hand.
+            </label>
+          ) : null}
           {lines.map((line, index) => (
             <div className={ui.grid4} key={index}>
               <Field label="Pay item">
@@ -291,6 +343,16 @@ function EmployeePay({
               <Field label="Description">
                 <input maxLength={200} value={line.description} onChange={(event) => change(index, "description", event.target.value)} />
               </Field>
+              {["overtime", "allowance"].includes(payItems.find((item) => item.id === line.payItemId)?.kind ?? "") ? (
+                <label className={ui.checkbox}>
+                  <input
+                    checked={line.regular ?? false}
+                    type="checkbox"
+                    onChange={(event) => setLines((current) => current.map((entry, at) => (at === index ? { ...entry, regular: event.target.checked } : entry)))}
+                  />
+                  A regular part of pay (holiday pay, decision 11)
+                </label>
+              ) : null}
               <div className={ui.actions}>
                 <Button size="small" variant="secondary" onClick={() => setLines((current) => current.filter((_, at) => at !== index))}>
                   Remove line
@@ -306,7 +368,7 @@ function EmployeePay({
           <div className={ui.actions}>
             <Button
               variant="secondary"
-              onClick={() => setLines((current) => [...current, { payItemId: "", quantity: "", rate: "", amount: "", description: "" }])}
+              onClick={() => setLines((current) => [...current, { payItemId: "", quantity: "", rate: "", amount: "", description: "", regular: null }])}
             >
               Add line
             </Button>
@@ -315,7 +377,7 @@ function EmployeePay({
               disabled={busy}
               variant="secondary"
               onClick={() => {
-                setLines(draftLines(employee));
+                setLines(draftLines(employee, keepUsualPay));
                 setEditing(false);
                 setError(null);
               }}
@@ -333,7 +395,9 @@ function EmployeePay({
                 <tr key={line.lineNumber}>
                   <td data-label="Pay item">
                     {line.payItemName}
+                    {line.source !== "typed" ? <> <Badge tone={line.source === "leave" ? "blue" : "neutral"}>{SOURCE_LABELS[line.source]}</Badge></> : null}
                     {line.description ? <span className={ui.muted}> · {line.description}</span> : null}
+                    {line.leave ? <span className={ui.muted}> {leaveDetail(line) ? `(${leaveDetail(line)})` : ""}</span> : null}
                   </td>
                   <td data-label="Hours" className={ui.num}>{line.quantity ?? ""}</td>
                   <td data-label="Rate" className={ui.num}>{line.rate ?? ""}</td>
@@ -347,6 +411,7 @@ function EmployeePay({
           </table>
         </div>
       ) : <Empty>No earnings yet.</Empty>}
+      {editable && !editing ? <PublicHolidayDecision organisationId={organisationId} run={run} employee={employee} onChanged={onChanged} /> : null}
       {editable && !editing ? (
         <BackPay
           organisationId={organisationId}
@@ -361,6 +426,103 @@ function EmployeePay({
       ) : null}
       {employee.pay ? <Figures figures={employee.pay} /> : null}
     </Card>
+  );
+}
+
+/**
+ * Records whether a public holiday in the period would otherwise have been a
+ * working day for the employee and the hours worked on it (decisions 21,
+ * 23), then works the draft's leave out again.
+ */
+function PublicHolidayDecision({
+  organisationId,
+  run,
+  employee,
+  onChanged,
+}: {
+  organisationId: string;
+  run: PayRun;
+  employee: PayRunEmployee;
+  onChanged: (message: string, payRun?: PayRun) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [holidayDate, setHolidayDate] = useState(run.periodStart);
+  const [otherwiseWorking, setOtherwiseWorking] = useState("true");
+  const [hoursWorked, setHoursWorked] = useState("");
+  const [penal, setPenal] = useState("");
+  const [extra, setExtra] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const suggestion = employee.problem?.match(/Tohyee suggests (yes|no): ([^)]+)\)/);
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api("/api/payroll/leave/public-holidays", {
+        method: "POST",
+        body: {
+          organisationId,
+          employeeId: employee.employeeId,
+          holidayDate,
+          otherwiseWorking: otherwiseWorking === "true",
+          hoursWorked: hoursWorked.trim() || null,
+          penalHourlyRate: penal.trim() || null,
+          extraAmount: extra.trim() || null,
+          suggestion: suggestion ? suggestion[2] : null,
+        },
+      });
+      const result = await api<{ payRun: PayRun }>(`/api/payroll/pay-runs/${run.id}`, { query: { organisationId } });
+      setOpen(false);
+      onChanged(`Public holiday decision recorded for ${employee.name}.`, result.payRun);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div className={ui.actions}>
+        <Button size="small" variant="secondary" onClick={() => setOpen(true)}>Public holiday…</Button>
+      </div>
+    );
+  }
+  return (
+    <form className={styles.stack} onSubmit={save}>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <p className={ui.muted}>
+        Whether a public holiday would otherwise have been a working day for {employee.name} (s 12), and any hours worked on it (s 50: time and a
+        half, and an alternative holiday if it would otherwise have been a working day). The decision is recorded with who made it.
+        {suggestion ? ` Tohyee suggests ${suggestion[1]}: ${suggestion[2]}.` : ""}
+      </p>
+      <div className={ui.grid4}>
+        <Field label="Public holiday">
+          <input required type="date" min={run.periodStart} max={run.periodEnd} value={holidayDate} onChange={(event) => setHolidayDate(event.target.value)} />
+        </Field>
+        <Field label="Would otherwise be a working day">
+          <select value={otherwiseWorking} onChange={(event) => setOtherwiseWorking(event.target.value)}>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </Field>
+        <Field label="Hours worked" hint="Blank if not worked.">
+          <input inputMode="decimal" value={hoursWorked} onChange={(event) => setHoursWorked(event.target.value)} />
+        </Field>
+        <Field label="Penal rate an hour" hint="Only if the agreement has one (s 50(1)(b)).">
+          <input inputMode="decimal" value={penal} onChange={(event) => setPenal(event.target.value)} />
+        </Field>
+        <Field label="Extra under the agreement" hint="Typed, for working part of the day (decision 23).">
+          <input inputMode="decimal" value={extra} onChange={(event) => setExtra(event.target.value)} />
+        </Field>
+      </div>
+      <div className={ui.actions}>
+        <Button disabled={saving} type="submit">Record decision</Button>
+        <Button disabled={saving} variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+      </div>
+    </form>
   );
 }
 
@@ -565,8 +727,24 @@ export function PayRunView({ organisationId, payRunId }: { organisationId: strin
               <Button disabled={busy || run.problemCount > 0 || blockedBySelf || run.employees.length === 0} onClick={approve}>
                 Approve and post
               </Button>
+              <Button
+                disabled={busy}
+                variant="secondary"
+                onClick={() =>
+                  void act(
+                    () => api(`/api/payroll/pay-runs/${run.id}/leave`, { method: "POST", body: { organisationId } }),
+                    "Leave worked out again from the bookings, public holidays and earlier pay runs.",
+                  )
+                }
+              >
+                Update leave
+              </Button>
               <Button disabled={busy} variant="danger" onClick={() => void remove()}>Delete draft</Button>
             </div>
+            <p className={ui.muted}>
+              Leave (Payroll › Leave) is worked out when the draft is made and whenever a booking or decision changes; approving works it out
+              again and stops if it changed.
+            </p>
           </>
         ) : null}
         {run.status === "approved" ? (

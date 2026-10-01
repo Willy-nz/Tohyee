@@ -210,7 +210,8 @@ describeWithDatabase("extra pays, back pay and final pays (XP8-XP14)", () => {
       expect(pay(week4, people.tama).lines).toMatchObject([{ quantity: "40.00", amount: "1000.00", description: null }]);
       expect(pay(week4, people.tama).finishDate).toBe("2026-11-01");
       expect(pay(week4, people.tama).notes).toEqual([
-        "Final pay: employment finishes on 1 Nov 2026. Holiday pay owed on finishing isn't calculated by Tohyee until leave (P8) is built; work it out outside Tohyee and add it as Holiday pay on finishing.",
+        // Since P8, only when Tohyee doesn't keep the employee's leave (decision 150).
+        "Final pay: employment finishes on 1 Nov 2026. Tohyee doesn't keep Tama Finishing's leave, so holiday pay owed on finishing isn't calculated by Tohyee; work it out outside Tohyee and add it as Holiday pay on finishing.",
       ]);
       expect(pay(week4, people.heidi)).toMatchObject({ finishDate: null, notes: [], extraPayBasis: null });
       expect(pay(week4, people.rawiri).lines).toMatchObject([{ quantity: "40.00", rate: "32.00", amount: "1280.00" }]);
@@ -426,7 +427,7 @@ describeWithDatabase("extra pays, back pay and final pays (XP8-XP14)", () => {
       ).payRate.id;
       const holiday = await backPay("POST", week4.id, refused.hana, { payItemId: items["Back pay"].id, payRateId: fromWeek3 });
       expect(holiday.body.error).toBe(
-        `${NOT_SUPPORTED}: back pay for a pay period with holiday pay in it: holiday pay on back pay needs leave, payroll stage P8 (${hanaWeek3}).`,
+        `${NOT_SUPPORTED}: back pay for a pay period with holiday pay or leave in it: back pay changes the ordinary weekly pay that leave was paid at and the gross earnings later holiday pay uses, which needs its own worked example (decision 152) (${hanaWeek3}).`,
       );
       const midWeek = (
         await asUser(jess, (tx) =>

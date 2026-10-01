@@ -12,7 +12,10 @@ export const GET = route(async (request) => {
   return json({ payItems });
 });
 
-/** Body: { organisationId, idempotencyKey, name, kind, accountCode, rateMultiplier? (overtime), taxable? and countsForKiwiSaver? (allowances) }. */
+/**
+ * Body: { organisationId, idempotencyKey, name, kind, accountCode, rateMultiplier? (overtime), taxable? and
+ * countsForKiwiSaver? (allowances), discretionary? (extra pays and taxable allowances: not gross earnings for holiday pay, decision 139) }.
+ */
 export const POST = route(async (request) => {
   const body = await readJson(request);
   const input = Object.fromEntries(Object.entries(body).filter(([field]) => field !== "organisationId"));

@@ -146,10 +146,13 @@ async function loadEmployees(tx: OrgTx, runId: string): Promise<EmployeeRow[]> {
   const result = await tx.query<EmployeeRow>(
     `select pe.employee_id, pe.employee_name, e.first_name || ' ' || e.last_name as name_now, pe.tax_code,
             e.start_date::text, coalesce(pe.finish_date, e.finish_date)::text as finish_date, e.ird_number_ciphertext,
-            (select coalesce(sum(l.quantity), 0)::text
+            -- Hours on earnings lines, and the hours of leave and public holidays paid in the period (decision 154).
+            (select round(coalesce(sum(l.quantity), 0)
+                          + coalesce(sum(l.leave_hours) filter (where l.leave_type in ('annual', 'sick', 'bereavement', 'family_violence',
+                                                                                      'alternative', 'public_holiday', 'public_holiday_worked')), 0), 2)::text
                from payroll_pay_run_lines l join payroll_pay_items p on p.id = l.pay_item_id
               where l.pay_run_id = pe.pay_run_id and l.employee_id = pe.employee_id
-                and p.category = 'earnings' and l.quantity is not null) as hours,
+                and p.category = 'earnings') as hours,
             pe.taxable_earnings::text, pe.paye::text, pe.student_loan_deduction::text, pe.kiwisaver_employee::text,
             pe.kiwisaver_employer_net::text, pe.esct::text,
             (select coalesce(sum(l.amount), 0)::text

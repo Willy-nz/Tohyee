@@ -21,11 +21,18 @@ export type PayslipLayout = {
   employer: Array<[string, string]>;
   yearToDateHeading: string;
   yearToDate: Array<[string, string]>;
+  /** Leave balances at the end of the period (P8), or empty. */
+  leaveHeading: string;
+  leave: Array<[string, string]>;
   notes: string[];
 };
 
 function rate(value: string | null): string {
   return value === null ? "" : `${value}%`;
+}
+
+function trimZeros(value: string): string {
+  return value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
 }
 
 export function payslipLayout(payslip: Payslip): PayslipLayout {
@@ -80,6 +87,16 @@ export function payslipLayout(payslip: Payslip): PayslipLayout {
       ["KiwiSaver employer", formatMoney(ytd.kiwiSaverEmployer)],
       ["ESCT", formatMoney(ytd.esct)],
     ],
+    leaveHeading: payslip.leaveBalances ? `Leave balances at ${formatDate(payslip.leaveBalances.asAt)}` : "",
+    leave: payslip.leaveBalances
+      ? [
+          ["Annual holidays", `${trimZeros(payslip.leaveBalances.annualWeeks)} weeks (${payslip.leaveBalances.annualHours} hours)`],
+          ["Sick leave", `${trimZeros(payslip.leaveBalances.sickDays)} days`],
+          ...(payslip.leaveBalances.alternativeHolidays > 0
+            ? [["Alternative holidays", String(payslip.leaveBalances.alternativeHolidays)] as [string, string]]
+            : []),
+        ]
+      : [],
     notes: [
       `Pay run ${payslip.payRunReference}.`,
       ...(payslip.extraPay

@@ -12,6 +12,7 @@ import { safeFileName } from "@/lib/pdf/documents";
 import { requirePayrollAccess } from "@/lib/payroll/access";
 import { maskBankAccount } from "@/lib/payroll/bank-account-number";
 import { type PayFrequency, PAY_FREQUENCY_WORDS } from "@/lib/payroll/groups";
+import { getLeaveSummary } from "@/lib/payroll/leave-reports";
 import { getPayRun, type PayRun } from "@/lib/payroll/pay-runs";
 import { addPayslipFigures, PAYSLIP_ZERO, type PayslipFigures, taxYearOf } from "@/lib/payroll/payslip-figures";
 import { decryptSecret } from "@/lib/secrets";
@@ -71,6 +72,20 @@ export type Payslip = {
   extraPay: { amount: string; taxRate: string | null } | null;
   /** The pay includes holiday pay on finishing, worked out outside Tohyee (XP12, decision 135). */
   holidayPayWorkedOutElsewhere: boolean;
+  /**
+   * Leave balances at the end of the pay period, when Tohyee keeps the
+   * employee's leave (P8; s 81). Family violence leave isn't shown, so the
+   * payslip doesn't say it exists (decision 27).
+   */
+  leaveBalances: PayslipLeaveBalances | null;
+};
+
+export type PayslipLeaveBalances = {
+  asAt: string;
+  annualWeeks: string;
+  annualHours: string;
+  sickDays: string;
+  alternativeHolidays: number;
 };
 
 export type PayslipSummary = {
@@ -223,7 +238,21 @@ async function buildPayslip(tx: OrgTx, run: PayRun, employeeId: string, employee
     fileName: payslipFileName(entry.name, run.payDate),
     finishDate: entry.finishDate,
     extraPay,
-    holidayPayWorkedOutElsewhere: entry.lines.some((line) => line.kind === "termination_holiday_pay"),
+    holidayPayWorkedOutElsewhere: entry.lines.some((line) => line.kind === "termination_holiday_pay" && line.source !== "leave"),
+    leaveBalances: await payslipLeaveBalances(tx, employeeId, run.periodEnd),
+  };
+}
+
+/** Leave balances for a payslip (P5 left the gap; P8). */
+async function payslipLeaveBalances(tx: OrgTx, employeeId: string, asAt: string): Promise<PayslipLeaveBalances | null> {
+  const summary = await getLeaveSummary(tx, employeeId, asAt);
+  if (!summary.kept || !summary.annual || !summary.sick) return null;
+  return {
+    asAt,
+    annualWeeks: summary.annual.weeks,
+    annualHours: summary.annual.hours,
+    sickDays: summary.sick.days,
+    alternativeHolidays: summary.alternative?.untaken ?? 0,
   };
 }
 

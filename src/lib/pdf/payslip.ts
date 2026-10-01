@@ -63,6 +63,7 @@ export async function renderPayslipPdf(payslip: Payslip, options: { logo?: PdfIm
   labelValueTable(writer, "Deductions", layout.deductions, ["Net pay", layout.netPay]);
   if (layout.employer.length > 0) labelValueTable(writer, "Paid by your employer", layout.employer);
   labelValueTable(writer, layout.yearToDateHeading, layout.yearToDate);
+  if (layout.leave.length > 0) labelValueTable(writer, layout.leaveHeading, layout.leave);
   for (const note of layout.notes) writer.text(note, { muted: true, size: 9 });
   return { fileName: payslip.fileName, bytes: await writer.finish() };
 }

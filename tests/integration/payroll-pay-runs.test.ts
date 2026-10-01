@@ -243,6 +243,17 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
         ["Overtime", "earnings", "overtime", "6200", true, true, false],
         ["Allowance (taxable)", "earnings", "allowance", "6200", true, true, false],
         ["Holiday pay", "earnings", "holiday_pay", "6200", true, true, false],
+        // The leave pay items Tohyee works out (P8, decision 138).
+        ["Annual leave", "earnings", "annual_leave", "6200", true, true, false],
+        ["Sick leave", "earnings", "sick_leave", "6200", true, true, false],
+        ["Bereavement leave", "earnings", "bereavement_leave", "6200", true, true, false],
+        ["Special leave", "earnings", "family_violence_leave", "6200", true, true, false],
+        ["Public holiday", "earnings", "public_holiday", "6200", true, true, false],
+        ["Public holiday worked", "earnings", "public_holiday_worked", "6200", true, true, false],
+        ["Alternative holiday", "earnings", "alternative_holiday", "6200", true, true, false],
+        ["Annual leave cashed up", "earnings", "annual_leave_cash_up", "6200", true, true, false],
+        ["Alternative holiday paid out", "earnings", "alternative_holiday_payout", "6200", true, true, false],
+        ["Holiday pay owed on finishing", "earnings", "termination_holiday_pay", "6200", true, true, false],
         ["Reimbursement", "earnings", "reimbursement", "6070", false, false, false],
         ["Union fees", "deduction", "after_tax_deduction", "2250", false, false, false],
         ["KiwiSaver employer contribution", "employer_contribution", "kiwisaver_employer", "6210", false, false, true],
@@ -302,8 +313,10 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
         const seeded = await client.query<{ name: string; code: string | null }>(
           "select p.name, a.code from payroll_pay_items p left join accounts a on a.id = p.account_id order by p.name",
         );
-        expect(seeded.rows).toHaveLength(7);
+        // The 7 starting items (0058) and the 10 leave items (0070, decision 138).
+        expect(seeded.rows).toHaveLength(17);
         expect(seeded.rows.find((row) => row.name === "Ordinary time")!.code).toBe("6200");
+        expect(seeded.rows.find((row) => row.name === "Annual leave")!.code).toBe("6200");
         expect(seeded.rows.find((row) => row.name === "Union fees")!.code).toBe("2250");
         expect((await client.query("select payroll_approver_must_differ from organisation_settings")).rows).toEqual([{ payroll_approver_must_differ: false }]);
       } finally {
@@ -736,13 +749,22 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
 
   describe("PRUN8: refused rather than guessed", () => {
     it("refuses pay items Tohyee doesn't support yet", async () => {
-      for (const kind of ["leave", "child_support", "payroll_giving", "employer_contribution"]) {
+      for (const kind of ["child_support", "payroll_giving", "employer_contribution"]) {
         const refused = await call(payItemsRoute.POST, mere, "/api/payroll/pay-items", {
           method: "POST",
           body: { idempotencyKey: key("item"), name: `Refused ${kind}`, kind, accountCode: "6200" },
         });
         expect(refused.status).toBe(400);
         expect(refused.body.error).toContain(NOT_SUPPORTED);
+      }
+      // Leave pay items come with the organisation since P8 (decision 138).
+      for (const kind of ["leave", "annual_leave", "sick_leave"]) {
+        const refused = await call(payItemsRoute.POST, mere, "/api/payroll/pay-items", {
+          method: "POST",
+          body: { idempotencyKey: key("item"), name: `Refused ${kind}`, kind, accountCode: "6200" },
+        });
+        expect(refused.status).toBe(400);
+        expect(refused.body.error).toContain("Leave pay items come with the organisation");
       }
       const taxedReimbursement = await call(payItemsRoute.POST, mere, "/api/payroll/pay-items", {
         method: "POST",

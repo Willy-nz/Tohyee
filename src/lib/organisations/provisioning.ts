@@ -116,6 +116,8 @@ async function seedOrganisationDatabase(organisation: ProvisioningRow): Promise<
 
     // The starting payroll pay items (PRUN10), once, after the chart they post to.
     await client.query("select tohyee_seed_payroll_pay_items()");
+    // The leave pay items (P8, decision 138), after the starting pay items.
+    await client.query("select tohyee_seed_payroll_leave_items()");
 
     // Standard GST codes, only for an organisation that has none (so Repair
     // never duplicates or clashes with codes people made themselves).

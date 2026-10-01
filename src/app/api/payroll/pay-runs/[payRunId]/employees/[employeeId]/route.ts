@@ -5,12 +5,14 @@ type Context = { params: Promise<{ payRunId: string; employeeId: string }> };
 
 /**
  * Replaces an employee's earnings and deductions on a draft (PRUN2). Body:
- * { organisationId, lines: [{ payItemId, quantity?, rate?, amount?, description? }] }.
+ * { organisationId, lines: [{ payItemId, quantity?, rate?, amount?, description?, regular? }], keepUsualPay? }.
+ * Leave lines stay (Tohyee works them out); with keepUsualPay the usual pay
+ * made from the usual week stays Tohyee's too (decision 149).
  */
 export const PUT = route<Context>(async (request, context) => {
   const { payRunId, employeeId } = await context.params;
   const body = await readJson(request);
-  const result = await withPayrollAccess(request, body.organisationId, (tx) => setPayRunEmployeeLines(tx, payRunId, employeeId, { lines: body.lines }));
+  const result = await withPayrollAccess(request, body.organisationId, (tx) => setPayRunEmployeeLines(tx, payRunId, employeeId, { lines: body.lines, keepUsualPay: body.keepUsualPay }));
   return json(result);
 });
 

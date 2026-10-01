@@ -40,6 +40,7 @@ import {
 } from "@/lib/payroll/pay-calculation";
 import {
   EXTRA_PAY_KINDS,
+  LEAVE_PAY_ITEM_KINDS,
   PAY_ITEM_COLUMNS,
   PAY_ITEM_FROM,
   PAY_ITEM_KIND_ORDER_SQL,
@@ -49,11 +50,13 @@ import {
   TERMINATION_KINDS,
 } from "@/lib/payroll/pay-items";
 import { payRateOn } from "@/lib/payroll/pay-rates";
+import { payRunReference } from "@/lib/payroll/pay-run-reference";
+import { type DraftRun, leaveKeptFor, leaveOutOfDate, updateEmployeeLeave } from "@/lib/payroll/leave-pay-runs";
 import { NOT_SUPPORTED, payrollRatesOn } from "@/lib/payroll/rates";
 import { percentageOfWeight, splitByWeights, timesheetWeights } from "@/lib/payroll/timesheet-split";
 import { timesheetCoverage, type TimesheetCoverage } from "@/lib/payroll/timesheets";
 import { loadTrackingContext, missingRequired, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
-import { asRecord, optionalSource, optionalString, requireArray, requireIdempotencyKey } from "@/lib/validation";
+import { asRecord, optionalSource, optionalString, requireArray, requireBoolean, requireIdempotencyKey } from "@/lib/validation";
 
 /**
  * Pay runs (examples PRUN1-PRUN11, payroll stage P3). A pay run pays one
@@ -87,6 +90,23 @@ export type PayRunLine = {
   description: string | null;
   /** Back pay worked out from pay rate history: the approved pay run it's for (decision 133). */
   backPayForPayRunId: string | null;
+  /** Typed, the usual pay Tohyee made from the usual week, or leave Tohyee worked out (P8; decision 141). */
+  source: "typed" | "usual_pay" | "leave";
+  /** Overtime or an allowance that's a regular part of pay (s 8(1)(b); decision 11). */
+  regular: boolean | null;
+  /** Leave Tohyee worked out: what, when, how much and the rate's inputs (decision 8). */
+  leave: PayRunLeave | null;
+};
+
+export type PayRunLeave = {
+  type: string;
+  from: string | null;
+  to: string | null;
+  hours: string | null;
+  units: string | null;
+  inAdvance: boolean;
+  holidayDate: string | null;
+  basis: Record<string, unknown>;
 };
 
 /** How an employee's extra pays are taxed (decisions 126-130): kept when approved. */
@@ -229,10 +249,7 @@ const RUN_FROM = "payroll_pay_runs r join payroll_pay_groups g on g.id = r.pay_g
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The journal reference and the name people use for a pay run (PRUN1). */
-export function payRunReference(runNumber: string | number): string {
-  return `PAYRUN-${runNumber}`;
-}
+export { payRunReference };
 
 function toSummary(row: RunRow): PayRunSummary {
   return {
@@ -276,6 +293,10 @@ function assertDraft(run: RunRow): void {
         : `${reference} is voided, so it can't be changed. Run the pay again.`,
     );
   }
+}
+
+function toDraftRun(run: RunRow): DraftRun {
+  return { id: run.id, run_number: run.run_number, period_start: run.period_start, period_end: run.period_end, pay_frequency: run.pay_frequency, status: run.status };
 }
 
 async function markPrepared(tx: OrgTx, runId: string): Promise<void> {
@@ -330,6 +351,8 @@ type EmployeeRow = {
   extra_pay_annualised: string | null;
   lump_sum_lowest_rate: boolean | null;
   kept_finish_date: string | null;
+  leave_problem: string | null;
+  leave_notes: string[] | null;
 };
 
 /**
@@ -353,7 +376,8 @@ async function loadEmployees(tx: OrgTx, run: RunRow): Promise<EmployeeRow[]> {
             pe.paye::text, pe.student_loan_deduction::text, pe.kiwisaver_employee::text, pe.deductions::text,
             pe.net_pay::text, pe.kiwisaver_employer::text, pe.esct::text, pe.kiwisaver_employer_net::text,
             pe.employer_cost::text, pe.extra_pay::text, pe.extra_pay_tax::text, pe.extra_pay_tax_rate::text,
-            pe.extra_pay_method, pe.extra_pay_annualised::text, pe.lump_sum_lowest_rate, pe.finish_date::text as kept_finish_date
+            pe.extra_pay_method, pe.extra_pay_annualised::text, pe.lump_sum_lowest_rate, pe.finish_date::text as kept_finish_date,
+            pe.leave_problem, pe.leave_notes
        from payroll_pay_run_employees pe
        join payroll_employees e on e.id = pe.employee_id
       where pe.pay_run_id = $1
@@ -378,13 +402,24 @@ type LineRow = {
   amount: string;
   description: string | null;
   back_pay_for_pay_run_id: string | null;
+  source: "typed" | "usual_pay" | "leave";
+  regular: boolean | null;
+  leave_type: string | null;
+  leave_from: string | null;
+  leave_to: string | null;
+  leave_hours: string | null;
+  leave_units: string | null;
+  leave_in_advance: boolean;
+  holiday_date: string | null;
+  leave_basis: Record<string, unknown> | null;
 };
 
 async function loadLines(tx: OrgTx, runId: string): Promise<LineRow[]> {
   const result = await tx.query<LineRow>(
     `select l.employee_id, l.line_number, l.pay_item_id, p.name as pay_item_name, p.category, p.kind,
             p.subject_to_paye, p.subject_to_acc_levy, p.subject_to_kiwisaver, l.quantity::text, l.rate::text, l.amount::text,
-            l.description, l.back_pay_for_pay_run_id::text
+            l.description, l.back_pay_for_pay_run_id::text, l.source, l.regular, l.leave_type, l.leave_from::text, l.leave_to::text,
+            l.leave_hours::text, l.leave_units::text, l.leave_in_advance, l.holiday_date::text, l.leave_basis
        from payroll_pay_run_lines l join payroll_pay_items p on p.id = l.pay_item_id
       where l.pay_run_id = $1
       order by l.employee_id, l.line_number`,
@@ -405,6 +440,20 @@ function toLine(row: LineRow): PayRunLine {
     amount: toFixedString(dec(row.amount), 2),
     description: row.description,
     backPayForPayRunId: row.back_pay_for_pay_run_id,
+    source: row.source,
+    regular: row.regular,
+    leave: row.leave_type
+      ? {
+          type: row.leave_type,
+          from: row.leave_from,
+          to: row.leave_to,
+          hours: row.leave_hours === null ? null : toPlainString(dec(row.leave_hours)),
+          units: row.leave_units === null ? null : toPlainString(dec(row.leave_units)),
+          inAdvance: row.leave_in_advance,
+          holidayDate: row.holiday_date,
+          basis: row.leave_basis ?? {},
+        }
+      : null,
   };
 }
 
@@ -594,13 +643,24 @@ async function backPayClash(tx: OrgTx, run: RunRow, employee: EmployeeRow, lines
     : null;
 }
 
-function notesFor(finishDate: string | null, pay: EmployeePayResult | null, basis: ExtraPayBasis | null): string[] {
+function notesFor(
+  finishDate: string | null,
+  pay: EmployeePayResult | null,
+  basis: ExtraPayBasis | null,
+  lines: LineRow[],
+  leaveNotes: string[] | null,
+  name: string,
+): string[] {
   const notes: string[] = [];
   if (finishDate) {
+    const tohyees = lines.some((line) => line.leave_type === "termination");
     notes.push(
-      `Final pay: employment finishes on ${formatDate(finishDate)}. Holiday pay owed on finishing isn't calculated by Tohyee until leave (P8) is built; work it out outside Tohyee and add it as Holiday pay on finishing.`,
+      tohyees
+        ? `Final pay: employment finishes on ${formatDate(finishDate)}. Holiday pay owed on finishing is worked out by Tohyee from ${name}'s leave (decision 150).`
+        : `Final pay: employment finishes on ${formatDate(finishDate)}. Tohyee doesn't keep ${name}'s leave, so holiday pay owed on finishing isn't calculated by Tohyee; work it out outside Tohyee and add it as Holiday pay on finishing.`,
     );
   }
+  for (const note of leaveNotes ?? []) notes.push(note);
   if (pay && basis && isPositive(dec(pay.extraPay))) {
     const how =
       basis.method === "flat_rate"
@@ -633,7 +693,12 @@ async function calculateRun(tx: OrgTx, run: RunRow): Promise<Calculated[]> {
       ({ basis, problem: basisProblem } = await extraPayBasis(tx, run, employee, own, finishDate));
       basisProblem ??= await backPayClash(tx, run, employee, own);
     }
-    const result = basisProblem ? { pay: null, problem: basisProblem } : calculate(run, employee, own, basis);
+    const leaveProblem = run.status === "draft" && !employee.is_archived ? employee.leave_problem : null;
+    const result = basisProblem
+      ? { pay: null, problem: basisProblem }
+      : leaveProblem
+        ? { pay: calculate(run, employee, own, basis).pay, problem: leaveProblem }
+        : calculate(run, employee, own, basis);
     // A finish date or pay rate change entered after the draft was made is refused here too (PRUN8).
     const later =
       run.status === "draft" && !employee.is_archived
@@ -706,7 +771,7 @@ export async function getPayRun(tx: OrgTx, idInput: unknown): Promise<PayRun> {
       timesheets: timesheets.get(entry.employee.employee_id) ?? null,
       finishDate: entry.finishDate,
       extraPayBasis: entry.basis,
-      notes: notesFor(entry.finishDate, entry.pay, entry.basis),
+      notes: notesFor(entry.finishDate, entry.pay, entry.basis, entry.lines, entry.employee.leave_notes, entry.employee.name),
     })),
     totals: totalsOf(calculated),
     problemCount: calculated.filter((entry) => entry.problem !== null).length,
@@ -881,6 +946,9 @@ export async function createPayRun(
       [runId, draft.employeeId, ordinaryTime, draft.quantity, draft.rate, draft.amount, draft.description],
     );
   }
+  // Leave and the usual pay from the usual week, for employees whose leave Tohyee keeps (P8; decisions 141, 148).
+  const created = await findRun(tx, runId);
+  for (const draft of drafts) await updateEmployeeLeave(tx, toDraftRun(created), draft.employeeId, { initial: true });
   const payRun = await getPayRun(tx, runId);
   await writeAuditEvent(tx, {
     eventType: "payroll_pay_run.created",
@@ -969,12 +1037,13 @@ export async function setPayRunEmployeeLines(
   tx: OrgTx,
   runIdInput: unknown,
   employeeIdInput: unknown,
-  input: { lines: unknown },
+  input: { lines: unknown; keepUsualPay?: unknown },
 ): Promise<{ payRun: PayRun }> {
   await requirePayrollAccess(tx);
   const run = await findRun(tx, runIdInput, true);
   assertDraft(run);
   const employeeId = parseUuid(employeeIdInput, "employee");
+  const keepUsualPay = input.keepUsualPay === undefined || input.keepUsualPay === null ? false : requireBoolean(input.keepUsualPay, "keepUsualPay");
   const onRun = await tx.query<{ start_date: string; name: string }>(
     `select e.start_date::text, e.first_name || ' ' || e.last_name as name
        from payroll_pay_run_employees pe join payroll_employees e on e.id = pe.employee_id
@@ -995,7 +1064,8 @@ export async function setPayRunEmployeeLines(
     ]),
   );
   let hourlyRate: string | null | undefined;
-  const parsed: Array<{ payItemId: string; quantity: string | null; rate: string | null; amount: string; description: string | null }> = [];
+  const kept = await leaveKeptFor(tx, employeeId, run.period_start);
+  const parsed: Array<{ payItemId: string; quantity: string | null; rate: string | null; amount: string; description: string | null; regular: boolean | null }> = [];
   for (const [index, raw] of rawLines.entries()) {
     const label = `Line ${index + 1}`;
     const line = asRecord(raw, label);
@@ -1005,6 +1075,18 @@ export async function setPayRunEmployeeLines(
       throw new ValidationError(`${label}: ${item.name} is calculated by Tohyee, not entered.`);
     }
     if (item.is_archived && !existing.has(item.id)) throw new ValidationError(`${label}: ${item.name} is archived.`);
+    if (LEAVE_PAY_ITEM_KINDS.includes(item.kind)) {
+      throw new ValidationError(`${label}: ${item.name} is worked out by Tohyee from leave (Payroll › Leave), not typed.`);
+    }
+    if (kept.kept && (item.kind === "holiday_pay" || item.kind === "termination_holiday_pay")) {
+      throw new ValidationError(
+        item.kind === "holiday_pay"
+          ? `${label}: Tohyee keeps ${onRun.rows[0].name}'s leave, so book it under Payroll › Leave instead of typing holiday pay.`
+          : `${label}: Tohyee works out ${onRun.rows[0].name}'s holiday pay on finishing from their leave (decision 150), so it isn't typed.`,
+      );
+    }
+    const regularInput = line.regular === undefined || line.regular === null ? null : requireBoolean(line.regular, `${label} regular`);
+    const regular = item.kind === "overtime" || item.kind === "allowance" ? (regularInput ?? kept.regularItems.has(item.id)) : null;
     const description = optionalString(line.description, `${label} description`, { maxLength: 200 });
     const hasQuantity = line.quantity !== undefined && line.quantity !== null && line.quantity !== "";
     const hasAmount = line.amount !== undefined && line.amount !== null && line.amount !== "";
@@ -1027,11 +1109,11 @@ export async function setPayRunEmployeeLines(
       } else {
         rate = parseRate(line.rate, label);
       }
-      parsed.push({ payItemId: item.id, quantity, rate, amount: lineAmount(quantity, rate), description });
+      parsed.push({ payItemId: item.id, quantity, rate, amount: lineAmount(quantity, rate), description, regular });
     } else {
       rejectNegative(line.amount);
       const amount = toFixedString(dec(parseDecimalInput(line.amount, `${label} amount`, { maxScale: 2, allowZero: true })), 2);
-      parsed.push({ payItemId: item.id, quantity: null, rate: null, amount, description });
+      parsed.push({ payItemId: item.id, quantity: null, rate: null, amount, description, regular });
     }
   }
 
@@ -1040,26 +1122,44 @@ export async function setPayRunEmployeeLines(
       where pay_run_id = $1 and employee_id = $2 and back_pay_for_pay_run_id is not null order by line_number`,
     [run.id, employeeId],
   );
-  if (parsed.length + backPay.rows.length > 200) {
+  // The usual pay Tohyee made from the usual week stays Tohyee's when asked (decision 149); leave is worked out again below.
+  const usual = keepUsualPay
+    ? (
+        await tx.query<{ pay_item_id: string; quantity: string | null; rate: string | null; amount: string; description: string | null; regular: boolean | null }>(
+          `select pay_item_id, quantity::text, rate::text, amount::text, description, regular from payroll_pay_run_lines
+            where pay_run_id = $1 and employee_id = $2 and source = 'usual_pay' order by line_number`,
+          [run.id, employeeId],
+        )
+      ).rows
+    : [];
+  if (parsed.length + backPay.rows.length + usual.length > 200) {
     throw new ValidationError("An employee can have at most 200 lines on a pay run, back pay included.");
   }
   await tx.query("delete from payroll_pay_run_lines where pay_run_id = $1 and employee_id = $2", [run.id, employeeId]);
-  const kept = backPay.rows.map((row) => ({
+  const keptBackPay = backPay.rows.map((row) => ({
     payItemId: row.pay_item_id,
     quantity: null,
     rate: null,
     amount: row.amount,
     description: row.description,
+    regular: null,
     backPayFor: row.back_pay_for_pay_run_id,
+    source: "typed",
   }));
-  for (const [index, line] of [...parsed.map((entry) => ({ ...entry, backPayFor: null as string | null })), ...kept].entries()) {
+  const all = [
+    ...parsed.map((entry) => ({ ...entry, backPayFor: null as string | null, source: "typed" })),
+    ...keptBackPay,
+    ...usual.map((row) => ({ payItemId: row.pay_item_id, quantity: row.quantity, rate: row.rate, amount: row.amount, description: row.description, regular: row.regular, backPayFor: null, source: "usual_pay" })),
+  ];
+  for (const [index, line] of all.entries()) {
     await tx.query(
       `insert into payroll_pay_run_lines (pay_run_id, employee_id, line_number, pay_item_id, quantity, rate, amount, description,
-                                          back_pay_for_pay_run_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [run.id, employeeId, index + 1, line.payItemId, line.quantity, line.rate, line.amount, line.description, line.backPayFor],
+                                          back_pay_for_pay_run_id, regular, source)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [run.id, employeeId, index + 1, line.payItemId, line.quantity, line.rate, line.amount, line.description, line.backPayFor, line.regular, line.source],
     );
   }
+  await updateEmployeeLeave(tx, toDraftRun(run), employeeId);
   await markPrepared(tx, run.id);
   await writeAuditEvent(tx, {
     eventType: "payroll_pay_run.changed",
@@ -1092,8 +1192,10 @@ function backPayForPeriod(
 ): { amount: Decimal; description: string } {
   const reference = payRunReference(target.run_number);
   const refuse = (what: string) => new ValidationError(`${NOT_SUPPORTED}: back pay ${what} (${reference}).`);
-  if (lines.some((line) => line.kind === "holiday_pay" || line.kind === "termination_holiday_pay")) {
-    throw refuse("for a pay period with holiday pay in it: holiday pay on back pay needs leave, payroll stage P8");
+  if (lines.some((line) => line.kind === "holiday_pay" || line.kind === "termination_holiday_pay" || LEAVE_PAY_ITEM_KINDS.includes(line.kind))) {
+    throw refuse(
+      "for a pay period with holiday pay or leave in it: back pay changes the ordinary weekly pay that leave was paid at and the gross earnings later holiday pay uses, which needs its own worked example (decision 152)",
+    );
   }
   const ordinary = lines.filter((line) => line.kind === "ordinary_time");
   const overtime = lines.filter((line) => line.kind === "overtime");
@@ -1243,6 +1345,31 @@ export async function addBackPay(
     entityType: "payroll_pay_run",
     entityId: run.id,
     details: { reference: payRunReference(run.run_number), employeeId, payRateId: rate.id, periodCount: added.length },
+  });
+  return { payRun: await getPayRun(tx, run.id) };
+}
+
+/**
+ * Works out leave again on a draft for everyone on it, or one employee
+ * ("Update leave"; decision 141): after a booking, a public holiday decision,
+ * a cash-up or an earlier pay run changed what it depends on.
+ */
+export async function updatePayRunLeave(tx: OrgTx, runIdInput: unknown, employeeIdInput?: unknown): Promise<{ payRun: PayRun }> {
+  await requirePayrollAccess(tx);
+  const run = await findRun(tx, runIdInput, true);
+  assertDraft(run);
+  const employees = await tx.query<{ employee_id: string }>("select employee_id::text from payroll_pay_run_employees where pay_run_id = $1", [run.id]);
+  const only = employeeIdInput === undefined || employeeIdInput === null || employeeIdInput === "" ? null : parseUuid(employeeIdInput, "employee");
+  if (only && !employees.rows.some((row) => row.employee_id === only)) throw new NotFoundError(`That employee isn't on ${payRunReference(run.run_number)}.`);
+  for (const row of employees.rows) {
+    if (!only || row.employee_id === only) await updateEmployeeLeave(tx, toDraftRun(run), row.employee_id);
+  }
+  await markPrepared(tx, run.id);
+  await writeAuditEvent(tx, {
+    eventType: "payroll_pay_run.leave_updated",
+    entityType: "payroll_pay_run",
+    entityId: run.id,
+    details: { reference: payRunReference(run.run_number), employeeId: only },
   });
   return { payRun: await getPayRun(tx, run.id) };
 }
@@ -1412,6 +1539,13 @@ export async function approvePayRun(
   if (problems.length > 0) {
     throw new ValidationError(`${reference} can't be approved yet: ${problems.map((entry) => entry.problem).join(" ")}`);
   }
+  // Leave is worked out again, so what's approved is what the leave records say now (decision 141).
+  const stale: string[] = [];
+  for (const entry of calculated) {
+    const outOfDate = await leaveOutOfDate(tx, toDraftRun(run), entry.employee.employee_id, entry.employee.name);
+    if (outOfDate) stale.push(outOfDate);
+  }
+  if (stale.length > 0) throw new ValidationError(`${reference} can't be approved yet: ${stale.join(" ")}`);
   const refused = `${reference} can't be approved`;
   const accounts = await itemAccounts(tx);
   const ctx = await loadTrackingContext(tx);
