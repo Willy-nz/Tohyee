@@ -410,7 +410,7 @@ export async function getPayRun(tx: OrgTx, idInput: unknown): Promise<PayRun> {
   if (run.status === "draft") {
     for (const entry of calculated) {
       const rate = await rateForPeriod(tx, entry.employee.employee_id, run.period_start, entry.employee.start_date);
-      hourly.set(entry.employee.employee_id, rate?.payBasis === "hourly" ? rate.hourlyRate : null);
+      hourly.set(entry.employee.employee_id, rate?.payBasis === "hourly" && rate.hourlyRate ? trimRate(rate.hourlyRate) : null);
     }
   }
   return {

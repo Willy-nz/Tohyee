@@ -7789,7 +7789,7 @@ Payroll deductions payable**.
   Cr 2220 ESCT 21.35, Cr 2240 Net pay 2,590.50; total 3,622.50. If Aroha's
   student loan box is ticked but her tax code is M (or the other way
   round), the pay run refuses to calculate her: "Aroha Ngata has a student
-  loan but tax code M has no SL. Fix her tax code or student loan under
+  loan but tax code M has no SL. Fix their tax code or student loan under
   Employees." (IRD's student loan deduction follows the tax code, 5.4.)
 
 - **PRUN4 Pay date 1 April 2026, across the KiwiSaver change (decision 2).**
