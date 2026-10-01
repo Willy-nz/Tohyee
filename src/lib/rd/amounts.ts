@@ -81,8 +81,9 @@ export const RD_OVERHEAD_BASES = {
 export type RdOverheadBasis = keyof typeof RD_OVERHEAD_BASES;
 export const RD_OVERHEAD_BASIS_CODES = Object.keys(RD_OVERHEAD_BASES) as RdOverheadBasis[];
 
-/** Shown wherever pay is counted for R&D until timesheets (P9) exist (RD28-RD32). */
-export const RD_PAYROLL_NOTE = "Timesheets aren't built yet: pay counts only for employees whose cost allocation is 100% R&D.";
+/** Shown wherever pay is counted for R&D (RD28-RD32, TS5-TS9; decisions 34, 100). */
+export const RD_PAYROLL_NOTE =
+  "Pay counts from approved timesheets for the days they cover; for other days, only when the employee's cost allocation is 100% R&D.";
 
 /** Records entered more than this many days after the work are flagged "entered late" (decision 38). */
 export const RD_LATE_AFTER_DAYS = 14;

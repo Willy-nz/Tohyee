@@ -6,9 +6,8 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { controlAccountCode, type ControlAccount } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
-import { add, dec, type Decimal, isZero, mul, parseDecimalInput, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, dec, type Decimal, isPositive, isZero, mul, parseDecimalInput, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { requirePayrollAccess } from "@/lib/payroll/access";
-import { splitByPercentages } from "@/lib/payroll/allocation-split";
 import { allocationOn } from "@/lib/payroll/allocations";
 import type { PayFrequency } from "@/lib/payroll/groups";
 import {
@@ -23,6 +22,8 @@ import {
 import { PAY_ITEM_COLUMNS, PAY_ITEM_FROM, type PayItemCategory, type PayItemKind, type PayItemRow } from "@/lib/payroll/pay-items";
 import { payRateOn } from "@/lib/payroll/pay-rates";
 import { NOT_SUPPORTED, payrollRatesOn } from "@/lib/payroll/rates";
+import { percentageOfWeight, splitByWeights, timesheetWeights } from "@/lib/payroll/timesheet-split";
+import { timesheetCoverage, type TimesheetCoverage } from "@/lib/payroll/timesheets";
 import { loadTrackingContext, missingRequired, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import { asRecord, optionalSource, optionalString, requireArray, requireIdempotencyKey } from "@/lib/validation";
 
@@ -32,7 +33,9 @@ import { asRecord, optionalSource, optionalString, requireArray, requireIdempote
  * employee from their pay rate; people running pay add earnings and
  * deductions; pay is calculated with IRD's rates for the pay date
  * (decision 1). Approving posts one journal dated the pay date, with each
- * employee's costs split by their cost allocation on the pay date and the
+ * employee's costs split by their approved timesheets for the days they
+ * cover and their cost allocation on the pay date for the rest (P9;
+ * decision 98), and the
  * journal lines totalled by pay item, account and tracking, never by
  * employee (decision 6). Approved pay runs are never changed, only voided
  * (an exact reversing journal). Everything needs payroll access.
@@ -67,7 +70,39 @@ export type PayRunEmployee = {
   /** Null when the pay can't be calculated; `problem` says why (PRUN8). */
   pay: EmployeePayResult | null;
   problem: string | null;
+  /** Approved timesheets covering the period (live on a draft, as used once approved; TS5, TS6). */
+  timesheets: PayRunTimesheets | null;
 };
+
+export type PayRunTimesheets = {
+  count: number;
+  coveredDays: number;
+  periodDays: number;
+  hours: string;
+  allDaysCovered: boolean;
+};
+
+function toPayRunTimesheets(coverage: TimesheetCoverage): PayRunTimesheets | null {
+  if (coverage.timesheetIds.length === 0) return null;
+  return {
+    count: coverage.timesheetIds.length,
+    coveredDays: coverage.coveredDays,
+    periodDays: coverage.periodDays,
+    hours: coverage.totalHours,
+    allDaysCovered: coverage.allDaysCovered,
+  };
+}
+
+/** The approved timesheets for an employee's pay period: live on a draft, the ones it used once approved (decision 98). */
+async function coverageFor(tx: OrgTx, run: RunRow, employeeId: string): Promise<TimesheetCoverage> {
+  if (run.status === "draft") return timesheetCoverage(tx, employeeId, run.period_start, run.period_end);
+  const used = await tx.query<{ timesheet_id: string }>(
+    `select l.timesheet_id from payroll_pay_run_timesheets l join payroll_timesheets t on t.id = l.timesheet_id
+      where l.pay_run_id = $1 and t.employee_id = $2`,
+    [run.id, employeeId],
+  );
+  return timesheetCoverage(tx, employeeId, run.period_start, run.period_end, { timesheetIds: used.rows.map((row) => row.timesheet_id) });
+}
 
 export type PayRunTotals = {
   gross: string;
@@ -423,6 +458,10 @@ export async function getPayRun(tx: OrgTx, idInput: unknown): Promise<PayRun> {
   const run = await findRun(tx, idInput);
   const calculated = await calculateRun(tx, run);
   const hourly = new Map<string, string | null>();
+  const timesheets = new Map<string, PayRunTimesheets | null>();
+  for (const entry of calculated) {
+    timesheets.set(entry.employee.employee_id, toPayRunTimesheets(await coverageFor(tx, run, entry.employee.employee_id)));
+  }
   if (run.status === "draft") {
     for (const entry of calculated) {
       const rate = await rateForPeriod(tx, entry.employee.employee_id, run.period_start, entry.employee.start_date);
@@ -448,6 +487,7 @@ export async function getPayRun(tx: OrgTx, idInput: unknown): Promise<PayRun> {
       lines: entry.lines.map(toLine),
       pay: entry.pay,
       problem: entry.problem,
+      timesheets: timesheets.get(entry.employee.employee_id) ?? null,
     })),
     totals: totalsOf(calculated),
     problemCount: calculated.filter((entry) => entry.problem !== null).length,
@@ -558,7 +598,7 @@ export async function createPayRun(
   if (employees.rows.length === 0) throw new ValidationError(`Nobody in ${groupName} is paid for ${periodStart} to ${periodEnd}.`);
   const ordinaryTime = await ordinaryTimeItem(tx);
 
-  const drafts: Array<{ employeeId: string; quantity: string | null; rate: string | null; amount: string }> = [];
+  const drafts: Array<{ employeeId: string; quantity: string | null; rate: string | null; amount: string; description: string | null }> = [];
   for (const employee of employees.rows) {
     if (employee.finish_date !== null && employee.finish_date <= periodEnd) {
       throw new ValidationError(finalPayRefusal(employee, groupName));
@@ -573,10 +613,19 @@ export async function createPayRun(
     const refused = await periodRefusal(tx, employee, periodStart, periodEnd, groupName);
     if (refused) throw new ValidationError(refused);
     if (rate.payBasis === "salary") {
-      drafts.push({ employeeId: employee.id, quantity: null, rate: null, amount: salaryForPeriod(rate.annualSalary!, frequency) });
+      drafts.push({ employeeId: employee.id, quantity: null, rate: null, amount: salaryForPeriod(rate.annualSalary!, frequency), description: null });
     } else {
-      const hours = ordinaryHoursForPeriod(rate.ordinaryHoursPerWeek!, frequency);
-      drafts.push({ employeeId: employee.id, quantity: hours, rate: rate.hourlyRate!, amount: lineAmount(hours, rate.hourlyRate!) });
+      // Approved timesheets covering every day of the period give the hours (TS8; decision 99).
+      const coverage = await timesheetCoverage(tx, employee.id, periodStart, periodEnd);
+      const fromTimesheets = coverage.allDaysCovered && isPositive(dec(coverage.totalHours));
+      const hours = fromTimesheets ? coverage.totalHours : ordinaryHoursForPeriod(rate.ordinaryHoursPerWeek!, frequency);
+      drafts.push({
+        employeeId: employee.id,
+        quantity: hours,
+        rate: rate.hourlyRate!,
+        amount: lineAmount(hours, rate.hourlyRate!),
+        description: fromTimesheets ? "From approved timesheets" : null,
+      });
     }
   }
 
@@ -603,9 +652,9 @@ export async function createPayRun(
   for (const draft of drafts) {
     await tx.query("insert into payroll_pay_run_employees (pay_run_id, employee_id) values ($1, $2)", [runId, draft.employeeId]);
     await tx.query(
-      `insert into payroll_pay_run_lines (pay_run_id, employee_id, line_number, pay_item_id, quantity, rate, amount)
-       values ($1, $2, 1, $3, $4, $5, $6)`,
-      [runId, draft.employeeId, ordinaryTime, draft.quantity, draft.rate, draft.amount],
+      `insert into payroll_pay_run_lines (pay_run_id, employee_id, line_number, pay_item_id, quantity, rate, amount, description)
+       values ($1, $2, 1, $3, $4, $5, $6, $7)`,
+      [runId, draft.employeeId, ordinaryTime, draft.quantity, draft.rate, draft.amount, draft.description],
     );
   }
   const payRun = await getPayRun(tx, runId);
@@ -856,7 +905,21 @@ function accountFor(entry: ItemAccount | { id: string; name: string; missing: tr
   return entry;
 }
 
-type Share = { percentage: string; tags: TrackingTags; projectId: string | null; projectName: string | null };
+/** One share of an employee's costs: a timesheet row or a default allocation line, with its weight (decision 98). */
+type Share = {
+  source: "timesheet" | "allocation";
+  weight: string;
+  /** The share of the whole, to 4 places, for display (decision 101). */
+  percentage: string;
+  tags: TrackingTags;
+  departmentId: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  rdActivityId: string | null;
+  hours: string | null;
+  allocationId: string | null;
+  allocationPercentage: string | null;
+};
 
 type Posting = {
   employeeId: string;
@@ -867,6 +930,7 @@ type Posting = {
   percentage: string;
   amount: string;
   group: string;
+  shareNumber: number;
 };
 
 type DebitGroup = { key: string; rank: number; order: number; accountCode: string; description: string; tags: TrackingTags; amount: Decimal };
@@ -921,7 +985,7 @@ export async function approvePayRun(
   const deductions = new Map<string, { item: ItemAccount; amount: Decimal }>();
   let kiwiSaverItem: ItemAccount | null = null;
   const addShare = (employeeId: string, item: ItemAccount, amount: string, shares: Share[]) => {
-    const split = splitByPercentages(amount, shares.map((share) => share.percentage));
+    const split = splitByWeights(amount, shares.map((share) => share.weight));
     shares.forEach((share, index) => {
       if (isZero(dec(split[index]))) return;
       const key = `${item.id}|${item.accountCode}|${trackingKey(share.tags)}|${share.projectId ?? ""}`;
@@ -948,13 +1012,19 @@ export async function approvePayRun(
         percentage: share.percentage,
         amount: split[index],
         group: key,
+        shareNumber: index + 1,
       });
     });
   };
 
+  const usedTimesheets = new Set<string>();
+  const employeeShares = new Map<string, Share[]>();
   for (const entry of calculated) {
     const pay = entry.pay!;
-    const shares = await sharesOn(tx, ctx, entry.employee, run.pay_date);
+    const coverage = await timesheetCoverage(tx, entry.employee.employee_id, run.period_start, run.period_end);
+    for (const id of coverage.timesheetIds) usedTimesheets.add(id);
+    const shares = await sharesFor(tx, ctx, entry.employee, run.pay_date, coverage);
+    employeeShares.set(entry.employee.employee_id, shares);
     const byItem = new Map<string, Decimal>();
     for (const line of entry.lines) {
       if (line.category === "deduction") {
@@ -1061,8 +1131,8 @@ export async function approvePayRun(
   for (const [index, posting] of postings.entries()) {
     await tx.query(
       `insert into payroll_pay_run_postings (pay_run_id, posting_number, employee_id, pay_item_id, account_id, tracking, project_id,
-                                             percentage, amount, journal_line_order)
-       values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10)`,
+                                             percentage, amount, journal_line_order, share_number)
+       values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11)`,
       [
         run.id,
         index + 1,
@@ -1074,8 +1144,37 @@ export async function approvePayRun(
         posting.percentage,
         posting.amount,
         lineOrder.get(posting.group),
+        posting.shareNumber,
       ],
     );
+  }
+  // What each employee's costs were split by, and the timesheets used (decisions 98, 100).
+  for (const [employeeId, shares] of employeeShares) {
+    for (const [index, share] of shares.entries()) {
+      await tx.query(
+        `insert into payroll_pay_run_shares (pay_run_id, employee_id, share_number, source, allocation_id, allocation_percentage, hours,
+                                            weight, percentage, tracking, department_id, project_id, rd_activity_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13)`,
+        [
+          run.id,
+          employeeId,
+          index + 1,
+          share.source,
+          share.allocationId,
+          share.allocationPercentage,
+          share.hours,
+          share.weight,
+          share.percentage,
+          JSON.stringify(share.tags),
+          share.departmentId,
+          share.projectId,
+          share.rdActivityId,
+        ],
+      );
+    }
+  }
+  for (const timesheetId of usedTimesheets) {
+    await tx.query("insert into payroll_pay_run_timesheets (pay_run_id, timesheet_id) values ($1, $2)", [run.id, timesheetId]);
   }
   try {
     await tx.query(
@@ -1111,36 +1210,92 @@ async function kiwiSaverEmployerItem(
 }
 
 /**
- * An employee's shares of their costs on the pay date (PRUN1): their cost
- * allocation's lines, with Department, Class and Location as tracking tags
- * when advanced features are on, or 100% untagged before their first
- * allocation. A required category missing from the allocation is refused.
+ * An employee's shares of their costs (PRUN1; TS5, TS6): approved
+ * timesheets' rows for the days they cover, and the cost allocation in
+ * effect on the pay date for the rest and for "other work" hours (100%
+ * untagged before their first allocation), each with its weight (decision
+ * 98). Department, Class and Location are tracking tags when advanced
+ * features are on. A required category missing from a share is refused.
  */
-async function sharesOn(
+async function sharesFor(
   tx: OrgTx,
   ctx: Awaited<ReturnType<typeof loadTrackingContext>>,
   employee: EmployeeRow,
   payDate: string,
+  coverage: TimesheetCoverage,
 ): Promise<Share[]> {
+  const tagsFor = (valueIds: Array<string | null>): TrackingTags => {
+    const tags: TrackingTags = {};
+    if (ctx.advancedFeatures) {
+      for (const valueId of valueIds) {
+        if (!valueId) continue;
+        const value = ctx.values.get(valueId);
+        if (value) tags[value.categoryId] = value.id;
+      }
+    }
+    return sortedTags(tags);
+  };
   const allocation = await allocationOn(tx, employee.employee_id, payDate);
-  const shares: Share[] = allocation
-    ? allocation.lines.map((line) => {
-        const tags: TrackingTags = {};
-        if (ctx.advancedFeatures) {
-          for (const valueId of [line.departmentId, line.classId, line.locationId]) {
-            if (!valueId) continue;
-            const value = ctx.values.get(valueId);
-            if (value) tags[value.categoryId] = value.id;
-          }
-        }
-        return { percentage: line.percentage, tags: sortedTags(tags), projectId: line.projectId, projectName: line.projectName };
-      })
-    : [{ percentage: "100.00", tags: {}, projectId: null, projectName: null }];
+  const lines = allocation
+    ? allocation.lines.map((line) => ({
+        percentage: line.percentage,
+        tags: tagsFor([line.departmentId, line.classId, line.locationId]),
+        departmentId: line.departmentId,
+        projectId: line.projectId,
+        projectName: line.projectName,
+        rdActivityId: line.rdActivityId,
+        allocationId: allocation.id,
+      }))
+    : [{ percentage: "100", tags: {}, departmentId: null, projectId: null, projectName: null, rdActivityId: null, allocationId: null }];
+  const weights = timesheetWeights({
+    periodDays: coverage.periodDays,
+    coveredDays: coverage.coveredDays,
+    rows: coverage.rows.map((row, index) => ({ key: `t${index}`, hours: row.hours })),
+    otherHours: coverage.otherHours,
+    allocation: lines.map((line, index) => ({ key: `a${index}`, percentage: line.percentage })),
+  });
+  const total = toFixedString(sum(weights.map((weight) => dec(weight.weight))), 8);
+  const shares: Share[] = weights.map((weight) => {
+    const index = Number(weight.key.slice(1));
+    const percentage = percentageOfWeight(weight.weight, total);
+    if (weight.source === "timesheet") {
+      const row = coverage.rows[index];
+      return {
+        source: "timesheet",
+        weight: weight.weight,
+        percentage,
+        tags: tagsFor([row.departmentId]),
+        departmentId: row.departmentId,
+        projectId: row.projectId,
+        projectName: row.projectName,
+        rdActivityId: row.rdActivityId,
+        hours: row.hours,
+        allocationId: null,
+        allocationPercentage: null,
+      };
+    }
+    const line = lines[index];
+    return {
+      source: "allocation",
+      weight: weight.weight,
+      percentage,
+      tags: line.tags,
+      departmentId: line.departmentId,
+      projectId: line.projectId,
+      projectName: line.projectName,
+      rdActivityId: line.rdActivityId,
+      hours: null,
+      allocationId: line.allocationId,
+      allocationPercentage: toFixedString(dec(line.percentage), 2),
+    };
+  });
   for (const share of shares) {
     const missing = missingRequired(ctx, share.tags, "expense");
     if (missing) {
       throw new ValidationError(
-        `${employee.name}'s cost allocation on ${payDate} has no ${missing}, and expense lines need one. Fix it under Employees › Cost allocation.`,
+        share.source === "timesheet"
+          ? `${employee.name}'s approved timesheet has hours with no ${missing}, and expense lines need one. Reopen the timesheet under Payroll › Timesheets and add one.`
+          : `${employee.name}'s cost allocation on ${payDate} has no ${missing}, and expense lines need one. Fix it under Employees › Cost allocation.`,
       );
     }
   }
@@ -1288,7 +1443,7 @@ export async function listPayRunPostings(tx: OrgTx, runIdInput: unknown): Promis
     accountCode: row.account_code,
     tracking: row.tracking,
     projectId: row.project_id,
-    percentage: toFixedString(dec(row.percentage), 2),
+    percentage: trimRate(row.percentage),
     amount: toFixedString(dec(row.amount), 2),
     journalLineOrder: row.journal_line_order,
   }));

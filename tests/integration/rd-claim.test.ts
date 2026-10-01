@@ -248,7 +248,7 @@ describeWithDatabase("R&D claim report (RD28-RD42)", () => {
     const pays = r.payroll.pays!;
     const hanaPay = pays.find((pay) => pay.employeeId === p.hana)!;
     expect(hanaPay).toMatchObject({ employeeName: "Hana Rewi", cost: "2484.00", excluded: "50.00", fullTimeRd: true, notRd: "0.00", payRunReference: p.run.reference });
-    expect(hanaPay.shares).toEqual([{ activityId: w.c1.id, percentage: "100.00", amount: "2484.00" }]);
+    expect(hanaPay.shares).toMatchObject([{ activityId: w.c1.id, percentage: "100.00", amount: "2484.00", source: "allocation", counts: true }]);
     const merePay = pays.find((pay) => pay.employeeId === p.mere)!;
     expect(merePay).toMatchObject({ cost: "2692.31", fullTimeRd: true, notRd: "0.01" });
     expect(merePay.shares.map((share) => share.amount)).toEqual(["1884.61", "807.69"]);
@@ -276,6 +276,17 @@ describeWithDatabase("R&D claim report (RD28-RD42)", () => {
     expect(again.activities.find((row) => row.activity.code === "C1")!.categories.employee).toBe("4368.61");
     // Nothing posted by the report.
     expect(again.figures.status).toBe("under_minimum");
+
+    // A pay run approved before timesheets (P9) kept no shares: the report finds the allocation it used (decision 67).
+    await w.as(async (tx) => {
+      await tx.query("alter table payroll_pay_run_shares disable trigger user");
+      await tx.query("delete from payroll_pay_run_shares where pay_run_id = $1", [p.run.id]);
+      await tx.query("alter table payroll_pay_run_shares enable trigger user");
+    });
+    const older = await w.report();
+    expect(older.payroll).toMatchObject({ counted: "5176.30", defaultSplit: "1200.00" });
+    expect(older.payroll.pays!.find((pay) => pay.employeeId === p.mere)!.shares.map((share) => share.amount)).toEqual(["1884.61", "807.69"]);
+    expect(older.payroll.pays!.find((pay) => pay.employeeId === p.hana)).toMatchObject({ fullTimeRd: true, usesTimesheets: false, shares: [{ amount: "2484.00", counts: true }] });
   });
 
   it("RD33: without payroll access, employee costs show as totals and the CSV names nobody", async () => {
