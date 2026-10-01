@@ -9,7 +9,7 @@ export default function CustomFieldsSettingsPage() {
     <Page>
       <PageHeader
         title="Custom fields"
-        description="Your own fields on contacts, documents and lines, like a pet's name, an engraving or a grant code. Fields are archived, never deleted."
+        description="Your own fields on contacts, documents, lines, and the CRM's people and opportunities, like a pet's name, an engraving, a grant code or a lead source. Fields are archived, never deleted."
       />
       <RequireOrganisation>{(organisationId) => <CustomFieldsManager key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>

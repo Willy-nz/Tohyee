@@ -6,7 +6,7 @@ import {
   parseCustomInput,
   resolveCustomValues,
 } from "@/lib/custom-fields/service";
-import { type CustomFieldUse, type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
+import { contactUses, type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import {
   CUSTOMER_DETAIL_FIELDS,
   type CustomerDetails,
@@ -277,14 +277,6 @@ function customerDetailsOf(contact: Contact): CustomerDetails {
   return Object.fromEntries(CUSTOMER_DETAIL_FIELDS.map((field) => [field, contact[field]])) as CustomerDetails;
 }
 
-/** A prospect uses the customer fields: it's a customer-to-be. */
-function rolesOf(details: { isCustomer: boolean; isSupplier: boolean; isProspect?: boolean }): CustomFieldUse[] {
-  return [
-    ...(details.isCustomer || details.isProspect ? (["customer"] as const) : []),
-    ...(details.isSupplier ? (["supplier"] as const) : []),
-  ];
-}
-
 async function crmOn(tx: OrgTx): Promise<boolean> {
   const result = await tx.query<{ crm_enabled: boolean }>("select crm_enabled from organisation_settings where id = true");
   return result.rows[0]?.crm_enabled === true;
@@ -306,7 +298,7 @@ async function prospectFlag(tx: OrgTx, input: unknown, details: ContactDetails, 
 }
 
 /**
- * Checks a contact's custom field values (CF3, CF7, CF8): the ones sent, or
+ * Checks a contact's custom field values (CF3, CF7, CF8, CRMF3): the ones sent, or
  * for a new contact each field's default. A required field for one of the
  * contact's roles must be set.
  */
@@ -317,7 +309,7 @@ async function contactCustomValues(
   saved: CustomValues | null,
 ): Promise<CustomValues> {
   const ctx = await loadCustomFieldContext(tx);
-  const uses = rolesOf(details);
+  const uses = contactUses(details);
   const values = resolveCustomValues(ctx, raw === undefined && saved ? saved : raw, { record: "contact", uses, kept: keptCustom(saved ?? {}) });
   const missing = missingRequiredField(ctx, values, { record: "contact", uses });
   if (missing) throw new ValidationError(`${missing} is required.`);
