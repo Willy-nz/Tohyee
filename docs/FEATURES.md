@@ -578,6 +578,22 @@ that something happened.
   assignees; logged **calls, meetings and notes**; and a **timeline** per
   company that also shows its invoices, credit notes, bills and payments.
   People, opportunities, tasks and activities are never deleted (CRM1-CRM9).
+  **CRM custom fields** (like Salesforce's): the organisation's own fields
+  on companies (contact fields used on prospects), people and
+  opportunities, with the same types, required fields, defaults and
+  archiving as other custom fields, in named, ordered **sections** per kind
+  of record (shown as groups that can be collapsed on the company page and
+  the people and opportunity forms; sections only group fields, they don't
+  hide them). Fields shown in lists are columns on the Companies and People
+  lists and lines on the pipeline cards, and changes are in each record's
+  history. Prospects only get the fields an admin turns on for prospects;
+  existing customer fields, required or not, stay off them. They need only
+  the CRM switch, not Advanced reporting (decided by Jess, 1 Oct 2026);
+  accounting fields still need Advanced reporting, and with it off behave
+  as before. A field that's already somewhere can be changed while one of
+  its places is switched on, so customer fields can still be changed with
+  the CRM off. They never change an amount, account, stage or the invoice
+  a won opportunity makes (CRMF1-CRMF12, not yet approved).
   **Email and calendar sync**: each member connects their own Gmail or
   Microsoft 365 mailbox (read-only, through the organisation's own Google or
   Microsoft app, tokens encrypted); every 15 minutes Tohyee keeps only the
@@ -599,8 +615,8 @@ that something happened.
   TC1-TC10. Admins can add up to 20 **custom segments** of their own (like
   Grant or Project) that work the same way and can be archived (CS1-CS3).
   **Custom fields** (like NetSuite's) add the organisation's own fields to
-  contacts (customers, suppliers or both), to the top of documents, or to
-  their lines: text, long text, whole and decimal numbers, money, percent,
+  contacts (customers, suppliers, prospects or a mix), to the top of
+  documents, or to their lines, grouped into named sections if wanted: text, long text, whole and decimal numbers, money, percent,
   date, check box, list, multiple select, email, phone and web address, each
   optionally required, with a default and shown as a column in lists.
   Fields and list options are archived, never deleted, and never reach the

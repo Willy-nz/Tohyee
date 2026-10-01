@@ -54,11 +54,10 @@ Next free tenant migration number: 0058 (0057 reserved for payroll P1b).
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
 
-CRM custom fields: decided by Jess (1 Oct 2026) that prospects only get the
-fields someone deliberately turns on for prospects; existing customer fields
-are not added to prospects automatically. A review of #67 found the first
-version did add them (locking accounting fields when the CRM is off); Copilot
-was asked to fix it on the PR.
+CRM custom fields are available whenever the CRM module is on, even with
+Advanced features off (decided by Jess, 1 Oct 2026). Prospects only get the
+fields turned on for prospects; existing customer fields aren't added to
+them.
 
 CRM work waiting on custom fields: record types and page layouts, and the
 Salesforce-style record page. Claude will build these once custom fields is
