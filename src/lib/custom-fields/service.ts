@@ -1,5 +1,6 @@
 import type { AccountClass } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
+import { addFieldToLayouts } from "@/lib/crm/record-types/service";
 import { crmEnabled } from "@/lib/crm/switch";
 import {
   CUSTOM_FIELD_RECORD_LABELS,
@@ -285,6 +286,8 @@ export async function createCustomField(
     const stored = !hasOptions ? defaultValue : Array.isArray(defaultValue) ? defaultValue.map(realId) : realId(String(defaultValue));
     await tx.query("update custom_fields set default_value = $2::jsonb where id = $1", [fieldId, JSON.stringify(stored)]);
   }
+  // A new company, person or opportunity field joins every page layout of its kind (CRT9).
+  await addFieldToLayouts(tx, { id: fieldId, record, sectionId });
   await writeAuditEvent(tx, {
     eventType: "custom_field.created",
     entityType: "custom_field",

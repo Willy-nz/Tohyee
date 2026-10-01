@@ -6,7 +6,11 @@ import {
   parseCustomInput,
   resolveCustomValues,
 } from "@/lib/custom-fields/service";
-import { contactUses, type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
+import { contactUses, type CustomField, type CustomFieldUse, type CustomValues, customValuesKey, defaultValues, isSwitchedOn } from "@/lib/custom-fields/values";
+import type { CustomFieldContext } from "@/lib/custom-fields/service";
+import type { Role } from "@/lib/auth/roles";
+import { checkAgainstLayout, chooseRecordType, getRecordType, type LayoutValues } from "@/lib/crm/record-types/service";
+import { listMembers } from "@/lib/organisations/members";
 import {
   CUSTOMER_DETAIL_FIELDS,
   type CustomerDetails,
@@ -79,6 +83,13 @@ export type Contact = {
    * purchase orders, repeating bills and spend money start with it.
    */
   defaultPurchaseTaxCode: string | null;
+  /** The CRM record type (CRT1): which page layout the company has, and its required and read-only fields. */
+  recordTypeId: string;
+  recordTypeName: string;
+  /** The company's owner in the CRM (CRT8), a member of the organisation. */
+  ownerUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
 } & CustomerDetails;
 
 /** The details a person enters. An edit leaves out anything it doesn't change. */
@@ -104,7 +115,14 @@ export type ContactInput = {
   defaultSalesTaxCode?: unknown;
   /** A tax code; blank for none (EX16). */
   defaultPurchaseTaxCode?: unknown;
+  /** A CRM record type for companies (CRT5); the default for a new contact. */
+  recordTypeId?: unknown;
+  /** A member's user id; blank for none (CRT8). */
+  ownerUserId?: unknown;
 } & CustomerDetailsInput;
+
+/** Who is saving: read-only fields on a record type are for admins and owners (CRT6). */
+export type SaveOptions = { role?: Role };
 
 type ContactDetails = Pick<Contact, "name" | "isCustomer" | "isSupplier" | "email" | "phone" | "postalAddress" | "gstNumber">;
 
@@ -141,12 +159,17 @@ type ContactRow = {
   default_sales_tax_code: string | null;
   default_purchase_tax_code_id: string | null;
   default_purchase_tax_code: string | null;
+  record_type_id: string;
+  record_type_name: string;
+  owner_user_id: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 const OWN_COLUMNS =
   "id, request_hash, name, is_customer, is_supplier, email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect, is_archived, " +
   "delivery_address, payment_term_id, credit_limit::text, customer_group_id, price_level_id, parent_contact_id, supplier_payment_term_id, currency_code, " +
-  "billing_country, delivery_country, default_sales_tax_code_id, default_purchase_tax_code_id";
+  "billing_country, delivery_country, default_sales_tax_code_id, default_purchase_tax_code_id, record_type_id, owner_user_id, created_at, updated_at";
 
 /** The primary contact person (RC6), looked up for each contact. */
 const PRIMARY_PERSON = `(select p.id from crm_people p where p.contact_id = contacts.id and p.is_primary) as primary_person_id,
@@ -155,7 +178,8 @@ const PRIMARY_PERSON = `(select p.id from crm_people p where p.contact_id = cont
 
 const COLUMNS = `${OWN_COLUMNS}, ${PRIMARY_PERSON},
   (select t.code from tax_codes t where t.id = contacts.default_sales_tax_code_id) as default_sales_tax_code,
-  (select t.code from tax_codes t where t.id = contacts.default_purchase_tax_code_id) as default_purchase_tax_code`;
+  (select t.code from tax_codes t where t.id = contacts.default_purchase_tax_code_id) as default_purchase_tax_code,
+  (select r.name from crm_record_types r where r.id = contacts.record_type_id) as record_type_name`;
 
 function toContact(row: ContactRow): Contact {
   return {
@@ -186,6 +210,11 @@ function toContact(row: ContactRow): Contact {
     deliveryCountry: row.delivery_country,
     defaultSalesTaxCode: row.default_sales_tax_code,
     defaultPurchaseTaxCode: row.default_purchase_tax_code,
+    recordTypeId: row.record_type_id,
+    recordTypeName: row.record_type_name,
+    ownerUserId: row.owner_user_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -313,6 +342,37 @@ async function contactCustomValues(
   const missing = missingRequiredField(ctx, values, { record: "contact", uses });
   if (missing) throw new ValidationError(`${missing} is required.`);
   return values;
+}
+
+/** The company's owner (CRT8): a member of the organisation, or none. */
+async function parseOwner(tx: OrgTx, input: unknown): Promise<string | null> {
+  if (input === null || input === "") return null;
+  if (typeof input !== "string") throw new ValidationError("The owner must be a member of the organisation.");
+  const members = await listMembers(tx.organisationId);
+  if (!members.some((member) => member.userId === input)) throw new ValidationError("The owner must be a member of the organisation.");
+  return input;
+}
+
+/** Whether a contact field is used on a contact with these roles now (CRMF8, CRMF11). */
+function contactFieldApplies(ctx: CustomFieldContext, uses: readonly CustomFieldUse[]): (field: CustomField) => boolean {
+  return (field) => field.usedOn.some((use) => uses.includes(use) && isSwitchedOn(ctx, use));
+}
+
+type LayoutStandard = Pick<Contact, "name" | "email" | "phone" | "gstNumber" | "postalAddress" | "deliveryAddress" | "ownerUserId">;
+
+function contactLayoutValues(standard: LayoutStandard, custom: CustomValues): LayoutValues {
+  return {
+    standard: {
+      name: standard.name,
+      ownerUserId: standard.ownerUserId,
+      email: standard.email,
+      phone: standard.phone,
+      gstNumber: standard.gstNumber,
+      postalAddress: standard.postalAddress,
+      deliveryAddress: standard.deliveryAddress,
+    },
+    custom,
+  };
 }
 
 function detailsOf(contact: Contact): ContactDetails {
@@ -451,6 +511,7 @@ export async function listContacts(
 export async function createContact(
   tx: OrgTx,
   input: ContactInput & { source?: unknown; idempotencyKey: unknown; name: unknown },
+  options: SaveOptions = {},
 ): Promise<{ created: boolean; contact: Contact }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
@@ -471,6 +532,8 @@ export async function createContact(
   const deliveryCountry = parseCountry(input.deliveryCountry, "Delivery country", null) ?? null;
   const rawSalesTax = optionalString(input.defaultSalesTaxCode, "defaultSalesTaxCode", { maxLength: 20 })?.toUpperCase() ?? null;
   const rawPurchaseTax = optionalString(input.defaultPurchaseTaxCode, "defaultPurchaseTaxCode", { maxLength: 20 })?.toUpperCase() ?? null;
+  const rawRecordType = input.recordTypeId === undefined || input.recordTypeId === null || input.recordTypeId === "" ? null : String(input.recordTypeId);
+  const rawOwner = input.ownerUserId === undefined || input.ownerUserId === null || input.ownerUserId === "" ? null : input.ownerUserId;
 
   // Values that weren't sent stay out of the hash, so older requests hash the same.
   const hash = requestHash("contact", {
@@ -483,6 +546,8 @@ export async function createContact(
     ...(rawCustom === undefined ? {} : { customFields: rawCustom }),
     ...(rawSalesperson === null ? {} : { defaultSalespersonId: rawSalesperson }),
     ...(isProspect ? { isProspect } : {}),
+    ...(rawRecordType === null ? {} : { recordTypeId: rawRecordType }),
+    ...(rawOwner === null ? {} : { ownerUserId: rawOwner }),
     ...customerDetailsForHash(input),
     ...(input.supplierPaymentTermId === undefined ? {} : { supplierPaymentTermId: input.supplierPaymentTermId === "" ? null : input.supplierPaymentTermId }),
   });
@@ -498,6 +563,19 @@ export async function createContact(
   const supplierPaymentTermId = await resolveSupplierPaymentTerm(tx, input.supplierPaymentTermId, null, { isSupplier: details.isSupplier });
   const salesTax = (await resolveDefaultTaxCode(tx, rawSalesTax, null)) ?? null;
   const purchaseTax = (await resolveDefaultTaxCode(tx, rawPurchaseTax, null, "purchase")) ?? null;
+  const recordType = await chooseRecordType(tx, "contact", rawRecordType, null);
+  const ownerUserId = await parseOwner(tx, rawOwner);
+  const ctx = await loadCustomFieldContext(tx);
+  const uses = contactUses({ ...details, isProspect });
+  await checkAgainstLayout(tx, {
+    record: "contact",
+    type: recordType,
+    values: contactLayoutValues({ ...details, deliveryAddress: customer.deliveryAddress, ownerUserId }, customFields),
+    before: { type: null, values: { standard: {}, custom: defaultValues([...ctx.fields.values()], "contact", uses, ctx) } },
+    role: options.role,
+    ctx,
+    applies: contactFieldApplies(ctx, uses),
+  });
 
   // No separate name check first: the original of a retry could commit between
   // it and the key check above. The unique indexes decide, and the key is
@@ -508,8 +586,9 @@ export async function createContact(
                            email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect,
                            delivery_address, payment_term_id, credit_limit, customer_group_id, price_level_id, parent_contact_id,
                            supplier_payment_term_id, currency_code, billing_country, delivery_country, default_sales_tax_code_id,
-                           default_purchase_tax_code_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16::numeric, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+                           default_purchase_tax_code_id, record_type_id, owner_user_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16::numeric, $17, $18, $19, $20, $21, $22, $23, $24, $25,
+             $26, $27)
      on conflict do nothing
      returning ${OWN_COLUMNS}`,
     [
@@ -538,6 +617,8 @@ export async function createContact(
       deliveryCountry,
       salesTax?.id ?? null,
       purchaseTax?.id ?? null,
+      recordType.id,
+      ownerUserId,
     ],
   );
   const row = inserted.rows[0] ? await readRow(tx, inserted.rows[0].id) : undefined;
@@ -567,6 +648,8 @@ export async function createContact(
       ...(purchaseTax ? { defaultPurchaseTaxCode: purchaseTax.code } : {}),
       ...Object.fromEntries(Object.entries(customer).filter(([, value]) => value !== null)),
       ...(supplierPaymentTermId ? { supplierPaymentTermId } : {}),
+      recordType: recordType.name,
+      ...(ownerUserId ? { ownerUserId } : {}),
     },
   });
   return { created: true, contact: toContact(row) };
@@ -576,7 +659,7 @@ export async function createContact(
  * Changes the fields that are sent; a blank optional field is cleared. An
  * edit that changes nothing isn't saved or audited.
  */
-export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: ContactInput): Promise<Contact> {
+export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: ContactInput, options: SaveOptions = {}): Promise<Contact> {
   const current = await lockContact(tx, contactIdInput);
   const before = detailsOf(current);
   const after: ContactDetails = {
@@ -640,9 +723,28 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
   if (purchaseTaxCode !== current.defaultPurchaseTaxCode) {
     changes.defaultPurchaseTaxCode = { from: current.defaultPurchaseTaxCode, to: purchaseTaxCode };
   }
+  // The CRM record type and owner (CRT5, CRT8).
+  const recordType = await chooseRecordType(tx, "contact", input.recordTypeId, current.recordTypeId);
+  if (recordType.id !== current.recordTypeId) changes.recordType = { from: current.recordTypeName, to: recordType.name };
+  const ownerUserId = input.ownerUserId === undefined ? current.ownerUserId : await parseOwner(tx, input.ownerUserId);
+  if (ownerUserId !== current.ownerUserId) changes.ownerUserId = { from: current.ownerUserId, to: ownerUserId };
   if (Object.keys(changes).length === 0) {
     return current;
   }
+  const ctx = await loadCustomFieldContext(tx);
+  const uses = contactUses({ ...after, isProspect });
+  await checkAgainstLayout(tx, {
+    record: "contact",
+    type: recordType,
+    values: contactLayoutValues({ ...after, deliveryAddress: customer.deliveryAddress, ownerUserId }, customFields),
+    before: {
+      type: recordType.id === current.recordTypeId ? recordType : await getRecordType(tx, current.recordTypeId),
+      values: contactLayoutValues(current, current.customFields),
+    },
+    role: options.role,
+    ctx,
+    applies: contactFieldApplies(ctx, uses),
+  });
   if (!current.isArchived && changes.name) {
     const clash = await activeNameClash(tx, after.name, current.id);
     if (clash) {
@@ -660,7 +762,8 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
               price_level_id = $16, parent_contact_id = $17, supplier_payment_term_id = $18, currency_code = $19,
               billing_country = $20, delivery_country = $21,
               default_sales_tax_code_id = case when $22::boolean then $23::bigint else default_sales_tax_code_id end,
-              default_purchase_tax_code_id = case when $24::boolean then $25::bigint else default_purchase_tax_code_id end, updated_at = now()
+              default_purchase_tax_code_id = case when $24::boolean then $25::bigint else default_purchase_tax_code_id end,
+              record_type_id = $26, owner_user_id = $27, updated_at = now()
         where id = $1`,
       [
         current.id,
@@ -688,6 +791,8 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
         sentSalesTax?.id ?? null,
         sentPurchaseTax !== undefined,
         sentPurchaseTax?.id ?? null,
+        recordType.id,
+        ownerUserId,
       ],
     );
     row = await readRow(tx, current.id);

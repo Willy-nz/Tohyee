@@ -589,8 +589,8 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PE3
     });
   });
 
-  it("applies tenant migration 0057 last", async () => {
+  it("applies tenant migration 0057", async () => {
     const { tenantMigrations } = await import("@/lib/db/migrations/tenant");
-    expect(tenantMigrations.at(-1)?.version).toBe("0057");
+    expect(tenantMigrations.map((migration) => migration.version)).toContain("0057");
   });
 });

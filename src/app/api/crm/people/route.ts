@@ -12,8 +12,10 @@ export const GET = route(async (request) => {
 
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const person = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
-    createPerson(tx, {
+  const person = await withOrganisation(request, body.organisationId, "bookkeeper", (tx, { membership }) =>
+    createPerson(
+      tx,
+      {
       contactId: body.contactId,
       firstName: body.firstName,
       lastName: body.lastName,
@@ -22,7 +24,10 @@ export const POST = route(async (request) => {
       phone: body.phone,
       isPrimary: body.isPrimary,
       customFields: body.customFields,
-    }),
+      recordTypeId: body.recordTypeId,
+      },
+      { role: membership.role },
+    ),
   );
   return json({ person }, { status: 201 });
 });

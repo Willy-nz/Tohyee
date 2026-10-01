@@ -4427,8 +4427,8 @@ Round 2; no section).
 - **CRT8** Inline edit: a bookkeeper changes only Mānuka Vets' Phone from
   its page; nothing else changes and the history says Phone changed. The
   owner is set to a member (Aroha Ngata's colleague, a bookkeeper) and is
-  in the history; an owner who isn't a member is refused ("Owner must be
-  a member of this organisation.").
+  in the history; an owner who isn't a member is refused ("The owner must
+  be a member of the organisation.").
 - **CRT9** New custom fields join the layouts: the admin has a contact
   custom field section "Practice details" and adds a "Practice details"
   section to Funding body's layout (not Standard's). Adding "Board meeting"
@@ -4462,7 +4462,8 @@ Round 2; no section).
 - **CRT12** CRM off: with the CRM off, Lottery Grants Board (Funding body)
   is saved from the Contacts screen without Phone, a bookkeeper can change
   its Grant round, and it keeps its type; record types can't be added or
-  changed ("The CRM is off. Turn it on in Settings › Modules first.").
+  changed ("The CRM is off. An admin can turn it on in Settings."), and
+  neither can a record's type.
 - **CRT13** Over HTTP: every record type route needs a signed-in member: a
   viewer reads the types and the record pages of companies, people and
   opportunities (200), a bookkeeper changes a record's fields and type
