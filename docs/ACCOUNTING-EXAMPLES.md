@@ -38,12 +38,14 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/stock.test.ts` (ST1-ST12) and
   `tests/integration/crm.test.ts` (MOD1, CRM1-CRM10) and
   `tests/integration/crm-mail.test.ts` (MAIL1-MAIL9) and
+  `tests/integration/sales-platforms.test.ts` (SPC1-SPC10) and
   `tests/integration/crm-custom-fields.test.ts` (CRMF1-CRMF12, not yet
   approved) and
   `tests/integration/reports-ledger.test.ts` (AGP1-AGP3, ATX1-ATX5,
   JR1-JR3) and `tests/integration/gst-audit.test.ts` (GA1-GA4) and
   `tests/integration/customer-statements.test.ts` (CST1-CST5) and
   `tests/integration/quotes.test.ts` (QT1-QT8) and
+  `tests/integration/sales-orders.test.ts` (SO1-SO12) and
   `tests/integration/repeating-invoices.test.ts` (RI1-RI10) and
   `tests/integration/repeating-bills.test.ts` (RB1-RB12, SPT3) and
   `tests/integration/printed-documents.test.ts` (PD1-PD8) and
@@ -83,7 +85,10 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/payroll-calculations.test.ts` and
   `tests/unit/payroll-ird-tables.test.ts` IRD's payroll rates and
   calculations (PR1-PR16), and `tests/unit/payroll-allocation.test.ts`
-  the payroll % split (PE3-PE5)
+  the payroll % split (PE3-PE5), and `tests/unit/sales-platforms.test.ts`
+  the webhook signature check, Shopify record shapes and which value is kept
+  (SPC2, SPC3, SPC5, SPC6, SPC8), and `tests/unit/sales-platforms-screen.test.ts`
+  the sync log on the settings screen (SPC10)
 
 ## NZ payroll — employee records (examples not yet approved by Jess)
 
@@ -319,7 +324,7 @@ sales, 5000 cost of goods sold.
   corrections that touch 1400, and stock movements to any other account. So
   stock always equals account 1400 to the cent.
 - **Cost of sales** is posted when the invoice is approved, dated the
-  invoice date (there are no sales orders or fulfilment yet), in the
+  invoice date (there's no fulfilment yet, even for sales orders: SO3), in the
   invoice's own journal: Dr 5000 / Cr 1400, the 5000 line tagged like the
   invoice line.
 - **Units** (IT5): stock is kept in the item's base unit. **Kits** (IT7):
@@ -3755,7 +3760,7 @@ Setup: Advanced reporting on; GST 15%; the six starting payment terms.
 
 - Credit limits shared across a parent and its subs (each customer's limit
   is its own). Prices from price levels arrived with items (IT4).
-- Holding orders over the limit (there are no sales orders yet) or
+- Holding sales orders over the limit (sales orders aren't checked) or
   checking the limit when a draft is saved (only approving is checked).
 - Customer statements (and so their roll-up); only aged receivables rolls
   up.
@@ -4106,6 +4111,199 @@ Ngata (aroha@manukavets.nz); Jess connects jess@glimmers.nz.
 - **MAIL9** Disconnecting removes the account and its synced emails and
   meetings from the timeline. Three failed syncs in a row pause it with the
   last error shown.
+
+## Sales platform connections (examples not yet approved by Jess)
+
+Jess sells through Shopify and asked (1 Oct 2026) for Tohyee to connect to
+sales platforms: Shopify first, then WooCommerce, Square and Stripe. The
+plan is Shopify order → sales order → invoice, but sales orders are being
+built separately, so **this first stage brings in only customers and
+products, and posts nothing to the ledger**. The connector framework
+(connections, the record links, the sync log, webhooks and the catch-up
+sync) is shared, so other platforms can be added as more connectors.
+
+The IDs are **SPC1-SPC10**: the brief suggested SP1, SP2..., but SP1-SP8
+are already the supplier payment examples.
+
+**This hasn't been tried against a real Shopify store.** The tests use
+recorded Shopify-shaped responses and webhooks signed in the tests, like the
+mail sync's.
+
+What Shopify says (shopify.dev and help.shopify.com can't be opened from the
+sandbox these were written in; the rules below come from Shopify's own
+open-source app library,
+[Shopify/shopify-app-js](https://github.com/Shopify/shopify-app-js), and
+web searches of Shopify's pages, so check them against the pages linked):
+
+- **Access**: a store owner makes a custom app and gives it an Admin API
+  access token
+  ([custom apps](https://help.shopify.com/en/manual/apps/app-types/custom-apps)).
+  Shopify stopped new custom apps being made in the store admin from
+  1 January 2026; ones made before then keep their access token (it starts
+  `shpat_`) and API secret key. New custom apps are made in Shopify's Dev
+  Dashboard, which gives a **client ID and client secret**; the app then
+  asks the store for an access token itself (the
+  [client credentials grant](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/client-credentials-grant),
+  which lasts about 24 hours and only works when the app and store belong
+  to the same organisation). Tohyee accepts either: an access token with
+  the app's API secret key, or a client ID and secret.
+- **API**: the Admin GraphQL API, version **2026-07**
+  ([Admin GraphQL API](https://shopify.dev/docs/api/admin-graphql/2026-07)),
+  at `https://{store}.myshopify.com/admin/api/2026-07/graphql.json` with the
+  `X-Shopify-Access-Token` header. Customer `email` and `phone` are
+  deprecated in this version, so Tohyee reads `defaultEmailAddress` and
+  `defaultPhoneNumber`.
+- **Scopes** (read-only only): `read_customers` and `read_products`
+  ([access scopes](https://shopify.dev/docs/api/usage/access-scopes)). Tohyee
+  never asks for a write scope and never changes anything in the store.
+- **Webhooks**: Shopify signs each delivery with the app's secret (the API
+  secret key, or the client secret): the `X-Shopify-Hmac-SHA256` header is
+  the base64 HMAC-SHA256 of the raw body
+  ([verifying webhooks](https://shopify.dev/docs/apps/build/webhooks/subscribe/https)).
+  Each delivery has an `X-Shopify-Webhook-Id`, which is the same if Shopify
+  sends it again. Webhooks set up by hand in the store's notification
+  settings are signed with a different key, so Tohyee subscribes itself
+  (`webhookSubscriptionCreate`), and only when the server has a public
+  https address (Settings › Remote access). Without one, the catch-up sync
+  still runs every 15 minutes.
+
+The rules (our choice where Shopify and Jess are silent):
+
+- An admin connects a store with its address (`name.myshopify.com`) and
+  either an access token and API secret key, or a client ID and secret.
+  Tohyee checks them by reading the shop's name, currency and whether its
+  prices include tax before saving anything; then they're stored encrypted
+  with TOHYEE_SECRET_KEY (without it, connecting is refused) and never shown
+  again. A store can only be connected once at a time.
+- The admin chooses what to sync: **customers** (into contacts, as
+  customers) and **products** (each variant into an item). Each Tohyee
+  record linked to a Shopify record is remembered, so nothing is brought in
+  twice.
+- **Matching**: a Shopify customer links to the one active contact with
+  the same email (ignoring case). A variant links to the item whose code is
+  the variant's SKU (ignoring case). Anything else that isn't clear is
+  skipped and logged, never guessed: no email match and a contact with the
+  same name already exists; more than one contact with that email; a
+  record already linked to another Shopify record; a variant with no SKU,
+  or a SKU that can't be an item code; an archived contact or item.
+  Otherwise a new contact (a customer) or a new **non-stock** item is
+  added. A new item's name is the product's title, followed by " - " and
+  the variant's title unless Shopify calls it "Default Title".
+- **What's copied**: a contact's name, email and phone; an item's name and
+  sale price. The **sale price is only copied when the store's currency is
+  the organisation's base currency and its prices exclude tax**, because
+  Tohyee's item prices exclude GST; otherwise it's logged as not copied
+  (see the questions below). Addresses, countries and stock levels aren't
+  copied. An item's code isn't changed after it's linked.
+- **Never overwriting what someone changed**: Tohyee remembers the value
+  Shopify last had for each copied field. When Shopify changes a field and
+  Tohyee still has the value Shopify last had, Tohyee's is updated; when
+  someone changed it in Tohyee, Tohyee's is kept and the log says so. When
+  a record is first linked, blank Tohyee fields are filled and different
+  ones kept (and logged).
+- **Webhooks** (customer and product create and update) are checked
+  against the connection's secret before anything is read from them; a
+  delivery that fails the check is refused (401) and nothing is stored or
+  logged. A delivery already received (same webhook ID) is acknowledged
+  and does nothing. A change older than the last one seen is ignored.
+- **The sync log** lists, newest first, what each sync and webhook did:
+  created, linked, updated, kept Tohyee's value, skipped (with why) and
+  errors. Syncs run every 15 minutes (off with
+  TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER=off) or on **Sync now**; each fetches
+  what changed since the last one. A failed sync records its error and is
+  tried again next time; three failures in a row pause the connection until
+  an admin syncs it successfully.
+- **Disconnecting** removes the credentials, the cached access token and
+  the links between Shopify and Tohyee records, and unsubscribes the
+  webhooks it can. Contacts and items brought in stay, and so does the
+  sync log. Connecting the same store again matches by email and SKU again.
+- Admins (and owners) connect, test, change what's synced, sync now and
+  disconnect; everyone in the organisation (viewers up) can see the
+  connections and the sync log. Nothing here touches the ledger.
+
+Setup: base currency NZD. Active contact **Aroha Ngata**
+(aroha@manukavets.nz, a customer, no phone) and **Kiri Walker** (no email).
+Item **CANDLE-L** "Large soy candle", non-stock, sale price **20.00**.
+Shopify store glimmers.myshopify.com, "Glimmers", NZD, prices exclude tax.
+
+- **SPC1** Connecting checks the credentials (the shop's name, Glimmers,
+  is read back) and stores the access token and secret encrypted; the
+  connection shows the store, its currency, "prices exclude tax" and what's
+  synced, never the secrets. Wrong credentials (Shopify says 401) are
+  refused and nothing is stored; without TOHYEE_SECRET_KEY connecting is
+  refused; connecting glimmers.myshopify.com a second time is refused.
+  If the store refuses one of the four webhooks (PRODUCTS_CREATE), the two
+  already made are removed again, the connection is still connected with a
+  note saying why webhooks aren't on, and testing the connection later sets
+  up all four once (testing again doesn't add more).
+- **SPC2** Customers sync: Shopify customer 1001 "Aroha Ngata",
+  AROHA@manukavets.nz, +64 21 555 0101 links to the existing contact Aroha
+  Ngata (email ignoring case) and fills her blank phone; 1002 "Tama Rewi",
+  tama@example.co.nz, adds a new customer contact Tama Rewi; 1003 "Kiri
+  Walker" with no email is skipped (there's already a Kiri Walker and
+  nothing to match them by). The log has linked, updated (phone), created
+  and skipped lines.
+- **SPC3** Products sync: product "Large candle" with one variant
+  (Default Title, SKU candle-l, 20.00) links to CANDLE-L and keeps its name
+  "Large soy candle" (logged as kept); product "Wax melts" with variants
+  Vanilla (SKU MELT-VAN, 8.50) and Lavender (no SKU) adds non-stock item
+  MELT-VAN "Wax melts - Vanilla" at **8.50** and skips Lavender (no SKU).
+- **SPC4** Syncing again with nothing changed in Shopify changes nothing
+  and adds nothing: no new contacts, items or log lines.
+- **SPC5** Changes on both sides: someone renames Tama Rewi in Tohyee to
+  "Tama Rewi (wholesale)". Shopify then changes Tama's last name to
+  "Rewi-Smith" and phone to +64 22 555 0102, and Large candle's price to
+  22.00. The next sync updates Tama's phone and CANDLE-L's sale price to
+  **22.00**, and keeps "Tama Rewi (wholesale)", logging that Tohyee's name
+  was kept because it was changed in Tohyee.
+- **SPC6** A store whose prices include tax: MELT-VAN is added with **no
+  sale price** and the log says the price wasn't copied because Shopify's
+  prices include tax. The same for a store in AUD.
+- **SPC7** Webhooks: a `customers/create` webhook for customer 1004 "Mere
+  Tane", signed with the connection's secret, adds the contact; the same
+  delivery again (same webhook ID) is acknowledged and does nothing; a
+  `products/update` webhook for "Wax melts" with Vanilla at 9.00 updates
+  MELT-VAN's price to **9.00**. A webhook whose change is older than the
+  last one seen for that record changes nothing.
+- **SPC8** A bad signature is refused: a webhook signed with another
+  secret, one whose body was changed after signing, one with no signature,
+  one for another store's domain and one to an unknown connection address
+  are all refused with 401, and no contact is added and nothing is logged.
+- **SPC9** Disconnecting keeps records: Aroha, Tama, Mere, CANDLE-L and
+  MELT-VAN stay as they are, the credentials and links are gone, the log is
+  kept with a "disconnected" line, and the old webhook address refuses
+  deliveries. Connecting the store again and syncing links Aroha and
+  CANDLE-L again by email and SKU, without adding duplicates.
+- **SPC10** Roles: a viewer sees the connection and its sync log, but
+  connecting, testing, changing what's synced, syncing now and
+  disconnecting are refused (403); an admin can do them all. Nothing is
+  posted to the ledger by any of this (no journals before or after).
+
+### Not supported yet (refused rather than guessed)
+
+- Shopify orders, refunds and payouts; WooCommerce, Square and Stripe.
+- Copying sale prices from a store whose prices include tax, or whose
+  currency isn't the base currency.
+- Addresses, countries (which choose an export's tax code, EX1), stock
+  levels and costs.
+- Deleting or archiving a Tohyee record when it's deleted in Shopify (the
+  link stays; nothing happens).
+- Matching by name, or anything other than one clear email or SKU match.
+
+### Questions for Jess (sales platform connections)
+
+- Should Shopify orders reach the accounts **per order** (each order a
+  sales order, then an invoice) or **per payout** (a summary of the
+  payout's sales, fees and refunds)?
+- Your store's prices probably include GST. Should Tohyee work out the
+  price excluding GST (e.g. 23.00 → 20.00 at 15%), and what about products
+  that aren't taxed?
+- Should products with tracked inventory become **stock** items rather than
+  non-stock?
+- Should a customer's country come across, so overseas customers get the
+  tax code for exports?
+- Is your Shopify app an older one made in the store admin (an access
+  token), or a new one from the Dev Dashboard (client ID and secret)?
 
 ## Custom fields on CRM records (examples not yet approved by Jess)
 
@@ -4873,6 +5071,226 @@ following month" and billing address "12 George St, Dunedin 9016".
 - Linking a quote to a CRM opportunity. A won opportunity still makes its
   own invoice (CRM5).
 - (Foreign-currency quotes are built: MC25.)
+
+## Sales orders (examples not yet approved by Jess)
+
+Written from NetSuite's sales orders, as Jess asked (NetSuite where it has an
+answer, otherwise Xero; Xero has no sales orders). Jess hasn't approved
+them yet. Stage 1 is the order and invoicing from it; stock isn't reserved
+and there are no deliveries yet. NetSuite help pages followed (the agent's
+sandbox can't open docs.oracle.com, so they were read through web search
+summaries of the pages):
+
+- "Sales Orders" (chapter_N1215966) and "Creating Sales Orders": a sales
+  order is a customer's order of items; it posts nothing to the general
+  ledger until it's billed (and fulfilled).
+- "Viewing the Status of Sales Orders" (section_N1220604): Pending
+  Approval, Pending Fulfillment, Partially Fulfilled, Pending
+  Billing/Partially Fulfilled, Pending Billing, Billed, Closed, Cancelled.
+- "Billing or Invoicing a Sales Order" (section_N1240951), "Invoicing Sales
+  Orders" (section_N1219162) and "Invoicing Individual Line Items"
+  (article_0518111425): the invoice is made from the order, carries its
+  lines, can be for part of the order, and the order keeps the quantity
+  billed per line.
+- "Closing a Sales Order" (section_4698204292) and "Closing Line Items on
+  Sales Orders" (section_N1220357): closing stops anything more being
+  billed (or fulfilled) on lines not yet done.
+- "Converting an Estimate to a Sales Order" (section_N1073352): an
+  estimate (quote) becomes a sales order carrying its lines.
+- "Currency on Customer Transactions": a transaction made from another
+  keeps the original's currency (also cited for MC25).
+
+A sales order goes to a **customer** and has the same lines as an invoice
+or quote (items, units, price levels, tracking, custom fields, salesperson,
+tax exclusive, inclusive or no tax) with the same line rules and maths
+(I1-I6). It has an **order date**, an optional **expected date** (not
+before the order date), a reference and a memo. A sales order **posts
+nothing** to the ledger and doesn't change stock or GST. It's in the
+customer's currency (MC1) with no exchange rate; each invoice gets its own
+rate (MC25).
+
+- A **draft** can be edited and deleted.
+- **Approving** checks it again as an invoice would be checked (an active
+  customer, accounts, tax codes, items, required tracking and custom
+  fields), gives it the next number (`SO-0001`, `SO-0002`, ...) from its own
+  counter, with no gaps, and **locks** it: the database refuses changing an
+  approved order or its lines, or deleting it. Following NetSuite, a draft
+  is "pending approval" and isn't billable.
+- **Invoice** makes a **draft invoice** to the same customer for what's left
+  on each line (ordered less what's on invoices that aren't voided, drafts
+  included), or less if the person reduces a quantity (zero leaves the line
+  off). It carries the line's description, price, account, tax code, item,
+  unit, tracking and custom fields, and the order's salesperson, custom
+  fields and reference (or its number). It's dated the day chosen and due
+  on the date given or else the customer's payment terms. Each invoice line
+  points back to its order line and the invoice to its order. The draft is
+  then edited and approved like any invoice; **cost of sales is still
+  posted when the invoice is approved** (ST1), since there are no
+  deliveries yet.
+- **Invoiced** is worked out from the linked invoices, never stored or
+  typed: per line, what's on **approved** invoices is invoiced and what's on
+  **draft** invoices is shown separately. Voiding an invoice, or deleting a
+  draft, gives its quantities back.
+- A linked invoice line keeps its order line's **item and unit**, the
+  invoice keeps its **customer**, and the invoices that aren't voided never
+  add up to **more than was ordered** on a line (anything extra goes on a
+  line of its own). The database refuses all three too.
+- **Status** is worked out, following NetSuite's: **draft** (NetSuite's
+  Pending Approval), **pending billing** (approved, nothing invoiced),
+  **partly billed** (some invoiced; NetSuite's "Partially Fulfilled" family
+  needs deliveries, which stage 1 hasn't got), **billed** (approved
+  invoices cover every line), **closed** and **cancelled**. Only closed and
+  cancelled are stored, as they're decisions, not figures.
+- **Closing** an approved order means nothing more will be invoiced. It's
+  refused once billed (nothing left), and while it has draft invoices
+  (approve or delete them first). Voiding an invoice of a closed order is
+  still allowed; the order stays closed.
+- **Cancelling** an approved order is allowed only while it has no invoices
+  other than voided ones (drafts count). Drafts are deleted, not cancelled;
+  a closed order can't be cancelled.
+- A finalised quote can be **accepted as a sales order** instead of as an
+  invoice (NetSuite's estimate to sales order): a draft order to the same
+  customer, dated the day chosen, with the quote's lines, custom fields,
+  salesperson and reference (or its number). The quote is accepted and the
+  two point to each other; the draft order can't be deleted (as QT7).
+
+Setup (GST 15%): organisation Glimmers with Advanced features on; customer
+**Kobe Cafe** with payment terms "20th of the following month"; item
+**WIDGET** "Widget" (stock, sale price **12.00** to 4000, purchase price
+5.00 to 1400, GST) with 20 bought on 1 Jul 2026 at **5.00** (100.00) on an
+approved bill; item **GIFTBOX** "Gift box" (non-stock, sale price **4.00**
+to 4000, GST).
+
+- **SO1** A draft sales order to Kobe Cafe dated 1 Aug 2026, expected
+  15 Aug 2026, reference **KC-PO-77**, memo "Deliver to the Octagon shop",
+  tax exclusive, with lines of only WIDGET x 10 and GIFTBOX x 50, is filled
+  in as "Widget" 10 x **12.00** to 4000 (120.00) and "Gift box" 50 x
+  **4.00** to 4000 (200.00): net **320.00**, GST **48.00**, total
+  **368.00**. It has no number, posts no journal, and stock is still 20
+  Widgets worth 100.00. An expected date before the order date is refused.
+- **SO2** Approving SO1 makes it **SO-0001**, **pending billing**, with 0
+  invoiced and 10 and 50 left; editing or deleting it is refused (and the
+  database refuses changing it or its lines). Still no journal, stock is
+  still 20 worth 100.00, and the GST return for August 2026 is unchanged
+  (nothing). A second draft to a customer that has since been archived is
+  refused on approval and stays a draft; the next order approved is
+  **SO-0002** (no gap).
+- **SO3** Invoicing SO-0001 on 5 Aug 2026 makes a draft invoice to Kobe
+  Cafe dated **5 Aug 2026**, due **20 Sep 2026** (terms), reference
+  **KC-PO-77**, with 10 Widget @ 12.00 and 50 Gift box @ 4.00, total
+  **368.00**, from SO-0001, each line linked to its order line. SO-0001
+  shows 10 and 50 on draft invoices, 0 invoiced, nothing left, and is still
+  **pending billing**; invoicing it again is refused ("nothing left to
+  invoice"). The same request retried with the same key returns the same
+  invoice. Approving it posts INV-0001: Dr 1100 **368.00** / Cr 4000
+  **320.00** / Cr 2100 **48.00** and cost of sales Dr 5000 **50.00** / Cr
+  1400 **50.00** (10 Widgets at 5.00), leaving 10 Widgets worth 50.00.
+  SO-0001 then shows 10 and 50 invoiced and is **billed**.
+- **SO4** A part invoice: invoicing SO-0001 on 5 Aug 2026 for 6 Widgets and
+  20 Gift boxes makes a draft with Widget 72.00 and Gift box 80.00: net
+  **152.00**, GST **22.80**, total **174.80**. Approved, it posts Dr 1100
+  **174.80** / Cr 4000 **152.00** / Cr 2100 **22.80** and Dr 5000 **30.00**
+  / Cr 1400 **30.00**. SO-0001 shows 6 of 10 and 20 of 50 invoiced, 4 and
+  30 left, and is **partly billed**. Invoicing it again on 20 Aug 2026
+  makes a draft for the rest, 4 Widgets (48.00) and 30 Gift boxes (120.00):
+  net **168.00**, GST **25.20**, total **193.20**, due 20 Sep 2026. Once
+  that's approved SO-0001 is **billed** (174.80 + 193.20 = 368.00).
+- **SO5** Voiding the second invoice of SO4 (193.20) on 21 Aug 2026 gives
+  its 4 and 30 back: SO-0001 is **partly billed** again with 4 and 30 left,
+  and invoicing again makes a new draft for them. Deleting that draft gives
+  them back too (still 4 and 30 left).
+- **SO6** Over-invoicing is refused. Asking the Invoice action for 5
+  Widgets when 4 are left is refused ("only 4 left to invoice"). On SO3's
+  draft invoice, 11 Widgets is refused (only 10 were ordered); on SO4's
+  second draft, 5 Widgets is refused ("6 of it is on other invoices, so at
+  most 4 can be invoiced here"). Changing a linked line's item, changing
+  the invoice's customer, and an invoice line naming an order line on an
+  invoice that wasn't made from that order are all refused (the database
+  refuses them too). Two changes at the same moment that each fit but
+  together go over take turns, and the second is refused, in the database
+  as well. A line of its own, "Freight" 15.00 to 4000, can be
+  added to the invoice, and a linked line's price can be changed to 11.50
+  (the invoice posts 11.50; the order keeps 12.00, since invoiced counts
+  quantities).
+- **SO7** Closing: after SO4's first invoice is approved (6 and 20
+  invoiced), closing SO-0001 makes it **closed**, still showing 4 and 30
+  not invoiced; invoicing it is then refused, and so is cancelling it.
+  Voiding that invoice is still allowed and SO-0001 stays **closed** (now 0
+  invoiced). Closing is refused for a draft, for an order with a draft
+  invoice (the database refuses too), and for a billed order.
+- **SO8** Cancelling: an approved order with no invoices is **cancelled**
+  and can't then be invoiced or closed. A draft can't be cancelled (it's
+  deleted instead). An order with a draft invoice can't be cancelled
+  (refused, and the database refuses too); after the draft is deleted it
+  can. An order with an approved invoice can't be cancelled; once that
+  invoice is voided it can.
+- **SO9** From a quote: QU-0001 (QT1: 2 x Paw print pendant at 120.00 and
+  1 x Engraving at 35.00, total **316.25**) accepted as a sales order on
+  16 Jul 2026 makes a draft sales order to Kobe Cafe dated **16 Jul 2026**,
+  reference **QU-0001**, with the same two lines and total **316.25**. The
+  quote is accepted and points to the order; the order points back to
+  QU-0001. Accepting it again (as an order or an invoice) is refused
+  ("already accepted"), the same request retried with the same key returns
+  the same order, and the draft order can't be deleted. Accepting a draft
+  quote as an order is refused. Approved as SO-0001 and invoiced on 20 Jul
+  2026, the draft invoice has reference QU-0001 and total **316.25**.
+- **SO10** Foreign currency: Acme Inc (USD). A sales order dated 1 Aug 2026
+  for 3 x "Consulting day" at **USD 100.00** to 4000, tax code ZERO, total
+  **USD 300.00**, approved as SO-0001, has no exchange rate and posts
+  nothing. Invoicing 2 of them on 10 Aug 2026 at a typed rate of **1.65**
+  makes a USD draft invoice of **USD 200.00** (NZD **330.00**); approved, it
+  posts Dr 1100 **330.00** / Cr 4000 **330.00**. SO-0001 is **partly
+  billed** with 1 left. Invoicing the rest on 20 Aug 2026 at **1.60** makes
+  **USD 100.00** (NZD **160.00**); once approved SO-0001 is **billed**.
+  Acme's currency can't then be changed (the order counts, like a quote).
+- **SO11** Period locks: with the lock date 31 Jul 2026, a sales order
+  dated 20 Jul 2026 can still be saved and approved (it posts nothing), and
+  invoicing it on 25 Jul 2026 makes a draft, but approving that invoice is
+  refused because 25 Jul 2026 is locked. With the draft deleted, invoicing
+  on 3 Aug 2026 and approving works, and the order is **billed**.
+- **SO12** Saving, approving, invoicing, closing and cancelling each return
+  the original when retried with the same key, and are refused (409) with
+  the same key and different content. A sales order with no lines is
+  refused. The list filters by status (draft, pending billing, partly
+  billed, billed, closed, cancelled). A viewer can list and open sales
+  orders and see their invoices but not save, approve, close, cancel or
+  invoice them.
+
+### Not supported yet (refused rather than guessed)
+
+- Reserving stock (committed quantities), deliveries (fulfilment), and
+  moving cost of sales to delivery: later stages. Until then cost of sales
+  is posted when the invoice is approved.
+- Making sales orders from won CRM opportunities, and Shopify orders.
+- **Line discounts**: invoices and quotes have no discount field (price
+  levels give customer prices instead), so neither do sales orders.
+- Editing an approved order, closing single lines, and reopening a closed
+  order.
+- Invoicing more than was ordered on a line (put the extra on a line of its
+  own); cancelling an order with invoices that aren't voided; closing an
+  order with draft invoices.
+- Credit notes don't give quantity back to the order; only voiding the
+  invoice (or deleting a draft) does.
+- Printing and emailing sales orders, deposits against an order, credit
+  limit holds, and accepting part of a quote as an order.
+- Notes and files on sales orders.
+
+### Questions for Jess
+
+1. Should accepting a quote make a sales order by default now (NetSuite's
+   estimate to sales order), with "accept as invoice" kept for quick sales?
+2. Line discounts: add a discount (percent or amount) to invoice, quote and
+   sales order lines together, or keep price levels only?
+3. Closing: should closing be per line (as NetSuite does) and should a
+   closed order be reopenable? Should voiding an invoice of a closed order
+   reopen it?
+4. Should approved orders be editable (NetSuite allows it; Tohyee locks
+   them like purchase orders), and if so what may change once invoiced?
+5. Should a credit note made from an order's invoice give the quantity back
+   to the order (NetSuite uses return authorisations for that)?
+6. Status names: "partly billed" stands in for NetSuite's "Pending
+   Billing/Partially Fulfilled" until deliveries exist. Keep "billed" or say
+   "invoiced"?
 
 ## Repeating invoices (examples not yet approved by Jess)
 

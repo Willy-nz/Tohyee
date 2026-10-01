@@ -37,8 +37,9 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ contacts               customers and suppliers (with terms, credit limit, group, price level, parent, currency)
 ├─ payment_terms, customer_groups, price_levels   lists for customers (archived, never deleted)
 ├─ items, item_units, item_level_prices, item_suppliers, kit_components   products and services
-├─ sales_invoices, sales_invoice_lines, sales_invoice_numbering
-├─ quotes, quote_lines, quote_numbering   quotes (post nothing; accepting makes a draft invoice)
+├─ sales_invoices, sales_invoice_lines, sales_invoice_numbering   (with the sales order and line they came from, if any)
+├─ quotes, quote_lines, quote_numbering   quotes (post nothing; accepting makes a draft invoice or sales order)
+├─ sales_orders, sales_order_lines, sales_order_numbering   sales orders (post nothing; invoiced in parts)
 ├─ repeating_invoices, repeating_invoice_lines   repeating invoice templates (post nothing)
 ├─ repeating_invoice_runs   one row per scheduled date made (unique), so a date is never made twice
 ├─ repeating_bills, repeating_bill_lines, repeating_bill_runs   repeating bill templates and the bills they made (the same rules)
@@ -83,6 +84,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ email_oauth_states     one-time states for signing in to the Microsoft or Google mailbox documents are sent from
 ├─ organisation_logo      the organisation's logo (PNG or JPEG, 512 KB at most), on emails, PDFs and print pages
 ├─ document_emails, document_email_batches   each email of a document or statement: queued, then sent or failed by the job
+├─ sales_platform_connections, sales_platform_mappings   connected stores (Shopify; credentials encrypted) and which contact or item each store record is
+├─ sales_platform_sync_log, sales_platform_webhook_deliveries   what each sync and webhook did (append-only), and webhook deliveries already handled
 └─ audit_events
 ```
 
@@ -201,6 +204,14 @@ re-runs the whole sequence.
   runs). A lockout message does reveal that the email has an account.
 - State-changing requests from another site are rejected (`Origin` /
   `Sec-Fetch-Site` check) on top of `SameSite` cookies.
+- Every API route needs a signed-in user and checks their role, except one:
+  the sales platform webhook address
+  (`/api/sales-platforms/webhooks/<organisation>/<random key>`), which a
+  store calls. It authenticates only by the platform's signature (Shopify:
+  HMAC-SHA256 of the raw body with the app's secret, compared in constant
+  time) with that connection's secret, before reading the body or writing
+  anything; every refusal is the same 401. The random key (32 bytes) only
+  finds the connection; it isn't the secret.
 - First-time setup creates the first server admin and needs `SETUP_TOKEN`
   from the server's environment. It only works while there are no users.
 - Command-line tool (`scripts/admin.ts`; `npm run admin`, or
@@ -239,8 +250,8 @@ Per organisation (lowest to highest):
 
 | Role | Can |
 | --- | --- |
-| viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, repeating invoices, repeating bills and purchase orders, projects (with profitability, the time report and staff cost rates); print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add and archive exchange rates; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept, decline, copy and delete draft quotes; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add notes and files, and edit, delete or remove their own |
+| viewer | read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, sales orders (with their invoices), repeating invoices, repeating bills and purchase orders, projects (with profitability, the time report and staff cost rates); print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
+| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add and archive exchange rates; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept (as an invoice or a sales order), decline, copy and delete draft quotes; save, approve, invoice, close, cancel and delete draft sales orders; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add notes and files, and edit, delete or remove their own |
 | admin | + approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, closing a month with checks that need attention (after confirming) and reopening months (with a reason) on Period close, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -337,8 +348,8 @@ Enforced by the database itself, not just the app:
   rate and bank base amount on payments for several documents, whose parts
   must add up to it; SQL helpers for what's open on a foreign document or
   credit (`tohyee_invoice_base_settled` and friends); and a trigger keeping
-  quotes, repeating templates and purchase orders in their contact's
-  currency (they have no rate). Stock is valued in the base currency: a
+  quotes, repeating templates and purchase orders (and, from migration
+  0055, sales orders) in their contact's currency (they have no rate). Stock is valued in the base currency: a
   foreign line's stock value is its base net amount (`stockLinesAtBase`).
   Migration 0045 (examples MC31-MC43, not yet approved) adds, following
   NetSuite: the system account `fx_rounding` (7050 Rounding gains and
@@ -505,6 +516,26 @@ Enforced by the database itself, not just the app:
   same item and unit, and the lines on bills that aren't voided never add
   up to more than the purchase order line's quantity (triggers). Whether a
   purchase order is billed is worked out from its bills, never stored.
+- Sales orders (SO1-SO12, migration 0055, following NetSuite): only drafts
+  can be changed or deleted. An approved one can only become closed (not
+  while a draft invoice names it) or cancelled (only while no invoice that
+  isn't voided names it), and then only those details change; its lines
+  are frozen, and none of the tables can be truncated. `SO-` numbers come
+  from their own one-row counter, so they have no gaps. An invoice's
+  `sales_order_id` must be an approved sales order to the invoice's
+  customer and never changes, nor does the customer; an invoice line's
+  `sales_order_line_id` must be a line of that order with the same item and
+  unit, and the lines on invoices that aren't voided never add up to more
+  than the order line's quantity (triggers; saving a linked invoice locks
+  the order first, and so does the trigger, so two invoices can't both take
+  the last of a line). A quote's
+  `sales_order_id` is set when it's accepted as an order (an accepted quote
+  has an invoice or a sales order, not both). What's invoiced per line and
+  the status (pending billing, partly billed, billed) are worked out from
+  approved invoices in SQL each time they're read
+  (`src/lib/sales-orders/service.ts`), never stored; only closed and
+  cancelled are stored, as decisions. Sales orders post nothing and touch
+  no stock; cost of sales stays on invoice approval until deliveries exist.
 - Sales credit notes: only drafts can be changed or deleted, and a draft can't
   be voided (it's deleted instead). An approved credit note can only become
   voided (and then only its void details change); a voided one can't change at
@@ -767,6 +798,35 @@ Enforced by the app (and covered by tests):
   `crm_calendar_events`, linked through `crm_participant_links`.
   Disconnecting deletes those rows. Every 15 minutes, off with
   TOHYEE_MAIL_SYNC_SCHEDULER=off. The code is in `src/lib/crm/mail/`.
+- Sales platform connections (SPC1-SPC10, migration 0056; not tried against
+  a real store): a connector framework in `src/lib/sales-platforms/`
+  (`connector.ts` is what each platform provides; `shopify.ts` is the first,
+  on the Admin GraphQL API 2026-07 with only `read_customers` and
+  `read_products`; `service.ts` decides what happens in Tohyee; `merge.ts`
+  has the field rules). `sales_platform_connections` holds each store's
+  credentials as encrypted JSON (TOHYEE_SECRET_KEY), a short-lived access
+  token (encrypted) when the app hands those out, status, the last sync and
+  error, and how far each kind has been synced. `sales_platform_mappings`
+  links a platform record (customer, variant) to a contact or item, unique
+  both ways per connection, with the values last copied, so a value
+  someone changed in Tohyee is kept (and logged) rather than overwritten.
+  `sales_platform_sync_log` is append-only (triggers) and readable by
+  viewers. Like mail sync, connecting, testing, syncing and disconnecting
+  read in one short transaction, call the store with nothing open, then
+  write in a second, which locks the connection row and checks it's still
+  connected. Each record is applied in a savepoint, so a bad one is logged
+  as failed and the rest carry on. Webhooks are verified before any
+  transaction; the delivery id goes into `sales_platform_webhook_deliveries`
+  (primary key) in the same transaction as the changes, so a repeated
+  delivery does nothing. Webhook subscriptions are set up all or none (if
+  one topic is refused, the ones already made are removed again), and
+  subscriptions made after the connection was disconnected or set up by
+  another request are removed rather than saved. Contacts and items are made through
+  `createContact` / `createItem` (source `sales-platform`, an idempotency
+  key per platform record) and changed through `updateContact` /
+  `updateItem`, so the usual checks and audit apply. Nothing posts to the
+  ledger. Disconnecting deletes the mappings and the credentials and keeps
+  the contacts, items and log.
 - Salespeople: `salespeople` (never deleted), `contacts.default_salesperson_id`
   and `salesperson_id` on `sales_invoices` and `sales_credit_notes`, fixed
   with the rest of the document once approved. Sales by salesperson reads
@@ -983,6 +1043,14 @@ organisation sends at most 100 an hour. The database refuses changes to
 what a queued email says and any change to a finished one. Every minute it
 works through organisations with emails waiting, and every 10 minutes it
 checks all of them (for retries and after a restart).
+
+The sales platform sync (`src/lib/sales-platforms/service.ts`, started from
+`src/instrumentation.ts`; `TOHYEE_SALES_PLATFORM_SYNC_SCHEDULER=off` stops
+it) runs two minutes after start-up and then every 15 minutes, like mail
+sync: for each ready organisation, each active connection is synced one at
+a time, asking only for what changed since the last sync. A failure is kept
+on the connection; after three in a row it's paused until someone chooses
+Sync now. No network calls inside a database transaction.
 
 Still to come for other jobs: a general transactional outbox.
 
