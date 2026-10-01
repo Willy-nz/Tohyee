@@ -191,6 +191,10 @@ function toBooking(row: BookingRow): LeaveBooking {
 
 export async function getLeaveBooking(tx: OrgTx, idInput: unknown): Promise<LeaveBooking> {
   await requirePayrollAccess(tx);
+  return loadBooking(tx, idInput);
+}
+
+async function loadBooking(tx: OrgTx, idInput: unknown): Promise<LeaveBooking> {
   const result = await tx.query<BookingRow>(`${BOOKING_SELECT} where b.id = $1`, [uuid(idInput, "leave booking")]);
   if (!result.rows[0]) throw new NotFoundError("That leave booking wasn't found.");
   return toBooking(result.rows[0]);
@@ -223,8 +227,10 @@ export type BookingWarnings = string[];
 export async function createLeaveBooking(
   tx: OrgTx,
   input: Record<string, unknown> & { advanceAgreement?: UploadedFile | null },
+  /** Booking an employee's approved leave request (decision 169): the approver needn't have payroll access. Never from a route's body. */
+  options: { fromApprovedRequest?: boolean } = {},
 ): Promise<{ created: boolean; booking: LeaveBooking; warnings: BookingWarnings; payRuns: string[] }> {
-  await requirePayrollAccess(tx);
+  if (!options.fromApprovedRequest) await requirePayrollAccess(tx);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const { advanceAgreement, ...fields } = input;
   const hash = requestHash("payroll_leave_booking", { ...fields, advanceAgreement: fileHash(advanceAgreement) });
@@ -356,7 +362,7 @@ export async function createLeaveBooking(
     details: { employeeId: facts.id, leaveType: leaveType === "family_violence" ? "special" : leaveType, startDate, endDate },
   });
   const payRuns = await updateDraftsCovering(tx, facts.id, startDate, endDate);
-  return { created: true, booking: await getLeaveBooking(tx, id), warnings, payRuns };
+  return { created: true, booking: await loadBooking(tx, id), warnings, payRuns };
 }
 
 /** Cancels a booking no approved pay run has paid (payroll access). Drafts that paid it are worked out again. */

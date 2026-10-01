@@ -99,6 +99,7 @@ const MENUS: Menu[] = [
         links: [
           { href: "/operations/payroll/pay-runs", label: "Pay runs", minRole: "bookkeeper" },
           { href: "/operations/payroll/timesheets", label: "Timesheets", minRole: "viewer" },
+          { href: "/operations/payroll/leave-requests", label: "Leave requests", minRole: "viewer" },
           { href: "/operations/payroll/leave", label: "Leave", minRole: "bookkeeper" },
           { href: "/operations/payroll/ird-payments", label: "IRD payments", minRole: "bookkeeper" },
           { href: "/operations/payroll/reports", label: "Reports", minRole: "bookkeeper" },
