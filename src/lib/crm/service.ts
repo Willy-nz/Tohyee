@@ -1,6 +1,8 @@
 import { writeAuditEvent } from "@/lib/audit";
 import { updateContact } from "@/lib/contacts/service";
 import { dueDateFromTerms } from "@/lib/customers/service";
+import { keptCustom, loadCustomFieldContext, missingRequiredField, parseCustomInput, resolveCustomValues } from "@/lib/custom-fields/service";
+import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -62,6 +64,8 @@ export type Person = {
   /** The company's primary contact for invoices (RC6); at most one per company. */
   isPrimary: boolean;
   isArchived: boolean;
+  /** Custom field values (CRMF4); they never change anything else. */
+  customFields: CustomValues;
 };
 
 export type Opportunity = {
@@ -80,6 +84,8 @@ export type Opportunity = {
   position: number;
   invoiceId: string | null;
   invoiceNumber: string | null;
+  /** Custom field values (CRMF5); they never change the amount, stage or invoice. */
+  customFields: CustomValues;
   createdAt: string;
   updatedAt: string;
 };
@@ -145,6 +151,32 @@ function parseEmail(input: unknown): string | null {
   return email;
 }
 
+/**
+ * Checks a person's or opportunity's custom field values (CRMF4, CRMF5,
+ * CRMF8): the ones sent, the saved ones when none are sent, or a new
+ * record's defaults. A required field must be set while the CRM is on.
+ */
+async function crmCustomValues(
+  tx: OrgTx,
+  record: "person" | "opportunity",
+  input: unknown,
+  saved: CustomValues | null,
+): Promise<CustomValues> {
+  const raw = parseCustomInput(input, "");
+  const ctx = await loadCustomFieldContext(tx);
+  const uses = [record] as const;
+  const values = resolveCustomValues(ctx, raw === undefined && saved ? saved : raw, { record, uses, kept: keptCustom(saved ?? {}) });
+  const missing = missingRequiredField(ctx, values, { record, uses });
+  if (missing) throw new ValidationError(`${missing} is required.`);
+  return values;
+}
+
+/** The values for the history: the new ones, and the old ones only when they changed (CRMF4). */
+function customHistory(values: CustomValues, saved: CustomValues | null): { customFields: CustomValues; customFieldsFrom?: CustomValues } {
+  if (saved === null || customValuesKey(values) === customValuesKey(saved)) return { customFields: values };
+  return { customFields: values, customFieldsFrom: saved };
+}
+
 async function requireContact(tx: OrgTx, id: string): Promise<{ id: string; name: string }> {
   const found = await tx.query<{ id: string; name: string }>("select id, name from contacts where id = $1", [id]);
   if (!found.rows[0]) throw new ValidationError(`There's no contact #${id}.`);
@@ -154,7 +186,8 @@ async function requireContact(tx: OrgTx, id: string): Promise<{ id: string; name
 // ---------------------------------------------------------------------------
 // People (CRM2)
 
-const PERSON_SELECT = `select p.id, p.contact_id, c.name as contact_name, p.first_name, p.last_name, p.job_title, p.email, p.phone, p.is_primary, p.is_archived
+const PERSON_SELECT = `select p.id, p.contact_id, c.name as contact_name, p.first_name, p.last_name, p.job_title, p.email, p.phone, p.is_primary, p.is_archived,
+    p.custom_fields
   from crm_people p left join contacts c on c.id = p.contact_id`;
 
 type PersonRow = {
@@ -168,6 +201,7 @@ type PersonRow = {
   phone: string | null;
   is_primary: boolean;
   is_archived: boolean;
+  custom_fields: CustomValues;
 };
 
 function toPerson(row: PersonRow): Person {
@@ -183,6 +217,7 @@ function toPerson(row: PersonRow): Person {
     phone: row.phone,
     isPrimary: row.is_primary,
     isArchived: row.is_archived,
+    customFields: row.custom_fields ?? {},
   };
 }
 
@@ -219,6 +254,7 @@ type PersonInput = {
   phone?: unknown;
   isPrimary?: unknown;
   isArchived?: unknown;
+  customFields?: unknown;
 };
 
 async function personValues(tx: OrgTx, input: PersonInput, current: Person | null) {
@@ -257,13 +293,15 @@ async function clearOtherPrimary(tx: OrgTx, contactId: string | null, personId: 
 export async function createPerson(tx: OrgTx, input: PersonInput): Promise<Person> {
   await requirePeople(tx);
   const values = await personValues(tx, input, null);
+  const customFields = await crmCustomValues(tx, "person", input.customFields, null);
   if (values.isPrimary) await clearOtherPrimary(tx, values.contactId, null);
   const inserted = await tx.query<{ id: string }>(
-    `insert into crm_people (contact_id, first_name, last_name, job_title, email, phone, is_primary) values ($1, $2, $3, $4, $5, $6, $7) returning id`,
-    [values.contactId, values.firstName, values.lastName, values.jobTitle, values.email, values.phone, values.isPrimary],
+    `insert into crm_people (contact_id, first_name, last_name, job_title, email, phone, is_primary, custom_fields)
+     values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) returning id`,
+    [values.contactId, values.firstName, values.lastName, values.jobTitle, values.email, values.phone, values.isPrimary, JSON.stringify(customFields)],
   );
   const id = inserted.rows[0].id;
-  await writeAuditEvent(tx, { eventType: "crm.person_created", entityType: "crm_person", entityId: id, details: values });
+  await writeAuditEvent(tx, { eventType: "crm.person_created", entityType: "crm_person", entityId: id, details: { ...values, customFields } });
   return getPerson(tx, id);
 }
 
@@ -271,14 +309,31 @@ export async function updatePerson(tx: OrgTx, idInput: unknown, input: PersonInp
   await requirePeople(tx);
   const current = await getPerson(tx, idInput);
   const values = await personValues(tx, input, current);
+  const customFields = await crmCustomValues(tx, "person", input.customFields, current.customFields);
   if (values.isPrimary) await clearOtherPrimary(tx, values.contactId, current.id);
   await tx.query(
     `update crm_people set contact_id = $2, first_name = $3, last_name = $4, job_title = $5, email = $6, phone = $7, is_archived = $8,
-            is_primary = $9, updated_at = now()
+            is_primary = $9, custom_fields = $10::jsonb, updated_at = now()
       where id = $1`,
-    [current.id, values.contactId, values.firstName, values.lastName, values.jobTitle, values.email, values.phone, values.isArchived, values.isPrimary],
+    [
+      current.id,
+      values.contactId,
+      values.firstName,
+      values.lastName,
+      values.jobTitle,
+      values.email,
+      values.phone,
+      values.isArchived,
+      values.isPrimary,
+      JSON.stringify(customFields),
+    ],
   );
-  await writeAuditEvent(tx, { eventType: "crm.person_updated", entityType: "crm_person", entityId: current.id, details: values });
+  await writeAuditEvent(tx, {
+    eventType: "crm.person_updated",
+    entityType: "crm_person",
+    entityId: current.id,
+    details: { ...values, ...customHistory(customFields, current.customFields) },
+  });
   return getPerson(tx, current.id);
 }
 
@@ -287,7 +342,7 @@ export async function updatePerson(tx: OrgTx, idInput: unknown, input: PersonInp
 
 const OPPORTUNITY_SELECT = `select o.id, o.name, o.contact_id, c.name as contact_name, o.point_of_contact_id,
     nullif(concat_ws(' ', p.first_name, p.last_name), '') as point_of_contact_name, o.owner_user_id, o.amount::text, o.currency_code,
-    o.close_date::text, o.stage, o.position, o.invoice_id, i.invoice_number, o.created_at, o.updated_at
+    o.close_date::text, o.stage, o.position, o.invoice_id, i.invoice_number, o.custom_fields, o.created_at, o.updated_at
   from crm_opportunities o
   join contacts c on c.id = o.contact_id
   left join crm_people p on p.id = o.point_of_contact_id
@@ -308,6 +363,7 @@ type OpportunityRow = {
   position: number;
   invoice_id: string | null;
   invoice_number: string | null;
+  custom_fields: CustomValues;
   created_at: string;
   updated_at: string;
 };
@@ -328,6 +384,7 @@ function toOpportunity(row: OpportunityRow): Opportunity {
     position: row.position,
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
+    customFields: row.custom_fields ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -375,6 +432,7 @@ type OpportunityInput = {
   amount?: unknown;
   closeDate?: unknown;
   stage?: unknown;
+  customFields?: unknown;
 };
 
 async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Opportunity | null) {
@@ -415,9 +473,11 @@ async function nextPosition(tx: OrgTx, stage: OpportunityStage): Promise<number>
 export async function createOpportunity(tx: OrgTx, input: OpportunityInput): Promise<Opportunity> {
   await requireCrm(tx);
   const values = await opportunityValues(tx, input, null);
+  const customFields = await crmCustomValues(tx, "opportunity", input.customFields, null);
   const inserted = await tx.query<{ id: string }>(
-    `insert into crm_opportunities (name, contact_id, point_of_contact_id, owner_user_id, amount, close_date, stage, position, created_by_email, currency_code)
-     values ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10) returning id`,
+    `insert into crm_opportunities (name, contact_id, point_of_contact_id, owner_user_id, amount, close_date, stage, position, created_by_email, currency_code,
+                                    custom_fields)
+     values ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::jsonb) returning id`,
     [
       values.name,
       values.contactId,
@@ -429,10 +489,11 @@ export async function createOpportunity(tx: OrgTx, input: OpportunityInput): Pro
       await nextPosition(tx, values.stage),
       tx.actor.email,
       values.currencyCode,
+      JSON.stringify(customFields),
     ],
   );
   const id = inserted.rows[0].id;
-  await writeAuditEvent(tx, { eventType: "crm.opportunity_created", entityType: "crm_opportunity", entityId: id, details: values });
+  await writeAuditEvent(tx, { eventType: "crm.opportunity_created", entityType: "crm_opportunity", entityId: id, details: { ...values, customFields } });
   return getOpportunity(tx, id);
 }
 
@@ -445,18 +506,35 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
   if (current.invoiceId && values.stage !== current.stage) {
     throw new ConflictError("This opportunity has made an invoice, so its stage can't change.");
   }
+  const customFields = await crmCustomValues(tx, "opportunity", input.customFields, current.customFields);
   const position = values.stage === current.stage ? current.position : await nextPosition(tx, values.stage);
   await tx.query(
     `update crm_opportunities set name = $2, contact_id = $3, point_of_contact_id = $4, owner_user_id = $5, amount = $6::numeric,
-            close_date = $7, stage = $8, position = $9, currency_code = $10, updated_at = now()
+            close_date = $7, stage = $8, position = $9, currency_code = $10, custom_fields = $11::jsonb, updated_at = now()
       where id = $1`,
-    [current.id, values.name, values.contactId, values.pointOfContactId, values.ownerUserId, values.amount, values.closeDate, values.stage, position, values.currencyCode],
+    [
+      current.id,
+      values.name,
+      values.contactId,
+      values.pointOfContactId,
+      values.ownerUserId,
+      values.amount,
+      values.closeDate,
+      values.stage,
+      position,
+      values.currencyCode,
+      JSON.stringify(customFields),
+    ],
   );
   await writeAuditEvent(tx, {
     eventType: "crm.opportunity_updated",
     entityType: "crm_opportunity",
     entityId: current.id,
-    details: { ...values, ...(values.stage !== current.stage ? { stageFrom: current.stage } : {}) },
+    details: {
+      ...values,
+      ...(values.stage !== current.stage ? { stageFrom: current.stage } : {}),
+      ...customHistory(customFields, current.customFields),
+    },
   });
   return getOpportunity(tx, current.id);
 }
@@ -831,6 +909,8 @@ export type CompanySummary = {
   /** The company's currency (MC68): its opportunities and documents are in it. */
   currencyCode: string;
   lastActivityAt: string | null;
+  /** The company's contact custom field values, for list columns (CRMF7). */
+  customFields: CustomValues;
 };
 
 export async function listCompanies(tx: OrgTx, options: { search?: unknown; includeArchived?: boolean } = {}): Promise<CompanySummary[]> {
@@ -848,8 +928,9 @@ export async function listCompanies(tx: OrgTx, options: { search?: unknown; incl
     open_tasks: string;
     open_pipeline: string;
     last_activity_at: string | null;
+    custom_fields: CustomValues;
   }>(
-    `select c.id, c.name, c.is_customer, c.is_supplier, c.is_prospect, c.is_archived, c.currency_code,
+    `select c.id, c.name, c.is_customer, c.is_supplier, c.is_prospect, c.is_archived, c.currency_code, c.custom_fields,
             (select count(*) from crm_people p where p.contact_id = c.id and not p.is_archived)::text as people,
             (select count(*) from crm_tasks t
                left join crm_people p on p.id = t.person_id left join crm_opportunities o on o.id = t.opportunity_id
@@ -876,6 +957,7 @@ export async function listCompanies(tx: OrgTx, options: { search?: unknown; incl
     openPipeline: toFixedString(dec(row.open_pipeline), 2),
     currencyCode: row.currency_code ?? tx.baseCurrency,
     lastActivityAt: row.last_activity_at ? new Date(row.last_activity_at).toISOString() : null,
+    customFields: row.custom_fields ?? {},
   }));
 }
 

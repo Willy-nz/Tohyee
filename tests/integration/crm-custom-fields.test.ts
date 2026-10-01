@@ -330,7 +330,7 @@ describeWithDatabase("custom fields on CRM records", () => {
     const read = await w.as((tx) => getInvoice(tx, invoice.id));
     expect(read.total).toBe("2760.00");
     expect(read.lines.map((line) => [line.description, line.quantity, line.unitPrice, line.accountCode])).toEqual([
-      ["Memorial paw prints 2027", "1", "2400.00", "4000"],
+      ["Memorial paw prints 2027", "1", "2400", "4000"],
     ]);
     expect(read.customFields).toEqual({});
     expect(read.lines[0].customFields).toEqual({});

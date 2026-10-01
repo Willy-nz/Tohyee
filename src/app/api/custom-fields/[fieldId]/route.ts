@@ -3,7 +3,11 @@ import { updateCustomField } from "@/lib/custom-fields/service";
 
 type Context = { params: Promise<{ fieldId: string }> };
 
-/** Changes a custom field, or archives or restores it (`isActive`). Its type and what it's on can't change (CF1). */
+/**
+ * Changes a custom field, puts it in a section (`sectionId`) or moves it
+ * (`move`: "up" or "down"), or archives or restores it (`isActive`). Its type
+ * and what it's on can't change (CF1, CRMF6).
+ */
 export const PATCH = route<Context>(async (request, context) => {
   const { fieldId } = await context.params;
   const body = await readJson(request);
@@ -18,6 +22,8 @@ export const PATCH = route<Context>(async (request, context) => {
       isActive: body.isActive,
       record: body.record,
       type: body.type,
+      sectionId: body.sectionId,
+      move: body.move,
     }),
   );
   return json(setup);
