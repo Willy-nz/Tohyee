@@ -39,6 +39,7 @@ const MENUS: Menu[] = [
           { href: "/operations/customer-payments", label: "Payments for several invoices" },
           { href: "/operations/credit-notes", label: "Credit notes" },
           { href: "/operations/quotes", label: "Quotes" },
+          { href: "/operations/sales-orders", label: "Sales orders" },
           { href: "/operations/repeating-invoices", label: "Repeating invoices" },
           { href: "/operations/items", label: "Products and services" },
           { href: "/operations/overpayments", label: "Overpayments" },
@@ -49,6 +50,7 @@ const MENUS: Menu[] = [
         links: [
           { href: "/operations/invoices/new", label: "New invoice", minRole: "bookkeeper" },
           { href: "/operations/quotes/new", label: "New quote", minRole: "bookkeeper" },
+          { href: "/operations/sales-orders/new", label: "New sales order", minRole: "bookkeeper" },
           { href: "/operations/credit-notes/new", label: "New credit note", minRole: "bookkeeper" },
           { href: "/operations/customer-payments/new", label: "Receive a payment", minRole: "bookkeeper" },
         ],
@@ -202,6 +204,7 @@ const AREAS: Record<string, string[]> = {
     "/operations/invoices",
     "/operations/credit-notes",
     "/operations/quotes",
+    "/operations/sales-orders",
     "/operations/repeating-invoices",
     "/operations/overpayments",
     "/operations/customer-payments",
