@@ -116,6 +116,15 @@ export function standardField(record: LayoutRecord, key: string): StandardField 
   return STANDARD_FIELDS[record].find((field) => field.key === key);
 }
 
+/**
+ * Whether a standard field is used on this record (CRT4): only customers
+ * have a delivery address (as on the Contacts screen), so a prospect or a
+ * supplier isn't asked for one or shown it.
+ */
+export function standardFieldApplies(record: LayoutRecord, key: string, contact: { isCustomer: boolean } | null): boolean {
+  return !(record === "contact" && key === "deliveryAddress" && contact !== null && !contact.isCustomer);
+}
+
 type FieldInfo = Pick<CustomField, "id" | "record" | "label" | "type">;
 
 /** A layout field's label: the standard field's or the custom field's. */

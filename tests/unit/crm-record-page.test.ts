@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { RecordDetails } from "@/components/crm-record-details";
 import type { Role } from "@/lib/auth/roles";
 import { detailSections, monthLabel, nzMonth, pastByMonth, upcomingAndOverdue } from "@/lib/crm/record-page";
-import { customKey, type PageLayout } from "@/lib/crm/record-types/layout";
+import { customKey, type PageLayout, standardFieldApplies } from "@/lib/crm/record-types/layout";
 import type { Task, TimelineEntry } from "@/lib/crm/service";
 import type { CustomField } from "@/lib/custom-fields/values";
 
@@ -65,6 +65,15 @@ describe("the Details tab follows the record type's layout (CRT6, CRT7)", () => 
     ]);
     const phone = sections[0].fields[1];
     expect([phone.required, phone.readOnly]).toEqual([true, false]);
+  });
+
+  it("shows a company's delivery address only on customers (CRT4)", () => {
+    const layout = { sections: [{ name: "Address information", fields: [{ key: "postalAddress", required: false, readOnly: false }, { key: "deliveryAddress", required: true, readOnly: false }] }] };
+    const labels = (contact: { isCustomer: boolean }) =>
+      detailSections("contact", layout, [], "bookkeeper", (key) => standardFieldApplies("contact", key, contact)).flatMap((s) => s.fields.map((f) => f.label));
+    expect(labels({ isCustomer: true })).toEqual(["Billing address", "Delivery address"]);
+    expect(labels({ isCustomer: false })).toEqual(["Billing address"]);
+    expect(standardFieldApplies("person", "deliveryAddress", null)).toBe(true);
   });
 
   it("lets bookkeepers edit, admins also edit read-only fields, and viewers nothing", () => {

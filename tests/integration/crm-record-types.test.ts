@@ -339,6 +339,27 @@ describeWithDatabase("CRM record types and page layouts", () => {
     expect(((await response.json()) as { error: string }).error).toBe("Phone is required on Funding body companies.");
   });
 
+  it("CRT4: a required delivery address only applies to customers", async () => {
+    const w = await setup();
+    const layout: PageLayout = {
+      sections: w.standard.layout.sections.map((section) => ({
+        ...section,
+        fields: section.fields.map((f) => (f.key === "deliveryAddress" ? { ...f, required: true } : f)),
+      })),
+    };
+    await w.as((tx) => updateRecordType(tx, w.standard.id, { layout }));
+    // A prospect or supplier can't have a delivery address, so it isn't required of them.
+    expect((await w.as((tx) => updateContact(tx, w.vets.id, { email: "hello@manukavets.nz" }))).email).toBe("hello@manukavets.nz");
+    const supplier = await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Paw Supplies", isSupplier: true }));
+    expect(supplier.contact.recordTypeName).toBe("Standard");
+    await expect(w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Kiri's Cats", isCustomer: true }))).rejects.toThrow(
+      "Delivery address is required on Standard companies.",
+    );
+    await expect(w.as((tx) => updateContact(tx, w.vets.id, { isCustomer: true }))).rejects.toThrow("Delivery address is required on Standard companies.");
+    const customer = await w.as((tx) => updateContact(tx, w.vets.id, { isCustomer: true, deliveryAddress: "1 George St, Dunedin" }));
+    expect(customer.deliveryAddress).toBe("1 George St, Dunedin");
+  });
+
   it("CRT5: changing a record's type", async () => {
     const w = await setup();
     const funding = await fundingBody(w);

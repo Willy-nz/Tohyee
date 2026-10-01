@@ -37,9 +37,17 @@ export type DetailSection = { name: string; fields: DetailField[] };
 /**
  * The layout's sections with the fields this record shows: standard fields,
  * and custom fields that apply to it (`visible`: a prospect only gets fields
- * turned on for prospects, CRMF8). Empty sections are left out.
+ * turned on for prospects, CRMF8), and standard fields it uses
+ * (`standardApplies`: only a customer has a delivery address, CRT4). Empty
+ * sections are left out.
  */
-export function detailSections(record: LayoutRecord, layout: PageLayout, visible: readonly CustomField[], role: Role): DetailSection[] {
+export function detailSections(
+  record: LayoutRecord,
+  layout: PageLayout,
+  visible: readonly CustomField[],
+  role: Role,
+  standardApplies: (key: string) => boolean = () => true,
+): DetailSection[] {
   const sections: DetailSection[] = [];
   for (const section of layout.sections) {
     const fields: DetailField[] = [];
@@ -48,7 +56,7 @@ export function detailSections(record: LayoutRecord, layout: PageLayout, visible
       const custom = id === null ? null : (visible.find((entry) => entry.id === id) ?? null);
       if (id !== null && !custom) continue;
       const standard = id === null ? (standardField(record, field.key) ?? null) : null;
-      if (id === null && !standard) continue;
+      if (id === null && (!standard || !standardApplies(field.key))) continue;
       fields.push({
         key: field.key,
         label: layoutFieldLabel(record, field.key, visible),

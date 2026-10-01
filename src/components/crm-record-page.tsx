@@ -32,7 +32,7 @@ import { useWorkspace } from "@/components/workspace";
 import { api } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
 import { type DetailField, detailSections, pastByMonth, upcomingAndOverdue } from "@/lib/crm/record-page";
-import { customIdOf, LAYOUT_RECORD_NAMES, type LayoutRecord, type RecordType } from "@/lib/crm/record-types/layout";
+import { customIdOf, LAYOUT_RECORD_NAMES, type LayoutRecord, type RecordType, standardFieldApplies } from "@/lib/crm/record-types/layout";
 import type { Activity, ActivityKind, Opportunity, OpportunityStage, Person, RelatedDocument, Task, TimelineEntry } from "@/lib/crm/service";
 import { contactUses, type CustomFieldUse, type CustomValue, type CustomValues, customValueText } from "@/lib/custom-fields/values";
 import { formatDate, formatDateTime, formatMoney, todayInBrowser } from "@/lib/format";
@@ -367,6 +367,7 @@ function DetailsTab({
   values,
   display,
   contactId,
+  standardApplies,
   onSaved,
 }: {
   organisationId: string;
@@ -378,6 +379,8 @@ function DetailsTab({
   /** How a standard field shows, when not just its text. */
   display: (key: string) => ReactNode;
   contactId: string | null;
+  /** Whether a standard field is used on this record (a company's delivery address only on customers, CRT4). */
+  standardApplies?: (key: string) => boolean;
   onSaved: () => void;
 }) {
   const { current, can } = useWorkspace();
@@ -385,7 +388,7 @@ function DetailsTab({
   const [editing, setEditing] = useState<string | null>(null);
   const role = current?.role ?? "viewer";
   if (!setup.data) return <p className={ui.muted}>Loading…</p>;
-  const sections = detailSections(record, recordType.layout, visibleFields(setup.data, record, uses, values.custom), role);
+  const sections = detailSections(record, recordType.layout, visibleFields(setup.data, record, uses, values.custom), role, standardApplies);
   return (
     <Card
       title="Details"
@@ -708,6 +711,7 @@ export function CompanyRecordPage({ organisationId, contactId }: { organisationI
           values={values}
           display={display}
           contactId={contact.id}
+          standardApplies={(key) => standardFieldApplies("contact", key, contact)}
           onSaved={data.reload}
         />
       }

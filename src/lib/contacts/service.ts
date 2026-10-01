@@ -9,6 +9,7 @@ import {
 import { contactUses, type CustomField, type CustomFieldUse, type CustomValues, customValuesKey, defaultValues, isSwitchedOn } from "@/lib/custom-fields/values";
 import type { CustomFieldContext } from "@/lib/custom-fields/service";
 import type { Role } from "@/lib/auth/roles";
+import { standardFieldApplies } from "@/lib/crm/record-types/layout";
 import { checkAgainstLayout, chooseRecordType, getRecordType, type LayoutValues } from "@/lib/crm/record-types/service";
 import { listMembers } from "@/lib/organisations/members";
 import {
@@ -576,6 +577,7 @@ export async function createContact(
     role: options.role,
     ctx,
     applies: contactFieldApplies(ctx, uses),
+    standardApplies: (key) => standardFieldApplies("contact", key, details),
   });
 
   // No separate name check first: the original of a retry could commit between
@@ -745,6 +747,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
     role: options.role,
     ctx,
     applies: contactFieldApplies(ctx, uses),
+    standardApplies: (key) => standardFieldApplies("contact", key, after),
   });
   if (!current.isArchived && changes.name) {
     const clash = await activeNameClash(tx, after.name, current.id);

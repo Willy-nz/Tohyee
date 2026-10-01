@@ -277,6 +277,8 @@ export type LayoutCheck = {
   ctx: CustomFieldContext;
   /** Whether a custom field is used on this record now (its uses and switches). */
   applies: (field: CustomField) => boolean;
+  /** Whether a standard field is used on this record (a company's delivery address only on customers); all are by default. */
+  standardApplies?: (key: string) => boolean;
 };
 
 /**
@@ -296,7 +298,7 @@ export async function checkAgainstLayout(tx: OrgTx, check: LayoutCheck): Promise
     const id = customIdOf(field.key);
     if (id === null) {
       const standard = standardField(record, field.key);
-      if (!standard || standard.system || standard.alwaysSet) continue;
+      if (!standard || standard.system || standard.alwaysSet || (check.standardApplies && !check.standardApplies(field.key))) continue;
     } else {
       const custom = ctx.fields.get(id);
       if (!custom || !custom.isActive || !check.applies(custom)) continue;

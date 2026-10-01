@@ -4502,8 +4502,9 @@ form**), and Salesforce's Lightning record page for the page itself:
   saved, checked by the server on every save (the CRM, the Contacts screen,
   imports and the API), while the CRM is on. A custom field counts only
   where it applies, as before (a contact field only for the roles it's on
-  and switched on: CRMF11). A required field on one type isn't required on
-  another.
+  and switched on: CRMF11). So does a company's delivery address: only
+  customers have one, so it isn't required of (or shown on) a prospect or
+  supplier. A required field on one type isn't required on another.
 - **Read-only** fields on a record's type can be changed by admins and
   owners only (as Salesforce's "Edit Read Only Fields" permission, which
   its administrators have). For anyone else the server refuses a change to
@@ -4598,6 +4599,10 @@ Round 2; no section).
   ("Funder reference is required on Funding body companies."), and with
   Funder reference "LGB-2026" too it's saved. Saving it again later without
   Phone is refused; the same request to the API is refused the same way.
+  With Delivery address required on Standard, Mānuka Vets (a prospect) and
+  a new supplier are still saved without one, but a new customer isn't
+  ("Delivery address is required on Standard companies."), and nor is
+  marking Mānuka Vets a customer until it's given one.
 - **CRT5** Changing a record's type: changing Mānuka Vets to Funding body
   is refused ("Phone is required on Funding body companies."); with Phone
   09 555 0101 and Funder reference "MV-1" in the same save it's saved, and
