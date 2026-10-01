@@ -22,10 +22,19 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 
 ## In progress (GitHub Copilot coding agents)
 
-| Work | Issue | Draft PR |
-| --- | --- | --- |
-| NZ payroll (PAYE, KiwiSaver, ESCT, student loan, payslips, payday filing file) | #60 | #62 |
-| Not-for-profit module (funds, grants, donation receipts, PBE Tier 3/4 reports) | #61 | #63 |
+| Work | Issue | Draft PR | Branch | Tenant migration |
+| --- | --- | --- | --- | --- |
+| NZ payroll (PAYE, KiwiSaver, ESCT, student loan, payslips, payday filing file) | #60 | #62 | `copilot/build-nz-payroll-tohyee` | 0051 |
+| Not-for-profit module (funds, grants, donation receipts, PBE Tier 3/4 reports) | #61 | #63 | `copilot/not-for-profit-module-development` | 0052 (branch currently uses 0051; renumber before merging) |
+| CRM as its own app: app shell at `/crm`, Accounting ↔ CRM switcher, CRM Home (CRM roadmap item 1) | none (Agents tab) | not opened yet | `copilot/crm-app-shell-navigation-home-page` | none needed |
+| Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | not opened yet | `copilot/extend-custom-fields-crm-records` | 0053 (agent asked to renumber from 0051) |
+
+The CRM custom fields brief makes CRM custom fields available whenever the
+CRM module is on, even with Advanced features off. Jess to confirm.
+
+CRM work waiting on those two: record types and page layouts (needs custom
+fields) and the Salesforce-style record page (needs both). Claude will build
+these once both are merged.
 
 To do:
 
