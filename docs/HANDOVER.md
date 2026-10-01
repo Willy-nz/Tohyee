@@ -24,15 +24,14 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 
 | Work | Issue | Draft PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| NZ payroll, stage 1: employee records only (see the payroll list below for the rest) | #60 | #62 | `copilot/build-nz-payroll-tohyee` | 0051 |
 | Not-for-profit module, first stage: opt-in fund tracking | #61 | #63 | `copilot/not-for-profit-module-development` | 0052 (renumbered) |
 | Custom fields on CRM people, opportunities and prospects, with sections (CRM roadmap item 2, examples CRMF1-CRMF9) | none (Agents tab) | #67 | `copilot/extend-custom-fields-crm-records` | 0053 (renumbered); merge after #62 and #63 |
-| Payroll P2: IRD payroll rates as dated data | #60 | none | `copilot/issue-60-ird-payroll-rates` | 0054 if needed. **Blocked**: the agent's sandbox can't reach ird.govt.nz; see below |
+| Payroll P2: IRD payroll rates as dated data | #60 | none | `copilot/issue-60-ird-payroll-rates` | 0054 if needed. Restarted 1 Oct after the IRD sites were allowlisted |
 | Payroll P7: Holidays Act leave worked examples (docs only) | #60 | #68 | `copilot/nz-payroll-stage-p7-holidays-act-leave` | none |
 | Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12) | none (Agents tab) | not opened yet | `copilot/sales-orders-stage-1` | 0055 |
 | Sales platform connections, stage 1: connector framework, Shopify customers and products (CRM roadmap items 27-28) | none (Agents tab) | not opened yet | `copilot/sales-platform-connections-stage-1` | 0056 |
 
-Next free tenant migration number: 0057.
+Next free tenant migration number: 0058 (0057 reserved for payroll P1b).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -47,46 +46,87 @@ CRM work waiting on custom fields: record types and page layouts, and the
 Salesforce-style record page. Claude will build these once custom fields is
 merged.
 
-### Payroll: what's left after #62
+### Payroll: the plan (issue #60)
 
-#62 only adds employee records (pay basis, frequency, tax code, KiwiSaver and
-student loan status, dates; IRD number and bank account encrypted). It
-calculates nothing. The rest of #60, in order, each its own branch and PR:
+Jess wants payroll for complex businesses (1 Oct 2026). From her Datapay
+experience: see each employee's department, split where their pay goes by %,
+and split the parts of pay out for reports and budgets. Payroll reports must
+only be run by certain people. Each item is its own branch and PR.
 
-- [ ] **P1 Review and merge #62** (employee records, migration 0051).
-- [ ] **P2 IRD payroll rates as dated data**: PAYE brackets and tax codes,
-      ACC earners' levy rate and maximum, student loan rate and threshold,
-      KiwiSaver rates, ESCT brackets, each with its tax year and IRD source
-      (IR340/IR335, the payroll calculation specification). No pay runs yet.
-      Can start now; reserve migration 0054 if it needs a table.
-- [ ] **P3 Pay runs**: draft → approve; earnings (ordinary time, overtime,
-      allowances, bonuses) and deductions; PAYE incl. ACC earners' levy,
-      student loan, KiwiSaver employee and employer, ESCT. Approving posts one
-      journal (wages expense; PAYE, KiwiSaver, student loan and ESCT payable to
-      IRD; net wages payable). Needs P1 and P2.
-- [ ] **P4 Paying**: pay net wages from a bank account or match a bank line;
-      pay IRD. Needs P3.
-- [ ] **P5 Payslips**: PDF and email, using the existing document PDF and
-      email pieces. Needs P3.
-- [ ] **P6 Payday filing file**: the employment information file for myIR
-      upload, plus new and departing employee details, to IRD's current file
-      specification (cited). No IRD gateway connection. Needs P3.
-- [ ] **P7 Holidays Act leave, plan first**: worked examples and questions
-      for Jess (annual leave, sick leave, public holidays, alternative days,
-      average weekly earnings vs ordinary weekly pay) in
-      `docs/ACCOUNTING-EXAMPLES.md`, docs only. Can start now.
-- [ ] **P8 Holidays Act leave, build** only what P7 specifies and Jess
-      approves. Needs P3 and P7.
+- [x] **P1 Employee records** (#62, migration 0051), merged 1 Oct 2026.
+- [ ] **P1b Cost allocation, pay rate history and payroll access** (migration
+      0057). Can start now.
+      - Each employee's default cost split by %: Department, Class, Location
+        (the existing tracking categories), and optionally a project and an
+        R&D activity, totalling 100%, with effective-from dates so history is
+        kept (a move between departments doesn't rewrite old pays).
+      - Job title, reports-to, pay rate history with effective dates, and
+        employee groups / pay groups (e.g. weekly wages vs monthly salaries).
+      - **Payroll access**: a separate permission an admin gives named people
+        (not a role). Only they can see employee pay details, pay runs and
+        payroll reports. Everyone else sees payroll in the ledger only as
+        totals by department and pay item, never per employee.
+- [ ] **P2 IRD payroll rates as dated data** (0054 if needed). Running.
+- [ ] **P3 Pay runs**, now including:
+      - **Pay items** (earnings, deductions, reimbursements, employer
+        contributions), each with its own expense or liability account and
+        its tax treatment from IRD's specification, so wages, overtime,
+        allowances, bonuses, holiday pay, employer KiwiSaver and ESCT report
+        separately.
+      - Posting split by each employee's allocation (or a per-pay-item
+        override), tagged with Department/Class/Location/project/R&D
+        activity, so profit and loss and **budget vs actual by department**
+        work from the existing budgets.
+      - Draft → approve, with the approver different from the preparer when
+        the organisation turns that on.
+      Needs P1b and P2.
+- [ ] **P4 Paying** wages and IRD. Needs P3.
+- [ ] **P5 Payslips** (PDF and email). Needs P3.
+- [ ] **P6 Payday filing file** for myIR. Needs P3.
+- [ ] **P7 Holidays Act leave, plan** (#68). Running.
+- [ ] **P8 Holidays Act leave, build** what P7 specifies and Jess approves,
+      including leave liability by department. Needs P3 and P7.
+- [ ] **P9 Timesheets**: hours by project, department or R&D activity
+      (reusing project time tracking), approved by a manager, overriding the
+      default split for the hours they cover. Time is stamped when entered,
+      so it counts as contemporaneous for RDTI. Needs P3.
+- [ ] **P10 Payroll reports** (payroll access only): labour cost by
+      department, project, R&D activity and pay item; payroll summary and
+      reconciliation to the ledger; headcount and FTE; employee earnings
+      history; PAYE, KiwiSaver and student loan summaries. Needs P3.
+- [ ] **P11 Workforce budgets**: budget wages by employee or position and
+      month, feeding budgets by department (existing budgets). Needs P3.
+- [ ] **P12 Back pay, extra pays and final pays** (bonuses under IRD's extra
+      pay rules, retrospective rate changes, termination pays). Needs P3,
+      and P8 for holiday pay on termination.
 
-**P2 is blocked**: GitHub's Copilot coding agent sandbox blocks
-www.ird.govt.nz, acc.co.nz and legislation.govt.nz, so it can't read IR340,
-IR335 or the payroll calculation specification, and it rightly refused to use
-figures from memory. Fix: add those sites to the repo's Copilot coding agent
-firewall allowlist, or attach the IRD PDFs to issue #60, then re-run P2. P3
-and P6 will need the same.
+Payroll and RDTI work needs IRD, ACC, legislation and Employment NZ sites:
+ird.govt.nz, acc.co.nz, legislation.govt.nz and employment.govt.nz are on the
+repo's Copilot cloud agent allowlist (added 1 Oct 2026, with Jess's OK). A
+scheduled task checks IRD's payroll specification every 5 April and starts an
+agent to add the new year's rates.
 
-P2 and P7 can run in parallel now; P4, P5 and P6 can run in parallel once P3
-is merged. Give each its own migration number up front.
+### RDTI (Research and Development Tax Incentive)
+
+Jess wants R&D tax incentive tracking (1 Oct 2026). The rules are in IRD's
+guidance IR1240 (15% credit; $50,000 minimum eligible expenditure in most
+cases; core and supporting activities; employee, goods and services,
+depreciation and apportioned overhead costs; contemporaneous records kept at
+the time, not backdated; general approval and the supplementary return have
+deadlines). Agents must check the current IR1240 and cite it, never memory.
+
+- [ ] **R1 Plan**: worked examples and questions for Jess, docs only. Can
+      start now.
+- [ ] **R2 R&D activity register and tagging**: activities (core or
+      supporting, linked core activity, approval reference, income year, in NZ
+      or overseas); tag time, payroll costs (via P1b/P3/P9), bills, expense
+      claims and fixed asset depreciation to activities with an eligible or
+      ineligible category; GST never included; entries stamped when made.
+      Needs R1 approved.
+- [ ] **R3 RDTI claim report**: eligible expenditure by category and
+      activity, overhead apportionment with its method, the overseas limit,
+      the minimum check, the 15% credit, figures for the supplementary return,
+      and reminders for the approval and return deadlines. Needs R2.
 
 To do:
 
