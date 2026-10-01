@@ -30,7 +30,7 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 | Payroll P7: Holidays Act leave worked examples (docs only) | #60 | #68 | `copilot/nz-payroll-stage-p7-holidays-act-leave` | none |
 | Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12) | none (Agents tab) | not opened yet | `copilot/sales-orders-stage-1` | 0055 |
 | Sales platform connections, stage 1: connector framework, Shopify customers and products (CRM roadmap items 27-28) | none (Agents tab) | not opened yet | `copilot/sales-platform-connections-stage-1` | 0056 |
-| RDTI R1: R&D Tax Incentive worked examples and questions (docs only, RD1-RD27) | none (Agents tab) | draft | `copilot/rdti-stage-r1-plan-tracking` | none |
+| RDTI R1: R&D Tax Incentive worked examples and questions (docs only, RD1-RD27) | none (Agents tab) | #72 | `copilot/rdti-stage-r1-plan-tracking` | none |
 
 Next free tenant migration number: 0058 (0057 reserved for payroll P1b).
 
