@@ -33,7 +33,8 @@ import { toCsv } from "@/lib/payroll/report-figures";
 
 /**
  * Leave balances, the holiday and leave record (s 81; HL40-HL42) and the
- * leave liability report (decision 28: shown, never posted). Read-only,
+ * leave liability report (decision 153; posted to the ledger by
+ * `leave-liability.ts`, decision 177). Read-only,
  * payroll access only. Balances count leave on approved pay runs, at the
  * date asked for.
  */
@@ -374,7 +375,8 @@ export type LeaveLiabilityReport = {
  * approved pay period; the running 8% since their last anniversary; and
  * untaken alternative holidays at a usual day's pay (ordinary weekly pay ÷
  * usual days, decision 153). By Department (the biggest line of their cost
- * allocation at the date). Shown only: nothing is posted to the ledger.
+ * allocation at the date). Read-only; `postLeaveLiability` posts its
+ * total by Department (decision 177).
  */
 export async function leaveLiabilityReport(tx: OrgTx, input: { asAt?: unknown } = {}): Promise<LeaveLiabilityReport> {
   await requirePayrollAccess(tx);

@@ -1,7 +1,7 @@
 import { json, readJson, route, searchParams, withPayrollAccess } from "@/lib/api/http";
 import { exportLeaveLiability, leaveLiabilityReport } from "@/lib/payroll/leave-reports";
 
-/** The leave liability report (decision 28: shown, never posted). Query: organisationId, asAt?. Payroll access. */
+/** The leave liability report (decision 153; posted from ./postings, decision 177). Query: organisationId, asAt?. Payroll access. */
 export const GET = route(async (request) => {
   const params = searchParams(request);
   const report = await withPayrollAccess(request, params.get("organisationId"), (tx) => leaveLiabilityReport(tx, { asAt: params.get("asAt") || undefined }));
