@@ -50,16 +50,17 @@ Set them in the Agents box before sending each task:
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
 | Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
-| Payroll P3: pay items and pay runs, one journal split by each employee's allocation (examples PRUN1...) | #60 | not opened yet | (Agents tab) | 0058 |
+| Payroll P4: paying wages and IRD (examples PPAY1-PPAY12) | #60 | not opened yet | `claude/payroll-p4-paying` (Claude) | 0062 |
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
 0053), payroll rates P2 (#71), payroll P1b allocation and payroll access
 (#73, 0057), Holidays Act plan P7 (#68), RDTI plan R1 (#72), sales orders
 stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
-and record page (#74, 0059) and the RDTI register R2 (#75, 0060).
+and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
+pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0062 (0058-0061 reserved above).
+Next free tenant migration number: 0063 (0058-0062 used or reserved above).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -103,20 +104,52 @@ only be run by certain people. Each item is its own branch and PR.
       Jess). Checked against IRD's site 1 Oct 2026. Before each 1 April, add
       the next year's file (README in that folder; a scheduled task checks
       every 5 April).
-- [ ] **P3 Pay runs**, now including:
-      - **Pay items** (earnings, deductions, reimbursements, employer
-        contributions), each with its own expense or liability account and
-        its tax treatment from IRD's specification, so wages, overtime,
-        allowances, bonuses, holiday pay, employer KiwiSaver and ESCT report
-        separately.
-      - Posting split by each employee's allocation (or a per-pay-item
-        override), tagged with Department/Class/Location/project/R&D
-        activity, so profit and loss and **budget vs actual by department**
-        work from the existing budgets.
-      - Draft → approve, with the approver different from the preparer when
-        the organisation turns that on.
-      Needs P1b and P2.
-- [ ] **P4 Paying** wages and IRD. Needs P3.
+- [ ] **P3 Pay runs** (migration 0058). Draft PR #76; examples
+      PRUN1-PRUN11 await Jess (questions in the PR and under PRUN11).
+      Built:
+      - **Pay items** (earnings, after-tax deductions, reimbursements,
+        employer KiwiSaver), each with its own expense or liability account
+        and its tax treatment from IRD's specification, so wages, overtime,
+        allowances, holiday pay, employer KiwiSaver and ESCT report
+        separately. Admins add allowances, overtime, holiday pay,
+        reimbursements and deductions.
+      - Pay runs per pay group and period: draft (calculated live) →
+        approve, posting one journal dated the pay date, split by each
+        employee's allocation on the pay date, tagged with
+        Department/Class/Location/project, so profit and loss and **budget
+        vs actual by department** work from the existing budgets. Journal
+        lines never name employees; the per-employee split is in
+        `payroll_pay_run_postings` (payroll access only). Void with a
+        reversing journal.
+      - The approver different from the preparer when the organisation turns
+        that on (Payroll › Pay items).
+      Not built in P3: a per-pay-item allocation override and the R&D
+      activity tag (waits for the RDTI register); other employer
+      contributions; adding an employee back to a draft once left out
+      (delete and start the draft again). Refused rather than guessed:
+      extra pays (P12), back pay and final pays (P12), leave (P8), child
+      support, payroll giving, pay rate changes inside a period.
+- [ ] **P4 Paying wages and IRD** (migration 0062), done in branch
+      `claude/payroll-p4-paying`, waiting for a PR and review; examples
+      PPAY1-PPAY12 await Jess (questions under PPAY12). Built:
+      - **Wages**: from an approved pay run, payments of net pay from a bank
+        account (Dr Wages payable, Cr bank), for the whole run or per
+        employee (not both), in part or in full, never more than unpaid;
+        journal lines say "Net pay", never a name; matched to the bank
+        statement like any payment; void with the exact reversal.
+      - **IRD** (Payroll › IRD payments): what approved pay runs owe per IRD
+        period (by pay date) for PAYE incl. ACC levy, student loan,
+        KiwiSaver and ESCT, with IRD's due date (checked on ird.govt.nz
+        1 Oct 2026: monthly by the 20th of the next month; twice a month
+        for $500,000+ of PAYE and ESCT: 1st-15th by the 20th, 16th-end by
+        the 5th, 16-31 Dec by 15 Jan; weekends move to Monday, public
+        holidays aren't checked). Part payments; overpaying a liability
+        refused. Monthly or twice a month is a setting (Payroll › Pay items).
+      - Undo order enforced: a pay run can't be voided while it has wage
+        payments or IRD payments for its period.
+      Not built: a bank direct-credit file (Tohyee has no bank batch file
+      format; question for Jess), public holidays in due dates, IRD
+      penalties, child support.
 - [ ] **P5 Payslips** (PDF and email). Needs P3.
 - [ ] **P6 Payday filing file** for myIR. Needs P3.
 - [ ] **P7 Holidays Act leave, plan** (#68): HL1-HL42 in

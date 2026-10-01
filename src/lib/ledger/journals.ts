@@ -56,7 +56,8 @@ export type JournalOrigin =
   | "expense_claim_payment"
   | "fixed_asset_depreciation"
   | "fixed_asset_disposal"
-  | "opening_balance";
+  | "opening_balance"
+  | "payroll";
 export type CorrectionKind = "reversal" | "replacement";
 
 /**
@@ -518,7 +519,8 @@ export async function postJournalBody(
       origin: options.origin,
       postingDate: body.postingDate,
       reference: body.reference,
-      total: body.total,
+      // A pay run's total can be one person's pay (PRUN9).
+      ...(options.origin === "payroll" ? {} : { total: body.total }),
       commandSource,
       idempotencyKey,
     },
@@ -735,6 +737,7 @@ export async function listJournals(
     "customer_overpayment_refund",
     "bank_transaction",
     "bank_transfer",
+    "payroll",
   ];
   const validKinds = ["primary", "reversal", "replacement", ...origins];
   if (kind && !validKinds.includes(kind)) {
@@ -825,7 +828,8 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
     journal.origin !== "expense_claim_payment" &&
     journal.origin !== "fixed_asset_depreciation" &&
     journal.origin !== "fixed_asset_disposal" &&
-    journal.origin !== "opening_balance"
+    journal.origin !== "opening_balance" &&
+    journal.origin !== "payroll"
   );
 }
 
@@ -920,6 +924,22 @@ export async function correctJournal(
   if (original.origin === "bank_transaction") {
     throw new ValidationError(
       `Journal #${original.id} was posted by a bank transaction (${original.reference}), so it can't be corrected in the ledger. To undo it, void the bank transaction.`,
+    );
+  }
+  if (original.origin === "payroll") {
+    const payment = await tx.query<{ reference: string }>(
+      `select 'WAGES-' || payment_number as reference from payroll_wage_payments where journal_id = $1 or void_journal_id = $1
+       union all
+       select 'IRD-' || payment_number from payroll_ird_payments where journal_id = $1 or void_journal_id = $1`,
+      [original.id],
+    );
+    if (payment.rows[0]) {
+      throw new ValidationError(
+        `Journal #${original.id} was posted by a payroll payment (${payment.rows[0].reference}), so it can't be corrected in the ledger. To undo it, void the payment under Payroll.`,
+      );
+    }
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a pay run (${original.reference}), so it can't be corrected in the ledger. To undo it, void the pay run.`,
     );
   }
   if (original.origin === "bank_transfer") {

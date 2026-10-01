@@ -55,6 +55,7 @@ const ORIGIN_LABELS: Record<Journal["origin"], string> = {
   fixed_asset_depreciation: "Depreciation",
   fixed_asset_disposal: "Asset disposal",
   opening_balance: "Opening balances",
+  payroll: "Pay run",
 };
 
 const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
@@ -75,6 +76,7 @@ const REVERSED_BY: Partial<Record<Journal["origin"], string>> = {
   expense_claim_payment: "The payment was voided: reversed by",
   fixed_asset_depreciation: "The depreciation run was rolled back: reversed by",
   fixed_asset_disposal: "The disposal was undone: reversed by",
+  payroll: "The pay run was voided: reversed by",
 };
 
 function KindBadge({ journal }: { journal: Journal }) {

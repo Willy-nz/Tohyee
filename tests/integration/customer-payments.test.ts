@@ -756,6 +756,13 @@ describeWithDatabase("customer payments", () => {
         { code: "1100", system_key: "accounts_receivable" },
         // Added by migration 0028 (expense claims, EC1).
         { code: "2010", system_key: "expense_claims_payable" },
+        // Added by migration 0058 (payroll pay runs, PRUN10).
+        { code: "2200", system_key: "paye_payable" },
+        { code: "2210", system_key: "kiwisaver_payable" },
+        { code: "2220", system_key: "esct_payable" },
+        { code: "2230", system_key: "student_loan_payable" },
+        { code: "2240", system_key: "wages_payable" },
+        { code: "2250", system_key: "payroll_deductions_payable" },
         // Added by migration 0036 (the equity conversion account, IM1, IM21).
         { code: "3900", system_key: "conversion_clearing" },
         // Added by migration 0033 (foreign-currency bank accounts, FXB5).

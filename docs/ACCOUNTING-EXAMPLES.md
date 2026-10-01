@@ -66,8 +66,10 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/tax-available-on.test.ts` (TAO1-TAO5, TAO7-TAO12) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
   GP3, GP5, GP6) and `tests/integration/payroll-employees.test.ts` (PE1, PE2)
-  and `tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE13),
-  all against
+  and `tests/integration/payroll-allocation.test.ts` (PE3, PE5-PE13)
+  and `tests/integration/payroll-pay-runs.test.ts` (PRUN1-PRUN11, not yet
+  approved) and `tests/integration/payroll-payments.test.ts` (PPAY1-PPAY12,
+  not yet approved), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
   ageing maths (AGP1, CST1), `tests/unit/repeating-schedule.test.ts` the
   repeating dates (RI1, RI5, RI6), `tests/unit/repeating-bill-rules.test.ts`
@@ -87,7 +89,10 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/payroll-calculations.test.ts` and
   `tests/unit/payroll-ird-tables.test.ts` IRD's payroll rates and
   calculations (PR1-PR16), and `tests/unit/payroll-allocation.test.ts`
-  the payroll % split (PE3-PE5), and `tests/unit/sales-platforms.test.ts`
+  the payroll % split (PE3-PE5), and `tests/unit/payroll-pay-calculation.test.ts`
+  one employee's pay in a pay run (PRUN1-PRUN4, PRUN8), and
+  `tests/unit/payroll-ird-due-dates.test.ts` IRD payroll periods and due
+  dates (PPAY4, PPAY9), and `tests/unit/sales-platforms.test.ts`
   the webhook signature check, Shopify record shapes and which value is kept
   (SPC2, SPC3, SPC5, SPC6, SPC8), and `tests/unit/sales-platforms-screen.test.ts`
   the sync log on the settings screen (SPC10), and
@@ -7903,7 +7908,8 @@ So C1's materials, consumables and overheads are 4,000.00 + 200.00 +
   asset type) is ignored. For FA-0007's 2026-27 year Kea enters, from its
   tax workings:
   - Investment Boost (DI 5): 20% × 6,000.00 = **1,200.00**, which counts as
-    depreciation (decision 33; **unverified** against the Act);
+    depreciation (decision 33; checked against schedule 21B part A cl 1
+    on 1 Oct 2026);
   - tax depreciation: **1,200.00** (say 25% diminishing value on the
     6,000.00 − 1,200.00 = 4,800.00 left after the boost; Tohyee doesn't
     check the rate);
@@ -8305,7 +8311,7 @@ them; Jess hasn't approved the examples yet.
 - **Overseas limit and credit rounded down to the cent** (RD16, RD20; 32).
 - **Tax depreciation, entered per asset for the year and split by its usage
   log; Investment Boost counts as depreciation**; never book depreciation
-  (RD11; 33, unverified against the Act).
+  (RD11; 33, checked against schedule 21B part A cl 1 on 1 Oct 2026).
 - **A default % split counts only when it's 100% R&D**; any other is listed
   as "default split, no time record" and left out (RD7; 34).
 - **Leave and training are spread over the year** (RD6; 35).
@@ -8514,6 +8520,599 @@ Decided 1 Oct 2026 on Jess's instruction to research and make the call; see
   IRD's bands are whole dollars, so enter a whole-dollar estimate.
 - **4% from 1 April 2028** (spec 2.3) will come with the edition that covers
   it.
+
+## NZ payroll — pay runs (examples not yet approved by Jess)
+
+Stage P3 of payroll (#60). Jess hasn't approved these. A **pay run** pays
+one pay group for one pay period: a draft gets a line per employee from
+their pay rate, people running pay add earnings and deductions, Tohyee
+calculates PAYE, student loan, KiwiSaver and ESCT with the P2 functions
+(rates by pay date, decision 1), and **approving** posts **one journal**
+dated the pay date, with each employee's costs split by their cost
+allocation on the pay date. Approved pay runs are never changed; voiding
+posts the exact reversal. Paying wages and IRD (P4), payslips (P5),
+payday filing (P6), leave (P8), timesheets (P9) and payroll reports (P10)
+are later stages.
+
+Sources, law first: IRD's **Payroll Calculations & Business Rules
+Specification 2026-27** ("the spec", the edition in
+`src/lib/payroll/rates/2026-27.ts`) for what each kind of pay is subject
+to: PAYE is on taxable earnings, including all taxable allowances, and not
+on non-taxable allowances or reimbursements (spec 5.7, 5.11: "Exclude
+non-taxable amounts"); IRD's PAYE includes the ACC earners' levy and the
+student loan deduction is on the same pay (5.2, 5.4); KiwiSaver deductions
+and employer contributions are on gross salary or wages, which includes
+overtime and "any other remuneration" but not reimbursements or
+accommodation allowances (4.5.1); ESCT is on the employer's contribution
+(5.20-5.21). The figures in PRUN3 are the spec's own (Employee Share
+Scheme example 4, page 42, the pay before the ESS amount). Then
+NetSuite for how pay items and pay runs post: each payroll item has its own
+expense or liability account and committing a payroll batch posts gross
+wages to expense, withholdings and employer contributions to liabilities and
+net pay as owed to employees
+([Creating Payroll Items](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1556724572.html),
+[Payroll Item Types](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/bridgehead_N931377.html),
+[Viewing Payroll Batches](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N948008.html));
+paycheck lines take each employee's Department, Class and Location
+(PE3-PE6). Where NetSuite (a US payroll) has no NZ answer, Xero Payroll NZ:
+earnings rates, deductions and reimbursements as pay items
+([Add a custom pay item](https://central.xero.com/s/article/Add-a-custom-pay-item),
+[About deductions](https://central.xero.com/0/article/About-deductions)),
+and draft, approve and post a pay run
+([Process a pay run and pay employees](https://central.xero.com/0/article/Process-a-pay-run-and-pay-employees-NZ)).
+The agent sandbox couldn't open docs.oracle.com or Xero Central, so those
+pages were found by web search and not read in full; check them before
+approving.
+
+Tests: `tests/unit/payroll-pay-calculation.test.ts` (the pure per-employee
+calculation, PRUN1-PRUN4, PRUN8) and
+`tests/integration/payroll-pay-runs.test.ts` (PRUN1-PRUN11, against
+PostgreSQL and the API routes).
+
+### Pay items (set-up)
+
+Each pay item has a category, a kind, its account, and its tax treatment.
+The kinds and their treatment follow the spec; admins pick a kind, a name and
+an account, and (for allowances) whether it's taxable and whether it counts
+for KiwiSaver. Taxable means subject to PAYE, the ACC earners' levy and the
+student loan deduction together (IRD's PAYE includes the levy, and the
+student loan deduction is on all PAYE income); there's no kind that is only
+some of those.
+
+| Pay item (starting set) | Category | Kind | Account | PAYE, ACC levy, student loan | KiwiSaver | ESCT |
+| --- | --- | --- | --- | --- | --- | --- |
+| Ordinary time | Earnings | Ordinary time (hours x rate, or the salary for the period) | 6200 Wages and salaries | Yes | Yes | — |
+| Overtime | Earnings | Overtime, hours x hourly rate x 1.5 | 6200 Wages and salaries | Yes | Yes | — |
+| Allowance (taxable) | Earnings | Allowance, an amount | 6200 Wages and salaries | Yes | Yes | — |
+| Holiday pay | Earnings | Holiday pay, an amount typed for now (stage P8 calculates it) | 6200 Wages and salaries | Yes | Yes | — |
+| Reimbursement | Earnings | Reimbursement of actual costs, an amount | 6070 General expenses | No | No | — |
+| Union fees | Deduction | After-tax deduction, an amount | 2250 Payroll deductions payable | — | — | — |
+| KiwiSaver employer contribution | Employer contribution | KiwiSaver employer contribution, calculated | 6210 KiwiSaver employer contributions | No (ESCT instead) | — | Yes |
+
+New organisations also get these liability accounts, and existing ones get
+them at the code shown or the next free code after it: **2200 PAYE
+payable** (marked as the PAYE account, including the ACC earners' levy),
+**2210 KiwiSaver payable** (employee deductions and employer contributions
+net of ESCT), **2220 ESCT payable**, **2230 Student loan payable**, **2240
+Wages payable** (net pay owed to employees until it's paid, P4) and **2250
+Payroll deductions payable**.
+
+- **PRUN10 Pay items.** Every organisation starts with the set above. Mere
+  (an admin with payroll access) adds "Tool allowance", an allowance,
+  taxable, counting for KiwiSaver, to 6200; and "Meal allowance
+  (non-taxable)", an allowance that isn't taxable, to 6200 (an allowance
+  that isn't taxable doesn't count for KiwiSaver either). Ben (a bookkeeper
+  with payroll access) can see pay items but can't add or change them
+  (admins only). Earnings and employer contributions go to expense or
+  direct costs accounts; deductions to liability accounts. Names are unique.
+  Ordinary time and the KiwiSaver employer contribution can't be archived or
+  changed except their name and account; other items can be archived, which
+  keeps them on earlier pay runs. Refused (see PRUN8): bonuses and other
+  extra pays, back pay, final pays, leave, child support, payroll giving,
+  employer contributions other than KiwiSaver, a reimbursement that is
+  taxed, and a taxable item that isn't subject to the ACC earners' levy or
+  student loan.
+
+### Drafts
+
+- **PRUN11 A draft.** Ben creates a pay run for pay group "Fortnightly
+  salaries" for the period **28 Sep 2026 to 11 Oct 2026**, pay date **14 Oct
+  2026**. The period is the group's frequency long (7, 14 or 28 days; a
+  monthly period is a calendar month starting on the 1st). The draft has a
+  line per employee in the group who isn't archived, started on or before
+  11 Oct 2026 and hadn't finished before 28 Sep 2026: an employee on a
+  salary gets Ordinary time of their annual salary divided by 52, 26, 13 or
+  12, rounded half up to the cent (70,000.00 / 26 = 2,692.3077 → **2,692.31**);
+  an hourly employee gets Ordinary time of their ordinary hours a week x 1,
+  2 or 4 weeks at their hourly rate (a monthly hourly employee starts at 0
+  hours to fill in). Hours x rate is rounded half up to the cent. The rate
+  is the one in effect for the period (PE7). A second pay run for the same
+  group and period start is refused unless the first was voided. A draft
+  calculates from the employee's current details every time it's opened, so
+  a fixed tax code or KiwiSaver rate shows straight away; approving keeps a
+  copy of what it was calculated from. Drafts can be deleted, and an
+  employee can be left out of a draft.
+
+### Worked pay runs
+
+- **PRUN1 Fortnightly salaries, split 60/40.** Pay group "Fortnightly
+  salaries", period 28 Sep to 11 Oct 2026, pay date 14 Oct 2026 (2026-27
+  rates).
+
+  | | Hemi Walker | Kiri Tane | Total |
+  | --- | --- | --- | --- |
+  | Pay | $70,000.00 a year | $52,000.00 a year | |
+  | Tax code, KiwiSaver | M; enrolled, 3.5% employee, 3.5% employer, ESCT 30% | M; not enrolled | |
+  | Cost allocation on 14 Oct 2026 | 60% Sales, 40% Operations | 100% Sales | |
+  | Ordinary time (gross) | 2,692.31 | 2,000.00 | 4,692.31 |
+  | PAYE (incl. ACC earners' levy) | 555.58 | 343.00 | 898.58 |
+  | Student loan | 0.00 | 0.00 | 0.00 |
+  | KiwiSaver employee (3.5%) | 94.23 | 0.00 | 94.23 |
+  | After-tax deductions | 0.00 | 0.00 | 0.00 |
+  | **Net pay** | **2,042.50** | **1,657.00** | **3,699.50** |
+  | KiwiSaver employer (3.5%, gross) | 94.23 | 0.00 | 94.23 |
+  | ESCT (30% of $94) | 28.20 | 0.00 | 28.20 |
+  | KiwiSaver employer, net of ESCT | 66.03 | 0.00 | 66.03 |
+  | **Employer cost** (gross + employer KiwiSaver) | **2,786.54** | **2,000.00** | **4,786.54** |
+
+  Hemi's ESCT rate is 30% because his ESCT rate threshold amount is
+  $70,000 + 3.5% = $72,450 (spec 5.21.1, the 30% band is $64,201 to
+  $93,720). Kiri's PAYE is IR340's fortnightly row for $2,000. Hemi's costs
+  are split 60/40 with the largest-remainder rule (PE3): ordinary time
+  2,692.31 → **1,615.39** Sales and **1,076.92** Operations; KiwiSaver
+  employer 94.23 → **56.54** Sales and **37.69** Operations.
+
+  Approving posts one journal, PAYRUN-1, dated 14 Oct 2026, origin
+  "payroll", description "Pay run PAYRUN-1: Fortnightly salaries, 28 Sep
+  2026 to 11 Oct 2026". Lines are by pay item, account and tracking, never
+  by employee:
+
+  | Account | Description | Department | Debit | Credit |
+  | --- | --- | --- | --- | --- |
+  | 6200 Wages and salaries | Ordinary time | Sales | 3,615.39 | |
+  | 6200 Wages and salaries | Ordinary time | Operations | 1,076.92 | |
+  | 6210 KiwiSaver employer contributions | KiwiSaver employer contribution | Sales | 56.54 | |
+  | 6210 KiwiSaver employer contributions | KiwiSaver employer contribution | Operations | 37.69 | |
+  | 2200 PAYE payable | PAYE | | | 898.58 |
+  | 2210 KiwiSaver payable | KiwiSaver | | | 160.26 |
+  | 2220 ESCT payable | ESCT | | | 28.20 |
+  | 2240 Wages payable | Net pay | | | 3,699.50 |
+  | **Total** | | | **4,786.54** | **4,786.54** |
+
+  KiwiSaver payable is the employee's 94.23 plus the employer's 66.03 net.
+  Tohyee also keeps, for people with payroll access only, each employee's
+  share of each debit line (Hemi's 1,615.39, Kiri's 2,000.00 and so on), so
+  the split can be checked and later reports can use it.
+
+- **PRUN2 Hourly, overtime, an allowance, a deduction and a
+  reimbursement.** Sione Fifita is paid weekly in pay group "Weekly wages":
+  $22.50 an hour, 32 ordinary hours a week, tax code M, KiwiSaver 4%
+  employee and 3.5% employer, ESCT 17.5% (threshold about $37,440 +
+  3.5%), union fees, allocation 100% Operations on project "Cafe rebrand".
+  Period 5 Oct to 11 Oct 2026, pay date 14 Oct 2026.
+
+  | Pay item | Hours x rate | Amount |
+  | --- | --- | --- |
+  | Ordinary time | 32 x 22.50 | 720.00 |
+  | Overtime | 4 x 33.75 (22.50 x 1.5) | 135.00 |
+  | Tool allowance (taxable, counts for KiwiSaver) | | 25.00 |
+  | Reimbursement (fuel receipt, not taxable) | | 42.60 |
+  | **Gross** | | **922.60** |
+  | Taxable earnings (and KiwiSaver earnings) | | 880.00 |
+  | PAYE (IR335's weekly $880.00 example, Lani) | | 148.40 |
+  | KiwiSaver employee (4% of 880.00) | | 35.20 |
+  | Union fees | | 8.50 |
+  | **Net pay** (922.60 − 148.40 − 35.20 − 8.50) | | **730.50** |
+  | KiwiSaver employer (3.5% of 880.00) | | 30.80 |
+  | ESCT (17.5% of $30) | | 5.25 |
+  | KiwiSaver employer net | | 25.55 |
+  | **Employer cost** (922.60 + 30.80) | | **953.40** |
+
+  Journal PAYRUN-2, 14 Oct 2026: Dr 6200 "Ordinary time (project Cafe
+  rebrand)" 720.00, Dr 6200 "Overtime (project Cafe rebrand)" 135.00, Dr
+  6200 "Tool allowance (project Cafe rebrand)" 25.00, Dr 6070
+  "Reimbursement (project Cafe rebrand)" 42.60, Dr 6210 "KiwiSaver employer
+  contribution (project Cafe rebrand)" 30.80, all tagged Operations; Cr 2200
+  PAYE 148.40, Cr 2210 KiwiSaver 60.75 (35.20 + 25.55), Cr 2220 ESCT 5.25,
+  Cr 2250 "Union fees" 8.50, Cr 2240 Net pay 730.50; total **953.40**.
+  Journal lines have no project column, so the project is in the line's
+  description and on the payroll posting kept with the pay run.
+  **Rounding:** 3.3 hours of overtime is 3.3 x 33.75 = 111.375 →
+  **111.38** (half up, once, on hours x rate).
+
+- **PRUN3 Student loan and KiwiSaver 3.5% employer with ESCT (IRD's
+  figures).** Aroha Ngata, four-weekly, $3,500.00 a period ($45,500.00 a
+  year), tax code M SL, KiwiSaver 3.5% and 3.5% employer, ESCT 17.5%,
+  allocation 100% Sales. Pay group "Four-weekly", period 14 Sep to 11 Oct
+  2026, pay date 14 Oct 2026. The spec's ESS example 4 (page 42) has the
+  same pay before its share-scheme amount: PAYE **589.72**, student loan
+  **197.28**, KiwiSaver employee **122.50**, employer gross 122.50, ESCT
+  **21.35**, employer net **101.15**. Net pay 3,500.00 − 589.72 − 197.28 −
+  122.50 = **2,590.50**; employer cost **3,622.50**. Journal: Dr 6200
+  Ordinary time Sales 3,500.00, Dr 6210 Sales 122.50; Cr 2200 PAYE 589.72,
+  Cr 2230 Student loan 197.28, Cr 2210 KiwiSaver 223.65 (122.50 + 101.15),
+  Cr 2220 ESCT 21.35, Cr 2240 Net pay 2,590.50; total 3,622.50. If Aroha's
+  student loan box is ticked but her tax code is M (or the other way
+  round), the pay run refuses to calculate her: "Aroha Ngata has a student
+  loan but tax code M has no SL. Fix their tax code or student loan under
+  Employees." (IRD's student loan deduction follows the tax code, 5.4.)
+
+- **PRUN4 Pay date 1 April 2026, across the KiwiSaver change (decision 2).**
+  Hemi (as PRUN1, but set up in March with KiwiSaver **3%** employee and **3%**
+  employer, the 2025-26 defaults), pay group "Fortnightly salaries", period
+  **19 Mar to 1 Apr 2026**. With pay date **1 Apr 2026** the 2026-27 rates
+  apply to the whole pay, even though most of the period is in March: the
+  draft shows Hemi's problem "3% isn't a KiwiSaver employee rate on
+  2026-04-01: use 3.5%, 4%, 6%, 8%, 10%." and approving is refused. (The
+  3% employer rate is also refused: "The compulsory KiwiSaver employer
+  contribution on 2026-04-01 is at least 3.5%.") Tohyee doesn't move him to
+  3.5% by itself (question for Jess). With the pay date moved to **31 Mar
+  2026** (2025-26 rates) the same pay calculates: PAYE **553.44**, KiwiSaver
+  employee 3% **80.76**, employer 3% **80.76**, ESCT 30% **24.00** (of $80;
+  threshold $70,000 + 3% = $72,100), employer net **56.76**, net pay
+  **2,058.11**. After Hemi's rates are updated to 3.5%/3.5%, pay date 1 Apr
+  2026 gives PRUN1's figures for Hemi: PAYE 555.58, KiwiSaver 94.23 and
+  94.23, ESCT 28.20, net pay 2,042.50.
+
+### Approving, locks and voiding
+
+- **PRUN5 Approving in a locked period is refused.** The lock date is 31 Oct
+  2026 and a draft pay run has pay date 28 Oct 2026. Approving is refused
+  with "2026-10-28 is in a locked period (locked up to 2026-10-31). Use a
+  later date, or ask an owner or admin to reopen the period on Period
+  close."; the pay run stays a draft and no journal is posted.
+
+- **PRUN6 Void.** PRUN1's pay run is voided on **20 Oct 2026**: Tohyee posts
+  journal VOID-PAYRUN-1 dated 20 Oct 2026, the exact reversal of PAYRUN-1
+  (every line, tag and description, debit and credit swapped, total
+  4,786.54), marked as PAYRUN-1's reversal, and the pay run becomes Voided.
+  A void date before the pay date is refused ("The void date can't be before
+  the pay date (2026-10-14)."), and so is a void date in a locked period.
+  Approved and voided pay runs can't be edited, deleted or approved again
+  ("PAYRUN-1 is approved, so it can't be changed. Void it and run the pay
+  again."); the database refuses it too. After the void, a new pay run for
+  the same group and period can be created. The journals can't be corrected
+  from the ledger ("posted by a pay run … void the pay run").
+
+- **PRUN7 Approver must be different (optional).** Under Payroll › Pay
+  items, an admin can turn on "The person who approves a pay run must be
+  different from whoever prepared it". With it on, Ben (who created or
+  changed the draft) is refused: "You prepared this pay run, so someone else
+  has to approve it." Jess, who didn't touch it, can approve. With it off
+  (the default), Ben can approve his own pay run. Who prepared and approved
+  is taken from the signed-in user, never from the request.
+
+### Refused and access
+
+- **PRUN8 Refused rather than guessed.** Each of these is refused with "Not
+  supported yet (refused rather than guessed)" and what it is:
+  - pay items for bonuses and other extra pays (IRD's extra-pay rules, stage
+    P12), back pay, final pays, leave (Holidays Act, stage P8; holiday pay is
+    a typed amount for now), child support, payroll giving, and employer
+    contributions other than KiwiSaver;
+  - a draft for a pay group where someone **finishes inside the period**
+    (a final pay; move them out of the pay group to pay everyone else);
+    someone on a salary who **starts after the period starts** (part of a
+    period); a **pay rate that changes inside the period**; a monthly
+    period that doesn't start on the 1st. A finish date or pay rate change
+    inside the period entered after the draft was made shows as that
+    employee's problem on the draft, so it can't be approved. Someone
+    moved to another pay group isn't paid twice: a pay run for days they're
+    already paid for on another pay run (not voided) is refused ("Moe Mover
+    is already paid for 2026-10-05 to 2026-10-11 on PAYRUN-7. Take them off
+    one of the pay runs (or void it).");
+  - calculating an employee whose tax code the rates don't support (STC,
+    WT; from P2), whose student loan box disagrees with their tax code, or
+    whose employer KiwiSaver contribution has no ESCT rate set;
+  - negative amounts (corrections and back pay), and approving a pay run
+    where anyone's net pay would be below zero.
+  The draft shows each employee's problem; approving is refused until
+  they're fixed.
+
+- **PRUN9 Payroll access and what others see (decision 6).** Everything about
+  pay items and pay runs (reading them too) needs payroll access and at
+  least the bookkeeper role; Ben without payroll access gets "You need
+  payroll access to see payroll…" (403). Pay run journals show only totals
+  by account and tracking: line descriptions are pay item names (and a
+  project), never employee names, and the per-employee split is only on the
+  pay run. Audit events (pay run created, changed, approved, voided; pay
+  item added or changed) never contain IRD numbers, bank accounts or pay
+  amounts, and the "journal posted" audit event for a pay run leaves out its
+  total.
+
+### Questions for Jess (pay runs)
+
+1. **KiwiSaver 3% → 3.5% on 1 April 2026.** Tohyee refuses a pay dated on or
+   after 1 April at 3% (PRUN4) rather than moving people to 3.5% itself.
+   Should it offer to update them?
+2. **Pay rate changes inside a period** are refused (PRUN8); should Tohyee
+   pro-rate by days, by working days or by hours?
+3. **Allocation date.** Costs are split by the allocation on the **pay
+   date**, as the task says, not the period end. Agreed?
+4. **Salary per period** is annual / 52, 26, 13 or 12 rounded half up; hours
+   x rate rounded half up. IRD truncates PAYE and contributions but says
+   nothing about the pay itself. Agreed?
+5. **Separate IRD liability accounts** (PAYE, KiwiSaver, ESCT, student loan),
+   or one "PAYE and deductions payable" as some NZ charts have?
+6. **Projects** go in the journal line's description (journal lines have no
+   project field) and on the payroll postings. Enough until project costing
+   reads payroll?
+7. **Monthly hourly employees** start at 0 hours. Should it be weekly hours x
+   52 / 12?
+8. **Approver rule** covers whoever created or changed the draft. Should it
+   also apply to admins and owners?
+9. **One journal line per pay item** (e.g. Ordinary time and Overtime both on
+   6200 are separate lines). Or one line per account?
+10. **Monthly periods** must be calendar months. Do any clients pay monthly
+    on other days (e.g. the 15th to the 14th)?
+11. **Pay date before the period ends** (paying in advance) is allowed; a
+    pay date before the period starts is refused. Agreed?
+12. **Leaving someone out of a draft** can't be undone on that draft (delete
+    the draft and start again). Is a way to add someone back needed?
+13. **Splitting one pay item differently** from the employee's allocation
+    (e.g. overtime always to one department) isn't built. Needed before
+    timesheets (P9)?
+
+## NZ payroll — paying wages and IRD (examples not yet approved by Jess)
+
+Stage P4 of payroll (#60). Jess hasn't approved these. An approved pay run
+(P3) leaves net pay owing to employees on **2240 Wages payable** and the
+deductions owing to IRD on **2200 PAYE payable** (including the ACC
+earners' levy), **2230 Student loan payable**, **2210 KiwiSaver payable**
+(employee deductions and employer contributions net of ESCT) and **2220
+ESCT payable**. P4 records the money leaving the bank for both: a **wage
+payment** (Dr 2240, Cr the bank) from a pay run, and an **IRD payroll
+payment** (Dr each liability, Cr the bank) for an IRD period. Each posts
+one journal (origin "payroll"), so period locks apply, its bank line can be
+matched to a statement line like any other payment, and it's undone by
+voiding it (the exact reversal), never by correcting the journal.
+
+Sources, law first. **IRD**, [Paying deductions to Inland
+Revenue](https://www.ird.govt.nz/employing-staff/payday-filing/paying-deductions-to-inland-revenue)
+(last updated 23 Mar 2026, read 1 Oct 2026): "If your gross annual PAYE
+and ESCT is less than $500,000 you: need to pay deductions monthly, by the
+20th of the following month"; above $500,000 "twice a month": wages paid
+1st-15th "By the 20th of the same month", wages paid 16th-end of month "By
+the 5th of the following month. Note: For period 16-31 December pay by 15
+January not 5 January"; one payment to the EMP account can cover "pay as you
+earn, child support deductions, KiwiSaver deductions, KiwiSaver
+contributions, student loan deductions, Employer Superannuation
+Contribution". IRD, [When to pay](https://www.ird.govt.nz/managing-my-tax/make-a-payment/when-to-pay)
+(last updated 1 Apr 2026): "For due dates that fall on a weekend or public
+holiday, we need to receive your payment on or before the next working
+day." Employment information is a different deadline ("within 2 working
+days of each payday" when filing electronically,
+[Payday filing](https://www.ird.govt.nz/employing-staff/payday-filing),
+last updated 24 Feb 2026); filing it is stage P6, not here. Then
+**NetSuite** for paying liabilities: Pay Payroll Liabilities lists what's
+owing by payroll item for a date range and lets you tick the items to pay,
+so part payments are allowed
+([Making Payroll Liability Payments](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N954201.html)).
+NetSuite pays wages when a payroll batch is committed (US direct deposit),
+which has no NZ answer, so **Xero Payroll NZ** for wages: the pay run's net
+pay sits on Wages payable and the bank payment is coded to Wages payable,
+not wages expense ([a Xero partner's guide](https://www.livingbusiness.co.nz/blog/reconcile-wages-in-xero-payroll);
+Xero Central couldn't be opened by the agent's tools).
+
+Tests: `tests/unit/payroll-ird-due-dates.test.ts` (IRD periods and due
+dates, PPAY4, PPAY9) and `tests/integration/payroll-payments.test.ts`
+(PPAY1-PPAY12, against PostgreSQL and the API routes).
+
+The figures come from **PRUN1** (pay run PAYRUN-1, Fortnightly salaries,
+pay date 14 Oct 2026: Hemi Walker net 2,042.50, Kiri Tane net 1,657.00,
+total **3,699.50**; PAYE 898.58, KiwiSaver 160.26, ESCT 28.20) and **PRUN3**
+(Aroha Ngata, Four-weekly, pay date 14 Oct 2026, its pay run is PAYRUN-2
+here: net **2,590.50**; PAYE 589.72, student loan 197.28, KiwiSaver
+223.65, ESCT 21.35). The bank account is **1000** (base currency NZD).
+
+### Paying wages
+
+- **PPAY1 Pay PRUN1's net wages in one payment.** On PAYRUN-1, Ben (a
+  bookkeeper with payroll access) pays the wages: payment date **14 Oct
+  2026**, from **1000**, amount **3,699.50** (the screen fills in what's
+  unpaid). Tohyee posts journal **WAGES-1** dated 14 Oct 2026, origin
+  "payroll", description "Wages paid for pay run PAYRUN-1: Fortnightly
+  salaries, 2026-09-28 to 2026-10-11":
+
+  | Account | Description | Debit | Credit |
+  | --- | --- | --- | --- |
+  | 2240 Wages payable | Net pay | 3,699.50 | |
+  | 1000 Bank | Net pay | | 3,699.50 |
+
+  PAYRUN-1 then shows net pay 3,699.50, paid 3,699.50, **unpaid 0.00**,
+  and the payment in its list. Refused: 3,699.51 before the payment ("That's
+  more than the 3,699.50 of net pay left to pay on PAYRUN-1."), and 0.01
+  after it ("PAYRUN-1's net pay is already paid in full."); a payment dated
+  **13 Oct 2026**, before the pay date ("The payment date can't be before
+  PAYRUN-1's pay date (2026-10-14)."); a payment on a draft or voided pay
+  run; a payment from an account that isn't a bank or credit card account,
+  is archived, or isn't in NZD (as for supplier payments). PAYRUN-2's net
+  pay is paid the same way: **WAGES-4**, 14 Oct 2026, 2,590.50.
+
+- **PPAY2 Paying each employee separately (for matching).** When the bank
+  shows one line per person, wages can be paid per employee instead. After
+  WAGES-1 is voided (PPAY3), Ben pays PAYRUN-1 per employee on 14 Oct 2026:
+  Hemi Walker **2,042.50** (WAGES-2) and Kiri Tane **1,657.00** (WAGES-3).
+  Each journal is Dr 2240 / Cr 1000 for that amount with line description
+  "Net pay" and journal description "Wages paid for pay run PAYRUN-1:
+  Fortnightly salaries, 2026-09-28 to 2026-10-11 (one employee)": **never
+  the employee's name** (decision 6), since anyone who can see the bank
+  account sees its journal lines. The pay run's payment list (payroll access
+  only) shows whose each one is. Refused: Hemi 2,042.51 ("That's more than
+  the 2,042.50 of Hemi Walker's net pay left to pay on PAYRUN-1."); someone
+  who isn't on the pay run; and mixing the two ways on one pay run, because
+  a payment for the whole run can't say whose pay it was: "PAYRUN-1 is being
+  paid per employee. Pay the rest per employee too, or void those payments
+  first." (and the other way round, "PAYRUN-1 is being paid as a whole...").
+  Part payments are allowed either way, up to what's unpaid.
+
+- **PPAY3 Voiding a wage payment, and the order of undoing.** With WAGES-1
+  active, voiding PAYRUN-1 is refused: "PAYRUN-1 has wage payments
+  (WAGES-1). Void them first." (the database refuses it too). Ben voids
+  WAGES-1 dated **14 Oct 2026**: journal **VOID-WAGES-1**, the exact
+  reversal (Dr 1000 3,699.50 / Cr 2240 3,699.50), marked as WAGES-1's
+  reversal; PAYRUN-1 is unpaid 3,699.50 again. A void date before the
+  payment date is refused, and so is a payment voided twice. A payment
+  reconciled with a bank statement line can't be voided until it's
+  unreconciled (PPAY7). Once no active payments are left, the pay run can be
+  voided (PPAY12).
+
+### Paying IRD
+
+- **PPAY4 What's owing to IRD for October 2026.** The organisation pays IRD
+  **monthly** (Payroll › Pay items, "How often you pay IRD": monthly, or
+  twice a month for employers whose gross annual PAYE and ESCT is
+  $500,000 or more; IRD tells the employer which, Tohyee doesn't guess).
+  An IRD period counts approved pay runs (not voided) **by pay date**, as
+  IRD's rule does ("wages paid 1st-15th"). PAYRUN-1 and PAYRUN-2 are both
+  paid on 14 Oct 2026, so Payroll › IRD payments shows for **1 Oct to 31
+  Oct 2026**, **due Friday 20 Nov 2026**:
+
+  | Liability | Account | PAYRUN-1 | PAYRUN-2 | Owing |
+  | --- | --- | --- | --- | --- |
+  | PAYE (incl. ACC earners' levy) | 2200 | 898.58 | 589.72 | **1,488.30** |
+  | Student loan | 2230 | 0.00 | 197.28 | **197.28** |
+  | KiwiSaver (employee and employer) | 2210 | 160.26 | 223.65 | **383.91** |
+  | ESCT | 2220 | 28.20 | 21.35 | **49.55** |
+  | **Total** | | 1,087.04 | 1,032.00 | **2,119.04** |
+
+  The amounts are the pay runs' own credits to those accounts (their stored
+  totals), so they always agree with the journals. After-tax deductions
+  such as union fees (2250) aren't paid to IRD and aren't listed. Child
+  support isn't supported yet (PRUN8), so there's none to pay.
+
+- **PPAY5 A part payment, then the rest.** On **19 Nov 2026** Ben pays
+  **PAYE 1,000.00** only, from 1000: journal **IRD-1**, description "IRD
+  payroll payment for 2026-10-01 to 2026-10-31": Dr 2200 "PAYE" 1,000.00,
+  Cr 1000 "IRD payroll payment" 1,000.00. October then shows PAYE paid
+  1,000.00, owing **488.30**, total owing **1,119.04**. On **20 Nov 2026**
+  he pays the rest in one payment, **IRD-2**:
+
+  | Account | Description | Debit | Credit |
+  | --- | --- | --- | --- |
+  | 2200 PAYE payable | PAYE | 488.30 | |
+  | 2230 Student loan payable | Student loan | 197.28 | |
+  | 2210 KiwiSaver payable | KiwiSaver | 383.91 | |
+  | 2220 ESCT payable | ESCT | 49.55 | |
+  | 1000 Bank | IRD payroll payment | | 1,119.04 |
+
+  October is then owing 0.00 on every liability. The payment date can't be
+  before the period starts (1 Oct 2026). Paying after the due date is
+  allowed (the screen shows it as late); Tohyee doesn't work out IRD's
+  late payment penalties or interest.
+
+- **PPAY6 Overpaying is refused.** Before IRD-2, paying PAYE **488.31** for
+  October is refused: "That's more than the 488.30 of PAYE owing for
+  2026-10-01 to 2026-10-31." After IRD-2, any amount is refused the same
+  way, with 0.00. Paying for **November 2026**, with no pay runs, is refused
+  ("Nothing is owing to IRD for 2026-11-01 to 2026-11-30."), and so is a
+  period that isn't one of IRD's: for a monthly payer a period must start
+  on the 1st ("For monthly IRD payments the period starts on the 1st of a
+  month."). Each liability is checked on its own: a payment that's right in
+  total but too much on one liability is refused.
+
+- **PPAY7 Matching to the bank statement.** The bank statement for 1000 has
+  **14 Oct 2026, -2,042.50**, **14 Oct 2026, -1,657.00** and **20 Nov 2026,
+  -1,119.04**. On the -2,042.50 line, Tohyee suggests WAGES-2's bank line
+  first (exact amount, origin "Payroll", reference WAGES-2, description "Net
+  pay"), and matching it reconciles the line and posts nothing, like any
+  match (BK4). The -1,119.04 line is matched to IRD-2 the same way. While
+  matched, voiding WAGES-2 or IRD-2 is refused ("This is reconciled with a
+  bank statement line ... Unreconcile it first"); unreconcile, then void.
+
+- **PPAY8 Period locks.** With the lock date at **31 Oct 2026**, a wage
+  payment dated **30 Oct 2026** is refused ("2026-10-30 is in a locked
+  period (locked up to 2026-10-31). Use a later date, or ask an owner or
+  admin to reopen the period on Period close."), and so is voiding a payment
+  with a void date in the locked period and an IRD payment dated 30 Oct
+  2026. Nothing is posted. Dated 2 Nov 2026, the same wage payment (or a
+  void) is accepted: the pay run's journal stays in October and the payment
+  is in November.
+
+- **PPAY9 IRD's due dates.** From IRD's rules above, worked out per period:
+
+  | Pays IRD | Period (by pay date) | Due | Day |
+  | --- | --- | --- | --- |
+  | monthly | 1 Oct to 31 Oct 2026 | 20 Nov 2026 | Friday |
+  | monthly | 1 Nov to 30 Nov 2026 | 20 Dec 2026 | Sunday: IRD accepts it on Monday **21 Dec 2026** |
+  | monthly | 1 Dec to 31 Dec 2026 | 20 Jan 2027 | Wednesday |
+  | twice a month | 1 Oct to 15 Oct 2026 | 20 Oct 2026 | Tuesday |
+  | twice a month | 16 Oct to 31 Oct 2026 | 5 Nov 2026 | Thursday |
+  | twice a month | 16 Nov to 30 Nov 2026 | 5 Dec 2026 | Saturday: Monday **7 Dec 2026** |
+  | twice a month | 16 Dec to 31 Dec 2026 | **15 Jan 2027** (not 5 Jan) | Friday |
+
+  A due date on a Saturday or Sunday shows the Monday after as "IRD accepts
+  payment by". Public holidays aren't checked (Tohyee has no list of them
+  yet), so the screen says "If that day is a public holiday, IRD accepts
+  payment on the next working day." The due date is shown, not enforced.
+  For a twice-monthly payer, October 2026's pay runs on 14 Oct are in **1-15
+  Oct 2026, due 20 Oct 2026**. If the frequency changes, a new payment for
+  a period that overlaps one with active IRD payments but isn't the same
+  period is refused ("IRD-3 already pays 2026-10-01 to 2026-10-31. Pay that
+  period, or void IRD-3 first.").
+
+### Access, privacy and order
+
+- **PPAY10 Payroll access, decision 6 and the audit trail.** Paying wages
+  and IRD, and seeing either screen, needs the bookkeeper role and payroll
+  access: Noah (a bookkeeper without it) gets "You need payroll access to
+  see payroll…" (403), as does a viewer; changing how often IRD is paid
+  needs an admin. Journal lines and their descriptions never name an
+  employee (only "Net pay", the liability names and the WAGES-n, IRD-n and
+  PAYRUN-n references), so viewers see payroll in the ledger and the bank
+  only as these totals. Audit events for wage and IRD payments (recorded,
+  voided) hold the pay run, period, dates, bank account code, journal and
+  whether it was one employee's pay, never an amount, a bank account number
+  or an IRD number; the "journal posted" event leaves out the total for
+  payroll journals (PRUN9).
+
+- **PPAY11 Refused rather than guessed.**
+  - **A bank file for paying wages** (a direct credit or batch payment
+    file): Tohyee has no bank batch file format yet (supplier batch payments
+    don't make one either), so none is made; record the payments and pay
+    them in the bank's own screens. Which bank formats are wanted is a
+    question for Jess.
+  - **Child support** and **payroll giving** (not deducted yet, PRUN8).
+  - Working out **IRD's penalties and interest** for late payment, and
+    **IRD's direct debit** or other ways of paying.
+  - Paying wages **before the pay date** (a direct credit that leaves the
+    day before): the payment is dated the pay date or later; a bank line a
+    day or two earlier can still be matched to it (60-day window).
+  - **Foreign-currency bank accounts** for wages or IRD.
+
+- **PPAY12 Undoing in order.** Each step needs the one after it undone
+  first: a **pay run** can't be voided while it has active wage payments
+  (PPAY3) or while an active IRD payment pays the period its pay date is in
+  ("IRD-1, IRD-2 pay 2026-10-01 to 2026-10-31, which includes PAYRUN-2's
+  pay date. Void them first."), and a payment matched to a bank line can't
+  be voided until it's unreconciled (PPAY7). Voiding PAYRUN-2 on **25 Nov
+  2026** therefore goes: unreconcile the -1,119.04 line; void IRD-2 and
+  IRD-1 (25 Nov 2026); void WAGES-4 (already voided in PPAY8 here); then
+  void PAYRUN-2. October then owes PAYRUN-1's deductions only: PAYE 898.58,
+  student loan 0.00, KiwiSaver 160.26, ESCT 28.20, total **1,087.04**.
+
+### Questions for Jess (paying wages and IRD)
+
+1. **Bank files.** Which NZ bank batch formats should Tohyee make for
+   wages (and supplier payments): ASB, ANZ, BNZ, Westpac, Kiwibank? Each has
+   its own; none is built, so P4 makes no file.
+2. **Monthly or twice a month** is a setting chosen by the organisation, as
+   IRD tells each employer. Should Tohyee warn when the year's PAYE and
+   ESCT pass $500,000? (IRD's page says "less than" and "more than"
+   $500,000 and doesn't say which side exactly $500,000 is on.)
+3. **December for monthly payers**: IRD's page gives 15 January only for
+   twice-monthly payers' 16-31 December; monthly payers' December is shown
+   as due 20 January, following the page. Please confirm against IRD's
+   IR328 calendar.
+4. **Public holidays** move a due date to the next working day; Tohyee
+   moves weekends only, until it has a dated list of public holidays (P8).
+5. **Voiding a pay run IRD has already been paid for** is refused until the
+   IRD payment is voided (PPAY12). Should it instead leave a credit with
+   IRD to use in a later period?
+6. **Paying wages before the pay date** is refused (PPAY11). Allow it a few
+   days early?
+7. **Paid as a whole or per employee, not both** on one pay run (PPAY2).
+   OK?
 
 ## Holidays Act leave (examples not yet approved by Jess)
 
@@ -8727,9 +9326,10 @@ amount paid.
   - Unpaid leave of 1 week or less counts towards the 12 months
     (s16(2)(a)(vi)); longer unpaid leave doesn't, unless agreed
     (s16(2)(b)). Had Aroha taken unpaid leave from Mon 2 to Sun 22 Feb 2026
-    (3 weeks), the first week still counts and her anniversary moves only by
-    the 2 weeks beyond it (14 days), from Wed 1 Apr to **Wed 15 Apr 2026**
-    (decision 14). Her AWE divisor stays 52.
+    (3 weeks), that single period is longer than 1 week, so none of it
+    counts: her anniversary moves by the whole 21 days, from Wed 1 Apr to
+    **Wed 22 Apr 2026** (decision 14, following the Act's wording). Her AWE
+    divisor stays 52.
   - If they agree, in writing, to count the whole 3 weeks, Tohyee records
     the agreement, the anniversary stays **Wed 1 Apr 2026** and her AWE
     divisor drops from 52 to **50** (the weeks over 1 week, s16(3)). Without
@@ -8814,7 +9414,7 @@ amount paid.
   - If the leave taken in advance had been worth more than the 8%, Tohyee
     takes the difference off his final pay **only with his written consent
     attached**; without it the deduction is refused (Wages Protection Act
-    1983, section unverified; Employment NZ, Deductions and premiums;
+    1983 s 5(1), checked 1 Oct 2026; Employment NZ, Deductions and premiums;
     decision 16). Xero takes it off the final pay without asking; Tohyee
     doesn't follow it there.
 - **HL16 Leaving after an entitlement has arisen** (s24, s25, s26, s40(3)).

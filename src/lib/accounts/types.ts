@@ -61,6 +61,13 @@ export const SYSTEM_KEYS = [
   "realised_fx",
   "fx_rounding",
   "conversion_clearing",
+  // What pay runs credit (PRUN1).
+  "paye_payable",
+  "kiwisaver_payable",
+  "esct_payable",
+  "student_loan_payable",
+  "wages_payable",
+  "payroll_deductions_payable",
 ] as const;
 
 export type SystemKey = (typeof SYSTEM_KEYS)[number];
