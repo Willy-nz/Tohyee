@@ -108,7 +108,13 @@ export async function setPayrollAccess(
       });
     }
   } else if (granted.has(member.userId)) {
-    const others = members.filter((each) => each.userId !== member.userId && each.isActive && granted.has(each.userId));
+    const others = members.filter(
+      (each) =>
+        each.userId !== member.userId &&
+        each.isActive &&
+        roleAtLeast(each.role, PAYROLL_MINIMUM_ROLE) &&
+        granted.has(each.userId),
+    );
     if (others.length === 0) {
       throw new ValidationError("At least one person must keep payroll access. Give it to someone else first.");
     }

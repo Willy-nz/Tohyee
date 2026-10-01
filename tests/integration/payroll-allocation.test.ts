@@ -256,6 +256,21 @@ describeWithDatabase("payroll cost allocation, pay rates and payroll access (PR3
       expect(refused.status).toBe(400);
       expect((await body(refused)).error).toMatch(/At least one person must keep payroll access/);
       expect(await asUser(jess, (tx) => hasPayrollAccess(tx))).toBe(true);
+
+      // Someone moved down to viewer keeps their grant but can't open payroll, so they don't count.
+      const jessCookie = await sessionCookieFor(jess);
+      const changeBen = (role: string) =>
+        memberRoute.PATCH(
+          apiRequest(`/api/organisations/${ORG}/members/${ben.id}`, { method: "PATCH", cookie: jessCookie, body: { role } }),
+          params({ organisationId: ORG, userId: ben.id }),
+        );
+      expect((await giveAccess(ben, jess)).status).toBe(200);
+      expect((await changeBen("viewer")).status).toBe(200);
+      const stillRefused = await giveAccess(jess, jess, false);
+      expect(stillRefused.status).toBe(400);
+      expect((await body(stillRefused)).error).toMatch(/At least one person must keep payroll access/);
+      expect((await changeBen("bookkeeper")).status).toBe(200);
+      expect((await giveAccess(ben, jess, false)).status).toBe(200);
     });
 
     it("PR12: someone removed from the organisation and added again starts without payroll access", async () => {

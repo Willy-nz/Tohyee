@@ -248,7 +248,8 @@ access); it needs the bookkeeper role or higher, and admins and owners don't
 get it automatically. It's kept in the organisation's own database
 (`payroll_access`, keyed by the core user id), and every grant and removal is
 in `audit_events` with who did it. The first owner has it from the start, the
-last current member with it can't lose it, and someone removed from the
+last current member who has it and can use it (bookkeeper or higher)
+can't lose it, and someone removed from the
 organisation and added again starts without it. Every payroll service calls
 `requirePayrollAccess(tx)` (`src/lib/payroll/access.ts`) first, and payroll
 routes use `withPayrollAccess()` (`src/lib/api/http.ts`: bookkeeper and

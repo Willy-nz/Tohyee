@@ -196,7 +196,7 @@ did it and when.
 | --- | --- | --- |
 | PR9 | Jess creates the organisation (or it's upgraded to this version); she's its first owner. Mere is an admin, Ben a bookkeeper. | **Jess has payroll access** from the start, recorded in the audit log as given by "system". Mere and Ben don't, even though Mere is an admin. |
 | PR10 | Ben (bookkeeper, no payroll access) opens Payroll › Employees, and tries the employee, pay rate, allocation and group APIs. | He sees "You need payroll access to see payroll. Ask an admin to give it to you in Settings › Payroll access." and no data; every payroll API answers 403 with that message, for reading and changing. |
-| PR11 | Mere (admin) opens Settings › Payroll access and gives it to herself, then to Ben. Later she removes Ben's. Ben tries to give himself access. A viewer is given access. | Mere and then Ben can see payroll once given it; the audit log shows "payroll access given" to each, by Mere, with the time. After removal Ben is refused again (PR10), and the audit log shows it. Ben can't give access (admins only, 403). Giving it to a viewer is refused ("needs the bookkeeper role or higher"). Removing access from the last member who has it is refused, so there's always someone. |
+| PR11 | Mere (admin) opens Settings › Payroll access and gives it to herself, then to Ben. Later she removes Ben's. Ben tries to give himself access. A viewer is given access. | Mere and then Ben can see payroll once given it; the audit log shows "payroll access given" to each, by Mere, with the time. After removal Ben is refused again (PR10), and the audit log shows it. Ben can't give access (admins only, 403). Giving it to a viewer is refused ("needs the bookkeeper role or higher"). Removing access from the last member who has it (and the bookkeeper role or higher to use it) is refused, so there's always someone. |
 | PR12 | Ben, who has payroll access, is removed from the organisation and added again later. | When he's added again **he has no payroll access** until an admin gives it to him again; the removal is in the audit log. |
 
 No IRD number, bank account or pay amount is ever written into an audit
@@ -232,6 +232,9 @@ rate events the effective date and pay basis.
   always go to the biggest line, or the last line?
 - Should a line be allowed with no Department, Class, Location or project
   (refused as built, PR5)?
+- When someone with payroll access is moved down to viewer, should their
+  access be removed then (as built it stays, unused, until an admin removes
+  it or they're moved back up)?
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
