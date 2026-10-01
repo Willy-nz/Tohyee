@@ -6252,3 +6252,8 @@ Decided (following NetSuite, 1 Oct 2026):
   NetSuite's close checklist has no bank reconciliation task.
 - **GST check**: uses the GST period setting (GP1-GP6) when it's set, and
   the latest filed return's length only when it isn't.
+
+## Holidays Act leave (examples not yet approved by Jess)
+
+Stage P7 of NZ payroll (#60): a plan only, being written. Nothing here is
+built.
