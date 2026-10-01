@@ -151,7 +151,7 @@ only be run by certain people. Each item is its own branch and PR.
       activity tag (waits for the RDTI register); other employer
       contributions; adding an employee back to a draft once left out
       (delete and start the draft again). Refused rather than guessed:
-      extra pays (P12), back pay and final pays (P12), leave (P8), child
+      extra pays, back pay and final pays (built in P12), leave (P8), child
       support, payroll giving, pay rate changes inside a period.
 - [x] **P4 Paying wages and IRD** (#78, migration 0062), merged; examples
       PPAY1-PPAY12 await Jess (questions under PPAY12). Built:
@@ -266,9 +266,30 @@ only be run by certain people. Each item is its own branch and PR.
       Workforce; Xero unverified. Not built: part months, several people
       per position line, on-costs, following later pay rate changes. The
       screen wasn't checked in a browser.
-- [ ] **P12 Back pay, extra pays and final pays** (bonuses under IRD's extra
-      pay rules, retrospective rate changes, termination pays). Needs P3,
-      and P8 for holiday pay on termination.
+- [x] **P12 Back pay, extra pays and final pays** (tenant migration 0069),
+      branch `claude/payroll-p12-extra-back-final-pays`; examples XP1-XP14
+      await Jess (questions at the end of the section), decisions 124-137.
+      Built:
+      - Pay items Extra pay, Back pay, Holiday pay on finishing (worked out
+        outside Tohyee) and Redundancy; extra pays taxed by IRD's extra pay
+        rules (spec 2026-27 5.11, 5.12, IR335): four weeks' regular pay
+        annualised, or on a final pay with a termination item the last 2
+        paid periods; secondary codes' low thresholds; ND and NSW flat;
+        redundancy without levy or KiwiSaver; student loan on the whole pay.
+        IRD's own examples are the unit tests.
+      - Back pay from pay rate history, a line per approved period paid at
+        less, never paid twice.
+      - Final pays: drafts include people finishing in the period; EI file
+        finish date, lump sum indicator and redundancy as not levied;
+        payslip notes; reports, journals and the R&D claim handle the new
+        items.
+      Not built (refused): holiday pay owed on finishing (P8; typed for
+      now), holiday pay on back pay, short four-week windows, extra pays on
+      a final pay without a termination item, CAE/EDW extra pays, a higher
+      rate on request, separate extra-pay pay runs. **Conflict found:** IRD's
+      printed example 1 truncates tax and levy separately ($10,366.39); its
+      steps truncate once ($10,366.40), which Tohyee follows (question 1).
+      Screens weren't checked in a browser.
 
 Payroll and RDTI work needs IRD, ACC, legislation and Employment NZ sites:
 ird.govt.nz, acc.co.nz, legislation.govt.nz and employment.govt.nz are on the
@@ -491,6 +512,20 @@ wording. Still open:
 - Budget on-costs too (holiday pay, ACC levies, overtime)?
 - A "number of people" on a position line?
 - Compare actuals by pay date (as now) or by period worked?
+
+**Extra pays, back pay and final pays** (P12, end of the XP section)
+- IRD's example 1 is a cent off its own steps ($10,366.39 vs $10,366.40):
+  ask IRD, or follow the example?
+- Short four-week windows (a new weekly employee's bonus) are refused: use
+  IRD's "other circumstances" rule (× 13), or annualise the pays there are?
+- A bonus on a final pay without a termination item: end-of-employment
+  rule, or let the person running pay choose?
+- Holiday pay on finishing typed until P8: enough, or should final pays
+  wait for P8?
+- Back pay for periods with holiday pay is refused: pay the ordinary time
+  and flag the holiday pay instead?
+- Hourly leavers start at 0 hours (starters get the full period): agreed?
+- Separate extra-pay pay runs, and a higher rate on request: needed?
 
 **Older lists still open** (see each section): repeating bills, quotes and
 repeating invoices and printed documents, purchase orders, stock transfers,

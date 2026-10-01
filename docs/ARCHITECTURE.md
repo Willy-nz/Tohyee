@@ -422,6 +422,32 @@ post, `[id]/vs-actual` get), all `withPayrollAccess()`. Screen:
 `src/components/payroll-workforce.tsx`; the budget grid shows fed amounts
 read-only (`fromWorkforce`).
 
+**Extra pays, back pay and final pays** (payroll stage P12, examples
+XP1-XP14, decisions 124-137, tenant migration 0069): pure functions in
+`src/lib/payroll/calculations.ts`: `annualiseForExtraPay()` (four weeks or
+the last 2 paid periods, refusing other patterns), `secondaryLowThreshold()`
+(the start of the bracket at a secondary code's rate) and
+`calculateExtraPayTax()` (rate from the grossed-up amount, ACC levy steps
+4.1-4.4, one truncation); `calculateEmployeePay()` taxes lines flagged
+`extraPay` with them and the rest as before, and puts student loan on the
+whole pay. Pay item kinds `extra_pay`, `back_pay`,
+`termination_holiday_pay` and `redundancy` (`EXTRA_PAY_KINDS`,
+`TERMINATION_KINDS` in `pay-items.ts`; the migration replaces the kind
+checks and lets redundancy have no levy). In `pay-runs.ts`,
+`extraPayBasis()` reads approved pay runs' regular pay
+(`taxable_earnings - extra_pay`) for the window and returns the method and
+annualised income, or the employee's problem; `addBackPay()` /
+`removeBackPay()` (route `.../employees/[employeeId]/back-pay`, POST and
+DELETE) write lines with `payroll_pay_run_lines.back_pay_for_pay_run_id`,
+which `setPayRunEmployeeLines()` keeps after the typed lines and approving
+checks no other approved pay run has paid. Approving keeps `extra_pay`,
+`extra_pay_tax`, `extra_pay_tax_rate`, `extra_pay_method`,
+`extra_pay_annualised`, `lump_sum_lowest_rate` and `finish_date` on
+`payroll_pay_run_employees`; the EI file reads the indicator and the kept
+finish date, and works field 13 out from lines whose item is taxed but not
+levied. `notes` on each pay run employee (final pay, extra pay rate) are
+worked out, never stored.
+
 **Payday filing** (payroll stage P6, examples PF1-PF9, decisions 56-65):
 `src/lib/payroll/payday-filing.ts` is pure (no database): IRD's employment
 information file (HEI2 header, DEI lines, amounts in hundredths, CR LF),

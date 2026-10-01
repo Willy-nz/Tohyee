@@ -361,7 +361,9 @@ answers only decision 56.
     blank), SLCIR, SLBOR, payroll donations, family tax credits and the
     Employee Share Scheme. **Earnings not liable for the ACC earners' levy
     are 0**: every taxable pay item is subject to the levy (PRUN10), and the
-    field "excludes earnings over maximum liable threshold".
+    field "excludes earnings over maximum liable threshold". (Since P12 the
+    lump sum indicator and redundancy, which isn't liable for the levy, are
+    filled in: decision 129.)
 59. **Hours paid = the hours on the employee's earnings lines** (lines
     entered as hours × rate: ordinary time, overtime and so on); lines
     entered as an amount (a salary, allowances) add none, so salaried
@@ -374,8 +376,8 @@ answers only decision 56.
     IRD's modulus 11 check (spec 5.8 wasn't read); myIR does.
     **Tax code as stored** (`M SL`, as in the spec's example).
 61. **Start and finish dates only when they fall inside that employee's pay
-    period** (spec fields 5 and 6). Final pays are refused (PRUN8), so a
-    finish date is rare.
+    period** (spec fields 5 and 6). Since P12 a final pay's finish date is
+    the one kept when the pay run was approved (decision 134).
 62. **Header details are payroll settings**: the employer's IRD number and
     the payroll contact's name (up to 20 characters), work phone (up to 12
     letters and digits; spaces and punctuation dropped) and email (up to
@@ -940,7 +942,10 @@ load by script and couldn't be read (**unverified**).
      lump sum method, not with which threshold); STC stays refused.
 129. **The lump sum indicator (EI field 14) is 1 when the extra pay's tax
      rate was the lowest bracket's rate** (spec 5.11.3), worked out and
-     kept on the approved pay run per employee.
+     kept on the approved pay run per employee. **Field 13 (earnings not
+     liable for the ACC earners' levy) is the redundancy in the pay**, the
+     only taxed pay that isn't levied (step 4.1); earnings over the levy's
+     maximum stay out of it, as the field says (decision 58).
 130. **The end-of-employment rule applies when a final pay has Holiday pay
      on finishing or Redundancy**, and then to every extra pay in that pay
      (IRD: "calculate other lump sum payments together with the lump sum

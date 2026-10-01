@@ -922,11 +922,11 @@ that something happened.
   split is kept separately for people with payroll access. Locked and closed
   periods are respected, and an organisation can require someone other than
   the preparer to approve. Approved pay runs can't be changed, only voided
-  with a reversing journal. Refused rather than guessed: bonuses and other
-  extra pays, back pay, final pays, leave, child support, payroll giving,
-  negative amounts, pay rate changes inside a period, tax codes and
-  KiwiSaver rates IRD's rates don't support, and employer contributions
-  other than KiwiSaver.
+  with a reversing journal. Refused rather than guessed: leave, child
+  support, payroll giving, negative amounts, pay rate changes inside a
+  period, tax codes and KiwiSaver rates IRD's rates don't support, and
+  employer contributions other than KiwiSaver. (Extra pays, back pay and
+  final pays came in P12, below.)
 - **Paying wages and IRD** (payroll stage P4, PPAY1-PPAY12, not yet approved
   by Jess; bookkeeper role and payroll access). **Wages** (on an approved pay
   run, "Wages paid"): record the net pay leaving a bank or credit card
@@ -982,8 +982,10 @@ that something happened.
   the file posts nothing and records only an audit event with its SHA-256;
   there's no "filed" tick. Not built: the employee details file, EI
   amendments, filing straight to IRD's gateway, and fields for things
-  Tohyee doesn't pay yet (child support, extra pays, ESS: always 0). No
-  file has been through myIR's checker yet.
+  Tohyee doesn't pay yet (child support, ESS: always 0). Since P12 the
+  lump sum indicator, the finish date of a final pay and redundancy (not
+  liable for the ACC earners' levy) are filled in. No file has been
+  through myIR's checker yet.
 - **Timesheets** (payroll stage P9, TS1-TS11, not yet approved by Jess;
   decisions 91-101; tenant migration 0067). Payroll › Timesheets: one
   timesheet per employee per week (Monday to Sunday) of hours per day, to 2
@@ -1050,6 +1052,36 @@ that something happened.
   without amounts or names. Not built: part months, more than one person
   per position line, overtime, holiday pay and other on-costs, a future
   KiwiSaver minimum rate, following later pay rate changes automatically.
+- **Extra pays, back pay and final pays** (payroll stage P12, XP1-XP14,
+  not yet approved by Jess; decisions 124-137; tenant migration 0069).
+  Admins add pay items of the kinds **Extra pay** (bonuses, gratuities,
+  lump sums), **Back pay**, **Holiday pay on finishing** (worked out
+  outside Tohyee) and **Redundancy**, each to its own account. In a pay
+  run, extra pays are taxed under IRD's extra pay rules (payroll
+  specification 2026-27 5.11, 5.12): the employee's regular pay in the four
+  weeks to the pay date annualised (× 13, or × 12 for a monthly pay; none
+  gives $0), plus the extra pay, picks the rate; the ACC earners' levy up to
+  its maximum; one truncation to cents. Secondary codes add their low
+  threshold; ND and NSW use their flat rate; ME gets no credit on extra
+  pays. A final pay with holiday pay on finishing or redundancy uses the
+  last 2 paid periods (× 26, 13, 6.5 or 6). Redundancy has no levy and no
+  KiwiSaver; student loan is on the whole pay. Back pay: "Add back pay"
+  picks a pay rate from the employee's history and adds a line for each
+  approved pay period it covers that was paid at less (Ordinary time, and
+  overtime at the old rate × its multiplier), never twice. Drafts include
+  people finishing in the period (hourly leavers start at 0 hours to fill
+  in); the screen says holiday pay owed on finishing isn't calculated until
+  leave (P8). The EI file has the lump sum indicator, the finish date and
+  redundancy as not liable for the levy; payslips note extra pays and final
+  pays; reports and journals show each new pay item; the R&D claim counts
+  bonuses, back pay and holiday pay on finishing. Refused rather than
+  guessed: short or mixed four-week windows, fewer than 2 paid periods on
+  leaving, an extra pay on a final pay without a termination item,
+  termination items on any other pay, CAE and EDW extra pays, redundancy
+  for ND and NSW or where the levy's maximum falls inside mixed extra pays,
+  a higher rate on request, separate extra-pay pay runs, holiday pay on
+  back pay and periods with holiday pay, rates starting part-way through a
+  paid period, lower rates, a change of basis, overtime at a typed rate.
 
 - **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
   RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;

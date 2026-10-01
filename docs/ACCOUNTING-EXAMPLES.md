@@ -9132,11 +9132,11 @@ Payroll deductions payable**.
   direct costs accounts; deductions to liability accounts. Names are unique.
   Ordinary time and the KiwiSaver employer contribution can't be archived or
   changed except their name and account; other items can be archived, which
-  keeps them on earlier pay runs. Refused (see PRUN8): bonuses and other
-  extra pays, back pay, final pays, leave, child support, payroll giving,
-  employer contributions other than KiwiSaver, a reimbursement that is
-  taxed, and a taxable item that isn't subject to the ACC earners' levy or
-  student loan.
+  keeps them on earlier pay runs. Refused (see PRUN8): leave, child
+  support, payroll giving, employer contributions other than KiwiSaver, a
+  reimbursement that is taxed, and a taxable item that isn't subject to the
+  ACC earners' levy or student loan (other than Redundancy, P12). Extra
+  pays, back pay and final pays came in P12 (XP1-XP14).
 
 ### Drafts
 
@@ -9311,14 +9311,13 @@ Payroll deductions payable**.
 
 - **PRUN8 Refused rather than guessed.** Each of these is refused with "Not
   supported yet (refused rather than guessed)" and what it is:
-  - pay items for bonuses and other extra pays (IRD's extra-pay rules, stage
-    P12), back pay, final pays, leave (Holidays Act, stage P8; holiday pay is
-    a typed amount for now), child support, payroll giving, and employer
-    contributions other than KiwiSaver;
-  - a draft for a pay group where someone **finishes inside the period**
-    (a final pay; move them out of the pay group to pay everyone else);
-    someone on a salary who **starts after the period starts** (part of a
-    period); a **pay rate that changes inside the period**; a monthly
+  - pay items for leave (Holidays Act, stage P8; holiday pay is a typed
+    amount for now), child support, payroll giving, and employer
+    contributions other than KiwiSaver (extra pays, back pay and final pays
+    came in P12, XP1-XP14);
+  - someone on a salary who **starts after the period starts** or (since
+    P12) **finishes before it ends** (part of a period); a **pay rate that
+    changes inside the period**; a monthly
     period that doesn't start on the 1st. A finish date or pay rate change
     inside the period entered after the draft was made shows as that
     employee's problem on the draft, so it can't be approved. Someone
@@ -10081,7 +10080,8 @@ separated by commas, each line ending CR LF (including the last). Dates
 are `CCYYMMDD`. Amounts and hours are in hundredths with no decimal point
 and no padding (2,692.31 → `269231`, 36 hours → `3600`, nil → `0`).
 Gross earnings are **taxable** earnings; fields for things Tohyee doesn't
-do yet are 0 and the child support code is blank. The file is named
+do yet are 0 and the child support code is blank. (Since P12, field 13 has
+redundancy and field 14 the lump sum indicator: XP9, XP13.) The file is named
 `EI-<pay date>-<pay run>.csv`.
 
 - **PF1 Fortnightly salaries (PRUN1).** PAYRUN-1, Fortnightly salaries,
@@ -11331,8 +11331,9 @@ pay), "Holiday pay on finishing" and "Redundancy".
   $4,880 × 13 = $63,440 + $160 = $63,600 → 30%: $48.00 + levy $2.80 =
   $50.80. PAYE $256.79 + $50.80 = **$307.59**; net **$1,132.41**.
   Adding back pay again on the same draft, or on a later draft once week 4
-  is approved, is refused ("PAYRUN-2 already has back pay for this rate on
-  PAYRUN-4"). Editing the employee's other lines keeps the back pay lines;
+  is approved, is refused ("Not supported yet (refused rather than
+  guessed): a second back pay for PAYRUN-2: Rāwiri Backpay already has back
+  pay for it on PAYRUN-4."). Editing the employee's other lines keeps the back pay lines;
   "Remove back pay" takes them off. Back pay is worked out for **Ordinary
   time** (hours × the new rate, or the new salary for the period) and
   **Overtime paid at the old rate × its multiplier**; allowances aren't
