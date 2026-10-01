@@ -555,6 +555,25 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
     }, 60_000);
   });
 
+  describe("Fiona (HL8, HL14, HL25)", () => {
+    it("HL25, s 36-s 38: sick leave booked over annual holidays takes those days; the rest stay annual holidays, in advance at AWE since she started", async () => {
+      await asJess((tx) => createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.fiona, leaveType: "annual", startDate: "2026-12-21", endDate: "2026-12-27" }));
+      await asJess((tx) =>
+        createLeaveBooking(tx, { idempotencyKey: key("book"), employeeId: people.fiona, leaveType: "sick", startDate: "2026-12-23", inAdvanceAgreed: true }),
+      );
+      const run = await draft("B", "2026-12-21");
+      const leave = leaveLines(run, "fiona");
+      expect(leave.map((line) => [line.payItemName, line.leave!.from, line.leave!.to, line.leave!.hours, line.leave!.units])).toEqual([
+        ["Annual leave", "2026-12-22", "2026-12-24", "12", "0.66666667"],
+        ["Sick leave", "2026-12-23", "2026-12-23", "6", "1"],
+      ]);
+      // Before 12 months, holidays in advance are paid at AWE since she started (s 22(2)(b)(ii)(B)), with 18 hours a week (HL8).
+      expect(leave[0].leave).toMatchObject({ inAdvance: true, basis: { section: "s 22", averageWeeklyEarningsFrom: "2026-09-07" } });
+      expect(leave[1].amount).toBe("162.00");
+      expect(lines(run, "fiona").filter((line) => line[3] === "usual_pay")).toEqual([["Ordinary time", "0.00", "0.00", "usual_pay"]]);
+    });
+  });
+
   describe("Cara (HL3, HL7, HL24, HL30)", () => {
     /** Cara's approved timesheet for a week: 6 hours Monday (unless `noMonday`), 8 Wednesday, 6 Friday; nothing on public holidays. */
     const caraWeek = async (monday: string, options: { noMonday?: boolean; off?: string[] } = {}) => {
@@ -694,6 +713,27 @@ describeWithDatabase("Holidays Act leave in pay runs (HL1-HL42)", () => {
       const file = await asJess((tx) => makePayRunPaydayFilingFile(tx, approved["A:2026-07-13"].id));
       const aroha = file.content.split("\r\n").find((line) => line.split(",")[2] === "Aroha Salary")!.split(",");
       expect(aroha[9]).toBe("4000");
+    });
+  });
+
+  describe("gross earnings for holiday pay (s 14; decision 139)", () => {
+    it("taxable earnings count; a discretionary extra pay, redundancy, reimbursements and cash-ups don't", async () => {
+      await asJess((tx) => createPayItem(tx, { idempotencyKey: key("item"), name: "Christmas voucher", kind: "extra_pay", accountCode: "6200", discretionary: true }));
+      await asJess((tx) => createPayItem(tx, { idempotencyKey: key("item"), name: "Redundancy", kind: "redundancy", accountCode: "6200" }));
+      await expect(
+        asJess((tx) => createPayItem(tx, { idempotencyKey: key("item"), name: "Odd", kind: "overtime", accountCode: "6200", discretionary: true })),
+      ).rejects.toThrow("Only extra pays and allowances can be discretionary");
+      const flags = Object.fromEntries((await asJess((tx) => listPayItems(tx))).map((item) => [item.name, item.countsForHolidayPay]));
+      expect(flags).toMatchObject({
+        "Ordinary time": true,
+        Bonus: true,
+        "Christmas voucher": false,
+        Redundancy: false,
+        Reimbursement: false,
+        "Annual leave cashed up": false,
+        "Annual leave": true,
+        "Alternative holiday paid out": true,
+      });
     });
   });
 
