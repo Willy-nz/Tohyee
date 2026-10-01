@@ -49,8 +49,7 @@ Set them in the Agents box before sending each task:
 
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| Sales orders, stage 1: the document and invoicing from it (CRM roadmap item 12, SO1-SO12); reviewed and fixed, merging when checks pass | none | #69 | `copilot/sales-orders-stage-1` | 0055 |
-| Sales platform connections, stage 1: connector framework, Shopify customers and products (SPC1-SPC10); reviewed and fixed, merging when checks pass | none | #70 | `copilot/sales-platform-connections-stage-1` | 0056 |
+| Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
 | Payroll P3: pay items and pay runs, one journal split by each employee's allocation (examples PRUN1...) | #60 | not opened yet | (Agents tab) | 0058 |
 | CRM record types, page layouts and the Salesforce-style record page (CRM roadmap items 3-4, examples CRT1...) | none | not opened yet | (Agents tab) | 0059 |
 | RDTI R2: R&D activity register and tagging costs to activities | none | not opened yet | (Agents tab) | 0060 |
@@ -58,9 +57,10 @@ Set them in the Agents box before sending each task:
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
 tracking (#63, 0052), the CRM as its own app (#66), CRM custom fields (#67,
 0053), payroll rates P2 (#71), payroll P1b allocation and payroll access
-(#73, 0057), Holidays Act plan P7 (#68) and RDTI plan R1 (#72).
+(#73, 0057), Holidays Act plan P7 (#68), RDTI plan R1 (#72), sales orders
+stage 1 (#69, 0055) and Shopify stage 1 (#70, 0056).
 
-Next free tenant migration number: 0061 (0055 sales orders and 0056 Shopify are being merged; 0058-0060 reserved above).
+Next free tenant migration number: 0062 (0058-0061 reserved above).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
