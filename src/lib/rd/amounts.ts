@@ -68,6 +68,22 @@ export const RD_FLAG_LABELS: Record<RdFlag, string> = {
   feedstock: "Feedstock",
 };
 
+/** IR1240 p 15: "a percentage of time; floor area used for the R&D; days/units of usage; volume used; unit sales; dollar value; activity-based costing principles". */
+export const RD_OVERHEAD_BASES = {
+  time: "Percentage of time",
+  floor_area: "Floor area used for the R&D",
+  usage: "Days or units of usage",
+  volume: "Volume used",
+  unit_sales: "Unit sales",
+  dollar_value: "Dollar value",
+  activity_based_costing: "Activity-based costing",
+} as const;
+export type RdOverheadBasis = keyof typeof RD_OVERHEAD_BASES;
+export const RD_OVERHEAD_BASIS_CODES = Object.keys(RD_OVERHEAD_BASES) as RdOverheadBasis[];
+
+/** Shown wherever pay is counted for R&D until timesheets (P9) exist (RD28-RD32). */
+export const RD_PAYROLL_NOTE = "Timesheets aren't built yet: pay counts only for employees whose cost allocation is 100% R&D.";
+
 /** Records entered more than this many days after the work are flagged "entered late" (decision 38). */
 export const RD_LATE_AFTER_DAYS = 14;
 

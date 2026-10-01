@@ -326,6 +326,169 @@ connection details checked against Shopify's docs.
     "Foreign Trade" setting is on (examples EX3, EX4), so it's switched per
     organisation.
 
+## Payday filing file (examples PF1-PF9)
+
+Made by Claude on 2 Oct 2026 while building payroll stage P6, by the rule
+law → IRD's specification → NetSuite → Xero. Source for the file:
+IRD's *Payday Filing File Upload Specification* 2026-27 ("version 2027",
+July 2026), summarised in `docs/sources/ird-payday-filing-file-spec.md`
+with what couldn't be read. NetSuite has no New Zealand payroll, so it has
+no answer on any of these. Xero Payroll NZ files employment information
+"automatically every time a pay run is completed"
+([Xero, Payday filing](https://www.xero.com/nz/accounting-software/payroll/payday-filing/),
+read 2 Oct 2026); it files through IRD's gateway, not a file, so it
+answers only decision 56.
+
+56. **One employment information (EI) file per approved pay run.** IRD's
+    spec: "Multiple EIs can be filed for the same paydate." Xero files each
+    pay run as it's completed. Drafts and voided pay runs are refused.
+57. **Amounts and hours in hundredths with no decimal point; CR LF after
+    every line; UTF-8; names as typed.** The spec's attribute definitions
+    (appendix 5.1) couldn't be read; its example file writes money as whole
+    cents (`143257`) and "Hours paid" says "37.5 hours = 3750". No line
+    terminator or character set was found, so Tohyee ends each line with
+    CR LF (what Notepad saves, which IRD recommends) and keeps macrons.
+    **(unverified)** until a file passes myIR's "Check your employment
+    information file" service.
+58. **What goes in each field** (all from the approved pay run's stored
+    figures): gross earnings = taxable earnings (spec field 11: "taxable
+    gross earnings ... Non-taxable allowances not included", so
+    reimbursements and non-taxable allowances are left out); PAYE includes
+    the ACC earners' levy (payroll spec 5.2, as in PRUN1); student
+    loan, KiwiSaver deductions, net employer KiwiSaver contributions and
+    ESCT as calculated. Fields for things Tohyee refuses (PRUN8) are 0:
+    prior period adjustments, lump sum indicator, child support (code left
+    blank), SLCIR, SLBOR, payroll donations, family tax credits and the
+    Employee Share Scheme. **Earnings not liable for the ACC earners' levy
+    are 0**: every taxable pay item is subject to the levy (PRUN10), and the
+    field "excludes earnings over maximum liable threshold".
+59. **Hours paid = the hours on the employee's earnings lines** (lines
+    entered as hours × rate: ordinary time, overtime and so on); lines
+    entered as an amount (a salary, allowances) add none, so salaried
+    staff show 0, which the spec allows ("default 0 if not held").
+60. **Employee name: the name kept on the approved pay run, "first last",
+    with any comma replaced by a space** (the spec forbids embedded commas;
+    an approved pay run can't be changed, so refusing would leave no way to
+    file). **IRD number: the employee's current one**, 8 digits written with
+    a leading 0 (as in the spec's example `074444444`). Tohyee doesn't run
+    IRD's modulus 11 check (spec 5.8 wasn't read); myIR does.
+    **Tax code as stored** (`M SL`, as in the spec's example).
+61. **Start and finish dates only when they fall inside that employee's pay
+    period** (spec fields 5 and 6). Final pays are refused (PRUN8), so a
+    finish date is rare.
+62. **Header details are payroll settings**: the employer's IRD number and
+    the payroll contact's name (up to 20 characters), work phone (up to 12
+    letters and digits; spaces and punctuation dropped) and email (up to
+    60, IRD's characters only), set by admins with payroll access under
+    Payroll › Pay items. The employer's IRD number is its own setting, not
+    the GST number, because not every employer is GST registered. Final
+    return is always N (stopping employing is a myIR matter) and nil return
+    is N (an approved pay run always has someone on it) and the PAYE intermediary is blank. Package
+    identifier `Tohyee_Tohyee_v<version>` (the spec's "Vendor_Package_v1.0"
+    shape, no employer information); IR form version `0001`.
+63. **Due date: the pay date plus 2 working days, skipping Saturdays and
+    Sundays but not public holidays** (spec 3.4 and IRD's "Payday filing"
+    page: "within 2 working days of each payday"). Tohyee has no list of
+    public holidays yet (as P4's IRD payment due dates), so the date it
+    shows is never later than IRD's; the screen says public holidays aren't
+    counted. The Tax Administration Act's definition of "working day" wasn't
+    read **(unverified)**.
+64. **No employee details file yet.** The spec has one (HED2/DED/TED), but
+    Tohyee's employee record has the address as one block of text (the file
+    needs it split into street, suburb, city, post code and country), one
+    phone number (the file needs mobile and daytime, each with a country
+    code) and no KiwiSaver eligibility code, and how tax codes are written
+    in TED records wasn't clear from what could be read (`TED,M` and
+    `TED,SL` in the example). Refused rather than guessed: the payday filing
+    card lists the employees who start in the pay period, so their details
+    can be entered in myIR (question for Jess).
+65. **Making a file posts nothing and records only an audit event**: the
+    file name, the SHA-256 of the file and the number of employee lines,
+    never amounts or IRD numbers. There's no "filed" tick (Tohyee can't
+    know the upload worked); myIR is the record of what was filed.
+
+## R&D claim report, stage R3 (examples RD28-RD42)
+
+Made 2 Oct 2026 by Claude while building R3, on Jess's standing instruction
+to decide by the law first, then NetSuite, then Xero (neither documents a New
+Zealand RDTI feature: see "How NetSuite and Xero do it" in the R&D examples),
+and never to overstate a claim. Sources read 1 Oct 2026: IRD's
+[due dates](https://www.ird.govt.nz/research-and-development/tax-incentive/research-and-development-tax-incentive-due-dates)
+page (updated 1 Apr 2026), IRD's
+[eligible expenditure](https://www.ird.govt.nz/research-and-development/tax-incentive/eligibility/eligible-expenditure)
+page (updated 28 Apr 2021), and the saved extracts of IR1240 and subpart LY
+in `docs/sources/`.
+
+66. **Pay items that count as employee costs**: ordinary time, overtime,
+    allowances, holiday pay and the employer KiwiSaver contribution (gross,
+    before ESCT, as the pay run posts it). Reimbursements and deductions
+    don't. IR1240 p 63 and IRD's eligible expenditure page list "salaries
+    and wages, bonuses, employee share schemes, employee recruitment and
+    relation costs, overtime, holiday and long-service pay, superannuation
+    contributions"; a reimbursement repays a cost the employee paid and
+    isn't pay (RD28).
+67. **A pay's R&D share comes from the allocation the pay run used**: the
+    employee's latest allocation effective on the pay date that was entered
+    before the pay run was approved. An allocation entered later, even if
+    backdated, doesn't change a posted pay (decision 37: the posted pay
+    run's tags count; RD31). Decision 34's 100% rule is applied per pay.
+    A pay is flagged "entered late" when that allocation was entered more
+    than 14 days after the pay period ended (decision 38; RD32); it still
+    counts and is listed. Until timesheets (P9) exist this is the only time
+    record, and the report says so.
+68. **Overhead rules are applied when the report runs**, never posted or
+    turned into tags. A line with its own tag keeps its tag and the rule
+    skips it (a line is never counted twice). On any day an account's rules
+    total at most 100%, with one rule per activity. Changing a rule adds a
+    new rule linked to the old: from the same start date the old one is
+    marked replaced; from a later date it ends the day before. The report
+    shows the replaced rule's figure next to the new one and marks a change
+    made after the rule's period began (RD23, RD35). Workings must be
+    attached (decision 46; IR1240 p 15, p 102: "Be prepared to explain the
+    basis ... and the calculation method").
+69. **Supporting activity counts only in a year when a core activity it
+    supports has an approval covering that year**; otherwise it's listed and
+    left out (IR1240 p 38; LY 5(1)(ab)). Its costs in the income year
+    immediately before the first income year of every core activity it
+    supports move to that first year (RD4, RD37; LY 5(1)(ab)(i); IR1240
+    p 118-119). Supporting activity in the year after (LY 5(1)(ab)(ii), by
+    variation) isn't supported yet.
+70. **The overseas limit is shared across the overseas amounts in proportion,
+    rounded down, with the leftover cents to the largest remainders** (the
+    earlier first on a tie), so the parts add up to exactly the limit
+    (decision 43; RD36). The limit itself is still rounded down (decision 32).
+71. **Feedstock and commercial production are listed and left out where
+    Tohyee can't work out the eligible part**: feedstock-flagged tags
+    (eligible only over the output's value, Sch 21B B cl 22; IR1240 p 81-82)
+    and commercial production tags other than employee related costs
+    (LY 5(1)(c): only an employee's contribution, or costs shown to be
+    additional, count; IRD's eligible expenditure page). Commercial
+    production tags on employee related costs count (RD39).
+72. **Over the $120 million maximum, $120 million is claimed** (LY 4(3)) and
+    the amount over it is shown; the figures by category aren't scaled down
+    (RD40). The associates' shared maximum is only a reminder.
+73. **Deadlines are worked out only for a 31 March balance date**: IRD's
+    page gives 15 January (not the last day of the 3rd month) for a 30
+    September balance date, so other balance dates need rules Tohyee
+    doesn't have; it says so rather than guessing. A date on a weekend is
+    shown with the next Monday ("considered on time if we receive your
+    application on the next business day", IRD's due dates page); public
+    holidays aren't checked (as in payroll's IRD due dates). Each date is
+    worked from the unmoved date before it. Reminders (decision 48) cover
+    general approval, the supplementary return and the material change
+    variation; the other dates are listed only (RD41).
+74. **An export keeps the report's summary figures, not the file**: who
+    exported, when, the year, and the figures by project and category, the
+    total, the overseas limit and the credit, in the R&D history, with no
+    employee's pay, so no payroll detail ends up where every viewer can read
+    it (decision 6). The report shows what changed since the last export.
+    Nothing records a "filed" status (RD42).
+75. **The claim report is for viewers and above**, like tagged costs; each
+    employee's pay is shown only to people with payroll access, and others
+    see employee related costs per activity and the "default split" total
+    (decision 6 accepts a total that's one person's pay; RD33). Overhead
+    rules are set by bookkeepers and above, like tags.
+
 ## CRM opportunity stages and forecasts (examples CRMS1-CRMS11)
 
 Jess wants a Salesforce-level CRM (2 Oct 2026): follow Salesforce where it

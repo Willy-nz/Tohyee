@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Money, RequireOrganisation } from "@/components/books";
 import { HomeTiles } from "@/components/home/home";
+import { RdDeadlineReminders } from "@/components/rd-claim";
 import { useApiData } from "@/components/hooks";
 import { Card, Empty, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -24,6 +25,7 @@ function Overview({ organisationId }: { organisationId: string }) {
 
   return (
     <>
+      <RdDeadlineReminders organisationId={organisationId} />
       <HomeTiles organisationId={organisationId} />
       <h2 style={{ margin: "8px 0 10px", fontSize: "1.05rem" }}>This financial year</h2>
       {error ? <Notice tone="error">{error}</Notice> : null}

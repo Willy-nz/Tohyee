@@ -50,7 +50,6 @@ Set them in the Agents box before sending each task:
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
 | Shopify stage 2: orders to sales orders and invoices, refunds, payouts, tax, stock and country (decisions 51-55, examples SPC11...) | none | not opened yet | (Agents tab) | 0061 |
-| Payroll P5: payslips and bank files for wages (examples PBF1-PBF7, PSLIP1-PSLIP6) | #60 | not opened yet | `claude/payroll-bank-files-payslips` (Claude) | 0063 |
 | CRM editable opportunity stages, probability, stage history, sales processes, forecasts and quotas (examples CRMS1-CRMS11, decisions 76-90) | none | not opened yet | `claude/crm-stages-forecasting` (Claude) | 0066 |
 
 Merged 1 Oct 2026: payroll employee records (#62, 0051), not-for-profit fund
@@ -61,7 +60,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0067 (0058-0063 used or reserved above; 0064 and 0065 are taken by other branches and 0066 by the CRM stages branch).
+Next free tenant migration number: 0068 (0058-0067 used or reserved: 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -184,7 +183,18 @@ only be run by certain people. Each item is its own branch and PR.
       portal. ERA s 130's wording couldn't be read (legislation.govt.nz
       blocks our tools); the payslip follows Holidays Act s 81 and
       Employment NZ's guidance.
-- [ ] **P6 Payday filing file** for myIR. Needs P3.
+- [ ] **P6 Payday filing file** for myIR (tenant migration 0064), built in
+      branch `claude/payroll-p6-payday-filing`, waiting for a PR and review;
+      examples PF1-PF9 await Jess (questions under PF9), decisions 56-65.
+      From an approved pay run: IRD's employment information file (file
+      upload specification 2026-27, `docs/sources/ird-payday-filing-file-spec.md`)
+      to upload in myIR, its due date (2 working days after the pay date;
+      weekends skipped, public holidays not), and who starts in the period.
+      Employer IRD number and payroll contact under Payroll › Pay items.
+      Posts nothing; audit event with the file's hash. Not built: the
+      employee details file (decision 64), EI amendments, gateway filing.
+      **No file has been through myIR's "Check your employment information
+      file" service yet**: do that before relying on it.
 - [ ] **P7 Holidays Act leave, plan** (#68): HL1-HL42 in
       `docs/ACCOUNTING-EXAMPLES.md`, reworked to follow decisions 7-29 in
       `docs/DECISIONS.md` (built for the Holidays Act 2003 until each
@@ -263,12 +273,31 @@ deadlines). Agents must check the current IR1240 and cite it, never memory.
       - Tagged costs (Tax › Tagged R&D costs): what's tagged by activity and
         category for an income year, plus untagged lines to tag. Not the
         claim.
-- [ ] **R3 RDTI claim report**: eligible expenditure by category and
-      activity, overhead apportionment with its method (RD10), the overseas
-      limit, the minimum check, the 15% credit, figures for the supplementary
-      return, payroll costs (RD5-RD7, RD22 with P3/P9), and reminders for the
-      approval and return deadlines. Build on `listTaggedCosts()` in
-      `src/lib/rd/costs.ts`. Needs R2.
+- [ ] **R3 RDTI claim report**: built on branch
+      `claude/rdti-r3-claim-report` (tenant migration **0065**), waiting for
+      a PR and review; examples RD28-RD42 (and RD3, RD4, RD16-RD20,
+      RD24-RD27 now tested) await Jess, with "Questions for Jess (claim
+      report)" under RD42; decisions 66-75 in `docs/DECISIONS.md`. Tax › R&D
+      claim report (`src/lib/rd/claim.ts`, `claim-figures.ts`,
+      `deadlines.ts`, `overheads.ts`, `payroll.ts`):
+      - eligible expenditure by activity and category for activities with an
+        approval covering the year; the overseas limit shared across
+        categories; the $50,000 minimum after it (approved research provider
+        only below it); the $120 million maximum; the 15% credit; per project
+        the supplementary return's figures; ineligible expenditure; what's
+        left out and why;
+      - **pay from cost allocations, not timesheets** (P9 isn't built): a pay
+        counts only when the allocation the pay run used is 100% R&D
+        (decisions 34, 67); others are listed as "default split, no time
+        record". Pay runs still don't tag; the report reads their postings
+        and the allocation entered before approval. Each employee's pay only
+        with payroll access;
+      - overhead rules (% of an account, IR1240 basis, workings required),
+        changed by a replacing rule with the earlier figure shown;
+      - deadlines for 31 March balance dates only, reminders for owners and
+        admins on the home page; CSV export keeping the summary figures.
+      When P9 timesheets arrive, the report should take hours from them
+      before the allocation (RD5, RD6, RD22).
 
 To do:
 
@@ -363,6 +392,16 @@ wording. Still open:
 **Year end and period close**
 - Can a bookkeeper close a month when every check passes, or only owners and
   admins?
+
+**RDTI claim report** (R3, under RD42)
+- Until timesheets exist, part-time R&D staff earn no credit (only 100% R&D
+  allocations count): OK, or build P9 timesheets first?
+- Reimbursements on pay runs aren't counted anywhere: let them be tagged as
+  materials later?
+- Feedstock: record the output's value at year end so the part over it can
+  be claimed?
+- Exports keep the summary figures, not the file: keep the CSV too, for
+  people with payroll access only?
 
 **Older lists still open** (see each section): repeating bills, quotes and
 repeating invoices and printed documents, purchase orders, stock transfers,

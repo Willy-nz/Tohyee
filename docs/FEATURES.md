@@ -52,8 +52,8 @@ that something happened.
   shares out the cents so the parts always add back to the whole. **Payroll
   access**: only members an admin has given it to (bookkeeper or higher) can
   see or change any of this; the first owner has it to start with. Pay runs,
-  paying wages and IRD, bank files and payslips are below; payday filing,
-  payroll reports and Holidays Act leave are not built.
+  paying wages and IRD, bank files, payslips and the payday filing file are
+  below; payroll reports and Holidays Act leave are not built.
 - **Chart of accounts** with account classes and types, a starting NZ chart,
   archiving, and foreign-currency accounts.
 - **General ledger**: manual journals in the base currency (lines on
@@ -968,6 +968,22 @@ that something happened.
   email account; the email's text and the audit log have no figures. Not
   shown yet: leave balances (no leave until P8) and hours each day (no
   timesheets until P9). No employee self-service portal.
+- **Payday filing file** (payroll stage P6, PF1-PF9, not yet approved by
+  Jess; decisions 56-65; bookkeeper role and payroll access). On an approved
+  pay run, "Payday filing" makes IRD's employment information file (the
+  2026-27 file upload specification's HEI2 header and a DEI line per
+  employee: IRD number, name, tax code, start date if in the period, pay
+  period, pay cycle, hours paid, taxable gross earnings, PAYE, student loan,
+  KiwiSaver deductions, net employer contributions and ESCT) to upload in
+  myIR, and shows its due date: 2 working days after the pay date, weekends
+  skipped, public holidays not yet. Employees starting in the period are
+  listed so their details can be given in myIR. The employer's IRD number
+  and payroll contact are set by admins under Payroll › Pay items. Making
+  the file posts nothing and records only an audit event with its SHA-256;
+  there's no "filed" tick. Not built: the employee details file, EI
+  amendments, filing straight to IRD's gateway, and fields for things
+  Tohyee doesn't pay yet (child support, extra pays, ESS: always 0). No
+  file has been through myIR's checker yet.
 
 - **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
   RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;
@@ -989,10 +1005,39 @@ that something happened.
   to the cent. Everything is stamped by the server with who and when, kept
   in its history, and flagged "entered late" when entered more than 14 days
   after the work. Tagged R&D costs lists what's tagged by activity and
-  category for an income year. Not built: the claim report (limits, the
-  minimum, overhead apportionment, the 15% credit, supplementary return
-  figures), tagging payroll and timesheets, reminders, criteria and
+  category for an income year. Not built: timesheets, criteria and
   methodologies approvals, and purging files after 7 years.
+
+- **R&D claim report** (RDTI stage R3, on branch
+  `claude/rdti-r3-claim-report`, tenant migration 0065; RD3, RD4, RD16-RD20,
+  RD24-RD27 and RD28-RD42 tested, examples not yet approved by Jess;
+  decisions 66-75): Tax › R&D claim report works out an income year's claim
+  from the tags, assets' tax depreciation, overhead rules and approved pay
+  runs, for activities with an approval covering the year: the counted
+  amounts by activity and category, the 10% overseas limit (rounded down and
+  shared across the overseas amounts), the $50,000 minimum after the limit
+  (approved research provider expenditure only below it), the $120 million
+  maximum, the 15% credit rounded down, and per project the supplementary
+  return's figures (categories, of which overseas, internal software,
+  commercial production and supporting activity from the year before, and
+  the core share). Pay counts from the cost allocation each approved pay run
+  used, only when it's 100% R&D (timesheets aren't built); other splits are
+  listed as "default split, no time record". Each employee's pay only for
+  people with payroll access; others see totals. Overhead rules ("% of an
+  account" to an activity, with an IR1240 basis and workings attached) are
+  set there by bookkeepers, applied when the report runs, changed by adding a
+  replacing rule (the earlier figure is shown), and never deleted. What's
+  left out is listed with why (no approval, no approved core activity,
+  supporting activity before its core activity, feedstock, commercial
+  production, goods not used, voided), with ineligible expenditure for the
+  return's evaluation questions. Deadlines for a 31 March balance date
+  (weekends moved to Monday; public holidays not checked) with reminders 60
+  days ahead for owners and admins on the home page. CSV export, which keeps
+  the summary figures (never anyone's pay) so later changes show as
+  differences. Read-only: it posts nothing, decides nothing is R&D and
+  records no "filed" status. Not built: timesheets, feedstock output values,
+  refundability, supporting activity in the following year, other balance
+  dates' deadlines, joint ventures.
 
 ## Not built yet, on purpose
 
@@ -1052,9 +1097,10 @@ The owner's to-do list in [TODO.md](TODO.md) comes first.
 3. Stock depth: bins, lots and serial
    numbers, variants, assemblies, stock takes (the item list, locations and
    kits are built).
-4. NZ payroll: payday filing, Holidays Act leave, timesheets and payroll
-   reports (employee records, IRD rates and calculations, pay items, pay
-   runs, paying wages and IRD, bank files and payslips are built).
+4. NZ payroll: Holidays Act leave, timesheets, payroll reports and IRD's
+   employee details file (employee records, IRD rates and calculations, pay
+   items, pay runs, paying wages and IRD, bank files, payslips and the payday
+   filing file are built).
 5. The rest of foreign-currency documents (MC11): sales on the payments
    basis, and chargeable expenses on foreign-currency projects.
    Foreign-currency bank accounts, invoices, bills, credit notes, payments,

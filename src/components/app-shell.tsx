@@ -202,6 +202,7 @@ const MENUS: Menu[] = [
         links: [
           { href: "/operations/rd", label: "R&D activities" },
           { href: "/operations/rd/costs", label: "Tagged R&D costs" },
+          { href: "/operations/rd/claim", label: "R&D claim report" },
         ],
       },
     ],

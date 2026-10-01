@@ -7815,10 +7815,14 @@ section was built in R1.** Stage R2 (the register, approvals, tagging and
 asset usage) is now built and tested: RD1-RD3, RD8, RD9, RD11-RD13 and
 RD21-RD23 in `tests/integration/rd.test.ts` (and RD21-RD22's flag on screen in
 `tests/unit/rd-screens.test.ts`), RD7's hook (an allocation line naming an
-activity) there too. Payroll (RD5-RD7, RD22's timesheet), overheads (RD10),
-grants and feedstock (RD14, RD15), the cross-year and claim examples (RD4,
-RD16-RD20, RD24-RD27) are stage R3 or later. The examples are still waiting
-for Jess. Every rule below cites
+activity) there too. Stage R3 (the claim report) is built on its branch:
+RD3's credit rule, RD4, RD7, RD10, RD16-RD20 and RD23-RD27, plus the new
+examples RD28-RD42 at the end of this section, which say how R3 does payroll
+without timesheets, overhead rules, the overseas limit across categories,
+feedstock and commercial production, deadlines and exports. Timesheets (RD5,
+RD6's spreading, RD22's timesheet) wait for payroll P9; grants (RD15) are
+tagged ineligible as in R2; feedstock values (RD14) aren't supported yet.
+The examples are still waiting for Jess. Every rule below cites
 where it comes from. Where the guidance was unclear or left a choice, Jess
 asked Claude to research it and decide; those are decisions 30-50 in
 [DECISIONS.md](DECISIONS.md), applied in the examples below and listed at the
@@ -8562,6 +8566,298 @@ them; Jess hasn't approved the examples yet.
   (RD24; 49).
 - **Payroll split: each R&D share rounded down to the cent, the remainder to
   non-R&D** (RD5; 50).
+
+### Stage R3: the claim report (examples RD28-RD42)
+
+What stage R3 builds, in the order the report works it out (Tax › R&D claim
+report). It's **read-only**: it posts nothing and changes no amount, and it
+never says an activity "qualifies". Rules already pinned down above (RD3,
+RD4, RD7, RD10, RD16-RD27, decisions 30-50) are followed as written; where
+they left a choice, the call is a new decision (66-75 in
+[DECISIONS.md](DECISIONS.md)). Extra sources read for R3:
+
+- IRD, "R&D tax incentive due dates"
+  (<https://www.ird.govt.nz/research-and-development/tax-incentive/research-and-development-tax-incentive-due-dates>,
+  last updated 1 Apr 2026, read 1 Oct 2026): general approval "due no later
+  than the last day of the 3rd month following the end of the 1st income
+  year" (31 March balance date: 30 June; 30 September: 15 January);
+  criteria and methodologies "due the last day of the 6th month before the
+  end of the 1st income year" (31 March: 30 September the year before);
+  supplementary return "due within 30 days after your income tax return due
+  date" (31 March: 6 August; 30 September: 14 February); "If a due date falls
+  on a weekend or public holiday, it will be considered on time if we
+  receive your application on the next business day."
+- IRD, "Eligible expenditure"
+  (<https://www.ird.govt.nz/research-and-development/tax-incentive/eligibility/eligible-expenditure>,
+  last updated 28 Apr 2021, read 1 Oct 2026): employee costs are "salaries and
+  wages, bonuses, employee share schemes, employee recruitment and relation
+  costs, overtime, holiday and long-service pay, superannuation
+  contributions"; in commercial production "the amount you can claim is
+  limited to expenditure in relation to your employee's contribution to the
+  R&D" and expenditure "you can show is additional"; "Expenditure incurred
+  with an approved research provider is not subject to the minimum
+  threshold."
+- IR1240 p 63-64 and LY 5(1)(c), LY 7 as saved in
+  `docs/sources/ir1240-pages-49-on.md` and
+  `docs/sources/income-tax-act-ly-and-esct.md` (read 1 Oct 2026).
+
+The examples use Kea Sensors Ltd's 2026-27 year again, with a payroll:
+**Hana Rewi** (salary 62,400.00, fortnightly, KiwiSaver with a 3.5%
+employer contribution), **Ben Tait** (salary 52,000.00, fortnightly, not in
+KiwiSaver) and **Mere Ngata** (salary 70,000.00, fortnightly, not in
+KiwiSaver). Jess has payroll access; Sam the bookkeeper and Vic the viewer
+don't.
+
+**Payroll without timesheets** (RD5-RD7, RD22; decisions 34, 36, 37, 50,
+56, 57). Pay runs (P3) post each employee's pay split by their cost
+allocation and keep the per-employee split; timesheets (P9) aren't built, so
+R3 works from **the allocation the pay run used**, never from a payroll
+calculation of its own (decision 37). An employee's R&D share counts only
+when the allocation is **100% R&D** (decision 34); otherwise it's listed as
+"default split, no time record" and left out. The report says so on screen:
+"Timesheets aren't built yet: pay counts only for employees whose cost
+allocation is 100% R&D."
+
+- **RD28** Full-time R&D, from the allocation. Hana's allocation from 1 Apr
+  2026 is 100% C1. Kea's fortnightly pay run for 6-19 Jul 2026, paid 22 Jul
+  2026, posts her ordinary time **2,400.00** (62,400.00 ÷ 26), employer
+  KiwiSaver **84.00** (3.5% of 2,400.00, before ESCT, as the pay run posts
+  it) and a **50.00** reimbursement for soil test kits she bought. Her R&D
+  cost is 2,400.00 + 84.00 = **2,484.00**, all C1, employee related costs
+  (100% of 2,484.00, rounded down to the cent: decision 50). The 50.00
+  reimbursement isn't pay, so it isn't an employee cost (IR1240 p 63's list;
+  decision 66) and isn't counted; it's a goods cost, which a pay run line
+  can't be tagged as yet. ACC levies aren't in a pay run at all (decision
+  36).
+- **RD29** Part-time on R&D, no time record (RD7 as built). Ben's allocation
+  from 1 Apr 2026 is **60% C1** and **40% Operations** (a department, not
+  R&D). The same pay run posts his ordinary time **2,000.00** (52,000.00 ÷
+  26). His C1 share 2,000.00 × 60% = **1,200.00** is listed under "default
+  split, no time record" and **left out** of the total (decision 34).
+- **RD30** 100% R&D across two activities. Mere's allocation from 1 Apr 2026
+  is **70% C1** and **30% S1**. The pay run posts her ordinary time
+  **2,692.31** (70,000.00 ÷ 26 = 2,692.307… rounded by the pay run). Each R&D
+  share is rounded down (decision 50):
+  - C1: 2,692.31 × 70% = 1,884.617 → **1,884.61**
+  - S1: 2,692.31 × 30% = 807.693 → **807.69**
+  - not R&D: 2,692.31 − 1,884.61 − 807.69 = **0.01**
+
+  Both count: the allocation is 100% R&D. (The pay run's own journal split,
+  which shares cents out so the lines add up, gives 1,884.62 and 807.69; R&D
+  uses the rounded-down shares so it's never overstated.)
+- **RD31** A later allocation doesn't change a posted pay. On a later day
+  Jess adds an allocation for Hana effective from **1 Apr 2026** of 50% C1
+  and 50% Operations (backdated). The 22 Jul pay was approved before it was
+  entered, so it keeps the allocation it was posted with: Hana's 2,484.00
+  still counts (decision 67). Pay runs approved after the new allocation
+  was entered use it.
+- **RD32** Late records. A pay counts from the allocation it used; that
+  allocation was **entered** (the server's date it was saved) some days
+  after the pay period ended. When that's more than 14 days, the pay is
+  flagged "entered late" like a tag (decision 38): an allocation entered on
+  1 Oct 2026 for the period ending 19 Jul 2026 is "entered 74 days after the
+  pay period" (12 days left in July + 31 + 30 + 1 = 74) and flagged; it still
+  counts, and the report lists it so Jess can decide (decision 67). An
+  allocation entered before the period ended is "entered before the pay
+  period ended" and never flagged.
+- **RD33** Payroll access (decision 6; P1b). Jess (payroll access) sees each
+  pay: "Hana Rewi, PAYRUN-1 paid 22 Jul 2026: 2,484.00 to C1". Sam and Vic
+  see C1's **employee related costs as one total** (2,484.00 + 1,884.61 =
+  4,368.61 from payroll) and S1's (807.69), and the "default split, no
+  time record" **total** (1,200.00), but no employee's name or pay. The CSV
+  export follows the same rule: per-employee rows only for people with
+  payroll access. A department total that's one person's pay is accepted
+  (decision 6), and so is an activity total.
+
+**Overhead rules** (RD10, RD23; decisions 46, 68). Set under the claim
+report, by bookkeepers and above. A rule is "**% of an account** to an
+activity, from a date (to a date)", with a **basis** from IR1240 p 15's list
+and a **description of the calculation** (e.g. "lab 30 m² of 200 m²"), and
+the **workings attached**: without the basis, the description or the file it
+isn't saved. It's applied **when the report runs** to every posted line on
+the account dated in the rule's period (bills, expense claims, spend money and
+manual journals, excluding GST, as tags are), rounded down per line. It posts
+nothing and adds no tag.
+
+- **RD34** Rent. Kea's rent account (6150) has bills from Harbour Property
+  Ltd dated **1 Apr**, **1 May** and **1 Jun 2026**, each **4,000.00 + GST
+  600.00**. Jess sets "15% of 6150 Rent to C1 from 1 Apr 2026, basis floor
+  area, lab 30 m² of 200 m²" with the floor plan attached. Each line gives
+  4,000.00 × 15% = **600.00**; 600.00 × 3 = **1,800.00** to C1, materials,
+  consumables and overheads. (RD10's full year is 7,200.00; the tests use
+  three months.) Refused:
+  - no basis, no description, or no file ("Attach the workings that show
+    how the % was worked out (IR1240 p 15, p 102).");
+  - a second rule on 6150 that would take the account over 100% on any day
+    (e.g. 90% to S1 from 1 May 2026: 15% + 90% = 105%);
+  - a second rule for C1 on 6150 overlapping the first;
+  - an account that isn't an expense account, or a book depreciation account
+    (decision 33).
+
+  A rent bill dated **1 Jul 2026** that Sam has **tagged** by hand (20% to
+  S1: **800.00**) keeps its tag: the rule skips lines with their own tag and
+  lists them as "has its own tag", so a line is never counted twice
+  (decision 68). The 1 Jul line counts 800.00 to S1, not 600.00 to C1.
+- **RD35** Changing a rule (RD23 as built). Jess changes the rule to **20%**
+  with effect from the **same date, 1 Apr 2026**, attaching new workings.
+  Tohyee keeps the 15% rule (marked "replaced", with who and when) and adds
+  the 20% one linked to it. C1 now gets 4,000.00 × 20% = 800.00 a line,
+  **2,400.00** for the three bills, and the report shows "**previously
+  1,800.00** under the rule entered by Jess on …; changed after the period
+  it covers began". Changed with effect from a **later** date (say 20% from
+  1 Jun 2026), the 15% rule ends on 31 May 2026 and stays in force before
+  then: 600.00 + 600.00 + 800.00 = **2,000.00**. Ending a rule sets its last
+  day; nothing is deleted. Each rule is stamped with who entered it and when,
+  and a rule entered more than 14 days after the start of its period is
+  flagged "entered late" (decision 38).
+
+**The overseas limit across categories** (RD16; decision 43, 70).
+
+- **RD36** Had S2 (overseas) spent **5,000.00** on contract expenditure and
+  **4,000.00** on materials (9,000.00 in all), with NZ eligible 73,200.00,
+  the limit is still 0.1 × 73,200.00 ÷ 0.9 → **8,133.33**. It's shared
+  between the two in proportion to what was spent, each rounded down to the
+  cent, and the cents left over go to the largest remainder (the earlier
+  category first on a tie), so the parts add up to the limit exactly
+  (decision 70):
+  - contract: 5,000.00 × 8,133.33 ÷ 9,000.00 = 4,518.5166… → 4,518.51
+  - materials: 4,000.00 × 8,133.33 ÷ 9,000.00 = 3,614.8133… → 3,614.81
+  - 4,518.51 + 3,614.81 = 8,133.32, so the 0.01 left goes to contract
+    (remainder 0.0066… is larger than 0.0033…): **4,518.52** and
+    **3,614.81**, total 8,133.33.
+
+  Over the limit: contract 5,000.00 − 4,518.52 = **481.48**, materials
+  4,000.00 − 3,614.81 = **385.19**, together 866.67 as in RD16.
+
+**Supporting activities and the core activity's year** (RD4; LY 5(1)(ab);
+IR1240 p 38, p 118-119; decision 69).
+
+- **RD37** RD4 as built. S1 supports C1 only, and C1's first income year is
+  2026-27. S1's 600.00 tagged on **15 Mar 2026** (2025-26) shows in the
+  **2025-26** report as "supporting activity before its core activity: claim
+  with 2026-27" (not counted there), and the **2026-27** report counts it
+  with S1's employee related costs and shows "of which supporting activity
+  from 2025-26: 600.00". Only the year immediately before counts.
+- **RD38** No core activity in the year. Supporting activity **S3** "Sensor
+  housing materials survey" supports core activity **C2**, which has no
+  approval for 2026-27; S3 itself is in an approval. S3's **450.00** tagged
+  in 2026-27 is listed as "supporting activity: none of the core activities
+  it supports has an approval for 2026-27" and **not counted** (IR1240 p 38:
+  a year with only supporting activity claims nothing; decision 69).
+
+**Feedstock and commercial production** (RD14; LY 5(1)(c); Sch 21B B cl 22;
+decision 71).
+
+- **RD39** A tag flagged **feedstock** (trial-batch components **2,500.00**,
+  materials) is listed as "feedstock: the output's value isn't recorded, so
+  it isn't counted" and **left out**: eligible feedstock is only the part
+  over the output's value (IR1240 p 81-82) and Tohyee can't record that yet.
+  A tag flagged **commercial production** on materials (**1,000.00**) is
+  listed and left out: in commercial production only an employee's
+  contribution, or costs shown to be additional, count (LY 5(1)(c); IRD's
+  eligible expenditure page), and Tohyee can't judge "additional". A
+  commercial production tag on **employee related costs** (**500.00**)
+  counts, and shows as "of which commercial production: 500.00".
+
+**The claim** (RD16-RD20, RD26; decisions 30-32, 44, 47, 72). The report
+works it out in this order, from the counted amounts of activities with an
+approval covering the year:
+
+1. NZ eligible: everything counted that isn't overseas;
+2. the overseas limit (RD16, RD20) and its spread (RD36);
+3. total eligible = NZ + overseas within the limit;
+4. the minimum (RD18, RD19): $50,000.00 or more → the total is claimed;
+   under it, only approved research provider expenditure is (RD17);
+5. the maximum: at most $120,000,000.00 is claimed (LY 4(3));
+6. the credit: 15% of what's claimed, rounded down to the cent (RD20);
+7. per project, the return's figures (RD26), with the core share rounded
+   down to two decimals.
+
+- **RD40** The maximum (a different, made-up organisation). NZ eligible
+  **130,000,000.00**: claimed **120,000,000.00**, credit 0.15 ×
+  120,000,000.00 = **18,000,000.00**, and the report shows "**10,000,000.00
+  over the $120 million maximum**; an organisation and its associates share
+  the maximum (IR1240 p 72-73); approval to exceed it is due 7 May". The
+  figures by category stay as spent (decision 72); the return's total is
+  the claimed amount.
+
+**Deadlines** (RD24, RD25; decisions 48, 49, 73). Worked out for a **31
+March balance date** only; any other balance date shows "Tohyee works these
+dates out only for a 31 March balance date; see IRD's due dates page" and
+no dates (decision 73).
+
+- **RD41** For **2027-28** (1 Apr 2027 - 31 Mar 2028): general approval
+  **Fri 30 Jun 2028**; income tax return Fri 7 Jul 2028; the supplementary
+  return is due 30 days after the return's due date, **Sun 6 Aug 2028**,
+  shown as "Sun 6 Aug 2028 (on time if received Mon 7 Aug 2028)"; approval
+  to exceed the maximum Sun 7 May 2028 (on time Mon 8 May 2028); criteria
+  and methodologies Thu 30 Sep 2027; following-year supporting variation Sat
+  30 Jun 2029 (Mon 2 Jul 2029); last filing date for the credit Sat 7 Jul
+  2029 (Mon 9 Jul 2029). Weekends move to the next business day (IRD's due
+  dates page); **public holidays aren't checked**, as in payroll's IRD due
+  dates, and the report says so. Each date is worked from the date before
+  it's moved (6 Aug is 30 days after 7 Jul whatever day 7 Jul is). All the
+  dates are listed on the claim report for everyone who can see it.
+
+  **Reminders** (RD25) are shown to owners and admins on the home page and
+  the claim report, for **general approval** (until approval details
+  covering the year are entered), the **supplementary return**, and the
+  **variation for a material change** (only while an activity with costs in
+  the year shows "changed since approval was entered"), each from 60 days
+  before its date until the date (as moved) has passed, and only for an
+  organisation with R&D activities. For **2026-27**: on **30 Apr 2027** none
+  show; on **1 May 2027** "General approval for 2026-27 due Wednesday 30 Jun
+  2027" shows; once an approval covering 2026-27 is entered it stops; on **7 Jun
+  2027** "R&D supplementary return for 2026-27 due Friday 6 Aug 2027" shows; on
+  **7 Aug 2027** it has passed and stops. The other dates (criteria and
+  methodologies, approval to exceed the maximum, the following-year
+  variation, the income tax return and the last filing date) are in the
+  list but not reminded about (decision 73).
+
+**Exporting** (RD27; decision 74).
+
+- **RD42** Jess exports the 2026-27 report as CSV. Tohyee records the export
+  (who, when, the income year and the report's summary figures: by project
+  and category, the total, the overseas limit and the credit, but **no
+  employee's pay**) in the R&D history, and the CSV downloads. Sam then tags
+  another bill line 1,000.00 to C1. The report shows "Exported by Jess on …;
+  changed since: Materials, consumables and overheads (Low-power soil
+  sensor) X → X + 1,000.00, Total eligible …, R&D tax credit …". There's no
+  "filed" status. The CSV has one row per figure (section, project,
+  activity, category, amount) and the drill-down lines; rows naming an
+  employee only for someone with payroll access.
+
+Who sees what: the claim report, like tagged costs, is for **viewers and
+above** (decision 75); per-employee pay only with payroll access (RD33);
+reminders only for owners and admins (decision 48). Overhead rules are set
+by bookkeepers and above.
+
+Not built in R3 (refused rather than guessed): timesheets (P9) and so RD5's
+hours split, RD6's spreading of leave and RD22's late timesheet;
+reimbursements in a pay run as goods costs; feedstock output values (RD14);
+deciding "additional" costs in commercial production; supporting activity in
+the year after the core activity's year (LY 5(1)(ab)(ii), by variation);
+non-resident employees' pay as foreign expenditure (an allocation to an
+overseas activity is overseas; nothing else is); refundability and the
+labour-related taxes; the previous year's figures for the evaluation
+questions; deadlines for balance dates other than 31 March; public holidays
+in due dates; associates' combined maximum.
+
+### Questions for Jess (claim report)
+
+1. **Part-time R&D staff until timesheets exist.** Now an employee whose
+   allocation isn't 100% R&D earns no credit at all (decision 34), so for
+   Kea's Ben the report lists 1,200.00 and claims nothing. Is that what you
+   want until timesheets (P9) are built, or should payroll P9 come before
+   anyone relies on the report?
+2. **Reimbursements in a pay run** (RD28) aren't counted anywhere. Should a
+   later stage let them be tagged as materials, like an expense claim's
+   receipts?
+3. **Feedstock** (RD39): should a later stage record the output's value at
+   year end (who entered it and when) so the part over it can be claimed?
+4. **Exports** (RD42) keep the summary figures, not the CSV file itself, so
+   no employee's pay ends up in a file every viewer can open. Do you want the
+   file kept too, visible only to people with payroll access?
 
 ## NZ payroll: IRD rates and calculations (examples not yet approved by Jess)
 
@@ -9731,6 +10027,198 @@ PostgreSQL, the API routes, the PDF and a real SMTP server).
    (Employment NZ lists both as things a payslip may show)?
 5. Should the payslip email's text be editable (a template, like
    invoices)? It's fixed now so pay never ends up in a stored message.
+
+## Payday filing file (examples not yet approved by Jess)
+
+Stage P6 of payroll (#60). Jess hasn't approved these. From an **approved**
+pay run Tohyee makes IRD's **employment information (EI) file**, a CSV file
+to upload in myIR (myIR › Employment information › file upload), and shows
+when it's due. Making the file posts nothing to the ledger and marks
+nothing as filed (decision 65).
+
+Sources, law first: IRD's **Payday Filing File Upload Specification
+2026-27** ("version 2027", July 2026), its section 3.4 (the EI file, header
+record `HEI2` and employee records `DEI`), summarised field by field in
+`docs/sources/ird-payday-filing-file-spec.md`, with what couldn't be read
+(the appendix: attribute definitions, the tax code table and the IRD number
+check). Due dates: spec 3.4 and IRD's
+[Payday filing](https://www.ird.govt.nz/employing-staff/payday-filing) page
+("within 2 working days of each payday", last updated 24 Feb 2026, read
+2 Oct 2026). The design calls are decisions 56-65 in `docs/DECISIONS.md`
+(NetSuite has no NZ payroll; Xero files each pay run straight to IRD). The
+figures are PRUN1-PRUN3's. **No file here has been through myIR yet**: run
+one through myIR's "Check your employment information file" service
+(spec 2.5) before approving.
+
+Tests: `tests/unit/payroll-payday-filing.test.ts` (the file byte for byte,
+due dates, settings checks) and `tests/integration/payroll-payday-filing.test.ts`
+(made from approved pay runs through the API).
+
+The examples use these **payroll settings** (Payroll › Pay items › Payday
+filing, admins with payroll access, decision 62): employer IRD number
+**123-123-123** (IRD's own example number), payroll contact **Mere Tipene**,
+work phone **03 477 1234** (kept as `034771234`), email
+**payroll@harbourcafe.co.nz**. Tohyee's version is 0.3.1, so the package
+identifier is `Tohyee_Tohyee_v0.3.1`. Employees' IRD numbers: Kiri Tane
+87-654-321, Hemi Walker 123-456-789, Sione Fifita 100-200-300, Aroha Ngata
+112-233-445, Sina Fifita 100-200-301 (none checked with IRD's modulus 11
+rule).
+
+How the file is written (decisions 57-61): one header line then one line
+per employee in the pay run's order (last name, first name), fields
+separated by commas, each line ending CR LF (including the last). Dates
+are `CCYYMMDD`. Amounts and hours are in hundredths with no decimal point
+and no padding (2,692.31 → `269231`, 36 hours → `3600`, nil → `0`).
+Gross earnings are **taxable** earnings; fields for things Tohyee doesn't
+do yet are 0 and the child support code is blank. The file is named
+`EI-<pay date>-<pay run>.csv`.
+
+- **PF1 Fortnightly salaries (PRUN1).** PAYRUN-1, Fortnightly salaries,
+  period 28 Sep to 11 Oct 2026, pay date Wednesday 14 Oct 2026. File
+  `EI-20261014-PAYRUN-1.csv`:
+
+  ```
+  HEI2,123123123,20261014,N,N,,Mere Tipene,034771234,payroll@harbourcafe.co.nz,2,469231,0,0,89858,0,0,0,0,0,9423,6603,2820,108704,0,0,0,Tohyee_Tohyee_v0.3.1,0001
+  DEI,087654321,Kiri Tane,M,,,20260928,20261011,FT,0,200000,0,0,0,34300,0,0,,0,0,0,0,0,0,0,0,0
+  DEI,123456789,Hemi Walker,M,,,20260928,20261011,FT,0,269231,0,0,0,55558,0,0,,0,0,0,9423,6603,2820,0,0,0
+  ```
+
+  Header: 2 employee lines; total gross 2,000.00 + 2,692.31 = **4,692.31**;
+  PAYE 343.00 + 555.58 = **898.58**; KiwiSaver deductions **94.23**; net
+  employer contributions **66.03** (94.23 less ESCT); ESCT **28.20**; total
+  amounts deducted 898.58 + 94.23 + 66.03 + 28.20 = **1,087.04** (what
+  PAYRUN-1 owes IRD in PPAY12). Pay cycle `FT`; hours 0 because
+  both are on a salary (decision 59). Kiri's 8-digit IRD number gets a
+  leading 0. Final return N, nil return N, no PAYE intermediary.
+
+- **PF2 Hourly, overtime, allowance, reimbursement and a deduction
+  (PRUN2).** PAYRUN-2, Weekly wages, period 5 to 11 Oct 2026, pay date
+  14 Oct 2026. Sione's lines: 32 hours ordinary time, 4 hours overtime,
+  Tool allowance 25.00, Reimbursement 42.60, Union fees 8.50. File
+  `EI-20261014-PAYRUN-2.csv`:
+
+  ```
+  HEI2,123123123,20261014,N,N,,Mere Tipene,034771234,payroll@harbourcafe.co.nz,1,88000,0,0,14840,0,0,0,0,0,3520,2555,525,21440,0,0,0,Tohyee_Tohyee_v0.3.1,0001
+  DEI,100200300,Sione Fifita,M,,,20261005,20261011,WK,3600,88000,0,0,0,14840,0,0,,0,0,0,3520,2555,525,0,0,0
+  ```
+
+  Hours paid **36.00** (32 + 4; the allowance and reimbursement are
+  amounts). Gross earnings **880.00**, the taxable earnings: the 42.60
+  reimbursement isn't taxable so it's left out (spec field 11), and the
+  union fees are an after-tax deduction IRD isn't told about. PAYE 148.40,
+  KiwiSaver 35.20, net employer 25.55, ESCT 5.25; total deducted
+  148.40 + 35.20 + 25.55 + 5.25 = **214.40**.
+
+- **PF3 Student loan (PRUN3).** PAYRUN-3, Four-weekly, period 14 Sep to
+  11 Oct 2026, pay date 14 Oct 2026. File `EI-20261014-PAYRUN-3.csv`:
+
+  ```
+  HEI2,123123123,20261014,N,N,,Mere Tipene,034771234,payroll@harbourcafe.co.nz,1,350000,0,0,58972,0,0,19728,0,0,12250,10115,2135,103200,0,0,0,Tohyee_Tohyee_v0.3.1,0001
+  DEI,112233445,Aroha Ngata,M SL,,,20260914,20261011,4W,0,350000,0,0,0,58972,0,0,,19728,0,0,12250,10115,2135,0,0,0
+  ```
+
+  Tax code `M SL` as stored (the spec's own example writes it that way).
+  Student loan **197.28** goes in its own field, not in PAYE. Total
+  deducted 589.72 + 197.28 + 122.50 + 101.15 + 21.35 = **1,032.00**.
+
+- **PF4 Three pay runs on one pay date.** PF1, PF2 and PF3 all have pay
+  date 14 Oct 2026. Each pay run makes its own file with its own header
+  totals; IRD accepts several EIs for one paydate (decision 56). Uploading
+  all three files tells IRD about gross earnings of 4,692.31 + 880.00 +
+  3,500.00 = **9,072.31** and deductions of 1,087.04 + 214.40 + 1,032.00 =
+  **2,333.44** for 14 Oct 2026. Making a file again gives the same bytes
+  (unless the payroll settings or an employee's IRD number changed since).
+
+- **PF5 A new employee in the pay period.** Sina Fifita starts on
+  **Wednesday 7 Oct 2026** in pay group "Weekly casuals", paid exactly as
+  Sione in PF2 (same rate, lines, KiwiSaver and ESCT rate), so the figures
+  are PF2's. PAYRUN-4, period 5 to 11 Oct 2026, pay date 14 Oct 2026. Her
+  line has the start date in field 5 because it's inside her pay period:
+
+  ```
+  DEI,100200301,Sina Fifita,M,20261007,,20261005,20261011,WK,3600,88000,0,0,0,14840,0,0,,0,0,0,3520,2555,525,0,0,0
+  ```
+
+  The payday filing card also lists her under "Starting in this pay
+  period": IRD wants a new employee's details (address and date of birth
+  if given) "on or before a new employee's first payday", and Tohyee
+  doesn't make the employee details file (decision 64), so they're entered
+  in myIR. Someone who started before the period (Sione) has field 5
+  blank.
+
+- **PF6 Due dates.** Due 2 working days after the pay date, skipping
+  Saturdays and Sundays (decision 63):
+
+  | Pay date | Shown as due | Note |
+  | --- | --- | --- |
+  | Wed 14 Oct 2026 | **Fri 16 Oct 2026** | |
+  | Fri 23 Oct 2026 | **Tue 27 Oct 2026** | Mon 26 Oct is Labour Day, so IRD's due date is Wed 28 Oct; Tohyee's is a day early, never late |
+  | Sat 24 Oct 2026 | **Tue 27 Oct 2026** | Monday and Tuesday are the 2 working days (again before counting Labour Day) |
+  | Fri 30 Oct 2026 | **Tue 3 Nov 2026** | |
+
+  The card says: "Due within 2 working days of the pay date (IRD). Public
+  holidays aren't counted yet, so if one falls in between, IRD's due date
+  is later." Paper filers' 10 working days aren't shown (a file is
+  electronic).
+
+- **PF7 Settings and refused files.** Making a file is refused, with what
+  to do, when:
+  - the pay run is a **draft** ("PAYRUN-5 is a draft, so it has no
+    employment information file. Approve it first.") or **voided**
+    ("PAYRUN-1 is voided, so it has no employment information file. If you
+    filed it, amend it in myIR.");
+  - the **payday filing settings** aren't filled in ("Set up payday
+    filing first: an admin enters the employer's IRD number and the
+    payroll contact under Payroll › Pay items.").
+  Saving the settings refuses: an employer IRD number that isn't 8 or 9
+  digits, or is all zeros; a contact name over 20 characters or with a
+  comma; a phone that isn't 1 to 12 letters and digits once spaces,
+  dashes, brackets and a leading + are dropped (`03 477 1234` →
+  `034771234`); an email over 60 characters, without `@` and a domain,
+  with two dots in a row, or with characters other than A-Z, a-z, 0-9,
+  @, -, _ and . (IRD's list). An 8-digit employer IRD number (`49-091-850`)
+  is written `049091850`. A comma in an employee's name becomes a
+  space, with spaces collapsed (last name typed "Tane, Jr" → "Kiri Tane
+  Jr"), because an approved pay run can't be changed (decision 60).
+
+- **PF8 Access, and nothing posted.** Making the file and reading the
+  settings need payroll access and the bookkeeper role (decision 6); Noah
+  (bookkeeper, no payroll access) gets "You need payroll access to see
+  payroll…" (403), Vic (viewer) 403. Only admins with payroll access change
+  the settings. Making a file posts no journal and changes nothing on the
+  pay run. It writes one audit event, "payroll_payday_filing.made", with
+  the pay run, file name, number of employee lines and the file's SHA-256,
+  never an amount or IRD number.
+
+- **PF9 Not built (refused rather than guessed).**
+  - The **employee details file** (HED2/DED/TED) for new and departing
+    employees (decision 64).
+  - **Amendments** to an EI already filed (the spec's EI amendments file,
+    3.5): amend in myIR. Voiding a pay run doesn't tell IRD.
+  - **Filing straight to IRD** (IRD's gateway services, as Xero does): it
+    needs IRD's onboarding as a software provider.
+  - Child support, SLCIR/SLBOR, payroll giving, extra pays (lump sum
+    indicator), schedular payments, the Employee Share Scheme and prior
+    period adjustments: Tohyee doesn't pay these yet (PRUN8), so their
+    fields are 0.
+
+### Questions for Jess (payday filing file)
+
+1. **Try a file in myIR.** Please run PF1's file (or a real pay run's)
+   through myIR's "Check your employment information file" service. It
+   checks things the spec's appendix (not read) defines: whether amounts
+   in cents without a decimal point, CR LF line endings, a final CR LF,
+   macrons in names and 3.5% KiwiSaver deductions are accepted.
+2. **Employee details file.** Do you want Tohyee to make it? That needs
+   employee addresses split into street, suburb, city and post code, a
+   mobile and a daytime phone, and each new employee's KiwiSaver
+   eligibility (NE, EE or EA) and status (AE, AK, OK, NK or CT).
+3. **One file per pay run** (decision 56), or one file per pay date
+   combining pay runs (IRD allows both)?
+4. **Employer IRD number** is its own setting. Should it start from the GST
+   number when that's set?
+5. **Hours paid** for salaried staff are 0 (decision 59). Would you rather
+   use their usual hours for the period?
 
 ## Holidays Act leave (examples not yet approved by Jess)
 
