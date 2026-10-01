@@ -7605,7 +7605,8 @@ So C1's materials, consumables and overheads are 4,000.00 + 200.00 +
   asset type) is ignored. For FA-0007's 2026-27 year Kea enters, from its
   tax workings:
   - Investment Boost (DI 5): 20% × 6,000.00 = **1,200.00**, which counts as
-    depreciation (decision 33; **unverified** against the Act);
+    depreciation (decision 33; checked against schedule 21B part A cl 1
+    on 1 Oct 2026);
   - tax depreciation: **1,200.00** (say 25% diminishing value on the
     6,000.00 − 1,200.00 = 4,800.00 left after the boost; Tohyee doesn't
     check the rate);
@@ -8007,7 +8008,7 @@ them; Jess hasn't approved the examples yet.
 - **Overseas limit and credit rounded down to the cent** (RD16, RD20; 32).
 - **Tax depreciation, entered per asset for the year and split by its usage
   log; Investment Boost counts as depreciation**; never book depreciation
-  (RD11; 33, unverified against the Act).
+  (RD11; 33, checked against schedule 21B part A cl 1 on 1 Oct 2026).
 - **A default % split counts only when it's 100% R&D**; any other is listed
   as "default split, no time record" and left out (RD7; 34).
 - **Leave and training are spread over the year** (RD6; 35).
@@ -9109,7 +9110,7 @@ amount paid.
   - If the leave taken in advance had been worth more than the 8%, Tohyee
     takes the difference off his final pay **only with his written consent
     attached**; without it the deduction is refused (Wages Protection Act
-    1983, section unverified; Employment NZ, Deductions and premiums;
+    1983 s 5(1), checked 1 Oct 2026; Employment NZ, Deductions and premiums;
     decision 16). Xero takes it off the final pay without asking; Tohyee
     doesn't follow it there.
 - **HL16 Leaving after an entitlement has arisen** (s24, s25, s26, s40(3)).

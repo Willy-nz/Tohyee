@@ -12,6 +12,15 @@ Marked **(unverified)**: the official text couldn't be read
 IRD, MBIE or Employment NZ guidance, or is a design choice. Check these
 before relying on them.
 
+On 1 Oct 2026 the official texts were read in Jess's Chrome and the
+relevant parts saved under `docs/sources/` (Holidays Act 2003, Employment
+Leave Act 2026, Income Tax Act 2007 subpart LY, schedule 21B and schedule 1
+part D, Wages Protection Act 1983 s 5, IR1240 April 2026, and the banks'
+direct credit file formats). Points checked are marked "(checked against
+<source> on 1 Oct 2026)". Where the text says something different from a
+decision, the decision is left as it was and a **Conflict found:** note
+says what the text says.
+
 ## The new leave law
 
 - The **Employment Leave Act 2026** (2026/48, Royal assent 6 Aug 2026)
@@ -25,9 +34,24 @@ before relying on them.
   [MBIE](https://www.mbie.govt.nz/business-and-employment/employment-and-skills/employment-legislation-reviews/holidays-act-reform-employment-leave-act),
   [Employment NZ](https://www.employment.govt.nz/news-and-updates/employment-leave-act-2026),
   [guidance for payroll software](https://www.employment.govt.nz/leave-and-holidays/changes-to-leave-coming-in-2028/how-payroll-software-providers-can-get-ready-for-the-changes-coming-in-2028).
-  Details of the final Act's accrual rates, sick leave cap and balance
-  conversion are **(unverified)**; MBIE's technical guidance is due
-  Nov 2026 to Jan 2027.
+  Details of the final Act **(checked against the Employment Leave Act 2026
+  as enacted, `docs/sources/employment-leave-act-2026.md`, on 1 Oct 2026)**:
+  in force 6 Aug 2028 (s 2(1)), repealing the Holidays Act (s 150); an
+  existing employer needn't comply for an employee until "the start of the
+  employee's first pay period that starts on or after the commencement date"
+  (sch 1 cl 6); annual leave accrues at "not less than 0.0769 of an hour ...
+  for each standard hour or part of a standard hour" (s 24(1)); sick leave at
+  "not less than 0.0385 of an hour" (s 73(1)), to "a maximum of 160 hours"
+  (s 75(1)); the leave compensation payment (LCP) is "not less than 12.5% of
+  the employee's ordinary hourly rate for each relevant hour" (s 126(1));
+  previous annual holidays and sick leave are converted to hours on the
+  commencement date by formula (sch 1 cl 11-12, 17-18: weeks × ordinary
+  weekly hours, days × ordinary daily hours, with pro-rated "type B"
+  amounts and 93-day averages); family violence leave is 10 days a year
+  from the start date, not carried forward (s 103, s 108). The "more
+  favourable agreement" rule runs from 6 Aug 2028 to the day before
+  6 Aug 2029 and stops once the agreement is updated (sch 1 cl 8). MBIE's
+  technical guidance is still due Nov 2026 to Jan 2027.
 
 ## Payroll rates (examples PR1-PR16)
 
@@ -40,8 +64,12 @@ before relying on them.
 3. **ESCT follows the specification**: the contribution in whole dollars,
    truncated (spec 5.10.1; IR341 Apr 2026).
 4. **ESCT threshold amounts with cents stay refused**; enter whole dollars.
-   IRD prints the bands in whole dollars. (Design choice; the Act's band
-   wording is unverified.)
+   IRD prints the bands in whole dollars. (Design choice. The Act's bands
+   are also in whole dollars, "$0 – $18,720", "$18,721 – $64,200" and so on,
+   applied to "the last dollar of the amount of the ESCT rate threshold
+   amount"; the Act doesn't say how an amount with cents is treated:
+   checked against Income Tax Act 2007 sch 1 part D cl 1, table 1, on
+   1 Oct 2026.)
 5. **IRD example figures that are still 2025-26 figures are tested against
    2025-26 only.**
 
@@ -64,8 +92,17 @@ recorded per pay period so standard, additional and casual hours can be split
 later; anniversary dates are kept. The Employment Leave Act is built as a
 second rule-set only after MBIE's technical and balance-conversion guidance
 is out, and never applies before 6 Aug 2028. Employment NZ guidance pages are
-linked in each example. Section numbers are **(unverified)** against the
-official text.
+linked in each example. Section numbers are **(checked against the
+Holidays Act 2003, version as at 20 Dec 2023, `docs/sources/holidays-act-2003.md`,
+on 1 Oct 2026)**: OWP s 8; RDP s 9; ADP s 9A; AWE s 5 ("1/52 of an
+employee's gross earnings") with s 14 (gross earnings) and s 21(2)(b)(ii);
+otherwise working day s 12 (s 13 Labour Inspector); entitlement and unpaid
+leave s 16; holidays in advance s 20 and s 22 (there is no s 20A);
+termination s 23-s 26; cash-up s 28A-s 28F; public holidays on termination
+s 40(2)-(3); public holiday not worked s 49, worked s 50 (s 51-s 54 are
+about agreements); alternative holidays s 56, s 57, s 59-s 61 (s 58
+repealed); sick and bereavement leave s 63-s 72; family violence leave
+s 72A-s 72J (not s 72N); records s 81, s 82.
 
 7. **Build for the 2003 Act now** (option a), designed for the switch as
    above.
@@ -74,78 +111,163 @@ official text.
 9. **Part weeks with unequal days: by hours** (weekly rate ÷ usual weekly
    hours × that day's hours). Design choice, as Xero does; it matches 2028.
 10. **AWE over the 12 calendar months ending at the end of the last pay
-    period** (the Act's wording), not the last 52 weeks.
+    period** (the Act's wording), not the last 52 weeks. (Checked against
+    Holidays Act s 21(2)(b)(ii), "the 12 months immediately before the end
+    of the last pay period before the annual holiday", and s 5, on
+    1 Oct 2026.)
 11. **"Regular" items in OWP are marked on the usual pay template** and can be
     changed in a pay run (as Xero).
 12. **The four-week OWP figure is always worked out and shown**, but used
-    only when OWP can't be worked out.
+    only when OWP can't be worked out. (Checked against Holidays Act s 8(2),
+    "If it is not possible to determine an employee's ordinary weekly pay
+    under subsection (1)", on 1 Oct 2026.)
 13. **RDP or ADP is set per employee, with the reason for ADP recorded**, and
     can be changed in a pay run. ADP may be used only where RDP isn't
-    practicable or daily pay varies.
+    practicable or daily pay varies. (Checked against Holidays Act s 9A(1):
+    "not possible or practicable to determine ... relevant daily pay" or
+    "daily pay varies within the pay period when the holiday or leave
+    falls", on 1 Oct 2026.)
 14. **Unpaid leave: the anniversary moves only by the unpaid leave beyond one
     week.** The AWE divisor is reduced only where an agreement to keep the
-    anniversary is recorded (not as Xero does).
+    anniversary is recorded (not as Xero does). (Divisor rule checked against
+    Holidays Act s 16(3) on 1 Oct 2026.)
+
+    **Conflict found:** the Act's wording may not support moving the
+    anniversary only by the part beyond one week. Holidays Act s 16(2) says
+    the 12 months "(a) includes any period during which the employee was ...
+    (vi) on unpaid leave for any other reason for a period of no more than 1
+    week; but (b) unless otherwise agreed, does not include any other unpaid
+    leave". Read literally, a single period of unpaid leave longer than a
+    week isn't "a period of no more than 1 week", so the whole period (not
+    just the part beyond a week) would be left out of the 12 months, moving
+    the anniversary by the full length (HL10's 3 weeks would move it 21
+    days, not 14). Only s 16(3), about the AWE divisor where the leave is
+    agreed to count, speaks of "weeks greater than 1 week". The Employment
+    Leave Act's conversion formula uses the same words (sch 1 cl 12(3): "any
+    other unpaid leave for a period of no more than 1 week"). Source:
+    `docs/sources/holidays-act-2003.md`. Jess to decide; HL10 and its test
+    follow the decision as it stands until she does.
 15. **No hard limit on holidays in advance**; a warning above what's been
     earned since the anniversary, and a prompt for the written agreement to
-    recover it.
+    recover it. (Checked against Holidays Act s 20, "An employer may allow
+    an employee to take an agreed portion of the employee's annual holidays
+    entitlement in advance", on 1 Oct 2026: no limit in the Act.)
 16. **Advance leave worth more than the 8% on leaving is deducted only with
     the written consent attached**; otherwise refused (Wages Protection Act
-    1983, **unverified** section).
+    1983 s 5(1), checked against the Act, version as at 27 Nov 2025, on
+    1 Oct 2026: deductions "for a lawful purpose ... (a) with the written
+    consent of the worker (including consent in a general deductions clause
+    in the worker's employment agreement); or (b) on the written request of
+    the worker"). Note from the Act: consent in a general deductions clause
+    counts, but s 5(1A) requires "first consulting the worker" before a
+    specific deduction under it, s 5(2) lets the worker withdraw consent in
+    writing, and s 5A forbids a deduction that "is unreasonable".
 17. **The 8% on leaving includes the s40(3) public holidays** (Employment NZ:
-    gross earnings include "the payment for the public holiday").
+    gross earnings include "the payment for the public holiday"). (Checked
+    against Holidays Act s 14(a)(iii), s 25(2), s 26 and s 40(2)-(3) on
+    1 Oct 2026. s 40(3) applies only where the employee "is entitled to
+    annual holidays" and hasn't taken them all (s 40(2)), i.e. alongside
+    s 24, as in HL16.)
 18. **Those public holidays are paid at each holiday's weekday RDP at the last
-    pay rate**, or ADP under decision 13.
+    pay rate**, or ADP under decision 13. (s 40(3) says only that the
+    employee "is entitled to be paid for a public holiday"; RDP/ADP is s 49.
+    Checked on 1 Oct 2026; the "last pay rate" part is a design choice.)
 19. **Part-day sick leave takes a whole day by default**; a part day only
     where an agreement is recorded for that employee.
-20. **"Month" in the hours test means calendar months.**
+20. **"Month" in the hours test means calendar months.** (Holidays Act
+    s 63(1)(b)(ii) and s 72D(1)(b)(ii) say "no less than 40 hours in every
+    month"; the Act doesn't define month. Checked 1 Oct 2026; the Legislation
+    Act's definition wasn't read.)
 21. **Otherwise a working day: Tohyee suggests from recent weeks and the
-    person running pay confirms**, and the decision is recorded.
+    person running pay confirms**, and the decision is recorded. (Checked
+    against Holidays Act s 12 on 1 Oct 2026. Note from the Act: s 12(2) has
+    "the employer and employee" weigh the s 12(3) factors "with a view to
+    reaching agreement", and a Labour Inspector decides if they can't
+    (s 13); s 12(4): any amount of time on a public holiday makes it an
+    otherwise working day.)
 22. **Public holiday dates are dated data with sources; anniversary day is set
     per employee, defaulting from the organisation** (if not agreed, the
     province where they usually work).
 23. **Working part of a public holiday: time and a half for the time worked
     plus an alternative holiday; nothing automatic for the rest of the day.**
+    (Checked against Holidays Act s 49, s 50(1) and s 56(1)-(2) on
+    1 Oct 2026: s 49 pays RDP only "If an employee does not work on a public
+    holiday".)
     A typed extra is allowed where an agreement gives one.
 24. **Exchanging an alternative holiday defaults to RDP (or ADP) on the
-    exchange date, editable, with the agreement recorded.**
+    exchange date, editable, with the agreement recorded.** (Checked against
+    Holidays Act s 61 on 1 Oct 2026: the request "may be made only if 12
+    months have passed since the employee's entitlement to the alternative
+    holiday arose" and the employer pays "the amount agreed"; HL33 already
+    applies the 12 months.)
 25. **Alternative holidays are counted in days, with that day's hours
-    stored.**
+    stored.** (s 57(1)(c): "a whole working day off work ... regardless of
+    the amount of time the employee actually worked on the public holiday";
+    checked 1 Oct 2026.)
 26. **Exact rates; each payment rounded once to cents.** (Under the 2028 Act,
     building up leave rounds up.)
+
+    **Conflict found:** the Employment Leave Act 2026 as enacted has no
+    rounding rule. A search of the whole Act for "round" found nothing;
+    s 24(1) says leave accrues at "not less than 0.0769 of an hour of annual
+    leave for each standard hour or part of a standard hour" (s 73(1): 0.0385
+    for sick leave), and its own example keeps five decimals ("37.5 × 0.0769
+    = 2.88375"). "Rounds up" may come from MBIE guidance; it isn't in the
+    Act. Source: `docs/sources/employment-leave-act-2026.md`.
 27. **Family violence leave is included with sick leave**, with its records
-    kept private.
+    kept private. (Checked against Holidays Act s 72C, s 72D, s 72H, s 72I on
+    1 Oct 2026: its own 10 days a year, not carried forward, paid at RDP or
+    ADP; HL27 keeps it as a separate balance.)
 28. **Leave liability is shown as a report with the running 8% now**; posting
     it to the ledger waits for its own approved worked example.
 29. **Cash-ups need the written request and the written answer attached**;
     record the amount, the portion and the date, and enforce the one-week
-    limit.
+    limit. (Checked against Holidays Act s 28A(2)-(3), s 28B and s 81(2)(ha),
+    (hb) on 1 Oct 2026: request "must be in writing", "a maximum of 1 week
+    ... in each entitlement year", the employer must "advise the employee in
+    writing", paid "in accordance with section 21(2)".)
 
 ## R&D Tax Incentive (examples RD1-RD27)
 
 Rule for every choice: never overstate a claim. Sources: IRD
 [IR1240](https://www.ird.govt.nz/-/media/project/ir/home/documents/forms-and-guides/ir1200---ir1299/ir1240/ir1240.pdf)
-(April 2026; pages after 49 not re-checked),
+(April 2026; the pages cited here re-read on 1 Oct 2026, see
+`docs/sources/ir1240-pages-49-on.md`),
 [eligible expenditure](https://www.ird.govt.nz/research-and-development/tax-incentive/eligibility/eligible-expenditure),
 [due dates](https://www.ird.govt.nz/research-and-development/tax-incentive/research-and-development-tax-incentive-due-dates).
-The Income Tax Act subpart LY text is **(unverified)**.
+The Income Tax Act subpart LY text is **(checked against the Income Tax Act
+2007, version as at 4 Sep 2026, `docs/sources/income-tax-act-ly-and-esct.md`,
+on 1 Oct 2026)**: the credit is "0.15 × total eligible R & D expenditure"
+(LY 4(2)), capped at $120 million (LY 4(3)).
 
 30. **Exactly $50,000 qualifies** (IR1240 p 13 "$50,000 or more"; IRD's page
-    "at least").
+    "at least"). (Checked against LY 4(1)(a), "is $50,000 or more for the
+    year", on 1 Oct 2026. IR1240 p 17 "more than $50,000" and p 72 "must
+    exceed $50,000" differ from the Act; the Act governs.)
 31. **The minimum is tested after the 10% overseas limit** (IR1240 p 14: the
-    excess isn't eligible).
+    excess isn't eligible). (Checked against LY 4(1)(a), LY 5(2)(b) and
+    LY 7(2), (5) on 1 Oct 2026: foreign expenditure is eligible only "to the
+    extent the amount is less than or equal to the lesser of" the actual
+    amount and "0.1 × total NZ R & D expenditure ÷ 0.9", and LY 4(1)(a)
+    tests eligible expenditure.)
 32. **The overseas limit and the credit are rounded down to the cent.**
 33. **Tax depreciation, entered per asset for the year and split by its usage
     log; Investment Boost counts as depreciation** (Budget Measures Bill
-    (No 2) commentary, **unverified** against the Act). Never book
-    depreciation.
+    (No 2) commentary; checked against the Act on 1 Oct 2026: schedule 21B
+    part A cl 1 makes eligible "Depreciation loss and amounts deductible
+    under section DI 5 for an item of depreciable property to the extent to
+    which the depreciable property is used in performing a research and
+    development activity"; DI 5 is the "New investment asset deduction").
+    Never book depreciation.
 34. **A default % split counts only when it's 100% R&D** (full-time R&D
     staff). Any other default split is listed as "default split, no time
     record" and left out of the total.
-35. **Leave and training are spread over the year** (IR1240's Zach example).
+35. **Leave and training are spread over the year** (IR1240's Zach example,
+    p 64, checked 1 Oct 2026).
 36. **Employee costs are only those IRD lists** (pay, bonuses, share schemes,
     recruitment, relocation, overtime, holiday and long-service pay,
     superannuation including employer KiwiSaver). ACC levies, FBT and other
-    employer costs are left out.
+    employer costs are left out. (IR1240 p 63 list checked 1 Oct 2026.)
 37. **Only the posted pay run's tags count.** A late timesheet shows under
     "entered late"; changing it is a reallocation with history.
 38. **Records entered more than 14 days after the work are flagged.**
@@ -160,11 +282,14 @@ The Income Tax Act subpart LY text is **(unverified)**.
 43. **Overseas spending stays in the category it was spent in, with an "of
     which overseas" line**; any limit reduction is spread in proportion.
 44. **Core % to two decimals, rounded down.**
-45. **Files on R&D records are kept 7 years after the year**; they can be
+45. **Files on R&D records are kept 7 years after the year** (IR1240 p 17,
+    p 101: "keep records for 7 years after the end of the tax year they
+    relate to", checked 1 Oct 2026); they can be
     replaced (history kept) but not deleted.
 46. **One "% of an account" overhead rule, with a required basis from IR1240's
     list** (time, floor area, usage, volume, unit sales, dollar value,
-    activity-based costing) and the calculation attached.
+    activity-based costing) and the calculation attached. (List checked
+    against IR1240 p 15 on 1 Oct 2026.)
 47. **Tagging is allowed without an approval, with a warning**; the claim
     report gives credit only for activities with an approval covering the
     year.
