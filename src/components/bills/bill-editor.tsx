@@ -23,6 +23,7 @@ import { currencyMinorUnits } from "@/lib/money/currency";
 import { isDecimalString } from "@/lib/money/decimal";
 import { ExchangeRateField, useLastRate } from "@/components/fx";
 import type { TaxCode } from "@/lib/tax/codes";
+import { codesForSide, unavailableNote } from "@/lib/tax/available-on";
 import { retaxLines, usualWithContact } from "@/lib/tax/exports";
 import { contactPurchaseTaxCode } from "@/lib/tax/purchase-defaults";
 import { type CustomFieldSetup, type CustomValues } from "@/lib/custom-fields/values";
@@ -510,7 +511,7 @@ export function PurchaseLines({
                         .filter((taxCode) => taxCode.isActive || taxCode.code === line.taxCode)
                         .map((taxCode) => (
                           <option key={taxCode.id} value={taxCode.code}>
-                            {taxCode.code} ({formatRate(taxCode.rate)}){taxCode.isActive ? "" : " (inactive)"}
+                            {taxCode.code} ({formatRate(taxCode.rate)}){unavailableNote(taxCode)}
                           </option>
                         ))}
                     </select>
@@ -593,7 +594,7 @@ export function BillEditor({
       accounts={accounts.data.accounts}
       items={items.data}
       contacts={contacts.data.contacts}
-      taxCodes={taxCodes.data.taxCodes}
+      taxCodes={codesForSide(taxCodes.data.taxCodes, "purchases")}
       tracking={tracking.data}
       customSetup={customSetup.data}
       bill={bill}

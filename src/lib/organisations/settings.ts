@@ -6,6 +6,7 @@ import { isFinancialYearEndMonth } from "@/lib/financial-year";
 import { assertFinancialYearEndChangeable } from "@/lib/ledger/period-controls";
 import { parseCurrencyCode } from "@/lib/money/currency";
 import { type GstPeriodSetting, gstPeriodSetting } from "@/lib/reports/gst-boxes";
+import { type AvailableOn, isAvailableOn, onlyWords } from "@/lib/tax/available-on";
 import { GST_BASES, type GstBasis } from "@/lib/tax/categories";
 import { optionalString, requireOneOf, requireString } from "@/lib/validation";
 
@@ -123,14 +124,15 @@ const CATEGORY_WORDS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The tax code for exports (EX13): an active zero-rated code. Exports are
- * zero-rated, not exempt (IR375), so they count in Box 5 and Box 6; an
- * exempt or standard-rated code is refused. The database checks it too.
+ * The tax code for exports (EX13): an active zero-rated code available on
+ * sales (TAO7). Exports are zero-rated, not exempt (IR375), so they count in
+ * Box 5 and Box 6; an exempt or standard-rated code is refused. The database
+ * checks it too.
  */
 async function resolveExportTaxCode(tx: OrgTx, input: unknown): Promise<{ id: string; code: string }> {
   const code = requireString(input, "exportTaxCode", { maxLength: 20 }).toUpperCase();
-  const found = await tx.query<{ id: string; code: string; category: string; is_active: boolean }>(
-    "select id, code, category, is_active from tax_codes where code = $1",
+  const found = await tx.query<{ id: string; code: string; category: string; is_active: boolean; available_on: AvailableOn }>(
+    "select id, code, category, is_active, available_on from tax_codes where code = $1",
     [code],
   );
   const row = found.rows[0];
@@ -139,6 +141,11 @@ async function resolveExportTaxCode(tx: OrgTx, input: unknown): Promise<{ id: st
   if (row.category !== "zero_rated") {
     throw new ValidationError(
       `The tax code for exports must be zero-rated (like ZERO): exports are zero-rated, not exempt, so they count in Box 5 and Box 6 of the GST return. ${row.code} is ${CATEGORY_WORDS[row.category] ?? row.category}.`,
+    );
+  }
+  if (!isAvailableOn(row.available_on, "sales")) {
+    throw new ValidationError(
+      `${row.code} is available on ${onlyWords(row.available_on)}, so it can't be the tax code for exports. Choose a zero-rated code available on sales.`,
     );
   }
   return { id: row.id, code: row.code };

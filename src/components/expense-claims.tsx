@@ -17,6 +17,7 @@ import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/fo
 import { calculateInvoice, PAID_STATUS_LABELS } from "@/lib/invoices/amounts";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
+import { codesForSide } from "@/lib/tax/available-on";
 import type { TrackingTags } from "@/lib/tracking/service";
 
 /**
@@ -77,7 +78,8 @@ export function ExpenseClaimEditor({
   const accounts = useAccounts(organisationId);
   const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
   const tracking = useTracking(organisationId);
-  const active = (taxCodes.data?.taxCodes ?? []).filter((taxCode) => taxCode.isActive);
+  // Receipts are purchases: only codes available on purchases (TAO6).
+  const active = codesForSide(taxCodes.data?.taxCodes ?? [], "purchases").filter((taxCode) => taxCode.isActive);
   const defaultTax = (active.find((taxCode) => taxCode.category === "standard") ?? active[0])?.code ?? "";
   const [description, setDescription] = useState(claim?.description ?? "");
   const [receipts, setReceipts] = useState<ReceiptDraft[] | null>(

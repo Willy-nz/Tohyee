@@ -57,6 +57,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/multi-currency.test.ts` (MC1-MC13) and
   `tests/integration/multi-currency-settlements.test.ts` (MC14-MC30) and
   `tests/integration/import.test.ts` (IM1-IM16) and
+  `tests/integration/tax-available-on.test.ts` (TAO1-TAO5, TAO7-TAO12) and
   `tests/integration/period-close.test.ts` (YE1-YE4, TB1-TB4, PC1-PC12,
   GP3, GP5, GP6), all against
   a real PostgreSQL database; `tests/unit/ageing.test.ts` has the pure
@@ -69,7 +70,9 @@ proves it". Test names start with the example IDs they cover:
   the project time and markup maths (PJ3-PJ7), and
   `tests/unit/foreign-currency.test.ts` the conversion, carrying value,
   rate and file currency pieces of FXB2-FXB10, and
-  `tests/unit/import-fields.test.ts` the import column matching (IM2-IM5, IM16)
+  `tests/unit/import-fields.test.ts` the import column matching (IM2-IM5, IM16), and
+  `tests/unit/tax-available-on.test.ts` the tax code pickers and starting codes
+  by side (TAO2-TAO4, TAO6, TAO8)
 
 If you change behaviour, change the example, the test and the code together.
 If a scenario isn't covered here, stop and ask for a decision before coding it.
@@ -2464,11 +2467,10 @@ cases, so Tohyee doesn't guess at it. So, matching the customer's default
 sales tax code (EX5):
 
 - **A contact's own default purchase tax code** (optional): any active tax
-  code, matched ignoring case; an inactive (archived) one is refused, and
-  one that became inactive after it was set can be kept but isn't used.
-  Tohyee's tax codes aren't split into sales and purchase codes (unlike
-  NetSuite's "Available on"), so any active code will do; the sales and
-  purchase defaults are separate and each is used only on its own side.
+  code available on purchases (Purchases or Both, TAO7), matched ignoring
+  case; an inactive (archived) one is refused, and one that became inactive
+  after it was set can be kept but isn't used. The sales and purchase
+  defaults are separate and each is used only on its own side.
   Changes are in the contact's history (contact.created, contact.updated).
   It's set in the contact screen for suppliers. Not in the contacts CSV
   import and export (the default sales tax code isn't either).
@@ -2503,7 +2505,7 @@ stated.
 | EX19 | On Cloud Apps' bill, account 6010 (usual code GST) and then the item SERVER (purchase code GST) are picked; the supplier is then changed to Kauri Supplies | The line stays **NONE** (the contact's default beats the account's and the item's). Changed to Kauri Supplies, it goes back to the usual **GST** |
 | EX20 | On a bill for Cloud Apps, the line is changed by hand to GST (local support charged with GST): 1 x 100.00; the supplier is changed and back | Saves with **GST**: GST **15.00**, total **115.00**. A code chosen by hand stays when the supplier changes |
 | EX21 | Cloud Apps' draft bill (1 x 50.00 NONE) is saved; its default is changed to GST; the draft is saved again and approved | The change is in the history (contact.updated, defaultPurchaseTaxCode NONE to GST). The draft keeps **NONE** and approves with GST **0.00**, total **50.00**. Only new lines start with **GST**. Clearing the default (blank) and setting NONE again over the API works |
-| EX22 | Setting OLD (inactive), NOPE (no such code) and ZERO as Kauri Supplies' default; a new contact with OLD; Rata Rentals' sales and purchase lines | OLD is refused: "Tax code OLD is inactive, so it can't be a contact's default purchase tax code." (on a new contact too); NOPE: "There's no tax code NOPE."; **ZERO** is accepted (codes aren't split into sales and purchase ones). A default that later became inactive can be kept but isn't used. Rata Rentals' sales lines start **EXEMPT**, its purchase lines **GST**; Cloud Apps' sales lines aren't affected by its purchase default |
+| EX22 | Setting OLD (inactive), NOPE (no such code) and ZERO as Kauri Supplies' default; a new contact with OLD; Rata Rentals' sales and purchase lines | OLD is refused: "Tax code OLD is inactive, so it can't be a contact's default purchase tax code." (on a new contact too); NOPE: "There's no tax code NOPE."; **ZERO** is accepted (it's available on both; TAO7 refuses a sales-only code). A default that later became inactive can be kept but isn't used. Rata Rentals' sales lines start **EXEMPT**, its purchase lines **GST**; Cloud Apps' sales lines aren't affected by its purchase default |
 | EX23 | Spend money to Cloud Apps from 1000: 50.00 inclusive, to 6010 | The line starts with **NONE**: GST **0.00**, total **50.00**: Dr 6010 50.00 / Cr 1000 50.00. On a foreign-currency bank line a standard-rated default (e.g. Rata Rentals' GST) isn't used, as those lines can't take it |
 | EX24 | A supplier credit note (1 x 10.00), purchase order (1 x 600.00) and repeating bill (1 x 50.00 a month) for Cloud Apps | Their new lines start with **NONE** in the editors (the same rule) and save it: GST **0.00**, totals **10.00** and **600.00**, and the repeating bill's line **NONE** |
 | EX25 | Foreign trade on. Wombat's invoice with a GST line: in the editor, as a draft, then approved | The warning shows in the editor and on the draft, but **not** on the approved invoice; **Export (Australia)** shows on all three (decided 1 Oct 2026) |
@@ -2511,6 +2513,94 @@ stated.
 Tests: `tests/integration/supplier-tax.test.ts` (EX16-EX18, EX20-EX24) and
 `tests/unit/supplier-tax.test.ts` (the purchase editors' starting code and
 the warning: EX17-EX23, EX25; EX12 in `tests/unit/exports.test.ts` too).
+
+### A tax code's "Available on" (examples not yet approved by Jess)
+
+Built overnight (1 Oct 2026) after Jess asked us to "look into what NetSuite
+does and do that" (question 5 below). **NetSuite**: the tax code record has
+an **Available On** field, **Sales Transactions**, **Purchase Transactions**
+or **Both**: "Most NetSuite Tax Codes are exclusive to either sales or
+purchase transactions. However, some are available for both." And "the
+default tax code you assign to a vendor must be available on purchase
+transactions, otherwise you will be unable to select this tax code on
+purchase orders or bills for that vendor" (Oracle help, "Setting Default Tax
+Items on Vendor Records" and "Creating Alternative Tax Codes"). So:
+
+- **Every tax code has "Available on": Sales, Purchases or Both.** Every
+  existing code, and the starting NZ codes (GST 15%, Zero rated, Exempt, No
+  GST), are **Both**: in New Zealand each applies to sales and purchases
+  alike, so nothing changes until an admin chooses otherwise. A code added
+  without a choice is Both. Migration 0050 adds it.
+- **Admins choose it** when adding a code and can change it on the Tax codes
+  screen (in the history as tax.code_created and tax.code_updated). Tax
+  codes have no other edits yet, so this is the only change there. It
+  **never changes saved documents**.
+- **Sales lines** (invoices, credit notes, quotes, repeating invoices,
+  receive money, project and CRM invoices) take only **Sales or Both** codes;
+  **purchase lines** (bills, supplier credit notes, purchase orders,
+  repeating bills, spend money, expense claim receipts) only **Purchases or
+  Both**. Manual journals have no tax codes, so there's nothing to check.
+  The refusal names the code and the side: "Line 1: tax code PUR is
+  available on purchases only, so it can't be used on sales. Choose a tax
+  code available on sales." It's checked where a line's code is checked
+  today (being active and in effect): when a document is saved or approved,
+  so an approved document is never checked again (voiding it works as
+  before), but a draft with a code that's no longer available on its side
+  can't be saved or approved until the code is changed (NetSuite: "unable to
+  select"). A repeating invoice or bill whose code is no longer available
+  makes nothing on that date and keeps the reason, like any other document
+  it can't make.
+- **Pickers** in every editor list only the codes available on their side
+  (a saved line's own code still shows, as "PUR (purchases only)", so it's
+  clear why it will be refused). The starting code of a new line comes only
+  from those codes: the first standard-rated one, an account's usual code
+  (an account is used on both sides, so its usual code is used only on the
+  side it's available on; elsewhere the line keeps its code), an item's
+  code, or the contact's.
+- **Defaults must match** (NetSuite's rule for a vendor's default): a
+  contact's **default sales tax code** must be Sales or Both and its
+  **default purchase tax code** Purchases or Both (EX5, EX16); an item's
+  sales tax code Sales or Both and its purchase tax code Purchases or Both;
+  the **tax code for exports** (Settings › Exports) Sales or Both. **Bank
+  rules** suggest receive money for money in (Sales or Both), spend money
+  for money out (Purchases or Both), and a rule for either needs a Both
+  code; cash coding and the reconcile screen list codes by each line's side.
+  The database checks these settings too.
+- **Changing "Available on" is refused while a setting uses the code on the
+  side it would lose**, listing them (a contact's default, the tax code for
+  exports, an item, a bank rule). NetSuite instead lets a default become one
+  that can't be selected; Tohyee refuses, so no setting quietly stops
+  working (Tohyee's choice, the safer one). Drafts and repeating templates
+  don't stop the change; they're refused when next saved or made.
+- **GST return**: nothing new. A line counts by its code's category whatever
+  the code's "Available on".
+
+Setup as above: invoice basis, GST 15%; 1000 bank, 1100 Accounts
+receivable, 2000 Accounts payable, 2100 GST, 4000 Sales, 6010 an expense
+account. **Kobe Ltd** (customer), **Kauri Supplies** (supplier) and **Cloud
+Apps Inc** (supplier, default purchase tax code NONE, EX17). An admin has
+added **PUR** "GST on purchases", standard-rated 15%, **Purchases**, and
+**SAL** "GST on sales", standard-rated 15%, **Sales**. Amounts exclusive of
+GST unless stated.
+
+| ID | What happens | Result |
+| --- | --- | --- |
+| TAO1 | Migration 0050 on an organisation with tax codes; a new organisation; a code added without choosing; then an invoice and a bill coded GST | GST, ZERO, EXEMPT and NONE are **Both**, in existing and new organisations, and so is the added code. The invoice (1 x 100.00) has GST **15.00**, total **115.00**, and the bill (1 x 200.00) GST **30.00**, total **230.00**, as before |
+| TAO2 | An invoice for Kobe: 1 x 100.00 coded PUR; a bill from Kauri Supplies: 1 x 200.00 coded PUR, approved | The invoice is refused: "Line 1: tax code PUR is available on purchases only, so it can't be used on sales. Choose a tax code available on sales." The bill: GST **30.00**, total **230.00**: Dr 6010 200.00, Dr 2100 30.00 / Cr 2000 230.00 |
+| TAO3 | SAL on a bill, supplier credit note, purchase order, repeating bill and expense claim receipt; PUR on a credit note, quote and repeating invoice; SAL on an invoice (1 x 100.00); PUR on a supplier credit note (1 x 10.00) | Each wrong-side line is refused the same way ("Receipt 1: tax code SAL is available on sales only, so it can't be used on purchases. …" on the claim). The invoice: GST **15.00**, total **115.00**; the supplier credit note: GST **1.50**, total **11.50** |
+| TAO4 | Spend money from 1000 to Kauri Supplies, 115.00 inclusive, coded SAL, then PUR; receive money from Kobe, 115.00 inclusive, coded PUR, then SAL | SAL on spend money and PUR on receive money are refused (spend money is purchases, receive money sales). PUR on spend money and SAL on receive money: net **100.00**, GST **15.00**, total **115.00** |
+| TAO5 | Adding PUR (Purchases); adding a code with "Available on" "sometimes"; a bookkeeper, then an admin, changes EXEMPT to Sales over the API, and back to Both | PUR's tax.code_created history has availableOn **purchases**. "sometimes" is refused. The bookkeeper is refused (**403**); the admin's change is saved, with tax.code_updated {availableOn: both to sales} |
+| TAO6 | Codes GST, ZERO, EXEMPT, NONE (Both), PUR, SAL and OLD (inactive): the editors' pickers and starting codes. Account 6200 Cleaning's usual code is PUR | Sales pickers list **GST, ZERO, EXEMPT, NONE, SAL**; purchase pickers **GST, ZERO, EXEMPT, NONE, PUR**. A sales draft's saved PUR line shows "PUR (purchases only)". With GST archived, new sales lines start **SAL** and purchase lines **PUR**. Picking 6200 on a bill line gives **PUR**; on an invoice line the line keeps its code |
+| TAO7 | Kobe's default sales tax code PUR; Kauri Supplies' default purchase tax code SAL, then PUR; ZPUR (zero-rated, Purchases) as the tax code for exports; item TOUR with sales tax code PUR, then SAL with purchase tax code PUR | "Tax code PUR is available on purchases only, so it can't be a contact's default sales tax code. Choose a code available on sales." (on a new contact too); SAL likewise as a purchase default; PUR is accepted for Kauri Supplies. "ZPUR is available on purchases only, so it can't be the tax code for exports. Choose a zero-rated code available on sales." TOUR with PUR as its sales code is refused; with SAL and PUR it's saved. The database refuses the wrong-side settings too |
+| TAO8 | Bank rules coding to 4000: money out with SAL; money in or out with SAL; money in with SAL; money in or out with GST | Refused: "…so it can't be used on a rule for money out (spend money is purchases)." and "…for money in or out (that needs a code available on both)." Money in with SAL and either way with GST are saved. The database refuses a rule changed to the wrong side |
+| TAO9 | Two invoices for Kobe on 8 Jul 2026 coded GST: a draft 1 x 100.00, and 1 x 200.00 approved. An admin makes GST **Purchases**; the draft is saved again and approved; the approved one is voided; GST goes back to **Both** and the draft is approved | The draft can't be saved or approved: "Line 1: tax code GST is available on purchases only, so it can't be used on sales. …". The approved invoice is **unchanged** (GST **30.00**, total **230.00**, coded GST) and voids as before. Back on Both, the draft approves: GST **15.00**, total **115.00** |
+| TAO10 | Making ZERO (the tax code for exports) Purchases; NONE (Cloud Apps' default purchase code) Sales; PUR (Kauri Supplies' default and TOUR's purchase code) Sales; SAL (TOUR's sales code, a money-in rule) Purchases; ZERO Sales | Refused: "Tax code ZERO can't be made available on purchases only while it's used for sales: the tax code for exports (Settings › Exports). Change those first."; "…NONE … used for purchases: Cloud Apps Inc's default purchase tax code…"; "…PUR …: Kauri Supplies' default purchase tax code; item TOUR's purchase tax code…"; SAL's lists item TOUR and the bank rule. **ZERO to Sales is accepted** (the export code is on the sales side). The database refuses a direct change too |
+| TAO11 | A repeating invoice for Kobe from 1 Aug 2026, monthly, 1 x 100.00 coded SVC (standard 15%, Both). SVC is made Purchases; the 1 Aug run; SVC back to Both; run again | The first run makes **nothing**; the template keeps "2026-08-01: Line 1: tax code SVC is available on purchases only, so it can't be used on sales. …". The second makes the invoice: GST **15.00**, total **115.00** |
+| TAO12 | A new organisation, July 2026, invoice basis: an invoice 1 x 100.00 coded SAL and a bill 1 x 200.00 coded PUR, both approved; the July GST return | Box 5 **115.00**, Box 6 **0.00**, Box 7 **115.00**, Box 8 **15.00**, Box 11 **230.00**, Box 12 **30.00**: exactly as if both were coded GST |
+
+Tests: `tests/integration/tax-available-on.test.ts` (TAO1-TAO5, TAO7-TAO12)
+and `tests/unit/tax-available-on.test.ts` (the pickers, starting codes and
+refusals: TAO2-TAO4, TAO6, TAO8).
 
 ### Not supported yet (refused rather than guessed)
 
@@ -2529,6 +2619,11 @@ the warning: EX17-EX23, EX25; EX12 in `tests/unit/exports.test.ts` too).
   Zealand, customs export entries): not recorded.
 - **Tax lookup by region** (NetSuite's "Enable Tax Lookup on Sales and
   Purchases" by state or province): only the country is used.
+- **"Available on" for opening balances**: invoices and bills brought in
+  when converting existing books (IM13, IM17-IM20) record documents raised
+  in the old system, so their codes aren't checked against Available on.
+  Other tax code changes (renaming, archiving, rates) aren't on the Tax
+  codes screen yet.
 
 ### Questions for Jess (exports)
 
@@ -2548,10 +2643,14 @@ the warning: EX17-EX23, EX25; EX12 in `tests/unit/exports.test.ts` too).
    this is Tohyee's choice): the warning shows **only where lines can still
    be changed** (editors and drafts), not on approved documents; the
    Export (country) flag stays everywhere (EX25).
-5. Tax codes aren't split into sales and purchase codes, so a contact's
-   default purchase tax code can be any active code (ZERO included). Would
-   you like codes marked as sales only or purchases only, as NetSuite's
-   "Available on" does?
+5. Decided 1 Oct 2026 following NetSuite ("look into what NetSuite does and
+   do that"): tax codes have NetSuite's **Available on** (Sales, Purchases
+   or Both), every existing and starting NZ code is Both, sales lines take
+   Sales or Both codes and purchase lines Purchases or Both, a contact's
+   defaults, items' codes, bank rules and the tax code for exports must be
+   on their side, and saved documents never change (TAO1-TAO12). Where
+   NetSuite lets a default become unusable, Tohyee refuses changing a
+   code's Available on while a setting uses it on that side, and lists them.
 
 ## Reports
 

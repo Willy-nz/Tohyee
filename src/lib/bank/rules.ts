@@ -3,6 +3,7 @@ import type { StatementLine } from "@/lib/bank/accounts";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { AMOUNTS_MODES, type AmountsMode } from "@/lib/invoices/amounts";
+import { type AvailableOn, isAvailableOn, onlyWords, ruleSides } from "@/lib/tax/available-on";
 import { optionalBoolean, optionalId, optionalString, requireId, requireOneOf, requireString } from "@/lib/validation";
 
 /**
@@ -131,18 +132,31 @@ async function resolveRule(tx: OrgTx, input: RuleInput) {
   const target = await tx.query<{ id: string }>("select id from accounts where lower(code) = lower($1)", [targetCode]);
   if (!target.rows[0]) throw new ValidationError(`There's no account with the code ${targetCode}.`);
   const taxCodeText = optionalString(input.taxCode, "taxCode", { maxLength: 20 });
+  const direction = input.direction == null ? "any" : requireOneOf(input.direction, "direction", RULE_DIRECTIONS);
   let taxCodeId: string | null = null;
   if (taxCodeText) {
-    const taxCode = await tx.query<{ id: string }>("select id from tax_codes where code = $1", [taxCodeText]);
-    if (!taxCode.rows[0]) throw new ValidationError(`There's no tax code ${taxCodeText}.`);
-    taxCodeId = taxCode.rows[0].id;
+    const taxCode = await tx.query<{ id: string; code: string; available_on: AvailableOn }>("select id, code, available_on from tax_codes where code = $1", [
+      taxCodeText,
+    ]);
+    const found = taxCode.rows[0];
+    if (!found) throw new ValidationError(`There's no tax code ${taxCodeText}.`);
+    // Money in becomes receive money (sales), out spend money (purchases); a rule for either needs a code for both (TAO8).
+    const missing = ruleSides(direction).find((side) => !isAvailableOn(found.available_on, side));
+    if (missing) {
+      throw new ValidationError(
+        `Tax code ${found.code} is available on ${onlyWords(found.available_on)}, so it can't be used on a rule for ${
+          direction === "any" ? "money in or out (that needs a code available on both)" : direction === "in" ? "money in (receive money is sales)" : "money out (spend money is purchases)"
+        }.`,
+      );
+    }
+    taxCodeId = found.id;
   }
   return {
     name,
     isActive: optionalBoolean(input.isActive, "isActive") ?? true,
     priority: priorityRaw,
     accountId,
-    direction: input.direction == null ? "any" : requireOneOf(input.direction, "direction", RULE_DIRECTIONS),
+    direction,
     matchField: input.matchField == null ? "any" : requireOneOf(input.matchField, "matchField", RULE_FIELDS),
     matchText,
     contactId,

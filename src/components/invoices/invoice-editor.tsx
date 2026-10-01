@@ -31,6 +31,7 @@ import { add, dec, isDecimalString, toFixedString, ZERO_DECIMAL } from "@/lib/mo
 import { convertAtRate, isRateText } from "@/lib/money/fx";
 import { ExchangeRateField, effectiveRate, useLastRate } from "@/components/fx";
 import type { TaxCode } from "@/lib/tax/codes";
+import { codesForSide, unavailableNote } from "@/lib/tax/available-on";
 import type { CustomerSetup } from "@/lib/customers/service";
 import type { SalespeopleSetup } from "@/lib/salespeople/service";
 import { type CustomFieldSetup, type CustomValues } from "@/lib/custom-fields/values";
@@ -559,7 +560,7 @@ export function SalesLines({
                         .filter((taxCode) => taxCode.isActive || taxCode.code === line.taxCode)
                         .map((taxCode) => (
                           <option key={taxCode.id} value={taxCode.code}>
-                            {taxCode.code} ({formatRate(taxCode.rate)}){taxCode.isActive ? "" : " (inactive)"}
+                            {taxCode.code} ({formatRate(taxCode.rate)}){unavailableNote(taxCode)}
                           </option>
                         ))}
                     </select>
@@ -630,7 +631,7 @@ export function useSalesEditorData(organisationId: string) {
           accounts: accounts.data.accounts,
           items: items.data,
           customers: contacts.data.contacts,
-          taxCodes: taxCodes.data.taxCodes,
+          taxCodes: codesForSide(taxCodes.data.taxCodes, "sales"),
           tracking: tracking.data,
           customSetup: customSetup.data,
           salespeople: salespeople.data,
@@ -739,7 +740,7 @@ export function InvoiceEditor({
       accounts={accounts.data.accounts}
       items={items.data}
       customers={contacts.data.contacts}
-      taxCodes={taxCodes.data.taxCodes}
+      taxCodes={codesForSide(taxCodes.data.taxCodes, "sales")}
       tracking={tracking.data}
       customSetup={customSetup.data}
       salespeople={salespeople.data}

@@ -9,6 +9,7 @@ import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import { dec, divide, mul, toPlainString } from "@/lib/money/decimal";
+import { AVAILABLE_ON, AVAILABLE_ON_LABELS, type AvailableOn } from "@/lib/tax/available-on";
 import { TAX_CATEGORIES, type TaxCategory } from "@/lib/tax/categories";
 import type { TaxCode } from "@/lib/tax/codes";
 
@@ -26,7 +27,14 @@ function percent(rate: string): string {
 function Tax({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const codes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
-  const [form, setForm] = useState({ code: "", label: "", category: "standard" as TaxCategory, percent: "15", effectiveFrom: todayInBrowser() });
+  const [form, setForm] = useState({
+    code: "",
+    label: "",
+    category: "standard" as TaxCategory,
+    percent: "15",
+    effectiveFrom: todayInBrowser(),
+    availableOn: "both" as AvailableOn,
+  });
   const [key, setKey] = useState(() => newIdempotencyKey("tax"));
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
@@ -50,6 +58,7 @@ function Tax({ organisationId }: { organisationId: string }) {
           category: form.category,
           rate: form.category === "standard" ? rate : "0",
           effectiveFrom: form.effectiveFrom,
+          availableOn: form.availableOn,
         },
       });
       setKey(newIdempotencyKey("tax"));
@@ -61,12 +70,27 @@ function Tax({ organisationId }: { organisationId: string }) {
     }
   }
 
+  // NetSuite's "Available on" (TAO5, TAO10): refused while a contact's default, the tax code for exports, an item or a
+  // bank rule uses the code on the side it would lose; the message lists them.
+  async function changeAvailableOn(code: TaxCode, availableOn: AvailableOn) {
+    try {
+      await api(`/api/tax/codes/${code.id}`, { method: "PATCH", body: { organisationId, availableOn } });
+      setStatus({ tone: "success", text: `${code.code} is now available on ${AVAILABLE_ON_LABELS[availableOn].toLowerCase()}.` });
+    } catch (caught) {
+      setStatus({ tone: "error", text: errorMessage(caught) });
+    }
+    codes.reload();
+  }
+
   return (
     <>
       <Notice tone="info">
         Tax codes set the GST on <Link href="/operations/invoices">sales invoices</Link> and{" "}
         <Link href="/operations/bills">bills</Link>. They aren&apos;t applied to journals you enter by hand. The{" "}
         <Link href="/operations/reports">GST return</Link> puts each line into its boxes by the tax code&apos;s category.
+        &ldquo;Available on&rdquo; says whether a code can be chosen on sales (invoices, credit notes, quotes, receive money),
+        purchases (bills, supplier credit notes, purchase orders, spend money, expense claims) or both. Changing it never
+        changes saved documents.
       </Notice>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
       {can("admin") ? (
@@ -95,6 +119,15 @@ function Tax({ organisationId }: { organisationId: string }) {
             <Field label="Effective from">
               <input type="date" value={form.effectiveFrom} onChange={(event) => setForm({ ...form, effectiveFrom: event.target.value })} required />
             </Field>
+            <Field label="Available on">
+              <select value={form.availableOn} onChange={(event) => setForm({ ...form, availableOn: event.target.value as AvailableOn })}>
+                {AVAILABLE_ON.map((side) => (
+                  <option key={side} value={side}>
+                    {AVAILABLE_ON_LABELS[side]}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Button type="submit">Add</Button>
           </form>
         </Card>
@@ -113,6 +146,7 @@ function Tax({ organisationId }: { organisationId: string }) {
                   <th>Type</th>
                   <th className={ui.num}>Rate</th>
                   <th>Effective</th>
+                  <th>Available on</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -126,6 +160,23 @@ function Tax({ organisationId }: { organisationId: string }) {
                     <td>
                       {formatDate(code.effectiveFrom)}
                       {code.effectiveTo ? ` to ${formatDate(code.effectiveTo)}` : ""}
+                    </td>
+                    <td>
+                      {can("admin") ? (
+                        <select
+                          aria-label={`${code.code} available on`}
+                          value={code.availableOn}
+                          onChange={(event) => void changeAvailableOn(code, event.target.value as AvailableOn)}
+                        >
+                          {AVAILABLE_ON.map((side) => (
+                            <option key={side} value={side}>
+                              {AVAILABLE_ON_LABELS[side]}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        AVAILABLE_ON_LABELS[code.availableOn]
+                      )}
                     </td>
                     <td>{code.isActive ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
                   </tr>

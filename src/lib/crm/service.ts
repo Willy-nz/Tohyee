@@ -504,7 +504,7 @@ export async function makeInvoiceFromOpportunity(
   const foreign = locked.currencyCode !== tx.baseCurrency;
   if (!foreign && typedRate != null) throw new ValidationError(`This opportunity is in ${tx.baseCurrency}, so its invoice has no exchange rate.`);
   const taxCode = await tx.query<{ code: string }>(
-    `select code from tax_codes where is_active and category = 'standard' and effective_from <= $1
+    `select code from tax_codes where is_active and category = 'standard' and available_on in ('sales', 'both') and effective_from <= $1
         and (effective_to is null or effective_to >= $1) order by id limit 1`,
     [today],
   );

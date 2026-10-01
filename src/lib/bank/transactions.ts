@@ -10,6 +10,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { AMOUNTS_MODES, calculateInvoice, type AmountsMode } from "@/lib/invoices/amounts";
 import { controlAccountCode, GST_ACCOUNT } from "@/lib/invoices/service";
+import { type AvailableOn, sideRefusal } from "@/lib/tax/available-on";
 import { carryingValueOut, convertAtRate, foreignAccountState, impliedRate } from "@/lib/ledger/foreign";
 import { type ForeignAmount, getJournal, parseExchangeRate, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
@@ -357,8 +358,9 @@ async function resolveInput(tx: OrgTx, input: ParsedInput): Promise<Resolved> {
     is_active: boolean;
     effective_from: string;
     effective_to: string | null;
+    available_on: AvailableOn;
   }>(
-    "select id, code, rate, category, is_active, effective_from::text, effective_to::text from tax_codes where code = any($1::text[])",
+    "select id, code, rate, category, is_active, effective_from::text, effective_to::text, available_on from tax_codes where code = any($1::text[])",
     [[...new Set(input.lines.flatMap((line) => (line.taxCode ? [line.taxCode] : [])))]],
   );
   const taxByCode = new Map(taxCodes.rows.map((row) => [row.code, row]));
@@ -379,6 +381,9 @@ async function resolveInput(tx: OrgTx, input: ParsedInput): Promise<Resolved> {
       const taxCode = taxByCode.get(line.taxCode);
       if (!taxCode) throw new ValidationError(`${lineLabel}: there's no tax code ${line.taxCode}.`);
       if (!taxCode.is_active) throw new ValidationError(`${lineLabel}: tax code ${taxCode.code} is inactive.`);
+      // Receive money is sales, spend money purchases (TAO4).
+      const offSide = sideRefusal(lineLabel, taxCode.code, taxCode.available_on, input.kind === "receive" ? "sales" : "purchases");
+      if (offSide) throw new ValidationError(offSide);
       if (taxCode.effective_from > input.date || (taxCode.effective_to !== null && taxCode.effective_to < input.date)) {
         throw new ValidationError(`${lineLabel}: tax code ${taxCode.code} isn't in effect on ${input.date}.`);
       }

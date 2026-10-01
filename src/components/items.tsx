@@ -14,6 +14,7 @@ import type { ItemLineDefaults } from "@/lib/items/lines";
 import { ITEM_TYPE_LABELS, ITEM_TYPES, type ItemType } from "@/lib/items/pricing";
 import type { Item, ItemList } from "@/lib/items/service";
 import type { TaxCode } from "@/lib/tax/codes";
+import { codesForSide, type TaxSide, unavailableNote } from "@/lib/tax/available-on";
 
 /**
  * Products and services on screen (examples IT1-IT9): the list hook, the
@@ -275,15 +276,17 @@ function ItemForm({
     }
   }
 
-  const taxSelect = (value: string, onChange: (code: string) => void, label: string) => (
+  // The sales tax code lists codes available on sales, the purchase one on purchases (TAO7).
+  const taxSelect = (value: string, onChange: (code: string) => void, label: string, side: TaxSide) => (
     <Field label={label}>
       <select value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">None</option>
-        {taxCodes
+        {codesForSide(taxCodes, side)
           .filter((taxCode) => taxCode.isActive || taxCode.code === value)
           .map((taxCode) => (
             <option key={taxCode.id} value={taxCode.code}>
               {taxCode.code}
+              {unavailableNote(taxCode)}
             </option>
           ))}
       </select>
@@ -323,7 +326,7 @@ function ItemForm({
         <Field label="Income account">
           <AccountSelect accounts={accounts} value={draft.incomeAccountCode} onChange={(code) => set({ incomeAccountCode: code })} filter={(account) => account.accountClass === "revenue"} placeholder="None" />
         </Field>
-        {taxSelect(draft.salesTaxCode, (code) => set({ salesTaxCode: code }), "Sales tax code")}
+        {taxSelect(draft.salesTaxCode, (code) => set({ salesTaxCode: code }), "Sales tax code", "sales")}
         <Field label="Base unit" hint="What quantities are counted in.">
           <input value={draft.baseUnit} onChange={(event) => set({ baseUnit: event.target.value })} maxLength={30} />
         </Field>
@@ -336,7 +339,7 @@ function ItemForm({
           <Field label="Purchase account">
             <AccountSelect accounts={accounts} value={draft.purchaseAccountCode} onChange={(code) => set({ purchaseAccountCode: code })} filter={(account) => billLineAccountProblem(account) === null} placeholder="None" />
           </Field>
-          {taxSelect(draft.purchaseTaxCode, (code) => set({ purchaseTaxCode: code }), "Purchase tax code")}
+          {taxSelect(draft.purchaseTaxCode, (code) => set({ purchaseTaxCode: code }), "Purchase tax code", "purchases")}
         </div>
       ) : null}
       {activeTaxCodes.length === 0 ? <p className={ui.muted}>There are no active tax codes yet.</p> : null}

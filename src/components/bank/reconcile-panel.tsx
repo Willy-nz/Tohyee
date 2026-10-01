@@ -35,6 +35,7 @@ import type { InvoiceSummary } from "@/lib/invoices/service";
 import { isDecimalString } from "@/lib/money/decimal";
 import { isRateText } from "@/lib/money/fx";
 import type { TaxCode } from "@/lib/tax/codes";
+import { isAvailableOn } from "@/lib/tax/available-on";
 import { retaxLines } from "@/lib/tax/exports";
 import { contactPurchaseTaxCode } from "@/lib/tax/purchase-defaults";
 import type { CustomFieldSetup, CustomValues } from "@/lib/custom-fields/values";
@@ -124,7 +125,9 @@ function AdjustmentFields({
   contactHint?: string;
 }) {
   const unsigned = centsToText(difference < BigInt(0) ? -difference : difference);
-  const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive);
+  // Spend money is purchases, receive money sales: only codes available on that side (TAO8).
+  const side = difference < BigInt(0) ? "purchases" : "sales";
+  const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive && isAvailableOn(taxCode.availableOn, side));
   return (
     <div className={ui.suggestion} style={{ display: "grid", gap: 8 }}>
       <span>
@@ -627,7 +630,9 @@ function BankTransactionForm({
   const rule = suggestions.rule;
   // A foreign-currency line (FXB2-FXB4): converted at a rate, and only zero-rated, exempt or no-GST codes.
   const foreign = line.currencyCode !== lookups.baseCurrency;
-  const usableTaxCode = (taxCode: TaxCode) => !foreign || taxCode.category !== "standard";
+  // Receive money is sales, spend money purchases: only codes available on that side (TAO8).
+  const usableTaxCode = (taxCode: TaxCode) =>
+    (!foreign || taxCode.category !== "standard") && isAvailableOn(taxCode.availableOn, moneyIn ? "sales" : "purchases");
   const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive && usableTaxCode(taxCode));
   const defaultTaxCode = (activeTaxCodes.find((taxCode) => taxCode.category === "standard") ?? activeTaxCodes[0])?.code ?? "";
   const [contactId, setContactId] = useState(rule?.contactId ?? "");

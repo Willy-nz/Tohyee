@@ -13,6 +13,7 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
 import { formatDate, formatMoney } from "@/lib/format";
 import type { TaxCode } from "@/lib/tax/codes";
+import { isAvailableOn, type TaxSide } from "@/lib/tax/available-on";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
 
 /** A line's own values; blank means "as for all". `taxCode` "none" is no GST. */
@@ -40,7 +41,13 @@ export function CashCodingForm({
 }) {
   // Foreign-currency lines (FXB2-FXB4): converted at a rate; only zero-rated, exempt or no-GST codes.
   const foreign = lines.some((line) => line.currencyCode !== lookups.baseCurrency);
-  const activeTaxCodes = lookups.taxCodes.filter((taxCode) => taxCode.isActive && (!foreign || taxCode.category !== "standard"));
+  const usable = lookups.taxCodes.filter((taxCode) => taxCode.isActive && (!foreign || taxCode.category !== "standard"));
+  // Money in becomes receive money (sales), out spend money (purchases): a line's own code is one available on its
+  // side, and the code for all one available on every side among the ticked lines (TAO8).
+  const sideOf = (line: StatementLine): TaxSide => (line.amount.startsWith("-") ? "purchases" : "sales");
+  const sides = [...new Set(lines.map(sideOf))];
+  const activeTaxCodes = usable.filter((taxCode) => sides.every((side) => isAvailableOn(taxCode.availableOn, side)));
+  const codesFor = (line: StatementLine) => usable.filter((taxCode) => isAvailableOn(taxCode.availableOn, sideOf(line)));
   const [exchangeRate, setExchangeRate] = useState("");
   const contacts = lookups.contacts.filter((contact) => !contact.isArchived);
   const [contactId, setContactId] = useState("");
@@ -207,7 +214,7 @@ export function CashCodingForm({
                         <select aria-label={`${label} GST`} value={mine.taxCode} onChange={(event) => setOwnFor(line.id, { taxCode: event.target.value })}>
                           <option value="">As for all</option>
                           <option value={NO_GST}>No GST</option>
-                          {activeTaxCodes.map((code) => (
+                          {codesFor(line).map((code) => (
                             <option key={code.id} value={code.code}>
                               {code.code} ({formatRate(code.rate)})
                             </option>
