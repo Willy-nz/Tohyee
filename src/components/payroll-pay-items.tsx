@@ -15,11 +15,25 @@ export const PAY_ITEM_KIND_NAMES: Record<PayItemKind, string> = {
   allowance: "Allowance",
   holiday_pay: "Holiday pay (typed amount)",
   reimbursement: "Reimbursement",
+  extra_pay: "Extra pay (bonus, gratuity, lump sum)",
+  back_pay: "Back pay",
+  termination_holiday_pay: "Holiday pay on finishing (worked out outside Tohyee)",
+  redundancy: "Redundancy",
   after_tax_deduction: "After-tax deduction",
   kiwisaver_employer: "KiwiSaver employer contribution",
 };
 
-const ADDABLE: PayItemKind[] = ["overtime", "allowance", "holiday_pay", "reimbursement", "after_tax_deduction"];
+const ADDABLE: PayItemKind[] = [
+  "overtime",
+  "allowance",
+  "holiday_pay",
+  "reimbursement",
+  "extra_pay",
+  "back_pay",
+  "termination_holiday_pay",
+  "redundancy",
+  "after_tax_deduction",
+];
 
 /** Where a pay item's amounts go: earnings to an expense, deductions to a liability (PRUN10). */
 function accountFilter(kind: PayItemKind | "") {
@@ -257,9 +271,22 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
             {kind === "reimbursement" ? <p className={ui.muted}>Reimbursements of actual costs aren&apos;t taxed and don&apos;t count for KiwiSaver.</p> : null}
             {kind === "overtime" || kind === "holiday_pay" ? <p className={ui.muted}>Taxable, and counts for KiwiSaver.</p> : null}
             {kind === "after_tax_deduction" ? <p className={ui.muted}>Taken from net pay after tax, for example union fees.</p> : null}
-            <p className={ui.muted}>
-              Bonuses, back pay, leave, child support and payroll giving aren&apos;t supported yet.
-            </p>
+            {kind === "extra_pay" || kind === "back_pay" ? (
+              <p className={ui.muted}>
+                Taxed under IRD&apos;s extra pay rules (the last four weeks&apos; pay annualised), and counts for KiwiSaver. A bonus
+                paid every pay isn&apos;t an extra pay: use an allowance.
+              </p>
+            ) : null}
+            {kind === "termination_holiday_pay" ? (
+              <p className={ui.muted}>
+                Only on a final pay. Tohyee doesn&apos;t work out holiday pay owed on finishing until leave is built: type the amount
+                you worked out. Taxed under IRD&apos;s rule for extra pays when employment ends.
+              </p>
+            ) : null}
+            {kind === "redundancy" ? (
+              <p className={ui.muted}>Only on a final pay. Taxed with no ACC earners&apos; levy, and doesn&apos;t count for KiwiSaver.</p>
+            ) : null}
+            <p className={ui.muted}>Leave, child support and payroll giving aren&apos;t supported yet.</p>
             <div className={ui.actions}>
               <Button disabled={busy} type="submit">Add pay item</Button>
             </div>
