@@ -20,6 +20,24 @@ next person or coding agent picking the work up. Read `AGENTS.md` and
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
+## Choosing the Copilot agent's model and reasoning level
+
+Jess asked Claude to choose these (1 Oct 2026) to keep Copilot credits down.
+Set them in the Agents box before sending each task:
+
+| Kind of task | Model | Reasoning |
+| --- | --- | --- |
+| Accounting, tax, payroll or RDTI calculations; anything that posts to the ledger; migrations that change existing tables; permissions and security | Claude Opus 5.5 | High |
+| Ordinary features: screens, records and their APIs, connectors, reports that don't calculate tax | Claude Sonnet 5.5 | Medium |
+| Docs-only planning and worked examples (research and citing) | Claude Sonnet 5.5 | Medium |
+| Small fixes: renumbering migrations, fixing a test, doc updates, adding next year's rates from IRD's specification | Claude Sonnet 5.5 | Low |
+
+- Don't use X-High or Max unless a task has already failed at High.
+- Prefer Claude doing small fixes, reviews and merges directly in its own
+  session (no Copilot credits) over starting an agent.
+- Give agents everything they need up front (sources, allowlisted sites,
+  migration number) so a session isn't spent stopping to ask.
+
 ## In progress (GitHub Copilot coding agents)
 
 | Work | Issue | Draft PR | Branch | Tenant migration |
