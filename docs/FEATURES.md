@@ -844,7 +844,20 @@ that something happened.
   are copied only from a store in the base currency whose prices exclude
   tax. Customer and product create/update webhooks are handled once each
   (a repeated delivery does nothing) and need a public https address
-  (Settings › Remote access). Nothing posts to the ledger.
+  (Settings › Remote access). Stage 1 posts nothing to the ledger.
+- **Sales platform connections, stage 2: Shopify orders, refunds and
+  payouts** (#77, SPC11-SPC24, decisions 51-55 and 317-322, not yet
+  approved by Jess; not tried against a real store). With "Post to the
+  accounts" on (Settings › Sales platforms › Posting to the accounts,
+  admins; the form was added on 2 Oct 2026, before then only the API could
+  set it), paid orders from the start date become approved sales orders
+  and invoices with their payment into a clearing account, refunds become
+  credit notes and refunds, and payouts move money from the clearing
+  account to the bank with the fees. Shopify's tax rates are matched to
+  tax codes; untaxed lines take the zero-rated or exempt code chosen.
+  Guest checkouts go to the customer contact chosen for them, or are
+  refused (SPC24). Refused rather than guessed: test orders, other
+  currencies, gift cards, tips or duties, chargebacks and reserves.
 - **Phone access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):
@@ -1267,9 +1280,8 @@ isn't acceptable, because people would trust it:
 - an import or reverse-charge tax code (imported services under the
   reverse charge, EX16-EX25), and a default purchase tax code on expense
   claims (their suppliers aren't contacts), cash coding and bank rules
-- sales platforms (SPC1-SPC10): Shopify orders, refunds and payouts (orders
-  will become sales orders, then invoices, once sales orders are built),
-  WooCommerce, Square and Stripe, customers' addresses and companies,
+- sales platforms: WooCommerce, Square and Stripe, Shopify chargebacks
+  and reserves, customers' addresses and companies,
   stock levels, and anything written back to the store
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)

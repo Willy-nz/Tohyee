@@ -50,6 +50,9 @@ export type SalesPlatformConnection = {
   feesAccountCode: string | null;
   salesAccountCode: string | null;
   shippingAccountCode: string | null;
+  /** The contact guest checkouts go to (decision 317), or null: guest checkouts are refused. */
+  guestContactId: string | null;
+  guestContactName: string | null;
   untaxedTaxCode: string | null;
   /** Shopify's tax rate as a percentage ("15") -> the Tohyee tax code. */
   taxCodes: Array<{ rate: string; taxCode: string }>;

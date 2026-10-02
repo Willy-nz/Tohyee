@@ -108,6 +108,8 @@ type ConnectionRow = {
   shipping_account_code: string | null;
   untaxed_tax_code: string | null;
   tax_codes: Array<{ rate: string; taxCode: string }>;
+  guest_contact_id: string | null;
+  guest_contact_name: string | null;
 };
 
 const accountCode = (column: string) => `(select a.code from accounts a where a.id = ${column}) as ${column.replace(/_id$/, "_code")}`;
@@ -120,6 +122,7 @@ const COLUMNS =
   "fees_account_id, sales_account_id, shipping_account_id, untaxed_tax_code_id, granted_scopes, orders_synced_until, payouts_synced_until, " +
   ["clearing_account_id", "payout_account_id", "fees_account_id", "sales_account_id", "shipping_account_id"].map(accountCode).join(", ") +
   ", (select t.code from tax_codes t where t.id = untaxed_tax_code_id) as untaxed_tax_code" +
+  ", guest_contact_id::text, (select g.name from contacts g where g.id = guest_contact_id) as guest_contact_name" +
   ", (select coalesce(json_agg(json_build_object('rate', m.rate::text, 'taxCode', t.code) order by m.rate), '[]'::json)" +
   "     from sales_platform_tax_codes m join tax_codes t on t.id = m.tax_code_id where m.connection_id = sales_platform_connections.id) as tax_codes";
 
@@ -154,6 +157,8 @@ function toConnection(row: ConnectionRow): SalesPlatformConnection {
     salesAccountCode: row.sales_account_code,
     shippingAccountCode: row.shipping_account_code,
     untaxedTaxCode: row.untaxed_tax_code,
+    guestContactId: row.guest_contact_id,
+    guestContactName: row.guest_contact_name,
     taxCodes: row.tax_codes.map((entry) => ({ rate: toPlainString(mul(dec(entry.rate), dec("100"))), taxCode: entry.taxCode })),
     grantedScopes: [...row.granted_scopes].sort(),
   };
@@ -607,6 +612,22 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     }
   }
 
+  // Guest checkouts' contact (decision 317): an active customer, or null to refuse guest checkouts.
+  let guest: { id: string; name: string } | null | undefined;
+  if (body.guestContactId !== undefined) {
+    if (body.guestContactId === null || body.guestContactId === "") guest = null;
+    else {
+      const found = await tx.query<{ id: string; name: string; is_customer: boolean; is_archived: boolean }>(
+        "select id::text, name, is_customer, is_archived from contacts where id::text = $1",
+        [String(body.guestContactId)],
+      );
+      const contact = found.rows[0];
+      if (!contact) throw new ValidationError("That contact for guest checkouts wasn't found.");
+      if (contact.is_archived || !contact.is_customer) throw new ValidationError(`${contact.name} isn't an active customer, so guest checkouts can't go to it.`);
+      guest = { id: contact.id, name: contact.name };
+    }
+  }
+
   const pick = <T,>(chosen: T | null | undefined, current: string | null) => (chosen === undefined ? current : chosen === null ? null : chosen);
   const next = {
     clearing: pick(clearing?.id ?? clearing, row.clearing_account_id),
@@ -615,6 +636,7 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     sales: pick(sales?.id ?? sales, row.sales_account_id),
     shipping: pick(shipping?.id ?? shipping, row.shipping_account_id),
     untaxed: pick(untaxed?.id ?? untaxed, row.untaxed_tax_code_id),
+    guest: pick(guest?.id ?? guest, row.guest_contact_id),
   };
   if (next.clearing !== null && next.clearing === next.payout) {
     throw new ValidationError("The clearing account and the account payouts arrive in must be different accounts.");
@@ -655,6 +677,7 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   named(sales, row.sales_account_id, "sales account");
   named(shipping, row.shipping_account_id, "shipping account");
   if (untaxed !== undefined && (untaxed?.id ?? null) !== row.untaxed_tax_code_id) changes.push(`untaxed sales: ${untaxed?.code ?? "none"}`);
+  if (guest !== undefined && (guest?.id ?? null) !== row.guest_contact_id) changes.push(`guest checkouts: ${guest ? `to ${guest.name}` : "refused"}`);
   if (taxCodes !== undefined) {
     const before = row.tax_codes.map((entry) => `${toPlainString(dec(entry.rate))}=${entry.taxCode}`).join(",");
     const after = [...taxCodes].sort((a, b) => cmp(dec(a.rate), dec(b.rate))).map((entry) => `${toPlainString(dec(entry.rate))}=${entry.code.code}`).join(",");
@@ -672,9 +695,10 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   await tx.query(
     `update sales_platform_connections
         set sync_customers = $2, sync_products = $3, post_to_accounts = $4, start_date = $5, clearing_account_id = $6, payout_account_id = $7,
-            fees_account_id = $8, sales_account_id = $9, shipping_account_id = $10, untaxed_tax_code_id = $11, updated_at = now()
+            fees_account_id = $8, sales_account_id = $9, shipping_account_id = $10, untaxed_tax_code_id = $11, guest_contact_id = $12::bigint,
+            updated_at = now()
       where id = $1`,
-    [row.id, syncCustomers, syncProducts, postToAccounts, startDate, next.clearing, next.payout, next.fees, next.sales, next.shipping, next.untaxed],
+    [row.id, syncCustomers, syncProducts, postToAccounts, startDate, next.clearing, next.payout, next.fees, next.sales, next.shipping, next.untaxed, next.guest],
   );
   const message = changes.join("; ");
   await writeLog(tx, row.id, { source: "connection", action: "settings", message: `${message.charAt(0).toUpperCase()}${message.slice(1)}.` });

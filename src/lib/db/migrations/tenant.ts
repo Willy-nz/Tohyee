@@ -12166,4 +12166,15 @@ create trigger organisation_settings_timesheet_first_day_guard
   for each row execute function tohyee_guard_timesheet_first_day();
 `,
   },
+  {
+    version: "0075",
+    name: "sales_platform_guest_contact",
+    sql: `
+-- Guest checkouts (decision 317; docs/ACCOUNTING-EXAMPLES.md SPC24): an
+-- order without a platform customer goes to one contact chosen on the
+-- connection. Null: guest checkouts are refused, as before.
+alter table sales_platform_connections
+  add column guest_contact_id bigint references contacts(id);
+`,
+  },
 ];

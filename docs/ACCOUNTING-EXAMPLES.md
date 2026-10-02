@@ -4581,11 +4581,23 @@ are New Zealand dates (NZDT, UTC+13).
   bookkeepers get 403); everyone can read the log; the webhook address
   takes only signed deliveries.
 - **SPC23** Refused rather than guessed (logged, nothing posted): a test
-  order; an order without a customer (guest checkout); an order in another
+  order; an order without a customer (guest checkout) when no contact is
+  chosen for them (SPC24); an order in another
   currency (store or presentment not NZD); an order with a gift card line;
   a paid order whose total Tohyee can't reproduce (e.g. with a tip or
   duties); a payment by a gift card; a partly paid order (it waits); a
   refund with an order adjustment; a payout that's a withdrawal.
+
+- **SPC24** Guest checkouts (decision 317). An admin chooses the
+  customer contact **Shopify customers** for guest checkouts on the
+  connection (a supplier-only contact such as Box Co is refused). A paid
+  guest order **#1201** (no Shopify customer, billing country NZ) is then
+  brought in like #1001 (SPC11), with its sales order and invoice against
+  Shopify customers. Whether a guest order is an
+  export comes from its own billing country, not the contact. With no
+  contact chosen, a guest order (**#1202**) is refused and logged: "#1202
+  has no Shopify customer (a guest checkout). Choose a contact for guest
+  checkouts in the connection's settings to bring it in."
 
 ### Not supported yet (refused rather than guessed)
 
