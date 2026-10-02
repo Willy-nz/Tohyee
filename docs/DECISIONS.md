@@ -1526,4 +1526,77 @@ like HL52-HL54 they're **not approved by Jess**.
      posting is refused while any row of the report has a problem (HL54),
      so a part of the liability is never quietly left out. Someone who
      finished on or before the date isn't in the report (what they're
-     owed is in their final pay), as built in P8.
+     owed is in their final pay), as built in P8. (Replaced by decision
+     189: they stay in until their final pay is paid. Sick leave: decision
+     188.)
+
+## The leave liability's four questions, decided (2 Oct 2026; decisions 188-191; examples HL53, HL57-HL61)
+
+The questions left after posting the leave liability was built ("Questions
+for Jess (posting the leave liability)" at the end of the HL section),
+decided by the rule law → NetSuite → Xero, as Jess asked. Neither NetSuite
+nor Xero NZ posts a leave liability (decision 182's preamble), so these
+follow the standard. PBE IPSAS 39 (XRB, [dmsdocument/5446](https://www.xrb.govt.nz/dmsdocument/5446/))
+was read again on 2 Oct 2026 through the summarising fetch tool; quotes are
+as it returned them, so check them against the PDF (they match NZ IAS 19's
+paragraphs of the same numbers). The examples are **not approved by Jess**.
+
+188. **Sick leave stays out of the liability (question 1), documented, not
+     built.** Para 17: "a sick leave obligation is likely to be material
+     only if there is a formal or informal understanding that unused paid
+     sick leave may be taken as paid annual leave." The Holidays Act 2003
+     doesn't let sick leave be taken as annual holidays, so for most
+     organisations there's no material obligation and nothing to estimate.
+     An organisation whose own agreements do allow it has to journal its
+     own estimate by hand; the liability screen says so. Bereavement and
+     family violence leave don't accumulate (para 13(b): recognised when
+     the absence occurs), so they stay out too.
+189. **Finished employees stay in the liability until their final pay is
+     paid (question 2; HL53, HL57, HL58).** Para 11 recognises the benefits
+     expected to be paid for service already given, "after deducting any
+     amount already paid". Someone who has finished but whose final pay's
+     pay date is after the posting's date is still owed their holiday pay
+     on finishing, and no account holds it until the final pay's journal.
+     So the report keeps everyone who finished before its date until an
+     approved pay run that includes their finish date (their final pay) is
+     dated on or before it, valued at the **holiday pay on finishing on
+     that final pay**: Tohyee's lines (s 23-s 26, s 40(3), s 60(2)(b)) and
+     any typed "Holiday pay on finishing (worked out outside Tohyee)". With
+     no approved final pay yet, the row is a problem, which stops the
+     posting (decision 187: never quietly left out) and says to approve the
+     final pay. Someone who finished and was never paid by an approved pay
+     run in Tohyee has nothing to wait for and is left out (as before).
+     HL53's figures are rewritten: Hemi is in at 31 Oct at 5,302.89.
+190. **Employer KiwiSaver on the leave is included (question 3; HL59,
+     HL60).** Para 9(a) counts social security contributions as short-term
+     benefits, and para 53 recognises "the contribution payable to a
+     defined contribution plan in exchange for that service". Employer
+     KiwiSaver is paid on holiday pay (Tohyee's leave and holiday pay on
+     finishing items count for KiwiSaver), so the liability includes it:
+     for each employee whose KiwiSaver status is "enrolled" (their status
+     now: it isn't dated), their employer rate × their liability,
+     truncated to cents as each pay's contribution is (spec 5.20.2,
+     `kiwiSaverEmployerContribution`). It's gross, before ESCT: ESCT is
+     taken out of the employer's contribution and is part of its cost.
+     It's posted as its own pair of lines, described "Employer KiwiSaver
+     on leave", to the same two accounts (so decision 184's guard on the
+     employee entitlements account covers it), measured from the last
+     posting the same way (decision 182), and kept by Department on each
+     posting (tenant migration 0073). Postings before 0073 measured none,
+     so the first posting after it adds the KiwiSaver in full. Not in it:
+     ACC levies (paid by the employer on liable earnings later, not per
+     pay) and the employee's own KiwiSaver (part of the gross).
+191. **A month-end reminder, worked out from the postings (question 4;
+     HL61).** On the home page, beside the R&D reminders, people with the
+     bookkeeper role and payroll access see "Post the leave liability at
+     31 Oct 2026" when, for the latest month end before today, an approved
+     pay run's period end or pay date falls after the last posting not
+     voided (or there's no posting) and on or before that month end, and
+     some employee has leave settings. Nothing is typed or ticked: posting
+     at or after the month end, or voiding, changes it. It doesn't work
+     out the liability itself (that would run the report on every home
+     page), so in the rare month where pay runs leave the liability
+     unchanged, posting says "Nothing to post" and the reminder stays until
+     the next month end. It isn't a Period close check: those are for
+     bookkeepers without payroll access too, and a warning there would
+     stop them closing.

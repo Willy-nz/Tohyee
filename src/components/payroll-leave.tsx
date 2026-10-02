@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { postForm } from "@/components/rd";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import type { EmployeeSummary } from "@/lib/payroll/employees";
@@ -13,7 +14,7 @@ import { LEAVE_TYPE_LABELS, LEAVE_TYPES, type LeaveType } from "@/lib/payroll/le
 import { BEREAVEMENT_LABELS, type BereavementKind } from "@/lib/payroll/leave/sick";
 import type { OpeningBalances } from "@/lib/payroll/leave-opening";
 import type { CashUp, LeaveBooking, PublicHolidayDecision, UnpaidLeaveRecord } from "@/lib/payroll/leave-records";
-import type { LeaveLiabilityPosting } from "@/lib/payroll/leave-liability";
+import type { LeaveLiabilityPosting, LeaveLiabilityReminder } from "@/lib/payroll/leave-liability";
 import type { LeaveLiabilityReport, LeaveRecord, LeaveSummary } from "@/lib/payroll/leave-reports";
 import type { LeaveSettings, OrganisationLeaveSettings } from "@/lib/payroll/leave-settings";
 import type { PayItem } from "@/lib/payroll/pay-items";
@@ -466,7 +467,7 @@ function Liability({ organisationId }: { organisationId: string }) {
     <>
     <Card
       title="Leave liability"
-      description="Annual holidays entitled to, at the greater of ordinary weekly pay and average weekly earnings; the running 8% since the last anniversary; untaken alternative holidays. Sick, bereavement and family violence leave aren't in it. Post it to the ledger below (decision 177)."
+      description="Annual holidays entitled to, at the greater of ordinary weekly pay and average weekly earnings; the running 8% since the last anniversary; untaken alternative holidays; and, for anyone who has finished but whose final pay isn't paid yet, the holiday pay on finishing on it. Employer KiwiSaver on it is shown for enrolled employees (gross, before ESCT). Sick, bereavement and family violence leave aren't in it: if your agreements let unused sick leave be taken as annual leave, journal your own estimate (decision 188). Post it to the ledger below (decisions 177, 189, 190)."
       actions={
         <div className={ui.actions}>
           <Field label="As at"><input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>
@@ -479,7 +480,7 @@ function Liability({ organisationId }: { organisationId: string }) {
         <>
           <div className={ui.tableWrap}>
             <table className={ui.stackOnPhone}>
-              <thead><tr><th>Employee</th><th>Department</th><th>Annual holidays</th><th>Value</th><th>Running 8%</th><th>Alternative holidays</th><th>Total</th></tr></thead>
+              <thead><tr><th>Employee</th><th>Department</th><th>Annual holidays</th><th>Value</th><th>Running 8%</th><th>Alternative holidays</th><th>Holiday pay on finishing</th><th>Total</th><th>Employer KiwiSaver</th></tr></thead>
               <tbody>
                 {data.rows.map((row) => (
                   <tr key={row.employeeId}>
@@ -489,7 +490,11 @@ function Liability({ organisationId }: { organisationId: string }) {
                     <td data-label="Value" className={ui.num}>{formatMoney(row.annualValue)}</td>
                     <td data-label="Running 8%" className={ui.num}>{formatMoney(row.runningEightPercent)}</td>
                     <td data-label="Alternative holidays" className={ui.num}>{row.alternativeHolidays ? `${row.alternativeHolidays}: ${formatMoney(row.alternativeValue)}` : "—"}</td>
+                    <td data-label="Holiday pay on finishing" className={ui.num}>
+                      {row.finishDate ? <>{formatMoney(row.holidayPayOnFinishing)}<br /><small>finished {formatDate(row.finishDate)}{row.finalPayDate ? `, paid ${formatDate(row.finalPayDate)}` : ""}</small></> : "—"}
+                    </td>
                     <td data-label="Total" className={ui.num}>{formatMoney(row.total)}</td>
+                    <td data-label="Employer KiwiSaver" className={ui.num}>{row.kiwiSaverRate ? <>{formatMoney(row.kiwiSaver)}<br /><small>{trim(row.kiwiSaverRate)}%</small></> : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -499,7 +504,9 @@ function Liability({ organisationId }: { organisationId: string }) {
                   <td className={ui.num}>{formatMoney(data.totals.annualValue)}</td>
                   <td className={ui.num}>{formatMoney(data.totals.runningEightPercent)}</td>
                   <td className={ui.num}>{formatMoney(data.totals.alternativeValue)}</td>
+                  <td className={ui.num}>{formatMoney(data.totals.holidayPayOnFinishing)}</td>
                   <td className={ui.num}>{formatMoney(data.totals.total)}</td>
+                  <td className={ui.num}>{formatMoney(data.totals.kiwiSaver)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -512,6 +519,7 @@ function Liability({ organisationId }: { organisationId: string }) {
                   <tr key={department.departmentId ?? "none"}>
                     <th scope="row">{department.department ?? "No Department"}</th>
                     <td className={ui.num}>{formatMoney(department.total)}</td>
+                    <td className={ui.num}>{department.kiwiSaver !== "0.00" ? `+ KiwiSaver ${formatMoney(department.kiwiSaver)}` : ""}</td>
                   </tr>
                 ))}
               </tbody>
@@ -520,7 +528,7 @@ function Liability({ organisationId }: { organisationId: string }) {
         </>
       ) : report.loading ? <Empty>Loading…</Empty> : null}
     </Card>
-    <LiabilityPostings organisationId={organisationId} asAt={asAt} total={data && data.rows.every((row) => row.problem === null) ? data.totals.total : null} onChanged={report.reload} />
+    <LiabilityPostings organisationId={organisationId} asAt={asAt} total={data && data.rows.every((row) => row.problem === null) ? data.totals.withKiwiSaver : null} onChanged={report.reload} />
     </>
   );
 }
@@ -552,7 +560,7 @@ function LiabilityPostings({ organisationId, asAt, total, onChanged }: { organis
     if (!window.confirm(`Post the leave liability at ${formatDate(asAt)}? The journal is the change since ${last ? last.reference : "nothing posted"}.`)) return;
     void act(
       () => api("/api/payroll/leave/liability/postings", { method: "POST", body: { organisationId, idempotencyKey: newIdempotencyKey("leave-liability"), asAt } }),
-      (posting) => `${posting.reference} posted: the liability at ${formatDate(posting.asAt)} is $${formatMoney(posting.liability)}, a change of $${formatMoney(posting.change)}.`,
+      (posting) => `${posting.reference} posted: the liability at ${formatDate(posting.asAt)} is $${formatMoney(posting.total)} (employer KiwiSaver $${formatMoney(posting.kiwiSaver)} of it), a change of $${formatMoney(posting.change)}.`,
     );
   };
   const voidPosting = (posting: LeaveLiabilityPosting) => {
@@ -566,12 +574,12 @@ function LiabilityPostings({ organisationId, asAt, total, onChanged }: { organis
   return (
     <Card
       title="Post to the ledger"
-      description="One journal at the date for the change since the last posting not voided: Dr the leave expense account, Cr the employee entitlements account (the other way when it falls), by Department, never naming anyone. Leave paid in pay runs still goes to wages; the next posting takes the fall. The accounts are under Payroll › Pay items."
+      description="One journal at the date for the change since the last posting not voided: Dr the leave expense account, Cr the employee entitlements account (the other way when it falls), by Department, never naming anyone, with the employer KiwiSaver on it as its own pair of lines. Leave paid in pay runs still goes to wages; the next posting takes the fall. The accounts are under Payroll › Pay items. The home page reminds you after each month end with pay runs."
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {postings.error ? <Notice tone="error">{postings.error}</Notice> : null}
       <p>
-        {last ? `Last posted: ${last.reference} at ${formatDate(last.asAt)}, $${formatMoney(last.liability)}.` : "Nothing posted yet."}
+        {last ? `Last posted: ${last.reference} at ${formatDate(last.asAt)}, $${formatMoney(last.total)}.` : "Nothing posted yet."}
         {total !== null ? ` At ${formatDate(asAt)}: $${formatMoney(total)}.` : ""}
       </p>
       <div className={ui.actions}>
@@ -587,9 +595,9 @@ function LiabilityPostings({ organisationId, asAt, total, onChanged }: { organis
                   <tr key={posting.id}>
                     <td data-label="Posting"><Link href={`/operations/ledger-journals?journal=${posting.journalId}`}>{posting.reference}</Link></td>
                     <td data-label="As at">{formatDate(posting.asAt)}</td>
-                    <td data-label="Liability" className={ui.num}>{formatMoney(posting.liability)}</td>
+                    <td data-label="Liability" className={ui.num}>{formatMoney(posting.total)}{posting.kiwiSaver !== "0.00" ? <><br /><small>KiwiSaver {formatMoney(posting.kiwiSaver)}</small></> : null}</td>
                     <td data-label="Change" className={ui.num}>{formatMoney(posting.change)}{posting.previousReference ? <><br /><small>from {posting.previousReference}</small></> : null}</td>
-                    <td data-label="By Department">{posting.departments.length ? posting.departments.map((entry) => `${entry.department ?? "No Department"} ${formatMoney(entry.liability)}`).join("; ") : "—"}</td>
+                    <td data-label="By Department">{posting.departments.length ? posting.departments.map((entry) => `${entry.department ?? "No Department"} ${formatMoney(entry.liability)}${entry.kiwiSaver !== "0.00" ? ` + KiwiSaver ${formatMoney(entry.kiwiSaver)}` : ""}`).join("; ") : "—"}</td>
                     <td data-label="Status">{posting.status === "voided" ? <Badge>Voided {formatDate(posting.voidDate)}</Badge> : "Posted"}</td>
                     <td data-label="Actions">
                       {last && posting.id === last.id ? <Button disabled={busy} size="small" variant="secondary" onClick={() => voidPosting(posting)}>Void</Button> : null}
@@ -1141,5 +1149,24 @@ export function LeaveRecordView({ organisationId, employeeId }: { organisationId
         </div>
       </Card>
     </div>
+  );
+}
+
+/** The leave liability's month-end reminder on the home page (decision 191; HL61): bookkeepers and up with payroll access. */
+export function LeaveLiabilityReminders({ organisationId }: { organisationId: string }) {
+  const { can } = useWorkspace();
+  const loaded = useApiData<{ reminders: LeaveLiabilityReminder[] }>(can("bookkeeper") ? "/api/payroll/leave/liability/reminders" : null, { organisationId });
+  const reminders = loaded.data?.reminders ?? [];
+  if (reminders.length === 0) return null;
+  return (
+    <Notice tone="warning">
+      <strong>Leave liability</strong>
+      <ul>
+        {reminders.map((reminder) => (
+          <li key={reminder.monthEnd}>{reminder.text}.</li>
+        ))}
+      </ul>
+      Post it under <Link href="/operations/payroll/leave">Payroll › Leave › Liability</Link>.
+    </Notice>
   );
 }

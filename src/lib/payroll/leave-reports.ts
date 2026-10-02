@@ -4,7 +4,7 @@ import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
-import { add, dec, divide, isPositive, isZero, mul, sum, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, dec, divide, isPositive, isZero, mul, sum, toFixedString, toPlainString, truncate, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { requirePayrollAccess } from "@/lib/payroll/access";
 import { annualEntitlement } from "@/lib/payroll/leave/annual";
 import { laterOf } from "@/lib/payroll/leave/dates";
@@ -357,16 +357,37 @@ export type LeaveLiabilityRow = {
   eightPercentSince: string | null;
   alternativeHolidays: number;
   alternativeValue: string;
+  /** Someone who finished before the date and isn't paid yet (decision 189): their finish date and final pay's pay date. */
+  finishDate: string | null;
+  finalPayDate: string | null;
+  /** The holiday pay on finishing on their approved final pay (decision 189). */
+  holidayPayOnFinishing: string;
+  /** Holiday pay owed: annual holidays, the running 8%, alternative holidays and holiday pay on finishing. */
   total: string;
+  /** The employer's KiwiSaver rate when enrolled (null otherwise), and the employer KiwiSaver on `total` (decision 190). */
+  kiwiSaverRate: string | null;
+  kiwiSaver: string;
   problem: string | null;
 };
+
+type LiabilityFigures = { annualValue: string; runningEightPercent: string; alternativeValue: string; holidayPayOnFinishing: string; total: string; kiwiSaver: string; withKiwiSaver: string };
 
 export type LeaveLiabilityReport = {
   asAt: string;
   rows: LeaveLiabilityRow[];
-  departments: Array<{ departmentId: string | null; department: string | null; annualValue: string; runningEightPercent: string; alternativeValue: string; total: string }>;
-  totals: { annualValue: string; runningEightPercent: string; alternativeValue: string; total: string };
+  departments: Array<{ departmentId: string | null; department: string | null } & LiabilityFigures>;
+  totals: LiabilityFigures;
 };
+
+/**
+ * The employer KiwiSaver on an employee's leave liability (decision 190):
+ * the employer rate × the holiday pay owed, truncated to cents as each
+ * pay's contribution is (spec 5.20.2). Gross, before ESCT.
+ */
+export function kiwiSaverOnLiability(total: string, employerRate: string): string {
+  const amount = mul(dec(total), divide(dec(employerRate), dec("100"), 10));
+  return toFixedString(truncate(amount, 2), 2);
+}
 
 /**
  * The leave liability report (decision 28; HL42): for each employee whose
@@ -374,15 +395,30 @@ export type LeaveLiabilityReport = {
  * greater of ordinary weekly pay and average weekly earnings to the last
  * approved pay period; the running 8% since their last anniversary; and
  * untaken alternative holidays at a usual day's pay (ordinary weekly pay ÷
- * usual days, decision 153). By Department (the biggest line of their cost
- * allocation at the date). Read-only; `postLeaveLiability` posts its
- * total by Department (decision 177).
+ * usual days, decision 153). Someone who finished before the date stays in
+ * until their final pay is paid, at the holiday pay on finishing on it, and
+ * is a problem while it isn't approved (decision 189). The employer
+ * KiwiSaver on each enrolled employee's total is shown beside it (decision
+ * 190). By Department (the biggest line of their cost allocation at the
+ * date). Read-only; `postLeaveLiability` posts it by Department (decision
+ * 177).
  */
 export async function leaveLiabilityReport(tx: OrgTx, input: { asAt?: unknown } = {}): Promise<LeaveLiabilityReport> {
   await requirePayrollAccess(tx);
   const asAt = input.asAt ? parseIsoDate(input.asAt, "As at") : todayIsoDate();
-  const employees = await tx.query<{ id: string }>(
-    `select id::text from payroll_employees where start_date <= $1 and (finish_date is null or finish_date >= $1) order by lower(last_name), lower(first_name), id`,
+  // Finished before the date: in until an approved pay run that includes the finish date (the final pay) is
+  // dated on or before it; never paid by an approved pay run in Tohyee: nothing to wait for (decision 189).
+  const employees = await tx.query<{ id: string; finish_date: string | null; kiwisaver_status: string; kiwisaver_employer_rate: string }>(
+    `select e.id::text, e.finish_date::text, e.kiwisaver_status, e.kiwisaver_employer_rate::text
+       from payroll_employees e
+      where e.start_date <= $1
+        and (e.finish_date is null or e.finish_date >= $1
+          or (exists (select 1 from payroll_pay_run_employees pe join payroll_pay_runs r on r.id = pe.pay_run_id
+                       where pe.employee_id = e.id and r.status = 'approved')
+              and not exists (select 1 from payroll_pay_run_employees pe join payroll_pay_runs r on r.id = pe.pay_run_id
+                               where pe.employee_id = e.id and r.status = 'approved' and r.pay_date <= $1
+                                 and r.period_start <= e.finish_date and r.period_end >= e.finish_date)))
+      order by lower(e.last_name), lower(e.first_name), e.id`,
     [asAt],
   );
   const departments = await tx.query<{ employee_id: string; department_id: string | null; department_name: string | null }>(
@@ -402,6 +438,7 @@ export async function leaveLiabilityReport(tx: OrgTx, input: { asAt?: unknown } 
     const facts = await loadEmployeeFacts(tx, employee.id, await allSettings(tx, employee.id));
     if (facts.settings.length === 0) continue;
     const department = departmentOf.get(facts.id);
+    const enrolled = employee.kiwisaver_status === "enrolled";
     const row: LeaveLiabilityRow = {
       employeeId: facts.id,
       name: facts.name,
@@ -415,9 +452,36 @@ export async function leaveLiabilityReport(tx: OrgTx, input: { asAt?: unknown } 
       eightPercentSince: null,
       alternativeHolidays: 0,
       alternativeValue: "0.00",
+      finishDate: null,
+      finalPayDate: null,
+      holidayPayOnFinishing: "0.00",
       total: "0.00",
+      kiwiSaverRate: enrolled ? toFixedString(dec(employee.kiwisaver_employer_rate), 2) : null,
+      kiwiSaver: "0.00",
       problem: null,
     };
+    if (employee.finish_date !== null && employee.finish_date < asAt) {
+      row.finishDate = employee.finish_date;
+      const finalPay = await tx.query<{ pay_date: string; amount: string }>(
+        `select r.pay_date::text,
+                coalesce((select sum(l.amount) from payroll_pay_run_lines l join payroll_pay_items i on i.id = l.pay_item_id
+                           where l.pay_run_id = r.id and l.employee_id = pe.employee_id and i.kind = 'termination_holiday_pay'), 0)::text as amount
+           from payroll_pay_run_employees pe join payroll_pay_runs r on r.id = pe.pay_run_id
+          where pe.employee_id = $1 and r.status = 'approved' and r.period_start <= $2 and r.period_end >= $2
+          order by r.pay_date desc limit 1`,
+        [facts.id, employee.finish_date],
+      );
+      if (!finalPay.rows[0]) {
+        row.problem = `${facts.name} finished on ${formatDate(employee.finish_date)} and their final pay isn't approved yet. Approve the pay run that includes ${formatDate(employee.finish_date)} (their final pay) first.`;
+      } else {
+        row.finalPayDate = finalPay.rows[0].pay_date;
+        row.holidayPayOnFinishing = toFixedString(dec(finalPay.rows[0].amount), 2);
+        row.total = row.holidayPayOnFinishing;
+        if (enrolled) row.kiwiSaver = kiwiSaverOnLiability(row.total, employee.kiwisaver_employer_rate);
+      }
+      rows.push(row);
+      continue;
+    }
     const summary = summarise(facts, asAt);
     if (!summary.kept) {
       row.problem = summary.notKeptReason;
@@ -455,33 +519,34 @@ export async function leaveLiabilityReport(tx: OrgTx, input: { asAt?: unknown } 
         row.alternativeValue = toFixedString(divide(mul(owp, dec(String(row.alternativeHolidays))), usualDays, 6), 2);
       }
       row.total = toFixedString(sum([dec(row.annualValue), dec(row.runningEightPercent), dec(row.alternativeValue)]), 2);
+      if (enrolled) row.kiwiSaver = kiwiSaverOnLiability(row.total, employee.kiwisaver_employer_rate);
     } catch (error) {
       if (!(error instanceof ValidationError)) throw error;
       row.problem = error.message;
     }
     rows.push(row);
   }
+  const zero = (): LiabilityFigures => ({ annualValue: "0.00", runningEightPercent: "0.00", alternativeValue: "0.00", holidayPayOnFinishing: "0.00", total: "0.00", kiwiSaver: "0.00", withKiwiSaver: "0.00" });
+  const addTo = (figures: LiabilityFigures, row: LeaveLiabilityRow) => {
+    for (const field of ["annualValue", "runningEightPercent", "alternativeValue", "holidayPayOnFinishing", "total", "kiwiSaver"] as const) {
+      figures[field] = toFixedString(add(dec(figures[field]), dec(row[field])), 2);
+    }
+    figures.withKiwiSaver = toFixedString(add(dec(figures.total), dec(figures.kiwiSaver)), 2);
+  };
   const byDepartment = new Map<string, LeaveLiabilityReport["departments"][number]>();
+  const totals = zero();
   for (const row of rows) {
     const keyOf = row.departmentId ?? "";
-    const entry = byDepartment.get(keyOf) ?? { departmentId: row.departmentId, department: row.department, annualValue: "0.00", runningEightPercent: "0.00", alternativeValue: "0.00", total: "0.00" };
-    entry.annualValue = toFixedString(add(dec(entry.annualValue), dec(row.annualValue)), 2);
-    entry.runningEightPercent = toFixedString(add(dec(entry.runningEightPercent), dec(row.runningEightPercent)), 2);
-    entry.alternativeValue = toFixedString(add(dec(entry.alternativeValue), dec(row.alternativeValue)), 2);
-    entry.total = toFixedString(add(dec(entry.total), dec(row.total)), 2);
+    const entry = byDepartment.get(keyOf) ?? { departmentId: row.departmentId, department: row.department, ...zero() };
+    addTo(entry, row);
     byDepartment.set(keyOf, entry);
+    addTo(totals, row);
   }
-  const total = (pick: (row: LeaveLiabilityRow) => string) => toFixedString(sum(rows.map((row) => dec(pick(row)))), 2);
   return {
     asAt,
     rows,
     departments: [...byDepartment.values()].sort((a, b) => (a.department ?? "~").localeCompare(b.department ?? "~")),
-    totals: {
-      annualValue: total((row) => row.annualValue),
-      runningEightPercent: total((row) => row.runningEightPercent),
-      alternativeValue: total((row) => row.alternativeValue),
-      total: total((row) => row.total),
-    },
+    totals,
   };
 }
 
@@ -489,7 +554,25 @@ export async function leaveLiabilityReport(tx: OrgTx, input: { asAt?: unknown } 
 export async function exportLeaveLiability(tx: OrgTx, input: { asAt?: unknown } = {}): Promise<{ fileName: string; csv: string; sha256: string }> {
   const report = await leaveLiabilityReport(tx, input);
   const csv = toCsv([
-    ["Employee", "Department", "Annual holidays (weeks)", "Weekly rate", "Rate", "Annual holidays value", "Running 8%", "8% since", "Alternative holidays", "Alternative holidays value", "Total", "Problem"],
+    [
+      "Employee",
+      "Department",
+      "Annual holidays (weeks)",
+      "Weekly rate",
+      "Rate",
+      "Annual holidays value",
+      "Running 8%",
+      "8% since",
+      "Alternative holidays",
+      "Alternative holidays value",
+      "Finished",
+      "Final pay date",
+      "Holiday pay on finishing",
+      "Total",
+      "Employer KiwiSaver rate",
+      "Employer KiwiSaver",
+      "Problem",
+    ],
     ...report.rows.map((row) => [
       row.name,
       row.department,
@@ -501,10 +584,33 @@ export async function exportLeaveLiability(tx: OrgTx, input: { asAt?: unknown } 
       row.eightPercentSince,
       row.alternativeHolidays,
       row.alternativeValue,
+      row.finishDate,
+      row.finalPayDate,
+      row.holidayPayOnFinishing,
       row.total,
+      row.kiwiSaverRate,
+      row.kiwiSaver,
       row.problem,
     ]),
-    ["Total", null, null, null, null, report.totals.annualValue, report.totals.runningEightPercent, null, null, report.totals.alternativeValue, report.totals.total, null],
+    [
+      "Total",
+      null,
+      null,
+      null,
+      null,
+      report.totals.annualValue,
+      report.totals.runningEightPercent,
+      null,
+      null,
+      report.totals.alternativeValue,
+      null,
+      null,
+      report.totals.holidayPayOnFinishing,
+      report.totals.total,
+      null,
+      report.totals.kiwiSaver,
+      null,
+    ],
   ]);
   const sha256 = createHash("sha256").update(csv).digest("hex");
   await writeAuditEvent(tx, { eventType: "payroll_leave_liability.exported", entityType: "payroll_report", entityId: "leave-liability", details: { asAt: report.asAt, rows: report.rows.length, sha256 } });
