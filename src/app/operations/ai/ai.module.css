@@ -1,0 +1,40 @@
+.snippet {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.keyRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.keyInput {
+  flex: 1 1 360px;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.steps {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  line-height: 1.6;
+}
+
+.steps li + li {
+  margin-top: 6px;
+}
+
+.toolList {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.6;
+}
