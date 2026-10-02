@@ -57,8 +57,9 @@ in a browser (list below), or Jess's open questions.
 **New from Jess (2 Oct 2026), in `docs/TODO.md` ("List of 2 October
 2026"):** the Windows app glitches between screens; she couldn't find
 where to add or look at items (Products and services is under Sales);
-she couldn't add a fixed asset; and fixed assets need more (what exactly
-is still to confirm with her).
+she couldn't add a fixed asset; fixed assets to ERP level, including
+"complicated new accounting" (which is still to confirm with her); and
+importing from Xero to ERP level (scope still to confirm).
 
 **Still waiting on Jess or the outside world:**
 - Put a payday filing file through myIR's "Check your employment
