@@ -24,12 +24,13 @@ tohyee                  core database (DATABASE_URL)
 ├─ server_settings      email sending and remote access (secrets encrypted with
 │                       TOHYEE_SECRET_KEY; never accounting data)
 ├─ organisation_members who can open which organisation, with what role
-├─ ai_access_tokens     personal read-only AI keys (SHA-256 only), per user per organisation
+├─ ai_access_tokens     personal AI keys (SHA-256 only) with an access level, per user per organisation
 └─ admin_audit_events   server-level audit trail
 
 tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ organisation_settings  (records which organisation owns this database)
 ├─ accounts, ledger_journals, ledger_journal_lines
+├─ ledger_journal_drafts, ledger_journal_draft_lines   draft manual journals (post nothing; a posted one links its journal and can't change)
 ├─ ledger_fx_revaluation_runs / _items / _documents   revaluations, per account and currency, and the open documents they revalued (MC39)
 ├─ ledger_foreign_opening_balances   a foreign-currency account's foreign balance as at a date, entered once (FXB1)
 ├─ inventory_item_balances, inventory_movements   stock by item code and location (a Location tracking value)
@@ -231,11 +232,15 @@ re-runs the whole sequence.
   doesn't use sessions either: it takes only `Authorization: Bearer
   tohyee_ai_…`, a personal AI key (SHA-256 in `ai_access_tokens`, core
   database) for one organisation, which works while its owner's login is
-  active and they're still a member, with their current role. Every tool
-  call runs in a read-only PostgreSQL transaction
-  (`withOrganisationTransaction(..., { readOnly: true })`), so it can't
-  write whatever the code does. No same-origin check (AI services call it
-  from elsewhere) and no CORS headers; cookies are ignored.
+  active and they're still a member, with their current role. The key's
+  access level (look only, make drafts, make and post; decision 346) is
+  capped by that role, and only those tools are offered. Read tools run in
+  a read-only PostgreSQL transaction (`withOrganisationTransaction(...,
+  { readOnly: true })`); write tools call the screens' services as the
+  person, with `actor.via` naming the key, which `writeAuditEvent` adds to
+  every audit event. No tool deletes anything (decision 347). No
+  same-origin check (AI services call it from elsewhere) and no CORS
+  headers; cookies are ignored.
 - First-time setup creates the first server admin and needs `SETUP_TOKEN`
   from the server's environment. It only works while there are no users.
 - Command-line tool (`scripts/admin.ts`; `npm run admin`, or

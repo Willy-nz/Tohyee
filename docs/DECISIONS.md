@@ -2253,8 +2253,10 @@ with the top bar redesign.
      start, never the key). Only the owner of a key sees or revokes it;
      admins can remove a person, which revokes theirs. Any member (viewer
      and up) can make keys for themselves, since a key can do no more than
-     read what they can already read.
-342. **Read-only, enforced by PostgreSQL.** Every tool call runs in its own
+     what they can already do themselves (its level is capped by their role,
+     decision 346).
+342. **Read-only, enforced by PostgreSQL** (for the read tools; since decision
+     346 a key can also be allowed to make drafts and post). Every read tool call runs in its own
      transaction on the organisation's database with `set transaction read
      only` (`withOrganisationTransaction(..., { readOnly: true })`), so an
      insert, update, delete, `nextval` or `select ... for update` fails
@@ -2306,3 +2308,83 @@ with the top bar redesign.
      until there is (the page says so). `last_used_at` is updated at most
      once a minute; individual reads aren't written to the audit trail,
      like reading a report on screen isn't.
+
+### AI that drafts and posts, and draft journals (decisions 346 to 352)
+
+Jess, on the read-only first version (3 Oct 2026): "Why can't it draft
+journals? Should be able to do anything if you want it to except delete too
+much." So keys get an access level, the AI can make drafts and post them,
+and manual journals get drafts (Xero has draft manual journals). This
+widens decision 342: read tools stay read-only; the new tools write.
+
+346. **Each AI key has an access level, chosen when it's made.** "Look only"
+     (`read`, the default), "Make drafts" (`draft`: also add and edit
+     contacts, and make and edit draft invoices, bills and journals; nothing
+     posts) and "Make and post" (`post`: also approve invoices and bills,
+     post draft journals and record payments). Stored on the key
+     (`ai_access_tokens.access_level`, in core migration 0005, which wasn't
+     released yet). The level is capped by the person's role every time the
+     key is used, with the same role the screens' routes need: making
+     contacts and drafts, approving, posting and recording payments all need
+     bookkeeper or higher, so a viewer's key only ever looks, whatever level
+     it was made with (and gains its level if the person is later made a
+     bookkeeper; the page says so). `tools/list` shows only the tools the key
+     may use now; calling any other is refused with a message saying which
+     level and role it needs.
+347. **The AI never deletes.** No tool deletes, voids, archives, rolls back,
+     refunds, removes, unreconciles or reopens anything, not even a draft,
+     at any level; there are no such tools and the write tools take no flag
+     that does it (e.g. `update_contact` can't archive). Approving an invoice
+     or bill, posting a journal and recording a payment can only be undone by
+     a person in Tohyee (void, correct). Jess said "except delete too much";
+     we took "never delete" because a deletion by an AI is the one thing a
+     person can't check and put right afterwards.
+348. **Write tools act as the person, through the key, and say so.** The
+     tools are `create_contact`, `update_contact`, `create_draft_invoice`,
+     `update_draft_invoice`, `create_draft_bill`, `update_draft_bill`,
+     `create_draft_journal`, `update_draft_journal` (draft level) and
+     `approve_invoice`, `approve_bill`, `post_draft_journal`,
+     `record_invoice_payment`, `record_bill_payment` (post level), plus the
+     read tools `list_draft_journals` and `get_draft_journal`. Each calls the
+     service the screen uses (same checks; payments only into bank and card
+     accounts, as CP8), in a normal transaction (read tools stay read-only),
+     as the key's owner, so records show the person (`created_by_email` and
+     so on). The key is added to every audit event the call writes
+     (`details.via`, e.g. `AI key "Claude on my laptop"`), so a record's
+     history shows "Jess via AI key …"; drafts also keep it in their own
+     columns. Creating, approving and paying take an optional idempotency
+     key kept per AI key (command source `ai-<key id>`); left out, one is made
+     up, so only a call that sends the same key is safe to retry. Edits
+     don't take one: the same edit twice gives the same result.
+349. **Draft manual journals, like Xero's** (examples MJD1-MJD9, tenant
+     migration 0081). `ledger_journal_drafts` and `..._lines` hold what a
+     manual journal holds (date, reference, description, custom fields;
+     lines with account, description, debit or credit, tracking, custom
+     fields and a typed foreign amount and rate; journals have no tax
+     codes), who saved, changed and posted it (and through which AI key), a
+     status (draft or posted) and the posted journal's id. A draft posts
+     nothing and isn't in any report.
+350. **A draft is checked like a journal when it's saved**: two or more
+     lines, each a debit or a credit, debits equal to credits, amounts in
+     cents, active accounts that exist. The checks that depend on the day it
+     posts (the period being open, required tracking and custom fields, the
+     inventory account, foreign amounts against their rates) run when it's
+     posted. Xero may let an unbalanced draft be saved (unverified); Tohyee
+     doesn't, so every draft can be posted as it stands and an AI can't
+     leave half-made journals.
+351. **Posting a draft goes through the usual path, exactly once.** It calls
+     `postJournal` (origin manual, command source `journal-draft`,
+     idempotency key `journal-draft-<id>`) with the draft locked, then
+     marks it posted with the journal's id, who posted it and when. Posting
+     a posted draft returns the same journal. If posting is refused (a
+     locked period, MJD6) nothing changes and it stays a draft. The journal
+     is posted by the person who posts the draft. A posted draft can't be
+     changed or deleted; the database refuses it too. Corrections are made
+     to the journal (C1), not the draft.
+352. **People can delete drafts; screens.** Bookkeepers and up can save,
+     edit, post and delete drafts (viewers can see them), the same role as
+     posting a journal. The journal page has "Save as draft" beside "Post
+     journal", and a "Draft journals" list (shown when there are any) with
+     Edit, Post and Delete, which is less disruptive than a new page or
+     tabs. Deleting a draft is allowed because nothing was posted; AI keys
+     can't (decision 347).
