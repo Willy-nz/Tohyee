@@ -17,7 +17,7 @@
   `accounts/types`, `auth/roles`, `crm/forecast-figures`, `tax/categories`, `tax/exports`, `tax/purchase-defaults`, `tax/available-on`, `contacts/countries`, `invoices/amounts`,
   `bills/accounts`, `rd/amounts`, `customers/terms`, `repeating/schedule`, `repeating/bill-rules`, `reports/gst-boxes`, `items/pricing`, `budgets/fill`, `fixed-assets/depreciation`, `projects/amounts`, `import/fields`, `financial-year`, `format`, `errors`, `documents/format`,
   `documents/tax-invoice`, `email/addresses`, `email/templates`,
-  `payroll/bank-account-number`, `payroll/payslip-figures`, `payroll/payslip-layout`, `payroll/timesheet-split`, `payroll/workforce-figures`,
+  `payroll/bank-account-number`, `ai/tool-names`, `payroll/payslip-figures`, `payroll/payslip-layout`, `payroll/timesheet-split`, `payroll/workforce-figures`,
   and the pure Holidays Act modules under `payroll/leave/` (`rules`, `public-holiday-dates`, `sick`, `quantity`, `dates`, and the rest there)).
 
 ## Organisation data

@@ -1256,6 +1256,20 @@ that something happened.
   access to post after each month end with approved pay runs. Sick leave
   carried over stays out (PBE IPSAS 39 para 17; journal your own estimate
   if your agreements let it be taken as annual leave).
+- **AI: connect your own AI** (decisions 339-345, core migration 0005). The
+  AI page (`/operations/ai`) lets each member make personal access keys for
+  the organisation (shown once, stored hashed, at most 10, revocable) and
+  shows how to connect Claude Desktop (through `mcp-remote`), Claude.ai or
+  ChatGPT custom connectors, or any MCP client to `/api/mcp`. The AI can
+  look up the organisation's settings, chart of accounts, profit and loss,
+  balance sheet, trial balance, aged receivables and payables, invoices,
+  bills, contacts, account transactions and the GST return for a period,
+  as the key's owner and with their current role, in a read-only database
+  transaction: it can't post, approve, change or delete anything, and
+  payroll isn't included. A key stops working when it's revoked, its owner
+  leaves the organisation or their login is turned off. Not yet tried
+  against each AI app; no OAuth sign-in yet, so AI services that only take
+  OAuth connectors can't connect.
 
 ## Not built yet, on purpose
 

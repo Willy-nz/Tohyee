@@ -32,7 +32,15 @@ GitHub; each merge commit says so):
 | Leave liability posting | 0072 | HL52-HL56 | 182-187 |
 | Leave liability: finished employees, employer KiwiSaver, month-end reminder (2 Oct, afternoon session) | 0073 | HL53 (rewritten), HL57-HL61 | 188-191 |
 
-**Next free tenant migration: 0081. Next core migration: 0005. Next decision number: 339.**
+**Next free tenant migration: 0081. Next core migration: 0006. Next decision number: 346.**
+
+**Connect your own AI (branch `claude/connect-your-ai`; decisions 339-345, core
+migration 0005):** personal read-only AI keys and an MCP endpoint (`POST
+/api/mcp`) so people's own Claude, ChatGPT and other AI can look up the books;
+the AI page is `/operations/ai` (the top bar's menu item comes with the top bar
+redesign). Tested with the integration tests (`tests/integration/ai-mcp.test.ts`)
+calling the route directly, not yet with Claude Desktop, Claude.ai or ChatGPT
+themselves: try one before telling people it works with it.
 
 **Evening of 2 Oct 2026 (for 0.4.0):** Claude tried Tohyee on Jess's server through her Chrome and fixed what turned up (docs/TODO.md, "Tried out on Jess's server"; decisions 333-338, tenant migration 0080 for default payment terms), the server app's missing lists and screen glitch on Windows (PR #86; the Windows installer workflow now saves pictures of the server app, also on the ci/tray-screenshots branch), and replaced the browser's confirm boxes with an in-page dialog.
 
