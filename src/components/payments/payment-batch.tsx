@@ -17,6 +17,7 @@ import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import type { InvoiceSummary } from "@/lib/invoices/service";
 import { add, cmp, dec, isDecimalString, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import type { BatchKind, PaymentBatch } from "@/lib/payments/batches";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * One payment for several of a customer's invoices or a supplier's bills
@@ -111,6 +112,7 @@ function useDocuments(kind: BatchKind, organisationId: string, contactId: string
 }
 
 export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; organisationId: string }) {
+  const confirm = useConfirm();
   const words = WORDS[kind];
   const router = useRouter();
   const accounts = useAccounts(organisationId);
@@ -168,7 +170,7 @@ export function NewPaymentBatch({ kind, organisationId }: { kind: BatchKind; org
     }
     if (kind === "customer" && cmp(extra, ZERO_DECIMAL) > 0 && allInFull) {
       const name = people.find((c) => c.id === contactId)?.name ?? "the customer";
-      if (!window.confirm(`${formatMoney(amount)} is ${formatMoney(toFixedString(extra, 2))} more than these invoices. Record it? The extra will be kept as an overpayment: credit for ${name}.`)) {
+      if (!(await confirm(`${formatMoney(amount)} is ${formatMoney(toFixedString(extra, 2))} more than these invoices. Record it? The extra will be kept as an overpayment: credit for ${name}.`))) {
         return;
       }
     }
@@ -351,6 +353,7 @@ function journalHref(journalId: string): string {
 }
 
 export function PaymentBatchView({ kind, organisationId, batchId, recorded }: { kind: BatchKind; organisationId: string; batchId: string; recorded: boolean }) {
+  const confirm = useConfirm();
   const words = WORDS[kind];
   const { can } = useWorkspace();
   const details = useApiData<{ batch: PaymentBatch }>(`${words.api}/${encodeURIComponent(batchId)}`, { organisationId });
@@ -368,7 +371,7 @@ export function PaymentBatchView({ kind, organisationId, batchId, recorded }: { 
 
   async function voidIt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!window.confirm(`Void the whole payment of ${formatMoney(batch.amount)}? This posts a reversal of its journal on ${formatDate(voidDate)}, and every ${words.document} is due again. It can't be undone.`)) return;
+    if (!(await confirm(`Void the whole payment of ${formatMoney(batch.amount)}? This posts a reversal of its journal on ${formatDate(voidDate)}, and every ${words.document} is due again. It can't be undone.`))) return;
     setBusy(true);
     setError(null);
     try {

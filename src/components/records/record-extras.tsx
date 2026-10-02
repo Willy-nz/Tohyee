@@ -7,6 +7,7 @@ import { api, ApiError, errorMessage, newIdempotencyKey } from "@/lib/client/api
 import { formatDateTime, personName } from "@/lib/format";
 import { ALLOWED_EXTENSIONS, fileTypeLabel, formatFileSize, MAX_ATTACHMENT_BYTES } from "@/lib/records/file-types";
 import { RECORD_TYPE_SLUGS, type RecordExtras, type RecordNote, type RecordType } from "@/lib/records/types";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Tab = "notes" | "files" | "history";
 
@@ -21,6 +22,7 @@ function NoteItem({
   organisationId: string;
   onChanged: () => void;
 }) {
+  const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(note.body);
   const [busy, setBusy] = useState(false);
@@ -42,7 +44,7 @@ function NoteItem({
   }
 
   async function remove() {
-    if (!window.confirm("Delete this note? The history keeps what it said.")) return;
+    if (!(await confirm("Delete this note? The history keeps what it said."))) return;
     setBusy(true);
     try {
       await api(`${base}/notes/${note.id}`, { method: "DELETE", body: { organisationId, version: note.version } });
@@ -116,6 +118,7 @@ export function RecordExtrasPanel({
   recordId: string;
   title?: string;
 }) {
+  const confirm = useConfirm();
   const base = `/api/records/${RECORD_TYPE_SLUGS[recordType]}/${encodeURIComponent(recordId)}`;
   const extras = useApiData<RecordExtras>(base, { organisationId });
   const [tab, setTab] = useState<Tab>("notes");
@@ -181,7 +184,7 @@ export function RecordExtrasPanel({
   }
 
   async function removeFile(id: string, name: string) {
-    if (!window.confirm(`Remove ${name}? The file is deleted; the history keeps its name and who removed it.`)) return;
+    if (!(await confirm(`Remove ${name}? The file is deleted; the history keeps its name and who removed it.`))) return;
     setBusy(true);
     try {
       await api(`${base}/attachments/${id}`, { method: "DELETE", body: { organisationId } });

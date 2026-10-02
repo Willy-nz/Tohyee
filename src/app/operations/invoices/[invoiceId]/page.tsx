@@ -23,6 +23,7 @@ import type { OverpaymentApplication } from "@/lib/invoices/overpayments";
 import type { CustomerPayment } from "@/lib/invoices/payments";
 import type { Invoice } from "@/lib/invoices/service";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
+import { useConfirm } from "@/components/confirm-dialog";
 
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
@@ -37,6 +38,7 @@ function InvoiceActions({
   invoice: Invoice;
   onChanged: (invoice: Invoice, message: string, warning?: string) => void;
 }) {
+  const confirm = useConfirm();
   const router = useRouter();
   // One key per action on this page, so a retry after a dropped connection
   // returns the first result instead of posting again.
@@ -58,8 +60,8 @@ function InvoiceActions({
     }
   }
 
-  function approve() {
-    if (!window.confirm(`Approve this invoice? It gets the next invoice number and is posted to the ledger on ${formatDate(invoice.invoiceDate)}. After that it can only be voided.`)) {
+  async function approve() {
+    if (!(await confirm(`Approve this invoice? It gets the next invoice number and is posted to the ledger on ${formatDate(invoice.invoiceDate)}. After that it can only be voided.`))) {
       return;
     }
     void run(async () => {
@@ -72,8 +74,8 @@ function InvoiceActions({
     });
   }
 
-  function remove() {
-    if (!window.confirm("Delete this draft? This can't be undone.")) {
+  async function remove() {
+    if (!(await confirm("Delete this draft? This can't be undone."))) {
       return;
     }
     void run(async () => {
@@ -82,8 +84,8 @@ function InvoiceActions({
     });
   }
 
-  function voidInvoice() {
-    if (!window.confirm(`Void ${invoice.invoiceNumber}? This posts a reversal of its journal on ${formatDate(voidDate)}, and can't be undone.`)) {
+  async function voidInvoice() {
+    if (!(await confirm(`Void ${invoice.invoiceNumber}? This posts a reversal of its journal on ${formatDate(voidDate)}, and can't be undone.`))) {
       return;
     }
     void run(async () => {

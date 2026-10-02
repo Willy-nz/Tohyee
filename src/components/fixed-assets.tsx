@@ -20,6 +20,7 @@ import type { AssetBillLine, FixedAsset, FixedAssetSettings, FixedAssetStatus, F
 import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import { add, dec, toFixedString } from "@/lib/money/decimal";
 import type { TrackingTags } from "@/lib/tracking/service";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Accounting › Fixed assets (examples FA1-FA14): the register, asset types,
@@ -375,6 +376,7 @@ function isProfitAndLoss(account: Account): boolean {
 
 /** Sell or write off an asset, with what it will post shown first (FA8-FA10). */
 function DisposeForm({ organisationId, asset, onDone }: { organisationId: string; asset: FixedAsset; onDone: (asset: FixedAsset, message: string) => void }) {
+  const confirm = useConfirm();
   const accounts = useAccounts(organisationId);
   const [disposalDate, setDisposalDate] = useState(todayInBrowser);
   const [proceeds, setProceeds] = useState("");
@@ -397,7 +399,7 @@ function DisposeForm({ organisationId, asset, onDone }: { organisationId: string
   const all = accounts.data?.accounts ?? [];
 
   async function dispose() {
-    if (!window.confirm(`Dispose of ${asset.assetNumber}? It posts the journal shown.`)) return;
+    if (!(await confirm(`Dispose of ${asset.assetNumber}? It posts the journal shown.`))) return;
     setBusy(true);
     setError(null);
     try {
@@ -473,6 +475,7 @@ function DisposeForm({ organisationId, asset, onDone }: { organisationId: string
 }
 
 export function FixedAssetView({ organisationId, assetId }: { organisationId: string; assetId: string }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
   const loaded = useApiData<{ asset: FixedAsset }>(`/api/fixed-assets/${encodeURIComponent(assetId)}`, { organisationId });
   const tracking = useTracking(organisationId);
@@ -491,7 +494,7 @@ export function FixedAssetView({ organisationId, assetId }: { organisationId: st
     setError(null);
   };
   async function action(path: string, body: Record<string, unknown>, text: string, confirmText: string) {
-    if (!window.confirm(confirmText)) return;
+    if (!(await confirm(confirmText))) return;
     try {
       const result = await api<{ asset: FixedAsset }>(`/api/fixed-assets/${asset!.id}${path}`, { method: "POST", body: { organisationId, source: "ui", ...body } });
       changed(result.asset, text);
@@ -631,6 +634,7 @@ export function FixedAssetView({ organisationId, assetId }: { organisationId: st
 
 /** Preview and post a depreciation run; roll back the latest (FA3-FA7). */
 export function DepreciationRuns({ organisationId }: { organisationId: string }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
   const [periodEnd, setPeriodEnd] = useState(lastMonthEnd);
   const [runKey, setRunKey] = useState(() => newIdempotencyKey("run"));
@@ -760,8 +764,8 @@ export function DepreciationRuns({ organisationId }: { organisationId: string })
                           size="small"
                           variant="secondary"
                           disabled={busy}
-                          onClick={() => {
-                            if (!window.confirm(`Roll back the run to ${formatDate(run.periodEnd)}? It posts the exact reversal on the same date.`)) return;
+                          onClick={async () => {
+                            if (!(await confirm(`Roll back the run to ${formatDate(run.periodEnd)}? It posts the exact reversal on the same date.`))) return;
                             void post(`/api/depreciation-runs/${run.id}/rollback`, { idempotencyKey: newIdempotencyKey("rollback") }, "Rolled back.");
                           }}
                         >

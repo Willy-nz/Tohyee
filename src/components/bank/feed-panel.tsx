@@ -10,6 +10,7 @@ import { useWorkspace } from "@/components/workspace";
 import type { BankAccount } from "@/lib/bank/accounts";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate, formatDateTime, todayInBrowser } from "@/lib/format";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type AkahuAccountOption = {
   id: string;
@@ -97,6 +98,7 @@ function LinkFeedForm({ organisationId, account, onLinked }: { organisationId: s
 
 /** The account's Akahu bank feed: link it, sync now, or stop it. */
 export function FeedPanel({ organisationId, account, onChanged }: { organisationId: string; account: BankAccount; onChanged: () => void }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,7 +125,7 @@ export function FeedPanel({ organisationId, account, onChanged }: { organisation
   }
 
   async function unlink() {
-    if (!window.confirm("Stop this bank feed? Lines already brought in stay; nothing posted changes.")) return;
+    if (!(await confirm("Stop this bank feed? Lines already brought in stay; nothing posted changes."))) return;
     setBusy(true);
     setError(null);
     try {

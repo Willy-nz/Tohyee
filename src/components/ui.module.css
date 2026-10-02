@@ -814,3 +814,40 @@
   cursor: pointer;
   font-weight: 600;
 }
+
+.confirmDialog {
+  width: min(460px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0;
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--shadow);
+}
+
+.confirmDialog::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.confirmBody {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+}
+
+.confirmTitle {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.confirmMessage {
+  margin: 0;
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

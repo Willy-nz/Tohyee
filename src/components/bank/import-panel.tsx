@@ -12,6 +12,7 @@ import { LAYOUT_FIELD_LABELS, LAYOUT_FIELDS, type TableLayout } from "@/lib/bank
 import type { ImportPreview, StatementImport } from "@/lib/bank/imports";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, personName } from "@/lib/format";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = ".csv,.txt,.xlsx,.ofx,.qfx,.qbo,.qif,.xml,.sta,.mt940,.940";
@@ -156,12 +157,13 @@ function ImportHistory({
   imports: StatementImport[];
   onChanged: () => void;
 }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function remove(entry: StatementImport) {
-    if (!window.confirm(`Delete this import? Its ${entry.lineCount} lines are marked deleted and stop counting. Nothing posted changes.`)) return;
+    if (!(await confirm(`Delete this import? Its ${entry.lineCount} lines are marked deleted and stop counting. Nothing posted changes.`))) return;
     setBusyId(entry.id);
     setError(null);
     try {

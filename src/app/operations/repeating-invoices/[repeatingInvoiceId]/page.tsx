@@ -16,6 +16,7 @@ import { formatDate, formatDateTime, personName } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import { describeSchedule } from "@/lib/repeating/schedule";
 import type { RepeatingInvoice, RepeatingRun, RunResult } from "@/lib/repeating/service";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const OUTCOMES: Record<RepeatingRun["outcome"], string> = {
   draft: "Saved as a draft",
@@ -33,6 +34,7 @@ function RepeatingActions({
   template: RepeatingInvoice;
   onChanged: (template: RepeatingInvoice, message: string) => void;
 }) {
+  const confirm = useConfirm();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,8 +68,8 @@ function RepeatingActions({
     });
   }
 
-  function setStatus(status: "active" | "paused" | "ended", confirmText: string | null, done: string) {
-    if (confirmText && !window.confirm(confirmText)) return;
+  async function setStatus(status: "active" | "paused" | "ended", confirmText: string | null, done: string) {
+    if (confirmText && !(await confirm(confirmText))) return;
     void run(async () => {
       const result = await api<{ repeatingInvoice: RepeatingInvoice }>(`/api/repeating-invoices/${template.id}/status`, {
         method: "POST",

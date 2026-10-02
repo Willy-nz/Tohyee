@@ -20,6 +20,7 @@ import { isDecimalString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
 import { codesForSide } from "@/lib/tax/available-on";
 import type { TrackingTags } from "@/lib/tracking/service";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Expense claims (examples EC1-EC12): a member's receipts, submitted for
@@ -315,6 +316,7 @@ function isPaymentAccount(account: Account): boolean {
 
 /** Submit, decline, approve, pay, void (EC2-EC7). Each posting action has its own idempotency key. */
 function ClaimActions({ organisationId, claim, onChanged }: { organisationId: string; claim: ExpenseClaim; onChanged: (claim: ExpenseClaim, message: string) => void }) {
+  const confirm = useConfirm();
   const { user, can, current } = useWorkspace();
   const router = useRouter();
   const accounts = useAccounts(organisationId);
@@ -365,8 +367,8 @@ function ClaimActions({ organisationId, claim, onChanged }: { organisationId: st
           <Button
             variant="danger"
             disabled={busy}
-            onClick={() => {
-              if (!window.confirm("Delete this draft claim?")) return;
+            onClick={async () => {
+              if (!(await confirm("Delete this draft claim?"))) return;
               void run(async () => {
                 await api(`/api/expense-claims/${claim.id}`, { method: "DELETE", query: { organisationId } });
                 router.push("/operations/expense-claims");
@@ -435,8 +437,8 @@ function ClaimActions({ organisationId, claim, onChanged }: { organisationId: st
           </Field>
           <Button
             variant="danger"
-            onClick={() => {
-              if (!window.confirm("Void this claim? It posts the exact reversal of its journal.")) return;
+            onClick={async () => {
+              if (!(await confirm("Void this claim? It posts the exact reversal of its journal."))) return;
               void run(() => post("/void", { idempotencyKey: voidKey, voidDate }), "Voided.");
             }}
             disabled={busy}

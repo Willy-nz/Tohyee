@@ -19,6 +19,7 @@ import type { Invoice } from "@/lib/invoices/service";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { Quote } from "@/lib/quotes/service";
 import type { SalesOrder } from "@/lib/sales-orders/service";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /** Finalise, accept, decline, copy, edit and delete (QT2-QT4, QT6). Each action has its own idempotency key. */
 function QuoteActions({
@@ -30,6 +31,7 @@ function QuoteActions({
   quote: Quote;
   onChanged: (quote: Quote, message: string) => void;
 }) {
+  const confirm = useConfirm();
   const router = useRouter();
   const [finaliseKey] = useState(() => newIdempotencyKey("quote-finalise"));
   const [acceptKey] = useState(() => newIdempotencyKey("quote-accept"));
@@ -60,8 +62,8 @@ function QuoteActions({
     }
   }
 
-  function finalise() {
-    if (!window.confirm("Finalise this quote? It gets the next quote number and can't be edited after that.")) return;
+  async function finalise() {
+    if (!(await confirm("Finalise this quote? It gets the next quote number and can't be edited after that."))) return;
     void run(async () => {
       const result = await api<{ quote: Quote }>(`/api/quotes/${quote.id}/finalise`, {
         method: "POST",
@@ -71,8 +73,8 @@ function QuoteActions({
     });
   }
 
-  function accept() {
-    if (!window.confirm(`Accept ${quote.quoteNumber}? This makes a draft invoice with the quote's lines.`)) return;
+  async function accept() {
+    if (!(await confirm(`Accept ${quote.quoteNumber}? This makes a draft invoice with the quote's lines.`))) return;
     void run(async () => {
       const result = await api<{ quote: Quote; invoice: Invoice }>(`/api/quotes/${quote.id}/accept`, {
         method: "POST",
@@ -89,8 +91,8 @@ function QuoteActions({
     });
   }
 
-  function acceptAsSalesOrder() {
-    if (!window.confirm(`Accept ${quote.quoteNumber} as a sales order? This makes a draft sales order with the quote's lines.`)) return;
+  async function acceptAsSalesOrder() {
+    if (!(await confirm(`Accept ${quote.quoteNumber} as a sales order? This makes a draft sales order with the quote's lines.`))) return;
     void run(async () => {
       const result = await api<{ quote: Quote; salesOrder: SalesOrder }>(`/api/quotes/${quote.id}/sales-order`, {
         method: "POST",
@@ -100,8 +102,8 @@ function QuoteActions({
     });
   }
 
-  function decline() {
-    if (!window.confirm(`Mark ${quote.quoteNumber} as declined by the customer? It can't be accepted after that.`)) return;
+  async function decline() {
+    if (!(await confirm(`Mark ${quote.quoteNumber} as declined by the customer? It can't be accepted after that.`))) return;
     void run(async () => {
       const result = await api<{ quote: Quote }>(`/api/quotes/${quote.id}/decline`, {
         method: "POST",
@@ -121,8 +123,8 @@ function QuoteActions({
     });
   }
 
-  function remove() {
-    if (!window.confirm("Delete this draft? This can't be undone.")) return;
+  async function remove() {
+    if (!(await confirm("Delete this draft? This can't be undone."))) return;
     void run(async () => {
       await api(`/api/quotes/${quote.id}`, { method: "DELETE", query: { organisationId } });
       router.push("/operations/quotes");

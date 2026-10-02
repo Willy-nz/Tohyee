@@ -18,6 +18,7 @@ import { describeBillDue } from "@/lib/repeating/bill-rules";
 import type { RepeatingBill } from "@/lib/repeating/bills";
 import type { RunOutcome, RunResult } from "@/lib/repeating/runner";
 import { describeSchedule } from "@/lib/repeating/schedule";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const OUTCOMES: Record<RunOutcome, string> = {
   draft: "Saved as a draft",
@@ -35,6 +36,7 @@ function RepeatingBillActions({
   template: RepeatingBill;
   onChanged: (template: RepeatingBill, message: string) => void;
 }) {
+  const confirm = useConfirm();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,8 +70,8 @@ function RepeatingBillActions({
     });
   }
 
-  function setStatus(status: "active" | "paused" | "ended", confirmText: string | null, done: string) {
-    if (confirmText && !window.confirm(confirmText)) return;
+  async function setStatus(status: "active" | "paused" | "ended", confirmText: string | null, done: string) {
+    if (confirmText && !(await confirm(confirmText))) return;
     void run(async () => {
       const result = await api<{ repeatingBill: RepeatingBill }>(`/api/repeating-bills/${template.id}/status`, {
         method: "POST",

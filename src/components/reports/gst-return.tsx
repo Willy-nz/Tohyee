@@ -29,6 +29,7 @@ import type {
   GstReturnLine,
 } from "@/lib/reports/gst-return";
 import { GST_BASIS_LABELS, type GstBasis, type TaxCategory } from "@/lib/tax/categories";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Calculated = GstReturnFigures & {
   periodStart: string;
@@ -486,6 +487,7 @@ function BasisChangeNotice({
  * return as filed (admins). See "GST return" in docs/ACCOUNTING-EXAMPLES.md.
  */
 export function GstReturnReport({ organisationId }: { organisationId: string }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
   const [start, setStart] = useState(() => monthStart(todayInBrowser()));
   const [months, setMonths] = useState<number>(2);
@@ -583,9 +585,9 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
 
   async function markAsFiled() {
     if (
-      !window.confirm(
+      !(await confirm(
         `Mark the GST return for ${formatDate(start)} to ${formatDate(periodEnd)} as filed? Its figures are stored as they are now and can't be changed.`,
-      )
+      ))
     ) {
       return;
     }

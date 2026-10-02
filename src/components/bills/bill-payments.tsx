@@ -13,6 +13,7 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import { convertAtRate, isRateText } from "@/lib/money/fx";
 import { ExchangeRateField, effectiveRate, useLastRate } from "@/components/fx";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type PaymentResult = { payment: SupplierPayment; bill: Bill };
 
@@ -173,6 +174,7 @@ function VoidPaymentForm({
   onCancel: () => void;
   onVoided: (result: PaymentResult) => void;
 }) {
+  const confirm = useConfirm();
   const [key] = useState(() => newIdempotencyKey("payment-void"));
   const [voidDate, setVoidDate] = useState(() => {
     const today = todayInBrowser();
@@ -184,9 +186,9 @@ function VoidPaymentForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
-      !window.confirm(
+      !(await confirm(
         `Void the payment of ${formatMoney(payment.amount)} made on ${formatDate(payment.paymentDate)}? This posts a reversal of its journal on ${formatDate(voidDate)}, so the amount is due again. It can't be undone.`,
-      )
+      ))
     ) {
       return;
     }

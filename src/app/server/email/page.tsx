@@ -7,6 +7,7 @@ import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import type { EmailSettings } from "@/lib/email/mailer";
 import { formatDateTime } from "@/lib/format";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const PRESETS = {
   gmail: { label: "Gmail", host: "smtp.gmail.com", port: "465" },
@@ -108,6 +109,7 @@ function EmailForm({ settings, onSaved }: { settings: EmailSettings; onSaved: (s
 }
 
 export default function EmailSettingsPage() {
+  const confirm = useConfirm();
   const { user } = useWorkspace();
   const settings = useApiData<{ email: EmailSettings }>(user.isServerAdmin ? "/api/admin/email" : null);
   const [current, setCurrent] = useState<EmailSettings | null>(null);
@@ -138,7 +140,7 @@ export default function EmailSettingsPage() {
   }
 
   async function clear() {
-    if (!window.confirm("Remove the email settings? Security alerts and reset links stop being sent.")) return;
+    if (!(await confirm("Remove the email settings? Security alerts and reset links stop being sent."))) return;
     setBusy(true);
     try {
       setCurrent((await api<{ email: EmailSettings }>("/api/admin/email", { method: "PUT", body: { clear: true } })).email);

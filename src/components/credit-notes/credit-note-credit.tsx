@@ -14,6 +14,7 @@ import type { CreditNoteRefund } from "@/lib/credit-notes/refunds";
 import type { CreditNote } from "@/lib/credit-notes/service";
 import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import type { InvoiceSummary } from "@/lib/invoices/service";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type ApplyResult = { applications: CreditNoteApplication[]; creditNote: CreditNote };
 type ApplicationResult = { application: CreditNoteApplication; creditNote: CreditNote };
@@ -189,6 +190,7 @@ function RemoveApplicationForm({
   onCancel: () => void;
   onRemoved: (result: ApplicationResult) => void;
 }) {
+  const confirm = useConfirm();
   const [key] = useState(() => newIdempotencyKey("credit-removal"));
   const [removalDate, setRemovalDate] = useState(() => laterOf(todayInBrowser(), application.applicationDate));
   const [busy, setBusy] = useState(false);
@@ -197,9 +199,9 @@ function RemoveApplicationForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
-      !window.confirm(
+      !(await confirm(
         `Remove the ${formatMoney(application.amount)} of credit applied to ${application.invoiceNumber}? That amount is due on the invoice again and back on the credit note. It can't be undone, but the credit can be applied again.`,
-      )
+      ))
     ) {
       return;
     }
@@ -380,6 +382,7 @@ function VoidRefundForm({
   onCancel: () => void;
   onVoided: (result: RefundResult) => void;
 }) {
+  const confirm = useConfirm();
   const [key] = useState(() => newIdempotencyKey("credit-refund-void"));
   const [voidDate, setVoidDate] = useState(() => laterOf(todayInBrowser(), refund.refundDate));
   const [busy, setBusy] = useState(false);
@@ -388,9 +391,9 @@ function VoidRefundForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
-      !window.confirm(
+      !(await confirm(
         `Void the refund of ${formatMoney(refund.amount)} paid on ${formatDate(refund.refundDate)}? This posts a reversal of its journal on ${formatDate(voidDate)}, so the credit is back on the credit note. It can't be undone.`,
-      )
+      ))
     ) {
       return;
     }
