@@ -1,7 +1,7 @@
 # Analytics: review and build plan
 
-Written 3 October 2026 for discussion with Jess. **Nothing here is built yet,
-and nothing is decided until Jess agrees.** Licence and product facts were
+Written 3 October 2026 and discussed with Jess the same day (her answers
+are at the end). Licence and product facts were
 checked against each project's own repository or help pages on this date;
 anything that couldn't be checked is marked *unverified*.
 
@@ -242,17 +242,28 @@ before moving on.
 Steps 1-4 make it usable for CSV-based reporting at work; 5 and 6 make it
 much less manual.
 
-## Questions for Jess
+## Jess's answers (3 Oct 2026)
 
-1. Does analytics belong to an organisation, as above (at work you'd make a
-   work organisation and only use its analytics), or do you want a separate
-   kind of "analytics workspace" without books?
-2. Clients: their own login seeing only shared dashboards (as above), or
-   also a link anyone can open without signing in?
-3. "Use my remaining GitHub credits": Actions minutes for Windows tests and
-   benchmarks, or also GitHub's coding agents doing parts of the build?
-4. Which Google account will receive the report emails at work: Google
-   Workspace or a personal Gmail? (It decides the 7-day catch above.)
+1. Analytics is per organisation, when it's turned on.
+2. Reports shared with clients are secure: clients sign in, as for the
+   accounting, and see only what's shared with them. No public links.
+3. Use GitHub's coding agent (Copilot) for parts of the build.
+4. Mailboxes: not sure yet; personal Gmail and Microsoft email may need to
+   be options. Decided before step 5.
+
+These are decisions 353-362 in `docs/DECISIONS.md`.
+
+## Who builds what
+
+- **Claude**: step 1 (the engine, folder loader and the patterns the rest
+  follow), then reviews every pull request the coding agent opens, and
+  writes the worked examples for step 2 for Jess to approve.
+- **GitHub's coding agent**, from GitHub issues with a clear brief, on
+  pieces that don't depend on unfinished work: the Windows test of DuckDB
+  first, then the chart and pivot components, then later steps as each
+  foundation is merged.
+- Nothing is merged without passing lint, type checks, tests and the
+  build, and a review.
 
 ## Sources
 
