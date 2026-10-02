@@ -7,6 +7,12 @@ import { loadMemberNames, type PeopleNames } from "@/lib/people/names";
 export type Actor = {
   userId: string | null;
   email: string;
+  /**
+   * How the person acted when it wasn't in Tohyee itself, e.g.
+   * 'AI key "Claude on my laptop"' (decision 348). Audit events record it
+   * beside the person, so the history shows "Jess via AI key …".
+   */
+  via?: string;
 };
 
 /**

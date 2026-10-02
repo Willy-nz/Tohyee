@@ -58,6 +58,8 @@ export type RecordHistoryEntry = {
   id: string;
   at: string;
   actorEmail: string | null;
+  /** How they did it when not in Tohyee itself, e.g. 'AI key "Claude on my laptop"' (decision 348). */
+  via: string | null;
   eventType: string;
   summary: string;
   /** For an edited or deleted note: the text before and after. */

@@ -336,7 +336,10 @@ export function RecordExtrasPanel({
                 {data.history.map((entry) => (
                   <tr key={entry.id}>
                     <td className={ui.muted}>{formatDateTime(entry.at)}</td>
-                    <td>{personName(entry, "actor") ?? "System"}</td>
+                    <td>
+                      {personName(entry, "actor") ?? "System"}
+                      {entry.via ? <div className={ui.muted}>via {entry.via}</div> : null}
+                    </td>
                     <td>
                       {entry.summary}
                       {entry.eventType === "note.edited" ? (

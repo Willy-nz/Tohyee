@@ -19,7 +19,7 @@ export async function writeAuditEvent(tx: OrgTx, event: AuditEvent): Promise<voi
       event.entityId,
       tx.actor.userId,
       tx.actor.email,
-      JSON.stringify(event.details ?? {}),
+      JSON.stringify(tx.actor.via ? { ...(event.details ?? {}), via: tx.actor.via } : (event.details ?? {})),
     ],
   );
 }
