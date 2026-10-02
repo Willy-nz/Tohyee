@@ -32,7 +32,7 @@ GitHub; each merge commit says so):
 | Leave liability posting | 0072 | HL52-HL56 | 182-187 |
 | Leave liability: finished employees, employer KiwiSaver, month-end reminder (2 Oct, afternoon session) | 0073 | HL53 (rewritten), HL57-HL61 | 188-191 |
 
-**Next free tenant migration: 0078. Next decision number: 326.**
+**Next free tenant migration: 0078. Next decision number: 327.**
 
 No worked example is marked approved; Jess still needs to approve them.
 Jess asked for open questions to be decided by law, then NetSuite, then
@@ -531,22 +531,12 @@ To do:
 
 ## Things only Jess (or her computer) can do
 
-- [ ] **Download the legal texts our tools couldn't read** (legislation.govt.nz
-      blocks them), so the "(unverified)" decisions in `docs/DECISIONS.md` can
-      be checked. Save the PDFs (or "print to PDF") and attach them to a chat
-      or put them in the repo under `docs/sources/`:
-      - Holidays Act 2003 (current version)
-      - Employment Leave Act 2026 (as enacted, 2026/48)
-      - Income Tax Act 2007: subpart LY (R&D tax incentive) and schedule 1
-        part D (ESCT rates)
-      - Wages Protection Act 1983 (section 5)
-      - Employment Relations Act 2000, section 130 (wages and time record),
-        for checking payslips (P5)
-      - IRD's IR1240 R&D tax incentive guidance, April 2026 (the whole PDF;
-        our tools only read the first 49 pages)
-      - When MBIE publishes it (due Nov 2026 to Jan 2027): its technical
-        guidance for the Employment Leave Act, including how to convert
-        existing leave balances.
+- [ ] **The legal texts still missing.** Everything asked for is now in
+      `docs/sources/` (ERA s 130 and tax "working day" added 2 Oct 2026),
+      except: the rule that moves a tax payment due on a non-working day
+      (decision 250), and MBIE's technical guidance for the Employment
+      Leave Act when it's published (due Nov 2026 to Jan 2027), including
+      how to convert existing leave balances.
 - [ ] **Ask IRD how recovering advance holiday pay is taxed** (decision
       170): an employee leaves having taken more annual holidays in advance
       than the 8% covers, and consents in writing to the excess coming off

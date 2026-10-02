@@ -394,7 +394,7 @@ answers only decision 56.
     public holidays yet (as P4's IRD payment due dates), so the date it
     shows is never later than IRD's; the screen says public holidays aren't
     counted. The Tax Administration Act's definition of "working day" wasn't
-    read **(unverified)**.
+    read **(unverified)**. (Replaced by decision 326 on 2 Oct 2026.)
 64. **No employee details file yet.** The spec has one (HED2/DED/TED), but
     Tohyee's employee record has the address as one block of text (the file
     needs it split into street, suburb, city, post code and country), one
@@ -1822,11 +1822,11 @@ end of each group.
 249. **December for monthly payers stays 20 January, as IRD's page showed**
      (question 3, kept): still to check against IRD's IR328 calendar
      (Jess).
-250. **Public holidays in IRD due dates: still weekends only** (question
-     4): Tohyee now has public holiday dates (P8), but IRD's "working day"
-     (Tax Administration Act 1994 s 3) wasn't read this session, and it
-     may differ from the Holidays Act's list (for example over Christmas
-     and New Year). Not built until it's read (**unverified**).
+250. **Public holidays in IRD payment due dates: still weekends only**
+     (question 4). "Working day" for tax has since been read (decision
+     326), but which rule moves a payment due on a non-working day, and to
+     when, wasn't found; IRD's own 16-31 December rule (15 January) is
+     already built. Not built until that rule is read.
 251. **Voiding a pay run IRD has been paid for stays refused** until the
      IRD payment is voided (question 5, kept): a credit with IRD is IRD's to
      give.
@@ -1853,8 +1853,8 @@ end of each group.
 
 ### Payslips (after PSLIP6)
 
-260. **ERA s 130 still to be read** (question 1): it's not in
-     `docs/sources/` yet; for Jess (or a Chrome session) to save.
+260. **ERA s 130: read on 2 Oct 2026** (question 1; decision 326):
+     it's the wages and time record, not payslip content.
 261. **Hours each day: answered by P9** (question 2): approved timesheets
      record them (s 81(2)(c)).
 262. **The payslip shows the employee's current bank account** (question
@@ -2047,3 +2047,24 @@ needing its own worked examples first.
 324. **Forecasts keep currencies apart and quotas count NZD only** (kept;
      MC68): converting needs a rate rule, later.
 325. **Per-owner forecasts** (kept); teams and manager adjustments later.
+
+### Working days for tax (decision 326)
+
+326. **The payday filing due date counts tax working days** (PF6; replaces
+     decision 63). The Tax Administration Act 1994 s 23E(2)(b) gives
+     "within 2 working days after payday"; the Act has no definition of
+     working day, so s 3(2) takes the Income Tax Act 2007's (s YA 1): not a
+     Saturday, Sunday, Waitangi Day, Good Friday, Easter Monday, Anzac Day,
+     the Sovereign's birthday, Matariki or Labour Day, nor the Monday after
+     Waitangi or Anzac Day when it falls on a weekend, nor 25 December to
+     15 January. Anniversary days and the Holidays Act's Christmas and New
+     Year transfers aren't in it. Read on 2 Oct 2026 in Chrome
+     (`docs/sources/working-day-tax.md`). The movable dates come from P8's
+     public holiday data (2025-2027); later years count them as working
+     days until added, so the date shown is never later than IRD's. ERA s
+     130 was read the same day (`docs/sources/employment-relations-act-s130.md`):
+     it's the wages and time record (hours each day and the pay for them,
+     kept 6 years, given to the employee on request), not a list of what a
+     payslip must show, so decision 260's question is answered: the
+     payslip follows Holidays Act s 81 and Employment NZ's guidance, and
+     P9's timesheets and the usual week (s 130(1B)) keep the hours.

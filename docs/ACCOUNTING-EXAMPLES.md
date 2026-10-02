@@ -10238,20 +10238,29 @@ redundancy and field 14 the lump sum indicator: XP9, XP13.) The file is named
   in myIR. Someone who started before the period (Sione) has field 5
   blank.
 
-- **PF6 Due dates.** Due 2 working days after the pay date, skipping
-  Saturdays and Sundays (decision 63):
+- **PF6 Due dates.** Due 2 working days after the pay date (Tax
+  Administration Act s 23E(2)(b)), working days as the Income Tax Act's s
+  YA 1 defines them: not weekends, Waitangi Day, Good Friday, Easter
+  Monday, Anzac Day, the Sovereign's birthday, Matariki or Labour Day (nor
+  the Monday after Waitangi or Anzac Day on a weekend), nor 25 December to
+  15 January (decision 326, replacing decision 63's weekends only):
 
-  | Pay date | Shown as due | Note |
+  | Pay date | Due | Note |
   | --- | --- | --- |
   | Wed 14 Oct 2026 | **Fri 16 Oct 2026** | |
-  | Fri 23 Oct 2026 | **Tue 27 Oct 2026** | Mon 26 Oct is Labour Day, so IRD's due date is Wed 28 Oct; Tohyee's is a day early, never late |
-  | Sat 24 Oct 2026 | **Tue 27 Oct 2026** | Monday and Tuesday are the 2 working days (again before counting Labour Day) |
+  | Fri 23 Oct 2026 | **Wed 28 Oct 2026** | Mon 26 Oct is Labour Day |
+  | Sat 24 Oct 2026 | **Wed 28 Oct 2026** | Tuesday and Wednesday are the 2 working days |
   | Fri 30 Oct 2026 | **Tue 3 Nov 2026** | |
+  | Wed 23 Dec 2026 | **Mon 18 Jan 2027** | Thu 24 Dec, then nothing until Mon 18 Jan |
+  | Fri 19 Mar 2027 | **Tue 23 Mar 2027** | Otago's anniversary day (Mon 22 Mar) is a working day for tax |
+  | Fri 23 Apr 2027 | **Wed 28 Apr 2027** | Anzac Day is a Sunday, so Mon 26 Apr isn't a working day |
 
-  The card says: "Due within 2 working days of the pay date (IRD). Public
-  holidays aren't counted yet, so if one falls in between, IRD's due date
-  is later." Paper filers' 10 working days aren't shown (a file is
-  electronic).
+  The card says: "Due within 2 working days after the pay date (Tax
+  Administration Act s 23E). Working days leave out weekends, the national
+  public holidays (not anniversary days) and 25 December to 15 January." A
+  year Tohyee has no public holiday dates for (2028 on) counts its movable
+  holidays as working days, so the date shown is never later than IRD's.
+  Paper filers' 10 working days aren't shown (a file is electronic).
 
 - **PF7 Settings and refused files.** Making a file is refused, with what
   to do, when:

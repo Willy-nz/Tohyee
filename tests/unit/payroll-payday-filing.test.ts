@@ -239,10 +239,17 @@ describe("payday filing settings (PF7)", () => {
 });
 
 describe("due date (PF6)", () => {
-  it("is 2 working days after the pay date, skipping weekends but not public holidays", () => {
+  it("is 2 tax working days after the pay date (Income Tax Act s YA 1; decision 326)", () => {
     expect(paydayFilingDueDate("2026-10-14")).toBe("2026-10-16");
-    expect(paydayFilingDueDate("2026-10-23")).toBe("2026-10-27");
-    expect(paydayFilingDueDate("2026-10-24")).toBe("2026-10-27");
+    // Mon 26 Oct is Labour Day.
+    expect(paydayFilingDueDate("2026-10-23")).toBe("2026-10-28");
+    expect(paydayFilingDueDate("2026-10-24")).toBe("2026-10-28");
     expect(paydayFilingDueDate("2026-10-30")).toBe("2026-11-03");
+    // 25 December to 15 January aren't working days.
+    expect(paydayFilingDueDate("2026-12-23")).toBe("2027-01-18");
+    // Anniversary days are working days for tax: Otago's Mon 22 Mar 2027.
+    expect(paydayFilingDueDate("2027-03-19")).toBe("2027-03-23");
+    // Anzac Day on Sun 25 Apr 2027: Mon 26 Apr isn't a working day.
+    expect(paydayFilingDueDate("2027-04-23")).toBe("2027-04-28");
   });
 });
