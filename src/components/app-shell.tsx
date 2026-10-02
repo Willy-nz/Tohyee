@@ -163,6 +163,8 @@ const MENUS: Menu[] = [
           { href: "/operations/bank-rules", label: "Bank rules" },
           { href: "/operations/ledger-journals", label: "Journals" },
           { href: "/operations/accounts", label: "Chart of accounts" },
+          // Also under Sales; Jess looked for items here (2 Oct 2026).
+          { href: "/operations/items", label: "Products and services" },
           { href: "/operations/inventory", label: "Stock" },
           { href: "/operations/fixed-assets", label: "Fixed assets" },
           { href: "/operations/fixed-assets/depreciation", label: "Depreciation" },

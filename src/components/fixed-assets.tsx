@@ -191,6 +191,7 @@ export function FixedAssetForm({
   onSaved: (asset: FixedAsset) => void;
   onCancel: () => void;
 }) {
+  const { can } = useWorkspace();
   const types = useApiData<{ types: FixedAssetType[] }>("/api/fixed-asset-types", { organisationId });
   const billLines = useApiData<{ lines: AssetBillLine[] }>(asset ? null : "/api/fixed-asset-bill-lines", { organisationId });
   const tracking = useTracking(organisationId);
@@ -212,6 +213,29 @@ export function FixedAssetForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!types.data) return types.error ? <Notice tone="error">{types.error}</Notice> : <p className={ui.muted}>Loading…</p>;
+  // A new organisation has no asset types, and an asset can't be registered without one: say so
+  // plainly, with the way there, rather than a form that can't be saved.
+  if (!asset && types.data.types.length === 0) {
+    return (
+      <div style={{ display: "grid", gap: 12 }}>
+        <Notice tone="warning">
+          Add an asset type first. Every asset belongs to a type (for example &ldquo;Computer equipment&rdquo;), which says which accounts it uses and how it&apos;s
+          depreciated. This organisation doesn&apos;t have any yet.
+          {can("admin") ? null : " An admin of this organisation needs to add them."}
+        </Notice>
+        <div className={ui.rowButtons}>
+          {can("admin") ? (
+            <Link className={`${ui.button} ${ui.primary}`} href="/operations/fixed-assets/types">
+              Add an asset type
+            </Link>
+          ) : null}
+          <Button variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
   const set = (change: Partial<AssetDraft>) => setDraft({ ...draft, ...change });
   const locked = asset?.hasHistory ?? false;
   const type = types.data.types.find((entry) => entry.id === draft.typeId);
@@ -260,7 +284,7 @@ export function FixedAssetForm({
         <Field label="Name">
           <input value={draft.name} maxLength={200} onChange={(event) => set({ name: event.target.value })} required />
         </Field>
-        <Field label="Asset type" hint={types.data.types.length === 0 ? "An admin adds asset types first (Asset types)." : undefined}>
+        <Field label="Asset type">
           <select value={draft.typeId} disabled={locked} onChange={(event) => set({ typeId: event.target.value, billLineId: "" })} required>
             <option value="">Choose a type</option>
             {types.data.types.map((entry) => (
@@ -903,7 +927,17 @@ export function FixedAssetTypes({ organisationId }: { organisationId: string }) 
   }
   return (
     <>
-      {message ? <Notice tone="success">{message}</Notice> : null}
+      {message ? (
+        <Notice tone="success">
+          {message}
+          {message.endsWith(" added.") ? (
+            <>
+              {" "}
+              <Link href="/operations/fixed-assets/new">Register an asset</Link>
+            </>
+          ) : null}
+        </Notice>
+      ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Notice tone="info">
         Tohyee has no built-in IRD depreciation rates. Enter the method and rate for each type (and change them per asset when needed); check IRD&apos;s current rates
