@@ -12,6 +12,7 @@ import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import {
   approvePurchaseOrder,
   cancelPurchaseOrder,
+  closePurchaseOrder,
   copyPurchaseOrderToBill,
   createPurchaseOrder,
   deletePurchaseOrder,
@@ -296,6 +297,43 @@ describeWithDatabase("purchase orders", () => {
     ).rejects.toThrow("6 of it is on other bills, so at most 4 can be billed here");
   });
 
+  it("PO10: closing the rest of a part-billed purchase order", async () => {
+    const w = await setup();
+    const order = await w.approve((await w.draft()).id);
+    const close = (id: string, idempotencyKey = key("close")) => w.as((tx) => closePurchaseOrder(tx, id, { idempotencyKey }));
+    const first = (await w.copy(order.id, "PS-201")).bill;
+    const part = await w.as((tx) => updateBill(tx, first.id, { lines: first.lines.map((line, index) => ({ ...line, quantity: index === 0 ? "6" : "40" })) }));
+    // A draft bill from it: refused.
+    await expect(close(order.id)).rejects.toThrow(`${order.poNumber} has a draft bill, so it can't be closed. Approve or delete the draft bill first.`);
+    await expect(w.as((tx) => tx.query("update purchase_orders set status = 'closed', closed_at = now() where id = $1", [order.id]))).rejects.toThrow("has a draft bill, so it can't be closed");
+    const approved = await w.approveTheBill(part.id);
+    const journalsBefore = await w.journals();
+    const keyed = key("close");
+    const closed = (await close(order.id, keyed)).purchaseOrder;
+    expect(closed.status).toBe("closed");
+    expect(w.billing(closed)).toEqual([
+      ["6", "0", "0"],
+      ["40", "0", "0"],
+    ]);
+    expect(await w.journals()).toBe(journalsBefore);
+    const again = await close(order.id, keyed);
+    expect([again.created, again.purchaseOrder.id]).toEqual([false, order.id]);
+    await expect(w.copy(order.id, "PS-202")).rejects.toThrow(`${order.poNumber} is closed, so it can't be billed.`);
+    await expect(close(order.id)).rejects.toThrow(`${order.poNumber} is already closed.`);
+    // Voiding its bill is still allowed, and it stays closed.
+    await w.as((tx) => voidBill(tx, approved.id, { idempotencyKey: key("v"), voidDate: "2026-07-13" }));
+    expect((await w.as((tx) => getPurchaseOrder(tx, order.id))).status).toBe("closed");
+    // A draft and a fully billed purchase order can't be closed (another organisation, so stock dates don't clash).
+    const v = await setup();
+    const draft = await v.draft();
+    await expect(v.as((tx) => closePurchaseOrder(tx, draft.id, { idempotencyKey: key("close") }))).rejects.toThrow("This purchase order is still a draft. Delete it instead.");
+    const full = await v.approve((await v.draft()).id);
+    await v.approveTheBill((await v.copy(full.id, "PS-301")).bill.id);
+    await expect(v.as((tx) => closePurchaseOrder(tx, full.id, { idempotencyKey: key("close") }))).rejects.toThrow(
+      `${full.poNumber} is fully billed, so there's nothing left to close.`,
+    );
+  });
+
   it("PO7: cancelling an approved purchase order with no bills", async () => {
     const w = await setup();
     const draft = await w.draft();
@@ -330,7 +368,7 @@ describeWithDatabase("purchase orders", () => {
       "12 Stuart St, Dunedin 9016",
     ]);
     expect([doc.customer, doc.organisation]).toEqual([
-      { name: "Paw Supplies", billingAddress: "4 Wharf St, Port Chalmers" },
+      { name: "Paw Supplies", billingAddress: "4 Wharf St, Port Chalmers", contactIdentifier: null },
       { name: "Glimmers", postalAddress: "PO Box 5, Dunedin", gstNumber: null },
     ]);
     expect([doc.subtotal, doc.taxTotal, doc.total, doc.labels.isTaxDocument, doc.labels.gstLine, doc.paymentDetails, doc.labels.warnings]).toEqual([

@@ -6278,6 +6278,17 @@ GST). No locations.
   document). A draft prints **Draft purchase order** with no number; a
   cancelled one **Cancelled purchase order**. A viewer can print it.
   Printing never posts a journal.
+- **PO10 Closing the rest** (decision 281; Xero's "mark as billed",
+  NetSuite's close). After PO4's PS-201 is approved (6 of 10 Widgets and 40
+  of 100 Gift boxes billed), the supplier says the rest won't come.
+  Closing PO-0001 makes it **closed**: 6 and 40 billed, nothing left to
+  bill (the 4 and 60 are no longer on order), and copying it to a bill is
+  refused. No journal is posted. Refused: closing a draft, a cancelled or a
+  fully billed purchase order, and closing while a draft bill from it
+  exists (delete or approve the draft first). Voiding PS-201 afterwards is
+  allowed (its 6 and 40 go back to unbilled) and the purchase order stays
+  closed. Retried with the same key, closing returns the same purchase
+  order.
 - **PO9** Saving, approving, copying to a bill and cancelling each return
   the original when retried with the same key, and are refused (409) with
   the same key and different content. A viewer can list and open purchase

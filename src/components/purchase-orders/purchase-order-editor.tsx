@@ -35,6 +35,7 @@ export function PurchaseOrderStatusBadge({ status }: { status: PurchaseOrderStat
     draft: { label: "Draft", tone: "neutral" },
     approved: { label: "Approved", tone: "blue" },
     billed: { label: "Billed", tone: "green" },
+    closed: { label: "Closed", tone: "neutral" },
     cancelled: { label: "Cancelled", tone: "red" },
   } as const;
   const badge = badges[status];

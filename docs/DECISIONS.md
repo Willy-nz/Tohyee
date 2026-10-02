@@ -1924,8 +1924,9 @@ needing its own worked examples first.
 
 281. **A part-billed purchase order can be closed** ("Close the rest";
      Xero's "mark as billed", NetSuite's close), when nothing is on a draft
-     bill: what's left no longer shows as on order. Later (needs PO
-     examples).
+     bill: what's left no longer shows as on order. Built (PO10, tenant
+     migration 0076): posts nothing; its approved bills can still be voided
+     and it stays closed; no new bills come from it.
 282. **Approved purchase orders stay locked** (kept): cancel and copy.
 283. **Extra delivered goes on a separate bill line** (kept).
 284. **The delivery address starts as the postal address** (kept); a

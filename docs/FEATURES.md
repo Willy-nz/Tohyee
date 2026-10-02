@@ -313,7 +313,8 @@ that something happened.
   invoices and quotes say so. The screen warns when a tax invoice over $1,000
   has no customer address, or GST is charged with no GST number in Settings.
   Emailed as a PDF (below).
-- **Purchase orders** (Purchases; PO1-PO9, not yet approved by Jess): drafts
+- **Purchase orders** (Purchases; PO1-PO10, not yet approved by Jess; "Close
+  the rest" of a part-billed one, decision 281): drafts
   to a supplier with the same lines as a bill (items fill the supplier's
   price), a delivery date, address and instructions; approving numbers them
   (`PO-0001`, no gaps) and locks them (the database refuses changes). They

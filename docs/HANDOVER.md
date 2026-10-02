@@ -32,7 +32,7 @@ GitHub; each merge commit says so):
 | Leave liability posting | 0072 | HL52-HL56 | 182-187 |
 | Leave liability: finished employees, employer KiwiSaver, month-end reminder (2 Oct, afternoon session) | 0073 | HL53 (rewritten), HL57-HL61 | 188-191 |
 
-**Next free tenant migration: 0075. Next decision number: 225.**
+**Next free tenant migration: 0077. Next decision number: 326.**
 
 No worked example is marked approved; Jess still needs to approve them.
 Jess asked for open questions to be decided by law, then NetSuite, then
@@ -148,7 +148,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0075 (0058-0074 used: 0074 timesheet first day and standard week, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting, 0073 employer KiwiSaver on the leave liability).
+Next free tenant migration number: 0077 (0058-0076 used: 0076 purchase order close, 0075 Shopify guest contact, 0074 timesheet first day and standard week, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting, 0073 employer KiwiSaver on the leave liability).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
