@@ -8,6 +8,7 @@ import { api, errorMessage } from "@/lib/client/api";
 import { formatDateTime, personName } from "@/lib/format";
 import type { LogoInfo } from "@/lib/organisations/logo";
 import { formatFileSize } from "@/lib/records/file-types";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Settings: the organisation's logo (admins). A PNG or JPEG of at most
@@ -15,6 +16,7 @@ import { formatFileSize } from "@/lib/records/file-types";
  * the top of emails. Kept in the organisation's database, so backups have it.
  */
 export function LogoCard({ organisationId }: { organisationId: string }) {
+  const confirm = useConfirm();
   const loaded = useApiData<{ logo: LogoInfo | null }>(`/api/organisations/${organisationId}/logo`, { info: "1" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export function LogoCard({ organisationId }: { organisationId: string }) {
   }
 
   async function remove() {
-    if (!window.confirm("Remove the logo? Documents and emails will show the organisation's name only.")) return;
+    if (!(await confirm("Remove the logo? Documents and emails will show the organisation's name only."))) return;
     setError(null);
     setMessage(null);
     try {

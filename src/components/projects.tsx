@@ -28,6 +28,7 @@ import type { TaxCode } from "@/lib/tax/codes";
 import { codesForSide } from "@/lib/tax/available-on";
 import { useExportSettings } from "@/components/exports";
 import { contactSalesTaxCode } from "@/lib/tax/exports";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Projects and time tracking (examples PJ1-PJ13): projects for a customer,
@@ -420,6 +421,7 @@ function TasksCard({ organisationId, project, onChanged }: { organisationId: str
 }
 
 function TimeCard({ organisationId, project, onChanged }: { organisationId: string; project: Project; onChanged: () => void }) {
+  const confirm = useConfirm();
   const { can, user } = useWorkspace();
   const open = project.status === "in_progress" && can("bookkeeper");
   const team = useApiData<{ rates: StaffRate[] }>(can("admin") ? "/api/project-staff-rates" : null, { organisationId });
@@ -450,8 +452,8 @@ function TimeCard({ organisationId, project, onChanged }: { organisationId: stri
       },
     );
   };
-  const remove = (entry: TimeEntry) => {
-    if (!window.confirm(`Remove ${formatMinutes(entry.minutes)} on ${entry.taskName}?`)) return;
+  const remove = async (entry: TimeEntry) => {
+    if (!(await confirm(`Remove ${formatMinutes(entry.minutes)} on ${entry.taskName}?`))) return;
     void run(() => api(`/api/project-time/${entry.id}/remove`, { method: "POST", body: { organisationId } }), onChanged);
   };
   const entries = project.timeEntries.filter((entry) => showRemoved || entry.status === "active");
@@ -877,6 +879,7 @@ function InvoicesCard({ project }: { project: Project }) {
 }
 
 function StatusActions({ organisationId, project, onChanged }: { organisationId: string; project: Project; onChanged: (project: Project, message: string) => void }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
   const [editing, setEditing] = useState(false);
   const { busy, error, run } = useRun();
@@ -911,8 +914,8 @@ function StatusActions({ organisationId, project, onChanged }: { organisationId:
                 <Button
                   variant="danger"
                   disabled={busy}
-                  onClick={() => {
-                    if (!window.confirm(`Write off ${project.figures.unbilled} unbilled and close? Written-off items are never invoiced.`)) return;
+                  onClick={async () => {
+                    if (!(await confirm(`Write off ${project.figures.unbilled} unbilled and close? Written-off items are never invoiced.`))) return;
                     post("close", { writeOff: true }, "Closed, with the unbilled items written off.");
                   }}
                 >

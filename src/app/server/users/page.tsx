@@ -7,8 +7,10 @@ import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDateTime } from "@/lib/format";
 import type { UserSummary } from "@/lib/users/admin";
+import { useConfirm } from "@/components/confirm-dialog";
 
 export default function UsersPage() {
+  const confirm = useConfirm();
   const { user: me } = useWorkspace();
   const users = useApiData<{ users: UserSummary[] }>(me.isServerAdmin ? "/api/admin/users" : null);
   const [draft, setDraft] = useState({ displayName: "", email: "", password: "", isServerAdmin: false });
@@ -136,9 +138,9 @@ export default function UsersPage() {
                         <Button
                           variant="secondary"
                           size="small"
-                          onClick={() => {
+                          onClick={async () => {
                             if (
-                              window.confirm(
+                              await confirm(
                                 `Reset two-step sign-in for ${user.email}? Their authenticator app and backup codes stop working, they're signed out everywhere, and they set it up again at their next sign-in. Only do this if you're sure it's really them asking (e.g. a lost phone).`,
                               )
                             ) {

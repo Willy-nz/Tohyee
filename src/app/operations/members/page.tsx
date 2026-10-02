@@ -8,6 +8,7 @@ import { useWorkspace } from "@/components/workspace";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/roles";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Member } from "@/lib/organisations/members";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const ROLE_HELP: Record<Role, string> = {
   viewer: "Can read journals, stock, contacts and reports.",
@@ -17,6 +18,7 @@ const ROLE_HELP: Record<Role, string> = {
 };
 
 function Members({ organisationId }: { organisationId: string }) {
+  const confirm = useConfirm();
   const { user, current, can } = useWorkspace();
   const members = useApiData<{ members: Member[] }>(`/api/organisations/${organisationId}/members`);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -117,8 +119,8 @@ function Members({ organisationId }: { organisationId: string }) {
                         variant="danger"
                         size="small"
                         disabled={locked}
-                        onClick={() => {
-                          if (window.confirm(`Remove ${member.email} from this organisation?`)) {
+                        onClick={async () => {
+                          if (await confirm(`Remove ${member.email} from this organisation?`)) {
                             void run(
                               () => api(`/api/organisations/${organisationId}/members/${member.userId}`, { method: "DELETE" }),
                               `Removed ${member.email}.`,

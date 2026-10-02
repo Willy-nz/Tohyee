@@ -14,6 +14,7 @@ import type { Invoice } from "@/lib/invoices/service";
 import { dec, isPositive, sub, toPlainString } from "@/lib/money/decimal";
 import { convertAtRate, isRateText } from "@/lib/money/fx";
 import { ExchangeRateField, effectiveRate, useLastRate } from "@/components/fx";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type PaymentResult = { payment: CustomerPayment; invoice: Invoice };
 
@@ -55,6 +56,7 @@ function RecordPaymentForm({
   invoice: Invoice;
   onRecorded: (result: PaymentResult) => void;
 }) {
+  const confirm = useConfirm();
   const accounts = useAccounts(organisationId);
   // One key per payment, so a retry after a dropped connection returns the
   // payment instead of recording it twice.
@@ -85,11 +87,11 @@ function RecordPaymentForm({
     if (
       !foreign &&
       extra !== null &&
-      !window.confirm(
+      !(await confirm(
         invoice.paidStatus === "paid"
           ? `${invoice.invoiceNumber} is already paid. Record ${formatMoney(fields.amount)} anyway? All of it will be kept as credit for ${invoice.contactName}, to apply to their other invoices or refund.`
           : `This is ${formatMoney(extra)} more than is due. Record it? The extra will be kept as credit for ${invoice.contactName}, to apply to their other invoices or refund.`,
-      )
+      ))
     ) {
       return;
     }
@@ -201,6 +203,7 @@ function VoidPaymentForm({
   onCancel: () => void;
   onVoided: (result: PaymentResult) => void;
 }) {
+  const confirm = useConfirm();
   const [key] = useState(() => newIdempotencyKey("payment-void"));
   const [voidDate, setVoidDate] = useState(() => {
     const today = todayInBrowser();
@@ -212,9 +215,9 @@ function VoidPaymentForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
-      !window.confirm(
+      !(await confirm(
         `Void the payment of ${formatMoney(payment.amount)} received on ${formatDate(payment.paymentDate)}? This posts a reversal of its journal on ${formatDate(voidDate)}, so the amount is due again${payment.overpaymentStatus ? " and its overpayment is cancelled" : ""}. It can't be undone.`,
-      )
+      ))
     ) {
       return;
     }

@@ -8,6 +8,7 @@ import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import type { ConnectedAccount, MailSettings } from "@/lib/crm/mail/service";
 import { formatDateTime } from "@/lib/format";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * CRM › Email and calendar (examples MAIL1-MAIL9): the organisation's Google
@@ -94,6 +95,7 @@ function AppSettings({ organisationId }: { organisationId: string }) {
 }
 
 function AccountRow({ organisationId, account, isAdmin, onChanged }: { organisationId: string; account: ConnectedAccount; isAdmin: boolean; onChanged: (accounts?: ConnectedAccount[]) => void }) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   async function run(what: string, work: () => Promise<{ accounts: ConnectedAccount[] }>) {
@@ -163,8 +165,8 @@ function AccountRow({ organisationId, account, isAdmin, onChanged }: { organisat
               size="small"
               variant="danger"
               disabled={busy !== null}
-              onClick={() => {
-                if (!window.confirm(`Disconnect ${account.email}? Tohyee's copies of its emails and meetings are deleted (your mailbox isn't touched).`)) return;
+              onClick={async () => {
+                if (!(await confirm(`Disconnect ${account.email}? Tohyee's copies of its emails and meetings are deleted (your mailbox isn't touched).`))) return;
                 void run("disconnect", () =>
                   api(`/api/crm/mail/accounts/${account.id}?organisationId=${encodeURIComponent(organisationId)}`, { method: "DELETE" }),
                 );

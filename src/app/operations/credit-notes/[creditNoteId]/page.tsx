@@ -20,6 +20,7 @@ import type { CreditNote } from "@/lib/credit-notes/service";
 import { formatDate, formatDateTime, formatQuantity, todayInBrowser, personName } from "@/lib/format";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
+import { useConfirm } from "@/components/confirm-dialog";
 
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
@@ -34,6 +35,7 @@ function CreditNoteActions({
   creditNote: CreditNote;
   onChanged: (creditNote: CreditNote, message: string) => void;
 }) {
+  const confirm = useConfirm();
   const router = useRouter();
   // One key per action on this page, so a retry after a dropped connection
   // returns the first result instead of posting again.
@@ -58,11 +60,11 @@ function CreditNoteActions({
     }
   }
 
-  function approve() {
+  async function approve() {
     if (
-      !window.confirm(
+      !(await confirm(
         `Approve this credit note? It gets the next credit note number and is posted to the ledger on ${formatDate(creditNote.creditNoteDate)}. After that it can only be voided.`,
-      )
+      ))
     ) {
       return;
     }
@@ -75,8 +77,8 @@ function CreditNoteActions({
     });
   }
 
-  function remove() {
-    if (!window.confirm("Delete this draft? This can't be undone.")) {
+  async function remove() {
+    if (!(await confirm("Delete this draft? This can't be undone."))) {
       return;
     }
     void run(async () => {
@@ -85,11 +87,11 @@ function CreditNoteActions({
     });
   }
 
-  function voidCreditNote() {
+  async function voidCreditNote() {
     if (
-      !window.confirm(
+      !(await confirm(
         `Void ${creditNote.creditNoteNumber}? This posts a reversal of its journal on ${formatDate(voidDate)}, and can't be undone.`,
-      )
+      ))
     ) {
       return;
     }

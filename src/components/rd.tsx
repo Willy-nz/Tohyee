@@ -31,6 +31,7 @@ import type { RdCosts, RdCostActivity } from "@/lib/rd/costs";
 import type { RdFile, RdFilePurpose } from "@/lib/rd/files";
 import type { RdActivity, RdActivityDetail, RdActivityRef, RdApproval } from "@/lib/rd/register";
 import type { RdDocumentType, RdLine, RdTag, RdTagDetail } from "@/lib/rd/tags";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * The R&D Tax Incentive screens for stage R2 (examples RD1-RD3, RD8, RD9,
@@ -393,6 +394,7 @@ function ActivityForm({
 // An activity: details, approvals, files and history (RD1-RD3, RD21-RD23)
 
 export function RdActivityView({ organisationId, activityId }: { organisationId: string; activityId: string }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
   const loaded = useApiData<{ activity: RdActivityDetail }>(`/api/rd/activities/${encodeURIComponent(activityId)}`, { organisationId });
   const list = useRdActivities(organisationId, true);
@@ -414,7 +416,7 @@ export function RdActivityView({ organisationId, activityId }: { organisationId:
     const question = archived
       ? `Archive ${activity.code}? Nothing more can be tagged to it; what's already tagged stays. You can restore it later.`
       : `Restore ${activity.code}?`;
-    if (!window.confirm(question)) return;
+    if (!(await confirm(question))) return;
     setBusy(true);
     setError(null);
     try {

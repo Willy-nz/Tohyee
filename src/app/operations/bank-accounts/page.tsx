@@ -13,6 +13,7 @@ import type { AkahuSettings } from "@/lib/bank/akahu/settings";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate, formatDateTime, personName } from "@/lib/format";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
+import { useConfirm } from "@/components/confirm-dialog";
 
 function AddAccountForm({ organisationId, onAdded }: { organisationId: string; onAdded: () => void }) {
   const [code, setCode] = useState("");
@@ -84,6 +85,7 @@ function AddAccountForm({ organisationId, onAdded }: { organisationId: string; o
 
 /** The organisation's own Akahu personal app: each organisation sets up its own, with its own bank logins. */
 function AkahuSettingsCard({ organisationId }: { organisationId: string }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
   const settings = useApiData<{ akahu: AkahuSettings }>("/api/bank-feeds/akahu/settings", { organisationId });
   const [editing, setEditing] = useState(false);
@@ -120,7 +122,7 @@ function AkahuSettingsCard({ organisationId }: { organisationId: string }) {
   }
 
   async function remove() {
-    if (!window.confirm("Remove this organisation's Akahu tokens? Linked accounts stay linked but stop syncing until tokens are saved again.")) return;
+    if (!(await confirm("Remove this organisation's Akahu tokens? Linked accounts stay linked but stop syncing until tokens are saved again."))) return;
     setBusy(true);
     setError(null);
     setSaved(null);

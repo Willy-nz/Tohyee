@@ -35,6 +35,7 @@ import {
 } from "@/lib/reports/custom-layout";
 import type { TrackingSetup } from "@/lib/tracking/service";
 import type { Budget } from "@/lib/budgets/service";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Custom reports (examples CR1-CR10): the lists (drafts, published,
@@ -226,6 +227,7 @@ function ReportTable({
   onEditRow: (row: ReportRow, isNew: boolean) => void;
   onError: (message: string) => void;
 }) {
+  const confirm = useConfirm();
   const columns = figures.columns;
   const span = columns.length + 1 + (editable ? 1 : 0);
   const [title, setTitle] = useState(block.title);
@@ -242,13 +244,13 @@ function ReportTable({
           onUp={() => onChange((layout) => move(tableOf(layout).rows, tableOf(layout).rows.findIndex((r) => r.id === row.id), -1))}
           onDown={() => onChange((layout) => move(tableOf(layout).rows, tableOf(layout).rows.findIndex((r) => r.id === row.id), 1))}
           onEdit={() => onEditRow(structuredClone(layoutRow), false)}
-          onDelete={() => {
+          onDelete={async () => {
             const users = (layoutBlock?.rows ?? []).filter((r) => r.kind === "formula" && r.terms.some((term) => term.rowId === row.id));
             if (users.length > 0) {
               onError(`${users.map((r) => r.label).join(" and ")} ${users.length === 1 ? "uses" : "use"} ${row.label}. Change or delete ${users.length === 1 ? "it" : "them"} first.`);
               return;
             }
-            if (!window.confirm(`Delete the row ${row.label}?`)) return;
+            if (!(await confirm(`Delete the row ${row.label}?`))) return;
             onChange((layout) => {
               const rows = tableOf(layout).rows;
               rows.splice(rows.findIndex((r) => r.id === row.id), 1);
@@ -739,6 +741,7 @@ function NoteBlock({
 }
 
 export function CustomReportPage({ organisationId, reportId }: { organisationId: string; reportId: string }) {
+  const confirm = useConfirm();
   const router = useRouter();
   const { can, current } = useWorkspace();
   const loaded = useApiData<Loaded>(`/api/custom-reports/${encodeURIComponent(reportId)}`, { organisationId });
@@ -798,8 +801,8 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
   function moveBlock(id: string, by: -1 | 1) {
     change((layout) => move(layout.blocks, layout.blocks.findIndex((block) => block.id === id), by));
   }
-  function deleteBlock(id: string, what: string) {
-    if (!window.confirm(`Delete this ${what}?`)) return;
+  async function deleteBlock(id: string, what: string) {
+    if (!(await confirm(`Delete this ${what}?`))) return;
     change((layout) => {
       layout.blocks.splice(layout.blocks.findIndex((block) => block.id === id), 1);
     });
@@ -820,8 +823,8 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
       setState({ report: result.report, figures });
       setMessage(archived ? "Archived. It's under Reports › Archived." : "Brought back.");
     });
-  const remove = () => {
-    if (!window.confirm(`Delete the draft ${report.title}? Published copies of it stay.`)) return;
+  const remove = async () => {
+    if (!(await confirm(`Delete the draft ${report.title}? Published copies of it stay.`))) return;
     void run(async () => {
       await api(`/api/custom-reports/${report.id}`, { method: "DELETE", query: { organisationId } });
       router.push("/operations/reports?view=drafts");

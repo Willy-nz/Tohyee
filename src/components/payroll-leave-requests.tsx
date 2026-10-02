@@ -9,6 +9,7 @@ import { LEAVE_TYPE_LABELS, LEAVE_TYPES, type LeaveType } from "@/lib/payroll/le
 import { BEREAVEMENT_LABELS, BEREAVEMENT_KINDS, type BereavementKind } from "@/lib/payroll/leave/sick";
 import type { LeaveRequest, LeaveRequestStatus, MyLeave } from "@/lib/payroll/leave-requests";
 import styles from "./payroll-employees.module.css";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Payroll › Leave requests (decision 169; HL49-HL51): an employee asks for
@@ -31,6 +32,7 @@ function typeLabel(type: LeaveType | "special"): string {
 type Loaded = { requests: LeaveRequest[]; mine: MyLeave[]; approves: number };
 
 export function LeaveRequestsPage({ organisationId }: { organisationId: string }) {
+  const confirm = useConfirm();
   const loaded = useApiData<Loaded>("/api/payroll/leave/requests", { organisationId });
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const data = loaded.data;
@@ -42,7 +44,7 @@ export function LeaveRequestsPage({ organisationId }: { organisationId: string }
       reason = window.prompt(`Why is ${request.reference} rejected? ${request.employeeName} sees this.`);
       if (!reason) return;
     }
-    if (action === "withdraw" && !window.confirm(`Withdraw ${request.reference}?`)) return;
+    if (action === "withdraw" && !(await confirm(`Withdraw ${request.reference}?`))) return;
     try {
       const result = await api<{ request: LeaveRequest; warnings?: string[] }>(`/api/payroll/leave/requests/${request.id}/${action}`, {
         method: "POST",

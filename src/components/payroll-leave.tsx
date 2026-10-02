@@ -19,6 +19,7 @@ import type { LeaveLiabilityReport, LeaveRecord, LeaveSummary } from "@/lib/payr
 import type { LeaveSettings, OrganisationLeaveSettings } from "@/lib/payroll/leave-settings";
 import type { PayItem } from "@/lib/payroll/pay-items";
 import styles from "./payroll-employees.module.css";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Holidays Act leave screens (payroll stage P8): Payroll › Leave (balances,
@@ -124,6 +125,7 @@ type BookingDraft = {
 };
 
 function Bookings({ organisationId }: { organisationId: string }) {
+  const confirm = useConfirm();
   const employees = useEmployees(organisationId);
   const bookings = useApiData<{ bookings: LeaveBooking[] }>("/api/payroll/leave/bookings", { organisationId, includeCancelled: "true" });
   const blank: BookingDraft = { employeeId: "", leaveType: "annual", startDate: "", endDate: "", hoursWorked: "", bereavementKind: "close_family", inAdvanceAgreed: false, dayHours: "", note: "" };
@@ -183,7 +185,7 @@ function Bookings({ organisationId }: { organisationId: string }) {
   };
 
   const cancel = async (booking: LeaveBooking) => {
-    if (!window.confirm(`Cancel ${booking.reference}?`)) return;
+    if (!(await confirm(`Cancel ${booking.reference}?`))) return;
     try {
       await api(`/api/payroll/leave/bookings/${booking.id}/cancel`, { method: "POST", body: { organisationId } });
       bookings.reload();
@@ -337,6 +339,7 @@ function PublicHolidays({ organisationId }: { organisationId: string }) {
 }
 
 function CashUps({ organisationId }: { organisationId: string }) {
+  const confirm = useConfirm();
   const employees = useEmployees(organisationId);
   const cashUps = useApiData<{ cashUps: CashUp[] }>("/api/payroll/leave/cash-ups", { organisationId });
   const [employeeId, setEmployeeId] = useState("");
@@ -372,7 +375,7 @@ function CashUps({ organisationId }: { organisationId: string }) {
   };
 
   const cancel = async (cashUp: CashUp) => {
-    if (!window.confirm(`Cancel ${cashUp.reference}?`)) return;
+    if (!(await confirm(`Cancel ${cashUp.reference}?`))) return;
     try {
       await api(`/api/payroll/leave/cash-ups/${cashUp.id}/cancel`, { method: "POST", body: { organisationId } });
       cashUps.reload();
@@ -535,6 +538,7 @@ function Liability({ organisationId }: { organisationId: string }) {
 
 /** Posting the liability to the ledger (decision 177; HL52-HL56) and the postings so far. */
 function LiabilityPostings({ organisationId, asAt, total, onChanged }: { organisationId: string; asAt: string; total: string | null; onChanged: () => void }) {
+  const confirm = useConfirm();
   const postings = useApiData<{ postings: LeaveLiabilityPosting[] }>("/api/payroll/leave/liability/postings", { organisationId });
   const [voidDate, setVoidDate] = useState(todayInBrowser());
   const [busy, setBusy] = useState(false);
@@ -556,15 +560,15 @@ function LiabilityPostings({ organisationId, asAt, total, onChanged }: { organis
       setBusy(false);
     }
   };
-  const post = () => {
-    if (!window.confirm(`Post the leave liability at ${formatDate(asAt)}? The journal is the change since ${last ? last.reference : "nothing posted"}.`)) return;
+  const post = async () => {
+    if (!(await confirm(`Post the leave liability at ${formatDate(asAt)}? The journal is the change since ${last ? last.reference : "nothing posted"}.`))) return;
     void act(
       () => api("/api/payroll/leave/liability/postings", { method: "POST", body: { organisationId, idempotencyKey: newIdempotencyKey("leave-liability"), asAt } }),
       (posting) => `${posting.reference} posted: the liability at ${formatDate(posting.asAt)} is $${formatMoney(posting.total)} (employer KiwiSaver $${formatMoney(posting.kiwiSaver)} of it), a change of $${formatMoney(posting.change)}.`,
     );
   };
-  const voidPosting = (posting: LeaveLiabilityPosting) => {
-    if (!window.confirm(`Void ${posting.reference} on ${formatDate(voidDate)}? Its journal is reversed on that date.`)) return;
+  const voidPosting = async (posting: LeaveLiabilityPosting) => {
+    if (!(await confirm(`Void ${posting.reference} on ${formatDate(voidDate)}? Its journal is reversed on that date.`))) return;
     void act(
       () => api(`/api/payroll/leave/liability/postings/${posting.id}/void`, { method: "POST", body: { organisationId, idempotencyKey: newIdempotencyKey("leave-liability-void"), voidDate } }),
       (voided) => `${voided.reference} voided.`,

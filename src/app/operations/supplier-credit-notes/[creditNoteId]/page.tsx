@@ -21,6 +21,7 @@ import { formatDate, formatDateTime, formatQuantity, todayInBrowser, personName 
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { SupplierCreditNote } from "@/lib/supplier-credit-notes/service";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type CreditNote = SupplierCreditNote;
 
@@ -37,6 +38,7 @@ function CreditNoteActions({
   creditNote: CreditNote;
   onChanged: (creditNote: CreditNote, message: string) => void;
 }) {
+  const confirm = useConfirm();
   const router = useRouter();
   // One key per action on this page, so a retry after a dropped connection
   // returns the first result instead of posting again.
@@ -61,11 +63,11 @@ function CreditNoteActions({
     }
   }
 
-  function approve() {
+  async function approve() {
     if (
-      !window.confirm(
+      !(await confirm(
         `Approve ${creditNote.supplierCreditNoteNumber}? It's posted to the ledger on ${formatDate(creditNote.creditNoteDate)}. After that it can only be voided.`,
-      )
+      ))
     ) {
       return;
     }
@@ -78,8 +80,8 @@ function CreditNoteActions({
     });
   }
 
-  function remove() {
-    if (!window.confirm("Delete this draft? This can't be undone.")) {
+  async function remove() {
+    if (!(await confirm("Delete this draft? This can't be undone."))) {
       return;
     }
     void run(async () => {
@@ -88,11 +90,11 @@ function CreditNoteActions({
     });
   }
 
-  function voidCreditNote() {
+  async function voidCreditNote() {
     if (
-      !window.confirm(
+      !(await confirm(
         `Void ${creditNote.supplierCreditNoteNumber}? This posts a reversal of its journal on ${formatDate(voidDate)}, and can't be undone.`,
-      )
+      ))
     ) {
       return;
     }

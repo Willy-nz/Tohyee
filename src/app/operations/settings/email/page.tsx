@@ -10,6 +10,7 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { OrganisationEmailSettings, SendingMethod, SmtpSecurity } from "@/lib/email/settings";
 import { EMAIL_KIND_LABELS, type EmailTemplate, PLACEHOLDERS } from "@/lib/email/templates";
 import { formatDateTime, personName } from "@/lib/format";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Settings › Email (admins): the organisation's own email account, which
@@ -72,6 +73,7 @@ function PresetHelp({ preset }: { preset: Preset }) {
 }
 
 function AccountForm({ organisationId, settings, onSaved }: { organisationId: string; settings: OrganisationEmailSettings; onSaved: (message: string) => void }) {
+  const confirm = useConfirm();
   const [preset, setPreset] = useState<Preset>(presetOf(settings.host));
   const replacesMailbox =
     settings.sendingMethod === "microsoft" ? settings.microsoft?.email : settings.sendingMethod === "google" ? settings.google?.email : undefined;
@@ -113,7 +115,7 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
   }
 
   async function remove() {
-    if (!window.confirm("Remove this email account? Documents can't be emailed until one is set up again. Emails already sent stay in each document's history.")) return;
+    if (!(await confirm("Remove this email account? Documents can't be emailed until one is set up again. Emails already sent stay in each document's history."))) return;
     setError(null);
     try {
       await api("/api/email/settings", { method: "PUT", body: { organisationId, clear: true } });
@@ -335,6 +337,7 @@ function Mailbox({
   settings: OrganisationEmailSettings;
   onSaved: (message: string) => void;
 }) {
+  const confirm = useConfirm();
   const [fromName, setFromName] = useState(settings.fromName ?? "");
   const [replyTo, setReplyTo] = useState(settings.replyTo ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -355,7 +358,7 @@ function Mailbox({
     }
   }
   async function disconnect() {
-    if (!window.confirm(`Disconnect ${mailbox?.email}? Documents can't be emailed through it until it's connected again.`)) return;
+    if (!(await confirm(`Disconnect ${mailbox?.email}? Documents can't be emailed through it until it's connected again.`))) return;
     setError(null);
     try {
       const { settings: after } = await api<{ settings: OrganisationEmailSettings }>(`/api/email/${provider}/disconnect`, { method: "POST", body: { organisationId } });

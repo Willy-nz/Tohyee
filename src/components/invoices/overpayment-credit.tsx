@@ -13,6 +13,7 @@ import type { OverpaymentApplication, OverpaymentRefund } from "@/lib/invoices/o
 import type { CustomerPayment } from "@/lib/invoices/payments";
 import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
 import type { InvoiceSummary } from "@/lib/invoices/service";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type ApplyResult = { applications: OverpaymentApplication[]; payment: CustomerPayment };
 type ApplicationResult = { application: OverpaymentApplication; payment: CustomerPayment };
@@ -188,6 +189,7 @@ function RemoveApplicationForm({
   onCancel: () => void;
   onRemoved: (result: ApplicationResult) => void;
 }) {
+  const confirm = useConfirm();
   const [key] = useState(() => newIdempotencyKey("overpayment-removal"));
   const [removalDate, setRemovalDate] = useState(() => laterOf(todayInBrowser(), application.applicationDate));
   const [busy, setBusy] = useState(false);
@@ -196,9 +198,9 @@ function RemoveApplicationForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
-      !window.confirm(
+      !(await confirm(
         `Remove the ${formatMoney(application.amount)} of credit applied to ${application.invoiceNumber}? That amount is due on the invoice again and back on the overpayment. It can't be undone, but the credit can be applied again.`,
-      )
+      ))
     ) {
       return;
     }
@@ -379,6 +381,7 @@ function VoidRefundForm({
   onCancel: () => void;
   onVoided: (result: RefundResult) => void;
 }) {
+  const confirm = useConfirm();
   const [key] = useState(() => newIdempotencyKey("overpayment-refund-void"));
   const [voidDate, setVoidDate] = useState(() => laterOf(todayInBrowser(), refund.refundDate));
   const [busy, setBusy] = useState(false);
@@ -387,9 +390,9 @@ function VoidRefundForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
-      !window.confirm(
+      !(await confirm(
         `Void the refund of ${formatMoney(refund.amount)} paid on ${formatDate(refund.refundDate)}? This posts a reversal of its journal on ${formatDate(voidDate)}, so the amount is back on the overpayment. It can't be undone.`,
-      )
+      ))
     ) {
       return;
     }

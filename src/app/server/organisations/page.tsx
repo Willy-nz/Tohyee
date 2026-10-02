@@ -9,6 +9,7 @@ import { api, errorMessage } from "@/lib/client/api";
 import { formatDateTime } from "@/lib/format";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import type { OrganisationAdminView } from "@/lib/organisations/admin";
+import { useConfirm } from "@/components/confirm-dialog";
 
 function slugify(name: string): string {
   return name
@@ -29,6 +30,7 @@ function StatusBadge({ organisation }: { organisation: OrganisationAdminView }) 
 }
 
 export default function OrganisationsPage() {
+  const confirm = useConfirm();
   const router = useRouter();
   const { user } = useWorkspace();
   const list = useApiData<{ organisations: OrganisationAdminView[] }>(user.isServerAdmin ? "/api/admin/organisations" : null);
@@ -197,10 +199,10 @@ export default function OrganisationsPage() {
                       <Button
                         variant={organisation.isActive ? "danger" : "secondary"}
                         size="small"
-                        onClick={() => {
+                        onClick={async () => {
                           if (
                             !organisation.isActive ||
-                            window.confirm(`Deactivate ${organisation.displayName}? Nobody will be able to open it until it's reactivated. Nothing is deleted.`)
+                            await confirm(`Deactivate ${organisation.displayName}? Nobody will be able to open it until it's reactivated. Nothing is deleted.`)
                           ) {
                             void act(
                               () =>
