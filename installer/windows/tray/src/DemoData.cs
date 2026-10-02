@@ -64,6 +64,14 @@ namespace Tohyee.Tray
                     Save(form, folder, "again-organisations-t0");
                     PumpFor(1);
                     Save(form, folder, "again-organisations-t1");
+                    // A selected row, to check it reads clearly.
+                    var list = FindList(form);
+                    if (list != null && list.Items.Count > 2)
+                    {
+                        list.Items[2].Selected = true;
+                        Pump();
+                        Save(form, folder, "organisations-selected");
+                    }
                 }
 
                 // Remote access: the chooser, then each way on or part-way through.
@@ -107,6 +115,17 @@ namespace Tohyee.Tray
         {
             var order = new[] { "home", "organisations", "users", "phone", "backups", "email", "stats", "updates" };
             return (Array.IndexOf(order, page) + 1) + "-" + page;
+        }
+
+        private static ListView FindList(Control root)
+        {
+            foreach (Control child in root.Controls)
+            {
+                if (child is ListView && child.Visible) return (ListView)child;
+                var found = FindList(child);
+                if (found != null) return found;
+            }
+            return null;
         }
 
         /// <summary>TOHYEE_DEMO_TRANSITIONS=1: also saves pictures while each page appears (needs a real screen).</summary>

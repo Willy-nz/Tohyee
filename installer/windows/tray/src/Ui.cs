@@ -183,21 +183,17 @@ namespace Tohyee.Tray
                 var text = new Rectangle(e.Bounds.X + 8, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height);
                 TextRenderer.DrawText(e.Graphics, e.Header.Text, Theme.SmallCaps, text, Theme.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
             };
-            // The selected row in the accent colour with white text: Windows' own highlight left
-            // the text dark on dark (2 Oct 2026).
-            list.DrawItem += (s, e) => e.DrawDefault = !e.Item.Selected;
-            list.Resize += (s, e) => FillLastColumn(list);
-            Theme.DarkScrollBars(list);
+            // Every row drawn here, not by Windows: its dark theme drew the row under the mouse
+            // (and a selected row) with dark text on a dark highlight (2 Oct 2026). The selected
+            // row is in the accent colour with white text.
+            list.DrawItem += (s, e) => e.DrawDefault = false;
             list.DrawSubItem += (s, e) =>
             {
-                if (!e.Item.Selected)
-                {
-                    e.DrawDefault = true;
-                    return;
-                }
-                using (var fill = new SolidBrush(Theme.Accent)) e.Graphics.FillRectangle(fill, e.Bounds);
+                var selected = e.Item.Selected;
+                using (var fill = new SolidBrush(selected ? Theme.Accent : list.BackColor)) e.Graphics.FillRectangle(fill, e.Bounds);
+                var colour = selected ? Color.White : (e.Item.UseItemStyleForSubItems ? e.Item.ForeColor : e.SubItem.ForeColor);
                 var text = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, Math.Max(0, e.Bounds.Width - 8), e.Bounds.Height);
-                TextRenderer.DrawText(e.Graphics, e.SubItem.Text, list.Font, text, Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                TextRenderer.DrawText(e.Graphics, e.SubItem.Text, list.Font, text, colour, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
             };
             foreach (var column in columns)
             {
