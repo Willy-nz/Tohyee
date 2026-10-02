@@ -2388,3 +2388,72 @@ widens decision 342: read tools stay read-only; the new tools write.
      Edit, Post and Delete, which is less disruptive than a new page or
      tabs. Deleting a draft is allowed because nothing was posted; AI keys
      can't (decision 347).
+
+### Analytics (decisions 353 to 362)
+
+Jess wants analytics next ("might actually be able to use that at work"):
+data in like Looker Studio, reports like Power BI, a folder of CSV files on
+the server (up to about 1M rows) reloaded daily, Tohyee's own books and CRM,
+and report emails from Google, Meta and others saved into that folder. The
+review behind these is `docs/ANALYTICS-REVIEW.md` (3 Oct 2026). Her answers
+the same day: analytics is per organisation when it's turned on; clients
+see only what's shared with them and must sign in, as for accounting; use
+GitHub's coding agent for parts of the build; mailbox choices to be decided
+when that step comes.
+
+353. **Analytics is a module switched on per organisation**, like the CRM
+     (`analytics_enabled` in the organisation's settings). No organisation
+     sees another's analytics. Reporting across client organisations (for
+     practices) is left for later and needs its own decision.
+354. **Each organisation's analytics data is one DuckDB file** beside its
+     database in Tohyee's data folder, not in PostgreSQL, so loaded CSVs
+     never grow the organisation's database or its backups. DuckDB (MIT)
+     runs inside the server through `@duckdb/node-api`; nothing else is
+     installed. Tested 3 Oct 2026: 1M CSV rows load in under a second and
+     the report queries take 12-44 ms.
+355. **Definitions live in the organisation's PostgreSQL database; data is
+     rebuildable.** Sources, column types, load settings, shaping steps,
+     measures, reports, dashboards and sharing are kept in PostgreSQL (backed
+     up and restored with the organisation). The DuckDB file holds only
+     loaded data and can always be rebuilt by loading again.
+356. **Money is never loaded as a floating-point number.** When a source is
+     set up, its columns' types are confirmed (detected types shown as a
+     preview); money columns load as `DECIMAL(18,2)` (or more places where
+     confirmed) and quantities as `DECIMAL(18,4)`. In the 3 Oct test,
+     DuckDB's own guess (double) gave a total that changed in the 7th
+     decimal place between runs; decimals were exact and matched
+     PostgreSQL to the cent.
+357. **A load replaces a table only when it succeeds.** Each load writes a
+     new table and swaps it in at the end; a failed or partly read file
+     leaves yesterday's table in place. Loads run nightly and on demand.
+     Every load is recorded by the loader (source, file, rows, time taken,
+     error), never typed in.
+358. **The source folder is chosen by a server admin.** Organisation owners
+     and admins set up sources inside it, but the folder on the server's disk
+     is a server setting, so an organisation can't point Tohyee at other
+     folders on the server.
+359. **Tohyee's own data is copied, not queried live.** A fixed, documented
+     set of tables (journal lines with accounts and periods, invoices and
+     bills with lines, contacts, items, CRM records and activities) is
+     copied from the organisation's database in a read-only transaction
+     using Tohyee's own PostgreSQL driver (DuckDB's PostgreSQL plug-in
+     downloads itself and isn't used). Column names stay stable between
+     versions. Figures that must agree with Tohyee's reports (sales, gross
+     margin) need worked examples before this is built.
+360. **Clients see analytics only by signing in**, the same as for the
+     books, and only the dashboards shared with them. This needs a new
+     access ("report viewer") that sees nothing else of the organisation; no
+     public links.
+361. **Charts with Apache ECharts, pivot tables with Perspective** (both
+     Apache-2.0). Metabase, Superset, Lightdash and Redash aren't bundled
+     (each needs Java, Python or Docker), and Elastic-licensed tools
+     (Airbyte, dbt Fusion) can't be. Their licence and NOTICE files ship with
+     the installer.
+362. **Report emails come from a chosen folder or label in a mailbox Tohyee
+     can already read.** Tohyee saves CSV, Excel and zipped CSV attachments
+     into the organisation's source folder, remembers which messages it has
+     saved, and never moves, marks or deletes mail. Which mailboxes (Google
+     Workspace, personal Gmail, Microsoft 365, Outlook.com) and how
+     (Google/Microsoft app or IMAP app password) is decided before that step
+     is built: a Google app in "Testing" loses access after 7 days, which
+     affects personal Gmail (and the CRM email sync now).
