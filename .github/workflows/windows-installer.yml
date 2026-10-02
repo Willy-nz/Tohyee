@@ -47,6 +47,26 @@ jobs:
       - name: Build the installer
         run: ./installer/windows/build.ps1
 
+      - name: Pictures of the server app (sample data, as on Windows)
+        timeout-minutes: 5
+        continue-on-error: true
+        env:
+          TOHYEE_DEMO_TRANSITIONS: "1"
+          TOHYEE_DEMO_DELAY_MS: "150"
+        run: |
+          $exe = Join-Path $PWD 'dist\windows\stage\tray\TohyeeTray.exe'
+          $shots = Join-Path $PWD 'dist\windows\tray-screenshots'
+          $p = Start-Process -FilePath $exe -ArgumentList @('--demo-screenshots', "`"$shots`"") -Wait -PassThru
+          Write-Host "Exit code $($p.ExitCode)"
+          Get-ChildItem $shots | Select-Object Name, Length | Format-Table | Out-Host
+
+      - name: Keep the pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tray-screenshots
+          path: dist/windows/tray-screenshots
+
       - name: Install and test it on this machine
         run: ./installer/windows/test-install.ps1
 

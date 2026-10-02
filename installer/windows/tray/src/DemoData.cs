@@ -42,8 +42,28 @@ namespace Tohyee.Tray
                 foreach (var page in new[] { "home", "organisations", "users", "backups", "email", "stats", "updates" })
                 {
                     form.Navigate(page);
+                    if (Transitions)
+                    {
+                        // What the window shows while the page is being made and its data arrives.
+                        Save(form, folder, Name(page) + "-t0");
+                        PumpFor(1);
+                        Save(form, folder, Name(page) + "-t1");
+                        PumpFor(4);
+                        Save(form, folder, Name(page) + "-t2");
+                    }
                     Pump();
+                    if (Transitions) PumpFor(20);
                     Save(form, folder, Name(page));
+                }
+                if (Transitions)
+                {
+                    // Coming back to a page that's already made.
+                    form.Navigate("home");
+                    Pump();
+                    form.Navigate("organisations");
+                    Save(form, folder, "again-organisations-t0");
+                    PumpFor(1);
+                    Save(form, folder, "again-organisations-t1");
                 }
 
                 // Phone access: the chooser, then each way on or part-way through.
@@ -89,6 +109,18 @@ namespace Tohyee.Tray
             return (Array.IndexOf(order, page) + 1) + "-" + page;
         }
 
+        /// <summary>TOHYEE_DEMO_TRANSITIONS=1: also saves pictures while each page appears (needs a real screen).</summary>
+        private static readonly bool Transitions = Environment.GetEnvironmentVariable("TOHYEE_DEMO_TRANSITIONS") == "1";
+
+        private static void PumpFor(int rounds)
+        {
+            for (var i = 0; i < rounds; i++)
+            {
+                Application.DoEvents();
+                Thread.Sleep(15);
+            }
+        }
+
         private static void Pump()
         {
             for (var i = 0; i < 40; i++)
@@ -102,7 +134,7 @@ namespace Tohyee.Tray
         {
             using (var bitmap = new Bitmap(form.ClientSize.Width, form.ClientSize.Height))
             {
-                if (Type.GetType("Mono.Runtime") != null)
+                if (Type.GetType("Mono.Runtime") != null || Transitions)
                 {
                     // Mono's DrawToBitmap leaves out child controls, so copy the window off the screen.
                     form.Activate();
