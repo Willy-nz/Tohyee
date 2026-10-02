@@ -53,6 +53,75 @@ features"). Not looked into yet: find the cause before changing anything.
    repeating invoices, employees and leave balances, and attachments.
    Worked examples first, following NetSuite's import assistant.
 
+## Tried out on Jess's server, 2 October 2026 (evening)
+
+Claude used Tohyee v0.3.0 on Jess's Windows server through her Chrome, in
+the smalldog and BigDog organisations (made-up data; Jess said to "go nuts"):
+contact, item, invoice, approve, payment, bill, asset type, fixed asset
+from the bill, depreciation run, profit and loss, balance sheet, GST
+return, bank account. The sums were right throughout (invoice 3 x 120 +
+GST = 414; depreciation 2,500 x 50% / 12 = 104.17; the balance sheet
+balanced). What could be better, not yet decided or built:
+
+1. **Due date is required but often blank.** With no payment terms on the
+   customer or supplier, the invoice and bill due dates stay empty and
+   Save draft only shows the browser's small "Please fill out this field".
+   Xero falls back to the organisation's default terms. To confirm with
+   Jess: a default (for example the organisation's terms) or a clearer
+   message.
+2. **No way to add a supplier (or customer) from the bill or invoice.**
+   The bill says to go to Contacts first. Xero lets you type a new name
+   on the bill.
+3. **A bill on an asset account doesn't offer to register the asset.**
+   Approving a bill to 1620 Computer equipment says nothing about fixed
+   assets; you have to know to go to New asset (where the bill line is
+   then offered). Xero lists these as pending assets.
+4. **New items start with no income account or tax code** ("None"), so
+   picking the item on an invoice doesn't fill them. Probably default to
+   Sales and GST (to confirm).
+5. **"All reconciled" / "Everything is reconciled" with no statement at
+   all.** Home and the bank account say everything's reconciled when no
+   statement has been imported, although 414.00 has gone through the
+   account. Should say there's nothing to reconcile yet, or no statement.
+6. **The GST return opens on the period that hasn't ended** (1 Oct to 30
+   Nov), so September's bill isn't in it; and there's no filing frequency
+   set. Probably open on the last period that has ended (to confirm).
+7. **Confirm boxes are the browser's own** (Approve, payments, disposals,
+   rolling back depreciation). They work, but look old-fashioned next to
+   the rest of Tohyee.
+8. **Small things:** "Depreciation has already been run to 2026-09-30"
+   shows the date as 2026-09-30 where everything else says 30 Sep 2026;
+   the customer and supplier tick boxes have no labels for screen
+   readers; on a wide (2560 px) screen the pages use about a third of the
+   width.
+9. **BigDog: an asset can be registered for a month already depreciated.**
+   Depreciation in BigDog has been run to 31 Mar 2027 (runs into the
+   future are allowed). Registering an asset bought 10 Aug 2026 then
+   works, but its August 2026 to March 2027 depreciation can only be
+   charged in a run after March 2027, in the wrong financial year. Either
+   refuse a purchase date on or before the last run, or say so and offer
+   to roll back. Also to decide: should depreciation runs past this month
+   be allowed at all?
+10. **BigDog: a typed-in asset with nothing in the ledger.** Registering an
+   asset that isn't from a bill posts nothing (as designed), so the
+   register then disagrees with account 1620 by the cost. The register
+   report shows the difference, but its advice ("look for journals posted
+   straight to them") doesn't mention this cause. Possibly what tripped
+   Jess up on 1 Oct: worth saying on New asset, when it's not from a bill,
+   that the cost must already be posted (or offering to post it).
+11. **BigDog, smaller things:** the bills list says "Newest first" but
+   isn't in date order (5 Sep above 25 Sep); some bills have supplier
+   invoice numbers like "S-d962a649ed" (where these come from is to be
+   checked); on Record a stock movement the item is a typed code rather
+   than a pick list, and the inventory account list offers every account
+   (bank, receivables); the invoice's "PDF" button opens a print page
+   rather than a PDF file.
+12. **Screen glitch:** in the browser, moving between screens shows
+   "Loading…" for a moment (about 50 ms) before the page fills in; no
+   freezes or long tasks were measured. The Windows server app needs
+   signing in, which Claude doesn't do, so its screens are still to be
+   watched with Jess.
+
 ## List of 27 September 2026
 
 1. **Server admin completely separate from accounting.** When dealing with the server there is no accounting anywhere: only server information and settings (organisations, users, updates, server details). A Tohyee icon in the Windows tray (by the clock), like a media server's tray icon, shows the server is running and opens the server screen. Decided with Jess (28 Sep 2026): the server settings become a **Windows tray app** installed on the server, not done in the browser at all; Docker/Linux servers use the command-line tool. Done so far: the server screens are out of the accounting menus, in their own area that only opens on the server computer itself (127.0.0.1, main port + 1), and the Windows tray app (installer/windows/tray; starts when you sign in to Windows, like a media server's, as Jess asked). The command-line tool now covers everything the server screens do, for Docker/Linux (`docker compose exec tohyee node tohyee-admin.cjs help`). To do: remove the browser server pages once Jess has tried the app on her server.
