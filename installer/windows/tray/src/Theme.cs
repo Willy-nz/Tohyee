@@ -505,8 +505,12 @@ namespace Tohyee.Tray
             else if (tag == "stretch")
             {
                 // Auto-sized groups ignore Width, so pin it with the minimum and maximum.
+                // A maximum height of 0 means "no limit" only to auto-sized controls: on
+                // Windows (.NET Framework) it cuts a fixed-height one (a list, a graph) to
+                // nothing, which hid the organisation and user lists (2 Oct 2026). Mono
+                // treats 0 as no limit for both, so it only showed on Windows.
                 child.MinimumSize = new Size(width, 0);
-                child.MaximumSize = new Size(width, 0);
+                child.MaximumSize = new Size(width, child.AutoSize ? 0 : 100000);
                 child.Width = width;
                 var inner = width - child.Padding.Horizontal;
                 if (!(child is ListView) && !(child is TableLayoutPanel))
