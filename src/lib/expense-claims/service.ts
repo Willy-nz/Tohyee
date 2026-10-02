@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format";
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
@@ -14,7 +15,7 @@ import { type ControlAccount, controlAccountCode, GST_ACCOUNT } from "@/lib/invo
 import { getJournal, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
-import { add, cmp, dec, type Decimal, isZero, parseDecimalInput, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { add, cmp, dec, type Decimal, isPositive, isZero, parseDecimalInput, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { personName } from "@/lib/people/names";
 import { removeRecordExtras } from "@/lib/records/extras";
 import {
@@ -57,6 +58,8 @@ export type ExpenseClaimReceipt = {
   lineOrder: number;
   receiptDate: string;
   supplierName: string;
+  /** The supplier's GST number from the receipt, digits only (decision 293), or null. */
+  supplierGstNumber: string | null;
   description: string;
   accountId: string;
   accountCode: string;
@@ -201,6 +204,7 @@ type ReceiptRow = {
   line_order: number;
   receipt_date: string;
   supplier_name: string;
+  supplier_gst_number: string | null;
   description: string;
   account_id: string;
   code: string;
@@ -236,7 +240,7 @@ export async function getExpenseClaim(tx: OrgTx, idInput: unknown): Promise<Expe
   const found = await tx.query<ClaimRow>(`${SUMMARY_SELECT} where c.id = $1`, [id]);
   if (!found.rows[0]) throw new NotFoundError("Expense claim not found.");
   const receipts = await tx.query<ReceiptRow>(
-    `select r.id::text, r.line_order, r.receipt_date, r.supplier_name, r.description, r.account_id::text, a.code, a.name,
+    `select r.id::text, r.line_order, r.receipt_date, r.supplier_name, r.supplier_gst_number, r.description, r.account_id::text, a.code, a.name,
             r.tax_code_id::text, t.code as tax_code, r.tax_rate::text, r.amount::text, r.net_amount::text, r.tax_amount::text, r.tracking
        from expense_claim_receipts r join accounts a on a.id = r.account_id left join tax_codes t on t.id = r.tax_code_id
       where r.claim_id = $1 order by r.line_order`,
@@ -256,6 +260,7 @@ export async function getExpenseClaim(tx: OrgTx, idInput: unknown): Promise<Expe
       lineOrder: row.line_order,
       receiptDate: row.receipt_date,
       supplierName: row.supplier_name,
+      supplierGstNumber: row.supplier_gst_number,
       description: row.description,
       accountId: row.account_id,
       accountCode: row.code,
@@ -319,6 +324,7 @@ export async function listExpenseClaims(tx: OrgTx, filters: { status?: unknown; 
 type ReceiptInput = {
   receiptDate: string;
   supplierName: string;
+  supplierGstNumber: string | null;
   description: string;
   accountCode: string;
   taxCode: string | null;
@@ -336,6 +342,44 @@ type ResolvedReceipt = ReceiptInput & {
   taxAmount: string;
 };
 
+/** A receipt's supplier GST number (decision 293): 8 or 9 digits, spaces and dashes dropped; null when left blank. */
+function parseSupplierGstNumber(input: unknown, label: string): string | null {
+  const value = optionalString(input, `${label} supplier GST number`, { maxLength: 20 });
+  if (value === null) return null;
+  const digits = value.replace(/[ -]/g, "");
+  if (!/^[0-9 -]+$/.test(value) || !/^[0-9]{8,9}$/.test(digits)) {
+    throw new ValidationError(`${label} supplier GST number must have 8 or 9 digits, like 123-456-789.`);
+  }
+  return digits;
+}
+
+/** Over $200 (GST included) from one supplier on one day, taxable supply information shows the seller's GST number (IRD). */
+export const SUPPLIER_GST_NUMBER_THRESHOLD = "200.00";
+
+/**
+ * Refuses approving a claim with GST claimed on a supplier's receipts of
+ * more than $200 on a day without the supplier's GST number (decision 293;
+ * EC13). Receipts from the same supplier on the same date are one supply.
+ */
+function assertSupplierGstNumbers(receipts: readonly ExpenseClaimReceipt[]): void {
+  const supplies = new Map<string, { supplier: string; date: string; total: Decimal; gst: Decimal; numbered: boolean }>();
+  for (const receipt of receipts) {
+    const key = `${receipt.supplierName.trim().toLowerCase()}|${receipt.receiptDate}`;
+    const entry = supplies.get(key) ?? { supplier: receipt.supplierName, date: receipt.receiptDate, total: ZERO_DECIMAL, gst: ZERO_DECIMAL, numbered: false };
+    entry.total = add(entry.total, dec(receipt.amount));
+    entry.gst = add(entry.gst, dec(receipt.taxAmount));
+    entry.numbered = entry.numbered || receipt.supplierGstNumber !== null;
+    supplies.set(key, entry);
+  }
+  for (const supply of supplies.values()) {
+    if (isPositive(supply.gst) && cmp(supply.total, dec(SUPPLIER_GST_NUMBER_THRESHOLD)) > 0 && !supply.numbered) {
+      throw new ValidationError(
+        `${supply.supplier}'s receipt of ${formatDate(supply.date)} is over $200 with GST claimed, so the supplier's GST number from the receipt is needed (IRD's taxable supply information). Enter it on the receipt, or claim no GST.`,
+      );
+    }
+  }
+}
+
 function parseReceipts(input: unknown, scale: number): ReceiptInput[] {
   const raw = requireArray(input ?? [], "receipts", MAX_RECEIPTS);
   return raw.map((entry, index) => {
@@ -345,6 +389,7 @@ function parseReceipts(input: unknown, scale: number): ReceiptInput[] {
     return {
       receiptDate: parseIsoDate(line.receiptDate, `${label} date`),
       supplierName: requireString(line.supplierName, `${label} supplier`, { maxLength: 200 }),
+      supplierGstNumber: parseSupplierGstNumber(line.supplierGstNumber, label),
       description: requireString(line.description, `${label} description`, { maxLength: 500 }),
       accountCode: parseAccountCodeInput(line.accountCode, `${label} account`),
       taxCode: optionalString(line.taxCode, `${label} tax code`, { maxLength: 20 })?.toUpperCase() ?? null,
@@ -434,8 +479,8 @@ async function writeReceipts(tx: OrgTx, claimId: string, receipts: ResolvedRecei
   for (const [index, receipt] of receipts.entries()) {
     await tx.query(
       `insert into expense_claim_receipts (claim_id, line_order, receipt_date, supplier_name, description, account_id, tax_code_id,
-                                           tax_rate, amount, net_amount, tax_amount, tracking)
-       values ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9::numeric, $10::numeric, $11::numeric, $12::jsonb)`,
+                                           tax_rate, amount, net_amount, tax_amount, tracking, supplier_gst_number)
+       values ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9::numeric, $10::numeric, $11::numeric, $12::jsonb, $13)`,
       [
         claimId,
         index + 1,
@@ -449,6 +494,7 @@ async function writeReceipts(tx: OrgTx, claimId: string, receipts: ResolvedRecei
         receipt.netAmount,
         receipt.taxAmount,
         JSON.stringify(receipt.tracking),
+        receipt.supplierGstNumber,
       ],
     );
   }
@@ -531,6 +577,7 @@ export async function updateExpenseClaim(tx: OrgTx, idInput: unknown, command: {
       ? current.receipts.map((receipt) => ({
           receiptDate: receipt.receiptDate,
           supplierName: receipt.supplierName,
+          supplierGstNumber: receipt.supplierGstNumber,
           description: receipt.description,
           accountCode: receipt.accountCode,
           taxCode: receipt.taxCode,
@@ -590,6 +637,7 @@ async function checkStillValid(tx: OrgTx, claim: ExpenseClaim): Promise<Resolved
     claim.receipts.map((receipt) => ({
       receiptDate: receipt.receiptDate,
       supplierName: receipt.supplierName,
+      supplierGstNumber: receipt.supplierGstNumber,
       description: receipt.description,
       accountCode: receipt.accountCode,
       taxCode: receipt.taxCode,
@@ -687,6 +735,7 @@ export async function approveExpenseClaim(
   const latest = current.receipts.reduce((date, receipt) => (receipt.receiptDate > date ? receipt.receiptDate : date), "");
   if (claimDate < latest) throw new ValidationError(`The claim date can't be before its latest receipt (${latest}).`);
   const receipts = await checkStillValid(tx, current);
+  assertSupplierGstNumbers(current.receipts);
   const payable = await controlAccountCode(tx, EXPENSE_CLAIMS_PAYABLE, "expense claims can't be approved");
   const gst = await controlAccountCode(tx, GST_ACCOUNT, "expense claims can't be approved");
   await assertPostingDateAllowed(tx, claimDate);

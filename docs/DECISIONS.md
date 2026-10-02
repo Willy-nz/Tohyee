@@ -1960,8 +1960,10 @@ needing its own worked examples first.
      one-person organisation must still work; bookkeepers can't.
 293. **Receipts over $200 need the supplier's GST number to claim GST**
      (IRD's page: the GST number is required over $200, not at $200 or
-     less). Recording the number on a receipt line and warning without it
-     is later; until then the approver checks the receipt.
+     less). Built (EC13, tenant migration 0077): a receipt has the
+     supplier's GST number, and approving is refused while a supplier's
+     receipts on one day add up to more than $200 with GST claimed and none
+     of them has it.
 294. **2010 Expense claims payable stays** (kept).
 295. **The claim date defaults to the approval date** (kept).
 

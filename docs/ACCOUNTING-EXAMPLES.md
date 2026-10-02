@@ -6660,6 +6660,17 @@ and Sam (bookkeepers) and a viewer. Sam's claim "June market trip":
   ledger (void the claim or the payment), and account transactions for 2010
   show them as "Expense claim CLAIM-n" and "Payment of expense claim
   CLAIM-n", linking to the claim.
+- **EC13 The supplier's GST number over $200** (decision 293; IRD: taxable
+  supply information over $200 shows the seller's GST number). Sam's claim
+  "Conference" has two receipts from **Noel Leeming** on 12 Jun 2026, a
+  monitor **172.50** (GST 22.50) and a cable **34.50** (GST 4.50): together
+  **207.00**, over $200, with GST claimed. Approving it is refused: "Noel
+  Leeming's receipt of 12 Jun 2026 is over $200 with GST claimed, so the
+  supplier's GST number from the receipt is needed (IRD's taxable supply
+  information). Enter it on the receipt, or claim no GST." With the GST
+  number **123-456-789** entered on either receipt (stored as 123456789) it's
+  approved. A receipt of **200.00** exactly, or one with no tax code, needs
+  no GST number. A GST number that isn't 8 or 9 digits is refused.
 
 ### Not supported yet (refused rather than guessed)
 
@@ -8159,8 +8170,9 @@ tags**, never a payroll calculation of its own (decision 37).
   stamped with who and when), only 4,000.00 − 1,000.00 = 3,000.00 would
   count for 2026-27, and the report would list the 1,000.00 to be tagged in
   the year they're used. (Not in Kea's totals: all were used.)
-- **RD9** Expense claim: Hana's receipt of 5 Aug 2026, "Potting mix and
-  pots for soil trials", **230.00 including GST** with the GST tax code:
+- **RD9** Expense claim: Hana's receipt of 5 Aug 2026 from Garden Centre
+  (GST number 111-222-333, needed over $200, EC13), "Potting mix and pots
+  for soil trials", **230.00 including GST** with the GST tax code:
   posts 200.00 to expense and 30.00 GST. Tagged C1: **200.00** counts.
   (Stage R2 behaviour, not part of the example: if the claim's journal is
   later corrected in the ledger, the receipt's tag stops counting and is
