@@ -247,7 +247,9 @@ rate events the effective date and pay basis.
 - Changing or deleting a saved allocation or pay rate: save a new one with
   the same effective date instead.
 
-### Questions for Jess (allocation, pay rates and payroll access)
+### Questions for Jess (allocation, pay rates and payroll access), decided
+
+Decided on 2 Oct 2026: decisions 225-233 in `docs/DECISIONS.md`. What was asked is kept below.
 
 - A pay period that spans an allocation change (PE6, a monthly pay with a
   move on 15 September): charge the whole pay by the allocation in effect on
@@ -9346,7 +9348,9 @@ Payroll deductions payable**.
   amounts, and the "journal posted" audit event for a pay run leaves out its
   total.
 
-### Questions for Jess (pay runs)
+### Questions for Jess (pay runs), decided
+
+Decided on 2 Oct 2026: decisions 234-246. What was asked is kept below.
 
 1. **KiwiSaver 3% → 3.5% on 1 April 2026.** Tohyee refuses a pay dated on or
    after 1 April at 3% (PRUN4) rather than moving people to 3.5% itself.
@@ -9615,7 +9619,9 @@ here: net **2,590.50**; PAYE 589.72, student loan 197.28, KiwiSaver
   void PAYRUN-2. October then owes PAYRUN-1's deductions only: PAYE 898.58,
   student loan 0.00, KiwiSaver 160.26, ESCT 28.20, total **1,087.04**.
 
-### Questions for Jess (paying wages and IRD)
+### Questions for Jess (paying wages and IRD), decided
+
+Decided on 2 Oct 2026: decisions 247-253 (question 3 still to check against IRD's IR328; question 4 waits for the Tax Administration Act's "working day"). What was asked is kept below.
 
 1. **Bank files.** Which NZ bank batch formats should Tohyee make for
    wages (and supplier payments): ASB, ANZ, BNZ, Westpac, Kiwibank? Each has
@@ -9858,7 +9864,9 @@ PostgreSQL and the API routes).
   account's code, the format, the due date and how many payments, never an
   amount or an account number (decision 6, PPAY10).
 
-### Questions for Jess (bank files)
+### Questions for Jess (bank files), decided
+
+Decided on 2 Oct 2026: decisions 254-259 (questions 1, 2 and 5 still need a test upload with each bank). What was asked is kept below.
 
 1. **ANZ's examples** end the header with a comma (`...,20060725,`) and put
    a space in the control record's total (`3, 503400,...`). Tohyee follows
@@ -10026,7 +10034,9 @@ PostgreSQL, the API routes, the PDF and a real SMTP server).
   There's no employee self-service portal: employees get their payslip by
   email or on paper.
 
-### Questions for Jess (payslips)
+### Questions for Jess (payslips), decided
+
+Decided on 2 Oct 2026: decisions 260-264 (ERA s 130 still to be saved to `docs/sources/`). What was asked is kept below.
 
 1. **ERA s 130**: its wording couldn't be read (legislation.govt.nz
    blocks our tools). Please save the section to `docs/sources/` so the
@@ -10215,7 +10225,9 @@ redundancy and field 14 the lump sum indicator: XP9, XP13.) The file is named
     period adjustments: Tohyee doesn't pay these yet (PRUN8), so their
     fields are 0.
 
-### Questions for Jess (payday filing file)
+### Questions for Jess (payday filing file), decided
+
+Decided on 2 Oct 2026: decisions 265-269 (question 1, a test in myIR, is still for Jess). What was asked is kept below.
 
 1. **Try a file in myIR.** Please run PF1's file (or a real pay run's)
    through myIR's "Check your employment information file" service. It

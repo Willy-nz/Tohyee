@@ -1740,3 +1740,141 @@ The examples these touch are **not approved by Jess**.
 224. **Where these replace earlier decisions**: 192 replaces 92's Monday;
      199 and 200 replace 107's unstored week and "assumed" salaries where
      there's a usual week.
+
+## Earlier payroll questions, decided (2 Oct 2026; decisions 225-269)
+
+The "Questions for Jess" lists for payroll stages P1b-P6 (allocation, pay
+runs, paying wages and IRD, bank files, payslips, the payday filing file),
+decided by law → NetSuite → Xero as Jess asked, or marked as answered by a
+later stage. "Kept" means as built, with the reason. Some stay with Jess
+because only she, a bank or IRD can answer them; those are listed at the
+end of each group.
+
+### Allocation, pay rates and payroll access (after PE13)
+
+225. **A pay period spanning an allocation change is charged by the
+     allocation on the pay date** (kept, PRUN3): the journal is dated the
+     pay date. Since P9, approved timesheets split by the days they cover.
+226. **A rate dated before the last posted pay run becomes back pay**
+     (answered by P12: back pay from pay rate history, XP5-XP7). An
+     allocation dated earlier changes only pay runs approved afterwards;
+     posted pay runs are never changed.
+227. **One employee group per employee** (kept; Xero's employee group).
+228. **A pay group's frequency must match the employee's** (kept): it
+     catches a mismatch rather than silently changing someone's pay.
+229. **The last person with payroll access can't be removed, even by an
+     owner** (kept): someone must always be able to run payroll; an owner
+     can give themselves access first.
+230. **Payroll needs the bookkeeper role as well as payroll access** (kept;
+     decision 105): a viewer can't post.
+231. **Leftover cents go by largest remainder, the earlier line on a tie**
+     (kept, PE3): the usual fair rounding, and it never moves more than a
+     cent per line.
+232. **Allocation lines need a Department, Class, Location or project**
+     (kept, PE5): an untagged line says nothing about where the cost goes.
+233. **Access stays recorded when someone is moved down to viewer** (kept):
+     it's unused while they're a viewer (decision 230), and moving them back
+     up shouldn't silently restore or lose it without an admin seeing it.
+
+### Pay runs (after PRUN11)
+
+234. **KiwiSaver 3% isn't changed to 3.5% by Tohyee** (question 1, kept):
+     the rate is the employee's choice (or a temporary rate reduction IRD
+     approved), so the pay run refuses 3% after 1 April 2026 and the person
+     running pay updates the employee.
+235. **Pay rate changes inside a period stay refused** (question 2, kept):
+     prorating by days, working days or hours depends on the agreement.
+236. **Costs split by the allocation on the pay date** (question 3, kept;
+     decision 225).
+237. **Salary per period and hours × rate rounded half up** (question 4,
+     kept): IRD truncates only PAYE and contributions.
+238. **Separate IRD liability accounts** (question 5, kept): IRD's payments
+     and the PAYE summary report them separately; NetSuite keeps a
+     liability per payroll item.
+239. **Projects: answered by P3 and P9**: postings carry the project tag
+     and timesheet shares carry projects to labour cost (PREP2).
+240. **Monthly hourly employees: answered by P8 and P9**: the usual pay
+     from the usual week (decision 148) or approved timesheets give the
+     hours.
+241. **The approver rule applies to everyone, admins and owners
+     included** (question 8, kept as built): a control that the most
+     senior people can skip isn't one.
+242. **One journal line per pay item** (question 9, kept): NetSuite posts
+     by payroll item, and it lets the ledger show overtime apart from
+     ordinary time.
+243. **Monthly periods are calendar months** (question 10, kept for now):
+     other monthly cycles (15th to 14th) need their own example; not
+     built.
+244. **Paying in advance allowed; a pay date before the period starts
+     refused** (question 11, kept).
+245. **Adding someone back to a draft: not built** (question 12): delete
+     the draft and start again.
+246. **A pay item split differently from the allocation: answered by P9**
+     (question 13): timesheets split by what was worked; a fixed per-item
+     override isn't built.
+
+### Paying wages and IRD (after PPAY12)
+
+247. **Bank files: answered by P5** (question 1): ANZ, ASB and BNZ from
+     their published specifications; Westpac and Kiwibank wait for theirs.
+248. **No warning at $500,000** (question 2, kept): IRD tells each employer
+     how often to pay; the setting follows IRD's letter.
+249. **December for monthly payers stays 20 January, as IRD's page showed**
+     (question 3, kept): still to check against IRD's IR328 calendar
+     (Jess).
+250. **Public holidays in IRD due dates: still weekends only** (question
+     4): Tohyee now has public holiday dates (P8), but IRD's "working day"
+     (Tax Administration Act 1994 s 3) wasn't read this session, and it
+     may differ from the Holidays Act's list (for example over Christmas
+     and New Year). Not built until it's read (**unverified**).
+251. **Voiding a pay run IRD has been paid for stays refused** until the
+     IRD payment is voided (question 5, kept): a credit with IRD is IRD's to
+     give.
+252. **Wages can't be paid before the pay date** (question 6, kept): the
+     wage payment is dated the payment; paying early would mean the pay run
+     dated after its own payment.
+253. **A pay run is paid as a whole or per employee, not both** (question
+     7, kept).
+
+### Bank files (after PBF7)
+
+254. **ANZ's header comma and total without a space** (question 1, kept as
+     built): still for Jess to check with one upload.
+255. **Zero-filling and CR line endings** (question 2, kept as built):
+     still for Jess to confirm with a test upload.
+256. **Account numbers are checked for shape only** (question 3, kept):
+     the banks' check-digit rules need a published source first.
+257. **Particulars "Wages", code PAYRUN-n, reference the pay date**
+     (question 4, kept); an employee's own code is a later option.
+258. **ANZ transaction code 50** (question 5, kept): the only code on
+     ANZ's page.
+259. **Westpac and Kiwibank wait for their specifications** (question 6,
+     kept).
+
+### Payslips (after PSLIP6)
+
+260. **ERA s 130 still to be read** (question 1): it's not in
+     `docs/sources/` yet; for Jess (or a Chrome session) to save.
+261. **Hours each day: answered by P9** (question 2): approved timesheets
+     record them (s 81(2)(c)).
+262. **The payslip shows the employee's current bank account** (question
+     3, kept for now): keeping the account each pay run paid into is a
+     later stage (it needs the account stored on approval).
+263. **Neither the IRD number nor an employee number** on payslips
+     (question 4, kept): neither is required, and leaving the IRD number off
+     keeps it out of emails.
+264. **The payslip email's text stays fixed** (question 5, kept): no pay
+     figure ever sits in a stored message.
+
+### Payday filing file (after PF9)
+
+265. **Try a file in myIR** (question 1): still for Jess.
+266. **The employee details file: a later stage** (question 2): it needs
+     split addresses, phones and KiwiSaver codes on employees first.
+267. **One file per pay run** (question 3, kept; decision 56).
+268. **The employer IRD number stays its own setting** (question 4, kept):
+     a GST number is usually the same number, but it may not be (an
+     organisation in a GST group, say), so it isn't copied.
+269. **Salaried hours paid stay 0 unless lines carry hours** (question 5,
+     kept; decision 59): IRD's spec allows "0 if not held". Leave lines
+     carry hours since P8.
