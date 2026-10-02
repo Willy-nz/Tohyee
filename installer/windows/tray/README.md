@@ -28,7 +28,7 @@ sidebar with the logo and the pages, and each page a column of cards.
 
 - **Home** (it opens here): whether the server is running (version, and how
   long it's been up when Windows lets the app see the service's process),
-  quick looks at phone access, the last backup and the organisations (click
+  quick looks at remote access, the last backup and the organisations (click
   one to go to its page), the latest news and the conference card.
 - **Organisations, Users, Email**: as before.
 - **Stats**: CPU, memory, requests, people using Tohyee, disk space and
@@ -41,7 +41,7 @@ sidebar with the logo and the pages, and each page a column of cards.
 - **Backups**: nightly backups, the backup key, each organisation's last
   backup, and the backup files (restore as a copy). Until a saved copy of the
   key has been checked, the window opens on Backups with a reminder.
-- **Phone access**: three ways to use Tohyee from anywhere, one at a time: a
+- **Remote access**: three ways to use Tohyee from anywhere, one at a time: a
   Tohyee address (recommended for most), your own domain (Cloudflare), and
   Tailscale Funnel. See below.
 
@@ -67,7 +67,7 @@ four hours (GitHub allows 60 unauthenticated requests an hour), caches in
 `%LocalAppData%\Tohyee\news-cache.json`, and says "Couldn't load news" when
 it's offline with nothing cached.
 
-## Phone access
+## Remote access
 
 `src/RemoteAccessPage.cs`. Three cards, in this order; only one way is on at
 a time. Turning one on while another is on asks first, then turns the other
@@ -180,7 +180,7 @@ mcs -sdk:4.5 -langversion:7 -target:winexe -out:/tmp/TohyeeTray.exe \
 ```
 
 Pictures of every page with sample data (no server, no network), including
-each Phone access state (`4-phone-1-choose` … `4-phone-7-tailscale-on`):
+each Remote access state (`4-phone-1-choose` … `4-phone-7-tailscale-on`):
 
 ```sh
 xvfb-run -a -s "-screen 0 1400x1000x24" mono /tmp/TohyeeTray.exe --demo-screenshots /tmp/tohyee-app/

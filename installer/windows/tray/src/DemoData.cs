@@ -66,7 +66,7 @@ namespace Tohyee.Tray
                     Save(form, folder, "again-organisations-t1");
                 }
 
-                // Phone access: the chooser, then each way on or part-way through.
+                // Remote access: the chooser, then each way on or part-way through.
                 Phone(form, services, folder, "1-choose", Off, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.None, true, null);
                 Phone(form, services, folder, "2-tohyee-on", TohyeeOn, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.None, true, null);
                 Phone(form, services, folder, "3-tohyee-not-available", Off, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.None, false, null);
@@ -154,7 +154,7 @@ namespace Tohyee.Tray
             return new List<NewsItem>
             {
                 new NewsItem { Kind = "release", Date = "2026-09-29", Title = "Tohyee 0.2.1", Body = "Bank reconciliation with one-click OK, bulk coding and split transactions, plus foreign-currency bank accounts.", Link = NewsFeed.ReleasesPage },
-                new NewsItem { Kind = "announcement", Date = "2026-09-20", Title = "Phone access is getting easier", Body = "The next server app gives you three ways to use Tohyee from your phone, including a Tohyee address in one click. Then scan a QR code." },
+                new NewsItem { Kind = "announcement", Date = "2026-09-20", Title = "Remote access is getting easier", Body = "The next server app gives you three ways to use Tohyee from your phone, including a Tohyee address in one click. Then scan a QR code." },
                 new NewsItem { Kind = "release", Date = "2026-09-02", Title = "Tohyee 0.2.0", Body = "Encrypted nightly backups with OneDrive copies, restore as a copy, and the backup key check.", Link = NewsFeed.ReleasesPage },
                 NewsFeed.DefaultConference,
             };

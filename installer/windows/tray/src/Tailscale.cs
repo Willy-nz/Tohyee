@@ -43,7 +43,7 @@ namespace Tohyee.Tray
         }
     }
 
-    /// <summary>The steps of turning phone access on; the demo mode fakes them.</summary>
+    /// <summary>The steps of turning remote access on; the demo mode fakes them.</summary>
     internal interface ITailscale
     {
         Task<TailscaleStatus> GetStatus(int port);
@@ -64,7 +64,7 @@ namespace Tohyee.Tray
     }
 
     /// <summary>
-    /// Phone access through Tailscale Funnel: Tailscale gives this computer a
+    /// Remote access through Tailscale Funnel: Tailscale gives this computer a
     /// https://&lt;name&gt;.&lt;tailnet&gt;.ts.net address that works from any phone, and
     /// forwards it to Tohyee on 127.0.0.1. This drives Tailscale's own
     /// command-line tool (tailscale.exe); Tohyee never sees or stores the
@@ -384,7 +384,7 @@ namespace Tohyee.Tray
                 // Windows tidies the temp folder.
             }
             if (exitCode == 1223 || exitCode == 1602) throw new TailscaleException("Tailscale wasn't installed: Windows didn't get permission.");
-            if (exitCode == -2) throw new TailscaleException("Installing Tailscale is taking a long time. Check for a Windows prompt, then press Set up phone access again.");
+            if (exitCode == -2) throw new TailscaleException("Installing Tailscale is taking a long time. Check for a Windows prompt, then press Set up remote access again.");
             if (exitCode != 0 && exitCode != 3010) throw new TailscaleException("Installing Tailscale failed (Windows Installer code " + exitCode + ").");
 
             progress("Starting Tailscale…");
@@ -417,7 +417,7 @@ namespace Tohyee.Tray
                 // all repeated. `login` signs in without changing them.
                 result = await Run("login --unattended", Waiting, open);
             }
-            if (result.TimedOut) throw new TailscaleException("Signing in to Tailscale took too long. Press Set up phone access to try again.");
+            if (result.TimedOut) throw new TailscaleException("Signing in to Tailscale took too long. Press Set up remote access to try again.");
             if (result.ExitCode != 0) throw new TailscaleException("Tailscale didn't sign in: " + FirstLine(result.Output));
         }
 
@@ -426,7 +426,7 @@ namespace Tohyee.Tray
             // Keep Tailscale connected when nobody is signed in to Windows (best effort).
             await Run("set --unattended", Quick, null);
             var result = await Run("funnel --bg --yes " + port, Waiting, OpenOnce(openUrl));
-            if (result.TimedOut) throw new TailscaleException("Waiting for Funnel to be approved took too long. Approve it in the browser, then press Turn on phone access again.");
+            if (result.TimedOut) throw new TailscaleException("Waiting for Funnel to be approved took too long. Approve it in the browser, then press Turn on remote access again.");
             if (result.ExitCode != 0) throw new TailscaleException("Tailscale didn't turn Funnel on: " + FirstLine(result.Output));
         }
 

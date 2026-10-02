@@ -8,7 +8,7 @@ using System.Windows.Forms;
 namespace Tohyee.Tray
 {
     /// <summary>
-    /// Home: whether the server is running, quick looks at phone access, the
+    /// Home: whether the server is running, quick looks at remote access, the
     /// last backup and the organisations, the latest Tohyee news, and the
     /// conference card.
     /// </summary>
@@ -57,7 +57,7 @@ namespace Tohyee.Tray
             hero.Body.Controls.Add(heroRow);
 
             // Quick looks.
-            _phone = new Tile("Phone access", Glyph.Phone, () => navigate("phone"));
+            _phone = new Tile("Remote access", Glyph.Phone, () => navigate("phone"));
             _backup = new Tile("Last backup", Glyph.Backups, () => navigate("backups"));
             _organisations = new Tile("Organisations", Glyph.Organisations, () => navigate("organisations"));
             page.Controls.Add(new SplitRow(new[] { _phone.Card, _backup.Card, _organisations.Card }, new[] { 1f, 1f, 1f }));

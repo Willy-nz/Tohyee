@@ -28,7 +28,7 @@ namespace Tohyee.Tray
     /// <summary>
     /// The server settings window. Signing in as a server admin (with two-step
     /// sign-in) comes first; then a sidebar with Home, Organisations, Users,
-    /// Phone access, Backups, Email, Stats and Updates. Nothing here touches the books.
+    /// Remote access, Backups, Email, Stats and Updates. Nothing here touches the books.
     /// </summary>
     internal sealed class ServerSettingsForm : Form
     {
@@ -248,7 +248,7 @@ namespace Tohyee.Tray
             Add(navigate, "home", "Home", Glyph.Home);
             Add(navigate, "organisations", "Organisations", Glyph.Organisations);
             Add(navigate, "users", "Users", Glyph.Users);
-            Add(navigate, "phone", "Phone access", Glyph.Phone);
+            Add(navigate, "phone", "Remote access", Glyph.Phone);
             Add(navigate, "backups", "Backups", Glyph.Backups);
             Add(navigate, "email", "Email", Glyph.Email);
             Add(navigate, "stats", "Stats", Glyph.Stats);
