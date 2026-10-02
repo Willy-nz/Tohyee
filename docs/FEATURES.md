@@ -989,7 +989,8 @@ that something happened.
   through myIR's checker yet.
 - **Timesheets** (payroll stage P9, TS1-TS11, not yet approved by Jess;
   decisions 91-101; tenant migration 0067). Payroll › Timesheets: one
-  timesheet per employee per week (Monday to Sunday) of hours per day, to 2
+  timesheet per employee per week (Monday to Sunday unless the organisation
+  starts its weeks on another day, decision 192, TS12) of hours per day, to 2
   decimal places, by R&D activity, Department, project, any combination, or
   "other work" (spread by the default allocation); "Fill from project time"
   suggests rows from the employee's project time. Every entry is stamped by
@@ -1023,8 +1024,11 @@ that something happened.
   payroll figure against its ledger movement, with every other journal that
   explains the difference: voided pay runs and payments, manual journals,
   other documents); **headcount and FTE** at a date and by month (usual
-  hours ÷ a standard week, 40.00 unless typed; salaries count 1, marked
-  assumed; by Department from the allocation; starters, leavers and who was
+  hours ÷ a standard week (saved per organisation, 40.00 unless changed,
+  or typed for one report; decision 199); usual hours from the employee's
+  usual week where they have leave settings, else the pay rate's, and
+  salaries without a usual week count 1, marked assumed (decision 200,
+  PREP9); by Department from the allocation; starters, leavers and who was
   paid); **employee earnings history**; and **PAYE, KiwiSaver and student
   loan** by month, tied to each pay run's employment information file (made
   or not, from the audit log) and IRD payments. Voided pay runs are listed,

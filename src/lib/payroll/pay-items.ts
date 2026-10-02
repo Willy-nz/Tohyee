@@ -2,10 +2,12 @@ import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { cmp, dec, parseDecimalInput, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { cmp, dec, parseDecimalInput, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { requirePayrollAccess } from "@/lib/payroll/access";
 import { type IrdPaymentFrequency, parseIrdPaymentFrequency } from "@/lib/payroll/ird-due-dates";
 import { NOT_SUPPORTED } from "@/lib/payroll/rates";
+import { parseStandardWeek } from "@/lib/payroll/report-figures";
+import { WEEKDAY_NAMES } from "@/lib/payroll/timesheet-split";
 import { requireBoolean, requireIdempotencyKey, requireString } from "@/lib/validation";
 
 /**
@@ -501,6 +503,10 @@ export type PayrollSettings = {
   irdPaymentFrequency: IrdPaymentFrequency;
   leaveExpenseAccountCode: string | null;
   leaveLiabilityAccountCode: string | null;
+  /** The first day of the timesheet week, ISO 1 = Monday to 7 = Sunday (decision 192). */
+  timesheetFirstDay: number;
+  /** The standard week FTE is measured against, hours (decision 199). */
+  standardWeek: string;
 };
 
 type SettingsRow = {
@@ -510,13 +516,16 @@ type SettingsRow = {
   payroll_leave_liability_account_id: string | null;
   leave_expense_code: string | null;
   leave_liability_code: string | null;
+  payroll_timesheet_first_day: number;
+  payroll_standard_week: string;
 };
 
 async function settingsRow(tx: OrgTx): Promise<SettingsRow | undefined> {
   const result = await tx.query<SettingsRow>(
     `select s.payroll_approver_must_differ, s.payroll_ird_payment_frequency,
             s.payroll_leave_expense_account_id::text, s.payroll_leave_liability_account_id::text,
-            e.code as leave_expense_code, l.code as leave_liability_code
+            e.code as leave_expense_code, l.code as leave_liability_code,
+            s.payroll_timesheet_first_day, s.payroll_standard_week::text
        from organisation_settings s
        left join accounts e on e.id = s.payroll_leave_expense_account_id
        left join accounts l on l.id = s.payroll_leave_liability_account_id
@@ -532,7 +541,15 @@ async function readPayrollSettings(tx: OrgTx): Promise<PayrollSettings> {
     irdPaymentFrequency: row?.payroll_ird_payment_frequency ?? "monthly",
     leaveExpenseAccountCode: row?.leave_expense_code ?? null,
     leaveLiabilityAccountCode: row?.leave_liability_code ?? null,
+    timesheetFirstDay: Number(row?.payroll_timesheet_first_day ?? 1),
+    standardWeek: toFixedString(dec(row?.payroll_standard_week ?? "40"), 2),
   };
+}
+
+/** The first day of the timesheet week (decision 192), ISO 1-7; no payroll access needed (timesheets are for everyone). */
+export async function timesheetFirstDay(tx: OrgTx): Promise<number> {
+  const result = await tx.query<{ payroll_timesheet_first_day: number }>("select payroll_timesheet_first_day from organisation_settings where id = true");
+  return Number(result.rows[0]?.payroll_timesheet_first_day ?? 1);
 }
 
 export async function getPayrollSettings(tx: OrgTx): Promise<PayrollSettings> {
@@ -583,7 +600,7 @@ async function resolveLeaveAccount(tx: OrgTx, code: unknown, which: "expense" | 
  */
 export async function updatePayrollSettings(tx: OrgTx, input: Record<string, unknown>): Promise<PayrollSettings> {
   await requirePayrollAccess(tx);
-  const fields = ["approverMustDiffer", "irdPaymentFrequency", "leaveExpenseAccountCode", "leaveLiabilityAccountCode"];
+  const fields = ["approverMustDiffer", "irdPaymentFrequency", "leaveExpenseAccountCode", "leaveLiabilityAccountCode", "timesheetFirstDay", "standardWeek"];
   if (fields.every((field) => input[field] === undefined)) {
     throw new ValidationError(`Give ${fields.join(", ")} or more.`);
   }
@@ -617,12 +634,28 @@ export async function updatePayrollSettings(tx: OrgTx, input: Record<string, unk
       );
     }
   }
+  let firstDay = current.timesheetFirstDay;
+  if (input.timesheetFirstDay !== undefined) {
+    const day = Number(input.timesheetFirstDay);
+    if (!Number.isInteger(day) || day < 1 || day > 7) throw new ValidationError("The first day of the timesheet week is 1 (Monday) to 7 (Sunday).");
+    if (day !== current.timesheetFirstDay) {
+      const any = await tx.query("select 1 from payroll_timesheets limit 1");
+      if (any.rows[0]) {
+        throw new ConflictError(
+          `Timesheets already start on a ${WEEKDAY_NAMES[current.timesheetFirstDay - 1]}, so the first day of the week can't change (existing weeks would be cut in two; decision 192).`,
+        );
+      }
+    }
+    firstDay = day;
+  }
+  const standardWeek = input.standardWeek === undefined ? current.standardWeek : parseStandardWeek(input.standardWeek);
   const updated = await tx.query(
     `update organisation_settings
         set payroll_approver_must_differ = $1, payroll_ird_payment_frequency = $2,
-            payroll_leave_expense_account_id = $3, payroll_leave_liability_account_id = $4
+            payroll_leave_expense_account_id = $3, payroll_leave_liability_account_id = $4,
+            payroll_timesheet_first_day = $5, payroll_standard_week = $6::numeric
       where id = true`,
-    [approverMustDiffer, irdPaymentFrequency, expenseAccountId, liabilityAccountId],
+    [approverMustDiffer, irdPaymentFrequency, expenseAccountId, liabilityAccountId, firstDay, standardWeek],
   );
   if (updated.rowCount !== 1) throw new NotFoundError("The organisation's settings weren't found.");
   const settings = await readPayrollSettings(tx);

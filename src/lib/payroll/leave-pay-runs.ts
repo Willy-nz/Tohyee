@@ -279,8 +279,7 @@ async function workOutKept(tx: OrgTx, run: DraftRun, facts: EmployeeFacts, recor
     ).rows.map((row) => [row.holiday_date, row]),
   );
   const timesheetHoursOn = (date: string): string | null => {
-    const monday = addDays(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7));
-    return facts.timesheetWeeks.has(monday) ? (facts.timesheetHours.get(date) ?? "0") : null;
+    return facts.timesheetDays.has(date) ? (facts.timesheetHours.get(date) ?? "0") : null;
   };
   const wouldWork = (date: string): boolean | null => {
     const decision = decisions.get(date);
@@ -716,8 +715,7 @@ function usualPayLines(
 ): WorkedLine[] | null {
   if (pattern.kind !== "fixed") return null;
   const days = eachDay(from, to);
-  const allMondays = new Set(days.map((date) => addDays(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7))));
-  const coveredByTimesheets = rate.payBasis === "hourly" && days.length > 0 && [...allMondays].every((monday) => facts.timesheetWeeks.has(monday));
+  const coveredByTimesheets = rate.payBasis === "hourly" && days.length > 0 && days.every((date) => facts.timesheetDays.has(date));
   if (coveredByTimesheets) {
     let hours = ZERO_DECIMAL;
     for (const date of days) {

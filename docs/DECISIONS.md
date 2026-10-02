@@ -1600,3 +1600,143 @@ paragraphs of the same numbers). The examples are **not approved by Jess**.
      the next month end. It isn't a Period close check: those are for
      bookkeepers without payroll access too, and a warning there would
      stop them closing.
+
+## Payroll and R&D questions, decided (2 Oct 2026; decisions 192-224)
+
+Jess asked (2 Oct 2026) for the open questions to be decided by law →
+NetSuite → Xero rather than left for her. These are the "Questions for
+Jess" under TS11 (timesheets), PREP8 (payroll reports), the WB section
+(workforce budgets), the XP section (extra pays) and RD42 (the R&D claim).
+What's built for each is said; "kept" means as built, with the reason.
+The examples these touch are **not approved by Jess**.
+
+### Timesheets (TS questions 1-7)
+
+192. **The first day of the week is an organisation setting** (question 1;
+     replaces decision 92's fixed Monday). NetSuite: "Select the day of the
+     week your company uses as the first day of the business week. The day
+     you select is reflected on time tracking forms and on reports"
+     ([Setting Up Time Tracking Preferences](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N902575.html),
+     read 2 Oct 2026). Monday unless changed; it can only change while the
+     organisation has no timesheets (changing it would cut existing weeks
+     in two). Timesheets per pay period (Xero) aren't built: NetSuite's
+     weekly sheet comes first.
+193. **Viewers keep filling in their own timesheets** (question 2, kept;
+     decision 95). No "time only" role: the viewer role already sees no pay
+     and can't post, and NetSuite's employees also enter their own time.
+194. **Approvers still can't change hours** (question 3, kept; decision
+     96): NetSuite's rule ("Time approvers can't edit or delete existing
+     time entries") comes before Xero's.
+195. **Part-covered pay periods stay split by calendar days** (question 4,
+     kept; decision 98). Working days would need everyone's usual week,
+     which only employees with leave settings have; the share is a cost
+     split, not pay, so the simpler rule stays.
+196. **Ordinary time only from timesheets; no automatic overtime**
+     (question 5, kept). When hours become overtime and at what rate is
+     set by each employment agreement (NZ law sets no overtime rate, as far
+     as known: Employment NZ's guidance wasn't read this session,
+     **unverified**), so Tohyee doesn't guess it; overtime stays
+     a typed line. Drafts are worked out live, so a timesheet approved
+     before the pay run is approved is used (decision 98).
+197. **Approved project hours don't become project time automatically**
+     (question 6, kept; decision 91). NetSuite has one time record, but
+     Tohyee's project time follows Xero Projects (a member's login, a task,
+     changeable until invoiced), which a timesheet row doesn't have.
+     "Fill from project time" stays the link between them.
+198. **A late timesheet after the pay is posted is listed, not
+     reallocated** (question 7, kept; decision 37, RD22). Posted pay runs
+     are never changed (append-only); the R&D claim lists the timesheet as
+     approved after its pay run. Reallocating would need a correcting
+     journal per pay run with its own example.
+
+### Payroll reports (PREP questions 1-7)
+
+199. **The standard week is saved per organisation** (question 1). 40.00
+     hours unless an admin with payroll access changes it (Payroll › Pay
+     items, beside the other payroll settings); a report can still use
+     another for one run. Not per pay group: FTE compares people across
+     groups, so one week is needed.
+200. **Salaried employees' usual hours come from their usual week**
+     (question 2). Decision 107 counted every salary as 1.0000 "assumed".
+     Since P8 an employee with leave settings has a usual week (hours each
+     day); when it's a fixed week on the date, its hours are their usual
+     hours, for salaried and hourly employees alike (it's what their leave
+     is paid on). Without one, an hourly employee uses the pay rate's
+     ordinary hours (as before) and a salaried one counts 1.0000, assumed.
+201. **FTE stays capped at 1** (question 3, kept; decision 107): FTE is a
+     share of one full-time position.
+202. **Reimbursements stay out of labour cost** (question 4, kept): they
+     repay the employee's spending; they aren't pay for work.
+203. **By pay date only** (question 5, kept; decision 102): it's what IRD
+     and the ledger use. By period worked would need its own example.
+204. **Pay runs approved before timesheets keep showing "Not recorded"**
+     (question 6, kept; decision 104). Only pay runs approved before P9 was
+     merged (2 Oct 2026) have no shares, and Tohyee has no users yet, so no
+     real organisation has any; working them out from the allocation (as
+     the R&D claim does, decision 67) would be code with nothing to apply
+     to. If one turns up, use decision 67's rule.
+205. **No second permission for exports** (question 7, kept; decision
+     109): payroll access already limits who sees the figures, and the
+     audit log records each export.
+
+### Workforce budgets (WB questions 1-6)
+
+206. **Whole months stay** (question 1, kept): budgets are monthly. A
+     part-month start is entered as a later start month, or the month's
+     amount adjusted with a rise. Prorating by days would need its own
+     example.
+207. **A later pay rate on the employee doesn't change the budget by
+     itself** (question 2, kept): a budget is a plan saved at a point in
+     time; "Update budgets" (P11) already rewrites the figures when the
+     person running it chooses.
+208. **The KiwiSaver employer rate stays as typed on each line** (question
+     3, kept): Tohyee only holds IRD's published rates (to 2026-27); the
+     April 2028 rise is typed as a rise until IRD's specification for that
+     year is added (never guessed).
+209. **No on-costs yet** (question 4): holiday pay accrual, ACC levies and
+     overtime each need their own worked example; ACC levies aren't paid
+     per pay. Not built.
+210. **One line per person** (question 5, kept): each line is one
+     employee or one position, so the budget can follow people.
+211. **Actuals by pay date** (question 6, kept), the same as decision 203.
+
+### Extra pays, back pay and final pays (XP questions 1-8)
+
+212. **IRD's steps, not its printed example** (question 1, kept; decision
+     126): the specification's steps are the rule; the one-cent difference
+     in the printed example 1 stays a question for IRD, for Jess to ask.
+213. **Short four-week windows stay refused** (question 2): IRD's
+     "other circumstances" rule wasn't read this session, and tax isn't
+     guessed.
+214. **An extra pay on a final pay without a termination item stays
+     refused** (question 3): whether a bonus arises from the ending decides
+     IRD's method; a choice for the person running pay would need IRD's
+     guidance on how to decide, not read this session.
+215. **Holiday pay on finishing: as built** (question 4; decision 150):
+     Tohyee works it out where it keeps the leave; typed only where it
+     doesn't.
+216. **Back pay over holiday pay periods stays refused** (question 5;
+     decision 171).
+217. **Hourly leavers: as built** (question 6; decision 148 gives leavers
+     their usual hours to the finish date).
+218. **Separate extra-pay pay runs: wanted, not built** (question 7).
+     NetSuite runs off-cycle payrolls, so a later stage adds an "extra
+     pays only" pay run on its own pay date, with its own examples.
+219. **A higher rate on request: not built** (question 8). It needs IR335's
+     rules on electing a rate, not read this session.
+
+### R&D claim (RD42 questions 1-4)
+
+220. **Part-time R&D staff earn credit from approved timesheets**
+     (question 1): settled by P9 (TS5-TS9); without timesheets only a 100%
+     R&D allocation counts (decision 34).
+221. **Reimbursements on pay runs stay out of the claim** (question 2).
+     Tagging them as materials is a later stage with its own example.
+222. **Feedstock: not built** (question 3). Recording the output's value
+     at year end is a later stage with its own example (IR1240's feedstock
+     rules).
+223. **Exports keep the summary figures, not the file** (question 4, kept;
+     decision 74): a kept file would hold each employee's pay.
+224. **Where these replace earlier decisions**: 192 replaces 92's Monday;
+     199 and 200 replace 107's unstored week and "assumed" salaries where
+     there's a usual week.

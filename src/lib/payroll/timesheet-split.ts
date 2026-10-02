@@ -33,17 +33,29 @@ const HUNDRED = dec("100");
 const MAX_HOURS = dec("24");
 const CENT = dec("0.01");
 
-/** True for a Monday (decision 92: weeks run Monday to Sunday). */
-export function isMonday(date: string): boolean {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day)).getUTCDay() === 1;
-}
+/** The names of ISO weekdays, 1 = Monday to 7 = Sunday. */
+export const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 
-/** The Monday of the week a date is in. */
-export function weekStartOf(date: string): string {
+/** A date's ISO weekday: 1 = Monday to 7 = Sunday. */
+export function isoWeekday(date: string): number {
   const [year, month, day] = date.split("-").map(Number);
   const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  return addDays(date, -((weekday + 6) % 7));
+  return weekday === 0 ? 7 : weekday;
+}
+
+/** True for a Monday. */
+export function isMonday(date: string): boolean {
+  return isoWeekday(date) === 1;
+}
+
+/** True when the date is the first day of a timesheet week (decision 192: the organisation's first day, Monday unless changed). */
+export function isWeekStart(date: string, firstDay = 1): boolean {
+  return isoWeekday(date) === firstDay;
+}
+
+/** The first day of the timesheet week a date is in (decision 192; Monday unless the organisation's first day is another). */
+export function weekStartOf(date: string, firstDay = 1): string {
+  return addDays(date, -((isoWeekday(date) - firstDay + 7) % 7));
 }
 
 /** The 7 dates of the week starting `weekStart`. */

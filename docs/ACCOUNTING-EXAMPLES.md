@@ -8854,7 +8854,9 @@ labour-related taxes; the previous year's figures for the evaluation
 questions; deadlines for balance dates other than 31 March; public holidays
 in due dates; associates' combined maximum.
 
-### Questions for Jess (claim report)
+### Questions for Jess (claim report), decided
+
+Decided on 2 Oct 2026: decisions 220-223 (part-time staff settled by timesheets; reimbursements and feedstock later stages; exports keep summary figures). What was asked is kept below.
 
 1. **Part-time R&D staff until timesheets exist.** Now an employee whose
    allocation isn't 100% R&D earns no credit at all (decision 34), so for
@@ -10512,7 +10514,19 @@ default allocation, for those days only:
 - A start/stop timer, mobile clock-in, and timesheets for people who aren't
   employees (contractors).
 
-### Questions for Jess (timesheets)
+- **TS12 Another first day of the week** (decision 192). A new
+  organisation sets its timesheet weeks to start on **Sunday** (Payroll ›
+  Pay items › Weeks; admins). Its first timesheet for an employee is the
+  week **Sun 4 Oct to Sat 10 Oct 2026**; a timesheet starting Mon 5 Oct is
+  refused ("A timesheet week starts on a Sunday."), and opening the week of
+  Wed 7 Oct shows the week starting Sun 4 Oct. Once it has a timesheet,
+  changing the first day is refused ("Timesheets already start on a
+  Sunday, so the first day of the week can't change"). Kea Sensors (TS1-TS9)
+  keeps Monday, the default.
+
+### Questions for Jess (timesheets), decided
+
+Decided on 2 Oct 2026 by law → NetSuite → Xero, as Jess asked: decisions 192-198 in `docs/DECISIONS.md` (1: the first day of the week is a setting, TS12; 2-7: kept as built, each with its reason). What was asked is kept below.
 
 1. **Week start.** Timesheets run Monday to Sunday (decision 92). Do any
    clients need another day, or timesheets per pay period as Xero does?
@@ -10886,7 +10900,19 @@ share (the first line if two are equal), as on the employee list.
 - Recording that an employment information file was **uploaded** or
   accepted by IRD (decision 65).
 
-### Questions for Jess (payroll reports)
+- **PREP9 Saved standard week and salaried usual hours** (decisions 199,
+  200). From PREP5's people at 14 Oct 2026: Kiri Tane (salary) gets leave
+  settings with a fixed usual week of 7.5 hours Monday to Thursday,
+  **30.00** hours; she now counts 30 ÷ 40 = **0.7500**, not assumed, and the
+  total is 3.8000 − 1.0000 + 0.7500 = **3.5500**. An admin saves a
+  standard week of **37.50** (Payroll › Pay items › Weeks); the report with
+  no week typed then uses it: Kiri 30 ÷ 37.5 = **0.8000**, Sione 32 ÷ 37.5
+  = **0.8533**, Aroha and Hemi 1.0000 assumed, total **3.6533**. A week typed
+  on the report (40) is still used for that report.
+
+### Questions for Jess (payroll reports), decided
+
+Decided on 2 Oct 2026: decisions 199-205 (1: the standard week is saved per organisation; 2: usual hours come from the usual week, PREP9; 3-7: kept as built). What was asked is kept below.
 
 1. **Standard week.** FTE uses 40.00 hours a week unless another is typed
    on the report. Should each organisation save its own (and could it
@@ -11106,7 +11132,9 @@ Operations on Cafe rebrand. Budgets: **Overall budget**, **Sales plan**
   levies and other on-costs, and any employer KiwiSaver minimum rate after
   the rates Tohyee holds (2026-27): the rate is what's typed on the line.
 
-### Questions for Jess (workforce budgets)
+### Questions for Jess (workforce budgets), decided
+
+Decided on 2 Oct 2026: decisions 206-211 (all kept as built for now; on-costs need their own examples). What was asked is kept below.
 
 1. **Part months**: should a line starting on 15 Jan count half of
    January (by days), rather than the whole month?
@@ -11419,7 +11447,9 @@ be approved until it's fixed:
 - holiday pay on back pay (still refused after P8, decision 152); back pay
   cases in XP11. (Calculating holiday pay owed on finishing came in P8.)
 
-### Questions for Jess (extra pays, back pay and final pays)
+### Questions for Jess (extra pays, back pay and final pays), decided
+
+Decided on 2 Oct 2026: decisions 212-219 (IRD's steps kept; short windows, bonuses on final pays without a termination item and elected rates stay refused until IRD's guidance is read; separate extra-pay pay runs wanted, a later stage). What was asked is kept below.
 
 1. **One cent in IRD's example (XP1).** IRD's steps add the tax and the
    levy and truncate once ($10,366.40); its printed example truncates each

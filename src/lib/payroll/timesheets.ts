@@ -8,7 +8,8 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { add, cmp, dec, divide, type Decimal, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { listMembers } from "@/lib/organisations/members";
 import { hasPayrollAccess, PAYROLL_MINIMUM_ROLE, requirePayrollAccess } from "@/lib/payroll/access";
-import { isMonday, parseTimesheetHours, timesheetLateness, weekDays } from "@/lib/payroll/timesheet-split";
+import { timesheetFirstDay } from "@/lib/payroll/pay-items";
+import { isWeekStart, parseTimesheetHours, timesheetLateness, WEEKDAY_NAMES, weekDays, weekStartOf } from "@/lib/payroll/timesheet-split";
 import { timeZone } from "@/lib/rd/common";
 import { advancedFeaturesOn } from "@/lib/tracking/service";
 import { asRecord, optionalString, requireArray, requireIdempotencyKey } from "@/lib/validation";
@@ -442,6 +443,8 @@ export type TimesheetWeekEmployee = {
 
 export type TimesheetWeek = {
   weekStart: string;
+  /** The organisation's first day of the week, ISO 1 = Monday to 7 = Sunday (decision 192). */
+  firstDay: number;
   /** The employee linked to the signed-in person's login, if any. */
   ownEmployeeId: string | null;
   hasPayrollAccess: boolean;
@@ -478,9 +481,11 @@ async function summaries(tx: OrgTx, sheetIds: readonly string[]): Promise<Map<st
   );
 }
 
-function parseWeekStart(input: unknown): string {
+/** A timesheet's week start: the organisation's first day of the week (decision 192; Monday unless changed). */
+async function parseWeekStart(tx: OrgTx, input: unknown): Promise<string> {
   const weekStart = parseIsoDate(input, "Week starting");
-  if (!isMonday(weekStart)) throw new ValidationError("A timesheet week starts on a Monday.");
+  const firstDay = await timesheetFirstDay(tx);
+  if (!isWeekStart(weekStart, firstDay)) throw new ValidationError(`A timesheet week starts on a ${WEEKDAY_NAMES[firstDay - 1]}.`);
   return weekStart;
 }
 
@@ -490,7 +495,9 @@ function parseWeekStart(input: unknown): string {
  * for people with payroll access; plus everything waiting for their approval.
  */
 export async function listTimesheetWeek(tx: OrgTx, role: Role, weekStartInput: unknown): Promise<TimesheetWeek> {
-  const weekStart = parseWeekStart(weekStartInput);
+  // Any date opens the week it's in, so the screen needn't know the organisation's first day (decision 192).
+  const firstDay = await timesheetFirstDay(tx);
+  const weekStart = weekStartOf(parseIsoDate(weekStartInput, "Week starting"), firstDay);
   const payroll = await payrollFor(tx, role);
   const employees = (
     await tx.query<EmployeeRow>(
@@ -522,6 +529,7 @@ export async function listTimesheetWeek(tx: OrgTx, role: Role, weekStartInput: u
   const own = all.find((employee) => tx.actor.userId !== null && employee.user_id === tx.actor.userId && !employee.is_archived);
   return {
     weekStart,
+    firstDay,
     ownEmployeeId: own?.id ?? null,
     hasPayrollAccess: payroll,
     employees: visible.map(({ employee, access }) => ({
@@ -554,7 +562,7 @@ export async function openTimesheet(
   const employee = await findEmployee(tx, input.employeeId, true);
   const access = accessTo(employee, tx.actor.userId, role, await payrollFor(tx, role));
   if (!canRead(access)) throw new ForbiddenError(TIMESHEET_ACCESS_MESSAGE);
-  const weekStart = parseWeekStart(input.weekStart);
+  const weekStart = await parseWeekStart(tx, input.weekStart);
   const existing = await tx.query<{ id: string }>("select id from payroll_timesheets where employee_id = $1 and week_start = $2", [employee.id, weekStart]);
   if (existing.rows[0]) return { created: false, timesheet: await getTimesheet(tx, role, existing.rows[0].id) };
   if (!access.own && !access.payroll) {
