@@ -23,24 +23,30 @@ features"). Not looked into yet: find the cause before changing anything.
    button, a role or setting such as Fixed asset types being admin only)
    and fix it.
 4. **Fixed assets to ERP level.** Jess wants ERP-level fixed assets (follow
-   NetSuite's Fixed Assets Management, else Xero), including "some
-   complicated new accounting with fixed assets". What that new accounting
-   is hasn't been said: **to confirm with Jess** before planning (it may be
-   the Investment Boost deduction, tax depreciation kept beside book, or
-   something else; don't assume). What's built now (FEATURES.md, FA1-FA14):
-   asset types, assets from bills or typed, diminishing value and straight
-   line, monthly depreciation runs, disposals and the register. Not built:
-   tax depreciation beside book, pooling, low-value write-offs. Plan with
-   worked examples first; likely its own module stage like payroll's.
-5. **Import from Xero, to ERP level.** What exists: the import wizard
-   (Accounting › Settings, IM1-IM21) reads CSV or Excel files exported from
-   Xero for the chart of accounts, contacts, products and services, and
-   opening balances at a conversion date (trial balance, stock, open
-   invoices and bills). Not there: transaction history, the fixed asset
-   register, tracking categories, repeating invoices, employees and leave
-   balances, attachments, or connecting to Xero directly. **To confirm with
-   Jess** which of these she needs and whether a direct connection (Xero's
-   API, which needs a Xero developer app) or exported files are wanted.
+   NetSuite's Fixed Assets Management, else Xero), taking into account NZ
+   GAAP and tax changes of the last 10 years ("make sure any difficult
+   things are taken into account", 2 Oct 2026). Researched on 2 Oct 2026:
+   `docs/sources/nz-fixed-assets-reporting-changes.md` (NZ IFRS 16 leases,
+   IAS 16 proceeds before intended use, Tier 3 revaluations from 1 Apr
+   2024, NZ IFRS 18 from 2027, PBE leases and measurement not yet
+   effective; building depreciation 2011, 2020 and 2024, low-value
+   thresholds, Investment Boost from 22 May 2025). What's built now
+   (FEATURES.md, FA1-FA14): asset types, assets from bills or typed,
+   diminishing value and straight line, monthly depreciation runs,
+   disposals and the register. Next: worked examples and decisions for book
+   and tax depreciation, revaluations, impairment, components, assets under
+   construction, leases, held for sale, donated assets and transfers, then
+   build in stages like payroll's.
+5. **Import from any accounting system, to ERP level.** Decided by Jess (2
+   Oct 2026): everything that's missing is needed, from files (CSV or
+   Excel), **not** a Xero connection, and not tied to Xero: "could be any
+   accounting software". What exists: the import wizard (Accounting ›
+   Settings, IM1-IM21) for the chart of accounts, contacts, products and
+   services, and opening balances at a conversion date (trial balance,
+   stock, open invoices and bills). To add: transaction history, the fixed
+   asset register (with book and tax values), tracking categories,
+   repeating invoices, employees and leave balances, and attachments.
+   Worked examples first, following NetSuite's import assistant.
 
 ## List of 27 September 2026
 
