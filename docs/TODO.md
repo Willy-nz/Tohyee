@@ -4,6 +4,43 @@ Changes the project owner (Jess) has asked for, newest list first. Coding
 agents: these come before the "Next" list in docs/FEATURES.md. Anything marked
 "to confirm" needs an answer from Jess before it's built; ask rather than guess.
 
+## List of 3 October 2026
+
+Jess (3 Oct 2026): "eventually we will need practice manager software, tax
+and the analytics", alongside CRM and Accounting. She chose to **add them to
+the plan only for now** (no screen changes yet). Each becomes its own app in
+the top-left switcher beside Accounting and CRM when it's built, and each
+starts with worked examples and decisions, like payroll. Details below are a
+first outline to confirm with Jess, not decided.
+
+1. **Practice manager**, for bookkeeping and accounting practices (Jess
+   chose this over general project management), following Xero Practice
+   Manager and the like:
+   - clients (people, businesses, trusts, not-for-profits), linked to the
+     Tohyee organisations the practice does the books for, with their IRD
+     numbers, balance dates and filing frequencies;
+   - jobs from job templates (GST returns, annual accounts, IR3/IR4/IR6/IR7
+     returns, payroll, AGMs and the like), with tasks, staff, budgets and
+     due dates;
+   - a deadlines calendar worked out from IRD's due dates (to be read from
+     IRD, never guessed), with extension of time arrangements;
+   - timesheets and work in progress (WIP), and invoicing a job's time or a
+     fixed fee into the practice's own Tohyee books;
+   - workpapers and documents per job, and client requests (send a list of
+     what's needed, track what's come in).
+2. **Tax** as its own app: the GST return, GST audit report, tax codes and
+   R&D (now under the Tax menu) move here, then income tax returns (IR3,
+   IR4, IR6, IR7/IR7P, IR10 financial statements summary), provisional tax,
+   FBT and related filings, each from IRD's current forms and guides.
+   Decide with Jess which comes first and whether filing goes to IRD
+   (gateway services) or is prepared for filing in myIR.
+3. **Analytics** as its own app (the "Advanced reporting" module from 29
+   Sep 2026 grows into it): dashboards and key figures over time, trends,
+   cash flow forecast, comparisons across periods, tracking categories and
+   (for practices) across client organisations; custom reports and budgets
+   move here from Reporting. To confirm with Jess which dashboards matter
+   most.
+
 ## List of 2 October 2026
 
 Items 1-3 noticed by Jess using the Windows server app on the evening of 1
