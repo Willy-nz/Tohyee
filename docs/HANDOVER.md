@@ -54,6 +54,12 @@ page reminder weren't opened in a browser.
 **Next job:** not chosen. Candidates: click through the new payroll screens
 in a browser (list below), or Jess's open questions.
 
+**New from Jess (2 Oct 2026), in `docs/TODO.md` ("List of 2 October
+2026"):** the Windows app glitches between screens; she couldn't find
+where to add or look at items (Products and services is under Sales);
+she couldn't add a fixed asset; and fixed assets need more (what exactly
+is still to confirm with her).
+
 **Still waiting on Jess or the outside world:**
 - Put a payday filing file through myIR's "Check your employment
   information file" service before relying on it.
