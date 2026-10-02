@@ -4,6 +4,27 @@ Changes the project owner (Jess) has asked for, newest list first. Coding
 agents: these come before the "Next" list in docs/FEATURES.md. Anything marked
 "to confirm" needs an answer from Jess before it's built; ask rather than guess.
 
+## List of 2 October 2026
+
+Noticed by Jess using the Windows server app on the evening of 1 Oct 2026.
+Not looked into yet: find the cause before changing anything.
+
+1. **Glitching between screens.** The program on the computer "kind of
+   glitches" when moving between screens. Reproduce it first (on the
+   Windows app and in a browser, to see whether it's the app or the pages),
+   and ask Jess which screens if it can't be seen.
+2. **Items: couldn't find where to add or look at them.** Products and
+   services is under Sales (`/operations/items`), which Jess didn't find.
+   Check the page works, then make it easy to find (for example also under
+   Accounting or Contacts, or from Home); to confirm with Jess where she
+   expects it.
+3. **Couldn't add a fixed asset.** Find out why (an error, a missing
+   button, a role or setting such as Fixed asset types being admin only)
+   and fix it.
+4. **Fixed assets are too limited.** Jess wants more. To confirm with Jess
+   what's missing, then follow NetSuite (Fixed Assets Management), else
+   Xero, with worked examples before building. Not decided yet.
+
 ## List of 27 September 2026
 
 1. **Server admin completely separate from accounting.** When dealing with the server there is no accounting anywhere: only server information and settings (organisations, users, updates, server details). A Tohyee icon in the Windows tray (by the clock), like a media server's tray icon, shows the server is running and opens the server screen. Decided with Jess (28 Sep 2026): the server settings become a **Windows tray app** installed on the server, not done in the browser at all; Docker/Linux servers use the command-line tool. Done so far: the server screens are out of the accounting menus, in their own area that only opens on the server computer itself (127.0.0.1, main port + 1), and the Windows tray app (installer/windows/tray; starts when you sign in to Windows, like a media server's, as Jess asked). The command-line tool now covers everything the server screens do, for Docker/Linux (`docker compose exec tohyee node tohyee-admin.cjs help`). To do: remove the browser server pages once Jess has tried the app on her server.
