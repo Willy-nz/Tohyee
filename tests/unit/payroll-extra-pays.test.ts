@@ -71,11 +71,18 @@ describe("tax on extra pays (IRD's examples)", () => {
     expect(tax("1000.00", heidi, "NSW")).toEqual({ tax: "122.50", taxRate: "10.5", grossedUp: null, lowestRate: false, method: "flat_rate" });
   });
 
+  it("XP15: other circumstances, the four weeks' payments x 13 (spec 2026-27 5.11.1 step 3.1; decision 213)", () => {
+    expect(annualiseForExtraPay({ method: "four_weeks", frequency: "weekly", pays: ["960.00", "1200.00"] })).toBe("28080.00");
+    expect(annualiseForExtraPay({ method: "four_weeks", frequency: "weekly", pays: ["1.00", "1.00", "1.00"] })).toBe("39.00");
+    expect(annualiseForExtraPay({ method: "four_weeks", frequency: "fortnightly", pays: ["1.00", "1.00", "1.00"] })).toBe("39.00");
+  });
+
   it("refuses what IRD's rules don't clearly answer", () => {
-    expect(() => annualiseForExtraPay({ method: "four_weeks", frequency: "weekly", pays: ["1.00", "1.00"] })).toThrow(
-      `${REFUSED}: an extra pay when the four weeks before it hold 2 weekly pays (IRD's rules annualise 4 weekly pays, or none).`,
+    // Only one pay period paid: note 4 doesn't say how it's annualised (decision 213).
+    expect(() => annualiseForExtraPay({ method: "four_weeks", frequency: "weekly", pays: ["1.00"] })).toThrow(
+      `${REFUSED}: an extra pay when the four weeks before it hold 1 weekly pay (IRD's note 4 doesn't say how one pay is annualised).`,
     );
-    expect(() => annualiseForExtraPay({ method: "four_weeks", frequency: "fortnightly", pays: ["1.00", "1.00", "1.00"] })).toThrow(REFUSED);
+    expect(() => annualiseForExtraPay({ method: "four_weeks", frequency: "fortnightly", pays: ["1.00"] })).toThrow(REFUSED);
     expect(() => annualiseForExtraPay({ method: "end_of_employment", frequency: "weekly", pays: ["1.00"] })).toThrow(
       `${REFUSED}: an extra pay on leaving with 1 paid pay period before the final pay (IRD's rule annualises the last 2).`,
     );

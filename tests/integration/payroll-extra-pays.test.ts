@@ -401,9 +401,11 @@ describeWithDatabase("extra pays, back pay and final pays (XP8-XP14)", () => {
     it("refuses extra pays IRD's rules don't clearly answer, as the employee's problem", async () => {
       const week4 = await draft(refusals, "2026-10-26", "2026-11-04");
       let run = await setLines(week4.id, refused.nia, [ordinary("40"), { payItemId: items.Bonus.id, amount: "500.00" }]);
+      // XP15: two weekly pays in the four weeks, "other circumstances": (1,000.00 + 1,000.00) x 13 (decision 213).
       expect(pay(run, refused.nia)).toMatchObject({
-        pay: null,
-        problem: `${NOT_SUPPORTED}: an extra pay when the four weeks before it hold 2 weekly pays (IRD's rules annualise 4 weekly pays, or none) for Nia New.`,
+        problem: null,
+        extraPayBasis: { method: "four_weeks", annualised: "26000.00" },
+        pay: { extraPay: "500.00", extraPayTax: "96.25", extraPayTaxRate: "17.5" },
       });
       run = await setLines(week4.id, refused.nia, [ordinary("40"), { payItemId: items.Redundancy.id, amount: "500.00" }]);
       expect(pay(run, refused.nia).problem).toBe(

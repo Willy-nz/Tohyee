@@ -1705,15 +1705,20 @@ The examples these touch are **not approved by Jess**.
 212. **IRD's steps, not its printed example** (question 1, kept; decision
      126): the specification's steps are the rule; the one-cent difference
      in the printed example 1 stays a question for IRD, for Jess to ask.
-213. **Short four-week windows stay refused** (question 2). IRD's
-     [Payroll calculations and business rules specification 2026](https://www.ird.govt.nz/-/media/project/ir/home/documents/digital-service-providers/software-providers/payroll-calculations-business-rules-specifications/payroll-calculations-and-business-rules-specification-2026-v1.pdf)
-     was read on 2 Oct 2026 only through the summarising fetch tool: s
-     5.11.1 step 3.1 says "In other circumstances, add all PAYE income
-     payments made to the employee in the four weeks prior and multiply by
-     13". Which circumstances count as "other" (a new weekly employee with
-     two pays, say) needs the full step text, and this edition may not be
-     the 2026-27 one P12 used, so it stays refused until the full section
-     is read (a Chrome session can extract it, as IR1240 was).
+213. **Short four-week windows: IRD's "other circumstances" rule, built**
+     (question 2; XP15). The 2026-27 specification (Payroll Calculations
+     & Business Rules Specification, 1 April 2026 to 31 March 2027,
+     version 1.0, 24 March 2026; s 5.11.1 read on 2 Oct 2026 in Chrome with
+     pdf.js on an ird.govt.nz page) s 5.11.1 step 3.1 lists the usual
+     patterns (four weekly pays × 13, two fortnightly × 13, one four-weekly
+     × 13, one monthly × 12), then: "In other circumstances, add all PAYE
+     income payments made to the employee in the four weeks prior and
+     multiply by 13." Note 4 covers only one pay period paid before the
+     extra pay ("the amount paid for that pay period is the amount to be
+     annualised") without saying how, so that case stays refused; two or
+     more pays of the right frequency that aren't the usual pattern use ×
+     13. The window is the four weeks to the extra pay's pay date,
+     inclusive; other extra pays in it are left out (as P12 already did).
 214. **An extra pay on a final pay without a termination item stays
      refused** (question 3): whether a bonus arises from the ending decides
      IRD's method; a choice for the person running pay would need IRD's
@@ -1733,8 +1738,12 @@ The examples these touch are **not approved by Jess**.
      employee can notify their employer to choose a higher tax rate" (s
      5.11.1 note 2; Income Tax Act s RD 10(2)), with elected rates of
      17.5%, 30%, 33% or 39% for primary and secondary extra pays. It's
-     wanted (it's the employee's right); build it once the full section is
-     read, with its own example.
+     wanted (it's the employee's right). Step 3.4 of s 5.11.1 (read 2 Oct
+     2026 in Chrome): "If the employee has elected to have extra pays
+     deducted at a higher rate, the tax rate is either 17.5%, 30%, 33% or
+     39% whichever they have elected." Still to read before building:
+     5.11.2's secondary steps and whether an election applies on
+     termination (5.12). The next extra pay item to build.
 
 ### R&D claim (RD42 questions 1-4)
 

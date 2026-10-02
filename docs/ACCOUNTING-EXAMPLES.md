@@ -11527,6 +11527,17 @@ pay), "Holiday pay on finishing" and "Redundancy".
   ($550.00) and Holiday pay on finishing $2,000.00. The last two **paid**
   periods are weeks 2 and 1: $1,100 × 26 = $28,600 → $385.00 (XP6). PAYE
   $84.87 + $385.00 = $469.87.
+- **XP15 Other circumstances** (decision 213; spec 2026-27 5.11.1 step
+  3.1: "In other circumstances, add all PAYE income payments made to the
+  employee in the four weeks prior and multiply by 13"). Nia New, hourly
+  $25.00, weekly, tax code M, starts Mon 19 Oct 2026: week 1 (19-25 Oct)
+  40 hours, $1,000.00; week 2 (26 Oct-1 Nov, paid Wed 4 Nov) 40 hours,
+  $1,000.00 and a Bonus of $500.00. The four weeks to 4 Nov hold two weekly
+  pays, not four, so it's "other circumstances": ($1,000.00 + $1,000.00) ×
+  13 = **$26,000.00**; plus the bonus, $26,500, taxed at 17.5% plus the ACC
+  earners' levy 1.75%: $500.00 × 19.25% = **$96.25**. With only **one** pay
+  period paid (a first week's pay with a bonus) it's still refused: note 4
+  says that pay "is the amount to be annualised" but not how.
 
 ### Not supported yet (refused rather than guessed)
 
@@ -11534,11 +11545,10 @@ Each is refused with "Not supported yet (refused rather than guessed)" and
 what it is; on a draft it's that employee's problem, so the pay run can't
 be approved until it's fixed:
 
-- an extra pay whose four weeks don't hold a whole pattern of pays (for
-  weekly pay 1-3 pays, fortnightly 1, or more than expected), or pays of
-  another frequency: IRD's rules give two answers (the "other
-  circumstances" × 13 and "if there's only one pay period ... the amount
-  paid for that pay period is the amount to be annualised");
+- an extra pay when only one pay period was paid in the four weeks
+  (weekly or fortnightly; note 4 doesn't say how it's annualised), or
+  pays of another frequency (two or more pays of the right frequency
+  that aren't the usual pattern are "other circumstances", XP15);
 - an end-of-employment extra pay with fewer than two paid periods before
   the final pay, or one of them at another frequency;
 - an extra pay or back pay on a final pay without holiday pay on finishing
