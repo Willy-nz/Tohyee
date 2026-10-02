@@ -2173,3 +2173,42 @@ examples.
      hours, disks, database sizes and what the server runs on, refreshing
      every 15 seconds. Only counts are kept about people, never who. Off
      with `TOHYEE_SERVER_STATS=off`.
+
+### Tonight's try-out fixes (decisions 333 to 338)
+
+From Claude using Tohyee on Jess's server on 2 Oct 2026 (docs/TODO.md);
+Jess asked for them all to be done. Decided by law, then NetSuite, then
+Xero, as she asked.
+
+333. **Default payment terms for invoices and for bills** (examples DT1,
+     DT2). No law sets them. Xero has a default due date for sales
+     invoices and one for bills in its invoice settings; NetSuite has a
+     default terms preference. So the organisation can choose one of its
+     payment terms for each (Settings › Payment terms and customers ›
+     Default terms); a contact's own terms win; with neither, the due date
+     is typed, and the invoice or bill now says so plainly instead of
+     only the browser's "Please fill out this field". Tenant migration
+     0080.
+334. **A new customer or supplier can be added from the invoice or bill**
+     ("+ New customer…" / "+ New supplier…" in the list: name, email, GST
+     number), as Xero lets you type a new contact there. Not accounting;
+     recorded so it isn't undone.
+335. **The GST return opens on the two months that ended last month** when
+     there's no GST period setting and no filed return, instead of the
+     period still going. With a setting or a filed return it already
+     opens on the right one (GP4). The two-month periods' alignment
+     depends on the organisation's registration, which Tohyee can't know
+     without the setting, so the page still asks for it.
+336. **Registering an asset after a run that covered its purchase month
+     stays allowed and catches up in the next run** (FA6, kept). A refusal
+     (as Xero does) was tried and dropped because FA6 already decides it
+     NetSuite's way. What went wrong in BigDog was the run into the future
+     (decision 337), which put the catch-up in the wrong year.
+337. **Depreciation can't be run past the end of the current month**
+     (example FA15). Depreciation is for the months used; posting months
+     that haven't happened puts them in this year's profit and loss. Rolling
+     back is unchanged.
+338. **New products and services start with the first revenue account and
+     the standard GST code for sales** (as new invoice lines already do), so
+     picking one on an invoice fills them in. They can be changed or
+     cleared. Purchases stay blank.

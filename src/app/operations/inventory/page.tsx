@@ -56,12 +56,15 @@ function MovementForm({
   accounts,
   recentIssues,
   locations,
+  stockItems,
   onPosted,
 }: {
   organisationId: string;
   accounts: Account[];
   recentIssues: Movement[];
   locations: TrackingCategory | null;
+  /** Stock items to pick from (the code can still be typed). */
+  stockItems: { code: string; name: string }[];
   onPosted: (movement: Movement) => void;
 }) {
   const inventoryDefault = accounts.find((account) => account.systemKey === "inventory")?.code ?? "";
@@ -150,7 +153,14 @@ function MovementForm({
           <input type="date" value={fields.movementDate} onChange={(event) => set("movementDate", event.target.value)} required />
         </Field>
         <Field label="Item code" hint="A stock item's code shares its stock with invoices and bills.">
-          <input value={fields.itemCode} onChange={(event) => set("itemCode", event.target.value)} maxLength={50} required />
+          <input value={fields.itemCode} onChange={(event) => set("itemCode", event.target.value)} maxLength={50} required list="stock-item-codes" />
+          <datalist id="stock-item-codes">
+            {stockItems.map((item) => (
+              <option key={item.code} value={item.code}>
+                {item.name}
+              </option>
+            ))}
+          </datalist>
         </Field>
         {locations && locations.values.length > 0 ? (
           <Field label="Location" hint="Stock is kept, and averaged, per location.">
@@ -206,7 +216,9 @@ function MovementForm({
             accounts={accounts}
             value={inventoryAccount}
             onChange={setInventoryAccount}
-            filter={(account) => account.accountClass === "asset"}
+            filter={(account) =>
+              accounts.some((entry) => entry.accountType === "inventory") ? account.accountType === "inventory" : account.accountClass === "asset"
+            }
             required
           />
         </Field>
@@ -375,6 +387,7 @@ function Inventory({ organisationId }: { organisationId: string }) {
               accounts={accounts.data.accounts}
               recentIssues={recentIssues}
               locations={locations}
+              stockItems={(items.data?.items ?? []).filter((item) => item.itemType === "stock" && item.isActive).map((item) => ({ code: item.code, name: item.name }))}
               onPosted={(movement) => {
                 setMessage(
                   `Posted ${TYPE_LABELS[movement.movementType].toLowerCase()} for ${movement.itemCode}: ${formatMoney(movement.valueDelta)} (journal #${movement.ledgerJournalId}).`,

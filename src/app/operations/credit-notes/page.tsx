@@ -137,7 +137,7 @@ function CreditNotes({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Sales credit notes"
-      description="Newest first. Drafts post nothing; approving numbers the credit note and posts it. Remaining credit is the total less the credit applied to invoices and refunded."
+      description="Latest entered first. Drafts post nothing; approving numbers the credit note and posts it. Remaining credit is the total less the credit applied to invoices and refunded."
       actions={
         can("bookkeeper") ? <Button onClick={() => router.push("/operations/credit-notes/new")}>New credit note</Button> : null
       }

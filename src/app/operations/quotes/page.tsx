@@ -109,7 +109,7 @@ function Quotes({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Quotes"
-      description="Newest first. Quotes post nothing. Finalising numbers a quote; accepting it makes a draft invoice with the same lines."
+      description="Latest entered first. Quotes post nothing. Finalising numbers a quote; accepting it makes a draft invoice with the same lines."
       actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/quotes/new")}>New quote</Button> : null}
     >
       <div className={ui.tabs} role="tablist" aria-label="Quote status">

@@ -106,7 +106,7 @@ function SalesOrders({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Sales orders"
-      description="Newest first. Sales orders post nothing. Approving numbers an order; invoicing it makes a draft invoice for what's left to invoice."
+      description="Latest entered first. Sales orders post nothing. Approving numbers an order; invoicing it makes a draft invoice for what's left to invoice."
       actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/sales-orders/new")}>New sales order</Button> : null}
     >
       <div className={ui.tabs} role="tablist" aria-label="Sales order status">

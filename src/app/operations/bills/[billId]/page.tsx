@@ -21,6 +21,7 @@ import type { SupplierCreditNoteApplication } from "@/lib/supplier-credit-notes/
 import type { SupplierCreditNoteSummary } from "@/lib/supplier-credit-notes/service";
 import { RdLineTags } from "@/components/rd";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
+import { BillAssetPrompt } from "@/components/fixed-assets";
 
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
@@ -400,6 +401,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           }}
         />
       ) : null}
+      {bill.status === "approved" ? <BillAssetPrompt key={`assets-${message ?? ""}`} organisationId={organisationId} billId={bill.id} /> : null}
       {bill.status === "approved" || bill.status === "voided" ? (
         <RdLineTags key={`rd-${bill.status}`} organisationId={organisationId} documentType="bill" documentId={bill.id} />
       ) : null}

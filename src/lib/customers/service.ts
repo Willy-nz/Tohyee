@@ -33,6 +33,9 @@ export type CustomerSetup = {
   customerGroups: CustomerGroup[];
   priceLevels: PriceLevel[];
   creditLimitAction: CreditLimitAction;
+  /** The organisation's terms for invoices and bills when the contact has none (decision 333). */
+  defaultSalesPaymentTermId: string | null;
+  defaultBillPaymentTermId: string | null;
 };
 
 export async function getCustomerSetup(tx: OrgTx): Promise<CustomerSetup> {
@@ -46,13 +49,17 @@ export async function getCustomerSetup(tx: OrgTx): Promise<CustomerSetup> {
   const levels = await tx.query<{ id: string; name: string; markup_percent: string; is_active: boolean }>(
     "select id, name, markup_percent::text, is_active from price_levels order by lower(name), id",
   );
-  const settings = await tx.query<{ credit_limit_action: CreditLimitAction }>("select credit_limit_action from organisation_settings where id = true");
+  const settings = await tx.query<{ credit_limit_action: CreditLimitAction; sales: string | null; bills: string | null }>(
+    "select credit_limit_action, default_sales_payment_term_id::text as sales, default_bill_payment_term_id::text as bills from organisation_settings where id = true",
+  );
   return {
     advancedFeatures: await advancedFeaturesOn(tx),
     paymentTerms: terms.rows.map((row) => ({ id: row.id, name: row.name, kind: row.kind, days: row.days, isActive: row.is_active })),
     customerGroups: groups.rows.map((row) => ({ id: row.id, name: row.name, isActive: row.is_active })),
     priceLevels: levels.rows.map((row) => ({ id: row.id, name: row.name, markupPercent: row.markup_percent, isActive: row.is_active })),
     creditLimitAction: settings.rows[0]?.credit_limit_action ?? "warn",
+    defaultSalesPaymentTermId: settings.rows[0]?.sales ?? null,
+    defaultBillPaymentTermId: settings.rows[0]?.bills ?? null,
   };
 }
 
@@ -386,13 +393,54 @@ export function hierarchyError(error: unknown): Error | null {
  * when the customer has none (or they're archived).
  */
 export async function dueDateFromTerms(tx: OrgTx, contactId: string, invoiceDate: string): Promise<string | null> {
-  const found = await tx.query<{ kind: PaymentTermKind; days: number; is_active: boolean }>(
-    `select t.kind, t.days, t.is_active from contacts c join payment_terms t on t.id = c.payment_term_id where c.id = $1`,
+  return dueDateFromContactOrDefault(tx, contactId, invoiceDate, "payment_term_id", "default_sales_payment_term_id");
+}
+
+/**
+ * The contact's own active terms, else the organisation's default for
+ * invoices or bills (decision 333), else none.
+ */
+async function dueDateFromContactOrDefault(
+  tx: OrgTx,
+  contactId: string,
+  date: string,
+  contactColumn: "payment_term_id" | "supplier_payment_term_id",
+  defaultColumn: "default_sales_payment_term_id" | "default_bill_payment_term_id",
+): Promise<string | null> {
+  const found = await tx.query<{ kind: PaymentTermKind; days: number }>(
+    `select t.kind, t.days
+       from payment_terms t
+      where t.is_active
+        and t.id = coalesce(
+              (select ct.id from contacts c join payment_terms ct on ct.id = c.${contactColumn} where c.id = $1 and ct.is_active),
+              (select ${defaultColumn} from organisation_settings where id = true))`,
     [contactId],
   );
   const term = found.rows[0];
-  if (!term || !term.is_active) return null;
-  return dueDateFor(invoiceDate, term);
+  return term ? dueDateFor(date, term) : null;
+}
+
+/** Sets the organisation's default terms for new invoices and bills (decision 333); blank clears one. Admins only. */
+export async function setDefaultPaymentTerms(tx: OrgTx, input: { defaultSalesPaymentTermId?: unknown; defaultBillPaymentTermId?: unknown }): Promise<CustomerSetup> {
+  const pick = async (value: unknown, label: string): Promise<string | null> => {
+    if (value === null || value === "") return null;
+    if (typeof value !== "string" && typeof value !== "number") throw new ValidationError(`Choose the ${label} payment term.`);
+    const id = String(value);
+    if (!/^\d{1,18}$/.test(id)) throw new ValidationError(`Choose the ${label} payment term.`);
+    const found = await tx.query<{ is_active: boolean }>("select is_active from payment_terms where id = $1", [id]);
+    if (!found.rows[0]) throw new ValidationError(`That ${label} payment term doesn't exist.`);
+    if (!found.rows[0].is_active) throw new ValidationError(`That ${label} payment term is archived.`);
+    return id;
+  };
+  if (input.defaultSalesPaymentTermId !== undefined) {
+    const id = await pick(input.defaultSalesPaymentTermId, "invoice");
+    await tx.query("update organisation_settings set default_sales_payment_term_id = $1, updated_at = now() where id = true", [id]);
+  }
+  if (input.defaultBillPaymentTermId !== undefined) {
+    const id = await pick(input.defaultBillPaymentTermId, "bill");
+    await tx.query("update organisation_settings set default_bill_payment_term_id = $1, updated_at = now() where id = true", [id]);
+  }
+  return getCustomerSetup(tx);
 }
 
 // ---------------------------------------------------------------------------
@@ -405,13 +453,7 @@ export async function dueDateFromTerms(tx: OrgTx, contactId: string, invoiceDate
  * 15 June is due 20 July.
  */
 export async function dueDateFromSupplierTerms(tx: OrgTx, contactId: string, billDate: string): Promise<string | null> {
-  const found = await tx.query<{ kind: PaymentTermKind; days: number; is_active: boolean }>(
-    `select t.kind, t.days, t.is_active from contacts c join payment_terms t on t.id = c.supplier_payment_term_id where c.id = $1`,
-    [contactId],
-  );
-  const term = found.rows[0];
-  if (!term || !term.is_active) return null;
-  return dueDateFor(billDate, term);
+  return dueDateFromContactOrDefault(tx, contactId, billDate, "supplier_payment_term_id", "default_bill_payment_term_id");
 }
 
 /**

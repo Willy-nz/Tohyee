@@ -845,9 +845,22 @@ has a Terms field and an editable Due Date. So:
 - Changing or archiving a term, or a supplier's term, never changes a saved
   bill.
 
+#### Default terms (decision 333, examples not yet approved by Jess)
+
+- **DT1** Supplier No Terms Supplies has no payment terms and the
+  organisation has no default: a bill dated 15 Jun 2026 sent without a due
+  date is refused ("this supplier has no payment terms"), as before.
+- **DT2** The organisation's default for bills is "20th of the following
+  month" (and for invoices "7 days", which bills ignore): the same bill is
+  due **20 Jul 2026**. A supplier with its own terms (7 days) still uses
+  them: due **22 Jun 2026**. An archived term can't be made the default;
+  clearing the defaults brings DT1 back. Invoices work the same way with
+  the invoice default and the customer's terms. A draft's due date can
+  still be changed.
+
 Setup: the six starting payment terms; supplier Harbour Property Ltd;
 Paw Supplies and Sales, a customer and a supplier. Tests:
-`tests/integration/bills.test.ts` (SPT1, SPT2, SPT5),
+`tests/integration/bills.test.ts` (SPT1, SPT2, SPT5, DT1, DT2),
 `tests/integration/repeating-bills.test.ts` (SPT3, as RB12) and
 `tests/integration/purchase-orders.test.ts` (SPT4).
 
@@ -3007,7 +3020,9 @@ viewers can see it. "Today" is the date in the business time zone
 - **H1** Bank accounts: one card for each active bank or credit card account,
   with its balance in Tohyee (the ledger), its statement balance if any, and
   "Reconcile N items" for its unreconciled statement lines (excluded lines
-  don't count), or "All reconciled". Archived accounts aren't shown.
+  don't count), "No statement yet: import one" when no statement has been
+  imported or synced (2 Oct 2026: it used to say "All reconciled" then), or
+  "All reconciled". Archived accounts aren't shown.
 - **H2** Money owed to you, on 1 Jun 2026: INV-0001 (115.00, due 20 Jun,
   50.00 paid) and INV-0002 (230.00, due 10 May, nothing paid): owed
   **295.00** on **2** invoices, of which **230.00** on **1** invoice is
@@ -6932,6 +6947,13 @@ Assets:
   the ledger, and account transactions for 1610 show "Depreciation run
   DEP-2026-05" (linking to the depreciation screen) and "Disposal of
   FA-0002" (linking to the asset).
+- **FA15** (decision 337, not yet approved by Jess) Depreciation can be run
+  up to the end of the current month (in the business time zone), not
+  later: on 2 Oct 2026 a run to 31 Mar 2027 is refused ("Depreciation can
+  be run up to the end of this month (31 Oct 2026)"), so this year's
+  figures don't include months that haven't happened. An asset registered
+  after a run that covers its purchase month still catches up in the next
+  run (FA6). Test: `tests/integration/fixed-assets.test.ts` (FA4).
 
 ### Not supported yet (refused rather than guessed)
 

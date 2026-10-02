@@ -170,6 +170,11 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
                 <Link className={styles.action} href={`/operations/bank-accounts/${account.id}`}>
                   Reconcile {plural(account.unreconciledCount, "item", "items")}
                 </Link>
+              ) : account.statementBalance === null ? (
+                // Nothing imported or synced yet, so nothing has been checked against the bank (2 Oct 2026).
+                <Link className={styles.action} href={`/operations/bank-accounts/${account.id}`}>
+                  No statement yet: import one
+                </Link>
               ) : (
                 <div className={styles.quiet}>All reconciled</div>
               )}

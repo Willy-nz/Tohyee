@@ -9,6 +9,7 @@ import type { ItemList } from "@/lib/items/service";
 import { useApiData } from "@/components/hooks";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { dueFromTerms, useCustomerSetup } from "@/components/customers";
+import { NEW_CONTACT, QuickContact } from "@/components/quick-contact";
 import { customerDefault, SalespersonField, useSalespeople } from "@/components/salespeople";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { Badge, Button, Field, Notice, Stat, ui } from "@/components/ui";
@@ -140,7 +141,7 @@ function InvoiceForm({
   items,
   baseCurrency,
   accounts,
-  customers,
+  customers: givenCustomers,
   taxCodes,
   tracking,
   customSetup,
@@ -151,6 +152,10 @@ function InvoiceForm({
   onSaved,
   onCancel,
 }: FormProps) {
+  // Customers added here with "New customer…" join the list straight away.
+  const [added, setAdded] = useState<Contact[]>([]);
+  const [addingCustomer, setAddingCustomer] = useState(false);
+  const customers = [...givenCustomers, ...added];
   const activeTaxCodes = taxCodes.filter((taxCode) => taxCode.isActive);
   const defaults: Defaults = {
     accountCode: accounts.find((account) => account.isActive && isRevenue(account))?.code ?? "",
@@ -161,9 +166,9 @@ function InvoiceForm({
   const [dueDate, setDueDate] = useState(invoice?.dueDate ?? "");
   // A new invoice's due date follows the customer's payment terms until it's typed over (RC1).
   const [dueTyped, setDueTyped] = useState(Boolean(invoice));
-  const refillDue = (customerId: string, date: string) => {
+  const refillDue = (customerId: string, date: string, known?: Contact) => {
     if (dueTyped) return;
-    const fromTerms = dueFromTerms(customerSetup, customers.find((contact) => contact.id === customerId), date);
+    const fromTerms = dueFromTerms(customerSetup, known ?? customers.find((contact) => contact.id === customerId), date);
     if (fromTerms) setDueDate(fromTerms);
   };
   const [reference, setReference] = useState(invoice?.reference ?? "");
@@ -206,6 +211,14 @@ function InvoiceForm({
   const hasTax = amountsMode !== "no_tax";
 
   const customerOptions = customers.filter((contact) => contact.isCustomer && !contact.isArchived);
+  function chooseCustomer(id: string, list: Contact[]) {
+    const next = list.find((contact) => contact.id === id);
+    if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
+    setContactId(id);
+    refillDue(id, invoiceDate, next);
+    setLines((current) => retaxLines(current, contactSalesTaxCode(next, exportSettings, taxCodes)));
+    if (!invoice) setSalespersonId(customerDefault(salespeople, next?.defaultSalespersonId));
+  }
   const savedCustomer =
     invoice && !customerOptions.some((contact) => contact.id === invoice.contactId) ? invoice : null;
 
@@ -258,7 +271,7 @@ function InvoiceForm({
       {error ? <Notice tone="error">{error}</Notice> : null}
       {customerOptions.length === 0 ? (
         <Notice tone="warning">
-          There are no customers yet. Add one in <Link href="/operations/contacts">Contacts</Link> (tick Customer) first.
+          There are no customers yet. Choose &ldquo;+ New customer…&rdquo; below, or add one in <Link href="/operations/contacts">Contacts</Link>.
         </Notice>
       ) : null}
       {hasTax && activeTaxCodes.length === 0 ? (
@@ -270,19 +283,16 @@ function InvoiceForm({
       <div className={ui.grid3}>
         <Field label="Customer" hint={invoice?.salesOrderNumber ? `From sales order ${invoice.salesOrderNumber}, so the customer stays.` : undefined}>
           <select value={contactId} disabled={Boolean(invoice?.salesOrderId)} onChange={(event) => {
-              const next = customers.find((contact) => contact.id === event.target.value);
-              if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
-              setContactId(event.target.value);
-              refillDue(event.target.value, invoiceDate);
-              setLines((current) => retaxLines(current, contactSalesTaxCode(next, exportSettings, taxCodes)));
-              if (!invoice) {
-                const chosen = customers.find((contact) => contact.id === event.target.value);
-                setSalespersonId(customerDefault(salespeople, chosen?.defaultSalespersonId));
+              if (event.target.value === NEW_CONTACT) {
+                setAddingCustomer(true);
+                return;
               }
+              chooseCustomer(event.target.value, customers);
             }}
             required
           >
             <option value="">Choose a customer</option>
+            {invoice?.salesOrderId ? null : <option value={NEW_CONTACT}>+ New customer…</option>}
             {savedCustomer ? (
               <option value={savedCustomer.contactId}>{savedCustomer.contactName} (archived or not a customer)</option>
             ) : null}
@@ -295,6 +305,20 @@ function InvoiceForm({
           </select>
           <ExportBadge contact={chosenCustomer} />
         </Field>
+        {addingCustomer ? (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <QuickContact
+              organisationId={organisationId}
+              kind="customer"
+              onCreated={(contact) => {
+                setAdded((current) => [...current, contact]);
+                setAddingCustomer(false);
+                chooseCustomer(contact.id, [...customers, contact]);
+              }}
+              onCancel={() => setAddingCustomer(false)}
+            />
+          </div>
+        ) : null}
         <Field label="Invoice date" hint="Approving posts the invoice on this date.">
           <input
             type="date"
@@ -306,7 +330,16 @@ function InvoiceForm({
             required
           />
         </Field>
-        <Field label="Due date" hint={dueTyped ? undefined : "From the customer's payment terms, if they have any."}>
+        <Field
+          label="Due date"
+          hint={
+            dueTyped
+              ? undefined
+              : contactId && !dueDate
+                ? "This customer has no payment terms: type the due date (or set default terms in Settings › Payment terms and customers)."
+                : "From the customer's payment terms, or the organisation's default terms."
+          }
+        >
           <input
             type="date"
             value={dueDate}

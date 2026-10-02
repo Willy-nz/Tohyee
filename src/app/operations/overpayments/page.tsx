@@ -127,7 +127,7 @@ function Overpayments({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Customer overpayments"
-      description="Newest first. When a customer pays more than an invoice's amount due, the extra is credit for them: apply it to their other invoices or refund it from the overpayment's page."
+      description="Latest entered first. When a customer pays more than an invoice's amount due, the extra is credit for them: apply it to their other invoices or refund it from the overpayment's page."
     >
       <div className={ui.tabs} role="tablist" aria-label="Overpayments shown">
         {FILTERS.map((entry) => (

@@ -26,14 +26,17 @@ export function useCustomerSetup(organisationId: string | null) {
 
 /** The due date for a customer's new invoice from its terms (RC1), or null. */
 export function dueFromTerms(setup: CustomerSetup | null | undefined, customer: Contact | undefined, invoiceDate: string): string | null {
-  const term = setup?.paymentTerms.find((entry) => entry.id === customer?.paymentTermId && entry.isActive);
+  // The customer's own terms, else the organisation's default for invoices (decision 333).
+  const own = setup?.paymentTerms.find((entry) => entry.id === customer?.paymentTermId && entry.isActive);
+  const term = own ?? (customer ? setup?.paymentTerms.find((entry) => entry.id === setup.defaultSalesPaymentTermId && entry.isActive) : undefined);
   if (!term || !/^\d{4}-\d{2}-\d{2}$/.test(invoiceDate)) return null;
   return dueDateFor(invoiceDate, term);
 }
 
 /** The due date for a supplier's new bill from its supplier payment terms (SPT2), or null. */
 export function dueFromSupplierTerms(setup: CustomerSetup | null | undefined, supplier: Contact | undefined, billDate: string): string | null {
-  const term = setup?.paymentTerms.find((entry) => entry.id === supplier?.supplierPaymentTermId && entry.isActive);
+  const own = setup?.paymentTerms.find((entry) => entry.id === supplier?.supplierPaymentTermId && entry.isActive);
+  const term = own ?? (supplier ? setup?.paymentTerms.find((entry) => entry.id === setup.defaultBillPaymentTermId && entry.isActive) : undefined);
   if (!term || !/^\d{4}-\d{2}-\d{2}$/.test(billDate)) return null;
   return dueDateFor(billDate, term);
 }
@@ -525,6 +528,13 @@ export function CustomerSettings({ organisationId }: { organisationId: string })
       setMessage({ tone: "error", text: errorMessage(caught) });
     }
   };
+  async function setDefault(field: "defaultSalesPaymentTermId" | "defaultBillPaymentTermId", value: string) {
+    try {
+      saved(await api<CustomerSetup>("/api/customers", { method: "PATCH", body: { organisationId, [field]: value } }), "Saved.");
+    } catch (caught) {
+      setMessage({ tone: "error", text: errorMessage(caught) });
+    }
+  }
   async function setAction(action: CreditLimitAction) {
     try {
       saved(await api<CustomerSetup>("/api/customers", { method: "PATCH", body: { organisationId, creditLimitAction: action } }), "Saved.");
@@ -565,6 +575,37 @@ export function CustomerSettings({ organisationId }: { organisationId: string })
           </table>
         </div>
         <TermInputs submitLabel="Add payment term" onSubmit={add("payment-terms", "the term")} />
+      </Card>
+      <Card
+        title="Default terms"
+        description="For customers and suppliers without terms of their own, so new invoices and bills still get a due date. It can be changed on the draft."
+      >
+        <div className={ui.grid2}>
+          <Field label="Invoices">
+            <select value={setup.defaultSalesPaymentTermId ?? ""} onChange={(event) => void setDefault("defaultSalesPaymentTermId", event.target.value)}>
+              <option value="">None (type the due date)</option>
+              {setup.paymentTerms
+                .filter((term) => term.isActive || term.id === setup.defaultSalesPaymentTermId)
+                .map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.name} ({describeTerm(term)})
+                  </option>
+                ))}
+            </select>
+          </Field>
+          <Field label="Bills">
+            <select value={setup.defaultBillPaymentTermId ?? ""} onChange={(event) => void setDefault("defaultBillPaymentTermId", event.target.value)}>
+              <option value="">None (type the due date)</option>
+              {setup.paymentTerms
+                .filter((term) => term.isActive || term.id === setup.defaultBillPaymentTermId)
+                .map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.name} ({describeTerm(term)})
+                  </option>
+                ))}
+            </select>
+          </Field>
+        </div>
       </Card>
       {!setup.advancedFeatures ? (
         <Notice tone="info">

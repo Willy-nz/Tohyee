@@ -4,6 +4,13 @@
   width: min(1180px, 100%);
 }
 
+/* Wide screens (2560 px and the like) get wider pages, so lists and reports use more of them (2 Oct 2026). */
+@media (min-width: 1800px) {
+  .page {
+    width: min(1560px, 100%);
+  }
+}
+
 .pageHeader {
   display: flex;
   flex-wrap: wrap;

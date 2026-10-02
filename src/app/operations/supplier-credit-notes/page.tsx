@@ -132,7 +132,7 @@ function SupplierCreditNotes({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Supplier credit notes"
-      description="Newest first. Drafts post nothing; approving posts the credit note. Remaining credit is the total less the credit applied to bills and refunded by the supplier."
+      description="Latest entered first. Drafts post nothing; approving posts the credit note. Remaining credit is the total less the credit applied to bills and refunded by the supplier."
       actions={
         can("bookkeeper") ? (
           <Button onClick={() => router.push("/operations/supplier-credit-notes/new")}>New supplier credit note</Button>

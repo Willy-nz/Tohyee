@@ -137,6 +137,13 @@ function selectionTitle(selection: Selection): string {
   }
 }
 
+/** The first of the month `count` months before a month start ("2026-10-01", 2 -> "2026-08-01"). */
+function monthsBefore(start: string, count: number): string {
+  const [year, month] = start.split("-").map(Number);
+  const index = year * 12 + (month - 1) - count;
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}-01`;
+}
+
 function monthStart(isoDate: string): string {
   return `${isoDate.slice(0, 7)}-01`;
 }
@@ -487,7 +494,9 @@ function BasisChangeNotice({
  */
 export function GstReturnReport({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
-  const [start, setStart] = useState(() => monthStart(todayInBrowser()));
+  // Without a GST period setting or a filed return, open on the two months that ended
+  // last month, not on a period still going (decision 335).
+  const [start, setStart] = useState(() => monthsBefore(monthStart(todayInBrowser()), 2));
   const [months, setMonths] = useState<number>(2);
   const periodEnd = gstPeriodEnd(start, months);
   const [adjustments, setAdjustments] = useState<GstAdjustment[]>([]);

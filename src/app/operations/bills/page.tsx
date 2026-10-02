@@ -123,7 +123,7 @@ function Bills({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Bills"
-      description="Newest first. Drafts post nothing; approving posts the bill to accounts payable on its bill date. Amount due is the total less the bill's payments."
+      description="Latest entered first. Drafts post nothing; approving posts the bill to accounts payable on its bill date. Amount due is the total less the bill's payments."
       actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/bills/new")}>New bill</Button> : null}
     >
       <div className={ui.tabs} role="tablist" aria-label="Bill status">

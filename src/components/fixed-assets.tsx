@@ -18,7 +18,7 @@ import type { FixedAssetRegister } from "@/lib/fixed-assets/register";
 import type { DepreciationRun, DisposalPreview, JournalPreviewLine, RunPreview } from "@/lib/fixed-assets/runs";
 import type { AssetBillLine, FixedAsset, FixedAssetSettings, FixedAssetStatus, FixedAssetSummary, FixedAssetType } from "@/lib/fixed-assets/service";
 import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
-import { add, dec, toFixedString } from "@/lib/money/decimal";
+import { add, dec, isPositive, toFixedString } from "@/lib/money/decimal";
 import type { TrackingTags } from "@/lib/tracking/service";
 
 /**
@@ -183,11 +183,14 @@ type AssetDraft = {
 export function FixedAssetForm({
   organisationId,
   asset,
+  initialBillLineId,
   onSaved,
   onCancel,
 }: {
   organisationId: string;
   asset?: FixedAsset;
+  /** From a bill's "Register as a fixed asset": that line, its asset type (when only one fits) and its description. */
+  initialBillLineId?: string;
   onSaved: (asset: FixedAsset) => void;
   onCancel: () => void;
 }) {
@@ -210,6 +213,21 @@ export function FixedAssetForm({
     tracking: asset?.tracking ?? {},
   }));
   const [createKey] = useState(() => newIdempotencyKey("asset"));
+  // Fill in from the bill line once the lists have loaded (only once, and only for a new asset).
+  const [prefilled, setPrefilled] = useState(false);
+  if (!asset && initialBillLineId && !prefilled && types.data && billLines.data) {
+    setPrefilled(true);
+    const line = billLines.data.lines.find((entry) => entry.billLineId === initialBillLineId);
+    if (line) {
+      const fitting = types.data.types.filter((entry) => entry.assetAccountCode === line.accountCode);
+      setDraft((current) => ({
+        ...current,
+        name: current.name || line.description.slice(0, 200),
+        typeId: fitting.length === 1 ? fitting[0].id : current.typeId,
+        billLineId: fitting.length === 1 ? line.billLineId : current.billLineId,
+      }));
+    }
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!types.data) return types.error ? <Notice tone="error">{types.error}</Notice> : <p className={ui.muted}>Loading…</p>;
@@ -299,7 +317,14 @@ export function FixedAssetForm({
         <input value={draft.description} maxLength={1000} onChange={(event) => set({ description: event.target.value })} />
       </Field>
       {!asset ? (
-        <Field label="From a bill" hint="Optional. The bill already posted the cost to the asset account; this just records it. Leave the cost blank to use what's left of the line.">
+        <Field
+          label="From a bill"
+          hint={
+            draft.billLineId
+              ? "The bill already posted the cost to the asset account; this just records it. Leave the cost blank to use what's left of the line."
+              : `Typed in: registering posts nothing, so the cost must already be in the ledger on the asset account${type ? ` (${type.assetAccountCode})` : ""}, for example from a journal or an opening balance. Otherwise the register won't match the ledger.`
+          }
+        >
           <select value={draft.billLineId} onChange={(event) => set({ billLineId: event.target.value })}>
             <option value="">Not from a bill (typed in)</option>
             {lines.map((line) => (
@@ -895,6 +920,31 @@ function TypeForm({ organisationId, type, onSaved, onCancel }: { organisationId:
 }
 
 /** Asset types and the part-month settings (admins change them; FA1, FA7, FA8). */
+/**
+ * On an approved bill: its lines on a fixed asset type's asset account that
+ * aren't registered yet, each with "Register as a fixed asset" (Xero lists
+ * these as pending assets). Shows nothing when there are none.
+ */
+export function BillAssetPrompt({ organisationId, billId }: { organisationId: string; billId: string }) {
+  const { can } = useWorkspace();
+  const lines = useApiData<{ lines: AssetBillLine[] }>(can("bookkeeper") ? "/api/fixed-asset-bill-lines" : null, { organisationId });
+  const mine = (lines.data?.lines ?? []).filter((line) => line.billId === billId && isPositive(dec(line.unregistered)));
+  if (mine.length === 0) return null;
+  return (
+    <Notice tone="info">
+      {mine.length === 1 ? "A line on this bill is" : `${mine.length} lines on this bill are`} on a fixed asset account but not on the fixed asset register yet:
+      <ul>
+        {mine.map((line) => (
+          <li key={line.billLineId}>
+            {line.description} ({line.accountCode}, {line.unregistered} to register){" "}
+            <Link href={`/operations/fixed-assets/new?billLine=${encodeURIComponent(line.billLineId)}`}>Register as a fixed asset</Link>
+          </li>
+        ))}
+      </ul>
+    </Notice>
+  );
+}
+
 export function FixedAssetTypes({ organisationId }: { organisationId: string }) {
   const { can } = useWorkspace();
   const types = useApiData<{ types: FixedAssetType[] }>("/api/fixed-asset-types", { organisationId, includeArchived: "true" });
@@ -1143,7 +1193,10 @@ export function FixedAssetRegisterReport({ organisationId }: { organisationId: s
           ) : null}
           <h3>Ties to the ledger</h3>
           {data.ties ? null : (
-            <Notice tone="warning">The ledger doesn&apos;t match the register on some accounts: look for journals posted straight to them (Account transactions).</Notice>
+            <Notice tone="warning">
+              The ledger doesn&apos;t match the register on some accounts. Usually either an asset was typed in (not from a bill) without its cost
+              being posted to the asset account, or a journal was posted straight to the account. Account transactions shows what&apos;s there.
+            </Notice>
           )}
           <div className={ui.tableWrap}>
             <table className={ui.table}>
