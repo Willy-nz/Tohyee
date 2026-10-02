@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Money, RequireOrganisation } from "@/components/books";
-import { HomeTiles } from "@/components/home/home";
+import { HomeTiles, SectionTitle } from "@/components/home/home";
 import { LeaveLiabilityReminders } from "@/components/payroll-leave";
 import { RdDeadlineReminders } from "@/components/rd-claim";
 import { useApiData } from "@/components/hooks";
@@ -29,7 +29,7 @@ function Overview({ organisationId }: { organisationId: string }) {
       <RdDeadlineReminders organisationId={organisationId} />
       <LeaveLiabilityReminders organisationId={organisationId} />
       <HomeTiles organisationId={organisationId} />
-      <h2 style={{ margin: "8px 0 10px", fontSize: "1.05rem" }}>This financial year</h2>
+      <SectionTitle>This financial year</SectionTitle>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.statRow} style={{ marginBottom: 16 }}>
         <Stat

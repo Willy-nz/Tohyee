@@ -1,0 +1,155 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 16px 16px;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+  animation: fadeIn 120ms ease-out;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  max-height: min(560px, 76vh);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+  animation: rise 160ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 14px;
+}
+
+.searchIcon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.input,
+.input:focus,
+.input:focus-visible {
+  min-height: 52px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  font-size: var(--text-lg);
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  list-style: none;
+}
+
+.option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: var(--text-base);
+}
+
+.optionActive {
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+}
+
+.label {
+  font-weight: 550;
+}
+
+.group {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.optionActive .group {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.empty {
+  padding: 28px 16px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.footer {
+  display: flex;
+  gap: 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+  padding: 8px 14px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  min-width: 20px;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface);
+  padding: 0 5px;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.99);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .dialog {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .backdrop {
+    padding-top: 8px;
+  }
+
+  .dialog {
+    max-height: calc(100vh - 16px);
+  }
+
+  .footer {
+    display: none;
+  }
+}

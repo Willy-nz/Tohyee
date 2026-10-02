@@ -2,91 +2,170 @@
   min-height: 100vh;
 }
 
+/* The same calm top bar as the books, with a "Server" tag so it's clear where you are. */
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 24px;
-  background: #3b0764;
-  padding: 12px 24px;
-  color: #ede9fe;
+  gap: 8px 20px;
+  min-height: 56px;
+  border-bottom: 1px solid var(--border);
+  background: var(--topbar-bg);
+  backdrop-filter: saturate(1.6) blur(14px);
+  -webkit-backdrop-filter: saturate(1.6) blur(14px);
+  padding: 8px 20px;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: #fff;
-  font-size: 1.1rem;
-  font-weight: 750;
+  gap: 9px;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-.brandDot {
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
-  background: linear-gradient(135deg, #c084fc, #7c3aed);
+.brandMark {
+  display: block;
+  border-radius: 7px;
+}
+
+.serverTag {
+  border-radius: var(--radius-pill);
+  background: var(--info-bg);
+  padding: 1px 8px;
+  color: var(--info-text);
+  font-size: var(--text-xs);
+  font-weight: 650;
+  letter-spacing: 0;
 }
 
 .nav {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
   flex: 1;
+  flex-wrap: wrap;
+  gap: 2px;
 }
 
 .link {
-  border-radius: 8px;
-  padding: 7px 12px;
-  color: #ede9fe;
-  font-weight: 600;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  font-weight: 550;
 }
 
 .link:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--surface-hover);
+  color: var(--text);
   text-decoration: none;
 }
 
-.active {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
+.active,
+.active:hover {
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+  font-weight: 650;
 }
 
 .user {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 0.9rem;
+  gap: 14px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.theme {
+  width: 200px;
+}
+
+/* The theme switch's "Theme" caption isn't needed in the bar. */
+.theme legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.email {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .signOut {
-  border: 0;
-  background: none;
-  color: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 4px 10px;
+  color: var(--text);
   font-weight: 600;
-  text-decoration: underline;
+}
+
+.signOut:hover {
+  background: var(--surface-hover);
 }
 
 .content {
-  padding: 24px;
+  padding: 28px 32px 48px;
   outline: none;
 }
 
 .note {
   margin: 0 0 16px;
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 .warning {
-  margin-bottom: 16px;
-  border: 1px solid #fca5a5;
-  border-radius: 12px;
-  background: #fef2f2;
-  color: #991b1b;
-  padding: 12px 14px;
-  font-size: 0.93rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 1180px;
+  margin-bottom: 8px;
+  border: 1px solid var(--warning-border);
+  border-left: 3px solid var(--warning-text);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  padding: 7px 12px;
+  color: var(--warning-text);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.warningIcon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--warning-text);
+  color: var(--warning-bg);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.warning:last-of-type {
+  margin-bottom: 20px;
+}
+
+@media (max-width: 900px) {
+  .header {
+    position: static;
+  }
+
+  .user {
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 700px) {

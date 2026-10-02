@@ -14,7 +14,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/unit/item-pricing.test.ts` (IT2, IT4-IT6, pure item price and
   unit maths)
 - `tests/integration/ledger.test.ts` (R2, R4, R5, L1-L4, C1-C5, C7, D1, D2,
-  P1-P3), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
+  P1-P3), `tests/integration/journal-drafts.test.ts` (MJD1-MJD9, not yet
+  approved), `tests/integration/inventory-fx.test.ts` (W1, W2, W7, W8, C6, D3,
   F1-F7), `tests/integration/auth-routes.test.ts` (D1, D2 over HTTP),
   `tests/integration/contacts.test.ts` (D1, D2 for contacts),
   `tests/integration/invoices.test.ts` (I1-I9, D1, D2 for invoices),
@@ -436,6 +437,44 @@ With a lock date of 31 Mar 2026:
 - **C6** Journals created by stock movements or FX revaluations can't be
   corrected in the ledger; correct them with a stock adjustment/return.
 - **C7** The correction date must be in an open period (see L1-L3).
+
+## Draft manual journals (examples not yet approved by Jess)
+
+Like Xero's draft manual journals (decisions 349-352): a draft posts nothing
+until someone posts it. Tested in `tests/integration/journal-drafts.test.ts`.
+
+A 12-month software subscription of $1,200.00 was expensed to 6040
+Software and subscriptions; at 30 Jun 2026 six months are still to come.
+
+- **MJD1** Save a draft dated 30 Jun 2026, reference PREPAY-JUN: Dr 1200
+  Prepayments 600.00 / Cr 6040 Software and subscriptions 600.00. Nothing
+  is posted: no journal, and the trial balance is unchanged (1200 and 6040
+  still 0.00 and 1,200.00). The draft shows who saved it and when.
+- **MJD2** A draft is checked like a journal when it's saved: Dr 600.00 /
+  Cr 550.00 is refused ("doesn't balance: debits 600, credits 550"), as are
+  one line, a line with both a debit and a credit, and an unknown or
+  archived account. Nothing is saved.
+- **MJD3** Editing the draft to 650.00 each side replaces its lines; still
+  nothing is posted.
+- **MJD4** Posting the draft posts one manual journal dated 30 Jun 2026,
+  reference PREPAY-JUN: Dr 1200 650.00 / Cr 6040 650.00, recorded as posted
+  by the person who posted it. The draft is marked posted and links the
+  journal. The trial balance shows 1200 650.00 Dr and 6040 550.00 Dr.
+- **MJD5** Posting it again returns the same journal; no second journal.
+  A posted draft can't be edited or deleted (the database refuses it too);
+  correct the journal instead (C1).
+- **MJD6** With June locked (lock date 30 Jun 2026), posting a draft dated
+  30 Jun 2026 is refused and the draft stays a draft; changed to 1 Jul
+  2026, it posts.
+- **MJD7** A draft that hasn't been posted can be deleted (bookkeeper and
+  up); nothing was ever posted. Viewers can see drafts but not save, post or
+  delete them.
+- **MJD8** Saving with the same idempotency key and the same content
+  returns the same draft (D1); the same key with different content is
+  refused (D2).
+- **MJD9** A draft saved by an AI key (decision 346) records the person
+  and the key ("jess@… via AI key \"Claude on my laptop\""); the key can save
+  and post drafts at its level but can never delete one.
 
 ## Duplicate and retried commands
 

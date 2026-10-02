@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+import { BrandMark } from "./brand-mark";
 import styles from "./server-shell.module.css";
+import { ThemeSwitch } from "./theme";
 import { WorkspaceProvider, type WorkspaceUser } from "./workspace";
 
 const LINKS = [
@@ -30,8 +32,9 @@ export function ServerShell({ user, warnings, children }: { user: WorkspaceUser;
       <div className={styles.shell}>
         <header className={styles.header}>
           <div className={styles.brand}>
-            <span className={styles.brandDot} aria-hidden />
-            Tohyee server
+            <BrandMark size={26} className={styles.brandMark} />
+            Tohyee
+            <span className={styles.serverTag}>Server</span>
           </div>
           <nav aria-label="Server settings" className={styles.nav}>
             {LINKS.map((link) => {
@@ -44,7 +47,10 @@ export function ServerShell({ user, warnings, children }: { user: WorkspaceUser;
             })}
           </nav>
           <div className={styles.user}>
-            <span>{user.email}</span>
+            <div className={styles.theme}>
+              <ThemeSwitch />
+            </div>
+            <span className={styles.email}>{user.email}</span>
             <button type="button" className={styles.signOut} onClick={() => void signOut()}>
               Sign out
             </button>
@@ -57,7 +63,10 @@ export function ServerShell({ user, warnings, children }: { user: WorkspaceUser;
           </p>
           {warnings.map((warning) => (
             <div key={warning} role="alert" className={styles.warning}>
-              {warning}
+              <span className={styles.warningIcon} aria-hidden>
+                !
+              </span>
+              <span>{warning}</span>
             </div>
           ))}
           {children}

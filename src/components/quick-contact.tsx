@@ -62,7 +62,7 @@ export function QuickContact({
   }
 
   return (
-    <div style={{ display: "grid", gap: 10, padding: 12, border: "1px solid var(--border, #d0d7e2)", borderRadius: 8 }}>
+    <div style={{ display: "grid", gap: 10, padding: 12, border: "1px solid var(--border)", borderRadius: 8 }}>
       <strong>New {kind}</strong>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid3}>

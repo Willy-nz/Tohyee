@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import { Button, Field, Notice } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
+import { BrandMark } from "@/components/brand-mark";
 import styles from "./auth.module.css";
 
 /** An emailed reset link: the password again, then two-step sign-in is set up afresh. */
@@ -31,7 +32,7 @@ export function ResetTwoStepForm({ token }: { token: string }) {
     <div className={styles.screen}>
       <div className={styles.panel}>
         <div className={styles.brand}>
-          <span className={styles.brandDot} aria-hidden />
+          <BrandMark size={30} className={styles.brandMark} />
           Tohyee
         </div>
         <div>

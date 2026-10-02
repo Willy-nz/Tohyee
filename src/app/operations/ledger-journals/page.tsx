@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { Money, RequireOrganisation, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { JournalDrafts } from "@/components/journals/journal-drafts";
 import { JournalEditor } from "@/components/journals/journal-editor";
 import { CustomValuesText, useCustomFields } from "@/components/custom-fields";
 import { TrackingTagsText, useTracking } from "@/components/tracking";
@@ -363,6 +364,7 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
   const [composing, setComposing] = useState(false);
   const [correcting, setCorrecting] = useState<JournalWithLines | null>(null);
   const [posted, setPosted] = useState<string | null>(null);
+  const [draftsVersion, setDraftsVersion] = useState(0);
 
   const journals = [...(list.data?.journals ?? []), ...(more?.journals ?? [])];
   const nextBeforeId = more ? more.nextBeforeId : (list.data?.nextBeforeId ?? null);
@@ -397,13 +399,21 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
       {posted ? <Notice tone="success">{posted}</Notice> : null}
       {can("bookkeeper") && !correcting ? (
         composing ? (
-          <Card title="New journal" description="Pick an account for each line. Debits must equal credits.">
+          <Card
+            title="New journal"
+            description="Pick an account for each line. Debits must equal credits. Save it as a draft to post it later; a draft isn't in the ledger."
+          >
             {accounts.data ? (
               <JournalEditor
                 organisationId={organisationId}
                 accounts={accounts.data.accounts}
                 mode="new"
                 onCancel={() => setComposing(false)}
+                onDraftSaved={(id) => {
+                  setComposing(false);
+                  setPosted(`Saved draft journal #${id}. It's under Draft journals until it's posted.`);
+                  setDraftsVersion((value) => value + 1);
+                }}
                 onDone={(id) => {
                   setPosted(`Posted journal #${id}.`);
                   refresh(id);
@@ -440,6 +450,13 @@ function Journals({ organisationId, initialJournalId }: { organisationId: string
           )}
         </Card>
       ) : null}
+
+      <JournalDrafts
+        organisationId={organisationId}
+        accounts={accounts.data?.accounts ?? null}
+        reloadKey={draftsVersion}
+        onPosted={(id) => refresh(id)}
+      />
 
       {selected ? (
         <JournalDetail
@@ -562,7 +579,7 @@ function JournalsPage() {
     <Page>
       <PageHeader
         title="Journals"
-        description="Every posting in the ledger. Posted journals are never edited: corrections reverse the original and post a replacement."
+        description="Every posting in the ledger, and draft journals waiting to be posted. Posted journals are never edited: corrections reverse the original and post a replacement."
       />
       <RequireOrganisation>
         {(organisationId) => (

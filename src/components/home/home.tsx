@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { CurrencyMoney } from "@/components/bank/foreign";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -13,6 +14,11 @@ import styles from "./home.module.css";
 /** Home's figures (examples H1-H4), loaded once for the page. */
 export function useHomeSummary(organisationId: string) {
   return useApiData<HomeSummary>("/api/home", { organisationId, today: todayInBrowser() });
+}
+
+/** A heading between Home's groups of tiles. */
+export function SectionTitle({ children }: { children: ReactNode }) {
+  return <h2 className={styles.sectionTitle}>{children}</h2>;
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -128,7 +134,7 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
           </section>
         ) : (
           summary.bankAccounts.map((account) => (
-            <section key={account.id} className={styles.tile} aria-label={account.name}>
+            <section key={account.id} className={`${styles.tile} ${styles.bankTile}`} aria-label={account.name}>
               <div className={styles.tileTitle}>
                 <Link href={`/operations/bank-accounts/${account.id}`}>{account.name}</Link>
                 <span className={styles.kind}>

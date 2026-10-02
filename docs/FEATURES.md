@@ -8,6 +8,7 @@ that something happened.
 
 - **Organisations**, each with its own PostgreSQL database, created and
   repaired by server admins.
+- **The look (2026 redesign, 3 Oct 2026):** a simpler top bar where each menu opens a short grouped panel, one **+ New** button for every "New …" action, a **search / command palette (Ctrl+K)** for any screen, an **AI** item, light and dark themes that follow the computer (switch in the user menu), the Inter font with tabular figures, and a short fade between pages. Reports and printed documents stay on white paper.
 - **Server settings apart from the books** (organisations, users, remote
   access, email, updates), open only on the server computer itself. On
   Windows they're in the **Tohyee server app**: an icon by the clock (the
@@ -1256,6 +1257,32 @@ that something happened.
   access to post after each month end with approved pay runs. Sick leave
   carried over stays out (PBE IPSAS 39 para 17; journal your own estimate
   if your agreements let it be taken as annual leave).
+- **AI: connect your own AI** (decisions 339-348, core migration 0005). The
+  AI page (`/operations/ai`) lets each member make personal access keys for
+  the organisation (shown once, stored hashed, at most 10, revocable), each
+  with a level: **Look only** (the default), **Make drafts** (also add and
+  edit contacts and make and edit draft invoices, bills and journals) or
+  **Make and post** (also approve invoices and bills, post draft journals
+  and record payments). The level is capped by the person's role (a
+  viewer's key only looks). It shows how to connect Claude Desktop (through
+  `mcp-remote`), Claude.ai or ChatGPT custom connectors, or any MCP client
+  to `/api/mcp`. The AI can look up the organisation's settings, chart of
+  accounts, profit and loss, balance sheet, trial balance, aged receivables
+  and payables, invoices, bills, contacts, account transactions, draft
+  journals and the GST return for a period, in a read-only database
+  transaction; writing tools use the same services as the screens, as the
+  key's owner, and the history shows "<person> via AI key <name>". It
+  **never deletes**: nothing at any level deletes, voids, archives, rolls
+  back or refunds anything. Payroll isn't included. A key stops working
+  when it's revoked, its owner leaves the organisation or their login is
+  turned off. Not yet tried against each AI app; no OAuth sign-in yet, so
+  AI services that only take OAuth connectors can't connect.
+- **Draft manual journals** (examples MJD1-MJD9, decisions 349-352, tenant
+  migration 0081), like Xero's: "Save as draft" beside "Post journal", and a
+  Draft journals list on the journal page to edit, post or delete them. A
+  draft is checked like a journal when saved but posts nothing; posting it
+  posts one manual journal through the usual checks and links it, and a
+  posted draft can't change.
 
 ## Not built yet, on purpose
 
