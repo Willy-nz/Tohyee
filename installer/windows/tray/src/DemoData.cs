@@ -39,7 +39,7 @@ namespace Tohyee.Tray
                 Pump();
                 Save(form, folder, "0-sign-in");
                 form.ShowSettings();
-                foreach (var page in new[] { "home", "organisations", "users", "backups", "email", "updates" })
+                foreach (var page in new[] { "home", "organisations", "users", "backups", "email", "stats", "updates" })
                 {
                     form.Navigate(page);
                     Pump();
@@ -85,7 +85,7 @@ namespace Tohyee.Tray
 
         private static string Name(string page)
         {
-            var order = new[] { "home", "organisations", "users", "phone", "backups", "email", "updates" };
+            var order = new[] { "home", "organisations", "users", "phone", "backups", "email", "stats", "updates" };
             return (Array.IndexOf(order, page) + 1) + "-" + page;
         }
 
@@ -191,11 +191,68 @@ namespace Tohyee.Tray
             {
                 return Parse(Remote);
             }
+            if (path.StartsWith("/api/admin/updates"))
+            {
+                return Parse("{'currentVersion':'0.2.1','latestVersion':'0.3.0','updateAvailable':true,'releaseName':'Tohyee v0.3.0','publishedAt':'" + Ago(20) + "','releaseNotesUrl':'https://github.com/Willy-nz/Tohyee/releases/tag/v0.3.0','checkedAt':'" + Ago(3) + "','nextCheckAt':'" + Ago(-21) + "','checkError':null,"
+                    + "'lastStart':{'version':'0.2.1','previousVersion':'0.2.0','startedAt':'" + Ago(77) + "','organisationsChecked':3,'organisationsUpgraded':3,'organisationsBlocked':0},"
+                    + "'lastUpdate':{'version':'0.2.1','previousVersion':'0.2.0','startedAt':'" + Ago(77) + "','organisationsChecked':3,'organisationsUpgraded':3,'organisationsBlocked':[]},'blockedOrganisations':[],'platform':'win32'}");
+            }
+            if (path.StartsWith("/api/admin/stats"))
+            {
+                return Stats();
+            }
             if (path.StartsWith("/api/updates/latest-release"))
             {
                 return Parse("{'currentVersion':'0.2.1','latestVersion':'0.2.1','updateAvailable':false,'release':{'name':'Tohyee 0.2.1','tagName':'v0.2.1','publishedAt':'" + Ago(26) + "','htmlUrl':'https://github.com/Willy-nz/Tohyee/releases/tag/v0.2.1','assets':[]}}");
             }
             return new Dictionary<string, object>();
+        }
+
+        /// <summary>A day of made-up readings for the Stats page: busy in working hours, quiet at night.</summary>
+        internal static Dictionary<string, object> Stats()
+        {
+            var history = new List<object>();
+            var now = DateTime.UtcNow;
+            var random = new Random(7);
+            for (var i = 24 * 60 - 1; i >= 0; i--)
+            {
+                var at = now.AddMinutes(-i);
+                var hour = at.ToLocalTime().Hour;
+                var busy = hour >= 8 && hour < 18 ? 1.0 : 0.15;
+                var requests = (int)(busy * (20 + random.Next(40)));
+                history.Add(new Dictionary<string, object>
+                {
+                    { "at", at.ToString("o") },
+                    { "cpuPercent", Math.Round(busy * 18 + random.NextDouble() * 6, 1) },
+                    { "tohyeeCpuPercent", Math.Round(busy * 4 + random.NextDouble(), 1) },
+                    { "memoryUsedBytes", 9.1e9 + busy * 1.2e9 + random.Next(200000000) },
+                    { "memoryTotalBytes", 16e9 },
+                    { "tohyeeMemoryBytes", 3.4e8 + busy * 6e7 },
+                    { "requests", requests },
+                    { "serverErrors", random.Next(400) == 0 ? 1 : 0 },
+                    { "averageMs", requests > 0 ? (object)(35 + random.Next(30)) : null },
+                    { "slowestMs", requests > 0 ? (object)(120 + random.Next(300)) : null },
+                    { "activeUsers", (int)(busy * 4) },
+                    { "databaseConnections", 6 + (int)(busy * 4) },
+                });
+            }
+            Func<string, string, double, Dictionary<string, object>> database = (id, name, size) => new Dictionary<string, object> { { "organisationId", id }, { "name", name }, { "sizeBytes", size } };
+            return new Dictionary<string, object>
+            {
+                { "version", "0.2.1" },
+                { "startedAt", now.AddHours(-77).ToString("o") },
+                { "uptimeSeconds", 77 * 3600 },
+                { "computer", new Dictionary<string, object> { { "platform", "Windows_NT 10.0.26100" }, { "cpuModel", "Intel(R) Core(TM) i5-12400" }, { "cores", 12 }, { "memoryTotalBytes", 16e9 }, { "computerUptimeSeconds", 9 * 86400 } } },
+                { "nodeVersion", "v22.22.0" },
+                { "postgresVersion", "17.6" },
+                { "sampleEverySeconds", 60 },
+                { "current", history[history.Count - 1] },
+                { "history", history },
+                { "disks", new List<object> { new Dictionary<string, object> { { "label", "Tohyee's program and backups" }, { "path", @"C:\ProgramData\Tohyee\backups" }, { "freeBytes", 212e9 }, { "totalBytes", 476e9 } } } },
+                { "databases", new Dictionary<string, object> { { "at", now.AddMinutes(-6).ToString("o") }, { "totalBytes", 251e6 }, { "list", new List<object> { database(null, "Server (users and settings)", 9e6), database("kelly-farm", "Kelly Farm Ltd", 168e6), database("jess-consulting", "Jess Consulting", 74e6) } } } },
+                { "people", new Dictionary<string, object> { { "activeNow", 3 }, { "activeLast24Hours", 5 }, { "signedIn", 6 }, { "users", 8 } } },
+                { "organisations", new Dictionary<string, object> { { "ready", 2 }, { "blocked", 0 } } },
+            };
         }
     }
 

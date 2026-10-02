@@ -31,6 +31,11 @@
  * And the backup scheduler, which backs up every organisation each night
  * (off with TOHYEE_BACKUP_SCHEDULER=off; the time and folder are server settings).
  *
+ * After the upgrades it records the start (version, previous version, what
+ * the upgrades did), checks GitHub for a new release a minute later and then
+ * daily (off with TOHYEE_UPDATE_CHECK=off), and samples the server's use for
+ * the server app's Stats page every minute (off with TOHYEE_SERVER_STATS=off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -70,6 +75,24 @@ export async function register() {
         `[tohyee] Organisation ${organisation.organisationId} migrated: ${organisation.applied.join(", ")}`,
       );
     }
+  }
+
+  // A record of this start: the version and what the upgrades did (decision 330).
+  try {
+    const { recordServerStart } = await import("@/lib/updates/server-starts");
+    await recordServerStart(result);
+  } catch (error) {
+    console.warn("[tohyee] Couldn't record this start:", error instanceof Error ? error.message : error);
+  }
+
+  if (process.env.TOHYEE_UPDATE_CHECK !== "off") {
+    const { startUpdateChecker } = await import("@/lib/updates/update-checker");
+    startUpdateChecker();
+  }
+
+  if (process.env.TOHYEE_SERVER_STATS !== "off") {
+    const { startStatsSampler } = await import("@/lib/server-stats/sampler");
+    startStatsSampler();
   }
 
   if (process.env.TOHYEE_BANK_FEEDS_SCHEDULER !== "off") {

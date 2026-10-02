@@ -18,6 +18,8 @@ namespace Tohyee.Tray
         ///   TohyeeTray.exe               the tray icon (started when you sign in to Windows)
         ///   TohyeeTray.exe --settings    the tray icon, with the server settings window open
         ///   TohyeeTray.exe --back-up     the same, backing up every organisation now (Start menu: Back up Tohyee)
+        ///   TohyeeTray.exe --after-update   the tray icon, started by the installer after Install on the Updates
+        ///                                   page; it reports how the update went (from the note Install left)
         ///   TohyeeTray.exe --self-test &lt;file&gt;   checks it can reach Tohyee (used by the installer test)
         ///   TohyeeTray.exe --demo-screenshots &lt;folder&gt;   saves pictures of each page with sample data (no server, no network)
         /// </summary>

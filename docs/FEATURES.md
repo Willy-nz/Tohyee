@@ -14,7 +14,7 @@ that something happened.
   logo with a green, amber or red dot; started when you sign in, like a
   media server's) that shows whether Tohyee is running, restarts it, backs it
   up and opens the logs, and a dark window for the settings with a sidebar
-  (Home, Organisations, Users, Phone access, Backups, Email, Updates). **Home**
+  (Home, Organisations, Users, Phone access, Backups, Email, Stats, Updates). **Home**
   shows whether the server is running (version, how long it's been up),
   phone access, the last backup and the organisations at a glance, the latest
   Tohyee news (GitHub releases plus announcements from `website/news.json`,
@@ -893,7 +893,19 @@ that something happened.
     arriving through Funnel; the Tailscale steps themselves still need trying
     on a real Windows computer.
   Each shows the address with a QR code, Copy address, Open and Turn off.
-- **Update check** against GitHub releases.
+- **Updates** (decisions 328-331): Tohyee checks GitHub for a new release a
+  minute after it starts and then daily. On Windows the server app shows a
+  notification and installs it in one click: every organisation is backed
+  up first (nothing happens if a backup fails), the installer is downloaded
+  and checked against GitHub's SHA-256, it runs silently, Tohyee upgrades
+  each organisation's database as it starts, and the app comes back to say
+  whether everything came up or which organisations are blocked. Each
+  server start is recorded (version, previous version, upgrades). Elsewhere
+  the server settings show the update and how to install it by hand. Not
+  yet tried on a real Windows computer.
+- **Server stats** in the Windows server app (decision 332): CPU, memory,
+  requests, people using Tohyee, database connections, disk space and each
+  organisation's database size, with graphs of the last 24 hours.
 - **NZ payroll rates and calculations** (payroll stage P2, PR1-PR16, not yet
   approved by Jess): IRD's payroll figures for pay dates 1 April 2025 to 31
   March 2027, from IRD's Payroll Calculations and Business Rules

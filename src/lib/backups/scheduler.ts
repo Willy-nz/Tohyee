@@ -4,7 +4,7 @@ import { sendSecurityAlert } from "@/lib/email/mailer";
 
 const RETRY_AFTER_MS = 60 * 60 * 1000;
 
-type RecentRun = { organisationId: string | null; trigger: "schedule" | "manual"; status: string; startedAt: Date };
+type RecentRun = { organisationId: string | null; trigger: "schedule" | "manual" | "update"; status: string; startedAt: Date };
 
 /**
  * Which databases the nightly backup still owes today: once the local time is

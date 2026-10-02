@@ -2102,3 +2102,74 @@ needing its own worked examples first.
      currency with no rate (SO10); it posts nothing and is approved and
      invoiced like any sales order. Once made, the opportunity's stage and
      company are fixed, as with an invoice. Tenant migration 0079.
+
+### Updates and server stats (decisions 328 to 332)
+
+Jess asked (2 Oct 2026) for the server to check for updates by itself,
+notify when one is out, and update without breaking anyone ("migrate the
+server to the updated version so it doesn't break them"), and for
+performance and usage stats like a media server's dashboard. She chose **notify, then one-click
+install** (like a media server) and **stats in the Windows server app only**. These
+are server features, not accounting, so they have tests rather than worked
+examples.
+
+328. **Tohyee checks GitHub for a new release by itself**: a minute after
+     it starts, then every 24 hours (and "Check now" any time). The answer
+     is kept in memory only (it's GitHub's, not Tohyee's). The tray icon
+     asks the server hourly over the local-only address, without signing
+     in (`GET /api/updates/status`, counts only, no organisation names),
+     shows a Windows notification once per version each time it starts,
+     and adds "Install Tohyee vX…" to its menu. The server settings pages
+     show a banner to server admins. Off with `TOHYEE_UPDATE_CHECK=off`.
+329. **Install backs everything up first** (`POST /api/admin/updates/prepare`):
+     it checks GitHub again, refuses if a newer version than the one the
+     person agreed to has come out, then backs up every organisation and
+     the server's own database (backup runs marked `update`, core migration
+     0004). If any backup fails, nothing is downloaded or installed and the
+     failures are shown. The backups are the way back: the start-up
+     upgrades refuse to run an older version against an upgraded database,
+     so an update can't be undone by reinstalling the old version, only by
+     restoring these backups (as a copy).
+330. **Each server start is recorded** (core table `server_starts`,
+     append-only, written by the server as it starts, never typed in): the
+     version, the version before it, the core upgrades applied, and how
+     many organisations were checked, upgraded and blocked (with each
+     blocked one's error). After an update this is how the server app
+     knows the new version came up and whether any organisation's upgrade
+     failed. An organisation whose upgrade fails is still blocked (not
+     half-upgraded: each migration is all or nothing), as before; the
+     Updates page lists blocked organisations with their errors.
+331. **The download is checked before it's run.** The server hands the app
+     the release's `TohyeeSetup-<version>.exe` (only from Tohyee's GitHub
+     releases) and its SHA-256: GitHub's own digest of the file if the
+     release has one, otherwise the `.sha256` file the release build
+     uploads beside it. With neither, Install is refused and the person is
+     told to download it from the release page. The app downloads it,
+     compares the SHA-256, deletes it on a mismatch, then runs it with
+     `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /RESTARTTRAY=yes` (Windows
+     asks for permission) and logs to Tohyee's logs folder. The installer
+     stops the services and the app, replaces the program, starts Tohyee
+     (which upgrades each organisation as it starts) and, because of
+     `/RESTARTTRAY=yes`, starts the app again. A note in the person's local
+     app data says what was being installed; the restarted app waits for
+     the server, reads the start record and shows a notification: all
+     organisations working, some blocked (click for details), or the
+     update didn't finish within 20 minutes (with the log's location).
+     The SHA-256 protects against a broken or tampered download, but comes
+     from the same GitHub release as the installer, so it doesn't protect
+     against someone who controls the GitHub account; the installer isn't
+     code-signed yet (unverified whether that's wanted; not decided here).
+     On Linux and Docker the Updates page says how to update by hand, as
+     before.
+332. **Stats, in the Windows server app only** (Jess's choice). Once a
+     minute the server samples the computer's CPU and memory, Tohyee's own
+     CPU and memory, API requests (count, average and slowest time, server
+     errors), people who made a signed-in request in the last 5 minutes,
+     and database connections, and keeps 24 hours in memory (a restart
+     starts again; nothing is stored). Database sizes (the server's and
+     each organisation's) are measured every 15 minutes; disk space is
+     read for the disks holding Tohyee's program and the backup folder.
+     The app's Stats page shows the figures now, graphs over 1, 6 or 24
+     hours, disks, database sizes and what the server runs on, refreshing
+     every 15 seconds. Only counts are kept about people, never who. Off
+     with `TOHYEE_SERVER_STATS=off`.

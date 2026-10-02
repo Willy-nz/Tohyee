@@ -32,7 +32,21 @@ GitHub; each merge commit says so):
 | Leave liability posting | 0072 | HL52-HL56 | 182-187 |
 | Leave liability: finished employees, employer KiwiSaver, month-end reminder (2 Oct, afternoon session) | 0073 | HL53 (rewritten), HL57-HL61 | 188-191 |
 
-**Next free tenant migration: 0080. Next decision number: 328.**
+**Next free tenant migration: 0080. Next core migration: 0005. Next decision number: 333.**
+
+**Updates and server stats (2 Oct 2026, late afternoon; decisions 328-332, core
+migration 0004):** the server checks GitHub daily; the Windows server app
+notifies and installs in one click (backs up every organisation, checks the
+download's SHA-256, runs TohyeeSetup silently, reports how the upgrades
+went from the server's new start record); and the app has a Stats page.
+The server side is tested here; the tray parts compile (checked with Mono)
+and the installer's CI test checks the start record and stats after an
+update, but **Install and the notifications haven't been tried on a real
+Windows desktop yet**: Jess to try it with the next release. Unverified:
+whether Inno Setup's `runasoriginaluser` restarts the app as the signed-in
+person when the app starts the installer (it should, since Setup elevates
+itself), and whether the Windows build of Node reports disk space through
+`fs.statfs` (the installer test will show it).
 
 No worked example is marked approved; Jess still needs to approve them.
 Jess asked for open questions to be decided by law, then NetSuite, then
