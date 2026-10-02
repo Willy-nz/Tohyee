@@ -56,7 +56,7 @@ features"). Not looked into yet: find the cause before changing anything.
 ## Tried out on Jess's server, 2 October 2026 (evening)
 
 Claude used Tohyee v0.3.0 on Jess's Windows server through her Chrome, in
-the smalldog organisation (made-up data; Jess said to "go nuts"):
+the smalldog and BigDog organisations (made-up data; Jess said to "go nuts"):
 contact, item, invoice, approve, payment, bill, asset type, fixed asset
 from the bill, depreciation run, profit and loss, balance sheet, GST
 return, bank account. The sums were right throughout (invoice 3 x 120 +
@@ -94,7 +94,29 @@ balanced). What could be better, not yet decided or built:
    the customer and supplier tick boxes have no labels for screen
    readers; on a wide (2560 px) screen the pages use about a third of the
    width.
-9. **Screen glitch:** in the browser, moving between screens shows
+9. **BigDog: an asset can be registered for a month already depreciated.**
+   Depreciation in BigDog has been run to 31 Mar 2027 (runs into the
+   future are allowed). Registering an asset bought 10 Aug 2026 then
+   works, but its August 2026 to March 2027 depreciation can only be
+   charged in a run after March 2027, in the wrong financial year. Either
+   refuse a purchase date on or before the last run, or say so and offer
+   to roll back. Also to decide: should depreciation runs past this month
+   be allowed at all?
+10. **BigDog: a typed-in asset with nothing in the ledger.** Registering an
+   asset that isn't from a bill posts nothing (as designed), so the
+   register then disagrees with account 1620 by the cost. The register
+   report shows the difference, but its advice ("look for journals posted
+   straight to them") doesn't mention this cause. Possibly what tripped
+   Jess up on 1 Oct: worth saying on New asset, when it's not from a bill,
+   that the cost must already be posted (or offering to post it).
+11. **BigDog, smaller things:** the bills list says "Newest first" but
+   isn't in date order (5 Sep above 25 Sep); some bills have supplier
+   invoice numbers like "S-d962a649ed" (where these come from is to be
+   checked); on Record a stock movement the item is a typed code rather
+   than a pick list, and the inventory account list offers every account
+   (bank, receivables); the invoice's "PDF" button opens a print page
+   rather than a PDF file.
+12. **Screen glitch:** in the browser, moving between screens shows
    "Loading…" for a moment (about 50 ms) before the page fills in; no
    freezes or long tasks were measured. The Windows server app needs
    signing in, which Claude doesn't do, so its screens are still to be
