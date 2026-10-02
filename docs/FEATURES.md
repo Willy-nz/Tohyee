@@ -8,6 +8,7 @@ that something happened.
 
 - **Organisations**, each with its own PostgreSQL database, created and
   repaired by server admins.
+- **The look (2026 redesign, 3 Oct 2026):** a simpler top bar where each menu opens a short grouped panel, one **+ New** button for every "New …" action, a **search / command palette (Ctrl+K)** for any screen, an **AI** item, light and dark themes that follow the computer (switch in the user menu), the Inter font with tabular figures, and a short fade between pages. Reports and printed documents stay on white paper.
 - **Server settings apart from the books** (organisations, users, remote
   access, email, updates), open only on the server computer itself. On
   Windows they're in the **Tohyee server app**: an icon by the clock (the
