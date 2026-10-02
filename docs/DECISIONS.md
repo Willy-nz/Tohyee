@@ -2108,8 +2108,8 @@ needing its own worked examples first.
 Jess asked (2 Oct 2026) for the server to check for updates by itself,
 notify when one is out, and update without breaking anyone ("migrate the
 server to the updated version so it doesn't break them"), and for
-performance and usage stats like Plex's. She chose **notify, then one-click
-install** (like Plex) and **stats in the Windows server app only**. These
+performance and usage stats like a media server's dashboard. She chose **notify, then one-click
+install** (like a media server) and **stats in the Windows server app only**. These
 are server features, not accounting, so they have tests rather than worked
 examples.
 
