@@ -14,6 +14,7 @@ import {
   listCompanies,
   listOpportunities,
   makeInvoiceFromOpportunity,
+  makeSalesOrderFromOpportunity,
   updateOpportunity,
   updatePerson,
   updateTask,
@@ -240,6 +241,37 @@ describeWithDatabase("modules and the CRM", () => {
     await expect(as((tx) => updateOpportunity(tx, deal.id, { stage: "lost" }))).rejects.toThrow("has made an invoice");
     const journals = await as((tx) => tx.query("select id from ledger_journals"));
     expect(journals.rowCount).toBe(0);
+  });
+
+  it("CRM5b: a won opportunity can make a draft sales order instead (decision 327)", async () => {
+    const { as, vets, deal } = await withVets();
+    await expect(as((tx) => makeSalesOrderFromOpportunity(tx, deal.id))).rejects.toThrow("Only a won opportunity can make a sales order.");
+    await as((tx) => updateOpportunity(tx, deal.id, { stage: "won" }));
+    const { created, salesOrder } = await as((tx) => makeSalesOrderFromOpportunity(tx, deal.id));
+    expect(created).toBe(true);
+    expect([salesOrder.status, salesOrder.contactId, salesOrder.orderDate, salesOrder.total, salesOrder.reference]).toEqual([
+      "draft",
+      vets.id,
+      todayIsoDate(),
+      "2760.00",
+      "Memorial paw prints 2027",
+    ]);
+    expect(salesOrder.lines.map((l) => [l.description, l.quantity, l.unitPrice, l.accountCode, l.taxCode])).toEqual([
+      ["Memorial paw prints 2027", "1", "2400", "4000", "GST"],
+    ]);
+    const again = await as((tx) => makeSalesOrderFromOpportunity(tx, deal.id));
+    expect([again.created, again.salesOrder.id]).toEqual([false, salesOrder.id]);
+    await expect(as((tx) => makeInvoiceFromOpportunity(tx, deal.id))).rejects.toThrow("This opportunity already has a sales order.");
+    await expect(as((tx) => updateOpportunity(tx, deal.id, { stage: "lost" }))).rejects.toThrow("has made a sales order");
+    await expect(as((tx) => tx.query("update crm_opportunities set stage = 'proposal' where id = $1", [deal.id]))).rejects.toThrow(
+      "has made a sales order, so its stage can't change",
+    );
+    expect((await as((tx) => tx.query("select id from ledger_journals"))).rowCount).toBe(0);
+    // And the other way round: an opportunity with an invoice can't make a sales order.
+    const other = await withVets();
+    await other.as((tx) => updateOpportunity(tx, other.deal.id, { stage: "won" }));
+    await other.as((tx) => makeInvoiceFromOpportunity(tx, other.deal.id));
+    await expect(other.as((tx) => makeSalesOrderFromOpportunity(tx, other.deal.id))).rejects.toThrow("This opportunity already has an invoice.");
   });
 
   it("CRM6: tasks", async () => {

@@ -201,8 +201,14 @@ async function buildPayslip(tx: OrgTx, run: PayRun, employeeId: string, employee
   }
   const pay = entry.pay;
   const ytd = await yearToDate(tx, run, employeeId);
-  // The employee's account is decrypted here, inside the payroll access check, and only its mask leaves.
-  const bankAccount = row.bank_account_ciphertext === null ? null : maskBankAccount(decryptSecret(row.bank_account_ciphertext));
+  // The account this pay went into, kept when it was approved (decision 262; PSLIP7), else (pays approved before
+  // that was kept) the employee's current one. Decrypted here, inside the payroll access check; only its mask leaves.
+  const kept = await tx.query<{ bank_account_ciphertext: string | null }>(
+    "select bank_account_ciphertext from payroll_pay_run_employees where pay_run_id = $1 and employee_id = $2",
+    [run.id, employeeId],
+  );
+  const ciphertext = kept.rows[0]?.bank_account_ciphertext ?? row.bank_account_ciphertext;
+  const bankAccount = ciphertext === null ? null : maskBankAccount(decryptSecret(ciphertext));
   const enrolled = entry.kiwiSaverStatus === "enrolled";
   return {
     payRunId: run.id,

@@ -1,3 +1,4 @@
+import { createSalesOrder, getSalesOrder, type SalesOrder } from "@/lib/sales-orders/service";
 import { writeAuditEvent } from "@/lib/audit";
 import { updateContact } from "@/lib/contacts/service";
 import { dueDateFromTerms } from "@/lib/customers/service";
@@ -102,6 +103,9 @@ export type Opportunity = {
   weightedAmount: string;
   position: number;
   invoiceId: string | null;
+  /** The sales order a won opportunity made instead of an invoice (CRM5b, decision 327). */
+  salesOrderId: string | null;
+  salesOrderNumber: string | null;
   invoiceNumber: string | null;
   /** Custom field values (CRMF5); they never change the amount, stage or invoice. */
   customFields: CustomValues;
@@ -440,14 +444,15 @@ export async function updatePerson(tx: OrgTx, idInput: unknown, input: PersonInp
 
 const OPPORTUNITY_SELECT = `select o.id, o.name, o.contact_id, c.name as contact_name, o.point_of_contact_id,
     nullif(concat_ws(' ', p.first_name, p.last_name), '') as point_of_contact_name, o.owner_user_id, o.amount::text, o.currency_code,
-    o.close_date::text, o.stage, s.name as stage_name, s.stage_type, o.probability, o.forecast_category, o.position, o.invoice_id,
+    o.close_date::text, o.stage, s.name as stage_name, s.stage_type, o.probability, o.forecast_category, o.position, o.invoice_id, o.sales_order_id::text, so.so_number as sales_order_number,
     i.invoice_number, o.custom_fields, o.created_at, o.updated_at, o.record_type_id, t.name as record_type_name
   from crm_opportunities o
   join crm_opportunity_stages s on s.key = o.stage
   join contacts c on c.id = o.contact_id
   join crm_record_types t on t.id = o.record_type_id
   left join crm_people p on p.id = o.point_of_contact_id
-  left join sales_invoices i on i.id = o.invoice_id`;
+  left join sales_invoices i on i.id = o.invoice_id
+  left join sales_orders so on so.id = o.sales_order_id`;
 
 type OpportunityRow = {
   id: string;
@@ -467,6 +472,8 @@ type OpportunityRow = {
   forecast_category: ForecastCategory;
   position: number;
   invoice_id: string | null;
+  sales_order_id: string | null;
+  sales_order_number: string | null;
   invoice_number: string | null;
   custom_fields: CustomValues;
   created_at: string;
@@ -495,6 +502,8 @@ function toOpportunity(row: OpportunityRow): Opportunity {
     weightedAmount: weightedAmount(row.amount, row.probability, currencyMinorUnits(row.currency_code)),
     position: row.position,
     invoiceId: row.invoice_id,
+    salesOrderId: row.sales_order_id,
+    salesOrderNumber: row.sales_order_number,
     invoiceNumber: row.invoice_number,
     customFields: row.custom_fields ?? {},
     recordTypeId: row.record_type_id,
@@ -585,6 +594,9 @@ async function opportunityValues(tx: OrgTx, input: OpportunityInput, current: Op
   if (current?.invoiceId && contactId !== current.contactId) {
     throw new ConflictError("This opportunity has made an invoice, so its company can't change.");
   }
+  if (current?.salesOrderId && contactId !== current.contactId) {
+    throw new ConflictError("This opportunity has made a sales order, so its company can't change.");
+  }
   // The amount is in the company's currency (MC68).
   const currencyCode = (await tx.query<{ currency_code: string | null }>("select currency_code from contacts where id = $1", [contactId])).rows[0]?.currency_code ?? tx.baseCurrency;
   const amount = input.amount === undefined ? (current?.amount ?? "0.00") : parseAmount(input.amount);
@@ -662,6 +674,9 @@ export async function updateOpportunity(tx: OrgTx, idInput: unknown, input: Oppo
   const recordType = await chooseRecordType(tx, "opportunity", input.recordTypeId, current.recordTypeId);
   if (current.invoiceId && input.stage !== undefined && input.stage !== current.stage) {
     throw new ConflictError("This opportunity has made an invoice, so its stage can't change.");
+  }
+  if (current.salesOrderId && input.stage !== undefined && input.stage !== current.stage) {
+    throw new ConflictError("This opportunity has made a sales order, so its stage can't change.");
   }
   const stage = await chooseStage(tx, input.stage, { key: current.stage, recordTypeId: current.recordTypeId }, recordType.id);
   const values = await opportunityValues(tx, input, current, stage);
@@ -745,6 +760,7 @@ export async function makeInvoiceFromOpportunity(
   await tx.query("select id from crm_opportunities where id = $1 for update", [current.id]);
   const locked = await getOpportunity(tx, current.id);
   if (locked.invoiceId) return { created: false, invoice: await getInvoice(tx, locked.invoiceId) };
+  if (locked.salesOrderId) throw new ConflictError("This opportunity already has a sales order.");
   // The stage's type, not its name, says it's won (CRMS4, decision 82).
   if (locked.stageType !== "won") throw new ConflictError("Only a won opportunity can make an invoice. Move it to a Closed won stage first.");
   const contact = await tx.query<{ is_customer: boolean }>("select is_customer from contacts where id = $1", [locked.contactId]);
@@ -790,6 +806,56 @@ export async function makeInvoiceFromOpportunity(
     details: { invoiceId: invoice.id },
   });
   return { created: true, invoice };
+}
+
+/**
+ * Makes a draft sales order from a won opportunity instead of an invoice
+ * (CRM5b, decision 327; NetSuite's opportunity to sales order): one line
+ * with its name and amount, the first active revenue account and the same
+ * tax code an invoice would get (EX15), dated today, in the company's
+ * currency with no rate (SO10). A prospect becomes a customer. Making it
+ * again returns the same sales order; an opportunity with an invoice can't
+ * make one. Posts nothing.
+ */
+export async function makeSalesOrderFromOpportunity(tx: OrgTx, idInput: unknown): Promise<{ created: boolean; salesOrder: SalesOrder }> {
+  await requireCrm(tx);
+  const current = await getOpportunity(tx, idInput);
+  await tx.query("select id from crm_opportunities where id = $1 for update", [current.id]);
+  const locked = await getOpportunity(tx, current.id);
+  if (locked.salesOrderId) return { created: false, salesOrder: await getSalesOrder(tx, locked.salesOrderId) };
+  if (locked.invoiceId) throw new ConflictError("This opportunity already has an invoice.");
+  if (locked.stageType !== "won") throw new ConflictError("Only a won opportunity can make a sales order. Move it to a Closed won stage first.");
+  const contact = await tx.query<{ is_customer: boolean }>("select is_customer from contacts where id = $1", [locked.contactId]);
+  if (!contact.rows[0]?.is_customer) await updateContact(tx, locked.contactId, { isCustomer: true });
+  const today = todayIsoDate();
+  const account = await tx.query<{ code: string }>("select code from accounts where is_active and account_class = 'revenue' order by code limit 1");
+  if (!account.rows[0]) throw new ValidationError("There's no active revenue account to sell to.");
+  const taxCode = await tx.query<{ code: string }>(
+    `select code from tax_codes where is_active and category = 'standard' and available_on in ('sales', 'both') and effective_from <= $1
+        and (effective_to is null or effective_to >= $1) order by id limit 1`,
+    [today],
+  );
+  const gst = (await contactSalesTaxCodeFor(tx, locked.contactId)) ?? taxCode.rows[0]?.code ?? null;
+  const { salesOrder } = await createSalesOrder(tx, {
+    source: "crm",
+    idempotencyKey: `opportunity-so-${locked.id}`,
+    contactId: locked.contactId,
+    orderDate: today,
+    amountsMode: gst ? "exclusive" : "no_tax",
+    reference: locked.name.slice(0, 100),
+    lines: [{ description: locked.name, quantity: "1", unitPrice: locked.amount, accountCode: account.rows[0].code, taxCode: gst }],
+  });
+  if (salesOrder.currencyCode !== locked.currencyCode) {
+    throw new ConflictError(`This opportunity is in ${locked.currencyCode}, but ${locked.contactName}'s sales orders are in ${salesOrder.currencyCode}.`);
+  }
+  await tx.query("update crm_opportunities set sales_order_id = $2, updated_at = now() where id = $1", [locked.id, salesOrder.id]);
+  await writeAuditEvent(tx, {
+    eventType: "crm.opportunity_sales_order",
+    entityType: "crm_opportunity",
+    entityId: locked.id,
+    details: { salesOrderId: salesOrder.id },
+  });
+  return { created: true, salesOrder };
 }
 
 // ---------------------------------------------------------------------------

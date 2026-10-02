@@ -11,6 +11,7 @@ import * as payslipRoute from "@/app/api/payroll/pay-runs/[payRunId]/payslips/[e
 import * as payslipsRoute from "@/app/api/payroll/pay-runs/[payRunId]/payslips/route";
 import { processOrganisationOutbox } from "@/lib/email/outbox";
 import { getOrganisation } from "@/lib/organisations/registry";
+import { updateEmployee } from "@/lib/payroll/employees";
 import type { PayItem } from "@/lib/payroll/pay-items";
 import type { PayRun } from "@/lib/payroll/pay-runs";
 import { payslipLayout } from "@/lib/payroll/payslip-layout";
@@ -370,6 +371,15 @@ describeWithDatabase("payroll: payslips (PSLIP1-PSLIP6)", () => {
       const notOnRun = await payslip(w.ben, run1.id, w.people.aroha);
       expect(notOnRun.status).toBe(404);
       expect(notOnRun.body.error).toBe("That employee isn't on PAYRUN-1.");
+    });
+  });
+
+  describe("the account it was paid into (PSLIP7)", () => {
+    it("PSLIP7: a payslip keeps the account its pay went into after the employee changes account", async () => {
+      await w.asUser(w.jess, (tx) => updateEmployee(tx, w.people.hemi, { bankAccount: "12-3456-7654321-00" }));
+      expect((await slip(run1.id, w.people.hemi)).bankAccount).toBe("**-****-******6-00");
+      const later = await w.approvedRun(w.groups.fortnightly, "2026-11-09", "2026-11-25");
+      expect((await slip(later.id, w.people.hemi)).bankAccount).toBe("**-****-******1-00");
     });
   });
 });

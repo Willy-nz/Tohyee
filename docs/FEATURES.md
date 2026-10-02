@@ -1287,8 +1287,9 @@ isn't acceptable, because people would trust it:
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)
 - on sales orders (SO1-SO12, stage 1): reserving stock (committed
-  quantities), deliveries and moving cost of sales to delivery, making
-  orders from won CRM opportunities or Shopify, line discounts, editing an
+  quantities), deliveries and moving cost of sales to delivery (orders
+  from won CRM opportunities, decision 327, and from Shopify, SPC11, are
+  built), line discounts, editing an
   approved order, closing single lines or reopening a closed order, credit
   notes giving quantities back, and printing or emailing orders
 

@@ -1857,9 +1857,10 @@ end of each group.
      it's the wages and time record, not payslip content.
 261. **Hours each day: answered by P9** (question 2): approved timesheets
      record them (s 81(2)(c)).
-262. **The payslip shows the employee's current bank account** (question
-     3, kept for now): keeping the account each pay run paid into is a
-     later stage (it needs the account stored on approval).
+262. **The payslip shows the account the pay went into** (question 3):
+     approving a pay run keeps each employee's bank account (encrypted)
+     with their pay (PSLIP7, tenant migration 0078); pays approved before
+     that show the employee's current account.
 263. **Neither the IRD number nor an employee number** on payslips
      (question 4, kept): neither is required, and leaving the IRD number off
      keeps it out of emails.
@@ -2068,3 +2069,16 @@ needing its own worked examples first.
      payslip must show, so decision 260's question is answered: the
      payslip follows Holidays Act s 81 and Employment NZ's guidance, and
      P9's timesheets and the usual week (s 130(1B)) keep the hours.
+
+### A won opportunity to a sales order (decision 327)
+
+327. **A won opportunity can make a draft sales order instead of an
+     invoice** (CRM5b; the handover's "won opportunity → sales order", not
+     built until now). NetSuite turns an opportunity into a sales order;
+     Tohyee keeps the invoice too (CRM5), so the opportunity offers both
+     and keeps whichever was made: one or the other, never both (the
+     database refuses both). The sales order's line, account and tax code
+     follow the invoice's rules (EX15), dated today, in the company's
+     currency with no rate (SO10); it posts nothing and is approved and
+     invoiced like any sales order. Once made, the opportunity's stage and
+     company are fixed, as with an invoice. Tenant migration 0079.

@@ -763,6 +763,9 @@ export function InvoiceAction({ organisationId, opportunity, onChanged }: { orga
   if (opportunity.invoiceId) {
     return <Link href={`/operations/invoices/${opportunity.invoiceId}`}>{opportunity.invoiceNumber ?? "Draft invoice"}</Link>;
   }
+  if (opportunity.salesOrderId) {
+    return <Link href={`/operations/sales-orders/${opportunity.salesOrderId}`}>{opportunity.salesOrderNumber ?? "Draft sales order"}</Link>;
+  }
   // A Closed won stage, whatever it's called (CRMS4).
   if (opportunity.stageType !== "won" || !can("bookkeeper")) return null;
   const make = () =>
@@ -774,6 +777,12 @@ export function InvoiceAction({ organisationId, opportunity, onChanged }: { orga
       onChanged();
       router.push(`/operations/invoices/${result.invoice.id}`);
     });
+  const makeOrder = () =>
+    void run(async () => {
+      const result = await api<{ salesOrder: { id: string } }>(`/api/crm/opportunities/${opportunity.id}/sales-order`, { method: "POST", body: { organisationId } });
+      onChanged();
+      router.push(`/operations/sales-orders/${result.salesOrder.id}`);
+    });
   return (
     <>
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -782,7 +791,12 @@ export function InvoiceAction({ organisationId, opportunity, onChanged }: { orga
       ) : null}
       <Button size="small" disabled={busy} onClick={() => (foreign && !askingRate ? setAskingRate(true) : make())}>
         {busy ? "Making…" : foreign && !askingRate ? `Make ${opportunity.currencyCode} invoice` : "Make invoice"}
-      </Button>
+      </Button>{" "}
+      {askingRate ? null : (
+        <Button size="small" variant="secondary" disabled={busy} onClick={makeOrder}>
+          Make sales order
+        </Button>
+      )}
     </>
   );
 }

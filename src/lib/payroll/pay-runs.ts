@@ -1671,7 +1671,8 @@ export async function approvePayRun(
               kiwisaver_earnings = $13, paye = $14, student_loan_deduction = $15, kiwisaver_employee = $16, deductions = $17,
               net_pay = $18, kiwisaver_employer = $19, esct = $20, kiwisaver_employer_net = $21, employer_cost = $22,
               extra_pay = $23, extra_pay_tax = $24, extra_pay_tax_rate = $25, extra_pay_method = $26, extra_pay_annualised = $27,
-              lump_sum_lowest_rate = $28, finish_date = $29
+              lump_sum_lowest_rate = $28, finish_date = $29,
+              bank_account_ciphertext = (select e.bank_account_ciphertext from payroll_employees e where e.id = $2)
         where pay_run_id = $1 and employee_id = $2`,
       [
         run.id,

@@ -4042,6 +4042,18 @@ when approved.
   prospect too); nothing is posted until the draft is approved. Making the
   invoice again returns the same invoice; an opportunity that isn't Won
   can't make one; once it has an invoice its stage can't change.
+- **CRM5b** A won opportunity can make a **draft sales order** instead
+  (NetSuite's opportunity to sales order; decision 327): for Mānuka Vets,
+  dated today, one line "Memorial paw prints 2027" 1 × 2,400.00 to 4000
+  with GST (15%), total **2,760.00**, reference the opportunity's name,
+  posting nothing (a sales order never posts). It's either an invoice or a
+  sales order: once one is made the other is refused ("This opportunity
+  already has an invoice." / "This opportunity already has a sales
+  order."). Making it again returns the same sales order; an opportunity
+  that isn't Won can't make one ("Only a won opportunity can make a sales
+  order."); once it has a sales order its stage can't change. A company in
+  another currency gets the sales order in its currency, with no exchange
+  rate (as SO10).
 - **CRM6** Tasks: "Send sample kit" due 2026-10-01 for Jess about the
   opportunity, To do → Done. The assignee must be a member of the
   organisation. A task can't be deleted.
@@ -10102,6 +10114,13 @@ PostgreSQL, the API routes, the PDF and a real SMTP server).
   "This needs the bookkeeper role or higher in this organisation." (403).
   There's no employee self-service portal: employees get their payslip by
   email or on paper.
+
+- **PSLIP7 The account it was paid into** (decision 262). Approving a pay
+  run keeps each employee's bank account with their pay (encrypted). After
+  Hemi changes his account to 12-3456-7654321-00, his PAYRUN-1 payslip
+  still shows the account that pay went into, **\*\*-\*\*\*\*-\*\*\*\*\*\*6-00**; a later
+  pay run's payslip shows the new one, **\*\*-\*\*\*\*-\*\*\*\*\*\*1-00**. Pays approved
+  before this was kept show the employee's current account, as before.
 
 ### Questions for Jess (payslips), decided
 
