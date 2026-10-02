@@ -49,6 +49,8 @@ export type Posting = PostingRules & {
   clearingAccountCode: string;
   payoutAccountCode: string;
   feesAccountCode: string;
+  /** The contact guest checkouts go to (decision 317), or null to refuse them. */
+  guestContactId: string | null;
 };
 
 export type PostingContext = {
@@ -72,6 +74,7 @@ type ConnectionSettingsRow = {
   sales_code: string | null;
   shipping_code: string | null;
   untaxed_code: string | null;
+  guest_contact_id: string | null;
 };
 
 /**
@@ -83,7 +86,7 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
   const found = await tx.query<ConnectionSettingsRow>(
     `select c.id, c.platform, c.store_domain, c.post_to_accounts, c.start_date::text as start_date, c.clearing_account_id,
             clearing.code as clearing_code, payout.code as payout_code, fees.code as fees_code, sales.code as sales_code,
-            shipping.code as shipping_code, untaxed.code as untaxed_code
+            shipping.code as shipping_code, untaxed.code as untaxed_code, c.guest_contact_id::text
        from sales_platform_connections c
        left join accounts clearing on clearing.id = c.clearing_account_id
        left join accounts payout on payout.id = c.payout_account_id
@@ -113,6 +116,7 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     clearingAccountCode: row.clearing_code!,
     payoutAccountCode: row.payout_code!,
     feesAccountCode: row.fees_code!,
+    guestContactId: row.guest_contact_id,
     baseCurrency: tx.baseCurrency,
     gstRegistered: Boolean(settings.gstNumber),
     foreignTrade: settings.foreignTrade,
@@ -322,15 +326,24 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       });
       return;
     }
+    let contactId: string | null;
+    let overseas: boolean;
     if (!order.customer) {
-      await refuse(`${order.name} has no ${shop} customer (a guest checkout), so it isn't brought in; guest checkouts aren't supported yet.`);
-      return;
-    }
-    const customer: PlatformCustomer = { ...order.customer, country: order.customer.country ?? order.billingCountry };
-    const contactId = await context.contactFor(customer);
-    if (!contactId) {
-      await wait(`${order.name}'s customer couldn't be linked to a contact (see the customer's line in this log), so the order waits.`, "waiting");
-      return;
+      // A guest checkout goes to the contact chosen for them (decision 317); whether it's an export comes from the order itself.
+      if (!posting.guestContactId) {
+        await refuse(`${order.name} has no ${shop} customer (a guest checkout). Choose a contact for guest checkouts in the connection's settings to bring it in.`);
+        return;
+      }
+      contactId = posting.guestContactId;
+      overseas = order.billingCountry !== null && isOverseas({ billingCountry: order.billingCountry, deliveryCountry: null });
+    } else {
+      const customer: PlatformCustomer = { ...order.customer, country: order.customer.country ?? order.billingCountry };
+      contactId = await context.contactFor(customer);
+      if (!contactId) {
+        await wait(`${order.name}'s customer couldn't be linked to a contact (see the customer's line in this log), so the order waits.`, "waiting");
+        return;
+      }
+      overseas = await contactIsOverseas(tx, contactId);
     }
     const items = await linkedItems(tx, posting, order.lines.flatMap((line) => (line.variantId ? [line.variantId] : [])));
     // A stock item the variant isn't linked to yet would sell without moving stock: wait for the product sync to link it.
@@ -342,7 +355,7 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
         return;
       }
     }
-    const plan = planOrder(order, posting, items, await contactIsOverseas(tx, contactId));
+    const plan = planOrder(order, posting, items, overseas);
     if (!plan.ok) {
       await refuse(plan.reason);
       return;

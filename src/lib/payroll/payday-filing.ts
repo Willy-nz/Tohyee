@@ -1,3 +1,4 @@
+import { taxWorkingDaysAfter } from "@/lib/payroll/tax-working-days";
 import { parseIsoDate } from "@/lib/dates";
 import { ValidationError } from "@/lib/errors";
 import { add, dec, type Decimal, isNegative, significantScale, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
@@ -161,31 +162,14 @@ export function parseContactEmail(input: unknown): string {
 
 // Due date (decision 63)
 
-function weekday(date: string): number {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-}
-
-function nextDay(date: string): string {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
-}
-
 /**
- * When the EI is due: "within 2 working days of each payday" for electronic
- * filers (IRD, Payday filing; spec 3.4). Saturdays and Sundays are skipped;
- * public holidays aren't (Tohyee has no list yet), so this is never later
- * than IRD's due date.
+ * When the EI is due: "within 2 working days after payday" for the online
+ * group (Tax Administration Act 1994 s 23E(2)(b)), working days as the
+ * Income Tax Act's s YA 1 defines them (decision 326, replacing decision
+ * 63's weekends-only count; docs/sources/working-day-tax.md).
  */
 export function paydayFilingDueDate(payDateInput: string): string {
-  let date = parseIsoDate(payDateInput, "Pay date");
-  let workingDays = 0;
-  while (workingDays < 2) {
-    date = nextDay(date);
-    const day = weekday(date);
-    if (day !== 0 && day !== 6) workingDays += 1;
-  }
-  return date;
+  return taxWorkingDaysAfter(parseIsoDate(payDateInput, "Pay date"), 2);
 }
 
 // The file

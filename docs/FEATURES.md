@@ -313,7 +313,8 @@ that something happened.
   invoices and quotes say so. The screen warns when a tax invoice over $1,000
   has no customer address, or GST is charged with no GST number in Settings.
   Emailed as a PDF (below).
-- **Purchase orders** (Purchases; PO1-PO9, not yet approved by Jess): drafts
+- **Purchase orders** (Purchases; PO1-PO10, not yet approved by Jess; "Close
+  the rest" of a part-billed one, decision 281): drafts
   to a supplier with the same lines as a bill (items fill the supplier's
   price), a delivery date, address and instructions; approving numbers them
   (`PO-0001`, no gaps) and locks them (the database refuses changes). They
@@ -844,7 +845,20 @@ that something happened.
   are copied only from a store in the base currency whose prices exclude
   tax. Customer and product create/update webhooks are handled once each
   (a repeated delivery does nothing) and need a public https address
-  (Settings › Remote access). Nothing posts to the ledger.
+  (Settings › Remote access). Stage 1 posts nothing to the ledger.
+- **Sales platform connections, stage 2: Shopify orders, refunds and
+  payouts** (#77, SPC11-SPC24, decisions 51-55 and 317-322, not yet
+  approved by Jess; not tried against a real store). With "Post to the
+  accounts" on (Settings › Sales platforms › Posting to the accounts,
+  admins; the form was added on 2 Oct 2026, before then only the API could
+  set it), paid orders from the start date become approved sales orders
+  and invoices with their payment into a clearing account, refunds become
+  credit notes and refunds, and payouts move money from the clearing
+  account to the bank with the fees. Shopify's tax rates are matched to
+  tax codes; untaxed lines take the zero-rated or exempt code chosen.
+  Guest checkouts go to the customer contact chosen for them, or are
+  refused (SPC24). Refused rather than guessed: test orders, other
+  currencies, gift cards, tips or duties, chargebacks and reserves.
 - **Phone access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):
@@ -989,7 +1003,8 @@ that something happened.
   through myIR's checker yet.
 - **Timesheets** (payroll stage P9, TS1-TS11, not yet approved by Jess;
   decisions 91-101; tenant migration 0067). Payroll › Timesheets: one
-  timesheet per employee per week (Monday to Sunday) of hours per day, to 2
+  timesheet per employee per week (Monday to Sunday unless the organisation
+  starts its weeks on another day, decision 192, TS12) of hours per day, to 2
   decimal places, by R&D activity, Department, project, any combination, or
   "other work" (spread by the default allocation); "Fill from project time"
   suggests rows from the employee's project time. Every entry is stamped by
@@ -1023,8 +1038,11 @@ that something happened.
   payroll figure against its ledger movement, with every other journal that
   explains the difference: voided pay runs and payments, manual journals,
   other documents); **headcount and FTE** at a date and by month (usual
-  hours ÷ a standard week, 40.00 unless typed; salaries count 1, marked
-  assumed; by Department from the allocation; starters, leavers and who was
+  hours ÷ a standard week (saved per organisation, 40.00 unless changed,
+  or typed for one report; decision 199); usual hours from the employee's
+  usual week where they have leave settings, else the pay rate's, and
+  salaries without a usual week count 1, marked assumed (decision 200,
+  PREP9); by Department from the allocation; starters, leavers and who was
   paid); **employee earnings history**; and **PAYE, KiwiSaver and student
   loan** by month, tied to each pay run's employment information file (made
   or not, from the audit log) and IRD payments. Voided pay runs are listed,
@@ -1263,15 +1281,15 @@ isn't acceptable, because people would trust it:
 - an import or reverse-charge tax code (imported services under the
   reverse charge, EX16-EX25), and a default purchase tax code on expense
   claims (their suppliers aren't contacts), cash coding and bank rules
-- sales platforms (SPC1-SPC10): Shopify orders, refunds and payouts (orders
-  will become sales orders, then invoices, once sales orders are built),
-  WooCommerce, Square and Stripe, customers' addresses and companies,
+- sales platforms: WooCommerce, Square and Stripe, Shopify chargebacks
+  and reserves, customers' addresses and companies,
   stock levels, and anything written back to the store
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)
 - on sales orders (SO1-SO12, stage 1): reserving stock (committed
-  quantities), deliveries and moving cost of sales to delivery, making
-  orders from won CRM opportunities or Shopify, line discounts, editing an
+  quantities), deliveries and moving cost of sales to delivery (orders
+  from won CRM opportunities, decision 327, and from Shopify, SPC11, are
+  built), line discounts, editing an
   approved order, closing single lines or reopening a closed order, credit
   notes giving quantities back, and printing or emailing orders
 

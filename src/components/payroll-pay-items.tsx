@@ -7,6 +7,7 @@ import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { PayItem, PayItemKind, PayrollSettings } from "@/lib/payroll/pay-items";
+import { WEEKDAY_NAMES } from "@/lib/payroll/timesheet-split";
 import styles from "./payroll-employees.module.css";
 
 export const PAY_ITEM_KIND_NAMES: Record<PayItemKind, string> = {
@@ -159,6 +160,9 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
       field === "leaveExpenseAccountCode" ? "Leave expense account saved." : "Employee entitlements account saved.",
       settings.reload,
     );
+
+  const changeWeekSetting = (body: { timesheetFirstDay?: number; standardWeek?: string }, done: string) =>
+    void run(() => api("/api/payroll/settings", { method: "PUT", body: { organisationId, ...body } }), done, settings.reload);
 
   const accountList = accounts.data?.accounts ?? [];
 
@@ -362,8 +366,41 @@ export function PayrollPayItems({ organisationId }: { organisationId: string }) 
       </Card>
 
       <Card
+        title="Weeks"
+        description="The day timesheet weeks start on (NetSuite's first day of the week; it can only change before the first timesheet), and the standard week the headcount and FTE report measures against (decisions 192, 199)."
+      >
+        {settings.loading ? <Empty>Loading…</Empty> : settings.error ? <Notice tone="error">{settings.error}</Notice> : (
+          <div className={ui.grid2}>
+            <Field label="Timesheet weeks start on">
+              <select
+                disabled={!isAdmin || busy}
+                value={settings.data?.settings.timesheetFirstDay ?? 1}
+                onChange={(event) => changeWeekSetting({ timesheetFirstDay: Number(event.target.value) }, "First day of the week saved.")}
+              >
+                {WEEKDAY_NAMES.map((name, index) => (
+                  <option key={name} value={index + 1}>{name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Standard week (hours)" hint="FTE = usual weekly hours ÷ this, at most 1.">
+              <input
+                disabled={!isAdmin || busy}
+                inputMode="decimal"
+                key={settings.data?.settings.standardWeek ?? "40.00"}
+                defaultValue={settings.data?.settings.standardWeek ?? "40.00"}
+                onBlur={(event) => {
+                  if (event.target.value !== settings.data?.settings.standardWeek) changeWeekSetting({ standardWeek: event.target.value }, "Standard week saved.");
+                }}
+              />
+            </Field>
+          </div>
+        )}
+        {isAdmin ? null : <p className={ui.muted}>Only admins can change these.</p>}
+      </Card>
+
+      <Card
         title="Leave liability accounts"
-        description="Where Payroll › Leave › Liability posts the leave liability (decision 177): annual holidays, the running 8% and alternative holidays owed, not sick, bereavement or family violence leave. The employee entitlements account can't change while a posting has left a liability in it."
+        description="Where Payroll › Leave › Liability posts the leave liability (decision 177): annual holidays, the running 8%, alternative holidays and holiday pay on finishing owed, with employer KiwiSaver on it; not sick, bereavement or family violence leave. The employee entitlements account can't change while a posting has left a liability in it."
       >
         {settings.loading ? <Empty>Loading…</Empty> : settings.error ? <Notice tone="error">{settings.error}</Notice> : (
           <div className={ui.grid2}>

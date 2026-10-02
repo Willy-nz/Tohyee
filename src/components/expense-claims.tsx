@@ -14,7 +14,7 @@ import type { Account } from "@/lib/accounts/service";
 import { billLineAccountProblem } from "@/lib/bills/accounts";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { ExpenseClaim, ExpenseClaimStatus, ExpenseClaimSummary } from "@/lib/expense-claims/service";
-import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
+import { formatDate, formatDateTime, formatGstNumber, todayInBrowser, personName } from "@/lib/format";
 import { calculateInvoice, PAID_STATUS_LABELS } from "@/lib/invoices/amounts";
 import { isDecimalString } from "@/lib/money/decimal";
 import type { TaxCode } from "@/lib/tax/codes";
@@ -53,6 +53,8 @@ function takesReceipts(account: Account): boolean {
 type ReceiptDraft = {
   receiptDate: string;
   supplierName: string;
+  /** Needed over $200 with GST claimed (decision 293). */
+  supplierGstNumber: string;
   description: string;
   accountCode: string;
   taxCode: string;
@@ -61,7 +63,7 @@ type ReceiptDraft = {
 };
 
 function blankReceipt(taxCode: string): ReceiptDraft {
-  return { receiptDate: todayInBrowser(), supplierName: "", description: "", accountCode: "", taxCode, amount: "", tracking: {} };
+  return { receiptDate: todayInBrowser(), supplierName: "", supplierGstNumber: "", description: "", accountCode: "", taxCode, amount: "", tracking: {} };
 }
 
 /** Enter or change a draft claim's receipts (tax inclusive). Totals are worked out with the same code as the server. */
@@ -88,6 +90,7 @@ export function ExpenseClaimEditor({
       ? claim.receipts.map((receipt) => ({
           receiptDate: receipt.receiptDate,
           supplierName: receipt.supplierName,
+          supplierGstNumber: receipt.supplierGstNumber ?? "",
           description: receipt.description,
           accountCode: receipt.accountCode,
           taxCode: receipt.taxCode ?? "",
@@ -116,7 +119,7 @@ export function ExpenseClaimEditor({
     const body = {
       organisationId,
       description: description.trim() || null,
-      receipts: rows.map((row) => ({ ...row, taxCode: row.taxCode || null })),
+      receipts: rows.map((row) => ({ ...row, taxCode: row.taxCode || null, supplierGstNumber: row.supplierGstNumber.trim() || null })),
     };
     try {
       const result = claim
@@ -157,6 +160,14 @@ export function ExpenseClaimEditor({
                 </td>
                 <td data-label="Supplier">
                   <input aria-label={`Receipt ${index + 1} supplier`} value={row.supplierName} maxLength={200} onChange={(event) => set(index, { supplierName: event.target.value })} required />
+                  <input
+                    aria-label={`Receipt ${index + 1} supplier GST number`}
+                    placeholder="GST number (over $200)"
+                    title="The supplier's GST number from the receipt: needed to claim GST on a receipt over $200 (IRD)."
+                    value={row.supplierGstNumber}
+                    maxLength={20}
+                    onChange={(event) => set(index, { supplierGstNumber: event.target.value })}
+                  />
                 </td>
                 <td data-label="Description">
                   <input aria-label={`Receipt ${index + 1} description`} value={row.description} maxLength={500} onChange={(event) => set(index, { description: event.target.value })} required />
@@ -544,7 +555,10 @@ export function ExpenseClaimView({ organisationId, claimId }: { organisationId: 
               {claim.receipts.map((receipt) => (
                 <tr key={receipt.id}>
                   <td data-label="Date">{formatDate(receipt.receiptDate)}</td>
-                  <td data-label="Supplier">{receipt.supplierName}</td>
+                  <td data-label="Supplier">
+                    {receipt.supplierName}
+                    {receipt.supplierGstNumber ? <><br /><small>GST {formatGstNumber(receipt.supplierGstNumber)}</small></> : null}
+                  </td>
                   <td data-label="Description">
                     {receipt.description}
                     <TrackingTagsText setup={tracking.data} tags={receipt.tracking} />

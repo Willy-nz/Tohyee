@@ -12,10 +12,12 @@ import type { AmountsMode } from "@/lib/invoices/amounts";
  *   description of each line, and either the GST as its own line (tax
  *   exclusive) or "Total includes GST of $x" (tax inclusive).
  * - Over $1,000 including GST, the buyer's name and an identifier must be
- *   shown. Tohyee prints the billing address as the identifier (other
- *   identifiers are a question for Jess), so a customer without one gets a
- *   warning on screen (not on the
- *   paper), rather than a tax invoice missing it being printed silently.
+ *   shown. IRD's identifiers are an address (physical or postal), phone
+ *   number, email address, trading name, NZBN or website (decision 270);
+ *   Tohyee prints the billing address, else the contact's email, else their
+ *   phone, so a customer with none of them gets a warning on screen (not
+ *   on the paper), rather than a tax invoice missing it being printed
+ *   silently.
  * - A draft is headed "Draft invoice" with no number (it isn't a tax invoice
  *   until it's approved); a voided invoice is headed "Voided invoice".
  * - "No tax" amounts, or an organisation with no GST number, print "Invoice"
@@ -40,7 +42,8 @@ export type TaxLabelInput = {
   total: string;
   taxTotal: string;
   organisationGstNumber: string | null;
-  buyerAddress: string | null;
+  /** The buyer's identifier (decision 270): their billing address, email or phone, whichever is first. */
+  buyerIdentifier: string | null;
 };
 
 export type TaxLabels = {
@@ -51,8 +54,8 @@ export type TaxLabels = {
   gstLine: boolean;
   /** "Total includes GST of $x" (tax inclusive). */
   includesGstStatement: boolean;
-  /** Over $1,000: the buyer's name and address must be on it. */
-  buyerAddressRequired: boolean;
+  /** Over $1,000: the buyer's name and an identifier must be on it. */
+  buyerIdentifierRequired: boolean;
   /** Shown on screen only, never on the paper. */
   warnings: string[];
 };
@@ -69,7 +72,7 @@ export function taxLabels(input: TaxLabelInput): TaxLabels {
       isTaxDocument: false,
       gstLine: input.amountsMode === "exclusive",
       includesGstStatement: input.amountsMode === "inclusive",
-      buyerAddressRequired: false,
+      buyerIdentifierRequired: false,
       warnings: [],
     };
   }
@@ -81,10 +84,10 @@ export function taxLabels(input: TaxLabelInput): TaxLabels {
   else if (voided) title = `Voided ${noun}`;
   else if (input.kind === "invoice") title = isTaxDocument ? "Tax invoice" : "Invoice";
   else title = "Credit note";
-  const buyerAddressRequired = isTaxDocument && cmp(dec(input.total), dec(TAX_INVOICE_BUYER_THRESHOLD)) > 0;
-  if (buyerAddressRequired && !input.buyerAddress) {
+  const buyerIdentifierRequired = isTaxDocument && cmp(dec(input.total), dec(TAX_INVOICE_BUYER_THRESHOLD)) > 0;
+  if (buyerIdentifierRequired && !input.buyerIdentifier) {
     warnings.push(
-      `This ${noun} is over $1,000, so a tax ${noun} must identify the customer by more than their name. Tohyee prints the billing address, and this customer has none: add one to the contact, then print it again.`,
+      `This ${noun} is over $1,000, so a tax ${noun} must identify the customer by more than their name. Tohyee prints their billing address, email or phone, and this customer has none: add one to the contact, then print it again.`,
     );
   }
   if (input.kind !== "quote" && hasTax && !registered && !isZero(dec(input.taxTotal))) {
@@ -95,7 +98,7 @@ export function taxLabels(input: TaxLabelInput): TaxLabels {
     isTaxDocument,
     gstLine: input.amountsMode === "exclusive",
     includesGstStatement: input.amountsMode === "inclusive",
-    buyerAddressRequired,
+    buyerIdentifierRequired,
     warnings,
   };
 }

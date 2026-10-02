@@ -189,7 +189,7 @@ describeWithDatabase("Posting the leave liability (HL52-HL56)", () => {
     expect((await put(jess, { leaveLiabilityAccountCode: "2240" })).body.error).toBe("Account 2240 (Wages payable) is a control account, so the leave liability can't use it.");
     const saved = await put(jess, { leaveExpenseAccountCode: "6220", leaveLiabilityAccountCode: "2260" });
     expect(saved.status).toBe(200);
-    expect(saved.body.settings).toEqual({ approverMustDiffer: false, irdPaymentFrequency: "monthly", leaveExpenseAccountCode: "6220", leaveLiabilityAccountCode: "2260" });
+    expect(saved.body.settings).toEqual({ approverMustDiffer: false, irdPaymentFrequency: "monthly", leaveExpenseAccountCode: "6220", leaveLiabilityAccountCode: "2260", timesheetFirstDay: 1, standardWeek: "40.00" });
     // A bookkeeper without payroll access can't change them.
     expect((await put(wiremu, { leaveExpenseAccountCode: "6200" })).status).toBe(403);
   });

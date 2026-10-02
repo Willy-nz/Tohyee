@@ -69,6 +69,7 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
             <p style={{ margin: 0, whiteSpace: "pre-line" }}>
               <strong>{doc.customer.name}</strong>
               {doc.customer.billingAddress ? `\n${doc.customer.billingAddress}` : ""}
+              {!doc.customer.billingAddress && labels.buyerIdentifierRequired && doc.customer.contactIdentifier ? `\n${doc.customer.contactIdentifier}` : ""}
             </p>
           </div>
           <div style={{ whiteSpace: "pre-line" }}>

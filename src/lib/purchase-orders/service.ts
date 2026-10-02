@@ -47,7 +47,7 @@ import {
  * approved purchase order with no bills (other than voided ones) can be
  * cancelled. Stock comes in on the bill (ST1), not here.
  */
-export const PURCHASE_ORDER_STATUSES = ["draft", "approved", "billed", "cancelled"] as const;
+export const PURCHASE_ORDER_STATUSES = ["draft", "approved", "billed", "closed", "cancelled"] as const;
 export type PurchaseOrderStatus = (typeof PURCHASE_ORDER_STATUSES)[number];
 
 export type PurchaseOrderSummary = {
@@ -72,6 +72,9 @@ export type PurchaseOrderSummary = {
   approvedByEmail: string | null;
   cancelledAt: string | null;
   cancelledByEmail: string | null;
+  /** Closed with the rest not billed (PO10, decision 281). */
+  closedAt: string | null;
+  closedByEmail: string | null;
   createdByEmail: string | null;
   createdAt: string;
   updatedAt: string;
@@ -83,7 +86,7 @@ export type PurchaseOrderLine = BillLine & {
   billedQuantity: string;
   /** On draft bills, not yet approved. */
   onDraftBillsQuantity: string;
-  /** Still to be copied to a bill: ordered less what's on bills that aren't voided. */
+  /** Still to be copied to a bill: ordered less what's on bills that aren't voided (0 once closed, PO10). */
   remainingQuantity: string;
 };
 
@@ -111,7 +114,7 @@ export type PurchaseOrderInput = {
 
 type Row = {
   id: string;
-  status: "draft" | "approved" | "cancelled";
+  status: "draft" | "approved" | "cancelled" | "closed";
   fully_billed: boolean;
   po_number: string | null;
   contact_id: string;
@@ -131,6 +134,8 @@ type Row = {
   approved_by_email: string | null;
   cancelled_at: string | null;
   cancelled_by_email: string | null;
+  closed_at: string | null;
+  closed_by_email: string | null;
   created_by_email: string | null;
   created_at: string;
   updated_at: string;
@@ -146,7 +151,7 @@ const FULLY_BILLED = `not exists (
 const SUMMARY_SQL = `select p.id, p.status, (p.status = 'approved' and ${FULLY_BILLED}) as fully_billed, p.po_number, p.contact_id,
        c.name as contact_name, p.order_date, p.delivery_date, p.delivery_address, p.delivery_instructions, p.reference,
        p.amounts_mode, p.currency_code, p.subtotal, p.tax_total, p.total, p.custom_fields, p.approved_at, p.approved_by_email,
-       p.cancelled_at, p.cancelled_by_email, p.created_by_email, p.created_at, p.updated_at
+       p.cancelled_at, p.cancelled_by_email, p.closed_at, p.closed_by_email, p.created_by_email, p.created_at, p.updated_at
   from purchase_orders p
   join contacts c on c.id = p.contact_id`;
 
@@ -172,6 +177,8 @@ function toSummary(row: Row): PurchaseOrderSummary {
     approvedByEmail: row.approved_by_email,
     cancelledAt: row.cancelled_at,
     cancelledByEmail: row.cancelled_by_email,
+    closedAt: row.closed_at,
+    closedByEmail: row.closed_by_email,
     createdByEmail: row.created_by_email,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -309,9 +316,11 @@ export async function getPurchaseOrder(tx: OrgTx, idInput: unknown): Promise<Pur
     "select id, status, supplier_invoice_number, bill_date, total from bills where purchase_order_id = $1 order by id",
     [id],
   );
+  const lines = await loadLines(tx, id);
   return {
     ...toSummary(row),
-    lines: await loadLines(tx, id),
+    // Once closed nothing is left to bill (PO10).
+    lines: row.status === "closed" ? lines.map((line) => ({ ...line, remainingQuantity: "0" })) : lines,
     bills: bills.rows.map((bill) => ({
       id: bill.id,
       status: bill.status,
@@ -359,6 +368,7 @@ const KEY_COLUMNS = {
   create: ["command_source", "idempotency_key", "request_hash"],
   approve: ["approve_command_source", "approve_idempotency_key", "approve_request_hash"],
   cancel: ["cancel_command_source", "cancel_idempotency_key", "cancel_request_hash"],
+  close: ["close_command_source", "close_idempotency_key", "close_request_hash"],
 } as const;
 
 async function findByKey(tx: OrgTx, kind: keyof typeof KEY_COLUMNS, source: string, key: string) {
@@ -609,6 +619,57 @@ export async function cancelPurchaseOrder(
   return { created: true, purchaseOrder: await getPurchaseOrder(tx, id) };
 }
 
+/**
+ * Closes the rest of an approved, part-billed (or unbilled) purchase order
+ * (PO10, decision 281; Xero's "mark as billed", NetSuite's close): what's
+ * left isn't on order any more and no new bills come from it. Its approved
+ * bills stay and can still be voided. Refused while a draft bill from it
+ * exists, and for a fully billed, draft or cancelled one. Posts nothing.
+ */
+export async function closePurchaseOrder(
+  tx: OrgTx,
+  idInput: unknown,
+  command: { source?: unknown; idempotencyKey: unknown },
+): Promise<{ created: boolean; purchaseOrder: PurchaseOrder }> {
+  const id = requireId(idInput, "purchaseOrderId");
+  const source = optionalSource(command.source);
+  const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
+  const hash = requestHash("purchase_order_close", { purchaseOrderId: id });
+  const replay = async () => {
+    const earlier = await findByKey(tx, "close", source, idempotencyKey);
+    if (!earlier) return null;
+    assertSameRequest(earlier.hash, hash, "purchase order close");
+    return { created: false, purchaseOrder: await getPurchaseOrder(tx, earlier.id) };
+  };
+  const earlier = await replay();
+  if (earlier) return earlier;
+  const current = await lockOrder(tx, id);
+  const meanwhile = await replay();
+  if (meanwhile) return meanwhile;
+  if (current.status === "draft") throw new ConflictError("This purchase order is still a draft. Delete it instead.");
+  if (current.status === "cancelled" || current.status === "closed") throw new ConflictError(`${label(current)} is already ${current.status}.`);
+  if (current.status === "billed") throw new ConflictError(`${label(current)} is fully billed, so there's nothing left to close.`);
+  const drafts = current.bills.filter((bill) => bill.status === "draft");
+  if (drafts.length > 0) {
+    throw new ConflictError(`${label(current)} has a draft bill, so it can't be closed. Approve or delete the draft bill first.`);
+  }
+  try {
+    await tx.query(
+      `update purchase_orders set status = 'closed', close_command_source = $2, close_idempotency_key = $3, close_request_hash = $4,
+              closed_by_user_id = $5, closed_by_email = $6, closed_at = now(), updated_at = now()
+        where id = $1`,
+      [id, source, idempotencyKey, hash, tx.actor.userId, tx.actor.email],
+    );
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") {
+      throw new ConflictError("That idempotency key was already used for a different purchase order close. Use a new key.");
+    }
+    throw error;
+  }
+  await writeAuditEvent(tx, { eventType: "purchase_order.closed", entityType: "purchase_order", entityId: id, details: { poNumber: current.poNumber } });
+  return { created: true, purchaseOrder: await getPurchaseOrder(tx, id) };
+}
+
 const COPY_SOURCE = "purchase_order";
 
 /**
@@ -653,7 +714,7 @@ export async function copyPurchaseOrderToBill(
   const meanwhile = await replay();
   if (meanwhile) return meanwhile;
   if (current.status === "draft") throw new ConflictError("Approve this purchase order before it's copied to a bill.");
-  if (current.status === "cancelled") throw new ConflictError(`${label(current)} is cancelled, so it can't be billed.`);
+  if (current.status === "cancelled" || current.status === "closed") throw new ConflictError(`${label(current)} is ${current.status}, so it can't be billed.`);
   const remaining = current.lines.filter((line) => isPositive(dec(line.remainingQuantity)));
   if (remaining.length === 0) {
     throw new ConflictError(

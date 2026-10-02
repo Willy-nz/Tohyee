@@ -1,6 +1,7 @@
 import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { add, cmp, dec, type Decimal, sum, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { type PatternDay, weekOrdinaryHours } from "@/lib/payroll/leave/work-pattern";
 import { requirePayrollAccess } from "@/lib/payroll/access";
 import { parseReportFilters, type ReportInput } from "@/lib/payroll/report-common";
 import { assertReportRange, fteFor, monthsBetween, parseStandardWeek, splitToPlaces } from "@/lib/payroll/report-figures";
@@ -71,7 +72,11 @@ const NO_DEPARTMENT = "No Department";
 export async function headcountReport(tx: OrgTx, input: ReportInput): Promise<HeadcountReport> {
   await requirePayrollAccess(tx);
   const date = parseOptionalIsoDate(input.date, "date") ?? todayIsoDate();
-  const standardWeek = parseStandardWeek(input.standardWeek);
+  // The organisation's saved standard week unless one is given for this report (decision 199).
+  const standardWeek =
+    input.standardWeek == null || input.standardWeek === ""
+      ? toFixedString(dec((await tx.query<{ week: string }>("select payroll_standard_week::text as week from organisation_settings where id = true")).rows[0]?.week ?? "40"), 2)
+      : parseStandardWeek(input.standardWeek);
   const to = parseOptionalIsoDate(input.to, "to") ?? date;
   const from = parseOptionalIsoDate(input.from, "from") ?? financialYearStart(to, await financialYearEndMonth(tx));
   assertReportRange(from, to);
@@ -100,6 +105,13 @@ export async function headcountReport(tx: OrgTx, input: ReportInput): Promise<He
          join payroll_cost_allocation_lines l on l.allocation_id = a.id
          left join tracking_values d on d.id = l.department_id
         order by a.effective_from desc, a.entry_number desc, l.line_number`,
+    )
+  ).rows;
+  // Usual weeks from leave settings (decision 200): a fixed week's ordinary hours are the employee's usual hours, salaried or hourly.
+  const usualWeeks = (
+    await tx.query<{ employee_id: string; effective_from: string; pattern_kind: string; pattern_days: PatternDay[] | null }>(
+      `select employee_id::text, effective_from::text, pattern_kind, pattern_days
+         from payroll_leave_settings order by effective_from desc, entry_number desc`,
     )
   ).rows;
   const paidRows = (
@@ -137,7 +149,13 @@ export async function headcountReport(tx: OrgTx, input: ReportInput): Promise<He
       .filter((employee) => employedOn(employee, on) && inDepartment(employee.id, on))
       .map((employee) => {
         const rate = rateOn(employee, on);
-        const usualHours = rate.payBasis === "hourly" && rate.hours !== null ? toFixedString(dec(rate.hours), 2) : null;
+        const usualWeek = usualWeeks.find((row) => row.employee_id === employee.id && row.effective_from <= on);
+        const usualHours =
+          usualWeek && usualWeek.pattern_kind === "fixed" && usualWeek.pattern_days
+            ? toFixedString(weekOrdinaryHours({ kind: "fixed", days: usualWeek.pattern_days }), 2)
+            : rate.payBasis === "hourly" && rate.hours !== null
+              ? toFixedString(dec(rate.hours), 2)
+              : null;
         const { fte, assumed } = fteFor(usualHours, standardWeek);
         // A Department's share is the sum of its lines (a Department on two lines, say with two projects, counts once).
         const shares = new Map<string, { departmentId: string | null; name: string; percentage: Decimal }>();

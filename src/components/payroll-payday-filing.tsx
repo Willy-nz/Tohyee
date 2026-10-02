@@ -71,8 +71,9 @@ export function PayRunPaydayFilingCard({ organisationId, payRunId }: { organisat
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <p>
-        <strong>Due {withWeekday(filing.dueDate)}</strong>: within 2 working days of the pay date ({formatDate(filing.payDate)}), IRD&apos;s
-        rule for filing electronically. Public holidays aren&apos;t counted yet, so if one falls in between, IRD&apos;s due date is later.
+        <strong>Due {withWeekday(filing.dueDate)}</strong>: within 2 working days after the pay date ({formatDate(filing.payDate)}) (Tax
+        Administration Act s 23E). Working days leave out weekends, the national public holidays (not anniversary days) and 25 December to 15
+        January.
       </p>
       {filing.settingsComplete ? null : (
         <Notice tone="warning">

@@ -12119,4 +12119,208 @@ alter table payroll_leave_liability_departments
   add column kiwisaver numeric(16,2) not null default 0 check (kiwisaver >= 0);
 `,
   },
+  {
+    version: "0074",
+    name: "payroll_week_settings",
+    sql: `
+-- Two payroll settings (docs/DECISIONS.md 192, 199; examples TS12, PREP9):
+-- the first day of the timesheet week (ISO 1 = Monday to 7 = Sunday; NetSuite's
+-- "first day of week" preference), and the standard week FTE is measured
+-- against (40.00 hours unless changed).
+alter table organisation_settings
+  add column payroll_timesheet_first_day smallint not null default 1 check (payroll_timesheet_first_day between 1 and 7),
+  add column payroll_standard_week numeric(5,2) not null default 40.00 check (payroll_standard_week > 0 and payroll_standard_week <= 168);
+
+-- A timesheet's week starts on the organisation's first day, not always a
+-- Monday. The day can only change while there are no timesheets (checked
+-- when settings are saved, and below), so every timesheet keeps to it.
+alter table payroll_timesheets drop constraint payroll_timesheets_week_start_check;
+
+create function tohyee_check_timesheet_week_start() returns trigger
+language plpgsql as $$
+declare
+  first_day smallint;
+begin
+  select payroll_timesheet_first_day into first_day from organisation_settings where id = true;
+  if extract(isodow from new.week_start) <> coalesce(first_day, 1) then
+    raise exception 'A timesheet week starts on the organisation''s first day of the week (ISO day %)', coalesce(first_day, 1) using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger payroll_timesheets_week_start_check
+  before insert or update of week_start on payroll_timesheets
+  for each row execute function tohyee_check_timesheet_week_start();
+
+create function tohyee_guard_timesheet_first_day() returns trigger
+language plpgsql as $$
+begin
+  if new.payroll_timesheet_first_day <> old.payroll_timesheet_first_day and exists (select 1 from payroll_timesheets) then
+    raise exception 'The first day of the timesheet week can''t change once there are timesheets' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger organisation_settings_timesheet_first_day_guard
+  before update of payroll_timesheet_first_day on organisation_settings
+  for each row execute function tohyee_guard_timesheet_first_day();
+`,
+  },
+  {
+    version: "0075",
+    name: "sales_platform_guest_contact",
+    sql: `
+-- Guest checkouts (decision 317; docs/ACCOUNTING-EXAMPLES.md SPC24): an
+-- order without a platform customer goes to one contact chosen on the
+-- connection. Null: guest checkouts are refused, as before.
+alter table sales_platform_connections
+  add column guest_contact_id bigint references contacts(id);
+`,
+  },
+  {
+    version: "0076",
+    name: "purchase_order_close",
+    sql: `
+-- Closing the rest of a purchase order (decision 281; docs/ACCOUNTING-EXAMPLES.md
+-- PO10; Xero's "mark as billed", NetSuite's close): an approved one with no
+-- draft bills becomes closed, so what's left isn't on order any more. Its
+-- approved bills stay (and can still be voided); no new bills come from it.
+alter table purchase_orders drop constraint purchase_orders_status_check;
+alter table purchase_orders add constraint purchase_orders_status_check check (status in ('draft', 'approved', 'cancelled', 'closed'));
+alter table purchase_orders
+  add column close_command_source text,
+  add column close_idempotency_key text,
+  add column close_request_hash text,
+  add column closed_by_user_id uuid,
+  add column closed_by_email text,
+  add column closed_at timestamptz,
+  add constraint purchase_orders_close_key unique (close_command_source, close_idempotency_key),
+  add constraint purchase_orders_closed_at check ((status = 'closed') = (closed_at is not null));
+
+create or replace function tohyee_guard_purchase_order() returns trigger
+language plpgsql as $$
+declare
+  cancel_columns text[] := array['status', 'cancel_command_source', 'cancel_idempotency_key', 'cancel_request_hash',
+    'cancelled_by_user_id', 'cancelled_by_email', 'cancelled_at', 'updated_at'];
+  close_columns text[] := array['status', 'close_command_source', 'close_idempotency_key', 'close_request_hash',
+    'closed_by_user_id', 'closed_by_email', 'closed_at', 'updated_at'];
+begin
+  if tg_op = 'TRUNCATE' then
+    raise exception 'purchase_orders can''t be truncated' using errcode = 'P0001';
+  end if;
+  if old.status = 'draft' then
+    if tg_op = 'DELETE' then
+      return old;
+    end if;
+    if new.status in ('cancelled', 'closed') then
+      raise exception 'A draft purchase order can''t be cancelled or closed; delete it instead' using errcode = 'P0001';
+    end if;
+    return new;
+  end if;
+  if tg_op = 'DELETE' then
+    raise exception 'Purchase order % is %, so it can''t be deleted', old.po_number, old.status using errcode = 'P0001';
+  end if;
+  if old.status = 'approved' and new.status = 'cancelled'
+     and (to_jsonb(new) - cancel_columns) = (to_jsonb(old) - cancel_columns) then
+    if exists (select 1 from bills where purchase_order_id = old.id and status <> 'voided') then
+      raise exception 'Purchase order % has bills, so it can''t be cancelled', old.po_number using errcode = 'P0001';
+    end if;
+    return new;
+  end if;
+  if old.status = 'approved' and new.status = 'closed'
+     and (to_jsonb(new) - close_columns) = (to_jsonb(old) - close_columns) then
+    if exists (select 1 from bills where purchase_order_id = old.id and status = 'draft') then
+      raise exception 'Purchase order % has a draft bill, so it can''t be closed', old.po_number using errcode = 'P0001';
+    end if;
+    return new;
+  end if;
+  raise exception 'Purchase order % is %, so it can''t be changed', old.po_number, old.status using errcode = 'P0001';
+end;
+$$;
+
+-- New bills only from an approved purchase order; a bill already from one
+-- that's since been closed can still change (be voided, say).
+create or replace function tohyee_check_bill_purchase_order() returns trigger
+language plpgsql as $$
+declare
+  po record;
+begin
+  if tg_op = 'UPDATE' and new.purchase_order_id is distinct from old.purchase_order_id then
+    raise exception 'A bill''s purchase order can''t be changed' using errcode = 'P0001';
+  end if;
+  if new.purchase_order_id is null then
+    return new;
+  end if;
+  select status, contact_id into po from purchase_orders where id = new.purchase_order_id;
+  if po.status <> 'approved' and not (tg_op = 'UPDATE' and po.status = 'closed') then
+    raise exception 'Bills can only be made from an approved purchase order' using errcode = 'P0001';
+  end if;
+  if po.contact_id <> new.contact_id then
+    raise exception 'A bill from a purchase order must be from the purchase order''s supplier' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+`,
+  },
+  {
+    version: "0077",
+    name: "expense_claim_receipt_gst_number",
+    sql: `
+-- The supplier's GST number on an expense claim receipt (decision 293;
+-- docs/ACCOUNTING-EXAMPLES.md EC13): IRD's taxable supply information over
+-- $200 shows it, so it's needed to claim GST on such a receipt.
+alter table expense_claim_receipts
+  add column supplier_gst_number text check (supplier_gst_number is null or supplier_gst_number ~ '^[0-9]{8,9}$');
+`,
+  },
+  {
+    version: "0078",
+    name: "payroll_pay_run_bank_account",
+    sql: `
+-- The bank account each approved pay paid into (decision 262; PSLIP7),
+-- encrypted as on the employee, so a payslip shows where that pay went
+-- even after the employee changes account. Null for pays approved before
+-- this (their payslips show the employee's current account, as before).
+alter table payroll_pay_run_employees add column bank_account_ciphertext text;
+`,
+  },
+  {
+    version: "0079",
+    name: "crm_opportunity_sales_order",
+    sql: `
+-- A won opportunity can make a sales order instead of an invoice (decision
+-- 327; docs/ACCOUNTING-EXAMPLES.md CRM5b; NetSuite's opportunity to sales
+-- order). One or the other, never both; once made, the stage is fixed.
+alter table crm_opportunities add column sales_order_id bigint references sales_orders(id);
+create unique index crm_opportunities_sales_order_idx on crm_opportunities (sales_order_id) where sales_order_id is not null;
+alter table crm_opportunities add constraint crm_opportunities_one_document check (invoice_id is null or sales_order_id is null);
+
+create or replace function tohyee_guard_crm_opportunity() returns trigger
+language plpgsql as $$
+begin
+  if old.invoice_id is not null and (new.invoice_id is distinct from old.invoice_id or new.stage is distinct from old.stage) then
+    raise exception 'This opportunity has made an invoice, so its stage can''t change' using errcode = 'P0001';
+  end if;
+  if old.sales_order_id is not null and (new.sales_order_id is distinct from old.sales_order_id or new.stage is distinct from old.stage) then
+    raise exception 'This opportunity has made a sales order, so its stage can''t change' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function tohyee_crm_opportunity_sales_order_won() returns trigger
+language plpgsql as $$
+begin
+  if new.sales_order_id is not null
+     and (select stage_type from crm_opportunity_stages where key = new.stage) is distinct from 'won' then
+    raise exception 'Only a won opportunity can have a sales order' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger crm_opportunities_sales_order_won before insert or update of stage, sales_order_id on crm_opportunities
+  for each row execute function tohyee_crm_opportunity_sales_order_won();
+`,
+  },
 ];

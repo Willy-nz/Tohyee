@@ -413,7 +413,7 @@ describeWithDatabase("R&D activity register and tagging (RD1-RD3, RD7-RD9, RD11-
     const { claim } = await w.asHana((tx) =>
       createExpenseClaim(tx, {
         idempotencyKey: key("claim"),
-        receipts: [{ receiptDate: "2026-08-05", supplierName: "Garden Centre", description: "Potting mix and pots for soil trials", accountCode: "6140", taxCode: "GST", amount: "230.00" }],
+        receipts: [{ receiptDate: "2026-08-05", supplierName: "Garden Centre", supplierGstNumber: "111-222-333", description: "Potting mix and pots for soil trials", accountCode: "6140", taxCode: "GST", amount: "230.00" }],
       }),
     );
     expect((await w.linesOf("expense_claim", claim.id))[0]).toMatchObject({ taggable: false });
@@ -473,7 +473,7 @@ describeWithDatabase("R&D activity register and tagging (RD1-RD3, RD7-RD9, RD11-
     const { claim } = await w.asHana((tx) =>
       createExpenseClaim(tx, {
         idempotencyKey: key("claim"),
-        receipts: [{ receiptDate: "2026-08-05", supplierName: "Garden Centre", description: "Potting mix and pots for soil trials", accountCode: "6140", taxCode: "GST", amount: "230.00" }],
+        receipts: [{ receiptDate: "2026-08-05", supplierName: "Garden Centre", supplierGstNumber: "111-222-333", description: "Potting mix and pots for soil trials", accountCode: "6140", taxCode: "GST", amount: "230.00" }],
       }),
     );
     await w.asHana((tx) => submitExpenseClaim(tx, claim.id));

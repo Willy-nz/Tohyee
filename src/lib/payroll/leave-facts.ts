@@ -5,7 +5,7 @@ import { formatDate } from "@/lib/format";
 import { add, dec, type Decimal, isPositive, mul, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import type { PayFrequency } from "@/lib/payroll/groups";
 import { annualEntitlement, divisorReduction, employedTwelveMonths, entitlementYear, type UnpaidLeave } from "@/lib/payroll/leave/annual";
-import { addDays, addMonths, eachDay, laterOf, weekdayIndex } from "@/lib/payroll/leave/dates";
+import { addDays, addMonths, eachDay, laterOf } from "@/lib/payroll/leave/dates";
 import {
   averageDailyPay,
   averageWeeklyEarnings,
@@ -113,7 +113,8 @@ export type EmployeeFacts = {
   lines: LeaveLine[];
   /** Approved timesheets: hours each day, and the weeks (Mondays) they cover. */
   timesheetHours: Map<string, string>;
-  timesheetWeeks: Set<string>;
+  /** Every day of the weeks with an approved timesheet with hours (any first day of the week, decision 192). */
+  timesheetDays: Set<string>;
   settings: LeaveSettings[];
   noCashUps: boolean;
   organisationRegion: string | null;
@@ -203,11 +204,11 @@ export async function loadEmployeeFacts(tx: OrgTx, employeeId: string, settings:
   );
   const opening = await loadOpening(tx, employeeId);
   const timesheetHours = new Map<string, string>();
-  const timesheetWeeks = new Set<string>();
+  const timesheetDays = new Set<string>();
   for (const entry of timesheets.rows) {
     if (entry.work_date && entry.hours) {
       timesheetHours.set(entry.work_date, entry.hours);
-      timesheetWeeks.add(entry.week_start);
+      for (let index = 0; index < 7; index += 1) timesheetDays.add(addDays(entry.week_start, index));
     }
   }
   const approvedPeriods: ApprovedPeriod[] = periods.rows.map((period) => ({
@@ -259,7 +260,7 @@ export async function loadEmployeeFacts(tx: OrgTx, employeeId: string, settings:
     periods: allPeriods,
     lines: lines.rows.map(toLeaveLine),
     timesheetHours,
-    timesheetWeeks,
+    timesheetDays,
     settings,
     noCashUps: organisation.rows[0]?.payroll_no_cash_ups ?? false,
     organisationRegion: organisation.rows[0]?.payroll_anniversary_region ?? null,
@@ -450,8 +451,7 @@ export function assertEarningsKnown(facts: EmployeeFacts, from: string, windowEn
 /** How a day weighs when a pay period is only partly inside a window: timesheet hours in weeks with an approved timesheet, else usual hours. */
 export function dayWeight(facts: EmployeeFacts): DayWeight {
   return (date) => {
-    const monday = addDays(date, -weekdayIndex(date));
-    if (facts.timesheetWeeks.has(monday)) return dec(facts.timesheetHours.get(date) ?? "0");
+    if (facts.timesheetDays.has(date)) return dec(facts.timesheetHours.get(date) ?? "0");
     const settings = settingsOn(facts, date) ?? facts.settings.at(-1) ?? null;
     if (!settings || settings.pattern.kind !== "fixed") return null;
     return usualHoursOn(settings.pattern, date);
@@ -592,8 +592,7 @@ export function daysWorkedOrPaid(facts: EmployeeFacts, from: string, to: string)
     if (period.openingDays !== undefined) continue;
     for (const date of eachDay(laterOf(period.periodStart, from), period.periodEnd < to ? period.periodEnd : to)) {
       if (date < facts.startDate || (facts.finishDate && date > facts.finishDate)) continue;
-      const monday = addDays(date, -weekdayIndex(date));
-      if (facts.timesheetWeeks.has(monday)) {
+      if (facts.timesheetDays.has(date)) {
         if (isPositive(dec(facts.timesheetHours.get(date) ?? "0")) || paidLeave.has(date)) count += 1;
         continue;
       }

@@ -1,10 +1,12 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import { AccountSelect, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
+import type { Contact } from "@/lib/contacts/service";
 import { formatDateTime } from "@/lib/format";
 import {
   AUTH_METHOD_LABELS,
@@ -16,11 +18,14 @@ import {
   type SyncLogEntry,
   type SyncResult,
 } from "@/lib/sales-platforms/types";
+import type { TaxCode } from "@/lib/tax/codes";
 
 /**
  * Settings › Sales platforms (examples SPC1-SPC10): connecting a Shopify
- * store, what to sync, "Sync now", the sync log and disconnecting. Everyone
- * can read the connections and the log; only admins change anything.
+ * store, what to sync, "Sync now", the sync log and disconnecting; and
+ * posting orders, refunds and payouts to the accounts (SPC11-SPC24).
+ * Everyone can read the connections and the log; only admins change
+ * anything.
  */
 
 const STATUS_BADGES: Record<SalesPlatformConnection["status"], { tone: "green" | "amber" | "neutral"; text: string }> = {
@@ -297,6 +302,7 @@ export function ConnectionCard({
             </label>
           </div>
         ) : null}
+        {connected ? <PostingSettings organisationId={organisationId} connection={connection} isAdmin={isAdmin} busy={busy} run={run} path={path} /> : null}
         {connected && isAdmin ? (
           <div className={ui.actions}>
             <Button onClick={() => void sync()} disabled={busy}>
@@ -342,7 +348,7 @@ export function SalesPlatformsManager({ organisationId }: { organisationId: stri
     <div style={{ display: "grid", gap: 16 }}>
       <Notice tone="warning">
         This hasn&apos;t been tried against a real Shopify store yet, only against Shopify&apos;s documented responses. Check the first sync&apos;s log
-        carefully. Orders aren&apos;t brought in yet, and nothing here posts to the accounts.
+        carefully. Orders, refunds and payouts are posted only when &quot;Post to the accounts&quot; is on for a store.
       </Notice>
       {notice ? <Notice tone="success">{notice}</Notice> : null}
       {current.map((connection) => (
@@ -373,5 +379,152 @@ export function SalesPlatformsManager({ organisationId }: { organisationId: stri
         </>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Posting to the accounts (SPC11-SPC24): the switch, the start date, the
+ * accounts, Shopify's tax rates matched to tax codes, the code for untaxed
+ * sales and the contact for guest checkouts (decision 317). Saved together;
+ * the server checks everything posting needs before the switch goes on.
+ */
+function PostingSettings({
+  organisationId,
+  connection,
+  isAdmin,
+  busy,
+  run,
+  path,
+}: {
+  organisationId: string;
+  connection: SalesPlatformConnection;
+  isAdmin: boolean;
+  busy: boolean;
+  run: (work: () => Promise<string>) => Promise<void>;
+  path: string;
+}) {
+  const accounts = useAccounts(organisationId);
+  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
+  const [form, setForm] = useState(() => ({
+    postToAccounts: connection.postToAccounts,
+    startDate: connection.startDate ?? "",
+    clearingAccountCode: connection.clearingAccountCode ?? "",
+    payoutAccountCode: connection.payoutAccountCode ?? "",
+    feesAccountCode: connection.feesAccountCode ?? "",
+    salesAccountCode: connection.salesAccountCode ?? "",
+    shippingAccountCode: connection.shippingAccountCode ?? "",
+    untaxedTaxCode: connection.untaxedTaxCode ?? "",
+    guestContactId: connection.guestContactId ?? "",
+    taxCodes: connection.taxCodes.length > 0 ? connection.taxCodes.map((entry) => ({ ...entry })) : [{ rate: "15", taxCode: "" }],
+  }));
+  const list = accounts.data?.accounts ?? [];
+  const codes = (taxCodes.data?.taxCodes ?? []).filter((code) => code.isActive && code.availableOn !== "purchases");
+  const customers = (contacts.data?.contacts ?? []).filter((contact) => contact.isCustomer);
+  const set = (change: Partial<typeof form>) => setForm((current) => ({ ...current, ...change }));
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void run(async () => {
+      await api(path, {
+        method: "PATCH",
+        body: {
+          organisationId,
+          postToAccounts: form.postToAccounts,
+          startDate: form.startDate || null,
+          clearingAccountCode: form.clearingAccountCode || null,
+          payoutAccountCode: form.payoutAccountCode || null,
+          feesAccountCode: form.feesAccountCode || null,
+          salesAccountCode: form.salesAccountCode || null,
+          shippingAccountCode: form.shippingAccountCode || null,
+          untaxedTaxCode: form.untaxedTaxCode || null,
+          guestContactId: form.guestContactId || null,
+          taxCodes: form.taxCodes.filter((entry) => entry.rate !== "" && entry.taxCode !== ""),
+        },
+      });
+      return "Posting settings saved.";
+    });
+  };
+  const accountField = (label: string, key: "clearingAccountCode" | "payoutAccountCode" | "feesAccountCode" | "salesAccountCode" | "shippingAccountCode", filter: (account: (typeof list)[number]) => boolean, hint?: string) => (
+    <Field label={label} hint={hint}>
+      <AccountSelect accounts={list} filter={filter} placeholder="Not chosen" value={form[key]} onChange={(code) => set({ [key]: code } as Partial<typeof form>)} />
+    </Field>
+  );
+  return (
+    <details>
+      <summary>
+        <strong>Posting to the accounts</strong> · {connection.postToAccounts ? `on, from ${connection.startDate}` : "off"}
+      </summary>
+      <form onSubmit={save} style={{ display: "grid", gap: 12, marginTop: 12 }}>
+        <fieldset disabled={!isAdmin || busy} style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 12 }}>
+          <label className={ui.checkbox}>
+            <input type="checkbox" checked={form.postToAccounts} onChange={(event) => set({ postToAccounts: event.target.checked })} /> Post orders, refunds and payouts to the accounts
+          </label>
+          <div className={ui.grid2}>
+            <Field label="Start date" hint="Orders processed before it aren't brought in.">
+              <input type="date" value={form.startDate} onChange={(event) => set({ startDate: event.target.value })} />
+            </Field>
+            {accountField("Clearing account", "clearingAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds until it pays out.")}
+            {accountField("Payouts arrive in", "payoutAccountCode", (account) => account.accountType === "bank")}
+            {accountField("Fees", "feesAccountCode", (account) => account.accountClass === "expense")}
+            {accountField("Sales", "salesAccountCode", (account) => account.accountClass === "revenue")}
+            {accountField("Shipping", "shippingAccountCode", (account) => account.accountClass === "revenue")}
+            <Field label="Tax code for untaxed sales" hint="Zero-rated or exempt; needed when the organisation is GST registered.">
+              <select value={form.untaxedTaxCode} onChange={(event) => set({ untaxedTaxCode: event.target.value })}>
+                <option value="">Not chosen</option>
+                {codes.filter((code) => code.category === "zero_rated" || code.category === "exempt").map((code) => (
+                  <option key={code.id} value={code.code}>{code.code} {code.label}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Guest checkouts go to" hint="Orders without a Shopify customer. Not chosen: they're refused and logged.">
+              <select value={form.guestContactId} onChange={(event) => set({ guestContactId: event.target.value })}>
+                <option value="">Not chosen (refused)</option>
+                {customers.map((contact) => (
+                  <option key={contact.id} value={String(contact.id)}>{contact.name}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div>
+            <strong>Shopify&apos;s tax rates</strong>
+            {form.taxCodes.map((entry, index) => (
+              <div key={index} className={ui.actions}>
+                <input
+                  aria-label="Rate %"
+                  inputMode="decimal"
+                  value={entry.rate}
+                  style={{ width: 80 }}
+                  onChange={(event) => set({ taxCodes: form.taxCodes.map((other, at) => (at === index ? { ...other, rate: event.target.value } : other)) })}
+                />
+                % →
+                <select
+                  aria-label="Tax code"
+                  value={entry.taxCode}
+                  onChange={(event) => set({ taxCodes: form.taxCodes.map((other, at) => (at === index ? { ...other, taxCode: event.target.value } : other)) })}
+                >
+                  <option value="">Choose a tax code</option>
+                  {codes.map((code) => (
+                    <option key={code.id} value={code.code}>{code.code} {code.label}</option>
+                  ))}
+                </select>
+                <Button type="button" size="small" variant="secondary" onClick={() => set({ taxCodes: form.taxCodes.filter((_, at) => at !== index) })}>
+                  Remove
+                </Button>
+              </div>
+            ))}
+            <Button type="button" size="small" variant="secondary" onClick={() => set({ taxCodes: [...form.taxCodes, { rate: "", taxCode: "" }] })}>
+              Add a rate
+            </Button>
+          </div>
+          {isAdmin ? (
+            <div className={ui.actions}>
+              <Button type="submit">Save posting settings</Button>
+            </div>
+          ) : (
+            <p className={ui.muted}>Only admins can change these.</p>
+          )}
+        </fieldset>
+      </form>
+    </details>
   );
 }

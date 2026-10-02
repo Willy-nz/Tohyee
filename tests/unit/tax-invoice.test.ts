@@ -9,7 +9,7 @@ const base: TaxLabelInput = {
   total: "316.25",
   taxTotal: "41.25",
   organisationGstNumber: "123456789",
-  buyerAddress: "12 George St, Dunedin 9016",
+  buyerIdentifier: "12 George St, Dunedin 9016",
 };
 
 /** Examples PD3-PD7 and QT5 in docs/ACCOUNTING-EXAMPLES.md. */
@@ -20,18 +20,18 @@ describe("printed document labels", () => {
       isTaxDocument: true,
       gstLine: true,
       includesGstStatement: false,
-      buyerAddressRequired: false,
+      buyerIdentifierRequired: false,
       warnings: [],
     });
   });
 
   it("PD3 and PD4: over $1,000 needs the buyer's address; exactly $1,000 doesn't", () => {
     const inclusive = { ...base, amountsMode: "inclusive" as const, total: "1150.00", taxTotal: "150.00" };
-    expect(taxLabels(inclusive)).toMatchObject({ title: "Tax invoice", gstLine: false, includesGstStatement: true, buyerAddressRequired: true, warnings: [] });
-    const noAddress = taxLabels({ ...inclusive, buyerAddress: null });
+    expect(taxLabels(inclusive)).toMatchObject({ title: "Tax invoice", gstLine: false, includesGstStatement: true, buyerIdentifierRequired: true, warnings: [] });
+    const noAddress = taxLabels({ ...inclusive, buyerIdentifier: null });
     expect(noAddress.warnings).toHaveLength(1);
-    expect(noAddress.warnings[0]).toMatch(/over \$1,000.*billing address/);
-    expect(taxLabels({ ...inclusive, total: "1000.00", taxTotal: "130.43", buyerAddress: null })).toMatchObject({ buyerAddressRequired: false, warnings: [] });
+    expect(noAddress.warnings[0]).toMatch(/over \$1,000.*billing address, email or phone/);
+    expect(taxLabels({ ...inclusive, total: "1000.00", taxTotal: "130.43", buyerIdentifier: null })).toMatchObject({ buyerIdentifierRequired: false, warnings: [] });
   });
 
   it("PD5: drafts and voided invoices aren't tax invoices", () => {

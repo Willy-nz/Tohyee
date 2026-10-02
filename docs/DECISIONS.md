@@ -394,7 +394,7 @@ answers only decision 56.
     public holidays yet (as P4's IRD payment due dates), so the date it
     shows is never later than IRD's; the screen says public holidays aren't
     counted. The Tax Administration Act's definition of "working day" wasn't
-    read **(unverified)**.
+    read **(unverified)**. (Replaced by decision 326 on 2 Oct 2026.)
 64. **No employee details file yet.** The spec has one (HED2/DED/TED), but
     Tohyee's employee record has the address as one block of text (the file
     needs it split into street, suburb, city, post code and country), one
@@ -1600,3 +1600,485 @@ paragraphs of the same numbers). The examples are **not approved by Jess**.
      the next month end. It isn't a Period close check: those are for
      bookkeepers without payroll access too, and a warning there would
      stop them closing.
+
+## Payroll and R&D questions, decided (2 Oct 2026; decisions 192-224)
+
+Jess asked (2 Oct 2026) for the open questions to be decided by law →
+NetSuite → Xero rather than left for her. These are the "Questions for
+Jess" under TS11 (timesheets), PREP8 (payroll reports), the WB section
+(workforce budgets), the XP section (extra pays) and RD42 (the R&D claim).
+What's built for each is said; "kept" means as built, with the reason.
+The examples these touch are **not approved by Jess**.
+
+### Timesheets (TS questions 1-7)
+
+192. **The first day of the week is an organisation setting** (question 1;
+     replaces decision 92's fixed Monday). NetSuite: "Select the day of the
+     week your company uses as the first day of the business week. The day
+     you select is reflected on time tracking forms and on reports"
+     ([Setting Up Time Tracking Preferences](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N902575.html),
+     read 2 Oct 2026). Monday unless changed; it can only change while the
+     organisation has no timesheets (changing it would cut existing weeks
+     in two). Timesheets per pay period (Xero) aren't built: NetSuite's
+     weekly sheet comes first.
+193. **Viewers keep filling in their own timesheets** (question 2, kept;
+     decision 95). No "time only" role: the viewer role already sees no pay
+     and can't post, and NetSuite's employees also enter their own time.
+194. **Approvers still can't change hours** (question 3, kept; decision
+     96): NetSuite's rule ("Time approvers can't edit or delete existing
+     time entries") comes before Xero's.
+195. **Part-covered pay periods stay split by calendar days** (question 4,
+     kept; decision 98). Working days would need everyone's usual week,
+     which only employees with leave settings have; the share is a cost
+     split, not pay, so the simpler rule stays.
+196. **Ordinary time only from timesheets; no automatic overtime**
+     (question 5, kept). When hours become overtime and at what rate is
+     set by each employment agreement (NZ law sets no overtime rate, as far
+     as known: Employment NZ's guidance wasn't read this session,
+     **unverified**), so Tohyee doesn't guess it; overtime stays
+     a typed line. Drafts are worked out live, so a timesheet approved
+     before the pay run is approved is used (decision 98).
+197. **Approved project hours don't become project time automatically**
+     (question 6, kept; decision 91). NetSuite has one time record, but
+     Tohyee's project time follows Xero Projects (a member's login, a task,
+     changeable until invoiced), which a timesheet row doesn't have.
+     "Fill from project time" stays the link between them.
+198. **A late timesheet after the pay is posted is listed, not
+     reallocated** (question 7, kept; decision 37, RD22). Posted pay runs
+     are never changed (append-only); the R&D claim lists the timesheet as
+     approved after its pay run. Reallocating would need a correcting
+     journal per pay run with its own example.
+
+### Payroll reports (PREP questions 1-7)
+
+199. **The standard week is saved per organisation** (question 1). 40.00
+     hours unless an admin with payroll access changes it (Payroll › Pay
+     items, beside the other payroll settings); a report can still use
+     another for one run. Not per pay group: FTE compares people across
+     groups, so one week is needed.
+200. **Salaried employees' usual hours come from their usual week**
+     (question 2). Decision 107 counted every salary as 1.0000 "assumed".
+     Since P8 an employee with leave settings has a usual week (hours each
+     day); when it's a fixed week on the date, its hours are their usual
+     hours, for salaried and hourly employees alike (it's what their leave
+     is paid on). Without one, an hourly employee uses the pay rate's
+     ordinary hours (as before) and a salaried one counts 1.0000, assumed.
+201. **FTE stays capped at 1** (question 3, kept; decision 107): FTE is a
+     share of one full-time position.
+202. **Reimbursements stay out of labour cost** (question 4, kept): they
+     repay the employee's spending; they aren't pay for work.
+203. **By pay date only** (question 5, kept; decision 102): it's what IRD
+     and the ledger use. By period worked would need its own example.
+204. **Pay runs approved before timesheets keep showing "Not recorded"**
+     (question 6, kept; decision 104). Only pay runs approved before P9 was
+     merged (2 Oct 2026) have no shares, and Tohyee has no users yet, so no
+     real organisation has any; working them out from the allocation (as
+     the R&D claim does, decision 67) would be code with nothing to apply
+     to. If one turns up, use decision 67's rule.
+205. **No second permission for exports** (question 7, kept; decision
+     109): payroll access already limits who sees the figures, and the
+     audit log records each export.
+
+### Workforce budgets (WB questions 1-6)
+
+206. **Whole months stay** (question 1, kept): budgets are monthly. A
+     part-month start is entered as a later start month, or the month's
+     amount adjusted with a rise. Prorating by days would need its own
+     example.
+207. **A later pay rate on the employee doesn't change the budget by
+     itself** (question 2, kept): a budget is a plan saved at a point in
+     time; "Update budgets" (P11) already rewrites the figures when the
+     person running it chooses.
+208. **The KiwiSaver employer rate stays as typed on each line** (question
+     3, kept): Tohyee only holds IRD's published rates (to 2026-27); the
+     April 2028 rise is typed as a rise until IRD's specification for that
+     year is added (never guessed).
+209. **No on-costs yet** (question 4): holiday pay accrual, ACC levies and
+     overtime each need their own worked example; ACC levies aren't paid
+     per pay. Not built.
+210. **One line per person** (question 5, kept): each line is one
+     employee or one position, so the budget can follow people.
+211. **Actuals by pay date** (question 6, kept), the same as decision 203.
+
+### Extra pays, back pay and final pays (XP questions 1-8)
+
+212. **IRD's steps, not its printed example** (question 1, kept; decision
+     126): the specification's steps are the rule; the one-cent difference
+     in the printed example 1 stays a question for IRD, for Jess to ask.
+213. **Short four-week windows stay refused** (question 2): IRD's
+     "other circumstances" rule wasn't read this session, and tax isn't
+     guessed.
+214. **An extra pay on a final pay without a termination item stays
+     refused** (question 3): whether a bonus arises from the ending decides
+     IRD's method; a choice for the person running pay would need IRD's
+     guidance on how to decide, not read this session.
+215. **Holiday pay on finishing: as built** (question 4; decision 150):
+     Tohyee works it out where it keeps the leave; typed only where it
+     doesn't.
+216. **Back pay over holiday pay periods stays refused** (question 5;
+     decision 171).
+217. **Hourly leavers: as built** (question 6; decision 148 gives leavers
+     their usual hours to the finish date).
+218. **Separate extra-pay pay runs: wanted, not built** (question 7).
+     NetSuite runs off-cycle payrolls, so a later stage adds an "extra
+     pays only" pay run on its own pay date, with its own examples.
+219. **A higher rate on request: not built** (question 8). It needs IR335's
+     rules on electing a rate, not read this session.
+
+### R&D claim (RD42 questions 1-4)
+
+220. **Part-time R&D staff earn credit from approved timesheets**
+     (question 1): settled by P9 (TS5-TS9); without timesheets only a 100%
+     R&D allocation counts (decision 34).
+221. **Reimbursements on pay runs stay out of the claim** (question 2).
+     Tagging them as materials is a later stage with its own example.
+222. **Feedstock: not built** (question 3). Recording the output's value
+     at year end is a later stage with its own example (IR1240's feedstock
+     rules).
+223. **Exports keep the summary figures, not the file** (question 4, kept;
+     decision 74): a kept file would hold each employee's pay.
+224. **Where these replace earlier decisions**: 192 replaces 92's Monday;
+     199 and 200 replace 107's unstored week and "assumed" salaries where
+     there's a usual week.
+
+## Earlier payroll questions, decided (2 Oct 2026; decisions 225-269)
+
+The "Questions for Jess" lists for payroll stages P1b-P6 (allocation, pay
+runs, paying wages and IRD, bank files, payslips, the payday filing file),
+decided by law → NetSuite → Xero as Jess asked, or marked as answered by a
+later stage. "Kept" means as built, with the reason. Some stay with Jess
+because only she, a bank or IRD can answer them; those are listed at the
+end of each group.
+
+### Allocation, pay rates and payroll access (after PE13)
+
+225. **A pay period spanning an allocation change is charged by the
+     allocation on the pay date** (kept, PRUN3): the journal is dated the
+     pay date. Since P9, approved timesheets split by the days they cover.
+226. **A rate dated before the last posted pay run becomes back pay**
+     (answered by P12: back pay from pay rate history, XP5-XP7). An
+     allocation dated earlier changes only pay runs approved afterwards;
+     posted pay runs are never changed.
+227. **One employee group per employee** (kept; Xero's employee group).
+228. **A pay group's frequency must match the employee's** (kept): it
+     catches a mismatch rather than silently changing someone's pay.
+229. **The last person with payroll access can't be removed, even by an
+     owner** (kept): someone must always be able to run payroll; an owner
+     can give themselves access first.
+230. **Payroll needs the bookkeeper role as well as payroll access** (kept;
+     decision 105): a viewer can't post.
+231. **Leftover cents go by largest remainder, the earlier line on a tie**
+     (kept, PE3): the usual fair rounding, and it never moves more than a
+     cent per line.
+232. **Allocation lines need a Department, Class, Location or project**
+     (kept, PE5): an untagged line says nothing about where the cost goes.
+233. **Access stays recorded when someone is moved down to viewer** (kept):
+     it's unused while they're a viewer (decision 230), and moving them back
+     up shouldn't silently restore or lose it without an admin seeing it.
+
+### Pay runs (after PRUN11)
+
+234. **KiwiSaver 3% isn't changed to 3.5% by Tohyee** (question 1, kept):
+     the rate is the employee's choice (or a temporary rate reduction IRD
+     approved), so the pay run refuses 3% after 1 April 2026 and the person
+     running pay updates the employee.
+235. **Pay rate changes inside a period stay refused** (question 2, kept):
+     prorating by days, working days or hours depends on the agreement.
+236. **Costs split by the allocation on the pay date** (question 3, kept;
+     decision 225).
+237. **Salary per period and hours × rate rounded half up** (question 4,
+     kept): IRD truncates only PAYE and contributions.
+238. **Separate IRD liability accounts** (question 5, kept): IRD's payments
+     and the PAYE summary report them separately; NetSuite keeps a
+     liability per payroll item.
+239. **Projects: answered by P3 and P9**: postings carry the project tag
+     and timesheet shares carry projects to labour cost (PREP2).
+240. **Monthly hourly employees: answered by P8 and P9**: the usual pay
+     from the usual week (decision 148) or approved timesheets give the
+     hours.
+241. **The approver rule applies to everyone, admins and owners
+     included** (question 8, kept as built): a control that the most
+     senior people can skip isn't one.
+242. **One journal line per pay item** (question 9, kept): NetSuite posts
+     by payroll item, and it lets the ledger show overtime apart from
+     ordinary time.
+243. **Monthly periods are calendar months** (question 10, kept for now):
+     other monthly cycles (15th to 14th) need their own example; not
+     built.
+244. **Paying in advance allowed; a pay date before the period starts
+     refused** (question 11, kept).
+245. **Adding someone back to a draft: not built** (question 12): delete
+     the draft and start again.
+246. **A pay item split differently from the allocation: answered by P9**
+     (question 13): timesheets split by what was worked; a fixed per-item
+     override isn't built.
+
+### Paying wages and IRD (after PPAY12)
+
+247. **Bank files: answered by P5** (question 1): ANZ, ASB and BNZ from
+     their published specifications; Westpac and Kiwibank wait for theirs.
+248. **No warning at $500,000** (question 2, kept): IRD tells each employer
+     how often to pay; the setting follows IRD's letter.
+249. **December for monthly payers stays 20 January, as IRD's page showed**
+     (question 3, kept): still to check against IRD's IR328 calendar
+     (Jess).
+250. **Public holidays in IRD payment due dates: still weekends only**
+     (question 4). "Working day" for tax has since been read (decision
+     326), but which rule moves a payment due on a non-working day, and to
+     when, wasn't found; IRD's own 16-31 December rule (15 January) is
+     already built. Not built until that rule is read.
+251. **Voiding a pay run IRD has been paid for stays refused** until the
+     IRD payment is voided (question 5, kept): a credit with IRD is IRD's to
+     give.
+252. **Wages can't be paid before the pay date** (question 6, kept): the
+     wage payment is dated the payment; paying early would mean the pay run
+     dated after its own payment.
+253. **A pay run is paid as a whole or per employee, not both** (question
+     7, kept).
+
+### Bank files (after PBF7)
+
+254. **ANZ's header comma and total without a space** (question 1, kept as
+     built): still for Jess to check with one upload.
+255. **Zero-filling and CR line endings** (question 2, kept as built):
+     still for Jess to confirm with a test upload.
+256. **Account numbers are checked for shape only** (question 3, kept):
+     the banks' check-digit rules need a published source first.
+257. **Particulars "Wages", code PAYRUN-n, reference the pay date**
+     (question 4, kept); an employee's own code is a later option.
+258. **ANZ transaction code 50** (question 5, kept): the only code on
+     ANZ's page.
+259. **Westpac and Kiwibank wait for their specifications** (question 6,
+     kept).
+
+### Payslips (after PSLIP6)
+
+260. **ERA s 130: read on 2 Oct 2026** (question 1; decision 326):
+     it's the wages and time record, not payslip content.
+261. **Hours each day: answered by P9** (question 2): approved timesheets
+     record them (s 81(2)(c)).
+262. **The payslip shows the account the pay went into** (question 3):
+     approving a pay run keeps each employee's bank account (encrypted)
+     with their pay (PSLIP7, tenant migration 0078); pays approved before
+     that show the employee's current account.
+263. **Neither the IRD number nor an employee number** on payslips
+     (question 4, kept): neither is required, and leaving the IRD number off
+     keeps it out of emails.
+264. **The payslip email's text stays fixed** (question 5, kept): no pay
+     figure ever sits in a stored message.
+
+### Payday filing file (after PF9)
+
+265. **Try a file in myIR** (question 1): still for Jess.
+266. **The employee details file: a later stage** (question 2): it needs
+     split addresses, phones and KiwiSaver codes on employees first.
+267. **One file per pay run** (question 3, kept; decision 56).
+268. **The employer IRD number stays its own setting** (question 4, kept):
+     a GST number is usually the same number, but it may not be (an
+     organisation in a GST group, say), so it isn't copied.
+269. **Salaried hours paid stay 0 unless lines carry hours** (question 5,
+     kept; decision 59): IRD's spec allows "0 if not held". Leave lines
+     carry hours since P8.
+
+## Accounting questions, decided (2 Oct 2026; decisions 270-325)
+
+The remaining "Questions for Jess" lists, decided by law → NetSuite → Xero
+as Jess asked. IRD's [taxable supply information](https://www.ird.govt.nz/gst/tax-invoices-for-gst/how-tax-invoices-for-gst-work)
+page was read on 2 Oct 2026 through the summarising fetch tool (quotes as
+returned). "Kept" means as built, with the reason; "later" means wanted but
+needing its own worked examples first.
+
+### Printed documents, quotes and repeating invoices
+
+270. **Over $1,000 the buyer's identifier can be any of IRD's: an address
+     (physical or postal), phone number, email address, trading name (if
+     different), NZBN or website** (IRD's list). Tohyee prints the billing
+     address, else the contact's email, else their phone, and warns only
+     when the contact has none of them (PD4). Built.
+271. **Approved invoices keep the heading "Tax invoice"** (kept): IRD's page
+     no longer needs the words, but they do no harm and match Xero.
+272. **Quotes: sending will move a quote on once emailing quotes is built**
+     (Xero); finalising stays its own step until then (kept).
+273. **Changing a repeating invoice's schedule starts it from today** (kept).
+274. **A repeating invoice left as a draft isn't emailed to anyone**
+     (kept): the draft says why it wasn't approved (MC52); notifying admins
+     by email is later.
+
+### Sales orders (the unlabelled list after SO examples)
+
+275. **Accepting a quote offers both, as built**: "Accept" makes the
+     invoice and "Accept as sales order" (NetSuite's estimate to sales
+     order) sits beside it. Making the sales order the default would push
+     every small organisation through an extra step; organisations that
+     use sales orders choose it.
+276. **Line discounts: later** (NetSuite uses discount items, Xero a line
+     %); price levels for now.
+277. **Closing is per order** (kept); per-line closing and reopening are
+     later.
+278. **Approved orders stay locked** (kept, like purchase orders): change by
+     closing and making another.
+279. **A credit note doesn't give quantity back to the order** (kept):
+     NetSuite uses return authorisations, a later stage.
+280. **"Partly billed" stays** (kept).
+
+### Purchase orders
+
+281. **A part-billed purchase order can be closed** ("Close the rest";
+     Xero's "mark as billed", NetSuite's close), when nothing is on a draft
+     bill: what's left no longer shows as on order. Built (PO10, tenant
+     migration 0076): posts nothing; its approved bills can still be voided
+     and it stays closed; no new bills come from it.
+282. **Approved purchase orders stay locked** (kept): cancel and copy.
+283. **Extra delivered goes on a separate bill line** (kept).
+284. **The delivery address starts as the postal address** (kept); a
+     delivery address setting is later.
+
+### Repeating bills
+
+285. **A taken number stops the template at that date** (kept): it may be
+     the same bill, so the person checks.
+
+### Stock transfers
+
+286. **Transfers keep posting between locations on 1400; cost of sales
+     lines stay untagged** (kept): changing ST2's journals needs its own
+     example. The stock report by location is the source of truth.
+287. **A transfer into a location below zero stays refused** (kept).
+
+### Budgets
+
+288. **Variance is actual less budget for every row** (kept): one rule,
+     shown with a sign.
+289. **Budgets for balance sheet accounts: later** (Xero has them).
+290. **One tracking value per budget** (kept); combinations are later.
+
+### Expense claims
+
+291. **No "submit only" role yet** (kept): Xero's submit-only role is
+     later, with the projects and timesheet questions about a "time only"
+     role (decisions 193, 298).
+292. **Admins and owners can approve their own claims** (kept): a
+     one-person organisation must still work; bookkeepers can't.
+293. **Receipts over $200 need the supplier's GST number to claim GST**
+     (IRD's page: the GST number is required over $200, not at $200 or
+     less). Built (EC13, tenant migration 0077): a receipt has the
+     supplier's GST number, and approving is refused while a supplier's
+     receipts on one day add up to more than $200 with GST claimed and none
+     of them has it.
+294. **2010 Expense claims payable stays** (kept).
+295. **The claim date defaults to the approval date** (kept).
+
+### Fixed assets
+
+296. **The five fixed asset questions are folded into the ERP fixed assets
+     plan** (docs/TODO.md, list of 2 Oct 2026, item 4;
+     `docs/sources/nz-fixed-assets-reporting-changes.md`): tax depreciation
+     beside book, depreciation recovered to its own account, low-value
+     write-offs and pooling, and IRD's disposal-year rules all belong
+     there. As built until then.
+
+### Projects
+
+297. **Time invoices at exact hours** (kept): rounding to 6 or 15 minutes
+     is a firm's choice; later as a setting.
+298. **No "time only" role** (kept; decision 193's reasoning).
+299. **Closing with a write-off stays; reopening doesn't undo it** (kept):
+     the write-off is posted history.
+300. **Profitability for the project's life** (kept); date ranges and
+     credit notes linked to projects are later.
+301. **No automatic "Project" segment** (kept): projects already tag
+     lines.
+302. **Foreign projects: costs only** (kept, MC63).
+303. **A won foreign opportunity's draft invoice is zero-rated** (kept,
+     MC69; the person can change it before approving).
+304. **A customer's currency stays fixed once they have a project or
+     opportunity** (kept, as quotes).
+305. **Currencies without cents stay refused for projects** (kept).
+
+### Multi-currency
+
+306. **A USD tax invoice shows its GST in USD only** (kept): IRD's page
+     read doesn't say GST must also be shown in NZD (**unverified**:
+     the GST Act wasn't read).
+307. **Payments basis, part-paid foreign sales: still refused** (question
+     2): it's a GST rule, and IRD's guidance on it wasn't read.
+308. **No automatic exchange rate feed** (question 6, kept): rates are
+     typed or pasted; a free RBNZ feed is later.
+309. **Refunds treated like payments** (question 7, kept).
+310. **Stock on a foreign bill at the bill's rate** (question 11, kept;
+     NetSuite's variance needs item receipts Tohyee doesn't have).
+311. **The reverse charge on imported services stays refused** (kept;
+     exports question 3).
+
+### Bringing in existing books
+
+312. **The 0.05 GST rounding allowance stays** (kept).
+313. **A bank account's opening balance is its ledger balance** (kept, as
+     Xero); entering unpresented items as opening transactions is later.
+314. **Control accounts matched by name and re-coded** (kept): needed for
+     any system's file, which is what Jess wants (TODO item 5).
+315. **Contacts without customer or supplier columns are both** (kept).
+
+### Year end and period close
+
+316. **A bookkeeper can close a month when every check passes** (kept);
+     warnings still need an owner or admin.
+
+### Sales platform connections (Shopify)
+
+317. **Guest checkouts go to one contact chosen on the connection**
+     ("Shopify customers", say), as some connectors do; refused until one
+     is chosen. Whether the order is an export
+     comes from the order's own billing country, not that contact. Built
+     (SPC24).
+318. **Payouts with chargebacks, reserves or other kinds stay refused**
+     (kept): where a chargeback goes needs its own example.
+319. **Adjustments go to the fees account** (kept).
+320. **A paid order is invoiced on the day it was paid** (kept): that's
+     when the sale is settled; the sales order keeps the order's date.
+321. **Refund line subtotals include tax on taxes-included orders** (kept,
+     still to check with one real refund; Jess).
+322. **Shipping goes to the shipping account chosen in settings** (kept;
+     it can already be its own account).
+
+### CRM stages and forecasts
+
+323. **The starting probabilities stay** (kept; Jess can change them under
+     CRM › Stages).
+324. **Forecasts keep currencies apart and quotas count NZD only** (kept;
+     MC68): converting needs a rate rule, later.
+325. **Per-owner forecasts** (kept); teams and manager adjustments later.
+
+### Working days for tax (decision 326)
+
+326. **The payday filing due date counts tax working days** (PF6; replaces
+     decision 63). The Tax Administration Act 1994 s 23E(2)(b) gives
+     "within 2 working days after payday"; the Act has no definition of
+     working day, so s 3(2) takes the Income Tax Act 2007's (s YA 1): not a
+     Saturday, Sunday, Waitangi Day, Good Friday, Easter Monday, Anzac Day,
+     the Sovereign's birthday, Matariki or Labour Day, nor the Monday after
+     Waitangi or Anzac Day when it falls on a weekend, nor 25 December to
+     15 January. Anniversary days and the Holidays Act's Christmas and New
+     Year transfers aren't in it. Read on 2 Oct 2026 in Chrome
+     (`docs/sources/working-day-tax.md`). The movable dates come from P8's
+     public holiday data (2025-2027); later years count them as working
+     days until added, so the date shown is never later than IRD's. ERA s
+     130 was read the same day (`docs/sources/employment-relations-act-s130.md`):
+     it's the wages and time record (hours each day and the pay for them,
+     kept 6 years, given to the employee on request), not a list of what a
+     payslip must show, so decision 260's question is answered: the
+     payslip follows Holidays Act s 81 and Employment NZ's guidance, and
+     P9's timesheets and the usual week (s 130(1B)) keep the hours.
+
+### A won opportunity to a sales order (decision 327)
+
+327. **A won opportunity can make a draft sales order instead of an
+     invoice** (CRM5b; the handover's "won opportunity → sales order", not
+     built until now). NetSuite turns an opportunity into a sales order;
+     Tohyee keeps the invoice too (CRM5), so the opportunity offers both
+     and keeps whichever was made: one or the other, never both (the
+     database refuses both). The sales order's line, account and tax code
+     follow the invoice's rules (EX15), dated today, in the company's
+     currency with no rate (SO10); it posts nothing and is approved and
+     invoiced like any sales order. Once made, the opportunity's stage and
+     company are fixed, as with an invoice. Tenant migration 0079.

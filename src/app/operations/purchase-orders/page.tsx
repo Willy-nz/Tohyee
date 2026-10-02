@@ -21,6 +21,7 @@ const FILTERS: Filter[] = [
   { label: "Drafts", status: "draft", empty: "No draft purchase orders." },
   { label: "Approved", status: "approved", empty: "No approved purchase orders waiting to be billed." },
   { label: "Billed", status: "billed", empty: "No billed purchase orders." },
+  { label: "Closed", status: "closed", empty: "No closed purchase orders." },
   { label: "Cancelled", status: "cancelled", empty: "No cancelled purchase orders." },
 ];
 

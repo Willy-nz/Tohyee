@@ -35,6 +35,7 @@ function PurchaseOrderActions({
   const [approveKey] = useState(() => newIdempotencyKey("po-approve"));
   const [copyKey] = useState(() => newIdempotencyKey("po-bill"));
   const [cancelKey] = useState(() => newIdempotencyKey("po-cancel"));
+  const [closeKey] = useState(() => newIdempotencyKey("po-close"));
   const today = todayInBrowser();
   const [billDate, setBillDate] = useState(today);
   const [dueDate, setDueDate] = useState("");
@@ -89,6 +90,17 @@ function PurchaseOrderActions({
     });
   }
 
+  function close() {
+    if (!window.confirm(`Close the rest of ${purchaseOrder.poNumber}? What's still to bill won't be on order any more, and it can't be copied to a bill after that.`)) return;
+    void run(async () => {
+      const result = await api<{ purchaseOrder: PurchaseOrder }>(`/api/purchase-orders/${purchaseOrder.id}/close`, {
+        method: "POST",
+        body: { organisationId, source: "ui", idempotencyKey: closeKey },
+      });
+      onChanged(result.purchaseOrder, `${result.purchaseOrder.poNumber} is closed.`);
+    });
+  }
+
   function cancel() {
     if (!window.confirm(`Cancel ${purchaseOrder.poNumber}? It can't be billed after that.`)) return;
     void run(async () => {
@@ -108,7 +120,7 @@ function PurchaseOrderActions({
     });
   }
 
-  if (purchaseOrder.status === "cancelled") return null;
+  if (purchaseOrder.status === "cancelled" || purchaseOrder.status === "closed") return null;
   return (
     <Card
       title="Actions"
@@ -157,6 +169,11 @@ function PurchaseOrderActions({
           <Button variant="danger" onClick={cancel} disabled={busy || openBills.length > 0}>
             Cancel purchase order
           </Button>
+          {openBills.length > 0 ? (
+            <Button variant="secondary" onClick={close} disabled={busy || purchaseOrder.bills.some((bill) => bill.status === "draft")}>
+              Close the rest
+            </Button>
+          ) : null}
           {openBills.length > 0 ? <span className={ui.muted}>It has bills, so it can&apos;t be cancelled.</span> : null}
         </div>
       ) : null}

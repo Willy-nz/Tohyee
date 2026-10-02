@@ -32,7 +32,7 @@ GitHub; each merge commit says so):
 | Leave liability posting | 0072 | HL52-HL56 | 182-187 |
 | Leave liability: finished employees, employer KiwiSaver, month-end reminder (2 Oct, afternoon session) | 0073 | HL53 (rewritten), HL57-HL61 | 188-191 |
 
-**Next free tenant migration: 0074. Next decision number: 192.**
+**Next free tenant migration: 0080. Next decision number: 328.**
 
 No worked example is marked approved; Jess still needs to approve them.
 Jess asked for open questions to be decided by law, then NetSuite, then
@@ -50,6 +50,29 @@ reminder after each month end (HL61). Tests:
 `tests/integration/payroll-leave-liability.test.ts` and
 `payroll-leave-liability-kiwisaver.test.ts`. The Liability tab and the home
 page reminder weren't opened in a browser.
+
+**Also done in the afternoon (2 Oct 2026, branch `claude/open-questions`):**
+Jess asked for every open "Questions for Jess" list to be decided by law →
+NetSuite → Xero. All 27 lists in `docs/ACCOUNTING-EXAMPLES.md` are now
+marked "decided", with decisions 192-327 in `docs/DECISIONS.md` (most keep
+what's built, each with its reason). Built from them, each with examples
+and tests:
+- timesheet weeks can start on any day (TS12, migration 0074);
+- FTE's standard week saved per organisation, and salaried usual hours
+  from the usual week (PREP9);
+- the buyer's identifier on tax invoices over $1,000 can be an email or
+  phone (PD4, IRD's list);
+- Shopify guest checkouts to a chosen contact (SPC24, 0075), and a
+  "Posting to the accounts" form, which was missing (the posting settings
+  could only be set through the API);
+- closing the rest of a purchase order (PO10, 0076);
+- the supplier's GST number on expense claim receipts over $200 (EC13,
+  0077);
+- payslips show the account the pay went into (PSLIP7, 0078);
+- payday filing due dates count tax working days (PF6; ITA s YA 1, read
+  in Chrome with ERA s 130, `docs/sources/`);
+- a won opportunity can make a sales order (CRM5b, 0079).
+None of the new screens was opened in a browser.
 
 **Next job:** not chosen. Candidates: click through the new payroll screens
 in a browser (list below), or Jess's open questions.
@@ -148,7 +171,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0074 (0058-0073 used: 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting, 0073 employer KiwiSaver on the leave liability).
+Next free tenant migration number: 0080 (0058-0079 used: 0079 opportunity sales orders, 0078 pay run bank accounts, 0077 expense claim supplier GST numbers, 0076 purchase order close, 0075 Shopify guest contact, 0074 timesheet first day and standard week, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting, 0073 employer KiwiSaver on the leave liability).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -168,9 +191,8 @@ history; sales processes per opportunity record type; CRM › Forecasts by
 month or financial-year quarter, owner and currency with Salesforce's
 cumulative rollups, weighted pipeline, drill-down and monthly quotas.
 "Won" now means a stage of type Closed won (the invoice and "open" follow
-the type). There's no "won opportunity → sales order" yet (still on the
-sales orders list of things not built); when it's built it must check
-`stageType === "won"`, not the stage key. help.salesforce.com couldn't be
+the type). A won opportunity can make a sales order instead of an invoice
+since 2 Oct 2026 (decision 327, CRM5b); it checks `stageType === "won"`. help.salesforce.com couldn't be
 read by our tools, so decisions marked (unverified) should be checked.
 Jess's questions are under CRMS11.
 
@@ -531,22 +553,12 @@ To do:
 
 ## Things only Jess (or her computer) can do
 
-- [ ] **Download the legal texts our tools couldn't read** (legislation.govt.nz
-      blocks them), so the "(unverified)" decisions in `docs/DECISIONS.md` can
-      be checked. Save the PDFs (or "print to PDF") and attach them to a chat
-      or put them in the repo under `docs/sources/`:
-      - Holidays Act 2003 (current version)
-      - Employment Leave Act 2026 (as enacted, 2026/48)
-      - Income Tax Act 2007: subpart LY (R&D tax incentive) and schedule 1
-        part D (ESCT rates)
-      - Wages Protection Act 1983 (section 5)
-      - Employment Relations Act 2000, section 130 (wages and time record),
-        for checking payslips (P5)
-      - IRD's IR1240 R&D tax incentive guidance, April 2026 (the whole PDF;
-        our tools only read the first 49 pages)
-      - When MBIE publishes it (due Nov 2026 to Jan 2027): its technical
-        guidance for the Employment Leave Act, including how to convert
-        existing leave balances.
+- [ ] **The legal texts still missing.** Everything asked for is now in
+      `docs/sources/` (ERA s 130 and tax "working day" added 2 Oct 2026),
+      except: the rule that moves a tax payment due on a non-working day
+      (decision 250), and MBIE's technical guidance for the Employment
+      Leave Act when it's published (due Nov 2026 to Jan 2027), including
+      how to convert existing leave balances.
 - [ ] **Ask IRD how recovering advance holiday pay is taxed** (decision
       170): an employee leaves having taken more annual holidays in advance
       than the 8% covers, and consents in writing to the excess coming off

@@ -14,7 +14,8 @@ import { addAllocation } from "@/lib/payroll/allocations";
 import { createEmployee, updateEmployee } from "@/lib/payroll/employees";
 import { createPayGroup } from "@/lib/payroll/groups";
 import { recordIrdPayment } from "@/lib/payroll/ird-payments";
-import { createPayItem, listPayItems, type PayItem } from "@/lib/payroll/pay-items";
+import { addLeaveSettings } from "@/lib/payroll/leave-settings";
+import { createPayItem, listPayItems, type PayItem, updatePayrollSettings } from "@/lib/payroll/pay-items";
 import { approvePayRun, createPayRun, type PayRun, setPayRunEmployeeLines, voidPayRun } from "@/lib/payroll/pay-runs";
 import { makePayRunPaydayFilingFile, updatePaydayFilingSettings } from "@/lib/payroll/payday-filing-service";
 import type {
@@ -702,6 +703,26 @@ describeWithDatabase("payroll reports (PREP1-PREP8)", () => {
         ["No project", "4184.00"],
       ]);
       expect((await by("employee", { rdActivityId: c1.id, employeeId: benTait })).total).toBe("900.00");
+    });
+  });
+
+  describe("saved standard week and usual weeks (PREP9)", () => {
+    it("PREP9: Kiri's usual week of 30 hours counts 0.7500; a saved standard week of 37.50 is used unless one is typed", async () => {
+      const kiriWeek = { kind: "fixed", days: Array.from({ length: 7 }, (_, index) => ({ ordinaryHours: index < 4 ? "7.5" : "0", extras: [] })) };
+      await asUser(jess, (tx) => addLeaveSettings(tx, people.kiri, { idempotencyKey: key("settings"), pattern: kiriWeek, annualPaidInPeriod: true }));
+      const at = (await report<HeadcountReport>(ben, { report: "headcount", date: "2026-10-14" })).report;
+      expect(at.employees.find((entry) => entry.employeeId === people.kiri)).toMatchObject({ usualHours: "30.00", fte: "0.7500", assumed: false });
+      expect([at.standardWeek, at.fte]).toEqual(["40.00", "3.5500"]);
+      await asUser(jess, (tx) => updatePayrollSettings(tx, { standardWeek: "37.5" }));
+      const saved = (await report<HeadcountReport>(ben, { report: "headcount", date: "2026-10-14" })).report;
+      expect(saved.employees.map((entry) => [entry.name, entry.fte, entry.assumed])).toEqual([
+        ["Aroha Ngata", "1.0000", true],
+        ["Hemi Walker", "1.0000", true],
+        ["Kiri Tane", "0.8000", false],
+        ["Sione Fifita", "0.8533", false],
+      ]);
+      expect([saved.standardWeek, saved.fte]).toEqual(["37.50", "3.6533"]);
+      expect((await report<HeadcountReport>(ben, { report: "headcount", date: "2026-10-14", standardWeek: "40" })).report.fte).toBe("3.5500");
     });
   });
 });

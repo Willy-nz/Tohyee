@@ -11,7 +11,8 @@ export const GET = route(async (request) => {
 
 /**
  * Body: { organisationId, approverMustDiffer?, irdPaymentFrequency? ("monthly" or "twice_monthly"),
- * leaveExpenseAccountCode?, leaveLiabilityAccountCode? (null or "" to clear; decision 184) }.
+ * leaveExpenseAccountCode?, leaveLiabilityAccountCode? (null or "" to clear; decision 184),
+ * timesheetFirstDay? (1 Monday to 7 Sunday; decision 192), standardWeek? (hours; decision 199) }.
  */
 export const PUT = route(async (request) => {
   const body = await readJson(request);
@@ -22,6 +23,8 @@ export const PUT = route(async (request) => {
       irdPaymentFrequency: body.irdPaymentFrequency,
       leaveExpenseAccountCode: body.leaveExpenseAccountCode,
       leaveLiabilityAccountCode: body.leaveLiabilityAccountCode,
+      timesheetFirstDay: body.timesheetFirstDay,
+      standardWeek: body.standardWeek,
     });
   });
   return json({ settings });

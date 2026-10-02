@@ -539,6 +539,30 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     expect(await count(w, "sales_orders")).toBe(0);
   });
 
+  it("SPC24: guest checkouts go to the contact chosen for them (decision 317)", async () => {
+    const w = await setup();
+    const guests = (await w.as((tx) => createContact(tx, { idempotencyKey: key("guests"), name: "Shopify customers", isCustomer: true }))).contact;
+    const supplier = (await w.as((tx) => createContact(tx, { idempotencyKey: key("box"), name: "Box Co", isSupplier: true }))).contact;
+    await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { guestContactId: supplier.id }))).rejects.toThrow(
+      "Box Co isn't an active customer, so guest checkouts can't go to it.",
+    );
+    const changed = await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { guestContactId: guests.id }));
+    expect([changed.guestContactId, changed.guestContactName]).toEqual([String(guests.id), "Shopify customers"]);
+    w.state.orders.push(order1001({ id: 5201, name: "#1201", customer: null }));
+    await w.sync("2026-10-02T02:00:00Z");
+    const posted = (await doc(w, "order", "5201"))!;
+    expect(posted.contact_id).toBe(String(guests.id));
+    expect(posted.invoice_id).not.toBeNull();
+    expect((await w.as((tx) => getInvoice(tx, posted.invoice_id!))).contactId).toBe(guests.id);
+    // Cleared: guest checkouts are refused again, saying how to bring them in.
+    await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { guestContactId: null }));
+    w.state.orders.push(order1001({ id: 5202, name: "#1202", customer: null }));
+    await w.sync("2026-10-02T03:00:00Z");
+    expect((await logFor(w, "5202")).at(-1)!.message).toBe(
+      "#1202 has no Shopify customer (a guest checkout). Choose a contact for guest checkouts in the connection's settings to bring it in.",
+    );
+  });
+
   it("SPC23: refused rather than guessed, logged, nothing posted", async () => {
     const w = await setup();
     await w.sync("2026-10-01T01:00:00Z");

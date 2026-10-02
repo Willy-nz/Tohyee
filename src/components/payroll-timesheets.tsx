@@ -7,7 +7,7 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { addDays } from "@/lib/financial-year";
 import { formatDate, formatDateTime, personName, todayInBrowser } from "@/lib/format";
 import { add, dec, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
-import { weekStartOf } from "@/lib/payroll/timesheet-split";
+import { WEEKDAY_NAMES } from "@/lib/payroll/timesheet-split";
 import type {
   ProjectTimeSuggestion,
   Timesheet,
@@ -51,11 +51,15 @@ export function TimesheetsPage({ organisationId }: { organisationId: string }) {
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const week = hydrated ? weekStart ?? weekStartOf(todayInBrowser()) : null;
-  const loaded = useApiData<{ week: TimesheetWeek }>(week ? "/api/payroll/timesheets" : null, { organisationId, weekStart: week });
+  // Any date opens the week it's in; the server knows the organisation's first day (decision 192).
+  const asked = hydrated ? weekStart ?? todayInBrowser() : null;
+  const loaded = useApiData<{ week: TimesheetWeek }>(asked ? "/api/payroll/timesheets" : null, { organisationId, weekStart: asked });
 
-  if (!week) return <Empty>Loading…</Empty>;
+  if (!asked) return <Empty>Loading…</Empty>;
   const data = loaded.data?.week;
+  const week = data?.weekStart ?? asked;
+  const firstDayName = WEEKDAY_NAMES[(data?.firstDay ?? 1) - 1];
+  const lastDayName = WEEKDAY_NAMES[((data?.firstDay ?? 1) + 5) % 7];
 
   const move = (days: number) => {
     setWeekStart(addDays(week, days));
@@ -79,7 +83,7 @@ export function TimesheetsPage({ organisationId }: { organisationId: string }) {
     <div className={styles.stack}>
       <Card
         title={`Week starting ${formatDate(week)}`}
-        description="Timesheets run Monday to Sunday. Hours are stamped when they're saved, so they count as a record made at the time (IR1240 p 100)."
+        description={`Timesheets run ${firstDayName} to ${lastDayName}. Hours are stamped when they're saved, so they count as a record made at the time (IR1240 p 100).`}
         actions={
           <>
             <Button variant="secondary" size="small" onClick={() => move(-7)}>Previous week</Button>
@@ -94,7 +98,7 @@ export function TimesheetsPage({ organisationId }: { organisationId: string }) {
               value={week}
               onChange={(event) => {
                 if (event.target.value) {
-                  setWeekStart(weekStartOf(event.target.value));
+                  setWeekStart(event.target.value);
                   setSelected(null);
                 }
               }}

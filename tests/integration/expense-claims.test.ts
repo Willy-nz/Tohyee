@@ -347,6 +347,25 @@ describeWithDatabase("expense claims", () => {
     ]);
   });
 
+  it("EC13: over $200 with GST claimed, the supplier's GST number is needed to approve", async () => {
+    const w = await setup();
+    const noel = [
+      { receiptDate: "2026-06-12", supplierName: "Noel Leeming", description: "Monitor", accountCode: "6140", taxCode: "GST", amount: "172.50" },
+      { receiptDate: "2026-06-12", supplierName: "Noel Leeming", description: "Cable", accountCode: "6140", taxCode: "GST", amount: "34.50" },
+    ];
+    const without = await w.submitted(noel);
+    await expect(w.approve(without.id, "2026-06-15")).rejects.toThrow(
+      "Noel Leeming's receipt of 12 Jun 2026 is over $200 with GST claimed, so the supplier's GST number from the receipt is needed (IRD's taxable supply information). Enter it on the receipt, or claim no GST.",
+    );
+    const numbered = await w.submitted([noel[0], { ...noel[1], supplierGstNumber: "123-456-789" }]);
+    expect(numbered.receipts.map((receipt) => receipt.supplierGstNumber)).toEqual([null, "123456789"]);
+    expect((await w.approve(numbered.id, "2026-06-15")).status).toBe("approved");
+    // 200.00 exactly, or no GST claimed: no number needed.
+    expect((await w.approve((await w.submitted([{ ...noel[0], amount: "200.00" }])).id, "2026-06-15")).status).toBe("approved");
+    expect((await w.approve((await w.submitted(noel.map((receipt) => ({ ...receipt, taxCode: null })))).id, "2026-06-15")).status).toBe("approved");
+    await expect(w.draft([{ ...noel[0], supplierGstNumber: "12-345" }])).rejects.toThrow("Receipt 1 supplier GST number must have 8 or 9 digits, like 123-456-789.");
+  });
+
   it("EC10: the GST return counts approved claims like bills, on each basis", async () => {
     const w = await setup();
     const claim = await w.approved();

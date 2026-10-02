@@ -660,8 +660,8 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
       const put = (user: SessionUser, approverMustDiffer: boolean) =>
         call(settingsRoute.PUT, user, "/api/payroll/settings", { method: "PUT", body: { approverMustDiffer } });
       expect((await put(ben, true)).status).toBe(403);
-      expect((await put(mere, true)).body.settings).toEqual({ approverMustDiffer: true, irdPaymentFrequency: "monthly", leaveExpenseAccountCode: null, leaveLiabilityAccountCode: null });
-      expect((await call(settingsRoute.GET, ben, "/api/payroll/settings")).body.settings).toEqual({ approverMustDiffer: true, irdPaymentFrequency: "monthly", leaveExpenseAccountCode: null, leaveLiabilityAccountCode: null });
+      expect((await put(mere, true)).body.settings).toEqual({ approverMustDiffer: true, irdPaymentFrequency: "monthly", leaveExpenseAccountCode: null, leaveLiabilityAccountCode: null, timesheetFirstDay: 1, standardWeek: "40.00" });
+      expect((await call(settingsRoute.GET, ben, "/api/payroll/settings")).body.settings).toEqual({ approverMustDiffer: true, irdPaymentFrequency: "monthly", leaveExpenseAccountCode: null, leaveLiabilityAccountCode: null, timesheetFirstDay: 1, standardWeek: "40.00" });
 
       const byBen = await approve(ben, runId);
       expect(byBen.status).toBe(403);
