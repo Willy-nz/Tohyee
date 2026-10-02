@@ -6,8 +6,9 @@ agents: these come before the "Next" list in docs/FEATURES.md. Anything marked
 
 ## List of 2 October 2026
 
-Noticed by Jess using the Windows server app on the evening of 1 Oct 2026.
-Not looked into yet: find the cause before changing anything.
+Items 1-3 noticed by Jess using the Windows server app on the evening of 1
+Oct 2026; items 4 and 5 asked for the same day ("needs to be ERP level
+features"). Not looked into yet: find the cause before changing anything.
 
 1. **Glitching between screens.** The program on the computer "kind of
    glitches" when moving between screens. Reproduce it first (on the
@@ -21,9 +22,25 @@ Not looked into yet: find the cause before changing anything.
 3. **Couldn't add a fixed asset.** Find out why (an error, a missing
    button, a role or setting such as Fixed asset types being admin only)
    and fix it.
-4. **Fixed assets are too limited.** Jess wants more. To confirm with Jess
-   what's missing, then follow NetSuite (Fixed Assets Management), else
-   Xero, with worked examples before building. Not decided yet.
+4. **Fixed assets to ERP level.** Jess wants ERP-level fixed assets (follow
+   NetSuite's Fixed Assets Management, else Xero), including "some
+   complicated new accounting with fixed assets". What that new accounting
+   is hasn't been said: **to confirm with Jess** before planning (it may be
+   the Investment Boost deduction, tax depreciation kept beside book, or
+   something else; don't assume). What's built now (FEATURES.md, FA1-FA14):
+   asset types, assets from bills or typed, diminishing value and straight
+   line, monthly depreciation runs, disposals and the register. Not built:
+   tax depreciation beside book, pooling, low-value write-offs. Plan with
+   worked examples first; likely its own module stage like payroll's.
+5. **Import from Xero, to ERP level.** What exists: the import wizard
+   (Accounting › Settings, IM1-IM21) reads CSV or Excel files exported from
+   Xero for the chart of accounts, contacts, products and services, and
+   opening balances at a conversion date (trial balance, stock, open
+   invoices and bills). Not there: transaction history, the fixed asset
+   register, tracking categories, repeating invoices, employees and leave
+   balances, attachments, or connecting to Xero directly. **To confirm with
+   Jess** which of these she needs and whether a direct connection (Xero's
+   API, which needs a Xero developer app) or exported files are wanted.
 
 ## List of 27 September 2026
 
