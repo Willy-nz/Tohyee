@@ -9,7 +9,7 @@ using System.Windows.Forms;
 namespace Tohyee.Tray
 {
     /// <summary>
-    /// Phone access: use Tohyee from anywhere. Three ways, in this order, and
+    /// Remote access: use Tohyee from anywhere. Three ways, in this order, and
     /// only one on at a time (switching asks first and turns the other off):
     ///
     /// 1. A Tohyee address (recommended for most): one click, no sign-up. The
@@ -54,7 +54,7 @@ namespace Tohyee.Tray
             { "missing_program", "cloudflared is missing" },
         };
 
-        private const string TwoStepMessage = "Phone access can't be turned on until two-step sign-in is in force, and that needs TOHYEE_SECRET_KEY set on the server. The Windows installer sets it when you update Tohyee.";
+        private const string TwoStepMessage = "Remote access can't be turned on until two-step sign-in is in force, and that needs TOHYEE_SECRET_KEY set on the server. The Windows installer sets it when you update Tohyee.";
         internal const string NotAvailableYet = "The Tohyee address service isn't available yet.";
 
         private readonly TohyeeApi _api;
@@ -114,7 +114,7 @@ namespace Tohyee.Tray
             _tailscale = tailscale;
             _cloudflare = cloudflare;
             BackColor = Theme.Bg;
-            _page = Ui.Page("Phone access", "Use Tohyee from your phone or laptop anywhere, with a proper https address and nothing to change on your router. Choose one of three ways. Everyone still signs in with their password and authenticator app.");
+            _page = Ui.Page("Remote access", "Use Tohyee from your phone or laptop anywhere, with a proper https address and nothing to change on your router. Choose one of three ways. Everyone still signs in with their password and authenticator app.");
 
             // ---- 1. Tohyee address
             _tohyee = new Section(_page, "RECOMMENDED FOR MOST", Theme.AccentText, "Tohyee address", (s, e) => CopyAddress(_tohyee), async (s, e) => await TurnOffTohyee());
@@ -569,7 +569,7 @@ namespace Tohyee.Tray
             var active = ActiveWay;
             if (active != Way.None && active != way)
             {
-                if (!Ui.Confirm(FindForm(), "Switch phone access from " + WayName(active) + " to " + WayName(way) + "? Only one way can be on, so " + WayName(active) + " is turned off (its settings are kept, so you can switch back).")) return null;
+                if (!Ui.Confirm(FindForm(), "Switch remote access from " + WayName(active) + " to " + WayName(way) + "? Only one way can be on, so " + WayName(active) + " is turned off (its settings are kept, so you can switch back).")) return null;
             }
             return active;
         }
@@ -623,7 +623,7 @@ namespace Tohyee.Tray
                 _serviceAvailable = true;
                 _working = false;
                 ShowAll();
-                Ui.Show(_tohyee.Status, "Phone access is on. Scan the code with your phone.", false);
+                Ui.Show(_tohyee.Status, "Remote access is on. Scan the code with your phone.", false);
                 await TurnOffPrevious(previous.Value, Way.Tohyee);
             }
             catch (ApiException error)
@@ -643,12 +643,12 @@ namespace Tohyee.Tray
         private async Task TurnOffTohyee()
         {
             if (_working) return;
-            if (!Ui.Confirm(FindForm(), "Turn off phone access? Tohyee stops being reachable at " + _tohyee.AddressText + ". It keeps working on this computer and your network, and the address is kept for next time.")) return;
+            if (!Ui.Confirm(FindForm(), "Turn off remote access? Tohyee stops being reachable at " + _tohyee.AddressText + ". It keeps working on this computer and your network, and the address is kept for next time.")) return;
             await Ui.Busy(_tohyee.Card, _tohyee.Status, async () =>
             {
                 await Put(new Dictionary<string, object> { { "method", "tohyee" }, { "enabled", false } });
                 ShowAll();
-                Ui.Show(_tohyee.Status, "Phone access is off.", false);
+                Ui.Show(_tohyee.Status, "Remote access is off.", false);
             });
         }
 
@@ -784,7 +784,7 @@ namespace Tohyee.Tray
                 _stage = CloudStage.Idle;
                 _working = false;
                 ShowAll();
-                Ui.Show(_cloud.Status, "Phone access is on at https://" + tunnel.Hostname + ". New addresses can take a minute or two to work everywhere.", false);
+                Ui.Show(_cloud.Status, "Remote access is on at https://" + tunnel.Hostname + ". New addresses can take a minute or two to work everywhere.", false);
                 await TurnOffPrevious(_pendingPrevious, Way.Cloudflare);
             }
             catch (OperationCanceledException)
@@ -819,7 +819,7 @@ namespace Tohyee.Tray
             {
                 await Put(new Dictionary<string, object> { { "method", "cloudflare" }, { "enabled", true } });
                 ShowAll();
-                Ui.Show(_cloud.Status, "Phone access is on.", false);
+                Ui.Show(_cloud.Status, "Remote access is on.", false);
             });
             if (ok) await TurnOffPrevious(previous.Value, Way.Cloudflare);
         }
@@ -847,7 +847,7 @@ namespace Tohyee.Tray
                 _token.Text = "";
                 _paste.Visible = false;
                 ShowAll();
-                Ui.Show(_cloud.Status, "Saved. Phone access is on.", false);
+                Ui.Show(_cloud.Status, "Saved. Remote access is on.", false);
             });
             if (ok) await TurnOffPrevious(previous.Value, Way.Cloudflare);
         }
@@ -855,12 +855,12 @@ namespace Tohyee.Tray
         private async Task TurnOffCloudflare()
         {
             if (_working) return;
-            if (!Ui.Confirm(FindForm(), "Turn off phone access? Tohyee stops being reachable at " + _cloud.AddressText + ". The tunnel stays on your Cloudflare account, so you can turn it back on.")) return;
+            if (!Ui.Confirm(FindForm(), "Turn off remote access? Tohyee stops being reachable at " + _cloud.AddressText + ". The tunnel stays on your Cloudflare account, so you can turn it back on.")) return;
             await Ui.Busy(_cloud.Card, _cloud.Status, async () =>
             {
                 await Put(new Dictionary<string, object> { { "method", "cloudflare" }, { "enabled", false } });
                 ShowAll();
-                Ui.Show(_cloud.Status, "Phone access is off.", false);
+                Ui.Show(_cloud.Status, "Remote access is off.", false);
             });
         }
 
@@ -949,7 +949,7 @@ namespace Tohyee.Tray
                 ShowAll();
                 if (_tailscaleStatus.State == PhoneState.On)
                 {
-                    Ui.Show(_ts.Status, "Phone access is on. Scan the code with your phone.", false);
+                    Ui.Show(_ts.Status, "Remote access is on. Scan the code with your phone.", false);
                 }
                 else
                 {
@@ -981,7 +981,7 @@ namespace Tohyee.Tray
         private async Task TurnOffTailscale()
         {
             if (_working) return;
-            if (!Ui.Confirm(FindForm(), "Turn off phone access? Tohyee stops being reachable at " + _ts.AddressText + ". It keeps working on this computer and your network.")) return;
+            if (!Ui.Confirm(FindForm(), "Turn off remote access? Tohyee stops being reachable at " + _ts.AddressText + ". It keeps working on this computer and your network.")) return;
             _working = true;
             try
             {
@@ -993,7 +993,7 @@ namespace Tohyee.Tray
                 }
                 _working = false;
                 await ReloadTailscale();
-                Ui.Show(_ts.Status, "Phone access is off.", false);
+                Ui.Show(_ts.Status, "Remote access is off.", false);
             }
             catch (TailscaleException error)
             {

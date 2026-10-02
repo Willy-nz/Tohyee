@@ -120,7 +120,7 @@ function TohyeeAddressCard({ remote, onChanged }: { remote: RemoteAccess; onChan
   }
 
   async function turnOff() {
-    if (!window.confirm(`Turn off phone access? Tohyee stops being reachable at ${remote.tohyeeAddress}. The address is kept for next time.`)) return;
+    if (!window.confirm(`Turn off remote access? Tohyee stops being reachable at ${remote.tohyeeAddress}. The address is kept for next time.`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -147,7 +147,7 @@ function TohyeeAddressCard({ remote, onChanged }: { remote: RemoteAccess; onChan
           </Button>
         ) : (
           <Button
-            onClick={() => void run("POST", other ? "Switch phone access to a Tohyee address? The way it works now is turned off." : null)}
+            onClick={() => void run("POST", other ? "Switch remote access to a Tohyee address? The way it works now is turned off." : null)}
             disabled={busy || !remote.secretsAvailable}
           >
             {busy ? "Working…" : remote.tohyeeAddress ? "Turn on" : "Get a Tohyee address"}
@@ -252,9 +252,9 @@ export default function RemoteAccessPage() {
           {remote.method === "tailscale" ? (
             <Notice tone="info">
               {remote.enabled
-                ? `Phone access is on through Tailscale Funnel${remote.publicUrl ? ` at ${remote.publicUrl}` : ""}. `
-                : "Phone access through Tailscale Funnel is off. "}
-              It&apos;s set up in the Tohyee server app on the server computer (Phone access). Saving a Cloudflare Tunnel below switches
+                ? `Remote access is on through Tailscale Funnel${remote.publicUrl ? ` at ${remote.publicUrl}` : ""}. `
+                : "Remote access through Tailscale Funnel is off. "}
+              It&apos;s set up in the Tohyee server app on the server computer (Remote access). Saving a Cloudflare Tunnel below switches
               to Cloudflare instead. Tailscale&apos;s free plan is for non-commercial use only; businesses need a paid Tailscale plan.
             </Notice>
           ) : null}

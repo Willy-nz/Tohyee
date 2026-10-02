@@ -165,7 +165,7 @@ namespace Tohyee.Tray
         private readonly TextBox _name = new TextBox();
         private readonly TextBox _email = new TextBox();
         private readonly TextBox _password = new TextBox { UseSystemPasswordChar = true };
-        private readonly CheckBox _admin = new CheckBox { Text = "Server admin (can change these server settings)", AutoSize = true };
+        private readonly CheckBox _admin = new DarkCheckBox { Text = "Server admin (can change these server settings)", AutoSize = true };
         private readonly Label _error = Ui.Status();
 
         public string DisplayName { get { return _name.Text.Trim(); } }

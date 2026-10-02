@@ -42,11 +42,31 @@ namespace Tohyee.Tray
                 foreach (var page in new[] { "home", "organisations", "users", "backups", "email", "stats", "updates" })
                 {
                     form.Navigate(page);
+                    if (Transitions)
+                    {
+                        // What the window shows while the page is being made and its data arrives.
+                        Save(form, folder, Name(page) + "-t0");
+                        PumpFor(1);
+                        Save(form, folder, Name(page) + "-t1");
+                        PumpFor(4);
+                        Save(form, folder, Name(page) + "-t2");
+                    }
                     Pump();
+                    if (Transitions) PumpFor(20);
                     Save(form, folder, Name(page));
                 }
+                if (Transitions)
+                {
+                    // Coming back to a page that's already made.
+                    form.Navigate("home");
+                    Pump();
+                    form.Navigate("organisations");
+                    Save(form, folder, "again-organisations-t0");
+                    PumpFor(1);
+                    Save(form, folder, "again-organisations-t1");
+                }
 
-                // Phone access: the chooser, then each way on or part-way through.
+                // Remote access: the chooser, then each way on or part-way through.
                 Phone(form, services, folder, "1-choose", Off, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.None, true, null);
                 Phone(form, services, folder, "2-tohyee-on", TohyeeOn, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.None, true, null);
                 Phone(form, services, folder, "3-tohyee-not-available", Off, PhoneState.NotInstalled, RemoteAccessPage.DemoStage.None, false, null);
@@ -89,6 +109,18 @@ namespace Tohyee.Tray
             return (Array.IndexOf(order, page) + 1) + "-" + page;
         }
 
+        /// <summary>TOHYEE_DEMO_TRANSITIONS=1: also saves pictures while each page appears (needs a real screen).</summary>
+        private static readonly bool Transitions = Environment.GetEnvironmentVariable("TOHYEE_DEMO_TRANSITIONS") == "1";
+
+        private static void PumpFor(int rounds)
+        {
+            for (var i = 0; i < rounds; i++)
+            {
+                Application.DoEvents();
+                Thread.Sleep(15);
+            }
+        }
+
         private static void Pump()
         {
             for (var i = 0; i < 40; i++)
@@ -102,7 +134,7 @@ namespace Tohyee.Tray
         {
             using (var bitmap = new Bitmap(form.ClientSize.Width, form.ClientSize.Height))
             {
-                if (Type.GetType("Mono.Runtime") != null)
+                if (Type.GetType("Mono.Runtime") != null || Transitions)
                 {
                     // Mono's DrawToBitmap leaves out child controls, so copy the window off the screen.
                     form.Activate();
@@ -122,7 +154,7 @@ namespace Tohyee.Tray
             return new List<NewsItem>
             {
                 new NewsItem { Kind = "release", Date = "2026-09-29", Title = "Tohyee 0.2.1", Body = "Bank reconciliation with one-click OK, bulk coding and split transactions, plus foreign-currency bank accounts.", Link = NewsFeed.ReleasesPage },
-                new NewsItem { Kind = "announcement", Date = "2026-09-20", Title = "Phone access is getting easier", Body = "The next server app gives you three ways to use Tohyee from your phone, including a Tohyee address in one click. Then scan a QR code." },
+                new NewsItem { Kind = "announcement", Date = "2026-09-20", Title = "Remote access is getting easier", Body = "The next server app gives you three ways to use Tohyee from your phone, including a Tohyee address in one click. Then scan a QR code." },
                 new NewsItem { Kind = "release", Date = "2026-09-02", Title = "Tohyee 0.2.0", Body = "Encrypted nightly backups with OneDrive copies, restore as a copy, and the backup key check.", Link = NewsFeed.ReleasesPage },
                 NewsFeed.DefaultConference,
             };

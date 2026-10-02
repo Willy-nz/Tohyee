@@ -8,7 +8,7 @@ namespace Tohyee.Tray
 {
     /// <summary>
     /// A small QR code maker (byte mode, error correction level M, versions 1
-    /// to 40), for showing the phone access address so a phone camera can open
+    /// to 40), for showing the remote access address so a phone camera can open
     /// it. Written for Tohyee following the QR code standard (ISO/IEC 18004);
     /// the structure follows Project Nayuki's public description of the
     /// algorithm. No outside code or packages.
@@ -435,7 +435,7 @@ namespace Tohyee.Tray
         }
     }
 
-    /// <summary>Shows a QR code for some text (the phone access address).</summary>
+    /// <summary>Shows a QR code for some text (the remote access address).</summary>
     internal sealed class QrView : Control
     {
         private QrCode _code;

@@ -100,7 +100,13 @@ namespace Tohyee.Tray
 
         private async Task<Dictionary<string, object>> Send(HttpMethod method, string path, object body, TimeSpan timeout)
         {
-            if (_fake != null) return _fake(method.Method, path, body);
+            if (_fake != null)
+            {
+                // TOHYEE_DEMO_DELAY_MS: answer as slowly as a real server, to see what the window does meanwhile.
+                int delay;
+                if (int.TryParse(Environment.GetEnvironmentVariable("TOHYEE_DEMO_DELAY_MS"), out delay) && delay > 0) await Task.Delay(delay);
+                return _fake(method.Method, path, body);
+            }
             using (var cancel = new System.Threading.CancellationTokenSource(timeout))
             using (var request = new HttpRequestMessage(method, _baseUrl + path))
             {

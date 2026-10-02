@@ -279,6 +279,61 @@ namespace Tohyee.Tray
         Danger,
     }
 
+    /// <summary>
+    /// A tick box drawn to match the theme. Windows' own flat tick box draws a
+    /// white box with the tick in the text colour, and this theme's text is
+    /// near-white, so a ticked box looked empty (seen on Jess's server, 2 Oct 2026).
+    /// </summary>
+    internal sealed class DarkCheckBox : CheckBox
+    {
+        public DarkCheckBox()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            ForeColor = Theme.Text;
+            Cursor = Cursors.Hand;
+        }
+
+        public override Size GetPreferredSize(Size proposedSize)
+        {
+            var text = TextRenderer.MeasureText(Text ?? "", Font);
+            return new Size(Theme.S(26) + text.Width, Math.Max(Theme.S(22), text.Height + Theme.S(4)));
+        }
+
+        protected override void OnCheckedChanged(EventArgs e)
+        {
+            base.OnCheckedChanged(e);
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Theme.BackOf(this));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var size = Theme.S(16);
+            var box = new RectangleF(1, (Height - size) / 2f, size, size);
+            using (var path = Theme.Rounded(box, Theme.S(4)))
+            {
+                using (var fill = new SolidBrush(Checked ? Theme.Accent : Theme.Input)) g.FillPath(fill, path);
+                using (var border = new Pen(Checked ? Theme.Accent : (Focused ? Theme.AccentText : Theme.Muted))) g.DrawPath(border, path);
+            }
+            if (Checked)
+            {
+                using (var tick = new Pen(Color.White, Theme.S(2)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+                {
+                    g.DrawLines(tick, new[]
+                    {
+                        new PointF(box.Left + size * 0.24f, box.Top + size * 0.52f),
+                        new PointF(box.Left + size * 0.43f, box.Top + size * 0.72f),
+                        new PointF(box.Left + size * 0.78f, box.Top + size * 0.30f),
+                    });
+                }
+            }
+            var textArea = new Rectangle(Theme.S(26), 0, Width - Theme.S(26), Height);
+            TextRenderer.DrawText(g, Text, Font, textArea, Enabled ? ForeColor : Theme.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.WordBreak);
+        }
+    }
+
     /// <summary>A flat button with rounded corners, drawn to match the theme.</summary>
     internal sealed class FlatButton : Button
     {
@@ -450,8 +505,12 @@ namespace Tohyee.Tray
             else if (tag == "stretch")
             {
                 // Auto-sized groups ignore Width, so pin it with the minimum and maximum.
+                // A maximum height of 0 means "no limit" only to auto-sized controls: on
+                // Windows (.NET Framework) it cuts a fixed-height one (a list, a graph) to
+                // nothing, which hid the organisation and user lists (2 Oct 2026). Mono
+                // treats 0 as no limit for both, so it only showed on Windows.
                 child.MinimumSize = new Size(width, 0);
-                child.MaximumSize = new Size(width, 0);
+                child.MaximumSize = new Size(width, child.AutoSize ? 0 : 100000);
                 child.Width = width;
                 var inner = width - child.Padding.Horizontal;
                 if (!(child is ListView) && !(child is TableLayoutPanel))

@@ -14,9 +14,9 @@ that something happened.
   logo with a green, amber or red dot; started when you sign in, like a
   media server's) that shows whether Tohyee is running, restarts it, backs it
   up and opens the logs, and a dark window for the settings with a sidebar
-  (Home, Organisations, Users, Phone access, Backups, Email, Stats, Updates). **Home**
+  (Home, Organisations, Users, Remote access, Backups, Email, Stats, Updates). **Home**
   shows whether the server is running (version, how long it's been up),
-  phone access, the last backup and the organisations at a glance, the latest
+  remote access, the last backup and the organisations at a glance, the latest
   Tohyee news (GitHub releases plus announcements from `website/news.json`,
   fetched at most every four hours and kept for when the computer is
   offline) and a (light-hearted) conference card. On Docker and Linux they're a **command-line tool**
@@ -859,7 +859,7 @@ that something happened.
   Guest checkouts go to the customer contact chosen for them, or are
   refused (SPC24). Refused rather than guessed: test orders, other
   currencies, gift cards, tips or duties, chargebacks and reserves.
-- **Phone access (remote access)**, three ways, one on at a time (switching
+- **Remote access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):
   - **Tohyee address** (recommended for most; Windows server app → Phone
@@ -881,7 +881,7 @@ that something happened.
     Tohyee's port. Pasting a tunnel token from Cloudflare's dashboard still
     works. The cloudflared steps still need trying on a real Windows computer
     with a real Cloudflare account.
-  - **Tailscale Funnel** (Windows server app → Phone access): the simplest
+  - **Tailscale Funnel** (Windows server app → Remote access): the simplest
     set-up, but Tailscale's free plan is for non-commercial use only;
     businesses need a paid Tailscale plan (from US$8 per user a month). One
     button installs Tailscale from Tailscale's package server if needed
