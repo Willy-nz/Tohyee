@@ -412,12 +412,17 @@ export function annualiseForExtraPay(input: { method: ExtraPayMethod; frequency:
   if (input.method === "four_weeks") {
     if (amounts.length === 0) return "0.00";
     const expected = FOUR_WEEK_PAYS[frequency];
-    if (amounts.length !== expected.count) {
+    if (amounts.length === expected.count) return atLeastCents(mul(total, dec(expected.multiplier)));
+    // Spec 2026-27 5.11.1 note 4: with only one pay period paid before the extra pay, "the amount paid for that pay
+    // period is the amount to be annualised", but not how (by its frequency or x 13), so that stays refused (decision 213).
+    if (amounts.length === 1) {
       throw new ValidationError(
-        `${NOT_SUPPORTED}: an extra pay when the four weeks before it hold ${pays(amounts.length, frequency)} (IRD's rules annualise ${pays(expected.count, frequency)}, or none).`,
+        `${NOT_SUPPORTED}: an extra pay when the four weeks before it hold ${pays(1, frequency)} (IRD's note 4 doesn't say how one pay is annualised).`,
       );
     }
-    return atLeastCents(mul(total, dec(expected.multiplier)));
+    // Step 3.1: "In other circumstances, add all PAYE income payments made to the employee in the four weeks prior and
+    // multiply by 13" (decision 213; XP15).
+    return atLeastCents(mul(total, dec("13")));
   }
   if (amounts.length !== 2) {
     throw new ValidationError(
