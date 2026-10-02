@@ -6,7 +6,9 @@ import { ConflictError, NotFoundError } from "@/lib/errors";
 import { getMembership, type Membership } from "@/lib/organisations/registry";
 import { readServerSetting } from "@/lib/server-settings";
 import { requireId, requireString } from "@/lib/validation";
+import { type AiAccessLevel, effectiveAccessLevel, isAiAccessLevel } from "@/lib/ai/access-levels";
 import { aiTokenDisplayPrefix, AI_TOKEN_PREFIX, hashAiToken, newAiToken } from "@/lib/ai/token-format";
+import { ValidationError } from "@/lib/errors";
 
 /** At most this many keys that aren't revoked, per person per organisation (decision 341). */
 export const MAX_ACTIVE_AI_TOKENS = 10;
@@ -19,6 +21,8 @@ export type AiAccessToken = {
   name: string;
   /** e.g. "tohyee_ai_abcd1234" (the start of the key). */
   startsWith: string;
+  /** What it may do (decision 346), before the owner's role caps it. */
+  accessLevel: AiAccessLevel;
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
@@ -28,18 +32,20 @@ type TokenRow = {
   id: string;
   name: string;
   token_prefix: string;
+  access_level: AiAccessLevel;
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
 };
 
-const TOKEN_COLUMNS = "id::text, name, token_prefix, created_at, last_used_at, revoked_at";
+const TOKEN_COLUMNS = "id::text, name, token_prefix, access_level, created_at, last_used_at, revoked_at";
 
 function toToken(row: TokenRow): AiAccessToken {
   return {
     id: row.id,
     name: row.name,
     startsWith: `${AI_TOKEN_PREFIX}${row.token_prefix}`,
+    accessLevel: row.access_level,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
     revokedAt: row.revoked_at,
@@ -64,9 +70,13 @@ export async function listAiTokens(auth: AuthContext, organisationId: string): P
 export async function createAiToken(
   auth: AuthContext,
   organisationId: string,
-  input: { name: unknown },
+  input: { name: unknown; accessLevel?: unknown },
 ): Promise<{ token: string; key: AiAccessToken }> {
   const name = requireString(input.name, "Name", { maxLength: 100 });
+  const accessLevel = input.accessLevel == null || input.accessLevel === "" ? "read" : input.accessLevel;
+  if (!isAiAccessLevel(accessLevel)) {
+    throw new ValidationError("accessLevel must be read, draft or post.");
+  }
   const token = newAiToken();
   const key = await withCoreTransaction(async (client) => {
     // Serialise per person and organisation so the limit holds.
@@ -82,17 +92,17 @@ export async function createAiToken(
       );
     }
     const inserted = await client.query<TokenRow>(
-      `insert into ai_access_tokens (user_id, organisation_id, name, token_hash, token_prefix, created_by_email)
-       values ($1, $2, $3, $4, $5, $6)
+      `insert into ai_access_tokens (user_id, organisation_id, name, token_hash, token_prefix, created_by_email, access_level)
+       values ($1, $2, $3, $4, $5, $6, $7)
        returning ${TOKEN_COLUMNS}`,
-      [auth.user.id, organisationId, name, hashAiToken(token), aiTokenDisplayPrefix(token), auth.user.email],
+      [auth.user.id, organisationId, name, hashAiToken(token), aiTokenDisplayPrefix(token), auth.user.email, accessLevel],
     );
     const row = inserted.rows[0];
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
       eventType: "ai_access_token.created",
       entityType: "organisation",
       entityId: organisationId,
-      details: { tokenId: row.id, name, startsWith: `${AI_TOKEN_PREFIX}${row.token_prefix}` },
+      details: { tokenId: row.id, name, accessLevel, startsWith: `${AI_TOKEN_PREFIX}${row.token_prefix}` },
     });
     return toToken(row);
   });
@@ -130,6 +140,10 @@ export async function revokeAiToken(auth: AuthContext, organisationId: string, t
 export type AiTokenIdentity = {
   tokenId: string;
   tokenName: string;
+  /** The level the key was made with. */
+  accessLevel: AiAccessLevel;
+  /** That level capped by the owner's role now (decision 346). */
+  effectiveLevel: AiAccessLevel;
   user: { id: string; email: string; displayName: string };
   membership: Membership;
 };
@@ -150,8 +164,9 @@ export async function authenticateAiToken(token: string): Promise<AiTokenIdentit
     email: string;
     display_name: string;
     last_used_at: string | null;
+    access_level: AiAccessLevel;
   }>(
-    `select t.id::text, t.name, t.organisation_id, t.user_id, u.email, u.display_name, t.last_used_at
+    `select t.id::text, t.name, t.organisation_id, t.user_id, u.email, u.display_name, t.last_used_at, t.access_level
        from ai_access_tokens t
        join users u on u.id = t.user_id
       where t.token_hash = $1 and t.revoked_at is null and u.is_active`,
@@ -167,6 +182,8 @@ export async function authenticateAiToken(token: string): Promise<AiTokenIdentit
   return {
     tokenId: row.id,
     tokenName: row.name,
+    accessLevel: row.access_level,
+    effectiveLevel: effectiveAccessLevel(row.access_level, membership.role),
     user: { id: row.user_id, email: row.email, displayName: row.display_name },
     membership,
   };

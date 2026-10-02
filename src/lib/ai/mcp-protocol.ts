@@ -33,6 +33,8 @@ export type JsonRpcResponse =
 
 export type ToolInfo = {
   name: string;
+  /** False for a tool that changes the books. */
+  readOnly?: boolean;
   title: string;
   description: string;
   inputSchema: Record<string, unknown>;
@@ -47,6 +49,8 @@ export type McpServer = {
   serverInfo: { name: string; title?: string; version: string };
   instructions: string;
   tools: readonly ToolInfo[];
+  /** Why a tool that exists isn't offered to this caller, or null. */
+  unavailableTool?(name: string): string | null;
   callTool(name: string, args: Record<string, unknown>): Promise<CallToolResult>;
 };
 
@@ -114,13 +118,21 @@ export async function handleMcpMessage(message: unknown, server: McpServer): Pro
           title: tool.title,
           description: tool.description,
           inputSchema: tool.inputSchema,
-          annotations: { title: tool.title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          annotations: {
+            title: tool.title,
+            readOnlyHint: tool.readOnly !== false,
+            // No tool deletes, voids or archives anything (decision 347).
+            destructiveHint: false,
+            idempotentHint: tool.readOnly !== false,
+            openWorldHint: false,
+          },
         })),
       });
     case "tools/call": {
       const name = params.name;
       if (typeof name !== "string" || !server.tools.some((tool) => tool.name === name)) {
-        return rpcError(id, JSON_RPC.INVALID_PARAMS, `Unknown tool: ${typeof name === "string" ? name : "(none)"}.`);
+        const reason = typeof name === "string" ? server.unavailableTool?.(name) : null;
+        return rpcError(id, JSON_RPC.INVALID_PARAMS, reason ?? `Unknown tool: ${typeof name === "string" ? name : "(none)"}.`);
       }
       const args = params.arguments ?? {};
       if (!args || typeof args !== "object" || Array.isArray(args)) {

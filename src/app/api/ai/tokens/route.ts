@@ -19,12 +19,16 @@ export const GET = route(async (request) => {
   });
 });
 
-/** POST { organisationId, name }: makes a key. The key is in this answer only. */
+/**
+ * POST { organisationId, name, accessLevel? }: makes a key (accessLevel read,
+ * draft or post; read when left out). The key is in this answer only. Any
+ * level can be chosen; it's capped by the person's role whenever it's used.
+ */
 export const POST = route(async (request) => {
   const auth = await requireAuth(request);
   const body = await readJson(request);
   const organisationId = parseOrganisationId(body.organisationId);
   await requireOrganisationRole(auth, organisationId, "viewer");
-  const result = await createAiToken(auth, organisationId, { name: body.name });
+  const result = await createAiToken(auth, organisationId, { name: body.name, accessLevel: body.accessLevel });
   return json(result, { status: 201 });
 });

@@ -1,5 +1,6 @@
 import { listAccounts } from "@/lib/accounts/service";
 import { boundedLimit, firstRows } from "@/lib/ai/limits";
+import type { AiAccessLevel } from "@/lib/ai/access-levels";
 import type { Role } from "@/lib/auth/roles";
 import { getBill, listBills, type BillSummary } from "@/lib/bills/service";
 import { listContacts } from "@/lib/contacts/service";
@@ -9,6 +10,7 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import { MONTH_NAMES } from "@/lib/financial-year";
 import { formatGstNumber } from "@/lib/format";
 import { getInvoice, listInvoices, type InvoiceSummary } from "@/lib/invoices/service";
+import { getJournalDraft, listJournalDrafts } from "@/lib/ledger/journal-drafts";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { accountTransactions } from "@/lib/reports/account-transactions";
 import { agedPayables } from "@/lib/reports/aged-payables";
@@ -18,27 +20,36 @@ import { calculateGstReturn } from "@/lib/reports/gst-return";
 import { optionalString } from "@/lib/validation";
 
 /**
- * The tools an AI connected over MCP can use (decision 342). Every one only
- * reads, through the same service functions the screens use, inside a
- * read-only transaction on the organisation's own database. No payroll.
- * Lists are capped so one answer stays small.
+ * The tools an AI connected over MCP can use to look things up (decision
+ * 342). Every one only reads, through the same service functions the screens
+ * use, inside a read-only transaction on the organisation's own database. No
+ * payroll. Lists are capped so one answer stays small. The tools that make
+ * drafts and post are in `@/lib/ai/write-tools` (decisions 346-348); the
+ * whole list is `@/lib/ai/catalogue`.
  */
 
-export type ToolContext = { role: Role; organisationId: string };
+export type ToolContext = {
+  role: Role;
+  organisationId: string;
+  /** The command source for idempotency keys, one per AI key (e.g. "ai-12"). */
+  source: string;
+};
 
-type JsonSchema = Record<string, unknown>;
+export type JsonSchema = Record<string, unknown>;
 
 export type AiTool = {
   name: string;
   title: string;
   description: string;
   inputSchema: JsonSchema;
+  /** The access level a key needs for this tool (decision 346). Only "read" tools run read-only. */
+  level: AiAccessLevel;
   run(tx: OrgTx, args: Record<string, unknown>, context: ToolContext): Promise<unknown>;
 };
 
-const DATE = { type: "string", format: "date", description: "A date as YYYY-MM-DD." } as const;
+export const DATE = { type: "string", format: "date", description: "A date as YYYY-MM-DD." } as const;
 
-function schema(properties: Record<string, JsonSchema> = {}, required: string[] = []): JsonSchema {
+export function schema(properties: Record<string, JsonSchema> = {}, required: string[] = []): JsonSchema {
   return { type: "object", properties, required, additionalProperties: false };
 }
 
@@ -49,7 +60,7 @@ const MAX_AGED_ROWS = 300;
 const MAX_DOCUMENTS_PER_ROW = 50;
 const MAX_DOCUMENT_LINES = 300;
 
-function invoiceSummary(invoice: InvoiceSummary) {
+export function invoiceSummary(invoice: InvoiceSummary) {
   return {
     id: invoice.id,
     number: invoice.invoiceNumber,
@@ -70,7 +81,7 @@ function invoiceSummary(invoice: InvoiceSummary) {
   };
 }
 
-function billSummary(bill: BillSummary) {
+export function billSummary(bill: BillSummary) {
   return {
     id: bill.id,
     supplierInvoiceNumber: bill.supplierInvoiceNumber,
@@ -103,7 +114,7 @@ type DocumentLine = {
   taxAmount: string;
 };
 
-function documentLines(lines: readonly DocumentLine[]) {
+export function documentLines(lines: readonly DocumentLine[]) {
   const kept = firstRows(lines, MAX_DOCUMENT_LINES);
   return {
     lines: kept.rows.map((line) => ({
@@ -145,7 +156,8 @@ export function financialYearEndLabel(month: number): string {
   return month === 2 ? `${label} (29 in a leap year)` : label;
 }
 
-export const AI_TOOLS: readonly AiTool[] = [
+export const READ_TOOLS: readonly AiTool[] = (
+  [
   {
     name: "get_organisation",
     title: "Organisation",
@@ -446,8 +458,24 @@ export const AI_TOOLS: readonly AiTool[] = [
       return { ...rest, transactionLineCount: lines.length, note: "Worked out now; nothing was filed or saved." };
     },
   },
-];
-
-export function findAiTool(name: unknown): AiTool | null {
-  return AI_TOOLS.find((tool) => tool.name === name) ?? null;
-}
+  {
+    name: "list_draft_journals",
+    title: "Draft journals",
+    description: "Draft manual journals, newest first: ones still to post (status draft) or already posted (status posted, with the journal's id).",
+    inputSchema: schema({
+      status: { type: "string", enum: ["draft", "posted"] },
+      limit: { type: "integer", minimum: 1, maximum: MAX_LIST, description: `Default 50, at most ${MAX_LIST}.` },
+    }),
+    async run(tx, args) {
+      return { drafts: await listJournalDrafts(tx, { status: args.status, limit: boundedLimit(args.limit, 50, MAX_LIST) }) };
+    },
+  },
+  {
+    name: "get_draft_journal",
+    title: "One draft journal",
+    description: "One draft manual journal with its lines.",
+    inputSchema: schema({ draftId: { type: "string", description: "The draft's id from list_draft_journals." } }, ["draftId"]),
+    run: (tx, args) => getJournalDraft(tx, args.draftId),
+  },
+  ] satisfies Omit<AiTool, "level">[]
+).map((tool) => ({ ...tool, level: "read" as const }));

@@ -6,6 +6,14 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
+import {
+  AI_ACCESS_LEVEL_HELP,
+  AI_ACCESS_LEVEL_LABELS,
+  AI_ACCESS_LEVELS,
+  type AiAccessLevel,
+  effectiveAccessLevel,
+  roleCeiling,
+} from "@/lib/ai/access-levels";
 import { AI_TOOL_PLAIN_WORDS } from "@/lib/ai/tool-names";
 import type { AiAccessToken } from "@/lib/ai/tokens";
 import { ROLE_LABELS } from "@/lib/auth/roles";
@@ -51,7 +59,7 @@ function NewKey({ token, onDone }: { token: string; onDone: () => void }) {
   return (
     <Notice tone="warning">
       <p>
-        <strong>Copy this key now. It won&apos;t be shown again.</strong> Anyone with it can read these books as you, so keep it somewhere safe
+        <strong>Copy this key now. It won&apos;t be shown again.</strong> Anyone with it can use these books as you, at the key&apos;s level, so keep it somewhere safe
         and only paste it into your own AI.
       </p>
       <div className={styles.keyRow}>
@@ -84,7 +92,9 @@ function AiConnect({ organisationId }: { organisationId: string }) {
   const keys = useApiData<KeysResponse>("/api/ai/tokens", { organisationId });
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [name, setName] = useState("");
+  const [accessLevel, setAccessLevel] = useState<AiAccessLevel>("read");
   const [busy, setBusy] = useState(false);
+  const ceiling = current ? roleCeiling(current.role) : "read";
   const [newToken, setNewToken] = useState<string | null>(null);
 
   const localUrl = `${window.location.origin}/api/mcp`;
@@ -97,10 +107,11 @@ function AiConnect({ organisationId }: { organisationId: string }) {
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await api<{ token: string; key: AiAccessToken }>("/api/ai/tokens", { method: "POST", body: { organisationId, name } });
+      const result = await api<{ token: string; key: AiAccessToken }>("/api/ai/tokens", { method: "POST", body: { organisationId, name, accessLevel } });
       setNewToken(result.token);
       setStatus({ tone: "success", text: `Made the key “${result.key.name}”.` });
       setName("");
+      setAccessLevel("read");
       keys.reload();
     } catch (caught) {
       setStatus({ tone: "error", text: errorMessage(caught) });
@@ -126,7 +137,7 @@ function AiConnect({ organisationId }: { organisationId: string }) {
 
       <Card
         title="Your access keys"
-        description={`Each key lets one AI read ${current?.displayName ?? "this organisation"}'s books as you. Make one per AI or device so you can revoke them separately.`}
+        description={`Each key lets one AI use ${current?.displayName ?? "this organisation"}'s books as you, at the level you choose. Make one per AI or device so you can revoke them separately.`}
       >
         {newToken ? <NewKey token={newToken} onDone={() => setNewToken(null)} /> : null}
         {keys.error ? <Notice tone="error">{keys.error}</Notice> : null}
@@ -134,10 +145,25 @@ function AiConnect({ organisationId }: { organisationId: string }) {
           <Field label="Name" hint="So you can tell your keys apart, e.g. “Claude on my laptop”.">
             <input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} required />
           </Field>
+          <Field label="What it can do" hint={AI_ACCESS_LEVEL_HELP[accessLevel]}>
+            <select value={accessLevel} onChange={(event) => setAccessLevel(event.target.value as AiAccessLevel)}>
+              {AI_ACCESS_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {AI_ACCESS_LEVEL_LABELS[level]}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Button type="submit" disabled={busy || (keys.data ? active.length >= keys.data.maxActiveKeys : false)}>
             Create a key
           </Button>
         </form>
+        {ceiling === "read" ? (
+          <Notice tone="info">
+            Your role here is {current ? ROLE_LABELS[current.role] : "viewer"}, so any key you make can only look things up, whatever you choose. Making
+            drafts and posting need the bookkeeper role or higher.
+          </Notice>
+        ) : null}
         {keys.data && active.length >= keys.data.maxActiveKeys ? (
           <p className={ui.muted}>You have {keys.data.maxActiveKeys} keys, the most you can have here. Revoke one to make another.</p>
         ) : null}
@@ -150,6 +176,7 @@ function AiConnect({ organisationId }: { organisationId: string }) {
                 <tr>
                   <th>Name</th>
                   <th>Starts with</th>
+                  <th>Can</th>
                   <th>Created</th>
                   <th>Last used</th>
                   <th />
@@ -163,6 +190,14 @@ function AiConnect({ organisationId }: { organisationId: string }) {
                     </td>
                     <td>
                       <code>{key.startsWith}…</code>
+                    </td>
+                    <td>
+                      {AI_ACCESS_LEVEL_LABELS[key.accessLevel]}
+                      {current && effectiveAccessLevel(key.accessLevel, current.role) !== key.accessLevel ? (
+                        <div className={ui.muted}>
+                          {AI_ACCESS_LEVEL_LABELS[effectiveAccessLevel(key.accessLevel, current.role)]} with your role
+                        </div>
+                      ) : null}
                     </td>
                     <td>{formatDateTime(key.createdAt)}</td>
                     <td>{key.lastUsedAt ? formatDateTime(key.lastUsedAt) : "Never"}</td>
@@ -238,20 +273,36 @@ function AiConnect({ organisationId }: { organisationId: string }) {
         </p>
       </Card>
 
-      <Card title="What it can see" description="Your AI can ask Tohyee for these, and nothing else. It can't post, approve, change or delete anything.">
-        <ul className={styles.toolList}>
-          {AI_TOOL_PLAIN_WORDS.map((tool) => (
-            <li key={tool.name}>{tool.words}</li>
-          ))}
-        </ul>
-        <p className={ui.muted}>Payroll isn&apos;t included.</p>
+      <Card title="What it can do" description="Your AI can ask Tohyee for these, and nothing else. Each key does only what its level allows.">
+        {AI_ACCESS_LEVELS.map((level) => (
+          <div key={level}>
+            <h3 className={ui.cardTitle}>
+              {AI_ACCESS_LEVEL_LABELS[level]}
+              {level === "read" ? "" : " (also)"}
+            </h3>
+            <p className={ui.muted}>{AI_ACCESS_LEVEL_HELP[level]}</p>
+            <ul className={styles.toolList}>
+              {AI_TOOL_PLAIN_WORDS.filter((tool) => tool.level === level).map((tool) => (
+                <li key={tool.name}>{tool.words}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        <Notice tone="info">
+          <strong>It never deletes.</strong> At every level, your AI can&apos;t delete, void, archive, roll back, refund or remove anything, not even a
+          draft. Those stay with people, in Tohyee. Payroll isn&apos;t included.
+        </Notice>
       </Card>
 
       <Card title="About your keys">
         <ul className={styles.toolList}>
           <li>
-            A key belongs to you and to this organisation only. It carries your role here ({current ? ROLE_LABELS[current.role] : "your role"}) but is
-            always read-only.
+            A key belongs to you and to this organisation only. It acts as you, so it can never do more than your role here (
+            {current ? ROLE_LABELS[current.role] : "your role"}) allows, and no more than the level you chose for it.
+          </li>
+          <li>
+            What it makes or changes shows in the history as you &ldquo;via AI key&rdquo; and the key&apos;s name. Drafts it makes wait for you on the
+            invoice, bill and journal pages.
           </li>
           <li>It stops working when you revoke it, when you&apos;re removed from this organisation, or when your login is turned off.</li>
           <li>Tohyee keeps only a fingerprint (hash) of each key, so it can&apos;t show a key again. If you lose one, revoke it and make another.</li>
@@ -269,7 +320,7 @@ export default function AiPage() {
     <Page>
       <PageHeader
         title="AI"
-        description="Connect your own AI (Claude, ChatGPT and others) to these books. It can look things up and answer questions; it can't change anything."
+        description="Connect your own AI (Claude, ChatGPT and others) to these books. It can look things up and answer questions, and, if you let it, make drafts and post them. It never deletes anything."
       />
       <RequireOrganisation>{(organisationId) => <AiConnect key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>

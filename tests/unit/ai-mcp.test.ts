@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { boundedJson, boundedLimit, firstRows, RequestLimiter } from "@/lib/ai/limits";
 import { handleMcpMessage, type McpServer, negotiateProtocolVersion, protocolHeaderAccepted } from "@/lib/ai/mcp-protocol";
 import { aiTokenDisplayPrefix, bearerAiToken, hashAiToken, looksLikeAiToken, newAiToken } from "@/lib/ai/token-format";
+import { effectiveAccessLevel, isAiAccessLevel, levelAllows } from "@/lib/ai/access-levels";
 import { AI_TOOL_PLAIN_WORDS } from "@/lib/ai/tool-names";
-import { AI_TOOLS, financialYearEndLabel } from "@/lib/ai/tools";
+import { AI_TOOLS } from "@/lib/ai/catalogue";
+import { financialYearEndLabel } from "@/lib/ai/tools";
 
 describe("AI key format (decision 340)", () => {
   it("makes tohyee_ai_ keys with 32 random bytes, different each time", () => {
@@ -127,5 +129,43 @@ describe("MCP messages (decision 344)", () => {
     expect(await handleMcpMessage({ jsonrpc: "2.0", method: "notifications/initialized" }, server)).toBeNull();
     expect(await handleMcpMessage({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }, server)).toBeNull();
     expect(await handleMcpMessage({ jsonrpc: "2.0", id: 9, result: {} }, server)).toBeNull();
+  });
+
+  it("explains a tool that exists but isn't offered, and marks writing tools", async () => {
+    const limited: McpServer = {
+      ...server,
+      tools: [{ name: "create_contact", title: "Add", description: "Adds a contact.", inputSchema: { type: "object" }, readOnly: false }],
+      unavailableTool: (name) => (name === "approve_invoice" ? "approve_invoice needs a key with \"Make and post\" access." : null),
+    };
+    expect(await handleMcpMessage({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "approve_invoice" } }, limited)).toMatchObject({
+      error: { code: -32602, message: 'approve_invoice needs a key with "Make and post" access.' },
+    });
+    const listed = (await handleMcpMessage({ jsonrpc: "2.0", id: 11, method: "tools/list" }, limited)) as { result: { tools: { annotations: Record<string, unknown> }[] } };
+    expect(listed.result.tools[0].annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+  });
+});
+
+describe("AI key access levels (decision 346)", () => {
+  it("caps the key's level by the person's role", () => {
+    expect(effectiveAccessLevel("post", "viewer")).toBe("read");
+    expect(effectiveAccessLevel("draft", "viewer")).toBe("read");
+    expect(effectiveAccessLevel("read", "owner")).toBe("read");
+    expect(effectiveAccessLevel("draft", "bookkeeper")).toBe("draft");
+    expect(effectiveAccessLevel("post", "bookkeeper")).toBe("post");
+    expect(effectiveAccessLevel("post", "admin")).toBe("post");
+  });
+
+  it("orders the levels", () => {
+    expect(levelAllows("post", "draft")).toBe(true);
+    expect(levelAllows("draft", "post")).toBe(false);
+    expect(levelAllows("read", "draft")).toBe(false);
+    expect(isAiAccessLevel("draft")).toBe(true);
+    expect(isAiAccessLevel("delete")).toBe(false);
+  });
+
+  it("every tool has a level, and the page lists each with the same level", () => {
+    for (const tool of AI_TOOLS) {
+      expect(AI_TOOL_PLAIN_WORDS.find((entry) => entry.name === tool.name)?.level, tool.name).toBe(tool.level);
+    }
   });
 });

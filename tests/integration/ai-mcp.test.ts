@@ -3,7 +3,7 @@ import * as revokeRoute from "@/app/api/ai/tokens/[tokenId]/revoke/route";
 import * as tokensRoute from "@/app/api/ai/tokens/route";
 import * as mcpRoute from "@/app/api/mcp/route";
 import * as memberRoute from "@/app/api/organisations/[organisationId]/members/[userId]/route";
-import { AI_TOOLS } from "@/lib/ai/tools";
+import { AI_TOOLS } from "@/lib/ai/catalogue";
 import { hashAiToken } from "@/lib/ai/token-format";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createBill, approveBill } from "@/lib/bills/service";
@@ -11,6 +11,7 @@ import { createContact } from "@/lib/contacts/service";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { approveInvoice, createInvoice } from "@/lib/invoices/service";
+import { createJournalDraft } from "@/lib/ledger/journal-drafts";
 import { getOrganisation } from "@/lib/organisations/registry";
 import {
   apiRequest,
@@ -67,6 +68,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
   let ownerCookie: string;
   let viewerCookie: string;
   let viewerToken: string;
+  let draftId: string;
 
   const asOwner = <T>(work: Parameters<typeof inOrganisation<T>>[2]) => inOrganisation(ORG, { userId: owner.id, email: owner.email }, work);
 
@@ -118,20 +120,33 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
       )
     ).bill;
     await asOwner((tx) => approveBill(tx, bill.id, { idempotencyKey: key("approve-bill") }));
+    draftId = (
+      await asOwner((tx) =>
+        createJournalDraft(tx, {
+          idempotencyKey: key("draft"),
+          postingDate: "2026-06-30",
+          reference: "DRAFT-1",
+          lines: [
+            { accountCode: "1200", debitAmount: "10.00" },
+            { accountCode: "6040", creditAmount: "10.00" },
+          ],
+        }),
+      )
+    ).draft.id;
   });
 
   afterAll(async () => {
     await server?.teardown();
   });
 
-  it("makes a key, shows it once, stores only its SHA-256 and lists it without the key", async () => {
+  it("makes a key (Look only unless asked), shows it once, stores only its SHA-256 and lists it without the key", async () => {
     const made = await makeKey(viewerCookie, "Claude on my laptop");
     expect(made.status).toBe(201);
     const token = made.body.token as string;
     expect(token).toMatch(/^tohyee_ai_[A-Za-z0-9_-]{43}$/);
     viewerToken = token;
     const keyInfo = made.body.key as Json;
-    expect(keyInfo).toMatchObject({ name: "Claude on my laptop", startsWith: token.slice(0, 18), lastUsedAt: null, revokedAt: null });
+    expect(keyInfo).toMatchObject({ name: "Claude on my laptop", startsWith: token.slice(0, 18), accessLevel: "read", lastUsedAt: null, revokedAt: null });
 
     const stored = await coreQuery<Json>("select * from ai_access_tokens where id = $1", [keyInfo.id]);
     expect(stored.rows[0]).toMatchObject({ user_id: viewer.id, organisation_id: ORG, token_hash: hashAiToken(token), created_by_email: viewer.email });
@@ -193,7 +208,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         serverInfo: { name: "tohyee", version: expect.stringMatching(/^\d+\.\d+\.\d+/) },
       },
     });
-    expect((init.body.result as Json).instructions).toContain("Read-only");
+    expect((init.body.result as Json).instructions).toContain("Look only");
     // An unknown version gets the one Tohyee was written against.
     expect(((await rpc(viewerToken, "initialize", { protocolVersion: "1999-01-01" })).body.result as Json).protocolVersion).toBe("2025-06-18");
 
@@ -221,6 +236,8 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "list_invoices",
         "profit_and_loss",
         "trial_balance",
+        "list_draft_journals",
+        "get_draft_journal",
       ].sort(),
     );
     for (const tool of tools) {
@@ -280,12 +297,13 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
       gst_return: { periodStart: "2026-05-01", periodEnd: "2026-06-30" },
       get_invoice: { number: "INV-0001" },
       get_bill: { supplierInvoiceNumber: "KS-77" },
+      get_draft_journal: { draftId },
       aged_receivables: { asAt: "2026-06-30" },
       aged_payables: { asAt: "2026-06-30" },
       balance_sheet: { asAt: "2026-06-30" },
       trial_balance: { asAt: "2026-06-30" },
     };
-    for (const tool of AI_TOOLS) {
+    for (const tool of AI_TOOLS.filter((entry) => entry.level === "read")) {
       const result = await callTool(viewerToken, tool.name, args[tool.name] ?? {});
       expect(result.isError, `${tool.name}: ${result.text}`).toBe(false);
     }
