@@ -1,0 +1,50 @@
+.chart {
+  min-width: 0;
+}
+
+.canvas {
+  width: 100%;
+  height: 340px;
+  min-height: 240px;
+}
+
+.kpi {
+  display: grid;
+  gap: 6px;
+  min-height: 120px;
+  align-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 20px 22px;
+}
+
+.kpiValue {
+  color: var(--text);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiTitle {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.kpiChange {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
