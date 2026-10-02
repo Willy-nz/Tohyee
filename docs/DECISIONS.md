@@ -1705,9 +1705,15 @@ The examples these touch are **not approved by Jess**.
 212. **IRD's steps, not its printed example** (question 1, kept; decision
      126): the specification's steps are the rule; the one-cent difference
      in the printed example 1 stays a question for IRD, for Jess to ask.
-213. **Short four-week windows stay refused** (question 2): IRD's
-     "other circumstances" rule wasn't read this session, and tax isn't
-     guessed.
+213. **Short four-week windows stay refused** (question 2). IRD's
+     [Payroll calculations and business rules specification 2026](https://www.ird.govt.nz/-/media/project/ir/home/documents/digital-service-providers/software-providers/payroll-calculations-business-rules-specifications/payroll-calculations-and-business-rules-specification-2026-v1.pdf)
+     was read on 2 Oct 2026 only through the summarising fetch tool: s
+     5.11.1 step 3.1 says "In other circumstances, add all PAYE income
+     payments made to the employee in the four weeks prior and multiply by
+     13". Which circumstances count as "other" (a new weekly employee with
+     two pays, say) needs the full step text, and this edition may not be
+     the 2026-27 one P12 used, so it stays refused until the full section
+     is read (a Chrome session can extract it, as IR1240 was).
 214. **An extra pay on a final pay without a termination item stays
      refused** (question 3): whether a bonus arises from the ending decides
      IRD's method; a choice for the person running pay would need IRD's
@@ -1722,8 +1728,13 @@ The examples these touch are **not approved by Jess**.
 218. **Separate extra-pay pay runs: wanted, not built** (question 7).
      NetSuite runs off-cycle payrolls, so a later stage adds an "extra
      pays only" pay run on its own pay date, with its own examples.
-219. **A higher rate on request: not built** (question 8). It needs IR335's
-     rules on electing a rate, not read this session.
+219. **A higher rate on request: not built yet** (question 8). The same
+     summarised read of the specification (decision 213) says "The
+     employee can notify their employer to choose a higher tax rate" (s
+     5.11.1 note 2; Income Tax Act s RD 10(2)), with elected rates of
+     17.5%, 30%, 33% or 39% for primary and secondary extra pays. It's
+     wanted (it's the employee's right); build it once the full section is
+     read, with its own example.
 
 ### R&D claim (RD42 questions 1-4)
 
