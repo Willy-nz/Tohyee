@@ -11,9 +11,16 @@ Oct 2026; items 4 and 5 asked for the same day ("needs to be ERP level
 features"). Not looked into yet: find the cause before changing anything.
 
 1. **Glitching between screens.** The program on the computer "kind of
-   glitches" when moving between screens. Reproduce it first (on the
-   Windows app and in a browser, to see whether it's the app or the pages),
-   and ask Jess which screens if it can't be seen.
+   glitches" when moving between screens. Seen on Jess's server on 2 Oct
+   2026 (v0.3.0): a page opened for the first time showed as a squashed
+   150 x 150 copy, then in pieces, then properly; the Organisations and
+   Users lists (and, in the current code, the Stats graphs) didn't show
+   at all on Windows; the ticked nightly backup box looked empty. Fixed
+   the same day (PR #86), checked with pictures from GitHub's Windows
+   runner (the installer workflow now saves them, also on the
+   ci/tray-screenshots branch). Jess to confirm after the next release.
+   Still to tidy: the selected row in a list is hard to read, and the
+   Backups folder row runs past the card in a small window.
 2. **Items: couldn't find where to add or look at them.** Products and
    services is under Sales (`/operations/items`), which Jess didn't find.
    Checked 2 Oct 2026: the page and New item work. Jess looked under
