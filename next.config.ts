@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // DuckDB (analytics, decision 354) is a native module: loaded by Node, not bundled.
+  serverExternalPackages: ["@duckdb/node-api", "@duckdb/node-bindings"],
   // The fonts the server writes PDFs with (src/lib/pdf/writer.ts reads them
   // from the app's folder), so the standalone build and installers have them.
   outputFileTracingIncludes: {

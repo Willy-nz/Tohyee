@@ -186,6 +186,7 @@ try {
   <env name="TOHYEE_CLOUDFLARED_PATH" value="$(X $CloudflaredExe)"/>
   <env name="TOHYEE_PG_BIN" value="$(X $PgBin)"/>
   <env name="TOHYEE_BACKUP_DIR" value="$(X (Join-Path $DataRoot 'backups'))"/>
+  <env name="TOHYEE_ANALYTICS_DIR" value="$(X (Join-Path $DataRoot 'analytics'))"/>
 $addressServiceEnv</service>
 "@
   [System.IO.File]::WriteAllText((Join-Path $ServiceDir 'TohyeeServer.xml'), $xml)
