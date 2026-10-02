@@ -56,7 +56,7 @@ function NoteItem({
   }
 
   return (
-    <li style={{ padding: "10px 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+    <li style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
       {editing ? (
         <form onSubmit={(event) => void save(event)}>
           <Field label="Note">

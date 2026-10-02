@@ -2,47 +2,48 @@
   display: grid;
   min-height: 100vh;
   place-items: center;
-  padding: 24px;
+  padding: 24px 16px;
   background:
-    radial-gradient(circle at 20% 10%, rgba(56, 189, 248, 0.18), transparent 35%),
-    radial-gradient(circle at 80% 90%, rgba(37, 99, 235, 0.16), transparent 40%),
-    var(--background);
+    radial-gradient(60rem 30rem at 50% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+    var(--bg);
 }
 
 .panel {
   display: grid;
-  gap: 16px;
-  width: min(420px, 100%);
-  border: 1px solid var(--line);
-  border-radius: 18px;
+  gap: 18px;
+  width: min(400px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow: var(--shadow);
-  padding: 28px;
+  box-shadow: var(--shadow-lg);
+  padding: 32px;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 1.3rem;
-  font-weight: 750;
+  margin-bottom: 4px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-.brandDot {
-  width: 14px;
-  height: 14px;
-  border-radius: 5px;
-  background: linear-gradient(135deg, #38bdf8, #2563eb);
+.brandMark {
+  display: block;
+  border-radius: 8px;
 }
 
 .title {
-  font-size: 1.15rem;
-  font-weight: 650;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .text {
-  color: var(--muted);
-  font-size: 0.93rem;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: var(--text-base);
 }
 
 .form {
@@ -60,7 +61,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.93rem;
+  font-size: var(--text-base);
 }
 
 .steps {
@@ -68,16 +69,18 @@
   gap: 4px;
   margin: 0;
   padding-left: 20px;
-  color: var(--muted);
-  font-size: 0.93rem;
+  color: var(--text-muted);
+  font-size: var(--text-base);
 }
 
 .qr {
   justify-self: center;
   width: min(220px, 70vw);
-  border-radius: 12px;
-  background: #fff;
-  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* QR codes need a white background to scan, in both themes. */
+  background: #ffffff;
+  padding: 8px;
 }
 
 .qr svg {
@@ -105,7 +108,7 @@
   background: none;
   border: 0;
   padding: 0;
-  color: var(--accent);
+  color: var(--link);
   font: inherit;
   cursor: pointer;
   text-decoration: underline;

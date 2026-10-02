@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { TwoStepEnrol, TwoStepVerify } from "@/components/auth/two-step";
 import { api, errorMessage } from "@/lib/client/api";
 import { Button, Field, Notice } from "@/components/ui";
+import { BrandMark } from "@/components/brand-mark";
 import styles from "./auth.module.css";
 
 export type LoginStage = "password" | "verify" | "enrol";
@@ -62,7 +63,7 @@ export function LoginForm({ next = "/operations", initialStage = "password", ini
     <div className={styles.screen}>
       <div className={styles.panel}>
         <div className={styles.brand}>
-          <span className={styles.brandDot} aria-hidden />
+          <BrandMark size={30} className={styles.brandMark} />
           Tohyee
         </div>
         {stage === "enrol" ? <TwoStepEnrol email={email} onDone={finish} /> : null}
