@@ -241,11 +241,18 @@ export async function removeMember(
       [organisationId, userId],
     );
     await assertAnOwnerRemains(client, organisationId);
+    // Their AI keys for this organisation stop for good (decision 341), so
+    // adding them back later doesn't bring old keys back to life.
+    const revoked = await client.query(
+      `update ai_access_tokens set revoked_at = now()
+        where organisation_id = $1 and user_id = $2 and revoked_at is null`,
+      [organisationId, userId],
+    );
     await writeAdminAuditEvent(client, { userId: auth.user.id, email: auth.user.email }, {
       eventType: "organisation.member_removed",
       entityType: "organisation",
       entityId: organisationId,
-      details: { userId, role: current },
+      details: { userId, role: current, aiKeysRevoked: revoked.rowCount },
     });
   });
 }

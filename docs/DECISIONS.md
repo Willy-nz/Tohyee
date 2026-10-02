@@ -2212,3 +2212,179 @@ Xero, as she asked.
      the standard GST code for sales** (as new invoice lines already do), so
      picking one on an invoice fills them in. They can be changed or
      cleared. Purchases stay blank.
+
+### Connect your own AI (decisions 339 to 345)
+
+Jess asked for an "AI" heading in Tohyee "to bring in your AI", and chose
+"Connect your own AI: add your Claude/ChatGPT … or connect it as a tool
+(MCP) so it can read the books and answer questions" (2 Oct 2026). This
+builds the MCP route, read-only to start. The page is
+`/operations/ai`; the top bar's "AI" menu item is being added separately
+with the top bar redesign.
+
+339. **Tohyee is an MCP server that people's own AI connects to.** MCP (the
+     Model Context Protocol) is what Claude (Desktop, Claude.ai custom
+     connectors, Claude Code), ChatGPT connectors and many other AI apps
+     use to call tools, so one endpoint (`POST /api/mcp`) serves them all
+     and Tohyee needs no AI provider account, API key or model of its own:
+     the person's AI does the thinking, under their own account and terms,
+     and asks Tohyee for figures. Nothing is sent to an AI service unless
+     the person connects one. The page says that what the AI reads goes to
+     that AI service.
+340. **Personal AI keys, per person per organisation, hashed.** A key is
+     `tohyee_ai_` followed by 32 random bytes as base64url, shown once when
+     it's made; the core database keeps only its SHA-256 (hex), the first 8
+     characters after the prefix (to tell keys apart), its name, who made
+     it and when, when it was last used and when it was revoked
+     (`ai_access_tokens`, core migration 0005). Keys live in the core
+     database next to sessions because they identify a person, like a
+     session; no accounting data is kept there. A key is for one
+     organisation only, so a bookkeeper with several clients makes one key
+     per client and an AI can never mix books.
+341. **When a key works.** Only while it isn't revoked, its owner's login is
+     active and they're still a member of that organisation (looked up on
+     every request, so it carries their *current* role); the organisation
+     must be ready, as for any request. Removing someone from an
+     organisation revokes their keys for it, so adding them back doesn't
+     revive old keys. Keys are revoked, never deleted, so the list shows
+     what was made. At most 10 keys that aren't revoked per person per
+     organisation. Making and revoking keys are recorded in the core audit
+     trail (`ai_access_token.created` / `.revoked`, with the key's name and
+     start, never the key). Only the owner of a key sees or revokes it;
+     admins can remove a person, which revokes theirs. Any member (viewer
+     and up) can make keys for themselves, since a key can do no more than
+     what they can already do themselves (its level is capped by their role,
+     decision 346).
+342. **Read-only, enforced by PostgreSQL** (for the read tools; since decision
+     346 a key can also be allowed to make drafts and post). Every read tool call runs in its own
+     transaction on the organisation's database with `set transaction read
+     only` (`withOrganisationTransaction(..., { readOnly: true })`), so an
+     insert, update, delete, `nextval` or `select ... for update` fails
+     whatever the code does. The tools reuse the services the screens
+     call: the organisation's settings, chart of accounts, profit and loss,
+     balance sheet, trial balance, aged receivables and payables, invoices,
+     bills, contacts, account transactions and the GST return worked out
+     for a period (nothing filed or stored). The only new queries find an
+     invoice by its number and a bill by the supplier's invoice number.
+     **No payroll**: pay, employees, leave and payroll reports are left out
+     whatever the person's payroll access (journal lines on wages accounts
+     are in account transactions, as for any viewer; they never name
+     anyone, decision 6). Every tool is listed with MCP's `readOnlyHint`.
+     Writing (drafting an invoice, coding a bank line) would be a later
+     decision, with its own approval step.
+343. **Bounded answers and a light rate limit.** Lists are capped (invoices
+     and bills 50 by default, at most 200; contacts 100, at most 500;
+     account transaction lines 200, at most 1,000; aged report rows 300 with
+     50 documents each; document lines 300), and any answer over 200,000
+     characters of JSON is refused with a hint to narrow it, so an AI can't
+     pull megabytes. Each key can make 120 requests a minute, counted in
+     memory (a restart starts again; one server process). A refused
+     request gets HTTP 429.
+344. **MCP as Tohyee speaks it.** The "Streamable HTTP" transport in its
+     simplest stateless form: each POST carries one JSON-RPC 2.0 message
+     (or a batch, as 2025-03-26 allowed) and gets one `application/json`
+     answer; notifications get 202 with no body; GET and DELETE get 405
+     (no event stream, no `Mcp-Session-Id`). Methods: `initialize` (echoes
+     a supported protocol version, 2025-11-25, 2025-06-18, 2025-03-26 or
+     2024-11-05, else answers 2025-06-18; capabilities `tools` only;
+     `serverInfo` name `tohyee` and the app version), `ping`, `tools/list`,
+     `tools/call`, and empty `resources/list` and `prompts/list`. An
+     `MCP-Protocol-Version` header naming an unknown version gets 400. A
+     tool's own failure (a bad date, an invoice that isn't there) is a
+     normal result with `isError: true` and the message, so the AI can
+     correct itself; an unknown tool is JSON-RPC error -32602. Built from
+     the specification as we understand it; not yet tried against each AI
+     app (see the handover).
+345. **Authentication is the key alone.** `/api/mcp` accepts only
+     `Authorization: Bearer tohyee_ai_…`; it ignores session cookies, so a
+     signed-in browser can't use it and a session token isn't a key. It has
+     no same-origin check because AI services call it from elsewhere; it
+     sends no CORS headers, so a web page on another site can't call it
+     with a key from a visitor's browser. Every refusal (no key, unknown,
+     revoked, owner left or disabled) is the same 401 with
+     `WWW-Authenticate: Bearer`. It's the second route, after the sales
+     platform webhook, that doesn't use a session. There's no OAuth sign-in
+     yet: AI services that only accept OAuth connectors can't connect
+     until there is (the page says so). `last_used_at` is updated at most
+     once a minute; individual reads aren't written to the audit trail,
+     like reading a report on screen isn't.
+
+### AI that drafts and posts, and draft journals (decisions 346 to 352)
+
+Jess, on the read-only first version (3 Oct 2026): "Why can't it draft
+journals? Should be able to do anything if you want it to except delete too
+much." So keys get an access level, the AI can make drafts and post them,
+and manual journals get drafts (Xero has draft manual journals). This
+widens decision 342: read tools stay read-only; the new tools write.
+
+346. **Each AI key has an access level, chosen when it's made.** "Look only"
+     (`read`, the default), "Make drafts" (`draft`: also add and edit
+     contacts, and make and edit draft invoices, bills and journals; nothing
+     posts) and "Make and post" (`post`: also approve invoices and bills,
+     post draft journals and record payments). Stored on the key
+     (`ai_access_tokens.access_level`, in core migration 0005, which wasn't
+     released yet). The level is capped by the person's role every time the
+     key is used, with the same role the screens' routes need: making
+     contacts and drafts, approving, posting and recording payments all need
+     bookkeeper or higher, so a viewer's key only ever looks, whatever level
+     it was made with (and gains its level if the person is later made a
+     bookkeeper; the page says so). `tools/list` shows only the tools the key
+     may use now; calling any other is refused with a message saying which
+     level and role it needs.
+347. **The AI never deletes.** No tool deletes, voids, archives, rolls back,
+     refunds, removes, unreconciles or reopens anything, not even a draft,
+     at any level; there are no such tools and the write tools take no flag
+     that does it (e.g. `update_contact` can't archive). Approving an invoice
+     or bill, posting a journal and recording a payment can only be undone by
+     a person in Tohyee (void, correct). Jess said "except delete too much";
+     we took "never delete" because a deletion by an AI is the one thing a
+     person can't check and put right afterwards.
+348. **Write tools act as the person, through the key, and say so.** The
+     tools are `create_contact`, `update_contact`, `create_draft_invoice`,
+     `update_draft_invoice`, `create_draft_bill`, `update_draft_bill`,
+     `create_draft_journal`, `update_draft_journal` (draft level) and
+     `approve_invoice`, `approve_bill`, `post_draft_journal`,
+     `record_invoice_payment`, `record_bill_payment` (post level), plus the
+     read tools `list_draft_journals` and `get_draft_journal`. Each calls the
+     service the screen uses (same checks; payments only into bank and card
+     accounts, as CP8), in a normal transaction (read tools stay read-only),
+     as the key's owner, so records show the person (`created_by_email` and
+     so on). The key is added to every audit event the call writes
+     (`details.via`, e.g. `AI key "Claude on my laptop"`), so a record's
+     history shows "Jess via AI key …"; drafts also keep it in their own
+     columns. Creating, approving and paying take an optional idempotency
+     key kept per AI key (command source `ai-<key id>`); left out, one is made
+     up, so only a call that sends the same key is safe to retry. Edits
+     don't take one: the same edit twice gives the same result.
+349. **Draft manual journals, like Xero's** (examples MJD1-MJD9, tenant
+     migration 0081). `ledger_journal_drafts` and `..._lines` hold what a
+     manual journal holds (date, reference, description, custom fields;
+     lines with account, description, debit or credit, tracking, custom
+     fields and a typed foreign amount and rate; journals have no tax
+     codes), who saved, changed and posted it (and through which AI key), a
+     status (draft or posted) and the posted journal's id. A draft posts
+     nothing and isn't in any report.
+350. **A draft is checked like a journal when it's saved**: two or more
+     lines, each a debit or a credit, debits equal to credits, amounts in
+     cents, active accounts that exist. The checks that depend on the day it
+     posts (the period being open, required tracking and custom fields, the
+     inventory account, foreign amounts against their rates) run when it's
+     posted. Xero may let an unbalanced draft be saved (unverified); Tohyee
+     doesn't, so every draft can be posted as it stands and an AI can't
+     leave half-made journals.
+351. **Posting a draft goes through the usual path, exactly once.** It calls
+     `postJournal` (origin manual, command source `journal-draft`,
+     idempotency key `journal-draft-<id>`) with the draft locked, then
+     marks it posted with the journal's id, who posted it and when. Posting
+     a posted draft returns the same journal. If posting is refused (a
+     locked period, MJD6) nothing changes and it stays a draft. The journal
+     is posted by the person who posts the draft. A posted draft can't be
+     changed or deleted; the database refuses it too. Corrections are made
+     to the journal (C1), not the draft.
+352. **People can delete drafts; screens.** Bookkeepers and up can save,
+     edit, post and delete drafts (viewers can see them), the same role as
+     posting a journal. The journal page has "Save as draft" beside "Post
+     journal", and a "Draft journals" list (shown when there are any) with
+     Edit, Post and Delete, which is less disruptive than a new page or
+     tabs. Deleting a draft is allowed because nothing was posted; AI keys
+     can't (decision 347).

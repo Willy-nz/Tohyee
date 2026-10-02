@@ -24,11 +24,13 @@ tohyee                  core database (DATABASE_URL)
 ├─ server_settings      email sending and remote access (secrets encrypted with
 │                       TOHYEE_SECRET_KEY; never accounting data)
 ├─ organisation_members who can open which organisation, with what role
+├─ ai_access_tokens     personal AI keys (SHA-256 only) with an access level, per user per organisation
 └─ admin_audit_events   server-level audit trail
 
 tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ organisation_settings  (records which organisation owns this database)
 ├─ accounts, ledger_journals, ledger_journal_lines
+├─ ledger_journal_drafts, ledger_journal_draft_lines   draft manual journals (post nothing; a posted one links its journal and can't change)
 ├─ ledger_fx_revaluation_runs / _items / _documents   revaluations, per account and currency, and the open documents they revalued (MC39)
 ├─ ledger_foreign_opening_balances   a foreign-currency account's foreign balance as at a date, entered once (FXB1)
 ├─ inventory_item_balances, inventory_movements   stock by item code and location (a Location tracking value)
@@ -218,7 +220,7 @@ re-runs the whole sequence.
   runs). A lockout message does reveal that the email has an account.
 - State-changing requests from another site are rejected (`Origin` /
   `Sec-Fetch-Site` check) on top of `SameSite` cookies.
-- Every API route needs a signed-in user and checks their role, except one:
+- Every API route needs a signed-in user and checks their role, except two: `/api/mcp` (below), and
   the sales platform webhook address
   (`/api/sales-platforms/webhooks/<organisation>/<random key>`), which a
   store calls. It authenticates only by the platform's signature (Shopify:
@@ -226,6 +228,19 @@ re-runs the whole sequence.
   time) with that connection's secret, before reading the body or writing
   anything; every refusal is the same 401. The random key (32 bytes) only
   finds the connection; it isn't the secret.
+- `/api/mcp` (decisions 339-345), where people's own AI connects over MCP,
+  doesn't use sessions either: it takes only `Authorization: Bearer
+  tohyee_ai_…`, a personal AI key (SHA-256 in `ai_access_tokens`, core
+  database) for one organisation, which works while its owner's login is
+  active and they're still a member, with their current role. The key's
+  access level (look only, make drafts, make and post; decision 346) is
+  capped by that role, and only those tools are offered. Read tools run in
+  a read-only PostgreSQL transaction (`withOrganisationTransaction(...,
+  { readOnly: true })`); write tools call the screens' services as the
+  person, with `actor.via` naming the key, which `writeAuditEvent` adds to
+  every audit event. No tool deletes anything (decision 347). No
+  same-origin check (AI services call it from elsewhere) and no CORS
+  headers; cookies are ignored.
 - First-time setup creates the first server admin and needs `SETUP_TOKEN`
   from the server's environment. It only works while there are no users.
 - Command-line tool (`scripts/admin.ts`; `npm run admin`, or

@@ -32,7 +32,19 @@ GitHub; each merge commit says so):
 | Leave liability posting | 0072 | HL52-HL56 | 182-187 |
 | Leave liability: finished employees, employer KiwiSaver, month-end reminder (2 Oct, afternoon session) | 0073 | HL53 (rewritten), HL57-HL61 | 188-191 |
 
-**Next free tenant migration: 0081. Next core migration: 0005. Next decision number: 339.**
+**Next free tenant migration: 0082. Next core migration: 0006. Next decision number: 353.**
+
+**Connect your own AI (branch `claude/connect-your-ai`; decisions 339-352, core
+migration 0005, tenant migration 0081):** personal AI keys (Look only, Make
+drafts, or Make and post; never delete) and an MCP endpoint (`POST /api/mcp`)
+so people's own Claude, ChatGPT and other AI can look up the books, make drafts
+and, if allowed, post them; plus draft manual journals (MJD1-MJD9, not yet
+approved by Jess). The AI page is `/operations/ai` (the top bar's menu item
+comes with the top bar redesign). Tested with the integration tests
+(`tests/integration/ai-mcp.test.ts`, `ai-mcp-write.test.ts`,
+`journal-drafts.test.ts`) calling the routes directly, not yet with Claude
+Desktop, Claude.ai or ChatGPT themselves: try one before telling people it
+works with it.
 
 **Evening of 2 Oct 2026 (for 0.4.0):** Claude tried Tohyee on Jess's server through her Chrome and fixed what turned up (docs/TODO.md, "Tried out on Jess's server"; decisions 333-338, tenant migration 0080 for default payment terms), the server app's missing lists and screen glitch on Windows (PR #86; the Windows installer workflow now saves pictures of the server app, also on the ci/tray-screenshots branch), and replaced the browser's confirm boxes with an in-page dialog.
 
@@ -187,7 +199,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0081 (0058-0080 used: 0080 default payment terms, 0079 opportunity sales orders, 0078 pay run bank accounts, 0077 expense claim supplier GST numbers, 0076 purchase order close, 0075 Shopify guest contact, 0074 timesheet first day and standard week, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting, 0073 employer KiwiSaver on the leave liability).
+Next free tenant migration number: 0082 (0058-0081 used: 0081 draft manual journals, 0080 default payment terms, 0079 opportunity sales orders, 0078 pay run bank accounts, 0077 expense claim supplier GST numbers, 0076 purchase order close, 0075 Shopify guest contact, 0074 timesheet first day and standard week, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting, 0073 employer KiwiSaver on the leave liability).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).

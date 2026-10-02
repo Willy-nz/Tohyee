@@ -274,6 +274,7 @@ async function historyFor(tx: OrgTx, recordType: RecordType, recordId: string): 
     id: row.id,
     at: row.created_at,
     actorEmail: row.actor_email,
+    via: typeof row.details?.via === "string" ? row.details.via : null,
     eventType: row.event_type,
     summary: summarise(row.event_type, row.details ?? {}),
     noteBefore: text(row.details?.before),
