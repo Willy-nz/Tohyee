@@ -30,31 +30,29 @@ GitHub; each merge commit says so):
 | Payroll P8 Holidays Act leave | 0070 | HL1-HL42 (tested) | 138-167 |
 | Leave calls, opening balances, leave requests | 0071 | HL43-HL51 | 168-181 |
 | Leave liability posting | 0072 | HL52-HL56 | 182-187 |
+| Leave liability: finished employees, employer KiwiSaver, month-end reminder (2 Oct, afternoon session) | 0073 | HL53 (rewritten), HL57-HL61 | 188-191 |
 
-**Next free tenant migration: 0073. Next decision number: 188.**
+**Next free tenant migration: 0074. Next decision number: 192.**
 
 No worked example is marked approved; Jess still needs to approve them.
 Jess asked for open questions to be decided by law, then NetSuite, then
 Xero, and recorded in `docs/DECISIONS.md` rather than left for her.
 
-**The next job (not started):** the four leave liability questions under
-HL56. A builder researched them (PBE IPSAS 39, read 2 Oct 2026 through a
-summarising fetch tool, xrb.govt.nz/dmsdocument/5446) and proposed these
-calls; record them as decisions 188+, write examples HL57+, then build:
-1. **Sick leave stays out of the liability**: PBE IPSAS 39 para 17 says it's
-   material only if unused sick leave can be taken as annual leave, which
-   NZ law doesn't allow. Document only.
-2. **Finished employees stay in the liability** until their final pay run
-   is approved and its pay date is on or before the posting date, valued at
-   the holiday pay owed on finishing stored on that final pay; with no
-   approved final pay, the row is a problem that blocks posting. HL53's
-   figures need rewriting (Hemi's 5,302.89 at 31 Oct). Source: para 11.
-3. **Employer KiwiSaver on leave is included** (paras 9, 53-54), at the
-   employee's employer rate, gross of ESCT, enrolled employees only, as its
-   own line pair. Needs migration 0073.
-4. **Month-end reminder: yes**, shown where existing reminders appear, to
-   bookkeepers with payroll access, worked out from the postings (no typed
-   status). Find where the RDTI reminders and Period close live first.
+**Done in the afternoon session (2 Oct 2026):** the four leave liability
+questions under HL56, decided as the builder proposed (decisions 188-191,
+PBE IPSAS 39 paras 9, 11, 13, 17 and 53 read again through the summarising
+fetch tool) and built with tenant migration 0073: sick leave stays out
+(documented only); finished employees stay in until their final pay's pay
+date, at its holiday pay on finishing (HL53 rewritten: Hemi 5,302.89 at 31
+Oct, LEAVELIAB-3 −1,024.56; HL57 takes him out at 4 Nov); employer
+KiwiSaver on the leave as its own line pair (HL59, HL60); a home page
+reminder after each month end (HL61). Tests:
+`tests/integration/payroll-leave-liability.test.ts` and
+`payroll-leave-liability-kiwisaver.test.ts`. The Liability tab and the home
+page reminder weren't opened in a browser.
+
+**Next job:** not chosen. Candidates: click through the new payroll screens
+in a browser (list below), or Jess's open questions.
 
 **Still waiting on Jess or the outside world:**
 - Put a payday filing file through myIR's "Check your employment
@@ -122,7 +120,7 @@ Set them in the Agents box before sending each task:
 
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| Payroll: posting the leave liability (decisions 177, 182-187, HL52-HL56; built by Claude, not merged) | #60 | none yet | `claude/payroll-leave-liability-posting` | 0072 |
+| (none) | | | | |
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
@@ -142,7 +140,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0073 (0058-0072 used: 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting).
+Next free tenant migration number: 0074 (0058-0073 used: 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting, 0073 employer KiwiSaver on the leave liability).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).
@@ -340,9 +338,11 @@ only be run by certain people. Each item is its own branch and PR.
       refused before the last posting, in a locked period, without the
       accounts, with a problem on any report row, or with nothing to
       post; only the latest posting voided (reversing journal). PBE IPSAS
-      39 paras 11, 13, 15 and 16 read (decision 187). Not in it: sick leave carried
-      over, employer KiwiSaver on the leave. Screens weren't checked in a
-      browser.
+      39 paras 11, 13, 15 and 16 read (decision 187). Then decisions
+      188-191 (migration 0073, HL53 rewritten, HL57-HL61): finished
+      employees until their final pay is paid, employer KiwiSaver on the
+      leave, a month-end reminder on the home page; sick leave stays out.
+      Screens weren't checked in a browser.
 - [x] **P9 Timesheets** (tenant migration 0067), merged 2 Oct 2026; examples
       TS1-TS11 await Jess (questions under TS11), decisions 91-101. Built:
       - Payroll › Timesheets: one timesheet per employee per week (Monday to
@@ -660,13 +660,8 @@ wording. Still open:
 - A "number of people" on a position line?
 - Compare actuals by pay date (as now) or by period worked?
 
-**Posting the leave liability** (end of the HL section)
-- Sick leave carried over: accrue a typed estimate (PBE IPSAS 39 para 15)
-  or keep it out?
-- Someone finished whose final pay is dated after the posting: keep them
-  in the report until it's approved, or accept the cut-off?
-- Add the employer KiwiSaver on the leave to the liability?
-- A reminder to post at each month end or on Period close?
+**Posting the leave liability** (end of the HL section): the four
+questions were decided on 2 Oct 2026 (decisions 188-191) and built.
 
 **Holidays Act leave** (P8): the 14 leave build questions were decided on
 2 Oct 2026 at Jess's request (decisions 168-181, "Decided (leave build)" at

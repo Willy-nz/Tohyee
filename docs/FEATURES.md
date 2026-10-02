@@ -1216,8 +1216,16 @@ that something happened.
   before the last posting, a locked period, no accounts, a problem on any
   row of the report (named), nothing to post. Only the latest posting is
   voided, with the reversing journal; the ledger won't correct them.
-  Audited without figures. Not in it: sick leave carried over and the
-  employer KiwiSaver on the leave (questions for Jess).
+  Audited without figures. Since decisions 188-191 (2 Oct 2026, HL53,
+  HL57-HL61, tenant migration 0073): someone who has finished stays in the
+  report until their final pay's pay date, at the holiday pay on finishing
+  on it (a problem that blocks posting while the final pay isn't
+  approved); the employer KiwiSaver on enrolled employees' leave (gross,
+  truncated to cents) is posted as its own pair of lines, "Employer
+  KiwiSaver on leave"; and the home page reminds bookkeepers with payroll
+  access to post after each month end with approved pay runs. Sick leave
+  carried over stays out (PBE IPSAS 39 para 17; journal your own estimate
+  if your agreements let it be taken as annual leave).
 
 ## Not built yet, on purpose
 

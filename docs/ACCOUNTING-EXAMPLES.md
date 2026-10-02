@@ -12187,12 +12187,18 @@ bookkeeper role.
   2026 is Dr Leave expense 6,327.45 (Workshop) / Cr Employee entitlements
   6,327.45 (Workshop), described "Leave liability at 11 Oct 2026", never
   naming Hemi.
-- **HL53 The next posting takes the fall.** Hemi's leave and final pay are
-  paid through pay runs to wages as usual (decision 138). At Sat 31 Oct
-  2026 he has finished, so the report has nothing for him: the posting is
-  0.00 − 6,327.45: Dr Employee entitlements 6,327.45 / Cr Leave expense
-  6,327.45 (Workshop). Sick, bereavement and family violence leave are
-  never in it.
+- **HL53 Finished, final pay not yet paid** (rewritten for decision 189).
+  Hemi's last day is Fri 30 Oct 2026 and his final pay (26 Oct-1 Nov) is
+  approved with pay date Wed 4 Nov. At Sat 31 Oct he has finished but isn't
+  paid yet, so he stays in the report at the holiday pay on finishing on
+  that final pay: untaken annual holidays 1.5 weeks × 1,221.95 = 1,832.93
+  (s 24) and 8% of gross earnings since 4 Mar 2026, 3,469.96 (s 25):
+  **5,302.89**. Hemi isn't enrolled in KiwiSaver, so there's no employer
+  KiwiSaver on it. With LEAVELIAB-2 voided (HL55), LEAVELIAB-3 at 31 Oct
+  measures from LEAVELIAB-1: 5,302.89 − 6,327.45 = −1,024.56, so Dr
+  Employee entitlements 1,024.56 / Cr Leave expense 1,024.56 (Workshop).
+  Sick, bereavement and family violence leave are never in it (decision
+  188).
 - **HL54 Refused or undone (posting).** A posting dated before the last
   one; a posting while any employee's row in the report has a problem
   (it names them); a posting without the two accounts set. A posting is
@@ -12217,17 +12223,71 @@ bookkeeper role.
   voided on 18 Oct (VOID-LEAVELIAB-2, the exact reversal); voiding
   LEAVELIAB-1 first is refused, because LEAVELIAB-2 measured from it. With
   LEAVELIAB-2 voided, HL53's posting at 31 Oct (LEAVELIAB-3) measures from
-  LEAVELIAB-1, 0.00 − 6,327.45, and the Employee entitlements account
-  comes to 0.00: 6,327.45 − 1,123.20 + 1,123.20 − 6,327.45.
+  LEAVELIAB-1 (and HL57's brings the account to 0.00).
 - **HL56 The accounts** (decision 184). An admin with payroll access sets
   them under Payroll › Pay items. Refused: Employee entitlements (2260) as
   the leave expense ("isn't an expense account"), Term loan (2800, a
   non-current liability) or Wages payable (2240, a control account) as
   the employee entitlements account, and a bookkeeper changing them.
   While LEAVELIAB-1 has left 6,327.45 in 2260, changing the employee
-  entitlements account to 2270 is refused; after LEAVELIAB-3 brings it to
-  0.00 it's allowed. The leave expense account can change at any time (to
+  entitlements account to 2270 is refused; after LEAVELIAB-4 (HL57) brings
+  it to 0.00 it's allowed. The leave expense account can change at any time (to
   6200 and back): it only moves where later changes go.
+
+- **HL57 The final pay is paid** (decision 189). At Wed 4 Nov 2026, the
+  final pay's pay date, Hemi drops out of the report (the final pay's
+  journal of 4 Nov has the holiday pay as wages). LEAVELIAB-4 at 4 Nov:
+  0.00 − 5,302.89, Dr Employee entitlements 5,302.89 / Cr Leave expense
+  5,302.89 (Workshop). The Employee entitlements account is then 0.00:
+  6,327.45 − 1,123.20 + 1,123.20 − 1,024.56 − 5,302.89. Mere (HL54), who
+  finished on 12 Oct and was never paid by a pay run in Tohyee, isn't in
+  the report at either date.
+
+The next examples use another organisation, with the same two accounts and
+an Office Department. **Tama** starts Mon 28 Sep 2026: hourly at 30.50 for 8
+hours Monday to Friday (OWP 1,220.00), paid weekly in Tohyee from his first
+week (so Tohyee keeps his leave from the start, with no opening balances),
+100% to Office, enrolled in KiwiSaver at 3.5% employee and 3.5% employer,
+ESCT 17.5%. His first two weeks (28 Sep-4 Oct, paid 7 Oct; 5-11 Oct, paid
+14 Oct) are approved pay runs of 1,220.00 each.
+
+- **HL58 Finished, no final pay approved** (decision 189). Tama's last day
+  is Fri 16 Oct 2026; the pay run for 12-18 Oct is still a draft. The
+  report at Sun 18 Oct has his row with the problem "Tama Liability
+  finished on 16 Oct 2026 and their final pay isn't approved yet. Approve
+  the pay run that includes 16 Oct 2026 (their final pay) first.", and
+  posting at 18 Oct is refused naming him.
+- **HL59 Employer KiwiSaver on the leave** (decision 190). The report at Sun
+  11 Oct shows Tama's running 8% (1,220.00 + 1,220.00) × 8% = **195.20** (no
+  annual holidays yet, no alternative holidays) and employer KiwiSaver
+  195.20 × 3.5% = 6.832, truncated to **6.83**. LEAVELIAB-1 at 11 Oct: Dr
+  Leave expense 195.20 / Cr Employee entitlements 195.20 ("Leave expense"
+  and "Employee entitlements"), and Dr Leave expense 6.83 / Cr Employee
+  entitlements 6.83 (both "Employer KiwiSaver on leave"), all tagged
+  Office. The posting keeps 195.20 and 6.83 for Office; its total and
+  change are 202.03.
+- **HL60 KiwiSaver on holiday pay on finishing** (decisions 189, 190). The
+  final pay for 12-18 Oct (pay date Wed 21 Oct) is approved: usual pay to
+  his last day 1,220.00, and holiday pay on finishing 8% of 3 × 1,220.00 =
+  **292.80** (s 23: less than a year, so no untaken entitlement; Labour Day
+  is after his last day). At Sun 18 Oct the report has Tama at 292.80 and
+  KiwiSaver 292.80 × 3.5% = 10.248, truncated to **10.24** (rounding would
+  give 10.25). LEAVELIAB-2 at 18 Oct measures from LEAVELIAB-1: leave
+  292.80 − 195.20 = 97.60 and KiwiSaver 10.24 − 6.83 = 3.41, so Dr Leave
+  expense 97.60 / Cr Employee entitlements 97.60 and Dr Leave expense 3.41
+  / Cr Employee entitlements 3.41 (Employer KiwiSaver on leave), Office;
+  the posting's change is 101.01. At Wed 21 Oct he's paid and drops out:
+  LEAVELIAB-3, Dr Employee entitlements 292.80 / Cr Leave expense 292.80
+  and Dr Employee entitlements 10.24 / Cr Leave expense 10.24, change
+  −303.04; the account is then 0.00.
+- **HL61 The month-end reminder** (decision 191). Before any posting, on
+  Thu 15 Oct 2026 there's no reminder (the latest month end is 30 Sep, and
+  no approved pay run's period end or pay date is on or before it); on Sun
+  1 Nov 2026 a bookkeeper with payroll access sees "Post the leave
+  liability at 31 Oct 2026: pay runs have been approved since nothing was
+  posted". Once LEAVELIAB-3 is posted at 21 Oct, on Sun 1 Nov there's none
+  (no approved pay run's period end or pay date is after 21 Oct). A
+  bookkeeper without payroll access, and a viewer, never see it.
 
 ### Not supported yet (refused rather than guessed)
 
@@ -12248,9 +12308,10 @@ bookkeeper role.
 - Labour Inspector determinations (s11, s13, s17(2), s28F, s54), and
   re-employment within a month (s85).
 - Posting a leave liability to the ledger: **built on 2 Oct 2026**
-  (decisions 177, 182-187, HL52-HL56). Still not in it: sick leave
-  carried over (decision 187), and the employer KiwiSaver contribution on
-  the leave.
+  (decisions 177, 182-191, HL52-HL61). Sick leave carried over stays out
+  (decision 188: material only where it can be taken as annual leave,
+  which the Act doesn't allow); an organisation whose agreements allow it
+  journals its own estimate.
 
 ### Decided (Holidays Act leave)
 
@@ -12398,23 +12459,21 @@ asked is kept under each.
     not the date paid: right?"
 
 
-### Questions for Jess (posting the leave liability)
+### Questions for Jess (posting the leave liability), decided
 
-Built on 2 Oct 2026 (decisions 182-187, HL52-HL56); these were left open:
+Jess asked for open questions to be decided by law, then NetSuite, then
+Xero (decisions 188-191 in `docs/DECISIONS.md`). What was asked is kept
+under each.
 
-1. **Sick leave carried over.** PBE IPSAS 39 and NZ IAS 19 para 15 treat
-   accumulating sick leave that doesn't vest as an obligation too,
-   measured for the chance it's used (decision 187). Tohyee leaves it out
-   (decision 177: it needs the organisation's own estimate). Add a typed
-   estimate per organisation, or keep it out?
-2. **Finished, final pay not yet paid.** Someone who finished on or before
-   the posting's date isn't in the report, and their final pay's journal
-   is dated its pay date. If the pay date is after the posting's date
-   (Hemi's final pay for 26 Oct-1 Nov is paid on 4 Nov; HL53 posts at 31
-   Oct), neither account holds his holiday pay owed on finishing at 31
-   Oct. Keep finished employees in the report until their final pay is
-   approved, or accept the cut-off?
-3. **On-costs.** The employer KiwiSaver contribution that will be paid
-   on the leave isn't in the liability. Add it?
-4. **Month-end routine.** Postings are made by hand at any date. Should
-   Tohyee remind (or offer) a posting at each month end or on Period close?
+1. **Sick leave carried over: kept out** (decision 188; PBE IPSAS 39 para
+   17). Asked: "Add a typed estimate per organisation, or keep it out?"
+2. **Finished, final pay not yet paid: kept in the report until the final
+   pay's pay date** (decision 189; HL53, HL57, HL58). Asked: "Keep finished
+   employees in the report until their final pay is approved, or accept
+   the cut-off?"
+3. **Employer KiwiSaver on the leave: added** (decision 190; HL59, HL60).
+   Asked: "The employer KiwiSaver contribution that will be paid on the
+   leave isn't in the liability. Add it?"
+4. **Month-end reminder: yes, on the home page** (decision 191; HL61).
+   Asked: "Should Tohyee remind (or offer) a posting at each month end or
+   on Period close?"

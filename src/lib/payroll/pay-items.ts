@@ -608,7 +608,7 @@ export async function updatePayrollSettings(tx: OrgTx, input: Record<string, unk
         : await resolveLeaveAccount(tx, input.leaveLiabilityAccountCode, "liability", ids.liabilityAccountId);
   if (liabilityAccountId !== ids.liabilityAccountId) {
     const last = await tx.query<{ posting_number: string; liability: string }>(
-      `select posting_number::text, liability::text from payroll_leave_liability_postings
+      `select posting_number::text, (liability + kiwisaver)::text as liability from payroll_leave_liability_postings
         where status = 'active' order by posting_number desc limit 1`,
     );
     if (last.rows[0] && cmp(dec(last.rows[0].liability), ZERO_DECIMAL) !== 0) {

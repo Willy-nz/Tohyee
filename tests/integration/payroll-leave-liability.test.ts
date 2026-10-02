@@ -308,16 +308,32 @@ describeWithDatabase("Posting the leave liability (HL52-HL56)", () => {
     await asJess((tx) => updatePeriodControls(tx, { lockDate: null, reason: "HL54 test" }));
   });
 
-  it("HL53: at Sat 31 Oct 2026 Hemi has finished: 0.00 − 6,327.45 from LEAVELIAB-1 (LEAVELIAB-2 is voided)", async () => {
+  it("HL53: at Sat 31 Oct 2026 Hemi has finished but his final pay (paid 4 Nov) isn't: 5,302.89 − 6,327.45 from LEAVELIAB-1", async () => {
     const liability = await asJess((tx) => leaveLiabilityReport(tx, { asAt: "2026-10-31" }));
-    expect(liability.rows).toEqual([]);
-    postings.third = (await asJess((tx) => postLeaveLiability(tx, { idempotencyKey: key("post"), asAt: "2026-10-31" }))).posting;
-    expect(postings.third).toMatchObject({ reference: "LEAVELIAB-3", liability: "0.00", change: "-6327.45", previousReference: "LEAVELIAB-1", departments: [] });
-    expect(await journalLines(postings.third.journalId)).toEqual([
-      ["2260", "6327.45", "0.00", "Employee entitlements", workshopTag()],
-      ["6220", "0.00", "6327.45", "Leave expense", workshopTag()],
+    expect(liability.rows.map((row) => [row.name, row.finishDate, row.finalPayDate, row.holidayPayOnFinishing, row.total, row.kiwiSaverRate, row.kiwiSaver, row.problem])).toEqual([
+      ["Hemi Liability", "2026-10-30", "2026-11-04", "5302.89", "5302.89", null, "0.00", null],
     ]);
-    // The account balances: 6,327.45 − 1,123.20 + 1,123.20 − 6,327.45 = 0.00, and the account can change now.
+    postings.third = (await asJess((tx) => postLeaveLiability(tx, { idempotencyKey: key("post"), asAt: "2026-10-31" }))).posting;
+    expect(postings.third).toMatchObject({ reference: "LEAVELIAB-3", liability: "5302.89", kiwiSaver: "0.00", change: "-1024.56", previousReference: "LEAVELIAB-1" });
+    expect(postings.third.departments).toEqual([{ departmentId: workshop, department: "Workshop", liability: "5302.89", kiwiSaver: "0.00" }]);
+    expect(await journalLines(postings.third.journalId)).toEqual([
+      ["2260", "1024.56", "0.00", "Employee entitlements", workshopTag()],
+      ["6220", "0.00", "1024.56", "Leave expense", workshopTag()],
+    ]);
+    // 2260 still holds 5,302.89, so it can't change yet (decision 184).
+    await expect(asJess((tx) => updatePayrollSettings(tx, { leaveLiabilityAccountCode: "2270" }))).rejects.toThrow("LEAVELIAB-3 left the leave liability in 2260");
+  });
+
+  it("HL57: at Wed 4 Nov 2026 the final pay is paid: 0.00 − 5,302.89, and the account comes to 0.00 (Mere is never in it)", async () => {
+    const liability = await asJess((tx) => leaveLiabilityReport(tx, { asAt: "2026-11-04" }));
+    expect(liability.rows).toEqual([]);
+    postings.fourth = (await asJess((tx) => postLeaveLiability(tx, { idempotencyKey: key("post"), asAt: "2026-11-04" }))).posting;
+    expect(postings.fourth).toMatchObject({ reference: "LEAVELIAB-4", liability: "0.00", total: "0.00", change: "-5302.89", previousReference: "LEAVELIAB-3", departments: [] });
+    expect(await journalLines(postings.fourth.journalId)).toEqual([
+      ["2260", "5302.89", "0.00", "Employee entitlements", workshopTag()],
+      ["6220", "0.00", "5302.89", "Leave expense", workshopTag()],
+    ]);
+    // 6,327.45 − 1,123.20 + 1,123.20 − 1,024.56 − 5,302.89 = 0.00, and the account can change now.
     const balance = await asJess((tx) =>
       tx.query<{ total: string }>(
         `select coalesce(sum(l.credit_amount - l.debit_amount), 0)::text as total from ledger_journal_lines l join accounts a on a.id = l.account_id where a.code = '2260'`,
@@ -328,6 +344,7 @@ describeWithDatabase("Posting the leave liability (HL52-HL56)", () => {
     expect((await asJess((tx) => getPayrollSettings(tx))).leaveLiabilityAccountCode).toBe("2270");
     const list = await asJess((tx) => listLeaveLiabilityPostings(tx));
     expect(list.map((entry) => [entry.reference, entry.status])).toEqual([
+      ["LEAVELIAB-4", "active"],
       ["LEAVELIAB-3", "active"],
       ["LEAVELIAB-2", "voided"],
       ["LEAVELIAB-1", "active"],
