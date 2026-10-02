@@ -30,7 +30,14 @@ sidebar with the logo and the pages, and each page a column of cards.
   long it's been up when Windows lets the app see the service's process),
   quick looks at phone access, the last backup and the organisations (click
   one to go to its page), the latest news and the conference card.
-- **Organisations, Users, Email, Updates**: as before.
+- **Organisations, Users, Email**: as before.
+- **Stats**: CPU, memory, requests, people using Tohyee, disk space and
+  database sizes, with graphs of the last 1, 6 or 24 hours (decision 332).
+- **Updates**: what the server's daily check found, the last update and any
+  blocked organisations; **Install** backs everything up, downloads and
+  checks TohyeeSetup, and runs it silently (decisions 328-331). The tray
+  icon shows a notification when an update is out, and after installing
+  (`--after-update`) says how it went.
 - **Backups**: nightly backups, the backup key, each organisation's last
   backup, and the backup files (restore as a copy). Until a saved copy of the
   key has been checked, the window opens on Backups with a reminder.

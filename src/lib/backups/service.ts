@@ -48,7 +48,7 @@ export type BackupSettings = {
 export type BackupRun = {
   id: string;
   organisationId: string | null;
-  trigger: "schedule" | "manual";
+  trigger: "schedule" | "manual" | "update";
   status: "running" | "ok" | "failed";
   startedAt: string;
   finishedAt: string | null;
@@ -248,7 +248,7 @@ export async function checkBackup(file: string, otherKey?: string): Promise<Back
   return header;
 }
 
-async function backUpTarget(root: string, target: Target, trigger: "schedule" | "manual", requestedByEmail: string | null): Promise<BackupRun> {
+async function backUpTarget(root: string, target: Target, trigger: BackupRun["trigger"], requestedByEmail: string | null): Promise<BackupRun> {
   const run = await coreQuery<{ id: string }>(
     "insert into backup_runs (organisation_id, trigger, requested_by_email) values ($1, $2, $3) returning id::text as id",
     [target.organisationId, trigger, requestedByEmail],
@@ -326,7 +326,7 @@ const BACKUP_LOCK = "tohyee:backups";
  * request while one is running is refused.
  */
 export async function backUpNow(options: {
-  trigger: "schedule" | "manual";
+  trigger: "schedule" | "manual" | "update";
   requestedByEmail: string | null;
   organisationId?: string;
   /** Only these targets (the scheduler retries the ones that failed). */

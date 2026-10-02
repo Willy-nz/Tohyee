@@ -7,6 +7,7 @@ import type { Membership } from "@/lib/organisations/registry";
 import { parseOrganisationId } from "@/lib/organisations/registry";
 import { PAYROLL_MINIMUM_ROLE, requirePayrollAccess } from "@/lib/payroll/access";
 import { addPersonNames, loadMemberNames } from "@/lib/people/names";
+import { countRequest } from "@/lib/server-stats/counters";
 
 export function json(data: unknown, init: { status?: number; headers?: HeadersInit } = {}) {
   return NextResponse.json(data, {
@@ -46,11 +47,16 @@ type Handler<Context> = (request: Request, context: Context) => Promise<Response
 /** Wraps a route handler so every error becomes a consistent JSON response. */
 export function route<Context = unknown>(handler: Handler<Context>): Handler<Context> {
   return async (request, context) => {
+    const started = performance.now();
+    let response: Response;
     try {
-      return await handler(request, context);
+      response = await handler(request, context);
     } catch (error) {
-      return errorResponse(error);
+      response = errorResponse(error);
     }
+    // For the server app's Stats page (decision 332): counts only.
+    countRequest(performance.now() - started, response.status);
+    return response;
   };
 }
 

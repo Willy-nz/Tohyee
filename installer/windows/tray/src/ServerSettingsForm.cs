@@ -28,7 +28,7 @@ namespace Tohyee.Tray
     /// <summary>
     /// The server settings window. Signing in as a server admin (with two-step
     /// sign-in) comes first; then a sidebar with Home, Organisations, Users,
-    /// Phone access, Backups, Email and Updates. Nothing here touches the books.
+    /// Phone access, Backups, Email, Stats and Updates. Nothing here touches the books.
     /// </summary>
     internal sealed class ServerSettingsForm : Form
     {
@@ -38,6 +38,7 @@ namespace Tohyee.Tray
         private Sidebar _sidebar;
         private BackupsPage _backupsPage;
         private bool _backUpWhenSignedIn;
+        private bool _updatesWhenSignedIn;
 
         public string Current { get; private set; }
 
@@ -104,6 +105,11 @@ namespace Tohyee.Tray
             ResumeLayout();
             Navigate("home");
             RemindAboutBackupKey();
+            if (_updatesWhenSignedIn)
+            {
+                _updatesWhenSignedIn = false;
+                Navigate("updates");
+            }
             if (_backUpWhenSignedIn)
             {
                 _backUpWhenSignedIn = false;
@@ -121,7 +127,8 @@ namespace Tohyee.Tray
                 case "phone": return new RemoteAccessPage(_app.Api, _app.Settings, _app.Tailscale, _app.Cloudflare);
                 case "backups": return _backupsPage = new BackupsPage(_app.Api);
                 case "email": return new EmailPage(_app.Api);
-                case "updates": return new UpdatesPage(_app.Api);
+                case "updates": return new UpdatesPage(_app);
+                case "stats": return new StatsPage(_app.Api);
                 default: throw new ArgumentException(key);
             }
         }
@@ -182,6 +189,13 @@ namespace Tohyee.Tray
             else _backUpWhenSignedIn = true;
         }
 
+        /// <summary>The tray's "an update is available" notification: opens Updates (signing in first if needed).</summary>
+        public void OpenUpdates()
+        {
+            if (_sidebar != null && !_sidebar.IsDisposed) Navigate("updates");
+            else _updatesWhenSignedIn = true;
+        }
+
         private void StartBackUp()
         {
             Navigate("backups");
@@ -237,6 +251,7 @@ namespace Tohyee.Tray
             Add(navigate, "phone", "Phone access", Glyph.Phone);
             Add(navigate, "backups", "Backups", Glyph.Backups);
             Add(navigate, "email", "Email", Glyph.Email);
+            Add(navigate, "stats", "Stats", Glyph.Stats);
             Add(navigate, "updates", "Updates", Glyph.Updates);
 
             _who.Text = "Signed in as\n" + (email ?? "");

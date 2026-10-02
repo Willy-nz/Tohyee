@@ -87,6 +87,9 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\tray\TohyeeTray.exe"; Flags: nowait runasoriginaluser skipifsilent
+; Install on the server app's Updates page runs this setup silently with
+; /RESTARTTRAY=yes, so the app comes back to say how the update went.
+Filename: "{app}\tray\TohyeeTray.exe"; Parameters: "--after-update"; Flags: nowait runasoriginaluser; Check: RestartTrayAfterUpdate
 Filename: "{code:GetOpenUrl}"; Description: "Open Tohyee now"; Flags: postinstall shellexec nowait skipifsilent
 
 [UninstallRun]
@@ -104,6 +107,12 @@ var
 function PowerShellExe(): String;
 begin
   Result := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+end;
+
+{ Started silently by the server app's Install (decision 331): start the app again afterwards. }
+function RestartTrayAfterUpdate(): Boolean;
+begin
+  Result := WizardSilent() and (CompareText(ExpandConstant('{param:RESTARTTRAY|no}'), 'yes') = 0);
 end;
 
 function GetOpenUrl(Param: String): String;

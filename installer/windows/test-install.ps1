@@ -173,6 +173,16 @@ try {
   $ids = @($me.organisations | ForEach-Object { $_.id })
   if (-not ($ids -contains 'ci') -or -not ($ids -contains 'ci-restored')) { throw "The organisations were not there after the update (found: $($ids -join ', '))." }
   Write-Host 'Signed in (password and backup code) after the update: data kept.'
+
+  Write-Host '== After the update: the start record (decision 330) and the stats (decision 332)'
+  # The tray icon reads this without a sign-in, on the local address only.
+  $status = Invoke-RestMethod -Uri "$adminUrl/api/updates/status"
+  Write-Host "Running v$($status.currentVersion); last start v$($status.lastStart.version) after v$($status.lastStart.previousVersion), $($status.lastStart.organisationsChecked) organisations, $($status.lastStart.organisationsBlocked) blocked"
+  if ($status.lastStart.version -ne $status.currentVersion) { throw 'The server did not record this start.' }
+  if ($status.lastStart.organisationsBlocked -ne 0 -or $status.lastStart.organisationsChecked -lt 2) { throw 'The organisations did not all come up after the update.' }
+  $stats = Invoke-RestMethod -Uri "$adminUrl/api/admin/stats" -WebSession $again
+  Write-Host "Stats: $($stats.computer.cores) cores, $(@($stats.disks).Count) disk(s), PostgreSQL $($stats.postgresVersion)"
+  if (-not $stats.computer.cores -or @($stats.disks).Count -lt 1) { throw 'The stats are missing the computer or its disks.' }
   $cloudflared = Join-Path $installDir 'cloudflared\cloudflared.exe'
   if (-not (Test-Path $cloudflared)) { throw 'cloudflared.exe was not installed.' }
   Write-Host (& $cloudflared --version)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -47,6 +48,11 @@ namespace Tohyee.Tray
         private string _stateText;
         private TimeSpan? _uptime;
         private bool _checking;
+        private readonly ToolStripMenuItem _updateItem;
+        private DateTime _nextUpdateLook = DateTime.MinValue;
+        private string _notifiedVersion;
+        private bool _balloonOpensUpdates;
+        private UpdateInstaller.PendingUpdate _pending;
 
         public TrayApp(TraySettings settings, bool openSettings, bool backUp = false)
         {
@@ -70,6 +76,8 @@ namespace Tohyee.Tray
             openBooks.Font = new Font(openBooks.Font, FontStyle.Bold);
             menu.Items.Add(openBooks);
             menu.Items.Add(new ToolStripMenuItem("Server settings…", null, (s, e) => ShowSettings()));
+            _updateItem = new ToolStripMenuItem("Install the update…", null, (s, e) => ShowUpdates()) { Visible = false };
+            menu.Items.Add(_updateItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem("Restart Tohyee", null, (s, e) => RestartServices()));
             menu.Items.Add(new ToolStripMenuItem("Back up now", null, (s, e) => BackUpNow()));
@@ -90,6 +98,11 @@ namespace Tohyee.Tray
             {
                 if (e.Button == MouseButtons.Left) ShowSettings();
             };
+            _icon.BalloonTipClicked += (s, e) =>
+            {
+                if (_balloonOpensUpdates) ShowUpdates();
+            };
+            _icon.BalloonTipClosed += (s, e) => _balloonOpensUpdates = false;
 
             _timer = new Timer { Interval = 10000 };
             _timer.Tick += async (s, e) => await Check();
@@ -168,16 +181,110 @@ namespace Tohyee.Tray
                     var oldIcon = _icon.Icon;
                     _icon.Icon = MakeIcon(state);
                     if (oldIcon != null) DestroyIcon(oldIcon);
-                    if (previous == ServerState.Running && (state == ServerState.Stopped || state == ServerState.Problem))
+                    if (previous == ServerState.Running && (state == ServerState.Stopped || state == ServerState.Problem) && UpdateInstaller.LoadPending() == null)
                     {
-                        _icon.ShowBalloonTip(8000, "Tohyee", text + ". People can't use the books until it's running again.", ToolTipIcon.Warning);
+                        Balloon(text + ". People can't use the books until it's running again.", ToolTipIcon.Warning, false);
                     }
                 }
+                // Install (on the Updates page) leaves a note; while there is one, the state changes are the update's.
+                if (_pending == null) _pending = UpdateInstaller.LoadPending();
+                if (_pending != null) await ReportUpdate(state);
+                else if (state == ServerState.Running && DateTime.UtcNow >= _nextUpdateLook) await LookForUpdate();
             }
             finally
             {
                 _checking = false;
             }
+        }
+
+        // ------------------------------------------------------------ updates (decisions 328 to 331)
+
+        private void Balloon(string text, ToolTipIcon icon, bool opensUpdates)
+        {
+            _balloonOpensUpdates = opensUpdates;
+            _icon.ShowBalloonTip(10000, "Tohyee", text, icon);
+        }
+
+        /// <summary>
+        /// What the server found on its daily check, asked for hourly over the
+        /// local-only address (no sign-in needed). A new version gets one
+        /// notification each time this app starts, and a menu item.
+        /// </summary>
+        private async Task LookForUpdate()
+        {
+            _nextUpdateLook = DateTime.UtcNow.AddHours(1);
+            Dictionary<string, object> status;
+            try
+            {
+                status = await _api.Get("/api/updates/status");
+            }
+            catch (ApiException)
+            {
+                _nextUpdateLook = DateTime.UtcNow.AddMinutes(5);
+                return;
+            }
+            var latest = J.Str(status, "latestVersion");
+            var available = J.Bool(status, "updateAvailable") && latest != null;
+            _updateItem.Visible = available;
+            if (!available) return;
+            _updateItem.Text = "Install Tohyee v" + latest + "…";
+            if (_notifiedVersion == latest) return;
+            _notifiedVersion = latest;
+            Balloon("Tohyee v" + latest + " is available (this server runs v" + J.Str(status, "currentVersion") + "). Click here to install it; everything is backed up first.", ToolTipIcon.Info, true);
+        }
+
+        /// <summary>
+        /// After Install: once the server answers, says whether the new version
+        /// is running and how the organisations' upgrades went (from the
+        /// server's own record of its start), then forgets the note.
+        /// </summary>
+        private async Task ReportUpdate(ServerState state)
+        {
+            var pending = _pending;
+            var late = DateTime.UtcNow - pending.StartedAt > UpdateInstaller.GiveUpAfter;
+            var log = string.IsNullOrEmpty(pending.Log) ? "" : " The installer's log is " + pending.Log + ".";
+            if (state != ServerState.Running)
+            {
+                if (!late) return;
+                Finish("Tohyee hasn't come back after updating to v" + pending.To + "." + log + " Restart Tohyee from this menu, or run the installer again.", ToolTipIcon.Error);
+                return;
+            }
+            Dictionary<string, object> status;
+            try
+            {
+                status = await _api.Get("/api/updates/status");
+            }
+            catch (ApiException)
+            {
+                if (late) Finish("Tohyee is running, but couldn't say how the update to v" + pending.To + " went. Open Updates to see." + log, ToolTipIcon.Warning);
+                return;
+            }
+            var start = J.Obj(status, "lastStart");
+            var running = J.Str(status, "currentVersion");
+            if (running != pending.To || start == null || J.Str(start, "version") != pending.To)
+            {
+                // The old version may still be answering while the installer stops it.
+                if (late) Finish("The update to v" + pending.To + " didn't finish: Tohyee is still running v" + running + ". Nothing was lost; the backups made first are in the backup folder." + log, ToolTipIcon.Error);
+                return;
+            }
+            var blocked = J.Int(start, "organisationsBlocked");
+            var checkedCount = J.Int(start, "organisationsChecked");
+            if (blocked == 0)
+            {
+                Finish("Tohyee is updated to v" + pending.To + ". All " + checkedCount + (checkedCount == 1 ? " organisation is" : " organisations are") + " working.", ToolTipIcon.Info);
+            }
+            else
+            {
+                Finish("Tohyee is updated to v" + pending.To + ", but " + blocked + " of " + checkedCount + " organisations couldn't be upgraded and are blocked until that's fixed. Click here for the details.", ToolTipIcon.Warning, true);
+            }
+        }
+
+        private void Finish(string text, ToolTipIcon icon, bool opensUpdates = false)
+        {
+            _pending = null;
+            UpdateInstaller.ClearPending();
+            _nextUpdateLook = DateTime.MinValue;
+            Balloon(text, icon, opensUpdates);
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -329,6 +436,13 @@ namespace Tohyee.Tray
                 "Tohyee", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
             if (answer != DialogResult.OK) return;
             RunElevated("-NoProfile -Command \"Restart-Service -Name TohyeePostgres -Force; Restart-Service -Name Tohyee -Force\"");
+        }
+
+        /// <summary>The Updates page (signing in first if needed).</summary>
+        public void ShowUpdates()
+        {
+            ShowSettings();
+            _settingsForm.OpenUpdates();
         }
 
         /// <summary>Encrypted backups of every organisation now, in the server settings window (after signing in).</summary>

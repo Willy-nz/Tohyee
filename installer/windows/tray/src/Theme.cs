@@ -601,6 +601,7 @@ namespace Tohyee.Tray
         Backups,
         Email,
         Updates,
+        Stats,
         Open,
         SignOut,
         News,
@@ -660,6 +661,10 @@ namespace Tohyee.Tray
                     case Glyph.Updates:
                         g.DrawArc(pen, 3.5f, 3.5f, 13, 13, 300, 300);
                         g.DrawLines(pen, new[] { new PointF(14.5f, 2.5f), new PointF(14.3f, 5.6f), new PointF(11.2f, 5.4f) });
+                        break;
+                    case Glyph.Stats:
+                        g.DrawLines(pen, new[] { new PointF(3, 3), new PointF(3, 17), new PointF(17, 17) });
+                        g.DrawLines(pen, new[] { new PointF(5.5f, 13.5f), new PointF(9, 9), new PointF(12, 11.5f), new PointF(16.5f, 5.5f) });
                         break;
                     case Glyph.Open:
                         g.DrawLines(pen, new[] { new PointF(9, 4), new PointF(4, 4), new PointF(4, 16), new PointF(16, 16), new PointF(16, 11) });

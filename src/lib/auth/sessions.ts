@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { DbClient } from "@/lib/db/transactions";
 import { coreQuery } from "@/lib/db/transactions";
 import { secretsAvailable } from "@/lib/secrets";
+import { noteActiveUser } from "@/lib/server-stats/counters";
 
 export const SESSION_COOKIE = "tohyee_session";
 /** A session ends after this many days without use (see getSessionUser). */
@@ -124,6 +125,7 @@ export async function getSessionState(token: string | null): Promise<SessionStat
   const required = twoStepRequired();
   const stage: SessionStage =
     row.two_step_pending && row.two_step_enabled ? "verify" : required && !row.two_step_enabled ? "enrol" : "full";
+  if (stage === "full") noteActiveUser(row.user_id);
   if (stage === "full" && !row.two_step_pending && Date.now() - new Date(row.last_seen_at).getTime() > REFRESH_AFTER_MS) {
     await coreQuery(
       `update sessions
