@@ -16,12 +16,17 @@ features"). Not looked into yet: find the cause before changing anything.
    and ask Jess which screens if it can't be seen.
 2. **Items: couldn't find where to add or look at them.** Products and
    services is under Sales (`/operations/items`), which Jess didn't find.
-   Check the page works, then make it easy to find (for example also under
-   Accounting or Contacts, or from Home); to confirm with Jess where she
-   expects it.
-3. **Couldn't add a fixed asset.** Find out why (an error, a missing
-   button, a role or setting such as Fixed asset types being admin only)
-   and fix it.
+   Checked 2 Oct 2026: the page and New item work. Jess looked under
+   Accounting, so it's now in the Accounting menu too (and still under
+   Sales).
+3. **Couldn't add a fixed asset.** Checked 2 Oct 2026 on a new
+   organisation: New asset opens, but a new organisation has no asset
+   types, so the Asset type box only offers "Choose a type" and the form
+   can't be saved (the browser says "Please select an item in the list";
+   the only hint was small grey text). Probably what happened, not yet
+   confirmed by Jess. Now New asset says to add an asset type first, with
+   a button to Asset types, and adding a type offers "Register an asset".
+   Still to check with Jess on her desktop that this was the problem.
 4. **Fixed assets to ERP level.** Jess wants ERP-level fixed assets (follow
    NetSuite's Fixed Assets Management, else Xero), taking into account NZ
    GAAP and tax changes of the last 10 years ("make sure any difficult
