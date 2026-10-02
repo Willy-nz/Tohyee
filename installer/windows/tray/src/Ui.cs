@@ -105,9 +105,11 @@ namespace Tohyee.Tray
         /// <summary>A two-column form: labels on the left, fields on the right.</summary>
         public static TableLayoutPanel Form()
         {
-            var table = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = new Padding(0, 0, 0, 8), BackColor = Color.Transparent };
+            // The fields take the rest of the card's width (up to 420 px wide), so a narrow window
+            // doesn't push them past the card's edge (2 Oct 2026).
+            var table = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = new Padding(0, 0, 0, 8), BackColor = Color.Transparent, Tag = "stretch" };
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Theme.S(160)));
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Theme.S(420)));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             return table;
         }
 
@@ -181,10 +183,18 @@ namespace Tohyee.Tray
                 var text = new Rectangle(e.Bounds.X + 8, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height);
                 TextRenderer.DrawText(e.Graphics, e.Header.Text, Theme.SmallCaps, text, Theme.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
             };
-            list.DrawItem += (s, e) => e.DrawDefault = true;
-            list.Resize += (s, e) => FillLastColumn(list);
-            Theme.DarkScrollBars(list);
-            list.DrawSubItem += (s, e) => e.DrawDefault = true;
+            // Every row drawn here, not by Windows: its dark theme drew the row under the mouse
+            // (and a selected row) with dark text on a dark highlight (2 Oct 2026). The selected
+            // row is in the accent colour with white text.
+            list.DrawItem += (s, e) => e.DrawDefault = false;
+            list.DrawSubItem += (s, e) =>
+            {
+                var selected = e.Item.Selected;
+                using (var fill = new SolidBrush(selected ? Theme.Accent : list.BackColor)) e.Graphics.FillRectangle(fill, e.Bounds);
+                var colour = selected ? Color.White : (e.Item.UseItemStyleForSubItems ? e.Item.ForeColor : e.SubItem.ForeColor);
+                var text = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, Math.Max(0, e.Bounds.Width - 8), e.Bounds.Height);
+                TextRenderer.DrawText(e.Graphics, e.SubItem.Text, list.Font, text, colour, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+            };
             foreach (var column in columns)
             {
                 list.Columns.Add(column, -2);

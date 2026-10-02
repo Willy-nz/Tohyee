@@ -29,6 +29,7 @@ import type {
   GstReturnLine,
 } from "@/lib/reports/gst-return";
 import { GST_BASIS_LABELS, type GstBasis, type TaxCategory } from "@/lib/tax/categories";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Calculated = GstReturnFigures & {
   periodStart: string;
@@ -135,6 +136,13 @@ function selectionTitle(selection: Selection): string {
     default:
       return `Box ${gstBoxNumber(selection)} lines`;
   }
+}
+
+/** The first of the month `count` months before a month start ("2026-10-01", 2 -> "2026-08-01"). */
+function monthsBefore(start: string, count: number): string {
+  const [year, month] = start.split("-").map(Number);
+  const index = year * 12 + (month - 1) - count;
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}-01`;
 }
 
 function monthStart(isoDate: string): string {
@@ -486,8 +494,11 @@ function BasisChangeNotice({
  * return as filed (admins). See "GST return" in docs/ACCOUNTING-EXAMPLES.md.
  */
 export function GstReturnReport({ organisationId }: { organisationId: string }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
-  const [start, setStart] = useState(() => monthStart(todayInBrowser()));
+  // Without a GST period setting or a filed return, open on the two months that ended
+  // last month, not on a period still going (decision 335).
+  const [start, setStart] = useState(() => monthsBefore(monthStart(todayInBrowser()), 2));
   const [months, setMonths] = useState<number>(2);
   const periodEnd = gstPeriodEnd(start, months);
   const [adjustments, setAdjustments] = useState<GstAdjustment[]>([]);
@@ -583,9 +594,9 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
 
   async function markAsFiled() {
     if (
-      !window.confirm(
+      !(await confirm(
         `Mark the GST return for ${formatDate(start)} to ${formatDate(periodEnd)} as filed? Its figures are stored as they are now and can't be changed.`,
-      )
+      ))
     ) {
       return;
     }

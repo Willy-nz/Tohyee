@@ -18,6 +18,7 @@ import type { Invoice } from "@/lib/invoices/service";
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import { dec, isPositive } from "@/lib/money/decimal";
 import type { SalesOrder } from "@/lib/sales-orders/service";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * "Invoice" (SO3, SO4): a draft invoice for what's left on each line, or less.
@@ -115,6 +116,7 @@ function SalesOrderActions({
   salesOrder: SalesOrder;
   onChanged: (salesOrder: SalesOrder, message: string) => void;
 }) {
+  const confirm = useConfirm();
   const router = useRouter();
   const [approveKey] = useState(() => newIdempotencyKey("so-approve"));
   const [closeKey] = useState(() => newIdempotencyKey("so-close"));
@@ -141,8 +143,8 @@ function SalesOrderActions({
     })();
   }
 
-  function command(path: "approve" | "close" | "cancel", idempotencyKey: string, confirmText: string, message: (order: SalesOrder) => string) {
-    if (!window.confirm(confirmText)) return;
+  async function command(path: "approve" | "close" | "cancel", idempotencyKey: string, confirmText: string, message: (order: SalesOrder) => string) {
+    if (!(await confirm(confirmText))) return;
     run(async () => {
       const result = await api<{ salesOrder: SalesOrder }>(`/api/sales-orders/${salesOrder.id}/${path}`, {
         method: "POST",
@@ -152,8 +154,8 @@ function SalesOrderActions({
     });
   }
 
-  function remove() {
-    if (!window.confirm("Delete this draft? This can't be undone.")) return;
+  async function remove() {
+    if (!(await confirm("Delete this draft? This can't be undone."))) return;
     run(async () => {
       await api(`/api/sales-orders/${salesOrder.id}`, { method: "DELETE", query: { organisationId } });
       router.push("/operations/sales-orders");

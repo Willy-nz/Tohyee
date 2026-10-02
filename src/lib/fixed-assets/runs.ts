@@ -1,6 +1,6 @@
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { writeAuditEvent } from "@/lib/audit";
-import { parseIsoDate } from "@/lib/dates";
+import { parseIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import {
@@ -8,6 +8,7 @@ import {
   type DisposalFigures,
   isMonthEnd,
   lastMonthBeforeDisposal,
+  monthEnd,
   monthOf,
   type PlannedSegment,
   planDepreciation,
@@ -223,7 +224,13 @@ async function planRun(tx: OrgTx, periodEnd: string): Promise<{ preview: RunPrev
   const scale = currencyMinorUnits(tx.baseCurrency);
   const lastRunPeriodEnd = await latestActiveRun(tx);
   if (lastRunPeriodEnd !== null && periodEnd <= lastRunPeriodEnd) {
-    throw new ValidationError(`Depreciation has already been run to ${lastRunPeriodEnd}. Run it to a later month end, or roll that run back first.`);
+    throw new ValidationError(`Depreciation has already been run to ${longDate(lastRunPeriodEnd)}. Run it to a later month end, or roll that run back first.`);
+  }
+  // Decision 337: not past the end of this month, so this year's figures don't
+  // include depreciation for months that haven't happened.
+  const thisMonthEnd = monthEnd(monthOf(todayIsoDate()));
+  if (periodEnd > thisMonthEnd) {
+    throw new ValidationError(`Depreciation can be run up to the end of this month (${longDate(thisMonthEnd)}), not to ${longDate(periodEnd)}.`);
   }
   const assets = await loadAssetStates(tx, { status: "registered" });
   const planned = assets
@@ -311,7 +318,7 @@ export async function runDepreciation(
       [runId, source, idempotencyKey, hash, periodEnd, preview.total, journalId, tx.actor.userId, tx.actor.email],
     );
   } catch (error) {
-    if (isUniqueViolation(error)) throw new ConflictError(`Depreciation has already been run to ${periodEnd}.`);
+    if (isUniqueViolation(error)) throw new ConflictError(`Depreciation has already been run to ${longDate(periodEnd)}.`);
     throw error;
   }
   for (const { asset, segments } of planned) {

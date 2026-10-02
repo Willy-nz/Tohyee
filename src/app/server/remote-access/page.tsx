@@ -7,6 +7,7 @@ import { api, errorMessage } from "@/lib/client/api";
 import { formatDateTime } from "@/lib/format";
 import type { RemoteAccess } from "@/lib/remote/settings";
 import type { TunnelStatus } from "@/lib/remote/tunnel";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const STATUS: Record<TunnelStatus, { tone: "green" | "amber" | "red" | "neutral"; label: string }> = {
   off: { tone: "neutral", label: "Off" },
@@ -102,12 +103,13 @@ function RemoteForm({ remote, onSaved }: { remote: RemoteAccess; onSaved: (remot
 
 /** A Tohyee address: one click, no sign-up (run by the Tohyee project). */
 function TohyeeAddressCard({ remote, onChanged }: { remote: RemoteAccess; onChanged: (remote: RemoteAccess) => void }) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const on = remote.method === "tohyee" && remote.enabled;
 
   async function run(method: "POST" | "DELETE", confirmText: string | null) {
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await confirm(confirmText))) return;
     setBusy(true);
     setError(null);
     try {
@@ -120,7 +122,7 @@ function TohyeeAddressCard({ remote, onChanged }: { remote: RemoteAccess; onChan
   }
 
   async function turnOff() {
-    if (!window.confirm(`Turn off remote access? Tohyee stops being reachable at ${remote.tohyeeAddress}. The address is kept for next time.`)) return;
+    if (!(await confirm(`Turn off remote access? Tohyee stops being reachable at ${remote.tohyeeAddress}. The address is kept for next time.`))) return;
     setBusy(true);
     setError(null);
     try {
@@ -179,6 +181,7 @@ function TohyeeAddressCard({ remote, onChanged }: { remote: RemoteAccess; onChan
 }
 
 export default function RemoteAccessPage() {
+  const confirm = useConfirm();
   const { user } = useWorkspace();
   const [remote, setRemote] = useState<RemoteAccess | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -227,7 +230,7 @@ export default function RemoteAccessPage() {
   }
 
   async function remove() {
-    if (!window.confirm("Remove remote access? Tohyee stops the connector and forgets the tunnel token. It stays reachable on this computer.")) return;
+    if (!(await confirm("Remove remote access? Tohyee stops the connector and forgets the tunnel token. It stays reachable on this computer."))) return;
     setBusy(true);
     try {
       setRemote((await api<{ remoteAccess: RemoteAccess }>("/api/admin/remote-access", { method: "PUT", body: { clear: true } })).remoteAccess);

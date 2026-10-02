@@ -226,7 +226,15 @@ function ItemForm({
   onSaved: (item: Item, message: string) => void;
   onCancel: () => void;
 }) {
-  const [draft, setDraft] = useState<Draft>(() => draftOf(item));
+  // A new item starts with the first revenue account and the standard GST code
+  // for sales, as new invoice lines do, so picking it fills them in (2 Oct 2026).
+  const [draft, setDraft] = useState<Draft>(() => {
+    const start = draftOf(item);
+    if (item) return start;
+    const revenue = accounts.find((account) => account.isActive && account.accountClass === "revenue");
+    const standard = taxCodes.find((taxCode) => taxCode.isActive && taxCode.category === "standard");
+    return { ...start, incomeAccountCode: revenue?.code ?? "", salesTaxCode: standard?.code ?? "" };
+  });
   const [idempotencyKey] = useState(() => newIdempotencyKey("item"));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

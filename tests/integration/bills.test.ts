@@ -18,6 +18,7 @@ import {
   voidBill,
 } from "@/lib/bills/service";
 import { archiveContact, type Contact, createContact, updateContact } from "@/lib/contacts/service";
+import { setDefaultPaymentTerms } from "@/lib/customers/service";
 import { applyMigrations } from "@/lib/db/migrations/runner";
 import { tenantMigrations } from "@/lib/db/migrations/tenant";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -534,6 +535,30 @@ describeWithDatabase("bills", () => {
     await asUser(owner, (tx) => tx.query("update payment_terms set is_active = false where id = $1", [term("7 days")]));
     await expect(draft({ ...noDue, billDate: "2026-06-15" })).rejects.toThrow("this supplier has no payment terms");
     await asUser(owner, (tx) => tx.query("update payment_terms set is_active = true where id in ($1, $2)", [term("7 days"), term("14 days")]));
+  });
+
+  it("DT1, DT2 (decision 333): without terms of its own, a bill takes the organisation's default bill terms", async () => {
+    const terms = (await asUser(owner, (tx) => tx.query<{ id: string; name: string }>("select id::text, name from payment_terms"))).rows;
+    const term = (name: string) => terms.find((entry) => entry.name === name)!.id;
+    const plain = (await asUser(bookkeeper, (tx) => createContact(tx, { idempotencyKey: key("contact"), name: "No Terms Supplies", isSupplier: true }))).contact;
+    const noDue = { dueDate: undefined, contactId: plain.id, billDate: "2026-06-15" };
+    // DT1: no terms anywhere: the due date has to be typed.
+    await expect(draft(noDue)).rejects.toThrow("this supplier has no payment terms");
+    // DT2: the organisation's default bill terms (20th of the following month) fill it; the invoice default doesn't.
+    await asUser(owner, (tx) => setDefaultPaymentTerms(tx, { defaultSalesPaymentTermId: term("7 days"), defaultBillPaymentTermId: term("20th of the following month") }));
+    expect((await draft(noDue)).dueDate).toBe("2026-07-20");
+    // A supplier's own terms still win.
+    const own = (
+      await asUser(bookkeeper, (tx) => createContact(tx, { idempotencyKey: key("contact"), name: "Own Terms Ltd", isSupplier: true, supplierPaymentTermId: term("7 days") }))
+    ).contact;
+    expect((await draft({ ...noDue, contactId: own.id })).dueDate).toBe("2026-06-22");
+    // An archived default can't be chosen, and an archived one gives no due date.
+    await asUser(owner, (tx) => tx.query("update payment_terms set is_active = false where id = $1", [term("14 days")]));
+    await expect(asUser(owner, (tx) => setDefaultPaymentTerms(tx, { defaultBillPaymentTermId: term("14 days") }))).rejects.toThrow("That bill payment term is archived.");
+    await asUser(owner, (tx) => tx.query("update payment_terms set is_active = true where id = $1", [term("14 days")]));
+    const cleared = await asUser(owner, (tx) => setDefaultPaymentTerms(tx, { defaultSalesPaymentTermId: "", defaultBillPaymentTermId: null }));
+    expect([cleared.defaultSalesPaymentTermId, cleared.defaultBillPaymentTermId]).toEqual([null, null]);
+    await expect(draft(noDue)).rejects.toThrow("this supplier has no payment terms");
   });
 
   it("L4, B6, B7, B8: retrying an approval or a void after its period is locked returns the original, not a lock error", async () => {

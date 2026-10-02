@@ -103,7 +103,7 @@ function PurchaseOrders({ organisationId }: { organisationId: string }) {
   return (
     <Card
       title="Purchase orders"
-      description="Newest first. Purchase orders post nothing. Approving numbers one; copying it to a bill makes a draft bill with what's still to bill."
+      description="Latest entered first. Purchase orders post nothing. Approving numbers one; copying it to a bill makes a draft bill with what's still to bill."
       actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/purchase-orders/new")}>New purchase order</Button> : null}
     >
       <div className={ui.tabs} role="tablist" aria-label="Purchase order status">

@@ -20,6 +20,7 @@ import { formatDate, formatDateTime, formatQuantity, todayInBrowser, personName 
 import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import { dec, isPositive } from "@/lib/money/decimal";
 import type { PurchaseOrder } from "@/lib/purchase-orders/service";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /** Approve, copy to bill, cancel, edit and delete (PO2-PO7). Each action has its own idempotency key. */
 function PurchaseOrderActions({
@@ -31,6 +32,7 @@ function PurchaseOrderActions({
   purchaseOrder: PurchaseOrder;
   onChanged: (purchaseOrder: PurchaseOrder, message: string) => void;
 }) {
+  const confirm = useConfirm();
   const router = useRouter();
   const [approveKey] = useState(() => newIdempotencyKey("po-approve"));
   const [copyKey] = useState(() => newIdempotencyKey("po-bill"));
@@ -61,8 +63,8 @@ function PurchaseOrderActions({
     }
   }
 
-  function approve() {
-    if (!window.confirm("Approve this purchase order? It gets the next PO number and can't be edited after that.")) return;
+  async function approve() {
+    if (!(await confirm("Approve this purchase order? It gets the next PO number and can't be edited after that."))) return;
     void run(async () => {
       const result = await api<{ purchaseOrder: PurchaseOrder }>(`/api/purchase-orders/${purchaseOrder.id}/approve`, {
         method: "POST",
@@ -90,8 +92,8 @@ function PurchaseOrderActions({
     });
   }
 
-  function close() {
-    if (!window.confirm(`Close the rest of ${purchaseOrder.poNumber}? What's still to bill won't be on order any more, and it can't be copied to a bill after that.`)) return;
+  async function close() {
+    if (!(await confirm(`Close the rest of ${purchaseOrder.poNumber}? What's still to bill won't be on order any more, and it can't be copied to a bill after that.`))) return;
     void run(async () => {
       const result = await api<{ purchaseOrder: PurchaseOrder }>(`/api/purchase-orders/${purchaseOrder.id}/close`, {
         method: "POST",
@@ -101,8 +103,8 @@ function PurchaseOrderActions({
     });
   }
 
-  function cancel() {
-    if (!window.confirm(`Cancel ${purchaseOrder.poNumber}? It can't be billed after that.`)) return;
+  async function cancel() {
+    if (!(await confirm(`Cancel ${purchaseOrder.poNumber}? It can't be billed after that.`))) return;
     void run(async () => {
       const result = await api<{ purchaseOrder: PurchaseOrder }>(`/api/purchase-orders/${purchaseOrder.id}/cancel`, {
         method: "POST",
@@ -112,8 +114,8 @@ function PurchaseOrderActions({
     });
   }
 
-  function remove() {
-    if (!window.confirm("Delete this draft? This can't be undone.")) return;
+  async function remove() {
+    if (!(await confirm("Delete this draft? This can't be undone."))) return;
     void run(async () => {
       await api(`/api/purchase-orders/${purchaseOrder.id}`, { method: "DELETE", query: { organisationId } });
       router.push("/operations/purchase-orders");

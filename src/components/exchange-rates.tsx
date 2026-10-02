@@ -9,6 +9,7 @@ import { formatDate, formatDateTime, personName, todayInBrowser } from "@/lib/fo
 import type { ExchangeRate, ExchangeRatesList } from "@/lib/fx/rates";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import { isRateText } from "@/lib/money/fx";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Accounting › Exchange rates (examples MC46-MC53), like NetSuite's Currency
@@ -132,10 +133,11 @@ function RateRow({
   editable: boolean;
   onArchived: (message: string) => void;
 }) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function archive() {
-    if (!window.confirm(`Archive ${rate.currencyCode} ${rate.rate} effective ${formatDate(rate.effectiveDate)}? It stays in the list but isn't used again.`)) return;
+    if (!(await confirm(`Archive ${rate.currencyCode} ${rate.rate} effective ${formatDate(rate.effectiveDate)}? It stays in the list but isn't used again.`))) return;
     setBusy(true);
     setError(null);
     try {

@@ -19,8 +19,7 @@ features"). Not looked into yet: find the cause before changing anything.
    the same day (PR #86), checked with pictures from GitHub's Windows
    runner (the installer workflow now saves them, also on the
    ci/tray-screenshots branch). Jess to confirm after the next release.
-   Still to tidy: the selected row in a list is hard to read, and the
-   Backups folder row runs past the card in a small window.
+   The selected row and the Backups folder row were tidied for 0.4.0.
 2. **Items: couldn't find where to add or look at them.** Products and
    services is under Sales (`/operations/items`), which Jess didn't find.
    Checked 2 Oct 2026: the page and New item work. Jess looked under
@@ -68,40 +67,41 @@ contact, item, invoice, approve, payment, bill, asset type, fixed asset
 from the bill, depreciation run, profit and loss, balance sheet, GST
 return, bank account. The sums were right throughout (invoice 3 x 120 +
 GST = 414; depreciation 2,500 x 50% / 12 = 104.17; the balance sheet
-balanced). What could be better, not yet decided or built:
+balanced). Jess asked for them all to be done (2 Oct 2026, evening): done
+the same night for 0.4.0 (decisions 333-338), except where noted.
 
-1. **Due date is required but often blank.** With no payment terms on the
+1. **(Done: default terms, decision 333.) Due date is required but often blank.** With no payment terms on the
    customer or supplier, the invoice and bill due dates stay empty and
    Save draft only shows the browser's small "Please fill out this field".
    Xero falls back to the organisation's default terms. To confirm with
    Jess: a default (for example the organisation's terms) or a clearer
    message.
-2. **No way to add a supplier (or customer) from the bill or invoice.**
+2. **(Done: decision 334.) No way to add a supplier (or customer) from the bill or invoice.**
    The bill says to go to Contacts first. Xero lets you type a new name
    on the bill.
-3. **A bill on an asset account doesn't offer to register the asset.**
+3. **(Done: an approved bill lists its unregistered asset lines with "Register as a fixed asset".) A bill on an asset account doesn't offer to register the asset.**
    Approving a bill to 1620 Computer equipment says nothing about fixed
    assets; you have to know to go to New asset (where the bill line is
    then offered). Xero lists these as pending assets.
-4. **New items start with no income account or tax code** ("None"), so
+4. **(Done: decision 338.) New items start with no income account or tax code** ("None"), so
    picking the item on an invoice doesn't fill them. Probably default to
    Sales and GST (to confirm).
-5. **"All reconciled" / "Everything is reconciled" with no statement at
+5. **(Done: "No statement yet: import one".) "All reconciled" / "Everything is reconciled" with no statement at
    all.** Home and the bank account say everything's reconciled when no
    statement has been imported, although 414.00 has gone through the
    account. Should say there's nothing to reconcile yet, or no statement.
-6. **The GST return opens on the period that hasn't ended** (1 Oct to 30
+6. **(Done: decision 335.) The GST return opens on the period that hasn't ended** (1 Oct to 30
    Nov), so September's bill isn't in it; and there's no filing frequency
    set. Probably open on the last period that has ended (to confirm).
-7. **Confirm boxes are the browser's own** (Approve, payments, disposals,
+7. **(Done: in-page confirm dialog.) Confirm boxes are the browser's own** (Approve, payments, disposals,
    rolling back depreciation). They work, but look old-fashioned next to
    the rest of Tohyee.
-8. **Small things:** "Depreciation has already been run to 2026-09-30"
+8. **(Done: the date, wider pages on wide screens; the tick boxes turned out to be labelled.) Small things:** "Depreciation has already been run to 2026-09-30"
    shows the date as 2026-09-30 where everything else says 30 Sep 2026;
    the customer and supplier tick boxes have no labels for screen
    readers; on a wide (2560 px) screen the pages use about a third of the
    width.
-9. **BigDog: an asset can be registered for a month already depreciated.**
+9. **(Done: runs past this month refused, decision 337; late registration keeps catching up, decision 336.) BigDog: an asset can be registered for a month already depreciated.**
    Depreciation in BigDog has been run to 31 Mar 2027 (runs into the
    future are allowed). Registering an asset bought 10 Aug 2026 then
    works, but its August 2026 to March 2027 depreciation can only be
@@ -109,14 +109,14 @@ balanced). What could be better, not yet decided or built:
    refuse a purchase date on or before the last run, or say so and offer
    to roll back. Also to decide: should depreciation runs past this month
    be allowed at all?
-10. **BigDog: a typed-in asset with nothing in the ledger.** Registering an
+10. **(Done: New asset and the register say so.) BigDog: a typed-in asset with nothing in the ledger.** Registering an
    asset that isn't from a bill posts nothing (as designed), so the
    register then disagrees with account 1620 by the cost. The register
    report shows the difference, but its advice ("look for journals posted
    straight to them") doesn't mention this cause. Possibly what tripped
    Jess up on 1 Oct: worth saying on New asset, when it's not from a bill,
    that the cost must already be posted (or offering to post it).
-11. **BigDog, smaller things:** the bills list says "Newest first" but
+11. **(Done: lists now say "Latest entered first"; stock item pick list; inventory accounts only. The "PDF" button does open a PDF: it was the "Print or save as PDF" link Claude checked. The "S-…" numbers aren't made by Tohyee's code as far as Claude could find.) BigDog, smaller things:** the bills list says "Newest first" but
    isn't in date order (5 Sep above 25 Sep); some bills have supplier
    invoice numbers like "S-d962a649ed" (where these come from is to be
    checked); on Record a stock movement the item is a typed code rather

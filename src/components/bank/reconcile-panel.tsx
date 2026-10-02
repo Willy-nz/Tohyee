@@ -1182,7 +1182,7 @@ export function ReconcilePanel({
   if (!list.data) return <p className={ui.muted}>Loading…</p>;
   const { lines, total } = list.data;
   if (total === 0) {
-    return <Empty>Everything is reconciled. Import a statement or sync the bank feed to bring in new lines.</Empty>;
+    return <Empty>No statement lines waiting to be reconciled. Import a statement or sync the bank feed to bring in new lines.</Empty>;
   }
   const confidence = new Map((confident.data?.lines ?? []).map((entry) => [entry.lineId, entry]));
   const canReconcile = can("bookkeeper");

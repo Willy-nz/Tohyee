@@ -424,8 +424,11 @@ describeWithDatabase("fixed assets", () => {
     ]);
     expect((await w.run("2026-06-30", k)).id).toBe(june.id);
     await expect(w.run("2026-07-31", k)).rejects.toThrow("idempotency key");
-    await expect(w.run("2026-06-30")).rejects.toThrow("already been run to 2026-06-30");
-    await expect(w.run("2026-05-31")).rejects.toThrow("already been run to 2026-06-30");
+    await expect(w.run("2026-06-30")).rejects.toThrow("already been run to 30 Jun 2026");
+    await expect(w.run("2026-05-31")).rejects.toThrow("already been run to 30 Jun 2026");
+    // Decision 337: not past the end of this month.
+    const nextYear = `${Number(new Date().getUTCFullYear()) + 1}-03-31`;
+    await expect(w.run(nextYear)).rejects.toThrow("Depreciation can be run up to the end of this month");
     await expect(
       w.as((tx) =>
         tx.query("insert into fixed_asset_depreciation_runs (command_source, idempotency_key, request_hash, period_end, total) values ('x', 'y', 'z', '2026-04-30', 0)"),

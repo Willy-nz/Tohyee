@@ -17,6 +17,7 @@ import type { PayItem } from "@/lib/payroll/pay-items";
 import type { PayRate } from "@/lib/payroll/pay-rates";
 import type { PayRun, PayRunEmployee, PayRunPosting, PayRunStatus, PayRunSummary, PayRunTotals } from "@/lib/payroll/pay-runs";
 import styles from "./payroll-employees.module.css";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const STATUS: Record<PayRunStatus, { label: string; tone: "amber" | "green" | "neutral" }> = {
   draft: { label: "Draft", tone: "amber" },
@@ -203,6 +204,7 @@ function EmployeePay({
   payItems: PayItem[];
   onChanged: (message: string, payRun?: PayRun) => void;
 }) {
+  const confirm = useConfirm();
   const editable = run.status === "draft";
   const hasUsualPay = employee.lines.some((line) => line.source === "usual_pay");
   const [keepUsualPay, setKeepUsualPay] = useState(hasUsualPay);
@@ -244,7 +246,7 @@ function EmployeePay({
   };
 
   const remove = async () => {
-    if (!window.confirm(`Leave ${employee.name} out of ${run.reference}? You can't add them back to this draft.`)) return;
+    if (!(await confirm(`Leave ${employee.name} out of ${run.reference}? You can't add them back to this draft.`))) return;
     setBusy(true);
     setError(null);
     try {
@@ -619,6 +621,7 @@ function BackPay({
 
 /** One pay run: the per-employee breakdown, then approve or void (PRUN1-PRUN11). */
 export function PayRunView({ organisationId, payRunId }: { organisationId: string; payRunId: string }) {
+  const confirm = useConfirm();
   const router = useRouter();
   const loaded = useApiData<{ payRun: PayRun }>(`/api/payroll/pay-runs/${payRunId}`, { organisationId });
   const items = useApiData<{ payItems: PayItem[] }>("/api/payroll/pay-items", { organisationId, includeArchived: "true" });
@@ -650,17 +653,17 @@ export function PayRunView({ organisationId, payRunId }: { organisationId: strin
     }
   };
 
-  const approve = () => {
-    if (!window.confirm(`Approve ${run.reference}? This posts its journal dated ${formatDate(run.payDate)}. It can't be changed afterwards, only voided.`)) return;
+  const approve = async () => {
+    if (!(await confirm(`Approve ${run.reference}? This posts its journal dated ${formatDate(run.payDate)}. It can't be changed afterwards, only voided.`))) return;
     void act(
       () => api(`/api/payroll/pay-runs/${run.id}/approve`, { method: "POST", body: { organisationId, idempotencyKey: newIdempotencyKey("pay-run-approve") } }),
       `${run.reference} approved and its journal posted.`,
     );
   };
 
-  const voidRun = (event: FormEvent<HTMLFormElement>) => {
+  const voidRun = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!window.confirm(`Void ${run.reference}? This posts a reversing journal dated ${formatDate(voidDate)}.`)) return;
+    if (!(await confirm(`Void ${run.reference}? This posts a reversing journal dated ${formatDate(voidDate)}.`))) return;
     void act(
       () =>
         api(`/api/payroll/pay-runs/${run.id}/void`, {
@@ -672,7 +675,7 @@ export function PayRunView({ organisationId, payRunId }: { organisationId: strin
   };
 
   const remove = async () => {
-    if (!window.confirm(`Delete the draft ${run.reference}? Nothing has been posted.`)) return;
+    if (!(await confirm(`Delete the draft ${run.reference}? Nothing has been posted.`))) return;
     setBusy(true);
     try {
       await api(`/api/payroll/pay-runs/${run.id}`, { method: "DELETE", query: { organisationId } });

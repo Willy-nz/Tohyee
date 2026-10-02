@@ -32,7 +32,9 @@ GitHub; each merge commit says so):
 | Leave liability posting | 0072 | HL52-HL56 | 182-187 |
 | Leave liability: finished employees, employer KiwiSaver, month-end reminder (2 Oct, afternoon session) | 0073 | HL53 (rewritten), HL57-HL61 | 188-191 |
 
-**Next free tenant migration: 0080. Next core migration: 0005. Next decision number: 333.**
+**Next free tenant migration: 0081. Next core migration: 0005. Next decision number: 339.**
+
+**Evening of 2 Oct 2026 (for 0.4.0):** Claude tried Tohyee on Jess's server through her Chrome and fixed what turned up (docs/TODO.md, "Tried out on Jess's server"; decisions 333-338, tenant migration 0080 for default payment terms), the server app's missing lists and screen glitch on Windows (PR #86; the Windows installer workflow now saves pictures of the server app, also on the ci/tray-screenshots branch), and replaced the browser's confirm boxes with an in-page dialog.
 
 **Updates and server stats (2 Oct 2026, late afternoon; decisions 328-332, core
 migration 0004):** the server checks GitHub daily; the Windows server app
@@ -185,7 +187,7 @@ stage 1 (#69, 0055), Shopify stage 1 (#70, 0056), CRM record types
 and record page (#74, 0059), the RDTI register R2 (#75, 0060) and payroll
 pay runs P3 (#76, 0058).
 
-Next free tenant migration number: 0080 (0058-0079 used: 0079 opportunity sales orders, 0078 pay run bank accounts, 0077 expense claim supplier GST numbers, 0076 purchase order close, 0075 Shopify guest contact, 0074 timesheet first day and standard week, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting, 0073 employer KiwiSaver on the leave liability).
+Next free tenant migration number: 0081 (0058-0080 used: 0080 default payment terms, 0079 opportunity sales orders, 0078 pay run bank accounts, 0077 expense claim supplier GST numbers, 0076 purchase order close, 0075 Shopify guest contact, 0074 timesheet first day and standard week, 0063 P5, 0064 P6, 0065 R3, 0066 CRM stages, 0067 timesheets P9, 0068 workforce budgets P11, 0069 extra pays P12, 0070 leave P8, 0071 opening balances and leave requests, 0072 leave liability posting, 0073 employer KiwiSaver on the leave liability).
 
 Merged: the CRM as its own app at `/crm`, with the Accounting ↔ CRM switcher
 and the CRM Home (CRM roadmap item 1, example CRM10, #66, 1 Oct 2026).

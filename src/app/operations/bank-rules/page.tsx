@@ -14,6 +14,7 @@ import type { Contact } from "@/lib/contacts/service";
 import { AMOUNTS_MODE_LABELS, AMOUNTS_MODES, type AmountsMode } from "@/lib/invoices/amounts";
 import type { TaxCode } from "@/lib/tax/codes";
 import { isAvailableOn, onlyWords, ruleSides } from "@/lib/tax/available-on";
+import { useConfirm } from "@/components/confirm-dialog";
 
 const DIRECTION_LABELS: Record<BankRule["direction"], string> = { any: "Money in or out", in: "Money in", out: "Money out" };
 const FIELD_LABELS: Record<BankRule["matchField"], string> = {
@@ -232,13 +233,14 @@ function RuleForm({
 }
 
 function BankRules({ organisationId }: { organisationId: string }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
   const rules = useApiData<{ rules: BankRule[] }>("/api/bank-rules", { organisationId });
   const [editing, setEditing] = useState<BankRule | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function remove(rule: BankRule) {
-    if (!window.confirm(`Delete the rule “${rule.name}”? Nothing already reconciled changes.`)) return;
+    if (!(await confirm(`Delete the rule “${rule.name}”? Nothing already reconciled changes.`))) return;
     setError(null);
     try {
       await api(`/api/bank-rules/${rule.id}`, { method: "DELETE", query: { organisationId } });

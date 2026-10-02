@@ -21,6 +21,8 @@ import type { SupplierCreditNoteApplication } from "@/lib/supplier-credit-notes/
 import type { SupplierCreditNoteSummary } from "@/lib/supplier-credit-notes/service";
 import { RdLineTags } from "@/components/rd";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
+import { BillAssetPrompt } from "@/components/fixed-assets";
+import { useConfirm } from "@/components/confirm-dialog";
 
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
@@ -35,6 +37,7 @@ function BillActions({
   bill: Bill;
   onChanged: (bill: Bill, message: string) => void;
 }) {
+  const confirm = useConfirm();
   const router = useRouter();
   // One key per action on this page, so a retry after a dropped connection
   // returns the first result instead of posting again.
@@ -56,8 +59,8 @@ function BillActions({
     }
   }
 
-  function approve() {
-    if (!window.confirm(`Approve this bill? It's posted to the ledger on ${formatDate(bill.billDate)}, owing ${bill.contactName} through accounts payable. After that it can only be voided.`)) {
+  async function approve() {
+    if (!(await confirm(`Approve this bill? It's posted to the ledger on ${formatDate(bill.billDate)}, owing ${bill.contactName} through accounts payable. After that it can only be voided.`))) {
       return;
     }
     void run(async () => {
@@ -69,8 +72,8 @@ function BillActions({
     });
   }
 
-  function remove() {
-    if (!window.confirm("Delete this draft? This can't be undone.")) {
+  async function remove() {
+    if (!(await confirm("Delete this draft? This can't be undone."))) {
       return;
     }
     void run(async () => {
@@ -79,8 +82,8 @@ function BillActions({
     });
   }
 
-  function voidBill() {
-    if (!window.confirm(`Void bill ${bill.supplierInvoiceNumber}? This posts a reversal of its journal on ${formatDate(voidDate)}, and can't be undone.`)) {
+  async function voidBill() {
+    if (!(await confirm(`Void bill ${bill.supplierInvoiceNumber}? This posts a reversal of its journal on ${formatDate(voidDate)}, and can't be undone.`))) {
       return;
     }
     void run(async () => {
@@ -400,6 +403,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           }}
         />
       ) : null}
+      {bill.status === "approved" ? <BillAssetPrompt key={`assets-${message ?? ""}`} organisationId={organisationId} billId={bill.id} /> : null}
       {bill.status === "approved" || bill.status === "voided" ? (
         <RdLineTags key={`rd-${bill.status}`} organisationId={organisationId} documentType="bill" documentId={bill.id} />
       ) : null}

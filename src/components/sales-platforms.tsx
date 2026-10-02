@@ -19,6 +19,7 @@ import {
   type SyncResult,
 } from "@/lib/sales-platforms/types";
 import type { TaxCode } from "@/lib/tax/codes";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Settings › Sales platforms (examples SPC1-SPC10): connecting a Shopify
@@ -200,6 +201,7 @@ export function ConnectionCard({
   isAdmin: boolean;
   onChanged: () => void;
 }) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [logVersion, setLogVersion] = useState(0);
@@ -235,11 +237,11 @@ export function ConnectionCard({
       await api(path, { method: "PATCH", body: { organisationId, ...change } });
       return "Saved.";
     });
-  const disconnect = () => {
+  const disconnect = async () => {
     if (
-      !window.confirm(
+      !(await confirm(
         `Disconnect ${connection.storeName ?? connection.storeDomain}? The contacts and items already brought in stay, and so does this log. Tohyee forgets the store's credentials and which Shopify record each contact and item came from.`,
-      )
+      ))
     ) {
       return;
     }

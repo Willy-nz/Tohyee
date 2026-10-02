@@ -8,6 +8,7 @@ import { LineItemPicker, useItems } from "@/components/items";
 import type { ItemList } from "@/lib/items/service";
 import { useApiData } from "@/components/hooks";
 import { dueFromSupplierTerms, useCustomerSetup } from "@/components/customers";
+import { NEW_CONTACT, QuickContact } from "@/components/quick-contact";
 import { CustomFieldInputs, startingValues, useCustomFields } from "@/components/custom-fields";
 import { TrackingSelects, useTracking } from "@/components/tracking";
 import { formatRate, InvoiceStatusBadge } from "@/components/invoices/invoice-editor";
@@ -143,7 +144,11 @@ type FormProps = {
   onCancel: () => void;
 };
 
-function BillForm({ organisationId, items, baseCurrency, accounts, contacts, taxCodes, tracking, customSetup, bill, onSaved, onCancel }: FormProps) {
+function BillForm({ organisationId, items, baseCurrency, accounts, contacts: givenContacts, taxCodes, tracking, customSetup, bill, onSaved, onCancel }: FormProps) {
+  // Suppliers added here with "New supplier…" join the list straight away.
+  const [added, setAdded] = useState<Contact[]>([]);
+  const [addingSupplier, setAddingSupplier] = useState(false);
+  const contacts = [...givenContacts, ...added];
   const activeTaxCodes = taxCodes.filter((taxCode) => taxCode.isActive);
   const defaultTaxCode = defaultPurchaseTaxCode(taxCodes);
   const [contactId, setContactId] = useState(bill?.contactId ?? "");
@@ -153,9 +158,9 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
   // A new bill's due date follows the supplier's payment terms until it's typed over (SPT2).
   const termsSetup = useCustomerSetup(organisationId).data;
   const [dueTyped, setDueTyped] = useState(Boolean(bill));
-  const refillDue = (supplierId: string, date: string) => {
+  const refillDue = (supplierId: string, date: string, known?: Contact) => {
     if (dueTyped) return;
-    const fromTerms = dueFromSupplierTerms(termsSetup, contacts.find((contact) => contact.id === supplierId), date);
+    const fromTerms = dueFromSupplierTerms(termsSetup, known ?? contacts.find((contact) => contact.id === supplierId), date);
     if (fromTerms) setDueDate(fromTerms);
   };
   const [amountsMode, setAmountsMode] = useState<AmountsMode>(bill?.amountsMode ?? "exclusive");
@@ -177,6 +182,13 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
 
   const hasTax = amountsMode !== "no_tax";
   const supplierOptions = contacts.filter((contact) => contact.isSupplier && !contact.isArchived);
+  function chooseSupplier(id: string, list: Contact[]) {
+    const next = list.find((contact) => contact.id === id);
+    if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
+    setContactId(id);
+    refillDue(id, billDate, next);
+    setLines((current) => retaxLines(current, contactPurchaseTaxCode(next, taxCodes)));
+  }
   const savedSupplier = bill && !supplierOptions.some((contact) => contact.id === bill.contactId) ? bill : null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -215,7 +227,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
       {error ? <Notice tone="error">{error}</Notice> : null}
       {supplierOptions.length === 0 ? (
         <Notice tone="warning">
-          There are no suppliers yet. Add one in <Link href="/operations/contacts">Contacts</Link> (tick Supplier) first.
+          There are no suppliers yet. Choose &ldquo;+ New supplier…&rdquo; below, or add one in <Link href="/operations/contacts">Contacts</Link>.
         </Notice>
       ) : null}
       {hasTax && activeTaxCodes.length === 0 ? (
@@ -229,15 +241,16 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
           <select
             value={contactId}
             onChange={(event) => {
-              const next = contacts.find((contact) => contact.id === event.target.value);
-              if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
-              setContactId(event.target.value);
-              refillDue(event.target.value, billDate);
-              setLines((current) => retaxLines(current, contactPurchaseTaxCode(next, taxCodes)));
+              if (event.target.value === NEW_CONTACT) {
+                setAddingSupplier(true);
+                return;
+              }
+              chooseSupplier(event.target.value, contacts);
             }}
             required
           >
             <option value="">Choose a supplier</option>
+            <option value={NEW_CONTACT}>+ New supplier…</option>
             {savedSupplier ? (
               <option value={savedSupplier.contactId}>{savedSupplier.contactName} (archived or not a supplier)</option>
             ) : null}
@@ -249,6 +262,20 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
             ))}
           </select>
         </Field>
+        {addingSupplier ? (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <QuickContact
+              organisationId={organisationId}
+              kind="supplier"
+              onCreated={(contact) => {
+                setAdded((current) => [...current, contact]);
+                setAddingSupplier(false);
+                chooseSupplier(contact.id, [...contacts, contact]);
+              }}
+              onCancel={() => setAddingSupplier(false)}
+            />
+          </div>
+        ) : null}
         <Field
           label="Supplier's invoice number"
           hint="As it's shown on their invoice. A supplier can't have two bills with the same number. A draft can wait for it; approving needs it."
@@ -279,7 +306,14 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts, tax
             required
           />
         </Field>
-        <Field label="Due date" hint="From the supplier's payment terms, if they have them. You can change it.">
+        <Field
+          label="Due date"
+          hint={
+            contactId && !dueDate
+              ? "This supplier has no payment terms: type the due date (or set default terms in Settings › Payment terms and customers)."
+              : "From the supplier's payment terms, or the organisation's default terms. You can change it."
+          }
+        >
           <input
             type="date"
             value={dueDate}

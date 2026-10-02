@@ -41,12 +41,12 @@ namespace Tohyee.Tray
             Ui.Field(form, "Nightly", _enabled);
             Ui.Field(form, "At (24-hour)", _time);
             _time.Dock = DockStyle.None;
-            var folderRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), BackColor = Theme.Card };
+            // Wraps the buttons under the folder in a narrow window rather than running off the card.
+            var folderRow = new FlowLayoutPanel { AutoSize = true, WrapContents = true, Margin = new Padding(0), BackColor = Theme.Card, Tag = "wrap" };
             folderRow.Controls.Add(Ui.Input(_folder));
             _folder.Margin = new Padding(0, 4, 8, 0);
             folderRow.Controls.Add(Ui.Btn("Browse…", (s, e) => Browse()));
             folderRow.Controls.Add(Ui.Btn("Use OneDrive", (s, e) => UseOneDrive()));
-            form.ColumnStyles[1].Width = Theme.S(600);
             form.RowCount += 1;
             form.Controls.Add(new Label { Text = "Folder", AutoSize = true, ForeColor = Theme.Muted, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 12, 7) });
             form.Controls.Add(folderRow);

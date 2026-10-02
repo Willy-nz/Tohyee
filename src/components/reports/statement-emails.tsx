@@ -10,6 +10,7 @@ import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import type { StatementRun, StatementRunPreview } from "@/lib/email/documents";
 import { formatDate } from "@/lib/format";
+import { useConfirm } from "@/components/confirm-dialog";
 
 /**
  * Contacts › Customer statements › "Email statements to every customer with
@@ -18,6 +19,7 @@ import { formatDate } from "@/lib/format";
  * statement's PDF, and the result for each customer as the server sends them.
  */
 export function StatementRunCard({ organisationId, statement }: { organisationId: string; statement: StatementQuery }) {
+  const confirm = useConfirm();
   const { can } = useWorkspace();
   const [previewing, setPreviewing] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
@@ -39,7 +41,7 @@ export function StatementRunCard({ organisationId, statement }: { organisationId
   const sending = (preview.data?.recipients ?? []).filter((recipient) => recipient.to.length > 0);
 
   async function send() {
-    if (!window.confirm(`Email ${sending.length} statement${sending.length === 1 ? "" : "s"} now?`)) return;
+    if (!(await confirm(`Email ${sending.length} statement${sending.length === 1 ? "" : "s"} now?`))) return;
     setBusy(true);
     setError(null);
     try {
