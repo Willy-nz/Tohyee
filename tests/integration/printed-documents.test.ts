@@ -95,9 +95,9 @@ describeWithDatabase("printed documents", () => {
     const w = await setup();
     const doc = await w.print("invoice", w.invoice.id);
     expect(doc).toMatchObject({
-      labels: { title: "Tax invoice", isTaxDocument: true, gstLine: true, includesGstStatement: false, buyerAddressRequired: false, warnings: [] },
+      labels: { title: "Tax invoice", isTaxDocument: true, gstLine: true, includesGstStatement: false, buyerIdentifierRequired: false, warnings: [] },
       organisation: { name: "Glimmers", postalAddress: "PO Box 5, Dunedin", gstNumber: "123456789" },
-      customer: { name: "Kobe Cafe", billingAddress: "12 George St, Dunedin 9016" },
+      customer: { name: "Kobe Cafe", billingAddress: "12 George St, Dunedin 9016", contactIdentifier: null },
       number: "INV-0001",
       date: "2026-07-20",
       dueDate: "2026-08-20",
@@ -120,14 +120,19 @@ describeWithDatabase("printed documents", () => {
   it("PD3 and PD4: over $1,000 the buyer's address is required", async () => {
     const w = await setup();
     const kobe = await w.print("invoice", (await w.newInvoice(w.kobe.id, "inclusive", "1150.00")).id);
-    expect(kobe.labels).toMatchObject({ title: "Tax invoice", gstLine: false, includesGstStatement: true, buyerAddressRequired: true, warnings: [] });
+    expect(kobe.labels).toMatchObject({ title: "Tax invoice", gstLine: false, includesGstStatement: true, buyerIdentifierRequired: true, warnings: [] });
     expect([kobe.total, kobe.taxTotal]).toEqual(["1150.00", "150.00"]);
     const paw = await w.print("invoice", (await w.newInvoice(w.paw.id, "inclusive", "1150.00")).id);
     expect(paw.labels.warnings).toEqual([
-      "This invoice is over $1,000, so a tax invoice must identify the customer by more than their name. Tohyee prints the billing address, and this customer has none: add one to the contact, then print it again.",
+      "This invoice is over $1,000, so a tax invoice must identify the customer by more than their name. Tohyee prints their billing address, email or phone, and this customer has none: add one to the contact, then print it again.",
     ]);
+    // An email (or phone) is enough (decision 270; PD4): it's printed under the name.
+    await w.as((tx) => tx.query("update contacts set email = 'hello@pawwalkers.test' where id = $1", [w.paw.id]));
+    const withEmail = await w.print("invoice", (await w.newInvoice(w.paw.id, "inclusive", "1150.00")).id);
+    expect([withEmail.labels.warnings, withEmail.customer]).toEqual([[], { name: "Paw Walkers", billingAddress: null, contactIdentifier: "hello@pawwalkers.test" }]);
+    await w.as((tx) => tx.query("update contacts set email = null where id = $1", [w.paw.id]));
     const exactly = await w.print("invoice", (await w.newInvoice(w.paw.id, "inclusive", "1000.00")).id);
-    expect([exactly.total, exactly.taxTotal, exactly.labels.buyerAddressRequired, exactly.labels.warnings]).toEqual(["1000.00", "130.43", false, []]);
+    expect([exactly.total, exactly.taxTotal, exactly.labels.buyerIdentifierRequired, exactly.labels.warnings]).toEqual(["1000.00", "130.43", false, []]);
   });
 
   it("PD5: drafts and voided invoices", async () => {

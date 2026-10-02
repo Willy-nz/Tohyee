@@ -1878,3 +1878,169 @@ end of each group.
 269. **Salaried hours paid stay 0 unless lines carry hours** (question 5,
      kept; decision 59): IRD's spec allows "0 if not held". Leave lines
      carry hours since P8.
+
+## Accounting questions, decided (2 Oct 2026; decisions 270-325)
+
+The remaining "Questions for Jess" lists, decided by law → NetSuite → Xero
+as Jess asked. IRD's [taxable supply information](https://www.ird.govt.nz/gst/tax-invoices-for-gst/how-tax-invoices-for-gst-work)
+page was read on 2 Oct 2026 through the summarising fetch tool (quotes as
+returned). "Kept" means as built, with the reason; "later" means wanted but
+needing its own worked examples first.
+
+### Printed documents, quotes and repeating invoices
+
+270. **Over $1,000 the buyer's identifier can be any of IRD's: an address
+     (physical or postal), phone number, email address, trading name (if
+     different), NZBN or website** (IRD's list). Tohyee prints the billing
+     address, else the contact's email, else their phone, and warns only
+     when the contact has none of them (PD4). Built.
+271. **Approved invoices keep the heading "Tax invoice"** (kept): IRD's page
+     no longer needs the words, but they do no harm and match Xero.
+272. **Quotes: sending will move a quote on once emailing quotes is built**
+     (Xero); finalising stays its own step until then (kept).
+273. **Changing a repeating invoice's schedule starts it from today** (kept).
+274. **A repeating invoice left as a draft isn't emailed to anyone**
+     (kept): the draft says why it wasn't approved (MC52); notifying admins
+     by email is later.
+
+### Sales orders (the unlabelled list after SO examples)
+
+275. **Accepting a quote offers both, as built**: "Accept" makes the
+     invoice and "Accept as sales order" (NetSuite's estimate to sales
+     order) sits beside it. Making the sales order the default would push
+     every small organisation through an extra step; organisations that
+     use sales orders choose it.
+276. **Line discounts: later** (NetSuite uses discount items, Xero a line
+     %); price levels for now.
+277. **Closing is per order** (kept); per-line closing and reopening are
+     later.
+278. **Approved orders stay locked** (kept, like purchase orders): change by
+     closing and making another.
+279. **A credit note doesn't give quantity back to the order** (kept):
+     NetSuite uses return authorisations, a later stage.
+280. **"Partly billed" stays** (kept).
+
+### Purchase orders
+
+281. **A part-billed purchase order can be closed** ("Close the rest";
+     Xero's "mark as billed", NetSuite's close), when nothing is on a draft
+     bill: what's left no longer shows as on order. Later (needs PO
+     examples).
+282. **Approved purchase orders stay locked** (kept): cancel and copy.
+283. **Extra delivered goes on a separate bill line** (kept).
+284. **The delivery address starts as the postal address** (kept); a
+     delivery address setting is later.
+
+### Repeating bills
+
+285. **A taken number stops the template at that date** (kept): it may be
+     the same bill, so the person checks.
+
+### Stock transfers
+
+286. **Transfers keep posting between locations on 1400; cost of sales
+     lines stay untagged** (kept): changing ST2's journals needs its own
+     example. The stock report by location is the source of truth.
+287. **A transfer into a location below zero stays refused** (kept).
+
+### Budgets
+
+288. **Variance is actual less budget for every row** (kept): one rule,
+     shown with a sign.
+289. **Budgets for balance sheet accounts: later** (Xero has them).
+290. **One tracking value per budget** (kept); combinations are later.
+
+### Expense claims
+
+291. **No "submit only" role yet** (kept): Xero's submit-only role is
+     later, with the projects and timesheet questions about a "time only"
+     role (decisions 193, 298).
+292. **Admins and owners can approve their own claims** (kept): a
+     one-person organisation must still work; bookkeepers can't.
+293. **Receipts over $200 need the supplier's GST number to claim GST**
+     (IRD's page: the GST number is required over $200, not at $200 or
+     less). Recording the number on a receipt line and warning without it
+     is later; until then the approver checks the receipt.
+294. **2010 Expense claims payable stays** (kept).
+295. **The claim date defaults to the approval date** (kept).
+
+### Fixed assets
+
+296. **The five fixed asset questions are folded into the ERP fixed assets
+     plan** (docs/TODO.md, list of 2 Oct 2026, item 4;
+     `docs/sources/nz-fixed-assets-reporting-changes.md`): tax depreciation
+     beside book, depreciation recovered to its own account, low-value
+     write-offs and pooling, and IRD's disposal-year rules all belong
+     there. As built until then.
+
+### Projects
+
+297. **Time invoices at exact hours** (kept): rounding to 6 or 15 minutes
+     is a firm's choice; later as a setting.
+298. **No "time only" role** (kept; decision 193's reasoning).
+299. **Closing with a write-off stays; reopening doesn't undo it** (kept):
+     the write-off is posted history.
+300. **Profitability for the project's life** (kept); date ranges and
+     credit notes linked to projects are later.
+301. **No automatic "Project" segment** (kept): projects already tag
+     lines.
+302. **Foreign projects: costs only** (kept, MC63).
+303. **A won foreign opportunity's draft invoice is zero-rated** (kept,
+     MC69; the person can change it before approving).
+304. **A customer's currency stays fixed once they have a project or
+     opportunity** (kept, as quotes).
+305. **Currencies without cents stay refused for projects** (kept).
+
+### Multi-currency
+
+306. **A USD tax invoice shows its GST in USD only** (kept): IRD's page
+     read doesn't say GST must also be shown in NZD (**unverified**:
+     the GST Act wasn't read).
+307. **Payments basis, part-paid foreign sales: still refused** (question
+     2): it's a GST rule, and IRD's guidance on it wasn't read.
+308. **No automatic exchange rate feed** (question 6, kept): rates are
+     typed or pasted; a free RBNZ feed is later.
+309. **Refunds treated like payments** (question 7, kept).
+310. **Stock on a foreign bill at the bill's rate** (question 11, kept;
+     NetSuite's variance needs item receipts Tohyee doesn't have).
+311. **The reverse charge on imported services stays refused** (kept;
+     exports question 3).
+
+### Bringing in existing books
+
+312. **The 0.05 GST rounding allowance stays** (kept).
+313. **A bank account's opening balance is its ledger balance** (kept, as
+     Xero); entering unpresented items as opening transactions is later.
+314. **Control accounts matched by name and re-coded** (kept): needed for
+     any system's file, which is what Jess wants (TODO item 5).
+315. **Contacts without customer or supplier columns are both** (kept).
+
+### Year end and period close
+
+316. **A bookkeeper can close a month when every check passes** (kept);
+     warnings still need an owner or admin.
+
+### Sales platform connections (Shopify)
+
+317. **Guest checkouts go to one contact chosen on the connection**
+     ("Shopify customers", say), as some connectors do; refused until one
+     is chosen. Whether the order is an export
+     comes from the order's own billing country, not that contact. Built
+     (SPC24).
+318. **Payouts with chargebacks, reserves or other kinds stay refused**
+     (kept): where a chargeback goes needs its own example.
+319. **Adjustments go to the fees account** (kept).
+320. **A paid order is invoiced on the day it was paid** (kept): that's
+     when the sale is settled; the sales order keeps the order's date.
+321. **Refund line subtotals include tax on taxes-included orders** (kept,
+     still to check with one real refund; Jess).
+322. **Shipping goes to the shipping account chosen in settings** (kept;
+     it can already be its own account).
+
+### CRM stages and forecasts
+
+323. **The starting probabilities stay** (kept; Jess can change them under
+     CRM › Stages).
+324. **Forecasts keep currencies apart and quotas count NZD only** (kept;
+     MC68): converting needs a rate rule, later.
+325. **Per-owner forecasts** (kept); teams and manager adjustments later.

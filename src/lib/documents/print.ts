@@ -25,7 +25,8 @@ export type PrintedDocument = {
   kind: PrintKind;
   labels: TaxLabels;
   organisation: { name: string; postalAddress: string | null; gstNumber: string | null };
-  customer: { name: string; billingAddress: string | null };
+  /** contactIdentifier: the email or phone printed when there's no address (decision 270). */
+  customer: { name: string; billingAddress: string | null; contactIdentifier: string | null };
   number: string | null;
   status: string;
   date: string;
@@ -78,10 +79,20 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
           ? { kind, document: await getQuote(tx, id) }
           : { kind, document: await getPurchaseOrder(tx, id) };
   const { document } = loaded;
-  const contact = await tx.query<{ name: string; postal_address: string | null }>("select name, postal_address from contacts where id = $1", [
-    document.contactId,
-  ]);
-  const customer = { name: contact.rows[0].name, billingAddress: contact.rows[0].postal_address };
+  const contact = await tx.query<{ name: string; postal_address: string | null; email: string | null; phone: string | null }>(
+    "select name, postal_address, email, phone from contacts where id = $1",
+    [document.contactId],
+  );
+  const found = contact.rows[0];
+  const present = (value: string | null) => (value && value.trim() !== "" ? value.trim() : null);
+  // The billing address, else email, else phone: each one of IRD's identifiers (decision 270).
+  const identifier = present(found.postal_address) ?? present(found.email) ?? present(found.phone);
+  const customer = {
+    name: found.name,
+    billingAddress: found.postal_address,
+    // Printed under the name when there's no address but one is needed (over $1,000).
+    contactIdentifier: present(found.postal_address) ? null : (present(found.email) ?? present(found.phone)),
+  };
   const labels = taxLabels({
     kind,
     status: document.status,
@@ -89,7 +100,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
     total: document.total,
     taxTotal: document.taxTotal,
     organisationGstNumber: settings.gstNumber,
-    buyerAddress: customer.billingAddress,
+    buyerIdentifier: identifier,
   });
   const base = {
     kind,

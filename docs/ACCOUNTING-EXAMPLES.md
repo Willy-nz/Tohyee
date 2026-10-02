@@ -2503,7 +2503,9 @@ MC2, MC10, MC25, MC64 and MC69 revised in their own tests.
   projects in a currency without cents (JPY, XPF; MC70). (Projects and CRM
   opportunities in another currency are built: MC61-MC70.)
 
-### Questions for Jess (multi-currency)
+### Questions for Jess (multi-currency), decided
+
+Decided on 2 Oct 2026 where still open: decisions 306-311 in `docs/DECISIONS.md` (payments basis part payments stay refused until IRD's guidance is read). What was asked is kept below.
 
 1. Answered 1 Oct 2026 by following NetSuite (and IRD's BR Pub 04/01):
    standard-rated GST on foreign-currency invoices, credit notes, bills and
@@ -2824,7 +2826,9 @@ refusals: TAO2-TAO4, TAO6, TAO8).
   Other tax code changes (renaming, archiving, rates) aren't on the Tax
   codes screen yet.
 
-### Questions for Jess (exports)
+### Questions for Jess (exports), decided
+
+All decided on 1 Oct 2026 (below).
 
 1. Decided 1 Oct 2026 (following NetSuite, whose Foreign Trade box is off
    until ticked): Foreign trade stays **off** for every organisation to
@@ -4605,7 +4609,9 @@ are New Zealand dates (NZDT, UTC+13).
   link stays; nothing happens).
 - Matching by name, or anything other than one clear email or SKU match.
 
-### Questions for Jess (sales platform connections)
+### Questions for Jess (sales platform connections), decided
+
+Decided on 2 Oct 2026: decisions 317-322 (guest checkouts go to a chosen contact, SPC24; a real refund still to check). What was asked is kept below.
 
 Answered 1 Oct 2026 (decisions 51-55): per order; tax from Shopify's tax
 lines; tracked products as stock items; countries come across; both kinds
@@ -5194,7 +5200,9 @@ prints 2027" for 2,400.00 closing 2026-12-15, owner Jess, NZD base).
   sets quotas (200). With the CRM off, stages, processes and quotas can't
   be changed ("The CRM is off. An admin can turn it on in Settings.").
 
-### Questions for Jess (stages and forecasts)
+### Questions for Jess (stages and forecasts), decided
+
+Decided on 2 Oct 2026: decisions 323-325. What was asked is kept below.
 
 - Are the starting probabilities (New 10%, Screening 20%, Meeting 50%,
   Proposal 75%) right for you, and should any start in Best case or
@@ -5815,7 +5823,9 @@ to 4000, GST).
   limit holds, and accepting part of a quote as an order.
 - Notes and files on sales orders.
 
-### Questions for Jess
+### Questions for Jess (sales orders), decided
+
+Decided on 2 Oct 2026: decisions 275-280. What was asked is kept below.
 
 1. Should accepting a quote make a sales order by default now (NetSuite's
    estimate to sales order), with "accept as invoice" kept for quick sales?
@@ -6038,7 +6048,9 @@ invoice number **RENT-{month}**, monthly from **31 Jan 2026**, due the
   yearly or "day N of the current month" rules.
 - Placeholders in line descriptions (Xero's [Month] [Year]).
 
-### Questions for Jess (repeating bills)
+### Questions for Jess (repeating bills), decided
+
+Decided on 2 Oct 2026: decision 285. What was asked is kept below.
 
 - When the number is already taken by a bill entered by hand, the template
   stops at that date (it may be the same bill). Should it skip that date
@@ -6106,9 +6118,13 @@ George St, Dunedin 9016"; customer Paw Walkers with no address; GST 15%.
   **1,150.00**: **Tax invoice**, total **1,150.00**, "Total includes GST of
   **150.00**", no separate GST line; over $1,000 so the buyer's address is
   required, and Kobe Cafe has one, so no warning.
-- **PD4** The same invoice to Paw Walkers: the screen warns that a tax
-  invoice over $1,000 needs the customer's address. At **1,000.00** exactly
-  (1 x 1,000.00 tax inclusive, GST 130.43) there's no warning.
+- **PD4** The same invoice to Paw Walkers, who has no address, email or
+  phone: the screen warns that a tax invoice over $1,000 needs an
+  identifier for the customer. With an email address
+  (hello@pawwalkers.test) on the contact there's no warning and the email
+  is printed under the name (decision 270: IRD accepts an address, phone,
+  email, trading name, NZBN or website). At **1,000.00** exactly (1 x
+  1,000.00 tax inclusive, GST 130.43) there's no warning.
 - **PD5** A draft invoice prints **Draft invoice** with no number, no GST
   number and no payment details; a voided invoice prints **Voided invoice**.
 - **PD6** With no GST number in Settings, INV-0001 prints **Invoice**, no
@@ -6128,7 +6144,9 @@ George St, Dunedin 9016"; customer Paw Walkers with no address; GST 15%.
 - Printing several documents at once.
 - Printing bills and supplier credit notes (they're the supplier's papers).
 
-### Questions for Jess (quotes, repeating invoices and printed documents)
+### Questions for Jess (quotes, repeating invoices and printed documents), decided
+
+Decided on 2 Oct 2026: decisions 270-274 (the buyer's identifier can be an email or phone, PD4). What was asked is kept below.
 
 - Tax invoices over $1,000: Tohyee treats the billing address as the
   buyer's identifier and warns when there isn't one. Should an email
@@ -6268,7 +6286,9 @@ GST). No locations.
 - Copying a purchase order to a new purchase order, making one from a sales
   invoice or quote. (Foreign-currency purchase orders are built: MC28.)
 
-### Questions for Jess (purchase orders)
+### Questions for Jess (purchase orders), decided
+
+Decided on 2 Oct 2026: decisions 281-284. What was asked is kept below.
 
 - A part-billed purchase order whose rest will never arrive stays
   "approved" with what's left showing. Should there be a way to close it
@@ -6349,7 +6369,9 @@ Christchurch; WIDGET (stock, purchase price 5.00); negative stock off.
   the item's base unit.
 - Backdated transfers (as for every stock movement).
 
-### Questions for Jess (stock transfers)
+### Questions for Jess (stock transfers), decided
+
+Decided on 2 Oct 2026: decisions 286-287. What was asked is kept below.
 
 - Transfers post a journal between locations on 1400 (Dr to-location / Cr
   from-location) because bills tag 1400 by Location. Cost of sales lines
@@ -6487,7 +6509,9 @@ the 4000 lines tagged as shown, everything else untagged):
 - A budget column for a period other than the custom report's first column,
   and a year to date budget column.
 
-### Questions for Jess (budgets)
+### Questions for Jess (budgets), decided
+
+Decided on 2 Oct 2026: decisions 288-290. What was asked is kept below.
 
 - Variance is actual less budget for every row, so on costs a positive
   variance is over budget. Would you rather costs show budget less actual
@@ -6629,7 +6653,9 @@ and Sam (bookkeepers) and a viewer. Sam's claim "June market trip":
 - Changing an approved claim: void it (with no payments) and make a new
   one.
 
-### Questions for Jess (expense claims)
+### Questions for Jess (expense claims), decided
+
+Decided on 2 Oct 2026: decisions 291-295. What was asked is kept below.
 
 - Should staff who otherwise only view the books be able to make their own
   claims (a new "submit only" role, like Xero's)?
@@ -6878,7 +6904,9 @@ Assets:
 - Registering assets from bank transactions, expense claims or journals by
   link (they're typed in with their cost).
 
-### Questions for Jess (fixed assets)
+### Questions for Jess (fixed assets), decided
+
+Decided on 2 Oct 2026: decision 296 (folded into the ERP fixed assets plan). What was asked is kept below.
 
 - Should the month an asset is bought count as a whole month (as built,
   the default), and the disposal month not be depreciated (the default)?
@@ -7095,7 +7123,9 @@ Harbour Cafe, estimate **2,000.00**, deadline 31 Aug 2026, with tasks
 - Notes and files on projects; time entries for people who aren't members
   of the organisation (e.g. contractors without a login).
 
-### Questions for Jess (projects)
+### Questions for Jess (projects), decided
+
+Decided on 2 Oct 2026: decisions 297-305. What was asked is kept below.
 
 - Invoice lines for time: the quantity is the hours when they're exact to 4
   decimal places, else 1 line at the amount (PJ7). Would you rather Tohyee
@@ -7475,7 +7505,9 @@ Open invoices: **INV-0107** Kobe Ltd, 15/03/2026, due 20/04/2026,
   from another system's day-and-term columns. Suppliers' payment terms
   (SPT1) aren't imported yet: the "Payment terms" column sets a customer's.
 
-### Questions for Jess (bringing in existing books)
+### Questions for Jess (bringing in existing books), decided
+
+Decided on 2 Oct 2026: decisions 312-315. What was asked is kept below.
 
 Decided with Jess (30 Sep 2026): open invoices and bills carry their GST, as
 in Xero (IM13, IM17-IM20), and the conversion account is equity (IM1, IM21).
@@ -7794,7 +7826,9 @@ doesn't apply.
   non-G/L changes"): drafts dated in a closed period can still be edited,
   but not approved.
 
-### Questions for Jess (year end and period close)
+### Questions for Jess (year end and period close), decided
+
+Decided on 2 Oct 2026: decision 316. What was asked is kept below.
 
 - Should a bookkeeper be able to close a month when every check passes (as
   built), or only owners and admins, like the old lock date?
