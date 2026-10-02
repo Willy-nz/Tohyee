@@ -67,6 +67,25 @@ jobs:
           name: tray-screenshots
           path: dist/windows/tray-screenshots
 
+      # Also on a branch of their own (ci/tray-screenshots), since coding
+      # agents can fetch branches but not always artifacts.
+      - name: Put the pictures on the ci/tray-screenshots branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        run: |
+          $shots = Join-Path $PWD 'dist\windows\tray-screenshots'
+          $work = Join-Path $env:RUNNER_TEMP 'shots-branch'
+          git init -q $work
+          Copy-Item (Join-Path $shots '*') $work
+          Push-Location $work
+          git config user.name 'github-actions'
+          git config user.email 'github-actions@users.noreply.github.com'
+          git checkout -q -b ci/tray-screenshots
+          git add -A
+          git commit -q -m "Server app pictures from ${{ github.sha }}"
+          git push -f -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci/tray-screenshots
+          Pop-Location
+
       - name: Install and test it on this machine
         run: ./installer/windows/test-install.ps1
 

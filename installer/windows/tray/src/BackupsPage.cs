@@ -17,7 +17,7 @@ namespace Tohyee.Tray
     {
         private readonly TohyeeApi _api;
         private readonly Label _state = Ui.State();
-        private readonly CheckBox _enabled = new CheckBox { Text = "Back up every night", AutoSize = true };
+        private readonly CheckBox _enabled = new DarkCheckBox { Text = "Back up every night", AutoSize = true };
         private readonly TextBox _time = new TextBox { Width = Theme.S(80) };
         private readonly TextBox _folder = new TextBox { Width = Theme.S(330) };
         private readonly Label _folderNote = new Label { AutoSize = true, ForeColor = Ui.Muted, MaximumSize = new Size(Theme.S(600), 0), Margin = new Padding(0, 2, 0, 6) };

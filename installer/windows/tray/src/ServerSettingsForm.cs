@@ -59,6 +59,20 @@ namespace Tohyee.Tray
             ShowSignIn();
         }
 
+        /// <summary>
+        /// Paints the whole window in one go (WS_EX_COMPOSITED), so switching pages
+        /// doesn't show each card and button being drawn one after another.
+        /// </summary>
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT) cp.ExStyle |= 0x02000000;
+                return cp;
+            }
+        }
+
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
@@ -141,10 +155,16 @@ namespace Tohyee.Tray
             if (!_pages.TryGetValue(key, out page))
             {
                 page = Create(key);
-                page.Dock = DockStyle.Fill;
+                // Made at its full size and laid out while hidden: a new page used to
+                // appear first at its default 150 x 150 (a squashed copy with scroll
+                // bars in the corner), then in pieces, then properly (2 Oct 2026).
                 page.Visible = false;
+                page.Bounds = _content.ClientRectangle;
+                page.Dock = DockStyle.Fill;
                 _pages[key] = page;
                 _content.Controls.Add(page);
+                page.CreateControl();
+                page.PerformLayout();
             }
             SetPage(key, page);
         }
