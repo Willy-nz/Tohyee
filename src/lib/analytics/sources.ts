@@ -13,6 +13,7 @@ import {
   TOHYEE_TABLE_PREFIX,
 } from "@/lib/analytics/engine";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
+import { rebuildShapedTablesForTable } from "@/lib/analytics/shaped-tables";
 
 /**
  * Analytics sources and loads (decisions 353-358): which file in the
@@ -37,6 +38,7 @@ export type AnalyticsSource = {
 
 export type LoadRun = {
   id: string;
+  shapeId?: string | null;
   sourceId: string | null;
   sourceName: string;
   tableName: string;
@@ -61,6 +63,7 @@ export async function requireAnalytics(tx: OrgTx): Promise<void> {
 
 type RunRow = {
   id: string;
+  shape_id: string | null;
   source_id: string | null;
   source_name: string;
   table_name: string;
@@ -76,11 +79,12 @@ type RunRow = {
 };
 
 const RUN_COLUMNS =
-  "id::text, source_id::text, source_name, table_name, file_name, trigger, status, started_at, finished_at, rows_loaded::text, milliseconds, error, requested_by_email";
+  "id::text, shaped_table_id::text as shape_id, source_id::text, source_name, table_name, file_name, trigger, status, started_at, finished_at, rows_loaded::text, milliseconds, error, requested_by_email";
 
 function toRun(row: RunRow): LoadRun {
   return {
     id: row.id,
+    shapeId: row.shape_id,
     sourceId: row.source_id,
     sourceName: row.source_name,
     tableName: row.table_name,
@@ -317,7 +321,7 @@ export async function runLoad(
     error = caught instanceof Error ? caught.message : String(caught);
   }
 
-  return withOrganisationTransaction(organisation, actor, async (tx) => {
+  const run = await withOrganisationTransaction(organisation, actor, async (tx) => {
     const result = await tx.query<RunRow>(
       `update analytics_load_runs set status = $2, finished_at = now(), rows_loaded = $3, milliseconds = $4, error = $5
         where id = $1 returning ${RUN_COLUMNS}`,
@@ -325,6 +329,14 @@ export async function runLoad(
     );
     return toRun(result.rows[0]);
   });
+  if (run.status === "ok") {
+    try {
+      await rebuildShapedTablesForTable(organisation, actor, started.source.tableName, trigger);
+    } catch (caught) {
+      console.warn(`[tohyee] Shaped tables after loading ${started.source.tableName}:`, caught instanceof Error ? caught.message : caught);
+    }
+  }
+  return run;
 }
 
 /** The latest copy of the books (analytics step 2), or null. */
@@ -334,4 +346,3 @@ export async function lastBooksRun(tx: OrgTx): Promise<LoadRun | null> {
   );
   return result.rows[0] ? toRun(result.rows[0]) : null;
 }
-

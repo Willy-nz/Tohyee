@@ -7,6 +7,8 @@ const tables = new Map([
     [
       { name: "region", type: "VARCHAR" },
       { name: "amount", type: "DECIMAL(18,2)" },
+      { name: "q1", type: "DECIMAL(18,2)" },
+      { name: "q2", type: "DECIMAL(18,2)" },
     ],
   ],
   ["lookup", [{ name: "code", type: "VARCHAR" }, { name: "label", type: "VARCHAR" }]],
@@ -19,11 +21,11 @@ describe("analytics shaping query builder", () => {
       tables,
       steps: [
         { type: "filter", column: "region", test: "contains", value: "x' OR 1=1 --" },
-        { type: "columns", action: "keep", columns: ["region", "amount"] },
+        { type: "columns", action: "keep", columns: ["region", "amount", "q1", "q2"] },
         { type: "rename", column: "region", name: "area" },
         { type: "type", column: "amount", kind: "money" },
         { type: "split", column: "area", separator: "-", names: ["zone", "district"] },
-        { type: "unpivot", columns: ["amount"], attributeName: "attribute", valueName: "value" },
+        { type: "unpivot", columns: ["q1", "q2"], attributeName: "attribute", valueName: "value" },
         {
           type: "group",
           by: ["zone"],
@@ -57,7 +59,7 @@ describe("analytics shaping query builder", () => {
     });
 
     expect(result.sql).toContain("DECIMAL(38,6)");
-    expect(result.sql).toContain("union by name");
+    expect(result.sql).toContain("union all by name");
     expect(result.sql).not.toContain("x' OR 1=1 --");
     expect(result.params).toContain("x' OR 1=1 --");
     expect(result.columns.map((column) => column.name)).toEqual([

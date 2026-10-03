@@ -192,6 +192,49 @@ export async function loadCsv(input: {
   );
 }
 
+export async function replaceTableFromSelect(
+  organisationId: string,
+  table: string,
+  sql: string,
+  params: unknown[],
+): Promise<CsvLoadResult> {
+  assertTableName(table);
+  if (table.startsWith(TOHYEE_TABLE_PREFIX)) throw new ValidationError("Table names starting with tohyee_ are kept for the copy of the books.");
+  return serialise(organisationId, () =>
+    withAnalytics(organisationId, async (connection) => {
+      const started = performance.now();
+      const staging = `_tohyee_shape_${table}`;
+      await connection.run(`drop table if exists ${quoteIdentifier(staging)}`);
+      try {
+        await connection.runAndReadAll(`create table ${quoteIdentifier(staging)} as ${sql}`, params as never);
+        const count = await connection.runAndReadAll(`select count(*)::bigint as n from ${quoteIdentifier(staging)}`);
+        const rows = Number(count.getRows()[0][0]);
+        await connection.run("begin transaction");
+        try {
+          await connection.run(`drop table if exists ${quoteIdentifier(table)}`);
+          await connection.run(`alter table ${quoteIdentifier(staging)} rename to ${quoteIdentifier(table)}`);
+          await connection.run("commit");
+        } catch (error) {
+          await connection.run("rollback");
+          throw error;
+        }
+        return { rows, milliseconds: Math.round(performance.now() - started) };
+      } catch (error) {
+        await connection.run(`drop table if exists ${quoteIdentifier(staging)}`).catch(() => undefined);
+        throw new ValidationError(`The shaped table couldn't be rebuilt: ${loadErrorMessage(error)}`);
+      }
+    }),
+  );
+}
+
+export async function previewSelect(
+  organisationId: string,
+  sql: string,
+  params: unknown[],
+): Promise<Array<Record<string, string | null>>> {
+  return runBuiltQuery(organisationId, `select * from (${sql}) as preview limit 100`, params);
+}
+
 /** DuckDB's error, first line only, without its internal prefixes. */
 export function loadErrorMessage(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error);
@@ -442,4 +485,3 @@ export function replaceTohyeeTables(organisationId: string, tables: readonly Tab
     }),
   );
 }
-
