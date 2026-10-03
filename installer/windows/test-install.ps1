@@ -3,7 +3,8 @@
 # (including two-step sign-in), creating an organisation, the Tohyee server
 # app (tray) reaching its server settings, surviving a service
 # restart, updating in place (signing in with a backup code), the bundled
-# cloudflared, and uninstalling. Needs Administrator (GitHub's Windows runners are).
+# cloudflared, an analytics CSV load through the installed DuckDB, and
+# uninstalling. Needs Administrator (GitHub's Windows runners are).
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -117,6 +118,46 @@ try {
   $created = Invoke-RestMethod -Uri "$adminUrl/api/admin/organisations" -Method Post -ContentType 'application/json' -Headers $adminOrigin -Body $org -WebSession $session
   Write-Host "Organisation: $($created.organisation.provisioningStatus), schema $($created.organisation.schemaVersion)"
   if ($created.organisation.provisioningStatus -ne 'ready') { throw 'The organisation was not provisioned.' }
+
+  Write-Host '== Analytics (the installed DuckDB native library and a real CSV load)'
+  $bindings = Join-Path $installDir 'app\node_modules\@duckdb\node-bindings-win32-x64'
+  foreach ($nativeFile in @('duckdb.node', 'duckdb.dll')) {
+    if (-not (Test-Path (Join-Path $bindings $nativeFile) -PathType Leaf)) { throw "$nativeFile was not installed." }
+  }
+  $enabled = Invoke-RestMethod -Uri "$url/api/organisations/ci/settings" -Method Patch -ContentType 'application/json' -Headers $origin -Body '{"analyticsEnabled":true}' -WebSession $session
+  if ($enabled.settings.analyticsEnabled -ne $true) { throw 'Analytics was not enabled.' }
+  $sourceFolder = Join-Path $dataRoot 'analytics-sources\ci'
+  New-Item -ItemType Directory -Force -Path $sourceFolder | Out-Null
+  [System.IO.File]::WriteAllText((Join-Path $sourceFolder 'sales.csv'), "order_date,region,quantity,unit_price`n2025-01-05,Auckland,2,0.10`n2025-02-06,Otago,3,19.99`n")
+  # Use the installed Node and admin tool with the service's actual database settings.
+  $serviceConfig = [xml](Get-Content (Join-Path $dataRoot 'service\TohyeeServer.xml') -Raw)
+  $previousDatabaseUrl = $env:DATABASE_URL
+  $previousAnalyticsDir = $env:TOHYEE_ANALYTICS_DIR
+  try {
+    $env:DATABASE_URL = ($serviceConfig.service.env | Where-Object name -eq 'DATABASE_URL').value
+    $env:TOHYEE_ANALYTICS_DIR = ($serviceConfig.service.env | Where-Object name -eq 'TOHYEE_ANALYTICS_DIR').value
+    & (Join-Path $installDir 'node\node.exe') (Join-Path $installDir 'app\tohyee-admin.cjs') analytics folder --id ci --folder $sourceFolder
+    if ($LASTEXITCODE -ne 0) { throw "Setting the analytics folder failed with exit code $LASTEXITCODE" }
+  } finally {
+    $env:DATABASE_URL = $previousDatabaseUrl
+    $env:TOHYEE_ANALYTICS_DIR = $previousAnalyticsDir
+  }
+  $sourceBody = @{
+    organisationId = 'ci'; name = 'Installed sales'; tableName = 'sales'; fileName = 'sales.csv'; reloadDaily = $false
+    columns = @(
+      @{ source = 'order_date'; name = 'order_date'; kind = 'date' },
+      @{ source = 'region'; name = 'region'; kind = 'text' },
+      @{ source = 'quantity'; name = 'quantity'; kind = 'quantity' },
+      @{ source = 'unit_price'; name = 'unit_price'; kind = 'money' }
+    )
+  } | ConvertTo-Json -Depth 5
+  $source = Invoke-RestMethod -Uri "$url/api/analytics/sources" -Method Post -ContentType 'application/json' -Headers $origin -Body $sourceBody -WebSession $session
+  $loaded = Invoke-RestMethod -Uri "$url/api/analytics/sources/$($source.source.id)/load" -Method Post -ContentType 'application/json' -Headers $origin -Body '{"organisationId":"ci"}' -WebSession $session -TimeoutSec 120
+  Write-Host "Installed DuckDB load: $($loaded.run.status), $($loaded.run.rowsLoaded) rows, $($loaded.run.milliseconds) ms"
+  if ($loaded.run.status -ne 'ok' -or $loaded.run.rowsLoaded -ne 2) { throw "Installed DuckDB load failed: $($loaded.run.error)" }
+  $analytics = Invoke-RestMethod -Uri "$url/api/analytics?organisationId=ci" -WebSession $session
+  $savedRun = @($analytics.loads | Where-Object id -eq $loaded.run.id)[0]
+  if ($savedRun.status -ne 'ok' -or $savedRun.rowsLoaded -ne 2) { throw 'The successful analytics load was not recorded.' }
 
   Write-Host '== Backups (the bundled pg_dump and pg_restore) and a restore as a copy'
   $backups = Invoke-RestMethod -Uri "$adminUrl/api/admin/backups" -Method Post -ContentType 'application/json' -Headers $adminOrigin -Body '{}' -WebSession $session -TimeoutSec 600

@@ -70,6 +70,22 @@ On this container (2 CPUs, 8 GB), with `@duckdb/node-api` 1.5.6:
   (`@duckdb/node-bindings-win32-x64`, about 38 MB unpacked). Step 1 below
   repeats this test on GitHub's Windows runner.
 
+### Repeatable engine benchmark
+
+Run `npx tsx scripts/analytics-benchmark.ts [rows]` (default: 1,000,000).
+It writes synthetic sales with integer seed 353 and UTC dates, loads them
+through Tohyee's CSV engine, times the three report queries, and compares
+the exact sales total with decimal arithmetic over the CSV text. Its
+temporary files are removed after the run.
+
+The Markdown table includes load and query times, row counts, CSV and
+checkpointed DuckDB sizes, and RSS sampled every 10 ms and after each step.
+The Windows installer workflow runs it after building the app and appends
+the table to the job summary. The installer test also checks the packaged
+`duckdb.node` and `duckdb.dll` and loads a two-row CSV through the signed-in
+installed server's API. Windows results must come from that run's logs
+and summary, not from the Linux figures above.
+
 ## Open-source review
 
 All licences checked in each project's own repository on 3 Oct 2026.
