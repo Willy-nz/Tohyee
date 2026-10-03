@@ -1485,6 +1485,35 @@ as the admin login, straight into an encrypted file:
   organisations, with one login and with a separate runtime login, and check
   that a changed file or the wrong key is refused.
 
+## Analytics data
+
+Analytics (decisions 353-362) keeps loaded data out of PostgreSQL. Each
+organisation with Analytics on has one DuckDB file,
+`<TOHYEE_ANALYTICS_DIR>/<organisation id>.duckdb` (Windows:
+`%ProgramData%\Tohyee\analytics` by default, set by the installer to the data
+folder's `analytics`; Docker: the `/analytics` volume). DuckDB runs inside
+the server through `@duckdb/node-api` (kept out of Next's bundle with
+`serverExternalPackages`), one instance per file per process, with loads for
+one organisation run one at a time. No DuckDB extensions are downloaded at
+run time.
+
+- **Definitions stay in the organisation's database** (tenant migration
+  0082: `analytics_sources`, `analytics_load_runs`), so they're backed up and
+  restored with it. The DuckDB file holds only loaded data and can always be
+  rebuilt by loading again; it isn't in the backups.
+- **Source folders are a server setting** (`analytics_folders` in the core
+  `server_settings`), chosen by a server admin on the server computer. Files
+  are only read from inside an organisation's own folder, after resolving
+  links and `..`.
+- **Loads** (`src/lib/analytics/engine.ts`) read every column as text and
+  convert it to the confirmed type, so money is `DECIMAL(18,2)` and never a
+  guessed floating-point number. A load writes a new table and swaps it in
+  only when it succeeds. The PostgreSQL record of a load is written before
+  and after it, in short transactions; the file is never read inside one.
+- **The nightly reload** (`src/lib/analytics/scheduler.ts`) loads each daily
+  source once a day after 04:00 business time and retries a failure an
+  hour later (off with `TOHYEE_ANALYTICS_SCHEDULER=off`).
+
 ## Open decisions
 
 - Canonical production HTTPS origin and local/offline access model.

@@ -36,6 +36,9 @@
  * daily (off with TOHYEE_UPDATE_CHECK=off), and samples the server's use for
  * the server app's Stats page every minute (off with TOHYEE_SERVER_STATS=off).
  *
+ * And the analytics loader, which reloads each organisation's daily data
+ * sources after 04:00 (off with TOHYEE_ANALYTICS_SCHEDULER=off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -123,6 +126,11 @@ export async function register() {
   if (process.env.TOHYEE_BACKUP_SCHEDULER !== "off") {
     const { startBackupScheduler } = await import("@/lib/backups/scheduler");
     startBackupScheduler();
+  }
+
+  if (process.env.TOHYEE_ANALYTICS_SCHEDULER !== "off") {
+    const { startAnalyticsScheduler } = await import("@/lib/analytics/scheduler");
+    startAnalyticsScheduler();
   }
 
   if (process.env.TOHYEE_REMOTE_ACCESS !== "off") {

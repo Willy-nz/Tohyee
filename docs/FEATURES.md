@@ -1283,6 +1283,19 @@ that something happened.
   draft is checked like a journal when saved but posts nothing; posting it
   posts one manual journal through the usual checks and links it, and a
   posted draft can't change.
+- **Analytics, step 1: data sources** (decisions 353-358, tenant migration
+  0082; plan in [ANALYTICS-REVIEW.md](ANALYTICS-REVIEW.md)). A module
+  switched on per organisation, with its own app at `/analytics`. A server
+  admin chooses each organisation's folder on the server (server settings ›
+  Analytics folders, or `analytics folder` on the command line). Admins set
+  up a CSV file from it: Tohyee shows the headings, its guess at each type
+  and the first values, and they confirm each column (money loads as exact
+  decimals). Each organisation's loaded data is one DuckDB file in
+  `TOHYEE_ANALYTICS_DIR`; a load swaps the table in only when it succeeds.
+  Sources reload nightly after 04:00 and on demand, and every load is
+  recorded. Tested with a made-up 1M-row CSV (about a second to load).
+  Reports, dashboards, Tohyee's own books and CRM, sharing with clients,
+  report emails and shaping are the next steps in the plan.
 
 ## Not built yet, on purpose
 

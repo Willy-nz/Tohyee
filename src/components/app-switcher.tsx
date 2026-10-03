@@ -4,17 +4,18 @@ import Link from "next/link";
 import type { Modules } from "@/components/modules";
 import styles from "./app-shell.module.css";
 
-/** Tohyee's apps, each with its own shell: Accounting (with Tax) and the CRM. */
-export type AppKey = "accounting" | "crm";
+/** Tohyee's apps, each with its own shell: Accounting (with Tax), the CRM and Analytics. */
+export type AppKey = "accounting" | "crm" | "analytics";
 
 const APPS: Array<{ key: AppKey; label: string; href: string }> = [
   { key: "accounting", label: "Accounting", href: "/operations" },
   { key: "crm", label: "CRM", href: "/crm" },
+  { key: "analytics", label: "Analytics", href: "/analytics" },
 ];
 
 /** The apps someone can switch to: the CRM only while it's on for the organisation (MOD1). */
 export function availableApps(modules: Modules | null): AppKey[] {
-  return APPS.filter((app) => app.key !== "crm" || modules?.crm === true).map((app) => app.key);
+  return APPS.filter((app) => (app.key !== "crm" || modules?.crm === true) && (app.key !== "analytics" || modules?.analytics === true)).map((app) => app.key);
 }
 
 /**

@@ -2,7 +2,7 @@ import type { Modules } from "@/components/modules";
 import type { Role } from "@/lib/auth/roles";
 
 /** An optional module a menu or link belongs to (example MOD1); shown only while it's on. */
-export type ModuleKey = "crm" | "reporting" | "notForProfit";
+export type ModuleKey = "crm" | "reporting" | "notForProfit" | "analytics";
 export type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
 export type MenuGroup = { heading: string; links: MenuLink[] };
 /** `area`: the paths that show the menu as current (default: AREAS by its label). */
@@ -276,6 +276,11 @@ export const CRM_MENUS: Menu[] = [
   { label: "Stages", href: "/crm/stages", area: ["/crm/stages"], minRole: "admin" as const },
 ].map((menu) => ({ ...menu, groups: [], module: "crm" as const }));
 
+/** Analytics' tabs (its own app, under /analytics); shown only while Analytics is on (decision 353). */
+export const ANALYTICS_MENUS: Menu[] = [
+  { label: "Data sources", href: "/analytics", area: ["/analytics"] },
+].map((menu) => ({ ...menu, groups: [], module: "analytics" as const }));
+
 /** The AI assistant's page; shown to everyone (the page itself checks what they may do). */
 export const AI_LINK: MenuLink = { href: "/operations/ai", label: "AI" };
 
@@ -316,7 +321,7 @@ export const AREAS: Record<string, string[]> = {
 
 export function inArea(pathname: string, menu: Menu): boolean {
   return (menu.area ?? AREAS[menu.label] ?? []).some((path) =>
-    path === "/operations" || path === "/crm" ? pathname === path : pathname === path || pathname.startsWith(`${path}/`),
+    path === "/operations" || path === "/crm" || path === "/analytics" ? pathname === path : pathname === path || pathname.startsWith(`${path}/`),
   );
 }
 
@@ -344,8 +349,8 @@ function filterGroups(groups: MenuGroup[], access: Access): MenuGroup[] {
 }
 
 /** The menus someone may see in an app: their role and the organisation's modules decide. */
-export function visibleMenus(app: "accounting" | "crm", access: Access): Menu[] {
-  return (app === "crm" ? CRM_MENUS : MENUS)
+export function visibleMenus(app: "accounting" | "crm" | "analytics", access: Access): Menu[] {
+  return (app === "crm" ? CRM_MENUS : app === "analytics" ? ANALYTICS_MENUS : MENUS)
     .filter((menu) => (!menu.module || Boolean(access.modules?.[menu.module])) && (!menu.minRole || access.can(menu.minRole)))
     .map((menu) => ({ ...menu, groups: filterGroups(menu.groups, access) }));
 }

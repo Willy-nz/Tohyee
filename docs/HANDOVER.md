@@ -179,7 +179,12 @@ Set them in the Agents box before sending each task:
 
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| (none) | | | | |
+| Analytics chart component (ECharts), step 3 piece | #93 | #94 | Copilot's | none |
+
+Analytics (3 Oct 2026): the plan and decisions 353-362 are in
+[ANALYTICS-REVIEW.md](ANALYTICS-REVIEW.md). Step 1 (engine, folders,
+sources, nightly loads) was built by Claude (PRs #95 and the step 1b PR).
+Next numbers: tenant migration 0083, core migration 0006, decision 363.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

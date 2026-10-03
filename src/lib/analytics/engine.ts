@@ -2,6 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { ValidationError } from "@/lib/errors";
+import { analyticsFilePath } from "@/lib/analytics/paths";
+
+export { analyticsFilePath, analyticsFolder } from "@/lib/analytics/paths";
 
 /**
  * The analytics engine (decisions 353-357): one DuckDB file per organisation
@@ -9,23 +12,6 @@ import { ValidationError } from "@/lib/errors";
  * what's loaded lives in the organisation's PostgreSQL database; this file
  * can always be rebuilt by loading again.
  */
-
-/** Where the analytics files are kept (not the folder sources are read from). */
-export function analyticsFolder(): string {
-  const configured = process.env.TOHYEE_ANALYTICS_DIR?.trim();
-  if (configured) return configured;
-  if (process.platform === "win32") {
-    return path.join(process.env.ProgramData || "C:\\ProgramData", "Tohyee", "analytics");
-  }
-  return path.join(process.cwd(), "analytics");
-}
-
-const ORGANISATION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
-
-export function analyticsFilePath(organisationId: string): string {
-  if (!ORGANISATION_ID.test(organisationId)) throw new ValidationError("Unknown organisation.");
-  return path.join(analyticsFolder(), `${organisationId}.duckdb`);
-}
 
 /**
  * How a column is loaded. Money and quantities are exact decimals, never
@@ -214,4 +200,143 @@ export async function queryAnalytics(organisationId: string, sql: string): Promi
     const reader = await connection.runAndReadAll(sql);
     return reader.getRowObjectsJson() as Record<string, unknown>[];
   });
+}
+
+/** Turns a file's position inside a folder (with / between folders) into its path, refusing anything outside it. */
+export function resolveSourceFile(sourceFolder: string, fileName: string): string {
+  if (typeof fileName !== "string" || !fileName.trim() || fileName.includes("\0")) throw new ValidationError("Choose a file.");
+  const file = path.resolve(sourceFolder, ...fileName.split("/"));
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile() || !isInsideFolder(sourceFolder, file)) {
+    throw new ValidationError("That file isn't in this organisation's analytics folder.");
+  }
+  return file;
+}
+
+export type SourceFile = { name: string; sizeBytes: number; modifiedAt: string };
+
+const DATA_FILE = /\.(csv|tsv|txt)$/i;
+
+/** The CSV files in a folder and the folders inside it (three levels), newest first. */
+export function listSourceFiles(sourceFolder: string): SourceFile[] {
+  const found: SourceFile[] = [];
+  const walk = (folder: string, prefix: string, depth: number) => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(folder, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const full = path.join(folder, entry.name);
+      const name = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory() && depth < 3) walk(full, name, depth + 1);
+      else if (entry.isFile() && DATA_FILE.test(entry.name)) {
+        const stat = fs.statSync(full);
+        found.push({ name, sizeBytes: stat.size, modifiedAt: stat.mtime.toISOString() });
+      }
+      if (found.length >= 500) return;
+    }
+  };
+  walk(sourceFolder, "", 1);
+  return found.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+}
+
+export type InspectedColumn = { source: string; name: string; kind: ColumnKind; detected: string; examples: string[] };
+
+const MONEY_WORDS = /(price|amount|cost|total|sales|revenue|spend|value|fee|gst|tax|net|gross|margin|profit|discount|balance|paid|\$)/i;
+
+/** A table or column name from a heading: "Unit price ($)" becomes unit_price. */
+export function columnNameFrom(heading: string, taken: Set<string>): string {
+  let name = heading
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 50);
+  if (!name || !/^[a-z]/.test(name)) name = `column_${name || taken.size + 1}`;
+  if (name.startsWith("_tohyee")) name = `x${name}`;
+  let unique = name;
+  for (let n = 2; taken.has(unique); n += 1) unique = `${name}_${n}`;
+  taken.add(unique);
+  return unique;
+}
+
+/** Suggests how to load a column from DuckDB's guess and its heading. People confirm it (decision 356). */
+export function suggestKind(detected: string, heading: string): ColumnKind {
+  const type = detected.toUpperCase();
+  if (type === "BOOLEAN") return "boolean";
+  if (type === "DATE") return "date";
+  if (type.startsWith("TIMESTAMP")) return "timestamp";
+  if (["BIGINT", "INTEGER", "SMALLINT", "TINYINT", "HUGEINT", "UBIGINT", "UINTEGER"].includes(type)) {
+    if (MONEY_WORDS.test(heading)) return "money";
+    return /(qty|quantity|units|hours|weight)/i.test(heading) ? "quantity" : "integer";
+  }
+  if (type === "DOUBLE" || type === "FLOAT" || type.startsWith("DECIMAL")) {
+    if (MONEY_WORDS.test(heading)) return "money";
+    if (/(qty|quantity|units|hours|weight)/i.test(heading)) return "quantity";
+    return "decimal";
+  }
+  return "text";
+}
+
+let scratch: Promise<DuckDBInstance> | null = null;
+
+/**
+ * A look at a file before it's set up: its headings, DuckDB's guess at each
+ * column's type, a suggested way to load it, and the first rows as text.
+ * Uses a scratch in-memory database, never the organisation's file.
+ */
+export async function inspectCsv(sourceFolder: string, fileName: string, delimiter?: string): Promise<{ columns: InspectedColumn[]; rows: string[][]; delimiter: string }> {
+  const file = resolveSourceFile(sourceFolder, fileName);
+  if (delimiter !== undefined && delimiter.length !== 1) throw new ValidationError("The separator must be one character.");
+  if (!scratch) {
+    scratch = DuckDBInstance.create(":memory:", { autoinstall_known_extensions: "false" });
+    scratch.catch(() => {
+      scratch = null;
+    });
+  }
+  const connection = await (await scratch).connect();
+  try {
+    const options = delimiter ? `, delim = ${quoteString(delimiter)}` : "";
+    let sniffed: Record<string, unknown> | undefined;
+    try {
+      const sniff = await connection.runAndReadAll(`select Delimiter as delimiter from sniff_csv(${quoteString(file)}${options})`);
+      sniffed = sniff.getRowObjectsJson()[0] as Record<string, unknown> | undefined;
+    } catch (error) {
+      throw new ValidationError(`That file couldn't be read as a CSV: ${loadErrorMessage(error)}`);
+    }
+    const chosen = delimiter ?? (typeof sniffed?.delimiter === "string" && sniffed.delimiter.length === 1 ? sniffed.delimiter : ",");
+    const source = `read_csv(${quoteString(file)}, header = true, delim = ${quoteString(chosen)}, sample_size = 20480)`;
+    const described = await connection.runAndReadAll(`describe select * from ${source}`);
+    const types = described.getRowObjectsJson() as Array<{ column_name: string; column_type: string }>;
+    const sample = await connection.runAndReadAll(
+      `select * from read_csv(${quoteString(file)}, header = true, delim = ${quoteString(chosen)}, all_varchar = true) limit 20`,
+    );
+    const rows = (sample.getRows() as unknown[][]).map((row) => row.map((value) => (value === null ? "" : String(value))));
+    const taken = new Set<string>();
+    const columns = types.map((column, index) => ({
+      source: column.column_name,
+      name: columnNameFrom(column.column_name, taken),
+      kind: suggestKind(column.column_type, column.column_name),
+      detected: column.column_type,
+      examples: rows.slice(0, 3).map((row) => row[index] ?? ""),
+    }));
+    return { columns, rows, delimiter: chosen };
+  } catch (error) {
+    if (error instanceof ValidationError) throw error;
+    throw new ValidationError(`That file couldn't be read as a CSV: ${loadErrorMessage(error)}`);
+  } finally {
+    connection.closeSync();
+  }
+}
+
+/** Drops a loaded table (when its source is removed). */
+export function dropTable(organisationId: string, table: string): Promise<void> {
+  assertTableName(table);
+  return serialise(organisationId, () =>
+    withAnalytics(organisationId, async (connection) => {
+      await connection.run(`drop table if exists ${quoteIdentifier(table)}`);
+    }),
+  );
 }
