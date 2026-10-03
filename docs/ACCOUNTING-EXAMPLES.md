@@ -3169,7 +3169,7 @@ above.
   refused. A standard-rated line at a rate other than 15% in the period is
   refused, naming its document.
 
-### Late changes to filed GST periods (examples LG1-LG8, proposed 3 Oct 2026, not yet approved by Jess)
+### Late changes to filed GST periods (examples LG1-LG9, proposed 3 Oct 2026, not yet approved by Jess)
 
 From Jess's issue #88: a change dated in a period whose return has been
 filed (for example GST on an asset that wasn't claimed) is ignored by every
@@ -3205,7 +3205,8 @@ later return. Today the filed return just shows "Changed since filed" (G8).
   which rule applies (missed input tax, or an error to fix).
 - Each late change is **included** in this return or **left out**. Included
   changes count in the boxes like any other line (sales in Box 5/6,
-  purchases in Box 11), as Xero does. Left-out changes stay listed on later
+  purchases in Box 11), as Xero does and as practices usually do (Jess, 3
+  Oct 2026: "we just jammed it into sales or expenses"). Left-out changes stay listed on later
   returns until they're included, and the filed return they belong to keeps
   showing "Changed since filed" (G8) so it can be amended with IRD.
 - Tohyee suggests whether each can be included:
@@ -3213,6 +3214,11 @@ later return. Today the filed return just shows "Changed since filed" (G8).
   - a purchase older than 2 years: **only if an IRD exception applies**;
   - other changes: their GST is totalled (sales add, purchases taken away,
     as the return does) and checked against the s113A limit.
+
+  The suggestion is a warning, not a block (Jess, 3 Oct 2026): a change
+  over the limit or older than 2 years can still be included, with a note
+  saying why, and the return shows a warning beside it. The note and who
+  included it are kept with the filed return.
 - **Filing** stores the late changes it included with their own dates and
   the period they belong to, so they're never counted twice.
 
@@ -3249,18 +3255,22 @@ LG3 and LG4, sales with output tax of 3,000.00).
   +900.00 to pay). The total for the limit is **1,050.00**, over $1,000, so
   with LG4's sales both are over the limit. Missed input tax (B9) never
   counts toward this total.
+- **LG9** As LG4, but Jess includes I21 anyway with the note "Agreed with
+  IRD by phone, ref 123". Box 5 goes up by **11,500.00** and Box 8 by
+  **1,500.00**. The return shows "Included over IRD's limit for fixing in a
+  later return" with her note, and filing keeps the note and who included
+  it. Including without a note is refused.
 - **LG8** On the payments and hybrid bases, the same rules apply to
   payments dated in a filed period that were entered after it was filed.
 
-**Questions for Jess before this is built:**
+**Decided by Jess (3 Oct 2026):**
 
-1. Should included late changes count in the ordinary boxes (Box 5/11,
-   like Xero), or go in as Box 9/13 adjustments? IRD's pages don't say which
-   boxes (not verified).
-2. When a change is over the limit (LG4) or older than 2 years (LG6), may
-   someone still include it (for example after IRD says it's fine, or
-   because an exception applies), with a note saying why? Or must it be
-   left out?
+1. Included late changes count in the ordinary boxes: sales in Box 5,
+   purchases in Box 11 ("we just jammed it into sales or expenses").
+2. IRD's limits can be overridden, with a warning (LG9).
+
+**Still to answer:**
+
 3. For the 2% limit, which return's output tax counts: the return being
    fixed (Apr-May) or the one fixing it (Jun-Jul)? IRD's wording is "the
    return period" (not verified which). The examples use the return fixing
