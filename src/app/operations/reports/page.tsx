@@ -219,7 +219,7 @@ function SplitGroupRows({
 function SplitProfitAndLoss({ organisationId, report }: { organisationId: string; report: ProfitAndLossSplit }) {
   const { columns } = report;
   return (
-    <div className={ui.tableWrap}>
+    <>
       <ReportExport
         organisationId={organisationId}
         report="profit-and-loss"
@@ -228,7 +228,8 @@ function SplitProfitAndLoss({ organisationId, report }: { organisationId: string
         filters={[`Split by ${report.category.name}`]}
         tables={[{ id: "profit-and-loss-split-report" }]}
       />
-      <table id="profit-and-loss-split-report" className={ui.table}>
+      <div className={ui.tableWrap}>
+        <table id="profit-and-loss-split-report" className={ui.table}>
         <thead>
           <tr>
             <th>{report.category.name}</th>
@@ -263,8 +264,9 @@ function SplitProfitAndLoss({ organisationId, report }: { organisationId: string
             ))}
           </tr>
         </tfoot>
-      </table>
-    </div>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -277,18 +279,21 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="trial-balance"
+          title="Trial balance"
+          period={`As at ${formatDate(report.data.asAt)}`}
+          tables={[{ id: "trial-balance-report" }]}
+        />
+      ) : null}
+      {report.data ? (
         report.data.rows.length === 0 ? (
           <Empty>No postings up to {formatDate(report.data.asAt)}.</Empty>
         ) : (
-          <div className={ui.tableWrap}>
-            <ReportExport
-              organisationId={organisationId}
-              report="trial-balance"
-              title="Trial balance"
-              period={`As at ${formatDate(report.data.asAt)}`}
-              tables={[{ id: "trial-balance-report" }]}
-            />
-            <table id="trial-balance-report" className={ui.table}>
+          <>
+            <div className={ui.tableWrap}>
+              <table id="trial-balance-report" className={ui.table}>
               <thead>
                 <tr>
                   <th>Account</th>
@@ -354,6 +359,7 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
               years&apos; profit is in retained earnings, as on the balance sheet.
             </p>
           </div>
+          </>
         )
       ) : null}
     </Card>
@@ -405,7 +411,7 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
       {shown.loading ? <p className={ui.muted}>Loading…</p> : null}
       {splitting && split.data ? <SplitProfitAndLoss organisationId={organisationId} report={split.data} /> : null}
       {!splitting && report.data ? (
-        <div className={ui.tableWrap}>
+        <>
           <ReportExport
             organisationId={organisationId}
             report="profit-and-loss"
@@ -413,7 +419,8 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
             period={`${formatDate(report.data.from)} to ${formatDate(report.data.to)}`}
             tables={[{ id: "profit-and-loss-report", columns: ["Account", "Amount"] }]}
           />
-          <table id="profit-and-loss-report" className={ui.table}>
+          <div className={ui.tableWrap}>
+            <table id="profit-and-loss-report" className={ui.table}>
             <tbody>
               <GroupRows title="Trading income" group={report.data.revenue} totalLabel="Total trading income" drilldown={{ from: report.data.from, to: report.data.to }} />
               <GroupRows title="Cost of sales" group={report.data.costOfSales} totalLabel="Total cost of sales" drilldown={{ from: report.data.from, to: report.data.to }} />
@@ -434,8 +441,9 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
                 </td>
               </tr>
             </tfoot>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       ) : null}
     </Card>
   );
@@ -450,7 +458,7 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
-        <div className={ui.tableWrap}>
+        <>
           <ReportExport
             organisationId={organisationId}
             report="balance-sheet"
@@ -458,7 +466,8 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
             period={`As at ${formatDate(report.data.asAt)}`}
             tables={[{ id: "balance-sheet-report", columns: ["Account", "Amount"] }]}
           />
-          <table id="balance-sheet-report" className={ui.table}>
+          <div className={ui.tableWrap}>
+            <table id="balance-sheet-report" className={ui.table}>
             <tbody>
               <GroupRows
                 title="Assets"
@@ -534,8 +543,9 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
                 </td>
               </tr>
             </tfoot>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       ) : null}
     </Card>
   );
@@ -548,18 +558,21 @@ function StockReport({ organisationId }: { organisationId: string }) {
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="inventory-valuation"
+          title="Stock on hand"
+          period={`As at ${formatDate(todayInBrowser())}`}
+          tables={[{ id: "inventory-valuation-report" }]}
+        />
+      ) : null}
+      {report.data ? (
         report.data.items.length === 0 ? (
           <Empty>No stock on hand.</Empty>
         ) : (
-          <div className={ui.tableWrap}>
-            <ReportExport
-              organisationId={organisationId}
-              report="inventory-valuation"
-              title="Stock on hand"
-              period={`As at ${formatDate(todayInBrowser())}`}
-              tables={[{ id: "inventory-valuation-report" }]}
-            />
-            <table id="inventory-valuation-report" className={ui.table}>
+          <>
+            <div className={ui.tableWrap}>
+              <table id="inventory-valuation-report" className={ui.table}>
               <thead>
                 <tr>
                   <th>Item</th>
@@ -579,7 +592,7 @@ function StockReport({ organisationId }: { organisationId: string }) {
                     </td>
                     <td>{item.locationName ?? ""}</td>
                     <td className={ui.num}>
-                      {formatQuantity(item.quantity)}
+                      <span data-export-value={item.quantity}>{formatQuantity(item.quantity)}</span>
                       {item.unit ? ` ${item.unit}` : ""}
                     </td>
                     <td className={ui.num}>{item.averageCost ? formatMoney(item.averageCost, 4) : ""}</td>
@@ -608,8 +621,9 @@ function StockReport({ organisationId }: { organisationId: string }) {
                   </tr>
                 ) : null}
               </tfoot>
-            </table>
-          </div>
+                </table>
+              </div>
+            </>
         )
       ) : null}
     </Card>

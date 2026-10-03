@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { apiDownload, errorMessage } from "@/lib/client/api";
@@ -12,26 +12,29 @@ export type ReportExportTableTarget = { id: string; title?: string; columns?: st
 function cellValue(cell: HTMLTableCellElement) {
   const text = cell.innerText.replace(/\s+/g, " ").trim();
   const candidates = [...cell.querySelectorAll<HTMLElement>("[data-export-value]")];
-  const valueNode = candidates.find((candidate) => !candidate.parentElement?.closest("[data-export-value]"));
+  const valueNodes = candidates.filter((candidate) => !candidate.parentElement?.closest("[data-export-value]"));
+  const valueNode = valueNodes.length === 1 ? valueNodes[0] : undefined;
   const value = valueNode?.dataset.exportValue;
-  if (value && text === valueNode?.innerText.replace(/\s+/g, " ").trim() && /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
+  if (value && /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
     return { text, value, numeric: true };
   }
+  const numericText = text.replaceAll(",", "");
+  if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(numericText)) return { text, value: numericText, numeric: true };
   return { text };
 }
 
-function tableData(target: ReportExportTableTarget): ReportExportTable {
+function tableData(target: ReportExportTableTarget): ReportExportTable | null {
   const table = document.getElementById(target.id);
-  if (!(table instanceof HTMLTableElement)) throw new Error("The report table isn't available to export.");
+  if (!(table instanceof HTMLTableElement)) return null;
   const headers = target.columns ?? [...table.querySelectorAll<HTMLTableRowElement>("thead tr")].flatMap((row) =>
-    [...row.cells].flatMap((cell) => [cell.innerText.replace(/\s+/g, " ").trim(), ...Array.from({ length: cell.colSpan - 1 }, () => "")]),
+    [...row.cells].filter((cell) => !cell.dataset.exportIgnore).flatMap((cell) => [cell.innerText.replace(/\s+/g, " ").trim(), ...Array.from({ length: cell.colSpan - 1 }, () => "")]),
   );
   if (headers.length === 0) throw new Error("The report has no column headings to export.");
   const rows: ReportExportRow[] = [];
   const bodyRows = [...table.tBodies].flatMap((body) => [...body.rows]);
   const footerRows = table.tFoot ? [...table.tFoot.rows] : [];
   for (const row of [...bodyRows, ...footerRows]) {
-    const cells = [...row.cells].flatMap((cell) => [cellValue(cell), ...Array.from({ length: cell.colSpan - 1 }, () => ({ text: "" }))]);
+    const cells = [...row.cells].filter((cell) => !cell.dataset.exportIgnore).flatMap((cell) => [cellValue(cell), ...Array.from({ length: cell.colSpan - 1 }, () => ({ text: "" }))]);
     const kind = row.classList.contains(ui.reportHeading) ? "section" : row.classList.contains(ui.reportTotal) ? "total" : undefined;
     rows.push({ cells, kind });
   }
@@ -58,7 +61,7 @@ export function ReportExport({
   const { current } = useWorkspace();
   const organisationName = current?.id === organisationId ? current.displayName : "Organisation";
   const filterText = filters.join(" · ");
-  const producedAt = useMemo(() => new Date().toISOString(), [title, period, basis, filterText]);
+  const [producedAt, setProducedAt] = useState(() => new Date().toISOString());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,6 +69,8 @@ export function ReportExport({
     setBusy(true);
     setError(null);
     try {
+      const exportProducedAt = new Date().toISOString();
+      setProducedAt(exportProducedAt);
       const data: ReportExportData = {
         report,
         organisationName,
@@ -73,8 +78,8 @@ export function ReportExport({
         period,
         basis,
         filters,
-        producedAt,
-        tables: tables.map(tableData),
+        producedAt: exportProducedAt,
+        tables: tables.map(tableData).filter((table): table is ReportExportTable => table !== null),
       };
       const blob = await apiDownload("/api/reports/export", { organisationId, format, data });
       const url = URL.createObjectURL(blob);

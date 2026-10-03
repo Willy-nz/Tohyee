@@ -560,7 +560,7 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {data ? (
-        <div className={ui.tableWrap}>
+        <>
           <ReportExport
             organisationId={organisationId}
             report="budget-vs-actual"
@@ -574,7 +574,8 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
             {data.budget.trackingLabel ? `, only lines tagged ${data.budget.trackingLabel}` : ""}.{" "}
             <Link href={`/operations/budgets/${data.budget.id}`}>Open the budget</Link>
           </p>
-          <table id="budget-vs-actual-report" className={ui.table}>
+          <div className={ui.tableWrap}>
+            <table id="budget-vs-actual-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Account</th>
@@ -600,8 +601,9 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
                 <VarianceCells figures={data.netProfit} />
               </tr>
             </tfoot>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       ) : null}
     </Card>
   );

@@ -20,7 +20,7 @@ export function parseReportExport(input: unknown): ReportExportData {
     if (typeof value !== "string" || value.length > MAX_CELL_LENGTH) throw new ValidationError(`${label} is too long or isn't text.`);
     return value;
   };
-  if (!Array.isArray(data.tables) || data.tables.length === 0 || data.tables.length > 25) throw new ValidationError("The report has too many tables to export.");
+  if (!Array.isArray(data.tables) || data.tables.length > 25) throw new ValidationError("The report has too many tables to export.");
   let rowCount = 0;
   const tables: ReportExportTable[] = data.tables.map((table, tableIndex) => {
     if (!table || typeof table !== "object" || Array.isArray(table)) throw new ValidationError(`Report table ${tableIndex + 1} is invalid.`);

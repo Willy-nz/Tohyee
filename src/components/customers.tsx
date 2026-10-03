@@ -739,18 +739,20 @@ export function AgedReceivablesReport({ organisationId }: { organisationId: stri
     >
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
+      {report.data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="aged-receivables"
+          title="Aged receivables"
+          period={`As at ${formatDate(report.data.asAt)}`}
+          filters={rollUp ? ["Roll up sub-customers"] : []}
+          tables={[{ id: "aged-receivables-report" }]}
+        />
+      ) : null}
       {report.data && report.data.rows.length === 0 ? <Empty>No customer owes anything on this date.</Empty> : null}
       {report.data && report.data.rows.length > 0 ? (
         <div className={ui.tableWrap}>
-          <ReportExport
-            organisationId={organisationId}
-            report="aged-receivables"
-            title="Aged receivables"
-            period={`As at ${formatDate(report.data.asAt)}`}
-            filters={rollUp ? ["Roll up sub-customers"] : []}
-            tables={[{ id: "aged-receivables-report" }]}
-          />
-          <table id="aged-receivables-report" className={ui.table}>
+            <table id="aged-receivables-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Customer</th>
@@ -826,7 +828,7 @@ export function AgedReceivablesReport({ organisationId }: { organisationId: stri
                 </tr>
               ) : null}
             </tfoot>
-          </table>
+            </table>
         </div>
       ) : null}
     </Card>

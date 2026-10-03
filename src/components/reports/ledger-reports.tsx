@@ -91,16 +91,18 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {data ? <p className={`${ui.muted} ${ui.printOnly}`}>As at {formatDate(data.asAt)}</p> : null}
+      {data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="aged-payables"
+          title="Aged payables"
+          period={`As at ${formatDate(data.asAt)}`}
+          tables={[{ id: "aged-payables-report" }]}
+        />
+      ) : null}
       {data && data.rows.length === 0 ? <Empty>You don&apos;t owe any supplier anything on this date.</Empty> : null}
       {data && data.rows.length > 0 ? (
         <div className={ui.tableWrap}>
-          <ReportExport
-            organisationId={organisationId}
-            report="aged-payables"
-            title="Aged payables"
-            period={`As at ${formatDate(data.asAt)}`}
-            tables={[{ id: "aged-payables-report" }]}
-          />
           <table id="aged-payables-report" className={ui.table}>
             <thead>
               <tr>
@@ -297,21 +299,24 @@ export function AccountTransactionsReport({
           {data.filter ? ` · only lines tagged ${data.filter.label}` : ""}
         </p>
       ) : null}
+      {data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="account-transactions"
+          title="Account transactions"
+          period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
+          filters={[
+            ...(data.accounts.length === 1 ? [`Account: ${data.accounts[0].code} · ${data.accounts[0].name}`] : []),
+            ...(data.filter ? [`Tracking: ${data.filter.label}`] : []),
+          ]}
+          tables={[{ id: "account-transactions-report" }]}
+        />
+      ) : null}
       {data && data.accounts.length === 0 ? <Empty>Nothing posted to these accounts yet.</Empty> : null}
       {data && data.accounts.length > 0 ? (
-        <div className={ui.tableWrap}>
-          <ReportExport
-            organisationId={organisationId}
-            report="account-transactions"
-            title="Account transactions"
-            period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
-            filters={[
-              ...(data.accounts.length === 1 ? [`Account: ${data.accounts[0].code} · ${data.accounts[0].name}`] : []),
-              ...(data.filter ? [`Tracking: ${data.filter.label}`] : []),
-            ]}
-            tables={[{ id: "account-transactions-report" }]}
-          />
-          <table id="account-transactions-report" className={ui.table}>
+        <>
+          <div className={ui.tableWrap}>
+            <table id="account-transactions-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Date</th>
@@ -386,8 +391,9 @@ export function AccountTransactionsReport({
                 <td />
               </tr>
             </tfoot>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       ) : null}
     </Card>
   );
@@ -424,16 +430,19 @@ export function JournalReportView({ organisationId }: { organisationId: string }
       ) : null}
       {data?.truncated ? <Notice tone="warning">Only the first {data.journals.length} journals are shown. Choose a shorter period to see the rest.</Notice> : null}
       {data && data.journals.length === 0 ? <Empty>No journals were posted in this period.</Empty> : null}
+      {data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="journal-report"
+          title="Journal report"
+          period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
+          tables={[{ id: "journal-report" }]}
+        />
+      ) : null}
       {data && data.journals.length > 0 ? (
-        <div className={ui.tableWrap}>
-          <ReportExport
-            organisationId={organisationId}
-            report="journal-report"
-            title="Journal report"
-            period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
-            tables={[{ id: "journal-report" }]}
-          />
-          <table id="journal-report" className={ui.table}>
+        <>
+          <div className={ui.tableWrap}>
+            <table id="journal-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Account</th>
@@ -487,8 +496,9 @@ export function JournalReportView({ organisationId }: { organisationId: string }
                 </td>
               </tr>
             </tfoot>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       ) : null}
     </Card>
   );

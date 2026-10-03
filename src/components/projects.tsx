@@ -1068,18 +1068,20 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
       </div>
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {!data && !report.error ? <p className={ui.muted}>Loading…</p> : null}
+      {data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="project-profitability"
+          title="Project profitability"
+          period="All project activity"
+          filters={[`Projects: ${status === "in_progress" ? "In progress" : status === "closed" ? "Closed" : "All"}`]}
+          tables={[{ id: "project-profitability-report" }]}
+        />
+      ) : null}
       {data && data.projects.length === 0 ? <Empty>No projects.</Empty> : null}
       {data && data.projects.length > 0 ? (
         <div className={ui.tableWrap}>
-          <ReportExport
-            organisationId={organisationId}
-            report="project-profitability"
-            title="Project profitability"
-            period="All project activity"
-            filters={[`Projects: ${status === "in_progress" ? "In progress" : status === "closed" ? "Closed" : "All"}`]}
-            tables={[{ id: "project-profitability-report" }]}
-          />
-          <table id="project-profitability-report" className={`${ui.table} ${ui.stackOnPhone}`}>
+            <table id="project-profitability-report" className={`${ui.table} ${ui.stackOnPhone}`}>
             <thead>
               <tr>
                 <th>Project</th>
@@ -1101,7 +1103,7 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
                     <Link href={`/operations/projects/${project.id}`}>{project.name}</Link> <span className={ui.muted}>{project.contactName}</span>
                   </td>
                   <td data-label="Time" className={ui.num}>
-                    {formatMinutes(project.figures.minutes)}
+                    <span data-export-value={project.figures.minutes}>{formatMinutes(project.figures.minutes)}</span>
                   </td>
                   <td data-label={`Invoiced (${data.baseCurrency})`} className={ui.num}>
                     <Money value={project.figures.invoicedBase} />
@@ -1183,7 +1185,7 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
                 </tr>
               ))}
             </tfoot>
-          </table>
+            </table>
         </div>
       ) : null}
     </Card>
@@ -1219,7 +1221,9 @@ export function TimeReportView({ organisationId }: { organisationId: string }) {
             {rows.map((row) => (
               <tr key={row.key}>
                 <td>{row.label}</td>
-                <td className={ui.num}>{formatMinutes(row.minutes)}</td>
+                <td className={ui.num}>
+                  <span data-export-value={row.minutes}>{formatMinutes(row.minutes)}</span>
+                </td>
                 <td className={ui.num}>{minutesAsHours(row.minutes)} h</td>
                 <td className={ui.num}>
                   <Money value={row.cost} />
@@ -1271,25 +1275,27 @@ export function TimeReportView({ organisationId }: { organisationId: string }) {
       </div>
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {!data && !report.error ? <p className={ui.muted}>Loading…</p> : null}
+      {data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="project-time"
+          title="Time report"
+          period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
+          filters={[
+            userId ? `Person: ${team.data?.rates.find((person) => person.userId === userId)?.displayName ?? userId}` : "Person: Everyone",
+            projectId ? `Project: ${projects.data?.projects.find((project) => project.id === projectId)?.name ?? projectId}` : "Project: All",
+          ]}
+          tables={[
+            { id: "project-time-by-person", title: "By person", columns: ["Person", "Minutes", "Hours", "Cost"] },
+            { id: "project-time-by-project", title: "By project", columns: ["Project", "Minutes", "Hours", "Cost"] },
+            { id: "project-time-by-task", title: "By task", columns: ["Task", "Minutes", "Hours", "Cost"] },
+            { id: "project-time-entries", title: "Entries" },
+          ]}
+        />
+      ) : null}
       {data && data.entries.length === 0 ? <Empty>No time in this range.</Empty> : null}
       {data && data.entries.length > 0 ? (
         <>
-          <ReportExport
-            organisationId={organisationId}
-            report="project-time"
-            title="Time report"
-            period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
-            filters={[
-              userId ? `Person: ${team.data?.rates.find((person) => person.userId === userId)?.displayName ?? userId}` : "Person: Everyone",
-              projectId ? `Project: ${projects.data?.projects.find((project) => project.id === projectId)?.name ?? projectId}` : "Project: All",
-            ]}
-            tables={[
-              { id: "project-time-by-person", title: "By person", columns: ["Person", "Minutes", "Hours", "Cost"] },
-              { id: "project-time-by-project", title: "By project", columns: ["Project", "Minutes", "Hours", "Cost"] },
-              { id: "project-time-by-task", title: "By task", columns: ["Task", "Minutes", "Hours", "Cost"] },
-              { id: "project-time-entries", title: "Entries" },
-            ]}
-          />
           <div className={ui.grid3}>
             <Stat label="Total time" value={`${formatMinutes(data.totalMinutes)} (${minutesAsHours(data.totalMinutes)} h)`} />
             <Stat label="Cost" value={<Money value={data.totalCost} />} />
@@ -1327,7 +1333,7 @@ export function TimeReportView({ organisationId }: { organisationId: string }) {
                       {entry.description}
                     </td>
                     <td data-label="Time" className={ui.num}>
-                      {formatMinutes(entry.minutes)}
+                      <span data-export-value={entry.minutes}>{formatMinutes(entry.minutes)}</span>
                     </td>
                     <td data-label="Cost" className={ui.num}>
                       <Money value={entry.cost} />

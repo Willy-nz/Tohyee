@@ -5,7 +5,8 @@ import { useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { PrintButton } from "@/components/reports/ledger-reports";
-import { Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { ReportExport } from "@/components/reports/report-export";
+import { Card, Field, Notice, ui } from "@/components/ui";
 import { formatDate, todayInBrowser } from "@/lib/format";
 import type { GstAuditBox, GstAuditEntry, GstAuditReport } from "@/lib/reports/gst-audit";
 import { GST_BOX_KEYS, GST_BOX_LABELS, GST_RETURN_PERIOD_MONTHS, gstBoxNumber, gstPeriodEnd } from "@/lib/reports/gst-boxes";
@@ -49,7 +50,7 @@ const EVENT_LABELS: Record<GstAuditEntry["eventType"], string> = {
   expense_claim_payment_voided: "Expense claim payment voided",
 };
 
-function EntriesTable({ title, entries, total, gst }: { title: string; entries: GstAuditEntry[]; total: string; gst?: string }) {
+function EntriesTable({ id, title, entries, total, gst }: { id: string; title: string; entries: GstAuditEntry[]; total: string; gst?: string }) {
   return (
     <section className={ui.reportPaperBlock}>
       <h3 className={ui.reportBlockTitle}>{title}</h3>
@@ -57,7 +58,7 @@ function EntriesTable({ title, entries, total, gst }: { title: string; entries: 
         <p className={ui.muted}>Nothing in this box.</p>
       ) : (
         <div className={ui.tableWrap}>
-          <table className={ui.table}>
+          <table id={id} className={ui.table}>
             <thead>
               <tr>
                 <th>Date</th>
@@ -127,7 +128,13 @@ function AuditPaper({ report }: { report: GstAuditReport }) {
       </header>
       <section className={ui.reportPaperBlock}>
         <div className={ui.tableWrap}>
-          <table className={ui.table}>
+          <table id="gst-audit-boxes" className={ui.table}>
+            <thead>
+              <tr>
+                <th>Box</th>
+                <th className={ui.num}>Amount</th>
+              </tr>
+            </thead>
             <tbody>
               {GST_BOX_KEYS.map((box) => (
                 <tr key={box}>
@@ -143,13 +150,13 @@ function AuditPaper({ report }: { report: GstAuditReport }) {
           </table>
         </div>
       </section>
-      <EntriesTable title={boxTitle(report.box5)} entries={report.box5.entries} total={report.box5.total} gst={report.box5.gst} />
-      <EntriesTable title={boxTitle(report.box6)} entries={report.box6.entries} total={report.box6.total} gst={report.box6.gst} />
+      <EntriesTable id="gst-audit-box-5" title={boxTitle(report.box5)} entries={report.box5.entries} total={report.box5.total} gst={report.box5.gst} />
+      <EntriesTable id="gst-audit-box-6" title={boxTitle(report.box6)} entries={report.box6.entries} total={report.box6.total} gst={report.box6.gst} />
       <p className={ui.muted}>
         Box 7 = Box 5 less Box 6 = <Money value={report.boxes.box7} />. Box 8 = Box 7 x 3 / 23 = <Money value={report.boxes.box8} /> (the sales
         lines&apos; own GST is <Money value={report.gstOnTransactions.sales} />; the difference is rounding).
       </p>
-      <EntriesTable title={boxTitle(report.box11)} entries={report.box11.entries} total={report.box11.total} gst={report.box11.gst} />
+      <EntriesTable id="gst-audit-box-11" title={boxTitle(report.box11)} entries={report.box11.entries} total={report.box11.total} gst={report.box11.gst} />
       <p className={ui.muted}>
         Box 12 = Box 11 x 3 / 23 = <Money value={report.boxes.box12} /> (the purchase lines&apos; own GST is{" "}
         <Money value={report.gstOnTransactions.purchases} />
@@ -161,7 +168,14 @@ function AuditPaper({ report }: { report: GstAuditReport }) {
           <p className={ui.muted}>No adjustments.</p>
         ) : (
           <div className={ui.tableWrap}>
-            <table className={ui.table}>
+            <table id="gst-audit-adjustments" className={ui.table}>
+              <thead>
+                <tr>
+                  <th>Box</th>
+                  <th>Description</th>
+                  <th className={ui.num}>Amount</th>
+                </tr>
+              </thead>
               <tbody>
                 {report.adjustments.map((adjustment, index) => (
                   <tr key={index}>
@@ -177,7 +191,7 @@ function AuditPaper({ report }: { report: GstAuditReport }) {
           </div>
         )}
       </section>
-      <EntriesTable title="Left out of every box (no tax, exempt, out of scope, zero-rated purchases)" entries={report.leftOut.entries} total={report.leftOut.total} />
+      <EntriesTable id="gst-audit-left-out" title="Left out of every box (no tax, exempt, out of scope, zero-rated purchases)" entries={report.leftOut.entries} total={report.leftOut.total} />
     </article>
   );
 }
@@ -245,12 +259,25 @@ export function GstAuditView({ organisationId }: { organisationId: string }) {
         {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       </Card>
       {report.data ? (
-        report.data.box5.entries.length + report.data.box11.entries.length + report.data.leftOut.entries.length === 0 &&
-        report.data.adjustments.length === 0 ? (
-          <Empty>Nothing counts in this period.</Empty>
-        ) : (
+        <>
+          <ReportExport
+            organisationId={organisationId}
+            report="gst-audit"
+            title="GST audit report"
+            period={`${formatDate(report.data.periodStart)} to ${formatDate(report.data.periodEnd)}`}
+            basis={GST_BASIS_LABELS[report.data.basis]}
+            filters={[report.data.gstReturnId ? "As filed" : "Worked out now"]}
+            tables={[
+              { id: "gst-audit-boxes", title: "GST boxes", columns: ["Box", "Amount"] },
+              ...(report.data.box5.entries.length ? [{ id: "gst-audit-box-5", title: boxTitle(report.data.box5) }] : []),
+              ...(report.data.box6.entries.length ? [{ id: "gst-audit-box-6", title: boxTitle(report.data.box6) }] : []),
+              ...(report.data.box11.entries.length ? [{ id: "gst-audit-box-11", title: boxTitle(report.data.box11) }] : []),
+              ...(report.data.adjustments.length ? [{ id: "gst-audit-adjustments", title: "Adjustments", columns: ["Box", "Description", "Amount"] }] : []),
+              ...(report.data.leftOut.entries.length ? [{ id: "gst-audit-left-out", title: "Left out of every box" }] : []),
+            ]}
+          />
           <AuditPaper report={report.data} />
-        )
+        </>
       ) : null}
     </>
   );
