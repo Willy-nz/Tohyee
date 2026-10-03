@@ -3255,13 +3255,13 @@ LG3 and LG4, sales with output tax of 3,000.00).
   +900.00 to pay). The total for the limit is **1,050.00**, over $1,000, so
   with LG4's sales both are over the limit. Missed input tax (B9) never
   counts toward this total.
+- **LG8** On the payments and hybrid bases, the same rules apply to
+  payments dated in a filed period that were entered after it was filed.
 - **LG9** As LG4, but Jess includes I21 anyway with the note "Agreed with
   IRD by phone, ref 123". Box 5 goes up by **11,500.00** and Box 8 by
   **1,500.00**. The return shows "Included over IRD's limit for fixing in a
   later return" with her note, and filing keeps the note and who included
   it. Including without a note is refused.
-- **LG8** On the payments and hybrid bases, the same rules apply to
-  payments dated in a filed period that were entered after it was filed.
 
 **Decided by Jess (3 Oct 2026):**
 
