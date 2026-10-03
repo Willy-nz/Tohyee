@@ -1309,7 +1309,7 @@ that something happened.
   Bookkeepers and up make dashboards; everyone in the organisation can see
   them. Tried with the made-up 1M-row CSV: a five-tile dashboard opens in
   about 3 seconds. Tohyee's own books and CRM, sharing with clients,
-  report emails, shaping and pivot tables are the next steps.
+  shaping and pivot tables are the next steps.
 
 - **Analytics, step 2: the books and CRM** (examples AB1-AB10, decision
   367). Each organisation's ledger lines, invoices, bills, contacts, items and
@@ -1317,6 +1317,22 @@ that something happened.
   its analytics every night and by Refresh now, as the same data with the
   ledger's signs; dashboard values can be shown the other way round. Pay run
   lines are copied without names.
+- **Analytics, step 5: report emails** (decision 362, tenant migration
+  0087). Admins and owners configure their own CRM-connected Gmail or
+  Microsoft mailbox, or IMAP with an encrypted app password, in Analytics
+  › Data sources. Choose a folder or label and set a mailbox rule to file
+  reports there. Checks save CSV, TSV and TXT attachments, or flat CSV/TSV
+  files extracted from ZIPs, in the source folder; keep every file or replace
+  matching names with the newest receipt. PDFs (including Looker Studio
+  reports) and Excel files are not accepted in this step. Limits are 25 MB
+  per attachment and 100 MB per check, including ZIP expansion. Message IDs
+  prevent repeat saves, and the job records files saved and errors. Checks
+  run every 15 minutes while the server runs, or by Check now. Google and
+  Microsoft permissions cover the whole mailbox, although checks read only
+  the chosen folder; mail is never moved, marked, labelled or deleted.
+  Microsoft 365 does not support IMAP passwords: use its CRM connection.
+  Provider and IMAP tests use mock mail; live GA4/Google Ads sends have not
+  been verified.
 - **GST late claims** (examples LG1-LG7, decisions 363-366, tenant
   migration 0084), like Xero's: anything approved or changed after a return
   was filed but dated in its period is offered in the next return, counted

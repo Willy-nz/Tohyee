@@ -1513,6 +1513,17 @@ run time.
 - **The nightly reload** (`src/lib/analytics/scheduler.ts`) loads each daily
   source once a day after 04:00 business time and retries a failure an
   hour later (off with `TOHYEE_ANALYTICS_SCHEDULER=off`).
+- **Report emails** (tenant migration 0087) keep mailbox configuration,
+  remembered message IDs, replacement timestamps and job-written checks in
+  the organisation's PostgreSQL database. Admins and owners use their own
+  CRM-connected Gmail or Microsoft mailbox, or TLS IMAP on port 993 with an
+  encrypted app password. Network reads run outside transactions; committed
+  leases keep checks from overlapping. Checks run every 15 minutes and on
+  demand (scheduler off with `TOHYEE_REPORT_EMAIL_SCHEDULER=off`). Data files
+  go into `email/<mailbox id>/` inside the server-admin-chosen source folder;
+  the existing loader discovers them there. OAuth permissions cover the
+  whole mailbox, but these checks only read the chosen folder or label and
+  never modify mail.
 
 ## Open decisions
 
