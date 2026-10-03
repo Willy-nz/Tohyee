@@ -48,30 +48,28 @@ namespace Tohyee.Tray
             return new Font(family, points * FontScale);
         }
 
-        /// <summary>Opt-in light palette for checking the app in both themes; dark is the default.</summary>
-        public static readonly bool Light = Environment.GetEnvironmentVariable("TOHYEE_UI_THEME") == "light";
-        public static readonly Color Bg = Light ? Color.FromArgb(244, 246, 249) : Color.FromArgb(28, 31, 36);
-        public static readonly Color Sidebar = Light ? Color.FromArgb(235, 239, 245) : Color.FromArgb(20, 22, 26);
-        public static readonly Color Card = Light ? Color.White : Color.FromArgb(38, 42, 49);
-        public static readonly Color CardBorder = Light ? Color.FromArgb(212, 218, 228) : Color.FromArgb(52, 57, 67);
-        public static readonly Color Input = Light ? Color.FromArgb(248, 250, 252) : Color.FromArgb(27, 30, 35);
-        public static readonly Color Header = Light ? Color.FromArgb(235, 239, 245) : Color.FromArgb(31, 35, 41);
-        public static readonly Color Text = Light ? Color.FromArgb(28, 31, 36) : Color.FromArgb(236, 239, 243);
-        public static readonly Color Muted = Light ? Color.FromArgb(82, 94, 112) : Color.FromArgb(160, 168, 180);
+        public static readonly Color Bg = Color.FromArgb(28, 31, 36);
+        public static readonly Color Sidebar = Color.FromArgb(20, 22, 26);
+        public static readonly Color Card = Color.FromArgb(38, 42, 49);
+        public static readonly Color CardBorder = Color.FromArgb(52, 57, 67);
+        public static readonly Color Input = Color.FromArgb(27, 30, 35);
+        public static readonly Color Header = Color.FromArgb(31, 35, 41);
+        public static readonly Color Text = Color.FromArgb(236, 239, 243);
+        public static readonly Color Muted = Color.FromArgb(160, 168, 180);
         /// <summary>Tohyee blue, for filled buttons (white text on it).</summary>
         public static readonly Color Accent = Color.FromArgb(37, 99, 235);
         public static readonly Color AccentHover = Color.FromArgb(59, 118, 245);
         /// <summary>A lighter blue for text and highlights on the dark background.</summary>
-        public static readonly Color AccentText = Light ? Accent : Color.FromArgb(122, 167, 255);
-        public static readonly Color Secondary = Light ? Color.FromArgb(229, 234, 242) : Color.FromArgb(52, 58, 69);
-        public static readonly Color SecondaryHover = Light ? Color.FromArgb(216, 223, 234) : Color.FromArgb(64, 71, 84);
+        public static readonly Color AccentText = Color.FromArgb(122, 167, 255);
+        public static readonly Color Secondary = Color.FromArgb(52, 58, 69);
+        public static readonly Color SecondaryHover = Color.FromArgb(64, 71, 84);
         public static readonly Color DangerFill = Color.FromArgb(92, 35, 40);
         public static readonly Color DangerHover = Color.FromArgb(118, 42, 48);
-        public static readonly Color NavSelected = Light ? Color.FromArgb(215, 228, 252) : Color.FromArgb(40, 47, 60);
-        public static readonly Color NavHover = Light ? Color.FromArgb(224, 230, 240) : Color.FromArgb(30, 34, 40);
-        public static readonly Color Success = Light ? Color.FromArgb(21, 128, 61) : Color.FromArgb(74, 222, 128);
-        public static readonly Color Danger = Light ? Color.FromArgb(185, 28, 28) : Color.FromArgb(248, 113, 113);
-        public static readonly Color Warning = Light ? Color.FromArgb(146, 94, 10) : Color.FromArgb(251, 191, 36);
+        public static readonly Color NavSelected = Color.FromArgb(40, 47, 60);
+        public static readonly Color NavHover = Color.FromArgb(30, 34, 40);
+        public static readonly Color Success = Color.FromArgb(74, 222, 128);
+        public static readonly Color Danger = Color.FromArgb(248, 113, 113);
+        public static readonly Color Warning = Color.FromArgb(251, 191, 36);
 
         public static readonly Font Body = F("Segoe UI", 9.75f);
         public static readonly Font Small = F("Segoe UI", 8.75f);
@@ -156,7 +154,7 @@ namespace Tohyee.Tray
             {
                 try
                 {
-                    SetWindowTheme(control.Handle, Light ? "Explorer" : "DarkMode_Explorer", null);
+                    SetWindowTheme(control.Handle, "DarkMode_Explorer", null);
                 }
                 catch (Exception)
                 {
@@ -193,7 +191,7 @@ namespace Tohyee.Tray
             if (Environment.OSVersion.Platform != PlatformID.Win32NT) return;
             try
             {
-                var on = Light ? 0 : 1;
+                var on = 1;
                 if (DwmSetWindowAttribute(form.Handle, 20, ref on, 4) != 0) DwmSetWindowAttribute(form.Handle, 19, ref on, 4);
             }
             catch (Exception)
@@ -823,7 +821,7 @@ namespace Tohyee.Tray
                     g.DrawPath(pen, path);
                 }
             }
-            var colour = _selected ? (Theme.Light ? Theme.Text : Color.White) : Theme.Muted;
+            var colour = _selected ? Color.White : Theme.Muted;
             Icons.Draw(g, Glyph, new RectangleF(Theme.S(16), (Height - Theme.S(20)) / 2f, Theme.S(20), Theme.S(20)), _selected ? Theme.AccentText : colour);
             TextRenderer.DrawText(g, Text, _selected ? Theme.NavSelectedFont : Theme.Nav, new Rectangle(Theme.S(48), 0, Width - Theme.S(52), Height), colour,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);

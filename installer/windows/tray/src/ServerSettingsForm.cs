@@ -250,7 +250,7 @@ namespace Tohyee.Tray
     {
         private readonly List<NavItem> _items = new List<NavItem>();
         private readonly Picture _logo = Picture.Logo(36);
-        private readonly Label _name = new Label { Text = "Tohyee", Font = Theme.F("Segoe UI Semibold", 14f), ForeColor = Theme.Light ? Theme.Text : Color.White, AutoSize = true, BackColor = Theme.Sidebar };
+        private readonly Label _name = new Label { Text = "Tohyee", Font = Theme.F("Segoe UI Semibold", 14f), ForeColor = Color.White, AutoSize = true, BackColor = Theme.Sidebar };
         private readonly Label _kind = new Label { Text = "SERVER", Font = Theme.SmallCaps, ForeColor = Theme.AccentText, AutoSize = true, BackColor = Theme.Sidebar };
         private readonly Label _who = new Label { ForeColor = Theme.Muted, Font = Theme.Small, AutoSize = false, AutoEllipsis = true, BackColor = Theme.Sidebar };
         private readonly FlatButton _open;
@@ -326,7 +326,7 @@ namespace Tohyee.Tray
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            using (var pen = new Pen(Theme.Light ? Theme.CardBorder : Color.FromArgb(34, 38, 45))) e.Graphics.DrawLine(pen, Width - 1, 0, Width - 1, Height);
+            using (var pen = new Pen(Color.FromArgb(34, 38, 45))) e.Graphics.DrawLine(pen, Width - 1, 0, Width - 1, Height);
         }
     }
 

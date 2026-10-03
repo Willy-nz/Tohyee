@@ -187,13 +187,8 @@ each Remote access state (`4-phone-1-choose` … `4-phone-7-tailscale-on`):
 
 ```sh
 xvfb-run -a -s "-screen 0 1400x1000x24" mono /tmp/TohyeeTray.exe --demo-screenshots /tmp/tohyee-app/
-TOHYEE_UI_THEME=light xvfb-run -a -s "-screen 0 1400x1000x24" mono /tmp/TohyeeTray.exe --demo-screenshots /tmp/tohyee-app-light/
 TOHYEE_UI_SCALE=1.5 xvfb-run -a -s "-screen 0 1920x1200x24" mono /tmp/TohyeeTray.exe --demo-screenshots /tmp/tohyee-app-150/
 ```
-
-Dark is the default; `TOHYEE_UI_THEME=light` opts into the light palette.
-The Windows installer workflow captures both palettes, including
-`6-analytics.png` and `light/6-analytics.png` on `ci/tray-screenshots`.
 
 Mono draws with DejaVu Sans instead of Segoe UI (wider), its own scroll bars,
 check boxes and drop-downs, and a thin line after the last list column; the
