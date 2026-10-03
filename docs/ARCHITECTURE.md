@@ -1497,10 +1497,11 @@ the server through `@duckdb/node-api` (kept out of Next's bundle with
 one organisation run one at a time. No DuckDB extensions are downloaded at
 run time.
 
-- **Definitions stay in the organisation's database** (tenant migration
-  0082: `analytics_sources`, `analytics_load_runs`), so they're backed up and
-  restored with it. The DuckDB file holds only loaded data and can always be
-  rebuilt by loading again; it isn't in the backups.
+- **Definitions stay in the organisation's database** (tenant migrations
+  0082/0087: `analytics_sources`, `analytics_shaped_tables`,
+  `analytics_load_runs`), so they're backed up and restored with it. The
+  DuckDB file holds only loaded data and can always be rebuilt by loading
+  again; it isn't in the backups.
 - **Source folders are a server setting** (`analytics_folders` in the core
   `server_settings`), chosen by a server admin on the server computer. Files
   are only read from inside an organisation's own folder, after resolving
@@ -1521,6 +1522,15 @@ run time.
   `tileId`; a free question needs viewer. `/api/analytics/values` needs a
   shared dashboard with that slicer. The app shell sends report viewers to
   `/analytics` and shows no other app.
+- **Shaped tables** store their base table and ordered steps in PostgreSQL.
+  The shaping compiler checks each step against its current columns, quotes
+  identifiers and binds values; it supports filters, column selection and
+  renames, type changes, split/unpivot/group/calculated columns, joins and
+  union-by-name appends. Rebuilds stage a new DuckDB table and swap it in only
+  on success. They run after a dependent CSV or books table loads, nightly or
+  on demand, and each result is recorded in `analytics_load_runs`. Averages
+  and division go through `src/lib/analytics/decimal-sql.ts`, which divides
+  whole millionths as HUGEINT, since DuckDB divides decimals as DOUBLE.
 
 ## Open decisions
 

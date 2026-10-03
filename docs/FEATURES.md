@@ -1329,6 +1329,14 @@ that something happened.
   their own title, filters and columns: contact details and fields, document
   fields, and on account transactions and the journal report, line fields
   and tracking. Columns can be reordered; figures never change.
+- **Analytics, step 6: shaping** (tenant migration 0087). Under Analytics ›
+  Shaping, admins can save ordered, repeatable steps against a loaded
+  CSV or `tohyee_*` table: filter, keep/remove or rename columns, change
+  types, split or unpivot, group and aggregate, calculate a number or joined
+  text column, merge with another loaded table, or append by column name.
+  The selected step previews up to 100 rows. Output tables are rebuilt after
+  a dependent source/books load or on demand; a failed rebuild leaves the
+  previous output in place, with its result recorded in load history.
 - **GST late claims** (examples LG1-LG7, decisions 363-366, tenant
   migration 0084), like Xero's: anything approved or changed after a return
   was filed but dated in its period is offered in the next return, counted

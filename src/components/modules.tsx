@@ -66,6 +66,7 @@ const OPTIONAL: ModuleRow[] = [
     links: [
       { href: "/analytics", label: "Dashboards" },
       { href: "/analytics/sources", label: "Data sources" },
+      { href: "/analytics/shaping", label: "Shaping" },
     ],
   },
   {
