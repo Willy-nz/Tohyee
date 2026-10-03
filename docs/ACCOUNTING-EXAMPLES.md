@@ -3169,7 +3169,7 @@ above.
   refused. A standard-rated line at a rate other than 15% in the period is
   refused, naming its document.
 
-### Late changes to filed GST periods (examples LG1-LG7, proposed 3 Oct 2026, not yet approved by Jess)
+### Late changes to filed GST periods (examples LG1-LG7, approved by Jess 3 Oct 2026)
 
 From Jess's issue #88: a change dated in a period whose return has been
 filed (for example GST on an asset that wasn't claimed) is ignored by every

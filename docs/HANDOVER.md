@@ -179,16 +179,19 @@ Set them in the Agents box before sending each task:
 
 | Work | Issue | PR | Branch | Tenant migration |
 | --- | --- | --- | --- | --- |
-| Analytics: prove DuckDB on Windows | #96 | | Copilot's | none |
-| Analytics: folders page in the tray app | #97 | | Copilot's | none |
-| Reports: drill down, export CSV/Excel/PDF, page layout (from #89) | #98 | | Copilot's | none |
+| (none) | | | | |
+
+Merged 3 Oct 2026 from Copilot: the ECharts chart component (#94), DuckDB
+on Windows (#99), the tray app's Analytics folders page (#100, light theme
+removed by Claude), report drill-downs and CSV/Excel/PDF exports (#101).
 
 Analytics (3 Oct 2026): the plan and decisions 353-362 are in
 [ANALYTICS-REVIEW.md](ANALYTICS-REVIEW.md). Step 1 (engine, folders,
-sources, nightly loads) was built by Claude (PRs #95 and the step 1b PR).
-Step 3's first part (dashboards) is tenant migration 0083. GST late changes
-(issue #88) have proposed examples LG1-LG8 waiting for Jess (PR #102).
-Next numbers: tenant migration 0084, core migration 0006, decision 363.
+sources, nightly loads) was built by Claude (#95); step 3's first part
+(dashboards, #103) is tenant migration 0083. GST late claims (issue #88)
+are built from examples LG1-LG7 (tenant migration 0084, decisions
+363-366). Next numbers: tenant migration 0085, core migration 0006,
+decision 367.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
