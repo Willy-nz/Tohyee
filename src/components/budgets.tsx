@@ -12,6 +12,7 @@ import type { Budget, BudgetGrid } from "@/lib/budgets/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import type { BudgetVsActual, BudgetVsActualGroup, VarianceFigures } from "@/lib/reports/budget-vs-actual";
+import { accountTransactionsHref } from "@/lib/reports/drilldown";
 
 /**
  * Budgets (examples BU1-BU8): the list, a budget's month-by-month amounts
@@ -443,11 +444,17 @@ export function BudgetEditor({ organisationId, budgetId }: { organisationId: str
   );
 }
 
-function VarianceCells({ figures }: { figures: VarianceFigures }) {
+function VarianceCells({ figures, actualHref }: { figures: VarianceFigures; actualHref?: string }) {
   return (
     <>
       <td className={ui.num}>
-        <Money value={figures.actual} />
+        {actualHref ? (
+          <Link href={actualHref}>
+            <Money value={figures.actual} />
+          </Link>
+        ) : (
+          <Money value={figures.actual} />
+        )}
       </td>
       <td className={ui.num}>
         <Money value={figures.budget} />
@@ -460,7 +467,17 @@ function VarianceCells({ figures }: { figures: VarianceFigures }) {
   );
 }
 
-function VarianceGroup({ title, group, totalLabel }: { title: string; group: BudgetVsActualGroup; totalLabel: string }) {
+function VarianceGroup({
+  title,
+  group,
+  totalLabel,
+  actualHref,
+}: {
+  title: string;
+  group: BudgetVsActualGroup;
+  totalLabel: string;
+  actualHref?: (accountId: string) => string;
+}) {
   if (group.sections.length === 0) return null;
   return (
     <>
@@ -481,7 +498,7 @@ function VarianceGroup({ title, group, totalLabel }: { title: string; group: Bud
               <td>
                 {line.code} · {line.name}
               </td>
-              <VarianceCells figures={line} />
+              <VarianceCells figures={line} actualHref={actualHref?.(line.accountId)} />
             </tr>
           ))}
         </Fragment>
@@ -503,6 +520,16 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
   const chosen = budgetId ?? budgets.data?.budgets[0]?.id ?? null;
   const report = useApiData<BudgetVsActual>(chosen ? "/api/reports/budget-vs-actual" : null, { organisationId, budgetId: chosen, from, to });
   const data = report.data;
+  const actualHref = (accountId: string) =>
+    data
+      ? accountTransactionsHref({
+          accountId,
+          from: data.from,
+          to: data.to,
+          trackingCategoryId: data.budget.trackingCategoryId,
+          trackingValueId: data.budget.trackingValueId,
+        })
+      : "";
   return (
     <Card
       title="Budget vs actual"
@@ -549,14 +576,14 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
               </tr>
             </thead>
             <tbody>
-              <VarianceGroup title="Revenue" group={data.revenue} totalLabel="Total revenue" />
-              <VarianceGroup title="Cost of sales" group={data.costOfSales} totalLabel="Total cost of sales" />
+              <VarianceGroup title="Revenue" group={data.revenue} totalLabel="Total revenue" actualHref={actualHref} />
+              <VarianceGroup title="Cost of sales" group={data.costOfSales} totalLabel="Total cost of sales" actualHref={actualHref} />
               <tr className={ui.reportTotal}>
                 <td>Gross profit</td>
                 <VarianceCells figures={data.grossProfit} />
               </tr>
-              <VarianceGroup title="Other income" group={data.otherIncome} totalLabel="Total other income" />
-              <VarianceGroup title="Expenses" group={data.expenses} totalLabel="Total expenses" />
+              <VarianceGroup title="Other income" group={data.otherIncome} totalLabel="Total other income" actualHref={actualHref} />
+              <VarianceGroup title="Expenses" group={data.expenses} totalLabel="Total expenses" actualHref={actualHref} />
             </tbody>
             <tfoot>
               <tr>

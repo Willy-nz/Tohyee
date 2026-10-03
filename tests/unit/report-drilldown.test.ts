@@ -17,9 +17,20 @@ describe("account transaction drill-down", () => {
     );
   });
 
-  it("does not emit an incomplete or empty tracking filter", () => {
+  it("does not emit an incomplete tracking filter", () => {
     const href = accountTransactionsHref({ accountId: "42", from: null, to: "2026-06-30" });
 
     expect(href).toBe("/operations/reports?report=transactions&account=42&to=2026-06-30");
+  });
+
+  it("keeps the category when linking an untagged split amount", () => {
+    const href = accountTransactionsHref({
+      accountId: "42",
+      to: "2026-06-30",
+      trackingCategoryId: "8",
+      trackingUnassigned: true,
+    });
+
+    expect(href).toBe("/operations/reports?report=transactions&account=42&to=2026-06-30&trackingCategoryId=8&trackingValueId=unassigned");
   });
 });

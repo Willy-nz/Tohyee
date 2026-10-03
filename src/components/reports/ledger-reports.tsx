@@ -190,28 +190,41 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
 export function AccountTransactionsReport({
   organisationId,
   initialAccountId,
+  initialFrom,
   initialTo,
+  initialTrackingCategoryId,
+  initialTrackingValueId,
 }: {
   organisationId: string;
   initialAccountId?: string | null;
+  initialFrom?: string | null;
   initialTo?: string | null;
+  initialTrackingCategoryId?: string | null;
+  initialTrackingValueId?: string | null;
 }) {
   const [accountId, setAccountId] = useState(() => (initialAccountId && /^\d+$/.test(initialAccountId) ? initialAccountId : ""));
-  const [from, setFrom] = useState<string | null>(null);
+  const [from, setFrom] = useState<string | null>(() => (initialFrom && /^\d{4}-\d{2}-\d{2}$/.test(initialFrom) ? initialFrom : null));
   const [to, setTo] = useState(() => (initialTo && /^\d{4}-\d{2}-\d{2}$/.test(initialTo) ? initialTo : todayInBrowser()));
-  const [filter, setFilter] = useState<{ categoryId: string; valueId: string }>({ categoryId: "", valueId: "" });
+  const [filter, setFilter] = useState<{ categoryId: string; valueId: string }>(() => ({
+    categoryId: initialTrackingCategoryId && /^\d+$/.test(initialTrackingCategoryId) ? initialTrackingCategoryId : "",
+    valueId:
+      initialTrackingValueId === "unassigned" || (initialTrackingValueId && /^\d+$/.test(initialTrackingValueId))
+        ? initialTrackingValueId
+        : "",
+  }));
   const accounts = useAccounts(organisationId, true);
   const tracking = useTracking(organisationId);
   const categories = reportCategories(tracking.data);
   const category = categories.find((entry) => entry.id === filter.categoryId);
   const valueId = category && category.values.some((value) => value.id === filter.valueId) ? filter.valueId : "";
+  const unassigned = Boolean(category && filter.valueId === "unassigned");
   const report = useApiData<AccountTransactions>("/api/reports/account-transactions", {
     organisationId,
     accountId: accountId || null,
     from,
     to,
     trackingCategoryId: valueId ? filter.categoryId : null,
-    trackingValueId: valueId || null,
+    trackingValueId: valueId || (unassigned ? "unassigned" : null),
   });
   const data = report.data;
   return (
@@ -240,7 +253,7 @@ export function AccountTransactionsReport({
           {categories.length > 0 ? (
             <Field label="Only lines tagged">
               <select
-                value={valueId ? `${filter.categoryId}:${valueId}` : ""}
+                value={valueId || unassigned ? `${filter.categoryId}:${valueId || "unassigned"}` : ""}
                 onChange={(event) => {
                   const [categoryId = "", value = ""] = event.target.value.split(":");
                   setFilter({ categoryId, valueId: value });
@@ -254,6 +267,7 @@ export function AccountTransactionsReport({
                         {value.name}
                       </option>
                     ))}
+                    <option value={`${entry.id}:unassigned`}>Not set</option>
                   </optgroup>
                 ))}
               </select>
