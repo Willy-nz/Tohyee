@@ -118,7 +118,8 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
   const router = useRouter();
   const { can } = useWorkspace();
   const list = useApiData<{ dashboards: Dashboard[] }>("/api/analytics/dashboards", { organisationId });
-  const tables = useApiData<{ tables: TableInfo[] }>("/api/analytics/tables", { organisationId });
+  // Report viewers see only shared dashboards, not the tables (decision 360).
+  const tables = useApiData<{ tables: TableInfo[] }>(can("viewer") ? "/api/analytics/tables" : null, { organisationId });
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,7 +166,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
         {!list.data ? (
           <p className={ui.muted}>Loading…</p>
         ) : list.data.dashboards.length === 0 ? (
-          <Empty>No dashboards yet.</Empty>
+          <Empty>{can("viewer") ? "No dashboards yet." : "Nothing has been shared with you yet."}</Empty>
         ) : (
           <div className={styles.dashboardCards}>
             {list.data.dashboards.map((dashboard) => (
@@ -200,7 +201,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const { can } = useWorkspace();
   const confirm = useConfirm();
   const loaded = useApiData<{ dashboard: Dashboard }>(`/api/analytics/dashboards/${dashboardId}`, { organisationId });
-  const tables = useApiData<{ tables: TableInfo[] }>("/api/analytics/tables", { organisationId });
+  const tables = useApiData<{ tables: TableInfo[] }>(can("bookkeeper") ? "/api/analytics/tables" : null, { organisationId });
   const [draft, setDraft] = useState<Dashboard | null>(null);
   const [editing, setEditing] = useState(startEditing);
   const [editingTile, setEditingTile] = useState<Tile | "new" | null>(null);
@@ -305,6 +306,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
       <FilterBar
         organisationId={organisationId}
+        dashboardId={dashboard.id}
         settings={dashboard.settings}
         filters={shown}
         onChange={setFilters}
@@ -312,6 +314,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         tables={tables.data?.tables ?? []}
         onSettings={(settings) => setDraft({ ...dashboard, settings })}
       />
+
+      {editing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
 
       {editingTile ? (
         <TileEditor
@@ -364,12 +368,77 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                   </div>
                 ) : null}
               </div>
-              <TileBody organisationId={organisationId} tile={tile} filters={shown} />
+              <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={tile} filters={shown} />
             </section>
           ))}
         </div>
       )}
     </>
+  );
+}
+
+type ReportViewer = { userId: string; email: string; displayName: string; isActive: boolean };
+
+/** Sharing a dashboard with report viewers, e.g. clients (decision 360). They sign in and see only what's shared. */
+function ShareCard({ organisationId, dashboardId }: { organisationId: string; dashboardId: string }) {
+  const shares = useApiData<{ shares: string[]; reportViewers: ReportViewer[] }>(`/api/analytics/dashboards/${dashboardId}/shares`, { organisationId });
+  const [chosen, setChosen] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const current = chosen ?? shares.data?.shares ?? [];
+  const people = shares.data?.reportViewers ?? [];
+
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await api<{ shares: string[] }>(`/api/analytics/dashboards/${dashboardId}/shares`, {
+        method: "PUT",
+        body: { organisationId, userIds: current },
+      });
+      setChosen(result.shares);
+      shares.reload();
+      setMessage({ tone: "success", text: result.shares.length ? `Shared with ${result.shares.length} ${result.shares.length === 1 ? "person" : "people"}.` : "Not shared with anyone." });
+    } catch (caught) {
+      setMessage({ tone: "error", text: errorMessage(caught) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card
+      title="Share with clients"
+      description="Report viewers sign in like anyone else and see only the dashboards shared with them, nothing of the books. Add someone as a Report viewer under Accounting › Members first."
+    >
+      {shares.error ? <Notice tone="error">{shares.error}</Notice> : null}
+      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+      {!shares.data ? (
+        <p className={ui.muted}>Loading…</p>
+      ) : people.length === 0 ? (
+        <Empty>This organisation has no report viewers yet.</Empty>
+      ) : (
+        <div className={styles.shareList}>
+          {people.map((person) => (
+            <label key={person.userId} className={ui.checkbox}>
+              <input
+                type="checkbox"
+                checked={current.includes(person.userId)}
+                onChange={(event) =>
+                  setChosen(event.target.checked ? [...current, person.userId] : current.filter((entry) => entry !== person.userId))
+                }
+              />{" "}
+              {person.displayName} <span className={ui.muted}>{person.email}{person.isActive ? "" : " · can't sign in"}</span>
+            </label>
+          ))}
+          <div>
+            <Button size="small" onClick={() => void save()} disabled={busy || chosen === null}>
+              {busy ? "Saving…" : "Save sharing"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -381,8 +450,10 @@ function FilterBar({
   editing,
   tables,
   onSettings,
+  dashboardId,
 }: {
   organisationId: string;
+  dashboardId: string;
   settings: DashboardSettings;
   filters: Filters;
   onChange: (filters: Filters) => void;
@@ -406,6 +477,7 @@ function FilterBar({
         <SlicerControl
           key={`${slicer.table}.${slicer.field}`}
           organisationId={organisationId}
+          dashboardId={dashboardId}
           slicer={slicer}
           chosen={filters.values[slicer.field] ?? []}
           onChange={(values) => onChange({ ...filters, values: { ...filters.values, [slicer.field]: values } })}
@@ -452,18 +524,20 @@ function FilterBar({
 
 function SlicerControl({
   organisationId,
+  dashboardId,
   slicer,
   chosen,
   onChange,
   onRemove,
 }: {
   organisationId: string;
+  dashboardId: string;
   slicer: Slicer;
   chosen: string[];
   onChange: (values: string[]) => void;
   onRemove?: () => void;
 }) {
-  const values = useApiData<{ values: string[] }>("/api/analytics/values", { organisationId, table: slicer.table, field: slicer.field });
+  const values = useApiData<{ values: string[] }>("/api/analytics/values", { organisationId, dashboardId, table: slicer.table, field: slicer.field });
   const summary = chosen.length === 0 ? "All" : chosen.length === 1 ? chosen[0] : `${chosen.length} chosen`;
   return (
     <div className={styles.slicer}>
@@ -510,15 +584,17 @@ function SlicerControl({
   );
 }
 
-function useTileResult(organisationId: string, query: TileQuery | null, filters: Filters) {
+/** A tile's answer: its saved question (`saved`, all a report viewer can run) or a question being built (`query`). */
+function useTileResult(organisationId: string, query: TileQuery | null, filters: Filters, saved?: { dashboardId: string; tileId: string }) {
   const [state, setState] = useState<{ key: string; result: QueryResult | null; error: string | null } | null>(null);
-  const key = JSON.stringify({ query, filters });
+  const key = JSON.stringify({ query, filters, saved });
   useEffect(() => {
     if (!query) return;
     let cancelled = false;
+    const question = saved ? { dashboardId: saved.dashboardId, tileId: saved.tileId } : { query };
     api<QueryResult>("/api/analytics/query", {
       method: "POST",
-      body: { organisationId, query, filters: { from: filters.from || null, to: filters.to || null, values: filters.values } },
+      body: { organisationId, ...question, filters: { from: filters.from || null, to: filters.to || null, values: filters.values } },
     }).then(
       (result) => {
         if (!cancelled) setState({ key, result, error: null });
@@ -536,8 +612,8 @@ function useTileResult(organisationId: string, query: TileQuery | null, filters:
   return state?.key === key ? state : null;
 }
 
-function TileBody({ organisationId, tile, filters }: { organisationId: string; tile: Tile; filters: Filters }) {
-  const state = useTileResult(organisationId, tile.query, filters);
+function TileBody({ organisationId, dashboardId, tile, filters }: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters }) {
+  const state = useTileResult(organisationId, tile.query, filters, { dashboardId, tileId: tile.id });
   if (!state) return <p className={ui.muted}>Working it out…</p>;
   if (state.error) return <Notice tone="error">{state.error}</Notice>;
   return <TileResult tile={tile} result={state.result!} />;

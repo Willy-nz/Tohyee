@@ -44,6 +44,7 @@ const ROLE_LABELS: Record<PayrollAccessPerson["role"], string> = {
   admin: "Admin",
   bookkeeper: "Bookkeeper",
   viewer: "Viewer",
+  report_viewer: "Report viewer",
 };
 
 /** Settings › Payroll access, for admins (PE11). */

@@ -1,13 +1,26 @@
-import { json, route, searchParams } from "@/lib/api/http";
-import { sliceValues } from "@/lib/analytics/dashboards";
-import { analyticsMember } from "@/lib/analytics/http";
+import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { roleAtLeast } from "@/lib/auth/roles";
+import { getDashboard, sliceValues } from "@/lib/analytics/dashboards";
 import { requireAnalytics } from "@/lib/analytics/sources";
-import { withOrganisationTransaction } from "@/lib/db/org-transaction";
+import { ForbiddenError } from "@/lib/errors";
 
-/** The values a slicer offers (up to 500). */
+/**
+ * The values a slicer offers (up to 500). Report viewers (decision 360) only
+ * for a slicer on a dashboard shared with them (`dashboardId`).
+ */
 export const GET = route(async (request) => {
   const params = searchParams(request);
-  const { organisation, actor } = await analyticsMember(request, params.get("organisationId"), "viewer");
-  await withOrganisationTransaction(organisation, actor, (tx) => requireAnalytics(tx), { readOnly: true });
-  return json({ values: await sliceValues(organisation.id, params.get("table") ?? "", params.get("field") ?? "") });
+  const table = params.get("table") ?? "";
+  const field = params.get("field") ?? "";
+  const organisationId = await withOrganisation(request, params.get("organisationId"), "report_viewer", async (tx, { auth, membership }) => {
+    await requireAnalytics(tx);
+    if (!roleAtLeast(membership.role, "viewer")) {
+      const dashboard = await getDashboard(tx, params.get("dashboardId") ?? "", { userId: auth.user.id, reportViewer: true });
+      if (!dashboard.settings.slicers.some((slicer) => slicer.table === table && slicer.field === field)) {
+        throw new ForbiddenError("You can only see the dashboards shared with you.");
+      }
+    }
+    return tx.organisationId;
+  });
+  return json({ values: await sliceValues(organisationId, table, field) });
 });

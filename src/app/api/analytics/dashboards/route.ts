@@ -2,10 +2,11 @@ import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api
 import { createDashboard, listDashboards } from "@/lib/analytics/dashboards";
 import { requireAnalytics } from "@/lib/analytics/sources";
 
+/** The dashboards someone can see: all of them, or for a report viewer only those shared with them (decision 360). */
 export const GET = route(async (request) => {
-  const dashboards = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", async (tx) => {
+  const dashboards = await withOrganisation(request, searchParams(request).get("organisationId"), "report_viewer", async (tx, { auth, membership }) => {
     await requireAnalytics(tx);
-    return listDashboards(tx);
+    return listDashboards(tx, { userId: auth.user.id, reportViewer: membership.role === "report_viewer" });
   });
   return json({ dashboards });
 });
