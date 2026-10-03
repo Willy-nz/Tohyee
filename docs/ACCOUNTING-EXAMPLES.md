@@ -3049,49 +3049,59 @@ all through 1000 Business bank account):
   and admins can create, change, publish, archive and delete them. Opening a
   report posts nothing.
 
-### Transaction-style custom reports (examples not yet approved by Jess)
+### Transaction-style custom reports
 
-An account transactions, aged receivables or payables, sales by salesperson or
-journal report can be saved as a new custom report. Its title, filters and
-ordered columns are its own; the standard report is unchanged. Contact details,
-tracking values and custom-field values add context only: adding or removing a
-column never changes the report's amounts or totals. A custom report starts
-with the standard columns, and columns can be added, removed and reordered.
+Jess's direction (3 Oct 2026): like Xero for the look (pick columns, reorder
+them, Save as custom, draft or published), and like NetSuite for custom
+fields, which belong to a contact, a document or a line. Anything more
+advanced (items by category, say) is done in Analytics, which has every
+invoice line.
 
-Setup: use the custom-report journals above (CR1-CR10) and the journal report
-setup in JR1-JR3.
-Kobe Ltd has email `accounts@kobe.example.nz`, billing address `1 Kauri Road,
-Dunedin`, customer group `Trade`, and a contact custom field **Region** with
-value `Otago`. Invoice INV-REPORT-1 for **100.00 + GST 15.00** is dated
-20 May 2026. It has document custom field **Channel** `Web` and a line with
-custom field **Project** `Fit-out`, tagged Location `Dunedin`. In the separate
-SR3 setup, invoice 1 has a document custom field **Channel** of `Web`.
+An account transactions, aged receivables or payables, sales by salesperson
+or journal report can be saved as a custom report with its own title,
+filters and ordered columns; the standard report is unchanged. Extra columns
+only add information: they never change an amount or a total, and saving or
+publishing posts nothing. Contact columns (email, addresses, phone, group,
+contact fields) and document fields are offered on every one of these
+reports. Line fields and tracking are only offered where each row is one
+ledger line (account transactions and the journal report), so a cell never
+mixes several lines' values. Sales post one ledger line per account and
+tracking (TC3), so on account transactions an invoice's sales line shows its
+tracking but not an invoice line's own field.
 
-- **CR11** Account transactions for account 4000, 1 April–31 May 2026, saved
-  with Date, Source, Contact, Region and Credit columns: the April and May
-  manual-journal sales are credits of **1,000.00** and **1,500.00**; the
-  invoice is a credit of **100.00** for Kobe Ltd, Region `Otago`. The closing
-  balance is **-2,600.00**, with period debits **0.00** and credits
-  **2,600.00**, unchanged by the extra columns.
-- **CR12** Aged receivables as at 31 July 2026, saved with Contact, Email,
-  Address, Group and Region columns: using RC9's documents, Kobe Auckland is
-  **322.00**, Kobe Dunedin **345.00**, and Rata Ltd **400.00**; the report
-  total remains **1,067.00**. Columns can be reordered so Region appears
-  before Contact, or removed without changing the total. In the CR11 setup,
-  the 31 May report shows Kobe Ltd's invoice as **115.00 current**, with
-  Region `Otago`, Channel `Web` and line Project `Fit-out`.
-- **CR13** Sales by salesperson for June in the SR3 setup, saved with Contact
-  Region and invoice-document Channel columns: Aroha still has **1** invoice,
-  **100.00** sales, **20.00** credit notes and **80.00** net sales; the total
-  is still **3** invoices, **350.00** sales, **20.00** credit notes and
-  **330.00** net sales. `Otago` and `Web` are descriptive values, not amounts.
-- **CR14** The JR1 journal report saved with Contact Region, Location and the
-  journal-line Project column: six journals still total **805.00** on each
-  side. A journal without a contact or a line without a tag/value has a blank
-  cell; the columns do not alter any journal.
-- **CR15** A viewer can open the saved report and export its selected columns.
-  Saving it posts nothing, and a later change to a contact or custom field
-  changes the draft's displayed value but not its figures.
+Setup: the custom-report journals above (CR1-CR10), advanced features on,
+salesperson Aroha. Kobe Ltd is a customer with email
+`accounts@kobe.example.nz`, billing address `1 Kauri Road, Dunedin`, group
+`Trade`, contact field **Region** `Otago` and default salesperson Aroha.
+Invoice INV-REPORT-1 for Kobe Ltd, 20 May 2026, **100.00 + GST 15.00**, has
+document field **Channel** `Web`; its one line (4000) has line field
+**Project** `Fit-out` and Location `Dunedin`.
+
+- **CR11** Account transactions for 4000, 1 April-31 May 2026, saved with
+  Date, Source, email, address, group, Region, Channel, Project, Location,
+  Credit and Balance: credits **1,000.00**, **1,500.00** and **100.00**,
+  total credits **2,600.00**, the same as the standard report. The invoice's
+  row shows `accounts@kobe.example.nz`, `1 Kauri Road, Dunedin`, `Trade`,
+  `Otago`, `Web` and `Dunedin`, with Project blank; the manual journals'
+  rows have blank contact and Location cells.
+- **CR12** Aged receivables as at 31 May 2026, saved with Region before
+  Contact, then Channel, Current and Total: Kobe Ltd **115.00** current,
+  Region `Otago`, its invoice Channel `Web`; total **115.00**. Project and
+  Location can't be added ("That report column isn't available.").
+- **CR13** Sales by salesperson for May 2026 saved with Region and Channel:
+  Aroha **1** invoice, sales **100.00**, credit notes **0.00**, net
+  **100.00**, and the same total; the invoice shows `Otago` and `Web`.
+  Project and Location can't be added.
+- **CR14** A journal on 25 May 2026, Dr 6010 **50.00** (Project `Fit-out`,
+  Location `Dunedin`) / Cr 1000 **50.00**. The journal report for that day
+  saved with Project and Location shows `Fit-out` and `Dunedin` on the debit
+  line and blanks on the credit line, and equals the standard journal
+  report.
+- **CR15** The CR12 report with Contact, email and Total, saved and then
+  published (no journal is posted). After Kobe's email changes to
+  `ap@kobe.example.nz`, a viewer opening the draft sees the new email and
+  the published report still shows `accounts@kobe.example.nz`; both total
+  **115.00**.
 
 ### Home
 

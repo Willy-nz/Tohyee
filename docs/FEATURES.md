@@ -1323,6 +1323,12 @@ that something happened.
   (Share, in a dashboard's edit mode, for bookkeepers and up), using that
   dashboard's slicers and dates. They can't see the books, the data tables or
   anything else in the organisation.
+- **Save transaction reports as custom** (examples CR11-CR15, decision 369,
+  tenant migration 0086). Account transactions, aged receivables and
+  payables, sales by salesperson and the journal report can be saved with
+  their own title, filters and columns: contact details and fields, document
+  fields, and on account transactions and the journal report, line fields
+  and tracking. Columns can be reordered; figures never change.
 - **GST late claims** (examples LG1-LG7, decisions 363-366, tenant
   migration 0084), like Xero's: anything approved or changed after a return
   was filed but dated in its period is offered in the next return, counted

@@ -87,6 +87,9 @@ const REPORT_COLUMNS: Record<TransactionReportBase, TransactionReportColumn[]> =
   ],
 };
 
+/** Reports with a row per ledger line; the others have a row per document. */
+const LINE_LEVEL_BASES: ReadonlySet<TransactionReportBase> = new Set(["account_transactions", "journal_report"]);
+
 function usesFor(base: TransactionReportBase): string[] {
   if (base === "aged_receivables") return ["customer", "invoice", "credit_note"];
   if (base === "aged_payables") return ["supplier", "bill", "supplier_credit_note"];
@@ -107,11 +110,16 @@ export async function transactionReportColumnOptions(tx: OrgTx, base: Transactio
     ...customFields.fields
       .filter((field) => field.record === "document" && field.usedOn.some((use) => uses.includes(use)))
       .map((field) => ({ key: `document.custom.${field.id}`, label: `Document · ${field.label}` })),
-    ...customFields.fields
-      .filter((field) => field.record === "line" && field.usedOn.some((use) => uses.includes(use)))
-      .map((field) => ({ key: `line.custom.${field.id}`, label: `Line · ${field.label}` })),
   ];
-  options.push(...tracking.categories.map((category) => ({ key: `tracking.${category.id}`, label: category.name })));
+  // Line fields and tracking only where each row is one line, so a cell never mixes several lines' values.
+  if (LINE_LEVEL_BASES.has(base)) {
+    options.push(
+      ...customFields.fields
+        .filter((field) => field.record === "line" && field.usedOn.some((use) => uses.includes(use)))
+        .map((field) => ({ key: `line.custom.${field.id}`, label: `Line · ${field.label}` })),
+      ...tracking.categories.map((category) => ({ key: `tracking.${category.id}`, label: category.name })),
+    );
+  }
   return options;
 }
 
@@ -148,15 +156,6 @@ const SOURCE_FIELD_TABLES: Record<string, string> = {
   supplier_credit_note_refund: "supplier_credit_notes",
   bank_transaction: "bank_transactions",
   journal: "ledger_journals",
-};
-
-const SOURCE_LINE_TABLES: Record<string, { table: string; foreignKey: string }> = {
-  invoice: { table: "sales_invoice_lines", foreignKey: "invoice_id" },
-  customer_payment: { table: "sales_invoice_lines", foreignKey: "invoice_id" },
-  sales_credit_note: { table: "sales_credit_note_lines", foreignKey: "credit_note_id" },
-  bill: { table: "bill_lines", foreignKey: "bill_id" },
-  supplier_credit_note: { table: "supplier_credit_note_lines", foreignKey: "credit_note_id" },
-  bank_transaction: { table: "bank_transaction_lines", foreignKey: "bank_transaction_id" },
 };
 
 function reportContexts(base: TransactionReportBase, data: Record<string, unknown>): ReportColumnContext[] {
@@ -259,36 +258,6 @@ async function addTransactionColumnValues(
   }
   const fields = await getCustomFieldSetup(tx);
   const tracking = await getTrackingSetup(tx);
-  const lineTags = new Map<string, Record<string, Set<string>>>();
-  const lineCustomValues = new Map<string, Record<string, Set<string | boolean>>>();
-  for (const { table, foreignKey } of Object.values(SOURCE_LINE_TABLES).filter((entry, index, all) => all.findIndex((candidate) => candidate.table === entry.table) === index)) {
-    const sourceTypes = Object.entries(SOURCE_LINE_TABLES).filter(([, entry]) => entry.table === table).map(([type]) => type);
-    const ids = [...new Set(contexts.filter((entry) => entry.recordId && sourceTypes.includes(entry.sourceType ?? "")).map((entry) => entry.recordId!))];
-    if (ids.length === 0) continue;
-    const found = await tx.query<{ record_id: string; tracking: TrackingTags; custom_fields: CustomValues }>(
-      `select ${foreignKey}::text as record_id, tracking, custom_fields from ${table} where ${foreignKey} = any($1::bigint[])`,
-      [ids],
-    );
-    for (const row of found.rows) {
-      const key = `${table}:${row.record_id}`;
-      const tags = lineTags.get(key) ?? {};
-      for (const [categoryId, valueId] of Object.entries(row.tracking ?? {})) {
-        const values = tags[categoryId] ?? new Set<string>();
-        values.add(valueId);
-        tags[categoryId] = values;
-      }
-      lineTags.set(key, tags);
-      const custom = lineCustomValues.get(key) ?? {};
-      for (const [fieldId, rawValue] of Object.entries(row.custom_fields ?? {})) {
-        const values = custom[fieldId] ?? new Set<string | boolean>();
-        for (const value of Array.isArray(rawValue) ? rawValue : [rawValue]) {
-          if (typeof value === "string" || typeof value === "boolean") values.add(value);
-        }
-        custom[fieldId] = values;
-      }
-      lineCustomValues.set(key, custom);
-    }
-  }
   for (const entry of contexts) {
     const contact = entry.contactId ? contacts.get(entry.contactId) : undefined;
     const table = entry.sourceType ? SOURCE_FIELD_TABLES[entry.sourceType] : undefined;
@@ -296,25 +265,6 @@ async function addTransactionColumnValues(
       entry.documentFields ??
       (table && entry.recordId ? documents.get(`${table}:${entry.recordId}`) : undefined) ??
       {};
-    if (entry.recordId && entry.sourceType) {
-      const lineTable = SOURCE_LINE_TABLES[entry.sourceType];
-      const recordKey = lineTable ? `${lineTable.table}:${entry.recordId}` : "";
-      const tags = lineTable ? lineTags.get(recordKey) : undefined;
-      if (tags && (!entry.tracking || Object.keys(entry.tracking).length === 0)) {
-        entry.tracking = Object.fromEntries(Object.entries(tags).map(([categoryId, valueIds]) => [categoryId, [...valueIds].join(",")]));
-      }
-      const custom = lineTable ? lineCustomValues.get(recordKey) : undefined;
-      if (custom) {
-        const sourceLineFields = Object.fromEntries(
-          Object.entries(custom).map(([fieldId, values]) => {
-            const field = fields.fields.find((candidate) => candidate.id === fieldId);
-            const value: CustomValues[string] = field?.type === "checkbox" ? values.has(true) : [...values].filter((item): item is string => typeof item === "string");
-            return [fieldId, value];
-          }),
-        );
-        entry.lineFields = { ...sourceLineFields, ...entry.lineFields };
-      }
-    }
     const columnValues: Record<string, string> = {};
     for (const key of selectedColumns) {
       if (
