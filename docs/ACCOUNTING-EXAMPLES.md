@@ -3058,26 +3058,28 @@ tracking values and custom-field values add context only: adding or removing a
 column never changes the report's amounts or totals. A custom report starts
 with the standard columns, and columns can be added, removed and reordered.
 
-Setup: use account transactions ATX1-ATX5 and the journal report JR1-JR3.
+Setup: use the custom-report journals above (CR1-CR10) and the journal report
+setup in JR1-JR3.
 Kobe Ltd has email `accounts@kobe.example.nz`, billing address `1 Kauri Road,
 Dunedin`, customer group `Trade`, and a contact custom field **Region** with
-value `Otago`. Invoice INV-0001 carries the contact's Region; the contact's
-email, address and group can also be shown. In the separate SR3 setup, invoice
-1 has a document custom field **Channel** of `Web`. An invoice line in the ATX
-setup has a line custom field **Project** of `Fit-out` and its tracking
-category **Location** is `Dunedin`.
+value `Otago`. Invoice INV-REPORT-1 for **100.00 + GST 15.00** is dated
+20 May 2026. It has document custom field **Channel** `Web` and a line with
+custom field **Project** `Fit-out`, tagged Location `Dunedin`. In the separate
+SR3 setup, invoice 1 has a document custom field **Channel** of `Web`.
 
 - **CR11** Account transactions for account 4000, 1 April–31 May 2026, saved
-  with Date, Source, Contact, Region and Credit columns: INV-0001 is credit
-  **100.00** for Kobe Ltd, Region `Otago`; INV-0002 is credit **50.00** and
-  its 5 May void is debit **50.00**. The closing balance is still **-100.00**,
-  and period debits **50.00** and credits **150.00** are unchanged by the
-  extra column.
+  with Date, Source, Contact, Region and Credit columns: the April and May
+  manual-journal sales are credits of **1,000.00** and **1,500.00**; the
+  invoice is a credit of **100.00** for Kobe Ltd, Region `Otago`. The closing
+  balance is **-2,600.00**, with period debits **0.00** and credits
+  **2,600.00**, unchanged by the extra columns.
 - **CR12** Aged receivables as at 31 July 2026, saved with Contact, Email,
   Address, Group and Region columns: using RC9's documents, Kobe Auckland is
   **322.00**, Kobe Dunedin **345.00**, and Rata Ltd **400.00**; the report
   total remains **1,067.00**. Columns can be reordered so Region appears
-  before Contact, or removed without changing the total.
+  before Contact, or removed without changing the total. In the CR11 setup,
+  the 31 May report shows Kobe Ltd's invoice as **115.00 current**, with
+  Region `Otago`, Channel `Web` and line Project `Fit-out`.
 - **CR13** Sales by salesperson for June in the SR3 setup, saved with Contact
   Region and invoice-document Channel columns: Aroha still has **1** invoice,
   **100.00** sales, **20.00** credit notes and **80.00** net sales; the total

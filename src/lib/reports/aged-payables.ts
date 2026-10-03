@@ -1,4 +1,5 @@
 import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
+import type { CustomValues } from "@/lib/custom-fields/values";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, type Decimal, dec, isZero, sub, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
@@ -31,7 +32,7 @@ live_apps as (
    where a.application_date <= params.as_at and (a.removal_date is null or a.removal_date > params.as_at)
 ),
 bills_open as (
-  select b.id, b.contact_id, b.supplier_invoice_number, b.bill_date, b.due_date, b.currency_code, b.base_total,
+  select b.id, b.contact_id, b.supplier_invoice_number, b.bill_date, b.due_date, b.currency_code, b.base_total, b.custom_fields,
          b.total
          - coalesce((select sum(p.amount) from live_payments p where p.bill_id = b.id), 0)
          - coalesce((select sum(a.amount) from live_apps a where a.bill_id = b.id), 0) as amount_due,
@@ -44,12 +45,12 @@ bills_open as (
      and (b.void_date is null or b.void_date > params.as_at)
 ),
 bills_due as (
-  select id, contact_id, supplier_invoice_number, bill_date, due_date, currency_code, amount_due,
+  select id, contact_id, supplier_invoice_number, bill_date, due_date, currency_code, custom_fields, amount_due,
          case when base_total is null then amount_due else base_due end as amount_due_base
     from bills_open
 ),
 credit as (
-  select n.id, n.contact_id, n.supplier_credit_note_number, n.credit_note_date, n.currency_code,
+  select n.id, n.contact_id, n.supplier_credit_note_number, n.credit_note_date, n.currency_code, n.custom_fields,
          n.total
          - coalesce((select sum(a.amount) from live_apps a where a.credit_note_id = n.id), 0)
          - coalesce((select sum(r.amount) from supplier_credit_note_refunds r, params
@@ -82,6 +83,7 @@ export type AgedBill = {
   currencyCode: string;
   /** In the base currency, at the bill's own rate (MC9). */
   amountDueBase: string;
+  customFields: CustomValues;
 };
 export type AgedSupplierCredit = {
   id: string;
@@ -90,6 +92,7 @@ export type AgedSupplierCredit = {
   unused: string;
   currencyCode: string;
   unusedBase: string;
+  customFields: CustomValues;
 };
 
 export type AgedPayablesRow = {
@@ -125,9 +128,10 @@ export async function agedPayables(tx: OrgTx, input: { asAt?: unknown }): Promis
     amount_due: string;
     currency_code: string;
     amount_due_base: string;
+    custom_fields: CustomValues;
   }>(
     `${PAYABLES_SQL}
-     select id::text, contact_id::text, supplier_invoice_number, bill_date, due_date, amount_due::text, currency_code, amount_due_base::text
+     select id::text, contact_id::text, supplier_invoice_number, bill_date, due_date, amount_due::text, currency_code, amount_due_base::text, custom_fields
        from bills_due
       where amount_due <> 0 or amount_due_base <> 0 order by due_date, id`,
     [asAt],
@@ -140,9 +144,10 @@ export async function agedPayables(tx: OrgTx, input: { asAt?: unknown }): Promis
     unused: string;
     currency_code: string;
     unused_base: string;
+    custom_fields: CustomValues;
   }>(
     `${PAYABLES_SQL}
-     select id::text, contact_id::text, supplier_credit_note_number, credit_note_date, unused::text, currency_code, unused_base::text from credit
+     select id::text, contact_id::text, supplier_credit_note_number, credit_note_date, unused::text, currency_code, unused_base::text, custom_fields from credit
       where unused <> 0 or unused_base <> 0 order by credit_note_date, id`,
     [asAt],
   );
@@ -175,6 +180,7 @@ export async function agedPayables(tx: OrgTx, input: { asAt?: unknown }): Promis
       amountDue: toFixedString(dec(row.amount_due), currencyMinorUnits(row.currency_code)),
       currencyCode: row.currency_code,
       amountDueBase: toFixedString(dec(row.amount_due_base), scale),
+      customFields: row.custom_fields ?? {},
     });
   }
   for (const row of creditRows.rows) {
@@ -188,6 +194,7 @@ export async function agedPayables(tx: OrgTx, input: { asAt?: unknown }): Promis
       unused: toFixedString(dec(row.unused), currencyMinorUnits(row.currency_code)),
       currencyCode: row.currency_code,
       unusedBase: toFixedString(dec(row.unused_base), scale),
+      customFields: row.custom_fields ?? {},
     });
   }
   const foreignOf = (id: string) => {

@@ -34,6 +34,7 @@ export type JournalSource = {
   href: string;
   contactId: string | null;
   contactName: string | null;
+  recordId: string | null;
 };
 
 /**
@@ -161,6 +162,7 @@ export function journalSource(
       href: `/operations/ledger-journals?journal=${journal.id}`,
       contactId: null,
       contactName: null,
+      recordId: journal.id,
     };
   }
   const name = NAMES[row.source_type];
@@ -172,5 +174,6 @@ export function journalSource(
     href: name.href(row.source_link_id),
     contactId: row.source_contact_id,
     contactName: row.source_contact_name,
+    recordId: row.source_link_id,
   };
 }

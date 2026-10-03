@@ -6,6 +6,7 @@ import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { ReportExport } from "@/components/reports/report-export";
+import { SaveAsCustomReportButton } from "@/components/reports/save-as-custom-report";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
@@ -726,7 +727,7 @@ export function AgedReceivablesReport({ organisationId }: { organisationId: stri
       title="Aged receivables"
       description="What each customer owes, by days past the due date, less credit not yet used, in the base currency (foreign-currency invoices at their own rates, with their own currency beside them). The total matches accounts receivable on the balance sheet, with any FX revaluation on the date."
       actions={
-        <div className={ui.inlineForm}>
+        <div className={ui.inlineForm} data-print="hide">
           <Field label="As at">
             <input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} />
           </Field>
@@ -734,6 +735,7 @@ export function AgedReceivablesReport({ organisationId }: { organisationId: stri
             <input type="checkbox" checked={rollUp} onChange={(event) => setRollUp(event.target.checked)} />
             Roll up sub-customers
           </label>
+          <SaveAsCustomReportButton organisationId={organisationId} base="aged_receivables" filters={{ asAt, rollUp }} />
         </div>
       }
     >

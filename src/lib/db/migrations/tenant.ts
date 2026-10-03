@@ -12508,4 +12508,13 @@ alter table gst_return_lines add column late_from_return_id bigint references gs
 create index gst_return_lines_late_from_idx on gst_return_lines (late_from_return_id) where late_from_return_id is not null;
 `,
   },
+  {
+    version: "0085",
+    name: "custom_transaction_reports",
+    sql: `
+alter table custom_reports drop constraint custom_reports_base_check;
+alter table custom_reports add constraint custom_reports_base_check
+  check (base in ('profit_and_loss', 'balance_sheet', 'account_transactions', 'aged_receivables', 'aged_payables', 'sales_by_salesperson', 'journal_report'));
+`,
+  },
 ];

@@ -2,10 +2,15 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import * as reportRoute from "@/app/api/custom-reports/[reportId]/route";
 import * as reportsRoute from "@/app/api/custom-reports/route";
 import type { SessionUser } from "@/lib/auth/sessions";
+import { createContact } from "@/lib/contacts/service";
+import { createCustomField } from "@/lib/custom-fields/service";
+import { createCustomerGroup } from "@/lib/customers/service";
 import { coreQuery } from "@/lib/db/transactions";
 import type { OrgTx } from "@/lib/db/org-transaction";
+import { approveInvoice, createInvoice } from "@/lib/invoices/service";
 import { postJournal } from "@/lib/ledger/journals";
-import { accountTransactions } from "@/lib/reports/account-transactions";
+import { updateOrganisationSettings } from "@/lib/organisations/settings";
+import { accountTransactions, type AccountTransactions } from "@/lib/reports/account-transactions";
 import {
   computeCustomReport,
   createCustomReport,
@@ -17,8 +22,16 @@ import {
   setCustomReportArchived,
   updateCustomReport,
 } from "@/lib/reports/custom";
-import type { ComputedBlock, CustomReportFigures, CustomReportLayout, ReportRow } from "@/lib/reports/custom-layout";
+import type {
+  ComputedBlock,
+  CustomReportFigures,
+  CustomReportLayout,
+  FinancialReportBase,
+  ReportRow,
+  TransactionCustomReportFigures,
+} from "@/lib/reports/custom-layout";
 import { balanceSheet, profitAndLoss } from "@/lib/reports/financial";
+import { createTrackingValue, getTrackingSetup } from "@/lib/tracking/service";
 import {
   apiRequest,
   createTestOrganisation,
@@ -82,12 +95,15 @@ describeWithDatabase("custom reports", () => {
     await journal("2026-06-20", "6010", "1000", "250.00");
     await journal("2026-06-30", "1000", "4200", "20.00");
 
-    const create = async (base: "profit_and_loss" | "balance_sheet", periodEnd = "2026-06-30") =>
-      (await as((tx) => createCustomReport(tx, { idempotencyKey: key("create"), base, periodEnd }))).report;
+    const create = async (base: FinancialReportBase, periodEnd = "2026-06-30") =>
+      (await as((tx) => createCustomReport(tx, { idempotencyKey: key("create"), base, periodEnd }))).report as CustomReport & {
+        base: FinancialReportBase;
+        layout: CustomReportLayout;
+      };
     /** Saves a changed layout and returns the figures. */
     const save = async (report: CustomReport, change: (layout: CustomReportLayout) => void) => {
       const current = (await as((tx) => getCustomReport(tx, report.id))).report;
-      const layout = structuredClone(current.layout);
+      const layout = structuredClone(current.layout) as CustomReportLayout;
       change(layout);
       return as((tx) => updateCustomReport(tx, report.id, { layout, version: current.version }));
     };
@@ -374,8 +390,58 @@ describeWithDatabase("custom reports", () => {
     expect(((await saved.json()) as { report: CustomReport }).report).toMatchObject({ title: "June", version: 2 });
   });
 
-  it("CR11: an account-transactions report keeps its filters and ordered columns without changing figures", async () => {
+  it("CR11: an account-transactions report keeps metadata columns and figures when saved", async () => {
     const w = await setup();
+    await w.as((tx) => updateOrganisationSettings(tx, { advancedFeatures: true }));
+    const regionField = (await w.as((tx) => createCustomField(tx, { record: "contact", label: "Region", type: "text", usedOn: ["customer"] })))
+      .fields.find((field) => field.label === "Region")!;
+    const channelField = (await w.as((tx) => createCustomField(tx, { record: "document", label: "Channel", type: "text", usedOn: ["invoice"] })))
+      .fields.find((field) => field.label === "Channel")!;
+    const projectField = (await w.as((tx) => createCustomField(tx, { record: "line", label: "Project", type: "text", usedOn: ["invoice"] })))
+      .fields.find((field) => field.label === "Project")!;
+    const group = (await w.as((tx) => createCustomerGroup(tx, { name: "Trade" }))).customerGroups[0];
+    const contact = (
+      await w.as((tx) =>
+        createContact(tx, {
+          idempotencyKey: key("contact"),
+          name: "Kobe Ltd",
+          isCustomer: true,
+          email: "accounts@kobe.example.nz",
+          postalAddress: "1 Kauri Road, Dunedin",
+          customerGroupId: group.id,
+          customFields: { [regionField.id]: "Otago" },
+        }),
+      )
+    ).contact;
+    const location = (await w.as((tx) => getTrackingSetup(tx))).categories.find((category) => category.kind === "location")!;
+    const dunedin = (await w.as((tx) => createTrackingValue(tx, { categoryId: location.id, name: "Dunedin" })))
+      .categories.find((category) => category.id === location.id)!.values.find((value) => value.name === "Dunedin")!;
+    const { invoice } = await w.as((tx) =>
+      createInvoice(tx, {
+        idempotencyKey: key("invoice"),
+        contactId: contact.id,
+        invoiceDate: "2026-05-20",
+        dueDate: "2026-06-19",
+        amountsMode: "exclusive",
+        customFields: { [channelField.id]: "Web" },
+        lines: [
+          {
+            description: "Consulting",
+            quantity: "1",
+            unitPrice: "100.00",
+            accountCode: "4000",
+            taxCode: "GST",
+            customFields: { [projectField.id]: "Fit-out" },
+            tracking: { [location.id]: dunedin.id },
+          },
+        ],
+      }),
+    );
+    await w.as((tx) => approveInvoice(tx, invoice.id, { idempotencyKey: key("approve") }));
+    expect(
+      (await w.as((tx) => tx.query<{ custom_fields: Record<string, unknown> }>("select custom_fields from sales_invoice_lines where invoice_id = $1", [invoice.id]))).rows[0]
+        .custom_fields,
+    ).toEqual({ [projectField.id]: "Fit-out" });
     const accountId = (await w.as((tx) => tx.query<{ id: string }>("select id::text from accounts where code = '4000'"))).rows[0].id;
     const { report } = await w.as((tx) =>
       createCustomReport(tx, { idempotencyKey: key("create"), base: "account_transactions", periodEnd: "2026-05-31" }),
@@ -383,17 +449,65 @@ describeWithDatabase("custom reports", () => {
     const layout = {
       title: "Sales detail",
       filters: { from: "2026-04-01", to: "2026-05-31", accountId },
-      columns: ["date", "source", "contact.email", "debit", "credit", "balance"],
+      columns: [
+        "date",
+        "source",
+        "contact.email",
+        "contact.address",
+        "contact.group",
+        `contact.custom.${regionField.id}`,
+        `document.custom.${channelField.id}`,
+        `line.custom.${projectField.id}`,
+        `tracking.${location.id}`,
+        "debit",
+        "credit",
+        "balance",
+      ],
     };
     const saved = await w.as((tx) => updateCustomReport(tx, report.id, { layout, version: report.version }));
     expect(saved.report).toMatchObject({ base: "account_transactions", title: "Sales detail", layout });
     expect(saved.figures).toMatchObject({
       base: "account_transactions",
-      columns: ["date", "source", "contact.email", "debit", "credit", "balance"],
-      data: { totalDebit: "50.00", totalCredit: "150.00" },
+      selectedColumns: layout.columns,
+      data: { totalDebit: "0.00", totalCredit: "2600.00" },
     });
     const standard = await w.as((tx) => accountTransactions(tx, { accountId, from: "2026-04-01", to: "2026-05-31" }));
-    expect(saved.figures.data).toEqual(standard);
-    expect((await w.as((tx) => tx.query<{ count: string }>("select count(*)::text as count from ledger_journals"))).rows[0].count).toBe("10");
+    expect(saved.figures.data).toMatchObject(standard);
+    const figures = saved.figures as TransactionCustomReportFigures;
+    const data = figures.data as AccountTransactions;
+    const invoiceLine = data.accounts[0].lines.find((line) => line.source.type === "invoice")!;
+    expect(invoiceLine.columnValues).toEqual({
+      "contact.email": "accounts@kobe.example.nz",
+      "contact.address": "1 Kauri Road, Dunedin",
+      "contact.group": "Trade",
+      [`contact.custom.${regionField.id}`]: "Otago",
+      [`document.custom.${channelField.id}`]: "Web",
+      [`line.custom.${projectField.id}`]: "Fit-out",
+      [`tracking.${location.id}`]: "Dunedin",
+    });
+    expect(figures.selectedColumns).toEqual(layout.columns);
+    expect((await w.as((tx) => tx.query<{ count: string }>("select count(*)::text as count from ledger_journals"))).rows[0].count).toBe("11");
+
+    const agedReport = (
+      await w.as((tx) => createCustomReport(tx, { idempotencyKey: key("create"), base: "aged_receivables", periodEnd: "2026-05-31" }))
+    ).report;
+    const agedLayout = {
+      title: "Receivables by region",
+      filters: { asAt: "2026-05-31" },
+      columns: ["contact.name", `contact.custom.${regionField.id}`, `document.custom.${channelField.id}`, `line.custom.${projectField.id}`, "total"],
+    };
+    const aged = await w.as((tx) => updateCustomReport(tx, agedReport.id, { layout: agedLayout, version: agedReport.version }));
+    const agedData = (aged.figures as TransactionCustomReportFigures).data as {
+      rows: Array<{ name: string; columnValues: Record<string, string>; invoices: Array<{ columnValues: Record<string, string> }> }>;
+      total: { total: string };
+    };
+    expect(agedData.total.total).toBe("115.00");
+    expect(agedData.rows[0].columnValues).toMatchObject({
+      [`contact.custom.${regionField.id}`]: "Otago",
+    });
+    expect(agedData.rows[0].invoices[0].columnValues).toMatchObject({
+      [`document.custom.${channelField.id}`]: "Web",
+      [`line.custom.${projectField.id}`]: "Fit-out",
+    });
   });
 });
