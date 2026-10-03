@@ -1294,8 +1294,22 @@ that something happened.
   `TOHYEE_ANALYTICS_DIR`; a load swaps the table in only when it succeeds.
   Sources reload nightly after 04:00 and on demand, and every load is
   recorded. Tested with a made-up 1M-row CSV (about a second to load).
-  Reports, dashboards, Tohyee's own books and CRM, sharing with clients,
-  report emails and shaping are the next steps in the plan.
+- **Analytics, step 3: dashboards** (tenant migration 0083). Dashboards at
+  `/analytics` (data sources moved to `/analytics/sources`). Each tile asks
+  one question of a loaded table: group by a column (dates by day, week,
+  month, quarter or year), one to six values (total, average, smallest,
+  largest, count, count of different values; a total can multiply two
+  columns, e.g. quantity x unit price), optional "and last year", filters,
+  order and top N. Shown as columns, bars, line, area, columns and line,
+  pie, donut, a key figure or a table (ECharts, from PR #94, with the
+  checked series colours `--chart-1` to `--chart-8`). A dashboard has a date
+  range and slicers (tick boxes) that apply to every tile. Totals stay
+  exact (DuckDB decimals, shown from their text); column and value names
+  are checked against the table and typed values go in as parameters.
+  Bookkeepers and up make dashboards; everyone in the organisation can see
+  them. Tried with the made-up 1M-row CSV: a five-tile dashboard opens in
+  about 3 seconds. Tohyee's own books and CRM, sharing with clients,
+  report emails, shaping and pivot tables are the next steps.
 
 ## Not built yet, on purpose
 

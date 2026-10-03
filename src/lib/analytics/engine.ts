@@ -348,3 +348,34 @@ export function dropTable(organisationId: string, table: string): Promise<void> 
     }),
   );
 }
+
+/** The organisation's loaded tables and their columns (DuckDB's types). */
+export async function listTables(organisationId: string): Promise<Map<string, Array<{ name: string; type: string }>>> {
+  const fs = await import("node:fs");
+  const tables = new Map<string, Array<{ name: string; type: string }>>();
+  // No file yet means nothing has been loaded; don't make an empty one.
+  if (!fs.existsSync(analyticsFilePath(organisationId))) return tables;
+  const rows = await withAnalytics(organisationId, async (connection) => {
+    const reader = await connection.runAndReadAll(
+      `select table_name, column_name, data_type from information_schema.columns
+        where table_schema = 'main' and table_name not like '\\_tohyee%' escape '\\' order by table_name, ordinal_position`,
+    );
+    return reader.getRowObjectsJson() as Array<{ table_name: string; column_name: string; data_type: string }>;
+  });
+  for (const row of rows) {
+    const list = tables.get(row.table_name) ?? [];
+    list.push({ name: row.column_name, type: row.data_type });
+    tables.set(row.table_name, list);
+  }
+  return tables;
+}
+
+/** Runs a query Tohyee built (with its values as parameters) and returns its rows as text, so decimals stay exact. */
+export async function runBuiltQuery(organisationId: string, sql: string, params: unknown[]): Promise<Array<Record<string, string | null>>> {
+  return withAnalytics(organisationId, async (connection) => {
+    const reader = await connection.runAndReadAll(sql, params as never);
+    return (reader.getRowObjectsJson() as Array<Record<string, unknown>>).map((row) =>
+      Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value === null || value === undefined ? null : String(value)])),
+    );
+  });
+}

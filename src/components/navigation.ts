@@ -278,7 +278,8 @@ export const CRM_MENUS: Menu[] = [
 
 /** Analytics' tabs (its own app, under /analytics); shown only while Analytics is on (decision 353). */
 export const ANALYTICS_MENUS: Menu[] = [
-  { label: "Data sources", href: "/analytics", area: ["/analytics"] },
+  { label: "Dashboards", href: "/analytics", area: ["/analytics", "/analytics/dashboards"] },
+  { label: "Data sources", href: "/analytics/sources", area: ["/analytics/sources"] },
 ].map((menu) => ({ ...menu, groups: [], module: "analytics" as const }));
 
 /** The AI assistant's page; shown to everyone (the page itself checks what they may do). */

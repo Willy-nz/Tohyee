@@ -1,0 +1,188 @@
+.dashboardCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.dashboardCard {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.dashboardCard:hover,
+.dashboardCard:focus-visible {
+  border-color: var(--accent);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-2xl);
+}
+
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.slicer {
+  display: grid;
+  gap: 4px;
+  min-width: 160px;
+  align-self: flex-end;
+}
+
+.slicerLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.slicerMenu {
+  position: relative;
+}
+
+.slicerMenu > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-width: 160px;
+}
+
+.slicerMenu > summary::after {
+  content: " ▾";
+  color: var(--text-muted);
+}
+
+.slicerList {
+  position: absolute;
+  z-index: 20;
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+  max-height: 280px;
+  overflow: auto;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 0.12));
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.tile {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.tileHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tileTitle {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.tileTools {
+  display: flex;
+  gap: 6px;
+}
+
+.kpi {
+  display: grid;
+  gap: 4px;
+  min-height: 100px;
+  align-content: center;
+}
+
+.kpiValue {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.subheading {
+  margin: 16px 0 8px;
+  font-size: var(--text-base);
+}
+
+.measureRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.measureRow > input,
+.measureRow > select {
+  width: auto;
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.measureRow > label,
+.measureRow > button {
+  flex: none;
+}
+
+.addRow {
+  display: flex;
+  margin-bottom: 4px;
+}
+
+.preview {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+
+@media (max-width: 800px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -10,12 +10,14 @@ type ChartProps = {
   rows: Record<string, string | number | null>[];
 };
 
+const CHART_SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
+
 const DEFAULT_THEME: ChartTheme = {
   text: "#15201c",
   mutedText: "#57635e",
   grid: "#e1e6e3",
   background: "#ffffff",
-  palette: ["#0e7467", "#1d4e89", "#146c2e", "#84500a", "#b42318"],
+  palette: CHART_SLOTS,
 };
 
 function readTheme(): ChartTheme {
@@ -26,13 +28,8 @@ function readTheme(): ChartTheme {
     mutedText: color("--text-muted", DEFAULT_THEME.mutedText),
     grid: color("--border", DEFAULT_THEME.grid),
     background: color("--surface", DEFAULT_THEME.background),
-    palette: [
-      color("--accent", DEFAULT_THEME.palette[0]),
-      color("--info-text", DEFAULT_THEME.palette[1]),
-      color("--success-text", DEFAULT_THEME.palette[2]),
-      color("--warning-text", DEFAULT_THEME.palette[3]),
-      color("--danger-text", DEFAULT_THEME.palette[4]),
-    ],
+    // The chart series colours in their fixed order (--chart-1 to --chart-8 in globals.css).
+    palette: CHART_SLOTS.map((fallback, index) => color(`--chart-${index + 1}`, fallback)),
   };
 }
 
