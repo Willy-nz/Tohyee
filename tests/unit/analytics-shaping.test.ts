@@ -234,4 +234,41 @@ describe("analytics shaping query builder", () => {
     expect(await runBuiltQuery(ORG, built.sql, built.params)).toEqual([]);
     expect(await runBuiltQuery(ORG, "select count(*)::varchar as n from orders", [])).toEqual([{ n: "3" }]);
   });
+
+  it("averages and divides exactly, without going through DOUBLE", async () => {
+    await replaceTableFromSelect(
+      ORG,
+      "big",
+      "select region, cast(amount as DECIMAL(18,2)) as amount from (values ('Otago', '1234567890123456.78'), ('Otago', '1234567890123456.79'), ('Otago', '1234567890123456.79')) v(region, amount)",
+      [],
+    );
+    const available = new Map([...(await listTables(ORG))].map(([name, columns]) => [name, columns.map(({ name: column, type }) => ({ name: column, type }))]));
+    const built = buildShapeQuery({
+      baseTable: "big",
+      tables: available,
+      steps: [
+        { type: "group", by: ["region"], aggregates: [{ operation: "average", column: "amount", name: "average" }] },
+        { type: "calculated", name: "half", expression: { type: "arithmetic", operator: "/", left: { type: "column", name: "average" }, right: { type: "number", value: "2" } } },
+        { type: "calculated", name: "taxed", expression: { type: "arithmetic", operator: "*", left: { type: "column", name: "half" }, right: { type: "number", value: "1.15" } } },
+        { type: "calculated", name: "again", expression: { type: "arithmetic", operator: "*", left: { type: "column", name: "taxed" }, right: { type: "number", value: "1" } } },
+        { type: "calculated", name: "none", expression: { type: "arithmetic", operator: "/", left: { type: "column", name: "half" }, right: { type: "number", value: "0" } } },
+      ],
+    });
+    expect(built.columns.filter((column) => column.name !== "region").map((column) => column.type)).toEqual(Array(5).fill("DECIMAL(38,6)"));
+    expect(
+      await runBuiltQuery(ORG, `select average::varchar a, half::varchar h, taxed::varchar t, again::varchar g, none::varchar n, typeof(taxed) k from (${built.sql})`, built.params),
+    ).toEqual([{ a: "1234567890123456.786667", h: "617283945061728.393334", t: "709876536820987.652334", g: "709876536820987.652334", n: null, k: "DECIMAL(38,6)" }]);
+  });
+
+  it("refuses floating-point columns for sums and arithmetic, and too many joins", () => {
+    const floats = new Map([["readings", [{ name: "value", type: "DOUBLE" }, { name: "site", type: "VARCHAR" }]]]);
+    expect(() =>
+      buildShapeQuery({ baseTable: "readings", tables: floats, steps: [{ type: "group", by: ["site"], aggregates: [{ operation: "sum", column: "value", name: "total" }] }] }),
+    ).toThrow(/needs a number column/);
+    expect(() =>
+      buildShapeQuery({ baseTable: "readings", tables: floats, steps: [{ type: "type", column: "value", kind: "constructor" }] }),
+    ).toThrow(/column type/);
+    const appends = Array.from({ length: 6 }, () => ({ type: "append", table: "readings" }));
+    expect(() => buildShapeQuery({ baseTable: "readings", tables: floats, steps: appends })).toThrow(/at most 5 merge and append steps/);
+  });
 });

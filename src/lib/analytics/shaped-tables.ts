@@ -230,16 +230,22 @@ export async function updateShapedTable(tx: OrgTx, id: string, input: Record<str
   return getShapedTable(tx, current.id);
 }
 
+/** The shaped tables built on a table (as their base, or merged or appended), by name. */
+export async function shapesUsing(tx: OrgTx, tableName: string, exceptId?: string): Promise<string[]> {
+  const result = await tx.query<{ id: string; name: string; base_table: string; steps: unknown }>(
+    "select id::text, name, base_table, steps from analytics_shaped_tables order by name",
+  );
+  return result.rows
+    .filter((shape) => shape.id !== exceptId && dependencies(shape.base_table, parseShapeSteps(shape.steps)).includes(tableName))
+    .map((shape) => shape.name);
+}
+
 export async function removeShapedTable(organisation: OrganisationRecord, actor: Actor, id: string): Promise<void> {
   const tableName = await withOrganisationTransaction(organisation, actor, async (tx) => {
     await requireAnalytics(tx);
     const current = await getShapedTable(tx, id);
-    const otherShapes = await tx.query<{ table_name: string; base_table: string; steps: unknown }>(
-      "select table_name, base_table, steps from analytics_shaped_tables where id <> $1",
-      [current.id],
-    );
-    const referenced = otherShapes.rows.some((shape) => dependencies(shape.base_table, parseShapeSteps(shape.steps)).includes(current.tableName));
-    if (referenced) throw new ConflictError("Another shaped table uses this table. Change or remove it first.");
+    const users = await shapesUsing(tx, current.tableName, current.id);
+    if (users.length > 0) throw new ConflictError(`${users.join(", ")} ${users.length === 1 ? "uses" : "use"} this table. Change or remove ${users.length === 1 ? "it" : "them"} first.`);
     const running = await tx.query("select 1 from analytics_load_runs where shaped_table_id = $1 and status = 'running'", [current.id]);
     if (running.rows.length > 0) throw new ConflictError("That table is rebuilding. Try again when it's finished.");
     await tx.query("delete from analytics_shaped_tables where id = $1", [current.id]);
@@ -323,6 +329,8 @@ export async function rebuildShapedTablesForTables(
   actor: Actor,
   changedTables: string[],
   trigger: "schedule" | "manual",
+  /** Changed tables that failed to rebuild: the shapes on them are skipped, with the reason. */
+  failedTables: string[] = [],
 ): Promise<ShapedLoadRun[]> {
   const definitions = await withOrganisationTransaction(organisation, actor, async (tx) => {
     await requireAnalytics(tx);
@@ -356,10 +364,41 @@ export async function rebuildShapedTablesForTables(
   };
   for (const shape of definitions) if (selected.has(shape.id)) visit(shape);
   const runs: ShapedLoadRun[] = [];
+  const failed = new Set<string>(failedTables);
   for (const shape of ordered) {
-    runs.push(await runShapedTable(organisation, actor, shape.id, trigger));
+    // Built on a table that just failed to rebuild: left as it was rather than built from stale data.
+    const brokenUpstream = dependencies(shape.base_table, shape.steps).find((name) => failed.has(name));
+    const run = brokenUpstream
+      ? await recordSkippedShape(organisation, actor, shape.id, trigger, `Not rebuilt: ${brokenUpstream} failed to rebuild.`)
+      : await runShapedTable(organisation, actor, shape.id, trigger);
+    if (run.status === "failed") failed.add(shape.table_name);
+    runs.push(run);
   }
   return runs;
+}
+
+async function recordSkippedShape(
+  organisation: OrganisationRecord,
+  actor: Actor,
+  id: string,
+  trigger: "schedule" | "manual",
+  reason: string,
+): Promise<ShapedLoadRun> {
+  const started = await recordShapeLoad(organisation, actor, id, trigger);
+  return withOrganisationTransaction(organisation, actor, async (tx) => {
+    const result = await tx.query<RunRow>(
+      `update analytics_load_runs set status = 'failed', finished_at = now(), error = $2 where id = $1 returning ${RUN_COLUMNS}`,
+      [started.runId, reason],
+    );
+    return toRun(result.rows[0]);
+  });
+}
+
+/** Rebuilds one shaped table now, then the shaped tables built on it. Returns the first table's run. */
+export async function runShapedTableAndDependents(organisation: OrganisationRecord, actor: Actor, id: string): Promise<ShapedLoadRun> {
+  const run = await runShapedTable(organisation, actor, id, "manual");
+  await rebuildShapedTablesForTables(organisation, actor, [run.tableName], "manual", run.status === "ok" ? [] : [run.tableName]);
+  return run;
 }
 
 export async function rebuildShapedTablesForTable(

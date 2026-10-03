@@ -86,7 +86,7 @@ export function AnalyticsShapingPage({ organisationId }: { organisationId: strin
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const canManage = can("bookkeeper");
+  const canManage = can("admin");
   const data = overview.data;
   const activeShape = data?.shapes.find((shape) => shape.id === activeId);
   const isNew = activeId === "new";
@@ -97,7 +97,8 @@ export function AnalyticsShapingPage({ organisationId }: { organisationId: strin
   const visiblePreviewError = noBaseTable ? "This base table is no longer loaded. Choose another table or reload the source." : previewError;
 
   useEffect(() => {
-    if (noBaseTable) return;
+    // Previews run the steps, so only for people who can change shapes (admins).
+    if (noBaseTable || !canManage) return;
     let cancelled = false;
     const timeout = setTimeout(async () => {
       try {
@@ -120,7 +121,7 @@ export function AnalyticsShapingPage({ organisationId }: { organisationId: strin
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [effectiveBaseTable, noBaseTable, organisationId, selectedStep, steps]);
+  }, [canManage, effectiveBaseTable, noBaseTable, organisationId, selectedStep, steps]);
 
   if (!modules) return <p className={ui.muted}>Loading…</p>;
   if (!modules.analytics) {

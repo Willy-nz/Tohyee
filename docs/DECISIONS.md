@@ -2522,3 +2522,15 @@ approved 3 Oct 2026.
      only slices by that dashboard's own slicers (other filters are
      dropped). A dashboard that isn't shared with them is "not found".
 
+### Analytics: shaping (decision 370)
+
+370. **Shaped tables are set up by admins, like data sources** (issue #108,
+     tenant migration 0087). Steps are chosen from a fixed list (no typed
+     SQL); averages and division are worked out exactly in millionths,
+     because DuckDB divides decimals as floating point, and float columns
+     can't be summed or calculated until their type is changed. A shape
+     can have at most five merge and append steps. Changing or rebuilding a
+     shape rebuilds the shapes built on it; when one fails, those are left as
+     they were with the reason. A source or shape that another shape uses
+     can't be removed. Dashboard averages use the same exact sum.
+

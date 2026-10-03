@@ -1498,7 +1498,7 @@ one organisation run one at a time. No DuckDB extensions are downloaded at
 run time.
 
 - **Definitions stay in the organisation's database** (tenant migrations
-  0082/0086: `analytics_sources`, `analytics_shaped_tables`,
+  0082/0087: `analytics_sources`, `analytics_shaped_tables`,
   `analytics_load_runs`), so they're backed up and restored with it. The
   DuckDB file holds only loaded data and can always be rebuilt by loading
   again; it isn't in the backups.
@@ -1528,7 +1528,9 @@ run time.
   renames, type changes, split/unpivot/group/calculated columns, joins and
   union-by-name appends. Rebuilds stage a new DuckDB table and swap it in only
   on success. They run after a dependent CSV or books table loads, nightly or
-  on demand, and each result is recorded in `analytics_load_runs`.
+  on demand, and each result is recorded in `analytics_load_runs`. Averages
+  and division go through `src/lib/analytics/decimal-sql.ts`, which divides
+  whole millionths as HUGEINT, since DuckDB divides decimals as DOUBLE.
 
 ## Open decisions
 

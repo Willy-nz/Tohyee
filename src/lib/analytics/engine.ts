@@ -145,7 +145,7 @@ export async function loadCsv(input: {
     assertTableName(column.name);
     if (names.has(column.name)) throw new ValidationError(`Two columns are both called ${column.name}.`);
     names.add(column.name);
-    if (!(column.kind in COLUMN_TYPES)) throw new ValidationError(`Unknown column type for ${column.name}.`);
+    if (!Object.hasOwn(COLUMN_TYPES, column.kind)) throw new ValidationError(`Unknown column type for ${column.name}.`);
   }
   if (!fs.existsSync(input.file) || !isInsideFolder(input.sourceFolder, input.file)) {
     throw new ValidationError("That file isn't in this organisation's analytics folder.");

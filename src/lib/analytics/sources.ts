@@ -13,7 +13,7 @@ import {
   TOHYEE_TABLE_PREFIX,
 } from "@/lib/analytics/engine";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
-import { rebuildShapedTablesForTable } from "@/lib/analytics/shaped-tables";
+import { rebuildShapedTablesForTable, shapesUsing } from "@/lib/analytics/shaped-tables";
 
 /**
  * Analytics sources and loads (decisions 353-358): which file in the
@@ -258,6 +258,10 @@ export async function deleteSource(tx: OrgTx, id: string): Promise<{ tableName: 
   const current = await getSource(tx, id);
   const running = await tx.query("select 1 from analytics_load_runs where source_id = $1 and status = 'running'", [id]);
   if (running.rows.length > 0) throw new ConflictError("That source is loading. Try again when it's finished.");
+  const users = await shapesUsing(tx, current.tableName);
+  if (users.length > 0) {
+    throw new ConflictError(`The shaped table${users.length === 1 ? "" : "s"} ${users.join(", ")} ${users.length === 1 ? "uses" : "use"} this source. Change or remove ${users.length === 1 ? "it" : "them"} first.`);
+  }
   await tx.query("delete from analytics_sources where id = $1", [id]);
   await writeAuditEvent(tx, {
     eventType: "analytics.source_deleted",

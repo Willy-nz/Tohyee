@@ -1,6 +1,6 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { analyticsMember } from "@/lib/analytics/http";
-import { listShapedTables, createShapedTable, runShapedTable } from "@/lib/analytics/shaped-tables";
+import { listShapedTables, createShapedTable, runShapedTableAndDependents } from "@/lib/analytics/shaped-tables";
 import { listTables } from "@/lib/analytics/engine";
 
 export const GET = route(async (request) => {
@@ -13,11 +13,11 @@ export const GET = route(async (request) => {
   });
 });
 
-/** Creates and immediately builds a shaped table. Bookkeepers and up. */
+/** Creates and immediately builds a shaped table. Admins and owners, like data sources. */
 export const POST = route(async (request) => {
   const body = await readJson(request);
-  const { organisation, actor } = await analyticsMember(request, body.organisationId, "bookkeeper");
-  const shape = await withOrganisation(request, organisation.id, "bookkeeper", (tx) => createShapedTable(tx, body));
-  const run = await runShapedTable(organisation, actor, shape.id, "manual");
+  const { organisation, actor } = await analyticsMember(request, body.organisationId, "admin");
+  const shape = await withOrganisation(request, organisation.id, "admin", (tx) => createShapedTable(tx, body));
+  const run = await runShapedTableAndDependents(organisation, actor, shape.id);
   return json({ shape, run }, { status: 201 });
 });

@@ -6,6 +6,7 @@ import * as foldersRoute from "@/app/api/admin/analytics-folders/route";
 import * as booksRoute from "@/app/api/analytics/books/route";
 import * as loadRoute from "@/app/api/analytics/sources/[sourceId]/load/route";
 import * as sourcesRoute from "@/app/api/analytics/sources/route";
+import * as sourceRoute from "@/app/api/analytics/sources/[sourceId]/route";
 import * as shapingRoute from "@/app/api/analytics/shaping/route";
 import * as previewRoute from "@/app/api/analytics/shaping/preview/route";
 import * as shapeRoute from "@/app/api/analytics/shaping/[shapeId]/route";
@@ -186,11 +187,21 @@ describeWithDatabase("analytics shaped tables", () => {
     );
     expect(booksTriggeredShape.rows[0]).toEqual({ status: "ok", trigger: "manual" });
 
+    // Previews run the steps, so only admins (who can change shapes) may run them.
+    const viewerPreview = await previewRoute.POST(
+      apiRequest("/api/analytics/shaping/preview", {
+        method: "POST",
+        cookie: viewerCookie,
+        body: { organisationId: ORG, baseTable: "contacts_export", steps, throughStep: 1 },
+      }),
+      noContext,
+    );
+    expect(viewerPreview.status).toBe(403);
     const preview = await body(
       await previewRoute.POST(
         apiRequest("/api/analytics/shaping/preview", {
           method: "POST",
-          cookie: viewerCookie,
+          cookie: ownerCookie,
           body: { organisationId: ORG, baseTable: "contacts_export", steps, throughStep: 1 },
         }),
         noContext,
@@ -203,7 +214,7 @@ describeWithDatabase("analytics shaped tables", () => {
       await previewRoute.POST(
         apiRequest("/api/analytics/shaping/preview", {
           method: "POST",
-          cookie: viewerCookie,
+          cookie: ownerCookie,
           body: {
             organisationId: ORG,
             baseTable: "contacts_export",
@@ -288,5 +299,73 @@ describeWithDatabase("analytics shaped tables", () => {
     );
     expect(removed.status).toBe(200);
     expect(await queryAnalytics(ORG, "select count(*)::int as n from information_schema.tables where table_name = 'matched_contacts'")).toEqual([{ n: 0 }]);
+  });
+
+  it("rebuilds the shapes built on a shape, skips them when it fails, and won't drop tables shapes use", async () => {
+    const bookkeeper = await createTestUser("bookkeeper@example.com");
+    const client = await createTestUser("client@example.com");
+    await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'bookkeeper'), ($1, $3, 'report_viewer')", [ORG, bookkeeper.id, client.id]);
+    const bookkeeperCookie = await sessionCookieFor(bookkeeper);
+    const clientCookie = await sessionCookieFor(client);
+    const create = (cookie: string, name: string, tableName: string, baseTable: string, steps: unknown[]) =>
+      shapingRoute.POST(apiRequest("/api/analytics/shaping", { method: "POST", cookie, body: { organisationId: ORG, name, tableName, baseTable, steps } }), noContext);
+    const runsOf = async (id: string) =>
+      (
+        await inOrganisation(ORG, actor(), (tx) =>
+          tx.query<{ status: string; error: string | null }>("select status, error from analytics_load_runs where shaped_table_id = $1 order by id", [id]),
+        )
+      ).rows;
+
+    // Shaping is set up by admins, like data sources; report viewers can't even list it.
+    expect((await create(bookkeeperCookie, "Totals", "export_totals", "contacts_export", [])).status).toBe(403);
+    expect((await shapingRoute.GET(apiRequest(`/api/analytics/shaping?organisationId=${ORG}`, { cookie: clientCookie }), noContext)).status).toBe(403);
+
+    const totalsSteps = [
+      { type: "type", column: "amount", kind: "money" },
+      { type: "group", by: ["email"], aggregates: [{ operation: "average", column: "amount", name: "average" }] },
+    ];
+    const totals = await body(await create(ownerCookie, "Export totals", "export_totals", "contacts_export", totalsSteps));
+    expect(totals.status).toBe(201);
+    const halves = await body(
+      await create(ownerCookie, "Halves", "export_halves", "export_totals", [
+        { type: "calculated", name: "half", expression: { type: "arithmetic", operator: "/", left: { type: "column", name: "average" }, right: { type: "number", value: "2" } } },
+      ]),
+    );
+    expect(halves.status).toBe(201);
+    const halvesRows = [
+      { email: "missing@example.test", half: "2.000000" },
+      { email: "person@example.test", half: "10.125000" },
+    ];
+    expect(await queryAnalytics(ORG, "select email, half::varchar as half from export_halves order by email")).toEqual(halvesRows);
+
+    // Changing the first shape rebuilds the one built on it.
+    const totalsId = totals.data.shape.id as string;
+    const halvesId = halves.data.shape.id as string;
+    const patch = (steps: unknown[]) =>
+      shapeRoute.PATCH(
+        apiRequest(`/api/analytics/shaping/${totalsId}`, { method: "PATCH", cookie: ownerCookie, body: { organisationId: ORG, name: "Export totals", baseTable: "contacts_export", steps } }),
+        params({ shapeId: totalsId }),
+      );
+    const doubled = [...totalsSteps, { type: "calculated", name: "unused", expression: { type: "text", parts: [{ type: "text", value: "x" }] } }];
+    expect((await body(await patch(doubled))).data.run.status).toBe("ok");
+    expect((await runsOf(halvesId)).map((run) => run.status)).toEqual(["ok", "ok"]);
+
+    // When it fails, the shapes built on it are left as they were, with the reason.
+    const broken = await body(await patch([{ type: "type", column: "email", kind: "money" }, ...totalsSteps]));
+    expect(broken.data.run.status).toBe("failed");
+    expect((await runsOf(halvesId)).at(-1)).toEqual({ status: "failed", error: "Not rebuilt: export_totals failed to rebuild." });
+    expect(await queryAnalytics(ORG, "select email, half::varchar as half from export_halves order by email")).toEqual(halvesRows);
+
+    // A source or shape that others are built on can't be removed.
+    const sourceGone = await body(
+      await sourceRoute.DELETE(apiRequest(`/api/analytics/sources/${sourceId}?organisationId=${ORG}`, { method: "DELETE", cookie: ownerCookie }), params({ sourceId })),
+    );
+    expect(sourceGone.status).toBe(409);
+    expect(sourceGone.data.error).toMatch(/Export totals uses this source/);
+    const shapeGone = await body(
+      await shapeRoute.DELETE(apiRequest(`/api/analytics/shaping/${totalsId}?organisationId=${ORG}`, { method: "DELETE", cookie: ownerCookie }), params({ shapeId: totalsId })),
+    );
+    expect(shapeGone.status).toBe(409);
+    expect(shapeGone.data.error).toMatch(/Halves uses this table/);
   });
 });

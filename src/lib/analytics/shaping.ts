@@ -1,4 +1,5 @@
 import { ValidationError } from "@/lib/errors";
+import { DECIMAL_RESULT, decimalResultSql, exactAverageSql, exactDivideSql } from "@/lib/analytics/decimal-sql";
 import { COLUMN_TYPES, type ColumnKind } from "@/lib/analytics/engine";
 
 export type ShapeColumn = { name: string; type: string };
@@ -38,7 +39,8 @@ const FILTER_TESTS = [
   "is not empty",
 ] as const;
 const AGGREGATES = ["sum", "average", "count", "smallest", "largest"] as const;
-const NUMBER_TYPE = /^(DECIMAL|BIGINT|INTEGER|SMALLINT|TINYINT|HUGEINT|UBIGINT|UINTEGER|USMALLINT|UTINYINT|DOUBLE|FLOAT)/;
+// No DOUBLE or FLOAT: money and quantities stay exact (change a float column's type first).
+const NUMBER_TYPE = /^(DECIMAL|BIGINT|INTEGER|SMALLINT|TINYINT|HUGEINT|UBIGINT|UINTEGER|USMALLINT|UTINYINT)/;
 const NUMBER_TEXT = /^-?\d+(?:\.\d+)?$/;
 const IDENTIFIER = /^[a-z][a-z0-9_]{0,62}$/;
 
@@ -74,8 +76,19 @@ function parseOperand(value: unknown): Operand {
   throw new ValidationError("A calculation needs a column or a valid number.");
 }
 
+// Each merge or append can multiply the rows, so a shape has only a few.
+const MAX_JOINS = 5;
+
 export function parseShapeSteps(value: unknown): ShapeStep[] {
   if (!Array.isArray(value) || value.length > 100) throw new ValidationError("Steps must be a list of up to 100 steps.");
+  const steps = parseEachStep(value);
+  if (steps.filter((step) => step.type === "merge" || step.type === "append").length > MAX_JOINS) {
+    throw new ValidationError(`A shaped table can have at most ${MAX_JOINS} merge and append steps.`);
+  }
+  return steps;
+}
+
+function parseEachStep(value: unknown[]): ShapeStep[] {
   return value.map((entry, index) => {
     const raw = object(entry, `Step ${index + 1} isn't set up properly.`);
     const fail = (message: string): never => {
@@ -98,7 +111,7 @@ export function parseShapeSteps(value: unknown): ShapeStep[] {
       case "rename":
         return { type: "rename", column: named(raw.column, "Choose a column."), name: named(raw.name, "Enter a valid new column name.") };
       case "type":
-        if (typeof raw.kind !== "string" || !(raw.kind in COLUMN_TYPES)) return fail("choose a column type.");
+        if (typeof raw.kind !== "string" || !Object.hasOwn(COLUMN_TYPES, raw.kind)) return fail("choose a column type.");
         return { type: "type", column: named(raw.column, "Choose a column."), kind: raw.kind as ColumnKind };
       case "split":
         return {
@@ -321,7 +334,7 @@ export function buildShapeQuery(input: {
           }
           const expression = column ? quote(column) : "*";
           const fn = { sum: "sum", average: "avg", count: "count", smallest: "min", largest: "max" }[aggregate.operation];
-          const result = aggregate.operation === "average" ? `cast(avg(${expression}) as DECIMAL(38,6))` : `${fn}(${expression})`;
+          const result = aggregate.operation === "average" ? exactAverageSql(expression) : `${fn}(${expression})`;
           return { name: aggregate.name, type: aggregate.operation === "average" ? "DECIMAL(38,6)" : aggregate.operation === "count" ? "BIGINT" : column ? columns.get(column)! : "BIGINT", sql: `${result} as ${quote(aggregate.name)}` };
         });
         ensureUnused(new Map(by.map((name) => [name, columns.get(name)!])), aggregateSql.map((aggregate) => aggregate.name));
@@ -342,9 +355,9 @@ export function buildShapeQuery(input: {
           };
           const left = operand(step.expression.left);
           const right = operand(step.expression.right);
-          expression = `(${left} ${step.expression.operator} ${step.expression.operator === "/" ? `nullif(${right}, 0)` : right})`;
-          resultType = step.expression.operator === "/" ? "DECIMAL(38,6)" : "DECIMAL(38,6)";
-          if (step.expression.operator === "/") expression = `cast(${expression} as DECIMAL(38,6))`;
+          // Exact: DuckDB would divide decimals as DOUBLE, and products grow their scale.
+          expression = step.expression.operator === "/" ? exactDivideSql(left, right) : decimalResultSql(`(${left} ${step.expression.operator} ${right})`);
+          resultType = DECIMAL_RESULT;
         } else {
           const parts = step.expression.parts.map((part) => {
             if (part.type === "text") return param(part.value);
