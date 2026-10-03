@@ -2,6 +2,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { dec, type Decimal, sum, toFixedString } from "@/lib/money/decimal";
 import { parseReportPeriod } from "@/lib/reports/account-transactions";
+import type { CustomValues } from "@/lib/custom-fields/values";
 import { JOURNAL_SOURCES_SQL, type JournalSource, journalSource, SOURCE_COLUMNS, SOURCE_JOINS, type SourceRow } from "@/lib/reports/journal-sources";
 import type { TrackingTags } from "@/lib/tracking/service";
 
@@ -22,6 +23,7 @@ export type JournalReportLine = {
   debit: string;
   credit: string;
   tracking: TrackingTags;
+  customFields: CustomValues;
 };
 
 export type JournalReportEntry = {
@@ -89,9 +91,10 @@ export async function journalReport(tx: OrgTx, input: { from?: unknown; to?: unk
     debit_amount: string;
     credit_amount: string;
     tracking: TrackingTags;
+    custom_fields: CustomValues;
   }>(
     `select l.journal_id::text, l.line_order, a.id::text as account_id, a.code, a.name, l.description,
-            l.debit_amount::text, l.credit_amount::text, l.tracking
+            l.debit_amount::text, l.credit_amount::text, l.tracking, l.custom_fields
        from ledger_journal_lines l join accounts a on a.id = l.account_id
       where l.journal_id = any($1::bigint[])
       order by l.journal_id, l.line_order`,
@@ -110,6 +113,7 @@ export async function journalReport(tx: OrgTx, input: { from?: unknown; to?: unk
         debit: money(dec(row.debit_amount)),
         credit: money(dec(row.credit_amount)),
         tracking: row.tracking ?? {},
+        customFields: row.custom_fields ?? {},
       },
     ]);
   }

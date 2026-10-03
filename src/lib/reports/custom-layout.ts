@@ -5,12 +5,36 @@ import type { AccountType } from "@/lib/accounts/types";
  * figures worked out from it. Browser-safe: no server imports, so the editor
  * can build and change layouts with the same types.
  */
-export type CustomReportBase = "profit_and_loss" | "balance_sheet";
+export type FinancialReportBase = "profit_and_loss" | "balance_sheet";
+export type TransactionReportBase =
+  | "account_transactions"
+  | "aged_receivables"
+  | "aged_payables"
+  | "sales_by_salesperson"
+  | "journal_report";
+export type CustomReportBase = FinancialReportBase | TransactionReportBase;
+
+export function isTransactionReportBase(base: string): base is TransactionReportBase {
+  return ["account_transactions", "aged_receivables", "aged_payables", "sales_by_salesperson", "journal_report"].includes(base);
+}
 export type PeriodLength = "month" | "quarter" | "year";
 
 export const CUSTOM_REPORT_BASES: Record<CustomReportBase, string> = {
   profit_and_loss: "Profit and loss",
   balance_sheet: "Balance sheet",
+  account_transactions: "Account transactions",
+  aged_receivables: "Aged receivables",
+  aged_payables: "Aged payables",
+  sales_by_salesperson: "Sales by salesperson",
+  journal_report: "Journal report",
+};
+
+export const TRANSACTION_REPORT_DEFAULT_COLUMNS: Record<TransactionReportBase, string[]> = {
+  account_transactions: ["date", "source", "description", "debit", "credit", "balance"],
+  aged_receivables: ["contact.name", "current", "days1to30", "days31to60", "days61to90", "over90", "credit", "total"],
+  aged_payables: ["contact.name", "current", "days1to30", "days31to60", "days61to90", "over90", "credit", "total"],
+  sales_by_salesperson: ["salesperson", "invoices", "sales", "creditNotes", "netSales"],
+  journal_report: ["date", "source", "account", "description", "debit", "credit"],
 };
 
 export const PERIOD_LENGTHS: Record<PeriodLength, { label: string; months: number }> = {
@@ -78,6 +102,41 @@ export type CustomReportLayout = {
   filter?: ReportTrackingFilter | null;
 };
 
+export type TransactionReportFilters = {
+  from?: string | null;
+  to?: string | null;
+  asAt?: string | null;
+  accountId?: string | null;
+  trackingCategoryId?: string | null;
+  trackingValueId?: string | null;
+  rollUp?: boolean;
+};
+
+export type TransactionReportLayout = {
+  title: string;
+  filters: TransactionReportFilters;
+  columns: string[];
+};
+
+export type StoredCustomReportLayout = CustomReportLayout | TransactionReportLayout;
+
+export type TransactionReportColumn = { key: string; label: string };
+
+export type TransactionCustomReportFigures = {
+  title: string;
+  base: TransactionReportBase;
+  currencyCode: string;
+  columns: ReportColumn[];
+  selectedColumns: string[];
+  columnOptions: TransactionReportColumn[];
+  data: unknown;
+  blocks: ComputedBlock[];
+  notInReport: ComputedLine[];
+  inSeveralGroups: Array<{ tableTitle: string; code: string; name: string; groups: string[] }>;
+  filterLabel?: string | null;
+  computedAt: string;
+};
+
 export type ReportColumnKind = "period" | "difference" | "percent" | "budget" | "budget_difference" | "year_to_date";
 
 export type ReportColumn = {
@@ -119,6 +178,7 @@ export type CustomReportFigures = {
   inSeveralGroups: Array<{ tableTitle: string; code: string; name: string; groups: string[] }>;
   /** The tracking filter, as shown on the report, e.g. "Location: Otago" (TC8). */
   filterLabel?: string | null;
+  data?: unknown;
   computedAt: string;
 };
 
@@ -156,7 +216,7 @@ function dayLabel(date: string): string {
 }
 
 /** The period columns, newest first (CR2, CR3, CR6). */
-export function periodColumns(base: CustomReportBase, setting: ReportColumnsSetting): ReportColumn[] {
+export function periodColumns(base: FinancialReportBase, setting: ReportColumnsSetting): ReportColumn[] {
   const months = PERIOD_LENGTHS[setting.periodLength].months;
   const last = monthIndex(setting.periodEnd);
   const columns: ReportColumn[] = [];
@@ -188,7 +248,7 @@ export function newLayoutId(prefix: string): string {
 }
 
 /** A new custom report starts as a copy of the standard report (CR1, CR6). */
-export function templateLayout(base: CustomReportBase, periodEnd: string): CustomReportLayout {
+export function templateLayout(base: FinancialReportBase, periodEnd: string): CustomReportLayout {
   const columns: ReportColumnsSetting = {
     periodEnd: lastDayOfMonth(periodEnd),
     periodLength: "month",
