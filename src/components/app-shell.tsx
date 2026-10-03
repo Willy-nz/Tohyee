@@ -342,7 +342,8 @@ function UserMenu({ onSignOut }: { onSignOut: () => void }) {
 function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: Modules | null; menus: Menu[]; onSignOut: () => void }) {
   const pathname = usePathname();
   const search = useSearchParams();
-  const { user } = useWorkspace();
+  const { user, current } = useWorkspace();
+  const reportViewer = current?.role === "report_viewer";
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   // The list opens under the top bar.
@@ -391,7 +392,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
       {open ? (
         <div className={styles.phoneMenu} style={{ top }} role="dialog" aria-modal="true" aria-label="Menu">
           <div className={styles.phoneApps}>
-            <AppSwitcher current={app} modules={modules} />
+            <AppSwitcher current={app} modules={modules} reportViewer={reportViewer} />
           </div>
           <nav aria-label="Main">
             {menus.map((menu) => {
@@ -549,6 +550,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   const pathname = usePathname();
   const { can, current } = useWorkspace();
   const modules = useModules(current?.id ?? null);
+  const reportViewer = current?.role === "report_viewer";
   const menus = useMemo(() => visibleMenus(app, { can, modules }), [app, can, modules]);
   const newActions = useMemo(() => visibleNewActions({ can, modules }), [can, modules]);
   const items = useMemo<Destination[]>(
@@ -556,13 +558,18 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
       destinations(menus, newActions, [
         { href: AI_LINK.href, label: "AI assistant", group: "AI" },
         { href: "/operations/profile", label: "Profile and two-step sign-in", group: "You" },
-        ...(app !== "accounting" ? [{ href: "/operations", label: "Accounting", group: "Apps" }] : []),
+        ...(app !== "accounting" && !reportViewer ? [{ href: "/operations", label: "Accounting", group: "Apps" }] : []),
         ...(app !== "crm" && modules?.crm ? [{ href: "/crm", label: "CRM", group: "Apps" }] : []),
         ...(app !== "analytics" && modules?.analytics ? [{ href: "/analytics", label: "Analytics", group: "Apps" }] : []),
       ]),
-    [menus, newActions, app, modules],
+    [menus, newActions, app, modules, reportViewer],
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Report viewers see only the dashboards shared with them (decision 360): anywhere else goes to Analytics.
+  useEffect(() => {
+    if (reportViewer && app !== "analytics") router.replace("/analytics");
+  }, [reportViewer, app, router]);
   const page = useRef<HTMLDivElement>(null);
   usePageEntrance(page, pathname);
 
@@ -595,7 +602,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
             <span className={styles.brandText}>Tohyee</span>
           </Link>
           <div className={styles.desktopOnly}>
-            <AppSwitcher current={app} modules={modules} />
+            <AppSwitcher current={app} modules={modules} reportViewer={reportViewer} />
           </div>
           <OrganisationPicker />
           <span className={styles.divider} aria-hidden />
@@ -624,7 +631,8 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
           </div>
         ) : null}
         <div ref={page} className={styles.page}>
-          {children}
+          {/* Not rendered for a report viewer outside Analytics, so the page doesn't ask for anything before the redirect. */}
+          {reportViewer && app !== "analytics" ? null : children}
         </div>
       </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={items} />

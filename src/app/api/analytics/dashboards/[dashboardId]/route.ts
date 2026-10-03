@@ -6,9 +6,9 @@ type Context = { params: Promise<{ dashboardId: string }> };
 
 export const GET = route<Context>(async (request, context) => {
   const { dashboardId } = await context.params;
-  const dashboard = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", async (tx) => {
+  const dashboard = await withOrganisation(request, searchParams(request).get("organisationId"), "report_viewer", async (tx, { auth, membership }) => {
     await requireAnalytics(tx);
-    return getDashboard(tx, dashboardId);
+    return getDashboard(tx, dashboardId, { userId: auth.user.id, reportViewer: membership.role === "report_viewer" });
   });
   return json({ dashboard });
 });

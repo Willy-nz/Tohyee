@@ -225,4 +225,15 @@ create table ai_access_tokens (
 create index ai_access_tokens_owner_idx on ai_access_tokens (organisation_id, user_id);
 `,
   },
+  {
+    version: "0006",
+    name: "report_viewer_role",
+    sql: `
+-- Report viewers (decision 360): someone, such as a client, who signs in and
+-- sees only the Analytics dashboards shared with them, nothing of the books.
+alter table organisation_members drop constraint organisation_members_role_check;
+alter table organisation_members add constraint organisation_members_role_check
+  check (role in ('owner', 'admin', 'bookkeeper', 'viewer', 'report_viewer'));
+`,
+  },
 ];
