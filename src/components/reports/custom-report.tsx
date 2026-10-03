@@ -13,14 +13,17 @@ import { ACCOUNT_TYPES, type AccountType } from "@/lib/accounts/types";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import type { CustomReport, CustomReportView } from "@/lib/reports/custom";
+import type { AnyCustomReportFigures } from "@/lib/reports/custom";
 import {
   type ComputedBlock,
   type ComputedRow,
   CUSTOM_REPORT_BASES,
+  isTransactionReportBase,
   CUSTOM_REPORT_LIMITS,
   type CustomReportBase,
   type CustomReportFigures,
   type CustomReportLayout,
+  type FinancialReportBase,
   type FormulaTerm,
   lastDayOfMonth,
   newLayoutId,
@@ -36,6 +39,7 @@ import {
 import type { TrackingSetup } from "@/lib/tracking/service";
 import type { Budget } from "@/lib/budgets/service";
 import { useConfirm } from "@/components/confirm-dialog";
+import { TransactionCustomReportPage } from "@/components/reports/transaction-custom-report";
 
 /**
  * Custom reports (examples CR1-CR10): the lists (drafts, published,
@@ -43,14 +47,14 @@ import { useConfirm } from "@/components/confirm-dialog";
  * is also its editor while it's a draft.
  */
 
-type Loaded = { report: CustomReport; figures: CustomReportFigures };
+type Loaded = { report: CustomReport; figures: AnyCustomReportFigures };
 
 const pageHref = (id: string) => `/operations/reports/custom/${id}`;
 
 export function StartCustomReport({ organisationId }: { organisationId: string }) {
   const router = useRouter();
   const { can } = useWorkspace();
-  const [keys] = useState(() => ({ profit_and_loss: newIdempotencyKey("custom-report"), balance_sheet: newIdempotencyKey("custom-report") }));
+  const [keys] = useState(() => Object.fromEntries(Object.keys(CUSTOM_REPORT_BASES).map((base) => [base, newIdempotencyKey("custom-report")])) as Record<CustomReportBase, string>);
   const [busy, setBusy] = useState<CustomReportBase | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,7 +88,9 @@ export function StartCustomReport({ organisationId }: { organisationId: string }
             <p className={ui.muted}>
               {base === "profit_and_loss"
                 ? "Revenue, cost of sales, gross profit, other income, expenses and net profit."
-                : "Assets, liabilities, net assets, equity, earnings and total equity."}
+                : base === "balance_sheet"
+                  ? "Assets, liabilities, net assets, equity, earnings and total equity."
+                  : "Save the report's filters and columns as a new editable custom report."}
             </p>
             <Button onClick={() => void start(base)} disabled={busy !== null}>
               {busy === base ? "Starting…" : "Start from this"}
@@ -758,7 +764,12 @@ export function CustomReportPage({ organisationId, reportId }: { organisationId:
 
   if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
   if (!loaded.data) return <p className={ui.muted}>Loading…</p>;
-  const { report, figures } = state ?? loaded.data;
+  const currentLoaded = state ?? loaded.data;
+  if (isTransactionReportBase(currentLoaded.report.base)) {
+    return <TransactionCustomReportPage organisationId={organisationId} loaded={currentLoaded} />;
+  }
+  const report = currentLoaded.report as CustomReport & { base: FinancialReportBase; layout: CustomReportLayout };
+  const figures = currentLoaded.figures as CustomReportFigures;
   const editable = report.kind === "draft" && !report.archivedAt && can("bookkeeper");
   const titleValue = title ?? report.title;
 

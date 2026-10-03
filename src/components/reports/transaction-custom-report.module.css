@@ -1,0 +1,40 @@
+/* The chosen columns, in order: name, then its buttons lined up. */
+.columnList {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  counter-reset: column;
+}
+
+.columnRow {
+  display: grid;
+  grid-template-columns: 2rem minmax(10rem, 1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  max-width: 40rem;
+  padding: 4px 8px;
+  border-radius: 8px;
+  counter-increment: column;
+}
+
+.columnRow:nth-child(odd) {
+  background: var(--surface-sunken);
+}
+
+.columnRow::before {
+  content: counter(column);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .columnRow {
+    grid-template-columns: 1.5rem 1fr;
+  }
+  .columnRow > :global(button) {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, Fragment, useState } from "react";
 import { Money } from "@/components/books";
 import { ReportExport } from "@/components/reports/report-export";
+import { SaveAsCustomReportButton } from "@/components/reports/save-as-custom-report";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -246,13 +247,14 @@ export function SalesBySalespersonReport({ organisationId }: { organisationId: s
       title="Sales by salesperson"
       description="Invoices and credit notes excluding GST, on their date once approved; voids count on their void date. Drafts don't count."
       actions={
-        <div className={ui.inlineForm}>
+        <div className={ui.inlineForm} data-print="hide">
           <Field label="From">
             <input type="date" value={from ?? report.data?.from ?? ""} onChange={(event) => setFrom(event.target.value || null)} />
           </Field>
           <Field label="To">
             <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           </Field>
+          <SaveAsCustomReportButton organisationId={organisationId} base="sales_by_salesperson" filters={{ from, to }} />
         </div>
       }
     >

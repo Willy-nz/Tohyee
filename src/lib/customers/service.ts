@@ -507,7 +507,7 @@ live_op_refunds as (
    where r.refund_date <= params.as_at and (r.void_date is null or r.void_date > params.as_at)
 ),
 invoices_open as (
-  select i.id, i.contact_id, i.invoice_number, i.invoice_date, i.due_date, i.currency_code, i.base_total,
+  select i.id, i.contact_id, i.invoice_number, i.invoice_date, i.due_date, i.currency_code, i.base_total, i.custom_fields,
          i.total
          - coalesce((select sum(p.amount - p.overpayment_amount) from live_payments p where p.invoice_id = i.id), 0)
          - coalesce((select sum(a.amount) from live_cn_apps a where a.invoice_id = i.id), 0)
@@ -522,7 +522,7 @@ invoices_open as (
      and (i.void_date is null or i.void_date > params.as_at)
 ),
 invoices as (
-  select id, contact_id, invoice_number, invoice_date, due_date, currency_code, amount_due,
+  select id, contact_id, invoice_number, invoice_date, due_date, currency_code, custom_fields, amount_due,
          case when base_total is null then amount_due else base_due end as amount_due_base
     from invoices_open
 ),

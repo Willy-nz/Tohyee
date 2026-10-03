@@ -3049,6 +3049,60 @@ all through 1000 Business bank account):
   and admins can create, change, publish, archive and delete them. Opening a
   report posts nothing.
 
+### Transaction-style custom reports
+
+Jess's direction (3 Oct 2026): like Xero for the look (pick columns, reorder
+them, Save as custom, draft or published), and like NetSuite for custom
+fields, which belong to a contact, a document or a line. Anything more
+advanced (items by category, say) is done in Analytics, which has every
+invoice line.
+
+An account transactions, aged receivables or payables, sales by salesperson
+or journal report can be saved as a custom report with its own title,
+filters and ordered columns; the standard report is unchanged. Extra columns
+only add information: they never change an amount or a total, and saving or
+publishing posts nothing. Contact columns (email, addresses, phone, group,
+contact fields) and document fields are offered on every one of these
+reports. Line fields and tracking are only offered where each row is one
+ledger line (account transactions and the journal report), so a cell never
+mixes several lines' values. Sales post one ledger line per account and
+tracking (TC3), so on account transactions an invoice's sales line shows its
+tracking but not an invoice line's own field.
+
+Setup: the custom-report journals above (CR1-CR10), advanced features on,
+salesperson Aroha. Kobe Ltd is a customer with email
+`accounts@kobe.example.nz`, billing address `1 Kauri Road, Dunedin`, group
+`Trade`, contact field **Region** `Otago` and default salesperson Aroha.
+Invoice INV-REPORT-1 for Kobe Ltd, 20 May 2026, **100.00 + GST 15.00**, has
+document field **Channel** `Web`; its one line (4000) has line field
+**Project** `Fit-out` and Location `Dunedin`.
+
+- **CR11** Account transactions for 4000, 1 April-31 May 2026, saved with
+  Date, Source, email, address, group, Region, Channel, Project, Location,
+  Credit and Balance: credits **1,000.00**, **1,500.00** and **100.00**,
+  total credits **2,600.00**, the same as the standard report. The invoice's
+  row shows `accounts@kobe.example.nz`, `1 Kauri Road, Dunedin`, `Trade`,
+  `Otago`, `Web` and `Dunedin`, with Project blank; the manual journals'
+  rows have blank contact and Location cells.
+- **CR12** Aged receivables as at 31 May 2026, saved with Region before
+  Contact, then Channel, Current and Total: Kobe Ltd **115.00** current,
+  Region `Otago`, its invoice Channel `Web`; total **115.00**. Project and
+  Location can't be added ("That report column isn't available.").
+- **CR13** Sales by salesperson for May 2026 saved with Region and Channel:
+  Aroha **1** invoice, sales **100.00**, credit notes **0.00**, net
+  **100.00**, and the same total; the invoice shows `Otago` and `Web`.
+  Project and Location can't be added.
+- **CR14** A journal on 25 May 2026, Dr 6010 **50.00** (Project `Fit-out`,
+  Location `Dunedin`) / Cr 1000 **50.00**. The journal report for that day
+  saved with Project and Location shows `Fit-out` and `Dunedin` on the debit
+  line and blanks on the credit line, and equals the standard journal
+  report.
+- **CR15** The CR12 report with Contact, email and Total, saved and then
+  published (no journal is posted). After Kobe's email changes to
+  `ap@kobe.example.nz`, a viewer opening the draft sees the new email and
+  the published report still shows `accounts@kobe.example.nz`; both total
+  **115.00**.
+
 ### Home
 
 Home shows a card for each bank account, money owed to you, bills to pay and

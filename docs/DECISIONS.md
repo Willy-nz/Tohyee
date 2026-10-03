@@ -2522,3 +2522,15 @@ approved 3 Oct 2026.
      only slices by that dashboard's own slicers (other filters are
      dropped). A dashboard that isn't shared with them is "not found".
 
+### Reports: saving transaction reports as custom (decision 369)
+
+369. **Account transactions, aged receivables and payables, sales by
+     salesperson and the journal report can be saved as custom reports**
+     (examples CR11-CR15, issue #89, tenant migration 0086), like Xero's
+     "Save as custom", with columns from NetSuite's three kinds of custom
+     field. Contact and document columns go on every one of these reports;
+     line fields and tracking only where a row is one ledger line, so a cell
+     never mixes lines. Drafts show contacts as they are now; published
+     reports keep what they showed. Anything more (items by category, say)
+     is for Analytics, not more report options (Jess, 3 Oct 2026).
+

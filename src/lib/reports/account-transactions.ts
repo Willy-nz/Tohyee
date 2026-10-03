@@ -9,6 +9,7 @@ import { financialYearEndMonth } from "@/lib/reports/financial";
 import { dayBefore } from "@/lib/reports/ageing";
 import { JOURNAL_SOURCES_SQL, type JournalSource, journalSource, SOURCE_COLUMNS, SOURCE_JOINS, type SourceRow } from "@/lib/reports/journal-sources";
 import { type TrackingTags, valueWithDescendants } from "@/lib/tracking/service";
+import type { CustomValues } from "@/lib/custom-fields/values";
 import { optionalId } from "@/lib/validation";
 
 /**
@@ -39,6 +40,8 @@ export type AccountTransactionLine = {
   /** Debits less credits so far, including the opening balance. */
   balance: string;
   tracking: TrackingTags;
+  customFields: CustomValues;
+  columnValues?: Record<string, string>;
 };
 
 export type AccountTransactionsAccount = {
@@ -108,6 +111,7 @@ type LineRow = SourceRow & {
   debit_amount: string;
   credit_amount: string;
   tracking: TrackingTags;
+  custom_fields: CustomValues;
 };
 
 export async function accountTransactions(
@@ -138,7 +142,7 @@ export async function accountTransactions(
     `with ${JOURNAL_SOURCES_SQL}
      select l.journal_id::text, l.line_order, l.account_id::text, j.posting_date, j.origin, j.reference, j.correction_kind,
             j.description as journal_description, l.description as line_description,
-            l.debit_amount::text, l.credit_amount::text, l.tracking, ${SOURCE_COLUMNS}
+            l.debit_amount::text, l.credit_amount::text, l.tracking, l.custom_fields, ${SOURCE_COLUMNS}
        from ledger_journal_lines l
        join ledger_journals j on j.id = l.journal_id
        ${SOURCE_JOINS}
@@ -174,6 +178,7 @@ export async function accountTransactions(
         credit: money(dec(row.credit_amount)),
         balance: money(balance),
         tracking: row.tracking ?? {},
+        customFields: row.custom_fields ?? {},
       };
     });
     const debits = sum(rows.map((row) => dec(row.debit_amount)));

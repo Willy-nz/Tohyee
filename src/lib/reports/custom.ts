@@ -16,6 +16,7 @@ import {
   type CustomReportBase,
   type CustomReportFigures,
   type CustomReportLayout,
+  type FinancialReportBase,
   type FormulaTerm,
   lastDayOfMonth,
   PERIOD_LENGTHS,
@@ -26,12 +27,22 @@ import {
   type ReportColumnsSetting,
   type ReportRow,
   type ReportValues,
+  type StoredCustomReportLayout,
+  type TransactionCustomReportFigures,
+  type TransactionReportLayout,
+  isTransactionReportBase,
   templateLayout,
 } from "@/lib/reports/custom-layout";
 import { accountTotals, type AccountTotalsRow, earningsOf, financialYearEndMonth, naturalAmount, type TrackingFilter } from "@/lib/reports/financial";
 import { budgetTotals } from "@/lib/budgets/service";
 import { valueWithDescendants } from "@/lib/tracking/service";
 import { optionalSource, requireId, requireIdempotencyKey } from "@/lib/validation";
+import {
+  computeTransactionCustomReport,
+  parseTransactionReportLayout,
+  templateTransactionReportLayout,
+  validateTransactionTrackingFilter,
+} from "@/lib/reports/transaction-custom";
 
 /**
  * Custom reports (examples CR1-CR10). A draft's layout is validated here and
@@ -72,7 +83,7 @@ function list(input: unknown, what: string, max: number): unknown[] {
   return input;
 }
 
-function parseColumns(base: CustomReportBase, input: unknown): ReportColumnsSetting {
+function parseColumns(base: FinancialReportBase, input: unknown): ReportColumnsSetting {
   const raw = record(input, "The columns");
   const periodEnd = parseIsoDate(raw.periodEnd, "periodEnd");
   if (lastDayOfMonth(periodEnd) !== periodEnd) {
@@ -108,7 +119,7 @@ function parseColumns(base: CustomReportBase, input: unknown): ReportColumnsSett
   };
 }
 
-function parseRow(base: CustomReportBase, input: unknown, ids: Set<string>): ReportRow {
+function parseRow(base: FinancialReportBase, input: unknown, ids: Set<string>): ReportRow {
   const raw = record(input, "A row");
   const id = raw.id;
   if (typeof id !== "string" || !ID_PATTERN.test(id)) throw new ValidationError("Each row needs an id of letters, numbers, - or _.");
@@ -179,7 +190,7 @@ function checkFormulas(rows: ReportRow[]): void {
 }
 
 /** Validates a layout from the editor (CR8). Unknown account codes are refused. */
-export async function parseLayout(tx: OrgTx, base: CustomReportBase, input: unknown): Promise<CustomReportLayout> {
+export async function parseLayout(tx: OrgTx, base: FinancialReportBase, input: unknown): Promise<CustomReportLayout> {
   const raw = record(input, "The report");
   if (JSON.stringify(raw).length > MAX_LAYOUT_BYTES) throw new ValidationError("This report is too big to save.");
   const title = text(raw.title, "The title", LIMITS.titleLength, { required: true });
@@ -225,7 +236,7 @@ export async function parseLayout(tx: OrgTx, base: CustomReportBase, input: unkn
 
 type Account = { id: string; code: string; name: string; accountClass: AccountClass; accountType: AccountType };
 
-const SCOPE: Record<CustomReportBase, AccountClass[]> = {
+const SCOPE: Record<FinancialReportBase, AccountClass[]> = {
   profit_and_loss: ["revenue", "expense"],
   balance_sheet: ["asset", "liability", "equity"],
 };
@@ -235,7 +246,7 @@ function groupIncludes(row: Extract<ReportRow, { kind: "group" }>, account: Acco
 }
 
 /** Works out a layout's figures (CR1-CR6, CR9). */
-export async function computeCustomReport(tx: OrgTx, base: CustomReportBase, layout: CustomReportLayout): Promise<CustomReportFigures> {
+export async function computeCustomReport(tx: OrgTx, base: FinancialReportBase, layout: CustomReportLayout): Promise<CustomReportFigures> {
   const scale = currencyMinorUnits(tx.baseCurrency);
   const money = (value: Decimal) => toFixedString(value, scale);
   const yearEndMonth = await financialYearEndMonth(tx);
@@ -402,7 +413,7 @@ export type CustomReport = {
   kind: "draft" | "published";
   base: CustomReportBase;
   title: string;
-  layout: CustomReportLayout;
+  layout: StoredCustomReportLayout;
   version: number;
   publishedFromId: string | null;
   publishedAt: string | null;
@@ -422,7 +433,7 @@ type ReportRecord = {
   kind: "draft" | "published";
   base: CustomReportBase;
   title: string;
-  layout: CustomReportLayout;
+  layout: StoredCustomReportLayout;
   version: number;
   published_from_id: string | null;
   published_at: string | null;
@@ -474,19 +485,26 @@ export async function listCustomReports(tx: OrgTx, viewInput: unknown): Promise<
 }
 
 /** A report and its figures: worked out now for a draft, as stored for a published copy (CR7). */
-export async function getCustomReport(tx: OrgTx, idInput: unknown): Promise<{ report: CustomReport; figures: CustomReportFigures }> {
+export type AnyCustomReportFigures = CustomReportFigures | TransactionCustomReportFigures;
+
+async function computeSavedReport(tx: OrgTx, base: CustomReportBase, layout: StoredCustomReportLayout): Promise<AnyCustomReportFigures> {
+  if (isTransactionReportBase(base)) return computeTransactionCustomReport(tx, base, layout as TransactionReportLayout);
+  return computeCustomReport(tx, base as FinancialReportBase, layout as CustomReportLayout);
+}
+
+export async function getCustomReport(tx: OrgTx, idInput: unknown): Promise<{ report: CustomReport; figures: AnyCustomReportFigures }> {
   const id = requireId(idInput, "reportId");
   const report = await findReport(tx, id);
   if (report.kind === "published") {
-    const stored = await tx.query<{ snapshot: CustomReportFigures }>("select snapshot from custom_reports where id = $1", [id]);
+    const stored = await tx.query<{ snapshot: AnyCustomReportFigures }>("select snapshot from custom_reports where id = $1", [id]);
     return { report, figures: stored.rows[0].snapshot };
   }
-  return { report, figures: await computeCustomReport(tx, report.base, report.layout) };
+  return { report, figures: await computeSavedReport(tx, report.base, report.layout) };
 }
 
 function parseBase(input: unknown): CustomReportBase {
   if (typeof input !== "string" || !Object.hasOwn(CUSTOM_REPORT_BASES, input)) {
-    throw new ValidationError("A custom report starts from the profit and loss or the balance sheet.");
+    throw new ValidationError("Choose one of the available standard reports.");
   }
   return input as CustomReportBase;
 }
@@ -494,13 +512,19 @@ function parseBase(input: unknown): CustomReportBase {
 /** Starts a draft as a copy of a standard report (CR1, CR6). */
 export async function createCustomReport(
   tx: OrgTx,
-  command: { source?: unknown; idempotencyKey: unknown; base: unknown; periodEnd?: unknown },
+  command: { source?: unknown; idempotencyKey: unknown; base: unknown; periodEnd?: unknown; layout?: unknown },
 ): Promise<{ created: boolean; report: CustomReport }> {
   const source = optionalSource(command.source);
   const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
   const base = parseBase(command.base);
   const periodEnd = command.periodEnd == null || command.periodEnd === "" ? lastDayOfMonth(todayIsoDate()) : parseIsoDate(command.periodEnd, "periodEnd");
-  const hash = requestHash("custom_report_create", { base, periodEnd });
+  const layout: StoredCustomReportLayout = isTransactionReportBase(base)
+    ? command.layout == null
+      ? templateTransactionReportLayout(base, periodEnd)
+      : await parseTransactionReportLayout(tx, base, command.layout)
+    : templateLayout(base as FinancialReportBase, periodEnd);
+  if (isTransactionReportBase(base)) await validateTransactionTrackingFilter(tx, (layout as TransactionReportLayout).filters);
+  const hash = requestHash("custom_report_create", { base, layout });
   const earlier = await tx.query<{ id: string; request_hash: string }>(
     "select id, request_hash from custom_reports where command_source = $1 and idempotency_key = $2",
     [source, idempotencyKey],
@@ -509,7 +533,6 @@ export async function createCustomReport(
     assertSameRequest(earlier.rows[0].request_hash, hash, "report");
     return { created: false, report: await findReport(tx, earlier.rows[0].id) };
   }
-  const layout = templateLayout(base, periodEnd);
   const inserted = await tx.query<{ id: string }>(
     `insert into custom_reports (kind, base, title, layout, command_source, idempotency_key, request_hash, created_by_user_id, created_by_email, updated_by_email)
      values ('draft', $1, $2, $3::jsonb, $4, $5, $6, $7, $8, $8) returning id`,
@@ -525,7 +548,7 @@ export async function updateCustomReport(
   tx: OrgTx,
   idInput: unknown,
   command: { layout: unknown; version: unknown },
-): Promise<{ report: CustomReport; figures: CustomReportFigures }> {
+): Promise<{ report: CustomReport; figures: AnyCustomReportFigures }> {
   const id = requireId(idInput, "reportId");
   const current = await findReport(tx, id, true);
   if (current.kind === "published") throw new ConflictError("A published report can't be changed. Change its draft and publish again.");
@@ -533,14 +556,17 @@ export async function updateCustomReport(
   if (command.version !== current.version) {
     throw new ConflictError("Someone else has changed this report since you opened it. Reload it to see their changes.");
   }
-  const layout = await parseLayout(tx, current.base, command.layout);
+  const layout: StoredCustomReportLayout = isTransactionReportBase(current.base)
+    ? await parseTransactionReportLayout(tx, current.base, command.layout)
+    : await parseLayout(tx, current.base as FinancialReportBase, command.layout);
+  if (isTransactionReportBase(current.base)) await validateTransactionTrackingFilter(tx, (layout as TransactionReportLayout).filters);
   await tx.query(
     `update custom_reports set title = $2, layout = $3::jsonb, version = version + 1, updated_by_email = $4, updated_at = now() where id = $1`,
     [id, layout.title, JSON.stringify(layout), tx.actor.email],
   );
   await writeAuditEvent(tx, { eventType: "custom_report.updated", entityType: "custom_report", entityId: id, details: { title: layout.title } });
   const report = await findReport(tx, id);
-  return { report, figures: await computeCustomReport(tx, report.base, report.layout) };
+  return { report, figures: await computeSavedReport(tx, report.base, report.layout) };
 }
 
 /** Keeps a frozen copy of a draft: its layout and today's figures (CR7). */
@@ -564,7 +590,7 @@ export async function publishCustomReport(
   }
   if (draft.kind !== "draft") throw new ConflictError("This report is already published.");
   if (draft.archivedAt) throw new ConflictError("This report is archived. Bring it back to publish it.");
-  const figures = await computeCustomReport(tx, draft.base, draft.layout);
+  const figures = await computeSavedReport(tx, draft.base, draft.layout);
   const inserted = await tx.query<{ id: string }>(
     `insert into custom_reports (kind, base, title, layout, command_source, idempotency_key, request_hash, published_from_id,
                                  snapshot, published_by_email, published_at, created_by_user_id, created_by_email, updated_by_email)
@@ -609,4 +635,3 @@ export async function deleteCustomReport(tx: OrgTx, idInput: unknown): Promise<v
   await tx.query("delete from custom_reports where id = $1", [id]);
   await writeAuditEvent(tx, { eventType: "custom_report.deleted", entityType: "custom_report", entityId: id, details: { title: report.title } });
 }
-
