@@ -3,7 +3,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { add, cmp, dec, neg, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
+import { abs, add, cmp, dec, isPositive, neg, toFixedString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { personName } from "@/lib/people/names";
 import {
   basisChangeAdjustment,
@@ -99,6 +99,8 @@ export type GstReturnLine = {
   /** For a settlement (payments and hybrid bases): the amount settled and the document's total. */
   settledAmount: string | null;
   documentTotal: string | null;
+  /** Set on a late claim: the filed return whose period the line is dated in (LG1-LG7). */
+  lateFrom?: { gstReturnId: string; periodStart: string; periodEnd: string } | null;
 };
 
 const MONEY_SCALE = 2;
@@ -136,6 +138,10 @@ type StoredLineRow = Omit<RawEventRow, "sign" | "settlement_id" | "settled" | "d
   gst: string;
   settled_amount: string | null;
   document_total: string | null;
+  late_from_return_id?: string | null;
+  late_reversal?: boolean | null;
+  late_from_period_start?: string | null;
+  late_from_period_end?: string | null;
 };
 
 /** Settlements: payments, credit applied, refunds and overpayments applied, and their voids and removals. */
@@ -403,12 +409,174 @@ function toLine(
 }
 
 function storedLine(row: StoredLineRow): GstReturnLine {
-  return toLine(row, {
+  const line = toLine(row, {
     amount: row.amount,
     gst: row.gst,
     settledAmount: row.settled_amount,
     documentTotal: row.document_total,
   });
+  if (row.late_from_return_id) {
+    line.lateFrom = { gstReturnId: row.late_from_return_id, periodStart: row.late_from_period_start!, periodEnd: row.late_from_period_end! };
+  }
+  return line;
+}
+
+const STORED_LINE_COLUMNS = `l.side, l.event_type, l.event_date::text as event_date, l.document_type, l.document_id::text,
+  l.document_number, l.reference, l.contact_id::text, l.contact_name, l.document_line_order, l.description, l.tax_code,
+  l.category, l.tax_rate::text, l.amount::text, l.gst_amount::text as gst, l.settled_amount::text, l.document_total::text,
+  l.late_from_return_id::text, l.late_reversal, f.period_start::text as late_from_period_start, f.period_end::text as late_from_period_end`;
+
+/** A late claim: one transaction's lines dated in a filed return's period that it didn't count (LG1-LG7). */
+export type GstLateClaim = {
+  /** Stable while nothing changes; pass it in excludedLateClaims to leave it out. */
+  key: string;
+  from: { gstReturnId: string; periodStart: string; periodEnd: string };
+  side: "sales" | "purchases";
+  eventType: GstEventType;
+  eventDate: string;
+  documentType: GstDocumentType;
+  documentId: string;
+  documentNumber: string;
+  contactName: string;
+  /** Including GST, and its GST; negative when it takes off what was counted. */
+  amount: string;
+  gst: string;
+  /** True when it counted in the return but has since changed or gone, so it's taken back off. */
+  reversal: boolean;
+  included: boolean;
+  /** What IRD says, when its rules differ; shown, never enforced (Jess, 3 Oct 2026). */
+  irdNote: string | null;
+  lines: GstReturnLine[];
+};
+
+export const IRD_NOTE_OLD_PURCHASE = "IRD says GST on purchases more than 2 years old can only be claimed in a few cases.";
+export const IRD_NOTE_OVER_LIMIT =
+  "IRD says changes over $1,000 (or over the lower of $10,000 and 2% of output tax) should be fixed by amending the earlier return.";
+const IRD_LIMIT = "1000";
+
+/** Identifies a counted line, so lines can be matched between what was filed and what's there now. */
+function lineIdentity(line: GstReturnLine): string {
+  return [line.eventType, line.eventDate, line.documentType, line.documentId, line.documentLineOrder, line.amount, line.gst].join("|");
+}
+
+/** Two years before a date, as YYYY-MM-DD (29 Feb goes to 28 Feb). */
+function twoYearsBefore(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const target = new Date(Date.UTC(year - 2, month - 1, day));
+  if (target.getUTCMonth() !== month - 1) target.setUTCDate(0);
+  return target.toISOString().slice(0, 10);
+}
+
+/**
+ * The late claims a return for this period would offer: for every return
+ * filed for an earlier period, the lines worked out now for its period that
+ * it didn't count and that no later return has claimed, and the lines it
+ * counted that are no longer there (taken back off). Each transaction is one
+ * claim; it's included unless its key is in `excluded`.
+ */
+async function lateClaimsFor(tx: OrgTx, periodStart: string, periodEnd: string, excluded: ReadonlySet<string>): Promise<GstLateClaim[]> {
+  const filed = await tx.query<{ id: string; period_start: string; period_end: string; gst_basis: GstBasis }>(
+    `select id::text, period_start::text, period_end::text, gst_basis from gst_returns where period_end < $1 order by period_start`,
+    [periodStart],
+  );
+  const claims: GstLateClaim[] = [];
+  for (const earlier of filed.rows) {
+    const from = { gstReturnId: earlier.id, periodStart: earlier.period_start, periodEnd: earlier.period_end };
+    const accounted = await tx.query<StoredLineRow>(
+      `select ${STORED_LINE_COLUMNS} from gst_return_lines l left join gst_returns f on f.id = l.late_from_return_id
+        where (l.gst_return_id = $1 and l.late_from_return_id is null) or l.late_from_return_id = $1
+        order by l.gst_return_id, l.line_order`,
+      [earlier.id],
+    );
+    const now = (await workOut(tx, earlier.gst_basis, earlier.period_start, earlier.period_end, [])).lines.filter((line) => line.boxes.length > 0);
+    // What's accounted for, by identity: what the earlier return counted and
+    // what later returns claimed for it, less what they took back off.
+    const remaining = new Map<string, GstReturnLine[]>();
+    for (const row of accounted.rows) {
+      const line = storedLine(row);
+      if (row.late_reversal) {
+        const bucket = remaining.get(lineIdentity({ ...line, amount: negText(line.amount), gst: negText(line.gst) }));
+        bucket?.pop();
+      } else {
+        const identity = lineIdentity(line);
+        remaining.set(identity, [...(remaining.get(identity) ?? []), line]);
+      }
+    }
+    const late: Array<GstReturnLine & { reversal: boolean }> = [];
+    for (const line of now) {
+      const bucket = remaining.get(lineIdentity(line));
+      if (bucket && bucket.length > 0) bucket.pop();
+      else late.push({ ...line, lateFrom: from, reversal: false });
+    }
+    for (const bucket of remaining.values()) {
+      for (const line of bucket) {
+        late.push({ ...line, amount: negText(line.amount), gst: negText(line.gst), lateFrom: from, reversal: true });
+      }
+    }
+    const groups = new Map<string, Array<GstReturnLine & { reversal: boolean }>>();
+    for (const line of late) {
+      const key = [earlier.id, line.reversal ? "reversal" : "claim", line.eventType, line.documentType, line.documentId, line.eventDate].join(":");
+      groups.set(key, [...(groups.get(key) ?? []), line]);
+    }
+    for (const [key, lines] of groups) {
+      const first = lines[0];
+      const amount = lines.reduce((total, line) => add(total, dec(line.amount)), ZERO_DECIMAL);
+      const gst = lines.reduce((total, line) => add(total, dec(line.gst)), ZERO_DECIMAL);
+      claims.push({
+        key,
+        from,
+        side: first.side,
+        eventType: first.eventType,
+        eventDate: first.eventDate,
+        documentType: first.documentType,
+        documentId: first.documentId,
+        documentNumber: first.documentNumber,
+        contactName: first.contactName,
+        amount: toFixedString(amount, MONEY_SCALE),
+        gst: toFixedString(gst, MONEY_SCALE),
+        reversal: first.reversal,
+        included: !excluded.has(key),
+        irdNote: null,
+        lines: lines.map((line) => {
+          const copy: GstReturnLine & { reversal?: boolean } = { ...line };
+          delete copy.reversal;
+          return copy;
+        }),
+      });
+    }
+  }
+
+  // IRD's rules, as notes only (LG5, LG6): missed input tax (a purchase that
+  // adds GST to claim) has the 2-year rule; everything else adds up toward
+  // the $1,000 limit for fixing in a later return.
+  const cutoff = twoYearsBefore(periodEnd);
+  const missedInputTax = (claim: GstLateClaim) => claim.side === "purchases" && isPositive(dec(claim.gst));
+  let otherTotal = ZERO_DECIMAL;
+  for (const claim of claims) {
+    if (claim.included && !missedInputTax(claim)) otherTotal = add(otherTotal, abs(dec(claim.gst)));
+  }
+  const overLimit = cmp(otherTotal, dec(IRD_LIMIT)) > 0;
+  for (const claim of claims) {
+    if (missedInputTax(claim)) {
+      if (claim.eventDate < cutoff) claim.irdNote = IRD_NOTE_OLD_PURCHASE;
+    } else if (overLimit && claim.included) {
+      claim.irdNote = IRD_NOTE_OVER_LIMIT;
+    }
+  }
+  return claims;
+}
+
+function negText(value: string): string {
+  return toFixedString(neg(dec(value)), MONEY_SCALE);
+}
+
+/** Parses the keys of late claims to leave out. */
+function parseExcludedLateClaims(input: unknown): string[] {
+  if (input === undefined || input === null) return [];
+  if (!Array.isArray(input) || input.some((entry) => typeof entry !== "string" || entry.length > 200)) {
+    throw new ValidationError("excludedLateClaims must be a list of late claim keys.");
+  }
+  return [...new Set(input as string[])].sort();
 }
 
 /**
@@ -532,6 +700,25 @@ async function workOut(
     );
   }
   return { figures: figuresFrom(lines, adjustments), lines };
+}
+
+/**
+ * The period's own lines plus the late claims from earlier filed returns
+ * that are included, and the boxes from all of them (LG1-LG7).
+ */
+async function workOutWithLateClaims(
+  tx: OrgTx,
+  basis: GstBasis,
+  periodStart: string,
+  periodEnd: string,
+  adjustments: readonly GstAdjustment[],
+  excluded: readonly string[],
+): Promise<{ figures: GstReturnFigures; lines: GstReturnLine[]; lateClaims: GstLateClaim[] }> {
+  const own = await workOut(tx, basis, periodStart, periodEnd, adjustments);
+  const lateClaims = await lateClaimsFor(tx, periodStart, periodEnd, new Set(excluded));
+  const lateLines = lateClaims.filter((claim) => claim.included).flatMap((claim) => claim.lines);
+  const lines = [...own.lines, ...lateLines];
+  return { figures: figuresFrom(lines, adjustments), lines, lateClaims };
 }
 
 async function gstBasis(tx: OrgTx, options: { lock: boolean }): Promise<GstBasis> {
@@ -742,12 +929,13 @@ async function overlappingReturns(tx: OrgTx, periodStart: string, periodEnd: str
  */
 export async function calculateGstReturn(
   tx: OrgTx,
-  input: { periodStart: unknown; periodEnd: unknown; adjustments?: unknown },
+  input: { periodStart: unknown; periodEnd: unknown; adjustments?: unknown; excludedLateClaims?: unknown },
 ) {
   const { periodStart, periodEnd, months } = parseGstPeriod(input.periodStart, input.periodEnd);
   const adjustments = parseGstAdjustments(input.adjustments);
+  const excluded = parseExcludedLateClaims(input.excludedLateClaims);
   const basis = await gstBasis(tx, { lock: false });
-  const { figures, lines } = await workOut(tx, basis, periodStart, periodEnd, adjustments);
+  const { figures, lines, lateClaims } = await workOutWithLateClaims(tx, basis, periodStart, periodEnd, adjustments, excluded);
   return {
     periodStart,
     periodEnd,
@@ -757,6 +945,8 @@ export async function calculateGstReturn(
     ...figures,
     adjustments,
     lines,
+    /** Lines dated in earlier filed returns' periods that they didn't count (LG1-LG7). */
+    lateClaims,
     /** Filed returns that cover any day of this period. */
     filedReturns: await overlappingReturns(tx, periodStart, periodEnd),
     /** The IR546 adjustment when the basis changed since the last filed return. */
@@ -815,6 +1005,16 @@ export type FiledGstReturn = FiledGstReturnSummary & {
   currentError: string | null;
   changedSinceFiled: boolean;
   changes: GstBoxChange[];
+  /** This period's lines that later returns claimed late, or took back off (LG2). */
+  claimedLater: Array<{
+    gstReturn: { id: string; periodStart: string; periodEnd: string };
+    documentType: GstDocumentType;
+    documentNumber: string;
+    contactName: string;
+    eventDate: string;
+    reversal: boolean;
+    gst: string;
+  }>;
 };
 
 async function loadGstReturn(tx: OrgTx, id: string): Promise<FiledRow | null> {
@@ -838,10 +1038,28 @@ export async function getGstReturn(tx: OrgTx, gstReturnIdInput: unknown): Promis
     [id],
   );
   const lines = await tx.query<StoredLineRow>(
-    `select side, event_type, event_date, document_type, document_id::text, document_number, reference,
-            contact_id::text, contact_name, document_line_order, description, tax_code, category, tax_rate::text,
-            amount::text, gst_amount::text as gst, settled_amount::text, document_total::text
-       from gst_return_lines where gst_return_id = $1 order by line_order`,
+    `select ${STORED_LINE_COLUMNS} from gst_return_lines l left join gst_returns f on f.id = l.late_from_return_id
+      where l.gst_return_id = $1 order by l.line_order`,
+    [id],
+  );
+  // Lines of this return's period that later returns claimed late (LG2).
+  const claimedLater = await tx.query<{
+    gst_return_id: string;
+    period_start: string;
+    period_end: string;
+    document_type: GstDocumentType;
+    document_number: string;
+    contact_name: string;
+    event_date: string;
+    late_reversal: boolean;
+    gst: string;
+  }>(
+    `select r.id::text as gst_return_id, r.period_start::text, r.period_end::text, l.document_type, l.document_number,
+            l.contact_name, l.event_date::text, l.late_reversal, sum(l.gst_amount)::text as gst
+       from gst_return_lines l join gst_returns r on r.id = l.gst_return_id
+      where l.late_from_return_id = $1
+      group by r.id, r.period_start, r.period_end, l.document_type, l.document_number, l.contact_name, l.event_date, l.late_reversal
+      order by r.period_start, l.event_date, l.document_number`,
     [id],
   );
   const storedAdjustments = adjustments.rows.map((adjustment) => ({ ...adjustment, amount: money(adjustment.amount) }));
@@ -874,6 +1092,15 @@ export async function getGstReturn(tx: OrgTx, gstReturnIdInput: unknown): Promis
     currentError,
     changedSinceFiled: changes.length > 0,
     changes,
+    claimedLater: claimedLater.rows.map((entry) => ({
+      gstReturn: { id: entry.gst_return_id, periodStart: entry.period_start, periodEnd: entry.period_end },
+      documentType: entry.document_type,
+      documentNumber: entry.document_number,
+      contactName: entry.contact_name,
+      eventDate: entry.event_date,
+      reversal: entry.late_reversal,
+      gst: money(entry.gst),
+    })),
   };
 }
 
@@ -885,13 +1112,22 @@ export async function getGstReturn(tx: OrgTx, gstReturnIdInput: unknown): Promis
  */
 export async function fileGstReturn(
   tx: OrgTx,
-  input: { source?: unknown; idempotencyKey: unknown; periodStart: unknown; periodEnd: unknown; adjustments?: unknown },
+  input: {
+    source?: unknown;
+    idempotencyKey: unknown;
+    periodStart: unknown;
+    periodEnd: unknown;
+    adjustments?: unknown;
+    excludedLateClaims?: unknown;
+  },
 ): Promise<{ created: boolean; gstReturn: FiledGstReturn }> {
   const source = optionalSource(input.source);
   const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
   const { periodStart, periodEnd } = parseGstPeriod(input.periodStart, input.periodEnd);
   const adjustments = parseGstAdjustments(input.adjustments);
-  const hash = requestHash("gst_return", { periodStart, periodEnd, adjustments });
+  const excluded = parseExcludedLateClaims(input.excludedLateClaims);
+  // Returns filed before late claims existed hashed without the list; keep that so retries still match.
+  const hash = requestHash("gst_return", excluded.length ? { periodStart, periodEnd, adjustments, excludedLateClaims: excluded } : { periodStart, periodEnd, adjustments });
 
   // One filing at a time, so overlapping periods and retries are checked
   // against every return filed before this one. Also keeps the basis steady.
@@ -912,8 +1148,11 @@ export async function fileGstReturn(
     );
   }
 
-  const { figures, lines } = await workOut(tx, basis, periodStart, periodEnd, adjustments);
-  const counted = lines.filter((line) => line.boxes.length > 0);
+  const { figures, lines, lateClaims } = await workOutWithLateClaims(tx, basis, periodStart, periodEnd, adjustments, excluded);
+  const reversals = new Set(lateClaims.filter((claim) => claim.reversal).flatMap((claim) => claim.lines));
+  const counted = lines
+    .filter((line) => line.boxes.length > 0)
+    .map((line) => ({ ...line, lateFromReturnId: line.lateFrom?.gstReturnId ?? null, lateReversal: reversals.has(line) }));
   const { boxes, gstOnTransactions } = figures;
   const inserted = await tx.query<{ id: string }>(
     `insert into gst_returns (command_source, idempotency_key, request_hash, period_start, period_end, gst_basis,
@@ -964,7 +1203,7 @@ export async function fileGstReturn(
       `insert into gst_return_lines (gst_return_id, line_order, side, event_type, event_date, document_type,
                                      document_id, document_number, reference, contact_id, contact_name,
                                      document_line_order, description, tax_code, category, tax_rate, amount,
-                                     gst_amount, boxes, settled_amount, document_total)
+                                     gst_amount, boxes, settled_amount, document_total, late_from_return_id, late_reversal)
        select $1, entry.ordinality, entry.value->>'side', entry.value->>'eventType', (entry.value->>'eventDate')::date,
               entry.value->>'documentType', (entry.value->>'documentId')::bigint, entry.value->>'documentNumber',
               entry.value->>'reference', (entry.value->>'contactId')::bigint, entry.value->>'contactName',
@@ -972,7 +1211,8 @@ export async function fileGstReturn(
               entry.value->>'category', (entry.value->>'taxRate')::numeric, (entry.value->>'amount')::numeric,
               (entry.value->>'gst')::numeric,
               array(select jsonb_array_elements_text(entry.value->'boxes')),
-              (entry.value->>'settledAmount')::numeric, (entry.value->>'documentTotal')::numeric
+              (entry.value->>'settledAmount')::numeric, (entry.value->>'documentTotal')::numeric,
+              (entry.value->>'lateFromReturnId')::bigint, coalesce((entry.value->>'lateReversal')::boolean, false)
          from jsonb_array_elements($2::jsonb) with ordinality as entry(value, ordinality)`,
       [id, JSON.stringify(counted)],
     );
@@ -981,7 +1221,17 @@ export async function fileGstReturn(
     eventType: "gst_return.filed",
     entityType: "gst_return",
     entityId: id,
-    details: { periodStart, periodEnd, basis, box15: boxes.box15, adjustments: adjustments.length, lines: counted.length },
+    details: {
+      periodStart,
+      periodEnd,
+      basis,
+      box15: boxes.box15,
+      adjustments: adjustments.length,
+      lines: counted.length,
+      ...(lateClaims.length
+        ? { lateClaimsIncluded: lateClaims.filter((claim) => claim.included).length, lateClaimsLeftOut: lateClaims.filter((claim) => !claim.included).length }
+        : {}),
+    },
   });
   return { created: true, gstReturn: await getGstReturn(tx, id) };
 }

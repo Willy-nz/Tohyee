@@ -27,6 +27,7 @@ import type {
   FiledGstReturnSummary,
   GstBasisChange,
   GstEventType,
+  GstLateClaim,
   GstReturnLine,
 } from "@/lib/reports/gst-return";
 import { GST_BASIS_LABELS, type GstBasis, type TaxCategory } from "@/lib/tax/categories";
@@ -42,7 +43,21 @@ type Calculated = GstReturnFigures & {
   lines: GstReturnLine[];
   filedReturns: FiledGstReturnSummary[];
   basisChange: GstBasisChange | null;
+  lateClaims: GstLateClaim[];
 };
+
+const DOCUMENT_LABELS: Record<GstReturnLine["documentType"], string> = {
+  sales_invoice: "Invoice",
+  sales_credit_note: "Credit note",
+  bill: "Bill",
+  supplier_credit_note: "Supplier credit note",
+  bank_transaction: "Bank transaction",
+  expense_claim: "Expense claim",
+};
+
+function periodLabel(period: { periodStart: string; periodEnd: string }): string {
+  return `${formatDate(period.periodStart)} to ${formatDate(period.periodEnd)}`;
+}
 
 /** What the report counts on each basis (docs/ACCOUNTING-EXAMPLES.md, G1-G18). */
 const BASIS_DESCRIPTIONS: Record<GstBasis, string> = {
@@ -276,6 +291,11 @@ function LinesTable({ lines, id }: { lines: GstReturnLine[]; id?: string }) {
               <td>
                 {line.documentNumber}
                 {line.reference ? <span className={ui.muted}> · {line.reference}</span> : null}
+                {line.lateFrom ? (
+                  <div>
+                    <Badge tone="amber">Late claim · from {periodLabel(line.lateFrom)}</Badge>
+                  </div>
+                ) : null}
               </td>
               <td>{line.contactName}</td>
               <td>
@@ -405,7 +425,7 @@ function FiledReturnDetail({ organisationId, gstReturnId }: { organisationId: st
           {filed.changedSinceFiled ? (
             <Notice tone="warning">
               <strong>Changed since filed.</strong> Something dated in this period was recorded, voided or removed after
-              the return was filed. Amending a filed return isn&apos;t supported yet.
+              the return was filed. It&apos;s offered as a late claim in the next return.
               <div className={ui.tableWrap}>
                 <table className={ui.table}>
                   <thead>
@@ -432,6 +452,18 @@ function FiledReturnDetail({ organisationId, gstReturnId }: { organisationId: st
               </div>
             </Notice>
           ) : null}
+          {filed.claimedLater.length ? (
+            <Notice tone="info">
+              <strong>Claimed in later returns.</strong>{" "}
+              {filed.claimedLater
+                .map(
+                  (entry) =>
+                    `${DOCUMENT_LABELS[entry.documentType]} ${entry.documentNumber} (${entry.contactName}, GST ${entry.gst}) ${entry.reversal ? "was taken back off" : "was claimed"} in the return for ${periodLabel(entry.gstReturn)}`,
+                )
+                .join("; ")}
+              .
+            </Notice>
+          ) : null}
           {filed.currentError ? (
             <Notice tone="warning">The figures can&apos;t be worked out again now: {filed.currentError}</Notice>
           ) : null}
@@ -441,6 +473,74 @@ function FiledReturnDetail({ organisationId, gstReturnId }: { organisationId: st
           <BoxDetail figures={filed} lines={filed.lines} adjustments={filed.adjustments} selected={selected} />
         </>
       ) : null}
+    </Card>
+  );
+}
+
+/**
+ * Late claims (LG1-LG7, like Xero's): transactions dated in an earlier filed
+ * return's period that it didn't count. Included unless they're unticked;
+ * where IRD's rules say otherwise, a note says so.
+ */
+function LateClaimsCard({
+  claims,
+  excluded,
+  onToggle,
+}: {
+  claims: GstLateClaim[];
+  excluded: string[];
+  onToggle: (key: string, include: boolean) => void;
+}) {
+  if (claims.length === 0) return null;
+  const included = claims.filter((claim) => claim.included);
+  return (
+    <Card
+      title={`Late claims (${included.length} of ${claims.length} included)`}
+      description="Transactions approved or changed after the return for their period was filed. They count in this return's boxes unless you untick them; an unticked one is offered again next time."
+    >
+      <div className={ui.tableWrap}>
+        <table id="gst-return-late-claims" className={ui.table}>
+          <thead>
+            <tr>
+              <th data-export-ignore="true">Include</th>
+              <th>Date</th>
+              <th>Transaction</th>
+              <th>Contact</th>
+              <th>From the return for</th>
+              <th className={ui.num}>Amount incl. GST</th>
+              <th className={ui.num}>GST</th>
+            </tr>
+          </thead>
+          <tbody>
+            {claims.map((claim) => (
+              <tr key={claim.key}>
+                <td data-export-ignore="true">
+                  <input
+                    type="checkbox"
+                    aria-label={`Include ${DOCUMENT_LABELS[claim.documentType]} ${claim.documentNumber}`}
+                    checked={!excluded.includes(claim.key)}
+                    onChange={(event) => onToggle(claim.key, event.target.checked)}
+                  />
+                </td>
+                <td>{formatDate(claim.eventDate)}</td>
+                <td>
+                  {DOCUMENT_LABELS[claim.documentType]} {claim.documentNumber}
+                  <span className={ui.muted}> · {claim.reversal ? "changed since, taken back off" : EVENT_LABELS[claim.eventType]}</span>
+                  {claim.irdNote ? <div className={ui.muted}>{claim.irdNote} You can still include it.</div> : null}
+                </td>
+                <td>{claim.contactName}</td>
+                <td>{periodLabel(claim.from)}</td>
+                <td className={ui.num}>
+                  <Money value={claim.amount} />
+                </td>
+                <td className={ui.num}>
+                  <Money value={claim.gst} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }
@@ -507,6 +607,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
   const [months, setMonths] = useState<number>(2);
   const periodEnd = gstPeriodEnd(start, months);
   const [adjustments, setAdjustments] = useState<GstAdjustment[]>([]);
+  const [excludedLateClaims, setExcludedLateClaims] = useState<string[]>([]);
   const [form, setForm] = useState<{ box: GstAdjustmentBox; description: string; amount: string }>({
     box: "9",
     description: "",
@@ -538,12 +639,12 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
     }
   }
 
-  const requestKey = JSON.stringify({ organisationId, start, periodEnd, adjustments, version });
+  const requestKey = JSON.stringify({ organisationId, start, periodEnd, adjustments, excludedLateClaims, version });
   useEffect(() => {
     let cancelled = false;
     api<Calculated>("/api/reports/gst-return", {
       method: "POST",
-      body: { organisationId, periodStart: start, periodEnd, adjustments },
+      body: { organisationId, periodStart: start, periodEnd, adjustments, excludedLateClaims },
     }).then(
       (data) => {
         if (!cancelled) setReport({ key: requestKey, data, error: null });
@@ -555,7 +656,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
     return () => {
       cancelled = true;
     };
-  }, [organisationId, start, periodEnd, adjustments, requestKey]);
+  }, [organisationId, start, periodEnd, adjustments, excludedLateClaims, requestKey]);
   const current = report?.key === requestKey ? report : null;
   const data = current?.data ?? null;
   const alreadyFiled = data ? data.filedReturns.length > 0 : false;
@@ -564,6 +665,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
     setSuggestionUsed(true);
     setStart(nextStart);
     setMonths(nextMonths);
+    setExcludedLateClaims([]);
     setFileKey(newIdempotencyKey("gst"));
     setStatus(null);
   }
@@ -573,7 +675,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
     try {
       const checked = await api<Calculated>("/api/reports/gst-return", {
         method: "POST",
-        body: { organisationId, periodStart: start, periodEnd, adjustments: [...adjustments, adjustment] },
+        body: { organisationId, periodStart: start, periodEnd, adjustments: [...adjustments, adjustment], excludedLateClaims },
       });
       setAdjustments(checked.adjustments);
       setFormError(null);
@@ -609,13 +711,14 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
     try {
       const result = await api<{ created: boolean; gstReturn: FiledGstReturn }>("/api/gst-returns", {
         method: "POST",
-        body: { organisationId, idempotencyKey: fileKey, source: "ui", periodStart: start, periodEnd, adjustments },
+        body: { organisationId, idempotencyKey: fileKey, source: "ui", periodStart: start, periodEnd, adjustments, excludedLateClaims },
       });
       setStatus({
         tone: "success",
         text: `Marked the GST return for ${formatDate(result.gstReturn.periodStart)} to ${formatDate(result.gstReturn.periodEnd)} as filed.`,
       });
       setFileKey(newIdempotencyKey("gst"));
+      setExcludedLateClaims([]);
       setOpenReturn(result.gstReturn.id);
       filed.reload();
       setVersion((value) => value + 1);
@@ -696,6 +799,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
               tables={[
                 { id: "gst-return-boxes", title: "GST return boxes" },
                 ...(adjustments.length ? [{ id: "gst-return-adjustments", title: "Adjustments" }] : []),
+                ...(data.lateClaims.length ? [{ id: "gst-return-late-claims", title: "Late claims" }] : []),
                 ...(selected ? [{ id: "gst-return-detail", title: selectionTitle(selected) }] : []),
               ]}
             />
@@ -710,6 +814,17 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
           </>
         ) : null}
       </Card>
+
+      {data ? (
+        <LateClaimsCard
+          claims={data.lateClaims}
+          excluded={excludedLateClaims}
+          onToggle={(claimKey, include) => {
+            setExcludedLateClaims(include ? excludedLateClaims.filter((entry) => entry !== claimKey) : [...excludedLateClaims, claimKey]);
+            setFileKey(newIdempotencyKey("gst"));
+          }}
+        />
+      ) : null}
 
       <Card
         title="Adjustments"
@@ -756,7 +871,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
         </Card>
       ) : null}
 
-      <Card title="Filed returns" description="Stored as they were filed. Amending a filed return isn't supported yet.">
+      <Card title="Filed returns" description="Stored as they were filed. Anything changed in a filed period later is offered as a late claim in the next return.">
         {filed.error ? <Notice tone="error">{filed.error}</Notice> : null}
         {filed.loading ? <p className={ui.muted}>Loading…</p> : null}
         {filed.data ? (

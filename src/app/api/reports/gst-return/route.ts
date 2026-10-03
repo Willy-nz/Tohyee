@@ -15,13 +15,19 @@ export const GET = route(async (request) => {
 
 /**
  * POST: works the return out with Box 9 and Box 13 adjustments
- * (`adjustments: [{ box: "9" | "13", description, amount }]`). Nothing is
+ * (`adjustments: [{ box: "9" | "13", description, amount }]`) and any late
+ * claims turned off (`excludedLateClaims: [key]`, LG3). Nothing is
  * stored; filing is POST /api/gst-returns.
  */
 export const POST = route(async (request) => {
   const body = await readJson(request);
   const report = await withOrganisation(request, body.organisationId, "viewer", (tx) =>
-    calculateGstReturn(tx, { periodStart: body.periodStart, periodEnd: body.periodEnd, adjustments: body.adjustments }),
+    calculateGstReturn(tx, {
+      periodStart: body.periodStart,
+      periodEnd: body.periodEnd,
+      adjustments: body.adjustments,
+      excludedLateClaims: body.excludedLateClaims,
+    }),
   );
   return json(report);
 });

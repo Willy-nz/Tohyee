@@ -1311,6 +1311,13 @@ that something happened.
   about 3 seconds. Tohyee's own books and CRM, sharing with clients,
   report emails, shaping and pivot tables are the next steps.
 
+- **GST late claims** (examples LG1-LG7, decisions 363-366, tenant
+  migration 0084), like Xero's: anything approved or changed after a return
+  was filed but dated in its period is offered in the next return, counted
+  in the ordinary boxes unless unticked, with "IRD says ..." notes for
+  purchases more than 2 years old and changes over $1,000. Filed returns
+  list what later returns claimed for them.
+
 ## Not built yet, on purpose
 
 These only arrive as working features. A screen that just records a status

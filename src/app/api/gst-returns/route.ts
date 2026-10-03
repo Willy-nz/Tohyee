@@ -22,6 +22,7 @@ export const POST = route(async (request) => {
       periodStart: body.periodStart,
       periodEnd: body.periodEnd,
       adjustments: body.adjustments,
+      excludedLateClaims: body.excludedLateClaims,
     }),
   );
   return json(result, { status: result.created ? 201 : 200 });

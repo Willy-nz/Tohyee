@@ -2457,3 +2457,38 @@ when that step comes.
      (Google/Microsoft app or IMAP app password) is decided before that step
      is built: a Google app in "Testing" loses access after 7 days, which
      affects personal Gmail (and the CRM email sync now).
+
+### GST late claims (decisions 363 to 366)
+
+Jess's issue #88: a change dated in a period whose return was filed was
+ignored by every later return. She asked to follow Xero, and to show IRD's
+rules rather than enforce them ("just say IRD says this but if you want we
+can"; practices "just jammed it into sales or expenses"). Examples LG1-LG7,
+approved 3 Oct 2026.
+
+363. **Late claims are worked out, not typed in.** For every return filed for
+     an earlier period, Tohyee works that period out again on its own basis
+     and compares it with what was filed plus what later returns have
+     claimed for it. A line now there that isn't accounted for is a late
+     claim; a line that was counted and has since gone is taken back off.
+     Each transaction is one claim.
+364. **Late claims count in the ordinary boxes and are included by
+     default** (sales in Box 5/6, purchases in Box 11), like Xero's. Each can
+     be unticked; an unticked one is offered again in the next return. The
+     filed return they belong to keeps showing "Changed since filed" and
+     lists what later returns claimed.
+365. **IRD's rules are notes, never blocks.** A missed purchase more than 2
+     years before the return's end says "IRD says GST on purchases more than
+     2 years old can only be claimed in a few cases" (GST Act s20(3)). When
+     the other included late claims add up to more than $1,000 of GST (each
+     claim's GST, either way), they say "IRD says changes over $1,000 (or
+     over the lower of $10,000 and 2% of output tax) should be fixed by
+     amending the earlier return" (TAA s113A). The 2% alternative is quoted,
+     not worked out, since nothing is blocked.
+366. **Filing stores late claims with the return that included them**
+     (tenant migration 0084: `late_from_return_id`, `late_reversal` on
+     `gst_return_lines`), with their own dates, so they're never counted
+     twice and the filed return's boxes still add up from its lines. Which
+     claims were left out is part of the filing request (and its retry
+     check).
+
