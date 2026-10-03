@@ -556,7 +556,9 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
       destinations(menus, newActions, [
         { href: AI_LINK.href, label: "AI assistant", group: "AI" },
         { href: "/operations/profile", label: "Profile and two-step sign-in", group: "You" },
-        ...(app === "crm" ? [{ href: "/operations", label: "Accounting", group: "Apps" }] : modules?.crm ? [{ href: "/crm", label: "CRM", group: "Apps" }] : []),
+        ...(app !== "accounting" ? [{ href: "/operations", label: "Accounting", group: "Apps" }] : []),
+        ...(app !== "crm" && modules?.crm ? [{ href: "/crm", label: "CRM", group: "Apps" }] : []),
+        ...(app !== "analytics" && modules?.analytics ? [{ href: "/analytics", label: "Analytics", group: "Apps" }] : []),
       ]),
     [menus, newActions, app, modules],
   );
@@ -588,7 +590,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
       </a>
       <header className={styles.topbar} data-print="hide">
         <div className={styles.topRow}>
-          <Link href={app === "crm" ? "/crm" : "/operations"} className={styles.brand} aria-label="Tohyee home">
+          <Link href={app === "crm" ? "/crm" : app === "analytics" ? "/analytics" : "/operations"} className={styles.brand} aria-label="Tohyee home">
             <BrandMark size={26} className={styles.brandMark} />
             <span className={styles.brandText}>Tohyee</span>
           </Link>

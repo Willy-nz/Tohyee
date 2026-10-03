@@ -23,3 +23,6 @@ tmp/
 installer/windows/tray/bin/
 installer/windows/tray/obj/
 .claude/worktrees/
+
+# Analytics data files made when running locally (decision 354).
+/analytics/

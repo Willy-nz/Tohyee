@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/server/users", label: "Users" },
   { href: "/server/remote-access", label: "Remote access" },
   { href: "/server/email", label: "Email" },
+  { href: "/server/analytics", label: "Analytics folders" },
   { href: "/server/updates", label: "Updates" },
 ];
 

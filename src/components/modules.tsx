@@ -11,7 +11,7 @@ import type { OrganisationSettings } from "@/lib/organisations/settings";
  * Accounting and Tax are always on; the other modules are switched on per
  * organisation.
  */
-export type Modules = { crm: boolean; reporting: boolean; notForProfit: boolean };
+export type Modules = { crm: boolean; reporting: boolean; notForProfit: boolean; analytics: boolean };
 
 const CHANGED = "tohyee:modules-changed";
 
@@ -28,12 +28,13 @@ export function useModules(organisationId: string | null): Modules | null {
     crm: settings.data.settings.crmEnabled,
     reporting: settings.data.settings.advancedFeatures,
     notForProfit: settings.data.settings.notForProfitEnabled,
+    analytics: settings.data.settings.analyticsEnabled,
   };
 }
 
 type ModuleRow = {
   key: keyof Modules;
-  setting: "crmEnabled" | "advancedFeatures" | "notForProfitEnabled";
+  setting: "crmEnabled" | "advancedFeatures" | "notForProfitEnabled" | "analyticsEnabled";
   title: string;
   description: string;
   links: Array<{ href: string; label: string }>;
@@ -50,6 +51,14 @@ const OPTIONAL: ModuleRow[] = [
       { href: "/crm/companies", label: "Companies" },
       { href: "/crm/pipeline", label: "Pipeline" },
     ],
+  },
+  {
+    key: "analytics",
+    setting: "analyticsEnabled",
+    title: "Analytics",
+    description:
+      "Load CSV files from a folder on the server (sales exports, emailed reports, anything with rows and columns) every night, ready for reports and dashboards. A server admin chooses the folder.",
+    links: [{ href: "/analytics", label: "Data sources" }],
   },
   {
     key: "reporting",

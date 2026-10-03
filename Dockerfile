@@ -29,14 +29,15 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client-17 \
  && apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* \
- && mkdir -p /backups && chown node:node /backups
+ && mkdir -p /backups /analytics && chown node:node /backups /analytics
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     TOHYEE_CLOUDFLARED_PATH=/usr/local/bin/cloudflared \
-    TOHYEE_BACKUP_DIR=/backups
+    TOHYEE_BACKUP_DIR=/backups \
+    TOHYEE_ANALYTICS_DIR=/analytics
 COPY --from=cloudflared /cloudflared /usr/local/bin/cloudflared
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
@@ -45,6 +46,8 @@ COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/dist/tohyee-admin.cjs ./tohyee-admin.cjs
 # Backups (Server settings > Backups); mount a volume or a folder here.
 VOLUME /backups
+# Analytics data (rebuildable by loading again; decision 355).
+VOLUME /analytics
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

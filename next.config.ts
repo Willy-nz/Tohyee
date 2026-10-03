@@ -2,10 +2,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // DuckDB (analytics, decision 354) is a native module: loaded by Node, not bundled.
+  serverExternalPackages: ["@duckdb/node-api", "@duckdb/node-bindings"],
   // The fonts the server writes PDFs with (src/lib/pdf/writer.ts reads them
   // from the app's folder), so the standalone build and installers have them.
   outputFileTracingIncludes: {
     "/api/**": ["src/lib/pdf/fonts/*.ttf", "src/lib/pdf/fonts/OFL.txt"],
+    // DuckDB's native library sits beside its .node file and is loaded by it
+    // (libduckdb.so, duckdb.dll), so tracing doesn't see it (decision 354).
+    "/api/analytics/**": ["node_modules/@duckdb/node-api/**", "node_modules/@duckdb/node-bindings/**", "node_modules/@duckdb/node-bindings-*/**"],
   },
   // The CRM moved from /operations/crm to its own app at /crm; old links and
   // bookmarks still reach the same pages (with their ?query). /operations/crm
