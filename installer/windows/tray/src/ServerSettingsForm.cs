@@ -28,7 +28,7 @@ namespace Tohyee.Tray
     /// <summary>
     /// The server settings window. Signing in as a server admin (with two-step
     /// sign-in) comes first; then a sidebar with Home, Organisations, Users,
-    /// Remote access, Backups, Email, Stats and Updates. Nothing here touches the books.
+    /// Remote access, Backups, Analytics, Email, Stats and Updates. Nothing here touches the books.
     /// </summary>
     internal sealed class ServerSettingsForm : Form
     {
@@ -140,6 +140,7 @@ namespace Tohyee.Tray
                 case "users": return new UsersPage(_app.Api);
                 case "phone": return new RemoteAccessPage(_app.Api, _app.Settings, _app.Tailscale, _app.Cloudflare);
                 case "backups": return _backupsPage = new BackupsPage(_app.Api);
+                case "analytics": return new AnalyticsPage(_app.Api);
                 case "email": return new EmailPage(_app.Api);
                 case "updates": return new UpdatesPage(_app);
                 case "stats": return new StatsPage(_app.Api);
@@ -249,7 +250,7 @@ namespace Tohyee.Tray
     {
         private readonly List<NavItem> _items = new List<NavItem>();
         private readonly Picture _logo = Picture.Logo(36);
-        private readonly Label _name = new Label { Text = "Tohyee", Font = Theme.F("Segoe UI Semibold", 14f), ForeColor = Color.White, AutoSize = true, BackColor = Theme.Sidebar };
+        private readonly Label _name = new Label { Text = "Tohyee", Font = Theme.F("Segoe UI Semibold", 14f), ForeColor = Theme.Light ? Theme.Text : Color.White, AutoSize = true, BackColor = Theme.Sidebar };
         private readonly Label _kind = new Label { Text = "SERVER", Font = Theme.SmallCaps, ForeColor = Theme.AccentText, AutoSize = true, BackColor = Theme.Sidebar };
         private readonly Label _who = new Label { ForeColor = Theme.Muted, Font = Theme.Small, AutoSize = false, AutoEllipsis = true, BackColor = Theme.Sidebar };
         private readonly FlatButton _open;
@@ -270,6 +271,7 @@ namespace Tohyee.Tray
             Add(navigate, "users", "Users", Glyph.Users);
             Add(navigate, "phone", "Remote access", Glyph.Phone);
             Add(navigate, "backups", "Backups", Glyph.Backups);
+            Add(navigate, "analytics", "Analytics", Glyph.Stats);
             Add(navigate, "email", "Email", Glyph.Email);
             Add(navigate, "stats", "Stats", Glyph.Stats);
             Add(navigate, "updates", "Updates", Glyph.Updates);
@@ -324,7 +326,7 @@ namespace Tohyee.Tray
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            using (var pen = new Pen(Color.FromArgb(34, 38, 45))) e.Graphics.DrawLine(pen, Width - 1, 0, Width - 1, Height);
+            using (var pen = new Pen(Theme.Light ? Theme.CardBorder : Color.FromArgb(34, 38, 45))) e.Graphics.DrawLine(pen, Width - 1, 0, Width - 1, Height);
         }
     }
 

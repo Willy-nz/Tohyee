@@ -41,6 +41,9 @@ sidebar with the logo and the pages, and each page a column of cards.
 - **Backups**: nightly backups, the backup key, each organisation's last
   backup, and the backup files (restore as a copy). Until a saved copy of the
   key has been checked, the window opens on Backups with a reminder.
+- **Analytics**: each organisation's CSV folder on this computer, whether
+  Tohyee can read it, and Browse and Save for each organisation. Blank clears
+  the folder. Tohyee only reads files there; it never changes or deletes them.
 - **Remote access**: three ways to use Tohyee from anywhere, one at a time: a
   Tohyee address (recommended for most), your own domain (Cloudflare), and
   Tailscale Funnel. See below.
@@ -184,8 +187,13 @@ each Remote access state (`4-phone-1-choose` … `4-phone-7-tailscale-on`):
 
 ```sh
 xvfb-run -a -s "-screen 0 1400x1000x24" mono /tmp/TohyeeTray.exe --demo-screenshots /tmp/tohyee-app/
+TOHYEE_UI_THEME=light xvfb-run -a -s "-screen 0 1400x1000x24" mono /tmp/TohyeeTray.exe --demo-screenshots /tmp/tohyee-app-light/
 TOHYEE_UI_SCALE=1.5 xvfb-run -a -s "-screen 0 1920x1200x24" mono /tmp/TohyeeTray.exe --demo-screenshots /tmp/tohyee-app-150/
 ```
+
+Dark is the default; `TOHYEE_UI_THEME=light` opts into the light palette.
+The Windows installer workflow captures both palettes, including
+`6-analytics.png` and `light/6-analytics.png` on `ci/tray-screenshots`.
 
 Mono draws with DejaVu Sans instead of Segoe UI (wider), its own scroll bars,
 check boxes and drop-downs, and a thin line after the last list column; the

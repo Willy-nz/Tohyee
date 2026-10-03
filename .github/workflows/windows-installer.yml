@@ -56,8 +56,14 @@ jobs:
         run: |
           $exe = Join-Path $PWD 'dist\windows\stage\tray\TohyeeTray.exe'
           $shots = Join-Path $PWD 'dist\windows\tray-screenshots'
-          $p = Start-Process -FilePath $exe -ArgumentList @('--demo-screenshots', "`"$shots`"") -Wait -PassThru
-          Write-Host "Exit code $($p.ExitCode)"
+          foreach ($theme in @('dark', 'light')) {
+            $env:TOHYEE_UI_THEME = $theme
+            $target = if ($theme -eq 'dark') { $shots } else { Join-Path $shots 'light' }
+            $p = Start-Process -FilePath $exe -ArgumentList @('--demo-screenshots', "`"$target`"") -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Screenshots failed for $theme (exit $($p.ExitCode))." }
+            if (!(Test-Path (Join-Path $target '6-analytics.png'))) { throw "Missing Analytics screenshot for $theme." }
+          }
+          Remove-Item Env:TOHYEE_UI_THEME
           Get-ChildItem $shots | Select-Object Name, Length | Format-Table | Out-Host
 
       - name: Keep the pictures
@@ -76,7 +82,7 @@ jobs:
           $shots = Join-Path $PWD 'dist\windows\tray-screenshots'
           $work = Join-Path $env:RUNNER_TEMP 'shots-branch'
           git init -q $work
-          Copy-Item (Join-Path $shots '*') $work
+          Copy-Item (Join-Path $shots '*') $work -Recurse
           Push-Location $work
           git config user.name 'github-actions'
           git config user.email 'github-actions@users.noreply.github.com'
