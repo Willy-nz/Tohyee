@@ -6,6 +6,7 @@ import { Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { reportCategories, TrackingTagsText, useTracking } from "@/components/tracking";
 import { Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { ReportExport } from "@/components/reports/report-export";
 import { formatDate, formatDateTime, formatMoney, todayInBrowser, personName } from "@/lib/format";
 import type { AccountTransactions } from "@/lib/reports/account-transactions";
 import type { AgedPayables } from "@/lib/reports/aged-payables";
@@ -41,12 +42,16 @@ export function PrintButton() {
 export function Balance({ value }: { value: string }) {
   if (value.startsWith("-")) {
     return (
-      <>
+      <span data-export-value={value}>
         <Money value={value.slice(1)} /> Cr
-      </>
+      </span>
     );
   }
-  return <Money value={value} />;
+  return (
+    <span data-export-value={value}>
+      <Money value={value} />
+    </span>
+  );
 }
 
 function AgedCells({ amounts }: { amounts: AgedAmounts }) {
@@ -89,7 +94,14 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
       {data && data.rows.length === 0 ? <Empty>You don&apos;t owe any supplier anything on this date.</Empty> : null}
       {data && data.rows.length > 0 ? (
         <div className={ui.tableWrap}>
-          <table className={ui.table}>
+          <ReportExport
+            organisationId={organisationId}
+            report="aged-payables"
+            title="Aged payables"
+            period={`As at ${formatDate(data.asAt)}`}
+            tables={[{ id: "aged-payables-report" }]}
+          />
+          <table id="aged-payables-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Supplier</th>
@@ -288,7 +300,18 @@ export function AccountTransactionsReport({
       {data && data.accounts.length === 0 ? <Empty>Nothing posted to these accounts yet.</Empty> : null}
       {data && data.accounts.length > 0 ? (
         <div className={ui.tableWrap}>
-          <table className={ui.table}>
+          <ReportExport
+            organisationId={organisationId}
+            report="account-transactions"
+            title="Account transactions"
+            period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
+            filters={[
+              ...(data.accounts.length === 1 ? [`Account: ${data.accounts[0].code} · ${data.accounts[0].name}`] : []),
+              ...(data.filter ? [`Tracking: ${data.filter.label}`] : []),
+            ]}
+            tables={[{ id: "account-transactions-report" }]}
+          />
+          <table id="account-transactions-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Date</th>
@@ -403,7 +426,14 @@ export function JournalReportView({ organisationId }: { organisationId: string }
       {data && data.journals.length === 0 ? <Empty>No journals were posted in this period.</Empty> : null}
       {data && data.journals.length > 0 ? (
         <div className={ui.tableWrap}>
-          <table className={ui.table}>
+          <ReportExport
+            organisationId={organisationId}
+            report="journal-report"
+            title="Journal report"
+            period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
+            tables={[{ id: "journal-report" }]}
+          />
+          <table id="journal-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Account</th>

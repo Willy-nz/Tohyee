@@ -8,6 +8,7 @@ import { useApiData } from "@/components/hooks";
 import { RdAssetPanel } from "@/components/rd";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { PrintButton } from "@/components/reports/ledger-reports";
+import { ReportExport } from "@/components/reports/report-export";
 import { TrackingSelects, TrackingTagsText, useTracking } from "@/components/tracking";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -1109,13 +1110,25 @@ export function FixedAssetRegisterReport({ organisationId }: { organisationId: s
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {data ? (
         <>
+          <ReportExport
+            organisationId={organisationId}
+            report="fixed-asset-register"
+            title="Fixed asset register"
+            period={`As at ${formatDate(data.asOf)}`}
+            filters={[`Financial year from ${formatDate(data.financialYearStart)}`]}
+            tables={[
+              ...(data.groups.length > 0 ? [{ id: "fixed-asset-register-held", title: "Held assets" }] : []),
+              ...(data.disposals.length > 0 ? [{ id: "fixed-asset-register-disposals", title: "Disposed of this year" }] : []),
+              { id: "fixed-asset-register-ledger", title: "Ties to the ledger" },
+            ]}
+          />
           <p className={ui.muted}>
             As at {formatDate(data.asOf)}; this year is from {formatDate(data.financialYearStart)}.
           </p>
           {data.groups.length === 0 ? <Empty>No assets held on this date.</Empty> : null}
           {data.groups.length > 0 ? (
             <div className={ui.tableWrap}>
-              <table className={ui.table}>
+              <table id="fixed-asset-register-held" className={ui.table}>
                 <thead>
                   <tr>
                     <th>Asset</th>
@@ -1154,7 +1167,7 @@ export function FixedAssetRegisterReport({ organisationId }: { organisationId: s
             <>
               <h3>Disposed of this year</h3>
               <div className={ui.tableWrap}>
-                <table className={ui.table}>
+                <table id="fixed-asset-register-disposals" className={ui.table}>
                   <thead>
                     <tr>
                       <th>Asset</th>
@@ -1203,7 +1216,7 @@ export function FixedAssetRegisterReport({ organisationId }: { organisationId: s
             </Notice>
           )}
           <div className={ui.tableWrap}>
-            <table className={ui.table}>
+            <table id="fixed-asset-register-ledger" className={ui.table}>
               <thead>
                 <tr>
                   <th>Account</th>

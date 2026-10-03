@@ -458,6 +458,79 @@
   font-weight: 700;
 }
 
+.reportMeta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  padding: 14px 16px;
+}
+
+.reportMetaText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.reportMetaText > strong,
+.reportMetaTitle {
+  color: var(--text);
+}
+
+.reportMetaTitle {
+  font-size: var(--text-lg);
+  font-weight: 650;
+}
+
+.reportExport {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.reportExport > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.reportExport > summary::-webkit-details-marker {
+  display: none;
+}
+
+.reportExportMenu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  right: 0;
+  display: grid;
+  min-width: 150px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  padding: 4px;
+}
+
+.reportExportMenu button {
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.reportExportMenu button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.reportExportMenu button:disabled {
+  color: var(--text-muted);
+}
+
 .inlineForm {
   display: flex;
   flex-wrap: wrap;
@@ -735,6 +808,16 @@
   min-width: 0;
   max-width: 200px;
   font-size: 0.85rem;
+}
+
+@media (max-width: 560px) {
+  .reportMeta {
+    display: grid;
+  }
+
+  .reportExport {
+    justify-self: start;
+  }
 }
 
 /* CRM: the pipeline board, opportunity cards and the company timeline. */

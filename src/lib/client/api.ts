@@ -50,6 +50,34 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   return payload as T;
 }
 
+/** Calls the Tohyee API for a downloadable file, with the same session handling as `api()`. */
+export async function apiDownload(path: string, body: unknown): Promise<Blob> {
+  const response = await fetch(new URL(path, window.location.origin), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  if (response.status === 401 && !path.startsWith("/api/auth/")) {
+    window.location.assign(new URL("/login", window.location.origin).toString());
+  }
+  if (!response.ok) {
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    const message =
+      payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string"
+        ? payload.error
+        : `Request failed (${response.status}).`;
+    throw new ApiError(message, response.status);
+  }
+  return response.blob();
+}
+
 /**
  * A fresh idempotency key for one submission. Uses getRandomValues because
  * crypto.randomUUID isn't available on plain-HTTP LAN addresses.

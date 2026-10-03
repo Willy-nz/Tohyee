@@ -13,6 +13,7 @@ import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, todayInBrowser, personName } from "@/lib/format";
 import type { BudgetVsActual, BudgetVsActualGroup, VarianceFigures } from "@/lib/reports/budget-vs-actual";
 import { accountTransactionsHref } from "@/lib/reports/drilldown";
+import { ReportExport } from "@/components/reports/report-export";
 
 /**
  * Budgets (examples BU1-BU8): the list, a budget's month-by-month amounts
@@ -560,12 +561,20 @@ export function BudgetVsActualReport({ organisationId, initialBudgetId }: { orga
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {data ? (
         <div className={ui.tableWrap}>
+          <ReportExport
+            organisationId={organisationId}
+            report="budget-vs-actual"
+            title="Budget vs actual"
+            period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
+            filters={[`Budget: ${data.budget.name}`, ...(data.budget.trackingLabel ? [`Tracking: ${data.budget.trackingLabel}`] : [])]}
+            tables={[{ id: "budget-vs-actual-report" }]}
+          />
           <p className={ui.muted}>
             {formatDate(data.from)} to {formatDate(data.to)}
             {data.budget.trackingLabel ? `, only lines tagged ${data.budget.trackingLabel}` : ""}.{" "}
             <Link href={`/operations/budgets/${data.budget.id}`}>Open the budget</Link>
           </p>
-          <table className={ui.table}>
+          <table id="budget-vs-actual-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Account</th>

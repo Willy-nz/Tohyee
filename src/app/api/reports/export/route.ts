@@ -1,0 +1,28 @@
+import { readJson, route, withOrganisation } from "@/lib/api/http";
+import { ValidationError } from "@/lib/errors";
+import { parseReportExport, reportCsv, reportFileName, reportPdf, reportXlsx } from "@/lib/reports/export-files";
+
+const CONTENT_TYPES = {
+  csv: "text/csv; charset=utf-8",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pdf: "application/pdf",
+} as const;
+
+export const POST = route(async (request) => {
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > 5_000_000) throw new ValidationError("The report is too large to export.");
+  const body = await readJson(request);
+  if (body.format !== "csv" && body.format !== "xlsx" && body.format !== "pdf") throw new ValidationError("Choose CSV, Excel (.xlsx) or PDF.");
+  const data = parseReportExport(body.data);
+  await withOrganisation(request, body.organisationId, "viewer", async () => undefined);
+  const content = body.format === "csv" ? reportCsv(data) : body.format === "xlsx" ? await reportXlsx(data) : await reportPdf(data);
+  return new Response(content as unknown as BodyInit, {
+    status: 200,
+    headers: {
+      "content-type": CONTENT_TYPES[body.format],
+      "content-disposition": `attachment; filename="${reportFileName(data, body.format)}"`,
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+    },
+  });
+});
