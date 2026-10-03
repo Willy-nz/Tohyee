@@ -3,6 +3,7 @@ import { ConflictError } from "@/lib/errors";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { columnNameFrom, replaceTohyeeTables, type TableCopy } from "@/lib/analytics/engine";
 import { type LoadRun, requireAnalytics } from "@/lib/analytics/sources";
+import { rebuildShapedTablesForTables } from "@/lib/analytics/shaped-tables";
 import { coreQuery } from "@/lib/db/transactions";
 import { personName } from "@/lib/people/names";
 
@@ -461,6 +462,7 @@ export async function refreshBooks(organisation: OrganisationRecord, actor: Acto
   const started = performance.now();
   let rows: number | null = null;
   let error: string | null = null;
+  let changedTables: string[] = [];
   try {
     // CRM owners are users, kept in the core database: looked up first, outside the organisation's transaction.
     const members = await coreQuery<{ id: string; email: string }>(
@@ -471,12 +473,13 @@ export async function refreshBooks(organisation: OrganisationRecord, actor: Acto
     const tables = await withOrganisationTransaction(organisation, actor, (tx) => readBooks(tx, ownerEmails), { readOnly: true });
     await replaceTohyeeTables(organisation.id, tables);
     rows = tables.reduce((total, table) => total + table.rows.length, 0);
+    changedTables = tables.map((table) => table.name);
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);
   }
   const milliseconds = Math.round(performance.now() - started);
 
-  return withOrganisationTransaction(organisation, actor, async (tx) => {
+  const run = await withOrganisationTransaction(organisation, actor, async (tx) => {
     const result = await tx.query<{
       id: string;
       source_id: string | null;
@@ -515,4 +518,12 @@ export async function refreshBooks(organisation: OrganisationRecord, actor: Acto
       requestedByEmail: row.requested_by_email,
     };
   });
+  if (run.status === "ok") {
+    try {
+      await rebuildShapedTablesForTables(organisation, actor, changedTables, trigger);
+    } catch (caught) {
+      console.warn("[tohyee] Shaped tables after copying the books:", caught instanceof Error ? caught.message : caught);
+    }
+  }
+  return run;
 }

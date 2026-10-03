@@ -2533,6 +2533,17 @@ approved 3 Oct 2026.
      never mixes lines. Drafts show contacts as they are now; published
      reports keep what they showed. Anything more (items by category, say)
      is for Analytics, not more report options (Jess, 3 Oct 2026).
+### Analytics: shaping (decision 370)
+
+370. **Shaped tables are set up by admins, like data sources** (issue #108,
+     tenant migration 0087). Steps are chosen from a fixed list (no typed
+     SQL); averages and division are worked out exactly in millionths,
+     because DuckDB divides decimals as floating point, and float columns
+     can't be summed or calculated until their type is changed. A shape
+     can have at most five merge and append steps. Changing or rebuilding a
+     shape rebuilds the shapes built on it; when one fails, those are left as
+     they were with the reason. A source or shape that another shape uses
+     can't be removed. Dashboard averages use the same exact sum.
 ### Analytics: report emails (decision 371)
 
 371. **Report emails (decision 362) are checked once a night, before the

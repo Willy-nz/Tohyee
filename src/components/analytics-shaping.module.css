@@ -1,0 +1,148 @@
+.shapeList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.shapeItem {
+  display: grid;
+  gap: 2px;
+  min-width: 160px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.shapeItem[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.definition {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.7fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.stepList,
+.rightPane {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.step[aria-current="step"] {
+  border-color: var(--accent);
+}
+
+.stepSelect {
+  min-width: 0;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.stepTools {
+  display: flex;
+  gap: 4px;
+}
+
+.stepTools button {
+  min-width: 30px;
+  padding: 5px;
+}
+
+.addStep {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.addStep select {
+  flex: 1 1 140px;
+}
+
+.stepEditor {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  font-family: var(--font-mono, monospace);
+}
+
+.previewTable {
+  max-width: 100%;
+  overflow: auto;
+}
+
+.previewTable table {
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.previewTable th,
+.previewTable td {
+  max-width: 260px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.previewTable th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-sunken);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .definition {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

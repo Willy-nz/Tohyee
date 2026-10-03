@@ -280,6 +280,7 @@ export const CRM_MENUS: Menu[] = [
 export const ANALYTICS_MENUS: Menu[] = [
   { label: "Dashboards", href: "/analytics", area: ["/analytics", "/analytics/dashboards"] },
   { label: "Data sources", href: "/analytics/sources", area: ["/analytics/sources"], minRole: "viewer" as const },
+  { label: "Shaping", href: "/analytics/shaping", area: ["/analytics/shaping"], minRole: "viewer" as const },
 ].map((menu) => ({ ...menu, groups: [], module: "analytics" as const }));
 
 /** The AI assistant's page; shown to everyone (the page itself checks what they may do). */

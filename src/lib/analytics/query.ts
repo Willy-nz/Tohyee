@@ -1,4 +1,5 @@
 import { ValidationError } from "@/lib/errors";
+import { exactAverageSql } from "@/lib/analytics/decimal-sql";
 
 /**
  * A dashboard tile's question, turned into SQL for DuckDB (analytics step 3).
@@ -238,7 +239,7 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
     if (measure.aggregate === "count_distinct") return `count(distinct ${q(measure.field!)})`;
     const plain = measure.times ? `(${q(measure.field!)} * ${q(measure.times)})` : q(measure.field!);
     const value = measure.negate ? `(-${plain})` : plain;
-    if (measure.aggregate === "avg") return `cast(avg(${value}) as DECIMAL(38,6))`;
+    if (measure.aggregate === "avg") return exactAverageSql(value);
     return `${measure.aggregate}(${value})`;
   };
   const measureFormat = (measure: Measure): ValueFormat => {
