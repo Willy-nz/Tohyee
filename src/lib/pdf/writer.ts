@@ -218,7 +218,13 @@ export class PdfWriter {
   table(
     columns: Column[],
     rows: string[][],
-    options: { size?: number; footer?: TableFooterRow[]; x?: number; width?: number } = {},
+    options: {
+      size?: number;
+      footer?: TableFooterRow[];
+      x?: number;
+      width?: number;
+      rowKinds?: Array<"normal" | "section" | "total">;
+    } = {},
   ): void {
     const size = options.size ?? 9;
     const lineHeight = size * 1.3;
@@ -264,10 +270,11 @@ export class PdfWriter {
     };
     this.ensure(rowHeight(header) + lineHeight * 2);
     drawHeader();
-    for (const row of rows) {
+    for (const [index, row] of rows.entries()) {
       const cells = cellsOf(row, false);
       if (this.ensure(rowHeight(cells))) drawHeader();
-      drawRow(cells, false, false);
+      const kind = options.rowKinds?.[index] ?? "normal";
+      drawRow(cells, kind !== "normal", kind === "section");
       this.rule({ x: x0, width: tableWidth });
     }
     for (const [index, row] of (options.footer ?? []).entries()) {

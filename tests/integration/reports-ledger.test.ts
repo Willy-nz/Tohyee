@@ -12,9 +12,10 @@ import { recordPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, voidInvoice } from "@/lib/invoices/service";
 import { correctJournal, postJournal } from "@/lib/ledger/journals";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
+import { dec, sub, toFixedString } from "@/lib/money/decimal";
 import { type AccountTransactions, accountTransactions } from "@/lib/reports/account-transactions";
 import { type AgedPayables, agedPayables } from "@/lib/reports/aged-payables";
-import { balanceSheet, trialBalance } from "@/lib/reports/financial";
+import { balanceSheet, profitAndLoss, profitAndLossSplit, trialBalance } from "@/lib/reports/financial";
 import { journalReport } from "@/lib/reports/journal-report";
 import { applySupplierCreditNote } from "@/lib/supplier-credit-notes/applications";
 import { approveSupplierCreditNote, createSupplierCreditNote } from "@/lib/supplier-credit-notes/service";
@@ -250,6 +251,34 @@ describeWithDatabase("ledger reports", () => {
     expect((await trialOf(w, "2026-05-31")).get("1000")?.debit).toBe("4885.00");
   });
 
+  it("P1/P2: P&L activity and balance sheet balances match the linked account transactions", async () => {
+    const { w } = await ledger();
+    const linkedFigures = await w.as(async (tx) => {
+      const pnl = await profitAndLoss(tx, { from: "2026-04-01", to: "2026-05-31" });
+      const sheet = await balanceSheet(tx, { asAt: "2026-05-31" });
+      const accountRows = await tx.query<{ id: string; code: string }>("select id::text, code from accounts where code in ('1000', '4000')");
+      const accountIds = new Map(accountRows.rows.map((row) => [row.code, row.id]));
+      const sales = await accountTransactions(tx, {
+        accountId: accountIds.get("4000"),
+        from: "2026-04-01",
+        to: "2026-05-31",
+      });
+      const bank = await accountTransactions(tx, {
+        accountId: accountIds.get("1000"),
+        from: sheet.financialYearStart,
+        to: sheet.asAt,
+      });
+      return {
+        pnlAmount: pnl.revenue.sections.flatMap((section) => section.lines).find((line) => line.code === "4000")!.amount,
+        salesNet: toFixedString(sub(dec(sales.accounts[0].totalCredit), dec(sales.accounts[0].totalDebit)), 2),
+        balanceSheetAmount: sheet.assets.sections.flatMap((section) => section.lines).find((line) => line.code === "1000")!.amount,
+        bankClosing: bank.accounts[0].closing,
+      };
+    });
+    expect(linkedFigures.salesNet).toBe(linkedFigures.pnlAmount);
+    expect(linkedFigures.bankClosing).toBe(linkedFigures.balanceSheetAmount);
+  });
+
   it("ATX2: income shows the void as its own line", async () => {
     const { w } = await ledger();
     const report = await w.as((tx) => accountTransactions(tx, { from: "2026-04-01", to: "2026-05-31" }));
@@ -324,8 +353,22 @@ describeWithDatabase("ledger reports", () => {
     expect(otago.lines.map((l) => l.credit)).toEqual(["100.00"]);
     expect(otago.closing).toBe("-100.00");
     expect((await run(values.Otago)).filter?.label).toBe("Location: Otago");
+    const split = await w.as((tx) => profitAndLossSplit(tx, { from: "2026-05-01", to: "2026-05-31", categoryId: location }));
+    const splitSales = split.revenue.sections.flatMap((section) => section.lines).find((line) => line.accountId === salesId)!;
+    expect(splitSales.amounts[values.Otago]).toBe(otago.totalCredit);
     expect((await run(values.Canterbury)).accounts[0].lines.map((l) => l.credit)).toEqual(["40.00"]);
     expect((await run()).accounts[0].closing).toBe("-140.00");
+    await w.invoice(kobe.id, [w.line("20.00", "4000")], "2026-06-01");
+    const notSet = await w.as((tx) =>
+      accountTransactions(tx, {
+        accountId: salesId,
+        from: "2026-06-01",
+        to: "2026-06-30",
+        trackingCategoryId: location,
+        trackingValueId: "unassigned",
+      }),
+    );
+    expect([notSet.accounts[0].totalCredit, notSet.filter?.label]).toEqual(["20.00", "Location: Not set"]);
     await expect(run(values.Retail)).rejects.toThrow("isn't in that category");
   });
 

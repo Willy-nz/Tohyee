@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { ReportExport } from "@/components/reports/report-export";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -162,15 +163,17 @@ function BoxesTable({
   figures,
   selected,
   onSelect,
+  id = "gst-return-boxes",
 }: {
   figures: GstReturnFigures;
   selected: Selection | null;
   onSelect: (selection: Selection) => void;
+  id?: string;
 }) {
   const { boxes, gstOnTransactions } = figures;
   return (
     <div className={ui.tableWrap}>
-      <table className={ui.table}>
+      <table id={id} className={ui.table}>
         <thead>
           <tr>
             <th>Box</th>
@@ -247,13 +250,13 @@ function BoxesTable({
   );
 }
 
-function LinesTable({ lines }: { lines: GstReturnLine[] }) {
+function LinesTable({ lines, id }: { lines: GstReturnLine[]; id?: string }) {
   if (lines.length === 0) {
     return <Empty>No lines.</Empty>;
   }
   return (
     <div className={ui.tableWrap}>
-      <table className={ui.table}>
+      <table id={id} className={ui.table}>
         <thead>
           <tr>
             <th>Date</th>
@@ -306,22 +309,24 @@ function LinesTable({ lines }: { lines: GstReturnLine[] }) {
 function AdjustmentsTable({
   adjustments,
   onRemove,
+  id,
 }: {
   adjustments: GstAdjustment[];
   onRemove?: (index: number) => void;
+  id?: string;
 }) {
   if (adjustments.length === 0) {
     return <p className={ui.muted}>No adjustments.</p>;
   }
   return (
     <div className={ui.tableWrap}>
-      <table className={ui.table}>
+      <table id={id} className={ui.table}>
         <thead>
           <tr>
             <th>Box</th>
             <th>Description</th>
             <th className={ui.num}>GST</th>
-            {onRemove ? <th /> : null}
+            {onRemove ? <th data-export-ignore="true" /> : null}
           </tr>
         </thead>
         <tbody>
@@ -333,7 +338,7 @@ function AdjustmentsTable({
                 <Money value={adjustment.amount} />
               </td>
               {onRemove ? (
-                <td className={ui.num}>
+                <td className={ui.num} data-export-ignore="true">
                   <Button variant="secondary" size="small" onClick={() => onRemove(index)}>
                     Remove
                   </Button>
@@ -368,14 +373,14 @@ function BoxDetail({
         <h3>
           Box {box} adjustments (<Money value={figures.boxes[selected]} />)
         </h3>
-        <AdjustmentsTable adjustments={adjustments.filter((adjustment) => adjustment.box === box)} />
+        <AdjustmentsTable id="gst-return-detail" adjustments={adjustments.filter((adjustment) => adjustment.box === box)} />
       </>
     );
   }
   return (
     <>
       <h3>{selectionTitle(selected)}</h3>
-      <LinesTable lines={linesFor(lines, selected)} />
+      <LinesTable id="gst-return-detail" lines={linesFor(lines, selected)} />
     </>
   );
 }
@@ -430,9 +435,9 @@ function FiledReturnDetail({ organisationId, gstReturnId }: { organisationId: st
           {filed.currentError ? (
             <Notice tone="warning">The figures can&apos;t be worked out again now: {filed.currentError}</Notice>
           ) : null}
-          <BoxesTable figures={filed} selected={selected} onSelect={setSelected} />
+          <BoxesTable id="gst-filed-return-boxes" figures={filed} selected={selected} onSelect={setSelected} />
           <h3>Adjustments</h3>
-          <AdjustmentsTable adjustments={filed.adjustments} />
+          <AdjustmentsTable id="gst-filed-return-adjustments" adjustments={filed.adjustments} />
           <BoxDetail figures={filed} lines={filed.lines} adjustments={filed.adjustments} selected={selected} />
         </>
       ) : null}
@@ -682,6 +687,18 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
                 onAdd={(adjustment) => void keepAdjustment(adjustment)}
               />
             ) : null}
+            <ReportExport
+              organisationId={organisationId}
+              report="gst-return"
+              title="GST return"
+              period={`${formatDate(start)} to ${formatDate(periodEnd)}`}
+              basis={data.basis}
+              tables={[
+                { id: "gst-return-boxes", title: "GST return boxes" },
+                ...(adjustments.length ? [{ id: "gst-return-adjustments", title: "Adjustments" }] : []),
+                ...(selected ? [{ id: "gst-return-detail", title: selectionTitle(selected) }] : []),
+              ]}
+            />
             <BoxesTable figures={data} selected={selected} onSelect={setSelected} />
             {can("admin") && !alreadyFiled ? (
               <div className={ui.actions}>
@@ -698,7 +715,7 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
         title="Adjustments"
         description="GST amounts for Box 9 (debit adjustments, e.g. bad debt recovered) and Box 13 (credit adjustments, e.g. bad debt written off). They're only stored when the return is filed."
       >
-        <AdjustmentsTable adjustments={adjustments} onRemove={removeAdjustment} />
+        <AdjustmentsTable id="gst-return-adjustments" adjustments={adjustments} onRemove={removeAdjustment} />
         {formError ? <Notice tone="error">{formError}</Notice> : null}
         <form className={ui.inlineForm} onSubmit={(event) => void addAdjustment(event)}>
           <Field label="Box">

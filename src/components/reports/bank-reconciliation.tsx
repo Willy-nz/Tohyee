@@ -6,6 +6,7 @@ import { journalHref, originLabel } from "@/components/bank/common";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { PrintButton } from "@/components/reports/ledger-reports";
+import { ReportExport } from "@/components/reports/report-export";
 import { Badge, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import type { BankAccount } from "@/lib/bank/accounts";
 import { formatDate, formatMoney, todayInBrowser } from "@/lib/format";
@@ -73,6 +74,14 @@ export function BankReconciliationReportView({
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {data ? (
         <>
+          <ReportExport
+            organisationId={organisationId}
+            report="bank-reconciliation"
+            title="Bank reconciliation"
+            period={`As at ${formatDate(data.asAt)}`}
+            filters={[`Account: ${data.account.code} · ${data.account.name}`]}
+            tables={[{ id: "bank-reconciliation-report", columns: ["Description", "Amount"] }]}
+          />
           <p className={`${ui.muted} ${ui.printOnly}`}>
             {data.account.code} · {data.account.name}, as at {formatDate(data.asAt)}
           </p>
@@ -80,7 +89,7 @@ export function BankReconciliationReportView({
             <p className={ui.muted}>For a credit card, a negative balance is what&apos;s owed on the card.</p>
           ) : null}
           <div className={ui.tableWrap}>
-            <table className={ui.table}>
+            <table id="bank-reconciliation-report" className={ui.table}>
               <tbody>
                 <tr className={ui.reportTotal}>
                   <td>

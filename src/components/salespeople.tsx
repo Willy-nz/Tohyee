@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type FormEvent, Fragment, useState } from "react";
 import { Money } from "@/components/books";
+import { ReportExport } from "@/components/reports/report-export";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -257,10 +258,20 @@ export function SalesBySalespersonReport({ organisationId }: { organisationId: s
     >
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
+      {report.data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="sales-by-salesperson"
+          title="Sales by salesperson"
+          period={`${formatDate(report.data.from)} to ${formatDate(report.data.to)}`}
+          tables={[{ id: "sales-by-salesperson-report" }]}
+        />
+      ) : null}
       {report.data && report.data.rows.length === 0 ? <Empty>No approved invoices or credit notes in this period.</Empty> : null}
       {report.data && report.data.rows.length > 0 ? (
-        <div className={ui.tableWrap}>
-          <table className={ui.table}>
+        <>
+          <div className={ui.tableWrap}>
+            <table id="sales-by-salesperson-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Salesperson</th>
@@ -324,8 +335,9 @@ export function SalesBySalespersonReport({ organisationId }: { organisationId: s
                 </td>
               </tr>
             </tfoot>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       ) : null}
     </Card>
   );

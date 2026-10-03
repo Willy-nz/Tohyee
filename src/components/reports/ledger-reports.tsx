@@ -6,6 +6,7 @@ import { Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { reportCategories, TrackingTagsText, useTracking } from "@/components/tracking";
 import { Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { ReportExport } from "@/components/reports/report-export";
 import { formatDate, formatDateTime, formatMoney, todayInBrowser, personName } from "@/lib/format";
 import type { AccountTransactions } from "@/lib/reports/account-transactions";
 import type { AgedPayables } from "@/lib/reports/aged-payables";
@@ -41,12 +42,16 @@ export function PrintButton() {
 export function Balance({ value }: { value: string }) {
   if (value.startsWith("-")) {
     return (
-      <>
+      <span data-export-value={value}>
         <Money value={value.slice(1)} /> Cr
-      </>
+      </span>
     );
   }
-  return <Money value={value} />;
+  return (
+    <span data-export-value={value}>
+      <Money value={value} />
+    </span>
+  );
 }
 
 function AgedCells({ amounts }: { amounts: AgedAmounts }) {
@@ -86,10 +91,19 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {data ? <p className={`${ui.muted} ${ui.printOnly}`}>As at {formatDate(data.asAt)}</p> : null}
+      {data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="aged-payables"
+          title="Aged payables"
+          period={`As at ${formatDate(data.asAt)}`}
+          tables={[{ id: "aged-payables-report" }]}
+        />
+      ) : null}
       {data && data.rows.length === 0 ? <Empty>You don&apos;t owe any supplier anything on this date.</Empty> : null}
       {data && data.rows.length > 0 ? (
         <div className={ui.tableWrap}>
-          <table className={ui.table}>
+          <table id="aged-payables-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Supplier</th>
@@ -190,28 +204,41 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
 export function AccountTransactionsReport({
   organisationId,
   initialAccountId,
+  initialFrom,
   initialTo,
+  initialTrackingCategoryId,
+  initialTrackingValueId,
 }: {
   organisationId: string;
   initialAccountId?: string | null;
+  initialFrom?: string | null;
   initialTo?: string | null;
+  initialTrackingCategoryId?: string | null;
+  initialTrackingValueId?: string | null;
 }) {
   const [accountId, setAccountId] = useState(() => (initialAccountId && /^\d+$/.test(initialAccountId) ? initialAccountId : ""));
-  const [from, setFrom] = useState<string | null>(null);
+  const [from, setFrom] = useState<string | null>(() => (initialFrom && /^\d{4}-\d{2}-\d{2}$/.test(initialFrom) ? initialFrom : null));
   const [to, setTo] = useState(() => (initialTo && /^\d{4}-\d{2}-\d{2}$/.test(initialTo) ? initialTo : todayInBrowser()));
-  const [filter, setFilter] = useState<{ categoryId: string; valueId: string }>({ categoryId: "", valueId: "" });
+  const [filter, setFilter] = useState<{ categoryId: string; valueId: string }>(() => ({
+    categoryId: initialTrackingCategoryId && /^\d+$/.test(initialTrackingCategoryId) ? initialTrackingCategoryId : "",
+    valueId:
+      initialTrackingValueId === "unassigned" || (initialTrackingValueId && /^\d+$/.test(initialTrackingValueId))
+        ? initialTrackingValueId
+        : "",
+  }));
   const accounts = useAccounts(organisationId, true);
   const tracking = useTracking(organisationId);
   const categories = reportCategories(tracking.data);
   const category = categories.find((entry) => entry.id === filter.categoryId);
   const valueId = category && category.values.some((value) => value.id === filter.valueId) ? filter.valueId : "";
+  const unassigned = Boolean(category && filter.valueId === "unassigned");
   const report = useApiData<AccountTransactions>("/api/reports/account-transactions", {
     organisationId,
     accountId: accountId || null,
     from,
     to,
     trackingCategoryId: valueId ? filter.categoryId : null,
-    trackingValueId: valueId || null,
+    trackingValueId: valueId || (unassigned ? "unassigned" : null),
   });
   const data = report.data;
   return (
@@ -240,7 +267,7 @@ export function AccountTransactionsReport({
           {categories.length > 0 ? (
             <Field label="Only lines tagged">
               <select
-                value={valueId ? `${filter.categoryId}:${valueId}` : ""}
+                value={valueId || unassigned ? `${filter.categoryId}:${valueId || "unassigned"}` : ""}
                 onChange={(event) => {
                   const [categoryId = "", value = ""] = event.target.value.split(":");
                   setFilter({ categoryId, valueId: value });
@@ -254,6 +281,7 @@ export function AccountTransactionsReport({
                         {value.name}
                       </option>
                     ))}
+                    <option value={`${entry.id}:unassigned`}>Not set</option>
                   </optgroup>
                 ))}
               </select>
@@ -271,10 +299,24 @@ export function AccountTransactionsReport({
           {data.filter ? ` · only lines tagged ${data.filter.label}` : ""}
         </p>
       ) : null}
+      {data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="account-transactions"
+          title="Account transactions"
+          period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
+          filters={[
+            ...(data.accounts.length === 1 ? [`Account: ${data.accounts[0].code} · ${data.accounts[0].name}`] : []),
+            ...(data.filter ? [`Tracking: ${data.filter.label}`] : []),
+          ]}
+          tables={[{ id: "account-transactions-report" }]}
+        />
+      ) : null}
       {data && data.accounts.length === 0 ? <Empty>Nothing posted to these accounts yet.</Empty> : null}
       {data && data.accounts.length > 0 ? (
-        <div className={ui.tableWrap}>
-          <table className={ui.table}>
+        <>
+          <div className={ui.tableWrap}>
+            <table id="account-transactions-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Date</th>
@@ -349,8 +391,9 @@ export function AccountTransactionsReport({
                 <td />
               </tr>
             </tfoot>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       ) : null}
     </Card>
   );
@@ -387,9 +430,19 @@ export function JournalReportView({ organisationId }: { organisationId: string }
       ) : null}
       {data?.truncated ? <Notice tone="warning">Only the first {data.journals.length} journals are shown. Choose a shorter period to see the rest.</Notice> : null}
       {data && data.journals.length === 0 ? <Empty>No journals were posted in this period.</Empty> : null}
+      {data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="journal-report"
+          title="Journal report"
+          period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
+          tables={[{ id: "journal-report" }]}
+        />
+      ) : null}
       {data && data.journals.length > 0 ? (
-        <div className={ui.tableWrap}>
-          <table className={ui.table}>
+        <>
+          <div className={ui.tableWrap}>
+            <table id="journal-report" className={ui.table}>
             <thead>
               <tr>
                 <th>Account</th>
@@ -443,8 +496,9 @@ export function JournalReportView({ organisationId }: { organisationId: string }
                 </td>
               </tr>
             </tfoot>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       ) : null}
     </Card>
   );

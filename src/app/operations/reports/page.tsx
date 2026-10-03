@@ -9,16 +9,33 @@ import { BudgetVsActualReport } from "@/components/budgets";
 import { BankReconciliationReportView } from "@/components/reports/bank-reconciliation";
 import { AgedReceivablesReport } from "@/components/customers";
 import { AccountTransactionsReport, AgedPayablesReport, JournalReportView } from "@/components/reports/ledger-reports";
+import { ReportExport } from "@/components/reports/report-export";
 import { CustomReportList, StartCustomReport } from "@/components/reports/custom-report";
 import { SalesBySalespersonReport, useSalespeople } from "@/components/salespeople";
 import { reportCategories, useTracking } from "@/components/tracking";
 import { Badge, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { formatDate, formatMoney, formatQuantity, todayInBrowser } from "@/lib/format";
+import { accountTransactionsHref } from "@/lib/reports/drilldown";
 import type { ProfitAndLossSplit, SplitColumn, SplitGroup } from "@/lib/reports/financial";
 
 type Line = { accountId: string; code: string; name: string; amount: string };
 type Section = { key: string; label: string; lines: Line[]; total: string };
 type Group = { sections: Section[]; total: string };
+type Drilldown = {
+  from?: string | null;
+  to: string;
+  trackingCategoryId?: string | null;
+  trackingValueId?: string | null;
+  trackingUnassigned?: boolean;
+};
+
+function AccountAmount({ accountId, value, drilldown }: { accountId: string; value: string; drilldown: Drilldown }) {
+  return (
+    <Link href={accountTransactionsHref({ accountId, ...drilldown })}>
+      <Money value={value} />
+    </Link>
+  );
+}
 
 type TrialBalance = {
   asAt: string;
@@ -73,7 +90,7 @@ type Valuation = {
   inventoryAccountBalance: string;
 };
 
-function GroupRows({ title, group, totalLabel }: { title: string; group: Group; totalLabel: string }) {
+function GroupRows({ title, group, totalLabel, drilldown }: { title: string; group: Group; totalLabel: string; drilldown?: Drilldown }) {
   return (
     <>
       <tr className={ui.reportHeading}>
@@ -101,7 +118,7 @@ function GroupRows({ title, group, totalLabel }: { title: string; group: Group; 
                 {line.code} · {line.name}
               </td>
               <td className={ui.num}>
-                <Money value={line.amount} />
+                {drilldown ? <AccountAmount accountId={line.accountId} value={line.amount} drilldown={drilldown} /> : <Money value={line.amount} />}
               </td>
             </tr>
           ))}
@@ -117,7 +134,23 @@ function GroupRows({ title, group, totalLabel }: { title: string; group: Group; 
   );
 }
 
-function SplitGroupRows({ title, group, columns, totalLabel }: { title: string; group: SplitGroup; columns: SplitColumn[]; totalLabel: string }) {
+function SplitGroupRows({
+  title,
+  group,
+  columns,
+  totalLabel,
+  from,
+  to,
+  categoryId,
+}: {
+  title: string;
+  group: SplitGroup;
+  columns: SplitColumn[];
+  totalLabel: string;
+  from: string;
+  to: string;
+  categoryId: string;
+}) {
   const span = columns.length + 1;
   return (
     <>
@@ -147,7 +180,23 @@ function SplitGroupRows({ title, group, columns, totalLabel }: { title: string; 
               </td>
               {columns.map((column) => (
                 <td key={column.key} className={ui.num}>
-                  <Money value={line.amounts[column.key]} />
+                  {column.valueId || column.key === "none" ? (
+                    <AccountAmount
+                      accountId={line.accountId}
+                      value={line.amounts[column.key]}
+                      drilldown={{
+                        from,
+                        to,
+                        trackingCategoryId: categoryId,
+                        trackingValueId: column.valueId,
+                        trackingUnassigned: column.key === "none",
+                      }}
+                    />
+                  ) : column.key === "total" ? (
+                    <AccountAmount accountId={line.accountId} value={line.amounts[column.key]} drilldown={{ from, to }} />
+                  ) : (
+                    <Money value={line.amounts[column.key]} />
+                  )}
                 </td>
               ))}
             </tr>
@@ -167,11 +216,20 @@ function SplitGroupRows({ title, group, columns, totalLabel }: { title: string; 
 }
 
 /** Profit and loss with one column per top-level value of a tracking category (TC7). */
-function SplitProfitAndLoss({ report }: { report: ProfitAndLossSplit }) {
+function SplitProfitAndLoss({ organisationId, report }: { organisationId: string; report: ProfitAndLossSplit }) {
   const { columns } = report;
   return (
-    <div className={ui.tableWrap}>
-      <table className={ui.table}>
+    <>
+      <ReportExport
+        organisationId={organisationId}
+        report="profit-and-loss"
+        title="Profit and loss"
+        period={`${formatDate(report.from)} to ${formatDate(report.to)}`}
+        filters={[`Split by ${report.category.name}`]}
+        tables={[{ id: "profit-and-loss-split-report" }]}
+      />
+      <div className={ui.tableWrap}>
+        <table id="profit-and-loss-split-report" className={ui.table}>
         <thead>
           <tr>
             <th>{report.category.name}</th>
@@ -183,8 +241,8 @@ function SplitProfitAndLoss({ report }: { report: ProfitAndLossSplit }) {
           </tr>
         </thead>
         <tbody>
-          <SplitGroupRows title="Trading income" group={report.revenue} columns={columns} totalLabel="Total trading income" />
-          <SplitGroupRows title="Cost of sales" group={report.costOfSales} columns={columns} totalLabel="Total cost of sales" />
+          <SplitGroupRows title="Trading income" group={report.revenue} columns={columns} totalLabel="Total trading income" from={report.from} to={report.to} categoryId={report.category.id} />
+          <SplitGroupRows title="Cost of sales" group={report.costOfSales} columns={columns} totalLabel="Total cost of sales" from={report.from} to={report.to} categoryId={report.category.id} />
           <tr className={ui.reportTotal}>
             <td>Gross profit</td>
             {columns.map((column) => (
@@ -193,8 +251,8 @@ function SplitProfitAndLoss({ report }: { report: ProfitAndLossSplit }) {
               </td>
             ))}
           </tr>
-          <SplitGroupRows title="Other income" group={report.otherIncome} columns={columns} totalLabel="Total other income" />
-          <SplitGroupRows title="Operating expenses" group={report.expenses} columns={columns} totalLabel="Total operating expenses" />
+          <SplitGroupRows title="Other income" group={report.otherIncome} columns={columns} totalLabel="Total other income" from={report.from} to={report.to} categoryId={report.category.id} />
+          <SplitGroupRows title="Operating expenses" group={report.expenses} columns={columns} totalLabel="Total operating expenses" from={report.from} to={report.to} categoryId={report.category.id} />
         </tbody>
         <tfoot>
           <tr>
@@ -206,24 +264,36 @@ function SplitProfitAndLoss({ report }: { report: ProfitAndLossSplit }) {
             ))}
           </tr>
         </tfoot>
-      </table>
-    </div>
+        </table>
+      </div>
+    </>
   );
 }
 
 function TrialBalanceReport({ organisationId }: { organisationId: string }) {
   const [asAt, setAsAt] = useState(todayInBrowser);
   const report = useApiData<TrialBalance>("/api/reports/trial-balance", { organisationId, asAt });
+  const drilldown = report.data ? { from: report.data.financialYearStart, to: report.data.asAt } : null;
   return (
     <Card title="Trial balance" actions={<Field label="As at"><input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>}>
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="trial-balance"
+          title="Trial balance"
+          period={`As at ${formatDate(report.data.asAt)}`}
+          tables={[{ id: "trial-balance-report" }]}
+        />
+      ) : null}
+      {report.data ? (
         report.data.rows.length === 0 ? (
           <Empty>No postings up to {formatDate(report.data.asAt)}.</Empty>
         ) : (
-          <div className={ui.tableWrap}>
-            <table className={ui.table}>
+          <>
+            <div className={ui.tableWrap}>
+              <table id="trial-balance-report" className={ui.table}>
               <thead>
                 <tr>
                   <th>Account</th>
@@ -245,10 +315,26 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
                       ) : null}
                     </td>
                     <td className={ui.num}>
-                      <Money value={row.debit} blankZero />
+                      {row.accountId ? (
+                        <AccountAmount
+                          accountId={row.accountId}
+                          value={row.debit}
+                          drilldown={drilldown!}
+                        />
+                      ) : (
+                        <Money value={row.debit} blankZero />
+                      )}
                     </td>
                     <td className={ui.num}>
-                      <Money value={row.credit} blankZero />
+                      {row.accountId ? (
+                        <AccountAmount
+                          accountId={row.accountId}
+                          value={row.credit}
+                          drilldown={drilldown!}
+                        />
+                      ) : (
+                        <Money value={row.credit} blankZero />
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -273,6 +359,7 @@ function TrialBalanceReport({ organisationId }: { organisationId: string }) {
               years&apos; profit is in retained earnings, as on the balance sheet.
             </p>
           </div>
+          </>
         )
       ) : null}
     </Card>
@@ -322,21 +409,29 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
     >
       {shown.error ? <Notice tone="error">{shown.error}</Notice> : null}
       {shown.loading ? <p className={ui.muted}>Loading…</p> : null}
-      {splitting && split.data ? <SplitProfitAndLoss report={split.data} /> : null}
+      {splitting && split.data ? <SplitProfitAndLoss organisationId={organisationId} report={split.data} /> : null}
       {!splitting && report.data ? (
-        <div className={ui.tableWrap}>
-          <table className={ui.table}>
+        <>
+          <ReportExport
+            organisationId={organisationId}
+            report="profit-and-loss"
+            title="Profit and loss"
+            period={`${formatDate(report.data.from)} to ${formatDate(report.data.to)}`}
+            tables={[{ id: "profit-and-loss-report", columns: ["Account", "Amount"] }]}
+          />
+          <div className={ui.tableWrap}>
+            <table id="profit-and-loss-report" className={ui.table}>
             <tbody>
-              <GroupRows title="Trading income" group={report.data.revenue} totalLabel="Total trading income" />
-              <GroupRows title="Cost of sales" group={report.data.costOfSales} totalLabel="Total cost of sales" />
+              <GroupRows title="Trading income" group={report.data.revenue} totalLabel="Total trading income" drilldown={{ from: report.data.from, to: report.data.to }} />
+              <GroupRows title="Cost of sales" group={report.data.costOfSales} totalLabel="Total cost of sales" drilldown={{ from: report.data.from, to: report.data.to }} />
               <tr className={ui.reportTotal}>
                 <td>Gross profit</td>
                 <td className={ui.num}>
                   <Money value={report.data.grossProfit} />
                 </td>
               </tr>
-              <GroupRows title="Other income" group={report.data.otherIncome} totalLabel="Total other income" />
-              <GroupRows title="Operating expenses" group={report.data.expenses} totalLabel="Total operating expenses" />
+              <GroupRows title="Other income" group={report.data.otherIncome} totalLabel="Total other income" drilldown={{ from: report.data.from, to: report.data.to }} />
+              <GroupRows title="Operating expenses" group={report.data.expenses} totalLabel="Total operating expenses" drilldown={{ from: report.data.from, to: report.data.to }} />
             </tbody>
             <tfoot>
               <tr>
@@ -346,8 +441,9 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
                 </td>
               </tr>
             </tfoot>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       ) : null}
     </Card>
   );
@@ -356,16 +452,35 @@ function ProfitAndLossReport({ organisationId }: { organisationId: string }) {
 function BalanceSheetReport({ organisationId }: { organisationId: string }) {
   const [asAt, setAsAt] = useState(todayInBrowser);
   const report = useApiData<BalanceSheet>("/api/reports/balance-sheet", { organisationId, asAt });
+  const drilldown = report.data ? { from: report.data.financialYearStart, to: report.data.asAt } : null;
   return (
     <Card title="Balance sheet" actions={<Field label="As at"><input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} /></Field>}>
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
-        <div className={ui.tableWrap}>
-          <table className={ui.table}>
+        <>
+          <ReportExport
+            organisationId={organisationId}
+            report="balance-sheet"
+            title="Balance sheet"
+            period={`As at ${formatDate(report.data.asAt)}`}
+            tables={[{ id: "balance-sheet-report", columns: ["Account", "Amount"] }]}
+          />
+          <div className={ui.tableWrap}>
+            <table id="balance-sheet-report" className={ui.table}>
             <tbody>
-              <GroupRows title="Assets" group={report.data.assets} totalLabel="Total assets" />
-              <GroupRows title="Liabilities" group={report.data.liabilities} totalLabel="Total liabilities" />
+              <GroupRows
+                title="Assets"
+                group={report.data.assets}
+                totalLabel="Total assets"
+                drilldown={drilldown!}
+              />
+              <GroupRows
+                title="Liabilities"
+                group={report.data.liabilities}
+                totalLabel="Total liabilities"
+                drilldown={drilldown!}
+              />
               <tr className={ui.reportHeading}>
                 <td colSpan={2}>Equity</td>
               </tr>
@@ -376,7 +491,11 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
                       {line.code} · {line.name}
                     </td>
                     <td className={ui.num}>
-                      <Money value={line.amount} />
+                      <AccountAmount
+                        accountId={line.accountId}
+                        value={line.amount}
+                        drilldown={drilldown!}
+                      />
                     </td>
                   </tr>
                 )),
@@ -389,7 +508,15 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
                   <div className={ui.muted}>Profit before {formatDate(report.data.financialYearStart)}, with anything posted to the account</div>
                 </td>
                 <td className={ui.num}>
-                  <Money value={report.data.equity.retainedEarnings.total} />
+                  {report.data.equity.retainedEarnings.account ? (
+                    <AccountAmount
+                      accountId={report.data.equity.retainedEarnings.account.id}
+                      value={report.data.equity.retainedEarnings.total}
+                      drilldown={{ from: report.data.financialYearStart, to: report.data.asAt }}
+                    />
+                  ) : (
+                    <Money value={report.data.equity.retainedEarnings.total} />
+                  )}
                 </td>
               </tr>
               <tr className={ui.reportSection}>
@@ -416,8 +543,9 @@ function BalanceSheetReport({ organisationId }: { organisationId: string }) {
                 </td>
               </tr>
             </tfoot>
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       ) : null}
     </Card>
   );
@@ -430,11 +558,21 @@ function StockReport({ organisationId }: { organisationId: string }) {
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {report.loading ? <p className={ui.muted}>Loading…</p> : null}
       {report.data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="inventory-valuation"
+          title="Stock on hand"
+          period={`As at ${formatDate(todayInBrowser())}`}
+          tables={[{ id: "inventory-valuation-report" }]}
+        />
+      ) : null}
+      {report.data ? (
         report.data.items.length === 0 ? (
           <Empty>No stock on hand.</Empty>
         ) : (
-          <div className={ui.tableWrap}>
-            <table className={ui.table}>
+          <>
+            <div className={ui.tableWrap}>
+              <table id="inventory-valuation-report" className={ui.table}>
               <thead>
                 <tr>
                   <th>Item</th>
@@ -454,7 +592,7 @@ function StockReport({ organisationId }: { organisationId: string }) {
                     </td>
                     <td>{item.locationName ?? ""}</td>
                     <td className={ui.num}>
-                      {formatQuantity(item.quantity)}
+                      <span data-export-value={item.quantity}>{formatQuantity(item.quantity)}</span>
                       {item.unit ? ` ${item.unit}` : ""}
                     </td>
                     <td className={ui.num}>{item.averageCost ? formatMoney(item.averageCost, 4) : ""}</td>
@@ -483,8 +621,9 @@ function StockReport({ organisationId }: { organisationId: string }) {
                   </tr>
                 ) : null}
               </tfoot>
-            </table>
-          </div>
+                </table>
+              </div>
+            </>
         )
       ) : null}
     </Card>
@@ -535,7 +674,16 @@ function StandardReports({ organisationId }: { organisationId: string }) {
       {tab === "stock" ? <StockReport organisationId={organisationId} /> : null}
       {tab === "aged" ? <AgedReceivablesReport organisationId={organisationId} /> : null}
       {tab === "payables" ? <AgedPayablesReport organisationId={organisationId} /> : null}
-      {tab === "transactions" ? <AccountTransactionsReport organisationId={organisationId} initialAccountId={params.get("account")} initialTo={params.get("to")} /> : null}
+      {tab === "transactions" ? (
+        <AccountTransactionsReport
+          organisationId={organisationId}
+          initialAccountId={params.get("account")}
+          initialFrom={params.get("from")}
+          initialTo={params.get("to")}
+          initialTrackingCategoryId={params.get("trackingCategoryId")}
+          initialTrackingValueId={params.get("trackingValueId")}
+        />
+      ) : null}
       {tab === "bankrec" ? (
         <BankReconciliationReportView organisationId={organisationId} initialAccountId={params.get("account")} initialAsAt={params.get("asAt")} />
       ) : null}

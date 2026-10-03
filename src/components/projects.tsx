@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { ReportExport } from "@/components/reports/report-export";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -76,7 +77,7 @@ function InCurrency({ value, currency, blankZero }: { value: string | null | und
   const base = useBaseCurrency();
   if (currency === base || (blankZero && (value == null || /^-?0*(\.0*)?$/.test(value)))) return <Money value={value} blankZero={blankZero} />;
   return (
-    <span className={ui.num}>
+    <span className={ui.num} data-export-value={value ?? ""}>
       {currency} {formatMoney(value)}
     </span>
   );
@@ -1067,10 +1068,20 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
       </div>
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {!data && !report.error ? <p className={ui.muted}>Loading…</p> : null}
+      {data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="project-profitability"
+          title="Project profitability"
+          period="All project activity"
+          filters={[`Projects: ${status === "in_progress" ? "In progress" : status === "closed" ? "Closed" : "All"}`]}
+          tables={[{ id: "project-profitability-report" }]}
+        />
+      ) : null}
       {data && data.projects.length === 0 ? <Empty>No projects.</Empty> : null}
       {data && data.projects.length > 0 ? (
         <div className={ui.tableWrap}>
-          <table className={`${ui.table} ${ui.stackOnPhone}`}>
+            <table id="project-profitability-report" className={`${ui.table} ${ui.stackOnPhone}`}>
             <thead>
               <tr>
                 <th>Project</th>
@@ -1092,7 +1103,7 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
                     <Link href={`/operations/projects/${project.id}`}>{project.name}</Link> <span className={ui.muted}>{project.contactName}</span>
                   </td>
                   <td data-label="Time" className={ui.num}>
-                    {formatMinutes(project.figures.minutes)}
+                    <span data-export-value={project.figures.minutes}>{formatMinutes(project.figures.minutes)}</span>
                   </td>
                   <td data-label={`Invoiced (${data.baseCurrency})`} className={ui.num}>
                     <Money value={project.figures.invoicedBase} />
@@ -1174,7 +1185,7 @@ export function ProfitabilityReportView({ organisationId }: { organisationId: st
                 </tr>
               ))}
             </tfoot>
-          </table>
+            </table>
         </div>
       ) : null}
     </Card>
@@ -1201,16 +1212,18 @@ export function TimeReportView({ organisationId }: { organisationId: string }) {
     projectId: projectId || null,
   });
   const data = report.data?.report;
-  const groups = (title: string, rows: TimeReport["byPerson"]) => (
+  const groups = (title: string, rows: TimeReport["byPerson"], tableId: string) => (
     <div>
       <h3 className={ui.reportHeading}>{title}</h3>
       <div className={ui.tableWrap}>
-        <table className={ui.table}>
+        <table id={tableId} className={ui.table}>
           <tbody>
             {rows.map((row) => (
               <tr key={row.key}>
                 <td>{row.label}</td>
-                <td className={ui.num}>{formatMinutes(row.minutes)}</td>
+                <td className={ui.num}>
+                  <span data-export-value={row.minutes}>{formatMinutes(row.minutes)}</span>
+                </td>
                 <td className={ui.num}>{minutesAsHours(row.minutes)} h</td>
                 <td className={ui.num}>
                   <Money value={row.cost} />
@@ -1262,6 +1275,24 @@ export function TimeReportView({ organisationId }: { organisationId: string }) {
       </div>
       {report.error ? <Notice tone="error">{report.error}</Notice> : null}
       {!data && !report.error ? <p className={ui.muted}>Loading…</p> : null}
+      {data ? (
+        <ReportExport
+          organisationId={organisationId}
+          report="project-time"
+          title="Time report"
+          period={`${formatDate(data.from)} to ${formatDate(data.to)}`}
+          filters={[
+            userId ? `Person: ${team.data?.rates.find((person) => person.userId === userId)?.displayName ?? userId}` : "Person: Everyone",
+            projectId ? `Project: ${projects.data?.projects.find((project) => project.id === projectId)?.name ?? projectId}` : "Project: All",
+          ]}
+          tables={[
+            { id: "project-time-by-person", title: "By person", columns: ["Person", "Minutes", "Hours", "Cost"] },
+            { id: "project-time-by-project", title: "By project", columns: ["Project", "Minutes", "Hours", "Cost"] },
+            { id: "project-time-by-task", title: "By task", columns: ["Task", "Minutes", "Hours", "Cost"] },
+            { id: "project-time-entries", title: "Entries" },
+          ]}
+        />
+      ) : null}
       {data && data.entries.length === 0 ? <Empty>No time in this range.</Empty> : null}
       {data && data.entries.length > 0 ? (
         <>
@@ -1271,13 +1302,13 @@ export function TimeReportView({ organisationId }: { organisationId: string }) {
             <Stat label="Entries" value={String(data.entries.length)} />
           </div>
           <div className={ui.grid3}>
-            {groups("By person", data.byPerson)}
-            {groups("By project", data.byProject)}
-            {groups("By task", data.byTask)}
+            {groups("By person", data.byPerson, "project-time-by-person")}
+            {groups("By project", data.byProject, "project-time-by-project")}
+            {groups("By task", data.byTask, "project-time-by-task")}
           </div>
           <h3 className={ui.reportHeading}>Entries</h3>
           <div className={ui.tableWrap}>
-            <table className={`${ui.table} ${ui.stackOnPhone}`}>
+            <table id="project-time-entries" className={`${ui.table} ${ui.stackOnPhone}`}>
               <thead>
                 <tr>
                   <th>Date</th>
@@ -1302,7 +1333,7 @@ export function TimeReportView({ organisationId }: { organisationId: string }) {
                       {entry.description}
                     </td>
                     <td data-label="Time" className={ui.num}>
-                      {formatMinutes(entry.minutes)}
+                      <span data-export-value={entry.minutes}>{formatMinutes(entry.minutes)}</span>
                     </td>
                     <td data-label="Cost" className={ui.num}>
                       <Money value={entry.cost} />

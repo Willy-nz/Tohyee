@@ -8,6 +8,7 @@ import { StatementRunCard } from "@/components/reports/statement-emails";
 import { useApiData } from "@/components/hooks";
 import { OrganisationLogo } from "@/components/organisation/logo";
 import { Balance, BUCKET_LABELS, BUCKETS, PrintButton } from "@/components/reports/ledger-reports";
+import { ReportExport } from "@/components/reports/report-export";
 import { Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { Contact } from "@/lib/contacts/service";
@@ -27,10 +28,10 @@ function monthStart(isoDate: string): string {
   return `${isoDate.slice(0, 7)}-01`;
 }
 
-function AgeingTable({ ageing, currencyCode }: { ageing: AgedAmounts; currencyCode: string }) {
+function AgeingTable({ ageing, currencyCode, id }: { ageing: AgedAmounts; currencyCode: string; id: string }) {
   return (
     <div className={ui.tableWrap}>
-      <table className={ui.table}>
+      <table id={id} className={ui.table}>
         <thead>
           <tr>
             {BUCKETS.map((bucket) => (
@@ -98,7 +99,7 @@ function ActivityPaper({ statement }: { statement: ActivityStatement }) {
     <article className={ui.reportPaper}>
       <StatementHeader title="Activity statement" statement={statement} period={`${formatDate(statement.from)} to ${formatDate(statement.to)}`} />
       <div className={ui.tableWrap}>
-        <table className={ui.table}>
+        <table id="customer-statement-activity" className={ui.table}>
           <thead>
             <tr>
               <th>Date</th>
@@ -162,7 +163,7 @@ function ActivityPaper({ statement }: { statement: ActivityStatement }) {
           </tfoot>
         </table>
       </div>
-      <AgeingTable ageing={statement.ageing} currencyCode={statement.currencyCode} />
+      <AgeingTable id="customer-statement-ageing" ageing={statement.ageing} currencyCode={statement.currencyCode} />
     </article>
   );
 }
@@ -176,7 +177,7 @@ function OutstandingPaper({ statement }: { statement: OutstandingStatement }) {
         <Empty>Nothing is owed on this date.</Empty>
       ) : (
         <div className={ui.tableWrap}>
-          <table className={ui.table}>
+          <table id="customer-statement-outstanding" className={ui.table}>
             <thead>
               <tr>
                 <th>Date</th>
@@ -229,7 +230,7 @@ function OutstandingPaper({ statement }: { statement: OutstandingStatement }) {
           </table>
         </div>
       )}
-      <AgeingTable ageing={statement.ageing} currencyCode={statement.currencyCode} />
+      <AgeingTable id="customer-statement-ageing" ageing={statement.ageing} currencyCode={statement.currencyCode} />
     </article>
   );
 }
@@ -317,6 +318,26 @@ export function CustomerStatements({ organisationId, initialContactId }: { organ
         {statement.error ? <Notice tone="error">{statement.error}</Notice> : null}
         {!chosen ? <p className={ui.muted}>Choose a customer to see their statement.</p> : null}
         {statement.loading ? <p className={ui.muted}>Loading…</p> : null}
+        {statement.data && chosen ? (
+          <ReportExport
+            organisationId={organisationId}
+            report="customer-statement"
+            title={statement.data.kind === "activity" ? "Activity statement" : "Outstanding statement"}
+            period={
+              statement.data.kind === "activity"
+                ? `${formatDate(statement.data.from)} to ${formatDate(statement.data.to)}`
+                : `As at ${formatDate(statement.data.asAt)}`
+            }
+            filters={[
+              `Customer: ${statement.data.customer.name}`,
+              ...(statement.data.includeSubCustomers ? ["Include sub-customers"] : []),
+            ]}
+            tables={[
+              { id: statement.data.kind === "activity" ? "customer-statement-activity" : "customer-statement-outstanding" },
+              { id: "customer-statement-ageing", title: "Ageing" },
+            ]}
+          />
+        ) : null}
       </Card>
       {statement.data?.kind === "activity" ? <ActivityPaper statement={statement.data} /> : null}
       {statement.data?.kind === "outstanding" ? <OutstandingPaper statement={statement.data} /> : null}

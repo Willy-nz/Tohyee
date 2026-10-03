@@ -70,6 +70,12 @@ export async function parseTrackingFilter(
   valueInput: unknown,
 ): Promise<{ categoryId: string; valueId: string; valueIds: string[]; label: string } | null> {
   const categoryId = optionalId(categoryInput, "trackingCategoryId");
+  if (valueInput === "unassigned") {
+    if (!categoryId) throw new ValidationError("Choose a tracking category to filter untagged lines.");
+    const found = await tx.query<{ name: string }>("select name from tracking_categories where id = $1", [categoryId]);
+    if (!found.rows[0]) throw new ValidationError("That tracking category doesn't exist.");
+    return { categoryId, valueId: "unassigned", valueIds: [], label: `${found.rows[0].name}: Not set` };
+  }
   const valueId = optionalId(valueInput, "trackingValueId");
   if (!categoryId && !valueId) return null;
   if (!categoryId || !valueId) throw new ValidationError("Choose both a tracking category and a value to filter by.");
@@ -119,13 +125,14 @@ export async function accountTransactions(
     [accountId],
   );
   if (accountId && accountRows.rows.length === 0) throw new NotFoundError("Account not found.");
-  const tagged = `($2::text is null or (l.tracking ->> $2::text) = any($3::text[]))`;
+  const openingTagged = `($2::text is null or ($5::boolean and l.tracking ->> $2::text is null) or (not $5::boolean and (l.tracking ->> $2::text) = any($3::text[])))`;
+  const lineTagged = `($2::text is null or ($6::boolean and l.tracking ->> $2::text is null) or (not $6::boolean and (l.tracking ->> $2::text) = any($3::text[])))`;
   const openingRows = await tx.query<{ account_id: string; balance: string }>(
     `select l.account_id::text, sum(l.debit_amount - l.credit_amount)::text as balance
        from ledger_journal_lines l join ledger_journals j on j.id = l.journal_id
-      where j.posting_date <= $1 and ${tagged} and ($4::bigint is null or l.account_id = $4)
+      where j.posting_date <= $1 and ${openingTagged} and ($4::bigint is null or l.account_id = $4)
       group by l.account_id`,
-    [dayBefore(from), filter?.categoryId ?? null, filter?.valueIds ?? [], accountId],
+    [dayBefore(from), filter?.categoryId ?? null, filter?.valueIds ?? [], accountId, filter?.valueId === "unassigned"],
   );
   const lineRows = await tx.query<LineRow>(
     `with ${JOURNAL_SOURCES_SQL}
@@ -135,9 +142,9 @@ export async function accountTransactions(
        from ledger_journal_lines l
        join ledger_journals j on j.id = l.journal_id
        ${SOURCE_JOINS}
-      where j.posting_date between $1 and $5 and ${tagged} and ($4::bigint is null or l.account_id = $4)
+      where j.posting_date between $1 and $5 and ${lineTagged} and ($4::bigint is null or l.account_id = $4)
       order by j.posting_date, j.id, l.line_order`,
-    [from, filter?.categoryId ?? null, filter?.valueIds ?? [], accountId, to],
+    [from, filter?.categoryId ?? null, filter?.valueIds ?? [], accountId, to, filter?.valueId === "unassigned"],
   );
 
   const opening = new Map(openingRows.rows.map((row) => [row.account_id, dec(row.balance)]));

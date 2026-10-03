@@ -120,7 +120,11 @@ export function AccountSelect({
 
 export function Money({ value, blankZero = false }: { value: string | null | undefined; blankZero?: boolean }) {
   if (blankZero && (value == null || /^-?0*(\.0*)?$/.test(value))) {
-    return <span className={ui.num} />;
+    return <span className={ui.num} data-export-value="" />;
   }
-  return <span className={ui.num}>{formatMoney(value)}</span>;
+  return (
+    <span className={ui.num} data-export-value={value ?? ""}>
+      {formatMoney(value)}
+    </span>
+  );
 }
