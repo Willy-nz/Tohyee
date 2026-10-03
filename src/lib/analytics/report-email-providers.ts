@@ -6,11 +6,20 @@ import { MAX_ATTACHMENT_BYTES } from "./report-email-files";
 
 export type MailFolder = { id: string; name: string };
 export type ReportAttachment = { name: string; size: number; read: () => Promise<Buffer> };
-export type ReportMessage = { id: string; receivedAt: string; attachments: ReportAttachment[] };
+/**
+ * A message in the report folder. `problem` is set, with no attachments, when
+ * this one message can't be read (too big, malformed): the check notes it and
+ * carries on. A network failure still stops the whole check, to try again later.
+ */
+export type ReportMessage = { id: string; receivedAt: string | null; attachments: ReportAttachment[]; problem?: string };
+/** Messages already dealt with, skipped before they're downloaded. */
+export type SkipMessage = (messageId: string) => boolean;
 export type ImapCredentials = { host: string; port: number; username: string; password: string };
 const GOOGLE = "https://gmail.googleapis.com/gmail/v1/users/me";
 const GRAPH = "https://graph.microsoft.com/v1.0/me";
 const TIMEOUT_MS = 30_000;
+// The folder-listing connection waits while each page of messages is saved.
+const IDLE_TIMEOUT_MS = 5 * 60_000;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_ENCODED_PART_BYTES = MAX_ATTACHMENT_BYTES * 4;
 const MAX_ENCODED_BYTES = Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4 + MAX_JSON_BYTES;
@@ -165,8 +174,18 @@ function gmailAttachments(part: GmailPart | undefined, messageId: string, token:
   return attachments;
 }
 
+/** One message's own problem (a ValidationError) becomes `problem`; anything else stops the check. */
+async function oneMessage(messageId: string, read: () => Promise<Omit<ReportMessage, "id">>): Promise<ReportMessage> {
+  try {
+    return { id: messageId, ...(await read()) };
+  } catch (error) {
+    if (error instanceof ValidationError) return { id: messageId, receivedAt: null, attachments: [], problem: error.message };
+    throw error;
+  }
+}
+
 type GraphAttachment = { id: string; name: string; size: number; contentBytes?: string; "@odata.type"?: string };
-export async function* reportMessages(provider: MailProvider, token: string, folderId: string): AsyncGenerator<ReportMessage> {
+export async function* reportMessages(provider: MailProvider, token: string, folderId: string, skip: SkipMessage = () => false): AsyncGenerator<ReportMessage> {
   id(folderId);
   if (provider === "google") {
     let pageToken = "";
@@ -176,10 +195,13 @@ export async function* reportMessages(provider: MailProvider, token: string, fol
       if (pageToken) query.set("pageToken", pageToken);
       const page = await request<{ messages?: { id: string }[]; nextPageToken?: string }>(`${GOOGLE}/messages?${query}`, token);
       for (const listed of page.messages ?? []) {
-        const message = await request<{ internalDate: string; payload?: GmailPart }>(
-          `${GOOGLE}/messages/${id(listed.id)}?format=full`, token,
-        );
-        yield { id: listed.id, receivedAt: received(Number(message.internalDate)), attachments: gmailAttachments(message.payload, listed.id, token) };
+        if (skip(listed.id)) continue;
+        yield await oneMessage(listed.id, async () => {
+          const message = await request<{ internalDate: string; payload?: GmailPart }>(
+            `${GOOGLE}/messages/${id(listed.id)}?format=full`, token, MAX_ENCODED_BYTES,
+          );
+          return { receivedAt: received(Number(message.internalDate)), attachments: gmailAttachments(message.payload, listed.id, token) };
+        });
       }
       pageToken = page.nextPageToken ?? "";
       if (pageToken && (pageToken.length > 4096 || seen.has(pageToken))) throw new ValidationError("The report mailbox returned a repeated or invalid next page.");
@@ -192,6 +214,8 @@ export async function* reportMessages(provider: MailProvider, token: string, fol
     `${folder}/messages?$top=100&$select=id,receivedDateTime,hasAttachments&$orderby=receivedDateTime%20asc`, token,
   )) {
     for (const message of page) {
+      if (skip(message.id)) continue;
+      yield await oneMessage(message.id, async () => {
       const attachments: ReportAttachment[] = [];
       const endpoint = `${folder}/messages/${id(message.id)}/attachments`;
       if (message.hasAttachments) {
@@ -211,7 +235,8 @@ export async function* reportMessages(provider: MailProvider, token: string, fol
           }
         }
       }
-      yield { id: message.id, receivedAt: received(message.receivedDateTime), attachments };
+      return { receivedAt: received(message.receivedDateTime), attachments };
+      });
     }
   }
 }
@@ -245,7 +270,7 @@ function imapClient(credentials: ImapCredentials): ImapClient {
     host: credentials.host, port: 993, secure: true,
     auth: { user: credentials.username, pass: credentials.password },
     tls: { rejectUnauthorized: true }, logger: false, emitLogs: false,
-    connectionTimeout: TIMEOUT_MS, greetingTimeout: TIMEOUT_MS, socketTimeout: TIMEOUT_MS,
+    connectionTimeout: TIMEOUT_MS, greetingTimeout: TIMEOUT_MS, socketTimeout: IDLE_TIMEOUT_MS,
     maxLiteralSize: MAX_ENCODED_PART_BYTES + 1, maxResponseSize: MAX_ENCODED_PART_BYTES + MAX_JSON_BYTES,
     disableAutoIdle: true,
   });
@@ -335,7 +360,7 @@ async function readImapAttachment(
   finally { clearTimeout(timeout); content?.destroy(); lock?.release(); await disconnect(client); }
 }
 
-export async function* imapReportMessages(credentials: ImapCredentials, folderId: string): AsyncGenerator<ReportMessage> {
+export async function* imapReportMessages(credentials: ImapCredentials, folderId: string, skip: SkipMessage = () => false): AsyncGenerator<ReportMessage> {
   id(folderId);
   const client = imapClient(credentials);
   let lock: { release: () => void } | undefined;
@@ -353,10 +378,14 @@ export async function* imapReportMessages(credentials: ImapCredentials, folderId
         page.push(message);
       }
       for (const message of page) {
-        const attachments = mimeParts(message.bodyStructure).map((part) => ({
-          name: part.name, size: part.size, read: () => readImapAttachment(credentials, folderId, validity, message.uid, part),
-        }));
-        yield { id: `${validity}:${message.uid}`, receivedAt: received(message.internalDate ?? ""), attachments };
+        const messageId = `${validity}:${message.uid}`;
+        if (skip(messageId)) continue;
+        yield await oneMessage(messageId, async () => {
+          const attachments = mimeParts(message.bodyStructure).map((part) => ({
+            name: part.name, size: part.size, read: () => readImapAttachment(credentials, folderId, validity, message.uid, part),
+          }));
+          return { receivedAt: received(message.internalDate ?? ""), attachments };
+        });
       }
     }
   } catch (error) { throw imapError(error); }

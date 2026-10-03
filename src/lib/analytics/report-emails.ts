@@ -9,7 +9,9 @@ import { reportMailboxToken } from "@/lib/crm/mail/service";
 import { requireCrm } from "@/lib/crm/switch";
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, UnavailableError, ValidationError } from "@/lib/errors";
+import { localParts } from "@/lib/backups/service";
+import { assertPublicMailHost } from "@/lib/analytics/mail-host";
 import { getOrganisation, type OrganisationRecord } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 
@@ -17,6 +19,8 @@ export type ReportMailbox = {
   id: string; kind: "crm" | "imap"; accountId: string | null; email: string | null;
   host: string | null; port: number | null; username: string | null;
   folderId: string; folderName: string; replace: boolean; hasPassword: boolean;
+  /** Who set it up; only they can change or check it, but any admin can remove it. */
+  setUpBy: string; yours: boolean;
 };
 export type ReportEmailCheck = {
   id: string; mailboxId: string; startedAt: string; finishedAt: string | null;
@@ -27,18 +31,35 @@ type MailboxRow = {
   host: string | null; port: number | null; username: string | null; password_ciphertext: string | null;
   folder_id: string; folder_name: string; replace_files: boolean; owner_user_id: string;
   lease_id: string | null; lease_until: Date | null;
-  last_check_at: Date | null;
+  last_check_at: Date | null; created_by_email: string;
 };
 type CheckRow = {
   id: string; mailbox_id: string; started_at: Date; finished_at: Date | null;
   files_saved: number; error: string | null; status: ReportEmailCheck["status"];
 };
-const CHECK_INTERVAL_MS = 15 * 60 * 1000;
+/**
+ * Report emails are checked once a night after this (business time), before
+ * the 04:00 reload (LOAD_TIME), so the reports they save are loaded the same
+ * night. "Check now" works any time.
+ */
+export const REPORT_EMAIL_TIME = "03:00";
+/** A message that keeps failing is tried this many times, then left with its reason. */
+const MAX_ATTEMPTS = 3;
+
+/** Whether a mailbox's nightly check is due, given when it was last checked. */
+export function reportEmailCheckDue(now: Date, lastCheckAt: Date | null, checkTime = REPORT_EMAIL_TIME): boolean {
+  const today = localParts(now);
+  if (today.time < checkTime) return false;
+  if (!lastCheckAt) return true;
+  const last = localParts(lastCheckAt);
+  return !(last.date === today.date && last.time >= checkTime);
+}
 const SAFE_CHECK_ERROR = "Some report files could not be saved. Check the mailbox connection, the organisation's source folder, and that attachments are safe data files within the size limits.";
-const publicMailbox = (row: MailboxRow): ReportMailbox => ({
+const publicMailbox = (row: MailboxRow, userId: string | null): ReportMailbox => ({
   id: row.id, kind: row.kind, accountId: row.account_id, email: row.email,
   host: row.host, port: row.port, username: row.username, folderId: row.folder_id,
   folderName: row.folder_name, replace: row.replace_files, hasPassword: Boolean(row.password_ciphertext),
+  setUpBy: row.created_by_email, yours: row.owner_user_id === userId,
 });
 const publicCheck = (row: CheckRow): ReportEmailCheck => ({
   id: row.id, mailboxId: row.mailbox_id, startedAt: new Date(row.started_at).toISOString(),
@@ -84,8 +105,7 @@ export async function listReportEmails(tx: OrgTx): Promise<{
   await requireAnalytics(tx);
   const mailboxes = await tx.query<MailboxRow>(
     `select m.*, m.id::text, m.account_id::text, a.email from analytics_report_mailboxes m
-       left join crm_connected_accounts a on a.id = m.account_id where m.owner_user_id = $1 order by m.id`,
-    [tx.actor.userId],
+       left join crm_connected_accounts a on a.id = m.account_id order by m.id`,
   );
   const accounts = await tx.query<{ id: string; email: string; provider: "google" | "microsoft" }>(
     `select id::text, email, provider from crm_connected_accounts where user_id = $1 and status = 'active'
@@ -93,16 +113,24 @@ export async function listReportEmails(tx: OrgTx): Promise<{
   );
   const checks = await tx.query<CheckRow>(
     `select c.*, c.id::text, c.mailbox_id::text from analytics_report_email_checks c
-       join analytics_report_mailboxes m on m.id = c.mailbox_id
-       where m.owner_user_id = $1 order by c.started_at desc, c.id desc limit 50`, [tx.actor.userId],
+       order by c.started_at desc, c.id desc limit 50`,
   );
-  return { mailboxes: mailboxes.rows.map(publicMailbox), accounts: accounts.rows, checks: checks.rows.map(publicCheck) };
+  return { mailboxes: mailboxes.rows.map((row) => publicMailbox(row, tx.actor.userId)), accounts: accounts.rows, checks: checks.rows.map(publicCheck) };
 }
-export function imapCredentials(input: Record<string, unknown>, savedPassword?: string): ImapCredentials {
+function savedLogin(row: MailboxRow | null) {
+  return row?.password_ciphertext ? { password: decryptSecret(row.password_ciphertext), host: row.host, username: row.username } : undefined;
+}
+
+export function imapCredentials(
+  input: Record<string, unknown>,
+  saved?: { password: string; host: string | null; username: string | null },
+): ImapCredentials {
   const host = text(input.host, "IMAP host", 253);
   if (!/^[a-zA-Z0-9.-]+$/.test(host) || host.startsWith(".") || host.endsWith(".")) throw new ValidationError("Enter the IMAP server's host name, without a URL or port.");
   if (input.port !== 993) throw new ValidationError("IMAP uses encrypted TLS on port 993 only.");
   const username = text(input.username, "IMAP username", 320);
+  // The saved password is only ever sent to the server and user it was saved for.
+  const savedPassword = saved && saved.host?.toLowerCase() === host.toLowerCase() && saved.username === username ? saved.password : undefined;
   const password = input.password === undefined || input.password === "" ? savedPassword : input.password;
   if (typeof password !== "string" || !password || password.length > 1000 || /[\u0000\r\n]/.test(password)) throw new ValidationError("Enter the mailbox's app password.");
   return { host, port: 993, username, password };
@@ -155,7 +183,8 @@ export async function saveReportMailbox(tx: OrgTx, input: Record<string, unknown
   const folderId = text(input.folderId, "Folder ID");
   const folderName = text(input.folderName, "Folder name");
   const accountId = input.kind === "crm" ? await ownAccount(tx, input.accountId) : null;
-  const credentials = input.kind === "imap" ? imapCredentials(input, current?.password_ciphertext ? decryptSecret(current.password_ciphertext) : undefined) : null;
+  const credentials = input.kind === "imap" ? imapCredentials(input, savedLogin(current)) : null;
+  if (credentials) await assertPublicMailHost(credentials.host);
   const changedSource = current && (current.kind !== input.kind || current.account_id !== accountId || current.folder_id !== folderId
     || current.host !== (credentials?.host ?? null) || current.username !== (credentials?.username ?? null));
   if (changedSource) {
@@ -173,15 +202,15 @@ export async function saveReportMailbox(tx: OrgTx, input: Record<string, unknown
       `insert into analytics_report_mailboxes
        (kind,account_id,owner_user_id,host,port,username,password_ciphertext,folder_id,folder_name,replace_files,created_by_email)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id::text`, values);
-  const mailbox = publicMailbox(await mailboxRow(tx, saved.rows[0].id));
+  const mailbox = publicMailbox(await mailboxRow(tx, saved.rows[0].id), tx.actor.userId);
   await writeAuditEvent(tx, { eventType: "analytics.report_mailbox_saved", entityType: "analytics_report_mailbox", entityId: mailbox.id,
     details: { kind: mailbox.kind, folderName, replace: mailbox.replace } });
   return mailbox;
 }
 export async function deleteReportMailbox(tx: OrgTx, mailboxId: unknown): Promise<void> {
   await requireAnalytics(tx);
+  // Any admin can remove one (e.g. set up by someone who has left); the routes need admin.
   const row = await mailboxRow(tx, mailboxId, true);
-  requireOwnMailbox(tx, row);
   if (row.lease_until && new Date(row.lease_until).getTime() > Date.now()) throw new ConflictError("This mailbox is being checked. Try again after the check finishes.");
   await tx.query("delete from analytics_report_mailboxes where id = $1", [row.id]);
   await writeAuditEvent(tx, { eventType: "analytics.report_mailbox_deleted", entityType: "analytics_report_mailbox", entityId: row.id, details: {} });
@@ -194,8 +223,9 @@ export async function reportEmailFolders(
     if (input.accountId !== undefined) return { accountId: await ownAccount(tx, input.accountId), credentials: null };
     const saved = input.mailboxId === undefined ? null : await mailboxRow(tx, input.mailboxId);
     if (saved) requireOwnMailbox(tx, saved);
-    return { accountId: null, credentials: imapCredentials(input, saved?.password_ciphertext ? decryptSecret(saved.password_ciphertext) : undefined) };
+    return { accountId: null, credentials: imapCredentials(input, savedLogin(saved)) };
   });
+  if (prepared.credentials) await assertPublicMailHost(prepared.credentials.host);
   try {
     if (prepared.accountId) {
       const access = await reportMailboxToken(organisation, actor, prepared.accountId);
@@ -218,7 +248,7 @@ export async function checkReportMailbox(
     requireOwnMailbox(tx, mailbox);
     if (mailbox.kind === "crm") await ownAccount(tx, mailbox.account_id);
     if (mailbox.lease_until && new Date(mailbox.lease_until).getTime() > Date.now()) throw new ConflictError("This mailbox is already being checked.");
-    if (trigger === "schedule" && mailbox.last_check_at && dueAt.getTime() - new Date(mailbox.last_check_at).getTime() < CHECK_INTERVAL_MS) {
+    if (trigger === "schedule" && !reportEmailCheckDue(dueAt, mailbox.last_check_at ? new Date(mailbox.last_check_at) : null)) {
       throw new ConflictError("This mailbox is not due for another scheduled check yet.");
     }
     await tx.query(
@@ -230,8 +260,11 @@ export async function checkReportMailbox(
     const check = await tx.query<CheckRow>(
       `insert into analytics_report_email_checks (mailbox_id,trigger,requested_by_email) values ($1,$2,$3) returning *, id::text, mailbox_id::text`,
       [mailbox.id, trigger, actor.email]);
-    const remembered = await tx.query<{ message_id: string }>("select message_id from analytics_report_email_messages where mailbox_id=$1", [mailbox.id]);
-    return { mailbox, check: check.rows[0], remembered: new Set(remembered.rows.map((row) => row.message_id)) };
+    const known = await tx.query<{ message_id: string; status: string; attempts: number }>(
+      "select message_id, status, attempts from analytics_report_email_messages where mailbox_id=$1", [mailbox.id]);
+    const done = new Set(known.rows.filter((row) => row.status === "saved" || row.attempts >= MAX_ATTEMPTS).map((row) => row.message_id));
+    const attempts = new Map(known.rows.filter((row) => row.status === "failed").map((row) => [row.message_id, row.attempts]));
+    return { mailbox, check: check.rows[0], done, attempts };
   });
   const { mailbox } = prepared;
   const run = <T>(work: (tx: OrgTx) => Promise<T>) => withOrganisationTransaction(organisation, actor, work);
@@ -258,39 +291,50 @@ export async function checkReportMailbox(
     const folder = await organisationSourceFolder(organisation.id);
     if (!folder) throw new ConflictError("A server admin needs to choose this organisation's analytics folder.");
     const access = mailbox.kind === "crm" ? await reportMailboxToken(organisation, actor, mailbox.account_id!) : null;
-    const messages = access ? reportMessages(access.provider, access.token, mailbox.folder_id)
-      : imapReportMessages({ host: mailbox.host!, port: 993, username: mailbox.username!, password: decryptSecret(mailbox.password_ciphertext!) }, mailbox.folder_id);
+    if (mailbox.kind === "imap") await assertPublicMailHost(mailbox.host!);
+    const skip = (messageId: string) => prepared.done.has(messageId);
+    const messages = access ? reportMessages(access.provider, access.token, mailbox.folder_id, skip)
+      : imapReportMessages({ host: mailbox.host!, port: 993, username: mailbox.username!, password: decryptSecret(mailbox.password_ciphertext!) }, mailbox.folder_id, skip);
     for await (const message of messages) {
       if (lostLease) throw new ConflictError("The mailbox check stopped.");
-      if (prepared.remembered.has(message.id)) continue;
+      if (prepared.done.has(message.id)) continue;
       if (usedBytes >= MAX_CHECK_BYTES) { failed = true; break; }
-      if (!Number.isFinite(new Date(message.receivedAt).getTime())) { failed = true; continue; }
-      let retry = false;
-      for (const attachment of message.attachments) {
+      // A problem with this message that won't change (it's tried MAX_ATTEMPTS times in all),
+      // one that might (a file couldn't be written), or running out of this check's budget.
+      let problem: string | null = message.problem ?? null;
+      let outOfBudget = false;
+      if (!problem && !message.receivedAt) problem = "The email has no valid received date.";
+      for (const attachment of problem ? [] : message.attachments) {
         if (!/\.(csv|tsv|txt|zip)$/i.test(attachment.name)) continue;
-        if (usedBytes >= MAX_CHECK_BYTES) { failed = true; retry = true; break; }
-        try { reportFileKey(attachment.name); } catch { failed = true; continue; }
-        if (attachment.size > MAX_ATTACHMENT_BYTES || attachment.size < 0 || !Number.isFinite(attachment.size)) { failed = true; continue; }
-        if (usedBytes + attachment.size > MAX_CHECK_BYTES) { failed = true; retry = true; continue; }
+        try { reportFileKey(attachment.name); } catch { problem = "An attachment has an unsafe file name."; continue; }
+        if (attachment.size > MAX_ATTACHMENT_BYTES || attachment.size < 0 || !Number.isFinite(attachment.size)) { problem = "An attachment is over the size limit."; continue; }
+        if (usedBytes + attachment.size > MAX_CHECK_BYTES) { outOfBudget = true; break; }
         let bytes: Buffer;
         usedBytes += attachment.size;
-        try { bytes = await attachment.read(); } catch { failed = true; retry = true; continue; }
+        try { bytes = await attachment.read(); } catch (error) {
+          if (error instanceof UnavailableError) throw error;
+          problem = "An attachment couldn't be read safely."; continue;
+        }
         usedBytes += bytes.length - attachment.size;
-        if (usedBytes > MAX_CHECK_BYTES) { failed = true; retry = true; break; }
-        if (bytes.length > MAX_ATTACHMENT_BYTES) { failed = true; continue; }
+        // Bigger than it said: if this check can't take it, the message waits for the next one.
+        if (usedBytes > MAX_CHECK_BYTES && bytes.length <= MAX_ATTACHMENT_BYTES) { outOfBudget = true; break; }
+        if (bytes.length > MAX_ATTACHMENT_BYTES) { problem = "An attachment is over the size limit."; continue; }
         let extracted;
         const archive = /\.zip$/i.test(attachment.name);
         const remaining = MAX_CHECK_BYTES - usedBytes;
         if (archive) {
           let expansion: number;
-          try { expansion = await reportZipExpansionBytes(bytes); } catch { failed = true; continue; }
-          if (expansion > remaining) { failed = true; retry ||= expansion + bytes.length <= MAX_CHECK_BYTES; continue; }
+          try { expansion = await reportZipExpansionBytes(bytes); } catch { problem = "A ZIP attachment is damaged or too large to unzip safely."; continue; }
+          if (expansion > remaining) {
+            if (expansion + bytes.length <= MAX_CHECK_BYTES) { outOfBudget = true; break; }
+            problem = "A ZIP attachment is too large once unzipped."; continue;
+          }
           usedBytes += expansion;
         }
         try { extracted = await extractReportAttachment(attachment.name, bytes, remaining + (archive ? 0 : bytes.length)); }
-        catch { failed = true; continue; }
+        catch { problem = "An attachment couldn't be unzipped or read as a data file."; continue; }
         for (const file of extracted) {
-          if (usedBytes > MAX_CHECK_BYTES) { failed = true; retry = true; break; }
+          if (usedBytes > MAX_CHECK_BYTES) { outOfBudget = true; break; }
           try {
             const outputName = mailbox.replace_files ? reportFileKey(file.name) : file.name;
             if (mailbox.replace_files) {
@@ -309,20 +353,30 @@ export async function checkReportMailbox(
             await run(async (tx) => {
               await renew(tx);
               const outputFile = mailbox.replace_files ? { ...file, name: outputName } : file;
-              const filename = await saveReportFile(folder, mailbox.id, message.id, message.receivedAt, outputFile, mailbox.replace_files);
+              const filename = await saveReportFile(folder, mailbox.id, message.id, message.receivedAt!, outputFile, mailbox.replace_files);
               filesSaved += 1;
               filenames.push(filename);
               await tx.query("update analytics_report_email_checks set files_saved=$2, files=$3::jsonb where id=$1",
                 [prepared.check.id, filesSaved, JSON.stringify(filenames)]);
             });
-          } catch { failed = true; retry = true; }
+          } catch (error) {
+            if (lostLease) throw error;
+            problem = error instanceof ValidationError || error instanceof ConflictError ? error.message : "A report file couldn't be saved.";
+          }
         }
+        if (outOfBudget) break;
       }
-      if (!retry) await run(async (tx) => {
+      // Out of budget: this message is left for the next check, untouched.
+      if (outOfBudget) { failed = true; break; }
+      if (problem) failed = true;
+      const attempts = (prepared.attempts.get(message.id) ?? 0) + 1;
+      await run(async (tx) => {
         await renew(tx);
         await tx.query(
-          "insert into analytics_report_email_messages (mailbox_id,message_id,received_at) values ($1,$2,$3) on conflict do nothing",
-          [mailbox.id, message.id, message.receivedAt]);
+          `insert into analytics_report_email_messages (mailbox_id,message_id,received_at,status,attempts,error) values ($1,$2,$3,$4,$5,$6)
+           on conflict (mailbox_id,message_id) do update set received_at=excluded.received_at, status=excluded.status,
+             attempts=excluded.attempts, error=excluded.error, saved_at=now()`,
+          [mailbox.id, message.id, message.receivedAt, problem ? "failed" : "saved", Math.min(attempts, MAX_ATTEMPTS), problem]);
       });
     }
   } catch { failed = true; }
@@ -351,10 +405,10 @@ export async function runDueReportEmailChecks(now = new Date()): Promise<ReportE
       const due = await withOrganisationTransaction(organisation, scheduler, async (tx) => {
         const enabled = await tx.query<{ analytics_enabled: boolean }>("select analytics_enabled from organisation_settings where id=true");
         if (!enabled.rows[0]?.analytics_enabled) return [];
-        return (await tx.query<{ id: string; owner_user_id: string; created_by_email: string }>(
-          `select id::text, owner_user_id, created_by_email from analytics_report_mailboxes
-           where (last_check_at is null or last_check_at <= $1::timestamptz - interval '15 minutes')
-             and (lease_until is null or lease_until <= now()) order by id`, [now.toISOString()])).rows;
+        const mailboxes = await tx.query<{ id: string; owner_user_id: string; created_by_email: string; last_check_at: Date | null }>(
+          `select id::text, owner_user_id, created_by_email, last_check_at from analytics_report_mailboxes
+           where lease_until is null or lease_until <= now() order by id`);
+        return mailboxes.rows.filter((mailbox) => reportEmailCheckDue(now, mailbox.last_check_at ? new Date(mailbox.last_check_at) : null));
       });
       for (const mailbox of due) {
         const membership = await coreQuery(
@@ -374,7 +428,7 @@ let schedulerTimer: NodeJS.Timeout | null = null;
 export function startReportEmailScheduler(): void {
   if (schedulerTimer) return;
   const tick = () => { runDueReportEmailChecks().catch(() => console.warn("[tohyee] Report email checks could not run.")); };
-  schedulerTimer = setInterval(tick, CHECK_INTERVAL_MS);
+  schedulerTimer = setInterval(tick, 5 * 60 * 1000);
   schedulerTimer.unref?.();
   setTimeout(tick, 60_000).unref?.();
 }

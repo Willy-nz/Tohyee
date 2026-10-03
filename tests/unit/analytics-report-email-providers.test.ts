@@ -35,6 +35,27 @@ describe("report email providers (decision 362)", () => {
     expect(await messages[0].attachments[0].read()).toEqual(Buffer.from("a,b"));
   });
 
+  it("skips saved Gmail messages before downloading them, and reports a bad one without stopping", async () => {
+    const fetched: string[] = [];
+    setMailFetchForTests(async (url) => {
+      if (url.includes("/messages?")) return json({ messages: [{ id: "saved" }, { id: "deep" }, { id: "fine" }] });
+      fetched.push(url);
+      if (url.includes("/messages/deep?")) {
+        const deep = { parts: [] as unknown[] };
+        let node = deep;
+        for (let level = 0; level < 25; level++) { const child = { parts: [] as unknown[] }; node.parts.push(child); node = child; }
+        return json({ internalDate: "1791028800000", payload: deep });
+      }
+      return json({ internalDate: "1791028800000", payload: {} });
+    });
+    const messages = await collect(reportMessages("google", "token", "reports", (id) => id === "saved"));
+    expect(fetched.some((url) => url.includes("/messages/saved?"))).toBe(false);
+    expect(messages.map((message) => [message.id, message.problem ?? null])).toEqual([
+      ["deep", "The report email has too many MIME parts."],
+      ["fine", null],
+    ]);
+  });
+
   it("streams beyond 500 Gmail messages and stops fetching when the consumer stops", async () => {
     let listed = 0;
     setMailFetchForTests(async (url) => {

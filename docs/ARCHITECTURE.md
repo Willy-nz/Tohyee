@@ -1526,8 +1526,13 @@ run time.
   the organisation's PostgreSQL database. Admins and owners use their own
   CRM-connected Gmail or Microsoft mailbox, or TLS IMAP on port 993 with an
   encrypted app password. Network reads run outside transactions; committed
-  leases keep checks from overlapping. Checks run every 15 minutes and on
-  demand (scheduler off with `TOHYEE_REPORT_EMAIL_SCHEDULER=off`). Data files
+  leases keep checks from overlapping. Checks run once a night after 03:00
+  business time, before the 04:00 reload, and on demand (scheduler off with
+  `TOHYEE_REPORT_EMAIL_SCHEDULER=off`). Saved messages are skipped before
+  they're downloaded; a message that can't be read is noted and the check
+  carries on, and one that keeps failing is tried three times in all. IMAP
+  hosts must resolve to public addresses (`src/lib/analytics/mail-host.ts`),
+  checked on save and before each connection. Data files
   go into `email/<mailbox id>/` inside the server-admin-chosen source folder;
   the existing loader discovers them there. OAuth permissions cover the
   whole mailbox, but these checks only read the chosen folder or label and

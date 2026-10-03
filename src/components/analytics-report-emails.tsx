@@ -31,7 +31,8 @@ export function ReportEmailsCard({ organisationId, folderChosen, onChanged }: {
   const [password, setPassword] = useState("");
   const [folders, setFolders] = useState<MailFolder[]>([]);
   const [folderId, setFolderId] = useState("");
-  const [replace, setReplace] = useState(false);
+  // Replace by default: a data source loads one file by its name each night.
+  const [replace, setReplace] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -86,7 +87,7 @@ export function ReportEmailsCard({ organisationId, folderChosen, onChanged }: {
   return (
     <Card title="Report emails" description="Read one mailbox folder or Gmail label and save its data attachments into this organisation's analytics source folder.">
       <p>Set a rule in your mailbox to file report emails into the folder or label you choose below. Tohyee never moves, marks as read, labels or deletes emails.</p>
-      <p className={ui.muted}>Google and Microsoft permissions cover the whole mailbox, even though Tohyee only reads the chosen folder or label here. Use your own mailbox already connected in the CRM, or IMAP with an app password for personal Gmail.</p>
+      <p className={ui.muted}>Google and Microsoft permissions cover the whole mailbox, even though Tohyee only reads the chosen folder or label here. Use your own mailbox already connected in the CRM, or IMAP with an app password for personal Gmail. Mailboxes are checked each night at 3am, before the 4am reload, or any time with Check now. If your Google connection uses an app still in Google&rsquo;s &ldquo;Testing&rdquo; mode, Google stops its access after 7 days; reconnect it in the CRM, or use IMAP.</p>
       <p className={ui.muted}>Microsoft 365 has turned off IMAP passwords: connect Microsoft mailboxes through the CRM&apos;s Microsoft connection. Looker Studio sends only PDFs, which cannot be loaded as data. CSV, TSV and TXT attachments, and flat CSV or TSV files inside ZIPs, are accepted. Limits: 25 MB per attachment and 100 MB per check.</p>
       {!folderChosen ? <Notice tone="warning">A server admin must choose this organisation&apos;s analytics source folder before files can be saved.</Notice> : null}
       {overview.error ? <Notice tone="error">{overview.error}</Notice> : null}
@@ -119,8 +120,8 @@ export function ReportEmailsCard({ organisationId, folderChosen, onChanged }: {
           <Field label="Folder or label"><select value={folderId} disabled={busy} onChange={(event) => setFolderId(event.target.value)}>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></Field>
           <Field label="When the attachment name repeats">
             <select value={replace ? "replace" : "keep"} disabled={busy} onChange={(event) => setReplace(event.target.value === "replace")}>
-              <option value="keep">Keep every file (received date and attachment name)</option>
-              <option value="replace">Replace with the newest file of the same name</option>
+              <option value="replace">Replace with the newest file of the same name (for a data source)</option>
+              <option value="keep">Keep every file, dated (an archive; a data source can&rsquo;t load these)</option>
             </select>
           </Field>
           <div className={ui.actions}><Button disabled={busy || !folderId || !folderChosen} onClick={save}>Save report mailbox</Button></div>
@@ -132,10 +133,12 @@ export function ReportEmailsCard({ organisationId, folderChosen, onChanged }: {
             <thead><tr><th>Mailbox</th><th>Folder / label</th><th>Files</th><th /></tr></thead>
             <tbody>{overview.data.mailboxes.map((mailbox) => (
               <tr key={mailbox.id}>
-                <td>{mailbox.email ?? mailbox.username}<div className={ui.muted}>{mailbox.kind === "imap" ? `${mailbox.host}:993 (TLS)` : "CRM connection"}</div></td>
+                <td>{mailbox.email ?? mailbox.username}<div className={ui.muted}>{mailbox.kind === "imap" ? `${mailbox.host}:993 (TLS)` : "CRM connection"}{mailbox.yours ? "" : ` · set up by ${mailbox.setUpBy}`}</div></td>
                 <td>{mailbox.folderName}</td>
                 <td>{mailbox.replace ? "Newest file" : "Every file"}</td>
                 <td><div className={ui.actions}>
+                  {/* Only the person who set it up can change or check it (it uses their connection); any admin can remove it. */}
+                  {mailbox.yours ? (<>
                   <Button size="small" variant="secondary" disabled={busy} onClick={() => {
                     setEditingId(mailbox.id);
                     setChoice(mailbox.kind === "imap" ? "imap" : mailbox.accountId ?? "");
@@ -154,6 +157,7 @@ export function ReportEmailsCard({ organisationId, folderChosen, onChanged }: {
                     overview.reload();
                     onChanged();
                   })}>Check now</Button>
+                  </>) : null}
                   <Button size="small" variant="danger" disabled={busy} onClick={() => action(async () => {
                     await api(`${base}/${mailbox.id}`, { method: "DELETE" });
                     overview.reload();

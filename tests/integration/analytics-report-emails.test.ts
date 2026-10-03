@@ -11,11 +11,12 @@ import { checkReportMailbox, runDueReportEmailChecks } from "@/lib/analytics/rep
 import { coreQuery } from "@/lib/db/transactions";
 import { getOrganisation } from "@/lib/organisations/registry";
 import { setMailFetchForTests } from "@/lib/crm/mail/providers";
+import { setMailHostResolverForTests } from "@/lib/analytics/mail-host";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { apiRequest, createTestOrganisation, createTestUser, describeWithDatabase, inOrganisation, params, sessionCookieFor, startTestServer, type TestServer } from "../helpers/test-server";
 
 const mocks = vi.hoisted(() => ({
-  messages: [] as Array<{ id: string; receivedAt: string; attachments: Array<{ name: string; size: number; read: () => Promise<Buffer> }> }>,
+  messages: [] as Array<{ id: string; receivedAt: string | null; problem?: string; attachments: Array<{ name: string; size: number; read: () => Promise<Buffer> }> }>,
   token: vi.fn(async () => ({ provider: "google", token: "test-token" })),
 }));
 function storedCsvZip(name: string, bytes: Buffer): Buffer {
@@ -67,6 +68,8 @@ describeWithDatabase("report emails (decision 362)", () => {
   const attachment = (name: string, text: string) => ({ name, size: Buffer.byteLength(text), read: vi.fn(async () => Buffer.from(text)) });
 
   beforeAll(async () => {
+    // Made-up mail servers: public addresses, except the one pointed at this server.
+    setMailHostResolverForTests(async (host) => (host === "mail.internal.example.com" ? ["10.0.0.5"] : ["203.0.113.10"]));
     server = await startTestServer();
     process.env.TOHYEE_SECRET_KEY = Buffer.alloc(32, 12).toString("base64");
     fs.mkdirSync(root);
@@ -87,7 +90,7 @@ describeWithDatabase("report emails (decision 362)", () => {
       await tx.query("update organisation_settings set crm_enabled=true");
     });
   });
-  afterAll(async () => { await server?.teardown(); fs.rmSync(root, { recursive: true, force: true }); delete process.env.TOHYEE_SECRET_KEY; });
+  afterAll(async () => { setMailHostResolverForTests(null); await server?.teardown(); fs.rmSync(root, { recursive: true, force: true }); delete process.env.TOHYEE_SECRET_KEY; });
 
   it("gates listing and saving when Analytics is off, and restricts routes to admins", async () => {
     expect((await mailboxesRoute.GET(apiRequest(endpoint, { cookie }), params({ organisationId: orgId }))).status).toBe(409);
@@ -107,7 +110,7 @@ describeWithDatabase("report emails (decision 362)", () => {
     expect(listed.mailboxes).toHaveLength(1);
     expect(JSON.stringify(listed)).not.toMatch(/ciphertext|refresh-token/);
   });
-  it("remembers messages before reading attachments again, and checks every 15 minutes", async () => {
+  it("remembers messages before reading attachments again", async () => {
     const file = attachment("sales.csv", "region,total\nOtago,123\n");
     mocks.messages = [{ id: "first", receivedAt: "2026-10-01T10:00:00Z", attachments: [file] }];
     const response = await checkRoute.POST(apiRequest(`${endpoint}/${mailboxId}/check`, { method: "POST", cookie }), params({ organisationId: orgId, id: mailboxId }));
@@ -115,7 +118,6 @@ describeWithDatabase("report emails (decision 362)", () => {
     const result = await response.json();
     expect(Object.keys(result)).toEqual(["check"]);
     expect(result.check).toMatchObject({ filesSaved: 1, status: "ok", error: null });
-    expect(await runDueReportEmailChecks()).toEqual([]);
     const organisation = (await getOrganisation(orgId))!;
     expect(await checkReportMailbox(organisation, actor, mailboxId)).toMatchObject({ filesSaved: 0, status: "ok" });
     expect(file.read).toHaveBeenCalledTimes(1);
@@ -199,9 +201,13 @@ describeWithDatabase("report emails (decision 362)", () => {
       await tx.query("update analytics_report_mailboxes set last_check_at=now()-interval '20 minutes',lease_id=$2,lease_until=now()-interval '1 minute' where id=$1", [mailboxId, randomUUID()]);
       await tx.query("insert into analytics_report_email_checks (mailbox_id,trigger,requested_by_email) values ($1,'schedule',$2)", [mailboxId, actor.email]);
     });
-    expect(await runDueReportEmailChecks()).toMatchObject([{ mailboxId, status: "ok", filesSaved: 0 }]);
-    expect(await runDueReportEmailChecks()).toEqual([]);
-    await expect(checkReportMailbox(organisation, actor, mailboxId, "schedule")).rejects.toThrow(/not due/);
+    // Once a night, after 3am business time (before the 4am reload).
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    tomorrow.setUTCHours(18, 0, 0, 0);
+    expect(await runDueReportEmailChecks(tomorrow)).toMatchObject([{ mailboxId, status: "ok", filesSaved: 0 }]);
+    expect(await runDueReportEmailChecks(tomorrow)).toEqual([]);
+    expect(await runDueReportEmailChecks(new Date(tomorrow.getTime() + 60 * 60 * 1000))).toEqual([]);
+    await expect(checkReportMailbox(organisation, actor, mailboxId, "schedule", tomorrow)).rejects.toThrow(/not due/);
     const failed = await inOrganisation(orgId, actor, (tx) => tx.query("select error from analytics_report_email_checks where mailbox_id=$1 and error='The previous check stopped. Retrying.'", [mailboxId]));
     expect(failed.rows).toHaveLength(1);
   });
@@ -325,5 +331,60 @@ describeWithDatabase("report emails (decision 362)", () => {
     const audit = await inOrganisation(orgId, actor, (tx) => tx.query("select details from audit_events where event_type like 'analytics.report_%'"));
     expect(JSON.stringify(audit.rows)).not.toContain("private-password");
     expect((await deleteRoute.DELETE(apiRequest(`${endpoint}/${saved.id}`, { method: "DELETE", cookie }), params({ organisationId: orgId, id: saved.id }))).status).toBe(200);
+  });
+
+  it("carries on past a message it can't read, and gives up on one after three tries", async () => {
+    const organisation = (await getOrganisation(orgId))!;
+    const good = attachment("after-bad.csv", "value\n1\n");
+    const unsaved = { name: "nested/../escape.csv", size: 5, read: vi.fn(async () => Buffer.from("value")) };
+    mocks.messages = [
+      { id: "unreadable", receivedAt: null, attachments: [], problem: "The report email has too many MIME parts." },
+      { id: "unsafe-name", receivedAt: "2026-10-10T09:00:00Z", attachments: [unsaved] },
+      { id: "after-bad", receivedAt: "2026-10-10T10:00:00Z", attachments: [good] },
+    ];
+    const attemptsOf = async () =>
+      (await inOrganisation(orgId, actor, (tx) =>
+        tx.query<{ message_id: string; status: string; attempts: number; error: string | null }>(
+          "select message_id, status, attempts, error from analytics_report_email_messages where mailbox_id=$1 and message_id in ('unreadable','unsafe-name','after-bad') order by message_id", [mailboxId]))).rows;
+    for (let check = 1; check <= 4; check++) {
+      expect(await checkReportMailbox(organisation, actor, mailboxId)).toMatchObject({ status: check <= 3 ? "failed" : "ok" });
+    }
+    expect(good.read).toHaveBeenCalledOnce();
+    expect(await attemptsOf()).toEqual([
+      { message_id: "after-bad", status: "saved", attempts: 1, error: null },
+      { message_id: "unreadable", status: "failed", attempts: 3, error: "The report email has too many MIME parts." },
+      { message_id: "unsafe-name", status: "failed", attempts: 3, error: "An attachment has an unsafe file name." },
+    ]);
+  });
+
+  it("refuses mail servers on this server's network, and never sends a saved password to another server", async () => {
+    const input = { kind: "imap", host: "imap.example.com", port: 993, username: "reports@example.com", password: "first-password", folderId: "INBOX", folderName: "Inbox", replace: true };
+    for (const host of ["localhost", "127.0.0.1", "169.254.169.254", "mail.internal.example.com"]) {
+      const refused = await save({ ...input, host });
+      expect(refused.status).toBe(400);
+      expect((await refused.json()).error).toMatch(/on the internet|Couldn't find/);
+    }
+    const saved = await (await save(input)).json();
+    const moved = await save({ ...input, id: saved.id, host: "imap.elsewhere.example.com", password: "" });
+    expect(moved.status).toBe(400);
+    expect((await moved.json()).error).toMatch(/app password/);
+    const renamed = await save({ ...input, id: saved.id, username: "other@example.com", password: "" });
+    expect(renamed.status).toBe(400);
+    expect((await deleteRoute.DELETE(apiRequest(`${endpoint}/${saved.id}`, { method: "DELETE", cookie }), params({ organisationId: orgId, id: saved.id }))).status).toBe(200);
+  });
+
+  it("lets another admin see and remove a mailbox someone else set up, but not check or change it", async () => {
+    const admin = await createTestUser("second-admin@example.com");
+    await coreQuery("insert into organisation_members (organisation_id,user_id,role) values ($1,$2,'admin')", [orgId, admin.id]);
+    const adminCookie = await sessionCookieFor(admin);
+    const listed = await (await mailboxesRoute.GET(apiRequest(endpoint, { cookie: adminCookie }), params({ organisationId: orgId }))).json();
+    const theirs = listed.mailboxes.find((mailbox: { id: string }) => mailbox.id === mailboxId);
+    expect(theirs).toMatchObject({ setUpBy: actor.email, yours: false });
+    const checked = await checkRoute.POST(apiRequest(`${endpoint}/${mailboxId}/check`, { method: "POST", cookie: adminCookie }), params({ organisationId: orgId, id: mailboxId }));
+    expect(checked.status).toBe(403);
+    expect((await save({ id: mailboxId, kind: "crm", accountId, folderId: "reports", folderName: "Reports", replace: true }, adminCookie)).status).toBe(403);
+    expect((await deleteRoute.DELETE(apiRequest(`${endpoint}/${mailboxId}`, { method: "DELETE", cookie: adminCookie }), params({ organisationId: orgId, id: mailboxId }))).status).toBe(200);
+    const checks = await inOrganisation(orgId, actor, (tx) => tx.query("select 1 from analytics_report_email_checks where mailbox_id=$1", [mailboxId]));
+    expect(checks.rows).toEqual([]);
   });
 });

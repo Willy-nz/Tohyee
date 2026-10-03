@@ -2522,3 +2522,16 @@ approved 3 Oct 2026.
      only slices by that dashboard's own slicers (other filters are
      dropped). A dashboard that isn't shared with them is "not found".
 
+### Analytics: report emails (decision 371)
+
+371. **Report emails (decision 362) are checked once a night, before the
+     reload** (issue #109, tenant migration 0088), and by Check now. One
+     message that can't be read never stops a check; a message that keeps
+     failing is tried three times in all and left with its reason. IMAP
+     servers must be on the internet, not this server's network, and a saved
+     password is only sent to the server and user it was saved for. Only the
+     person who set a mailbox up can change or check it (it uses their
+     connection); any admin can remove it. Replacing files is the default,
+     since a data source loads one file by name. Excel attachments wait until
+     the loader can read Excel.
+

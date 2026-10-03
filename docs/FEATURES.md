@@ -1328,8 +1328,9 @@ that something happened.
   Microsoft mailbox, or IMAP with an encrypted app password, in Analytics
   › Data sources. Choose a folder or label and set a mailbox rule to file
   reports there. Checks save CSV, TSV and TXT attachments, or flat CSV/TSV
-  files extracted from ZIPs, in the source folder; keep every file or replace
-  matching names with the newest receipt. PDFs (including Looker Studio
+  files extracted from ZIPs, in the source folder, replacing matching names
+  with the newest receipt (or, as an archive, keeping every file dated).
+  Mailboxes are checked each night before the reload, or with Check now. PDFs (including Looker Studio
   reports) and Excel files are not accepted in this step. Limits are 25 MB
   per attachment and 100 MB per check, including ZIP expansion. Message IDs
   prevent repeat saves, and the job records files saved and errors. Checks

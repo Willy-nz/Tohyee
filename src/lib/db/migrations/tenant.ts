@@ -12539,7 +12539,7 @@ create table analytics_report_mailboxes (
   password_ciphertext text,
   folder_id text not null check (length(folder_id) between 1 and 500),
   folder_name text not null check (length(folder_name) between 1 and 500),
-  replace_files boolean not null default false,
+  replace_files boolean not null default true,
   lease_id uuid,
   lease_until timestamptz,
   last_check_at timestamptz,
@@ -12550,7 +12550,7 @@ create table analytics_report_mailboxes (
 );
 create table analytics_report_email_checks (
   id bigserial primary key,
-  mailbox_id bigint not null,
+  mailbox_id bigint not null references analytics_report_mailboxes(id) on delete cascade,
   trigger text not null check (trigger in ('manual', 'schedule')),
   started_at timestamptz not null default now(),
   finished_at timestamptz,
@@ -12561,11 +12561,16 @@ create table analytics_report_email_checks (
   files jsonb not null default '[]'::jsonb
 );
 create index analytics_report_email_checks_mailbox_idx on analytics_report_email_checks (mailbox_id, started_at desc);
+-- Messages already dealt with: saved, or failed. A failed message is tried
+-- again on later checks, up to three times, then left with its reason.
 create table analytics_report_email_messages (
   mailbox_id bigint not null references analytics_report_mailboxes(id) on delete cascade,
   message_id text not null,
-  received_at timestamptz not null,
+  received_at timestamptz,
   saved_at timestamptz not null default now(),
+  status text not null default 'saved' check (status in ('saved', 'failed')),
+  attempts integer not null default 1 check (attempts between 1 and 3),
+  error text,
   primary key (mailbox_id, message_id)
 );
 -- Reserve the newest receipt before filesystem writes. Retrying that same
