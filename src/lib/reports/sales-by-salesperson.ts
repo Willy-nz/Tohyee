@@ -1,4 +1,5 @@
 import { parseIsoDate, parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
+import type { CustomValues } from "@/lib/custom-fields/values";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { financialYearStart } from "@/lib/financial-year";
@@ -17,6 +18,8 @@ export type SalesDocument = {
   number: string | null;
   date: string;
   contactName: string;
+  contactId: string;
+  customFields: CustomValues;
   /** Excluding GST; negative for a void. */
   amount: string;
 };
@@ -49,6 +52,8 @@ type Row = {
   amount: string;
   salesperson_id: string | null;
   salesperson_name: string | null;
+  contact_id: string;
+  custom_fields: CustomValues;
 };
 
 export async function salesBySalesperson(tx: OrgTx, input: { from?: unknown; to?: unknown }): Promise<SalesBySalesperson> {
@@ -58,19 +63,19 @@ export async function salesBySalesperson(tx: OrgTx, input: { from?: unknown; to?
   const result = await tx.query<Row>(
     `select * from (
        select 'invoice' as kind, i.id::text, i.invoice_number as number, i.invoice_date::text as date, c.name as contact_name,
-              coalesce(i.base_subtotal, i.subtotal)::text as amount, i.salesperson_id::text, sp.name as salesperson_name
+              coalesce(i.base_subtotal, i.subtotal)::text as amount, i.salesperson_id::text, sp.name as salesperson_name, i.contact_id::text, i.custom_fields
          from sales_invoices i join contacts c on c.id = i.contact_id left join salespeople sp on sp.id = i.salesperson_id
         where i.status in ('approved', 'voided') and i.invoice_date between $1 and $2 and not i.is_opening_balance
        union all
-       select 'invoice_void', i.id::text, i.invoice_number, i.void_date::text, c.name, (-coalesce(i.base_subtotal, i.subtotal))::text, i.salesperson_id::text, sp.name
+       select 'invoice_void', i.id::text, i.invoice_number, i.void_date::text, c.name, (-coalesce(i.base_subtotal, i.subtotal))::text, i.salesperson_id::text, sp.name, i.contact_id::text, i.custom_fields
          from sales_invoices i join contacts c on c.id = i.contact_id left join salespeople sp on sp.id = i.salesperson_id
         where i.status = 'voided' and i.void_date between $1 and $2 and not i.is_opening_balance
        union all
-       select 'credit_note', n.id::text, n.credit_note_number, n.credit_note_date::text, c.name, coalesce(n.base_subtotal, n.subtotal)::text, n.salesperson_id::text, sp.name
+       select 'credit_note', n.id::text, n.credit_note_number, n.credit_note_date::text, c.name, coalesce(n.base_subtotal, n.subtotal)::text, n.salesperson_id::text, sp.name, n.contact_id::text, n.custom_fields
          from sales_credit_notes n join contacts c on c.id = n.contact_id left join salespeople sp on sp.id = n.salesperson_id
         where n.status in ('approved', 'voided') and n.credit_note_date between $1 and $2
        union all
-       select 'credit_note_void', n.id::text, n.credit_note_number, n.void_date::text, c.name, (-coalesce(n.base_subtotal, n.subtotal))::text, n.salesperson_id::text, sp.name
+       select 'credit_note_void', n.id::text, n.credit_note_number, n.void_date::text, c.name, (-coalesce(n.base_subtotal, n.subtotal))::text, n.salesperson_id::text, sp.name, n.contact_id::text, n.custom_fields
          from sales_credit_notes n join contacts c on c.id = n.contact_id left join salespeople sp on sp.id = n.salesperson_id
         where n.status = 'voided' and n.void_date between $1 and $2
      ) docs
@@ -104,7 +109,16 @@ export async function salesBySalesperson(tx: OrgTx, input: { from?: unknown; to?
       acc.credits = add(acc.credits, amount);
       total.credits = add(total.credits, amount);
     }
-    acc.documents.push({ kind: row.kind, id: row.id, number: row.number, date: row.date, contactName: row.contact_name, amount: money(amount) });
+    acc.documents.push({
+      kind: row.kind,
+      id: row.id,
+      number: row.number,
+      date: row.date,
+      contactName: row.contact_name,
+      contactId: row.contact_id,
+      customFields: row.custom_fields ?? {},
+      amount: money(amount),
+    });
     groups.set(key, acc);
   }
   // Salespeople by name, with "Not set" last.

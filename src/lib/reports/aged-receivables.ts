@@ -1,4 +1,5 @@
 import { RECEIVABLES_SQL } from "@/lib/customers/service";
+import type { CustomValues } from "@/lib/custom-fields/values";
 import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { currencyMinorUnits } from "@/lib/money/currency";
@@ -26,6 +27,7 @@ export type AgedInvoice = {
   currencyCode: string;
   /** In the base currency, at the invoice's own rate (MC9); the same as amountDue for a base-currency invoice. */
   amountDueBase: string;
+  customFields: CustomValues;
 };
 
 export type AgedRow = {
@@ -70,9 +72,10 @@ export async function agedReceivables(tx: OrgTx, input: { asAt?: unknown; rollUp
     amount_due: string;
     currency_code: string;
     amount_due_base: string;
+    custom_fields: CustomValues;
   }>(
     `${RECEIVABLES_SQL}
-     select id, contact_id, invoice_number, invoice_date, due_date, amount_due::text, currency_code, amount_due_base::text from invoices
+     select id, contact_id, invoice_number, invoice_date, due_date, amount_due::text, currency_code, amount_due_base::text, custom_fields from invoices
       where amount_due <> 0 or amount_due_base <> 0 order by due_date, id`,
     [asAt],
   );
@@ -111,6 +114,7 @@ export async function agedReceivables(tx: OrgTx, input: { asAt?: unknown; rollUp
       amountDue: toFixedString(dec(row.amount_due), currencyMinorUnits(row.currency_code)),
       currencyCode: row.currency_code,
       amountDueBase: toFixedString(dec(row.amount_due_base), scale),
+      customFields: row.custom_fields ?? {},
     });
   }
   for (const row of creditRows.rows) {

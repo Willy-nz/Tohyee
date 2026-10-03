@@ -8,11 +8,17 @@ export const GET = route(async (request) => {
   return json({ reports });
 });
 
-/** Starts a draft as a copy of a standard report (examples CR1, CR6): `base` is profit_and_loss or balance_sheet. */
+/** Starts a draft as a copy of a standard report (examples CR1, CR6, CR11-CR15). */
 export const POST = route(async (request) => {
   const body = await readJson(request);
   const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
-    createCustomReport(tx, { source: body.source, idempotencyKey: body.idempotencyKey, base: body.base, periodEnd: body.periodEnd }),
+    createCustomReport(tx, {
+      source: body.source,
+      idempotencyKey: body.idempotencyKey,
+      base: body.base,
+      periodEnd: body.periodEnd,
+      layout: body.layout,
+    }),
   );
   return json(result, { status: result.created ? 201 : 200 });
 });

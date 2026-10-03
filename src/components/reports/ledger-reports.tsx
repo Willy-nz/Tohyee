@@ -7,6 +7,7 @@ import { useApiData } from "@/components/hooks";
 import { reportCategories, TrackingTagsText, useTracking } from "@/components/tracking";
 import { Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { ReportExport } from "@/components/reports/report-export";
+import { SaveAsCustomReportButton } from "@/components/reports/save-as-custom-report";
 import { formatDate, formatDateTime, formatMoney, todayInBrowser, personName } from "@/lib/format";
 import type { AccountTransactions } from "@/lib/reports/account-transactions";
 import type { AgedPayables } from "@/lib/reports/aged-payables";
@@ -85,6 +86,7 @@ export function AgedPayablesReport({ organisationId }: { organisationId: string 
             <input type="date" value={asAt} onChange={(event) => setAsAt(event.target.value)} />
           </Field>
           <PrintButton />
+          <SaveAsCustomReportButton organisationId={organisationId} base="aged_payables" filters={{ asAt }} />
         </div>
       }
     >
@@ -288,6 +290,17 @@ export function AccountTransactionsReport({
             </Field>
           ) : null}
           <PrintButton />
+          <SaveAsCustomReportButton
+            organisationId={organisationId}
+            base="account_transactions"
+            filters={{
+              accountId: accountId || null,
+              from,
+              to,
+              trackingCategoryId: valueId || unassigned ? filter.categoryId : null,
+              trackingValueId: valueId || (unassigned ? "unassigned" : null),
+            }}
+          />
         </div>
       }
     >
@@ -418,6 +431,7 @@ export function JournalReportView({ organisationId }: { organisationId: string }
             <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           </Field>
           <PrintButton />
+          <SaveAsCustomReportButton organisationId={organisationId} base="journal_report" filters={{ from, to }} />
         </div>
       }
     >

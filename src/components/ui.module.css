@@ -634,6 +634,8 @@
   --border-strong: #c7d0cb;
   --text: #15201c;
   --text-muted: #57635e;
+  /* --muted is an alias set at the root, so it's set again for the light page. */
+  --muted: var(--text-muted);
   --link: #0b6b5f;
   --accent: #0e7467;
   --accent-text: #ffffff;

@@ -1323,6 +1323,12 @@ that something happened.
   (Share, in a dashboard's edit mode, for bookkeepers and up), using that
   dashboard's slicers and dates. They can't see the books, the data tables or
   anything else in the organisation.
+- **Save transaction reports as custom** (examples CR11-CR15, decision 369,
+  tenant migration 0086). Account transactions, aged receivables and
+  payables, sales by salesperson and the journal report can be saved with
+  their own title, filters and columns: contact details and fields, document
+  fields, and on account transactions and the journal report, line fields
+  and tracking. Columns can be reordered; figures never change.
 - **Analytics, step 6: shaping** (tenant migration 0087). Under Analytics ›
   Shaping, admins can save ordered, repeatable steps against a loaded
   CSV or `tohyee_*` table: filter, keep/remove or rename columns, change
