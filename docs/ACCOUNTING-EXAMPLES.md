@@ -12836,9 +12836,9 @@ cost of goods sold 400.00 (13 May) and 300.00 (9 Jun); interest 20.00
   invoice isn't copied. A voided invoice is copied with status voided and
   its void date; its ledger lines (the posting and the reversal) are both in
   `tohyee_ledger_lines`, so they net to 0.00.
-- **AB7** A USD invoice for USD 100.00 at 0.6 (NZD 166.67): net in the
-  organisation's currency **166.67**, with currency **USD** and amount
-  **100.00** alongside.
+- **AB7** A zero-rated USD invoice for USD 100.00 at **1.60** (as in the
+  foreign-currency examples, MC): net in the organisation's currency
+  **160.00**, with currency **USD** and amount **100.00** alongside.
 - **AB8** Posting a new sales journal of 300.00 on 1 Jul 2026 doesn't change
   the copied tables until the next refresh; after it, revenue for July is
   **300.00**.
