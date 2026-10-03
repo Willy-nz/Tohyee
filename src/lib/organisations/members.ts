@@ -43,7 +43,7 @@ export async function listMembers(organisationId: string): Promise<Member[]> {
        from organisation_members m
        join users u on u.id = m.user_id
       where m.organisation_id = $1
-      order by case m.role when 'owner' then 0 when 'admin' then 1 when 'bookkeeper' then 2 else 3 end,
+      order by case m.role when 'owner' then 0 when 'admin' then 1 when 'bookkeeper' then 2 when 'viewer' then 3 else 4 end,
                u.display_name`,
     [organisationId],
   );
@@ -52,7 +52,7 @@ export async function listMembers(organisationId: string): Promise<Member[]> {
 
 function parseRole(input: unknown): Role {
   if (!isRole(input)) {
-    throw new ValidationError("role must be owner, admin, bookkeeper or viewer.");
+    throw new ValidationError("role must be owner, admin, bookkeeper, viewer or report_viewer.");
   }
   return input;
 }

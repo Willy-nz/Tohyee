@@ -11,6 +11,7 @@ import type { Member } from "@/lib/organisations/members";
 import { useConfirm } from "@/components/confirm-dialog";
 
 const ROLE_HELP: Record<Role, string> = {
+  report_viewer: "Sees only the Analytics dashboards shared with them (for example a client). Nothing of the books.",
   viewer: "Can read journals, stock, contacts and reports.",
   bookkeeper: "Can also post journals, corrections, stock movements and FX revaluations, and manage contacts.",
   admin: "Can also manage the chart of accounts, tax codes, period locks, settings and people.",

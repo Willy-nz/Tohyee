@@ -379,3 +379,67 @@ export async function runBuiltQuery(organisationId: string, sql: string, params:
     );
   });
 }
+
+/** A table copied into the analytics file: its columns (DuckDB types) and its rows as text. */
+export type TableCopy = { name: string; columns: Array<{ name: string; type: string }>; rows: Array<Array<string | null>> };
+
+export const TOHYEE_TABLE_PREFIX = "tohyee_";
+
+/**
+ * Replaces every `tohyee_*` table with these (analytics step 2). Each is
+ * written to a staging table first; only when all have loaded are they
+ * swapped in together, and `tohyee_*` tables not in the set (e.g. the CRM's,
+ * once it's off) are dropped. Values go in as text and DuckDB converts them
+ * to each column's type, so decimals stay exact.
+ */
+export function replaceTohyeeTables(organisationId: string, tables: readonly TableCopy[]): Promise<void> {
+  for (const table of tables) {
+    if (!table.name.startsWith(TOHYEE_TABLE_PREFIX)) throw new ValidationError(`${table.name} isn't a Tohyee table.`);
+    assertTableName(table.name);
+    for (const column of table.columns) assertTableName(column.name);
+  }
+  return serialise(organisationId, () =>
+    withAnalytics(organisationId, async (connection) => {
+      const staging = (name: string) => quoteIdentifier(`_tohyee_load_${name}`);
+      try {
+        for (const table of tables) {
+          await connection.run(`drop table if exists ${staging(table.name)}`);
+          await connection.run(
+            `create table ${staging(table.name)} (${table.columns.map((column) => `${quoteIdentifier(column.name)} ${column.type}`).join(", ")})`,
+          );
+          const appender = await connection.createAppender(`_tohyee_load_${table.name}`);
+          for (const row of table.rows) {
+            for (const value of row) {
+              if (value === null || value === undefined) appender.appendNull();
+              else appender.appendVarchar(value);
+            }
+            appender.endRow();
+          }
+          appender.closeSync();
+        }
+        const existing = await connection.runAndReadAll(
+          `select table_name from information_schema.tables where table_schema = 'main' and starts_with(table_name, 'tohyee_')`,
+        );
+        const keep = new Set(tables.map((table) => table.name));
+        await connection.run("begin transaction");
+        try {
+          for (const [name] of existing.getRows() as Array<[string]>) {
+            if (!keep.has(name)) await connection.run(`drop table ${quoteIdentifier(name)}`);
+          }
+          for (const table of tables) {
+            await connection.run(`drop table if exists ${quoteIdentifier(table.name)}`);
+            await connection.run(`alter table ${staging(table.name)} rename to ${quoteIdentifier(table.name)}`);
+          }
+          await connection.run("commit");
+        } catch (error) {
+          await connection.run("rollback");
+          throw error;
+        }
+      } catch (error) {
+        for (const table of tables) await connection.run(`drop table if exists ${staging(table.name)}`).catch(() => undefined);
+        throw new ValidationError(`The books couldn't be copied: ${loadErrorMessage(error)}`);
+      }
+    }),
+  );
+}
+

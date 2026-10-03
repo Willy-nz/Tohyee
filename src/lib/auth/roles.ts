@@ -1,5 +1,7 @@
 /**
  * Organisation roles, lowest to highest:
+ *  report_viewer  only the Analytics dashboards shared with them, e.g. a
+ *                 client (decision 360); nothing of the books
  *  viewer      read everything (reports, journals, stock, contacts)
  *  bookkeeper  + post journals, corrections, stock movements, FX revaluations;
  *                add, edit and archive contacts
@@ -10,11 +12,12 @@
  * organisations and users, but does not by itself grant access to any
  * organisation's books.
  */
-export const ROLES = ["viewer", "bookkeeper", "admin", "owner"] as const;
+export const ROLES = ["report_viewer", "viewer", "bookkeeper", "admin", "owner"] as const;
 
 export type Role = (typeof ROLES)[number];
 
 const RANK: Record<Role, number> = {
+  report_viewer: -1,
   viewer: 0,
   bookkeeper: 1,
   admin: 2,
@@ -30,6 +33,7 @@ export function isRole(value: unknown): value is Role {
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
+  report_viewer: "Report viewer",
   viewer: "Viewer",
   bookkeeper: "Bookkeeper",
   admin: "Admin",

@@ -190,8 +190,14 @@ Analytics (3 Oct 2026): the plan and decisions 353-362 are in
 sources, nightly loads) was built by Claude (#95); step 3's first part
 (dashboards, #103) is tenant migration 0083. GST late claims (issue #88)
 are built from examples LG1-LG7 (tenant migration 0084, decisions
-363-366). Next numbers: tenant migration 0085, core migration 0006,
-decision 367.
+363-366). Analytics step 2 (the books and CRM, AB1-AB10) is decision 367,
+no migration. Tax manager and Practice manager are parked (Jess, 3 Oct
+2026; PR #91 left open). The rest of #89 (save any report as custom,
+contact and custom-field columns) is with Copilot (#106). Sharing with
+clients (report viewer role, dashboard shares) is decision 368, tenant
+migration 0085 and core migration 0006. Shaping (#108, tenant migration 0086)
+and report emails (#109, 0087) are with Copilot. Next numbers: tenant
+migration 0088, core migration 0007, decision 369.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

@@ -1311,6 +1311,18 @@ that something happened.
   about 3 seconds. Tohyee's own books and CRM, sharing with clients,
   report emails, shaping and pivot tables are the next steps.
 
+- **Analytics, step 2: the books and CRM** (examples AB1-AB10, decision
+  367). Each organisation's ledger lines, invoices, bills, contacts, items and
+  (with the CRM on) companies, opportunities and activities are copied into
+  its analytics every night and by Refresh now, as the same data with the
+  ledger's signs; dashboard values can be shown the other way round. Pay run
+  lines are copied without names.
+- **Analytics: sharing with clients** (decision 368, tenant migration 0085,
+  core migration 0006). A new "Report viewer" access for clients: they sign
+  in like anyone else and see only the Analytics dashboards shared with them
+  (Share, in a dashboard's edit mode, for bookkeepers and up), using that
+  dashboard's slicers and dates. They can't see the books, the data tables or
+  anything else in the organisation.
 - **GST late claims** (examples LG1-LG7, decisions 363-366, tenant
   migration 0084), like Xero's: anything approved or changed after a return
   was filed but dated in its period is offered in the next return, counted

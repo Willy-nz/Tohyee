@@ -12820,3 +12820,81 @@ under each.
 4. **Month-end reminder: yes, on the home page** (decision 191; HL61).
    Asked: "Should Tohyee remind (or offer) a posting at each month end or
    on Period close?"
+
+## Analytics: Tohyee's own books and CRM (examples AB1-AB10, approved with Jess's answers 3 Oct 2026)
+
+Step 2 of [ANALYTICS-REVIEW.md](ANALYTICS-REVIEW.md) (decision 359): a fixed,
+documented set of tables copied from the organisation's own database into its
+analytics file, so dashboards can show the books beside CSV data. Nothing is
+posted or changed.
+
+Jess's answers (3 Oct 2026): the data comes from the organisation's own
+database and must be **the same data** (every row and amount as it is
+there); the analytics figures don't have to be made to match report totals.
+Whether a figure shows as positive or negative is decided by the dashboard
+tile and the dataset, not built into the copy. Pay run lines are copied
+without employee names.
+
+**Rules:**
+
+- The copy is taken in one read-only transaction, so every table is from the
+  same moment. It's refreshed nightly with the CSV sources (after 04:00) and
+  by "Refresh now"; between refreshes the tables don't change, and the Data
+  sources page shows when they were copied.
+- Table names start with `tohyee_` and stay the same between versions (new
+  columns can be added; none are renamed or removed). CSV sources can't use
+  the `tohyee_` prefix.
+- Money is exact (`DECIMAL(18,2)`), in the organisation's currency (foreign
+  documents at their base amounts, as the ledger has them), with the
+  document's own currency and amount alongside.
+- **`tohyee_ledger_lines`**: one row per posted journal line, with the
+  posting date, journal number, source (invoice, bill, bank, manual journal
+  and so on), account code, name, class and type, contact, description,
+  tracking (one column per tracking category), debit, credit and `amount`
+  (debit - credit). Lines of pay run journals have no contact and the
+  description "Pay run" (no employee names).
+- **`tohyee_invoices`, `tohyee_invoice_lines`, `tohyee_bills`,
+  `tohyee_bill_lines`**: approved and voided documents (never drafts), with
+  status, dates, contact, net, GST and total, and each line's item, account,
+  tax code and tracking.
+- **`tohyee_contacts`** (with address, region and custom fields as columns)
+  and **`tohyee_items`**.
+- With the CRM on: **`tohyee_crm_companies`**, **`tohyee_crm_opportunities`**
+  (stage, amount, expected close, owner, won/lost) and
+  **`tohyee_crm_activities`**.
+- A dashboard value can be shown **the other way round** (each amount
+  negated), so credits such as sales can show as positive.
+
+Setup: the journals under "Custom reports" (CR1): owner funds 5,000.00 on
+1 Mar 2026; sales of 500.00 (20 Mar), 1,000.00 (10 Apr), 1,500.00 (12 May)
+and 1,200.00 (8 Jun); accounting fees 100.00 (15 Apr) and 250.00 (20 Jun);
+cost of goods sold 400.00 (13 May) and 300.00 (9 Jun); interest 20.00
+(30 Jun). All through 1000 Business bank account.
+
+- **AB1** After a refresh, `tohyee_ledger_lines` has **20** rows (10
+  journals, 2 lines each), each with the same date, account, debit and
+  credit as in the ledger, and the sum of `amount` is **0.00**.
+- **AB2** The 4000 Sales lines for June 2026 sum to `amount` **-1,200.00**
+  (a credit); shown the other way round, **1,200.00**.
+- **AB3** Lines for 5000 Cost of goods sold in June sum to **300.00**.
+- **AB4** 4000 Sales by month, the other way round: Mar 2026 **500.00**, Apr
+  **1,000.00**, May **1,500.00**, Jun **1,200.00**.
+- **AB5** Lines for 1000 Business bank account up to 30 Jun 2026 sum to
+  **8,170.00**.
+- **AB6** Invoice I1 (2 x 50.00 at 15% exclusive): `tohyee_invoices` has net
+  **100.00**, GST **15.00**, total **115.00**, status approved. A draft
+  invoice isn't copied. A voided invoice is copied with status voided and
+  its void date; its ledger lines (the posting and the reversal) are both in
+  `tohyee_ledger_lines`, so they net to 0.00.
+- **AB7** A zero-rated USD invoice for USD 100.00 at **1.60** (as in the
+  foreign-currency examples, MC): net in the organisation's currency
+  **160.00**, with currency **USD** and amount **100.00** alongside.
+- **AB8** Posting a new sales journal of 300.00 on 1 Jul 2026 doesn't change
+  the copied tables until the next refresh; after it, the July 4000 Sales
+  lines sum to **-300.00**.
+- **AB9** With the CRM off, no CRM tables are copied (and any from before
+  are removed). With it on, an opportunity of 5,000.00 in stage Proposal is
+  copied with its stage, amount and expected close date.
+- **AB10** A pay run's wages journal is copied as lines on the wages and
+  bank (or wages payable) accounts with no contact and the description
+  "Pay run".

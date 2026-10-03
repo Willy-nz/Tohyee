@@ -22,6 +22,8 @@ export type Measure = {
   times?: string;
   /** Adds the same measure for the same period a year before. */
   compare?: "previous_year";
+  /** Shows it the other way round: each amount negated, e.g. so credits such as sales show as positive (AB2). */
+  negate?: boolean;
 };
 
 export type Filter = { field: string; op: FilterOp; value: string | string[] };
@@ -120,6 +122,10 @@ export function parseTileQuery(input: unknown, tables: Map<string, ColumnInfo[]>
       if (!["sum", "avg"].includes(aggregate) || !result.field) throw new ValidationError(`${label}: only a sum or average can multiply two columns.`);
       result.times = column(columns, measure.times, label);
       if (!isNumberType(columns.get(result.times)!)) throw new ValidationError(`${label}: ${result.times} isn't a number.`);
+    }
+    if (measure.negate === true) {
+      if (aggregate === "count" || aggregate === "count_distinct") throw new ValidationError(`${label}: a count can't be turned the other way round.`);
+      result.negate = true;
     }
     if (measure.compare === "previous_year") {
       if (!groupBy?.grain) throw new ValidationError(`${label}: comparing with last year needs the tile grouped by a date.`);
@@ -230,7 +236,8 @@ export function buildTileSql(query: TileQuery, tableColumns: ColumnInfo[], dashb
   const measureSql = (measure: Measure) => {
     if (measure.aggregate === "count") return measure.field ? `count(${q(measure.field)})` : "count(*)";
     if (measure.aggregate === "count_distinct") return `count(distinct ${q(measure.field!)})`;
-    const value = measure.times ? `(${q(measure.field!)} * ${q(measure.times)})` : q(measure.field!);
+    const plain = measure.times ? `(${q(measure.field!)} * ${q(measure.times)})` : q(measure.field!);
+    const value = measure.negate ? `(-${plain})` : plain;
     if (measure.aggregate === "avg") return `cast(avg(${value}) as DECIMAL(38,6))`;
     return `${measure.aggregate}(${value})`;
   };
