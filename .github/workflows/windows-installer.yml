@@ -12,6 +12,11 @@ on:
     paths:
       - "installer/windows/**"
       - ".github/workflows/windows-installer.yml"
+      - "src/lib/analytics/**"
+      - "package*.json"
+      - "scripts/analytics-benchmark.ts"
+      - "scripts/build-admin.mjs"
+      - "next.config.ts"
   workflow_dispatch:
 
 permissions:
@@ -43,6 +48,9 @@ jobs:
 
       - name: Build the app
         run: npm run build
+
+      - name: Benchmark DuckDB (1,000,000 rows)
+        run: npx tsx scripts/analytics-benchmark.ts 1000000
 
       - name: Build the installer
         run: ./installer/windows/build.ps1

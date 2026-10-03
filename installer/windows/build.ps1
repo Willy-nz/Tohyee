@@ -39,6 +39,10 @@ Copy-Item -Recurse (Join-Path $root '.next\static') (Join-Path $stage 'app\.next
 Copy-Item -Recurse (Join-Path $root 'public') (Join-Path $stage 'app\public')
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $stage 'LICENSE.txt')
 
+& node (Join-Path $root 'scripts\build-admin.mjs')
+if ($LASTEXITCODE -ne 0) { throw "Building the command-line tool failed with exit code $LASTEXITCODE" }
+Copy-Item (Join-Path $root 'dist\tohyee-admin.cjs') (Join-Path $stage 'app\tohyee-admin.cjs')
+
 $nodeVersion = (& node -v).Trim()
 Write-Host "== Node.js $nodeVersion"
 $nodeZip = Join-Path $downloads 'node.zip'
