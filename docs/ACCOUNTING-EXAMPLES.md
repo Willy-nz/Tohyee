@@ -3169,6 +3169,95 @@ above.
   refused. A standard-rated line at a rate other than 15% in the period is
   refused, naming its document.
 
+### Late changes to filed GST periods (examples LG1-LG7, proposed 3 Oct 2026, not yet approved by Jess)
+
+From Jess's issue #88: a change dated in a period whose return has been
+filed (for example GST on an asset that wasn't claimed) is ignored by every
+later return. Today the filed return just shows "Changed since filed" (G8).
+
+**Follow Xero** (Jess, 3 Oct 2026). Xero's help: "If you approved, edited,
+voided or deleted transactions in Xero after you finalised the GST return
+for that period, you can include these transactions as late claims on the
+current GST return." Its late claims sit in the ordinary boxes of the
+return, can be turned on or off, and can be filtered to on the
+transactions list (Xero product ideas forum; Xero's own page on turning
+them off couldn't be read here). That's also how practices handle them
+(Jess: "we just jammed it into sales or expenses", and adjustments often
+wait until year end).
+
+**IRD's rules are shown, not enforced** (Jess: "just say IRD says this but
+if you want we can"). Checked 3 Oct 2026:
+
+- GST on a purchase that wasn't claimed can be claimed in a later return
+  within 2 years (GST Act s20(3)); after that only in a few cases (the
+  supply information couldn't be got, the price was disputed, it was
+  wrongly thought not to be a taxable supply, or a clear mistake or simple
+  oversight).
+- Other mistakes can be fixed in the next return if the tax difference in
+  total is $1,000 or less, or no more than the lower of $10,000 and 2% of
+  the output tax for the return period (Tax Administration Act s113A);
+  otherwise IRD expects the earlier return to be amended.
+
+**Proposed rules:**
+
+- A **late claim** is a GST event (as defined above) dated inside a filed
+  return's period that isn't one of the lines stored when that return was
+  filed. Voids are dated when they're voided, so a void after filing is an
+  ordinary event in the current period, not a late claim.
+- The next return **includes late claims automatically**, in the ordinary
+  boxes (sales in Box 5/6, purchases in Box 11), and marks them "Late claim
+  · from Apr-May 2026" in its list of transactions, which can be filtered to
+  late claims only. Each can be **turned off**; a late claim turned off
+  stays waiting for a later return, and the filed return it belongs to
+  keeps showing "Changed since filed" (G8).
+- Where IRD's rules say otherwise, the late claim shows a note starting
+  "IRD says", with nothing blocked and nothing extra to fill in:
+  - a purchase more than 2 years old: "IRD says GST on purchases more than
+    2 years old can only be claimed in a few cases";
+  - when the other late claims add up to more than $1,000 of GST: "IRD says
+    changes over $1,000 (or over the lower of $10,000 and 2% of output tax)
+    should be fixed by amending the earlier return".
+- **Filing** stores the late claims it included with their own dates and
+  the period they belong to, so they're never counted twice.
+
+Filed: the Apr-May 2026 return (G1: I1 and B1). Working on the Jun-Jul 2026
+return.
+
+- **LG1** On 10 Jun 2026, bill B9 is entered for a laptop bought on 20 May
+  2026: 2,300.00 including GST, GST **300.00**. The Jun-Jul return includes
+  it: Box 11 goes up by **2,300.00** and Box 12 by **300.00**, and B9 is
+  listed as "Late claim · from Apr-May 2026". No IRD note (within 2 years).
+  The Apr-May return still shows "Changed since filed" (Box 11 230.00 ->
+  2,530.00).
+- **LG2** Filing the Jun-Jul return stores B9 as a late claim belonging to
+  Apr-May. The Aug-Sep return doesn't include B9 again. The Apr-May return
+  now says B9 was claimed in the Jun-Jul return.
+- **LG3** Turning B9 off: Box 11 and Box 12 go back down by 2,300.00 and
+  300.00. B9 is offered again in the Aug-Sep return.
+- **LG4** Invoice I20 dated 15 May 2026, entered 5 Jun 2026: 1,150.00
+  including GST, GST **150.00**. Included: Box 5 goes up by **1,150.00**
+  and Box 8 by **150.00**. No IRD note (150.00 is within $1,000).
+- **LG5** Invoice I21 dated 15 May 2026 for 11,500.00 including GST, GST
+  **1,500.00**. Included like LG4 (Box 5 +11,500.00, Box 8 +1,500.00), with
+  the note "IRD says changes over $1,000 … should be fixed by amending the
+  earlier return". It can be turned off as in LG3.
+- **LG6** A bill dated 10 Mar 2024 (GST 45.00) entered in Jun 2026 is
+  included (Box 11 +345.00, Box 12 +45.00) with the note "IRD says GST on
+  purchases more than 2 years old can only be claimed in a few cases".
+- **LG7** On the payments and hybrid bases, the same applies to payments
+  dated in a filed period that were entered after it was filed.
+
+Sources:
+- Xero, View transactions on your GST return ("Check the GST return
+  includes late claims"): https://central.xero.com/0/article/The-GST-Audit-Report
+- Xero late claims in the return body (product ideas forum): https://productideas.xero.com/forums/967133-reports-tax/suggestions/48289109-nz-gst-keep-separate-late-claims-tab
+- IRD, Fixing mistakes in my return: https://www.ird.govt.nz/managing-my-tax/fixing-mistakes-in-my-return
+- IRD SPS 20/03, correcting errors: https://www.taxtechnical.ird.govt.nz/standard-practice-statements/investigations/sps-20-03
+- IRD QB 09/04 on s113 TAA and s20(3) GST Act: https://www.taxtechnical.ird.govt.nz/questions-we-ve-been-asked/2009/qb-0904-the-relationship-between-section-113-of-the-taa-and-the-proviso-to-section-20-3-of-the-gst-a
+- Not verified: the current text of GST Act s20(3); whether Xero includes
+  late claims automatically or only when turned on; whether Xero offers a
+  turned-off late claim again in later returns.
+
 ### GST period setting (examples not yet approved by Jess)
 
 Decided 1 Oct 2026, following NetSuite's tax periods ([Tax Periods
