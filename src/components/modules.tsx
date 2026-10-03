@@ -6,6 +6,7 @@ import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
 import type { OrganisationSettings } from "@/lib/organisations/settings";
+import { useWorkspace } from "@/components/workspace";
 
 /**
  * Accounting and Tax are always on; the other modules are switched on per
@@ -17,12 +18,16 @@ const CHANGED = "tohyee:modules-changed";
 
 /** Which optional modules are on for an organisation. Updates when they're switched. */
 export function useModules(organisationId: string | null): Modules | null {
-  const settings = useApiData<{ settings: OrganisationSettings }>(organisationId ? `/api/organisations/${organisationId}/settings` : null);
+  const { current } = useWorkspace();
+  // Report viewers see only shared dashboards (decision 360), not the organisation's settings.
+  const reportViewer = current?.id === organisationId && current?.role === "report_viewer";
+  const settings = useApiData<{ settings: OrganisationSettings }>(organisationId && !reportViewer ? `/api/organisations/${organisationId}/settings` : null);
   const { reload } = settings;
   useEffect(() => {
     window.addEventListener(CHANGED, reload);
     return () => window.removeEventListener(CHANGED, reload);
   }, [reload]);
+  if (reportViewer) return { crm: false, reporting: false, notForProfit: false, analytics: true };
   if (!settings.data) return null;
   return {
     crm: settings.data.settings.crmEnabled,

@@ -1317,8 +1317,14 @@ that something happened.
   its analytics every night and by Refresh now, as the same data with the
   ledger's signs; dashboard values can be shown the other way round. Pay run
   lines are copied without names.
-- **Analytics, step 6: shaping** (tenant migration 0086). Under Analytics ›
-  Shaping, bookkeepers can save ordered, repeatable steps against a loaded
+- **Analytics: sharing with clients** (decision 368, tenant migration 0085,
+  core migration 0006). A new "Report viewer" access for clients: they sign
+  in like anyone else and see only the Analytics dashboards shared with them
+  (Share, in a dashboard's edit mode, for bookkeepers and up), using that
+  dashboard's slicers and dates. They can't see the books, the data tables or
+  anything else in the organisation.
+- **Analytics, step 6: shaping** (tenant migration 0087). Under Analytics ›
+  Shaping, admins can save ordered, repeatable steps against a loaded
   CSV or `tohyee_*` table: filter, keep/remove or rename columns, change
   types, split or unpivot, group and aggregate, calculate a number or joined
   text column, merge with another loaded table, or append by column name.
