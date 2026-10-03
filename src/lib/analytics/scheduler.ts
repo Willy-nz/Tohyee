@@ -3,6 +3,7 @@ import type { Actor } from "@/lib/db/org-transaction";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
+import { BOOKS_TABLE_NAME, refreshBooks } from "@/lib/analytics/books";
 import { type LoadRun, runLoad } from "@/lib/analytics/sources";
 import { getOrganisation } from "@/lib/organisations/registry";
 
@@ -45,8 +46,7 @@ export async function runDueLoads(now = new Date()): Promise<LoadRun[]> {
       "select id from organisations where is_active and provisioning_status = 'ready' and migration_status = 'current' order by id",
     );
     for (const { id } of organisations.rows) {
-      // Only organisations a server admin has given a folder can have sources.
-      if (!(await organisationSourceFolder(id))) continue;
+      const hasFolder = Boolean(await organisationSourceFolder(id));
       const organisation = await getOrganisation(id);
       if (!organisation) continue;
       try {
@@ -56,12 +56,25 @@ export async function runDueLoads(now = new Date()): Promise<LoadRun[]> {
           async (tx) => {
             const enabled = await tx.query<{ on: boolean }>("select analytics_enabled as on from organisation_settings where id = true");
             if (!enabled.rows[0]?.on) return [];
-            const sources = await tx.query<{ id: string }>("select id::text from analytics_sources where reload_daily order by id");
+            // The books are copied for every organisation with Analytics on; CSV sources need a folder.
+            const sources = hasFolder
+              ? await tx.query<{ id: string }>("select id::text from analytics_sources where reload_daily order by id")
+              : { rows: [] as Array<{ id: string }> };
+            const books = await tx.query<{ status: string; trigger: string; started_at: Date }>(
+              `select status, trigger, started_at from analytics_load_runs
+                where source_id is null and table_name = $1 and started_at > now() - interval '2 days'`,
+              [BOOKS_TABLE_NAME],
+            );
+            const booksDue = loadDue(
+              now,
+              books.rows.map((run) => ({ status: run.status, trigger: run.trigger, startedAt: new Date(run.started_at) })),
+            );
             const runs = await tx.query<{ source_id: string; status: string; trigger: string; started_at: Date }>(
               `select source_id::text, status, trigger, started_at from analytics_load_runs
                 where source_id is not null and started_at > now() - interval '2 days'`,
             );
-            return sources.rows
+            const due: string[] = booksDue ? ["books"] : [];
+            return due.concat(sources.rows
               .map((source) => source.id)
               .filter((sourceId) =>
                 loadDue(
@@ -70,13 +83,14 @@ export async function runDueLoads(now = new Date()): Promise<LoadRun[]> {
                     .filter((run) => run.source_id === sourceId)
                     .map((run) => ({ status: run.status, trigger: run.trigger, startedAt: new Date(run.started_at) })),
                 ),
-              );
+              ));
           },
           { readOnly: true },
         );
         for (const sourceId of due) {
           try {
-            const run = await runLoad(organisation, SCHEDULE_ACTOR, sourceId, "schedule");
+            const run =
+              sourceId === "books" ? await refreshBooks(organisation, SCHEDULE_ACTOR, "schedule") : await runLoad(organisation, SCHEDULE_ACTOR, sourceId, "schedule");
             made.push(run);
             if (run.status === "failed") console.warn(`[tohyee] Analytics load of ${run.sourceName} (${id}) failed: ${run.error}`);
           } catch (error) {

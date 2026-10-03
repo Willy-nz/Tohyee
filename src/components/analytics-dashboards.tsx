@@ -763,7 +763,10 @@ function TileEditor({
       {query.measures.map((measure, index) => (
         <div key={index} className={styles.measureRow}>
           <input aria-label={`Value ${index + 1} label`} value={measure.label} maxLength={80} onChange={(event) => setMeasure(index, { label: event.target.value })} />
-          <select aria-label={`Value ${index + 1} how`} value={measure.aggregate} onChange={(event) => setMeasure(index, { aggregate: event.target.value as Aggregate })}>
+          <select aria-label={`Value ${index + 1} how`} value={measure.aggregate} onChange={(event) => {
+              const aggregate = event.target.value as Aggregate;
+              setMeasure(index, { aggregate, ...(aggregate === "count" || aggregate === "count_distinct" ? { negate: undefined } : {}) });
+            }}>
             {AGGREGATES.map((entry) => (
               <option key={entry.value} value={entry.value}>
                 {entry.label}
@@ -789,6 +792,12 @@ function TileEditor({
                 </option>
               ))}
             </select>
+          ) : null}
+          {["sum", "avg", "min", "max"].includes(measure.aggregate) ? (
+            <label className={ui.checkbox} title="Each amount negated, e.g. so sales (credits) show as positive">
+              <input type="checkbox" checked={measure.negate === true} onChange={(event) => setMeasure(index, { negate: event.target.checked || undefined })} /> other way
+              round
+            </label>
           ) : null}
           {query.groupBy?.grain ? (
             <label className={ui.checkbox}>

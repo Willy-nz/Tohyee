@@ -230,11 +230,15 @@ describeWithDatabase("analytics sources and loads", () => {
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
     tomorrow.setUTCHours(18, 0, 0, 0); // 07:00 or 06:00 in New Zealand, after 04:00
     const made = await runDueLoads(tomorrow);
-    expect(made.map((run) => [run.sourceName, run.status, run.trigger])).toEqual([["Sales export", "ok", "schedule"]]);
+    // The books are copied every night too (step 2, AB8).
+    expect(made.map((run) => [run.sourceName, run.status, run.trigger])).toEqual([
+      ["Books and CRM", "ok", "schedule"],
+      ["Sales export", "ok", "schedule"],
+    ]);
     expect(await queryAnalytics(ORG, "select region, (quantity * unit_price)::varchar as total from sales")).toEqual([{ region: "Waikato", total: "30.000000" }]);
     // The load is stamped with the real time; move it to "tomorrow" like the run it stands for.
     await inOrganisation(ORG, { userId: owner.id, email: owner.email }, (tx) =>
-      tx.query("update analytics_load_runs set started_at = $1 where id = $2", [tomorrow, made[0].id]),
+      tx.query("update analytics_load_runs set started_at = $1 where id = any($2::bigint[])", [tomorrow, made.map((run) => run.id)]),
     );
     expect(await runDueLoads(tomorrow)).toEqual([]);
   });
@@ -248,7 +252,7 @@ describeWithDatabase("analytics sources and loads", () => {
     expect(await queryAnalytics(ORG, "select count(*)::int as n from information_schema.tables where table_name = 'sales'")).toEqual([{ n: 0 }]);
     const overview = await body(await analyticsRoute.GET(apiRequest(`/api/analytics?organisationId=${ORG}`, { cookie: ownerCookie }), noContext));
     expect(overview.data.sources).toEqual([]);
-    expect(overview.data.loads).toHaveLength(3);
+    expect(overview.data.loads).toHaveLength(4);
   });
 
   it("gives another organisation nothing from this one's folder or data", async () => {

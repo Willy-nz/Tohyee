@@ -1311,6 +1311,12 @@ that something happened.
   about 3 seconds. Tohyee's own books and CRM, sharing with clients,
   report emails, shaping and pivot tables are the next steps.
 
+- **Analytics, step 2: the books and CRM** (examples AB1-AB10, decision
+  367). Each organisation's ledger lines, invoices, bills, contacts, items and
+  (with the CRM on) companies, opportunities and activities are copied into
+  its analytics every night and by Refresh now, as the same data with the
+  ledger's signs; dashboard values can be shown the other way round. Pay run
+  lines are copied without names.
 - **GST late claims** (examples LG1-LG7, decisions 363-366, tenant
   migration 0084), like Xero's: anything approved or changed after a return
   was filed but dated in its period is offered in the next return, counted

@@ -2492,3 +2492,19 @@ approved 3 Oct 2026.
      claims were left out is part of the filing request (and its retry
      check).
 
+### Analytics: the books and CRM (decision 367)
+
+367. **The books are copied as they are** (examples AB1-AB10, Jess's
+     answers 3 Oct 2026). Each organisation's analytics gets `tohyee_*`
+     tables read from its own database in one read-only transaction: ledger
+     lines, invoices and bills with their lines, contacts, items, and with the
+     CRM on, companies, opportunities and activities. It's the same data,
+     row for row. Nothing is worked out to match a report, and amounts keep
+     the ledger's sign (debit less credit); a dashboard value can be shown
+     "the other way round". Tracking categories and custom fields become
+     columns. Pay run lines have no contact and say "Pay run" (no employee
+     names). It's copied nightly with the CSV sources, for every
+     organisation with Analytics on, and by Refresh now (admins and
+     owners); the tables are swapped in together only when all have loaded.
+     CSV sources can't use `tohyee_` names.
+
