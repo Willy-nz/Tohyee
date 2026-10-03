@@ -129,8 +129,12 @@ export async function register() {
   }
 
   if (process.env.TOHYEE_ANALYTICS_SCHEDULER !== "off") {
-    const { startAnalyticsScheduler } = await import("@/lib/analytics/scheduler");
-    startAnalyticsScheduler();
+    try {
+      const { startAnalyticsScheduler } = await import("@/lib/analytics/scheduler");
+      startAnalyticsScheduler();
+    } catch (error) {
+      console.warn("[tohyee] The analytics loader couldn't start:", error instanceof Error ? error.message : error);
+    }
   }
 
   if (process.env.TOHYEE_REMOTE_ACCESS !== "off") {

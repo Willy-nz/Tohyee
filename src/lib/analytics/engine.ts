@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
+import type { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import { ValidationError } from "@/lib/errors";
 import { analyticsFilePath } from "@/lib/analytics/paths";
 
@@ -54,6 +54,14 @@ function quoteString(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
+/**
+ * DuckDB is loaded the first time analytics is used, not when the server
+ * starts, so a missing or broken DuckDB can never stop the books opening.
+ */
+async function duckdb(): Promise<typeof import("@duckdb/node-api")> {
+  return import("@duckdb/node-api");
+}
+
 // One DuckDB instance per file per process: DuckDB lets only one process
 // write a file, and connections from one instance share it safely.
 const instances = new Map<string, Promise<DuckDBInstance>>();
@@ -65,7 +73,7 @@ async function instanceFor(organisationId: string): Promise<DuckDBInstance> {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     // Extensions are never downloaded at run time (the server may be
     // offline, and it's code from the internet).
-    instance = DuckDBInstance.create(file, { autoinstall_known_extensions: "false" });
+    instance = duckdb().then(({ DuckDBInstance }) => DuckDBInstance.create(file, { autoinstall_known_extensions: "false" }));
     instances.set(file, instance);
     instance.catch(() => instances.delete(file));
   }
@@ -291,7 +299,7 @@ export async function inspectCsv(sourceFolder: string, fileName: string, delimit
   const file = resolveSourceFile(sourceFolder, fileName);
   if (delimiter !== undefined && delimiter.length !== 1) throw new ValidationError("The separator must be one character.");
   if (!scratch) {
-    scratch = DuckDBInstance.create(":memory:", { autoinstall_known_extensions: "false" });
+    scratch = duckdb().then(({ DuckDBInstance }) => DuckDBInstance.create(":memory:", { autoinstall_known_extensions: "false" }));
     scratch.catch(() => {
       scratch = null;
     });
