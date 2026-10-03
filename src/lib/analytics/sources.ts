@@ -10,6 +10,7 @@ import {
   loadCsv,
   type LoadColumn,
   resolveSourceFile,
+  TOHYEE_TABLE_PREFIX,
 } from "@/lib/analytics/engine";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
 
@@ -178,6 +179,9 @@ function parseSourceInput(input: Record<string, unknown>, current?: AnalyticsSou
   } catch {
     throw new ValidationError("The table name must start with a letter and use only lower-case letters, digits and _.");
   }
+  if (!current && tableName.startsWith(TOHYEE_TABLE_PREFIX)) {
+    throw new ValidationError("Table names starting with tohyee_ are kept for the copy of the books.");
+  }
   const fileName = input.fileName === undefined && current ? current.fileName : typeof input.fileName === "string" ? input.fileName.trim() : "";
   if (!fileName || fileName.length > 500) throw new ValidationError("Choose the file.");
   const delimiter = input.delimiter === undefined ? (current?.delimiter ?? ",") : String(input.delimiter);
@@ -322,3 +326,12 @@ export async function runLoad(
     return toRun(result.rows[0]);
   });
 }
+
+/** The latest copy of the books (analytics step 2), or null. */
+export async function lastBooksRun(tx: OrgTx): Promise<LoadRun | null> {
+  const result = await tx.query<RunRow>(
+    `select ${RUN_COLUMNS} from analytics_load_runs where source_id is null and table_name = 'tohyee_*' order by started_at desc, id desc limit 1`,
+  );
+  return result.rows[0] ? toRun(result.rows[0]) : null;
+}
+

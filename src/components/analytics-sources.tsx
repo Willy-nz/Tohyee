@@ -20,6 +20,7 @@ type Overview = {
   folder: { chosen: boolean; readable: boolean };
   files: SourceFile[];
   sources: AnalyticsSource[];
+  books: Run | null;
   loads: Run[];
 };
 
@@ -108,6 +109,8 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
         />
       ) : null}
 
+      <BooksCard organisationId={organisationId} data={data} onChanged={overview.reload} />
+
       <SourcesCard organisationId={organisationId} data={data} onEdit={(source) => setSetUp({ file: source.fileName, source })} onChanged={overview.reload} />
 
       {data.canManage && data.folder.readable ? (
@@ -188,6 +191,71 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
         )}
       </Card>
     </>
+  );
+}
+
+/** The copy of this organisation's own books and CRM (analytics step 2, AB1-AB10). */
+function BooksCard({ organisationId, data, onChanged }: { organisationId: string; data: Overview; onChanged: () => void }) {
+  const tables = useApiData<{ tables: Array<{ name: string; columns: unknown[] }> }>("/api/analytics/tables", { organisationId });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const copied = (tables.data?.tables ?? []).filter((table) => table.name.startsWith("tohyee_"));
+
+  async function refresh() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const { run } = await api<{ run: LoadRun }>("/api/analytics/books", { method: "POST", body: { organisationId } });
+      setMessage(
+        run.status === "ok"
+          ? { tone: "success", text: `Copied ${rows(run.rowsLoaded)} rows in ${duration(run.milliseconds)}.` }
+          : { tone: "error", text: `The books weren't copied: ${run.error}. The last copy is still there.` },
+      );
+      tables.reload();
+    } catch (caught) {
+      setMessage({ tone: "error", text: errorMessage(caught) });
+    } finally {
+      setBusy(false);
+      onChanged();
+    }
+  }
+
+  return (
+    <Card
+      title="Books and CRM"
+      description="A copy of this organisation's ledger, invoices, bills, contacts, items and (with the CRM on) opportunities and activities, made every night after 4am. Amounts are as in the ledger (debit less credit); a dashboard value can be shown the other way round. Pay runs are copied without names."
+      actions={
+        data.canManage ? (
+          <Button size="small" onClick={() => void refresh()} disabled={busy}>
+            {busy ? "Copying…" : "Refresh now"}
+          </Button>
+        ) : null
+      }
+    >
+      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+      <p className={ui.muted}>
+        {data.books ? (
+          <>
+            <LoadBadge run={data.books} /> Last copied {formatDateTime(data.books.startedAt)}
+            {data.books.rowsLoaded ? ` · ${rows(data.books.rowsLoaded)} rows` : ""}
+            {data.books.error ? ` · ${data.books.error}` : ""}
+          </>
+        ) : (
+          "Not copied yet. It's copied tonight, or now with Refresh now."
+        )}
+      </p>
+      {copied.length ? (
+        <p className={ui.muted}>
+          Tables:{" "}
+          {copied.map((table, index) => (
+            <span key={table.name}>
+              {index ? ", " : ""}
+              <code>{table.name}</code>
+            </span>
+          ))}
+        </p>
+      ) : null}
+    </Card>
   );
 }
 

@@ -2,7 +2,7 @@ import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
 import { listSourceFiles } from "@/lib/analytics/engine";
 import { organisationSourceFolder, sourceFolderStatus } from "@/lib/analytics/folders";
-import { listSources, recentLoads } from "@/lib/analytics/sources";
+import { lastBooksRun, listSources, recentLoads } from "@/lib/analytics/sources";
 
 /**
  * The organisation's analytics: whether it's on, whether its folder is
@@ -18,6 +18,7 @@ export const GET = route(async (request) => {
       enabled: enabled.rows[0]?.on === true,
       canManage: roleAtLeast(membership.role, "admin"),
       sources: await listSources(tx),
+      books: await lastBooksRun(tx),
       loads: await recentLoads(tx, 50),
     };
   });
