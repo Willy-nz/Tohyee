@@ -3169,6 +3169,110 @@ above.
   refused. A standard-rated line at a rate other than 15% in the period is
   refused, naming its document.
 
+### Late changes to filed GST periods (examples LG1-LG8, proposed 3 Oct 2026, not yet approved by Jess)
+
+From Jess's issue #88: a change dated in a period whose return has been
+filed (for example GST on an asset that wasn't claimed) is ignored by every
+later return. Today the filed return just shows "Changed since filed" (G8).
+
+**NZ rules these follow** (checked 3 Oct 2026; sources at the end):
+
+- **Missed input tax (GST Act s20(3)).** GST on a purchase that wasn't
+  claimed can be claimed in a later return within 2 years of the earlier of
+  the tax invoice (taxable supply information) date and the payment date.
+  After 2 years it can only be claimed if one of IRD's four exceptions
+  applies: the supply information couldn't be got, the price was disputed,
+  it was wrongly thought not to be a taxable supply, or a clear mistake or
+  simple oversight. There's no dollar limit.
+- **Other errors (Tax Administration Act s113A).** Any other change (most
+  often a sale that was missed) can be fixed in the next return if the tax
+  difference from all such errors in total is **$1,000 or less**, or no
+  more than **the lower of $10,000 and 2% of the output tax for the return
+  period**, and it isn't being done mainly to put off paying tax. Otherwise
+  the filed return has to be amended with IRD (in myIR, or by asking IRD).
+- **Credit and debit notes** count in the period they're issued or received,
+  which Tohyee already does (G4, G5).
+
+**Proposed rules:**
+
+- A **late change** is a GST event (as defined above) dated inside a filed
+  return's period that isn't one of the lines stored when that return was
+  filed. Voids are dated when they're voided, so a void after filing is an
+  ordinary event in the current period, not a late change.
+- The return for a later period lists the late changes not yet dealt with
+  in a separate **From earlier periods** section: the document, its date,
+  the filed period it falls in, its amount including GST and its GST, and
+  which rule applies (missed input tax, or an error to fix).
+- Each late change is **included** in this return or **left out**. Included
+  changes count in the boxes like any other line (sales in Box 5/6,
+  purchases in Box 11), as Xero does. Left-out changes stay listed on later
+  returns until they're included, and the filed return they belong to keeps
+  showing "Changed since filed" (G8) so it can be amended with IRD.
+- Tohyee suggests whether each can be included:
+  - a purchase within 2 years: **can be claimed**;
+  - a purchase older than 2 years: **only if an IRD exception applies**;
+  - other changes: their GST is totalled (sales add, purchases taken away,
+    as the return does) and checked against the s113A limit.
+- **Filing** stores the late changes it included with their own dates and
+  the period they belong to, so they're never counted twice.
+
+Filed: the Apr-May 2026 return (G1: I1 and B1). Working on the Jun-Jul 2026
+return, filed on 28 Aug 2026, which has its own sales and purchases (in
+LG3 and LG4, sales with output tax of 3,000.00).
+
+- **LG1** On 10 Jun 2026, bill B9 is entered for a laptop bought on 20 May
+  2026: 2,300.00 including GST, GST **300.00**. The Jun-Jul return lists B9
+  under From earlier periods: "Apr-May 2026 · missed input tax, within 2
+  years: can be claimed in this return". Included: Box 11 goes up by
+  **2,300.00** and Box 12 by **300.00**. The Apr-May return still shows
+  "Changed since filed" (Box 11 230.00 -> 2,530.00).
+- **LG2** Filing the Jun-Jul return with B9 included stores B9 as a late
+  line belonging to Apr-May. The Aug-Sep return doesn't list B9 again. The
+  Apr-May return now says B9 was claimed in the Jun-Jul return.
+- **LG3** Invoice I20 dated 15 May 2026, entered 5 Jun 2026: 1,150.00
+  including GST, GST **150.00**. It's an error to fix, and 150.00 is within
+  $1,000, so it can be fixed in this return. Included: Box 5 goes up by
+  **1,150.00** and Box 8 by **150.00**.
+- **LG4** Instead, I21 dated 15 May 2026 for 11,500.00 including GST, GST
+  **1,500.00**. 1,500.00 is over $1,000. The other limit is the lower of
+  $10,000 and 2% of 3,000.00 = **60.00**, so it's over that too. Tohyee
+  says: "Over the limit for fixing in a later return: amend the Apr-May
+  return with IRD". It starts as **left out**.
+- **LG5** As LG4, but the Jun-Jul sales have output tax of **100,000.00**:
+  2% is **2,000.00**, the lower of that and $10,000 is 2,000.00, and
+  1,500.00 is within it, so I21 can be fixed in this return.
+- **LG6** A bill dated 10 Mar 2024 (GST 45.00) is entered in Jun 2026. It's
+  more than 2 years old, so it's listed as "only if an IRD exception
+  applies" and starts as left out.
+- **LG7** Two late changes together: I20 (GST +150.00) and a late supplier
+  credit note dated 5 May 2026 (GST 900.00 taken off what was claimed, so
+  +900.00 to pay). The total for the limit is **1,050.00**, over $1,000, so
+  with LG4's sales both are over the limit. Missed input tax (B9) never
+  counts toward this total.
+- **LG8** On the payments and hybrid bases, the same rules apply to
+  payments dated in a filed period that were entered after it was filed.
+
+**Questions for Jess before this is built:**
+
+1. Should included late changes count in the ordinary boxes (Box 5/11,
+   like Xero), or go in as Box 9/13 adjustments? IRD's pages don't say which
+   boxes (not verified).
+2. When a change is over the limit (LG4) or older than 2 years (LG6), may
+   someone still include it (for example after IRD says it's fine, or
+   because an exception applies), with a note saying why? Or must it be
+   left out?
+3. For the 2% limit, which return's output tax counts: the return being
+   fixed (Apr-May) or the one fixing it (Jun-Jul)? IRD's wording is "the
+   return period" (not verified which). The examples use the return fixing
+   it.
+
+Sources:
+- IRD, Fixing mistakes in my return: https://www.ird.govt.nz/managing-my-tax/fixing-mistakes-in-my-return
+- IRD SPS 20/03, correcting errors (paras 84, 90-91, 97-99): https://www.taxtechnical.ird.govt.nz/standard-practice-statements/investigations/sps-20-03
+- IRD QB 09/04 on s113 TAA and s20(3) GST Act: https://www.taxtechnical.ird.govt.nz/questions-we-ve-been-asked/2009/qb-0904-the-relationship-between-section-113-of-the-taa-and-the-proviso-to-section-20-3-of-the-gst-a
+- Xero late claims (product ideas forum): https://productideas.xero.com/forums/967133-reports-tax/suggestions/48289109-nz-gst-keep-separate-late-claims-tab
+- Not verified: the current text of GST Act s20(3) (legislation.govt.nz couldn't be read here), and which return boxes IRD expects.
+
 ### GST period setting (examples not yet approved by Jess)
 
 Decided 1 Oct 2026, following NetSuite's tax periods ([Tax Periods
