@@ -136,7 +136,7 @@ PREP8, WB7, XP14 and the HL section.
 
 ## Where things stand
 
-- **Latest release: v0.3.0** (1 Oct 2026), published with the Windows
+- **Latest release: v0.5.0** (3 Oct 2026), published with the Windows
   installer, the Docker zip and the Linux bundle.
 - **main is ahead of the release** and already says version **0.3.1** in
   `package.json`. Merged since 0.3.0, not released yet:
@@ -196,10 +196,13 @@ no migration. Tax manager and Practice manager are parked (Jess, 3 Oct
 contact and custom-field columns) is with Copilot (#106). Sharing with
 clients (report viewer role, dashboard shares) is decision 368, tenant
 migration 0085 and core migration 0006. Saving transaction reports as custom
-(#107, CR11-CR15) is decision 369, tenant migration 0086; Copilot's shaping
-(#110) and report emails (#111) need renumbering to 0087 and 0088 when
-merged. Next numbers: tenant migration 0089, core migration 0007, decision
-370.
+(#107, CR11-CR15) is decision 369, tenant migration 0086; shaping (#110) is
+decision 370, 0087; report emails (#111) are decision 371, 0088 (Copilot
+built #107, #110 and #111; Claude reviewed and fixed them). All released in
+**v0.5.0** (3 Oct 2026). Next numbers: tenant migration 0089, core migration
+0007, decision 372. Still to do for Analytics: pivot tables (Perspective),
+reading Excel files (then saving Excel report emails), and limiting DuckDB's
+file access (`allowed_directories`).
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
