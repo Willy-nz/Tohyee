@@ -5,6 +5,7 @@ import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { postJournal } from "@/lib/ledger/journals";
+import { accountTransactions } from "@/lib/reports/account-transactions";
 import {
   computeCustomReport,
   createCustomReport,
@@ -371,5 +372,28 @@ describeWithDatabase("custom reports", () => {
     const saved = await put(cookie);
     expect(saved.status).toBe(200);
     expect(((await saved.json()) as { report: CustomReport }).report).toMatchObject({ title: "June", version: 2 });
+  });
+
+  it("CR11: an account-transactions report keeps its filters and ordered columns without changing figures", async () => {
+    const w = await setup();
+    const accountId = (await w.as((tx) => tx.query<{ id: string }>("select id::text from accounts where code = '4000'"))).rows[0].id;
+    const { report } = await w.as((tx) =>
+      createCustomReport(tx, { idempotencyKey: key("create"), base: "account_transactions", periodEnd: "2026-05-31" }),
+    );
+    const layout = {
+      title: "Sales detail",
+      filters: { from: "2026-04-01", to: "2026-05-31", accountId },
+      columns: ["date", "source", "contact.email", "debit", "credit", "balance"],
+    };
+    const saved = await w.as((tx) => updateCustomReport(tx, report.id, { layout, version: report.version }));
+    expect(saved.report).toMatchObject({ base: "account_transactions", title: "Sales detail", layout });
+    expect(saved.figures).toMatchObject({
+      base: "account_transactions",
+      columns: ["date", "source", "contact.email", "debit", "credit", "balance"],
+      data: { totalDebit: "50.00", totalCredit: "150.00" },
+    });
+    const standard = await w.as((tx) => accountTransactions(tx, { accountId, from: "2026-04-01", to: "2026-05-31" }));
+    expect(saved.figures.data).toEqual(standard);
+    expect((await w.as((tx) => tx.query<{ count: string }>("select count(*)::text as count from ledger_journals"))).rows[0].count).toBe("10");
   });
 });

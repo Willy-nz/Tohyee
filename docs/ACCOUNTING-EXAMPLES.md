@@ -3049,6 +3049,48 @@ all through 1000 Business bank account):
   and admins can create, change, publish, archive and delete them. Opening a
   report posts nothing.
 
+### Transaction-style custom reports (examples not yet approved by Jess)
+
+An account transactions, aged receivables or payables, sales by salesperson or
+journal report can be saved as a new custom report. Its title, filters and
+ordered columns are its own; the standard report is unchanged. Contact details,
+tracking values and custom-field values add context only: adding or removing a
+column never changes the report's amounts or totals. A custom report starts
+with the standard columns, and columns can be added, removed and reordered.
+
+Setup: use account transactions ATX1-ATX5 and the journal report JR1-JR3.
+Kobe Ltd has email `accounts@kobe.example.nz`, billing address `1 Kauri Road,
+Dunedin`, customer group `Trade`, and a contact custom field **Region** with
+value `Otago`. Invoice INV-0001 carries the contact's Region; the contact's
+email, address and group can also be shown. In the separate SR3 setup, invoice
+1 has a document custom field **Channel** of `Web`. An invoice line in the ATX
+setup has a line custom field **Project** of `Fit-out` and its tracking
+category **Location** is `Dunedin`.
+
+- **CR11** Account transactions for account 4000, 1 April–31 May 2026, saved
+  with Date, Source, Contact, Region and Credit columns: INV-0001 is credit
+  **100.00** for Kobe Ltd, Region `Otago`; INV-0002 is credit **50.00** and
+  its 5 May void is debit **50.00**. The closing balance is still **-100.00**,
+  and period debits **50.00** and credits **150.00** are unchanged by the
+  extra column.
+- **CR12** Aged receivables as at 31 July 2026, saved with Contact, Email,
+  Address, Group and Region columns: using RC9's documents, Kobe Auckland is
+  **322.00**, Kobe Dunedin **345.00**, and Rata Ltd **400.00**; the report
+  total remains **1,067.00**. Columns can be reordered so Region appears
+  before Contact, or removed without changing the total.
+- **CR13** Sales by salesperson for June in the SR3 setup, saved with Contact
+  Region and invoice-document Channel columns: Aroha still has **1** invoice,
+  **100.00** sales, **20.00** credit notes and **80.00** net sales; the total
+  is still **3** invoices, **350.00** sales, **20.00** credit notes and
+  **330.00** net sales. `Otago` and `Web` are descriptive values, not amounts.
+- **CR14** The JR1 journal report saved with Contact Region, Location and the
+  journal-line Project column: six journals still total **805.00** on each
+  side. A journal without a contact or a line without a tag/value has a blank
+  cell; the columns do not alter any journal.
+- **CR15** A viewer can open the saved report and export its selected columns.
+  Saving it posts nothing, and a later change to a contact or custom field
+  changes the draft's displayed value but not its figures.
+
 ### Home
 
 Home shows a card for each bank account, money owed to you, bills to pay and
