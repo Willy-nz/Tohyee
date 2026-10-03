@@ -208,6 +208,17 @@ function numeric(type: string): boolean {
   return NUMBER_TYPE.test(type);
 }
 
+function comparisonType(type: string): string {
+  if (
+    /^(?:DECIMAL\(\d+,\d+\)|VARCHAR|BOOLEAN|DATE|TIMESTAMP(?: WITH TIME ZONE)?|(?:U)?(?:TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT)|DOUBLE|FLOAT)$/.test(
+      type,
+    )
+  ) {
+    return type;
+  }
+  return "VARCHAR";
+}
+
 export function buildShapeQuery(input: {
   baseTable: string;
   tables: Map<string, ShapeColumn[]>;
@@ -242,7 +253,7 @@ export function buildShapeQuery(input: {
         if (step.test === "is empty") sql = `select * from ${source} where ${field} is null or cast(${field} as varchar) = ''`;
         else if (step.test === "is not empty") sql = `select * from ${source} where ${field} is not null and cast(${field} as varchar) <> ''`;
         else {
-          const value = param(step.value ?? "");
+          const value = `cast(${param(step.value ?? "")} as ${comparisonType(columns.get(column)!)})`;
           const condition = {
             is: `${field} = ${value}`,
             "is not": `${field} <> ${value}`,
@@ -366,8 +377,14 @@ export function buildShapeQuery(input: {
         const right = tableColumns(input.tables, step.table);
         const merged = new Map(columns);
         for (const [name, type] of right) if (!merged.has(name)) merged.set(name, type);
+        const leftProjection = [...merged.keys()].map((name) =>
+          columns.has(name) ? quote(name) : `null as ${quote(name)}`,
+        );
+        const rightProjection = [...merged.keys()].map((name) =>
+          right.has(name) ? quote(name) : `null as ${quote(name)}`,
+        );
         columns = merged;
-        sql = `select * from ${source} union all by name select * from ${quote(step.table)}`;
+        sql = `select ${leftProjection.join(", ")} from ${source} union all by name select ${rightProjection.join(", ")} from ${quote(step.table)}`;
         break;
       }
     }

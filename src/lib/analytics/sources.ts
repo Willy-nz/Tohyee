@@ -205,6 +205,8 @@ export async function createSource(tx: OrgTx, input: Record<string, unknown>): P
   resolveSourceFile(folder, values.fileName);
   const taken = await tx.query("select 1 from analytics_sources where table_name = $1", [values.tableName]);
   if (taken.rows.length > 0) throw new ConflictError(`Another source already loads into ${values.tableName}.`);
+  const shaped = await tx.query("select 1 from analytics_shaped_tables where table_name = $1", [values.tableName]);
+  if (shaped.rows.length > 0) throw new ConflictError(`A shaped table already uses ${values.tableName}.`);
   const result = await tx.query<{ id: string }>(
     `insert into analytics_sources (name, table_name, file_name, delimiter, columns, reload_daily, created_by_email, updated_by_email)
      values ($1, $2, $3, $4, $5::jsonb, $6, $7, $7) returning id::text`,

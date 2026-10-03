@@ -1497,10 +1497,11 @@ the server through `@duckdb/node-api` (kept out of Next's bundle with
 one organisation run one at a time. No DuckDB extensions are downloaded at
 run time.
 
-- **Definitions stay in the organisation's database** (tenant migration
-  0082: `analytics_sources`, `analytics_load_runs`), so they're backed up and
-  restored with it. The DuckDB file holds only loaded data and can always be
-  rebuilt by loading again; it isn't in the backups.
+- **Definitions stay in the organisation's database** (tenant migrations
+  0082/0086: `analytics_sources`, `analytics_shaped_tables`,
+  `analytics_load_runs`), so they're backed up and restored with it. The
+  DuckDB file holds only loaded data and can always be rebuilt by loading
+  again; it isn't in the backups.
 - **Source folders are a server setting** (`analytics_folders` in the core
   `server_settings`), chosen by a server admin on the server computer. Files
   are only read from inside an organisation's own folder, after resolving
@@ -1513,6 +1514,13 @@ run time.
 - **The nightly reload** (`src/lib/analytics/scheduler.ts`) loads each daily
   source once a day after 04:00 business time and retries a failure an
   hour later (off with `TOHYEE_ANALYTICS_SCHEDULER=off`).
+- **Shaped tables** store their base table and ordered steps in PostgreSQL.
+  The shaping compiler checks each step against its current columns, quotes
+  identifiers and binds values; it supports filters, column selection and
+  renames, type changes, split/unpivot/group/calculated columns, joins and
+  union-by-name appends. Rebuilds stage a new DuckDB table and swap it in only
+  on success. They run after a dependent CSV or books table loads, nightly or
+  on demand, and each result is recorded in `analytics_load_runs`.
 
 ## Open decisions
 
