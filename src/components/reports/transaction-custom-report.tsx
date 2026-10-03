@@ -7,6 +7,7 @@ import { Money } from "@/components/books";
 import { ReportExport } from "@/components/reports/report-export";
 import { Badge, Button, Card, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
+import styles from "./transaction-custom-report.module.css";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, personName } from "@/lib/format";
 import type { CustomReport } from "@/lib/reports/custom";
@@ -29,6 +30,8 @@ function displayValue(value: unknown): string {
 }
 
 function reportRows(figures: TransactionCustomReportFigures): TableRow[] {
+  // Like Xero's summary and detail: a row per document only when a document column is shown.
+  const showDocuments = figures.selectedColumns.some((key) => key.startsWith("document."));
   const data = figures.data as Record<string, unknown>;
   const rows: TableRow[] = [];
   const push = (values: Record<string, unknown>, kind?: TableRow["kind"]) => rows.push({ values, kind });
@@ -96,7 +99,7 @@ function reportRows(figures: TransactionCustomReportFigures): TableRow[] {
                 columnValues: credit.columnValues,
               })),
             ];
-      detailRows.forEach((detail) => push(detail));
+      if (showDocuments) detailRows.forEach((detail) => push(detail));
     }
     const total = data.total as Record<string, unknown> | undefined;
     if (total) push({ ...total, total: total.total }, "total");
@@ -109,7 +112,7 @@ function reportRows(figures: TransactionCustomReportFigures): TableRow[] {
         "contact.name": row.contactName,
         columnValues: row.columnValues,
       });
-      for (const document of (row.documents ?? []) as Array<Record<string, unknown>>) {
+      for (const document of showDocuments ? ((row.documents ?? []) as Array<Record<string, unknown>>) : []) {
         push({
           "document.date": document.date,
           "document.reference": document.number,
@@ -275,9 +278,9 @@ export function TransactionCustomReportPage({ organisationId, loaded }: { organi
               setAddColumn("");
             }}>Add</Button>
           </div>
-          <ol>
+          <ol className={styles.columnList}>
             {columns.map((key, index) => (
-              <li key={key} className={ui.actions}>
+              <li key={key} className={styles.columnRow}>
                 <span>{options.find((option) => option.key === key)?.label ?? key}</span>
                 <Button size="small" variant="secondary" disabled={index === 0} onClick={() => setColumns(columns.map((entry, i) => i === index - 1 ? key : i === index ? columns[index - 1] : entry))}>Move up</Button>
                 <Button size="small" variant="secondary" disabled={index === columns.length - 1} onClick={() => setColumns(columns.map((entry, i) => i === index ? columns[index + 1] : i === index + 1 ? key : entry))}>Move down</Button>
