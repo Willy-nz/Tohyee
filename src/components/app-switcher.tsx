@@ -14,7 +14,9 @@ const APPS: Array<{ key: AppKey; label: string; href: string }> = [
 ];
 
 /** The apps someone can switch to: the CRM only while it's on for the organisation (MOD1). */
-export function availableApps(modules: Modules | null): AppKey[] {
+export function availableApps(modules: Modules | null, reportViewer = false): AppKey[] {
+  // Report viewers only have Analytics (decision 360).
+  if (reportViewer) return ["analytics"];
   return APPS.filter((app) => (app.key !== "crm" || modules?.crm === true) && (app.key !== "analytics" || modules?.analytics === true)).map((app) => app.key);
 }
 
@@ -23,8 +25,8 @@ export function availableApps(modules: Modules | null): AppKey[] {
  * there's somewhere to switch to, so people without the CRM never see it
  * (nor while the organisation's modules are still loading).
  */
-export function AppSwitcher({ current, modules }: { current: AppKey; modules: Modules | null }) {
-  const keys = availableApps(modules);
+export function AppSwitcher({ current, modules, reportViewer = false }: { current: AppKey; modules: Modules | null; reportViewer?: boolean }) {
+  const keys = availableApps(modules, reportViewer);
   if (keys.length < 2) return null;
   return (
     <nav aria-label="Apps" className={styles.appSwitcher}>

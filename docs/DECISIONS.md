@@ -2508,3 +2508,17 @@ approved 3 Oct 2026.
      owners); the tables are swapped in together only when all have loaded.
      CSV sources can't use `tohyee_` names.
 
+### Analytics: sharing with clients (decision 368)
+
+368. **Report viewers see only the dashboards shared with them** (decision
+     360 built). "Report viewer" is a new organisation access, ranked below
+     viewer, so every existing screen and API that needs viewer or more
+     refuses it; it only opens the Analytics app. Bookkeepers and up share a
+     dashboard with chosen report viewers (tenant migration 0085,
+     `analytics_dashboard_shares`; core migration 0006 allows the role); only
+     an organisation's report viewers can be chosen, and each change is
+     audited. A report viewer can't see the tables, sources or books, or ask
+     its own questions: it only runs a shared dashboard's saved tiles, and
+     only slices by that dashboard's own slicers (other filters are
+     dropped). A dashboard that isn't shared with them is "not found".
+

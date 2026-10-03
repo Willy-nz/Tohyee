@@ -1513,7 +1513,15 @@ run time.
 - **The nightly reload** (`src/lib/analytics/scheduler.ts`) loads each daily
   source once a day after 04:00 business time and retries a failure an
   hour later (off with `TOHYEE_ANALYTICS_SCHEDULER=off`).
-- **Report emails** (tenant migration 0087) keep mailbox configuration,
+- **Sharing** (decision 368): the `report_viewer` role ranks below viewer
+  (`src/lib/auth/roles.ts`), so routes guarded at viewer refuse it. The
+  dashboard routes accept it and filter through `analytics_dashboard_shares`
+  (`src/lib/analytics/dashboards.ts`: `DashboardReader`, `allowedFilters`).
+  `/api/analytics/query` runs a saved tile when given `dashboardId` and
+  `tileId`; a free question needs viewer. `/api/analytics/values` needs a
+  shared dashboard with that slicer. The app shell sends report viewers to
+  `/analytics` and shows no other app.
+- **Report emails** (tenant migration 0088) keep mailbox configuration,
   remembered message IDs, replacement timestamps and job-written checks in
   the organisation's PostgreSQL database. Admins and owners use their own
   CRM-connected Gmail or Microsoft mailbox, or TLS IMAP on port 993 with an

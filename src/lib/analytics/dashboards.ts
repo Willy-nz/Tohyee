@@ -77,15 +77,84 @@ function toDashboard(row: Row): Dashboard {
 
 const COLUMNS = "id::text, name, description, settings, tiles, created_by_email, created_at, updated_by_email, updated_at";
 
-export async function listDashboards(tx: OrgTx): Promise<Dashboard[]> {
-  const result = await tx.query<Row>(`select ${COLUMNS} from analytics_dashboards order by name, id`);
+/**
+ * Who's looking: a report viewer (decision 360) sees only the dashboards
+ * shared with them; everyone else in the organisation sees them all.
+ */
+export type DashboardReader = { userId: string | null; reportViewer: boolean };
+
+const EVERYONE: DashboardReader = { userId: null, reportViewer: false };
+
+export async function listDashboards(tx: OrgTx, reader: DashboardReader = EVERYONE): Promise<Dashboard[]> {
+  const result = reader.reportViewer
+    ? await tx.query<Row>(
+        `select ${COLUMNS} from analytics_dashboards d
+          where exists (select 1 from analytics_dashboard_shares s where s.dashboard_id = d.id and s.user_id = $1)
+          order by name, id`,
+        [reader.userId ?? ""],
+      )
+    : await tx.query<Row>(`select ${COLUMNS} from analytics_dashboards order by name, id`);
   return result.rows.map(toDashboard);
 }
 
-export async function getDashboard(tx: OrgTx, id: string): Promise<Dashboard> {
-  const result = await tx.query<Row>(`select ${COLUMNS} from analytics_dashboards where id = $1`, [/^\d{1,18}$/.test(id) ? id : "0"]);
+export async function getDashboard(tx: OrgTx, id: string, reader: DashboardReader = EVERYONE): Promise<Dashboard> {
+  const dashboardId = /^\d{1,18}$/.test(id) ? id : "0";
+  const result = await tx.query<Row>(`select ${COLUMNS} from analytics_dashboards where id = $1`, [dashboardId]);
+  // Not shared reads as not found, so dashboards can't be probed.
   if (!result.rows[0]) throw new NotFoundError("That dashboard wasn't found.");
+  if (reader.reportViewer) {
+    const shared = await tx.query("select 1 from analytics_dashboard_shares where dashboard_id = $1 and user_id = $2", [dashboardId, reader.userId ?? ""]);
+    if (shared.rows.length === 0) throw new NotFoundError("That dashboard wasn't found.");
+  }
   return toDashboard(result.rows[0]);
+}
+
+/** The report viewers a dashboard is shared with (user ids). */
+export async function dashboardShares(tx: OrgTx, id: string): Promise<string[]> {
+  const dashboard = await getDashboard(tx, id);
+  const result = await tx.query<{ user_id: string }>("select user_id from analytics_dashboard_shares where dashboard_id = $1 order by user_id", [dashboard.id]);
+  return result.rows.map((row) => row.user_id);
+}
+
+/**
+ * Shares a dashboard with exactly these people (replacing the list). Only
+ * the organisation's report viewers can be chosen; everyone else already
+ * sees every dashboard. `reportViewerIds` comes from the core database,
+ * looked up before the transaction.
+ */
+export async function setDashboardShares(tx: OrgTx, id: string, input: unknown, reportViewerIds: ReadonlySet<string>): Promise<string[]> {
+  await requireAnalytics(tx);
+  const dashboard = await getDashboard(tx, id);
+  if (!Array.isArray(input) || input.some((entry) => typeof entry !== "string")) throw new ValidationError("userIds must be a list.");
+  const wanted = [...new Set(input as string[])];
+  const stranger = wanted.find((userId) => !reportViewerIds.has(userId));
+  if (stranger) throw new ValidationError("Dashboards can only be shared with this organisation's report viewers.");
+  await tx.query("delete from analytics_dashboard_shares where dashboard_id = $1 and not (user_id = any($2::text[]))", [dashboard.id, wanted]);
+  for (const userId of wanted) {
+    await tx.query(
+      `insert into analytics_dashboard_shares (dashboard_id, user_id, shared_by_email) values ($1, $2, $3)
+       on conflict (dashboard_id, user_id) do nothing`,
+      [dashboard.id, userId, tx.actor.email],
+    );
+  }
+  await writeAuditEvent(tx, {
+    eventType: "analytics.dashboard_shared",
+    entityType: "analytics_dashboard",
+    entityId: dashboard.id,
+    details: { name: dashboard.name, sharedWith: wanted.length },
+  });
+  return dashboardShares(tx, dashboard.id);
+}
+
+/**
+ * The dashboard filters a reader may use. Report viewers can only slice by
+ * the dashboard's own slicers, so they can't ask about other columns.
+ */
+export function allowedFilters(dashboard: Dashboard, filters: DashboardFilters, reader: DashboardReader): DashboardFilters {
+  if (!reader.reportViewer) return filters;
+  const slicerFields = new Set(dashboard.settings.slicers.map((slicer) => slicer.field));
+  const values = Object.fromEntries(Object.entries(filters.values ?? {}).filter(([field]) => slicerFields.has(field)));
+  return { from: filters.from, to: filters.to, values };
 }
 
 function parseSettings(input: unknown, tables: Map<string, ColumnInfo[]>): DashboardSettings {
@@ -187,6 +256,13 @@ export async function updateDashboard(tx: OrgTx, id: string, input: Record<strin
     details: { name, tiles: tiles.length },
   });
   return getDashboard(tx, current.id);
+}
+
+/** A dashboard tile's saved question, for reading the dashboard (what report viewers can run). */
+export function tileOf(dashboard: Dashboard, tileId: unknown): Tile {
+  const tile = dashboard.tiles.find((entry) => entry.id === tileId);
+  if (!tile) throw new NotFoundError("That tile wasn't found.");
+  return tile;
 }
 
 export async function deleteDashboard(tx: OrgTx, id: string): Promise<void> {

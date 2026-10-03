@@ -1317,8 +1317,14 @@ that something happened.
   its analytics every night and by Refresh now, as the same data with the
   ledger's signs; dashboard values can be shown the other way round. Pay run
   lines are copied without names.
+- **Analytics: sharing with clients** (decision 368, tenant migration 0085,
+  core migration 0006). A new "Report viewer" access for clients: they sign
+  in like anyone else and see only the Analytics dashboards shared with them
+  (Share, in a dashboard's edit mode, for bookkeepers and up), using that
+  dashboard's slicers and dates. They can't see the books, the data tables or
+  anything else in the organisation.
 - **Analytics, step 5: report emails** (decision 362, tenant migration
-  0087). Admins and owners configure their own CRM-connected Gmail or
+  0088). Admins and owners configure their own CRM-connected Gmail or
   Microsoft mailbox, or IMAP with an encrypted app password, in Analytics
   › Data sources. Choose a folder or label and set a mailbox rule to file
   reports there. Checks save CSV, TSV and TXT attachments, or flat CSV/TSV
