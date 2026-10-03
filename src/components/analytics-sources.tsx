@@ -7,6 +7,7 @@ import { useModules } from "@/components/modules";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useWorkspace } from "@/components/workspace";
+import { ReportEmailsCard } from "@/components/analytics-report-emails";
 import type { ColumnKind, InspectedColumn, SourceFile } from "@/lib/analytics/engine";
 import type { AnalyticsSource, LoadRun } from "@/lib/analytics/sources";
 import { api, errorMessage } from "@/lib/client/api";
@@ -112,6 +113,8 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
       <BooksCard organisationId={organisationId} data={data} onChanged={overview.reload} />
 
       <SourcesCard organisationId={organisationId} data={data} onEdit={(source) => setSetUp({ file: source.fileName, source })} onChanged={overview.reload} />
+
+      {data.canManage ? <ReportEmailsCard key={organisationId} organisationId={organisationId} folderChosen={data.folder.chosen && data.folder.readable} onChanged={overview.reload} /> : null}
 
       {data.canManage && data.folder.readable ? (
         <Card title="Files in the folder" description="CSV files in this organisation's folder and the folders inside it, newest first. Set one up to load it.">

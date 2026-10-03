@@ -137,6 +137,15 @@ export async function register() {
     }
   }
 
+  if (process.env.TOHYEE_REPORT_EMAIL_SCHEDULER !== "off") {
+    try {
+      const { startReportEmailScheduler } = await import("@/lib/analytics/report-emails");
+      startReportEmailScheduler();
+    } catch (error) {
+      console.warn("[tohyee] Report email checks couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
   if (process.env.TOHYEE_REMOTE_ACCESS !== "off") {
     const { applyRemoteAccess } = await import("@/lib/remote/settings");
     const { stopTunnelOnExit } = await import("@/lib/remote/tunnel");

@@ -1531,6 +1531,22 @@ run time.
   on demand, and each result is recorded in `analytics_load_runs`. Averages
   and division go through `src/lib/analytics/decimal-sql.ts`, which divides
   whole millionths as HUGEINT, since DuckDB divides decimals as DOUBLE.
+- **Report emails** (tenant migration 0088) keep mailbox configuration,
+  remembered message IDs, replacement timestamps and job-written checks in
+  the organisation's PostgreSQL database. Admins and owners use their own
+  CRM-connected Gmail or Microsoft mailbox, or TLS IMAP on port 993 with an
+  encrypted app password. Network reads run outside transactions; committed
+  leases keep checks from overlapping. Checks run once a night after 03:00
+  business time, before the 04:00 reload, and on demand (scheduler off with
+  `TOHYEE_REPORT_EMAIL_SCHEDULER=off`). Saved messages are skipped before
+  they're downloaded; a message that can't be read is noted and the check
+  carries on, and one that keeps failing is tried three times in all. IMAP
+  hosts must resolve to public addresses (`src/lib/analytics/mail-host.ts`),
+  checked on save and before each connection. Data files
+  go into `email/<mailbox id>/` inside the server-admin-chosen source folder;
+  the existing loader discovers them there. OAuth permissions cover the
+  whole mailbox, but these checks only read the chosen folder or label and
+  never modify mail.
 
 ## Open decisions
 

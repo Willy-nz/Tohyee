@@ -1,6 +1,6 @@
 {
   "name": "tohyee",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -24,13 +24,15 @@
     "@pdf-lib/fontkit": "^1.1.1",
     "echarts": "^6.1.0",
     "exceljs": "^4.4.0",
+    "imapflow": "^2.2.1",
     "next": "16.3.6",
     "nodemailer": "^10.0.11",
     "pdf-lib": "^1.17.1",
     "pg": "^8.23.0",
     "qrcode": "^1.5.4",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@types/mailparser": "^3.9.0",
@@ -40,10 +42,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/smtp-server": "^3.5.13",
+    "@types/yauzl": "^3.4.0",
     "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
-    "mailparser": "^3.9.32",
+    "mailparser": "^3.9.33",
     "smtp-server": "^3.19.16",
     "tsx": "^4.23.15",
     "typescript": "^5",

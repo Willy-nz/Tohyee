@@ -381,6 +381,45 @@ type AccountRow = {
   status: string;
 };
 
+/** Reuses a member's CRM connection without exposing tokens to HTTP callers. */
+export async function reportMailboxToken(
+  organisation: OrganisationRecord,
+  actor: Actor,
+  accountId: string,
+): Promise<{ provider: MailProvider; token: string }> {
+  const prepared = await withOrganisationTransaction(organisation, actor, async (tx) => {
+    await requireCrm(tx);
+    const found = await tx.query<AccountRow & { user_id: string }>(
+      `select id, user_id, provider, email, refresh_token_ciphertext, access_token_ciphertext,
+              access_token_expires_at, status from crm_connected_accounts where id = $1`,
+      [accountId],
+    );
+    const account = found.rows[0];
+    if (!account) throw new NotFoundError("Connected mailbox not found.");
+    if (account.user_id !== actor.userId) throw new ForbiddenError("Choose your own connected mailbox.");
+    if (account.status !== "active") throw new ConflictError("Reconnect this mailbox before checking report emails.");
+    return { account, app: await providerApp(tx, account.provider) };
+  });
+  const { account, app } = prepared;
+  if (account.access_token_ciphertext && account.access_token_expires_at
+      && new Date(account.access_token_expires_at).getTime() > Date.now() + 60_000) {
+    return { provider: account.provider, token: decryptSecret(account.access_token_ciphertext) };
+  }
+  const refreshed = await refreshAccess(account.provider, app, decryptSecret(account.refresh_token_ciphertext));
+  await withOrganisationTransaction(organisation, actor, async (tx) => {
+    await requireCrm(tx);
+    await tx.query(
+      `update crm_connected_accounts set access_token_ciphertext = $3, access_token_expires_at = $4,
+         refresh_token_ciphertext = coalesce($5, refresh_token_ciphertext), updated_at = now()
+       where id = $1 and user_id = $2 and refresh_token_ciphertext = $6`,
+      [account.id, actor.userId, encryptSecret(refreshed.accessToken),
+        new Date(Date.now() + refreshed.expiresInSeconds * 1000).toISOString(),
+        refreshed.refreshToken ? encryptSecret(refreshed.refreshToken) : null, account.refresh_token_ciphertext],
+    );
+  });
+  return { provider: account.provider, token: refreshed.accessToken };
+}
+
 /** Syncs one connected account; network calls happen between two short transactions. */
 export async function syncAccount(organisation: OrganisationRecord, accountId: string, now = new Date()): Promise<{ messages: number; meetings: number }> {
   const prepared = await withOrganisationTransaction(organisation, SYNC_ACTOR, async (tx) => {
