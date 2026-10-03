@@ -1,19 +1,16 @@
 "use client";
 
 import { Suspense } from "react";
-import { DataSourcesPage } from "@/components/analytics-sources";
+import { DashboardsList } from "@/components/analytics-dashboards";
 import { RequireOrganisation } from "@/components/books";
 import { Page, PageHeader } from "@/components/ui";
 
-export default function AnalyticsPage() {
+export default function AnalyticsDashboardsPage() {
   return (
     <Page>
-      <PageHeader
-        title="Data sources"
-        description="Files from this organisation's folder on the server, loaded every night after 4am, ready for reports and dashboards."
-      />
+      <PageHeader title="Dashboards" description="Charts, tables and key figures from your loaded data, with date ranges and slicers." />
       <Suspense fallback={null}>
-        <RequireOrganisation>{(organisationId) => <DataSourcesPage key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
+        <RequireOrganisation>{(organisationId) => <DashboardsList key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
       </Suspense>
     </Page>
   );

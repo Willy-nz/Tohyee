@@ -1,0 +1,891 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { Chart } from "@/components/analytics/chart";
+import { useConfirm } from "@/components/confirm-dialog";
+import { useApiData } from "@/components/hooks";
+import { useModules } from "@/components/modules";
+import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
+import type { ChartSpec } from "@/lib/analytics/chart-spec";
+import type { Dashboard, DashboardSettings, Slicer, Tile } from "@/lib/analytics/dashboards";
+import type { Aggregate, ColumnInfo, Filter, FilterOp, Grain, Measure, QueryResult, ResultColumn, TileQuery, Visual } from "@/lib/analytics/query";
+import { api, errorMessage } from "@/lib/client/api";
+import { formatDate, formatDateTime, formatMoney, formatQuantity } from "@/lib/format";
+import { cmp, dec, sum, toPlainString } from "@/lib/money/decimal";
+import styles from "./analytics-dashboards.module.css";
+
+type TableInfo = { name: string; columns: ColumnInfo[] };
+
+const VISUALS: Array<{ value: Visual; label: string }> = [
+  { value: "column", label: "Columns" },
+  { value: "bar", label: "Bars" },
+  { value: "line", label: "Line" },
+  { value: "area", label: "Area" },
+  { value: "combo", label: "Columns and line" },
+  { value: "pie", label: "Pie" },
+  { value: "donut", label: "Donut" },
+  { value: "kpi", label: "Key figure" },
+  { value: "table", label: "Table" },
+];
+
+const AGGREGATES: Array<{ value: Aggregate; label: string }> = [
+  { value: "sum", label: "Total" },
+  { value: "avg", label: "Average" },
+  { value: "min", label: "Smallest" },
+  { value: "max", label: "Largest" },
+  { value: "count", label: "Count of rows" },
+  { value: "count_distinct", label: "Count of different values" },
+];
+
+const OPS: Array<{ value: FilterOp; label: string }> = [
+  { value: "eq", label: "is" },
+  { value: "neq", label: "is not" },
+  { value: "contains", label: "contains" },
+  { value: "gt", label: "more than" },
+  { value: "gte", label: "at least" },
+  { value: "lt", label: "less than" },
+  { value: "lte", label: "at most" },
+];
+
+const GRAINS: Array<{ value: Grain; label: string }> = [
+  { value: "day", label: "Day" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+  { value: "quarter", label: "Quarter" },
+  { value: "year", label: "Year" },
+];
+
+const isDate = (type: string) => type === "DATE" || type.startsWith("TIMESTAMP");
+const isNumber = (type: string) => /^(DECIMAL|BIGINT|INTEGER|SMALLINT|TINYINT|HUGEINT|DOUBLE|FLOAT|UBIGINT|UINTEGER)/.test(type);
+
+/** "order_date" -> "Order date". */
+function heading(label: string): string {
+  const text = label.replaceAll("_", " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** A value from a query, shown the way its column is meant to be read. Never turned into a JS number. */
+function showValue(value: string | null, column: ResultColumn): string {
+  if (value === null) return "";
+  switch (column.format) {
+    case "money":
+      return `$${formatMoney(value)}`;
+    case "number":
+      return formatQuantity(formatMoney(value, 4));
+    case "integer":
+      return formatQuantity(value);
+    case "date":
+      return formatDate(value);
+    default:
+      return value;
+  }
+}
+
+function RequireAnalytics({ organisationId, children }: { organisationId: string; children: React.ReactNode }) {
+  const modules = useModules(organisationId);
+  const { can } = useWorkspace();
+  if (!modules) return <p className={ui.muted}>Loading…</p>;
+  if (!modules.analytics) {
+    return (
+      <Notice tone="info">
+        Analytics is off.{" "}
+        {can("admin") ? (
+          <>
+            Turn it on in <Link href="/operations/settings">Settings › Modules</Link>.
+          </>
+        ) : (
+          "An admin can turn it on in Settings."
+        )}
+      </Notice>
+    );
+  }
+  return <>{children}</>;
+}
+
+/** Analytics › Dashboards: the list, and making a new one. */
+export function DashboardsList({ organisationId }: { organisationId: string }) {
+  return (
+    <RequireAnalytics organisationId={organisationId}>
+      <DashboardsListInner organisationId={organisationId} />
+    </RequireAnalytics>
+  );
+}
+
+function DashboardsListInner({ organisationId }: { organisationId: string }) {
+  const router = useRouter();
+  const { can } = useWorkspace();
+  const list = useApiData<{ dashboards: Dashboard[] }>("/api/analytics/dashboards", { organisationId });
+  const tables = useApiData<{ tables: TableInfo[] }>("/api/analytics/tables", { organisationId });
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function create() {
+    setBusy(true);
+    setError(null);
+    try {
+      const { dashboard } = await api<{ dashboard: Dashboard }>("/api/analytics/dashboards", {
+        method: "POST",
+        body: { organisationId, name: name.trim() || "New dashboard", tiles: [] },
+      });
+      router.push(`/analytics/dashboards/${dashboard.id}?edit=1`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setBusy(false);
+    }
+  }
+
+  const noTables = tables.data && tables.data.tables.length === 0;
+  return (
+    <>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {noTables ? (
+        <Notice tone="info">
+          Nothing is loaded yet. Set up a file under <Link href="/analytics/sources">Data sources</Link> first; dashboards are built from loaded
+          tables.
+        </Notice>
+      ) : null}
+      <Card
+        title="Dashboards"
+        actions={
+          can("bookkeeper") ? (
+            <div className={ui.rowButtons}>
+              <input aria-label="New dashboard name" placeholder="New dashboard name" value={name} maxLength={100} onChange={(event) => setName(event.target.value)} />
+              <Button onClick={() => void create()} disabled={busy || Boolean(noTables)}>
+                {busy ? "Making…" : "New dashboard"}
+              </Button>
+            </div>
+          ) : null
+        }
+      >
+        {list.error ? <Notice tone="error">{list.error}</Notice> : null}
+        {!list.data ? (
+          <p className={ui.muted}>Loading…</p>
+        ) : list.data.dashboards.length === 0 ? (
+          <Empty>No dashboards yet.</Empty>
+        ) : (
+          <div className={styles.dashboardCards}>
+            {list.data.dashboards.map((dashboard) => (
+              <Link key={dashboard.id} href={`/analytics/dashboards/${dashboard.id}`} className={styles.dashboardCard}>
+                <strong>{dashboard.name}</strong>
+                {dashboard.description ? <span className={ui.muted}>{dashboard.description}</span> : null}
+                <span className={ui.muted}>
+                  {dashboard.tiles.length} {dashboard.tiles.length === 1 ? "tile" : "tiles"} · changed {formatDateTime(dashboard.updatedAt)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Card>
+    </>
+  );
+}
+
+type Filters = { from: string; to: string; values: Record<string, string[]> };
+
+/** One dashboard: its date range and slicers, and its tiles; Edit to change them. */
+export function DashboardView({ organisationId, dashboardId, startEditing }: { organisationId: string; dashboardId: string; startEditing: boolean }) {
+  return (
+    <RequireAnalytics organisationId={organisationId}>
+      <DashboardViewInner organisationId={organisationId} dashboardId={dashboardId} startEditing={startEditing} />
+    </RequireAnalytics>
+  );
+}
+
+function DashboardViewInner({ organisationId, dashboardId, startEditing }: { organisationId: string; dashboardId: string; startEditing: boolean }) {
+  const router = useRouter();
+  const { can } = useWorkspace();
+  const confirm = useConfirm();
+  const loaded = useApiData<{ dashboard: Dashboard }>(`/api/analytics/dashboards/${dashboardId}`, { organisationId });
+  const tables = useApiData<{ tables: TableInfo[] }>("/api/analytics/tables", { organisationId });
+  const [draft, setDraft] = useState<Dashboard | null>(null);
+  const [editing, setEditing] = useState(startEditing);
+  const [editingTile, setEditingTile] = useState<Tile | "new" | null>(null);
+  const [filters, setFilters] = useState<Filters | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dashboard = draft ?? loaded.data?.dashboard ?? null;
+  const shown: Filters = filters ?? { from: dashboard?.settings.from ?? "", to: dashboard?.settings.to ?? "", values: {} };
+  const canEdit = can("bookkeeper");
+
+  async function save(next: Dashboard) {
+    setBusy(true);
+    setError(null);
+    try {
+      const { dashboard: saved } = await api<{ dashboard: Dashboard }>(`/api/analytics/dashboards/${dashboardId}`, {
+        method: "PATCH",
+        body: { organisationId, name: next.name, description: next.description, settings: next.settings, tiles: next.tiles },
+      });
+      setDraft(saved);
+      return true;
+    } catch (caught) {
+      setError(errorMessage(caught));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!dashboard) return;
+    const ok = await confirm(`Delete the ${dashboard.name} dashboard? The data it shows isn't touched.`, { title: "Delete dashboard?", confirmLabel: "Delete", danger: true });
+    if (!ok) return;
+    try {
+      await api(`/api/analytics/dashboards/${dashboardId}`, { method: "DELETE", query: { organisationId } });
+      router.push("/analytics");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }
+
+  function moveTile(index: number, by: number) {
+    if (!dashboard) return;
+    const tiles = [...dashboard.tiles];
+    const [tile] = tiles.splice(index, 1);
+    tiles.splice(Math.max(0, Math.min(tiles.length, index + by)), 0, tile);
+    void save({ ...dashboard, tiles });
+  }
+
+  if (loaded.error) return <Notice tone="error">{loaded.error}</Notice>;
+  if (!dashboard) return <p className={ui.muted}>Loading…</p>;
+
+  return (
+    <>
+      <div className={styles.header}>
+        <div>
+          {editing ? (
+            <div className={ui.grid3}>
+              <Field label="Name">
+                <input value={dashboard.name} maxLength={100} onChange={(event) => setDraft({ ...dashboard, name: event.target.value })} />
+              </Field>
+              <Field label="Description">
+                <input value={dashboard.description ?? ""} maxLength={500} onChange={(event) => setDraft({ ...dashboard, description: event.target.value })} />
+              </Field>
+            </div>
+          ) : (
+            <>
+              <h1 className={styles.title}>{dashboard.name}</h1>
+              {dashboard.description ? <p className={ui.muted}>{dashboard.description}</p> : null}
+            </>
+          )}
+        </div>
+        <div className={ui.rowButtons}>
+          {canEdit && editing ? (
+            <>
+              <Button variant="secondary" onClick={() => setEditingTile("new")} disabled={busy}>
+                Add tile
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (await save(dashboard)) {
+                    setEditing(false);
+                    setEditingTile(null);
+                  }
+                }}
+                disabled={busy}
+              >
+                {busy ? "Saving…" : "Done"}
+              </Button>
+              <Button variant="danger" onClick={() => void remove()} disabled={busy}>
+                Delete
+              </Button>
+            </>
+          ) : canEdit ? (
+            <Button variant="secondary" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+
+      <FilterBar
+        organisationId={organisationId}
+        settings={dashboard.settings}
+        filters={shown}
+        onChange={setFilters}
+        editing={editing}
+        tables={tables.data?.tables ?? []}
+        onSettings={(settings) => setDraft({ ...dashboard, settings })}
+      />
+
+      {editingTile ? (
+        <TileEditor
+          organisationId={organisationId}
+          tables={tables.data?.tables ?? []}
+          tile={editingTile === "new" ? null : editingTile}
+          filters={shown}
+          onCancel={() => setEditingTile(null)}
+          onSave={async (tile) => {
+            const exists = dashboard.tiles.some((entry) => entry.id === tile.id);
+            const tiles = exists ? dashboard.tiles.map((entry) => (entry.id === tile.id ? tile : entry)) : [...dashboard.tiles, tile];
+            if (await save({ ...dashboard, tiles })) setEditingTile(null);
+          }}
+        />
+      ) : null}
+
+      {dashboard.tiles.length === 0 ? (
+        <Empty>{canEdit ? "No tiles yet. Edit, then Add tile." : "No tiles yet."}</Empty>
+      ) : (
+        <div className={styles.grid}>
+          {dashboard.tiles.map((tile, index) => (
+            <section key={tile.id} className={`${styles.tile} ${tile.width === "full" ? styles.full : ""}`}>
+              <div className={styles.tileHeader}>
+                <h2 className={styles.tileTitle}>{tile.title}</h2>
+                {editing ? (
+                  <div className={styles.tileTools}>
+                    <Button size="small" variant="secondary" aria-label={`Move ${tile.title} earlier`} onClick={() => moveTile(index, -1)} disabled={busy || index === 0}>
+                      ↑
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="secondary"
+                      aria-label={`Move ${tile.title} later`}
+                      onClick={() => moveTile(index, 1)}
+                      disabled={busy || index === dashboard.tiles.length - 1}
+                    >
+                      ↓
+                    </Button>
+                    <Button size="small" variant="secondary" onClick={() => setEditingTile(tile)} disabled={busy}>
+                      Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="danger"
+                      onClick={() => void save({ ...dashboard, tiles: dashboard.tiles.filter((entry) => entry.id !== tile.id) })}
+                      disabled={busy}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+              <TileBody organisationId={organisationId} tile={tile} filters={shown} />
+            </section>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function FilterBar({
+  organisationId,
+  settings,
+  filters,
+  onChange,
+  editing,
+  tables,
+  onSettings,
+}: {
+  organisationId: string;
+  settings: DashboardSettings;
+  filters: Filters;
+  onChange: (filters: Filters) => void;
+  editing: boolean;
+  tables: TableInfo[];
+  onSettings: (settings: DashboardSettings) => void;
+}) {
+  const [newSlicer, setNewSlicer] = useState("");
+  const slicerChoices = tables.flatMap((table) =>
+    table.columns.filter((column) => !isNumber(column.type) && !isDate(column.type)).map((column) => `${table.name}.${column.name}`),
+  );
+  return (
+    <div className={styles.filterBar}>
+      <Field label="From">
+        <input type="date" value={filters.from} onChange={(event) => onChange({ ...filters, from: event.target.value })} />
+      </Field>
+      <Field label="To">
+        <input type="date" value={filters.to} onChange={(event) => onChange({ ...filters, to: event.target.value })} />
+      </Field>
+      {settings.slicers.map((slicer) => (
+        <SlicerControl
+          key={`${slicer.table}.${slicer.field}`}
+          organisationId={organisationId}
+          slicer={slicer}
+          chosen={filters.values[slicer.field] ?? []}
+          onChange={(values) => onChange({ ...filters, values: { ...filters.values, [slicer.field]: values } })}
+          onRemove={editing ? () => onSettings({ ...settings, slicers: settings.slicers.filter((entry) => entry !== slicer) }) : undefined}
+        />
+      ))}
+      {editing ? (
+        <>
+          <Field label="Add a slicer">
+            <select value={newSlicer} onChange={(event) => setNewSlicer(event.target.value)}>
+              <option value="">Choose a column</option>
+              {slicerChoices.map((choice) => (
+                <option key={choice} value={choice}>
+                  {choice}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Button
+            size="small"
+            variant="secondary"
+            disabled={!newSlicer}
+            onClick={() => {
+              const [table, field] = newSlicer.split(".");
+              onSettings({ ...settings, slicers: [...settings.slicers, { table, field, label: field.replaceAll("_", " ") }] });
+              setNewSlicer("");
+            }}
+          >
+            Add slicer
+          </Button>
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => onSettings({ ...settings, from: filters.from || null, to: filters.to || null })}
+            title="Open the dashboard with these dates"
+          >
+            Keep these dates
+          </Button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function SlicerControl({
+  organisationId,
+  slicer,
+  chosen,
+  onChange,
+  onRemove,
+}: {
+  organisationId: string;
+  slicer: Slicer;
+  chosen: string[];
+  onChange: (values: string[]) => void;
+  onRemove?: () => void;
+}) {
+  const values = useApiData<{ values: string[] }>("/api/analytics/values", { organisationId, table: slicer.table, field: slicer.field });
+  const summary = chosen.length === 0 ? "All" : chosen.length === 1 ? chosen[0] : `${chosen.length} chosen`;
+  return (
+    <div className={styles.slicer}>
+      <span className={styles.slicerLabel}>{slicer.label}</span>
+      <details
+        className={styles.slicerMenu}
+        onToggle={(event) => {
+          const menu = event.currentTarget;
+          if (!menu.open) return;
+          const close = (click: MouseEvent) => {
+            if (!menu.contains(click.target as Node)) {
+              menu.open = false;
+              document.removeEventListener("mousedown", close);
+            }
+          };
+          document.addEventListener("mousedown", close);
+        }}
+      >
+        <summary>{summary}</summary>
+        <div className={styles.slicerList} role="group" aria-label={slicer.label}>
+          {(values.data?.values ?? []).map((value) => (
+            <label key={value} className={ui.checkbox}>
+              <input
+                type="checkbox"
+                checked={chosen.includes(value)}
+                onChange={(event) => onChange(event.target.checked ? [...chosen, value] : chosen.filter((entry) => entry !== value))}
+              />{" "}
+              {value}
+            </label>
+          ))}
+          {chosen.length ? (
+            <Button size="small" variant="secondary" onClick={() => onChange([])}>
+              Show all
+            </Button>
+          ) : null}
+        </div>
+      </details>
+      {onRemove ? (
+        <Button size="small" variant="danger" onClick={onRemove}>
+          Remove
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function useTileResult(organisationId: string, query: TileQuery | null, filters: Filters) {
+  const [state, setState] = useState<{ key: string; result: QueryResult | null; error: string | null } | null>(null);
+  const key = JSON.stringify({ query, filters });
+  useEffect(() => {
+    if (!query) return;
+    let cancelled = false;
+    api<QueryResult>("/api/analytics/query", {
+      method: "POST",
+      body: { organisationId, query, filters: { from: filters.from || null, to: filters.to || null, values: filters.values } },
+    }).then(
+      (result) => {
+        if (!cancelled) setState({ key, result, error: null });
+      },
+      (error) => {
+        if (!cancelled) setState({ key, result: null, error: errorMessage(error) });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+    // `key` covers query and filters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organisationId, key]);
+  return state?.key === key ? state : null;
+}
+
+function TileBody({ organisationId, tile, filters }: { organisationId: string; tile: Tile; filters: Filters }) {
+  const state = useTileResult(organisationId, tile.query, filters);
+  if (!state) return <p className={ui.muted}>Working it out…</p>;
+  if (state.error) return <Notice tone="error">{state.error}</Notice>;
+  return <TileResult tile={tile} result={state.result!} />;
+}
+
+function TileResult({ tile, result }: { tile: Pick<Tile, "title" | "visual">; result: QueryResult }) {
+  const measures = result.columns.filter((column) => column.role === "measure");
+  const spec = useMemo<ChartSpec | null>(() => {
+    if (tile.visual === "table") return null;
+    return {
+      kind: tile.visual,
+      category: "category",
+      series: measures.map((column, index) => ({
+        field: column.key,
+        label: column.label,
+        // One axis only: a second scale makes the chart misleading.
+        ...(tile.visual === "combo" ? { as: index === 0 ? ("bar" as const) : ("line" as const) } : {}),
+      })),
+      valueFormat: measures[0]?.format === "money" ? "money" : "number",
+      currency: "NZD",
+    };
+  }, [tile.visual, measures]);
+
+  if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
+  const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(result.rows, measures[0]?.key ?? "m0") : result.rows;
+  if (tile.visual === "kpi") {
+    const first = measures[0];
+    return (
+      <div className={styles.kpi}>
+        <span className={styles.kpiValue}>{showValue(result.rows[0][first.key], first)}</span>
+        {measures.slice(1).map((column) => (
+          <span key={column.key} className={ui.muted}>
+            {column.label}: {showValue(result.rows[0][column.key], column)}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  if (!spec) {
+    return (
+      <div className={ui.tableWrap}>
+        <table className={ui.table}>
+          <thead>
+            <tr>
+              {result.columns.map((column) => (
+                <th key={column.key} className={column.role === "measure" ? ui.num : undefined}>
+                  {heading(column.label)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {result.rows.map((row, index) => (
+              <tr key={index}>
+                {result.columns.map((column) => (
+                  <td key={column.key} className={column.role === "measure" ? ui.num : undefined}>
+                    {showValue(row[column.key], column)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {result.truncated ? <p className={ui.muted}>Showing the first 5,000 rows.</p> : null}
+      </div>
+    );
+  }
+  return <Chart spec={spec} rows={rows} />;
+}
+
+/** A pie keeps its 7 largest slices and adds the rest up (exactly) as Other, so no two slices share a colour. */
+function foldSlices(rows: QueryResult["rows"], key: string): QueryResult["rows"] {
+  if (rows.length <= 8) return rows;
+  const sorted = [...rows].sort((a, b) => cmp(dec(b[key] ?? "0"), dec(a[key] ?? "0")));
+  const other = sum(sorted.slice(7).map((row) => dec(row[key] ?? "0")));
+  return [...sorted.slice(0, 7), { category: "Other", [key]: toPlainString(other) }];
+}
+
+function blankQuery(table: TableInfo | undefined): TileQuery {
+  const date = table?.columns.find((column) => isDate(column.type));
+  const text = table?.columns.find((column) => !isDate(column.type) && !isNumber(column.type));
+  const money = table?.columns.find((column) => /^DECIMAL\(\d+,2\)$/.test(column.type)) ?? table?.columns.find((column) => isNumber(column.type));
+  return {
+    table: table?.name ?? "",
+    groupBy: date ? { field: date.name, grain: "month" } : text ? { field: text.name } : null,
+    measures: money ? [{ label: money.name.replaceAll("_", " "), aggregate: "sum", field: money.name }] : [{ label: "Rows", aggregate: "count" }],
+    filters: [],
+    dateField: date?.name ?? null,
+    sort: { by: "category", direction: "asc" },
+    limit: null,
+  };
+}
+
+/** Adding or changing a tile, with a live preview. */
+function TileEditor({
+  organisationId,
+  tables,
+  tile,
+  filters,
+  onSave,
+  onCancel,
+}: {
+  organisationId: string;
+  tables: TableInfo[];
+  tile: Tile | null;
+  filters: Filters;
+  onSave: (tile: Tile) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(tile?.title ?? "");
+  const [visual, setVisual] = useState<Visual>(tile?.visual ?? "column");
+  const [width, setWidth] = useState<"half" | "full">(tile?.width ?? "half");
+  const [query, setQuery] = useState<TileQuery>(tile?.query ?? blankQuery(tables[0]));
+  const table = tables.find((entry) => entry.name === query.table);
+  const columns = table?.columns ?? [];
+  const numbers = columns.filter((column) => isNumber(column.type));
+  const groupType = columns.find((column) => column.name === query.groupBy?.field)?.type ?? "";
+  const preview = useTileResult(organisationId, query.table ? query : null, filters);
+
+  const setMeasure = (index: number, patch: Partial<Measure>) =>
+    setQuery({ ...query, measures: query.measures.map((measure, at) => (at === index ? { ...measure, ...patch } : measure)) });
+  const setFilter = (index: number, patch: Partial<Filter>) =>
+    setQuery({ ...query, filters: query.filters.map((filter, at) => (at === index ? { ...filter, ...patch } : filter)) });
+
+  return (
+    <Card title={tile ? `Change ${tile.title}` : "Add a tile"} description="Choose a loaded table, what to group by and which values to show. The preview uses the dashboard's dates and slicers.">
+      <div className={ui.grid3}>
+        <Field label="Title">
+          <input value={title} maxLength={100} placeholder="e.g. Sales by month" onChange={(event) => setTitle(event.target.value)} />
+        </Field>
+        <Field label="Show as">
+          <select value={visual} onChange={(event) => setVisual(event.target.value as Visual)}>
+            {VISUALS.map((entry) => (
+              <option key={entry.value} value={entry.value}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Width">
+          <select value={width} onChange={(event) => setWidth(event.target.value as "half" | "full")}>
+            <option value="half">Half</option>
+            <option value="full">Full</option>
+          </select>
+        </Field>
+        <Field label="Table">
+          <select value={query.table} onChange={(event) => setQuery(blankQuery(tables.find((entry) => entry.name === event.target.value)))}>
+            {tables.map((entry) => (
+              <option key={entry.name} value={entry.name}>
+                {entry.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Group by">
+          <select
+            value={query.groupBy?.field ?? ""}
+            onChange={(event) => {
+              const field = event.target.value;
+              const type = columns.find((column) => column.name === field)?.type ?? "";
+              setQuery({
+                ...query,
+                groupBy: field ? { field, ...(isDate(type) ? { grain: "month" as Grain } : {}) } : null,
+                measures: field && isDate(type) ? query.measures : query.measures.map((measure) => ({ ...measure, compare: undefined })),
+              });
+            }}
+          >
+            <option value="">Nothing (one total)</option>
+            {columns.map((column) => (
+              <option key={column.name} value={column.name}>
+                {column.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {isDate(groupType) ? (
+          <Field label="By">
+            <select value={query.groupBy?.grain ?? "month"} onChange={(event) => setQuery({ ...query, groupBy: { field: query.groupBy!.field, grain: event.target.value as Grain } })}>
+              {GRAINS.map((grain) => (
+                <option key={grain.value} value={grain.value}>
+                  {grain.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+        <Field label="Date range applies to" hint="The dashboard's From and To.">
+          <select value={query.dateField ?? ""} onChange={(event) => setQuery({ ...query, dateField: event.target.value || null })}>
+            <option value="">No date</option>
+            {columns
+              .filter((column) => isDate(column.type))
+              .map((column) => (
+                <option key={column.name} value={column.name}>
+                  {column.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+        <Field label="Order by">
+          <select
+            value={`${query.sort.by}-${query.sort.direction}`}
+            onChange={(event) => {
+              const [by, direction] = event.target.value.split("-") as ["category" | "value", "asc" | "desc"];
+              setQuery({ ...query, sort: { by, direction } });
+            }}
+          >
+            <option value="category-asc">Group, A to Z / oldest first</option>
+            <option value="category-desc">Group, Z to A / newest first</option>
+            <option value="value-desc">First value, largest first</option>
+            <option value="value-asc">First value, smallest first</option>
+          </select>
+        </Field>
+        <Field label="Top" hint="Blank for all.">
+          <input
+            inputMode="numeric"
+            value={query.limit ?? ""}
+            onChange={(event) => setQuery({ ...query, limit: event.target.value ? Number(event.target.value.replace(/\D/g, "")) || null : null })}
+          />
+        </Field>
+      </div>
+
+      <h3 className={styles.subheading}>Values</h3>
+      {query.measures.map((measure, index) => (
+        <div key={index} className={styles.measureRow}>
+          <input aria-label={`Value ${index + 1} label`} value={measure.label} maxLength={80} onChange={(event) => setMeasure(index, { label: event.target.value })} />
+          <select aria-label={`Value ${index + 1} how`} value={measure.aggregate} onChange={(event) => setMeasure(index, { aggregate: event.target.value as Aggregate })}>
+            {AGGREGATES.map((entry) => (
+              <option key={entry.value} value={entry.value}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+          {measure.aggregate !== "count" ? (
+            <select aria-label={`Value ${index + 1} of`} value={measure.field ?? ""} onChange={(event) => setMeasure(index, { field: event.target.value })}>
+              <option value="">Choose a column</option>
+              {(["sum", "avg"].includes(measure.aggregate) ? numbers : columns).map((column) => (
+                <option key={column.name} value={column.name}>
+                  {column.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {["sum", "avg"].includes(measure.aggregate) ? (
+            <select aria-label={`Value ${index + 1} times`} value={measure.times ?? ""} onChange={(event) => setMeasure(index, { times: event.target.value || undefined })}>
+              <option value="">× nothing</option>
+              {numbers.map((column) => (
+                <option key={column.name} value={column.name}>
+                  × {column.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {query.groupBy?.grain ? (
+            <label className={ui.checkbox}>
+              <input
+                type="checkbox"
+                checked={measure.compare === "previous_year"}
+                onChange={(event) => setMeasure(index, { compare: event.target.checked ? "previous_year" : undefined })}
+              />{" "}
+              and last year
+            </label>
+          ) : null}
+          <Button size="small" variant="danger" disabled={query.measures.length === 1} onClick={() => setQuery({ ...query, measures: query.measures.filter((_m, at) => at !== index) })}>
+            Remove
+          </Button>
+        </div>
+      ))}
+      <div className={styles.addRow}>
+        <Button
+          size="small"
+          variant="secondary"
+          disabled={query.measures.length >= 6}
+          onClick={() => setQuery({ ...query, measures: [...query.measures, { label: "Rows", aggregate: "count" }] })}
+        >
+          Add a value
+        </Button>
+      </div>
+
+      <h3 className={styles.subheading}>Only include rows where</h3>
+      {query.filters.map((filter, index) => (
+        <div key={index} className={styles.measureRow}>
+          <select aria-label={`Filter ${index + 1} column`} value={filter.field} onChange={(event) => setFilter(index, { field: event.target.value })}>
+            {columns.map((column) => (
+              <option key={column.name} value={column.name}>
+                {column.name}
+              </option>
+            ))}
+          </select>
+          <select aria-label={`Filter ${index + 1} test`} value={filter.op} onChange={(event) => setFilter(index, { op: event.target.value as FilterOp })}>
+            {OPS.map((entry) => (
+              <option key={entry.value} value={entry.value}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+          <input
+            aria-label={`Filter ${index + 1} value`}
+            type={isDate(columns.find((column) => column.name === filter.field)?.type ?? "") ? "date" : "text"}
+            value={String(filter.value)}
+            onChange={(event) => setFilter(index, { value: event.target.value })}
+          />
+          <Button size="small" variant="danger" onClick={() => setQuery({ ...query, filters: query.filters.filter((_f, at) => at !== index) })}>
+            Remove
+          </Button>
+        </div>
+      ))}
+      <div className={styles.addRow}>
+        <Button
+          size="small"
+          variant="secondary"
+          disabled={!columns.length}
+          onClick={() => setQuery({ ...query, filters: [...query.filters, { field: columns[0].name, op: "eq", value: "" }] })}
+        >
+          Add a filter
+        </Button>
+      </div>
+
+      <h3 className={styles.subheading}>
+        Preview {preview?.result?.truncated ? <Badge tone="amber">first 5,000 rows</Badge> : null}
+      </h3>
+      <div className={styles.preview}>
+        {!preview ? (
+          <p className={ui.muted}>Working it out…</p>
+        ) : preview.error ? (
+          <Notice tone="error">{preview.error}</Notice>
+        ) : (
+          <TileResult tile={{ title: title || "Preview", visual }} result={preview.result!} />
+        )}
+      </div>
+
+      <div className={ui.rowButtons}>
+        <Button
+          onClick={() =>
+            onSave({
+              id: tile?.id ?? `t${Date.now().toString(36)}`,
+              title: title.trim() || query.measures[0]?.label || "Tile",
+              visual,
+              width,
+              query: { ...query, filters: query.filters.filter((filter) => String(filter.value).trim() !== "") },
+            })
+          }
+        >
+          {tile ? "Save tile" : "Add tile"}
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </Card>
+  );
+}
