@@ -52,7 +52,7 @@ namespace Tohyee.Tray
             // As big as it's designed for, but never bigger than the screen.
             var screen = Screen.PrimaryScreen.WorkingArea;
             ClientSize = new Size(Math.Min(Theme.S(1120), screen.Width - 40), Math.Min(Theme.S(760), screen.Height - 60));
-            MinimumSize = new Size(Math.Min(Theme.S(900), screen.Width - 40), Math.Min(Theme.S(600), screen.Height - 60));
+            MinimumSize = new Size(Math.Min(Theme.S(900), screen.Width - 40), Math.Min(Theme.S(640), screen.Height - 60));
             StartPosition = FormStartPosition.CenterScreen;
             ShowInTaskbar = true;
             if (Theme.AppIcon != null) Icon = Theme.AppIcon;

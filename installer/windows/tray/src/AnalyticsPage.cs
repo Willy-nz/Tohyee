@@ -19,6 +19,9 @@ namespace Tohyee.Tray
             BackColor = Theme.Bg;
             _page = Ui.Page("Analytics", "The folder on this computer each organisation's analytics reads CSV files from. Tohyee only reads them; it never changes or deletes files there.");
             var note = Ui.Card(_page, "Analytics folders", "Use a full path. The Tohyee service needs to be able to read it. Leave blank for none.");
+            var buttons = Ui.Row();
+            buttons.Controls.Add(Ui.Btn("Refresh", async (s, e) => await Reload()));
+            note.Body.Controls.Add(buttons);
             note.Body.Controls.Add(_message);
             Controls.Add(_page);
             Load += async (s, e) => await Reload();
@@ -26,6 +29,7 @@ namespace Tohyee.Tray
 
         private async Task Reload()
         {
+            _message.Text = "";
             await Ui.Busy(this, _message, async () =>
             {
                 var result = await _api.Get("/api/admin/analytics-folders");
