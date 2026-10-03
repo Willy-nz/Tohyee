@@ -41,6 +41,9 @@ sidebar with the logo and the pages, and each page a column of cards.
 - **Backups**: nightly backups, the backup key, each organisation's last
   backup, and the backup files (restore as a copy). Until a saved copy of the
   key has been checked, the window opens on Backups with a reminder.
+- **Analytics**: each organisation's CSV folder on this computer, whether
+  Tohyee can read it, and Browse and Save for each organisation. Blank clears
+  the folder. Tohyee only reads files there; it never changes or deletes them.
 - **Remote access**: three ways to use Tohyee from anywhere, one at a time: a
   Tohyee address (recommended for most), your own domain (Cloudflare), and
   Tailscale Funnel. See below.

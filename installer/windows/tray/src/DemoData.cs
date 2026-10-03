@@ -39,7 +39,7 @@ namespace Tohyee.Tray
                 Pump();
                 Save(form, folder, "0-sign-in");
                 form.ShowSettings();
-                foreach (var page in new[] { "home", "organisations", "users", "backups", "email", "stats", "updates" })
+                foreach (var page in new[] { "home", "organisations", "users", "backups", "analytics", "email", "stats", "updates" })
                 {
                     form.Navigate(page);
                     if (Transitions)
@@ -113,7 +113,7 @@ namespace Tohyee.Tray
 
         private static string Name(string page)
         {
-            var order = new[] { "home", "organisations", "users", "phone", "backups", "email", "stats", "updates" };
+            var order = new[] { "home", "organisations", "users", "phone", "backups", "analytics", "email", "stats", "updates" };
             return (Array.IndexOf(order, page) + 1) + "-" + page;
         }
 
@@ -231,6 +231,12 @@ namespace Tohyee.Tray
             if (path.StartsWith("/api/admin/email"))
             {
                 return Parse("{'email':{'configured':true,'host':'smtp.gmail.com','port':465,'username':'tohyee.alerts@gmail.com','hasPassword':true,'fromAddress':'tohyee.alerts@gmail.com','fromName':'Tohyee','secretsAvailable':true,'updatedAt':'" + Ago(24 * 30) + "'}}");
+            }
+            if (path == "/api/admin/analytics-folders")
+            {
+                return Parse("{'folders':[" +
+                    "{'organisationId':'harbour-bowls','displayName':'Harbour Bowling Club','folder':'D:\\\\Reports\\\\Harbour','readable':true}," +
+                    "{'organisationId':'kowhai-kindy','displayName':'Kōwhai Kindergarten Inc','folder':null,'readable':false}]}");
             }
             if (path.StartsWith("/api/admin/remote-access/tohyee-address") && method == "GET")
             {

@@ -28,7 +28,7 @@ namespace Tohyee.Tray
     /// <summary>
     /// The server settings window. Signing in as a server admin (with two-step
     /// sign-in) comes first; then a sidebar with Home, Organisations, Users,
-    /// Remote access, Backups, Email, Stats and Updates. Nothing here touches the books.
+    /// Remote access, Backups, Analytics, Email, Stats and Updates. Nothing here touches the books.
     /// </summary>
     internal sealed class ServerSettingsForm : Form
     {
@@ -52,7 +52,7 @@ namespace Tohyee.Tray
             // As big as it's designed for, but never bigger than the screen.
             var screen = Screen.PrimaryScreen.WorkingArea;
             ClientSize = new Size(Math.Min(Theme.S(1120), screen.Width - 40), Math.Min(Theme.S(760), screen.Height - 60));
-            MinimumSize = new Size(Math.Min(Theme.S(900), screen.Width - 40), Math.Min(Theme.S(600), screen.Height - 60));
+            MinimumSize = new Size(Math.Min(Theme.S(900), screen.Width - 40), Math.Min(Theme.S(640), screen.Height - 60));
             StartPosition = FormStartPosition.CenterScreen;
             ShowInTaskbar = true;
             if (Theme.AppIcon != null) Icon = Theme.AppIcon;
@@ -140,6 +140,7 @@ namespace Tohyee.Tray
                 case "users": return new UsersPage(_app.Api);
                 case "phone": return new RemoteAccessPage(_app.Api, _app.Settings, _app.Tailscale, _app.Cloudflare);
                 case "backups": return _backupsPage = new BackupsPage(_app.Api);
+                case "analytics": return new AnalyticsPage(_app.Api);
                 case "email": return new EmailPage(_app.Api);
                 case "updates": return new UpdatesPage(_app);
                 case "stats": return new StatsPage(_app.Api);
@@ -270,6 +271,7 @@ namespace Tohyee.Tray
             Add(navigate, "users", "Users", Glyph.Users);
             Add(navigate, "phone", "Remote access", Glyph.Phone);
             Add(navigate, "backups", "Backups", Glyph.Backups);
+            Add(navigate, "analytics", "Analytics", Glyph.Stats);
             Add(navigate, "email", "Email", Glyph.Email);
             Add(navigate, "stats", "Stats", Glyph.Stats);
             Add(navigate, "updates", "Updates", Glyph.Updates);
