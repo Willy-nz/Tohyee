@@ -12776,3 +12776,87 @@ under each.
 4. **Month-end reminder: yes, on the home page** (decision 191; HL61).
    Asked: "Should Tohyee remind (or offer) a posting at each month end or
    on Period close?"
+
+## Analytics: Tohyee's own books and CRM (examples AB1-AB10, proposed 3 Oct 2026, not yet approved by Jess)
+
+Step 2 of [ANALYTICS-REVIEW.md](ANALYTICS-REVIEW.md) (decision 359): a fixed,
+documented set of tables copied from the organisation's own database into its
+analytics file, so dashboards can show the books beside CSV data. Nothing is
+posted or changed; the figures must agree with Tohyee's own reports.
+
+**Proposed rules:**
+
+- The copy is taken in one read-only transaction, so every table is from the
+  same moment. It's refreshed nightly with the CSV sources (after 04:00) and
+  by "Refresh now"; between refreshes the tables don't change, and the Data
+  sources page shows when they were copied.
+- Table names start with `tohyee_` and stay the same between versions (new
+  columns can be added; none are renamed or removed). CSV sources can't use
+  the `tohyee_` prefix.
+- Money is exact (`DECIMAL(18,2)`), in the organisation's currency (foreign
+  documents at their base amounts, as the ledger has them), with the
+  document's own currency and amount alongside.
+- **`tohyee_ledger_lines`**: one row per posted journal line, with the
+  posting date, journal number, source (invoice, bill, bank, manual journal
+  and so on), account code, name, class and type, contact, description,
+  tracking (one column per tracking category), debit, credit, `amount`
+  (debit - credit) and `natural_amount` (the amount as the reports show it:
+  income, liability and equity accounts with credits positive; asset and
+  expense accounts with debits positive).
+- **`tohyee_invoices`, `tohyee_invoice_lines`, `tohyee_bills`,
+  `tohyee_bill_lines`**: approved and voided documents (never drafts), with
+  status, dates, contact, net, GST and total, and each line's item, account,
+  tax code and tracking.
+- **`tohyee_contacts`** (with address, region and custom fields as columns)
+  and **`tohyee_items`**.
+- With the CRM on: **`tohyee_crm_companies`**, **`tohyee_crm_opportunities`**
+  (stage, amount, expected close, owner, won/lost) and
+  **`tohyee_crm_activities`**.
+
+Setup: the journals under "Custom reports" (CR1): owner funds 5,000.00 on
+1 Mar 2026; sales of 500.00 (20 Mar), 1,000.00 (10 Apr), 1,500.00 (12 May)
+and 1,200.00 (8 Jun); accounting fees 100.00 (15 Apr) and 250.00 (20 Jun);
+cost of goods sold 400.00 (13 May) and 300.00 (9 Jun); interest 20.00
+(30 Jun). All through 1000 Business bank account.
+
+- **AB1** After a refresh, `tohyee_ledger_lines` has **20** rows (10
+  journals, 2 lines each), and the sum of `amount` is **0.00**.
+- **AB2** Revenue for June 2026 (sum of `natural_amount` for revenue
+  accounts, posting dates in June) is **1,200.00**, as on the profit and
+  loss (CR1).
+- **AB3** Gross margin for June: revenue 1,200.00 less cost of sales 300.00
+  = **900.00**, which is **75.0%** of revenue.
+- **AB4** Revenue by month: Mar 2026 **500.00**, Apr **1,000.00**, May
+  **1,500.00**, Jun **1,200.00**.
+- **AB5** The balance of 1000 Business bank account at 30 Jun 2026 (sum of
+  `amount`, posting dates up to then) is **8,170.00**, as on the balance
+  sheet.
+- **AB6** Invoice I1 (2 x 50.00 at 15% exclusive): `tohyee_invoices` has net
+  **100.00**, GST **15.00**, total **115.00**, status approved. A draft
+  invoice isn't copied. A voided invoice is copied with status voided and
+  its void date; its ledger lines (the posting and the reversal) are both in
+  `tohyee_ledger_lines`, so they net to 0.00.
+- **AB7** A USD invoice for USD 100.00 at 0.6 (NZD 166.67): net in the
+  organisation's currency **166.67**, with currency **USD** and amount
+  **100.00** alongside.
+- **AB8** Posting a new sales journal of 300.00 on 1 Jul 2026 doesn't change
+  the copied tables until the next refresh; after it, revenue for July is
+  **300.00**.
+- **AB9** With the CRM off, no CRM tables are copied (and any from before
+  are removed). With it on, an opportunity of 5,000.00 in stage Proposal is
+  copied with its stage, amount and expected close date.
+- **AB10** A dashboard tile can combine a CSV table with `tohyee_contacts`
+  by a matching column (e.g. a CSV customer name and the contact's name).
+
+**Questions for Jess:**
+
+1. Is `natural_amount` (income and costs both positive, as the reports show
+   them) the right way round for building charts, alongside the plain
+   debit-minus-credit `amount`?
+2. Payroll: pay run journals post wages to the ledger. Should their ledger
+   lines be copied with the employee names left out (description "Pay
+   run", totals by account only), since only people with payroll access
+   can see pay details in Tohyee? (Proposed: yes.)
+3. Anything else from the books you'd want in dashboards at work (for
+   example budgets, quotes, purchase orders, stock)?
+
