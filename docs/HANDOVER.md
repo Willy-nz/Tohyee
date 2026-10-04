@@ -138,15 +138,10 @@ PREP8, WB7, XP14 and the HL section.
 
 - **Latest release: v0.5.0** (3 Oct 2026), published with the Windows
   installer, the Docker zip and the Linux bundle.
-- **main is ahead of the release** and already says version **0.3.1** in
-  `package.json`. Merged since 0.3.0, not released yet:
-  - normal GST on foreign-currency invoices, bills and credit notes
-    (#56, examples MC71-MC83)
-  - exports: contact country, Settings › Exports, the export flag
-    (#57, EX1-EX15)
-  - default sales and purchase tax codes on contacts (#58, EX16-EX25)
-  - tax codes "Available on" sales, purchases or both (#59, TAO1-TAO12)
-- Jess decided **not to release 0.3.1 yet** ("lots to do still").
+- Since v0.5.0, not released yet:
+  - UI step 1: simpler top bar, page dashboards and the new Home (#117)
+  - search everything from Ctrl K (#118)
+- In progress: the analytics work (#119-#121, PR #125).
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
