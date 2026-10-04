@@ -5,6 +5,7 @@ import { deflateRawSync, crc32 } from "node:zlib";
 import ExcelJS from "exceljs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  analyticsWorkFolder,
   closeAnalytics,
   inspectSourceFile,
   inspectXlsx,
@@ -123,14 +124,14 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="${MAIN}
   `<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
   `<xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs></styleSheet>`;
 
-type RawSheet = { name: string; rows: Array<Cell[] | { r: number; cells: Cell[] }>; part?: string; chart?: boolean };
+type RawSheet = { name: string; rows: Array<Cell[] | { r: number; cells: Cell[] }>; part?: string; chart?: boolean; state?: "hidden" | "veryHidden" };
 
 /** A workbook's parts in Excel's own order: sheets before styles and shared strings. */
 function workbookEntries(sheets: RawSheet[], options: { date1904?: string; absoluteTargets?: boolean; sharedStrings?: string[] } = {}): RawEntry[] {
   const parts = sheets.map((sheet, index) => sheet.part ?? (sheet.chart ? `xl/chartsheets/sheet${index + 1}.xml` : `xl/worksheets/sheet${index + 1}.xml`));
   const workbook = `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="${MAIN}" xmlns:r="${REL}">` +
     `<workbookPr${options.date1904 ? ` date1904="${options.date1904}"` : ""}/><sheets>` +
-    sheets.map((sheet, index) => `<sheet name="${escape(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join("") +
+    sheets.map((sheet, index) => `<sheet name="${escape(sheet.name)}" sheetId="${index + 1}"${sheet.state ? ` state="${sheet.state}"` : ""} r:id="rId${index + 1}"/>`).join("") +
     `</sheets></workbook>`;
   const rels = `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
     sheets.map((sheet, index) => {
@@ -267,8 +268,28 @@ describe("loading Excel workbooks (decision 376)", () => {
     expect(await queryAnalytics(ORG, "select data_type from information_schema.columns where table_name = 'money' and column_name = 'amount'"))
       .toEqual([{ data_type: "DECIMAL(18,2)" }]);
     expect(await queryAnalytics(ORG, "select sum(amount)::varchar as total from money where day <= '2026-01-03'")).toEqual([{ total: "0.60" }]);
-    // The scratch copy of the sheet is gone.
-    expect(fs.readdirSync(path.join(root, "data")).filter((name) => name.startsWith(".xlsx-"))).toEqual([]);
+    // The scratch copy of the sheet was made in the organisation's own work folder (decision 377), and is gone.
+    expect(fs.readdirSync(analyticsWorkFolder(ORG)).filter((name) => name.startsWith("xlsx-"))).toEqual([]);
+    // Nothing else in the shared analytics folder (its own file, a write-ahead log, its work folder).
+    expect(fs.readdirSync(path.join(root, "data")).filter((name) => !name.startsWith(`${ORG}.`))).toEqual([]);
+  });
+
+  it("clears a scratch copy left behind by a crash, but not one still in use", async () => {
+    const work = analyticsWorkFolder(ORG);
+    fs.mkdirSync(work, { recursive: true });
+    const stale = path.join(work, "xlsx-stale");
+    const fresh = path.join(work, "xlsx-fresh");
+    fs.mkdirSync(stale);
+    fs.mkdirSync(fresh);
+    fs.writeFileSync(path.join(stale, "sheet.csv"), "left,behind\n");
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    fs.utimesSync(stale, twoHoursAgo, twoHoursAgo);
+    const file = writeFile("sweep.xlsx", zip(workbookEntries([{ name: "Sweep", rows: [["Day", "Customer", "Amount"], [{ v: 46023, style: 1 }, "Sweep", 1]] }])));
+    await loadXlsx({ organisationId: ORG, sourceFolder: sources, file, table: "sweep", columns: SALES });
+    expect(await queryAnalytics(ORG, "select customer from sweep")).toEqual([{ customer: "Sweep" }]);
+    expect(fs.existsSync(stale)).toBe(false);
+    expect(fs.existsSync(fresh)).toBe(true);
+    fs.rmSync(fresh, { recursive: true, force: true });
   });
 
   it("keeps formula results of 0 and FALSE (ExcelJS drops them from cell.value)", async () => {
@@ -319,6 +340,18 @@ describe("loading Excel workbooks (decision 376)", () => {
     expect(await queryAnalytics(ORG, "select customer from months")).toEqual([{ customer: "Feb" }]);
     await expect(loadXlsx({ organisationId: ORG, sourceFolder: sources, file, table: "months", columns: SALES, sheetName: "March" }))
       .rejects.toThrow('The sheet "March" wasn\'t found');
+
+    // Hidden sheets are still offered, marked hidden (Jess, Oct 2026), but aren't the default.
+    writeFile("hidden-tabs.xlsx", zip(workbookEntries([
+      { name: "Lookup", state: "hidden", rows: [["Code"], ["A"]] },
+      { name: "Sales", rows: [["Day", "Customer", "Amount"], [{ v: 46023, style: 1 }, "Shown", 1]] },
+      { name: "Workings", state: "veryHidden", rows: [["Note"], ["x"]] },
+    ])));
+    const hiddenPreview = await inspectSourceFile(sources, "hidden-tabs.xlsx");
+    expect(hiddenPreview.sheets).toEqual(["Lookup", "Sales", "Workings"]);
+    expect(hiddenPreview.hiddenSheets).toEqual(["Lookup", "Workings"]);
+    expect(hiddenPreview.sheetName).toBe("Sales");
+    expect((await inspectXlsx(sources, "hidden-tabs.xlsx", "Lookup")).rows).toEqual([["A"]]);
 
     // Same errors as a CSV: a bad value, a missing column, a value with no heading.
     writeFile("months.xlsx", book([["Day", "Customer", "Amount"], ["not a date", "Feb", 20]]));

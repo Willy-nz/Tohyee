@@ -10,7 +10,8 @@ import * as sourcesRoute from "@/app/api/analytics/sources/route";
 import * as sourceRoute from "@/app/api/analytics/sources/[sourceId]/route";
 import * as loadRoute from "@/app/api/analytics/sources/[sourceId]/load/route";
 import * as settingsRoute from "@/app/api/organisations/[organisationId]/settings/route";
-import { closeAnalytics, queryAnalytics } from "@/lib/analytics/engine";
+import { analyticsFilePath, closeAnalytics, queryAnalytics } from "@/lib/analytics/engine";
+import { analyticsWorkFolder } from "@/lib/analytics/paths";
 import { loadDue, runDueLoads } from "@/lib/analytics/scheduler";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { coreQuery } from "@/lib/db/transactions";
@@ -333,6 +334,12 @@ describeWithDatabase("analytics sources and loads", () => {
     await expect(queryAnalytics(ORG, "install httpfs")).rejects.toThrow();
     // Another organisation has no folder, so it can read none.
     await expect(queryAnalytics(OTHER, `select * from read_csv('${path.join(folder, "exports", "sales.csv").replaceAll("'", "''")}')`)).rejects.toThrow(/Permission Error|Cannot access/);
+    // The analytics folder holds every organisation's file: another
+    // organisation can't attach or read this one's.
+    const ownFile = analyticsFilePath(ORG).replaceAll("'", "''");
+    await expect(queryAnalytics(OTHER, `attach '${ownFile}' as theirs (read_only)`)).rejects.toThrow(/Permission Error|Cannot access/);
+    await expect(queryAnalytics(OTHER, `select * from read_blob('${ownFile}')`)).rejects.toThrow(/Permission Error|Cannot access/);
+    expect(await queryAnalytics(OTHER, "select current_setting('temp_directory') as dir")).toEqual([{ dir: path.join(analyticsWorkFolder(OTHER), "tmp") }]);
     await closeAnalytics(OTHER);
   });
 });

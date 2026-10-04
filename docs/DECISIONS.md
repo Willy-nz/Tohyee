@@ -2591,9 +2591,10 @@ approved 3 Oct 2026.
 
 376. **Analytics loads Excel workbooks (.xlsx), and report emails save them**
      (issue #121; tenant migration 0090).
-     - **One sheet per source**, chosen at setup (the first tab by default)
+     - **One sheet per source**, chosen at setup (the first visible tab by default)
        and stored on the source (`analytics_sources.sheet_name`). Chart
-       sheets aren't offered. Setup shows the sheet names and the first rows,
+       sheets aren't offered. Hidden sheets are offered, marked "(hidden)",
+       but the default is the first visible tab (Jess, Oct 2026). Setup shows the sheet names and the first rows,
        as for a CSV; the preview reads only the first 20,481 rows.
      - **Same path as a CSV:** the sheet is copied out as CSV text and loaded
        by the CSV loader, so every value is text first and then cast to the
@@ -2601,8 +2602,10 @@ approved 3 Oct 2026.
        only when the whole sheet loads, with the same errors. The first row
        with a value holds the headings; empty rows are skipped; a value to
        the right of the last heading fails the load (as an extra column in a
-       CSV does). The copy sits in the analytics data folder, which DuckDB
-       may read (decision 377), and is deleted afterwards.
+       CSV does). The copy sits in the organisation's own work folder
+       (`<id>.work`, the only part of the analytics folder its DuckDB may
+       read, decision 377) and is deleted afterwards; a copy left by a crash
+       is cleared on the next load once it's an hour old.
      - **Values as written:** a number is written as the shortest text that
        reads back as the same number, then rounded by the column type, so
        0.1 + 0.2 (stored as 0.30000000000000004) loads as 0.30 and 2.675 as
@@ -2610,7 +2613,8 @@ approved 3 Oct 2026.
        0.15). Date-formatted cells, including formula results, load as dates
        or date-times in the 1900 or 1904 date system. Formulas load Excel's
        last worked-out result; an error result loads as text (`#ERROR!`,
-       `#DIV/0!`) so a number column fails rather than guessing. Merged cells
+       `#DIV/0!`) so a number column fails rather than guessing (Jess
+       confirmed both, Oct 2026). Merged cells
        have their value in the top-left cell only.
      - **Read safely:** ExcelJS (MIT, already used for report exports) reads
        the sheet as a stream. Workbooks are capped at 50 MB. Every ZIP entry
@@ -2628,7 +2632,9 @@ approved 3 Oct 2026.
 ### Analytics: what DuckDB may touch (decision 377)
 
 377. **Each organisation's analytics database may only read its own source
-     folder and its own data folder**, and that can't be switched off
+     folder and its own work folder** (`<analytics folder>/<id>.work`, which
+     also holds DuckDB's temporary files), never the analytics folder as a
+     whole, because that holds every organisation's file. That can't be switched off
      afterwards (`allowed_directories`, `enable_external_access = false`,
      `lock_configuration`). File checks use a throwaway database limited the
      same way. Tohyee builds all of its own SQL, so this is defence in depth.
@@ -2638,3 +2644,6 @@ approved 3 Oct 2026.
        web), the database is reopened with the new folder the next time
        it's used.
      - Shaping previews stop after 10 seconds.
+     - The first version allowed the whole analytics folder, which would have
+       let one organisation's query attach another's file; fixed before
+       release, with a test.

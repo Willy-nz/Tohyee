@@ -4,10 +4,11 @@ import path from "node:path";
 import type { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import { ValidationError } from "@/lib/errors";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
-import { analyticsFilePath } from "@/lib/analytics/paths";
+import { analyticsFilePath, analyticsWorkFolder } from "@/lib/analytics/paths";
 import {
   checkXlsxArchive,
   chooseSheet,
+  defaultSheet,
   MAX_XLSX_FILE_BYTES,
   writeXlsxSheetCsv,
   XLSX_LOAD_LIMITS,
@@ -15,7 +16,7 @@ import {
   xlsxStructure,
 } from "@/lib/analytics/xlsx";
 
-export { analyticsFilePath, analyticsFolder } from "@/lib/analytics/paths";
+export { analyticsFilePath, analyticsFolder, analyticsWorkFolder } from "@/lib/analytics/paths";
 
 /**
  * The analytics engine (decisions 353-357): one DuckDB file per organisation
@@ -78,9 +79,13 @@ async function duckdb(): Promise<typeof import("@duckdb/node-api")> {
 type Opened = { instance: Promise<DuckDBInstance>; folder: string | null };
 const instances = new Map<string, Opened>();
 
-/** The folders DuckDB may read and write: the organisation's source folder and its own data folder. */
-function allowedFolders(file: string, folder: string | null): string[] {
-  const folders = [path.dirname(file)];
+/**
+ * The folders DuckDB may read and write: the organisation's source folder and
+ * its own work folder. Not the analytics folder: that holds every
+ * organisation's file. DuckDB opens its own database file regardless.
+ */
+function allowedFolders(work: string, folder: string | null): string[] {
+  const folders = [work];
   if (folder) {
     folders.push(folder);
     try {
@@ -92,18 +97,22 @@ function allowedFolders(file: string, folder: string | null): string[] {
   return [...new Set(folders.map((entry) => (entry.endsWith(path.sep) ? entry : entry + path.sep)))];
 }
 
-async function open(file: string, folder: string | null): Promise<DuckDBInstance> {
+async function open(organisationId: string, file: string, folder: string | null): Promise<DuckDBInstance> {
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  const work = analyticsWorkFolder(organisationId);
+  fs.mkdirSync(work, { recursive: true });
   const { DuckDBInstance } = await duckdb();
   // Extensions are never downloaded at run time (the server may be
   // offline, and it's code from the internet).
   const instance = await DuckDBInstance.create(file, { autoinstall_known_extensions: "false" });
   // Defence in depth (decision 377): DuckDB may only touch this
-  // organisation's source folder and its own data folder, and the setting
-  // can't be changed back, so no query can read other files on the server.
+  // organisation's source folder and its own work folder, and the setting
+  // can't be changed back, so no query can read other files on the server
+  // or another organisation's analytics file.
   const setup = await instance.connect();
   try {
-    const list = allowedFolders(file, folder).map(quoteString).join(", ");
+    await setup.run(`set temp_directory = ${quoteString(path.join(work, "tmp"))}`);
+    const list = allowedFolders(work, folder).map(quoteString).join(", ");
     await setup.run(`set allowed_directories = [${list}]`);
     await setup.run("set enable_external_access = false");
     await setup.run("set lock_configuration = true");
@@ -128,7 +137,7 @@ async function instanceFor(organisationId: string, folderHint?: string): Promise
     instances.delete(file);
     (await current.instance.catch(() => null))?.closeSync();
   }
-  const instance = open(file, folder);
+  const instance = open(organisationId, file, folder);
   instances.set(file, { instance, folder });
   instance.catch(() => {
     if (instances.get(file)?.instance === instance) instances.delete(file);
@@ -311,40 +320,46 @@ export async function inspectXlsx(
   sourceFolder: string,
   fileName: string,
   sheetName?: string,
-): Promise<Awaited<ReturnType<typeof inspectCsv>> & { sheets: string[]; sheetName: string }> {
+): Promise<Awaited<ReturnType<typeof inspectCsv>> & { sheets: string[]; hiddenSheets: string[]; sheetName: string }> {
   const chosen = validateSheetName(sheetName);
   const file = resolveSourceFile(sourceFolder, fileName);
   const { checked, structure } = await openXlsx(sourceFolder, file);
-  const sheet = structure.sheets.find((candidate) => candidate.name === chosen) ?? structure.sheets[0];
+  const sheet = structure.sheets.find((candidate) => candidate.name === chosen) ?? defaultSheet(structure);
   // The scratch CSV is checked by inspectCsv's own throwaway database, limited to this folder.
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), "tohyee-xlsx-"));
   try {
     const csvFile = path.join(folder, "sheet.csv");
     await writeXlsxSheetCsv(file, checked, structure, sheet, csvFile, { maxBytes: MAX_XLSX_CSV_BYTES, maxRows: XLSX_PREVIEW_ROWS });
     const inspected = await inspectCsv(folder, "sheet.csv", ",");
-    return { ...inspected, sheets: structure.sheets.map((candidate) => candidate.name), sheetName: sheet.name };
+    return {
+      ...inspected,
+      sheets: structure.sheets.map((candidate) => candidate.name),
+      hiddenSheets: structure.sheets.filter((candidate) => candidate.hidden).map((candidate) => candidate.name),
+      sheetName: sheet.name,
+    };
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });
   }
 }
 
-/** Temporary sheet copies sit in the analytics data folder, which DuckDB may read (decision 377). */
-function xlsxScratchPrefix(organisationId: string): string {
-  return `.xlsx-${organisationId}-`;
-}
+/**
+ * Temporary sheet copies sit in the organisation's own work folder, the only
+ * part of the analytics folder its DuckDB may read (decision 377).
+ */
+const XLSX_SCRATCH_PREFIX = "xlsx-";
 
-function removeStaleXlsxScratch(organisationId: string, dataFolder: string): void {
+function removeStaleXlsxScratch(workFolder: string): void {
   // Left behind only if the server stopped mid-load.
-  const prefix = xlsxScratchPrefix(organisationId);
+  const prefix = XLSX_SCRATCH_PREFIX;
   let names: string[] = [];
   try {
-    names = fs.readdirSync(dataFolder);
+    names = fs.readdirSync(workFolder);
   } catch {
     return;
   }
   for (const name of names) {
     if (!name.startsWith(prefix)) continue;
-    const full = path.join(dataFolder, name);
+    const full = path.join(workFolder, name);
     try {
       if (Date.now() - fs.statSync(full).mtimeMs > 60 * 60 * 1000) fs.rmSync(full, { recursive: true, force: true });
     } catch {
@@ -370,11 +385,11 @@ export async function loadXlsx(input: {
   validateLoadInput(input);
   const { checked, structure } = await openXlsx(input.sourceFolder, input.file);
   const sheet = chooseSheet(structure, sheetName);
-  const dataFolder = path.dirname(analyticsFilePath(input.organisationId));
+  const workFolder = analyticsWorkFolder(input.organisationId);
   return serialise(input.organisationId, async () => {
-    fs.mkdirSync(dataFolder, { recursive: true });
-    removeStaleXlsxScratch(input.organisationId, dataFolder);
-    const folder = fs.mkdtempSync(path.join(dataFolder, xlsxScratchPrefix(input.organisationId)));
+    fs.mkdirSync(workFolder, { recursive: true });
+    removeStaleXlsxScratch(workFolder);
+    const folder = fs.mkdtempSync(path.join(workFolder, XLSX_SCRATCH_PREFIX));
     try {
       const csvFile = path.join(folder, "sheet.csv");
       await writeXlsxSheetCsv(input.file, checked, structure, sheet, csvFile, { maxBytes: MAX_XLSX_CSV_BYTES });
@@ -395,7 +410,7 @@ export async function inspectSourceFile(
   fileName: string,
   delimiter?: string,
   sheetName?: string,
-): Promise<Awaited<ReturnType<typeof inspectCsv>> & { sheets?: string[]; sheetName?: string }> {
+): Promise<Awaited<ReturnType<typeof inspectCsv>> & { sheets?: string[]; hiddenSheets?: string[]; sheetName?: string }> {
   if (isExcelFileName(fileName)) {
     const file = resolveSourceFile(sourceFolder, fileName);
     validateXlsxFile(sourceFolder, file);

@@ -373,7 +373,7 @@ function SourcesCard({
   );
 }
 
-type Preview = { columns: InspectedColumn[]; rows: string[][]; delimiter: string; sheets?: string[]; sheetName?: string };
+type Preview = { columns: InspectedColumn[]; rows: string[][]; delimiter: string; sheets?: string[]; hiddenSheets?: string[]; sheetName?: string };
 type ColumnChoice = { source: string; name: string; kind: ColumnKind; include: boolean; detected: string; examples: string[] };
 
 function tableNameFor(file: string, taken: string[]): string {
@@ -501,7 +501,11 @@ function SourceSetup({
                 setChoices(null);
               }}
             >
-              {(preview.data?.sheets ?? []).map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}
+              {(preview.data?.sheets ?? []).map((sheet) => (
+                <option key={sheet} value={sheet}>
+                  {preview.data?.hiddenSheets?.includes(sheet) ? `${sheet} (hidden)` : sheet}
+                </option>
+              ))}
             </select>
           </Field>
         ) : (

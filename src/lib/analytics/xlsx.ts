@@ -281,7 +281,8 @@ async function workbookReader(input: Readable): Promise<ExcelJsWorkbookReader> {
   });
 }
 
-export type XlsxSheet = { name: string; part: string };
+/** A worksheet; `hidden` when Excel hides its tab (decision 376: still offered, marked hidden). */
+export type XlsxSheet = { name: string; part: string; hidden: boolean };
 export type XlsxStructure = { sheets: XlsxSheet[]; date1904: boolean; sharedStrings: string | null; styles: string | null };
 
 const RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/";
@@ -303,7 +304,7 @@ export async function xlsxStructure(checked: CheckedXlsx): Promise<XlsxStructure
     throw new ValidationError(`That Excel workbook couldn't be read: ${error instanceof Error ? error.message : String(error)}`);
   }
   const parsed = reader as unknown as {
-    model?: { sheets?: Array<{ name?: string; rId?: string }> };
+    model?: { sheets?: Array<{ name?: string; rId?: string; state?: string }> };
     workbookRels?: Array<{ Id?: string; Type?: string; Target?: string; TargetMode?: string }>;
     properties?: { model?: { date1904?: boolean } };
   };
@@ -319,7 +320,7 @@ export async function xlsxStructure(checked: CheckedXlsx): Promise<XlsxStructure
     // Chart sheets and dialog sheets have no rows to load.
     if (!rel || rel.Type !== RELATIONSHIP + "worksheet" || typeof sheet.name !== "string") continue;
     const part = partFromTarget(rel.Target!);
-    if (checked.entries.has(part)) sheets.push({ name: sheet.name, part });
+    if (checked.entries.has(part)) sheets.push({ name: sheet.name, part, hidden: sheet.state === "hidden" || sheet.state === "veryHidden" });
   }
   if (sheets.length === 0) throw new ValidationError("That Excel workbook has no sheets.");
   // Excel writes date1904="1"; other programs may write "true".
@@ -422,9 +423,14 @@ function syntheticWorkbook(date1904: boolean): string {
     `<workbookPr${date1904 ? ' date1904="1"' : ""}/><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>`;
 }
 
-/** Chooses a sheet by name, or the first (tab order) when none is given. */
+/** The sheet used when none is chosen: the first visible tab, or the first tab if all are hidden. */
+export function defaultSheet(structure: XlsxStructure): XlsxSheet {
+  return structure.sheets.find((sheet) => !sheet.hidden) ?? structure.sheets[0];
+}
+
+/** Chooses a sheet by name, or the first visible one (tab order) when none is given. */
 export function chooseSheet(structure: XlsxStructure, sheetName?: string): XlsxSheet {
-  if (!sheetName) return structure.sheets[0];
+  if (!sheetName) return defaultSheet(structure);
   const sheet = structure.sheets.find((candidate) => candidate.name === sheetName);
   if (!sheet) throw new ValidationError(`The sheet "${sheetName}" wasn't found in this Excel workbook.`);
   return sheet;
