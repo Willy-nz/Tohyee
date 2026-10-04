@@ -142,6 +142,7 @@ function PinnedTileResult({ tile, result }: { tile: Tile; result: QueryResult })
       })),
       valueFormat: measures[0]?.format === "money" ? "money" : "number",
       currency: "NZD",
+      compact: true,
     };
   }, [chart, tile.visual, measures]);
 

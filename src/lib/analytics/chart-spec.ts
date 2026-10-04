@@ -11,6 +11,8 @@ export type ChartSpec = {
   valueFormat: "money" | "number" | "percent";
   currency?: string;
   title?: string;
+  /** A small chart (a pinned tile): tight margins so the plot isn't squeezed out. */
+  compact?: boolean;
 };
 
 export type ChartTheme = {
@@ -109,7 +111,7 @@ function numberAxis(format: (value: number | string) => string, theme: ChartThem
   return {
     type: "value" as const,
     position,
-    axisLabel: { color: theme.mutedText, formatter: format },
+    axisLabel: { color: theme.mutedText, formatter: format, hideOverlap: true },
     axisLine: { lineStyle: { color: theme.grid } },
     axisTick: { show: false },
     splitLine: { lineStyle: { color: theme.grid } },
@@ -131,6 +133,8 @@ export function toEChartsOption(spec: ChartSpec, rows: ChartRow[], theme: ChartT
     textStyle: { color: theme.text },
     ...(spec.title ? { title: { text: spec.title, textStyle: { color: theme.text } } } : {}),
     legend: { show: spec.series.length > 1, textStyle: { color: theme.mutedText } },
+    // ECharts leaves 60px above and below the plot by default, which is all of a small chart.
+    ...(spec.compact ? { grid: { top: spec.series.length > 1 ? 32 : 8, bottom: 4, left: 4, right: 12 } } : {}),
     tooltip: {
       trigger: spec.kind === "pie" || spec.kind === "donut" ? "item" as const : "axis" as const,
       valueFormatter: (value: unknown) =>

@@ -138,10 +138,44 @@ PREP8, WB7, XP14 and the HL section.
 
 - **Latest release: v0.5.0** (3 Oct 2026), published with the Windows
   installer, the Docker zip and the Linux bundle.
-- Since v0.5.0, not released yet:
+- **0.6.0 is ready to publish** (4 Oct 2026): `package.json` says 0.6.0 on
+  main. Jess to publish the `v0.6.0` release on main from her Windows
+  desktop Chrome (the tag can't be pushed from a Claude cloud session); the
+  release notes are below. In it:
   - UI step 1: simpler top bar, page dashboards and the new Home (#117)
   - search everything from Ctrl K (#118)
-- In progress: the analytics work (#119-#121, PR #125).
+  - DuckDB limited to each organisation's own folders, and a 10-second
+    limit on shaping previews (#125, #128; decision 377)
+  - pinned Analytics tiles on Home (#122; decisions 374 and 378)
+  - pivot tables on dashboards, and a 30-second limit on every Analytics
+    question (#123; decisions 375 and 379)
+  - Excel (.xlsx) sources and report-email attachments (#124; decision 376,
+    tenant migration 0090)
+- Visual check before 0.6.0 (4 Oct 2026, built app in Chromium, light and
+  dark, desktop and phone width): Home with two pinned tiles, the dashboard
+  with a pivot and its drill-down, Customise, and an Excel source's sheet
+  choice (a hidden sheet shows "(hidden)"). Fixed: a pinned (bar)
+  chart was squeezed flat (ECharts' default 60px margins on a 140px chart),
+  axis labels overlapped on narrow charts, and the report emails text didn't
+  say Excel attachments are saved. No page scrolls sideways; no console
+  errors.
+
+**0.6.0 release notes** (paste into the release):
+
+```
+**Analytics**
+- Pin dashboard tiles to Home: a key figure, small chart or table, next to Home's own tiles. Pins follow dashboard sharing, and come back if a dashboard is shared again or Analytics is switched back on.
+- Pivot tables on dashboards: up to five row fields and one column field, with subtotals and grand totals worked out exactly on the server. Click a figure to see the rows behind it (up to 500). Export to CSV or Excel.
+- Excel workbooks (.xlsx) as data sources: choose the sheet (hidden sheets are marked). Report emails save .xlsx attachments too. Old .xls, macro and password-protected workbooks are refused.
+- Every Analytics question stops after 30 seconds, with a hint to filter or group further.
+- Each organisation's Analytics can only read its own folders on the server.
+
+**Also**
+- A simpler top bar, dashboards on the main pages (hide or customise them) and a new Home.
+- Search everything with Ctrl K.
+
+Database upgrades run by themselves when Tohyee starts. Back up first if you install by hand.
+```
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
