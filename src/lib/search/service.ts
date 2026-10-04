@@ -6,6 +6,11 @@ import { requireOneOf } from "@/lib/validation";
 import { SEARCH_FILTERS, type SearchFilter, type SearchGroup, type SearchKind, type SearchRecord, type SearchResponse } from "./types";
 
 const PER_KIND = 5;
+/** Searches start from two characters; one letter matches almost everything. */
+const MIN_QUERY = 2;
+const day = (column: string) => `to_char(${column}, 'FMDD Mon YYYY')`;
+const money = (column: string) => `to_char(${column}, 'FM999,999,999,990.00')`;
+const status = (column: string) => `initcap(replace(${column}, '_', ' '))`;
 const DASHBOARDS_HREF = "/analytics";
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
 
@@ -112,6 +117,7 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
   const withPrefix = splitPrefix(input.query);
   const query = withPrefix.query;
   const filter = withPrefix.forcedFilter ?? requested;
+  if (query.length < MIN_QUERY) return { query, filter, groups: [] };
   if (input.onlyDashboards) {
     const dashboards = await listDashboards(tx, { userId: input.userId, reportViewer: true });
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -163,8 +169,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "invoice",
         "Invoices",
         `select coalesce(i.invoice_number, concat('Draft invoice #', i.id::text)) as title,
-                concat_ws(' · ', i.invoice_date::text, i.total::text, c.name) as subtitle,
-                initcap(i.status) as status,
+                concat_ws(' · ', ${day("i.invoice_date")}, ${money("i.total")}, c.name) as subtitle,
+                ${status("i.status")} as status,
                 '/operations/invoices/' || i.id::text as href
            from sales_invoices i
            join contacts c on c.id = i.contact_id
@@ -181,8 +187,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "sales_credit_note",
         "Sales credit notes",
         `select coalesce(n.credit_note_number, concat('Draft credit note #', n.id::text)) as title,
-                concat_ws(' · ', n.credit_note_date::text, n.total::text, c.name) as subtitle,
-                initcap(n.status) as status,
+                concat_ws(' · ', ${day("n.credit_note_date")}, ${money("n.total")}, c.name) as subtitle,
+                ${status("n.status")} as status,
                 '/operations/credit-notes/' || n.id::text as href
            from sales_credit_notes n
            join contacts c on c.id = n.contact_id
@@ -199,8 +205,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "quote",
         "Quotes",
         `select coalesce(q.quote_number, concat('Draft quote #', q.id::text)) as title,
-                concat_ws(' · ', q.quote_date::text, q.total::text, c.name) as subtitle,
-                initcap(q.status) as status,
+                concat_ws(' · ', ${day("q.quote_date")}, ${money("q.total")}, c.name) as subtitle,
+                ${status("q.status")} as status,
                 '/operations/quotes/' || q.id::text as href
            from quotes q
            join contacts c on c.id = q.contact_id
@@ -217,8 +223,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "sales_order",
         "Sales orders",
         `select coalesce(s.so_number, concat('Draft sales order #', s.id::text)) as title,
-                concat_ws(' · ', s.order_date::text, s.total::text, c.name) as subtitle,
-                initcap(s.status) as status,
+                concat_ws(' · ', ${day("s.order_date")}, ${money("s.total")}, c.name) as subtitle,
+                ${status("s.status")} as status,
                 '/operations/sales-orders/' || s.id::text as href
            from sales_orders s
            join contacts c on c.id = s.contact_id
@@ -231,15 +237,15 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
   }
 
   if (include("purchases")) {
-    const billWhere = whereParts(["b.supplier_invoice_number", "coalesce(b.reference, '')", "c.name", "coalesce(c.email, '')", "coalesce(c.phone, '')"], query, "b.total", "b.bill_date");
+    const billWhere = whereParts(["b.supplier_invoice_number", "c.name", "coalesce(c.email, '')", "coalesce(c.phone, '')"], query, "b.total", "b.bill_date");
     groups.push(
       await queryRecords(
         tx,
         "bill",
         "Bills",
         `select b.supplier_invoice_number as title,
-                concat_ws(' · ', b.bill_date::text, b.total::text, c.name) as subtitle,
-                initcap(b.status) as status,
+                concat_ws(' · ', ${day("b.bill_date")}, ${money("b.total")}, c.name) as subtitle,
+                ${status("b.status")} as status,
                 '/operations/bills/' || b.id::text as href
            from bills b
            join contacts c on c.id = b.contact_id
@@ -256,8 +262,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "supplier_credit_note",
         "Supplier credit notes",
         `select s.supplier_credit_note_number as title,
-                concat_ws(' · ', s.credit_note_date::text, s.total::text, c.name) as subtitle,
-                initcap(s.status) as status,
+                concat_ws(' · ', ${day("s.credit_note_date")}, ${money("s.total")}, c.name) as subtitle,
+                ${status("s.status")} as status,
                 '/operations/supplier-credit-notes/' || s.id::text as href
            from supplier_credit_notes s
            join contacts c on c.id = s.contact_id
@@ -274,8 +280,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "purchase_order",
         "Purchase orders",
         `select coalesce(p.po_number, concat('Draft purchase order #', p.id::text)) as title,
-                concat_ws(' · ', p.order_date::text, p.total::text, c.name) as subtitle,
-                initcap(p.status) as status,
+                concat_ws(' · ', ${day("p.order_date")}, ${money("p.total")}, c.name) as subtitle,
+                ${status("p.status")} as status,
                 '/operations/purchase-orders/' || p.id::text as href
            from purchase_orders p
            join contacts c on c.id = p.contact_id
@@ -295,9 +301,9 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "customer_payment",
         "Customer payments",
         `select coalesce(p.reference, concat('Payment #', p.id::text)) as title,
-                concat_ws(' · ', p.payment_date::text, p.amount::text, c.name) as subtitle,
-                initcap(p.status) as status,
-                '/operations/customer-payments' as href
+                concat_ws(' · ', ${day("p.payment_date")}, ${money("p.amount")}, c.name) as subtitle,
+                ${status("p.status")} as status,
+                '/operations/customer-payments/' || p.id::text as href
            from customer_payment_batches p
            join contacts c on c.id = p.contact_id
            join accounts a on a.id = p.bank_account_id
@@ -314,9 +320,9 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "supplier_payment",
         "Supplier payments",
         `select coalesce(p.reference, concat('Payment #', p.id::text)) as title,
-                concat_ws(' · ', p.payment_date::text, p.amount::text, c.name) as subtitle,
-                initcap(p.status) as status,
-                '/operations/supplier-payments' as href
+                concat_ws(' · ', ${day("p.payment_date")}, ${money("p.amount")}, c.name) as subtitle,
+                ${status("p.status")} as status,
+                '/operations/supplier-payments/' || p.id::text as href
            from supplier_payment_batches p
            join contacts c on c.id = p.contact_id
            join accounts a on a.id = p.bank_account_id
@@ -333,8 +339,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "bank_statement_line",
         "Bank statement lines",
         `select s.description as title,
-                concat_ws(' · ', s.line_date::text, abs(s.amount)::text, a.name) as subtitle,
-                initcap(s.status) as status,
+                concat_ws(' · ', ${day("s.line_date")}, ${money("abs(s.amount)")}, a.name) as subtitle,
+                ${status("s.status")} as status,
                 '/operations/bank-accounts/' || s.account_id::text as href
            from bank_statement_lines s
            join accounts a on a.id = s.account_id
@@ -354,7 +360,7 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "journal",
         "Manual journals",
         `select j.reference as title,
-                concat_ws(' · ', j.posting_date::text, j.total_debit::text, coalesce(j.description, 'Manual journal')) as subtitle,
+                concat_ws(' · ', ${day("j.posting_date")}, ${money("j.total_debit")}, coalesce(j.description, 'Manual journal')) as subtitle,
                 null::text as status,
                 '/operations/ledger-journals' as href
            from ledger_journals j
@@ -405,8 +411,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "fixed_asset",
         "Fixed assets",
         `select concat(f.asset_number, ' · ', f.name) as title,
-                concat_ws(' · ', f.purchase_date::text, f.cost::text) as subtitle,
-                initcap(f.status) as status,
+                concat_ws(' · ', ${day("f.purchase_date")}, ${money("f.cost")}) as subtitle,
+                ${status("f.status")} as status,
                 '/operations/fixed-assets/' || f.id::text as href
            from fixed_assets f
           where ${fixedAssetWhere.sql}
@@ -418,6 +424,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
   }
 
   if (crmOn && include("crm")) {
+    // With "All", companies are already in Contacts (the same records).
+    if (filter === "crm") {
     const companyWhere = whereParts(["c.name", "coalesce(c.email, '')", "coalesce(c.phone, '')"], query, null, null);
     groups.push(
       await queryRecords(
@@ -435,6 +443,7 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         companyWhere.params,
       ),
     );
+    }
     const personWhere = whereParts(["p.first_name", "coalesce(p.last_name, '')", "coalesce(p.email, '')", "coalesce(p.phone, '')"], query, null, null);
     groups.push(
       await queryRecords(
@@ -460,8 +469,8 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         "crm_opportunity",
         "CRM opportunities",
         `select o.name as title,
-                concat_ws(' · ', c.name, coalesce(o.close_date::text, ''), o.amount::text) as subtitle,
-                initcap(o.stage) as status,
+                concat_ws(' · ', c.name, ${day("o.close_date")}, ${money("o.amount")}) as subtitle,
+                ${status("o.stage")} as status,
                 '/crm/opportunities/' || o.id::text as href
            from crm_opportunities o
            join contacts c on c.id = o.contact_id

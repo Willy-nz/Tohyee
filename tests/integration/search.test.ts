@@ -120,16 +120,6 @@ describeWithDatabase("search API", () => {
         [key("bill"), key("hash"), contact.id, billApprovalJournal, key("approve"), key("approve-hash"), owner.id, owner.email],
       );
 
-      const paymentJournal = await insertJournal(tx, "2026-10-04", "BATCH-1");
-      await tx.query(
-        `insert into customer_payment_batches (
-            command_source, idempotency_key, request_hash, status, contact_id, payment_date, amount, currency_code, bank_account_id,
-            reference, journal_id, created_by_user_id, created_by_email
-         ) values ('tests', $1, $2, 'active', $3, '2026-10-04', 1748.00, 'NZD',
-                   (select id from accounts order by id limit 1), 'Kobe payment', $4, $5, $6)`,
-        [key("batch"), key("hash"), contact.id, paymentJournal, owner.id, owner.email],
-      );
-
       await tx.query(
         `insert into bank_statement_imports (
             command_source, idempotency_key, request_hash, account_id, source, file_name, file_format, line_count,
@@ -138,10 +128,10 @@ describeWithDatabase("search API", () => {
         [key("import"), key("hash"), owner.id, owner.email],
       );
       await tx.query(
-        `insert into bank_statement_lines (account_id, import_id, line_date, amount, description, payee, reference, match_key)
+        `insert into bank_statement_lines (account_id, import_id, line_date, amount, description, payee, reference, match_key, currency_code)
          values ((select id from accounts order by id limit 1),
                  (select id from bank_statement_imports order by id desc limit 1),
-                 '2026-10-04', 1748.00, 'Kobe payment', 'Kobe Ltd', 'INV-0106', 'kobe-payment')`,
+                 '2026-10-04', 1748.00, 'Kobe payment', 'Kobe Ltd', 'INV-0106', 'kobe-payment', 'NZD')`,
       );
 
       await tx.query(
@@ -174,7 +164,7 @@ describeWithDatabase("search API", () => {
         [contact.id],
       );
       await tx.query(
-        "insert into crm_opportunities (name, contact_id, point_of_contact_id, amount, close_date, stage) values ('Kobe expansion', $1, $2, 1748.00, '2026-10-04', 'proposal')",
+        "insert into crm_opportunities (name, contact_id, point_of_contact_id, amount, close_date, stage, currency_code) values ('Kobe expansion', $1, $2, 1748.00, '2026-10-04', 'proposal', 'NZD')",
         [contact.id, person.rows[0]!.id],
       );
     });
@@ -210,8 +200,11 @@ describeWithDatabase("search API", () => {
     expect(invoices?.records.length).toBe(5);
     expect(data.groups.some((group) => group.key === "contact")).toBe(true);
     expect(data.groups.some((group) => group.key === "bank_statement_line")).toBe(true);
-    expect(data.groups.some((group) => group.key === "crm_company")).toBe(true);
+    // With "All", companies are in Contacts (the same records), not listed twice.
+    expect(data.groups.some((group) => group.key === "crm_company")).toBe(false);
     expect(data.groups.some((group) => group.key === "crm_person")).toBe(true);
+    const crm = await body(await searchRoute.GET(apiRequest(`/api/search?organisationId=${ORG}&q=kobe&kind=crm`, { cookie: viewerCookie }), noContext));
+    expect(crm.groups.some((group) => group.key === "crm_company")).toBe(true);
     expect(data.groups.some((group) => group.key === "crm_opportunity")).toBe(true);
   });
 
@@ -224,7 +217,7 @@ describeWithDatabase("search API", () => {
     const byDate = await body(
       await searchRoute.GET(apiRequest(`/api/search?organisationId=${ORG}&q=4 Oct&kind=all`, { cookie: viewerCookie }), noContext),
     );
-    expect(byDate.groups.some((group) => group.records.some((record) => record.subtitle.includes("2026-10-04")))).toBe(true);
+    expect(byDate.groups.some((group) => group.records.some((record) => record.subtitle.includes("4 Oct 2026")))).toBe(true);
 
     const byPrefix = await body(
       await searchRoute.GET(apiRequest(`/api/search?organisationId=${ORG}&q=inv 106&kind=all`, { cookie: viewerCookie }), noContext),
@@ -242,5 +235,34 @@ describeWithDatabase("search API", () => {
     expect(data.groups.map((group) => group.key)).toEqual(["dashboard"]);
     expect(data.groups[0]?.records[0]?.title).toBe("Client dashboard");
   });
-});
 
+  it("refuses people outside the organisation, needs two characters, and leaves out the CRM when it's off", async () => {
+    const outsider = await createTestUser("outsider@example.com");
+    const outsiderResponse = await searchRoute.GET(
+      apiRequest(`/api/search?organisationId=${ORG}&q=kobe&kind=all`, { cookie: await sessionCookieFor(outsider) }),
+      noContext,
+    );
+    expect(outsiderResponse.status).toBe(404);
+
+    const short = await body(await searchRoute.GET(apiRequest(`/api/search?organisationId=${ORG}&q=k&kind=all`, { cookie: viewerCookie }), noContext));
+    expect(short.groups).toEqual([]);
+
+    await asUser(owner, (tx) => tx.query("update organisation_settings set crm_enabled = false"));
+    try {
+      const data = await body(await searchRoute.GET(apiRequest(`/api/search?organisationId=${ORG}&q=kobe&kind=all`, { cookie: viewerCookie }), noContext));
+      expect(data.groups.some((group) => group.key.startsWith("crm_"))).toBe(false);
+      expect(data.groups.some((group) => group.key === "invoice")).toBe(true);
+    } finally {
+      await asUser(owner, (tx) => tx.query("update organisation_settings set crm_enabled = true"));
+    }
+  });
+
+  it("runs every kind's search without error", async () => {
+    for (const kind of ["all", "contacts", "sales", "purchases", "banking", "accounts", "crm"]) {
+      for (const q of ["kobe", "1748", "4 Oct"]) {
+        const response = await searchRoute.GET(apiRequest(`/api/search?organisationId=${ORG}&q=${encodeURIComponent(q)}&kind=${kind}`, { cookie: viewerCookie }), noContext);
+        expect(response.status, `${kind} ${q}`).toBe(200);
+      }
+    }
+  });
+});

@@ -4,7 +4,29 @@ import { useRouter } from "next/navigation";
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { type Destination, searchDestinations } from "@/components/navigation";
 import { useWorkspace } from "@/components/workspace";
-import type { SearchFilter, SearchGroup, SearchRecord } from "@/lib/search/types";
+import type { SearchFilter, SearchGroup, SearchKind, SearchRecord } from "@/lib/search/types";
+
+const KIND_LABELS: Partial<Record<SearchKind, string>> = {
+  contact: "Contact",
+  invoice: "Invoice",
+  sales_credit_note: "Credit note",
+  quote: "Quote",
+  sales_order: "Sales order",
+  bill: "Bill",
+  supplier_credit_note: "Supplier credit",
+  purchase_order: "Purchase order",
+  customer_payment: "Payment in",
+  supplier_payment: "Payment out",
+  bank_statement_line: "Bank line",
+  journal: "Journal",
+  item: "Item",
+  account: "Account",
+  fixed_asset: "Fixed asset",
+  crm_company: "Company",
+  crm_person: "Person",
+  crm_opportunity: "Opportunity",
+  dashboard: "Dashboard",
+};
 import styles from "./command-palette.module.css";
 
 /**
@@ -43,7 +65,10 @@ function PaletteDialog({ onClose, items }: { onClose: () => void; items: Destina
       return [];
     }
   }, [recentTick, storageKey]);
-  const records = useMemo(() => (trimmed.length === 0 ? recent : groups.flatMap((group) => group.records)), [groups, recent, trimmed.length]);
+  const records = useMemo(
+    () => (trimmed.length === 0 ? recent : trimmed.length < 2 ? [] : groups.flatMap((group) => group.records)),
+    [groups, recent, trimmed.length],
+  );
   const results = useMemo(
     () => [
       ...records.map((record) => ({ type: "record" as const, record })),
@@ -74,26 +99,33 @@ function PaletteDialog({ onClose, items }: { onClose: () => void; items: Destina
     };
   }, []);
 
+  // Only the newest search's answer is shown; a slower, older one is ignored.
+  const latest = useRef(0);
   useEffect(() => {
     if (!current) return;
-    if (trimmed.length === 0) return;
+    if (trimmed.length < 2) return;
+    const ticket = ++latest.current;
+    const abort = new AbortController();
     const timer = window.setTimeout(() => {
-      const abort = new AbortController();
       setLoading(true);
       fetch(
         `/api/search?organisationId=${encodeURIComponent(current.id)}&q=${encodeURIComponent(trimmed)}&kind=${encodeURIComponent(filter)}`,
         { signal: abort.signal },
       )
         .then(async (response) => {
-          if (!response.ok) return;
+          if (!response.ok || ticket !== latest.current) return;
           const payload = (await response.json()) as { groups?: SearchGroup[] };
-          setGroups(Array.isArray(payload.groups) ? payload.groups : []);
+          if (ticket === latest.current) setGroups(Array.isArray(payload.groups) ? payload.groups : []);
         })
         .catch(() => undefined)
-        .finally(() => setLoading(false));
-      return () => abort.abort();
+        .finally(() => {
+          if (ticket === latest.current) setLoading(false);
+        });
     }, 250);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      abort.abort();
+    };
   }, [current, filter, trimmed]);
 
   useEffect(() => {
@@ -215,7 +247,7 @@ function PaletteDialog({ onClose, items }: { onClose: () => void; items: Destina
                 }}
                 onClick={() => go({ type: "record", record })}
               >
-                <span className={styles.kind}>{record.kind.replaceAll("_", " ")}</span>
+                <span className={styles.kind}>{KIND_LABELS[record.kind] ?? record.kind}</span>
                 <span className={styles.recordText}>
                   <span className={styles.label}>{record.title}</span>
                   <span className={styles.subtitle}>{record.subtitle}</span>
