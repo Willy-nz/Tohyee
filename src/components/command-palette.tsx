@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { type Destination, searchDestinations } from "@/components/navigation";
+import { useWorkspace } from "@/components/workspace";
+import type { SearchFilter, SearchGroup, SearchRecord } from "@/lib/search/types";
 import styles from "./command-palette.module.css";
 
 /**
@@ -17,13 +19,48 @@ export function CommandPalette({ open, onClose, items }: { open: boolean; onClos
 
 function PaletteDialog({ onClose, items }: { onClose: () => void; items: Destination[] }) {
   const router = useRouter();
+  const { current } = useWorkspace();
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<SearchFilter>("all");
   const [active, setActive] = useState(0);
+  const [groups, setGroups] = useState<SearchGroup[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [recentTick, setRecentTick] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const listId = useId();
-  const results = useMemo(() => searchDestinations(items, query), [items, query]);
+  const trimmed = query.trim();
+  const storageKey = useMemo(() => `tohyee.search.recent.${current?.id ?? "none"}`, [current?.id]);
+  const goTo = useMemo(() => searchDestinations(items, trimmed), [items, trimmed]);
+  const recent = useMemo(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((entry): entry is SearchRecord => Boolean(entry?.href && entry?.title && entry?.kind)).slice(0, 12);
+    } catch {
+      return [];
+    }
+  }, [recentTick, storageKey]);
+  const records = useMemo(() => (trimmed.length === 0 ? recent : groups.flatMap((group) => group.records)), [groups, recent, trimmed.length]);
+  const results = useMemo(
+    () => [
+      ...records.map((record) => ({ type: "record" as const, record })),
+      ...goTo.map((destination) => ({ type: "goto" as const, destination })),
+    ],
+    [goTo, records],
+  );
   const activeIndex = Math.min(active, Math.max(0, results.length - 1));
+  const filterChoices: Array<{ key: SearchFilter; label: string }> = [
+    { key: "all", label: "All" },
+    { key: "contacts", label: "Contacts" },
+    { key: "sales", label: "Sales" },
+    { key: "purchases", label: "Purchases" },
+    { key: "banking", label: "Banking" },
+    { key: "accounts", label: "Accounts" },
+    { key: "crm", label: "CRM" },
+  ];
 
   // Focus the search box; give focus back to whatever had it when closing.
   useEffect(() => {
@@ -38,13 +75,52 @@ function PaletteDialog({ onClose, items }: { onClose: () => void; items: Destina
   }, []);
 
   useEffect(() => {
+    if (!current) return;
+    if (trimmed.length === 0) return;
+    const timer = window.setTimeout(() => {
+      const abort = new AbortController();
+      setLoading(true);
+      fetch(
+        `/api/search?organisationId=${encodeURIComponent(current.id)}&q=${encodeURIComponent(trimmed)}&kind=${encodeURIComponent(filter)}`,
+        { signal: abort.signal },
+      )
+        .then(async (response) => {
+          if (!response.ok) return;
+          const payload = (await response.json()) as { groups?: SearchGroup[] };
+          setGroups(Array.isArray(payload.groups) ? payload.groups : []);
+        })
+        .catch(() => undefined)
+        .finally(() => setLoading(false));
+      return () => abort.abort();
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [current, filter, trimmed]);
+
+  useEffect(() => {
     list.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`)?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  function go(destination: Destination | undefined) {
-    if (!destination) return;
+  function remember(record: SearchRecord) {
+    const next = [record, ...recent.filter((entry) => !(entry.kind === record.kind && entry.href === record.href))].slice(0, 12);
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      setRecentTick((value) => value + 1);
+    } catch {
+      // Ignore private mode failures.
+    }
+  }
+
+  function go(
+    result:
+      | { type: "record"; record: SearchRecord }
+      | { type: "goto"; destination: Destination }
+      | undefined,
+  ) {
+    if (!result) return;
+    const href = result.type === "record" ? result.record.href : result.destination.href;
+    if (result.type === "record") remember(result.record);
     onClose();
-    router.push(destination.href);
+    router.push(href);
   }
 
   function onKeyDown(event: KeyboardEvent) {
@@ -97,8 +173,8 @@ function PaletteDialog({ onClose, items }: { onClose: () => void; items: Destina
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={results.length > 0 ? optionId(activeIndex) : undefined}
-            aria-label="Search pages and actions"
-            placeholder="Search pages and actions…"
+            aria-label="Search records, pages and actions"
+            placeholder="Search records, pages and actions…"
             autoComplete="off"
             spellCheck={false}
             value={query}
@@ -109,26 +185,74 @@ function PaletteDialog({ onClose, items }: { onClose: () => void; items: Destina
           />
           <kbd className={styles.kbd}>Esc</kbd>
         </div>
-        <ul id={listId} ref={list} role="listbox" aria-label="Pages and actions" className={styles.list}>
-          {results.map((item, index) => (
-            <li
-              key={`${item.group}|${item.href}|${item.label}`}
-              id={optionId(index)}
-              data-index={index}
-              role="option"
-              aria-selected={index === activeIndex}
-              className={`${styles.option} ${index === activeIndex ? styles.optionActive : ""}`}
-              onMouseMove={() => {
-                if (index !== activeIndex) setActive(index);
+        <div className={styles.chips}>
+          {filterChoices.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              className={`${styles.chip} ${chip.key === filter ? styles.chipActive : ""}`}
+              onClick={() => {
+                setFilter(chip.key);
+                setActive(0);
               }}
-              onClick={() => go(item)}
             >
-              <span className={styles.label}>{item.label}</span>
-              <span className={styles.group}>{item.group}</span>
+              {chip.label}
+            </button>
+          ))}
+        </div>
+        <ul id={listId} ref={list} role="listbox" aria-label="Pages and actions" className={styles.list}>
+          {records.length > 0 ? <li className={styles.section}>Records</li> : null}
+          {records.map((record, index) => (
+            <li key={`${record.kind}|${record.href}`}>
+              <div
+                id={optionId(index)}
+                data-index={index}
+                role="option"
+                aria-selected={index === activeIndex}
+                className={`${styles.option} ${index === activeIndex ? styles.optionActive : ""}`}
+                onMouseMove={() => {
+                  if (index !== activeIndex) setActive(index);
+                }}
+                onClick={() => go({ type: "record", record })}
+              >
+                <span className={styles.kind}>{record.kind.replaceAll("_", " ")}</span>
+                <span className={styles.recordText}>
+                  <span className={styles.label}>{record.title}</span>
+                  <span className={styles.subtitle}>{record.subtitle}</span>
+                </span>
+                {record.status ? <span className={styles.group}>{record.status}</span> : null}
+              </div>
             </li>
           ))}
+          {goTo.length > 0 ? <li className={styles.section}>Go to</li> : null}
+          {goTo.map((destination, offset) => {
+            const index = records.length + offset;
+            return (
+              <li key={`${destination.group}|${destination.href}|${destination.label}`}>
+                <div
+                  id={optionId(index)}
+                  data-index={index}
+                  role="option"
+                  aria-selected={index === activeIndex}
+                  className={`${styles.option} ${index === activeIndex ? styles.optionActive : ""}`}
+                  onMouseMove={() => {
+                    if (index !== activeIndex) setActive(index);
+                  }}
+                  onClick={() => go({ type: "goto", destination })}
+                >
+                  <span className={styles.label}>{destination.label}</span>
+                  <span className={styles.group}>{destination.group}</span>
+                </div>
+              </li>
+            );
+          })}
         </ul>
-        {results.length === 0 ? <p className={styles.empty}>Nothing matches “{query}”. Try another word.</p> : null}
+        {loading && trimmed.length > 0 ? <p className={styles.empty}>Searching…</p> : null}
+        {results.length === 0 && !loading ? (
+          <p className={styles.empty}>
+            {trimmed.length === 0 ? "No recent records yet. Open a record and it will appear here." : `Nothing matches “${query}”. Try another word.`}
+          </p>
+        ) : null}
         <div className={styles.footer} aria-hidden>
           <span>
             <kbd className={styles.kbd}>↑</kbd> <kbd className={styles.kbd}>↓</kbd> to move
