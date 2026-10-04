@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tohyee proposal – New invoice (light)</title>
+<link rel="stylesheet" href="./mockup.css" />
+</head>
+<body>
+<header class="topbar">
+  <span class="logo"><i></i>Tohyee</span>
+  <button class="apps" title="Apps: Accounting, CRM, Analytics" aria-label="Switch app"><svg viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg></button>
+  <span class="org"><b>G</b>Glimmers Demo</span>
+  <nav class="menus" aria-label="Main"><a class="" href="#">Home</a><a class="on" href="#">Sales</a><a class="" href="#">Purchases</a><a class="" href="#">Banking</a><a class="" href="#">Payroll</a><a class="" href="#">Reports</a><a class="" href="#">Accountant</a></nav>
+  <span class="spacer"></span>
+  <span class="search">Search or jump to… <kbd>Ctrl K</kbd></span>
+  <button class="btn primary small">+ New</button>
+  <span class="bell" title="2 notices (backup key, bank feed)"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg></span>
+  <span class="avatar">J</span>
+</header>
+<main class="page">
+<div class="head">
+  <div><h1>New invoice <span class="chip">Draft</span></h1><p>No dashboard here: the page is for the one invoice.</p></div>
+</div>
+<div class="editor">
+  <section class="card">
+    <div class="fields">
+      <div class="field"><label>Customer</label><div class="input">Māhuika Vets</div></div>
+      <div class="field"><label>Date</label><div class="input">2 Oct 2026</div></div>
+      <div class="field"><label>Due</label><div class="input">16 Oct 2026</div></div>
+      <div class="field"><label>Amounts</label><div class="input">Excl. GST</div></div>
+    </div>
+    <a class="more-link" href="#">+ Reference, salesperson, currency and other details</a>
+    <table class="lines">
+      <thead><tr><th class="chev"></th><th>Item or description</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead>
+      <tbody><tr class="open"><td class="chev">▾</td><td><div class="input">Paw print memorial pendant</div></td><td style="width:80px"><div class="input num">2</div></td><td style="width:120px"><div class="input num">590.00</div></td><td class="num" style="width:120px">1,180.00</td></tr><tr class="open"><td colspan="5"><div class="line-more">
+<div class="field"><label>Account</label><div class="input">4000 · Sales</div></div>
+<div class="field"><label>Tax</label><div class="input">GST 15%</div></div>
+<div class="field"><label>Location</label><div class="input">Dunedin</div></div>
+<div class="field"><label>Project</label><div class="input">—</div></div>
+</div></td></tr><tr class=""><td class="chev">▸</td><td><div class="input">Framing</div></td><td style="width:80px"><div class="input num">1</div></td><td style="width:120px"><div class="input num">340.00</div></td><td class="num" style="width:120px">340.00</td></tr></tbody>
+    </table>
+    <div><button class="btn small">+ Add line</button></div>
+  </section>
+  <aside class="card totals">
+    <div class="stack">
+      <div class="row"><span class="muted">Subtotal</span><span class="num">1,520.00</span></div>
+      <div class="row"><span class="muted">GST 15%</span><span class="num">228.00</span></div>
+      <div class="row total"><span>Total</span><span class="num">1,748.00</span></div>
+    </div>
+    <button class="btn primary">Approve</button>
+    <div class="actions"><button class="btn small">Save draft</button><button class="btn small">Preview</button><button class="btn quiet small">More</button></div>
+    <p class="note-box">A draft posts nothing to the books.</p>
+  </aside>
+</div>
+</main>
+<span class="mock-label">Proposal mockup · demo figures</span>
+</body>
+</html>

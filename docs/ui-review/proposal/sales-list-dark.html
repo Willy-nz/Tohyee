@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tohyee proposal – Invoices (dark)</title>
+<link rel="stylesheet" href="./mockup.css" />
+</head>
+<body>
+<header class="topbar">
+  <span class="logo"><i></i>Tohyee</span>
+  <button class="apps" title="Apps: Accounting, CRM, Analytics" aria-label="Switch app"><svg viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg></button>
+  <span class="org"><b>G</b>Glimmers Demo</span>
+  <nav class="menus" aria-label="Main"><a class="" href="#">Home</a><a class="on" href="#">Sales</a><a class="" href="#">Purchases</a><a class="" href="#">Banking</a><a class="" href="#">Payroll</a><a class="" href="#">Reports</a><a class="" href="#">Accountant</a></nav>
+  <span class="spacer"></span>
+  <span class="search">Search or jump to… <kbd>Ctrl K</kbd></span>
+  <button class="btn primary small">+ New</button>
+  <span class="bell" title="2 notices (backup key, bank feed)"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg></span>
+  <span class="avatar">J</span>
+</header>
+<main class="page">
+<div class="head">
+  <div><h1>Invoices</h1></div>
+  <div class="actions"><button class="btn">Export</button><button class="btn primary">New invoice</button></div>
+</div>
+<section class="dash" aria-label="Dashboard">
+  <div class="dash-bar">
+    <h2>Dashboard</h2>
+    <div class="actions"><span class="muted small hide-phone">Customise to swap a tile or pin one from Analytics</span><button class="btn quiet small">Customise</button><button class="btn quiet small" aria-expanded="true">Hide</button></div>
+  </div>
+  <div class="tiles"><a class="tile" href="#"><span class="label">Awaiting payment</span><span class="value">7,860.00</span><span class="note ">8 invoices</span></a><a class="tile" href="#"><span class="label">Overdue</span><span class="value">2,440.00</span><span class="note bad">2 customers</span></a><a class="tile" href="#"><span class="label">Sales this month</span><span class="value">11,320.00</span><span class="note ">Excl. GST · matches Sales by salesperson</span></a><a class="tile pinned" href="#"><span class="label">Average days to pay</span><span class="value">18</span><span class="note ">Last 90 days</span><span class="src">Pinned from Analytics · Sales dashboard</span></a></div>
+</section>
+<section class="card">
+  <div class="listbar">
+    <span class="seg"><span class="on">All</span><span>Drafts<em>2</em></span><span>Awaiting<em>8</em></span><span>Overdue<em>2</em></span><span>Paid</span></span>
+    <span class="filter-search">Search customer, number or reference</span>
+    <button class="btn quiet small">Columns</button>
+  </div>
+  <table>
+    <thead><tr><th class="chev"></th><th>Customer</th><th>Invoice</th><th>Status</th><th class="num">Total</th><th class="num">Due</th></tr></thead>
+    <tbody><tr class="expanded"><td class="chev">▾</td><td><b>Kobe Ltd</b></td><td>INV-0107<span class="sub">4 Oct</span></td><td><span class="chip bad">Overdue 3 days</span></td><td class="num">2,760.00</td><td class="num">2,760.00</td></tr><tr class="expanded"><td></td><td colspan="5"><dl class="detail">
+<div><dt>Reference</dt><dd>PO-1880</dd></div><div><dt>Salesperson</dt><dd>Aroha</dd></div><div><dt>Channel</dt><dd>Web</dd></div><div><dt>Sent</dt><dd>4 Oct, viewed 5 Oct</dd></div>
+</dl><div class="actions" style="margin-top:10px"><button class="btn small">Open</button><button class="btn small">Record payment</button><button class="btn small">Send reminder</button><button class="btn quiet small">More</button></div></td></tr><tr class=""><td class="chev">▸</td><td><b>Māhuika Vets</b></td><td>Draft<span class="sub">2 Oct</span></td><td><span class="chip">Draft</span></td><td class="num">1,180.00</td><td class="num">—</td></tr><tr class=""><td class="chev">▸</td><td><b>Rata Ltd</b></td><td>INV-0105<span class="sub">29 Sep</span></td><td><span class="chip info">Due 13 Oct</span></td><td class="num">1,640.00</td><td class="num">1,640.00</td></tr><tr class=""><td class="chev">▸</td><td><b>Kobe Ltd</b></td><td>INV-0106<span class="sub">28 Sep</span></td><td><span class="chip ok">Paid</span></td><td class="num">1,200.00</td><td class="num">0.00</td></tr></tbody>
+  </table>
+</section>
+</main>
+<span class="mock-label">Proposal mockup · demo figures</span>
+</body>
+</html>
