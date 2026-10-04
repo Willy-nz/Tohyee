@@ -133,6 +133,8 @@ const MAX_XLSX_EXPANDED_BYTES = 250 * 1024 * 1024;
 const MAX_XLSX_ZIP_ENTRIES = 1000;
 const MAX_XLSX_COMPRESSION_RATIO = 1000;
 const MAX_XLSX_CSV_BYTES = 1024 * 1024 * 1024;
+const MAX_XLSX_SHARED_STRINGS_BYTES = 32 * 1024 * 1024;
+const MAX_XLSX_STYLES_BYTES = 8 * 1024 * 1024;
 
 function validateLoadInput(input: {
   sourceFolder: string;
@@ -258,10 +260,15 @@ async function validateXlsxArchive(file: string): Promise<void> {
       zip.on("entry", (entry: yauzl.Entry) => {
         void (async () => {
           const mode = (entry.externalFileAttributes >>> 16) & 0xf000;
+          if (entry.generalPurposeBitFlag & (1 | 64)) {
+            throw new ValidationError("This Excel workbook is password-protected. Remove its password and try again.");
+          }
           if (++entries > MAX_XLSX_ZIP_ENTRIES || !safeXlsxEntry(entry.fileName) ||
-              (entry.generalPurposeBitFlag & (1 | 64)) || ![0, 8].includes(entry.compressionMethod) ||
+              ![0, 8].includes(entry.compressionMethod) ||
               (mode !== 0 && mode !== 0x8000 && mode !== 0x4000) ||
               !Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0 ||
+              (entry.fileName === "xl/sharedStrings.xml" && entry.uncompressedSize > MAX_XLSX_SHARED_STRINGS_BYTES) ||
+              (entry.fileName === "xl/styles.xml" && entry.uncompressedSize > MAX_XLSX_STYLES_BYTES) ||
               entry.uncompressedSize > Math.max(1, entry.compressedSize) * MAX_XLSX_COMPRESSION_RATIO ||
               total + entry.uncompressedSize > MAX_XLSX_EXPANDED_BYTES) {
             throw new ValidationError("The Excel workbook contains unsafe files or exceeds the extraction limits.");
@@ -319,15 +326,26 @@ function validateXlsxFile(sourceFolder: string, file: string): void {
   }
 }
 
-function excelCellText(value: unknown): string {
+function validateSheetName(sheetName?: string | null): string | undefined {
+  if (sheetName === undefined || sheetName === null || sheetName === "") return undefined;
+  if (sheetName.length > 31 || /[\u0000-\u001f\u007f]/.test(sheetName)) {
+    throw new ValidationError("An Excel sheet name must be 1 to 31 characters.");
+  }
+  return sheetName;
+}
+
+function excelCellText(value: unknown, numberFormat?: string): string {
   if (value === null || value === undefined) return "";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) {
+    const format = numberFormat?.replace(/"[^"]*"|\\./g, "") ?? "";
+    return /h/i.test(format) ? value.toISOString().slice(0, 23).replace("T", " ") : value.toISOString().slice(0, 10);
+  }
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "object") {
     if (Array.isArray((value as { richText?: unknown }).richText)) {
       return (value as { richText: Array<{ text?: string }> }).richText.map((part) => part.text ?? "").join("");
     }
-    if ("result" in value) return excelCellText((value as { result?: unknown }).result);
+    if ("result" in value) return excelCellText((value as { result?: unknown }).result, numberFormat);
     if ("text" in value) return String((value as { text?: unknown }).text ?? "");
     if ("error" in value) return String((value as { error?: unknown }).error ?? "");
     return "";
@@ -360,7 +378,7 @@ async function writeXlsxSheetAsCsv(file: string, destination: string, chosenShee
       if (name === (chosenSheet ?? sheets[0])) selected = name;
       for await (const row of worksheet) {
         if (name !== selected) continue;
-        const values = (row.values as unknown[]).slice(1).map(excelCellText);
+        const values = (row.values as unknown[]).slice(1).map((value, index) => excelCellText(value, row.getCell(index + 1).numFmt));
         const line = `${values.map(csvField).join(",")}\r\n`;
         bytesWritten += Buffer.byteLength(line);
         if (bytesWritten > MAX_XLSX_CSV_BYTES) throw new ValidationError("The Excel sheet is too large to load.");
@@ -402,14 +420,23 @@ export async function inspectXlsx(
   fileName: string,
   sheetName?: string,
 ): Promise<Awaited<ReturnType<typeof inspectCsv>> & { sheets: string[]; sheetName: string }> {
+  const chosenSheet = validateSheetName(sheetName);
   const file = resolveSourceFile(sourceFolder, fileName);
   validateXlsxFile(sourceFolder, file);
   await validateXlsxArchive(file);
-  return withTemporaryXlsxCsv(file, sheetName, async (folder, csvFile, workbook) => ({
+  const inspect = (sheet?: string) => withTemporaryXlsxCsv(file, sheet, async (folder, csvFile, workbook) => ({
     ...(await inspectCsv(folder, path.basename(csvFile))),
     sheets: workbook.sheets,
     sheetName: workbook.sheetName,
   }));
+  try {
+    return await inspect(chosenSheet);
+  } catch (error) {
+    if (chosenSheet && error instanceof ValidationError && error.message === `The sheet "${chosenSheet}" wasn't found in this Excel workbook.`) {
+      return inspect();
+    }
+    throw error;
+  }
 }
 
 export async function loadXlsx(input: {
@@ -420,11 +447,12 @@ export async function loadXlsx(input: {
   columns: readonly LoadColumn[];
   sheetName?: string | null;
 }): Promise<CsvLoadResult> {
+  const sheetName = validateSheetName(input.sheetName);
   validateLoadInput(input);
   validateXlsxFile(input.sourceFolder, input.file);
   await validateXlsxArchive(input.file);
   return serialise(input.organisationId, () =>
-    withTemporaryXlsxCsv(input.file, input.sheetName ?? undefined, async (_folder, csvFile) =>
+    withTemporaryXlsxCsv(input.file, sheetName, async (_folder, csvFile) =>
       withAnalytics(input.organisationId, (connection) =>
         loadCsvInto(connection, { ...input, file: csvFile, delimiter: "," }),
       ),
@@ -536,9 +564,9 @@ export function resolveSourceFile(sourceFolder: string, fileName: string): strin
 
 export type SourceFile = { name: string; sizeBytes: number; modifiedAt: string };
 
-const DATA_FILE = /\.(csv|tsv|txt)$/i;
+const DATA_FILE = /\.(csv|tsv|txt|xlsx)$/i;
 
-/** The CSV files in a folder and the folders inside it (three levels), newest first. */
+/** The CSV and Excel files in a folder and the folders inside it (three levels), newest first. */
 export function listSourceFiles(sourceFolder: string): SourceFile[] {
   const found: SourceFile[] = [];
   const walk = (folder: string, prefix: string, depth: number) => {

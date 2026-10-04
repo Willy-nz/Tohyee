@@ -140,6 +140,7 @@ describe("analytics engine (decisions 354-358)", () => {
       ["region", "text"],
       ["unit_price", "money"],
     ]);
+    expect((await inspectXlsx(sources, "sales.xlsx", "Removed sheet")).sheetName).toBe("First");
 
     await loadXlsx({
       organisationId: ORG,
@@ -158,6 +159,24 @@ describe("analytics engine (decisions 354-358)", () => {
       { day: "2026-01-06", total: "0.20" },
       { day: "2026-01-07", total: "0.30" },
     ]);
+    expect(await queryAnalytics(ORG, "select sum(unit_price)::varchar as total from xlsx_sales")).toEqual([{ total: "0.60" }]);
+
+    const invalid = await writeXlsx("bad-sales.xlsx", [{
+      name: "Bad",
+      rows: [["Order date", "Region", "Unit price"], ["not a date", "Otago", 5]],
+    }]);
+    await expect(loadXlsx({
+      organisationId: ORG,
+      sourceFolder: sources,
+      file: invalid,
+      table: "xlsx_sales",
+      columns: [
+        { source: "Order date", name: "order_date", kind: "date" },
+        { source: "Region", name: "region", kind: "text" },
+        { source: "Unit price", name: "unit_price", kind: "money" },
+      ],
+    })).rejects.toThrow(/not a date/);
+    expect(await queryAnalytics(ORG, "select sum(unit_price)::varchar as total from xlsx_sales")).toEqual([{ total: "0.60" }]);
 
     await loadXlsx({
       organisationId: ORG,

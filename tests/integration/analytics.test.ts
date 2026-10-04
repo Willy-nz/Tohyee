@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import ExcelJS from "exceljs";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as foldersRoute from "@/app/api/admin/analytics-folders/route";
 import * as analyticsRoute from "@/app/api/analytics/route";
@@ -253,6 +254,60 @@ describeWithDatabase("analytics sources and loads", () => {
     const overview = await body(await analyticsRoute.GET(apiRequest(`/api/analytics?organisationId=${ORG}`, { cookie: ownerCookie }), noContext));
     expect(overview.data.sources).toEqual([]);
     expect(overview.data.loads).toHaveLength(4);
+  });
+
+  it("previews Excel sheets and persists the selected sheet on a source", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const first = workbook.addWorksheet("First");
+    first.addRows([["Order date", "Region", "Unit price"], [new Date("2026-03-01T00:00:00.000Z"), "Otago", 1]]);
+    first.getColumn(1).numFmt = "yyyy-mm-dd";
+    const selected = workbook.addWorksheet("Chosen sheet");
+    selected.addRows([["Order date", "Region", "Unit price"], [new Date("2026-03-02T00:00:00.000Z"), "Waikato", 19.99]]);
+    selected.getColumn(1).numFmt = "yyyy-mm-dd";
+    await workbook.xlsx.writeFile(path.join(folder, "exports", "monthly.xlsx"));
+
+    const preview = await body(await filesRoute.GET(
+      apiRequest(`/api/analytics/files?organisationId=${ORG}&file=exports/monthly.xlsx&sheetName=${encodeURIComponent("Chosen sheet")}`, { cookie: ownerCookie }),
+      noContext,
+    ));
+    expect(preview.status).toBe(200);
+    expect(preview.data.sheets).toEqual(["First", "Chosen sheet"]);
+    expect(preview.data.sheetName).toBe("Chosen sheet");
+    expect(preview.data.rows[0]).toEqual(["2026-03-02", "Waikato", "19.99"]);
+
+    const created = await body(await sourcesRoute.POST(
+      apiRequest("/api/analytics/sources", {
+        method: "POST",
+        cookie: ownerCookie,
+        body: {
+          organisationId: ORG,
+          name: "Monthly Excel",
+          tableName: "monthly_excel",
+          fileName: "exports/monthly.xlsx",
+          sheetName: "Chosen sheet",
+          columns: [
+            { source: "Order date", name: "order_date", kind: "date" },
+            { source: "Region", name: "region", kind: "text" },
+            { source: "Unit price", name: "unit_price", kind: "money" },
+          ],
+        },
+      }),
+      noContext,
+    ));
+    expect(created.status).toBe(201);
+    expect(created.data.source.sheetName).toBe("Chosen sheet");
+    const loaded = await body(await loadRoute.POST(
+      apiRequest(`/api/analytics/sources/${created.data.source.id}/load`, { method: "POST", cookie: ownerCookie, body: { organisationId: ORG } }),
+      params({ sourceId: created.data.source.id }),
+    ));
+    expect(loaded.data.run.status).toBe("ok");
+    expect(await queryAnalytics(ORG, "select order_date::varchar as day, region, unit_price::varchar as amount from monthly_excel")).toEqual([
+      { day: "2026-03-02", region: "Waikato", amount: "19.99" },
+    ]);
+    await sourceRoute.DELETE(
+      apiRequest(`/api/analytics/sources/${created.data.source.id}?organisationId=${ORG}`, { method: "DELETE", cookie: ownerCookie }),
+      params({ sourceId: created.data.source.id }),
+    );
   });
 
   it("gives another organisation nothing from this one's folder or data", async () => {

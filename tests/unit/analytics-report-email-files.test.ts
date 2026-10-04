@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { deflateRawSync } from "node:zlib";
+import ExcelJS from "exceljs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { extractReportAttachment, MAX_ATTACHMENT_BYTES, MAX_CHECK_BYTES, ReportCheckBudgetError, reportFileKey, saveReportFile } from "@/lib/analytics/report-email-files";
 
@@ -69,6 +70,23 @@ describe("report email files (decision 362)", () => {
       expect(await extractReportAttachment(name, bytes, 100)).toEqual([{ name, bytes }]);
     }
     expect(await extractReportAttachment("report.pdf", bytes, 100)).toEqual([]);
+  });
+
+  it("accepts and saves Excel workbooks with bounded ZIP expansion", async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet("Sales").addRows([["Day", "Total"], ["2026-10-03", 12.5]]);
+    const xlsxBytes = Buffer.from(await workbook.xlsx.writeBuffer());
+    expect(await extractReportAttachment("report.xlsx", xlsxBytes, MAX_CHECK_BYTES)).toEqual([{ name: "report.xlsx", bytes: xlsxBytes }]);
+
+    const folder = await root();
+    const saved = await saveReportFile(folder, "box", "xlsx-message", "2026-10-03", { name: "report.xlsx", bytes: xlsxBytes }, true);
+    expect(saved).toBe("email/box/report.xlsx");
+    expect(await fs.readFile(path.join(folder, saved))).toEqual(xlsxBytes);
+  });
+
+  it("rejects a ZIP bomb disguised as an Excel workbook", async () => {
+    const bomb = zip([{ name: "xl/worksheets/sheet1.xml", bytes: Buffer.alloc(26 * 1024 * 1024), compress: true }]);
+    await expect(extractReportAttachment("report.xlsx", bomb, MAX_CHECK_BYTES)).rejects.toThrow(/Excel attachment|unsafe Excel ZIP/i);
   });
 
   it("uses the same safe normalized output key on Windows and Linux", async () => {

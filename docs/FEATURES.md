@@ -1284,14 +1284,17 @@ that something happened.
   draft is checked like a journal when saved but posts nothing; posting it
   posts one manual journal through the usual checks and links it, and a
   posted draft can't change.
-- **Analytics, step 1: data sources** (decisions 353-358, tenant migration
-  0082; plan in [ANALYTICS-REVIEW.md](ANALYTICS-REVIEW.md)). A module
+- **Analytics, step 1: data sources** (decisions 353-358 and 376, tenant
+  migrations 0082/0090; plan in [ANALYTICS-REVIEW.md](ANALYTICS-REVIEW.md)). A module
   switched on per organisation, with its own app at `/analytics`. A server
   admin chooses each organisation's folder on the server (server settings ›
   Analytics folders, or `analytics folder` on the command line). Admins set
-  up a CSV file from it: Tohyee shows the headings, its guess at each type
-  and the first values, and they confirm each column (money loads as exact
-  decimals). Each organisation's loaded data is one DuckDB file in
+  up a CSV or Excel (`.xlsx`) file from it: for Excel, Tohyee shows the sheet
+  names and previews the selected sheet (first by default); it shows the
+  headings, its guess at each type and the first values, and they confirm each
+  column (money loads as exact decimals). Excel files are streamed and capped
+  at 50 MB; old `.xls`, macro-enabled `.xlsm` and password-protected files
+  aren't supported. Each organisation's loaded data is one DuckDB file in
   `TOHYEE_ANALYTICS_DIR`; a load swaps the table in only when it succeeds.
   Sources reload nightly after 04:00 and on demand, and every load is
   recorded. Tested with a made-up 1M-row CSV (about a second to load).
@@ -1344,17 +1347,18 @@ that something happened.
   The selected step previews up to 100 rows. Output tables are rebuilt after
   a dependent source/books load or on demand; a failed rebuild leaves the
   previous output in place, with its result recorded in load history.
-- **Analytics, step 5: report emails** (decision 362, tenant migration
+- **Analytics, step 5: report emails** (decisions 362 and 376, tenant migration
   0088). Admins and owners configure their own CRM-connected Gmail or
   Microsoft mailbox, or IMAP with an encrypted app password, in Analytics
   › Data sources. Choose a folder or label and set a mailbox rule to file
-  reports there. Checks save CSV, TSV and TXT attachments, or flat CSV/TSV
-  files extracted from ZIPs, in the source folder, replacing matching names
-  with the newest receipt (or, as an archive, keeping every file dated).
+  reports there. Checks save CSV, TSV, TXT and Excel (`.xlsx`) attachments,
+  or flat CSV/TSV files extracted from ZIPs, in the source folder, replacing
+  matching names with the newest receipt (or, as an archive, keeping every
+  file dated).
   Mailboxes are checked each night before the reload, or with Check now. PDFs (including Looker Studio
-  reports) and Excel files are not accepted in this step. Limits are 25 MB
-  per attachment and 100 MB per check, including ZIP expansion. Message IDs
-  prevent repeat saves, and the job records files saved and errors. Checks
+  reports), `.xls`, and `.xlsm` files aren't accepted. Limits are 25 MB
+  per attachment and 100 MB per check, including ZIP and Excel workbook
+  expansion. Message IDs prevent repeat saves, and the job records files saved and errors. Checks
   run every 15 minutes while the server runs, or by Check now. Google and
   Microsoft permissions cover the whole mailbox, although checks read only
   the chosen folder; mail is never moved, marked, labelled or deleted.

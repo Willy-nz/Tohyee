@@ -1488,7 +1488,7 @@ as the admin login, straight into an encrypted file:
 
 ## Analytics data
 
-Analytics (decisions 353-362) keeps loaded data out of PostgreSQL. Each
+Analytics (decisions 353-362 and 376) keeps loaded data out of PostgreSQL. Each
 organisation with Analytics on has one DuckDB file,
 `<TOHYEE_ANALYTICS_DIR>/<organisation id>.duckdb` (Windows:
 `%ProgramData%\Tohyee\analytics` by default, set by the installer to the data
@@ -1499,7 +1499,7 @@ one organisation run one at a time. No DuckDB extensions are downloaded at
 run time.
 
 - **Definitions stay in the organisation's database** (tenant migrations
-  0082/0087: `analytics_sources`, `analytics_shaped_tables`,
+  0082/0087/0090: `analytics_sources`, `analytics_shaped_tables`,
   `analytics_load_runs`), so they're backed up and restored with it. The
   DuckDB file holds only loaded data and can always be rebuilt by loading
   again; it isn't in the backups.
@@ -1507,11 +1507,15 @@ run time.
   `server_settings`), chosen by a server admin on the server computer. Files
   are only read from inside an organisation's own folder, after resolving
   links and `..`.
-- **Loads** (`src/lib/analytics/engine.ts`) read every column as text and
-  convert it to the confirmed type, so money is `DECIMAL(18,2)` and never a
-  guessed floating-point number. A load writes a new table and swaps it in
-  only when it succeeds. The PostgreSQL record of a load is written before
-  and after it, in short transactions; the file is never read inside one.
+- **Loads** (`src/lib/analytics/engine.ts`) read CSV and `.xlsx` cells as text
+  and convert them to the confirmed type, so money is `DECIMAL(18,2)` and
+  never a guessed floating-point number. ExcelJS streams a chosen worksheet
+  (the first by default); the source stores its sheet name. Excel workbooks are
+  capped at 50 MB, with ZIP entry and expansion checks; old `.xls`, macro
+  `.xlsm`, and password-protected workbooks are refused. A load writes a new
+  table and swaps it in only when it succeeds. The PostgreSQL record of a load
+  is written before and after it, in short transactions; the file is never
+  read inside one.
 - **The nightly reload** (`src/lib/analytics/scheduler.ts`) loads each daily
   source once a day after 04:00 business time and retries a failure an
   hour later (off with `TOHYEE_ANALYTICS_SCHEDULER=off`).
@@ -1545,9 +1549,12 @@ run time.
   hosts must resolve to public addresses (`src/lib/analytics/mail-host.ts`),
   checked on save and before each connection. Data files
   go into `email/<mailbox id>/` inside the server-admin-chosen source folder;
-  the existing loader discovers them there. OAuth permissions cover the
-  whole mailbox, but these checks only read the chosen folder or label and
-  never modify mail.
+  the existing loader discovers them there. CSV, TSV and TXT, and `.xlsx`
+  attachments are saved; ZIP and workbook entries are checked for safe paths,
+  entry counts, compression ratios, CRCs and expansion. Attachments are capped
+  at 25 MB and each check at 100 MB including expansion. OAuth permissions
+  cover the whole mailbox, but these checks only read the chosen folder or
+  label and never modify mail.
 
 ## Open decisions
 

@@ -2586,3 +2586,18 @@ approved 3 Oct 2026.
        Payroll employees aren't searched.
      - **No indexes yet:** a plain `like` over the words is fast enough for the
        sizes Tohyee is used at; add indexes if that changes.
+
+### Analytics: Excel files (decision 376)
+
+376. **Analytics reads ordinary Excel workbooks and report emails save them**
+     (issue #121; tenant migration 0090). Data sources can choose a worksheet,
+     defaulting to the workbook's first sheet; the chosen name is stored with
+     the source. ExcelJS (MIT) reads worksheets as a stream. Workbooks are
+     limited to 50 MB and checked for unsafe or excessive ZIP expansion.
+     Cells are converted to text before the same explicit column casts as CSV,
+     so money stays `DECIMAL(18,2)`; dates remain date text and Excel's
+     floating-point artifacts are rounded by the selected decimal type.
+     Old `.xls`, macro-enabled `.xlsm`, and password-protected workbooks are
+     refused. Report emails save `.xlsx` attachments unchanged, within the
+     existing 25 MB attachment and 100 MB check budgets, including workbook
+     ZIP expansion.

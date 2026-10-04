@@ -117,9 +117,9 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
       {data.canManage ? <ReportEmailsCard key={organisationId} organisationId={organisationId} folderChosen={data.folder.chosen && data.folder.readable} onChanged={overview.reload} /> : null}
 
       {data.canManage && data.folder.readable ? (
-        <Card title="Files in the folder" description="CSV files in this organisation's folder and the folders inside it, newest first. Set one up to load it.">
+        <Card title="Files in the folder" description="CSV and Excel (.xlsx) files in this organisation's folder and its subfolders, newest first. Set one up to load it.">
           {data.files.length === 0 ? (
-            <Empty>No CSV files yet. Save or copy exports into the folder and they&apos;ll show here.</Empty>
+            <Empty>No data files yet. Save or copy CSV or .xlsx exports into the folder and they&apos;ll show here.</Empty>
           ) : (
             <div className={ui.tableWrap}>
               <table className={ui.table}>
@@ -337,7 +337,7 @@ function SourcesCard({
                   <td>
                     <strong>{source.name}</strong>
                     <div className={ui.muted}>
-                      {source.fileName} · {source.columns.length} columns · {source.reloadDaily ? "loads nightly" : "loads by hand only"}
+                      {source.fileName}{source.sheetName ? ` · ${source.sheetName}` : ""} · {source.columns.length} columns · {source.reloadDaily ? "loads nightly" : "loads by hand only"}
                     </div>
                   </td>
                   <td>
@@ -373,7 +373,7 @@ function SourcesCard({
   );
 }
 
-type Preview = { columns: InspectedColumn[]; rows: string[][]; delimiter: string };
+type Preview = { columns: InspectedColumn[]; rows: string[][]; delimiter: string; sheets?: string[]; sheetName?: string };
 type ColumnChoice = { source: string; name: string; kind: ColumnKind; include: boolean; detected: string; examples: string[] };
 
 function tableNameFor(file: string, taken: string[]): string {
@@ -407,7 +407,17 @@ function SourceSetup({
   onCancel: () => void;
 }) {
   const [delimiter, setDelimiter] = useState(existing?.delimiter ?? "");
-  const preview = useApiData<Preview>("/api/analytics/files", { organisationId, file, delimiter: delimiter || undefined });
+  const [sheetName, setSheetName] = useState(existing?.sheetName ?? "");
+  const isExcel = /\.xlsx$/i.test(file);
+  const preview = useApiData<Preview>("/api/analytics/files", {
+    organisationId,
+    file,
+    delimiter: isExcel ? undefined : delimiter || undefined,
+    sheetName: isExcel ? sheetName || undefined : undefined,
+  });
+  const selectedSheet = isExcel
+    ? sheetName && preview.data?.sheets?.includes(sheetName) ? sheetName : preview.data?.sheetName ?? sheetName
+    : null;
   const [name, setName] = useState(existing?.name ?? (file.split("/").pop() ?? file).replace(/\.[^.]+$/, ""));
   const [tableName, setTableName] = useState(existing?.tableName ?? tableNameFor(file, takenTables));
   const [reloadDaily, setReloadDaily] = useState(existing?.reloadDaily ?? true);
@@ -445,6 +455,7 @@ function SourceSetup({
       organisationId,
       name,
       fileName: file,
+      sheetName: selectedSheet || null,
       delimiter: delimiter || preview.data?.delimiter || ",",
       reloadDaily,
       columns: columns.filter((column) => column.include).map(({ source, name: columnName, kind }) => ({ source, name: columnName, kind })),
@@ -481,21 +492,35 @@ function SourceSetup({
         <Field label="Table" hint={existing ? "Reports use this name, so it can't change." : "Lower-case letters, digits and _."}>
           <input value={tableName} disabled={Boolean(existing)} maxLength={63} onChange={(event) => setTableName(event.target.value)} />
         </Field>
-        <Field label="Separator" hint={preview.data ? `Found "${preview.data.delimiter === "\t" ? "tab" : preview.data.delimiter}".` : undefined}>
-          <select
-            value={delimiter}
-            onChange={(event) => {
-              setDelimiter(event.target.value);
-              setChoices(null);
-            }}
-          >
-            <option value="">Work it out</option>
-            <option value=",">Comma</option>
-            <option value=";">Semicolon</option>
-            <option value={"\t"}>Tab</option>
-            <option value="|">Bar (|)</option>
-          </select>
-        </Field>
+        {isExcel ? (
+          <Field label="Sheet">
+            <select
+              value={selectedSheet || ""}
+              onChange={(event) => {
+                setSheetName(event.target.value);
+                setChoices(null);
+              }}
+            >
+              {(preview.data?.sheets ?? []).map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}
+            </select>
+          </Field>
+        ) : (
+          <Field label="Separator" hint={preview.data ? `Found "${preview.data.delimiter === "\t" ? "tab" : preview.data.delimiter}".` : undefined}>
+            <select
+              value={delimiter}
+              onChange={(event) => {
+                setDelimiter(event.target.value);
+                setChoices(null);
+              }}
+            >
+              <option value="">Work it out</option>
+              <option value=",">Comma</option>
+              <option value=";">Semicolon</option>
+              <option value={"\t"}>Tab</option>
+              <option value="|">Bar (|)</option>
+            </select>
+          </Field>
+        )}
       </div>
       <label className={ui.checkbox}>
         <input type="checkbox" checked={reloadDaily} onChange={(event) => setReloadDaily(event.target.checked)} /> Load again every night after 4am

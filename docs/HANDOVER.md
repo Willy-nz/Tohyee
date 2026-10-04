@@ -202,9 +202,15 @@ built #107, #110 and #111; Claude reviewed and fixed them). All released in
 **v0.5.0** (3 Oct 2026). UI review step 1 (#117, decision 372, tenant
 migration 0089: top bar, notices bell, dashboard preferences, Home) and
 search everything (#118, decision 373, no migration) are built. Next
-numbers: tenant migration 0090, core migration 0007, decision 374. Still to do for Analytics: pivot tables (Perspective),
-reading Excel files (then saving Excel report emails), and limiting DuckDB's
-file access (`allowed_directories`).
+Excel sources and report-email attachments (#121, decision 376, tenant
+migration 0090) use the existing MIT-licensed ExcelJS package; sources store
+their selected worksheet, and workbooks are streamed with size and ZIP
+expansion checks. Old `.xls`, `.xlsm` and password-protected workbooks are
+refused. Unit tests cover date and money casts, sheet selection, unsupported
+formats, file size and workbook ZIP bombs. Next numbers: tenant migration
+0091, core migration 0007, decision 377. Still to do for Analytics: pivot
+tables (Perspective; separate work) and limiting DuckDB's file access
+(`allowed_directories`).
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

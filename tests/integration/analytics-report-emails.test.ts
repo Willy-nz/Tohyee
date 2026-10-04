@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import ExcelJS from "exceljs";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import * as mailboxesRoute from "@/app/api/organisations/[organisationId]/analytics/report-emails/route";
 import * as checkRoute from "@/app/api/organisations/[organisationId]/analytics/report-emails/[id]/check/route";
@@ -66,6 +67,7 @@ describeWithDatabase("report emails (decision 362)", () => {
   const endpoint = `/api/organisations/${orgId}/analytics/report-emails`;
   const save = (body: object, asCookie = cookie) => mailboxesRoute.POST(apiRequest(endpoint, { method: "POST", cookie: asCookie, body }), params({ organisationId: orgId }));
   const attachment = (name: string, text: string) => ({ name, size: Buffer.byteLength(text), read: vi.fn(async () => Buffer.from(text)) });
+  const attachmentBytes = (name: string, bytes: Buffer) => ({ name, size: bytes.length, read: vi.fn(async () => bytes) });
 
   beforeAll(async () => {
     // Made-up mail servers: public addresses, except the one pointed at this server.
@@ -217,13 +219,19 @@ describeWithDatabase("report emails (decision 362)", () => {
     try { expect(await runDueReportEmailChecks()).toEqual([]); }
     finally { await coreQuery("update users set is_active=true where id=$1", [actor.userId]); }
   });
-  it("does not download unsupported PDF or Excel attachments", async () => {
+  it("saves Excel attachments and skips unsupported PDFs", async () => {
     const pdf = attachment("report.pdf", "PDF data");
-    const excel = attachment("report.xlsx", "Excel data");
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet("Sales").addRows([["Day", "Total"], ["2026-10-08", 12.5]]);
+    const excelBytes = Buffer.from(await workbook.xlsx.writeBuffer());
+    const excel = attachmentBytes("report.xlsx", excelBytes);
     mocks.messages = [{ id: "unsupported", receivedAt: "2026-10-08T10:00:00Z", attachments: [pdf, excel] }];
-    expect(await checkReportMailbox((await getOrganisation(orgId))!, actor, mailboxId)).toMatchObject({ status: "ok", filesSaved: 0 });
+    expect(await checkReportMailbox((await getOrganisation(orgId))!, actor, mailboxId)).toMatchObject({ status: "ok", filesSaved: 1 });
     expect(pdf.read).not.toHaveBeenCalled();
-    expect(excel.read).not.toHaveBeenCalled();
+    expect(excel.read).toHaveBeenCalledOnce();
+    const saved = fs.readdirSync(root, { recursive: true }).map(String).find((name) => name.endsWith("/report.xlsx"));
+    expect(saved).toBeDefined();
+    expect(fs.readFileSync(path.join(root, saved!))).toEqual(excelBytes);
   });
   it("refreshes an expired CRM token outside transactions and then reuses the fresh token", async () => {
     const actual = await vi.importActual<typeof import("@/lib/crm/mail/service")>("@/lib/crm/mail/service");

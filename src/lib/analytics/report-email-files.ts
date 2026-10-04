@@ -33,6 +33,87 @@ export function reportFileKey(name: string): string {
   return key;
 }
 
+function safeArchiveEntry(name: string): boolean {
+  if (!name || name.length > 512 || name.startsWith("/") || name.includes("\\") || name.includes("\0")) return false;
+  const parts = name.split("/");
+  if (parts.at(-1) === "") parts.pop();
+  return parts.length > 0 && parts.every((part) => part !== "" && part !== "." && part !== "..");
+}
+
+function crc32(bytes: Buffer, initial = 0xffffffff): number {
+  let crc = initial;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return crc >>> 0;
+}
+
+export async function reportXlsxExpansionBytes(bytes: Buffer): Promise<number> {
+  if (bytes.length > MAX_ATTACHMENT_BYTES) throw new ValidationError("The Excel attachment exceeds the attachment size limit.");
+  return new Promise((resolve, reject) => {
+    yauzl.fromBuffer(bytes, { lazyEntries: true, autoClose: false, strictFileNames: true, validateEntrySizes: false }, (error, zip) => {
+      if (error || !zip) { reject(new ValidationError("The Excel attachment couldn't be read safely.")); return; }
+      let failed = false;
+      let count = 0;
+      let total = 0;
+      const names = new Set<string>();
+      const fail = () => {
+        if (failed) return;
+        failed = true;
+        zip.close();
+        reject(new ValidationError("The Excel attachment is damaged or exceeds the extraction limits."));
+      };
+      zip.on("error", fail);
+      zip.on("end", () => {
+        zip.close();
+        if (!failed) resolve(total);
+      });
+      zip.on("entry", (entry: yauzl.Entry) => {
+        void (async () => {
+          const mode = (entry.externalFileAttributes >>> 16) & 0xf000;
+          const key = entry.fileName.normalize("NFC").toLowerCase();
+          if (++count > MAX_ZIP_ENTRIES || !safeArchiveEntry(entry.fileName) || names.has(key) ||
+              (entry.generalPurposeBitFlag & (1 | 64)) || (mode !== 0 && mode !== 0x8000 && mode !== 0x4000) ||
+              ((entry.externalFileAttributes & 0x10) !== 0 && !entry.fileName.endsWith("/")) || ![0, 8].includes(entry.compressionMethod) ||
+              !Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0 ||
+              entry.uncompressedSize > Math.max(1, entry.compressedSize) * MAX_COMPRESSION_RATIO ||
+              entry.uncompressedSize > MAX_CHECK_BYTES || total + entry.uncompressedSize > MAX_CHECK_BYTES) {
+            throw new ValidationError("Unsafe Excel ZIP.");
+          }
+          names.add(key);
+          total += entry.uncompressedSize;
+          const stream = await new Promise<import("node:stream").Readable>((accept, refuse) => {
+            zip.openReadStream(entry, (streamError, content) => {
+              if (streamError || !content) refuse(streamError);
+              else accept(content);
+            });
+          });
+          let size = 0;
+          let crc = 0xffffffff;
+          try {
+            for await (const chunk of stream) {
+              const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+              size += buffer.length;
+              if (size > entry.uncompressedSize || size + total - entry.uncompressedSize > MAX_CHECK_BYTES) {
+                throw new ValidationError("Excel ZIP expansion exceeds the mailbox-check limit.");
+              }
+              crc = crc32(buffer, crc);
+            }
+          } finally {
+            stream.destroy();
+          }
+          if (size !== entry.uncompressedSize || ((crc ^ 0xffffffff) >>> 0) !== entry.crc32) {
+            throw new ValidationError("The Excel attachment is damaged.");
+          }
+          if (!failed) zip.readEntry();
+        })().catch(fail);
+      });
+      zip.readEntry();
+    });
+  });
+}
+
 function budget(size: number, remaining: number): void {
   if (!Number.isSafeInteger(remaining) || remaining < 0 || remaining > MAX_CHECK_BYTES ||
       !Number.isSafeInteger(size) || size < 0 || size > MAX_ATTACHMENT_BYTES) {
@@ -50,6 +131,11 @@ export async function extractReportAttachment(
   const extension = path.extname(name).toLowerCase();
   if ([".csv", ".tsv", ".txt"].includes(extension)) {
     budget(bytes.length, remainingBytes);
+    return [{ name, bytes }];
+  }
+  if (extension === ".xlsx") {
+    const expanded = await reportXlsxExpansionBytes(bytes);
+    if (expanded > remainingBytes) throw new ReportCheckBudgetError();
     return [{ name, bytes }];
   }
   if (extension !== ".zip") return [];
@@ -199,7 +285,7 @@ async function writeReportFile(
 ): Promise<string> {
   const fileName = reportFileKey(file.name);
   budget(file.bytes.length, MAX_CHECK_BYTES);
-  if (![".csv", ".tsv", ".txt"].includes(path.extname(file.name).toLowerCase())) {
+  if (![".csv", ".tsv", ".txt", ".xlsx"].includes(path.extname(file.name).toLowerCase())) {
     throw new ValidationError("Only extracted data files can be saved.");
   }
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(mailboxId) || !messageId || messageId.length > 1024 ||
