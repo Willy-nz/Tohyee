@@ -2570,3 +2570,19 @@ approved 3 Oct 2026.
      net profit by month, a To do card and recent activity lines. Dashboard
      hide/show and tile choices are saved per person and per page in
      `dashboard_preferences`.
+
+### Search everything (decision 373)
+
+373. **Ctrl K searches records as well as pages** (issue #116, Jess 4 Oct
+     2026, `docs/UI-REVIEW-2026.md`). Records come first, then pages:
+     contacts, sales and purchase documents, payments, bank lines, manual
+     journals, items, accounts, fixed assets, and with the CRM on, CRM
+     people, companies and opportunities.
+     - **Matching:** by name, number, reference, email, phone, an amount or a
+       date, with "inv", "bill" and "c:" prefixes.
+     - **Limits:** at most five of each kind, from two characters.
+     - **Access:** it searches only the current organisation, at viewer and
+       up. Report viewers get only the names of dashboards shared with them.
+       Payroll employees aren't searched.
+     - **No indexes yet:** a plain `like` over the words is fast enough for the
+       sizes Tohyee is used at; add indexes if that changes.

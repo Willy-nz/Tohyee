@@ -32,6 +32,29 @@
   padding: 0 14px;
 }
 
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+}
+
+.chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 4px 10px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.chipActive {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+}
+
 .searchIcon {
   flex-shrink: 0;
   color: var(--text-muted);
@@ -58,13 +81,35 @@
 
 .option {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   border-radius: var(--radius-sm);
   padding: 9px 12px;
   cursor: pointer;
   font-size: var(--text-base);
+}
+
+.section {
+  padding: 10px 10px 4px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.kind {
+  min-width: 96px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-transform: capitalize;
+}
+
+.recordText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .optionActive {
@@ -80,9 +125,17 @@
   flex-shrink: 0;
   color: var(--text-muted);
   font-size: var(--text-sm);
+  text-align: right;
 }
 
-.optionActive .group {
+.subtitle {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.optionActive .group,
+.optionActive .subtitle,
+.optionActive .kind {
   color: inherit;
   opacity: 0.85;
 }

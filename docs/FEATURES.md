@@ -1324,6 +1324,12 @@ that something happened.
   (Share, in a dashboard's edit mode, for bookkeepers and up), using that
   dashboard's slicers and dates. They can't see the books, the data tables or
   anything else in the organisation.
+- **Search everything** (decision 373). Ctrl K finds records as well as
+  pages: contacts, invoices, bills, credit notes, quotes and orders, payments,
+  bank lines, journals, items, accounts, fixed assets and CRM records. Search
+  by name, number, reference, amount or date, narrow it with chips or "inv",
+  "bill" and "c:" prefixes, and see your recently opened records when the box
+  is empty.
 - **Save transaction reports as custom** (examples CR11-CR15, decision 369,
   tenant migration 0086). Account transactions, aged receivables and
   payables, sales by salesperson and the journal report can be saved with
