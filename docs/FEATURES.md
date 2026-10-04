@@ -1307,10 +1307,12 @@ that something happened.
   range and slicers (tick boxes) that apply to every tile. Totals stay
   exact (DuckDB decimals, shown from their text); column and value names
   are checked against the table and typed values go in as parameters.
+  Tiles can be pinned to a person's Home dashboard, using the saved question
+  and date range while keeping the dashboard's sharing rules.
   Bookkeepers and up make dashboards; everyone in the organisation can see
   them. Tried with the made-up 1M-row CSV: a five-tile dashboard opens in
-  about 3 seconds. Tohyee's own books and CRM, sharing with clients,
-  shaping and pivot tables are the next steps.
+  about 3 seconds. Tohyee's own books and CRM, shaping and pivot tables are
+  the next steps.
 
 - **Analytics, step 2: the books and CRM** (examples AB1-AB10, decision
   367). Each organisation's ledger lines, invoices, bills, contacts, items and
