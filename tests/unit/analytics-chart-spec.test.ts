@@ -57,6 +57,16 @@ describe("analytics chart specs", () => {
     expect(option.series[0].radius).toEqual(kind === "donut" ? ["45%", "70%"] : ["0%", "70%"]);
   });
 
+  it("gives a compact chart tight margins and hides overlapping axis labels", () => {
+    const spec: ChartSpec = { kind: "bar", category: "region", series: [{ field: "sales", label: "Sales" }], valueFormat: "number" };
+    const rows = [{ region: "Otago", sales: "1" }];
+    const full = toEChartsOption(spec, rows, theme) as { grid?: unknown; xAxis?: { axisLabel?: { hideOverlap?: boolean } } };
+    expect(full.grid).toBeUndefined();
+    expect(full.xAxis?.axisLabel?.hideOverlap).toBe(true);
+    const compact = toEChartsOption({ ...spec, compact: true }, rows, theme) as { grid?: { top: number; bottom: number } };
+    expect(compact.grid).toMatchObject({ top: 8, bottom: 4 });
+  });
+
   it("formats money compactly on axes and fully in tooltips", () => {
     const option = asOption(
       { kind: "column", category: "month", series: [{ field: "sales", label: "Sales" }], valueFormat: "money", currency: "NZD" },
