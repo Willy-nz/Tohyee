@@ -1515,6 +1515,12 @@ run time.
 - **The nightly reload** (`src/lib/analytics/scheduler.ts`) loads each daily
   source once a day after 04:00 business time and retries a failure an
   hour later (off with `TOHYEE_ANALYTICS_SCHEDULER=off`).
+- **File access** (decision 377): each organisation's DuckDB is opened with
+  `allowed_directories` set to its source folder and data folder,
+  `enable_external_access = false` and `lock_configuration = true`
+  (`src/lib/analytics/engine.ts`). The folder is checked on each use and a
+  change reopens the file. Previews have a 10-second limit
+  (`PREVIEW_TIME_LIMIT_MS`, via `connection.interrupt()`).
 - **Sharing** (decision 368): the `report_viewer` role ranks below viewer
   (`src/lib/auth/roles.ts`), so routes guarded at viewer refuse it. The
   dashboard routes accept it and filter through `analytics_dashboard_shares`

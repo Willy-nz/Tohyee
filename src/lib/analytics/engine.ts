@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import { ValidationError } from "@/lib/errors";
+import { organisationSourceFolder } from "@/lib/analytics/folders";
 import { analyticsFilePath } from "@/lib/analytics/paths";
 
 export { analyticsFilePath, analyticsFolder } from "@/lib/analytics/paths";
@@ -64,19 +65,64 @@ async function duckdb(): Promise<typeof import("@duckdb/node-api")> {
 
 // One DuckDB instance per file per process: DuckDB lets only one process
 // write a file, and connections from one instance share it safely.
-const instances = new Map<string, Promise<DuckDBInstance>>();
+type Opened = { instance: Promise<DuckDBInstance>; folder: string | null };
+const instances = new Map<string, Opened>();
 
-async function instanceFor(organisationId: string): Promise<DuckDBInstance> {
-  const file = analyticsFilePath(organisationId);
-  let instance = instances.get(file);
-  if (!instance) {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    // Extensions are never downloaded at run time (the server may be
-    // offline, and it's code from the internet).
-    instance = duckdb().then(({ DuckDBInstance }) => DuckDBInstance.create(file, { autoinstall_known_extensions: "false" }));
-    instances.set(file, instance);
-    instance.catch(() => instances.delete(file));
+/** The folders DuckDB may read and write: the organisation's source folder and its own data folder. */
+function allowedFolders(file: string, folder: string | null): string[] {
+  const folders = [path.dirname(file)];
+  if (folder) {
+    folders.push(folder);
+    try {
+      folders.push(fs.realpathSync(folder));
+    } catch {
+      // A folder that has gone is checked again when it's used.
+    }
   }
+  return [...new Set(folders.map((entry) => (entry.endsWith(path.sep) ? entry : entry + path.sep)))];
+}
+
+async function open(file: string, folder: string | null): Promise<DuckDBInstance> {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const { DuckDBInstance } = await duckdb();
+  // Extensions are never downloaded at run time (the server may be
+  // offline, and it's code from the internet).
+  const instance = await DuckDBInstance.create(file, { autoinstall_known_extensions: "false" });
+  // Defence in depth (decision 377): DuckDB may only touch this
+  // organisation's source folder and its own data folder, and the setting
+  // can't be changed back, so no query can read other files on the server.
+  const setup = await instance.connect();
+  try {
+    const list = allowedFolders(file, folder).map(quoteString).join(", ");
+    await setup.run(`set allowed_directories = [${list}]`);
+    await setup.run("set enable_external_access = false");
+    await setup.run("set lock_configuration = true");
+  } finally {
+    setup.closeSync();
+  }
+  return instance;
+}
+
+async function instanceFor(organisationId: string, folderHint?: string): Promise<DuckDBInstance> {
+  const file = analyticsFilePath(organisationId);
+  // The folder can be changed from the server app or the command line too,
+  // so it's checked each time; a change reopens the file with the new folder.
+  // Without the server's database (the benchmark tool, unit tests) the
+  // caller's folder is used, and otherwise none, which is the stricter choice.
+  const folder = await organisationSourceFolder(organisationId).catch(() => folderHint ?? null);
+  const current = instances.get(file);
+  if (current && current.folder === folder) return current.instance;
+  if (current) {
+    // Not waiting for queued work here: this can be called from inside it.
+    // A load running at that moment fails and is tried again.
+    instances.delete(file);
+    (await current.instance.catch(() => null))?.closeSync();
+  }
+  const instance = open(file, folder);
+  instances.set(file, { instance, folder });
+  instance.catch(() => {
+    if (instances.get(file)?.instance === instance) instances.delete(file);
+  });
   return instance;
 }
 
@@ -94,8 +140,12 @@ function serialise<T>(organisationId: string, work: () => Promise<T>): Promise<T
   return next;
 }
 
-export async function withAnalytics<T>(organisationId: string, work: (connection: DuckDBConnection) => Promise<T>): Promise<T> {
-  const instance = await instanceFor(organisationId);
+export async function withAnalytics<T>(
+  organisationId: string,
+  work: (connection: DuckDBConnection) => Promise<T>,
+  folderHint?: string,
+): Promise<T> {
+  const instance = await instanceFor(organisationId, folderHint);
   const connection = await instance.connect();
   try {
     return await work(connection);
@@ -107,11 +157,11 @@ export async function withAnalytics<T>(organisationId: string, work: (connection
 /** Closes an organisation's analytics file (tests, and before deleting it). */
 export async function closeAnalytics(organisationId: string): Promise<void> {
   const file = analyticsFilePath(organisationId);
-  const instance = instances.get(file);
-  if (!instance) return;
+  const opened = instances.get(file);
+  if (!opened) return;
   instances.delete(file);
   await queues.get(organisationId);
-  (await instance).closeSync();
+  (await opened.instance).closeSync();
 }
 
 /** True when `file` is inside `folder` (after resolving `..` and links). */
@@ -188,7 +238,7 @@ export async function loadCsv(input: {
         await connection.run(`drop table if exists ${quoteIdentifier(staging)}`).catch(() => undefined);
         throw new ValidationError(loadErrorMessage(error));
       }
-    }),
+    }, input.sourceFolder),
   );
 }
 
@@ -227,12 +277,15 @@ export async function replaceTableFromSelect(
   );
 }
 
+/** Previews (shaping) stop after this long. */
+export const PREVIEW_TIME_LIMIT_MS = 10_000;
+
 export async function previewSelect(
   organisationId: string,
   sql: string,
   params: unknown[],
 ): Promise<Array<Record<string, string | null>>> {
-  return runBuiltQuery(organisationId, `select * from (${sql}) as preview limit 100`, params);
+  return runBuiltQuery(organisationId, `select * from (${sql}) as preview limit 100`, params, { timeLimitMs: PREVIEW_TIME_LIMIT_MS });
 }
 
 /** DuckDB's error, first line only, without its internal prefixes. */
@@ -331,7 +384,6 @@ export function suggestKind(detected: string, heading: string): ColumnKind {
   return "text";
 }
 
-let scratch: Promise<DuckDBInstance> | null = null;
 
 /**
  * A look at a file before it's set up: its headings, DuckDB's guess at each
@@ -341,13 +393,15 @@ let scratch: Promise<DuckDBInstance> | null = null;
 export async function inspectCsv(sourceFolder: string, fileName: string, delimiter?: string): Promise<{ columns: InspectedColumn[]; rows: string[][]; delimiter: string }> {
   const file = resolveSourceFile(sourceFolder, fileName);
   if (delimiter !== undefined && delimiter.length !== 1) throw new ValidationError("The separator must be one character.");
-  if (!scratch) {
-    scratch = duckdb().then(({ DuckDBInstance }) => DuckDBInstance.create(":memory:", { autoinstall_known_extensions: "false" }));
-    scratch.catch(() => {
-      scratch = null;
-    });
-  }
-  const connection = await (await scratch).connect();
+  // A throwaway in-memory database that can only read this organisation's folder (decision 377).
+  const { DuckDBInstance } = await duckdb();
+  const scratch = await DuckDBInstance.create(":memory:", { autoinstall_known_extensions: "false" });
+  const connection = await scratch.connect();
+  const folders = [sourceFolder, ...(() => { try { return [fs.realpathSync(sourceFolder)]; } catch { return []; } })()]
+    .map((entry) => (entry.endsWith(path.sep) ? entry : entry + path.sep));
+  await connection.run(`set allowed_directories = [${[...new Set(folders)].map(quoteString).join(", ")}]`);
+  await connection.run("set enable_external_access = false");
+  await connection.run("set lock_configuration = true");
   try {
     const options = delimiter ? `, delim = ${quoteString(delimiter)}` : "";
     let sniffed: Record<string, unknown> | undefined;
@@ -379,6 +433,7 @@ export async function inspectCsv(sourceFolder: string, fileName: string, delimit
     throw new ValidationError(`That file couldn't be read as a CSV: ${loadErrorMessage(error)}`);
   } finally {
     connection.closeSync();
+    scratch.closeSync();
   }
 }
 
@@ -414,12 +469,32 @@ export async function listTables(organisationId: string): Promise<Map<string, Ar
 }
 
 /** Runs a query Tohyee built (with its values as parameters) and returns its rows as text, so decimals stay exact. */
-export async function runBuiltQuery(organisationId: string, sql: string, params: unknown[]): Promise<Array<Record<string, string | null>>> {
+export async function runBuiltQuery(
+  organisationId: string,
+  sql: string,
+  params: unknown[],
+  options: { timeLimitMs?: number } = {},
+): Promise<Array<Record<string, string | null>>> {
   return withAnalytics(organisationId, async (connection) => {
-    const reader = await connection.runAndReadAll(sql, params as never);
-    return (reader.getRowObjectsJson() as Array<Record<string, unknown>>).map((row) =>
-      Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value === null || value === undefined ? null : String(value)])),
-    );
+    // A time limit stops a heavy question (e.g. a preview with many merges) tying up the server.
+    let stopped = false;
+    const timer = options.timeLimitMs
+      ? setTimeout(() => {
+          stopped = true;
+          connection.interrupt();
+        }, options.timeLimitMs)
+      : undefined;
+    try {
+      const reader = await connection.runAndReadAll(sql, params as never);
+      return (reader.getRowObjectsJson() as Array<Record<string, unknown>>).map((row) =>
+        Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value === null || value === undefined ? null : String(value)])),
+      );
+    } catch (error) {
+      if (stopped) throw new ValidationError("That took too long to preview. Filter or group the data sooner, or use fewer merges.");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   });
 }
 
