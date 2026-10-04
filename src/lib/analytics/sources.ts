@@ -7,7 +7,7 @@ import {
   COLUMN_TYPES,
   type ColumnKind,
   dropTable,
-  loadCsv,
+  loadSourceFile,
   type LoadColumn,
   resolveSourceFile,
   TOHYEE_TABLE_PREFIX,
@@ -26,6 +26,7 @@ export type AnalyticsSource = {
   name: string;
   tableName: string;
   fileName: string;
+  sheetName: string | null;
   delimiter: string;
   columns: LoadColumn[];
   reloadDaily: boolean;
@@ -105,6 +106,7 @@ type SourceRow = {
   name: string;
   table_name: string;
   file_name: string;
+  sheet_name: string | null;
   delimiter: string;
   columns: LoadColumn[];
   reload_daily: boolean;
@@ -116,7 +118,7 @@ type SourceRow = {
 
 export async function listSources(tx: OrgTx): Promise<AnalyticsSource[]> {
   const sources = await tx.query<SourceRow>(
-    `select id::text, name, table_name, file_name, delimiter, columns, reload_daily, created_by_email, created_at, updated_by_email, updated_at
+    `select id::text, name, table_name, file_name, sheet_name, delimiter, columns, reload_daily, created_by_email, created_at, updated_by_email, updated_at
        from analytics_sources order by name, id`,
   );
   const runs = await tx.query<RunRow>(
@@ -128,6 +130,7 @@ export async function listSources(tx: OrgTx): Promise<AnalyticsSource[]> {
     name: row.name,
     tableName: row.table_name,
     fileName: row.file_name,
+    sheetName: row.sheet_name,
     delimiter: row.delimiter,
     columns: row.columns,
     reloadDaily: row.reload_daily,
@@ -188,12 +191,19 @@ function parseSourceInput(input: Record<string, unknown>, current?: AnalyticsSou
   }
   const fileName = input.fileName === undefined && current ? current.fileName : typeof input.fileName === "string" ? input.fileName.trim() : "";
   if (!fileName || fileName.length > 500) throw new ValidationError("Choose the file.");
+  const sheetInput = input.sheetName === undefined ? (current && current.fileName === fileName ? current.sheetName : null) : input.sheetName;
+  const sheetName = sheetInput === null || sheetInput === "" ? null : typeof sheetInput === "string" ? sheetInput : null;
+  if (sheetInput !== null && sheetInput !== "" && sheetName === null) throw new ValidationError("Choose a valid Excel sheet.");
+  if (sheetName !== null && (sheetName.length > 31 || /[\u0000-\u001f\u007f]/.test(sheetName))) {
+    throw new ValidationError("An Excel sheet name must be 1 to 31 characters.");
+  }
+  if (sheetName !== null && !/\.xlsx$/i.test(fileName)) throw new ValidationError("Choose a sheet only for an .xlsx file.");
   const delimiter = input.delimiter === undefined ? (current?.delimiter ?? ",") : String(input.delimiter);
   if (delimiter.length !== 1) throw new ValidationError("The separator must be one character.");
   const columns = input.columns === undefined && current ? current.columns : parseColumns(input.columns);
   if (input.reloadDaily !== undefined && typeof input.reloadDaily !== "boolean") throw new ValidationError("reloadDaily must be true or false.");
   const reloadDaily = input.reloadDaily === undefined ? (current?.reloadDaily ?? true) : input.reloadDaily;
-  return { name, tableName, fileName, delimiter, columns, reloadDaily };
+  return { name, tableName, fileName, sheetName, delimiter, columns, reloadDaily };
 }
 
 /** Sets up a file to load. Admins and owners; the file must be in the organisation's folder. */
@@ -208,16 +218,16 @@ export async function createSource(tx: OrgTx, input: Record<string, unknown>): P
   const shaped = await tx.query("select 1 from analytics_shaped_tables where table_name = $1", [values.tableName]);
   if (shaped.rows.length > 0) throw new ConflictError(`A shaped table already uses ${values.tableName}.`);
   const result = await tx.query<{ id: string }>(
-    `insert into analytics_sources (name, table_name, file_name, delimiter, columns, reload_daily, created_by_email, updated_by_email)
-     values ($1, $2, $3, $4, $5::jsonb, $6, $7, $7) returning id::text`,
-    [values.name, values.tableName, values.fileName, values.delimiter, JSON.stringify(values.columns), values.reloadDaily, tx.actor.email],
+    `insert into analytics_sources (name, table_name, file_name, sheet_name, delimiter, columns, reload_daily, created_by_email, updated_by_email)
+     values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $8) returning id::text`,
+    [values.name, values.tableName, values.fileName, values.sheetName, values.delimiter, JSON.stringify(values.columns), values.reloadDaily, tx.actor.email],
   );
   const id = result.rows[0].id;
   await writeAuditEvent(tx, {
     eventType: "analytics.source_created",
     entityType: "analytics_source",
     entityId: id,
-    details: { name: values.name, tableName: values.tableName, fileName: values.fileName, columns: values.columns.length },
+    details: { name: values.name, tableName: values.tableName, fileName: values.fileName, sheetName: values.sheetName, columns: values.columns.length },
   });
   return getSource(tx, id);
 }
@@ -236,15 +246,15 @@ export async function updateSource(tx: OrgTx, id: string, input: Record<string, 
     resolveSourceFile(folder, values.fileName);
   }
   await tx.query(
-    `update analytics_sources set name = $2, file_name = $3, delimiter = $4, columns = $5::jsonb, reload_daily = $6,
-            updated_by_email = $7, updated_at = now() where id = $1`,
-    [id, values.name, values.fileName, values.delimiter, JSON.stringify(values.columns), values.reloadDaily, tx.actor.email],
+    `update analytics_sources set name = $2, file_name = $3, sheet_name = $4, delimiter = $5, columns = $6::jsonb, reload_daily = $7,
+            updated_by_email = $8, updated_at = now() where id = $1`,
+    [id, values.name, values.fileName, values.sheetName, values.delimiter, JSON.stringify(values.columns), values.reloadDaily, tx.actor.email],
   );
   await writeAuditEvent(tx, {
     eventType: "analytics.source_updated",
     entityType: "analytics_source",
     entityId: id,
-    details: { name: values.name, fileName: values.fileName, columns: values.columns.length, reloadDaily: values.reloadDaily },
+    details: { name: values.name, fileName: values.fileName, sheetName: values.sheetName, columns: values.columns.length, reloadDaily: values.reloadDaily },
   });
   return getSource(tx, id);
 }
@@ -315,13 +325,14 @@ export async function runLoad(
     const folder = await organisationSourceFolder(organisation.id);
     if (!folder) throw new ValidationError("This organisation's analytics folder isn't chosen any more.");
     const file = resolveSourceFile(folder, started.source.fileName);
-    outcome = await loadCsv({
+    outcome = await loadSourceFile({
       organisationId: organisation.id,
       sourceFolder: folder,
       file,
       table: started.source.tableName,
       columns: started.source.columns,
       delimiter: started.source.delimiter,
+      sheetName: started.source.sheetName,
     });
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);

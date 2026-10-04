@@ -1,6 +1,10 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { once } from "node:events";
+import { finished } from "node:stream/promises";
 import type { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
+import yauzl from "yauzl";
 import { ValidationError } from "@/lib/errors";
 import { analyticsFilePath } from "@/lib/analytics/paths";
 
@@ -124,6 +128,71 @@ export function isInsideFolder(folder: string, file: string): boolean {
 
 export type CsvLoadResult = { rows: number; milliseconds: number };
 
+const MAX_XLSX_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_XLSX_EXPANDED_BYTES = 250 * 1024 * 1024;
+const MAX_XLSX_ZIP_ENTRIES = 1000;
+const MAX_XLSX_COMPRESSION_RATIO = 1000;
+const MAX_XLSX_CSV_BYTES = 1024 * 1024 * 1024;
+
+function validateLoadInput(input: {
+  sourceFolder: string;
+  file: string;
+  table: string;
+  columns: readonly LoadColumn[];
+}): void {
+  assertTableName(input.table);
+  if (input.columns.length === 0) throw new ValidationError("Choose at least one column to load.");
+  const names = new Set<string>();
+  for (const column of input.columns) {
+    assertTableName(column.name);
+    if (names.has(column.name)) throw new ValidationError(`Two columns are both called ${column.name}.`);
+    names.add(column.name);
+    if (!Object.hasOwn(COLUMN_TYPES, column.kind)) throw new ValidationError(`Unknown column type for ${column.name}.`);
+  }
+  if (!fs.existsSync(input.file) || !isInsideFolder(input.sourceFolder, input.file)) {
+    throw new ValidationError("That file isn't in this organisation's analytics folder.");
+  }
+}
+
+async function loadCsvInto(connection: DuckDBConnection, input: {
+  file: string;
+  table: string;
+  columns: readonly LoadColumn[];
+  delimiter: string;
+}): Promise<CsvLoadResult> {
+  const started = performance.now();
+  const staging = `_tohyee_load_${input.table}`;
+  const select = input.columns
+    .map((column) => {
+      const value = `nullif(trim(${quoteIdentifier(column.source)}), '')`;
+      const converted = column.kind === "text" ? value : `cast(${value} as ${COLUMN_TYPES[column.kind]})`;
+      return `${converted} as ${quoteIdentifier(column.name)}`;
+    })
+    .join(", ");
+  await connection.run(`drop table if exists ${quoteIdentifier(staging)}`);
+  try {
+    await connection.run(
+      `create table ${quoteIdentifier(staging)} as select ${select} from read_csv(${quoteString(input.file)}, ` +
+        `header = true, all_varchar = true, delim = ${quoteString(input.delimiter)})`,
+    );
+    const count = await connection.runAndReadAll(`select count(*)::bigint as n from ${quoteIdentifier(staging)}`);
+    const rows = Number(count.getRows()[0][0]);
+    await connection.run("begin transaction");
+    try {
+      await connection.run(`drop table if exists ${quoteIdentifier(input.table)}`);
+      await connection.run(`alter table ${quoteIdentifier(staging)} rename to ${quoteIdentifier(input.table)}`);
+      await connection.run("commit");
+    } catch (error) {
+      await connection.run("rollback");
+      throw error;
+    }
+    return { rows, milliseconds: Math.round(performance.now() - started) };
+  } catch (error) {
+    await connection.run(`drop table if exists ${quoteIdentifier(staging)}`).catch(() => undefined);
+    throw new ValidationError(loadErrorMessage(error));
+  }
+}
+
 /**
  * Loads a CSV file into `table`, replacing it only if the whole file loads
  * (decision 357). The file must be inside `sourceFolder` (decision 358).
@@ -138,58 +207,260 @@ export async function loadCsv(input: {
   columns: readonly LoadColumn[];
   delimiter?: string;
 }): Promise<CsvLoadResult> {
-  assertTableName(input.table);
-  if (input.columns.length === 0) throw new ValidationError("Choose at least one column to load.");
-  const names = new Set<string>();
-  for (const column of input.columns) {
-    assertTableName(column.name);
-    if (names.has(column.name)) throw new ValidationError(`Two columns are both called ${column.name}.`);
-    names.add(column.name);
-    if (!Object.hasOwn(COLUMN_TYPES, column.kind)) throw new ValidationError(`Unknown column type for ${column.name}.`);
-  }
-  if (!fs.existsSync(input.file) || !isInsideFolder(input.sourceFolder, input.file)) {
-    throw new ValidationError("That file isn't in this organisation's analytics folder.");
-  }
+  validateLoadInput(input);
   const delimiter = input.delimiter ?? ",";
   if (delimiter.length !== 1) throw new ValidationError("The separator must be one character.");
 
   return serialise(input.organisationId, () =>
-    withAnalytics(input.organisationId, async (connection) => {
-      const started = performance.now();
-      const staging = `_tohyee_load_${input.table}`;
-      // Every column is read as text and converted explicitly, so DuckDB
-      // never guesses a type (it guesses prices as floating-point numbers).
-      const select = input.columns
-        .map((column) => {
-          const value = `nullif(trim(${quoteIdentifier(column.source)}), '')`;
-          const converted = column.kind === "text" ? value : `cast(${value} as ${COLUMN_TYPES[column.kind]})`;
-          return `${converted} as ${quoteIdentifier(column.name)}`;
-        })
-        .join(", ");
-      await connection.run(`drop table if exists ${quoteIdentifier(staging)}`);
-      try {
-        await connection.run(
-          `create table ${quoteIdentifier(staging)} as select ${select} from read_csv(${quoteString(input.file)}, ` +
-            `header = true, all_varchar = true, delim = ${quoteString(delimiter)})`,
-        );
-        const count = await connection.runAndReadAll(`select count(*)::bigint as n from ${quoteIdentifier(staging)}`);
-        const rows = Number(count.getRows()[0][0]);
-        await connection.run("begin transaction");
-        try {
-          await connection.run(`drop table if exists ${quoteIdentifier(input.table)}`);
-          await connection.run(`alter table ${quoteIdentifier(staging)} rename to ${quoteIdentifier(input.table)}`);
-          await connection.run("commit");
-        } catch (error) {
-          await connection.run("rollback");
-          throw error;
-        }
-        return { rows, milliseconds: Math.round(performance.now() - started) };
-      } catch (error) {
-        await connection.run(`drop table if exists ${quoteIdentifier(staging)}`).catch(() => undefined);
-        throw new ValidationError(loadErrorMessage(error));
-      }
-    }),
+    withAnalytics(input.organisationId, (connection) => loadCsvInto(connection, { ...input, delimiter })),
   );
+}
+
+function crc32(bytes: Buffer, initial = 0xffffffff): number {
+  let crc = initial;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return crc >>> 0;
+}
+
+function safeXlsxEntry(name: string): boolean {
+  if (!name || name.length > 512 || name.startsWith("/") || name.includes("\\") || name.includes("\0")) return false;
+  const parts = name.split("/");
+  if (parts.at(-1) === "") parts.pop();
+  return parts.length > 0 && parts.every((part) => part !== "" && part !== "." && part !== "..");
+}
+
+async function validateXlsxArchive(file: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    yauzl.open(file, { lazyEntries: true, autoClose: false, strictFileNames: true, validateEntrySizes: false }, (error, zip) => {
+      if (error || !zip) {
+        reject(new ValidationError("That Excel file couldn't be read. It may be password-protected or damaged."));
+        return;
+      }
+      let done = false;
+      let total = 0;
+      let entries = 0;
+      const fail = (reason = "The Excel workbook contains unsafe files or exceeds the extraction limits.") => {
+        if (done) return;
+        done = true;
+        zip.close();
+        reject(new ValidationError(reason));
+      };
+      zip.on("error", () => fail());
+      zip.on("end", () => {
+        if (done) return;
+        done = true;
+        zip.close();
+        resolve();
+      });
+      zip.on("entry", (entry: yauzl.Entry) => {
+        void (async () => {
+          const mode = (entry.externalFileAttributes >>> 16) & 0xf000;
+          if (++entries > MAX_XLSX_ZIP_ENTRIES || !safeXlsxEntry(entry.fileName) ||
+              (entry.generalPurposeBitFlag & (1 | 64)) || ![0, 8].includes(entry.compressionMethod) ||
+              (mode !== 0 && mode !== 0x8000 && mode !== 0x4000) ||
+              !Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0 ||
+              entry.uncompressedSize > Math.max(1, entry.compressedSize) * MAX_XLSX_COMPRESSION_RATIO ||
+              total + entry.uncompressedSize > MAX_XLSX_EXPANDED_BYTES) {
+            throw new ValidationError("The Excel workbook contains unsafe files or exceeds the extraction limits.");
+          }
+          total += entry.uncompressedSize;
+          const stream = await new Promise<import("node:stream").Readable>((accept, refuse) => {
+            zip.openReadStream(entry, (streamError, content) => {
+              if (streamError || !content) refuse(streamError);
+              else accept(content);
+            });
+          });
+          let size = 0;
+          let crc = 0xffffffff;
+          try {
+            for await (const chunk of stream) {
+              const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+              size += buffer.length;
+              if (size > entry.uncompressedSize || size + total - entry.uncompressedSize > MAX_XLSX_EXPANDED_BYTES) {
+                throw new ValidationError("The Excel workbook exceeds the extraction limits.");
+              }
+              crc = crc32(buffer, crc);
+            }
+          } finally {
+            stream.destroy();
+          }
+          if (size !== entry.uncompressedSize || ((crc ^ 0xffffffff) >>> 0) !== entry.crc32) {
+            throw new ValidationError("The Excel workbook is damaged.");
+          }
+          if (!done) zip.readEntry();
+        })().catch((caught: unknown) => fail(caught instanceof ValidationError ? caught.message : undefined));
+      });
+      zip.readEntry();
+    });
+  });
+}
+
+function validateXlsxFile(sourceFolder: string, file: string): void {
+  if (!fs.existsSync(file) || !isInsideFolder(sourceFolder, file)) {
+    throw new ValidationError("That file isn't in this organisation's analytics folder.");
+  }
+  const extension = path.extname(file).toLowerCase();
+  if (extension === ".xls") throw new ValidationError("Older Excel files (.xls) aren't supported. Save the file as .xlsx.");
+  if (extension === ".xlsm") throw new ValidationError("Excel files with macros (.xlsm) aren't supported.");
+  if (extension !== ".xlsx") throw new ValidationError("Choose an Excel workbook (.xlsx).");
+  if (fs.statSync(file).size > MAX_XLSX_FILE_BYTES) throw new ValidationError("Excel workbooks must be 50 MB or smaller.");
+  const descriptor = fs.openSync(file, "r");
+  const signature = Buffer.alloc(8);
+  try {
+    fs.readSync(descriptor, signature, 0, signature.length, 0);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  if (signature.equals(Buffer.from("d0cf11e0a1b11ae1", "hex"))) {
+    throw new ValidationError("This Excel workbook is password-protected. Remove its password and try again.");
+  }
+}
+
+function excelCellText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "object") {
+    if (Array.isArray((value as { richText?: unknown }).richText)) {
+      return (value as { richText: Array<{ text?: string }> }).richText.map((part) => part.text ?? "").join("");
+    }
+    if ("result" in value) return excelCellText((value as { result?: unknown }).result);
+    if ("text" in value) return String((value as { text?: unknown }).text ?? "");
+    if ("error" in value) return String((value as { error?: unknown }).error ?? "");
+    return "";
+  }
+  return String(value);
+}
+
+function csvField(value: string): string {
+  return /[,"\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+}
+
+async function writeXlsxSheetAsCsv(file: string, destination: string, chosenSheet?: string): Promise<{ sheets: string[]; sheetName: string }> {
+  const ExcelJS = await import("exceljs");
+  const reader = new ExcelJS.stream.xlsx.WorkbookReader(file, {
+    worksheets: "emit",
+    sharedStrings: "cache",
+    hyperlinks: "ignore",
+    styles: "cache",
+    entries: "ignore",
+  });
+  const output = fs.createWriteStream(destination, { flags: "wx", mode: 0o600 });
+  const writing = finished(output);
+  const sheets: string[] = [];
+  let selected = "";
+  let bytesWritten = 0;
+  try {
+    for await (const worksheet of reader) {
+      const name = (worksheet as unknown as { name: string }).name;
+      sheets.push(name);
+      if (name === (chosenSheet ?? sheets[0])) selected = name;
+      for await (const row of worksheet) {
+        if (name !== selected) continue;
+        const values = (row.values as unknown[]).slice(1).map(excelCellText);
+        const line = `${values.map(csvField).join(",")}\r\n`;
+        bytesWritten += Buffer.byteLength(line);
+        if (bytesWritten > MAX_XLSX_CSV_BYTES) throw new ValidationError("The Excel sheet is too large to load.");
+        if (!output.write(line)) await once(output, "drain");
+      }
+    }
+    output.end();
+    await writing;
+  } catch (error) {
+    output.destroy();
+    await writing.catch(() => undefined);
+    if (error instanceof ValidationError) throw error;
+    throw new ValidationError(`That Excel workbook couldn't be read: ${loadErrorMessage(error)}`);
+  }
+  if (!sheets.length) throw new ValidationError("That Excel workbook has no sheets.");
+  if (!selected) {
+    throw new ValidationError(`The sheet "${chosenSheet}" wasn't found in this Excel workbook.`);
+  }
+  return { sheets, sheetName: selected };
+}
+
+async function withTemporaryXlsxCsv<T>(
+  file: string,
+  sheetName: string | undefined,
+  work: (folder: string, csvFile: string, workbook: { sheets: string[]; sheetName: string }) => Promise<T>,
+): Promise<T> {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "tohyee-analytics-xlsx-"));
+  const csvFile = path.join(folder, "sheet.csv");
+  try {
+    const workbook = await writeXlsxSheetAsCsv(file, csvFile, sheetName);
+    return await work(folder, csvFile, workbook);
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+}
+
+export async function inspectXlsx(
+  sourceFolder: string,
+  fileName: string,
+  sheetName?: string,
+): Promise<Awaited<ReturnType<typeof inspectCsv>> & { sheets: string[]; sheetName: string }> {
+  const file = resolveSourceFile(sourceFolder, fileName);
+  validateXlsxFile(sourceFolder, file);
+  await validateXlsxArchive(file);
+  return withTemporaryXlsxCsv(file, sheetName, async (folder, csvFile, workbook) => ({
+    ...(await inspectCsv(folder, path.basename(csvFile))),
+    sheets: workbook.sheets,
+    sheetName: workbook.sheetName,
+  }));
+}
+
+export async function loadXlsx(input: {
+  organisationId: string;
+  sourceFolder: string;
+  file: string;
+  table: string;
+  columns: readonly LoadColumn[];
+  sheetName?: string | null;
+}): Promise<CsvLoadResult> {
+  validateLoadInput(input);
+  validateXlsxFile(input.sourceFolder, input.file);
+  await validateXlsxArchive(input.file);
+  return serialise(input.organisationId, () =>
+    withTemporaryXlsxCsv(input.file, input.sheetName ?? undefined, async (_folder, csvFile) =>
+      withAnalytics(input.organisationId, (connection) =>
+        loadCsvInto(connection, { ...input, file: csvFile, delimiter: "," }),
+      ),
+    ),
+  );
+}
+
+export async function inspectSourceFile(
+  sourceFolder: string,
+  fileName: string,
+  delimiter?: string,
+  sheetName?: string,
+): Promise<Awaited<ReturnType<typeof inspectCsv>> | (Awaited<ReturnType<typeof inspectCsv>> & { sheets: string[]; sheetName: string })> {
+  const extension = path.extname(fileName).toLowerCase();
+  if (extension === ".xlsx") return inspectXlsx(sourceFolder, fileName, sheetName);
+  if (extension === ".xls" || extension === ".xlsm") {
+    const file = resolveSourceFile(sourceFolder, fileName);
+    validateXlsxFile(sourceFolder, file);
+  }
+  return inspectCsv(sourceFolder, fileName, delimiter);
+}
+
+export async function loadSourceFile(input: {
+  organisationId: string;
+  sourceFolder: string;
+  file: string;
+  table: string;
+  columns: readonly LoadColumn[];
+  delimiter?: string;
+  sheetName?: string | null;
+}): Promise<CsvLoadResult> {
+  const extension = path.extname(input.file).toLowerCase();
+  if (extension === ".xlsx" || extension === ".xls" || extension === ".xlsm") {
+    return loadXlsx(input);
+  }
+  return loadCsv(input);
 }
 
 export async function replaceTableFromSelect(
