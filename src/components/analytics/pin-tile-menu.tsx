@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Dashboard } from "@/lib/analytics/dashboards";
+import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { analyticsTileReference, parseAnalyticsTileReference } from "@/lib/dashboard/analytics-tile-reference";
 import { DASHBOARD_PAGES, MAX_DASHBOARD_TILES } from "@/lib/dashboard/pages";
@@ -24,6 +25,9 @@ export function PinTileMenu({
   tileId: string;
 }) {
   const reference = analyticsTileReference(dashboardId, tileId);
+  const { can } = useWorkspace();
+  // Only pages this person can open (report viewers can't open Home).
+  const pages = DASHBOARD_PAGES.filter((page) => can(page.minimumRole));
   const menu = useRef<HTMLDetailsElement>(null);
   const [preferences, setPreferences] = useState<Record<string, Preference>>({});
   const [dashboards, setDashboards] = useState<Dashboard[] | null>(null);
@@ -97,6 +101,8 @@ export function PinTileMenu({
     return dashboard && tile ? `${tile.title} · ${dashboard.name}` : "a pinned Analytics tile";
   }
 
+  if (pages.length === 0) return null;
+
   return (
     <details
       ref={menu}
@@ -106,13 +112,13 @@ export function PinTileMenu({
         setOpen(isOpen);
         if (!isOpen) return;
         // Fresh each time it opens, so a pin made elsewhere shows.
-        for (const page of DASHBOARD_PAGES) void load(page.id);
+        for (const page of pages) void load(page.id);
         void loadDashboards();
       }}
     >
       <summary>Pin to page</summary>
       <div className={styles.list}>
-        {DASHBOARD_PAGES.map((page) => {
+        {pages.map((page) => {
           const preference = preferences[page.id];
           const tiles = preference?.tiles ?? [];
           const pinned = tiles.includes(reference);

@@ -7,6 +7,8 @@ export const DASHBOARD_PAGES = [
   {
     id: "home",
     label: "Home",
+    // Report viewers can't open Home, so they aren't offered it to pin to.
+    minimumRole: "viewer",
     defaultTiles: [
       { id: "cash_in_bank", label: "Cash in bank" },
       { id: "owed_to_you", label: "Money owed to you" },

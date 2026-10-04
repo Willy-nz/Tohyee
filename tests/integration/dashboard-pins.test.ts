@@ -312,4 +312,27 @@ describeWithDatabase("pinned Analytics tiles", () => {
     }
     expect((await getHome(viewerCookie)).data.tiles).toEqual(pinned);
   });
+
+  it("keeps hidden pins, in place, when the page is saved while they're hidden", async () => {
+    const pinned = [DEFAULTS[0], ref(privateId, "total"), DEFAULTS[1]];
+    expect((await putHome(viewerCookie, pinned)).status).toBe(200);
+
+    await setAnalytics(ORG, false);
+    try {
+      expect((await getHome(viewerCookie)).data.tiles).toEqual([DEFAULTS[0], DEFAULTS[1]]);
+      // Customise saved while Analytics is off: only the tiles they can see are sent.
+      const saved = await putHome(viewerCookie, [DEFAULTS[0], DEFAULTS[1], DEFAULTS[2]]);
+      expect(saved.status).toBe(200);
+      expect(saved.data.tiles).toEqual([DEFAULTS[0], DEFAULTS[1], DEFAULTS[2]]);
+      expect((await getHome(viewerCookie)).data.tiles).toEqual([DEFAULTS[0], DEFAULTS[1], DEFAULTS[2]]);
+    } finally {
+      await setAnalytics(ORG, true);
+    }
+    // Back where it was.
+    expect((await getHome(viewerCookie)).data.tiles).toEqual([DEFAULTS[0], ref(privateId, "total"), DEFAULTS[1], DEFAULTS[2]]);
+
+    // A pin they removed themselves while it showed stays removed.
+    expect((await putHome(viewerCookie, [DEFAULTS[0], DEFAULTS[1]])).status).toBe(200);
+    expect(await storedTiles(viewer)).toEqual([DEFAULTS[0], DEFAULTS[1]]);
+  });
 });
