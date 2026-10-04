@@ -7,6 +7,8 @@ import {
   closeAnalytics,
   loadCsv,
   queryAnalytics,
+  runBuiltQuery,
+  TILE_TIME_LIMIT_MS,
   type LoadColumn,
 } from "@/lib/analytics/engine";
 
@@ -103,5 +105,16 @@ describe("analytics engine (decisions 354-358)", () => {
         loadCsv({ organisationId: ORG, sourceFolder: sources, file, table, columns: [{ source: "a", name: "a", kind: "integer" }] }),
       ).rejects.toThrow(/table name/);
     }
+  });
+
+  it("stops any question that runs too long, tiles included (decision 379)", async () => {
+    expect(TILE_TIME_LIMIT_MS).toBe(30_000);
+    // A cross join big enough to run far past the limit.
+    const heavy = "select count(*) as n from range(100000000) a, range(100000000) b";
+    const started = Date.now();
+    await expect(runBuiltQuery(ORG, heavy, [], { timeLimitMs: 200 })).rejects.toThrow(/more than 30 seconds, so it was stopped/);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    // The connection is usable again straight after.
+    expect(await runBuiltQuery(ORG, "select 1 as one", [])).toEqual([{ one: "1" }]);
   });
 });

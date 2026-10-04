@@ -2633,3 +2633,13 @@ approved 3 Oct 2026.
        web), the database is reopened with the new folder the next time
        it's used.
      - Shaping previews stop after 10 seconds.
+
+### Analytics: a time limit on every question (decision 379)
+
+379. **Every Analytics question stops after 30 seconds**: dashboard tiles,
+     pivot tables, drill-ins, pinned tiles and exports (shaping previews keep
+     their 10 seconds). The tile says it was stopped and suggests filtering or
+     grouping by fewer fields, rather than tying up the server (Jess, Oct 2026).
+     Jess also confirmed that report viewers may drill into up to 500 rows of
+     a tile's own fields and export pivot tiles to CSV and Excel (decision 375).
+

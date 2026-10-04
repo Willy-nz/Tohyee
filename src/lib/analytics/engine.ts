@@ -280,12 +280,18 @@ export async function replaceTableFromSelect(
 /** Previews (shaping) stop after this long. */
 export const PREVIEW_TIME_LIMIT_MS = 10_000;
 
+/** Every other question (dashboard tiles, pivots, drill-ins, exports) stops after this long (decision 379). */
+export const TILE_TIME_LIMIT_MS = 30_000;
+
 export async function previewSelect(
   organisationId: string,
   sql: string,
   params: unknown[],
 ): Promise<Array<Record<string, string | null>>> {
-  return runBuiltQuery(organisationId, `select * from (${sql}) as preview limit 100`, params, { timeLimitMs: PREVIEW_TIME_LIMIT_MS });
+  return runBuiltQuery(organisationId, `select * from (${sql}) as preview limit 100`, params, {
+    timeLimitMs: PREVIEW_TIME_LIMIT_MS,
+    tooLong: "That took too long to preview. Filter or group the data sooner, or use fewer merges.",
+  });
 }
 
 /** DuckDB's error, first line only, without its internal prefixes. */
@@ -473,24 +479,26 @@ export async function runBuiltQuery(
   organisationId: string,
   sql: string,
   params: unknown[],
-  options: { timeLimitMs?: number } = {},
+  options: { timeLimitMs?: number; tooLong?: string } = {},
 ): Promise<Array<Record<string, string | null>>> {
   return withAnalytics(organisationId, async (connection) => {
-    // A time limit stops a heavy question (e.g. a preview with many merges) tying up the server.
+    // A time limit stops a heavy question (a big tile, or a preview with many merges) tying up the server.
     let stopped = false;
-    const timer = options.timeLimitMs
-      ? setTimeout(() => {
-          stopped = true;
-          connection.interrupt();
-        }, options.timeLimitMs)
-      : undefined;
+    const timer = setTimeout(() => {
+      stopped = true;
+      connection.interrupt();
+    }, options.timeLimitMs ?? TILE_TIME_LIMIT_MS);
     try {
       const reader = await connection.runAndReadAll(sql, params as never);
       return (reader.getRowObjectsJson() as Array<Record<string, unknown>>).map((row) =>
         Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value === null || value === undefined ? null : String(value)])),
       );
     } catch (error) {
-      if (stopped) throw new ValidationError("That took too long to preview. Filter or group the data sooner, or use fewer merges.");
+      if (stopped) {
+        throw new ValidationError(
+          options.tooLong ?? "That took more than 30 seconds, so it was stopped. Filter the tile to fewer rows, or group by fewer fields.",
+        );
+      }
       throw error;
     } finally {
       clearTimeout(timer);
