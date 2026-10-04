@@ -2590,7 +2590,9 @@ approved 3 Oct 2026.
 ### Analytics: what DuckDB may touch (decision 377)
 
 377. **Each organisation's analytics database may only read its own source
-     folder and its own data folder**, and that can't be switched off
+     folder and its own work folder** (`<analytics folder>/<id>.work`, which
+     also holds DuckDB's temporary files), never the analytics folder as a
+     whole, because that holds every organisation's file. That can't be switched off
      afterwards (`allowed_directories`, `enable_external_access = false`,
      `lock_configuration`). File checks use a throwaway database limited the
      same way. Tohyee builds all of its own SQL, so this is defence in depth.
@@ -2600,3 +2602,6 @@ approved 3 Oct 2026.
        web), the database is reopened with the new folder the next time
        it's used.
      - Shaping previews stop after 10 seconds.
+     - The first version allowed the whole analytics folder, which would have
+       let one organisation's query attach another's file; fixed before
+       release, with a test.
