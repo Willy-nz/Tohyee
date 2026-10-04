@@ -2619,6 +2619,39 @@ approved 3 Oct 2026.
        open Home) don't see it.
        Customise lists the page's defaults and the person's pinned tiles.
 
+### Analytics: dashboard pivot tables (decision 375)
+
+375. **A pivot is a saved, read-only dashboard tile** (issue #120). It has one
+     to five row fields, zero or one column field, and one to six sum, count,
+     average, minimum or maximum values. Date fields group by month, quarter or
+     year, as charts do. DuckDB groups the loaded data on the server (grouping
+     sets) and returns only pivot cells, with subtotals and grand totals; more
+     than 2,000 value cells, totals included, is refused with "Too many rows
+     and columns; filter or group further". Rows sort by their fields, each
+     group followed by its subtotal, the grand total last; columns sort by
+     value. Each cell can open at most 500 matching rows, showing only the
+     saved tile's fields (rows, column, values and date). Report viewers can
+     run and drill only pivots on dashboards shared with them, with the same
+     slicer restrictions as other tiles.
+     - Money remains DECIMAL and averages use `exactAverageSql`; every
+       subtotal and total is worked out by DuckDB from the underlying rows
+       (an average total is the average of the rows, not of the averages),
+       never added up in the browser.
+     - An accessible HTML table rather than Perspective (which decision 361
+       planned): the browser only ever gets at most 2,000 finished cells, so
+       Perspective's browser-side engine would have nothing to do but re-add
+       them; the current viewer (`@perspective-dev/viewer` 5.5) is 14 MB
+       unpacked plus a WASM engine, and its toolbar would need locking down
+       to stay read-only. Revisit it for an interactive explore view.
+     - CSV and Excel go through the standard report export
+       (`/api/reports/export`, report `analytics-pivot`), which report viewers
+       may use for pivots only (no PDF; the file is made from what their page
+       already shows). Values with more than 15 significant digits, which
+       Excel can't hold exactly, go into the workbook as decimal text (this
+       applies to every report export).
+     - Theme previews: [light](screenshots/analytics-pivot-light.png) and
+       [dark](screenshots/analytics-pivot-dark.png).
+
 ### Analytics: what DuckDB may touch (decision 377)
 
 377. **Each organisation's analytics database may only read its own source
@@ -2646,3 +2679,13 @@ approved 3 Oct 2026.
      A pin whose dashboard or tile was deleted goes for good. At most 8 hidden
      pins are kept per page. While hidden, a pin's slot isn't refilled: the
      page just shows fewer tiles (Jess, Oct 2026).
+
+### Analytics: a time limit on every question (decision 379)
+
+379. **Every Analytics question stops after 30 seconds**: dashboard tiles,
+     pivot tables, drill-ins, pinned tiles and exports (shaping previews keep
+     their 10 seconds). The tile says it was stopped and suggests filtering or
+     grouping by fewer fields, rather than tying up the server (Jess, Oct 2026).
+     Jess also confirmed that report viewers may drill into up to 500 rows of
+     a tile's own fields and export pivot tiles to CSV and Excel (decision 375).
+

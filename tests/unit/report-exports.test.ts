@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import { REPORT_EXPORTS, type ReportExportData } from "@/lib/reports/export-types";
-import { reportCsv, reportPdf, reportXlsx } from "@/lib/reports/export-files";
+import { parseReportExport, reportCsv, reportPdf, reportXlsx } from "@/lib/reports/export-files";
 
 const report = (name: ReportExportData["report"]): ReportExportData => ({
   report: name,
@@ -44,6 +44,28 @@ describe("standard report exports", () => {
     expect(row.getCell(2).value).toBe(1234.56);
     expect(row.getCell(3).type).toBe(ExcelJS.ValueType.Number);
     expect(row.getCell(3).value).toBe(1);
+  });
+
+  it("keeps a value too long for an Excel number as its exact decimal text", async () => {
+    const data = report("analytics-pivot");
+    data.tables[0].rows.push({ kind: "total", cells: [{ text: "Grand total" }, { text: "$1,000,000,000,000,000.90", value: "1000000000000000.90", numeric: true }] });
+    expect(reportCsv(data)).toContain("Grand total,1000000000000000.90");
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Buffer.from(await reportXlsx(data)) as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+    const rows = workbook.getWorksheet("Report")!.getRows(1, 40)!;
+    const grand = rows.find((candidate) => candidate.getCell(1).value === "Grand total")!;
+    expect(grand.getCell(2).value).toBe("1000000000000000.90");
+    const total = rows.find((candidate) => candidate.getCell(1).value === "Total trading income")!;
+    expect(total.getCell(2).value).toBe(1234.56);
+  });
+
+  it("allows a wide pivot but not a wide standard report", () => {
+    const wide = (name: string) => ({
+      ...report(name as (typeof REPORT_EXPORTS)[number]),
+      tables: [{ columns: Array.from({ length: 60 }, (_, index) => `C${index}`), rows: [] }],
+    });
+    expect(parseReportExport(wide("analytics-pivot")).tables[0].columns).toHaveLength(60);
+    expect(() => parseReportExport(wide("profit-and-loss"))).toThrow(/too many columns/);
   });
 
   it("exports an empty report with its heading block", () => {

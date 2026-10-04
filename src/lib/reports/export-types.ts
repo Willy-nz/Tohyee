@@ -1,6 +1,7 @@
 export const REPORT_EXPORTS = [
   "account-transactions",
   "aged-payables",
+  "analytics-pivot",
   "aged-receivables",
   "balance-sheet",
   "bank-reconciliation",
