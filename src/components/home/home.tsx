@@ -41,10 +41,7 @@ function CashInBankTile({ summary }: { summary: HomeSummary }) {
       <div className={styles.figure}>
         <Money value={summary.cashInBank} />
       </div>
-      <div className={ui.muted}>Active bank accounts only.</div>
-      <Link className={styles.action} href="/operations/reports?report=bs">
-        Open balance sheet
-      </Link>
+      <div className={ui.muted}>Bank accounts · cards are under Banking</div>
     </section>
   );
 }
@@ -57,7 +54,7 @@ export function AmountsDueTile({
 }: {
   title: string;
   due: AmountsDue;
-  note: string;
+  note: ReactNode;
   href: string;
 }) {
   return (
@@ -69,9 +66,6 @@ export function AmountsDueTile({
         <Money value={due.total} />
       </div>
       <div className={ui.muted}>{note}</div>
-      <Link className={styles.action} href={href}>
-        Open report
-      </Link>
     </section>
   );
 }
@@ -97,9 +91,6 @@ function NextGstTile({ summary }: { summary: HomeSummary }) {
           </div>
         </>
       )}
-      <Link className={styles.action} href="/operations/gst-return">
-        Open GST return
-      </Link>
     </section>
   );
 }
@@ -111,7 +102,7 @@ function HomeTile({ tile, summary }: { tile: HomeTileId; summary: HomeSummary })
       <AmountsDueTile
         title="Money owed to you"
         due={summary.owedToYou}
-        note={`Overdue: ${summary.owedToYou.overdueCount}`}
+        note={summary.owedToYou.overdueCount > 0 ? <span className={styles.bad}><Money value={summary.owedToYou.overdueTotal} /> overdue</span> : "Nothing overdue"}
         href="/operations/reports?report=aged"
       />
     );
@@ -121,7 +112,7 @@ function HomeTile({ tile, summary }: { tile: HomeTileId; summary: HomeSummary })
       <AmountsDueTile
         title="Bills to pay"
         due={summary.billsToPay}
-        note={`Due this week: ${summary.billsDueThisWeek}`}
+        note={summary.billsDueThisWeek > 0 ? `${summary.billsDueThisWeek} due this week` : "None due this week"}
         href="/operations/reports?report=payables"
       />
     );
@@ -130,23 +121,28 @@ function HomeTile({ tile, summary }: { tile: HomeTileId; summary: HomeSummary })
 }
 
 function ToDoCard({ summary }: { summary: HomeSummary }) {
+  const plural = (count: number, one: string, many: string) => (count === 1 ? one : many.replace("#", String(count)));
+  const items = [
+    { count: summary.toDo.paydayFilingsDue, text: plural(summary.toDo.paydayFilingsDue, "A payday filing is due this week", "# payday filings are due this week"), action: "File", href: "/operations/payroll/pay-runs" },
+    { count: summary.toDo.accountsToReconcile, text: plural(summary.toDo.accountsToReconcile, "1 bank line to reconcile", "# bank lines to reconcile"), action: "Reconcile", href: "/operations/bank-accounts" },
+    { count: summary.toDo.feedsToReconnect, text: plural(summary.toDo.feedsToReconnect, "A bank feed needs reconnecting", "# bank feeds need reconnecting"), action: "Reconnect", href: "/operations/bank-accounts" },
+    { count: summary.toDo.draftsToApprove, text: plural(summary.toDo.draftsToApprove, "1 draft to approve", "# drafts to approve"), action: "Review", href: "/operations/invoices" },
+  ].filter((item) => item.count > 0);
   return (
     <section className={styles.tile}>
       <div className={styles.tileTitle}>To do</div>
-      <div className={styles.rows}>
-        <Link className={styles.action} href="/operations/payroll/pay-runs">
-          Payday filings due ({summary.toDo.paydayFilingsDue})
-        </Link>
-        <Link className={styles.action} href="/operations/bank-accounts">
-          Accounts to reconcile ({summary.toDo.accountsToReconcile})
-        </Link>
-        <Link className={styles.action} href="/operations/bank-accounts">
-          Feeds to reconnect ({summary.toDo.feedsToReconnect})
-        </Link>
-        <Link className={styles.action} href="/operations/invoices">
-          Drafts to approve ({summary.toDo.draftsToApprove})
-        </Link>
-      </div>
+      {items.length === 0 ? (
+        <p className={ui.muted}>Nothing needs doing.</p>
+      ) : (
+        <div className={styles.rows}>
+          {items.map((item) => (
+            <div key={item.action} className={styles.row}>
+              <span>{item.text}</span>
+              <Link href={item.href}>{item.action}</Link>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -201,16 +197,20 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
           ))}
         </div>
       </PageDashboardFrame>
-      <SectionTitle>Net profit by month</SectionTitle>
-      <Chart
-        spec={{ kind: "column", category: "month", series: [{ field: "netProfit", label: "Net profit" }], valueFormat: "money", currency: summary.currencyCode }}
-        rows={chartRows}
-      />
-      <SectionTitle>Today</SectionTitle>
-      <div className={styles.grid}>
+      <div className={styles.split}>
+        <section className={styles.tile} aria-label="Net profit by month">
+          <div className={styles.tileTitle}>
+            <Link href="/operations/reports?report=pnl">Net profit by month</Link>
+            <span className={styles.kind}>This financial year</span>
+          </div>
+          <Chart
+            spec={{ kind: "column", category: "month", series: [{ field: "netProfit", label: "Net profit" }], valueFormat: "money", currency: summary.currencyCode }}
+            rows={chartRows}
+          />
+        </section>
         <ToDoCard summary={summary} />
-        <RecentActivity summary={summary} />
       </div>
+      <RecentActivity summary={summary} />
     </>
   );
 }

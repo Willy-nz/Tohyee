@@ -184,7 +184,11 @@ export async function getHomeSummary(tx: OrgTx, input: { today?: unknown } = {})
     nextGstReturn: await nextGstReturn(tx),
     profitByMonth: months,
     toDo: {
-      paydayFilingsDue: payRuns.rows.filter((row) => paydayFilingDueDate(row.pay_date) <= today).length,
+      // Tohyee can't know a filing was made (that's done in myIR), so this is the ones due in the coming week, not overdue ones.
+      paydayFilingsDue: payRuns.rows.filter((row) => {
+        const due = paydayFilingDueDate(row.pay_date);
+        return due >= today && due <= addDays(today, 7);
+      }).length,
       accountsToReconcile: bankAccounts.reduce((sum, account) => sum + account.unreconciledCount, 0),
       feedsToReconnect: bankAccounts.filter((account) => account.feed.active && account.feed.lastSyncStatus === "failed").length,
       draftsToApprove: drafts.rows[0]?.count ?? 0,
