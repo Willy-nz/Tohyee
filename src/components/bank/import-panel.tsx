@@ -202,7 +202,12 @@ function ImportHistory({
                 </td>
                 <td>
                   {entry.fileName ?? STATEMENT_FORMAT_LABELS[entry.fileFormat]}
-                  {entry.fileName ? <div className={ui.muted}>{STATEMENT_FORMAT_LABELS[entry.fileFormat]}</div> : null}
+                  {entry.fileName ? (
+                    <div className={ui.muted}>
+                      {entry.fileFeed ? `${entry.fileFeed === "folder" ? "Folder feed" : "Mailbox feed"} · ` : ""}
+                      {STATEMENT_FORMAT_LABELS[entry.fileFormat]}
+                    </div>
+                  ) : null}
                 </td>
                 <td>{entry.firstDate ? `${formatDate(entry.firstDate)} – ${formatDate(entry.lastDate)}` : <span className={ui.muted}>—</span>}</td>
                 <td className={ui.num}>

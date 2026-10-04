@@ -39,6 +39,10 @@
  * And the analytics loader, which reloads each organisation's daily data
  * sources after 04:00 (off with TOHYEE_ANALYTICS_SCHEDULER=off).
  *
+ * And the statement file feeds, which read new statement files from each
+ * bank account's folder or mailbox when due, every 6 hours by default
+ * (off with TOHYEE_FILE_FEEDS_SCHEDULER=off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -143,6 +147,15 @@ export async function register() {
       startReportEmailScheduler();
     } catch (error) {
       console.warn("[tohyee] Report email checks couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (process.env.TOHYEE_FILE_FEEDS_SCHEDULER !== "off") {
+    try {
+      const { startFileFeedScheduler } = await import("@/lib/bank/file-feeds");
+      startFileFeedScheduler();
+    } catch (error) {
+      console.warn("[tohyee] Statement file feeds couldn't start:", error instanceof Error ? error.message : error);
     }
   }
 

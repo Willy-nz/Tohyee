@@ -1371,6 +1371,134 @@ history to bring in.
 - **BK16** Akahu's balance for the account is kept as the statement balance
   with its date, shown next to the ledger balance.
 
+### Automatic statement files: a folder and a mailbox per bank account (approved by Jess, 5 Oct 2026)
+
+Stage 1b, part 1, of the Xero add-ons plan (5 Oct 2026). Most banks have no
+API Tohyee can use, but nearly all can email a statement file on a schedule
+or save one where Tohyee can read it. Like the OCA bank-statement-import
+modules for Odoo, each bank account can have **feeds** that bring in
+statement files by themselves, read by the same importers as a file chosen
+by hand (CSV, Excel, OFX, QIF, CAMT.053 and MT940, BK1-BK3), with the same
+duplicate rules. Akahu stays a feed of its own (BK15, BK16). Nothing is
+posted: lines arrive unreconciled, exactly as an import by hand.
+
+- **A folder feed** reads one subfolder of the organisation's **bank files
+  folder**. As with Analytics folders (decision 358), a server admin chooses
+  each organisation's bank files folder (server app, command line or web),
+  so an organisation can't point Tohyee at other folders on the server. An
+  admin of the organisation then links a bank account to one subfolder of it
+  (for example `ANZ business`, where the bank's scheduled export or a
+  OneDrive sync puts its files). Tohyee only reads: files are never moved,
+  changed or deleted.
+- **A mailbox feed** reads one mailbox folder or Gmail label, through the
+  admin's own mailbox connected in the CRM (Gmail or Microsoft), or IMAP
+  with an app password (stored encrypted), the same connections report
+  emails use (decisions 362 and 376) but kept with the feed, so it doesn't
+  need Analytics. Statement files attached to the messages there are imported; other
+  attachments (PDFs, images) are ignored. Mail is never changed. Tohyee
+  doesn't give out email addresses of its own (there's no relay): set a rule
+  in the mailbox to file the bank's emails into that folder or label.
+- **When:** every feed is checked every 6 hours by default (1 to 24, as the
+  Akahu feed), and with **Check now**. Each check takes every file (or
+  attachment) it hasn't seen before, oldest first.
+- **Seen before** means the same file name with the same contents (SHA-256)
+  in that feed, or the same message and attachment name in that mailbox. A
+  bank that overwrites one file (`statement.csv`) every day is read again
+  whenever its contents change, and the duplicate rules (BK2) keep lines
+  already on the account out, so only new lines are added.
+- **CSV and Excel files are read with the account's saved column layout**
+  (BK1), so the first file of a kind has to be imported by hand once. A file
+  whose columns don't match the saved layout is **not imported**: it's
+  listed as "Columns don't match the last file imported by hand" and tried
+  again only if it changes. (A file chosen by hand works out a fresh
+  layout; an automatic one doesn't guess.)
+- A file that can't be read (empty, too large, an old .xls, rows that don't
+  read) is listed with the reason and tried again only if it changes. A
+  file with **no new lines** is recorded as seen, adds no import, and shows
+  "0 new lines".
+- Each file that adds lines is an **import** like one by hand, marked with
+  its feed and file name, so it can be deleted (BK12) as now. Deleting it
+  doesn't make the feed bring it back: the file is still seen.
+- A file in a currency other than the account's is refused (FXB10). Files
+  don't say which account they're for (Tohyee doesn't store bank account
+  numbers), so linking the right subfolder or label is up to the admin.
+- Admins set up and change feeds; anyone who can see the account sees each
+  feed's last check (time, files read, lines added, problems). Changes are in
+  the audit history.
+
+Setup: as BK1 (1000 Business bank account, its column layout saved by the
+BK1 import), dates in June 2026. The server admin has chosen `D:\BankFiles\
+Kobe Co` as the organisation's bank files folder; an admin links 1000 to its
+subfolder `ANZ business`.
+
+- **BF1** `anz-2026-06-01.csv` arrives with three lines:
+
+  ```
+  Date,Amount,Payee,Particulars,Code,Reference
+  01/06/2026,-46.00,Z ENERGY,,,
+  01/06/2026,-4.50,CAFE,,,
+  01/06/2026,115.00,KOBE LTD,INV-0007,,
+  ```
+
+  The next check imports it: **3** new unreconciled lines, one import
+  marked "Folder feed · anz-2026-06-01.csv". Nothing is posted.
+- **BF2** The next day `anz-2026-06-02.csv` holds the 1 Jun lines again plus
+  `02/06/2026,-69.00,CALTEX,,,`. The check adds **1** line. A check with no
+  new files reads nothing.
+- **BF3** The bank overwrites `statement.csv` each day. On 3 Jun it holds the
+  02/06 line and `03/06/2026,-11.50,Z ENERGY,,,`; the check adds **1**. On
+  4 Jun it's the same file again, unchanged: not read. On 5 Jun it has a
+  05/06 line added: read again, **1** added. Two identical lines on one day
+  in a file (two `-4.50 CAFE` on 05/06) add **2** the first time and **0**
+  after, as BK2.
+- **BF4** `anz-export.csv` with the columns `Date,Details,Debit,Credit` (not
+  the saved layout) isn't imported: it's listed "Columns don't match the last
+  file imported by hand". Importing it once by hand saves the new layout;
+  the next file with those columns is read by the feed.
+- **BF5** `june.ofx` holds the same three 1 Jun transactions, each with the
+  bank's FITID. As in BK3, a line from another kind of file that matches a
+  line already on the account on date and amount is **added but flagged
+  possible duplicate**: the check adds **3** flagged lines, to be excluded
+  or matched (BK12). The same OFX file saved again under another name adds
+  **0** (the FITIDs are on the account). An empty file and a `.xls` file are
+  listed with "The file is empty." and "Older Excel files (.xls) aren't
+  supported…", and tried again only when they change.
+- **BF6** Deleting BF2's import removes its 1 line (none reconciled, BK12);
+  the next check doesn't bring `anz-2026-06-02.csv` back. Its lines come back
+  by importing the file by hand.
+- **BF7** (mailbox) An admin links 1000 to the label `Bank/ANZ` of the CRM
+  Gmail mailbox. A message there has `anz-2026-06-06.csv` (one new line,
+  `06/06/2026,-230.00,KAURI SUPPLIES,,,`) and `statement.pdf`. The check
+  imports the CSV (**1** line, marked "Mailbox feed · anz-2026-06-06.csv")
+  and ignores the PDF. Checking again reads nothing new. A forwarded copy
+  of the same message (a new message, the same file) adds **0** lines (BK2).
+- **BF8** A check that fails (the folder can't be read, or the mailbox's
+  sign-in has expired) adds nothing, keeps the files for next time, and
+  shows the reason on the account; the next check after it's fixed reads
+  them.
+- **BF9** Only admins can link, change or remove a feed; a bookkeeper can
+  press Check now; viewers see the last check. A subfolder outside the bank
+  files folder (`..\Other Co`) is refused. With no bank files folder chosen
+  by a server admin, folder feeds can't be set up and the page says to ask
+  them.
+- **BF10** Removing a feed keeps every import it made and what's been seen,
+  so linking the same subfolder again doesn't import old files twice.
+
+**Questions for Jess (automatic statement files), decided** (Jess approved
+the examples and the proposed answers on 5 Oct 2026):
+1. Every 6 hours by default, 1 to 24 as Akahu: **yes** (decision 385).
+2. CSV and Excel files with different columns wait for a person (BF4);
+   Tohyee doesn't guess: **yes** (decision 387).
+3. A server admin chooses each organisation's bank files folder, as for
+   Analytics, and organisation admins pick subfolders of it (BF9): **yes**
+   (decision 386).
+
+Tests: `tests/integration/bank-file-feeds.test.ts`.
+
+Not supported yet (refused rather than guessed): zipped statement files;
+Tohyee's own email addresses (no relay); checking a file's account number
+against the bank account; moving or deleting files after reading them.
+
 ### One-click matching ("OK") (examples not yet approved by Jess)
 
 Like Xero's "OK" button. For each unreconciled line, Tohyee looks for

@@ -96,6 +96,8 @@ Backups (encrypted with TOHYEE_SECRET_KEY: keep a copy of that key somewhere saf
   backups key check                         checks your saved copy (TOHYEE_BACKUP_KEY or asked)
   analytics folders [--json]                each organisation's analytics folder (decision 358)
   analytics folder --id ORGANISATION --folder PATH   choose it (--folder "" clears it)
+  bank folders [--json]                     each organisation's bank files folder (decision 386)
+  bank folder --id ORGANISATION --folder PATH        choose it (--folder "" clears it)
 
 Updates
   updates check [--json]
@@ -613,6 +615,27 @@ async function analytics(command: string | undefined, args: string[]) {
   throw new UsageError(`Unknown analytics command${command ? ` "${command}"` : ""}.`);
 }
 
+async function bank(command: string | undefined, args: string[]) {
+  const { listBankFileFolders, setBankFilesFolder } = await import("@/lib/bank/file-folders");
+  if (command === "folders") {
+    const rows = await listBankFileFolders();
+    if (flag(args, "json")) return console.log(JSON.stringify(rows, null, 2));
+    for (const row of rows) {
+      console.log(`${row.organisationId}: ${row.folder ? `${row.folder}${row.readable ? "" : " (can't open it)"}` : "no folder"}`);
+    }
+    return;
+  }
+  if (command === "folder") {
+    const id = option(args, "id");
+    const folder = option(args, "folder");
+    if (!id || folder === null) throw new UsageError("Use: bank folder --id ORGANISATION --folder PATH");
+    const saved = await setBankFilesFolder(COMMAND_LINE_ADMIN, id, folder);
+    console.log(saved ? `${id} reads bank statement files from ${saved}.` : `${id} has no bank files folder now.`);
+    return;
+  }
+  throw new UsageError(`Unknown bank command${command ? ` "${command}"` : ""}.`);
+}
+
 async function main(argv: string[]): Promise<void> {
   const [area, command, ...rest] = argv;
   // The older one-word commands.
@@ -627,6 +650,7 @@ async function main(argv: string[]): Promise<void> {
   if (area === "updates") return updates(command, rest);
   if (area === "backups") return backups(command, rest);
   if (area === "analytics") return analytics(command, rest);
+  if (area === "bank") return bank(command, rest);
   if (area === undefined || area === "help" || area === "--help" || area === "-h") {
     console.log(HELP);
     if (area === undefined) process.exitCode = 1;

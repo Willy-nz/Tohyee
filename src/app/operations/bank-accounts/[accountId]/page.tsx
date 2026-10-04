@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ACCOUNT_TYPE_LABELS, FeedBadge } from "@/components/bank/common";
 import { CurrencyMoney, OpeningBalancePanel } from "@/components/bank/foreign";
 import { FeedPanel } from "@/components/bank/feed-panel";
+import { FileFeedsPanel } from "@/components/bank/file-feeds-panel";
 import { ImportPanel } from "@/components/bank/import-panel";
 import { StatementLinesPanel, TransactionsPanel } from "@/components/bank/lines-panel";
 import { ReconcilePanel } from "@/components/bank/reconcile-panel";
@@ -118,7 +119,12 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
         {tab === "reconcile" ? <ReconcilePanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
         {tab === "lines" ? <StatementLinesPanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
         {tab === "import" ? <ImportPanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
-        {tab === "feed" ? <FeedPanel organisationId={organisationId} account={account} onChanged={detail.reload} /> : null}
+        {tab === "feed" ? (
+          <>
+            <FeedPanel organisationId={organisationId} account={account} onChanged={detail.reload} />
+            <FileFeedsPanel organisationId={organisationId} account={account} onChanged={detail.reload} />
+          </>
+        ) : null}
         {tab === "transactions" ? <TransactionsPanel organisationId={organisationId} account={account} /> : null}
       </Card>
     </>
