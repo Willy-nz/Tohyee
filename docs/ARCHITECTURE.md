@@ -1516,7 +1516,9 @@ run time.
   source once a day after 04:00 business time and retries a failure an
   hour later (off with `TOHYEE_ANALYTICS_SCHEDULER=off`).
 - **File access** (decision 377): each organisation's DuckDB is opened with
-  `allowed_directories` set to its source folder and data folder,
+  `allowed_directories` set to its source folder and its own work folder
+  (`analyticsWorkFolder`: `<id>.work` beside its file, also its
+  `temp_directory`; never the shared analytics folder),
   `enable_external_access = false` and `lock_configuration = true`
   (`src/lib/analytics/engine.ts`). The folder is checked on each use and a
   change reopens the file. Previews have a 10-second limit
