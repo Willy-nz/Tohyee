@@ -33,6 +33,10 @@ export const PATCH = route<{ params: Promise<{ contactId: string }> }>(async (re
     deliveryCountry: body.deliveryCountry,
     defaultSalesTaxCode: body.defaultSalesTaxCode,
     defaultPurchaseTaxCode: body.defaultPurchaseTaxCode,
+    defaultPurchaseAccountCode: body.defaultPurchaseAccountCode,
+    defaultSalesAccountCode: body.defaultSalesAccountCode,
+    defaultPurchaseTracking: body.defaultPurchaseTracking,
+    defaultSalesTracking: body.defaultSalesTracking,
     recordTypeId: body.recordTypeId,
     ownerUserId: body.ownerUserId,
   };

@@ -1,3 +1,12 @@
+import {
+  CONTACT_DEFAULT_COLUMNS,
+  type ContactDefaultRow,
+  type ContactDefaults,
+  type ContactDefaultsInput,
+  contactDefaultsFromRow,
+  NO_CONTACT_DEFAULTS,
+  saveContactDefaults,
+} from "@/lib/contacts/defaults";
 import { writeAuditEvent } from "@/lib/audit";
 import {
   keptCustom,
@@ -91,7 +100,8 @@ export type Contact = {
   ownerUserId: string | null;
   createdAt: string;
   updatedAt: string;
-} & CustomerDetails;
+} & CustomerDetails &
+  ContactDefaults;
 
 /** The details a person enters. An edit leaves out anything it doesn't change. */
 export type ContactInput = {
@@ -120,7 +130,8 @@ export type ContactInput = {
   recordTypeId?: unknown;
   /** A member's user id; blank for none (CRT8). */
   ownerUserId?: unknown;
-} & CustomerDetailsInput;
+} & CustomerDetailsInput &
+  ContactDefaultsInput;
 
 /** Who is saving: read-only fields on a record type are for admins and owners (CRT6). */
 export type SaveOptions = { role?: Role };
@@ -165,7 +176,7 @@ type ContactRow = {
   owner_user_id: string | null;
   created_at: string;
   updated_at: string;
-};
+} & Partial<ContactDefaultRow>;
 
 const OWN_COLUMNS =
   "id, request_hash, name, is_customer, is_supplier, email, phone, postal_address, gst_number, custom_fields, default_salesperson_id, is_prospect, is_archived, " +
@@ -180,7 +191,8 @@ const PRIMARY_PERSON = `(select p.id from crm_people p where p.contact_id = cont
 const COLUMNS = `${OWN_COLUMNS}, ${PRIMARY_PERSON},
   (select t.code from tax_codes t where t.id = contacts.default_sales_tax_code_id) as default_sales_tax_code,
   (select t.code from tax_codes t where t.id = contacts.default_purchase_tax_code_id) as default_purchase_tax_code,
-  (select r.name from crm_record_types r where r.id = contacts.record_type_id) as record_type_name`;
+  (select r.name from crm_record_types r where r.id = contacts.record_type_id) as record_type_name,
+  ${CONTACT_DEFAULT_COLUMNS}`;
 
 function toContact(row: ContactRow): Contact {
   return {
@@ -216,6 +228,12 @@ function toContact(row: ContactRow): Contact {
     ownerUserId: row.owner_user_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ...contactDefaultsFromRow({
+      default_purchase_account_code: row.default_purchase_account_code ?? null,
+      default_sales_account_code: row.default_sales_account_code ?? null,
+      default_purchase_tracking: row.default_purchase_tracking ?? null,
+      default_sales_tracking: row.default_sales_tracking ?? null,
+    }),
   };
 }
 
@@ -545,6 +563,7 @@ export async function createContact(
     ...(deliveryCountry === null ? {} : { deliveryCountry }),
     ...(rawSalesTax === null ? {} : { defaultSalesTaxCode: rawSalesTax }),
     ...(rawPurchaseTax === null ? {} : { defaultPurchaseTaxCode: rawPurchaseTax }),
+    ...defaultsForHash(input),
     ...(rawCustom === undefined ? {} : { customFields: rawCustom }),
     ...(rawSalesperson === null ? {} : { defaultSalespersonId: rawSalesperson }),
     ...(isProspect ? { isProspect } : {}),
@@ -624,6 +643,7 @@ export async function createContact(
       ownerUserId,
     ],
   );
+  const defaultChanges = inserted.rows[0] ? await saveContactDefaults(tx, inserted.rows[0].id, input, NO_CONTACT_DEFAULTS) : {};
   const row = inserted.rows[0] ? await readRow(tx, inserted.rows[0].id) : undefined;
   if (!row) {
     // The command was already saved (possibly by a copy that committed after
@@ -653,6 +673,7 @@ export async function createContact(
       ...(supplierPaymentTermId ? { supplierPaymentTermId } : {}),
       recordType: recordType.name,
       ...(ownerUserId ? { ownerUserId } : {}),
+      ...Object.fromEntries(Object.entries(defaultChanges).map(([key, change]) => [key, change.to])),
     },
   });
   return { created: true, contact: toContact(row) };
@@ -731,6 +752,7 @@ export async function updateContact(tx: OrgTx, contactIdInput: unknown, input: C
   if (recordType.id !== current.recordTypeId) changes.recordType = { from: current.recordTypeName, to: recordType.name };
   const ownerUserId = input.ownerUserId === undefined ? current.ownerUserId : await parseOwner(tx, input.ownerUserId);
   if (ownerUserId !== current.ownerUserId) changes.ownerUserId = { from: current.ownerUserId, to: ownerUserId };
+  Object.assign(changes, await saveContactDefaults(tx, current.id, input, current));
   if (Object.keys(changes).length === 0) {
     return current;
   }
@@ -857,4 +879,16 @@ export function archiveContact(tx: OrgTx, contactIdInput: unknown): Promise<Cont
 /** Refused while another active contact has the same name. */
 export function unarchiveContact(tx: OrgTx, contactIdInput: unknown): Promise<Contact> {
   return setArchived(tx, contactIdInput, false);
+}
+
+/** The defaults as sent, for the request hash; values not sent stay out, so older requests hash the same. */
+function defaultsForHash(input: ContactDefaultsInput): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of ["defaultPurchaseAccountCode", "defaultSalesAccountCode", "defaultPurchaseTracking", "defaultSalesTracking"] as const) {
+    const value = input[key];
+    if (value === undefined || value === null || value === "") continue;
+    if (typeof value === "object" && Object.keys(value as object).length === 0) continue;
+    out[key] = value;
+  }
+  return out;
 }

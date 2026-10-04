@@ -1,7 +1,7 @@
 import { getStatementLine, lockStatementLine, type StatementLine } from "@/lib/bank/accounts";
 import { assertBulkKey, eachLine, type BulkResult } from "@/lib/bank/bulk";
 import { MATCH_WINDOW_DAYS, reconcileStatementLine } from "@/lib/bank/reconcile";
-import { listBankRules, ruleMatches } from "@/lib/bank/rules";
+import { firstFittingRule, listBankRules, ruleAmountsMode, ruleContact, type SuggestedRuleLine } from "@/lib/bank/rules";
 import type { OrgRunner, OrgTx } from "@/lib/db/org-transaction";
 import { ConflictError } from "@/lib/errors";
 import { defaultRates, lastRateOnOrBefore } from "@/lib/ledger/foreign";
@@ -54,11 +54,14 @@ export type ConfidentSuggestion =
       ruleName: string;
       contactId: string;
       contactName: string;
+      /** The first line, as a one-line rule shows. */
       accountCode: string;
       accountName: string;
       taxCode: string | null;
       amountsMode: string;
       description: string;
+      /** Every line the rule gives for this amount (BR4-BR6). */
+      lines: SuggestedRuleLine[];
       /** For a foreign-currency line: the rate it'll be converted at (the last one used, D4). */
       exchangeRate: string | null;
     };
@@ -199,7 +202,11 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
   }
   const rules = await listBankRules(tx, { activeOnly: true });
   const rates = await defaultRates(tx, lines.map((row) => row.currency_code ?? tx.baseCurrency));
-  return lines.map((row): LineConfidence => {
+  const confidences: LineConfidence[] = [];
+  for (const row of lines) confidences.push(await confidenceOf(row));
+  return confidences;
+
+  async function confidenceOf(row: (typeof lines)[number]): Promise<LineConfidence> {
     const list = candidates.get(row.id) ?? [];
     if (list.length === 1) {
       const competing = (uses.get(list[0].key) ?? 0) > 1;
@@ -207,33 +214,37 @@ export async function confidentMatches(tx: OrgTx, accountIdInput: unknown): Prom
     }
     if (list.length > 1) return { lineId: row.id, suggestion: null, candidateCount: list.length, competing: false };
     const line = { accountId: row.account_id, amount: money(row.amount), description: row.description, payee: row.payee, particulars: row.particulars, code: row.code, reference: row.reference };
-    const matched = rules.find((candidate) => ruleMatches(candidate, line));
+    const fitting = firstFittingRule(rules, line);
     // A foreign-currency line is converted at the last rate used (D4); with none, a rule isn't confident.
     const foreign = row.currency_code !== null && row.currency_code !== tx.baseCurrency;
     const rate = foreign ? lastRateOnOrBefore(rates.get(row.currency_code!), row.line_date)?.rate ?? null : null;
-    const rule = foreign && rate === null ? undefined : matched;
+    // A rule still waiting for a contact (none named like the payee) isn't confident (BR2).
+    const contact = fitting && !(foreign && rate === null) ? await ruleContact(tx, fitting.rule, line) : null;
+    const first = fitting?.lines[0];
     return {
       lineId: row.id,
-      suggestion: rule
-        ? {
-            kind: "rule",
-            key: rate === null ? `rule:${rule.id}` : `rule:${rule.id}@${rate}`,
-            ruleId: rule.id,
-            ruleName: rule.name,
-            contactId: rule.contactId,
-            contactName: rule.contactName,
-            accountCode: rule.targetAccountCode,
-            accountName: rule.targetAccountName,
-            taxCode: rule.amountsMode === "no_tax" ? null : rule.taxCode,
-            amountsMode: rule.amountsMode,
-            description: rule.lineDescription ?? row.description,
-            exchangeRate: rate,
-          }
-        : null,
+      suggestion:
+        fitting && contact && first
+          ? {
+              kind: "rule",
+              key: rate === null ? `rule:${fitting.rule.id}` : `rule:${fitting.rule.id}@${rate}`,
+              ruleId: fitting.rule.id,
+              ruleName: fitting.rule.name,
+              contactId: contact.id,
+              contactName: contact.name,
+              accountCode: first.accountCode,
+              accountName: first.accountName,
+              taxCode: first.taxCode,
+              amountsMode: ruleAmountsMode(fitting.lines),
+              description: first.description,
+              lines: fitting.lines,
+              exchangeRate: rate,
+            }
+          : null,
       candidateCount: 0,
       competing: false,
     };
-  });
+  }
 }
 
 /** The reconcile command a confident suggestion stands for. */
@@ -249,7 +260,13 @@ function commandFor(suggestion: ConfidentSuggestion, line: StatementLine): Recor
     ...(suggestion.exchangeRate ? { exchangeRate: suggestion.exchangeRate } : {}),
     contactId: suggestion.contactId,
     amountsMode: suggestion.amountsMode,
-    lines: [{ description: suggestion.description, accountCode: suggestion.accountCode, taxCode: suggestion.taxCode ?? undefined, amount: unsigned }],
+    lines: suggestion.lines.map((entry) => ({
+      description: entry.description,
+      accountCode: entry.accountCode,
+      ...(entry.taxCode ? { taxCode: entry.taxCode } : {}),
+      amount: entry.amount,
+      ...(Object.keys(entry.tracking).length > 0 ? { tracking: entry.tracking } : {}),
+    })),
   };
 }
 

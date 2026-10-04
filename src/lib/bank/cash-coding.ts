@@ -1,3 +1,5 @@
+import { contactNamedLike } from "@/lib/bank/rules";
+import { usableContactDefaults } from "@/lib/contacts/defaults";
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { getStatementLine } from "@/lib/bank/accounts";
 import { assertBulkKey, type BulkResult, eachLine } from "@/lib/bank/bulk";
@@ -106,10 +108,18 @@ export async function cashCodeStatementLines(run: OrgRunner, accountIdInput: unk
     const pick = <K extends keyof Values>(field: K): Values[K] => (own[field] !== undefined ? own[field] : all[field]);
     const line = await getStatementLine(tx, lineId);
     if (line.accountId !== accountId) throw new ConflictError("This line is on another account.");
-    const accountCode = pick("accountCode");
-    if (!accountCode) throw new ValidationError("Choose an account for this line.");
-    const taxCode = pick("taxCode") ?? null;
-    const tracking = pick("tracking") ?? {};
+    let accountCode = pick("accountCode");
+    let taxCode = pick("taxCode") ?? null;
+    let tracking = pick("tracking") ?? {};
+    if (!accountCode) {
+      // No account chosen: the contact's defaults for its side (SD2), money out purchases, in sales.
+      const found = pick("contactId") ?? (await contactNamedLike(tx, line.payee ?? line.description))?.id ?? null;
+      const defaults = found ? await usableContactDefaults(tx, found, line.amount.startsWith("-") ? "purchase" : "sales") : null;
+      if (!defaults?.accountCode) throw new ValidationError("Choose an account for this line.");
+      accountCode = defaults.accountCode;
+      taxCode = defaults.taxCode;
+      tracking = defaults.tracking;
+    }
     const contactId = pick("contactId") ?? (await contactNamed(tx, line.payee ?? line.description));
     return reconcileStatementLine(tx, lineId, {
       source,

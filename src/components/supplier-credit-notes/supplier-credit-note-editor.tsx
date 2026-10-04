@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -170,6 +171,10 @@ function SupplierCreditNoteForm({
   const [typedRate, setTypedRate] = useState<string | null>(creditNote?.exchangeRate ?? null);
   const suggestedRate = useLastRate(organisationId, currencyCode, baseCurrency, creditNoteDate);
   const contactTaxCode = contactPurchaseTaxCode(chosenSupplier, taxCodes);
+  // New lines start with the supplier's default account and tracking (SD1).
+  const checkers = defaultsCheckers(accounts, tracking);
+  const purchaseDefaults = (current: EditorLine[], supplier: Contact | undefined) =>
+    withContactDefaults(current, supplier, "purchase", checkers.accountUsable, checkers.valueUsable);
 
   const hasTax = amountsMode !== "no_tax";
   const rates = new Map(taxCodes.map((taxCode) => [taxCode.code, taxCode.rate]));
@@ -260,7 +265,7 @@ function SupplierCreditNoteForm({
               const next = suppliers.find((contact) => contact.id === event.target.value);
               if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
               setContactId(event.target.value);
-              setLines((current) => retaxLines(current, contactPurchaseTaxCode(next, taxCodes)));
+              setLines((current) => retaxLines(purchaseDefaults(current, next), contactPurchaseTaxCode(next, taxCodes)));
             }}
             required
           >
@@ -434,7 +439,7 @@ function SupplierCreditNoteForm({
           <tfoot>
             <tr>
               <td colSpan={hasTax ? 8 : 6}>
-                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaultTaxCode, lineDefaults, contactTaxCode)])}>
+                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, ...purchaseDefaults([blankLine(defaultTaxCode, lineDefaults, contactTaxCode)], chosenSupplier)])}>
                   Add line
                 </Button>
               </td>

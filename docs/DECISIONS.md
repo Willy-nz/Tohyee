@@ -2731,3 +2731,59 @@ approved 3 Oct 2026.
      Jess also confirmed that report viewers may drill into up to 500 rows of
      a tile's own fields and export pivot tiles to CSV and Excel (decision 375).
 
+
+### Bank rules with several conditions and split lines (decisions 380-383)
+
+Stage 1 of the Xero add-ons plan ([XERO-ADDONS-PLAN.md](XERO-ADDONS-PLAN.md)),
+examples BR1-BR10, approved by Jess on 5 Oct 2026; tenant migration 0091.
+Jess asked Claude to decide the open questions (5 Oct 2026: "do what you
+think is best").
+
+380. **A bank rule has conditions joined by all or any, and one or more
+     lines** (like Xero's bank rules; NetSuite's bank feed rules also set
+     the classification segments): text conditions *contains*, *equals* or
+     *starts with* on payee, description, particulars, code, reference or
+     any of them, ignoring case and extra spaces; amount conditions
+     *equals*, *at least*, *at most* or *between*; up to 10 conditions and
+     20 lines. Lines are fixed amounts (taken first) then percentages of
+     what's left, adding up to exactly 100%, each with an account, GST code,
+     description and tracking. The contact is a chosen one or "the contact
+     named like the payee" (as bulk coding finds one). The first active rule
+     by priority that matches **and fits** is suggested; a rule whose fixed
+     amounts are more than the line doesn't fit. **Rules only suggest**:
+     nothing posts until OK (Jess, 5 Oct 2026, no "post automatically").
+     Existing rules became one *contains* condition and one 100% line.
+381. **A rule's lines include GST**: each is a share of the statement line,
+     so a line with a GST code is tax inclusive and one without has no tax.
+     The rule's old "amounts are" setting is gone, because "tax exclusive"
+     can't add up to the statement line.
+382. **Percentages are split in cents the way payroll allocations are**
+     (`splitByPercentages`): each share rounded down to the cent, leftover
+     cents one at a time to the shares that lost most, earliest first on a
+     tie, so the lines always add up exactly. Xero's help doesn't say how it
+     rounds; one rule for all of Tohyee's splits is easier to check.
+383. **Amount conditions ignore the sign** (money in or out is chosen
+     separately); **a percentage line that comes to 0.00 is left out**
+     (fixed amounts took the whole line); **"the contact named like the
+     payee" stays a contact choice**, and a suggestion with no such contact
+     isn't confident and can't be OK'd until one is chosen. Negative
+     percentages (which Xero allows) are refused.
+     - Screenshots: the rule form ([light](screenshots/bank-rule-split-light.png),
+       [dark](screenshots/bank-rule-split-dark.png)) and a split suggestion
+       on the reconcile screen ([light](screenshots/bank-rule-reconcile-light.png)).
+
+### A contact's default account and tracking (decision 384)
+
+384. **Contacts have a default purchase account and tracking, and a default
+     sales account and tracking** (examples SD1-SD3, approved by Jess on
+     5 Oct 2026; tenant migration 0091), like Xero's contact "Purchase
+     defaults" and "Sales defaults" and NetSuite's vendor default expense
+     account. The purchase account must be one a bill line can use, the
+     sales account a revenue account. New bill, supplier credit note and
+     spend money lines start with the purchase defaults; new invoice, sales
+     credit note and receive money lines with the sales defaults (lines
+     nobody has filled in yet; filled-in lines are kept). Bulk coding uses
+     them for a line with no account. An archived account or tracking value
+     is kept on the contact but not used. Bank rules don't use them (their
+     lines say their own account). Screenshot:
+     [the contact's defaults](screenshots/contact-defaults-dark.png).

@@ -179,8 +179,9 @@ Database upgrades run by themselves when Tohyee starts. Back up first if you ins
 - **Next: the Xero top 10 add-ons plan** ([XERO-ADDONS-PLAN.md](XERO-ADDONS-PLAN.md),
   Jess, 5 Oct 2026), with Jess's answers to its questions. Stage 1 (bank
   rules with several conditions and split lines, contacts' default accounts
-  and tracking): examples BR1-BR10 and SD1-SD3 are written and **wait for
-  Jess's approval**; nothing is built yet.
+  and tracking) is built: examples BR1-BR10 and SD1-SD3 approved by Jess
+  5 Oct 2026, decisions 380-384, tenant migration 0091. Next: stage 1b
+  (more bank feeds); ask Jess the order of PayPal, Stripe and Wise first.
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
@@ -249,8 +250,10 @@ package; sources store their chosen worksheet, and workbooks are streamed
 with size and ZIP expansion checks. Old `.xls`, `.xlsm` and
 password-protected workbooks are refused. DuckDB's file access is limited
 (decision 377); pins are kept while hidden (decision 378); every Analytics
-question stops after 30 seconds (decision 379). Next numbers: tenant
-migration 0091, core migration 0007, decision 380.
+question stops after 30 seconds (decision 379). Bank rules with several
+conditions and split lines, and contacts' default accounts and tracking
+(Xero add-ons stage 1, decisions 380-384, tenant migration 0091). Next
+numbers: tenant migration 0092, core migration 0007, decision 385.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

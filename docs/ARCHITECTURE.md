@@ -93,7 +93,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bank_reconciliation_splits   one journal line reconciled across several statement lines
 ├─ bank_transactions, bank_transaction_lines   spend and receive money
 ├─ bank_transfers         money moved between bank and card accounts
-├─ bank_rules             text to look for, and the bank transaction to suggest
+├─ bank_rules, bank_rule_conditions, bank_rule_lines   conditions (all or any) and the split lines a rule suggests (decisions 380-383)
 ├─ record_notes, record_attachments   notes and files on journals, documents and contacts
 ├─ conversion_balances, conversion_balance_lines   opening balances as brought in, once (IM1-IM21)
 ├─ import_mappings        the column mapping last used for each kind of import file

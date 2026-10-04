@@ -53,8 +53,8 @@ phone width).
    exist (BK10, BK22-BK23), so this extends them: several conditions (all or
    any, text and amount), fixed and percentage split lines with tracking,
    the contact named like the payee, and contacts' default accounts and
-   tracking. Examples **BR1-BR10** and **SD1-SD3** are written and wait for
-   Jess (5 Oct 2026).
+   tracking. **Built** (examples BR1-BR10 and SD1-SD3, approved by Jess
+   5 Oct 2026; decisions 380-384; tenant migration 0091).
 2. **1b. More bank feeds:** a provider interface (Akahu becomes one of
    several), then PayPal, Stripe and Wise (Jess to confirm the order); a
    watched folder and an email address per bank account using the existing

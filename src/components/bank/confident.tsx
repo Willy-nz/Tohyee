@@ -24,9 +24,17 @@ export function suggestionText(suggestion: ConfidentSuggestion): string {
       suggestion.amountDue,
     )} due`;
   }
+  const rate = suggestion.exchangeRate ? `, at ${suggestion.exchangeRate}` : "";
+  // A split rule (BR4, BR5) shows every line and its amount, so OK isn't a surprise.
+  if (suggestion.lines.length > 1) {
+    const parts = suggestion.lines.map(
+      (line) => `${formatMoney(line.amount)} to ${line.accountCode} ${line.accountName}${line.taxCode ? ` (${line.taxCode})` : " (no GST)"}`,
+    );
+    return `Rule “${suggestion.ruleName}”: ${suggestion.contactName}, ${parts.join(" + ")}${rate}`;
+  }
   return `Rule “${suggestion.ruleName}”: ${suggestion.contactName}, ${suggestion.accountCode} ${suggestion.accountName}${
     suggestion.taxCode ? `, ${suggestion.taxCode}` : ", no GST"
-  }${suggestion.exchangeRate ? `, at ${suggestion.exchangeRate}` : ""}`;
+  }${rate}`;
 }
 
 /** The highlighted suggestion under a line, or why there's none. */

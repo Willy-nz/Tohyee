@@ -1,5 +1,9 @@
 "use client";
 
+import { AccountSelect, useAccounts } from "@/components/books";
+import { TrackingSelects, useTracking } from "@/components/tracking";
+import { takesBillLines } from "@/components/bills/bill-editor";
+import type { TrackingTags } from "@/lib/tracking/service";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, Suspense, useId, useState } from "react";
@@ -59,6 +63,11 @@ type Draft = {
   defaultSalesTaxCode: string;
   /** "" for none (EX16). */
   defaultPurchaseTaxCode: string;
+  /** "" for none (SD1-SD3). */
+  defaultPurchaseAccountCode: string;
+  defaultSalesAccountCode: string;
+  defaultPurchaseTracking: TrackingTags;
+  defaultSalesTracking: TrackingTags;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -79,6 +88,10 @@ const EMPTY_DRAFT: Draft = {
   deliveryCountry: "",
   defaultSalesTaxCode: "",
   defaultPurchaseTaxCode: "",
+  defaultPurchaseAccountCode: "",
+  defaultSalesAccountCode: "",
+  defaultPurchaseTracking: {},
+  defaultSalesTracking: {},
 };
 
 function draftFrom(contact: Contact): Draft {
@@ -100,6 +113,10 @@ function draftFrom(contact: Contact): Draft {
     deliveryCountry: contact.deliveryCountry ?? "",
     defaultSalesTaxCode: contact.defaultSalesTaxCode ?? "",
     defaultPurchaseTaxCode: contact.defaultPurchaseTaxCode ?? "",
+    defaultPurchaseAccountCode: contact.defaultPurchaseAccountCode ?? "",
+    defaultSalesAccountCode: contact.defaultSalesAccountCode ?? "",
+    defaultPurchaseTracking: contact.defaultPurchaseTracking,
+    defaultSalesTracking: contact.defaultSalesTracking,
   };
 }
 
@@ -108,12 +125,23 @@ function draftFrom(contact: Contact): Draft {
  * terms only for suppliers (the server keeps a former customer's or supplier's).
  */
 function bodyFrom(draft: Draft): Record<string, unknown> {
-  const { customer, supplierPaymentTermId, deliveryCountry, defaultSalesTaxCode, defaultPurchaseTaxCode, ...rest } = draft;
+  const {
+    customer,
+    supplierPaymentTermId,
+    deliveryCountry,
+    defaultSalesTaxCode,
+    defaultPurchaseTaxCode,
+    defaultPurchaseAccountCode,
+    defaultSalesAccountCode,
+    ...rest
+  } = draft;
   return {
     ...rest,
     deliveryCountry: deliveryCountry || null,
     defaultSalesTaxCode: defaultSalesTaxCode || null,
     defaultPurchaseTaxCode: defaultPurchaseTaxCode || null,
+    defaultPurchaseAccountCode: defaultPurchaseAccountCode || null,
+    defaultSalesAccountCode: defaultSalesAccountCode || null,
     ...(draft.isCustomer ? customerBody(customer) : {}),
     ...(draft.isSupplier ? { supplierPaymentTermId: supplierPaymentTermId || null } : {}),
   };
@@ -185,7 +213,12 @@ function ContactForm({
   const [draft, setDraft] = useState<Draft>(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const baseCurrency = useWorkspace().current?.baseCurrency ?? "NZD";
+  const workspace = useWorkspace();
+  const baseCurrency = workspace.current?.baseCurrency ?? "NZD";
+  // For the default accounts and tracking (SD1-SD3).
+  const accounts = useAccounts(workspace.current?.id ?? null, true);
+  const tracking = useTracking(workspace.current?.id ?? null);
+  const accountList = accounts.data?.accounts ?? [];
   const typeLabelId = useId();
   // Values for fields the contact's roles use are shown; the rest (like a
   // customer field's default on a supplier) are kept aside and not saved.
@@ -336,6 +369,23 @@ function ContactForm({
             </select>
           </Field>
         ) : null}
+        {draft.isCustomer ? (
+          <Field label="Default sales account" hint="New invoice, credit note and receive money lines for this customer start with it, and its tracking.">
+            <AccountSelect
+              accounts={accountList.filter((account) => account.isActive || account.code === draft.defaultSalesAccountCode)}
+              filter={(account) => account.accountClass === "revenue"}
+              placeholder="None"
+              value={draft.defaultSalesAccountCode}
+              onChange={(code) => setDraft({ ...draft, defaultSalesAccountCode: code })}
+            />
+            <TrackingSelects
+              setup={tracking.data}
+              labelPrefix="Default sales"
+              value={draft.defaultSalesTracking}
+              onChange={(tags) => setDraft({ ...draft, defaultSalesTracking: tags })}
+            />
+          </Field>
+        ) : null}
       </div>
       {draft.isCustomer ? (
         <CustomerFields
@@ -383,6 +433,24 @@ function ContactForm({
                   </option>
                 ))}
             </select>
+          </Field>
+          <Field
+            label="Default purchase account"
+            hint="New bill, supplier credit note and spend money lines for this supplier start with it, and its tracking; bulk coding uses it when no account is chosen."
+          >
+            <AccountSelect
+              accounts={accountList.filter((account) => account.isActive || account.code === draft.defaultPurchaseAccountCode)}
+              filter={takesBillLines}
+              placeholder="None"
+              value={draft.defaultPurchaseAccountCode}
+              onChange={(code) => setDraft({ ...draft, defaultPurchaseAccountCode: code })}
+            />
+            <TrackingSelects
+              setup={tracking.data}
+              labelPrefix="Default purchase"
+              value={draft.defaultPurchaseTracking}
+              onChange={(tags) => setDraft({ ...draft, defaultPurchaseTracking: tags })}
+            />
           </Field>
         </div>
       ) : null}
