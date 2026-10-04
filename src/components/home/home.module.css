@@ -154,3 +154,21 @@
   font-weight: 650;
   letter-spacing: -0.015em;
 }
+
+/* Home: the profit chart and To do side by side. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.bad {
+  color: var(--danger-text);
+}
+
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}

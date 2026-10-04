@@ -9,6 +9,10 @@ const access = (role: Role, modules = { crm: false, reporting: false, notForProf
 
 /** The top bar's menus after the 2026 redesign: a few labelled groups each, creating things under "+ New". */
 describe("top bar menus", () => {
+  it("uses the simplified accounting menus", () => {
+    expect(MENUS.map((menu) => menu.label)).toEqual(["Home", "Sales", "Purchases", "Banking", "Payroll", "Reports", "Accountant"]);
+  });
+
   it("keeps every menu to at most four labelled groups, none empty", () => {
     for (const menu of MENUS) {
       expect(menu.groups.length).toBeLessThanOrEqual(4);
@@ -58,7 +62,7 @@ describe("command palette search", () => {
   const items = destinations(visibleMenus("accounting", access("owner")), visibleNewActions(access("owner")));
 
   it("lists every menu destination and + New action", () => {
-    expect(items.some((item) => item.label === "Chart of accounts" && item.group === "Accounting › Ledger")).toBe(true);
+    expect(items.some((item) => item.label === "Chart of accounts" && item.group === "Accountant › Ledger")).toBe(true);
     expect(items.some((item) => item.label === "New invoice" && item.group === "New › Sales")).toBe(true);
     expect(items.some((item) => item.label === "Home" && item.href === "/operations")).toBe(true);
   });

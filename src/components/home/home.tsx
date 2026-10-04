@@ -2,42 +2,60 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { CurrencyMoney } from "@/components/bank/foreign";
+import { Chart } from "@/components/analytics/chart";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
+import { DashboardTileSlots, PageDashboardFrame, useDashboardPreferences } from "@/components/page-dashboard";
 import { Notice, ui } from "@/components/ui";
-import { formatDate, todayInBrowser } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import type { AmountsDue, HomeSummary } from "@/lib/reports/home";
 import { GST_BASIS_LABELS } from "@/lib/tax/categories";
 import styles from "./home.module.css";
 
-/** Home's figures (examples H1-H4), loaded once for the page. */
+const HOME_TILES = [
+  { id: "cash_in_bank", label: "Cash in bank" },
+  { id: "owed_to_you", label: "Money owed to you" },
+  { id: "bills_to_pay", label: "Bills to pay" },
+  { id: "next_gst_return", label: "Next GST return" },
+] as const;
+const HOME_DEFAULT_TILE_IDS = HOME_TILES.map((tile) => tile.id);
+
+type HomeTileId = (typeof HOME_TILES)[number]["id"];
+
+/** Home's figures, loaded after the page. */
 export function useHomeSummary(organisationId: string) {
-  return useApiData<HomeSummary>("/api/home", { organisationId, today: todayInBrowser() });
+  return useApiData<HomeSummary>("/api/home", { organisationId });
 }
 
-/** A heading between Home's groups of tiles. */
+/** A heading between Home's groups of cards. */
 export function SectionTitle({ children }: { children: ReactNode }) {
   return <h2 className={styles.sectionTitle}>{children}</h2>;
 }
 
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
+function CashInBankTile({ summary }: { summary: HomeSummary }) {
+  return (
+    <section className={styles.tile} aria-label="Cash in bank">
+      <div className={styles.tileTitle}>
+        <Link href="/operations/reports?report=bs">Cash in bank</Link>
+      </div>
+      <div className={styles.figure}>
+        <Money value={summary.cashInBank} />
+      </div>
+      <div className={ui.muted}>Bank accounts · cards are under Banking</div>
+    </section>
+  );
 }
 
-/** H2 and H3: what's owed to you, or what you owe, with the overdue part. */
 export function AmountsDueTile({
   title,
   due,
-  noun,
+  note,
   href,
-  emptyText,
 }: {
   title: string;
   due: AmountsDue;
-  noun: [string, string];
+  note: ReactNode;
   href: string;
-  emptyText: string;
 }) {
   return (
     <section className={styles.tile} aria-label={title}>
@@ -47,27 +65,7 @@ export function AmountsDueTile({
       <div className={styles.figure}>
         <Money value={due.total} />
       </div>
-      {due.count === 0 ? (
-        <div className={styles.quiet}>{emptyText}</div>
-      ) : (
-        <>
-          <div className={styles.rows}>
-            <div className={styles.row}>
-              <span>{plural(due.count, ...noun)}</span>
-              <span />
-            </div>
-            <div className={`${styles.row} ${due.overdueCount > 0 ? styles.overdue : ""}`}>
-              <span>Overdue ({due.overdueCount})</span>
-              <span>
-                <Money value={due.overdueTotal} />
-              </span>
-            </div>
-          </div>
-          <Link className={styles.action} href={href}>
-            See them
-          </Link>
-        </>
-      )}
+      <div className={ui.muted}>{note}</div>
     </section>
   );
 }
@@ -81,130 +79,139 @@ function NextGstTile({ summary }: { summary: HomeSummary }) {
         {gst.status === "ready" ? <span className={styles.kind}>{GST_BASIS_LABELS[gst.basis]}</span> : null}
       </div>
       {gst.status === "none_filed" ? (
-        <p className={ui.muted}>
-          No GST return has been filed in Tohyee yet, so the next period isn&apos;t known. Work one out and mark it as filed
-          on the GST return page.
-        </p>
+        <p className={ui.muted}>No filed GST return yet.</p>
       ) : (
         <>
-          <div className={styles.rows}>
-            <div className={styles.row}>
-              <span>Period</span>
-              <span>
-                {formatDate(gst.periodStart)} to {formatDate(gst.periodEnd)}
-              </span>
-            </div>
+          <div className={styles.figure}>
+            <Money value={gst.status === "ready" ? gst.box15.replace(/^-/, "") : "0.00"} />
           </div>
-          {gst.status === "ready" ? (
-            <>
-              <div className={styles.figure}>
-                <Money value={gst.box15.replace(/^-/, "")} />
-              </div>
-              <div className={ui.muted}>
-                {gst.box15.startsWith("-") ? "Refund due so far (Box 15)" : gst.box15 === "0.00" ? "Nothing to pay so far (Box 15)" : "GST to pay so far (Box 15)"}
-              </div>
-            </>
-          ) : (
-            <Notice tone="warning">{gst.message}</Notice>
-          )}
+          <div className={ui.muted}>
+            {gst.status === "ready" ? (gst.box15.startsWith("-") ? "Refund due so far · " : gst.box15 === "0.00" ? "Nothing to pay so far · " : "To pay so far · ") : ""}
+            {gst.periodEnd ? `period ends ${formatDate(gst.periodEnd)}` : ""}
+            {gst.status === "error" ? ` · ${gst.message}` : ""}
+          </div>
         </>
       )}
-      <Link className={styles.action} href="/operations/gst-return">
-        Open the GST return
-      </Link>
+    </section>
+  );
+}
+
+function HomeTile({ tile, summary }: { tile: HomeTileId; summary: HomeSummary }) {
+  if (tile === "cash_in_bank") return <CashInBankTile summary={summary} />;
+  if (tile === "owed_to_you") {
+    return (
+      <AmountsDueTile
+        title="Money owed to you"
+        due={summary.owedToYou}
+        note={summary.owedToYou.overdueCount > 0 ? <span className={styles.bad}><Money value={summary.owedToYou.overdueTotal} /> overdue</span> : "Nothing overdue"}
+        href="/operations/reports?report=aged"
+      />
+    );
+  }
+  if (tile === "bills_to_pay") {
+    return (
+      <AmountsDueTile
+        title="Bills to pay"
+        due={summary.billsToPay}
+        note={summary.billsDueThisWeek > 0 ? `${summary.billsDueThisWeek} due this week` : "None due this week"}
+        href="/operations/reports?report=payables"
+      />
+    );
+  }
+  return <NextGstTile summary={summary} />;
+}
+
+function ToDoCard({ summary }: { summary: HomeSummary }) {
+  const plural = (count: number, one: string, many: string) => (count === 1 ? one : many.replace("#", String(count)));
+  const items = [
+    { count: summary.toDo.paydayFilingsDue, text: plural(summary.toDo.paydayFilingsDue, "A payday filing is due this week", "# payday filings are due this week"), action: "File", href: "/operations/payroll/pay-runs" },
+    { count: summary.toDo.accountsToReconcile, text: plural(summary.toDo.accountsToReconcile, "1 bank line to reconcile", "# bank lines to reconcile"), action: "Reconcile", href: "/operations/bank-accounts" },
+    { count: summary.toDo.feedsToReconnect, text: plural(summary.toDo.feedsToReconnect, "A bank feed needs reconnecting", "# bank feeds need reconnecting"), action: "Reconnect", href: "/operations/bank-accounts" },
+    { count: summary.toDo.draftsToApprove, text: plural(summary.toDo.draftsToApprove, "1 draft to approve", "# drafts to approve"), action: "Review", href: "/operations/invoices" },
+  ].filter((item) => item.count > 0);
+  return (
+    <section className={styles.tile}>
+      <div className={styles.tileTitle}>To do</div>
+      {items.length === 0 ? (
+        <p className={ui.muted}>Nothing needs doing.</p>
+      ) : (
+        <div className={styles.rows}>
+          {items.map((item) => (
+            <div key={item.action} className={styles.row}>
+              <span>{item.text}</span>
+              <Link href={item.href}>{item.action}</Link>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RecentActivity({ summary }: { summary: HomeSummary }) {
+  return (
+    <section className={styles.tile}>
+      <div className={styles.tileTitle}>
+        <span>Recent activity</span>
+        <Link href="/operations/ledger-journals">All journals</Link>
+      </div>
+      <div className={styles.rows}>
+        {summary.recentActivity.map((item) => (
+          <div key={item.journalId} className={styles.row}>
+            <span>
+              {formatDate(item.postingDate)} · {item.description}
+            </span>
+            <span>
+              <Money value={item.amount} />
+            </span>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
 
 export function HomeTiles({ organisationId }: { organisationId: string }) {
   const home = useHomeSummary(organisationId);
+  const dashboard = useDashboardPreferences({ organisationId, page: "home", defaultTiles: HOME_DEFAULT_TILE_IDS });
   if (home.error) return <Notice tone="error">{home.error}</Notice>;
   const summary = home.data;
   if (!summary) return <p className={ui.muted}>Loading…</p>;
+  const chartRows = summary.profitByMonth.map((point) => ({ month: point.monthStart, netProfit: point.netProfit }));
   return (
     <>
-      <h2 className={styles.sectionTitle}>Bank accounts</h2>
-      <div className={styles.grid}>
-        {summary.bankAccounts.length === 0 ? (
-          <section className={styles.tile}>
-            <p className={ui.muted}>No bank accounts yet.</p>
-            <Link className={styles.action} href="/operations/bank-accounts">
-              Add a bank account
-            </Link>
-          </section>
-        ) : (
-          summary.bankAccounts.map((account) => (
-            <section key={account.id} className={`${styles.tile} ${styles.bankTile}`} aria-label={account.name}>
-              <div className={styles.tileTitle}>
-                <Link href={`/operations/bank-accounts/${account.id}`}>{account.name}</Link>
-                <span className={styles.kind}>
-                  {account.code} · {account.accountType === "credit_card" ? "Credit card" : "Bank"}
-                </span>
-              </div>
-              <div className={styles.rows}>
-                <div className={styles.row}>
-                  <span>Balance in Tohyee</span>
-                  <span>
-                    {account.isForeign ? (
-                      <>
-                        <CurrencyMoney currency={account.statementCurrency} value={account.foreignBalance} />
-                        {" · "}
-                        <CurrencyMoney currency={summary.currencyCode} value={account.ledgerBalance} />
-                      </>
-                    ) : (
-                      <Money value={account.ledgerBalance} />
-                    )}
-                  </span>
-                </div>
-                <div className={styles.row}>
-                  <span>
-                    Statement balance
-                    {account.statementBalanceAt ? ` (${formatDate(account.statementBalanceAt)})` : ""}
-                  </span>
-                  <span>
-                    {account.statementBalance === null ? (
-                      "—"
-                    ) : account.isForeign ? (
-                      <CurrencyMoney currency={account.statementCurrency} value={account.statementBalance} />
-                    ) : (
-                      <Money value={account.statementBalance} />
-                    )}
-                  </span>
-                </div>
-              </div>
-              {account.unreconciledCount > 0 ? (
-                <Link className={styles.action} href={`/operations/bank-accounts/${account.id}`}>
-                  Reconcile {plural(account.unreconciledCount, "item", "items")}
-                </Link>
-              ) : account.statementBalance === null ? (
-                // Nothing imported or synced yet, so nothing has been checked against the bank (2 Oct 2026).
-                <Link className={styles.action} href={`/operations/bank-accounts/${account.id}`}>
-                  No statement yet: import one
-                </Link>
-              ) : (
-                <div className={styles.quiet}>All reconciled</div>
-              )}
-            </section>
-          ))
-        )}
+      {dashboard.error ? <Notice tone="error">{dashboard.error}</Notice> : null}
+      <PageDashboardFrame
+        hidden={dashboard.hidden}
+        onToggleHidden={() => dashboard.setHidden(!dashboard.hidden)}
+        customise={
+          <DashboardTileSlots<HomeTileId>
+            tiles={dashboard.tiles as HomeTileId[]}
+            options={HOME_TILES.map((tile) => ({ id: tile.id, label: tile.label }))}
+            onChange={(tiles) => dashboard.setTiles(tiles)}
+          />
+        }
+      >
+        <div className={styles.grid}>
+          {(dashboard.tiles as HomeTileId[]).map((tile) => (
+            <HomeTile key={tile} tile={tile} summary={summary} />
+          ))}
+        </div>
+      </PageDashboardFrame>
+      <div className={styles.split}>
+        <section className={styles.tile} aria-label="Net profit by month">
+          <div className={styles.tileTitle}>
+            <Link href="/operations/reports?report=pnl">Net profit by month</Link>
+            <span className={styles.kind}>This financial year</span>
+          </div>
+          <Chart
+            spec={{ kind: "column", category: "month", series: [{ field: "netProfit", label: "Net profit" }], valueFormat: "money", currency: summary.currencyCode }}
+            rows={chartRows}
+          />
+        </section>
+        <ToDoCard summary={summary} />
       </div>
-      <div className={styles.grid}>
-        <AmountsDueTile
-          title="Money owed to you"
-          due={summary.owedToYou}
-          noun={["invoice", "invoices"]}
-          href="/operations/invoices?show=awaiting"
-          emptyText="Nothing owed right now."
-        />
-        <AmountsDueTile
-          title="Bills to pay"
-          due={summary.billsToPay}
-          noun={["bill", "bills"]}
-          href="/operations/bills?show=awaiting"
-          emptyText="No bills to pay right now."
-        />
-        <NextGstTile summary={summary} />
-      </div>
+      <RecentActivity summary={summary} />
     </>
   );
 }

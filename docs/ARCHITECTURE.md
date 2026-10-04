@@ -77,6 +77,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ project_invoices, project_invoice_items, project_staff_rates   what each project invoice billed, and staff cost rates per member
 ├─ customer_payment_batches, supplier_payment_batches   one payment for several invoices or bills (its parts are customer or supplier payments)
 ├─ custom_reports         custom report drafts, and published frozen copies with their figures
+├─ dashboard_preferences  per-user per-page dashboard hide/show and tile choices
 ├─ budgets, budget_amounts   budgets (post nothing; archived, never deleted) and their amounts per account and month
 ├─ sales_credit_notes, sales_credit_note_lines, sales_credit_note_numbering
 ├─ sales_credit_note_applications   credit applied to sales invoices
