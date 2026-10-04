@@ -19,7 +19,6 @@ export default function OperationsPage() {
     <Page>
       <PageHeader
         title={current ? current.displayName : "Welcome to Tohyee"}
-        description="Home: your dashboard, this year's monthly net profit, today's to-do list and recent activity."
       />
       <RequireOrganisation>{(organisationId) => <Overview organisationId={organisationId} />}</RequireOrganisation>
     </Page>

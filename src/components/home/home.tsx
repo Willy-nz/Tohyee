@@ -86,7 +86,8 @@ function NextGstTile({ summary }: { summary: HomeSummary }) {
             <Money value={gst.status === "ready" ? gst.box15.replace(/^-/, "") : "0.00"} />
           </div>
           <div className={ui.muted}>
-            {gst.periodEnd ? `Period ends ${formatDate(gst.periodEnd)}` : ""}
+            {gst.status === "ready" ? (gst.box15.startsWith("-") ? "Refund due so far · " : gst.box15 === "0.00" ? "Nothing to pay so far · " : "To pay so far · ") : ""}
+            {gst.periodEnd ? `period ends ${formatDate(gst.periodEnd)}` : ""}
             {gst.status === "error" ? ` · ${gst.message}` : ""}
           </div>
         </>

@@ -42,6 +42,7 @@ export const MENUS: Menu[] = [
         heading: "Customers and items",
         links: [
           { href: "/operations/contacts?type=customers", label: "Customers" },
+          { href: "/operations/contacts", label: "All contacts" },
           { href: "/operations/customer-statements", label: "Customer statements" },
           { href: "/operations/projects", label: "Projects" },
           { href: "/operations/projects/staff-rates", label: "Staff cost rates" },
