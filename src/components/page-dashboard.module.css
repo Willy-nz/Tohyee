@@ -1,0 +1,50 @@
+.frame {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.linkButton {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--link);
+  font-weight: 600;
+}
+
+.hiddenRow {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 9px 12px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.customise {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 10px 12px;
+}
+
+.slots {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.slot label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}

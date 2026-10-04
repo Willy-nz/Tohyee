@@ -2557,3 +2557,16 @@ approved 3 Oct 2026.
      since a data source loads one file by name. Excel attachments wait until
      the loader can read Excel.
 
+### UI review 2026: top bar, dashboard frame and Home (decision 372)
+
+372. **The top bar and Home move to one reusable page-dashboard pattern**
+     (issue #115, tenant migration 0089). Accounting now uses one apps
+     launcher button and the menus Home, Sales, Purchases, Banking, Payroll,
+     Reports and Accountant (Contacts under Sales/Purchases; Accounting and
+     Tax combined under Accountant). Non-blocking warnings (for example the
+     backup-key reminder and bank-feed reconnect notices) move to a bell with
+     a dot; blocking warnings stay banners. Home becomes a four-tile dashboard
+     (Cash in bank, Money owed to you, Bills to pay, Next GST return), with
+     net profit by month, a To do card and recent activity lines. Dashboard
+     hide/show and tile choices are saved per person and per page in
+     `dashboard_preferences`.

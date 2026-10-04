@@ -366,6 +366,33 @@
   color: var(--text);
 }
 
+.noticeButton {
+  position: relative;
+}
+
+.noticeDot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger-text);
+}
+
+.noticePanel {
+  width: 320px;
+  max-width: min(320px, calc(100vw - 24px));
+}
+
+.noticeText {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
 .avatarButton {
   display: grid;
   place-items: center;
@@ -722,34 +749,86 @@
   }
 }
 
-/* The app switcher (Accounting / CRM), beside the brand. */
-.appSwitcher {
-  display: flex;
+/* One apps launcher button (Accounting / CRM / Analytics). */
+.appLauncher {
+  position: relative;
   flex-shrink: 0;
-  gap: 2px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-  padding: 2px;
 }
 
-.appLink {
-  border-radius: 6px;
-  padding: 3px 10px;
+.appLauncher > summary {
+  list-style: none;
+}
+
+.appLauncher > summary::-webkit-details-marker {
+  display: none;
+}
+
+.appLauncherButton {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--text-muted);
-  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.appLauncherButton:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.appLauncher[open] .appLauncherButton {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.appLauncherGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 4px);
+  gap: 2px;
+}
+
+.appLauncherGrid > span {
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.appLauncherPanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 50;
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  padding: 8px;
+  box-shadow: var(--shadow-lg);
+}
+
+.appLauncherLink {
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: var(--text-base);
   font-weight: 600;
   white-space: nowrap;
 }
 
-.appLink:hover {
-  color: var(--text);
+.appLauncherLink:hover {
+  background: var(--surface-hover);
   text-decoration: none;
 }
 
-.appLinkActive,
-.appLinkActive:hover {
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
-  color: var(--text);
+.appLauncherLinkActive,
+.appLauncherLinkActive:hover {
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
 }

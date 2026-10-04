@@ -18,6 +18,7 @@ import {
 import { type AppKey, AppSwitcher } from "@/components/app-switcher";
 import { BrandMark } from "@/components/brand-mark";
 import { CommandPalette } from "@/components/command-palette";
+import { useApiData } from "@/components/hooks";
 import { type Modules, useModules } from "@/components/modules";
 import {
   AI_LINK,
@@ -80,6 +81,15 @@ function SearchIcon() {
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden focusable="false">
       <circle cx="7" cy="7" r="4.75" fill="none" stroke="currentColor" strokeWidth="1.5" />
       <path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden focusable="false">
+      <path d="M8 2.2a3.2 3.2 0 0 0-3.2 3.2v1.4c0 1.2-.3 2.4-1 3.4l-.8 1.1h10l-.8-1.1c-.7-1-.9-2.2-.9-3.4V5.4A3.2 3.2 0 0 0 8 2.2Z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6.4 12.3a1.6 1.6 0 0 0 3.2 0" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -338,6 +348,50 @@ function UserMenu({ onSignOut }: { onSignOut: () => void }) {
   );
 }
 
+type TopNotice = { id: string; message: string; href: string };
+
+function NoticesMenu({ notices }: { notices: Array<{ id: string; message: string; href?: string }> }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
+  const close = useCallback(() => setOpen(false), []);
+  const focusButton = useCallback(() => button.current, []);
+  useDismiss(open, close, wrap, focusButton);
+  if (notices.length === 0) return null;
+  return (
+    <div className={styles.menu} ref={wrap}>
+      <button
+        type="button"
+        ref={button}
+        className={`${styles.iconButton} ${styles.noticeButton}`}
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label={`Notices (${notices.length})`}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <BellIcon />
+        <span className={styles.noticeDot} aria-hidden />
+      </button>
+      {open ? (
+        <div id={panelId} className={`${styles.dropdown} ${styles.dropdownEnd} ${styles.noticePanel}`} role="group" aria-label="Notices">
+          {notices.map((notice) =>
+            notice.href ? (
+              <Link key={notice.id} href={notice.href} className={styles.dropdownLink} onClick={close}>
+                {notice.message}
+              </Link>
+            ) : (
+              <p key={notice.id} className={styles.noticeText}>
+                {notice.message}
+              </p>
+            ),
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Phones and narrow windows: a ☰ button opens every section as a full-screen list. */
 function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: Modules | null; menus: Menu[]; onSignOut: () => void }) {
   const pathname = usePathname();
@@ -518,7 +572,17 @@ function usePageEntrance(target: RefObject<HTMLElement | null>, pathname: string
   }, [target, pathname]);
 }
 
-function TopBarActions({ newActions, onSearch, onSignOut }: { newActions: MenuGroup[]; onSearch: () => void; onSignOut: () => void }) {
+function TopBarActions({
+  newActions,
+  notices,
+  onSearch,
+  onSignOut,
+}: {
+  newActions: MenuGroup[];
+  notices: Array<{ id: string; message: string; href?: string }>;
+  onSearch: () => void;
+  onSignOut: () => void;
+}) {
   const pathname = usePathname();
   const shortcut = useShortcutLabel();
   const aiCurrent = pathname === AI_LINK.href || pathname.startsWith(`${AI_LINK.href}/`);
@@ -538,6 +602,7 @@ function TopBarActions({ newActions, onSearch, onSignOut }: { newActions: MenuGr
         <SparkIcon />
         {AI_LINK.label}
       </Link>
+      <NoticesMenu notices={notices} />
       <div className={styles.desktopOnly}>
         <UserMenu onSignOut={onSignOut} />
       </div>
@@ -551,6 +616,21 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   const { can, current } = useWorkspace();
   const modules = useModules(current?.id ?? null);
   const reportViewer = current?.role === "report_viewer";
+  const noticeData = useApiData<{ notices: TopNotice[] }>(
+    current?.id && !reportViewer ? "/api/notices" : null,
+    current?.id ? { organisationId: current.id } : {},
+  );
+  const notices = useMemo(
+    () => [
+      ...warnings.map((warning, index) => ({ id: `server-warning-${index}`, message: warning })),
+      ...((noticeData.data?.notices ?? []).map((notice) => ({ id: notice.id, message: notice.message, href: notice.href })) as Array<{
+        id: string;
+        message: string;
+        href?: string;
+      }>),
+    ],
+    [warnings, noticeData.data],
+  );
   const menus = useMemo(() => visibleMenus(app, { can, modules }), [app, can, modules]);
   const newActions = useMemo(() => visibleNewActions({ can, modules }), [can, modules]);
   const items = useMemo<Destination[]>(
@@ -610,7 +690,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
             <DesktopMenus menus={menus} />
           </Suspense>
           <Suspense fallback={<div className={styles.actions} />}>
-            <TopBarActions newActions={newActions} onSearch={() => setPaletteOpen(true)} onSignOut={() => void signOut()} />
+            <TopBarActions newActions={newActions} notices={notices} onSearch={() => setPaletteOpen(true)} onSignOut={() => void signOut()} />
           </Suspense>
           <Suspense fallback={null}>
             <PhoneMenu app={app} modules={modules} menus={menus} onSignOut={() => void signOut()} />
@@ -618,18 +698,6 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
         </div>
       </header>
       <main id="main-content" className={styles.content} tabIndex={-1}>
-        {warnings.length > 0 ? (
-          <div className={styles.warnings} data-print="hide">
-            {warnings.map((warning) => (
-              <div key={warning} role="alert" className={styles.serverWarning}>
-                <span className={styles.warningIcon} aria-hidden>
-                  !
-                </span>
-                <span>{warning}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
         <div ref={page} className={styles.page}>
           {/* Not rendered for a report viewer outside Analytics, so the page doesn't ask for anything before the redirect. */}
           {reportViewer && app !== "analytics" ? null : children}

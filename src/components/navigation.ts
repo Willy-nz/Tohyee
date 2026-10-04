@@ -9,8 +9,8 @@ export type MenuGroup = { heading: string; links: MenuLink[] };
 export type Menu = { label: string; href?: string; groups: MenuGroup[]; module?: ModuleKey; area?: string[]; minRole?: Role };
 
 /**
- * The accounting menus: Home, Sales, Purchases, Payroll, Reporting,
- * Accounting, Tax, Contacts. Each opens to a panel of a few labelled groups.
+ * The accounting menus: Home, Sales, Purchases, Banking, Payroll, Reports,
+ * Accountant. Each opens to a panel of a few labelled groups.
  * Making something new lives in the "+ New" menu (NEW_ACTIONS), not here.
  * Server settings aren't here: they open only on the server computer.
  */
@@ -39,8 +39,10 @@ export const MENUS: Menu[] = [
         ],
       },
       {
-        heading: "Projects and items",
+        heading: "Customers and items",
         links: [
+          { href: "/operations/contacts?type=customers", label: "Customers" },
+          { href: "/operations/customer-statements", label: "Customer statements" },
           { href: "/operations/projects", label: "Projects" },
           { href: "/operations/projects/staff-rates", label: "Staff cost rates" },
           { href: "/operations/items", label: "Products and services" },
@@ -63,10 +65,30 @@ export const MENUS: Menu[] = [
         ],
       },
       {
-        heading: "Money out",
+        heading: "Suppliers and money out",
         links: [
+          { href: "/operations/contacts?type=suppliers", label: "Suppliers" },
           { href: "/operations/supplier-payments", label: "Payments for several bills" },
           { href: "/operations/expense-claims", label: "Expense claims" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Banking",
+    groups: [
+      {
+        heading: "Banking",
+        links: [
+          { href: "/operations/bank-accounts", label: "Bank accounts" },
+          { href: "/operations/bank-rules", label: "Bank rules" },
+          { href: "/operations/exchange-rates", label: "Exchange rates" },
+        ],
+      },
+      {
+        heading: "FX",
+        links: [
+          { href: "/operations/fx-revaluation", label: "FX revaluation", minRole: "bookkeeper" },
         ],
       },
     ],
@@ -104,7 +126,7 @@ export const MENUS: Menu[] = [
     ],
   },
   {
-    label: "Reporting",
+    label: "Reports",
     groups: [
       {
         heading: "Financial statements",
@@ -151,17 +173,8 @@ export const MENUS: Menu[] = [
     ],
   },
   {
-    label: "Accounting",
+    label: "Accountant",
     groups: [
-      {
-        heading: "Banking",
-        links: [
-          { href: "/operations/bank-accounts", label: "Bank accounts" },
-          { href: "/operations/bank-rules", label: "Bank rules" },
-          { href: "/operations/exchange-rates", label: "Exchange rates" },
-          { href: "/operations/fx-revaluation", label: "FX revaluation", minRole: "bookkeeper" },
-        ],
-      },
       {
         heading: "Ledger",
         links: [
@@ -181,6 +194,17 @@ export const MENUS: Menu[] = [
         ],
       },
       {
+        heading: "Tax and R&D",
+        links: [
+          { href: "/operations/gst-return", label: "GST return" },
+          { href: "/operations/gst-audit", label: "GST audit report" },
+          { href: "/operations/tax", label: "Tax codes" },
+          { href: "/operations/rd", label: "R&D activities" },
+          { href: "/operations/rd/costs", label: "Tagged R&D costs" },
+          { href: "/operations/rd/claim", label: "R&D claim report" },
+        ],
+      },
+      {
         heading: "Settings",
         links: [
           { href: "/operations/settings", label: "Organisation settings", minRole: "admin" },
@@ -197,41 +221,6 @@ export const MENUS: Menu[] = [
           { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
           { href: "/crm/record-types", label: "CRM record types", minRole: "admin", module: "crm" },
           { href: "/crm/stages", label: "CRM opportunity stages", minRole: "admin", module: "crm" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Tax",
-    groups: [
-      {
-        heading: "GST",
-        links: [
-          { href: "/operations/gst-return", label: "GST return" },
-          { href: "/operations/gst-audit", label: "GST audit report" },
-          { href: "/operations/tax", label: "Tax codes" },
-        ],
-      },
-      {
-        heading: "R&D Tax Incentive",
-        links: [
-          { href: "/operations/rd", label: "R&D activities" },
-          { href: "/operations/rd/costs", label: "Tagged R&D costs" },
-          { href: "/operations/rd/claim", label: "R&D claim report" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Contacts",
-    groups: [
-      {
-        heading: "Contacts",
-        links: [
-          { href: "/operations/contacts", label: "All contacts" },
-          { href: "/operations/contacts?type=customers", label: "Customers" },
-          { href: "/operations/contacts?type=suppliers", label: "Suppliers" },
-          { href: "/operations/customer-statements", label: "Customer statements" },
         ],
       },
     ],
@@ -303,22 +292,22 @@ export const AREAS: Record<string, string[]> = {
   ],
   Purchases: ["/operations/purchases", "/operations/bills", "/operations/purchase-orders", "/operations/repeating-bills", "/operations/supplier-credit-notes", "/operations/supplier-payments", "/operations/expense-claims"],
   Payroll: ["/operations/payroll"],
-  Reporting: ["/operations/reports", "/operations/budgets", "/operations/project-reports"],
-  Accounting: [
-    "/operations/bank-accounts",
-    "/operations/bank-rules",
-    "/operations/ledger-journals",
+  Banking: ["/operations/bank-accounts", "/operations/bank-rules", "/operations/exchange-rates", "/operations/fx-revaluation"],
+  Reports: ["/operations/reports", "/operations/budgets", "/operations/project-reports"],
+  Accountant: [
     "/operations/accounts",
+    "/operations/ledger-journals",
     "/operations/inventory",
     "/operations/fixed-assets",
-    "/operations/exchange-rates",
-    "/operations/fx-revaluation",
     "/operations/period-close",
+    "/operations/bank-accounts",
+    "/operations/gst-return",
+    "/operations/gst-audit",
+    "/operations/tax",
+    "/operations/rd",
     "/operations/settings",
     "/operations/members",
   ],
-  Tax: ["/operations/gst-return", "/operations/gst-audit", "/operations/tax", "/operations/rd"],
-  Contacts: ["/operations/contacts", "/operations/customer-statements"],
 };
 
 export function inArea(pathname: string, menu: Menu): boolean {

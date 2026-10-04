@@ -199,8 +199,10 @@ migration 0085 and core migration 0006. Saving transaction reports as custom
 (#107, CR11-CR15) is decision 369, tenant migration 0086; shaping (#110) is
 decision 370, 0087; report emails (#111) are decision 371, 0088 (Copilot
 built #107, #110 and #111; Claude reviewed and fixed them). All released in
-**v0.5.0** (3 Oct 2026). Next numbers: tenant migration 0089, core migration
-0007, decision 372. Still to do for Analytics: pivot tables (Perspective),
+**v0.5.0** (3 Oct 2026). Next numbers: tenant migration 0090, core migration
+0007, decision 373. UI review step 1-2 (#115) is built with tenant migration
+0089 (top bar menus + notices bell, dashboard preferences, Home dashboard
+frame and monthly profit chart). Still to do for Analytics: pivot tables (Perspective),
 reading Excel files (then saving Excel report emails), and limiting DuckDB's
 file access (`allowed_directories`).
 

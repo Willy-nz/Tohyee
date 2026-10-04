@@ -28,18 +28,29 @@ export function availableApps(modules: Modules | null, reportViewer = false): Ap
 export function AppSwitcher({ current, modules, reportViewer = false }: { current: AppKey; modules: Modules | null; reportViewer?: boolean }) {
   const keys = availableApps(modules, reportViewer);
   if (keys.length < 2) return null;
+  const apps = APPS.filter((app) => keys.includes(app.key));
   return (
-    <nav aria-label="Apps" className={styles.appSwitcher}>
-      {APPS.filter((app) => keys.includes(app.key)).map((app) => (
-        <Link
-          key={app.key}
-          href={app.href}
-          className={`${styles.appLink} ${app.key === current ? styles.appLinkActive : ""}`}
-          aria-current={app.key === current ? "true" : undefined}
-        >
-          {app.label}
-        </Link>
-      ))}
-    </nav>
+    <details className={styles.appLauncher}>
+      <summary className={styles.appLauncherButton} aria-label="Apps">
+        <span className={styles.appLauncherGrid} aria-hidden>
+          <span />
+          <span />
+          <span />
+          <span />
+        </span>
+      </summary>
+      <nav aria-label="Apps" className={styles.appLauncherPanel}>
+        {apps.map((app) => (
+          <Link
+            key={app.key}
+            href={app.href}
+            className={`${styles.appLauncherLink} ${app.key === current ? styles.appLauncherLinkActive : ""}`}
+            aria-current={app.key === current ? "page" : undefined}
+          >
+            {app.label}
+          </Link>
+        ))}
+      </nav>
+    </details>
   );
 }

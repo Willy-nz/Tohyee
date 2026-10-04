@@ -12,6 +12,8 @@ import { coreQuery } from "@/lib/db/transactions";
 import { recordPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, voidInvoice } from "@/lib/invoices/service";
 import { fileGstReturn } from "@/lib/reports/gst-return";
+import { agedPayables } from "@/lib/reports/aged-payables";
+import { agedReceivables } from "@/lib/reports/aged-receivables";
 import { getHomeSummary, type HomeSummary } from "@/lib/reports/home";
 import { createTaxCode } from "@/lib/tax/codes";
 import {
@@ -89,31 +91,27 @@ describeWithDatabase("Home", () => {
     return { org, as, kobe, paw, invoice, bill, home };
   }
 
-  it("H1: a card for each active bank account with its balances and what's left to reconcile", async () => {
+  it("H1: cash in bank is active bank accounts only (credit cards left out), with reconcile/feed counts in To do", async () => {
     const world = await setup();
     await world.as((tx) => createBankAccount(tx, { code: "1010", name: "Savings", accountType: "bank" }));
-    const before = await world.home();
-    const bank = before.bankAccounts.find((account) => account.code === "1000")!;
-    expect(bank).toMatchObject({ unreconciledCount: 0, statementBalance: null });
+    await world.as((tx) => createBankAccount(tx, { code: "1020", name: "Visa", accountType: "credit_card" }));
+    const bankId = await world.as(async (tx) => {
+      const row = await tx.query<{ id: string }>("select id::text from accounts where code = '1000'");
+      return row.rows[0]!.id;
+    });
     await world.as((tx) =>
-      importStatementFile(tx, bank.id, {
+      importStatementFile(tx, bankId, {
         idempotencyKey: key("import"),
         fileName: "statement.csv",
         fileBase64: Buffer.from(CSV).toString("base64"),
       }),
     );
-    const lines = (await world.as((tx) => listStatementLines(tx, bank.id, { status: "all" }))).lines;
+    const lines = (await world.as((tx) => listStatementLines(tx, bankId, { status: "all" }))).lines;
     await world.as((tx) => setStatementLineExcluded(tx, lines.find((line) => line.amount === "-500.00")!.id, true));
     const after = await world.home();
-    // Excluded lines don't count: 2 of the 3 are left to reconcile.
-    expect(after.bankAccounts.find((account) => account.code === "1000")).toMatchObject({
-      unreconciledCount: 2,
-      ledgerBalance: "0.00",
-    });
-    expect(after.bankAccounts.find((account) => account.code === "1010")).toMatchObject({ unreconciledCount: 0 });
-    // Archived accounts aren't shown.
-    await world.as((tx) => tx.query("update accounts set is_active = false where code = '1010'"));
-    expect((await world.home()).bankAccounts.map((account) => account.code)).not.toContain("1010");
+    expect(after.cashInBank).toBe("0.00");
+    expect(after.toDo.accountsToReconcile).toBe(2);
+    expect(after.toDo.feedsToReconnect).toBe(0);
   });
 
   it("H2: money owed to you, with the overdue part; drafts, voids and applied credit handled", async () => {
@@ -151,6 +149,8 @@ describeWithDatabase("Home", () => {
       applyCreditNote(tx, approved.id, { idempotencyKey: key("apply"), applicationDate: "2026-05-26", applications: [{ invoiceId: inv1.id, amount: "23.00" }] }),
     );
     expect((await world.home()).owedToYou).toEqual({ total: "272.00", count: 2, overdueTotal: "230.00", overdueCount: 1 });
+    const report = await world.as((tx) => agedReceivables(tx, { asAt: JUNE_1 }));
+    expect((await world.home()).owedToYou.total).toBe(report.total.total);
   });
 
   it("H3: bills to pay, less supplier payments, with the overdue part", async () => {
@@ -161,7 +161,11 @@ describeWithDatabase("Home", () => {
       { unitPrice: "100.00", taxCode: "GST" },
       { unitPrice: "20.00", taxCode: "EXEMPT" },
     ]);
-    expect((await world.home()).billsToPay).toEqual({ total: "250.00", count: 2, overdueTotal: "135.00", overdueCount: 1 });
+    const home = await world.home();
+    expect(home.billsToPay).toEqual({ total: "250.00", count: 2, overdueTotal: "135.00", overdueCount: 1 });
+    expect(home.billsDueThisWeek).toBe(0);
+    const report = await world.as((tx) => agedPayables(tx, { asAt: JUNE_1 }));
+    expect(home.billsToPay.total).toBe(report.total.total);
   });
 
   it("H4: the next GST return follows the latest filed one, with its Box 15 so far; none filed says so", async () => {

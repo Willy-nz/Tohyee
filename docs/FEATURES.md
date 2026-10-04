@@ -8,7 +8,7 @@ that something happened.
 
 - **Organisations**, each with its own PostgreSQL database, created and
   repaired by server admins.
-- **The look (2026 redesign, 3 Oct 2026):** a simpler top bar where each menu opens a short grouped panel, one **+ New** button for every "New …" action, a **search / command palette (Ctrl+K)** for any screen, an **AI** item, light and dark themes that follow the computer (switch in the user menu), the Inter font with tabular figures, and a short fade between pages. Reports and printed documents stay on white paper.
+- **The look (2026 redesign, 4 Oct 2026):** a simpler top bar where each menu opens a short grouped panel, one **apps launcher** button (Accounting, CRM, Analytics), one **+ New** button for every "New …" action, a **search / command palette (Ctrl+K)** for any screen, an **AI** item, a **notices bell** for non-blocking warnings, light and dark themes that follow the computer (switch in the user menu), the Inter font with tabular figures, and a short fade between pages. Reports and printed documents stay on white paper.
 - **Server settings apart from the books** (organisations, users, remote
   access, email, updates), open only on the server computer itself. On
   Windows they're in the **Tohyee server app**: an icon by the clock (the
@@ -31,12 +31,13 @@ that something happened.
   key. **Keeping the key**: server admins can see the backup key (with their
   password) and check a saved copy by pasting it back; they're reminded on
   every page until someone has.
-- **Menus**: Home, Sales, Purchases, Reporting, Accounting, Tax and Contacts
-  across the top, each opening to its overview, lists and settings; a ☰ menu
-  with the same sections on phones, where line editors stack each line's
-  fields. **Home** (examples H1-H4): a card per bank account with its
-  balances and "Reconcile N items", money owed to you and bills to pay (with
-  what's overdue), and the next GST return's Box 15 so far.
+- **Menus**: Home, Sales, Purchases, Banking, Payroll, Reports and Accountant
+  across the top (Contacts under Sales/Purchases; Tax and Accounting under
+  Accountant), each opening to its overview, lists and settings; a ☰ menu with
+  the same sections on phones, where line editors stack each line's fields.
+  **Home** is now one page dashboard: four tiles (Cash in bank; Money owed to
+  you; Bills to pay with due-this-week; Next GST return), net profit by month,
+  a To do card and recent activity.
 - **Logins and roles**: server admins; per-organisation owner, admin,
   bookkeeper and viewer; first-time setup; password changes and resets;
   sign-in lockout; admin CLI for recovery.

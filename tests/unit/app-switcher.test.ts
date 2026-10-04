@@ -11,7 +11,7 @@ describe("app switcher", () => {
   const links = (html: string) =>
     [...html.matchAll(/<a([^>]*)>([^<]*)<\/a>/g)].map(([, attributes, text]) => [
       /href="([^"]*)"/.exec(attributes)?.[1],
-      /aria-current="true"/.test(attributes),
+      /aria-current="page"/.test(attributes),
       text,
     ]);
 
@@ -27,6 +27,7 @@ describe("app switcher", () => {
     expect(availableApps({ crm: true, reporting: false, notForProfit: false, analytics: false })).toEqual(["accounting", "crm"]);
     const inAccounting = render("accounting", { crm: true, reporting: false, notForProfit: false, analytics: false });
     expect(inAccounting).toContain('aria-label="Apps"');
+    expect(inAccounting).toContain("<summary");
     expect(links(inAccounting)).toEqual([
       ["/operations", true, "Accounting"],
       ["/crm", false, "CRM"],
@@ -44,5 +45,10 @@ describe("app switcher", () => {
       ["/crm", false, "CRM"],
       ["/analytics", true, "Analytics"],
     ]);
+  });
+
+  it("shows only Analytics to report viewers", () => {
+    expect(availableApps({ crm: true, reporting: true, notForProfit: true, analytics: true }, true)).toEqual(["analytics"]);
+    expect(renderToStaticMarkup(createElement(AppSwitcher, { current: "analytics", modules: { crm: true, reporting: true, notForProfit: true, analytics: true }, reportViewer: true }))).toBe("");
   });
 });

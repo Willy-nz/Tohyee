@@ -42,17 +42,15 @@ export function AreaOverview({ organisationId, area }: { organisationId: string;
             <AmountsDueTile
               title="Money owed to you"
               due={home.data.owedToYou}
-              noun={["invoice", "invoices"]}
+              note={`Overdue: ${home.data.owedToYou.overdueCount}`}
               href="/operations/invoices?show=awaiting"
-              emptyText="Nothing owed right now."
             />
           ) : (
             <AmountsDueTile
               title="Bills to pay"
               due={home.data.billsToPay}
-              noun={["bill", "bills"]}
+              note={`Overdue: ${home.data.billsToPay.overdueCount}`}
               href="/operations/bills?show=awaiting"
-              emptyText="No bills to pay right now."
             />
           )}
         </div>
