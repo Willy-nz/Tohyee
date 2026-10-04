@@ -2605,8 +2605,8 @@ approved 3 Oct 2026.
        decision 368). A pin from a dashboard that's deleted, unshared or no
        longer has the tile, or while Analytics is off, quietly drops off
        (the defaults show if nothing is left); the saved row isn't rewritten,
-       so sharing again or switching Analytics back on brings it back, unless
-       the person saves the page's tiles in the meantime. Saving a reference
+       so sharing again or switching Analytics back on brings it back, even
+       if the person saves the page's tiles in the meantime (decision 378). Saving a reference
        the person can't open is refused as not found (so dashboards can't be
        probed); while Analytics is off, pinning is refused.
      - **Shown through the dashboard query path** (`dashboardId` + `tileId`),
@@ -2614,7 +2614,9 @@ approved 3 Oct 2026.
        chart, or a table's first rows. It has a dashed edge and "From
        <dashboard name>", and opens the dashboard.
      - **Pin to page** is on each tile in Analytics (not while the dashboard
-       is being edited); a full page offers to replace one of its tiles.
+       is being edited); a full page offers to replace one of its tiles. It
+       only lists pages the person can open, so report viewers (who can't
+       open Home) don't see it.
        Customise lists the page's defaults and the person's pinned tiles.
 
 ### Analytics: what DuckDB may touch (decision 377)
@@ -2630,3 +2632,12 @@ approved 3 Oct 2026.
        web), the database is reopened with the new folder the next time
        it's used.
      - Shaping previews stop after 10 seconds.
+
+### Pinned tiles: kept while hidden (decision 378)
+
+378. **Saving a page's tiles keeps pins that are hidden at the time**
+     (Analytics off, or the dashboard no longer shared with the person), in
+     their old places, as long as the dashboard and the tile still exist.
+     A pin whose dashboard or tile was deleted goes for good. At most 8 hidden
+     pins are kept per page. While hidden, a pin's slot isn't refilled: the
+     page just shows fewer tiles (Jess, Oct 2026).
