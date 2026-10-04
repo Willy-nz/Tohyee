@@ -2608,3 +2608,5 @@ approved 3 Oct 2026.
       Revisit Perspective for a future interactive, client-side explore view.
      - CSV and Excel exports contain the pivot result only; exact values are
       exported as text.
+     - Theme previews: [light](screenshots/analytics-pivot-light.png) and
+      [dark](screenshots/analytics-pivot-dark.png).

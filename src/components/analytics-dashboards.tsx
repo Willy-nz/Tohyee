@@ -794,7 +794,9 @@ function pivotColumnLabel(column: PivotColumn, pivot: PivotData): string {
 function pivotExportRows(pivot: PivotData): string[][] {
   const headers = [
     ...pivot.rowFields.map((field) => heading(field.label)),
-    ...pivot.columns.map((column) => `${pivotColumnLabel(column, pivot)} · ${column.measure.label}`),
+    ...pivot.columns.map((column) =>
+      [column.total ? "Grand total" : pivot.columnField ? pivotColumnLabel(column, pivot) : "", column.measure.label].filter(Boolean).join(" · "),
+    ),
   ];
   const rows = pivot.rows.map((row) => [
     ...pivot.rowFields.map((field, index) => pivotRowLabel(row, index, field)),
@@ -857,7 +859,7 @@ export function PivotTable({
   const click = (row: PivotRow, column: PivotColumn) => {
     if (!onDrill) return;
     const rowValues = row.dimensions.slice(0, row.depth).map((value) => value === null ? "(blank)" : value);
-    const columnValue = column.total || !pivot.columnField ? "" : pivotColumnLabel(column, pivot);
+    const columnValue = column.total ? "Grand total" : pivot.columnField ? pivotColumnLabel(column, pivot) : "";
     const drillTitle = [rowValues.join(" · "), columnValue, column.measure.label].filter(Boolean).join(" · ") || "Grand total";
     onDrill(
       { depth: row.depth, dimensions: row.dimensions, pivotValue: column.pivotValue, total: column.total },
