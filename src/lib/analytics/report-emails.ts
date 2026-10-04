@@ -3,7 +3,14 @@ import yauzl from "yauzl";
 import { writeAuditEvent } from "@/lib/audit";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
 import { requireAnalytics } from "@/lib/analytics/sources";
-import { extractReportAttachment, MAX_ATTACHMENT_BYTES, MAX_CHECK_BYTES, reportFileKey, saveReportFile } from "@/lib/analytics/report-email-files";
+import {
+  extractReportAttachment,
+  MAX_ATTACHMENT_BYTES,
+  MAX_CHECK_BYTES,
+  reportFileKey,
+  reportXlsxExpansionBytes,
+  saveReportFile,
+} from "@/lib/analytics/report-email-files";
 import { imapReportMessages, listImapFolders, listReportFolders, reportMessages, type ImapCredentials } from "@/lib/analytics/report-email-providers";
 import { reportMailboxToken } from "@/lib/crm/mail/service";
 import { requireCrm } from "@/lib/crm/switch";
@@ -305,7 +312,7 @@ export async function checkReportMailbox(
       let outOfBudget = false;
       if (!problem && !message.receivedAt) problem = "The email has no valid received date.";
       for (const attachment of problem ? [] : message.attachments) {
-        if (!/\.(csv|tsv|txt|zip)$/i.test(attachment.name)) continue;
+        if (!/\.(csv|tsv|txt|zip|xlsx)$/i.test(attachment.name)) continue;
         try { reportFileKey(attachment.name); } catch { problem = "An attachment has an unsafe file name."; continue; }
         if (attachment.size > MAX_ATTACHMENT_BYTES || attachment.size < 0 || !Number.isFinite(attachment.size)) { problem = "An attachment is over the size limit."; continue; }
         if (usedBytes + attachment.size > MAX_CHECK_BYTES) { outOfBudget = true; break; }
@@ -320,14 +327,25 @@ export async function checkReportMailbox(
         if (usedBytes > MAX_CHECK_BYTES && bytes.length <= MAX_ATTACHMENT_BYTES) { outOfBudget = true; break; }
         if (bytes.length > MAX_ATTACHMENT_BYTES) { problem = "An attachment is over the size limit."; continue; }
         let extracted;
-        const archive = /\.zip$/i.test(attachment.name);
+        const archive = /\.(zip|xlsx)$/i.test(attachment.name);
         const remaining = MAX_CHECK_BYTES - usedBytes;
         if (archive) {
           let expansion: number;
-          try { expansion = await reportZipExpansionBytes(bytes); } catch { problem = "A ZIP attachment is damaged or too large to unzip safely."; continue; }
+          try {
+            expansion = /\.xlsx$/i.test(attachment.name) ? await reportXlsxExpansionBytes(bytes) : await reportZipExpansionBytes(bytes);
+          } catch (error) {
+            // An Excel attachment says why (macros, a password, too large to unpack safely).
+            problem = /\.xlsx$/i.test(attachment.name)
+              ? `An Excel attachment couldn't be saved: ${error instanceof ValidationError ? error.message : "it's damaged or too large to read safely."}`
+              : "A ZIP attachment is damaged or too large to unzip safely.";
+            continue;
+          }
           if (expansion > remaining) {
             if (expansion + bytes.length <= MAX_CHECK_BYTES) { outOfBudget = true; break; }
-            problem = "A ZIP attachment is too large once unzipped."; continue;
+            problem = /\.xlsx$/i.test(attachment.name)
+              ? "An Excel attachment is too large once expanded."
+              : "A ZIP attachment is too large once unzipped.";
+            continue;
           }
           usedBytes += expansion;
         }

@@ -1488,7 +1488,7 @@ as the admin login, straight into an encrypted file:
 
 ## Analytics data
 
-Analytics (decisions 353-362) keeps loaded data out of PostgreSQL. Each
+Analytics (decisions 353-362 and 376) keeps loaded data out of PostgreSQL. Each
 organisation with Analytics on has one DuckDB file,
 `<TOHYEE_ANALYTICS_DIR>/<organisation id>.duckdb` (Windows:
 `%ProgramData%\Tohyee\analytics` by default, set by the installer to the data
@@ -1499,7 +1499,7 @@ one organisation run one at a time. No DuckDB extensions are downloaded at
 run time.
 
 - **Definitions stay in the organisation's database** (tenant migrations
-  0082/0087: `analytics_sources`, `analytics_shaped_tables`,
+  0082/0087/0090: `analytics_sources`, `analytics_shaped_tables`,
   `analytics_load_runs`), so they're backed up and restored with it. The
   DuckDB file holds only loaded data and can always be rebuilt by loading
   again; it isn't in the backups.
@@ -1512,6 +1512,16 @@ run time.
   guessed floating-point number. A load writes a new table and swaps it in
   only when it succeeds. The PostgreSQL record of a load is written before
   and after it, in short transactions; the file is never read inside one.
+- **Excel sources** (`src/lib/analytics/xlsx.ts`, decision 376): one sheet
+  of an `.xlsx` (stored on the source) is copied out as CSV text into a
+  scratch folder in the organisation's work folder (`analyticsWorkFolder`)
+  and loaded by the CSV loader.
+  The workbook (50 MB at most) is checked first by unpacking every ZIP entry
+  with limits; ExcelJS then reads a stream Tohyee rebuilds from only the
+  checked parts it needs (workbook, styles, shared strings, the sheet),
+  unpacked by Tohyee and stopped at the checked sizes, so ZIP tricks that
+  hide entries from the directory don't reach it. `.xls`, macros and
+  password-protected workbooks are refused.
 - **The nightly reload** (`src/lib/analytics/scheduler.ts`) loads each daily
   source once a day after 04:00 business time and retries a failure an
   hour later (off with `TOHYEE_ANALYTICS_SCHEDULER=off`).
@@ -1578,9 +1588,13 @@ run time.
   hosts must resolve to public addresses (`src/lib/analytics/mail-host.ts`),
   checked on save and before each connection. Data files
   go into `email/<mailbox id>/` inside the server-admin-chosen source folder;
-  the existing loader discovers them there. OAuth permissions cover the
-  whole mailbox, but these checks only read the chosen folder or label and
-  never modify mail.
+  the existing loader discovers them there. CSV, TSV and TXT, and `.xlsx`
+  attachments are saved; ZIP and workbook entries are checked for safe paths,
+  entry counts, compression ratios, CRCs and expansion, and workbooks with
+  macros or a password are refused (the same check as loading, decision 376). Attachments are capped
+  at 25 MB and each check at 100 MB including expansion. OAuth permissions
+  cover the whole mailbox, but these checks only read the chosen folder or
+  label and never modify mail.
 
 ## Open decisions
 

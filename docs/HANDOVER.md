@@ -204,12 +204,14 @@ dashboard tiles on Home; the pages they can go on are listed in
 subtotals, a read-only HTML grid, restricted cell drill-down and CSV/Excel
 exports. Perspective was not added because its viewer package is 14 MB
 unpacked and needs browser-side WASM and controls to be explicitly locked
-down. Next numbers: tenant migration 0091 (0090 is reserved for Excel
-sources, #121), core migration 0007, decision 380 (376 is reserved for Excel
-#121; 377 is DuckDB file access, 378 pins kept while hidden, 379 the
-30-second limit on Analytics questions). Still to do for Analytics: reading
-Excel files (then saving Excel report emails). DuckDB's file access is
-limited (decision 377).
+down. Excel sources and report-email attachments (#124 for issue #121,
+decision 376, tenant migration 0090) use the existing MIT-licensed ExcelJS
+package; sources store their chosen worksheet, and workbooks are streamed
+with size and ZIP expansion checks. Old `.xls`, `.xlsm` and
+password-protected workbooks are refused. DuckDB's file access is limited
+(decision 377); pins are kept while hidden (decision 378); every Analytics
+question stops after 30 seconds (decision 379). Next numbers: tenant
+migration 0091, core migration 0007, decision 380.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

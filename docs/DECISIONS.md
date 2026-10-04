@@ -2652,6 +2652,48 @@ approved 3 Oct 2026.
      - Theme previews: [light](screenshots/analytics-pivot-light.png) and
        [dark](screenshots/analytics-pivot-dark.png).
 
+### Analytics: Excel files (decision 376)
+
+376. **Analytics loads Excel workbooks (.xlsx), and report emails save them**
+     (issue #121; tenant migration 0090).
+     - **One sheet per source**, chosen at setup (the first visible tab by default)
+       and stored on the source (`analytics_sources.sheet_name`). Chart
+       sheets aren't offered. Hidden sheets are offered, marked "(hidden)",
+       but the default is the first visible tab (Jess, Oct 2026). Setup shows the sheet names and the first rows,
+       as for a CSV; the preview reads only the first 20,481 rows.
+     - **Same path as a CSV:** the sheet is copied out as CSV text and loaded
+       by the CSV loader, so every value is text first and then cast to the
+       confirmed type (money `DECIMAL(18,2)`), in a staging table swapped in
+       only when the whole sheet loads, with the same errors. The first row
+       with a value holds the headings; empty rows are skipped; a value to
+       the right of the last heading fails the load (as an extra column in a
+       CSV does). The copy sits in the organisation's own work folder
+       (`<id>.work`, the only part of the analytics folder its DuckDB may
+       read, decision 377) and is deleted afterwards; a copy left by a crash
+       is cleared on the next load once it's an hour old.
+     - **Values as written:** a number is written as the shortest text that
+       reads back as the same number, then rounded by the column type, so
+       0.1 + 0.2 (stored as 0.30000000000000004) loads as 0.30 and 2.675 as
+       2.68 (half away from zero). A percentage loads as its value (15% is
+       0.15). Date-formatted cells, including formula results, load as dates
+       or date-times in the 1900 or 1904 date system. Formulas load Excel's
+       last worked-out result; an error result loads as text (`#ERROR!`,
+       `#DIV/0!`) so a number column fails rather than guessing (Jess
+       confirmed both, Oct 2026). Merged cells
+       have their value in the top-left cell only.
+     - **Read safely:** ExcelJS (MIT, already used for report exports) reads
+       the sheet as a stream. Workbooks are capped at 50 MB. Every ZIP entry
+       is unpacked and counted before reading (250 MB in all, no entry more
+       than 1,000 times its packed size, 2,000 entries, 64 MB of shared text), and
+       ExcelJS is given a stream Tohyee builds of only the parts it needs, so
+       entries the ZIP's directory doesn't list are never read. DuckDB's
+       Excel extension isn't used (it downloads at run time).
+     - **Refused with a reason:** old `.xls`, `.xlsm`, an `.xlsx` that holds
+       macros or is a binary workbook, and password-protected workbooks.
+     - **Report emails** save `.xlsx` attachments as they came, after the
+       same ZIP checks, within the 25 MB attachment and 100 MB check limits
+       (the unpacked size counts against the check).
+
 ### Analytics: what DuckDB may touch (decision 377)
 
 377. **Each organisation's analytics database may only read its own source

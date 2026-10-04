@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import ExcelJS from "exceljs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   analyticsFilePath,
   closeAnalytics,
   loadCsv,
+  loadXlsx,
+  inspectXlsx,
   queryAnalytics,
   runBuiltQuery,
   TILE_TIME_LIMIT_MS,
@@ -26,6 +29,18 @@ const columns: LoadColumn[] = [
 function writeCsv(name: string, text: string): string {
   const file = path.join(sources, name);
   fs.writeFileSync(file, text);
+  return file;
+}
+
+async function writeXlsx(name: string, worksheets: Array<{ name: string; rows: unknown[][] }>): Promise<string> {
+  const workbook = new ExcelJS.Workbook();
+  for (const sheet of worksheets) {
+    const worksheet = workbook.addWorksheet(sheet.name);
+    for (const row of sheet.rows) worksheet.addRow(row);
+    worksheet.getColumn(1).numFmt = "yyyy-mm-dd";
+  }
+  const file = path.join(sources, name);
+  await workbook.xlsx.writeFile(file);
   return file;
 }
 
@@ -96,6 +111,120 @@ describe("analytics engine (decisions 354-358)", () => {
         loadCsv({ organisationId: ORG, sourceFolder: sources, file, table: "sales", columns }),
       ).rejects.toThrow(/analytics folder/);
     }
+  });
+
+  it("previews sheets and loads the chosen Excel sheet with dates and exact money", async () => {
+    const file = await writeXlsx("sales.xlsx", [
+      {
+        name: "First",
+        rows: [
+          ["Order date", "Region", "Unit price"],
+          [new Date("2026-01-05T00:00:00.000Z"), "Otago", 0.1],
+          [new Date("2026-01-06T00:00:00.000Z"), "Otago", 0.2],
+          [new Date("2026-01-07T00:00:00.000Z"), "Otago", 0.30000000000000004],
+        ],
+      },
+      {
+        name: "Second",
+        rows: [
+          ["Order date", "Region", "Unit price"],
+          [new Date("2026-02-01T00:00:00.000Z"), "Canterbury", 1.25],
+        ],
+      },
+    ]);
+
+    const preview = await inspectXlsx(sources, "sales.xlsx", "Second");
+    expect(preview.sheets).toEqual(["First", "Second"]);
+    expect(preview.sheetName).toBe("Second");
+    expect(preview.rows[0]).toEqual(["2026-02-01", "Canterbury", "1.25"]);
+    expect(preview.columns.map((column) => [column.name, column.kind])).toEqual([
+      ["order_date", "date"],
+      ["region", "text"],
+      ["unit_price", "money"],
+    ]);
+    expect((await inspectXlsx(sources, "sales.xlsx", "Removed sheet")).sheetName).toBe("First");
+
+    await loadXlsx({
+      organisationId: ORG,
+      sourceFolder: sources,
+      file,
+      table: "xlsx_sales",
+      columns: [
+        { source: "Order date", name: "order_date", kind: "date" },
+        { source: "Region", name: "region", kind: "text" },
+        { source: "Unit price", name: "unit_price", kind: "money" },
+      ],
+      sheetName: "First",
+    });
+    expect(await queryAnalytics(ORG, "select order_date::varchar as day, sum(unit_price)::varchar as total from xlsx_sales group by 1 order by 1")).toEqual([
+      { day: "2026-01-05", total: "0.10" },
+      { day: "2026-01-06", total: "0.20" },
+      { day: "2026-01-07", total: "0.30" },
+    ]);
+    expect(await queryAnalytics(ORG, "select sum(unit_price)::varchar as total from xlsx_sales")).toEqual([{ total: "0.60" }]);
+
+    const invalid = await writeXlsx("bad-sales.xlsx", [{
+      name: "Bad",
+      rows: [["Order date", "Region", "Unit price"], ["not a date", "Otago", 5]],
+    }]);
+    await expect(loadXlsx({
+      organisationId: ORG,
+      sourceFolder: sources,
+      file: invalid,
+      table: "xlsx_sales",
+      columns: [
+        { source: "Order date", name: "order_date", kind: "date" },
+        { source: "Region", name: "region", kind: "text" },
+        { source: "Unit price", name: "unit_price", kind: "money" },
+      ],
+    })).rejects.toThrow(/not a date/);
+    expect(await queryAnalytics(ORG, "select sum(unit_price)::varchar as total from xlsx_sales")).toEqual([{ total: "0.60" }]);
+
+    await loadXlsx({
+      organisationId: ORG,
+      sourceFolder: sources,
+      file,
+      table: "xlsx_default",
+      columns: [
+        { source: "Order date", name: "order_date", kind: "date" },
+        { source: "Region", name: "region", kind: "text" },
+        { source: "Unit price", name: "unit_price", kind: "money" },
+      ],
+    });
+    expect(await queryAnalytics(ORG, "select region, count(*)::int as n from xlsx_default group by 1")).toEqual([{ region: "Otago", n: 3 }]);
+  });
+
+  it.each([
+    ["old.xls", Buffer.from("not an Excel workbook"), /\.xls\b/i],
+    ["macros.xlsm", Buffer.from("not an Excel workbook"), /\.xlsm\b/i],
+    ["locked.xlsx", Buffer.from("d0cf11e0a1b11ae1", "hex"), /password-protected/i],
+  ])("refuses unsupported Excel file %s", async (name, contents, message) => {
+    const file = path.join(sources, name);
+    fs.writeFileSync(file, contents);
+    await expect(loadXlsx({
+      organisationId: ORG,
+      sourceFolder: sources,
+      file,
+      table: "xlsx_refused",
+      columns: [{ source: "value", name: "value", kind: "text" }],
+    })).rejects.toThrow(message);
+  });
+
+  it("refuses Excel workbooks larger than 50 MB before reading them", async () => {
+    const file = path.join(sources, "too-large.xlsx");
+    const descriptor = fs.openSync(file, "w");
+    try {
+      fs.ftruncateSync(descriptor, 50 * 1024 * 1024 + 1);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    await expect(loadXlsx({
+      organisationId: ORG,
+      sourceFolder: sources,
+      file,
+      table: "xlsx_too_large",
+      columns: [{ source: "value", name: "value", kind: "text" }],
+    })).rejects.toThrow(/50 MB/);
   });
 
   it("refuses table and column names that could be read as SQL", async () => {

@@ -1,5 +1,5 @@
 import { json, route, searchParams } from "@/lib/api/http";
-import { inspectCsv } from "@/lib/analytics/engine";
+import { inspectSourceFile } from "@/lib/analytics/engine";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
 import { analyticsMember } from "@/lib/analytics/http";
 import { requireAnalytics } from "@/lib/analytics/sources";
@@ -14,5 +14,6 @@ export const GET = route(async (request) => {
   const folder = await organisationSourceFolder(organisation.id);
   if (!folder) throw new ConflictError("A server admin needs to choose this organisation's analytics folder first.");
   const delimiter = params.get("delimiter") || undefined;
-  return json(await inspectCsv(folder, params.get("file") ?? "", delimiter));
+  const sheetName = params.get("sheetName") || undefined;
+  return json(await inspectSourceFile(folder, params.get("file") ?? "", delimiter, sheetName));
 });

@@ -4,6 +4,7 @@ import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import yauzl from "yauzl";
 import { ValidationError } from "@/lib/errors";
+import { checkXlsxArchive } from "@/lib/analytics/xlsx";
 
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export const MAX_CHECK_BYTES = 100 * 1024 * 1024;
@@ -33,6 +34,21 @@ export function reportFileKey(name: string): string {
   return key;
 }
 
+/** Workbook ZIPs may hold more parts than a report ZIP (sheets, styles, drawings). */
+const MAX_XLSX_ENTRIES = 2000;
+
+/**
+ * Checks an Excel attachment the way the loader checks a workbook
+ * (decision 376): unpacked and counted without trusting its stated sizes,
+ * and refused if it has macros, a password or unpacks past this check's
+ * budget. Returns what it unpacks to.
+ */
+export async function reportXlsxExpansionBytes(bytes: Buffer): Promise<number> {
+  if (bytes.length > MAX_ATTACHMENT_BYTES) throw new ValidationError("The Excel attachment exceeds the attachment size limit.");
+  const checked = await checkXlsxArchive(bytes, { expandedBytes: MAX_CHECK_BYTES, entries: MAX_XLSX_ENTRIES, ratio: MAX_COMPRESSION_RATIO });
+  return checked.expandedBytes;
+}
+
 function budget(size: number, remaining: number): void {
   if (!Number.isSafeInteger(remaining) || remaining < 0 || remaining > MAX_CHECK_BYTES ||
       !Number.isSafeInteger(size) || size < 0 || size > MAX_ATTACHMENT_BYTES) {
@@ -50,6 +66,12 @@ export async function extractReportAttachment(
   const extension = path.extname(name).toLowerCase();
   if ([".csv", ".tsv", ".txt"].includes(extension)) {
     budget(bytes.length, remainingBytes);
+    return [{ name, bytes }];
+  }
+  if (extension === ".xlsx") {
+    // Saved as it came, but only once it has been unpacked and counted against this check's budget.
+    const expanded = await reportXlsxExpansionBytes(bytes);
+    if (expanded > remainingBytes) throw new ReportCheckBudgetError();
     return [{ name, bytes }];
   }
   if (extension !== ".zip") return [];
@@ -199,7 +221,7 @@ async function writeReportFile(
 ): Promise<string> {
   const fileName = reportFileKey(file.name);
   budget(file.bytes.length, MAX_CHECK_BYTES);
-  if (![".csv", ".tsv", ".txt"].includes(path.extname(file.name).toLowerCase())) {
+  if (![".csv", ".tsv", ".txt", ".xlsx"].includes(path.extname(file.name).toLowerCase())) {
     throw new ValidationError("Only extracted data files can be saved.");
   }
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(mailboxId) || !messageId || messageId.length > 1024 ||

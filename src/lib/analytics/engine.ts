@@ -1,9 +1,20 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import { ValidationError } from "@/lib/errors";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
 import { analyticsFilePath, analyticsWorkFolder } from "@/lib/analytics/paths";
+import {
+  checkXlsxArchive,
+  chooseSheet,
+  defaultSheet,
+  MAX_XLSX_FILE_BYTES,
+  writeXlsxSheetCsv,
+  XLSX_LOAD_LIMITS,
+  XLSX_MESSAGES,
+  xlsxStructure,
+} from "@/lib/analytics/xlsx";
 
 export { analyticsFilePath, analyticsFolder, analyticsWorkFolder } from "@/lib/analytics/paths";
 
@@ -182,6 +193,72 @@ export function isInsideFolder(folder: string, file: string): boolean {
 
 export type CsvLoadResult = { rows: number; milliseconds: number };
 
+/** A sheet copied out of a workbook stops at this size (a 50 MB workbook rarely makes more than a few hundred MB). */
+const MAX_XLSX_CSV_BYTES = 1024 * 1024 * 1024;
+
+function validateLoadInput(input: {
+  sourceFolder: string;
+  file: string;
+  table: string;
+  columns: readonly LoadColumn[];
+}): void {
+  assertTableName(input.table);
+  if (input.columns.length === 0) throw new ValidationError("Choose at least one column to load.");
+  const names = new Set<string>();
+  for (const column of input.columns) {
+    assertTableName(column.name);
+    if (names.has(column.name)) throw new ValidationError(`Two columns are both called ${column.name}.`);
+    names.add(column.name);
+    if (!Object.hasOwn(COLUMN_TYPES, column.kind)) throw new ValidationError(`Unknown column type for ${column.name}.`);
+  }
+  if (!fs.existsSync(input.file) || !isInsideFolder(input.sourceFolder, input.file)) {
+    throw new ValidationError("That file isn't in this organisation's analytics folder.");
+  }
+}
+
+async function loadCsvInto(connection: DuckDBConnection, input: {
+  file: string;
+  table: string;
+  columns: readonly LoadColumn[];
+  delimiter: string;
+  quote?: string;
+}): Promise<CsvLoadResult> {
+  const started = performance.now();
+  const staging = `_tohyee_load_${input.table}`;
+  // Every column is read as text and converted explicitly, so DuckDB
+  // never guesses a type (it guesses prices as floating-point numbers).
+  const select = input.columns
+    .map((column) => {
+      const value = `nullif(trim(${quoteIdentifier(column.source)}), '')`;
+      const converted = column.kind === "text" ? value : `cast(${value} as ${COLUMN_TYPES[column.kind]})`;
+      return `${converted} as ${quoteIdentifier(column.name)}`;
+    })
+    .join(", ");
+  await connection.run(`drop table if exists ${quoteIdentifier(staging)}`);
+  try {
+    await connection.run(
+      `create table ${quoteIdentifier(staging)} as select ${select} from read_csv(${quoteString(input.file)}, ` +
+        `header = true, all_varchar = true, delim = ${quoteString(input.delimiter)}` +
+        (input.quote ? `, quote = ${quoteString(input.quote)}, escape = ${quoteString(input.quote)}` : "") + ")",
+    );
+    const count = await connection.runAndReadAll(`select count(*)::bigint as n from ${quoteIdentifier(staging)}`);
+    const rows = Number(count.getRows()[0][0]);
+    await connection.run("begin transaction");
+    try {
+      await connection.run(`drop table if exists ${quoteIdentifier(input.table)}`);
+      await connection.run(`alter table ${quoteIdentifier(staging)} rename to ${quoteIdentifier(input.table)}`);
+      await connection.run("commit");
+    } catch (error) {
+      await connection.run("rollback");
+      throw error;
+    }
+    return { rows, milliseconds: Math.round(performance.now() - started) };
+  } catch (error) {
+    await connection.run(`drop table if exists ${quoteIdentifier(staging)}`).catch(() => undefined);
+    throw new ValidationError(loadErrorMessage(error));
+  }
+}
+
 /**
  * Loads a CSV file into `table`, replacing it only if the whole file loads
  * (decision 357). The file must be inside `sourceFolder` (decision 358).
@@ -196,58 +273,169 @@ export async function loadCsv(input: {
   columns: readonly LoadColumn[];
   delimiter?: string;
 }): Promise<CsvLoadResult> {
-  assertTableName(input.table);
-  if (input.columns.length === 0) throw new ValidationError("Choose at least one column to load.");
-  const names = new Set<string>();
-  for (const column of input.columns) {
-    assertTableName(column.name);
-    if (names.has(column.name)) throw new ValidationError(`Two columns are both called ${column.name}.`);
-    names.add(column.name);
-    if (!Object.hasOwn(COLUMN_TYPES, column.kind)) throw new ValidationError(`Unknown column type for ${column.name}.`);
-  }
-  if (!fs.existsSync(input.file) || !isInsideFolder(input.sourceFolder, input.file)) {
-    throw new ValidationError("That file isn't in this organisation's analytics folder.");
-  }
+  validateLoadInput(input);
   const delimiter = input.delimiter ?? ",";
   if (delimiter.length !== 1) throw new ValidationError("The separator must be one character.");
 
   return serialise(input.organisationId, () =>
-    withAnalytics(input.organisationId, async (connection) => {
-      const started = performance.now();
-      const staging = `_tohyee_load_${input.table}`;
-      // Every column is read as text and converted explicitly, so DuckDB
-      // never guesses a type (it guesses prices as floating-point numbers).
-      const select = input.columns
-        .map((column) => {
-          const value = `nullif(trim(${quoteIdentifier(column.source)}), '')`;
-          const converted = column.kind === "text" ? value : `cast(${value} as ${COLUMN_TYPES[column.kind]})`;
-          return `${converted} as ${quoteIdentifier(column.name)}`;
-        })
-        .join(", ");
-      await connection.run(`drop table if exists ${quoteIdentifier(staging)}`);
-      try {
-        await connection.run(
-          `create table ${quoteIdentifier(staging)} as select ${select} from read_csv(${quoteString(input.file)}, ` +
-            `header = true, all_varchar = true, delim = ${quoteString(delimiter)})`,
-        );
-        const count = await connection.runAndReadAll(`select count(*)::bigint as n from ${quoteIdentifier(staging)}`);
-        const rows = Number(count.getRows()[0][0]);
-        await connection.run("begin transaction");
-        try {
-          await connection.run(`drop table if exists ${quoteIdentifier(input.table)}`);
-          await connection.run(`alter table ${quoteIdentifier(staging)} rename to ${quoteIdentifier(input.table)}`);
-          await connection.run("commit");
-        } catch (error) {
-          await connection.run("rollback");
-          throw error;
-        }
-        return { rows, milliseconds: Math.round(performance.now() - started) };
-      } catch (error) {
-        await connection.run(`drop table if exists ${quoteIdentifier(staging)}`).catch(() => undefined);
-        throw new ValidationError(loadErrorMessage(error));
-      }
-    }, input.sourceFolder),
+    withAnalytics(input.organisationId, (connection) => loadCsvInto(connection, { ...input, delimiter }), input.sourceFolder),
   );
+}
+
+function validateXlsxFile(sourceFolder: string, file: string): void {
+  if (!fs.existsSync(file) || !isInsideFolder(sourceFolder, file)) {
+    throw new ValidationError("That file isn't in this organisation's analytics folder.");
+  }
+  const extension = path.extname(file).toLowerCase();
+  if (extension === ".xls") throw new ValidationError("Older Excel files (.xls) aren't supported. Open it in Excel and save it as an Excel workbook (.xlsx).");
+  if (extension === ".xlsm") throw new ValidationError(XLSX_MESSAGES.macros);
+  if (extension !== ".xlsx") throw new ValidationError("Choose an Excel workbook (.xlsx).");
+  if (fs.statSync(file).size > MAX_XLSX_FILE_BYTES) throw new ValidationError("Excel workbooks must be 50 MB or smaller.");
+}
+
+function validateSheetName(sheetName?: string | null): string | undefined {
+  if (sheetName === undefined || sheetName === null || sheetName === "") return undefined;
+  if (typeof sheetName !== "string" || sheetName.length > 31 || /[\u0000-\u001f\u007f]/.test(sheetName)) {
+    throw new ValidationError("An Excel sheet name must be 1 to 31 characters.");
+  }
+  return sheetName;
+}
+
+/** Checks a workbook and finds its sheets (decision 376). */
+async function openXlsx(sourceFolder: string, file: string) {
+  validateXlsxFile(sourceFolder, file);
+  const checked = await checkXlsxArchive(file, XLSX_LOAD_LIMITS);
+  return { checked, structure: await xlsxStructure(checked) };
+}
+
+/** Rows read for a preview: enough for DuckDB's type guess (its sample is 20,480 rows). */
+const XLSX_PREVIEW_ROWS = 20_481;
+
+/**
+ * A look at an Excel sheet, like inspectCsv: its sheets, headings, suggested
+ * types and first rows. A sheet that isn't there any more falls back to the
+ * first, so setup can carry on.
+ */
+export async function inspectXlsx(
+  sourceFolder: string,
+  fileName: string,
+  sheetName?: string,
+): Promise<Awaited<ReturnType<typeof inspectCsv>> & { sheets: string[]; hiddenSheets: string[]; sheetName: string }> {
+  const chosen = validateSheetName(sheetName);
+  const file = resolveSourceFile(sourceFolder, fileName);
+  const { checked, structure } = await openXlsx(sourceFolder, file);
+  const sheet = structure.sheets.find((candidate) => candidate.name === chosen) ?? defaultSheet(structure);
+  // The scratch CSV is checked by inspectCsv's own throwaway database, limited to this folder.
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "tohyee-xlsx-"));
+  try {
+    const csvFile = path.join(folder, "sheet.csv");
+    await writeXlsxSheetCsv(file, checked, structure, sheet, csvFile, { maxBytes: MAX_XLSX_CSV_BYTES, maxRows: XLSX_PREVIEW_ROWS });
+    const inspected = await inspectCsv(folder, "sheet.csv", ",");
+    return {
+      ...inspected,
+      sheets: structure.sheets.map((candidate) => candidate.name),
+      hiddenSheets: structure.sheets.filter((candidate) => candidate.hidden).map((candidate) => candidate.name),
+      sheetName: sheet.name,
+    };
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Temporary sheet copies sit in the organisation's own work folder, the only
+ * part of the analytics folder its DuckDB may read (decision 377).
+ */
+const XLSX_SCRATCH_PREFIX = "xlsx-";
+
+function removeStaleXlsxScratch(workFolder: string): void {
+  // Left behind only if the server stopped mid-load.
+  const prefix = XLSX_SCRATCH_PREFIX;
+  let names: string[] = [];
+  try {
+    names = fs.readdirSync(workFolder);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (!name.startsWith(prefix)) continue;
+    const full = path.join(workFolder, name);
+    try {
+      if (Date.now() - fs.statSync(full).mtimeMs > 60 * 60 * 1000) fs.rmSync(full, { recursive: true, force: true });
+    } catch {
+      // Gone already.
+    }
+  }
+}
+
+/**
+ * Loads one sheet of an Excel workbook into `table` through the same path as
+ * a CSV (decision 376): every cell as text, the same explicit casts, the same
+ * staging table swapped in only when the whole sheet has loaded.
+ */
+export async function loadXlsx(input: {
+  organisationId: string;
+  sourceFolder: string;
+  file: string;
+  table: string;
+  columns: readonly LoadColumn[];
+  sheetName?: string | null;
+}): Promise<CsvLoadResult> {
+  const sheetName = validateSheetName(input.sheetName);
+  validateLoadInput(input);
+  const { checked, structure } = await openXlsx(input.sourceFolder, input.file);
+  const sheet = chooseSheet(structure, sheetName);
+  const workFolder = analyticsWorkFolder(input.organisationId);
+  return serialise(input.organisationId, async () => {
+    fs.mkdirSync(workFolder, { recursive: true });
+    removeStaleXlsxScratch(workFolder);
+    const folder = fs.mkdtempSync(path.join(workFolder, XLSX_SCRATCH_PREFIX));
+    try {
+      const csvFile = path.join(folder, "sheet.csv");
+      await writeXlsxSheetCsv(input.file, checked, structure, sheet, csvFile, { maxBytes: MAX_XLSX_CSV_BYTES });
+      return await withAnalytics(
+        input.organisationId,
+        (connection) => loadCsvInto(connection, { ...input, file: csvFile, delimiter: ",", quote: '"' }),
+        input.sourceFolder,
+      );
+    } finally {
+      fs.rmSync(folder, { recursive: true, force: true });
+    }
+  });
+}
+
+/** Looks at a CSV or Excel file for setup. */
+export async function inspectSourceFile(
+  sourceFolder: string,
+  fileName: string,
+  delimiter?: string,
+  sheetName?: string,
+): Promise<Awaited<ReturnType<typeof inspectCsv>> & { sheets?: string[]; hiddenSheets?: string[]; sheetName?: string }> {
+  if (isExcelFileName(fileName)) {
+    const file = resolveSourceFile(sourceFolder, fileName);
+    validateXlsxFile(sourceFolder, file);
+    return inspectXlsx(sourceFolder, fileName, sheetName);
+  }
+  return inspectCsv(sourceFolder, fileName, delimiter);
+}
+
+/** .xlsx, and the Excel files that are refused with a reason (.xls, .xlsm). */
+export function isExcelFileName(fileName: string): boolean {
+  return /\.(xlsx|xlsm|xls)$/i.test(fileName);
+}
+
+/** Loads a source's file, CSV or Excel. */
+export async function loadSourceFile(input: {
+  organisationId: string;
+  sourceFolder: string;
+  file: string;
+  table: string;
+  columns: readonly LoadColumn[];
+  delimiter?: string;
+  sheetName?: string | null;
+}): Promise<CsvLoadResult> {
+  if (isExcelFileName(input.file)) return loadXlsx(input);
+  return loadCsv(input);
 }
 
 export async function replaceTableFromSelect(
@@ -332,9 +520,10 @@ export function resolveSourceFile(sourceFolder: string, fileName: string): strin
 
 export type SourceFile = { name: string; sizeBytes: number; modifiedAt: string };
 
-const DATA_FILE = /\.(csv|tsv|txt)$/i;
+// .xls and .xlsm are listed so choosing one says why it can't be loaded.
+const DATA_FILE = /\.(csv|tsv|txt|xlsx|xlsm|xls)$/i;
 
-/** The CSV files in a folder and the folders inside it (three levels), newest first. */
+/** The CSV and Excel files in a folder and the folders inside it (three levels), newest first. */
 export function listSourceFiles(sourceFolder: string): SourceFile[] {
   const found: SourceFile[] = [];
   const walk = (folder: string, prefix: string, depth: number) => {
