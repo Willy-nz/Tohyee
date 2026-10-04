@@ -1,111 +1,66 @@
 <!doctype html>
 <html lang="en" data-theme="light">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tohyee proposal – Home light</title>
-    <link rel="stylesheet" href="./mockup.css" />
-  </head>
-  <body>
-    <main class="shell">
-      <div class="frame">
-        <div class="topbar">
-          <div class="brand">
-            <span class="brand-badge active">Proposal only</span>
-            <strong>Operations</strong>
-            <span class="muted">Glimmers Demo</span>
-          </div>
-          <div class="toolbar">
-            <span class="badge">Today</span>
-            <button class="ghost">Pinned analytics</button>
-            <button class="button primary">New invoice</button>
-          </div>
-        </div>
-
-        <section class="page-header">
-          <span class="kicker active">Home dashboard</span>
-          <h1>Start with what needs attention, not with every detail.</h1>
-          <p>One dashboard strip, one recent activity card and one calm route into banking, sales, purchases and GST.</p>
-        </section>
-
-        <div class="notice">Reminders become a slim alert rail: payday filing due tomorrow · one bank feed needs reauth.</div>
-
-        <section class="dashboard-strip">
-          <article class="tile medium">
-            <h2>Cash in bank</h2>
-            <div class="metric">NZ$38,420</div>
-            <div class="inline-meta"><span class="status-chip success">3 accounts live</span><span class="muted">Source: Home bank balances</span></div>
-          </article>
-          <article class="tile medium">
-            <h2>Lines to reconcile</h2>
-            <div class="metric">14</div>
-            <div class="inline-meta"><span class="status-chip warning">2 accounts need work</span><a href="#">Open banking</a></div>
-          </article>
-          <article class="tile medium">
-            <h2>Money owed to you</h2>
-            <div class="metric">NZ$7,860</div>
-            <div class="inline-meta"><span class="status-chip warning">2 overdue</span><a href="#">Open sales</a></div>
-          </article>
-          <article class="tile medium">
-            <h2>Bills to pay</h2>
-            <div class="metric">NZ$4,110</div>
-            <div class="inline-meta"><span class="status-chip info">1 due this week</span><a href="#">Open purchases</a></div>
-          </article>
-          <article class="tile wide">
-            <h2>Net profit year to date</h2>
-            <div class="metric">NZ$92,340</div>
-            <div class="spark" aria-hidden="true">
-              <span style="height: 28%"></span><span style="height: 54%"></span><span style="height: 46%"></span><span style="height: 70%"></span><span style="height: 66%"></span><span style="height: 88%"></span>
-            </div>
-            <div class="muted">Matches Profit and loss. Optional Analytics tile can sit beside or replace this chart area.</div>
-          </article>
-          <article class="tile wide">
-            <h2>Next GST</h2>
-            <div class="metric">NZ$5,480 to pay</div>
-            <div class="inline-meta"><span class="status-chip warning">Period ends 31 Oct</span><span class="muted">Matches GST return Box 15</span></div>
-            <div class="summary-rail">
-              <div class="cell"><span class="muted">Sales GST</span><strong>NZ$8,910</strong></div>
-              <div class="cell"><span class="muted">Purchase GST</span><strong>NZ$3,430</strong></div>
-              <div class="cell"><span class="muted">Late claims</span><strong>2</strong></div>
-            </div>
-          </article>
-        </section>
-
-        <section class="layout">
-          <article class="card">
-            <div class="header-actions">
-              <div>
-                <h2>Recent posting activity</h2>
-                <p class="muted">Keep the journal table, but make it secondary.</p>
-              </div>
-              <button class="ghost">All journals</button>
-            </div>
-            <div class="table-card">
-              <table>
-                <thead>
-                  <tr><th>Date</th><th>Reference</th><th>Description</th><th class="num">Amount</th></tr>
-                </thead>
-                <tbody>
-                  <tr><td>04 Oct</td><td>INV-0107</td><td>Approved invoice · Kobe Ltd</td><td class="num">2,760.00</td></tr>
-                  <tr><td>04 Oct</td><td>PAY-0084</td><td>Customer payment</td><td class="num">1,200.00</td></tr>
-                  <tr><td>03 Oct</td><td>BILL-0044</td><td>Approved bill · Kauri Supplies</td><td class="num">1,980.00</td></tr>
-                  <tr><td>02 Oct</td><td>PAYRUN-0012</td><td>Fortnightly salaries</td><td class="num">6,340.00</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </article>
-
-          <aside class="sticky-box">
-            <h3>Daily shortcuts</h3>
-            <div class="aside-list">
-              <div class="mini"><strong>Banking</strong><div class="muted">Reconcile 14 lines</div></div>
-              <div class="mini"><strong>Sales</strong><div class="muted">2 invoices overdue</div></div>
-              <div class="mini"><strong>CRM</strong><div class="muted">1 opportunity closes this month</div></div>
-              <div class="mini"><strong>Analytics</strong><div class="muted">Pinned “Pipeline by stage” tile</div></div>
-            </div>
-          </aside>
-        </section>
-      </div>
-    </main>
-  </body>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tohyee proposal – Home (light)</title>
+<link rel="stylesheet" href="./mockup.css" />
+</head>
+<body>
+<header class="topbar">
+  <span class="logo"><i></i>Tohyee</span>
+  <button class="apps" title="Apps: Accounting, CRM, Analytics" aria-label="Switch app"><svg viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg></button>
+  <span class="org"><b>G</b>Glimmers Demo</span>
+  <nav class="menus" aria-label="Main"><a class="on" href="#">Home</a><a class="" href="#">Sales</a><a class="" href="#">Purchases</a><a class="" href="#">Banking</a><a class="" href="#">Payroll</a><a class="" href="#">Reports</a><a class="" href="#">Accountant</a></nav>
+  <span class="spacer"></span>
+  <span class="search">Search or jump to… <kbd>Ctrl K</kbd></span>
+  <button class="btn primary small">+ New</button>
+  <span class="bell" title="2 notices (backup key, bank feed)"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg></span>
+  <span class="avatar">J</span>
+</header>
+<main class="page">
+<div class="head">
+  <div><h1>Home</h1><p>Sunday 4 October · amounts in NZD</p></div>
+</div>
+<section class="dash" aria-label="Dashboard">
+  <div class="dash-bar">
+    <h2>Dashboard</h2>
+    <div class="actions"><span class="muted small hide-phone">Each figure opens its report</span><button class="btn quiet small">Customise</button><button class="btn quiet small" aria-expanded="true">Hide</button></div>
+  </div>
+  <div class="tiles"><a class="tile" href="#"><span class="label">Cash in bank</span><span class="value">38,420.00</span><span class="note ">2 bank accounts · cards are under Banking</span></a><a class="tile" href="#"><span class="label">Money owed to you</span><span class="value">7,860.00</span><span class="note bad">2,440.00 overdue</span></a><a class="tile" href="#"><span class="label">Bills to pay</span><span class="value">4,110.00</span><span class="note warn">1 due this week</span></a><a class="tile" href="#"><span class="label">Next GST return</span><span class="value">5,480.00 to pay</span><span class="note ">Period ends 31 Oct</span></a></div>
+</section>
+<div class="grid-2">
+  <section class="card chart">
+    <div class="card-head"><h3>Net profit by month</h3><span class="muted small">This financial year · matches Profit and loss</span></div>
+    <svg viewBox="0 0 560 220" role="img" aria-label="Net profit by month, April to September"><line class="grid" x1="48" x2="560" y1="192.0" y2="192.0"/><text class="axis" x="40" y="196.0" text-anchor="end">-5k</text><line class="grid" x1="48" x2="560" y1="156.0" y2="156.0"/><text class="axis" x="40" y="160.0" text-anchor="end">0k</text><line class="grid" x1="48" x2="560" y1="120.0" y2="120.0"/><text class="axis" x="40" y="124.0" text-anchor="end">5k</text><line class="grid" x1="48" x2="560" y1="84.0" y2="84.0"/><text class="axis" x="40" y="88.0" text-anchor="end">10k</text><line class="grid" x1="48" x2="560" y1="48.0" y2="48.0"/><text class="axis" x="40" y="52.0" text-anchor="end">15k</text><line class="grid" x1="48" x2="560" y1="12.0" y2="12.0"/><text class="axis" x="40" y="16.0" text-anchor="end">20k</text><rect x="66.8" y="66.7" width="47.8" height="89.3" rx="4" fill="var(--chart-1)"><title>Apr: 12,400</title></rect><text class="axis" x="90.7" y="212" text-anchor="middle">Apr</text><rect x="152.1" y="85.4" width="47.8" height="70.6" rx="4" fill="var(--chart-1)"><title>May: 9,800</title></rect><text class="axis" x="176.0" y="212" text-anchor="middle">May</text><rect x="237.4" y="46.6" width="47.8" height="109.4" rx="4" fill="var(--chart-1)"><title>Jun: 15,200</title></rect><text class="axis" x="261.3" y="212" text-anchor="middle">Jun</text><rect x="322.8" y="156.0" width="47.8" height="15.1" rx="4" fill="var(--chart-8)"><title>Jul: -2,100</title></rect><text class="axis" x="346.7" y="212" text-anchor="middle">Jul</text><rect x="408.1" y="22.1" width="47.8" height="133.9" rx="4" fill="var(--chart-1)"><title>Aug: 18,600</title></rect><text class="axis" x="432.0" y="212" text-anchor="middle">Aug</text><rect x="493.4" y="48.7" width="47.8" height="107.3" rx="4" fill="var(--chart-1)"><title>Sep: 14,900</title></rect><text class="axis" x="517.3" y="212" text-anchor="middle">Sep</text></svg>
+    <div class="legend"><span><i style="background:var(--chart-1)"></i>Profit</span><span><i style="background:var(--chart-8)"></i>Loss</span></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h3>To do</h3><span class="muted small">4</span></div>
+    <ul class="todo">
+      <li><span class="dot"></span>Payday filing for PAYRUN-3 is due tomorrow<a href="#">File</a></li>
+      <li><span class="dot"></span>Business bank account has 14 lines to reconcile<a href="#">Reconcile</a></li>
+      <li><span class="dot"></span>The ANZ bank feed needs reconnecting<a href="#">Reconnect</a></li>
+      <li><span class="dot ok"></span>2 draft invoices are ready to approve<a href="#">Review</a></li>
+    </ul>
+  </section>
+</div>
+<section class="card">
+  <div class="card-head"><h3>Recent activity</h3><a class="more-link" href="#">All journals</a></div>
+  <table>
+    <thead><tr><th>Date</th><th>What happened</th><th class="num">Amount</th></tr></thead>
+    <tbody>
+      <tr><td>4 Oct</td><td>Invoice INV-0107 to Kobe Ltd approved</td><td class="num">2,760.00</td></tr>
+      <tr><td>4 Oct</td><td>Payment received from Māhuika Vets</td><td class="num">1,200.00</td></tr>
+      <tr><td>3 Oct</td><td>Bill BILL-0044 from Kauri Supplies approved</td><td class="num">1,980.00</td></tr>
+    </tbody>
+  </table>
+</section>
+<section class="dash">
+  <div class="dash-bar"><h2>When the dashboard is hidden</h2></div>
+  <div class="dash-hidden"><span>Dashboard hidden on this page</span><button class="btn small">Show dashboard</button></div>
+</section>
+</main>
+<span class="mock-label">Proposal mockup · demo figures</span>
+</body>
 </html>

@@ -1,117 +1,59 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tohyee proposal – Invoice editor dark</title>
-    <link rel="stylesheet" href="./mockup.css" />
-  </head>
-  <body>
-    <main class="shell">
-      <div class="frame">
-        <div class="topbar">
-          <div class="brand">
-            <span class="brand-badge active">Proposal only</span>
-            <strong>Invoice editor</strong>
-            <span class="muted">Draft #9</span>
-          </div>
-          <div class="toolbar">
-            <button class="ghost">More details</button>
-            <button class="ghost">Preview</button>
-            <button class="button primary">Approve</button>
-          </div>
-        </div>
-
-        <section class="page-header">
-          <span class="kicker active">Editor</span>
-          <h1>Keep the document calm, and let deeper detail unfold only when needed.</h1>
-          <p>The proposal keeps every existing field, but moves secondary detail into drawers and expandable line rows.</p>
-        </section>
-
-        <section class="editor-layout">
-          <article class="card">
-            <div class="header-actions">
-              <div>
-                <h2>Document details</h2>
-                <p class="muted">Show only the fields people need every time; move reference, salesperson, FX and custom fields behind “More details”.</p>
-              </div>
-              <span class="status-chip info">Draft posts nothing</span>
-            </div>
-
-            <div class="form-grid">
-              <div class="field"><label>Customer</label><div class="select">Mānuka Vets</div></div>
-              <div class="field"><label>Amounts are</label><div class="select">Exclusive of GST</div></div>
-              <div class="field"><label>Invoice date</label><div class="input">2026-10-02</div></div>
-              <div class="field"><label>Due date</label><div class="input">2026-10-16</div></div>
-            </div>
-
-            <div class="summary-rail">
-              <div class="cell"><span class="muted">More details</span><strong>Salesperson · reference · FX · custom fields</strong></div>
-              <div class="cell"><span class="muted">Line detail</span><strong>Account · tax · tracking · custom line fields</strong></div>
-              <div class="cell"><span class="muted">Accessibility</span><strong>Sticky totals · keyboard row expansion</strong></div>
-            </div>
-
-            <div class="stack">
-              <div class="line-item">
-                <div class="line-head">
-                  <div><strong>Line 1 · Paw print memorial package</strong><div class="muted">The first row stays simple.</div></div>
-                  <div class="num">2</div>
-                  <div class="num">590.00</div>
-                  <div class="num">1,180.00</div>
-                </div>
-                <div class="line-body">
-                  <div>Description and item picker</div>
-                  <div>Qty</div>
-                  <div>Price</div>
-                  <div>Amount</div>
-                </div>
-                <div class="row">
-                  <div>
-                    <strong>Expanded details</strong>
-                    <div class="muted">Tax code, account, tracking and custom fields slide open inside the row instead of staying visible all the time.</div>
-                  </div>
-                  <div class="row-actions"><span class="badge active">GST 15%</span><span class="badge">Income 2100</span><button class="ghost">Collapse</button></div>
-                </div>
-              </div>
-
-              <div class="line-item">
-                <div class="line-head">
-                  <div><strong>Line 2 · Framing</strong><div class="muted">Secondary line</div></div>
-                  <div class="num">1</div>
-                  <div class="num">340.00</div>
-                  <div class="num">340.00</div>
-                </div>
-                <div class="line-body">
-                  <div>Description and item picker</div>
-                  <div>Qty</div>
-                  <div>Price</div>
-                  <div>Amount</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="footer-actions">
-              <button class="button primary">Save draft</button>
-              <button class="ghost">Cancel</button>
-              <button class="ghost">Add line</button>
-            </div>
-          </article>
-
-          <aside class="sticky-box">
-            <h3>Totals and next action</h3>
-            <div class="total-list">
-              <div class="item"><span>Subtotal</span><span>1,520.00</span></div>
-              <div class="item"><span>GST</span><span>228.00</span></div>
-              <div class="item"><strong>Total</strong><strong>1,748.00</strong></div>
-            </div>
-            <div class="aside-list">
-              <div class="mini"><strong>Approval check</strong><div class="muted">All required fields complete</div></div>
-              <div class="mini"><strong>Customer terms</strong><div class="muted">Due 14 days after invoice date</div></div>
-              <div class="mini"><strong>Share later</strong><div class="muted">Email / PDF actions can stay in the approved view</div></div>
-            </div>
-          </aside>
-        </section>
-      </div>
-    </main>
-  </body>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tohyee proposal – New invoice (dark)</title>
+<link rel="stylesheet" href="./mockup.css" />
+</head>
+<body>
+<header class="topbar">
+  <span class="logo"><i></i>Tohyee</span>
+  <button class="apps" title="Apps: Accounting, CRM, Analytics" aria-label="Switch app"><svg viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg></button>
+  <span class="org"><b>G</b>Glimmers Demo</span>
+  <nav class="menus" aria-label="Main"><a class="" href="#">Home</a><a class="on" href="#">Sales</a><a class="" href="#">Purchases</a><a class="" href="#">Banking</a><a class="" href="#">Payroll</a><a class="" href="#">Reports</a><a class="" href="#">Accountant</a></nav>
+  <span class="spacer"></span>
+  <span class="search">Search or jump to… <kbd>Ctrl K</kbd></span>
+  <button class="btn primary small">+ New</button>
+  <span class="bell" title="2 notices (backup key, bank feed)"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg></span>
+  <span class="avatar">J</span>
+</header>
+<main class="page">
+<div class="head">
+  <div><h1>New invoice <span class="chip">Draft</span></h1><p>No dashboard here: the page is for the one invoice.</p></div>
+</div>
+<div class="editor">
+  <section class="card">
+    <div class="fields">
+      <div class="field"><label>Customer</label><div class="input">Māhuika Vets</div></div>
+      <div class="field"><label>Date</label><div class="input">2 Oct 2026</div></div>
+      <div class="field"><label>Due</label><div class="input">16 Oct 2026</div></div>
+      <div class="field"><label>Amounts</label><div class="input">Excl. GST</div></div>
+    </div>
+    <a class="more-link" href="#">+ Reference, salesperson, currency and other details</a>
+    <table class="lines">
+      <thead><tr><th class="chev"></th><th>Item or description</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead>
+      <tbody><tr class="open"><td class="chev">▾</td><td><div class="input">Paw print memorial pendant</div></td><td style="width:80px"><div class="input num">2</div></td><td style="width:120px"><div class="input num">590.00</div></td><td class="num" style="width:120px">1,180.00</td></tr><tr class="open"><td colspan="5"><div class="line-more">
+<div class="field"><label>Account</label><div class="input">4000 · Sales</div></div>
+<div class="field"><label>Tax</label><div class="input">GST 15%</div></div>
+<div class="field"><label>Location</label><div class="input">Dunedin</div></div>
+<div class="field"><label>Project</label><div class="input">—</div></div>
+</div></td></tr><tr class=""><td class="chev">▸</td><td><div class="input">Framing</div></td><td style="width:80px"><div class="input num">1</div></td><td style="width:120px"><div class="input num">340.00</div></td><td class="num" style="width:120px">340.00</td></tr></tbody>
+    </table>
+    <div><button class="btn small">+ Add line</button></div>
+  </section>
+  <aside class="card totals">
+    <div class="stack">
+      <div class="row"><span class="muted">Subtotal</span><span class="num">1,520.00</span></div>
+      <div class="row"><span class="muted">GST 15%</span><span class="num">228.00</span></div>
+      <div class="row total"><span>Total</span><span class="num">1,748.00</span></div>
+    </div>
+    <button class="btn primary">Approve</button>
+    <div class="actions"><button class="btn small">Save draft</button><button class="btn small">Preview</button><button class="btn quiet small">More</button></div>
+    <p class="note-box">A draft posts nothing to the books.</p>
+  </aside>
+</div>
+</main>
+<span class="mock-label">Proposal mockup · demo figures</span>
+</body>
 </html>
