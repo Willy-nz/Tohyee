@@ -138,15 +138,10 @@ PREP8, WB7, XP14 and the HL section.
 
 - **Latest release: v0.5.0** (3 Oct 2026), published with the Windows
   installer, the Docker zip and the Linux bundle.
-- **main is ahead of the release** and already says version **0.3.1** in
-  `package.json`. Merged since 0.3.0, not released yet:
-  - normal GST on foreign-currency invoices, bills and credit notes
-    (#56, examples MC71-MC83)
-  - exports: contact country, Settings › Exports, the export flag
-    (#57, EX1-EX15)
-  - default sales and purchase tax codes on contacts (#58, EX16-EX25)
-  - tax codes "Available on" sales, purchases or both (#59, TAO1-TAO12)
-- Jess decided **not to release 0.3.1 yet** ("lots to do still").
+- Since v0.5.0, not released yet:
+  - UI step 1: simpler top bar, page dashboards and the new Home (#117)
+  - search everything from Ctrl K (#118)
+- In progress: the analytics work (#119-#121, PR #125).
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
@@ -201,16 +196,15 @@ decision 370, 0087; report emails (#111) are decision 371, 0088 (Copilot
 built #107, #110 and #111; Claude reviewed and fixed them). All released in
 **v0.5.0** (3 Oct 2026). UI review step 1 (#117, decision 372, tenant
 migration 0089: top bar, notices bell, dashboard preferences, Home) and
-search everything (#118, decision 373, no migration) are built. Next
+search everything (#118, decision 373, no migration) are built.
 Excel sources and report-email attachments (#121, decision 376, tenant
 migration 0090) use the existing MIT-licensed ExcelJS package; sources store
-their selected worksheet, and workbooks are streamed with size and ZIP
+their chosen worksheet, and workbooks are streamed with size and ZIP
 expansion checks. Old `.xls`, `.xlsm` and password-protected workbooks are
-refused. Unit tests cover date and money casts, sheet selection, unsupported
-formats, file size and workbook ZIP bombs. Next numbers: tenant migration
-0091, core migration 0007, decision 377. Still to do for Analytics: pivot
-tables (Perspective; separate work) and limiting DuckDB's file access
-(`allowed_directories`).
+refused. DuckDB's file access is limited (decision 377). Next numbers: tenant
+migration 0091, core migration 0007, decision 378 (374-375 are reserved for
+pinned tiles #119 and pivot tables #120). Still to do for Analytics: pivot
+tables (Perspective).
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
