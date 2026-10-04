@@ -2586,3 +2586,17 @@ approved 3 Oct 2026.
        Payroll employees aren't searched.
      - **No indexes yet:** a plain `like` over the words is fast enough for the
        sizes Tohyee is used at; add indexes if that changes.
+
+### Analytics: what DuckDB may touch (decision 377)
+
+377. **Each organisation's analytics database may only read its own source
+     folder and its own data folder**, and that can't be switched off
+     afterwards (`allowed_directories`, `enable_external_access = false`,
+     `lock_configuration`). File checks use a throwaway database limited the
+     same way. Tohyee builds all of its own SQL, so this is defence in depth.
+     It means no query can read other files on the server, another
+     organisation's folder, or install extensions.
+     - When a server admin changes the folder (server app, command line or
+       web), the database is reopened with the new folder the next time
+       it's used.
+     - Shaping previews stop after 10 seconds.
