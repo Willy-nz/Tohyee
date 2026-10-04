@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tohyee proposal – Search (dark)</title>
+<link rel="stylesheet" href="./mockup.css" />
+</head>
+<body>
+<header class="topbar">
+  <span class="logo"><i></i>Tohyee</span>
+  <button class="apps" title="Apps: Accounting, CRM, Analytics" aria-label="Switch app"><svg viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg></button>
+  <span class="org"><b>G</b>Glimmers Demo</span>
+  <nav class="menus" aria-label="Main"><a class="on" href="#">Home</a><a class="" href="#">Sales</a><a class="" href="#">Purchases</a><a class="" href="#">Banking</a><a class="" href="#">Payroll</a><a class="" href="#">Reports</a><a class="" href="#">Accountant</a></nav>
+  <span class="spacer"></span>
+  <span class="search">Search or jump to… <kbd>Ctrl K</kbd></span>
+  <button class="btn primary small">+ New</button>
+  <span class="bell" title="2 notices (backup key, bank feed)"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg></span>
+  <span class="avatar">J</span>
+</header>
+<main class="page">
+<div class="head"><div><h1>Home</h1><p>Search is open over the page</p></div></div>
+<div class="overlay"><div class="palette">
+  <div class="pinput"><span>kobe</span><kbd>Esc</kbd></div>
+  <div class="chips"><span class="chip info">All</span><span class="chip">Contacts</span><span class="chip">Sales</span><span class="chip">Purchases</span><span class="chip">Banking</span><span class="chip">Accounts</span><span class="chip">CRM</span></div>
+  <div class="sect">Records</div>
+  <ul class="sres"><li class="sr"><span class="kind">Contact</span><span class="what"><b>Kobe Ltd</b><span class="sub">Customer · accounts@kobe.example.nz · owes 2,760.00</span></span><span class="chip bad">Overdue</span></li><li class="sr on"><span class="kind">Invoice</span><span class="what"><b>INV-0107 · Kobe Ltd</b><span class="sub">4 Oct · 2,760.00</span></span><span class="chip bad">Overdue 3 days</span></li><li class="sr"><span class="kind">Invoice</span><span class="what"><b>INV-0098 · Kobe Ltd</b><span class="sub">12 Sep · 1,150.00</span></span><span class="chip ok">Paid</span></li><li class="sr"><span class="kind">Credit note</span><span class="what"><b>CN-0012 · Kobe Ltd</b><span class="sub">20 Sep · 115.00</span></span></li><li class="sr"><span class="kind">Bank line</span><span class="what"><b>Kobe Ltd payment</b><span class="sub">27 Sep · Business bank account · 1,150.00</span></span><span class="chip ok">Reconciled</span></li><li class="sr"><span class="kind">Opportunity</span><span class="what"><b>Kobe Ltd – Christmas range</b><span class="sub">CRM · Proposal · 4,800.00</span></span></li></ul>
+  <a class="more-link seeall" href="#">See all 9 invoices for “kobe”</a>
+  <div class="sect">Go to</div>
+  <ul class="sres"><li class="sr"><span class="kind">Page</span><span class="what"><b>Customer statement</b><span class="sub">Sales › Statements</span></span></li></ul>
+  <div class="phint">↑ ↓ to move · Enter to open · Tip: “inv 107”, “bill kauri”, or an amount like 1,748</div>
+</div></div>
+</main>
+<span class="mock-label">Proposal mockup · demo figures</span>
+</body>
+</html>

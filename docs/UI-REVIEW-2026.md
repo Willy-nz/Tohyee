@@ -61,6 +61,34 @@ That's a big part of "too many things in one place".
   still shows as a banner.
 - Search and New stay. Search becomes the quick way to jump anywhere (Ctrl K).
 
+## Search everything
+
+Today Ctrl K only finds pages and actions from the menus; it doesn't look
+inside the books. Jess (4 Oct 2026): it should search everything, as an
+option on the same search bar.
+
+- **One box, two kinds of result.** Typing shows **Records** first (contacts,
+  invoices, bills, credit notes, quotes and orders, payments, journals, items,
+  accounts, bank lines, fixed assets, and with the CRM on, companies, people
+  and opportunities), then **Go to** (pages, settings and actions, as now).
+- **Narrow it with chips:** All · Contacts · Sales · Purchases · Banking ·
+  Accounts · CRM. A short word does the same: "inv 107", "bill kauri",
+  "c: kobe".
+- **Search by what people remember:** name, number, reference, email, phone,
+  the amount ("1748" or "1,748.00" finds documents with that total), and a
+  date ("4 Oct").
+- **Each result says what it is:** for example "Invoice INV-0107 · Kobe Ltd ·
+  1,748.00 · Overdue". Enter opens it; arrow keys move between results.
+- **When the box is empty,** it shows the records you opened recently.
+- **Only what you're allowed to see.** It searches the organisation you're in
+  and follows your access. Employees and pay are only for people with payroll
+  access. Report viewers search only the dashboards shared with them.
+- **Speed.** At most five results per kind, answered as you type (after a
+  short pause), from indexed name, number and reference columns.
+  "See all 23 invoices" opens the invoices list already filtered.
+
+This goes in build step 1 with the top bar.
+
 ## Where dashboards go
 
 Only the **main pages** get a dashboard:
@@ -367,13 +395,14 @@ Static proposal mockups are in `docs/ui-review/proposal/`:
 - `invoice-editor-dark.html`
 - `mockup.css`
 
-They use the existing surface, text, accent and chart token values from `src/app/globals.css`. Figures are made up. Home shows what a hidden dashboard looks like at the bottom. The Sales list shows a pinned Analytics tile, which has a dashed edge, and one row opened up. The invoice editor has no dashboard.
+They use the existing surface, text, accent and chart token values from `src/app/globals.css`. Figures are made up. `search-light.html` and `search-dark.html` show search everything open. Home shows what a hidden dashboard looks like at the bottom. The Sales list shows a pinned Analytics tile, which has a dashed edge, and one row opened up. The invoice editor has no dashboard.
 
 ## Build plan in small PRs
 
-1. **Top bar and the dashboard frame.** The simpler menus, the app grid, the
-   notices bell, and a reusable dashboard (up to four tiles) with Hide and
-   Customise that's remembered per person and page. No accounting changes.
+1. **Top bar, search everything and the dashboard frame.** The simpler menus,
+   the app grid, the notices bell, Ctrl K searching records as well as pages,
+   and a reusable dashboard (up to four tiles) with Hide and Customise that's
+   remembered per person and page. No accounting changes.
 2. **Home.** Tiles, the monthly profit chart, To do and Recent activity.
 3. **Pinned Analytics tiles.** "Pin to page" from a dashboard tile, with the
    existing sharing rules (report viewers only see shared dashboards). This
