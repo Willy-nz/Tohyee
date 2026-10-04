@@ -1,0 +1,49 @@
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+
+.heading h2 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.heading a {
+  color: var(--link);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.kpi {
+  display: grid;
+  gap: 4px;
+  min-height: 70px;
+  align-content: center;
+}
+
+.kpiValue {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart :global([role="img"]) {
+  height: 120px;
+  min-height: 100px;
+}

@@ -4,12 +4,14 @@ import { listDashboards } from "@/lib/analytics/dashboards";
 import { analyticsTileReference, parseAnalyticsTileReference } from "@/lib/dashboard/analytics-tile-reference";
 import { dashboardPage, defaultDashboardTileIds } from "@/lib/dashboard/pages";
 import { NotFoundError, ValidationError } from "@/lib/errors";
+import type { OrgTx } from "@/lib/db/org-transaction";
+import type { Role } from "@/lib/auth/roles";
 
 async function allowedTiles(
-  tx: Parameters<Parameters<typeof withOrganisation>[3]>[0],
+  tx: OrgTx,
   page: string,
   userId: string,
-  role: string,
+  role: Role,
 ): Promise<readonly string[]> {
   const definition = dashboardPage(page);
   if (!definition) return [];

@@ -3,22 +3,22 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Chart } from "@/components/analytics/chart";
+import { PinnedAnalyticsTile } from "@/components/analytics/pinned-tile";
 import { Money } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { DashboardTileSlots, PageDashboardFrame, useDashboardPreferences } from "@/components/page-dashboard";
 import { Notice, ui } from "@/components/ui";
 import { formatDate } from "@/lib/format";
+import { parseAnalyticsTileReference } from "@/lib/dashboard/analytics-tile-reference";
+import { dashboardPage, defaultDashboardTileIds } from "@/lib/dashboard/pages";
+import type { Dashboard } from "@/lib/analytics/dashboards";
 import type { AmountsDue, HomeSummary } from "@/lib/reports/home";
 import { GST_BASIS_LABELS } from "@/lib/tax/categories";
 import styles from "./home.module.css";
 
-const HOME_TILES = [
-  { id: "cash_in_bank", label: "Cash in bank" },
-  { id: "owed_to_you", label: "Money owed to you" },
-  { id: "bills_to_pay", label: "Bills to pay" },
-  { id: "next_gst_return", label: "Next GST return" },
-] as const;
-const HOME_DEFAULT_TILE_IDS = HOME_TILES.map((tile) => tile.id);
+const HOME_PAGE = dashboardPage("home")!;
+const HOME_TILES = HOME_PAGE.defaultTiles;
+const HOME_DEFAULT_TILE_IDS = defaultDashboardTileIds(HOME_PAGE);
 
 type HomeTileId = (typeof HOME_TILES)[number]["id"];
 
@@ -173,7 +173,21 @@ function RecentActivity({ summary }: { summary: HomeSummary }) {
 
 export function HomeTiles({ organisationId }: { organisationId: string }) {
   const home = useHomeSummary(organisationId);
-  const dashboard = useDashboardPreferences({ organisationId, page: "home", defaultTiles: HOME_DEFAULT_TILE_IDS });
+  const dashboard = useDashboardPreferences({ organisationId, page: HOME_PAGE.id, defaultTiles: HOME_DEFAULT_TILE_IDS });
+  const pinned = dashboard.tiles.flatMap((tile) => {
+    const reference = parseAnalyticsTileReference(tile);
+    return reference ? [{ ...reference, reference: tile }] : [];
+  });
+  const availableDashboards = useApiData<{ dashboards: Dashboard[] }>(pinned.length ? "/api/analytics/dashboards" : null, { organisationId });
+  const pinOptions = pinned.map((reference) => {
+    const source = availableDashboards.data?.dashboards.find((entry) => entry.id === reference.dashboardId);
+    const tile = source?.tiles.find((entry) => entry.id === reference.tileId);
+    return {
+      id: reference.reference,
+      label: tile && source ? `${tile.title} · ${source.name}` : `Analytics tile ${reference.tileId}`,
+    };
+  });
+  const tileOptions = [...HOME_TILES, ...pinOptions];
   if (home.error) return <Notice tone="error">{home.error}</Notice>;
   const summary = home.data;
   if (!summary) return <p className={ui.muted}>Loading…</p>;
@@ -185,17 +199,24 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
         hidden={dashboard.hidden}
         onToggleHidden={() => dashboard.setHidden(!dashboard.hidden)}
         customise={
-          <DashboardTileSlots<HomeTileId>
-            tiles={dashboard.tiles as HomeTileId[]}
-            options={HOME_TILES.map((tile) => ({ id: tile.id, label: tile.label }))}
+          <DashboardTileSlots<string>
+            tiles={dashboard.tiles}
+            options={tileOptions}
             onChange={(tiles) => dashboard.setTiles(tiles)}
           />
         }
       >
         <div className={styles.grid}>
-          {(dashboard.tiles as HomeTileId[]).map((tile) => (
-            <HomeTile key={tile} tile={tile} summary={summary} />
-          ))}
+          {dashboard.tiles.map((tile) => {
+            const reference = parseAnalyticsTileReference(tile);
+            if (reference) {
+              return <PinnedAnalyticsTile key={tile} organisationId={organisationId} dashboardId={reference.dashboardId} tileId={reference.tileId} />;
+            }
+            if (HOME_TILES.some((entry) => entry.id === tile)) {
+              return <HomeTile key={tile} tile={tile as HomeTileId} summary={summary} />;
+            }
+            return null;
+          })}
         </div>
       </PageDashboardFrame>
       <div className={styles.split}>
