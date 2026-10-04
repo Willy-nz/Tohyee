@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -81,6 +82,9 @@ function nextLineKey(): number {
 }
 
 type Defaults = { accountCode: string; taxCode: string };
+
+/** A credit note line nobody has filled in yet: it can take the customer's defaults (SD1). */
+const untouchedSalesLine = (line: EditorLine) => !line.itemId && !line.description.trim() && !line.unitPrice.trim();
 
 function blankLine(defaults: Defaults, customFields: CustomValues = {}, contactTaxCode: string | null = null): EditorLine {
   return {
@@ -213,6 +217,10 @@ function CreditNoteForm({
   const chosenCustomer = customers.find((contact) => contact.id === contactId);
   // The customer's own default sales tax code, or the tax code for exports (EX2-EX6, EX15).
   const contactTaxCode = contactSalesTaxCode(chosenCustomer, exportSettings, taxCodes);
+  // Untouched lines take the customer's default account and tracking (SD1).
+  const checkers = defaultsCheckers(accounts, tracking);
+  const salesDefaults = (current: EditorLine[], customer: Contact | undefined) =>
+    withContactDefaults(current, customer, "sales", checkers.accountUsable, checkers.valueUsable, untouchedSalesLine);
   const currencyCode = chosenCustomer ? (chosenCustomer.currencyCode ?? baseCurrency) : (creditNote?.currencyCode ?? baseCurrency);
   const foreign = currencyCode !== baseCurrency;
   const [typedRate, setTypedRate] = useState<string | null>(creditNote?.exchangeRate ?? null);
@@ -306,7 +314,7 @@ function CreditNoteForm({
               const next = customers.find((contact) => contact.id === event.target.value);
               if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
               setContactId(event.target.value);
-              setLines((current) => retaxLines(current, contactSalesTaxCode(next, exportSettings, taxCodes)));
+              setLines((current) => retaxLines(salesDefaults(current, next), contactSalesTaxCode(next, exportSettings, taxCodes)));
               if (!creditNote) {
                 const chosen = customers.find((contact) => contact.id === event.target.value);
                 setSalespersonId(customerDefault(salespeople, chosen?.defaultSalespersonId));
@@ -487,7 +495,7 @@ function CreditNoteForm({
           <tfoot>
             <tr>
               <td colSpan={hasTax ? 8 : 6}>
-                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaults, lineDefaults, contactTaxCode)])}>
+                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, ...salesDefaults([blankLine(defaults, lineDefaults, contactTaxCode)], chosenCustomer)])}>
                   Add line
                 </Button>
               </td>

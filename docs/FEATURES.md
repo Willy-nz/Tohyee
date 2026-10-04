@@ -528,6 +528,14 @@ that something happened.
   before. Only a starting value: lines can be changed and saved documents
   never change. No import or reverse-charge tax code (refused rather than
   guessed).
+- **A contact's default account and tracking** (Xero's contact "Purchase
+  defaults" and "Sales defaults", examples SD1-SD3, decision 384). Contacts
+  have an optional default purchase account and tracking (bills, supplier
+  credit notes, spend money) and default sales account and tracking
+  (invoices, sales credit notes, receive money). Choosing the contact fills
+  them into lines nobody has filled in yet, and lines added afterwards start
+  with them; bulk coding uses them for a line with no account. Archived
+  defaults are kept but not used.
 - **Bank accounts and reconciliation**. Bank and credit card accounts (any
   number, any bank) with a statement balance, the balance in Tohyee and a
   count of lines to reconcile. Statements come in as files (CSV and Excel
@@ -539,8 +547,14 @@ that something happened.
   line is reconciled by matching what's already posted (within 60 days),
   paying invoices or bills, creating spend or receive money (with GST), or a
   transfer between accounts; lines can be excluded, unreconciled and imports
-  deleted. **Bank rules** fill in spend or receive money from text in the
-  line. Each organisation sets up its own Akahu personal app (with its own
+  deleted. **Bank rules** fill in spend or receive money for lines that
+  meet their conditions (all or any of: payee, description, reference and
+  other text *contains*, *equals* or *starts with*; amount *equals*, *at
+  least*, *at most* or *between*), with a chosen contact or the contact named
+  like the payee, and one or more lines: fixed amounts first, then the rest
+  split by percentages, each with its own account, GST code and tracking
+  (examples BR1-BR10, decisions 380-383). Rules only suggest; nothing posts
+  until OK. Each organisation sets up its own Akahu personal app (with its own
   bank logins) and an organisation admin enters its tokens, which are checked
   with Akahu and stored encrypted. See examples BK1-BK16. **One-click
   matching** (like Xero's OK): a line whose only exact-amount candidate (a

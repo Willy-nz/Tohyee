@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
 import Link from "next/link";
 import { type Dispatch, type FormEvent, type SetStateAction, useState } from "react";
@@ -126,7 +127,7 @@ export function defaultPurchaseTaxCode(taxCodes: TaxCode[]): string {
 }
 
 /** The accounts bill lines can go to, the same rule the server checks. */
-function takesBillLines(account: Account): boolean {
+export function takesBillLines(account: Account): boolean {
   return billLineAccountProblem(account) === null;
 }
 
@@ -175,6 +176,10 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts: giv
   const [busy, setBusy] = useState(false);
   // A supplier in another currency gets bills in it, at a rate for the bill date (MC10).
   const chosenSupplier = contacts.find((contact) => contact.id === contactId);
+  // New lines start with the supplier's default account and tracking (SD1).
+  const checkers = defaultsCheckers(accounts, tracking);
+  const purchaseDefaults = (current: EditorLine[], supplier: Contact | undefined) =>
+    withContactDefaults(current, supplier, "purchase", checkers.accountUsable, checkers.valueUsable);
   const currencyCode = chosenSupplier ? (chosenSupplier.currencyCode ?? baseCurrency) : (bill?.currencyCode ?? baseCurrency);
   const foreign = currencyCode !== baseCurrency;
   const [typedRate, setTypedRate] = useState<string | null>(bill?.exchangeRate ?? null);
@@ -187,7 +192,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts: giv
     if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
     setContactId(id);
     refillDue(id, billDate, next);
-    setLines((current) => retaxLines(current, contactPurchaseTaxCode(next, taxCodes)));
+    setLines((current) => retaxLines(purchaseDefaults(current, next), contactPurchaseTaxCode(next, taxCodes)));
   }
   const savedSupplier = bill && !supplierOptions.some((contact) => contact.id === bill.contactId) ? bill : null;
 
@@ -358,6 +363,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts: giv
         defaultTaxCode={defaultTaxCode}
         lineDefaults={lineDefaults}
         contactTaxCode={contactPurchaseTaxCode(chosenSupplier, taxCodes)}
+        withDefaults={(fresh) => purchaseDefaults(fresh, chosenSupplier)}
       />
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>
@@ -393,6 +399,7 @@ export function PurchaseLines({
   defaultTaxCode,
   lineDefaults,
   contactTaxCode = null,
+  withDefaults,
 }: {
   organisationId: string;
   items: ItemList | null;
@@ -410,6 +417,8 @@ export function PurchaseLines({
   lineDefaults: CustomValues;
   /** The supplier's default purchase tax code, if it has an active one (EX17-EX19). */
   contactTaxCode?: string | null;
+  /** Gives a new line the supplier's default account and tracking (SD1). */
+  withDefaults?: (lines: EditorLine[]) => EditorLine[];
 }) {
   const scale = currencyMinorUnits(baseCurrency);
   const hasTax = amountsMode !== "no_tax";
@@ -573,7 +582,7 @@ export function PurchaseLines({
                 <Button
                   variant="secondary"
                   size="small"
-                  onClick={() => setLines((current) => [...current, blankLine(defaultTaxCode, lineDefaults, contactTaxCode)])}
+                  onClick={() => setLines((current) => [...current, ...(withDefaults ?? ((fresh: EditorLine[]) => fresh))([blankLine(defaultTaxCode, lineDefaults, contactTaxCode)])])}
                 >
                   Add line
                 </Button>

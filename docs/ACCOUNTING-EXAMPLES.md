@@ -1570,6 +1570,170 @@ Date,Amount,Payee,Particulars,Code,Reference
   account for this line"; a line on another account or already reconciled is
   refused; viewers can't cash code (403).
 
+### Bank rules with several conditions and split lines (examples BR1-BR10, approved by Jess 5 Oct 2026)
+
+Stage 1 of the Xero add-ons plan (5 Oct 2026), from Dext's supplier rules
+and Xero's own bank rules. **Xero** (look and usability): a rule has
+conditions joined by "all" or "any" (payee, description, reference and
+other text fields with *contains*, *equals* or *starts with*, and the
+amount), a contact, **fixed amount lines** taken first, and the
+**remainder split by percentages** adding up to 100%. **NetSuite**
+(features): its bank feed rules match on several fields and set the
+account, the entity and the classification segments (Tohyee's tracking).
+So a BK10 rule grows into:
+
+- **Where and which way:** one bank or credit card account, or all of them;
+  money in, money out or either (as now).
+- **Conditions**, all of which or any of which must hold (up to 10):
+  - a text field (payee, description, particulars, code, reference, or any
+    of them) *contains*, *equals* or *starts with* some text, ignoring case
+    and extra spaces;
+  - the amount *equals*, *is at least*, *is at most* or *is between* two
+    amounts. The amount is the line's amount without its sign (−46.00 is
+    46.00), since the money-in or money-out choice already covers the sign.
+- **Contact:** a chosen contact, or **"the contact named like the payee"**
+  (the active contact whose name is the line's payee, or with no payee its
+  description, ignoring case and extra spaces, exactly as bulk coding finds
+  one, BK22).
+- **Lines** (up to 20), each with an account, a GST code (or none), a
+  description and tracking (one value per category, TC1-TC10):
+  - **fixed amount lines** first, each a positive amount;
+  - then **percentage lines** for what's left, at least one, each more
+    than 0% with at most 2 decimal places, adding up to exactly 100%.
+    Percentages are split in cents the way payroll allocations already are:
+    each share is rounded down to the cent, and the cents left over go one
+    at a time to the shares that lost the most, earliest line first on a
+    tie. So the lines always add up to the statement line exactly.
+  - A rule whose fixed amounts are more than the statement line **doesn't
+    fit** that line; the next rule that matches and fits is used instead. A
+    percentage line that comes to 0.00 (fixed amounts equal to the line) is
+    left out.
+- **Amounts include GST**: each line is a share of the statement line, so a
+  line with a GST code works out its GST from its share (tax inclusive),
+  one line at a time as on a bill, and a line without one has no GST. (A
+  rule no longer has its own "amounts are" choice: "tax exclusive" couldn't
+  add up to the statement line.)
+- **The first rule that matches and fits wins**: lowest priority number
+  first, then the oldest rule (as now). Inactive rules are ignored.
+- **A rule only suggests** (Jess, 5 Oct 2026: no "post automatically"). The
+  suggestion is the same spend or receive money as BK6 and BK7, posted only
+  when someone clicks OK (or "OK all confident matches", BK17), and it can
+  be changed before that. A suggestion still waiting for a contact (no
+  contact named like the payee) isn't confident and can't be OK'd until one
+  is chosen.
+- Existing rules keep working as before: each becomes one text condition
+  (*contains*) and one 100% line with its account and GST code (none for a
+  "no tax" rule).
+- Rules are settings: bookkeepers and up create, change and delete them,
+  and every change is in the audit history, as now.
+
+Setup: as the bank examples above (1000 Business bank account, 2400 Credit
+card, tax code GST 15%, 2100 GST, contact Z Energy), dates in June 2026,
+advanced features on with Department values **Retail** and **Wholesale**,
+the default chart's **6020** Bank fees, **6120** Motor vehicle expenses,
+**6150** Rent, **6170** Telephone and internet and **2800** Term loan,
+contacts **Spark**, **Caltex**, **Harbour Properties**, **ANZ** and **Gull
+NZ**, and this statement imported into 1000:
+
+```
+Date,Amount,Payee,Particulars,Code,Reference
+02/06/2026,-115.00,SPARK,,,
+03/06/2026,-230.00,SPARK,,,
+04/06/2026,-69.00,CALTEX ,,,
+05/06/2026,-11.50,Z ENERGY,,,
+06/06/2026,-2300.00,HARBOUR PROPERTIES,,,rent
+08/06/2026,-46.01,SPARK MOBILE,,,
+09/06/2026,-505.00,ANZ,LOAN,,
+10/06/2026,-3.00,ANZ,FEE,,
+12/06/2026,-18.40,GULL,,,
+```
+
+The rules, all on any account:
+
+| Rule | Priority | Money | Conditions | Contact | Lines (GST inclusive unless "no GST") |
+| --- | --- | --- | --- | --- | --- |
+| A Spark broadband | 100 | out | **all**: payee contains SPARK; amount at most 200.00 | Spark | 100% 6170, GST |
+| B Fuel | 100 | out | **any**: payee contains CALTEX; payee contains Z ENERGY; payee contains GULL | named like the payee | 100% 6120, GST |
+| C Rent | 100 | out | **all**: reference equals RENT; amount equals 2,300.00 | Harbour Properties | 100% 6150, GST |
+| D Spark mobile | 10 | out | **all**: payee starts with SPARK MOBILE | Spark | 60% 6170 Retail, GST; 40% 6170 Wholesale, GST |
+| E ANZ loan | 20 | out | **all**: payee equals ANZ | ANZ | fixed 5.00 6020, no GST; then 100% 2800, no GST |
+| F ANZ fees | 30 | out | **all**: payee equals ANZ | ANZ | 100% 6020, no GST |
+
+- **BR1** (all conditions) The 2 Jun −115.00 SPARK line gets rule A's
+  suggestion: spend money to Spark, 6170, GST: **Dr 6170 100.00 / Dr 2100
+  15.00 / Cr 1000 115.00**. Nothing is posted until OK. The 3 Jun −230.00
+  SPARK line gets no suggestion from rule A (230.00 is more than 200.00), and
+  no other rule matches it.
+- **BR2** (any condition, contact from the payee) Rule B suggests, for the
+  4 Jun −69.00 "CALTEX " line (trailing space ignored), spend money to
+  **Caltex**: **Dr 6120 60.00 / Dr 2100 9.00 / Cr 1000 69.00**; for the 5 Jun
+  −11.50 line, to **Z Energy**: **Dr 6120 10.00 / Dr 2100 1.50 / Cr 1000
+  11.50**. For the 12 Jun −18.40 GULL line there's no contact called "GULL",
+  so the suggestion shows 6120 and GST with "No contact called “GULL”;
+  choose one", isn't confident, and OK is refused until a contact is chosen.
+  Choosing Gull NZ and OK posts **Dr 6120 16.00 / Dr 2100 2.40 / Cr 1000
+  18.40**.
+- **BR3** (equals, amount equals) Rule C suggests, for the 6 Jun −2,300.00
+  line with reference "rent" (case ignored), spend money to Harbour
+  Properties: **Dr 6150 2,000.00 / Dr 2100 300.00 / Cr 1000 2,300.00**. A
+  −2,300.01 line with reference RENT, or a −2,300.00 line with reference
+  "RENT JUNE", doesn't match rule C ("equals" isn't "contains").
+- **BR4** (percentage split with tracking, rounding) The 8 Jun −46.01 SPARK
+  MOBILE line matches rules D and A; D has the lower priority number, so D's
+  suggestion is used. 60% of 46.01 is 27.606 and 40% is 18.404; rounded down
+  they're 27.60 and 18.40, and the cent left over goes to the first line
+  (it lost 0.006, the second 0.004): **27.61** Retail and **18.40**
+  Wholesale. GST on each line: 27.61 → 3.60, net 24.01; 18.40 → 2.40, net
+  16.00. OK posts **Dr 6170 24.01 (Retail) / Dr 6170 16.00 (Wholesale) /
+  Dr 2100 6.00 / Cr 1000 46.01**, adding **46.01** to the June GST return's
+  Box 11 and **6.00** to its purchases GST. (A −115.00 SPARK MOBILE line
+  would split exactly: 69.00 Retail (60.00 + GST 9.00) and 46.00 Wholesale
+  (40.00 + GST 6.00).)
+- **BR5** (fixed amount, then the rest) The 9 Jun −505.00 ANZ line matches
+  rules E and F; E is first: **Dr 6020 5.00 / Dr 2800 500.00 / Cr 1000
+  505.00**, no GST, in no GST box.
+- **BR6** (a rule that doesn't fit) The 10 Jun −3.00 ANZ line matches rule
+  E, but E's fixed 5.00 is more than 3.00, so E doesn't fit and rule F is
+  used: **Dr 6020 3.00 / Cr 1000 3.00**. A −5.00 ANZ line fits E with
+  nothing left for the percentage line, which is left out: **Dr 6020 5.00 /
+  Cr 1000 5.00**.
+- **BR7** (where a rule applies) Rule A limited to **2400** Credit card
+  suggests nothing for any line on 1000. With rule D made inactive, the
+  8 Jun SPARK MOBILE line gets rule A's suggestion instead (one 6170 line,
+  46.01: Dr 6170 40.01 / Dr 2100 6.00 / Cr 1000 46.01). A money-in rule
+  never matches these money-out lines.
+- **BR8** (OK all) "OK all confident matches" on 1000 posts the BR1, BR2
+  (Caltex and Z Energy only), BR3, BR4, BR5 and BR6 suggestions, each as its
+  own spend money reconciled to its line, exactly as BR1-BR6 show. The GULL
+  line (no contact) and the 3 Jun line (no rule) stay unreconciled. With the
+  period locked up to 5 Jun, the 2, 4 and 5 Jun lines are refused as in
+  BK13 and the others are posted.
+- **BR9** (saving a rule) Refused, with nothing saved: percentage lines
+  adding up to 99.99% or 100.01%; a percentage of 0 or less, or with 3
+  decimal places; no percentage line; a fixed amount of 0 or less; more than
+  10 conditions or 20 lines; no conditions; "between" with the first amount
+  more than the second; an archived account, GST code or tracking value; a
+  sales-only GST code on a money-out rule (TAO7); with Department
+  **required** (TC), a line on an income or expense account without a
+  Department. A viewer can't create or change rules (403).
+- **BR10** (existing rules) After the upgrade, the BK10 rule ("description
+  contains Z ENERGY, money out: spend money to Z Energy, 6120, GST,
+  inclusive") is one condition and one 100% line, and suggests exactly the
+  BK6 transaction for the −46.00 line, as before. The single-condition shape
+  is still accepted when saving a rule (e.g. "Save a bank rule" while
+  reconciling).
+
+**Questions for Jess (bank rules), decided** (Jess, 5 Oct 2026: "do what
+you think is best"; decisions 380-383): splits round as payroll
+allocations do; amount conditions ignore the sign; a 0.00 percentage line is
+left out; "the contact named like the payee" stays.
+
+Not supported yet (refused rather than guessed): negative percentages
+(Xero allows them as long as the total is 100%); rules that pay invoices or
+bills, make transfers or match existing transactions (rules only make spend
+and receive money); rules that post by themselves; regular expressions in
+conditions; standard-rated GST on foreign-currency accounts (as FXB4).
+
 ### Small differences when matching (examples not yet approved by Jess)
 
 Like Xero's adjustment. When matching a line (BK4) or paying invoices or
@@ -2766,6 +2930,61 @@ stated.
 Tests: `tests/integration/supplier-tax.test.ts` (EX16-EX18, EX20-EX24) and
 `tests/unit/supplier-tax.test.ts` (the purchase editors' starting code and
 the warning: EX17-EX23, EX25; EX12 in `tests/unit/exports.test.ts` too).
+
+### A contact's default account and tracking (examples SD1-SD3, approved by Jess 5 Oct 2026)
+
+Stage 1 of the Xero add-ons plan (5 Oct 2026). **Xero**: a contact's
+"Purchase defaults" and "Sales defaults" hold an account, a tax rate and
+tracking, used for new bill, spend money, invoice and receive money lines
+for that contact. **NetSuite**: a vendor's default expense account. So, next
+to the default purchase and sales tax codes above:
+
+- **Default purchase account** and **default purchase tracking** (one value
+  per category), and **default sales account** and **default sales
+  tracking**, all optional. The purchase account can be any active account a
+  bill line can use, the sales account any active account an invoice line
+  can use. Archived accounts and tracking values can't be chosen; one that's
+  archived after it was set is kept but not used. Changes are in the
+  contact's history. Not in the contacts CSV import and export (the default
+  tax codes aren't either).
+- **New lines start with** the defaults for their side: bills, supplier
+  credit notes and spend money use the purchase defaults; invoices, sales
+  credit notes and receive money use the sales defaults. Choosing the
+  contact fills them into lines nobody has filled in yet (on a bill, a line
+  with no account; on an invoice, a line with no item, description or
+  price), and lines added afterwards start with them. Lines already filled
+  in keep their account and tracking, so changing a draft's contact doesn't
+  recode it. The GST code still comes from the contact's default tax code,
+  or the usual default (TAO6). They're only a starting point: any line can
+  be changed.
+- **Bulk coding** (BK22) uses them too: a ticked line with no account, for
+  all or its own, takes its contact's default account, GST code and tracking
+  for its side (money out: purchase, money in: sales), in place of whatever
+  GST code and tracking were chosen. When an account is chosen, the chosen
+  GST code and tracking are used as now. With no account and no default
+  it's refused as now ("Choose an account for this line").
+- Bank rules don't use them: a rule's lines say their own account (BR1-BR10).
+
+Setup: as BR1-BR10. Spark has default purchase account 6170, default
+purchase tax code GST, and default purchase tracking Department Retail.
+
+- **SD1** On a new bill, choosing Spark fills the empty first line with
+  **6170**, **GST** and **Retail**, and an added line starts the same; so
+  does a new spend money to Spark. Changing the line to 6120 and Wholesale
+  is kept. A new invoice to Spark keeps the usual starting account (Spark
+  has no sales defaults). On a draft bill whose line is already coded to
+  6120, changing the contact to Spark leaves that line as it was.
+- **SD2** Bulk coding the 3 Jun −230.00 SPARK line with no account and no
+  contact chosen: the contact named like the payee is Spark, so the line
+  takes 6170, GST and Retail: **Dr 6170 200.00 (Retail) / Dr 2100 30.00 /
+  Cr 1000 230.00**, adding **230.00** to Box 11 and **30.00** to purchases
+  GST. The same with 6120, GST and no tracking chosen for all uses those
+  (Dr 6120 200.00 / Dr 2100 30.00 / Cr 1000 230.00, no tracking): the
+  chosen account wins.
+- **SD3** With 6170 archived, Spark's default account is kept but not used:
+  choosing Spark on a new bill leaves the line with no account, and SD2 is
+  refused with "Choose an account for this line". Choosing an archived account or tracking value as
+  a default is refused, and a viewer can't change a contact (403).
 
 ### A tax code's "Available on" (examples not yet approved by Jess)
 

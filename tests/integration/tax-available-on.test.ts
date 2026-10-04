@@ -291,11 +291,13 @@ describeWithDatabase("a tax code's Available on", () => {
       );
     await expect(rule("out", "SAL")).rejects.toThrow("Tax code SAL is available on sales only, so it can't be used on a rule for money out (spend money is purchases).");
     await expect(rule("any", "SAL")).rejects.toThrow("so it can't be used on a rule for money in or out (that needs a code available on both).");
-    expect((await rule("in", "SAL")).taxCode).toBe("SAL");
-    expect((await rule("any", "GST")).taxCode).toBe("GST");
+    expect((await rule("in", "SAL")).lines[0].taxCode).toBe("SAL");
+    expect((await rule("any", "GST")).lines[0].taxCode).toBe("GST");
     await expect(
       run((tx) =>
-        tx.query("update bank_rules set direction = 'out' where tax_code_id = (select id from tax_codes where code = 'SAL')"),
+        tx.query(
+          "update bank_rules set direction = 'out' where id in (select rule_id from bank_rule_lines where tax_code_id = (select id from tax_codes where code = 'SAL'))",
+        ),
       ),
     ).rejects.toThrow("A bank rule's tax code must be available on the side it codes");
   });
@@ -306,7 +308,9 @@ describeWithDatabase("a tax code's Available on", () => {
     const approved = (await run((tx) => approveInvoice(tx, other.id, { idempotencyKey: key("approve") }))).invoice;
     expect(approved).toMatchObject({ status: "approved", taxTotal: "30.00", total: "230.00" });
     // GST is used for sales only by the "any" bank rule (TAO8); it goes first.
-    await run((tx) => tx.query("delete from bank_rules where tax_code_id = (select id from tax_codes where code = 'GST')"));
+    await run((tx) =>
+      tx.query("delete from bank_rules where id in (select rule_id from bank_rule_lines where tax_code_id = (select id from tax_codes where code = 'GST'))"),
+    );
     expect((await setAvailableOn("GST", "purchases")).availableOn).toBe("purchases");
     const refused = refusal("GST", "purchases", "sales");
     await expect(run((tx) => updateInvoice(tx, draft.id, { reference: "Saved again" }))).rejects.toThrow(refused);

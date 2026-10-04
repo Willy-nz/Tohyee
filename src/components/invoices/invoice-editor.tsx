@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
@@ -96,6 +97,9 @@ export type Defaults = { accountCode: string; taxCode: string };
  * default, or the tax code for exports, EX2-EX6); without one the line starts
  * with the usual default.
  */
+/** A sales line nobody has filled in yet: it can take the customer's defaults (SD1). */
+export const untouchedSalesLine = (line: EditorLine) => !line.itemId && !line.description.trim() && !line.unitPrice.trim();
+
 export function blankLine(defaults: Defaults, customFields: CustomValues = {}, contactTaxCode: string | null = null): EditorLine {
   return {
     key: nextLineKey(),
@@ -204,6 +208,10 @@ function InvoiceForm({
   // A customer in another currency gets invoices in it, at a rate for the invoice date (MC1-MC3).
   const chosenCustomer = customers.find((contact) => contact.id === contactId);
   const currencyCode = chosenCustomer ? (chosenCustomer.currencyCode ?? baseCurrency) : (invoice?.currencyCode ?? baseCurrency);
+  // Untouched lines take the customer's default account and tracking (SD1).
+  const checkers = defaultsCheckers(accounts, tracking);
+  const salesDefaults = (current: EditorLine[], customer: Contact | undefined) =>
+    withContactDefaults(current, customer, "sales", checkers.accountUsable, checkers.valueUsable, untouchedSalesLine);
   const foreign = currencyCode !== baseCurrency;
   const [typedRate, setTypedRate] = useState<string | null>(invoice?.exchangeRate ?? null);
   const suggestedRate = useLastRate(organisationId, currencyCode, baseCurrency, invoiceDate);
@@ -216,7 +224,7 @@ function InvoiceForm({
     if ((next?.currencyCode ?? baseCurrency) !== currencyCode) setTypedRate(null);
     setContactId(id);
     refillDue(id, invoiceDate, next);
-    setLines((current) => retaxLines(current, contactSalesTaxCode(next, exportSettings, taxCodes)));
+    setLines((current) => retaxLines(salesDefaults(current, next), contactSalesTaxCode(next, exportSettings, taxCodes)));
     if (!invoice) setSalespersonId(customerDefault(salespeople, next?.defaultSalespersonId));
   }
   const savedCustomer =
@@ -392,6 +400,7 @@ function InvoiceForm({
         defaults={defaults}
         lineDefaults={lineDefaults}
         contact={chosenCustomer}
+        withDefaults={(fresh) => salesDefaults(fresh, chosenCustomer)}
         exportSettings={exportSettings}
       />
       <div className={ui.actions}>
@@ -432,6 +441,7 @@ export function SalesLines({
   exchangeRate,
   contact,
   exportSettings,
+  withDefaults,
 }: {
   organisationId: string;
   items: ItemList | null;
@@ -454,6 +464,8 @@ export function SalesLines({
   /** The chosen customer and the organisation's export settings (EX2-EX6, EX12). */
   contact?: Contact;
   exportSettings?: ExportSettings | null;
+  /** Gives a new line the customer's default account and tracking (SD1). */
+  withDefaults?: (lines: EditorLine[]) => EditorLine[];
 }) {
   const scale = currencyMinorUnits(baseCurrency);
   const contactTaxCode = contactSalesTaxCode(contact, exportSettings, taxCodes);
@@ -626,7 +638,7 @@ export function SalesLines({
           <tfoot>
             <tr>
               <td colSpan={hasTax ? 8 : 6}>
-                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, blankLine(defaults, lineDefaults, contactTaxCode)])}>
+                <Button variant="secondary" size="small" onClick={() => setLines((current) => [...current, ...(withDefaults ?? ((fresh: EditorLine[]) => fresh))([blankLine(defaults, lineDefaults, contactTaxCode)])])}>
                   Add line
                 </Button>
               </td>

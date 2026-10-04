@@ -1,6 +1,6 @@
 import { writeAuditEvent } from "@/lib/audit";
 import { getStatementLine, lockStatementLine, type StatementLine } from "@/lib/bank/accounts";
-import { listBankRules, ruleMatches, type BankRule } from "@/lib/bank/rules";
+import { firstFittingRule, listBankRules, ruleAmountsMode, ruleContact, type BankRule, type SuggestedRuleLine } from "@/lib/bank/rules";
 import { createBankTransaction, createTransfer } from "@/lib/bank/transactions";
 import { recordSupplierPayment } from "@/lib/bills/payments";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -665,7 +665,17 @@ export type MatchCandidate = {
 export type LineSuggestions = {
   matches: MatchCandidate[];
   documents: Array<{ kind: "invoice" | "bill"; id: string; number: string; contactName: string; amountDue: string; date: string }>;
-  rule: (BankRule & { suggestedLine: { description: string; accountCode: string; taxCode: string | null; amount: string } }) | null;
+  rule:
+    | (BankRule & {
+        amountsMode: "inclusive" | "no_tax";
+        /** Every line the rule gives for this amount (BR4-BR6). */
+        suggestedLines: SuggestedRuleLine[];
+        /** The first of them, as the reconcile screen shows a one-line rule. */
+        suggestedLine: { description: string; accountCode: string; taxCode: string | null; amount: string };
+        /** Set when the rule can't be used as it stands (BR2: no contact named like the payee). */
+        problem: string | null;
+      })
+    | null;
 };
 
 /**
@@ -727,7 +737,8 @@ export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?
       date: row.date,
     }));
   const allRules = rules ?? (await listBankRules(tx, { activeOnly: true }));
-  const rule = allRules.find((candidate) => ruleMatches(candidate, line)) ?? null;
+  const fitting = firstFittingRule(allRules, line);
+  const contact = fitting ? await ruleContact(tx, fitting.rule, line) : null;
   return {
     matches: candidates.rows.map((row) => ({
       journalLineId: row.id,
@@ -741,15 +752,20 @@ export async function suggestionsForLine(tx: OrgTx, lineIdInput: unknown, rules?
       voided: row.voided === true,
     })),
     documents: exactDocuments,
-    rule: rule
+    rule: fitting
       ? {
-          ...rule,
+          ...fitting.rule,
+          contactId: contact?.id ?? null,
+          contactName: contact?.name ?? null,
+          amountsMode: ruleAmountsMode(fitting.lines),
+          suggestedLines: fitting.lines,
           suggestedLine: {
-            description: rule.lineDescription ?? line.description,
-            accountCode: rule.targetAccountCode,
-            taxCode: rule.amountsMode === "no_tax" ? null : rule.taxCode,
-            amount: unsigned,
+            description: fitting.lines[0].description,
+            accountCode: fitting.lines[0].accountCode,
+            taxCode: fitting.lines[0].taxCode,
+            amount: fitting.lines[0].amount,
           },
+          problem: contact ? null : `No contact called “${line.payee ?? line.description}”; choose one.`,
         }
       : null,
   };

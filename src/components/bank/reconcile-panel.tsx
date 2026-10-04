@@ -37,6 +37,7 @@ import { isRateText } from "@/lib/money/fx";
 import type { TaxCode } from "@/lib/tax/codes";
 import { isAvailableOn } from "@/lib/tax/available-on";
 import { retaxLines } from "@/lib/tax/exports";
+import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { contactPurchaseTaxCode } from "@/lib/tax/purchase-defaults";
 import type { CustomFieldSetup, CustomValues } from "@/lib/custom-fields/values";
 import type { TrackingSetup, TrackingTags } from "@/lib/tracking/service";
@@ -645,19 +646,36 @@ function BankTransactionForm({
   const kind = moneyIn ? "receive" : "spend";
   const lineDefaults = startingValues(lookups.customSetup, "line", [kind]);
   const [customFields, setCustomFields] = useState<CustomValues>(() => startingValues(lookups.customSetup, "document", [kind]));
-  const [lines, setLines] = useState<EditorLine[]>(() => [
-    {
-      key: ++lineKey,
-      description: rule?.suggestedLine.description ?? line.description,
-      accountCode: rule?.suggestedLine.accountCode ?? "",
-      taxCode: rule?.suggestedLine.taxCode ?? contactTaxCode(rule?.contactId ?? "") ?? defaultTaxCode,
-      usualTaxCode: defaultTaxCode,
-      taxTyped: Boolean(rule?.suggestedLine.taxCode),
-      amount: unsigned,
-      tracking: {},
-      customFields: lineDefaults,
-    },
-  ]);
+  // New lines start with the contact's default account and tracking (SD1); a rule's lines say their own (BR1-BR10).
+  const checkers = defaultsCheckers(lookups.accounts, lookups.tracking, takesBankTransactionLines);
+  const contactDefaults = (current: EditorLine[], id: string) =>
+    withContactDefaults(current, lookups.contacts.find((contact) => contact.id === id), moneyIn ? "sales" : "purchase", checkers.accountUsable, checkers.valueUsable);
+  const [lines, setLines] = useState<EditorLine[]>(() =>
+    rule
+      ? rule.suggestedLines.map((suggested) => ({
+          key: ++lineKey,
+          description: suggested.description,
+          accountCode: suggested.accountCode,
+          taxCode: suggested.taxCode ?? defaultTaxCode,
+          usualTaxCode: defaultTaxCode,
+          taxTyped: true,
+          amount: suggested.amount,
+          tracking: suggested.tracking,
+          customFields: lineDefaults,
+        }))
+      : [
+          {
+            key: ++lineKey,
+            description: line.description,
+            accountCode: "",
+            taxCode: defaultTaxCode,
+            usualTaxCode: defaultTaxCode,
+            amount: unsigned,
+            tracking: {},
+            customFields: lineDefaults,
+          },
+        ],
+  );
   const [saveRule, setSaveRule] = useState(false);
   const [ruleText, setRuleText] = useState(line.payee ?? line.description);
   const [ruleError, setRuleError] = useState<string | null>(null);
@@ -728,6 +746,7 @@ function BankTransactionForm({
       {rule ? (
         <Notice tone="info">
           Filled in by the bank rule “{rule.name}”. Check it before saving.
+          {rule.problem ? ` ${rule.problem}` : ""}
         </Notice>
       ) : null}
       {ruleError ? <Notice tone="warning">{ruleError}</Notice> : null}
@@ -741,7 +760,7 @@ function BankTransactionForm({
             value={contactId}
             onChange={(event) => {
               setContactId(event.target.value);
-              setLines((current) => retaxLines(current, contactTaxCode(event.target.value)));
+              setLines((current) => retaxLines(contactDefaults(current, event.target.value), contactTaxCode(event.target.value)));
             }}
             required
           >

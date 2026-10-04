@@ -158,7 +158,8 @@ async function usesOnSide(tx: OrgTx, taxCodeId: string, side: TaxSide): Promise<
   }
   const items = await tx.query<{ code: string }>(`select code from items where ${itemColumn} = $1 order by code`, [taxCodeId]);
   uses.push(...items.rows.map((row) => `item ${row.code}'s ${word} tax code`));
-  const rules = await tx.query<{ name: string }>("select name from bank_rules where tax_code_id = $1 and direction = any($2::text[]) order by name", [
+  const rules = await tx.query<{ name: string }>(`select distinct r.name from bank_rules r join bank_rule_lines l on l.rule_id = r.id
+      where l.tax_code_id = $1 and r.direction = any($2::text[]) order by r.name`, [
     taxCodeId,
     side === "sales" ? ["in", "any"] : ["out", "any"],
   ]);
