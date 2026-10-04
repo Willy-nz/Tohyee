@@ -333,9 +333,10 @@ export async function checkReportMailbox(
           let expansion: number;
           try {
             expansion = /\.xlsx$/i.test(attachment.name) ? await reportXlsxExpansionBytes(bytes) : await reportZipExpansionBytes(bytes);
-          } catch {
+          } catch (error) {
+            // An Excel attachment says why (macros, a password, too large to unpack safely).
             problem = /\.xlsx$/i.test(attachment.name)
-              ? "An Excel attachment is damaged or too large to read safely."
+              ? `An Excel attachment couldn't be saved: ${error instanceof ValidationError ? error.message : "it's damaged or too large to read safely."}`
               : "A ZIP attachment is damaged or too large to unzip safely.";
             continue;
           }

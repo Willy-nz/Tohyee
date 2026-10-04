@@ -274,6 +274,14 @@ describeWithDatabase("analytics sources and loads", () => {
     expect(preview.data.sheets).toEqual(["First", "Chosen sheet"]);
     expect(preview.data.sheetName).toBe("Chosen sheet");
     expect(preview.data.rows[0]).toEqual(["2026-03-02", "Waikato", "19.99"]);
+    const excelPreview = `/api/analytics/files?organisationId=${ORG}&file=exports/monthly.xlsx`;
+    expect((await filesRoute.GET(apiRequest(excelPreview, { cookie: viewerCookie }), noContext)).status).toBe(403);
+    expect((await filesRoute.GET(apiRequest(excelPreview, { cookie: await sessionCookieFor(outsider) }), noContext)).status).toBe(404);
+    const otherOrganisation = await filesRoute.GET(
+      apiRequest(`/api/analytics/files?organisationId=${OTHER}&file=exports/monthly.xlsx`, { cookie: ownerCookie }),
+      noContext,
+    );
+    expect(otherOrganisation.status).not.toBe(200);
 
     const created = await body(await sourcesRoute.POST(
       apiRequest("/api/analytics/sources", {

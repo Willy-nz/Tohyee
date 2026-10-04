@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import ExcelJS from "exceljs";
+import { inspectSourceFile } from "@/lib/analytics/engine";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import * as mailboxesRoute from "@/app/api/organisations/[organisationId]/analytics/report-emails/route";
 import * as checkRoute from "@/app/api/organisations/[organisationId]/analytics/report-emails/[id]/check/route";
@@ -232,6 +233,16 @@ describeWithDatabase("report emails (decision 362)", () => {
     const saved = fs.readdirSync(root, { recursive: true }).map(String).find((name) => name.endsWith("/report.xlsx"));
     expect(saved).toBeDefined();
     expect(fs.readFileSync(path.join(root, saved!))).toEqual(excelBytes);
+    // The saved workbook is ready to set up as a data source.
+    expect((await inspectSourceFile(root, saved!)).rows).toEqual([["2026-10-08", "12.5"]]);
+
+    // A password-protected workbook is refused, and the email says why.
+    const locked = attachmentBytes("locked.xlsx", Buffer.concat([Buffer.from("d0cf11e0a1b11ae1", "hex"), Buffer.alloc(504)]));
+    mocks.messages = [{ id: "locked-excel", receivedAt: "2026-10-08T11:00:00Z", attachments: [locked] }];
+    expect(await checkReportMailbox((await getOrganisation(orgId))!, actor, mailboxId)).toMatchObject({ status: "failed", filesSaved: 0 });
+    const stored = await inOrganisation(orgId, actor, (tx) =>
+      tx.query<{ error: string }>("select error from analytics_report_email_messages where mailbox_id=$1 and message_id='locked-excel'", [mailboxId]));
+    expect(stored.rows[0].error).toMatch(/^An Excel attachment couldn't be saved: This file is password-protected/);
   });
   it("refreshes an expired CRM token outside transactions and then reuses the fresh token", async () => {
     const actual = await vi.importActual<typeof import("@/lib/crm/mail/service")>("@/lib/crm/mail/service");

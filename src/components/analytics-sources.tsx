@@ -408,7 +408,7 @@ function SourceSetup({
 }) {
   const [delimiter, setDelimiter] = useState(existing?.delimiter ?? "");
   const [sheetName, setSheetName] = useState(existing?.sheetName ?? "");
-  const isExcel = /\.xlsx$/i.test(file);
+  const isExcel = /\.(xlsx|xlsm|xls)$/i.test(file);
   const preview = useApiData<Preview>("/api/analytics/files", {
     organisationId,
     file,

@@ -86,7 +86,41 @@ describe("report email files (decision 362)", () => {
 
   it("rejects a ZIP bomb disguised as an Excel workbook", async () => {
     const bomb = zip([{ name: "xl/worksheets/sheet1.xml", bytes: Buffer.alloc(26 * 1024 * 1024), compress: true }]);
-    await expect(extractReportAttachment("report.xlsx", bomb, MAX_CHECK_BYTES)).rejects.toThrow(/Excel attachment|unsafe Excel ZIP/i);
+    await expect(extractReportAttachment("report.xlsx", bomb, MAX_CHECK_BYTES)).rejects.toThrow(/unsafe files or unpacks to more than the limit/);
+    // Sizes the ZIP understates are counted as it unpacks.
+    const lying = zip([{ name: "xl/worksheets/sheet1.xml", bytes: Buffer.alloc(200_000, 7), declaredSize: 1000, compress: true }]);
+    await expect(extractReportAttachment("report.xlsx", lying, MAX_CHECK_BYTES)).rejects.toThrow(/unsafe|damaged/);
+  });
+
+  it("charges an Excel attachment's unpacked size to the check's budget", async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet("Sales").addRows([["Day", "Total"], ["2026-10-03", 12.5]]);
+    const xlsxBytes = Buffer.from(await workbook.xlsx.writeBuffer());
+    await expect(extractReportAttachment("report.xlsx", xlsxBytes, xlsxBytes.length)).rejects.toBeInstanceOf(ReportCheckBudgetError);
+  });
+
+  it("refuses Excel attachments with macros or a password", async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet("Sales").addRows([["Day", "Total"]]);
+    const xlsxBytes = Buffer.from(await workbook.xlsx.writeBuffer());
+    const { default: yauzl } = await import("yauzl");
+    const entries = await new Promise<{ name: string; bytes: Buffer }[]>((resolve, reject) => {
+      yauzl.fromBuffer(xlsxBytes, { lazyEntries: false }, (error, archive) => {
+        if (error || !archive) return reject(error);
+        const found: Promise<{ name: string; bytes: Buffer }>[] = [];
+        archive.on("entry", (entry: import("yauzl").Entry) => found.push(new Promise((accept, refuse) => archive.openReadStream(entry, async (streamError, stream) => {
+          if (streamError || !stream) return refuse(streamError);
+          const chunks: Buffer[] = [];
+          for await (const chunk of stream) chunks.push(chunk as Buffer);
+          accept({ name: entry.fileName, bytes: Buffer.concat(chunks) });
+        }))));
+        archive.on("end", () => Promise.all(found).then(resolve, reject));
+      });
+    });
+    const withMacros = zip([...entries.map((entry) => ({ ...entry, compress: true })), { name: "xl/vbaProject.bin", bytes: Buffer.from("macro") }]);
+    await expect(extractReportAttachment("report.xlsx", withMacros, MAX_CHECK_BYTES)).rejects.toThrow(/macros/);
+    const locked = Buffer.concat([Buffer.from("d0cf11e0a1b11ae1", "hex"), Buffer.alloc(504)]);
+    await expect(extractReportAttachment("report.xlsx", locked, MAX_CHECK_BYTES)).rejects.toThrow(/password-protected/);
   });
 
   it("uses the same safe normalized output key on Windows and Linux", async () => {

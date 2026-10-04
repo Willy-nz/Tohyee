@@ -1292,9 +1292,11 @@ that something happened.
   up a CSV or Excel (`.xlsx`) file from it: for Excel, Tohyee shows the sheet
   names and previews the selected sheet (first by default); it shows the
   headings, its guess at each type and the first values, and they confirm each
-  column (money loads as exact decimals). Excel files are streamed and capped
-  at 50 MB; old `.xls`, macro-enabled `.xlsm` and password-protected files
-  aren't supported. Each organisation's loaded data is one DuckDB file in
+  column (money loads as exact decimals). An Excel source loads one sheet,
+  stored on the source; dates and formula results load as Excel shows them
+  and numbers as written (0.1 + 0.2 loads as 0.30). Excel files are streamed
+  and capped at 50 MB with ZIP-bomb checks; old `.xls`, `.xlsm`, workbooks
+  with macros and password-protected files are refused with a reason. Each organisation's loaded data is one DuckDB file in
   `TOHYEE_ANALYTICS_DIR`; a load swaps the table in only when it succeeds.
   Sources reload nightly after 04:00 and on demand, and every load is
   recorded. Tested with a made-up 1M-row CSV (about a second to load).
@@ -1356,7 +1358,8 @@ that something happened.
   matching names with the newest receipt (or, as an archive, keeping every
   file dated).
   Mailboxes are checked each night before the reload, or with Check now. PDFs (including Looker Studio
-  reports), `.xls`, and `.xlsm` files aren't accepted. Limits are 25 MB
+  reports), `.xls`, and `.xlsm` files aren't accepted, and `.xlsx` files
+  with macros or a password are refused. Limits are 25 MB
   per attachment and 100 MB per check, including ZIP and Excel workbook
   expansion. Message IDs prevent repeat saves, and the job records files saved and errors. Checks
   run every 15 minutes while the server runs, or by Check now. Google and

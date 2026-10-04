@@ -1507,15 +1507,20 @@ run time.
   `server_settings`), chosen by a server admin on the server computer. Files
   are only read from inside an organisation's own folder, after resolving
   links and `..`.
-- **Loads** (`src/lib/analytics/engine.ts`) read CSV and `.xlsx` cells as text
-  and convert them to the confirmed type, so money is `DECIMAL(18,2)` and
-  never a guessed floating-point number. ExcelJS streams a chosen worksheet
-  (the first by default); the source stores its sheet name. Excel workbooks are
-  capped at 50 MB, with ZIP entry and expansion checks; old `.xls`, macro
-  `.xlsm`, and password-protected workbooks are refused. A load writes a new
-  table and swaps it in only when it succeeds. The PostgreSQL record of a load
-  is written before and after it, in short transactions; the file is never
-  read inside one.
+- **Loads** (`src/lib/analytics/engine.ts`) read every column as text and
+  convert it to the confirmed type, so money is `DECIMAL(18,2)` and never a
+  guessed floating-point number. A load writes a new table and swaps it in
+  only when it succeeds. The PostgreSQL record of a load is written before
+  and after it, in short transactions; the file is never read inside one.
+- **Excel sources** (`src/lib/analytics/xlsx.ts`, decision 376): one sheet
+  of an `.xlsx` (stored on the source) is copied out as CSV text into a
+  scratch folder in the analytics data folder and loaded by the CSV loader.
+  The workbook (50 MB at most) is checked first by unpacking every ZIP entry
+  with limits; ExcelJS then reads a stream Tohyee rebuilds from only the
+  checked parts it needs (workbook, styles, shared strings, the sheet),
+  unpacked by Tohyee and stopped at the checked sizes, so ZIP tricks that
+  hide entries from the directory don't reach it. `.xls`, macros and
+  password-protected workbooks are refused.
 - **The nightly reload** (`src/lib/analytics/scheduler.ts`) loads each daily
   source once a day after 04:00 business time and retries a failure an
   hour later (off with `TOHYEE_ANALYTICS_SCHEDULER=off`).
@@ -1557,7 +1562,8 @@ run time.
   go into `email/<mailbox id>/` inside the server-admin-chosen source folder;
   the existing loader discovers them there. CSV, TSV and TXT, and `.xlsx`
   attachments are saved; ZIP and workbook entries are checked for safe paths,
-  entry counts, compression ratios, CRCs and expansion. Attachments are capped
+  entry counts, compression ratios, CRCs and expansion, and workbooks with
+  macros or a password are refused (the same check as loading, decision 376). Attachments are capped
   at 25 MB and each check at 100 MB including expansion. OAuth permissions
   cover the whole mailbox, but these checks only read the chosen folder or
   label and never modify mail.

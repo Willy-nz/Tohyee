@@ -1,13 +1,19 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { once } from "node:events";
-import { finished } from "node:stream/promises";
 import type { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
-import yauzl from "yauzl";
 import { ValidationError } from "@/lib/errors";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
 import { analyticsFilePath } from "@/lib/analytics/paths";
+import {
+  checkXlsxArchive,
+  chooseSheet,
+  MAX_XLSX_FILE_BYTES,
+  writeXlsxSheetCsv,
+  XLSX_LOAD_LIMITS,
+  XLSX_MESSAGES,
+  xlsxStructure,
+} from "@/lib/analytics/xlsx";
 
 export { analyticsFilePath, analyticsFolder } from "@/lib/analytics/paths";
 
@@ -178,13 +184,8 @@ export function isInsideFolder(folder: string, file: string): boolean {
 
 export type CsvLoadResult = { rows: number; milliseconds: number };
 
-const MAX_XLSX_FILE_BYTES = 50 * 1024 * 1024;
-const MAX_XLSX_EXPANDED_BYTES = 250 * 1024 * 1024;
-const MAX_XLSX_ZIP_ENTRIES = 1000;
-const MAX_XLSX_COMPRESSION_RATIO = 1000;
+/** A sheet copied out of a workbook stops at this size (a 50 MB workbook rarely makes more than a few hundred MB). */
 const MAX_XLSX_CSV_BYTES = 1024 * 1024 * 1024;
-const MAX_XLSX_SHARED_STRINGS_BYTES = 32 * 1024 * 1024;
-const MAX_XLSX_STYLES_BYTES = 8 * 1024 * 1024;
 
 function validateLoadInput(input: {
   sourceFolder: string;
@@ -211,9 +212,12 @@ async function loadCsvInto(connection: DuckDBConnection, input: {
   table: string;
   columns: readonly LoadColumn[];
   delimiter: string;
+  quote?: string;
 }): Promise<CsvLoadResult> {
   const started = performance.now();
   const staging = `_tohyee_load_${input.table}`;
+  // Every column is read as text and converted explicitly, so DuckDB
+  // never guesses a type (it guesses prices as floating-point numbers).
   const select = input.columns
     .map((column) => {
       const value = `nullif(trim(${quoteIdentifier(column.source)}), '')`;
@@ -225,7 +229,8 @@ async function loadCsvInto(connection: DuckDBConnection, input: {
   try {
     await connection.run(
       `create table ${quoteIdentifier(staging)} as select ${select} from read_csv(${quoteString(input.file)}, ` +
-        `header = true, all_varchar = true, delim = ${quoteString(input.delimiter)})`,
+        `header = true, all_varchar = true, delim = ${quoteString(input.delimiter)}` +
+        (input.quote ? `, quote = ${quoteString(input.quote)}, escape = ${quoteString(input.quote)}` : "") + ")",
     );
     const count = await connection.runAndReadAll(`select count(*)::bigint as n from ${quoteIdentifier(staging)}`);
     const rows = Number(count.getRows()[0][0]);
@@ -268,227 +273,91 @@ export async function loadCsv(input: {
   );
 }
 
-function crc32(bytes: Buffer, initial = 0xffffffff): number {
-  let crc = initial;
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-  }
-  return crc >>> 0;
-}
-
-function safeXlsxEntry(name: string): boolean {
-  if (!name || name.length > 512 || name.startsWith("/") || name.includes("\\") || name.includes("\0")) return false;
-  const parts = name.split("/");
-  if (parts.at(-1) === "") parts.pop();
-  return parts.length > 0 && parts.every((part) => part !== "" && part !== "." && part !== "..");
-}
-
-async function validateXlsxArchive(file: string): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    yauzl.open(file, { lazyEntries: true, autoClose: false, strictFileNames: true, validateEntrySizes: false }, (error, zip) => {
-      if (error || !zip) {
-        reject(new ValidationError("That Excel file couldn't be read. It may be password-protected or damaged."));
-        return;
-      }
-      let done = false;
-      let total = 0;
-      let entries = 0;
-      const fail = (reason = "The Excel workbook contains unsafe files or exceeds the extraction limits.") => {
-        if (done) return;
-        done = true;
-        zip.close();
-        reject(new ValidationError(reason));
-      };
-      zip.on("error", () => fail());
-      zip.on("end", () => {
-        if (done) return;
-        done = true;
-        zip.close();
-        resolve();
-      });
-      zip.on("entry", (entry: yauzl.Entry) => {
-        void (async () => {
-          const mode = (entry.externalFileAttributes >>> 16) & 0xf000;
-          if (entry.generalPurposeBitFlag & (1 | 64)) {
-            throw new ValidationError("This Excel workbook is password-protected. Remove its password and try again.");
-          }
-          if (++entries > MAX_XLSX_ZIP_ENTRIES || !safeXlsxEntry(entry.fileName) ||
-              ![0, 8].includes(entry.compressionMethod) ||
-              (mode !== 0 && mode !== 0x8000 && mode !== 0x4000) ||
-              !Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0 ||
-              (entry.fileName === "xl/sharedStrings.xml" && entry.uncompressedSize > MAX_XLSX_SHARED_STRINGS_BYTES) ||
-              (entry.fileName === "xl/styles.xml" && entry.uncompressedSize > MAX_XLSX_STYLES_BYTES) ||
-              entry.uncompressedSize > Math.max(1, entry.compressedSize) * MAX_XLSX_COMPRESSION_RATIO ||
-              total + entry.uncompressedSize > MAX_XLSX_EXPANDED_BYTES) {
-            throw new ValidationError("The Excel workbook contains unsafe files or exceeds the extraction limits.");
-          }
-          total += entry.uncompressedSize;
-          const stream = await new Promise<import("node:stream").Readable>((accept, refuse) => {
-            zip.openReadStream(entry, (streamError, content) => {
-              if (streamError || !content) refuse(streamError);
-              else accept(content);
-            });
-          });
-          let size = 0;
-          let crc = 0xffffffff;
-          try {
-            for await (const chunk of stream) {
-              const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-              size += buffer.length;
-              if (size > entry.uncompressedSize || size + total - entry.uncompressedSize > MAX_XLSX_EXPANDED_BYTES) {
-                throw new ValidationError("The Excel workbook exceeds the extraction limits.");
-              }
-              crc = crc32(buffer, crc);
-            }
-          } finally {
-            stream.destroy();
-          }
-          if (size !== entry.uncompressedSize || ((crc ^ 0xffffffff) >>> 0) !== entry.crc32) {
-            throw new ValidationError("The Excel workbook is damaged.");
-          }
-          if (!done) zip.readEntry();
-        })().catch((caught: unknown) => fail(caught instanceof ValidationError ? caught.message : undefined));
-      });
-      zip.readEntry();
-    });
-  });
-}
-
 function validateXlsxFile(sourceFolder: string, file: string): void {
   if (!fs.existsSync(file) || !isInsideFolder(sourceFolder, file)) {
     throw new ValidationError("That file isn't in this organisation's analytics folder.");
   }
   const extension = path.extname(file).toLowerCase();
-  if (extension === ".xls") throw new ValidationError("Older Excel files (.xls) aren't supported. Save the file as .xlsx.");
-  if (extension === ".xlsm") throw new ValidationError("Excel files with macros (.xlsm) aren't supported.");
+  if (extension === ".xls") throw new ValidationError("Older Excel files (.xls) aren't supported. Open it in Excel and save it as an Excel workbook (.xlsx).");
+  if (extension === ".xlsm") throw new ValidationError(XLSX_MESSAGES.macros);
   if (extension !== ".xlsx") throw new ValidationError("Choose an Excel workbook (.xlsx).");
   if (fs.statSync(file).size > MAX_XLSX_FILE_BYTES) throw new ValidationError("Excel workbooks must be 50 MB or smaller.");
-  const descriptor = fs.openSync(file, "r");
-  const signature = Buffer.alloc(8);
-  try {
-    fs.readSync(descriptor, signature, 0, signature.length, 0);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-  if (signature.equals(Buffer.from("d0cf11e0a1b11ae1", "hex"))) {
-    throw new ValidationError("This Excel workbook is password-protected. Remove its password and try again.");
-  }
 }
 
 function validateSheetName(sheetName?: string | null): string | undefined {
   if (sheetName === undefined || sheetName === null || sheetName === "") return undefined;
-  if (sheetName.length > 31 || /[\u0000-\u001f\u007f]/.test(sheetName)) {
+  if (typeof sheetName !== "string" || sheetName.length > 31 || /[\u0000-\u001f\u007f]/.test(sheetName)) {
     throw new ValidationError("An Excel sheet name must be 1 to 31 characters.");
   }
   return sheetName;
 }
 
-function excelCellText(value: unknown, numberFormat?: string): string {
-  if (value === null || value === undefined) return "";
-  if (value instanceof Date) {
-    const format = numberFormat?.replace(/"[^"]*"|\\./g, "") ?? "";
-    return /h/i.test(format) ? value.toISOString().slice(0, 23).replace("T", " ") : value.toISOString().slice(0, 10);
-  }
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "object") {
-    if (Array.isArray((value as { richText?: unknown }).richText)) {
-      return (value as { richText: Array<{ text?: string }> }).richText.map((part) => part.text ?? "").join("");
-    }
-    if ("result" in value) return excelCellText((value as { result?: unknown }).result, numberFormat);
-    if ("text" in value) return String((value as { text?: unknown }).text ?? "");
-    if ("error" in value) return String((value as { error?: unknown }).error ?? "");
-    return "";
-  }
-  return String(value);
+/** Checks a workbook and finds its sheets (decision 376). */
+async function openXlsx(sourceFolder: string, file: string) {
+  validateXlsxFile(sourceFolder, file);
+  const checked = await checkXlsxArchive(file, XLSX_LOAD_LIMITS);
+  return { checked, structure: await xlsxStructure(checked) };
 }
 
-function csvField(value: string): string {
-  return /[,"\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
-}
+/** Rows read for a preview: enough for DuckDB's type guess (its sample is 20,480 rows). */
+const XLSX_PREVIEW_ROWS = 20_481;
 
-async function writeXlsxSheetAsCsv(file: string, destination: string, chosenSheet?: string): Promise<{ sheets: string[]; sheetName: string }> {
-  const ExcelJS = await import("exceljs");
-  const reader = new ExcelJS.stream.xlsx.WorkbookReader(file, {
-    worksheets: "emit",
-    sharedStrings: "cache",
-    hyperlinks: "ignore",
-    styles: "cache",
-    entries: "ignore",
-  });
-  const output = fs.createWriteStream(destination, { flags: "wx", mode: 0o600 });
-  const writing = finished(output);
-  const sheets: string[] = [];
-  let selected = "";
-  let bytesWritten = 0;
-  try {
-    for await (const worksheet of reader) {
-      const name = (worksheet as unknown as { name: string }).name;
-      sheets.push(name);
-      if (name === (chosenSheet ?? sheets[0])) selected = name;
-      for await (const row of worksheet) {
-        if (name !== selected) continue;
-        const values = (row.values as unknown[]).slice(1).map((value, index) => excelCellText(value, row.getCell(index + 1).numFmt));
-        const line = `${values.map(csvField).join(",")}\r\n`;
-        bytesWritten += Buffer.byteLength(line);
-        if (bytesWritten > MAX_XLSX_CSV_BYTES) throw new ValidationError("The Excel sheet is too large to load.");
-        if (!output.write(line)) await once(output, "drain");
-      }
-    }
-    output.end();
-    await writing;
-  } catch (error) {
-    output.destroy();
-    await writing.catch(() => undefined);
-    if (error instanceof ValidationError) throw error;
-    throw new ValidationError(`That Excel workbook couldn't be read: ${loadErrorMessage(error)}`);
-  }
-  if (!sheets.length) throw new ValidationError("That Excel workbook has no sheets.");
-  if (!selected) {
-    throw new ValidationError(`The sheet "${chosenSheet}" wasn't found in this Excel workbook.`);
-  }
-  return { sheets, sheetName: selected };
-}
-
-async function withTemporaryXlsxCsv<T>(
-  file: string,
-  sheetName: string | undefined,
-  work: (folder: string, csvFile: string, workbook: { sheets: string[]; sheetName: string }) => Promise<T>,
-): Promise<T> {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "tohyee-analytics-xlsx-"));
-  const csvFile = path.join(folder, "sheet.csv");
-  try {
-    const workbook = await writeXlsxSheetAsCsv(file, csvFile, sheetName);
-    return await work(folder, csvFile, workbook);
-  } finally {
-    fs.rmSync(folder, { recursive: true, force: true });
-  }
-}
-
+/**
+ * A look at an Excel sheet, like inspectCsv: its sheets, headings, suggested
+ * types and first rows. A sheet that isn't there any more falls back to the
+ * first, so setup can carry on.
+ */
 export async function inspectXlsx(
   sourceFolder: string,
   fileName: string,
   sheetName?: string,
 ): Promise<Awaited<ReturnType<typeof inspectCsv>> & { sheets: string[]; sheetName: string }> {
-  const chosenSheet = validateSheetName(sheetName);
+  const chosen = validateSheetName(sheetName);
   const file = resolveSourceFile(sourceFolder, fileName);
-  validateXlsxFile(sourceFolder, file);
-  await validateXlsxArchive(file);
-  const inspect = (sheet?: string) => withTemporaryXlsxCsv(file, sheet, async (folder, csvFile, workbook) => ({
-    ...(await inspectCsv(folder, path.basename(csvFile))),
-    sheets: workbook.sheets,
-    sheetName: workbook.sheetName,
-  }));
+  const { checked, structure } = await openXlsx(sourceFolder, file);
+  const sheet = structure.sheets.find((candidate) => candidate.name === chosen) ?? structure.sheets[0];
+  // The scratch CSV is checked by inspectCsv's own throwaway database, limited to this folder.
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "tohyee-xlsx-"));
   try {
-    return await inspect(chosenSheet);
-  } catch (error) {
-    if (chosenSheet && error instanceof ValidationError && error.message === `The sheet "${chosenSheet}" wasn't found in this Excel workbook.`) {
-      return inspect();
-    }
-    throw error;
+    const csvFile = path.join(folder, "sheet.csv");
+    await writeXlsxSheetCsv(file, checked, structure, sheet, csvFile, { maxBytes: MAX_XLSX_CSV_BYTES, maxRows: XLSX_PREVIEW_ROWS });
+    const inspected = await inspectCsv(folder, "sheet.csv", ",");
+    return { ...inspected, sheets: structure.sheets.map((candidate) => candidate.name), sheetName: sheet.name };
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
   }
 }
 
+/** Temporary sheet copies sit in the analytics data folder, which DuckDB may read (decision 377). */
+function xlsxScratchPrefix(organisationId: string): string {
+  return `.xlsx-${organisationId}-`;
+}
+
+function removeStaleXlsxScratch(organisationId: string, dataFolder: string): void {
+  // Left behind only if the server stopped mid-load.
+  const prefix = xlsxScratchPrefix(organisationId);
+  let names: string[] = [];
+  try {
+    names = fs.readdirSync(dataFolder);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (!name.startsWith(prefix)) continue;
+    const full = path.join(dataFolder, name);
+    try {
+      if (Date.now() - fs.statSync(full).mtimeMs > 60 * 60 * 1000) fs.rmSync(full, { recursive: true, force: true });
+    } catch {
+      // Gone already.
+    }
+  }
+}
+
+/**
+ * Loads one sheet of an Excel workbook into `table` through the same path as
+ * a CSV (decision 376): every cell as text, the same explicit casts, the same
+ * staging table swapped in only when the whole sheet has loaded.
+ */
 export async function loadXlsx(input: {
   organisationId: string;
   sourceFolder: string;
@@ -499,32 +368,48 @@ export async function loadXlsx(input: {
 }): Promise<CsvLoadResult> {
   const sheetName = validateSheetName(input.sheetName);
   validateLoadInput(input);
-  validateXlsxFile(input.sourceFolder, input.file);
-  await validateXlsxArchive(input.file);
-  return serialise(input.organisationId, () =>
-    withTemporaryXlsxCsv(input.file, sheetName, async (_folder, csvFile) =>
-      withAnalytics(input.organisationId, (connection) =>
-        loadCsvInto(connection, { ...input, file: csvFile, delimiter: "," }),
-      ),
-    ),
-  );
+  const { checked, structure } = await openXlsx(input.sourceFolder, input.file);
+  const sheet = chooseSheet(structure, sheetName);
+  const dataFolder = path.dirname(analyticsFilePath(input.organisationId));
+  return serialise(input.organisationId, async () => {
+    fs.mkdirSync(dataFolder, { recursive: true });
+    removeStaleXlsxScratch(input.organisationId, dataFolder);
+    const folder = fs.mkdtempSync(path.join(dataFolder, xlsxScratchPrefix(input.organisationId)));
+    try {
+      const csvFile = path.join(folder, "sheet.csv");
+      await writeXlsxSheetCsv(input.file, checked, structure, sheet, csvFile, { maxBytes: MAX_XLSX_CSV_BYTES });
+      return await withAnalytics(
+        input.organisationId,
+        (connection) => loadCsvInto(connection, { ...input, file: csvFile, delimiter: ",", quote: '"' }),
+        input.sourceFolder,
+      );
+    } finally {
+      fs.rmSync(folder, { recursive: true, force: true });
+    }
+  });
 }
 
+/** Looks at a CSV or Excel file for setup. */
 export async function inspectSourceFile(
   sourceFolder: string,
   fileName: string,
   delimiter?: string,
   sheetName?: string,
-): Promise<Awaited<ReturnType<typeof inspectCsv>> | (Awaited<ReturnType<typeof inspectCsv>> & { sheets: string[]; sheetName: string })> {
-  const extension = path.extname(fileName).toLowerCase();
-  if (extension === ".xlsx") return inspectXlsx(sourceFolder, fileName, sheetName);
-  if (extension === ".xls" || extension === ".xlsm") {
+): Promise<Awaited<ReturnType<typeof inspectCsv>> & { sheets?: string[]; sheetName?: string }> {
+  if (isExcelFileName(fileName)) {
     const file = resolveSourceFile(sourceFolder, fileName);
     validateXlsxFile(sourceFolder, file);
+    return inspectXlsx(sourceFolder, fileName, sheetName);
   }
   return inspectCsv(sourceFolder, fileName, delimiter);
 }
 
+/** .xlsx, and the Excel files that are refused with a reason (.xls, .xlsm). */
+export function isExcelFileName(fileName: string): boolean {
+  return /\.(xlsx|xlsm|xls)$/i.test(fileName);
+}
+
+/** Loads a source's file, CSV or Excel. */
 export async function loadSourceFile(input: {
   organisationId: string;
   sourceFolder: string;
@@ -534,10 +419,7 @@ export async function loadSourceFile(input: {
   delimiter?: string;
   sheetName?: string | null;
 }): Promise<CsvLoadResult> {
-  const extension = path.extname(input.file).toLowerCase();
-  if (extension === ".xlsx" || extension === ".xls" || extension === ".xlsm") {
-    return loadXlsx(input);
-  }
+  if (isExcelFileName(input.file)) return loadXlsx(input);
   return loadCsv(input);
 }
 
@@ -617,7 +499,8 @@ export function resolveSourceFile(sourceFolder: string, fileName: string): strin
 
 export type SourceFile = { name: string; sizeBytes: number; modifiedAt: string };
 
-const DATA_FILE = /\.(csv|tsv|txt|xlsx)$/i;
+// .xls and .xlsm are listed so choosing one says why it can't be loaded.
+const DATA_FILE = /\.(csv|tsv|txt|xlsx|xlsm|xls)$/i;
 
 /** The CSV and Excel files in a folder and the folders inside it (three levels), newest first. */
 export function listSourceFiles(sourceFolder: string): SourceFile[] {
