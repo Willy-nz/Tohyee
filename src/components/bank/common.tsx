@@ -3,7 +3,7 @@
 import { Money } from "@/components/books";
 import { Badge, ui } from "@/components/ui";
 import type { Account } from "@/lib/accounts/service";
-import type { BankAccount, BankFeedStatus, StatementLine } from "@/lib/bank/accounts";
+import type { BankAccount, BankFeedStatus, SimpleFinFeedStatus, StatementLine } from "@/lib/bank/accounts";
 import { formatDateTime } from "@/lib/format";
 
 export const ACCOUNT_TYPE_LABELS: Record<BankAccount["accountType"], string> = {
@@ -50,7 +50,16 @@ export function isStatementAccount(account: Account): boolean {
   return account.accountType === "bank" || account.accountType === "credit_card";
 }
 
-export function FeedBadge({ feed }: { feed: BankFeedStatus }) {
+export function FeedBadge({ feed, simplefin = null }: { feed: BankFeedStatus; simplefin?: SimpleFinFeedStatus | null }) {
+  if (!feed.active && simplefin) {
+    if (simplefin.lastSyncStatus === "failed") return <Badge tone="red">SimpleFIN failed</Badge>;
+    if (simplefin.lastSyncStatus === "never") return <Badge tone="amber">SimpleFIN waiting</Badge>;
+    return (
+      <span title={simplefin.lastSyncedAt ? `Last synced ${formatDateTime(simplefin.lastSyncedAt)}` : undefined}>
+        <Badge tone="green">SimpleFIN on</Badge>
+      </span>
+    );
+  }
   if (!feed.active) return <Badge>No feed</Badge>;
   if (feed.lastSyncStatus === "failed") return <Badge tone="red">Feed failed</Badge>;
   if (feed.lastSyncStatus === "never") return <Badge tone="amber">Feed waiting</Badge>;

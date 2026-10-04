@@ -43,6 +43,9 @@
  * bank account's folder or mailbox when due, every 6 hours by default
  * (off with TOHYEE_FILE_FEEDS_SCHEDULER=off).
  *
+ * And SimpleFIN bank feeds, which sync each organisation's SimpleFIN Bridge
+ * accounts when due (off with TOHYEE_SIMPLEFIN_SCHEDULER=off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -156,6 +159,15 @@ export async function register() {
       startFileFeedScheduler();
     } catch (error) {
       console.warn("[tohyee] Statement file feeds couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (process.env.TOHYEE_SIMPLEFIN_SCHEDULER !== "off") {
+    try {
+      const { startSimpleFinScheduler } = await import("@/lib/bank/simplefin/service");
+      startSimpleFinScheduler();
+    } catch (error) {
+      console.warn("[tohyee] SimpleFIN syncs couldn't start:", error instanceof Error ? error.message : error);
     }
   }
 

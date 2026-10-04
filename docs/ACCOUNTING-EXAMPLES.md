@@ -1499,7 +1499,7 @@ Not supported yet (refused rather than guessed): zipped statement files;
 Tohyee's own email addresses (no relay); checking a file's account number
 against the bank account; moving or deleting files after reading them.
 
-### SimpleFIN bank feeds (examples not yet approved by Jess)
+### SimpleFIN bank feeds (approved by Jess, 5 Oct 2026)
 
 Stage 1b, part 2, of the Xero add-ons plan. SimpleFIN is an open protocol
 (simplefin.org/protocol.html). Its **SimpleFIN Bridge** reaches banks through
@@ -1598,19 +1598,18 @@ two accounts, `ACT-1` Checking (USD) and `ACT-2` Savings (USD).
 Only admins connect, link, unlink and disconnect; bookkeepers press Sync now;
 viewers see the last sync, as BK15.
 
-**Questions for Jess (SimpleFIN), with proposed answers:**
-1. Should SimpleFIN be offered at all, given the Bridge's banks are mostly
-   US (its own pages don't list countries, and Tohyee hasn't checked which
-   NZ or Australian banks it reaches)? Proposed: yes, for organisations with
-   US or other overseas accounts; NZ banks stay with Akahu.
-2. The date of a line: the `posted` moment's date in a time zone chosen per
-   linked account, defaulting to the organisation's (SF3)? The protocol
-   gives a time, not the bank's date, so without a zone a US evening
-   transaction would land on the next day in New Zealand.
-3. Keep lines as first received when the bank changes a posted transaction
-   (SF4), as with Akahu, rather than updating unreconciled lines?
-4. Sync now refused after 20 requests in 24 hours (keeping under the
-   Bridge's 24)?
+Tests: `tests/integration/bank-simplefin.test.ts`.
+
+**Questions for Jess (SimpleFIN), decided** (Jess approved the examples
+and chose the proposed answers on 5 Oct 2026):
+1. Offer SimpleFIN for organisations with US or other overseas accounts; NZ
+   banks stay with Akahu (the Bridge's own pages don't list countries, and
+   Tohyee hasn't checked which NZ or Australian banks it reaches).
+2. A line's date is the `posted` moment's date in a time zone chosen per
+   linked account, defaulting to the organisation's (SF3).
+3. Lines are kept as first received when the bank changes a posted
+   transaction (SF4), as with Akahu.
+4. Sync now is refused after 20 requests in 24 hours (the Bridge allows 24).
 
 Not supported (refused rather than guessed): pending transactions,
 investment holdings (the demo returns them; they're ignored), custom

@@ -26,9 +26,9 @@ import { optionalSource, requireId, requireIdempotencyKey, requireString } from 
 export type StatementImport = {
   id: string;
   accountId: string;
-  source: "file" | "akahu";
+  source: "file" | "akahu" | "simplefin";
   fileName: string | null;
-  fileFormat: StatementFormat | "akahu";
+  fileFormat: StatementFormat | "akahu" | "simplefin";
   /** Brought in by a folder or mailbox feed (BF1, BF7) rather than by hand. */
   fileFeed: "folder" | "mailbox" | null;
   lineCount: number;
@@ -47,9 +47,9 @@ export type StatementImport = {
 type ImportRow = {
   id: string;
   account_id: string;
-  source: "file" | "akahu";
+  source: "file" | "akahu" | "simplefin";
   file_name: string | null;
-  file_format: StatementFormat | "akahu";
+  file_format: StatementFormat | "akahu" | "simplefin";
   file_feed: "folder" | "mailbox" | null;
   line_count: number;
   duplicate_count: number;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { ACCOUNT_TYPE_LABELS, FeedBadge } from "@/components/bank/common";
 import { CurrencyMoney } from "@/components/bank/foreign";
+import { SimpleFinSettingsCard } from "@/components/bank/simplefin";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -318,7 +319,7 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
                       )}
                     </td>
                     <td>
-                      <FeedBadge feed={account.feed} />
+                      <FeedBadge feed={account.feed} simplefin={account.simplefin} />
                       {account.feed.akahuAccountName ? <div className={ui.muted}>{account.feed.akahuAccountName}</div> : null}
                     </td>
                   </tr>
@@ -337,6 +338,12 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
         description="This organisation's own Akahu personal app, which brings in its bank and credit card transactions automatically."
       >
         <AkahuSettingsCard organisationId={organisationId} />
+      </Card>
+      <Card
+        title="SimpleFIN bank feeds"
+        description="For overseas bank accounts (mostly US banks): this organisation's own SimpleFIN Bridge account brings in their transactions. NZ banks use Akahu."
+      >
+        <SimpleFinSettingsCard organisationId={organisationId} />
       </Card>
     </>
   );
