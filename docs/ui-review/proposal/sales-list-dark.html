@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tohyee proposal – Sales list dark</title>
+    <link rel="stylesheet" href="./mockup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <div class="frame">
+        <div class="topbar">
+          <div class="brand">
+            <span class="brand-badge active">Proposal only</span>
+            <strong>Sales</strong>
+            <span class="muted">Invoices list</span>
+          </div>
+          <div class="toolbar">
+            <button class="ghost">Export</button>
+            <button class="ghost">Columns</button>
+            <button class="button primary">New invoice</button>
+          </div>
+        </div>
+
+        <section class="page-header">
+          <span class="kicker active">List page</span>
+          <h1>Put the dashboard first, the dense columns second.</h1>
+          <p>Keep the power of the existing list, but default to faster scanning and calmer controls.</p>
+        </section>
+
+        <section class="dashboard-strip">
+          <article class="tile medium">
+            <h2>Awaiting payment</h2>
+            <div class="metric">NZ$7,860</div>
+            <div class="muted">Aged receivables total</div>
+          </article>
+          <article class="tile medium">
+            <h2>Overdue</h2>
+            <div class="metric">NZ$2,440</div>
+            <div class="muted">Matches overdue receivables</div>
+          </article>
+          <article class="tile medium">
+            <h2>Customers overdue</h2>
+            <div class="metric">2</div>
+            <div class="muted">Count from receivables rows</div>
+          </article>
+          <article class="tile large">
+            <h2>Sales by salesperson</h2>
+            <div class="mini-bars" aria-hidden="true">
+              <span style="height: 42%"></span><span style="height: 74%"></span><span style="height: 63%"></span><span style="height: 28%"></span>
+            </div>
+            <div class="muted">Pinned to the page from the existing report or a shared Analytics tile.</div>
+          </article>
+        </section>
+
+        <section class="card">
+          <div class="header-actions">
+            <div class="stack">
+              <h2>Invoices</h2>
+              <div class="segmented">
+                <span class="active">All</span>
+                <span>Drafts</span>
+                <span>Awaiting</span>
+                <span>Overdue</span>
+                <span>More</span>
+              </div>
+            </div>
+            <div class="toolbar">
+              <span class="badge active">Search Kobe</span>
+              <button class="ghost">Filters</button>
+              <button class="ghost">More</button>
+            </div>
+          </div>
+
+          <div class="summary-rail">
+            <div class="cell"><span class="muted">Visible rows</span><strong>27</strong></div>
+            <div class="cell"><span class="muted">Shown columns</span><strong>6 core</strong></div>
+            <div class="cell"><span class="muted">Hidden detail</span><strong>Reference · salesperson · custom fields</strong></div>
+          </div>
+
+          <div class="table-card">
+            <table>
+              <thead>
+                <tr><th>Customer</th><th>Invoice / date</th><th>Due state</th><th>Status</th><th class="num">Total</th><th class="num">Amount due</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Kobe Ltd</strong><div class="muted">Ref PO-1880 hidden until expanded</div></td>
+                  <td><strong>INV-0107</strong><div class="muted">04 Oct 2026</div></td>
+                  <td><span class="status-chip warning">Overdue · 3 days</span></td>
+                  <td><span class="badge active">Approved</span></td>
+                  <td class="num">2,760.00</td>
+                  <td class="num">2,760.00</td>
+                </tr>
+                <tr>
+                  <td><strong>Mānuka Vets</strong><div class="muted">Owner: Jess Wong</div></td>
+                  <td><strong>Draft #9</strong><div class="muted">02 Oct 2026</div></td>
+                  <td><span class="status-chip info">Due 16 Oct</span></td>
+                  <td><span class="badge">Draft</span></td>
+                  <td class="num">1,180.00</td>
+                  <td class="num">—</td>
+                </tr>
+                <tr>
+                  <td><strong>Kobe Ltd</strong><div class="muted">Salesperson hidden</div></td>
+                  <td><strong>INV-0106</strong><div class="muted">28 Sep 2026</div></td>
+                  <td><span class="status-chip success">Paid</span></td>
+                  <td><span class="badge active">Approved</span></td>
+                  <td class="num">1,200.00</td>
+                  <td class="num">0.00</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>
