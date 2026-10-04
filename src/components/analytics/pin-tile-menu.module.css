@@ -9,6 +9,7 @@
   list-style: none;
   color: var(--link);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .menu > summary::-webkit-details-marker {
@@ -26,7 +27,10 @@
   right: 0;
   display: grid;
   gap: 10px;
+  width: max-content;
   min-width: 210px;
+  /* Never wider than a phone screen less its gutters. */
+  max-width: min(320px, calc(100vw - 32px));
   max-height: 300px;
   overflow: auto;
   margin-top: 4px;
@@ -34,7 +38,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-raised);
-  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 0.12));
+  box-shadow: var(--shadow-lg);
 }
 
 .page,
@@ -48,11 +52,19 @@
   background: none;
   padding: 0;
   color: var(--link);
+  font: inherit;
   text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .page button:disabled {
   opacity: 0.6;
+  cursor: default;
+}
+
+.muted {
+  color: var(--text-muted);
 }
 
 .error {

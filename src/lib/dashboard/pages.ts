@@ -1,3 +1,8 @@
+/**
+ * The pages with a dashboard frame (decision 372), and so the pages an
+ * Analytics tile can be pinned to (decision 374). Add Sales, Purchases,
+ * Banking and CRM home here when they get their frames.
+ */
 export const DASHBOARD_PAGES = [
   {
     id: "home",
@@ -10,6 +15,9 @@ export const DASHBOARD_PAGES = [
     ],
   },
 ] as const;
+
+/** A page shows at most this many tiles, defaults and pinned together. */
+export const MAX_DASHBOARD_TILES = 4;
 
 export type DashboardPage = (typeof DASHBOARD_PAGES)[number];
 

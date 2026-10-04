@@ -1,5 +1,6 @@
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
+import { MAX_DASHBOARD_TILES } from "@/lib/dashboard/pages";
 
 export type DashboardPreference = { hidden: boolean; tiles: string[] };
 
@@ -21,7 +22,7 @@ export async function getDashboardPreference(
   const row = result.rows[0];
   if (!row) return { hidden: false, tiles: [...input.defaultTiles] };
   const tiles = parseTiles(row.tiles, allowedTiles);
-  return { hidden: row.hidden, tiles: tiles.length > 0 ? tiles.slice(0, 4) : [...input.defaultTiles] };
+  return { hidden: row.hidden, tiles: tiles.length > 0 ? tiles.slice(0, MAX_DASHBOARD_TILES) : [...input.defaultTiles] };
 }
 
 export async function saveDashboardPreference(
@@ -37,7 +38,7 @@ export async function saveDashboardPreference(
 ): Promise<DashboardPreference> {
   if (typeof input.hidden !== "boolean") throw new ValidationError("hidden must be true or false.");
   const allowedTiles = input.allowedTiles ?? input.defaultTiles;
-  const tiles = parseTiles(input.tiles, allowedTiles).slice(0, 4);
+  const tiles = parseTiles(input.tiles, allowedTiles).slice(0, MAX_DASHBOARD_TILES);
   if (tiles.length === 0) throw new ValidationError("Pick at least one tile.");
   await tx.query(
     `insert into dashboard_preferences (user_id, page, hidden, tiles, updated_at)

@@ -341,42 +341,36 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
             <section key={tile.id} className={`${styles.tile} ${tile.width === "full" ? styles.full : ""}`}>
               <div className={styles.tileHeader}>
                 <h2 className={styles.tileTitle}>{tile.title}</h2>
-                <div className={styles.tileTools}>
-                  <PinTileMenu
-                    organisationId={organisationId}
-                    dashboardId={dashboard.id}
-                    dashboardName={dashboard.name}
-                    tileId={tile.id}
-                    tileTitle={tile.title}
-                  />
-                  {editing ? (
-                    <>
-                      <Button size="small" variant="secondary" aria-label={`Move ${tile.title} earlier`} onClick={() => moveTile(index, -1)} disabled={busy || index === 0}>
-                        ↑
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="secondary"
-                        aria-label={`Move ${tile.title} later`}
-                        onClick={() => moveTile(index, 1)}
-                        disabled={busy || index === dashboard.tiles.length - 1}
-                      >
-                        ↓
-                      </Button>
-                      <Button size="small" variant="secondary" onClick={() => setEditingTile(tile)} disabled={busy}>
-                        Edit
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="danger"
-                        onClick={() => void save({ ...dashboard, tiles: dashboard.tiles.filter((entry) => entry.id !== tile.id) })}
-                        disabled={busy}
-                      >
-                        Remove
-                      </Button>
-                    </>
-                  ) : null}
-                </div>
+                {editing ? (
+                  <div className={styles.tileTools}>
+                    <Button size="small" variant="secondary" aria-label={`Move ${tile.title} earlier`} onClick={() => moveTile(index, -1)} disabled={busy || index === 0}>
+                      ↑
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="secondary"
+                      aria-label={`Move ${tile.title} later`}
+                      onClick={() => moveTile(index, 1)}
+                      disabled={busy || index === dashboard.tiles.length - 1}
+                    >
+                      ↓
+                    </Button>
+                    <Button size="small" variant="secondary" onClick={() => setEditingTile(tile)} disabled={busy}>
+                      Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="danger"
+                      onClick={() => void save({ ...dashboard, tiles: dashboard.tiles.filter((entry) => entry.id !== tile.id) })}
+                      disabled={busy}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  // Only saved tiles can be pinned, so not while the dashboard is being changed.
+                  <PinTileMenu organisationId={organisationId} dashboardId={dashboard.id} tileId={tile.id} />
+                )}
               </div>
               <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={tile} filters={shown} />
             </section>
