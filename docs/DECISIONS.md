@@ -2787,3 +2787,39 @@ think is best").
      is kept on the contact but not used. Bank rules don't use them (their
      lines say their own account). Screenshot:
      [the contact's defaults](screenshots/contact-defaults-dark.png).
+
+### Automatic statement files (decisions 385-387)
+
+385. **A bank or credit card account can have feeds that bring statement
+     files in by themselves** (examples BF1-BF10, approved by Jess on
+     5 Oct 2026; tenant migration 0092), like the OCA bank-statement-import
+     modules for Odoo, for banks with no feed Tohyee can use. A **folder
+     feed** reads one subfolder of the organisation's bank files folder; a
+     **mailbox feed** reads one mailbox folder or Gmail label, through the
+     admin's own CRM Gmail or Microsoft mailbox or IMAP with an app password
+     (stored encrypted), kept with the feed so it doesn't need Analytics.
+     Each file goes through the same importers and duplicate rules as a file
+     imported by hand, and nothing is posted. A file is read again only when
+     its name or contents change (SHA-256), each mail message once; what a
+     place has given an account is kept when the feed is removed, so linking
+     it again doesn't import old files twice. Feeds are checked every 6 hours
+     by default (1 to 24, as Akahu; Jess, 5 Oct 2026) and with Check now;
+     the schedule looks for due feeds every 15 minutes
+     (`TOHYEE_FILE_FEEDS_SCHEDULER=off` turns it off). Admins set feeds up,
+     bookkeepers check them, viewers see the last check. Tohyee gives out no
+     email addresses of its own: Jess won't run a relay.
+386. **A server admin chooses each organisation's bank files folder** (Jess,
+     5 Oct 2026), as Analytics folders (decision 358): the server app's
+     "Bank files folders" page, `/api/admin/bank-file-folders` or
+     `admin bank folder --id ORG --folder PATH`. Organisation admins pick a
+     subfolder by name; names with separators or `..`, and links that lead
+     outside the folder, are refused. Organisations see subfolder names,
+     never the server path. Files are only read, never moved or deleted.
+387. **CSV and Excel files from a feed use the account's saved column layout
+     strictly** (Jess, 5 Oct 2026): the first file of a kind is imported by
+     hand, and a file whose columns don't match waits with "Columns don't
+     match the last file imported by hand." Tohyee doesn't guess columns for
+     a file nobody looked at. Importing it by hand once saves the new layout.
+     - Screenshots: the Bank feed tab ([light](screenshots/bank-file-feeds-light.png),
+       [dark](screenshots/bank-file-feeds-dark.png), [phone](screenshots/bank-file-feeds-phone.png))
+       and the server's [Bank files folders](screenshots/bank-files-folders-dark.png).

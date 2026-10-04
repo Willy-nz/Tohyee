@@ -89,6 +89,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bank_account_settings  per bank/card account: statement balance, import layout, Akahu feed link, bank file format and account number (P5)
 ├─ akahu_connections      the organisation's own Akahu personal app (tokens encrypted)
 ├─ bank_statement_imports, bank_statement_lines   statement files and bank feed syncs
+├─ bank_file_feeds        per bank/card account: folders and mailboxes statement files are read from (BF1-BF10; IMAP passwords encrypted)
+├─ bank_file_feed_seen    what each place has given an account (file or message, SHA-256), kept when a feed is removed
 ├─ bank_reconciliations, bank_reconciliation_items   which journal lines each statement line is
 ├─ bank_reconciliation_splits   one journal line reconciled across several statement lines
 ├─ bank_transactions, bank_transaction_lines   spend and receive money
@@ -1016,6 +1018,18 @@ Enforced by the app (and covered by tests):
   a second. Feed lines carry Akahu's transaction id, so a line is never added
   twice; lines that match a file line on date and amount are flagged as
   possible duplicates rather than skipped.
+- Automatic statement files (`src/lib/bank/file-feeds.ts`, decisions
+  385-387): a check takes a 10-minute lease on the feed, lists its folder or
+  mailbox outside any transaction, and imports each new file or attachment
+  in its own short transaction through `importStatementFromFeed` (the same
+  readers and duplicate rules as a hand import, `command_source 'feed'`,
+  `bank_statement_imports.file_feed`). What has been read is kept in
+  `bank_file_feed_seen` by place, name and SHA-256, separate from the feed,
+  so removing and relinking a feed doesn't import anything twice. The bank
+  files folder is a server setting (`bank_file_folders` in the core
+  `server_settings`, `src/lib/bank/file-folders.ts`); subfolders are
+  resolved through real paths and must stay inside it. Mailbox feeds reuse
+  the report-email readers (`src/lib/analytics/report-email-providers.ts`).
 - Tracking categories (advanced features): `tracking_categories` and a tree
   of `tracking_values` per organisation. Lines store their tags as a jsonb
   map `{categoryId: valueId}` (`tracking` on document lines and

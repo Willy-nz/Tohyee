@@ -3,6 +3,7 @@ import { writeAuditEvent } from "@/lib/audit";
 import { addStatementLines, lockStatementAccount, type AddLinesResult } from "@/lib/bank/accounts";
 import { RowError } from "@/lib/bank/formats/common";
 import {
+  detectFormat,
   MAX_STATEMENT_FILE_BYTES,
   parseLayout,
   readStatementFile,
@@ -28,6 +29,8 @@ export type StatementImport = {
   source: "file" | "akahu";
   fileName: string | null;
   fileFormat: StatementFormat | "akahu";
+  /** Brought in by a folder or mailbox feed (BF1, BF7) rather than by hand. */
+  fileFeed: "folder" | "mailbox" | null;
   lineCount: number;
   duplicateCount: number;
   possibleDuplicateCount: number;
@@ -47,6 +50,7 @@ type ImportRow = {
   source: "file" | "akahu";
   file_name: string | null;
   file_format: StatementFormat | "akahu";
+  file_feed: "folder" | "mailbox" | null;
   line_count: number;
   duplicate_count: number;
   possible_duplicate_count: number;
@@ -61,7 +65,7 @@ type ImportRow = {
 };
 
 const IMPORT_SELECT = `
-  select i.id, i.account_id, i.source, i.file_name, i.file_format, i.line_count, i.duplicate_count,
+  select i.id, i.account_id, i.source, i.file_name, i.file_format, i.file_feed, i.line_count, i.duplicate_count,
          i.possible_duplicate_count, i.status, i.created_by_email, i.created_at, i.deleted_at, i.deleted_by_email,
          (select count(*) from bank_statement_lines b where b.import_id = i.id and b.status = 'reconciled')::text
            as reconciled_count,
@@ -76,6 +80,7 @@ function toImport(row: ImportRow): StatementImport {
     source: row.source,
     fileName: row.file_name,
     fileFormat: row.file_format,
+    fileFeed: row.file_feed,
     lineCount: row.line_count,
     duplicateCount: row.duplicate_count,
     possibleDuplicateCount: row.possible_duplicate_count,
@@ -369,4 +374,102 @@ export async function deleteImport(tx: OrgTx, importIdInput: unknown): Promise<S
     details: { accountId: statement.accountId, fileName: statement.fileName, lineCount: statement.lineCount },
   });
   return getImport(tx, importId);
+}
+
+export type FeedImportResult = {
+  result: "imported" | "no_new" | "failed";
+  /** Why a file wasn't imported, as the feed lists it (BF4, BF5). */
+  reason: string | null;
+  linesAdded: number;
+  importId: string | null;
+};
+
+export const COLUMNS_DONT_MATCH = "Columns don't match the last file imported by hand.";
+
+/**
+ * A statement file brought in by a feed (BF1-BF10): the same reading and
+ * duplicate rules as an import by hand, but CSV and Excel files must fit the
+ * account's saved column layout (BF4, decision 387): Tohyee doesn't guess an
+ * automatic file's columns. A file that can't be imported says why instead
+ * of throwing, so one bad file doesn't stop the rest. A file with no new
+ * lines adds no import (BF2).
+ */
+export async function importStatementFromFeed(
+  tx: OrgTx,
+  accountId: string,
+  input: { fileName: string; bytes: Buffer; feed: "folder" | "mailbox"; key: string },
+): Promise<FeedImportResult> {
+  const failed = (reason: string): FeedImportResult => ({ result: "failed", reason, linesAdded: 0, importId: null });
+  let file: StatementFile;
+  try {
+    const format = detectFormat(input.fileName, input.bytes);
+    if (format === "csv" || format === "xlsx") {
+      const saved = await savedLayout(tx, accountId);
+      if (saved == null) return failed("Import one file of this kind by hand first, so Tohyee knows its columns.");
+      let layout: TableLayout | null;
+      try {
+        layout = parseLayout(saved);
+      } catch {
+        return failed(COLUMNS_DONT_MATCH);
+      }
+      file = readStatementFile(input.fileName, input.bytes, layout);
+      if (file.errors.some((error) => /^The file has no ".*" column|^Choose the/.test(error))) return failed(COLUMNS_DONT_MATCH);
+    } else {
+      file = readStatementFile(input.fileName, input.bytes);
+    }
+  } catch (error) {
+    if (error instanceof RowError || error instanceof ValidationError) return failed(error.message);
+    throw error;
+  }
+  if (file.errors.length > 0) {
+    return failed(
+      `The file has ${file.errors.length} problem${file.errors.length === 1 ? "" : "s"}: ${file.errors.slice(0, 3).join(" ")}${file.errors.length > 3 ? " …" : ""}`,
+    );
+  }
+  if (file.lines.length === 0) return failed("The file has no transactions to import.");
+  const account = await lockStatementAccount(tx, accountId);
+  try {
+    assertFileCurrency(file, account);
+  } catch (error) {
+    if (error instanceof ValidationError) return failed(error.message);
+    throw error;
+  }
+  const counts = await addStatementLines(tx, accountId, null, file.lines, { dryRun: true });
+  if (counts.added === 0) return { result: "no_new", reason: null, linesAdded: 0, importId: null };
+  const inserted = await tx.query<{ id: string }>(
+    `insert into bank_statement_imports (
+       command_source, idempotency_key, request_hash, account_id, source, file_name, file_format, line_count,
+       duplicate_count, possible_duplicate_count, created_by_user_id, created_by_email, file_feed
+     ) values ('feed', $1, $2, $3, 'file', $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
+    [
+      input.key,
+      createHash("sha256").update(input.bytes).digest("hex"),
+      accountId,
+      input.fileName.slice(0, 255),
+      file.format,
+      counts.added,
+      counts.duplicates,
+      counts.possibleDuplicates,
+      tx.actor.userId,
+      tx.actor.email,
+      input.feed,
+    ],
+  );
+  const importId = inserted.rows[0].id;
+  await addStatementLines(tx, accountId, importId, file.lines);
+  await writeAuditEvent(tx, {
+    eventType: "statement.imported",
+    entityType: "bank_statement_import",
+    entityId: importId,
+    details: {
+      accountCode: account.code,
+      fileName: input.fileName,
+      format: file.format,
+      feed: input.feed,
+      added: counts.added,
+      duplicates: counts.duplicates,
+      possibleDuplicates: counts.possibleDuplicates,
+    },
+  });
+  return { result: "imported", reason: null, linesAdded: counts.added, importId };
 }

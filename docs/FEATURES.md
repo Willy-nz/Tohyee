@@ -542,7 +542,15 @@ that something happened.
   with column mapping that's remembered per account, OFX/QFX/QBO, QIF,
   CAMT.053 and MT940; up to 10 MB) or through an **Akahu bank feed** (NZ),
   which can bring in history from a chosen start date (as far back as Akahu
-  and the bank allow) and then syncs in the background. Duplicates are
+  and the bank allow) and then syncs in the background. **Automatic
+  statement files**: for banks without a feed, each account can read new
+  statement files by itself from a folder inside the organisation's bank
+  files folder (chosen by a server admin) or from a mailbox folder or Gmail
+  label (the admin's own CRM mailbox, or IMAP with an app password), every
+  6 hours by default (1-24) or with Check now. Each file is imported as if
+  by hand, read again only when it changes; CSV and Excel files must match
+  the columns of the last file imported by hand, or they wait (examples
+  BF1-BF10, decisions 385-387). Duplicates are
   skipped; lines that look like a file-and-feed duplicate are flagged. Each
   line is reconciled by matching what's already posted (within 60 days),
   paying invoices or bills, creating spend or receive money (with GST), or a
@@ -1423,6 +1431,9 @@ isn't acceptable, because people would trust it:
 - import staging (other than bank statements and the one-file-at-a-time
   import checks, which save nothing), and importing transactions from before
   a conversion date
+- automatic statement files from zipped files, Tohyee's own email addresses
+  (there's no relay), checking a file's account number, or moving or
+  deleting files after reading them
 - bank feeds from providers other than Akahu, Akahu feeds for
   foreign-currency accounts (Akahu's transactions don't say their currency),
   an adjustment when splitting one posted transaction across several

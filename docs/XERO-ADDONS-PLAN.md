@@ -57,7 +57,8 @@ phone width).
    5 Oct 2026; decisions 380-384; tenant migration 0091).
 2. **1b. More bank feeds** (Jess, 5 Oct 2026: Claude chose the order). One PR
    each: (i) automatic statement files, a folder and a mailbox per bank
-   account (examples BF1-BF10, waiting for Jess); (ii) SimpleFIN, an open
+   account (examples BF1-BF10 approved by Jess 5 Oct 2026; decisions
+   385-387; tenant migration 0092; **built**); (ii) SimpleFIN, an open
    protocol whose SimpleFIN Bridge (US$15 a year, the organisation's own
    account) reaches US banks, as Actual Budget uses it; (iii) Stripe;
    (iv) PayPal; (v) Wise (its statement API needs a request-signing key the

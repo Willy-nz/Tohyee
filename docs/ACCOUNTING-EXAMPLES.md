@@ -1371,7 +1371,7 @@ history to bring in.
 - **BK16** Akahu's balance for the account is kept as the statement balance
   with its date, shown next to the ledger balance.
 
-### Automatic statement files: a folder and a mailbox per bank account (examples not yet approved by Jess)
+### Automatic statement files: a folder and a mailbox per bank account (approved by Jess, 5 Oct 2026)
 
 Stage 1b, part 1, of the Xero add-ons plan (5 Oct 2026). Most banks have no
 API Tohyee can use, but nearly all can email a statement file on a schedule
@@ -1390,10 +1390,11 @@ posted: lines arrive unreconciled, exactly as an import by hand.
   (for example `ANZ business`, where the bank's scheduled export or a
   OneDrive sync puts its files). Tohyee only reads: files are never moved,
   changed or deleted.
-- **A mailbox feed** reads one mailbox folder or Gmail label, through a
-  mailbox the organisation has connected for report emails (its CRM Gmail or
-  Microsoft mailbox, or IMAP with an app password, decisions 362 and 376).
-  Statement files attached to the messages there are imported; other
+- **A mailbox feed** reads one mailbox folder or Gmail label, through the
+  admin's own mailbox connected in the CRM (Gmail or Microsoft), or IMAP
+  with an app password (stored encrypted), the same connections report
+  emails use (decisions 362 and 376) but kept with the feed, so it doesn't
+  need Analytics. Statement files attached to the messages there are imported; other
   attachments (PDFs, images) are ignored. Mail is never changed. Tohyee
   doesn't give out email addresses of its own (there's no relay): set a rule
   in the mailbox to file the bank's emails into that folder or label.
@@ -1483,12 +1484,16 @@ subfolder `ANZ business`.
 - **BF10** Removing a feed keeps every import it made and what's been seen,
   so linking the same subfolder again doesn't import old files twice.
 
-**Questions for Jess (automatic statement files), with proposed answers:**
-1. Check every 6 hours by default, 1-24 as Akahu?
-2. CSV and Excel files with different columns wait for a person (BF4)
-   rather than Tohyee guessing the columns?
+**Questions for Jess (automatic statement files), decided** (Jess approved
+the examples and the proposed answers on 5 Oct 2026):
+1. Every 6 hours by default, 1 to 24 as Akahu: **yes** (decision 385).
+2. CSV and Excel files with different columns wait for a person (BF4);
+   Tohyee doesn't guess: **yes** (decision 387).
 3. A server admin chooses each organisation's bank files folder, as for
-   Analytics, and organisation admins pick subfolders of it (BF9)?
+   Analytics, and organisation admins pick subfolders of it (BF9): **yes**
+   (decision 386).
+
+Tests: `tests/integration/bank-file-feeds.test.ts`.
 
 Not supported yet (refused rather than guessed): zipped statement files;
 Tohyee's own email addresses (no relay); checking a file's account number
