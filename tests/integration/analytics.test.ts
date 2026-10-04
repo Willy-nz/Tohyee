@@ -260,4 +260,16 @@ describeWithDatabase("analytics sources and loads", () => {
     expect(other.data.folder).toEqual({ chosen: false, readable: false });
     expect(other.data.files).toEqual([]);
   });
+
+  it("lets DuckDB read only this organisation's own folder, and that can't be switched off (decision 377)", async () => {
+    // Inside the source folder is fine; root's secret.csv sits outside it.
+    expect(await queryAnalytics(ORG, `select count(*)::int as n from read_csv('${path.join(folder, "exports", "sales.csv").replaceAll("'", "''")}')`)).toEqual([{ n: expect.any(Number) }]);
+    await expect(queryAnalytics(ORG, `select * from read_csv('${path.join(root, "secret.csv").replaceAll("'", "''")}')`)).rejects.toThrow(/Permission Error|Cannot access/);
+    await expect(queryAnalytics(ORG, "select * from read_text('/etc/hostname')")).rejects.toThrow(/Permission Error|Cannot access/);
+    await expect(queryAnalytics(ORG, "set enable_external_access = true")).rejects.toThrow(/Cannot change configuration/);
+    await expect(queryAnalytics(ORG, "install httpfs")).rejects.toThrow();
+    // Another organisation has no folder, so it can read none.
+    await expect(queryAnalytics(OTHER, `select * from read_csv('${path.join(folder, "exports", "sales.csv").replaceAll("'", "''")}')`)).rejects.toThrow(/Permission Error|Cannot access/);
+    await closeAnalytics(OTHER);
+  });
 });
