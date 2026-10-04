@@ -1,0 +1,66 @@
+/* A pinned Analytics tile: sized like Home's own tiles, with a dashed edge so it reads as borrowed from a dashboard. */
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 16px 18px 18px;
+  box-shadow: var(--shadow);
+}
+
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.title {
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.source {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.source:hover {
+  color: var(--link);
+}
+
+.kpi {
+  display: grid;
+  gap: 4px;
+  min-height: 70px;
+  align-content: center;
+}
+
+.kpiValue {
+  font-size: 1.75rem;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.chart {
+  min-width: 0;
+}
+
+.chart :global([role="img"]) {
+  height: 140px;
+  min-height: 120px;
+}

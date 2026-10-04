@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
+import { PinTileMenu } from "@/components/analytics/pin-tile-menu";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
@@ -392,7 +393,10 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                       Remove
                     </Button>
                   </div>
-                ) : null}
+                ) : (
+                  // Only saved tiles can be pinned, so not while the dashboard is being changed.
+                  <PinTileMenu organisationId={organisationId} dashboardId={dashboard.id} tileId={tile.id} />
+                )}
               </div>
               <TileBody organisationId={organisationId} dashboardId={dashboard.id} tile={tile} filters={shown} />
             </section>

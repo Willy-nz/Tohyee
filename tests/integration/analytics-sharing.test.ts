@@ -5,6 +5,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import * as foldersRoute from "@/app/api/admin/analytics-folders/route";
 import * as analyticsRoute from "@/app/api/analytics/route";
 import * as booksRoute from "@/app/api/analytics/books/route";
+import * as dashboardPreferencesRoute from "@/app/api/dashboard-preferences/route";
 import * as dashboardRoute from "@/app/api/analytics/dashboards/[dashboardId]/route";
 import * as sharesRoute from "@/app/api/analytics/dashboards/[dashboardId]/shares/route";
 import * as dashboardsRoute from "@/app/api/analytics/dashboards/route";
@@ -313,6 +314,43 @@ describeWithDatabase("analytics dashboard sharing", () => {
       noContext,
     );
     expect([403, 404]).toContain(other.status);
+  });
+
+  it("lets a report viewer pin only a shared dashboard tile", async () => {
+    const sharedReference = `analytics:${sharedId}:regions`;
+    const preference = await body(
+      await dashboardPreferencesRoute.GET(
+        apiRequest(`/api/dashboard-preferences?organisationId=${ORG}&page=home`, { cookie: clientCookie }),
+        noContext,
+      ),
+    );
+    expect(preference.status).toBe(200);
+    expect(preference.data.tiles).toEqual(["cash_in_bank", "owed_to_you", "bills_to_pay", "next_gst_return"]);
+
+    const saved = await body(
+      await dashboardPreferencesRoute.PUT(
+        apiRequest("/api/dashboard-preferences", {
+          method: "PUT",
+          cookie: clientCookie,
+          body: { organisationId: ORG, page: "home", hidden: false, tiles: ["cash_in_bank", "owed_to_you", "bills_to_pay", sharedReference] },
+        }),
+        noContext,
+      ),
+    );
+    expect(saved.status).toBe(200);
+    expect(saved.data.tiles).toContain(sharedReference);
+
+    const privatePin = await body(
+      await dashboardPreferencesRoute.PUT(
+        apiRequest("/api/dashboard-preferences", {
+          method: "PUT",
+          cookie: clientCookie,
+          body: { organisationId: ORG, page: "home", hidden: false, tiles: [sharedReference, `analytics:${privateId}:regions`] },
+        }),
+        noContext,
+      ),
+    );
+    expect(privatePin.status).toBe(404);
   });
 
   it("offers slicer values only for a shared dashboard's slicers", async () => {

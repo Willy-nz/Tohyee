@@ -3,9 +3,9 @@ import path from "node:path";
 import type { DuckDBConnection, DuckDBInstance } from "@duckdb/node-api";
 import { ValidationError } from "@/lib/errors";
 import { organisationSourceFolder } from "@/lib/analytics/folders";
-import { analyticsFilePath } from "@/lib/analytics/paths";
+import { analyticsFilePath, analyticsWorkFolder } from "@/lib/analytics/paths";
 
-export { analyticsFilePath, analyticsFolder } from "@/lib/analytics/paths";
+export { analyticsFilePath, analyticsFolder, analyticsWorkFolder } from "@/lib/analytics/paths";
 
 /**
  * The analytics engine (decisions 353-357): one DuckDB file per organisation
@@ -68,9 +68,13 @@ async function duckdb(): Promise<typeof import("@duckdb/node-api")> {
 type Opened = { instance: Promise<DuckDBInstance>; folder: string | null };
 const instances = new Map<string, Opened>();
 
-/** The folders DuckDB may read and write: the organisation's source folder and its own data folder. */
-function allowedFolders(file: string, folder: string | null): string[] {
-  const folders = [path.dirname(file)];
+/**
+ * The folders DuckDB may read and write: the organisation's source folder and
+ * its own work folder. Not the analytics folder: that holds every
+ * organisation's file. DuckDB opens its own database file regardless.
+ */
+function allowedFolders(work: string, folder: string | null): string[] {
+  const folders = [work];
   if (folder) {
     folders.push(folder);
     try {
@@ -82,18 +86,22 @@ function allowedFolders(file: string, folder: string | null): string[] {
   return [...new Set(folders.map((entry) => (entry.endsWith(path.sep) ? entry : entry + path.sep)))];
 }
 
-async function open(file: string, folder: string | null): Promise<DuckDBInstance> {
+async function open(organisationId: string, file: string, folder: string | null): Promise<DuckDBInstance> {
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  const work = analyticsWorkFolder(organisationId);
+  fs.mkdirSync(work, { recursive: true });
   const { DuckDBInstance } = await duckdb();
   // Extensions are never downloaded at run time (the server may be
   // offline, and it's code from the internet).
   const instance = await DuckDBInstance.create(file, { autoinstall_known_extensions: "false" });
   // Defence in depth (decision 377): DuckDB may only touch this
-  // organisation's source folder and its own data folder, and the setting
-  // can't be changed back, so no query can read other files on the server.
+  // organisation's source folder and its own work folder, and the setting
+  // can't be changed back, so no query can read other files on the server
+  // or another organisation's analytics file.
   const setup = await instance.connect();
   try {
-    const list = allowedFolders(file, folder).map(quoteString).join(", ");
+    await setup.run(`set temp_directory = ${quoteString(path.join(work, "tmp"))}`);
+    const list = allowedFolders(work, folder).map(quoteString).join(", ");
     await setup.run(`set allowed_directories = [${list}]`);
     await setup.run("set enable_external_access = false");
     await setup.run("set lock_configuration = true");
@@ -118,7 +126,7 @@ async function instanceFor(organisationId: string, folderHint?: string): Promise
     instances.delete(file);
     (await current.instance.catch(() => null))?.closeSync();
   }
-  const instance = open(file, folder);
+  const instance = open(organisationId, file, folder);
   instances.set(file, { instance, folder });
   instance.catch(() => {
     if (instances.get(file)?.instance === instance) instances.delete(file);
