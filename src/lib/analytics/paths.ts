@@ -23,3 +23,14 @@ export function analyticsFilePath(organisationId: string): string {
   if (!ORGANISATION_ID.test(organisationId)) throw new ValidationError("Unknown organisation.");
   return path.join(analyticsFolder(), `${organisationId}.duckdb`);
 }
+
+/**
+ * The organisation's own working folder inside the analytics folder: the
+ * only part of it that organisation's DuckDB may touch (decision 377), for
+ * temporary files while sorting or loading. The analytics folder itself
+ * holds every organisation's file, so it is never allowed as a whole.
+ */
+export function analyticsWorkFolder(organisationId: string): string {
+  if (!ORGANISATION_ID.test(organisationId)) throw new ValidationError("Unknown organisation.");
+  return path.join(analyticsFolder(), `${organisationId}.work`);
+}
