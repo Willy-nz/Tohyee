@@ -1,0 +1,72 @@
+.menu {
+  position: relative;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.menu > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--link);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu > summary::after {
+  content: " ▾";
+  color: var(--text-muted);
+}
+
+.list {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  display: grid;
+  gap: 10px;
+  width: max-content;
+  min-width: 210px;
+  /* Never wider than a phone screen less its gutters. */
+  max-width: min(320px, calc(100vw - 32px));
+  max-height: 300px;
+  overflow: auto;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+}
+
+.page,
+.replacements {
+  display: grid;
+  gap: 6px;
+}
+
+.page button {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--link);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.page button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.error {
+  color: var(--danger-text);
+}

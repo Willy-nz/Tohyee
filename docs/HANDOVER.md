@@ -196,15 +196,22 @@ decision 370, 0087; report emails (#111) are decision 371, 0088 (Copilot
 built #107, #110 and #111; Claude reviewed and fixed them). All released in
 **v0.5.0** (3 Oct 2026). UI review step 1 (#117, decision 372, tenant
 migration 0089: top bar, notices bell, dashboard preferences, Home) and
-search everything (#118, decision 373, no migration) are built.
-Excel sources and report-email attachments (#121, decision 376, tenant
-migration 0090) use the existing MIT-licensed ExcelJS package; sources store
-their chosen worksheet, and workbooks are streamed with size and ZIP
-expansion checks. Old `.xls`, `.xlsm` and password-protected workbooks are
-refused. DuckDB's file access is limited (decision 377). Next numbers: tenant
-migration 0091, core migration 0007, decision 378 (374-375 are reserved for
-pinned tiles #119 and pivot tables #120). Still to do for Analytics: pivot
-tables (Perspective).
+search everything (#118, decision 373, no migration) are built. Pinned
+Analytics tiles (#122 for issue #119, decision 374, no migration) put
+dashboard tiles on Home; the pages they can go on are listed in
+`src/lib/dashboard/pages.ts`. Analytics pivot tiles are built (#123 for issue
+#120, decision 375): exact server-side DuckDB aggregates, a 2,000-cell cap,
+subtotals, a read-only HTML grid, restricted cell drill-down and CSV/Excel
+exports. Perspective was not added because its viewer package is 14 MB
+unpacked and needs browser-side WASM and controls to be explicitly locked
+down. Excel sources and report-email attachments (#124 for issue #121,
+decision 376, tenant migration 0090) use the existing MIT-licensed ExcelJS
+package; sources store their chosen worksheet, and workbooks are streamed
+with size and ZIP expansion checks. Old `.xls`, `.xlsm` and
+password-protected workbooks are refused. DuckDB's file access is limited
+(decision 377); pins are kept while hidden (decision 378); every Analytics
+question stops after 30 seconds (decision 379). Next numbers: tenant
+migration 0091, core migration 0007, decision 380.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

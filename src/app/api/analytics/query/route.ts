@@ -1,6 +1,6 @@
 import { json, readJson, route, withOrganisation } from "@/lib/api/http";
 import { roleAtLeast } from "@/lib/auth/roles";
-import { allowedFilters, getDashboard, runTile, tileOf } from "@/lib/analytics/dashboards";
+import { allowedFilters, getDashboard, runPivotDrilldown, runTile, tileOf } from "@/lib/analytics/dashboards";
 import type { DashboardFilters } from "@/lib/analytics/query";
 import { requireAnalytics } from "@/lib/analytics/sources";
 import { ForbiddenError } from "@/lib/errors";
@@ -33,10 +33,11 @@ export const POST = route(async (request) => {
     const reader = { userId: auth.user.id, reportViewer: membership.role === "report_viewer" };
     if (body.dashboardId !== undefined) {
       const dashboard = await getDashboard(tx, String(body.dashboardId), reader);
-      return { organisationId: tx.organisationId, query: { tile: tileOf(dashboard, body.tileId).query, filters: allowedFilters(dashboard, filters, reader) } };
+      return { organisationId: tx.organisationId, query: { tile: tileOf(dashboard, body.tileId), filters: allowedFilters(dashboard, filters, reader) } };
     }
     if (!roleAtLeast(membership.role, "viewer")) throw new ForbiddenError("You can only see the dashboards shared with you.");
-    return { organisationId: tx.organisationId, query: { tile: body.query, filters } };
+    return { organisationId: tx.organisationId, query: { tile: { query: body.query }, filters } };
   });
-  return json(await runTile(organisationId, query.tile, query.filters));
+  if (body.drill !== undefined) return json(await runPivotDrilldown(organisationId, query.tile.query, query.filters, body.drill));
+  return json(await runTile(organisationId, query.tile.query, query.filters));
 });

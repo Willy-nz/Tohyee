@@ -5,6 +5,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import * as foldersRoute from "@/app/api/admin/analytics-folders/route";
 import * as analyticsRoute from "@/app/api/analytics/route";
 import * as booksRoute from "@/app/api/analytics/books/route";
+import * as dashboardPreferencesRoute from "@/app/api/dashboard-preferences/route";
 import * as dashboardRoute from "@/app/api/analytics/dashboards/[dashboardId]/route";
 import * as sharesRoute from "@/app/api/analytics/dashboards/[dashboardId]/shares/route";
 import * as dashboardsRoute from "@/app/api/analytics/dashboards/route";
@@ -14,6 +15,7 @@ import * as sourcesRoute from "@/app/api/analytics/sources/route";
 import * as tablesRoute from "@/app/api/analytics/tables/route";
 import * as valuesRoute from "@/app/api/analytics/values/route";
 import * as membersRoute from "@/app/api/organisations/[organisationId]/members/route";
+import * as reportExportRoute from "@/app/api/reports/export/route";
 import * as settingsRoute from "@/app/api/organisations/[organisationId]/settings/route";
 import { closeAnalytics } from "@/lib/analytics/engine";
 import type { SessionUser } from "@/lib/auth/sessions";
@@ -64,6 +66,21 @@ describeWithDatabase("analytics dashboard sharing", () => {
       sort: { by: "category", direction: "asc" },
     },
   });
+  const pivotTile = {
+    id: "pivot",
+    title: "Sales by region and channel",
+    visual: "pivot",
+    width: "full",
+    query: {
+      table: "sales",
+      pivot: { rows: [{ field: "region" }], column: { field: "channel" } },
+      measures: [{ label: "Sales", aggregate: "sum", field: "quantity", times: "unit_price" }],
+      filters: [],
+      dateField: "order_date",
+      sort: { by: "category", direction: "asc" },
+      limit: null,
+    },
+  };
 
   const makeDashboard = async (name: string, slicers: unknown[]) => {
     const made = await body(
@@ -71,7 +88,7 @@ describeWithDatabase("analytics dashboard sharing", () => {
         apiRequest("/api/analytics/dashboards", {
           method: "POST",
           cookie: ownerCookie,
-          body: { organisationId: ORG, name, settings: { slicers }, tiles: [tile("regions")] },
+          body: { organisationId: ORG, name, settings: { slicers }, tiles: [tile("regions"), pivotTile] },
         }),
         noContext,
       ),
@@ -95,7 +112,7 @@ describeWithDatabase("analytics dashboard sharing", () => {
     fs.mkdirSync(folder);
     fs.writeFileSync(
       path.join(folder, "sales.csv"),
-      "Date,Region,Channel,Qty,Price\n2026-03-05,Otago,Web,2,10.00\n2026-03-09,Canterbury,Shop,1,0.10\n2026-04-01,Otago,Shop,1,0.20\n",
+      "Date,Region,Channel,Qty,Price,Private note\n2026-03-05,Otago,Web,2,10.00,private web\n2026-03-09,Canterbury,Shop,1,0.10,private shop\n2026-04-01,Otago,Shop,1,0.20,private retail\n",
     );
     process.env.TOHYEE_ANALYTICS_DIR = path.join(root, "data");
     server = await startTestServer();
@@ -128,6 +145,7 @@ describeWithDatabase("analytics dashboard sharing", () => {
               { source: "Channel", name: "channel", kind: "text" },
               { source: "Qty", name: "quantity", kind: "quantity" },
               { source: "Price", name: "unit_price", kind: "money" },
+              { source: "Private note", name: "private_note", kind: "text" },
             ],
           },
         }),
@@ -211,10 +229,128 @@ describeWithDatabase("analytics dashboard sharing", () => {
     const probing = await body(await runTile(clientCookie, { dashboardId: sharedId, tileId: "regions", filters: { values: { channel: ["Web"] } } }));
     expect(probing.data.rows).toEqual(answer.data.rows);
 
+    const pivot = await body(await runTile(clientCookie, { dashboardId: sharedId, tileId: "pivot" }));
+    expect(pivot.status).toBe(200);
+    expect(pivot.data.pivot.columns.map((column: { key: string }) => column.key)).toEqual(["c0_m0", "c1_m0", "total_m0"]);
+    const otago = pivot.data.pivot.rows.find((row: { kind: string; dimensions: string[] }) => row.kind === "detail" && row.dimensions[0] === "Otago");
+    expect(otago.cells).toEqual({ c0_m0: "0.200000", c1_m0: "20.000000", total_m0: "20.200000" });
+    const drilled = await body(
+      await runTile(clientCookie, {
+        dashboardId: sharedId,
+        tileId: "pivot",
+        drill: { depth: 1, dimensions: ["Otago"], pivotValue: "Web", total: false },
+      }),
+    );
+    expect(drilled.data.rows).toEqual([{ d0: "Otago", d1: "Web", d2: "2.0000", d3: "10.00", d4: "2026-03-05" }]);
+    expect(drilled.data.columns.map((column: { label: string }) => column.label)).not.toContain("private_note");
+    expect(drilled.data.rows[0]).not.toHaveProperty("d5");
+
+    // The dashboard's own slicer narrows the pivot and its drill-down; any other field is dropped.
+    const slicedPivot = await body(await runTile(clientCookie, { dashboardId: sharedId, tileId: "pivot", filters: { values: { region: ["Canterbury"] } } }));
+    expect(slicedPivot.data.pivot.rows.map((row: { kind: string; dimensions: string[] }) => [row.kind, row.dimensions[0]])).toEqual([
+      ["detail", "Canterbury"],
+      ["grand_total", null],
+    ]);
+    const probingPivot = await body(
+      await runTile(clientCookie, { dashboardId: sharedId, tileId: "pivot", filters: { values: { channel: ["Web"] } }, drill: { depth: 0, dimensions: [null], pivotValue: null, total: true } }),
+    );
+    expect(probingPivot.data.rows).toHaveLength(3);
+    const slicedDrill = await body(
+      await runTile(clientCookie, { dashboardId: sharedId, tileId: "pivot", filters: { values: { region: ["Canterbury"] } }, drill: { depth: 0, dimensions: [null], pivotValue: null, total: true } }),
+    );
+    expect(slicedDrill.data.rows.map((row: Record<string, string>) => row.d0)).toEqual(["Canterbury"]);
+    // A drill-down is only for a saved, shared pivot tile.
+    const drillAll = { depth: 0, dimensions: [null], pivotValue: null, total: true };
+    expect((await runTile(clientCookie, { query: pivotTile.query, drill: drillAll })).status).toBe(403);
+    expect((await runTile(clientCookie, { dashboardId: privateId, tileId: "pivot", drill: drillAll })).status).toBe(404);
+    expect((await runTile(clientCookie, { dashboardId: sharedId, tileId: "regions", drill: drillAll })).status).toBe(400);
+    expect((await runTile(clientCookie, { dashboardId: sharedId, tileId: "pivot", drill: { ...drillAll, dimensions: [] } })).status).toBe(400);
+
     const raw = await runTile(clientCookie, { query: tile("regions").query });
     expect(raw.status).toBe(403);
     expect((await runTile(clientCookie, { dashboardId: privateId, tileId: "regions" })).status).toBe(404);
     expect((await runTile(clientCookie, { dashboardId: sharedId, tileId: "nope" })).status).toBe(404);
+  });
+
+  it("lets a report viewer export a pivot as CSV or Excel, but nothing else", async () => {
+    const pivotData = (report: string) => ({
+      report,
+      organisationName: "Share Co",
+      title: "Sales by region and channel",
+      period: "All dates",
+      basis: null,
+      filters: [],
+      producedAt: "2026-10-04T00:00:00.000Z",
+      tables: [
+        {
+          columns: ["Region", "Grand total · Sales"],
+          rows: [
+            { cells: [{ text: "Otago" }, { text: "$0.30", value: "0.30", numeric: true }] },
+            { kind: "total", cells: [{ text: "Grand total" }, { text: "$1,000,000,000,000,000.90", value: "1000000000000000.90", numeric: true }] },
+          ],
+        },
+      ],
+    });
+    const exportAs = (format: string, report = "analytics-pivot", organisationId = ORG) =>
+      reportExportRoute.POST(
+        apiRequest("/api/reports/export", { method: "POST", cookie: clientCookie, body: { organisationId, format, data: pivotData(report) } }),
+        noContext,
+      );
+    const csv = await exportAs("csv");
+    expect(csv.status).toBe(200);
+    const text = await csv.text();
+    expect(text).toContain("Otago,0.30");
+    expect(text).toContain("Grand total,1000000000000000.90");
+    expect((await exportAs("xlsx")).status).toBe(200);
+    expect((await exportAs("pdf")).status).toBe(400);
+    expect((await exportAs("csv", "profit-and-loss")).status).toBe(403);
+    expect((await exportAs("csv", "analytics-pivot", "share-other")).status).toBeGreaterThanOrEqual(403);
+  });
+
+  it("keeps a report viewer to their own organisation's dashboards", async () => {
+    await createTestOrganisation(owner, "share-other");
+    const other = await queryRoute.POST(
+      apiRequest("/api/analytics/query", { method: "POST", cookie: clientCookie, body: { organisationId: "share-other", dashboardId: sharedId, tileId: "pivot" } }),
+      noContext,
+    );
+    expect([403, 404]).toContain(other.status);
+  });
+
+  it("lets a report viewer pin only a shared dashboard tile", async () => {
+    const sharedReference = `analytics:${sharedId}:regions`;
+    const preference = await body(
+      await dashboardPreferencesRoute.GET(
+        apiRequest(`/api/dashboard-preferences?organisationId=${ORG}&page=home`, { cookie: clientCookie }),
+        noContext,
+      ),
+    );
+    expect(preference.status).toBe(200);
+    expect(preference.data.tiles).toEqual(["cash_in_bank", "owed_to_you", "bills_to_pay", "next_gst_return"]);
+
+    const saved = await body(
+      await dashboardPreferencesRoute.PUT(
+        apiRequest("/api/dashboard-preferences", {
+          method: "PUT",
+          cookie: clientCookie,
+          body: { organisationId: ORG, page: "home", hidden: false, tiles: ["cash_in_bank", "owed_to_you", "bills_to_pay", sharedReference] },
+        }),
+        noContext,
+      ),
+    );
+    expect(saved.status).toBe(200);
+    expect(saved.data.tiles).toContain(sharedReference);
+
+    const privatePin = await body(
+      await dashboardPreferencesRoute.PUT(
+        apiRequest("/api/dashboard-preferences", {
+          method: "PUT",
+          cookie: clientCookie,
+          body: { organisationId: ORG, page: "home", hidden: false, tiles: [sharedReference, `analytics:${privateId}:regions`] },
+        }),
+        noContext,
+      ),
+    );
+    expect(privatePin.status).toBe(404);
   });
 
   it("offers slicer values only for a shared dashboard's slicers", async () => {
@@ -243,5 +379,6 @@ describeWithDatabase("analytics dashboard sharing", () => {
     const listed = await body(await dashboardsRoute.GET(apiRequest(`/api/analytics/dashboards?organisationId=${ORG}`, { cookie: clientCookie }), noContext));
     expect(listed.data.dashboards).toEqual([]);
     expect((await runTile(clientCookie, { dashboardId: sharedId, tileId: "regions" })).status).toBe(404);
+    expect((await runTile(clientCookie, { dashboardId: sharedId, tileId: "pivot", drill: { depth: 0, dimensions: [null], pivotValue: null, total: true } })).status).toBe(404);
   });
 });

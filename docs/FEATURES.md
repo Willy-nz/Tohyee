@@ -1314,8 +1314,18 @@ that something happened.
   are checked against the table and typed values go in as parameters.
   Bookkeepers and up make dashboards; everyone in the organisation can see
   them. Tried with the made-up 1M-row CSV: a five-tile dashboard opens in
-  about 3 seconds. Tohyee's own books and CRM, sharing with clients,
-  shaping and pivot tables are the next steps.
+  about 3 seconds. Analytics also copies Tohyee's books and CRM, shares
+  dashboards with report viewers and supports shaping.
+  Pivot tiles have one to five row fields, an optional column field and
+  exact sum/count/average/minimum/maximum values, with date groups by month,
+  quarter or year. DuckDB returns the cells and subtotals without sending raw
+  source rows to the browser; results above 2,000 cells ask for more filtering
+  or grouping. Subtotals and totals are worked out by DuckDB, so they equal
+  their rows exactly. Cells drill into up to 500 matching rows showing only
+  the tile's own fields. Shared report viewers can see, drill and export only
+  saved pivots on dashboards shared with them. The read-only grid is an
+  accessible HTML table; CSV and Excel exports use the standard report
+  export (decision 375).
 
 - **Analytics, step 2: the books and CRM** (examples AB1-AB10, decision
   367). Each organisation's ledger lines, invoices, bills, contacts, items and
@@ -1329,6 +1339,15 @@ that something happened.
   (Share, in a dashboard's edit mode, for bookkeepers and up), using that
   dashboard's slicers and dates. They can't see the books, the data tables or
   anything else in the organisation.
+- **Pinned Analytics tiles** (decision 374, issue #119). "Pin to page" on a
+  dashboard tile puts it on Home, next to or in place of the default tiles
+  (still four at most); Customise lists both. A pinned tile shows the saved
+  question with the dashboard's own dates (a key figure, a small chart or a
+  table's first rows), has a dashed edge and "From <dashboard name>", and
+  opens the dashboard. Access is checked every time the page loads: report
+  viewers can only pin dashboards shared with them, and a pin from a deleted
+  or unshared dashboard or tile drops off, as all pins do while Analytics is
+  off.
 - **Search everything** (decision 373). Ctrl K finds records as well as
   pages: contacts, invoices, bills, credit notes, quotes and orders, payments,
   bank lines, journals, items, accounts, fixed assets and CRM records. Search

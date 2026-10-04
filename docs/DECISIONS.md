@@ -2587,6 +2587,71 @@ approved 3 Oct 2026.
      - **No indexes yet:** a plain `like` over the words is fast enough for the
        sizes Tohyee is used at; add indexes if that changes.
 
+### Pinned Analytics tiles (decision 374)
+
+374. **A dashboard tile can be pinned to a page with a dashboard frame**
+     (issue #119, step 3 of `docs/UI-REVIEW-2026.md`, no migration). Today
+     that's only Home; the pages are listed once, in
+     `src/lib/dashboard/pages.ts`, so Sales, Purchases, Banking and CRM home
+     can be added there.
+     - **Stored as a reference:** `analytics:<dashboard id>:<tile id>` in the
+       person's own `dashboard_preferences.tiles` for that page, next to the
+       default tile ids, still at most four tiles. Nothing of the tile is
+       copied. A reference is only read in the organisation it's saved in,
+       so it can never name another organisation's dashboard.
+     - **Access is checked on every load, not only when pinning.** The page's
+       tiles are filtered to the defaults plus the tiles of the dashboards the
+       person can open now (a report viewer: only those shared with them,
+       decision 368). A pin from a dashboard that's deleted, unshared or no
+       longer has the tile, or while Analytics is off, quietly drops off
+       (the defaults show if nothing is left); the saved row isn't rewritten,
+       so sharing again or switching Analytics back on brings it back, even
+       if the person saves the page's tiles in the meantime (decision 378). Saving a reference
+       the person can't open is refused as not found (so dashboards can't be
+       probed); while Analytics is off, pinning is refused.
+     - **Shown through the dashboard query path** (`dashboardId` + `tileId`),
+       with the dashboard's own dates and no slicers: a key figure, a small
+       chart, or a table's first rows. It has a dashed edge and "From
+       <dashboard name>", and opens the dashboard.
+     - **Pin to page** is on each tile in Analytics (not while the dashboard
+       is being edited); a full page offers to replace one of its tiles. It
+       only lists pages the person can open, so report viewers (who can't
+       open Home) don't see it.
+       Customise lists the page's defaults and the person's pinned tiles.
+
+### Analytics: dashboard pivot tables (decision 375)
+
+375. **A pivot is a saved, read-only dashboard tile** (issue #120). It has one
+     to five row fields, zero or one column field, and one to six sum, count,
+     average, minimum or maximum values. Date fields group by month, quarter or
+     year, as charts do. DuckDB groups the loaded data on the server (grouping
+     sets) and returns only pivot cells, with subtotals and grand totals; more
+     than 2,000 value cells, totals included, is refused with "Too many rows
+     and columns; filter or group further". Rows sort by their fields, each
+     group followed by its subtotal, the grand total last; columns sort by
+     value. Each cell can open at most 500 matching rows, showing only the
+     saved tile's fields (rows, column, values and date). Report viewers can
+     run and drill only pivots on dashboards shared with them, with the same
+     slicer restrictions as other tiles.
+     - Money remains DECIMAL and averages use `exactAverageSql`; every
+       subtotal and total is worked out by DuckDB from the underlying rows
+       (an average total is the average of the rows, not of the averages),
+       never added up in the browser.
+     - An accessible HTML table rather than Perspective (which decision 361
+       planned): the browser only ever gets at most 2,000 finished cells, so
+       Perspective's browser-side engine would have nothing to do but re-add
+       them; the current viewer (`@perspective-dev/viewer` 5.5) is 14 MB
+       unpacked plus a WASM engine, and its toolbar would need locking down
+       to stay read-only. Revisit it for an interactive explore view.
+     - CSV and Excel go through the standard report export
+       (`/api/reports/export`, report `analytics-pivot`), which report viewers
+       may use for pivots only (no PDF; the file is made from what their page
+       already shows). Values with more than 15 significant digits, which
+       Excel can't hold exactly, go into the workbook as decimal text (this
+       applies to every report export).
+     - Theme previews: [light](screenshots/analytics-pivot-light.png) and
+       [dark](screenshots/analytics-pivot-dark.png).
+
 ### Analytics: Excel files (decision 376)
 
 376. **Analytics loads Excel workbooks (.xlsx), and report emails save them**
@@ -2647,3 +2712,22 @@ approved 3 Oct 2026.
      - The first version allowed the whole analytics folder, which would have
        let one organisation's query attach another's file; fixed before
        release, with a test.
+
+### Pinned tiles: kept while hidden (decision 378)
+
+378. **Saving a page's tiles keeps pins that are hidden at the time**
+     (Analytics off, or the dashboard no longer shared with the person), in
+     their old places, as long as the dashboard and the tile still exist.
+     A pin whose dashboard or tile was deleted goes for good. At most 8 hidden
+     pins are kept per page. While hidden, a pin's slot isn't refilled: the
+     page just shows fewer tiles (Jess, Oct 2026).
+
+### Analytics: a time limit on every question (decision 379)
+
+379. **Every Analytics question stops after 30 seconds**: dashboard tiles,
+     pivot tables, drill-ins, pinned tiles and exports (shaping previews keep
+     their 10 seconds). The tile says it was stopped and suggests filtering or
+     grouping by fewer fields, rather than tying up the server (Jess, Oct 2026).
+     Jess also confirmed that report viewers may drill into up to 500 rows of
+     a tile's own fields and export pivot tiles to CSV and Excel (decision 375).
+

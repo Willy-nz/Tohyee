@@ -4,11 +4,19 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { listTables, runBuiltQuery } from "@/lib/analytics/engine";
 import {
+  buildPivotDrillSql,
+  buildPivotSql,
   buildTileSql,
   type ColumnInfo,
   type DashboardFilters,
+  MAX_PIVOT_DRILL_ROWS,
+  MAX_PIVOT_CELLS,
   MAX_ROWS,
   parseTileQuery,
+  type PivotColumn,
+  type PivotDrillResult,
+  type PivotDrillSelection,
+  type PivotRow,
   type QueryResult,
   quoteIdentifier,
   type TileQuery,
@@ -46,7 +54,7 @@ export type Dashboard = {
   updatedAt: string;
 };
 
-const VISUALS: Visual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table"];
+const VISUALS: Visual[] = ["column", "bar", "line", "area", "combo", "pie", "donut", "kpi", "table", "pivot"];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 type Row = {
@@ -192,7 +200,9 @@ function parseTiles(input: unknown, tables: Map<string, ColumnInfo[]>): Tile[] {
     } catch (error) {
       throw new ValidationError(`${title}: ${error instanceof Error ? error.message : String(error)}`);
     }
-    if (visual !== "table" && visual !== "kpi" && !query.groupBy) throw new ValidationError(`${title}: a chart needs something to group by.`);
+    if (visual === "pivot" && !query.pivot) throw new ValidationError(`${title}: choose at least one pivot row field.`);
+    if (visual !== "pivot" && query.pivot) throw new ValidationError(`${title}: pivot fields can only be used with a pivot table.`);
+    if (visual !== "table" && visual !== "kpi" && visual !== "pivot" && !query.groupBy) throw new ValidationError(`${title}: a chart needs something to group by.`);
     if ((visual === "pie" || visual === "donut") && query.measures.length !== 1) throw new ValidationError(`${title}: a pie shows one value.`);
     return {
       id: typeof tile.id === "string" && /^[a-z0-9-]{1,40}$/.test(tile.id) ? tile.id : randomUUID(),
@@ -276,9 +286,85 @@ export async function deleteDashboard(tx: OrgTx, id: string): Promise<void> {
 export async function runTile(organisationId: string, query: unknown, filters: DashboardFilters = {}): Promise<QueryResult> {
   const tables = await listTables(organisationId);
   const parsed = parseTileQuery(query, tables);
+  if (parsed.pivot) {
+    const built = buildPivotSql(parsed, tables.get(parsed.table)!, filters);
+    const counts = await runBuiltQuery(organisationId, built.countSql, built.params);
+    const rowCount = BigInt(counts[0]?.row_groups ?? "0");
+    const columnCount = built.hasColumn ? BigInt(counts[0]?.column_groups ?? "0") + BigInt(1) : BigInt(1);
+    if (rowCount * columnCount * BigInt(built.measures.length) > BigInt(MAX_PIVOT_CELLS)) {
+      throw new ValidationError("Too many rows and columns; filter or group further");
+    }
+    const grouped = await runBuiltQuery(organisationId, built.sql, built.params);
+    // The grand total row has every column value, already in column order.
+    const columnValues = built.hasColumn
+      ? grouped.filter((row) => row.gc === "0" && built.rowFields.every((_field, index) => row[`g${index}`] === "1")).map((row) => row.pivot_column)
+      : [];
+    const columns: PivotColumn[] = built.hasColumn
+      ? [
+          ...columnValues.flatMap((pivotValue, columnIndex) =>
+            built.measures.map((measure, measureIndex) => ({
+              key: `c${columnIndex}_m${measureIndex}`,
+              label: pivotValue ?? "(blank)",
+              pivotValue,
+              measure,
+              total: false,
+            })),
+          ),
+          ...built.measures.map((measure, measureIndex) => ({
+            key: `total_m${measureIndex}`,
+            label: "Grand total",
+            pivotValue: null,
+            measure,
+            total: true,
+          })),
+        ]
+      : built.measures.map((measure) => ({ key: measure.key, label: measure.label, pivotValue: null, measure, total: false }));
+    const rows = new Map<string, PivotRow>();
+    for (const result of grouped) {
+      const dimensions = built.rowFields.map((_field, index) => result[`r${index}`] ?? null);
+      const depth = built.rowFields.filter((_field, index) => result[`g${index}`] === "0").length;
+      const kind = depth === 0 ? "grand_total" : depth < built.rowFields.length ? "subtotal" : "detail";
+      const key = JSON.stringify([depth, dimensions.slice(0, depth)]);
+      let row = rows.get(key);
+      if (!row) {
+        row = { key, kind, depth, dimensions, cells: {} };
+        rows.set(key, row);
+      }
+      for (let index = 0; index < built.measures.length; index += 1) {
+        const measure = built.measures[index];
+        const cellKey = built.hasColumn
+          ? result.gc === "1"
+            ? `total_m${index}`
+            : `c${columnValues.indexOf(result.pivot_column)}_m${index}`
+          : measure.key;
+        row.cells[cellKey] = result[`m${index}`];
+      }
+    }
+    return {
+      columns: [...built.rowFields, ...built.measures],
+      rows: [],
+      truncated: false,
+      pivot: { rowFields: built.rowFields, columnField: built.columnField, columnValues, columns, rows: [...rows.values()] },
+    };
+  }
   const built = buildTileSql(parsed, tables.get(parsed.table)!, filters);
   const rows = await runBuiltQuery(organisationId, built.sql, built.params);
   return { columns: built.columns, rows: rows.slice(0, MAX_ROWS), truncated: rows.length > MAX_ROWS };
+}
+
+/** Drill into only the fields used by a saved pivot tile, never the source table itself. */
+export async function runPivotDrilldown(
+  organisationId: string,
+  query: unknown,
+  filters: DashboardFilters,
+  selection: unknown,
+): Promise<PivotDrillResult> {
+  if (!selection || typeof selection !== "object" || Array.isArray(selection)) throw new ValidationError("That pivot cell can't be opened.");
+  const tables = await listTables(organisationId);
+  const parsed = parseTileQuery(query, tables);
+  const built = buildPivotDrillSql(parsed, tables.get(parsed.table)!, filters, selection as PivotDrillSelection);
+  const rows = await runBuiltQuery(organisationId, built.sql, built.params);
+  return { columns: built.columns, rows: rows.slice(0, MAX_PIVOT_DRILL_ROWS), truncated: rows.length > MAX_PIVOT_DRILL_ROWS };
 }
 
 /** The values a slicer offers: up to 500 distinct values of a column, sorted. */

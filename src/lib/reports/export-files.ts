@@ -6,6 +6,8 @@ import { REPORT_EXPORTS, type ReportExportCell, type ReportExportData, type Repo
 const DECIMAL = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
 const MAX_ROWS = 10_000;
 const MAX_COLUMNS = 40;
+/** An analytics pivot (decision 375) can be up to 2,000 value cells wide, plus its row fields. */
+const MAX_PIVOT_COLUMNS = 2_005;
 const MAX_CELL_LENGTH = 2_000;
 
 export type ReportExportFormat = "csv" | "xlsx" | "pdf";
@@ -21,11 +23,12 @@ export function parseReportExport(input: unknown): ReportExportData {
     return value;
   };
   if (!Array.isArray(data.tables) || data.tables.length > 25) throw new ValidationError("The report has too many tables to export.");
+  const maxColumns = data.report === "analytics-pivot" ? MAX_PIVOT_COLUMNS : MAX_COLUMNS;
   let rowCount = 0;
   const tables: ReportExportTable[] = data.tables.map((table, tableIndex) => {
     if (!table || typeof table !== "object" || Array.isArray(table)) throw new ValidationError(`Report table ${tableIndex + 1} is invalid.`);
     const candidate = table as Record<string, unknown>;
-    if (!Array.isArray(candidate.columns) || candidate.columns.length === 0 || candidate.columns.length > MAX_COLUMNS) {
+    if (!Array.isArray(candidate.columns) || candidate.columns.length === 0 || candidate.columns.length > maxColumns) {
       throw new ValidationError(`Report table ${tableIndex + 1} has too many columns.`);
     }
     if (!Array.isArray(candidate.rows)) throw new ValidationError(`Report table ${tableIndex + 1} has invalid rows.`);
@@ -88,6 +91,15 @@ function headingRows(data: ReportExportData): string[][] {
   ];
 }
 
+/**
+ * Excel keeps 15 significant digits, so a longer exact value (e.g. a large
+ * analytics total) goes in as its decimal text rather than a rounded number.
+ */
+function fitsExcelNumber(value: string): boolean {
+  const digits = value.replace(/^-/, "").replace(".", "").replace(/^0+/, "").replace(/0+$/, "");
+  return digits.length <= 15;
+}
+
 function exportCellValue(cell: ReportExportCell): string {
   return cell.numeric ? cell.value! : cell.text;
 }
@@ -124,13 +136,14 @@ export async function reportXlsx(data: ReportExportData): Promise<Uint8Array> {
       const row = sheet.addRow(
         Array.from({ length: table.columns.length }, (_, index) => {
           const cell = item.cells[index] ?? { text: "" };
-          return cell.numeric ? Number(cell.value) : cell.text;
+          if (!cell.numeric) return cell.text;
+          return fitsExcelNumber(cell.value!) ? Number(cell.value) : cell.value!;
         }),
       );
       if (item.kind === "section" || item.kind === "total") row.font = { bold: true };
       if (item.kind === "total") row.border = { top: { style: "thin", color: { argb: "FF35423D" } } };
       for (const [index, cell] of item.cells.entries()) {
-        if (cell.numeric) row.getCell(index + 1).numFmt = "#,##0.00;[Red](#,##0.00)";
+        if (cell.numeric && fitsExcelNumber(cell.value!)) row.getCell(index + 1).numFmt = "#,##0.00;[Red](#,##0.00)";
       }
     }
     sheet.addRow([]);
