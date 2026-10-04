@@ -29,9 +29,10 @@ import type {
   TileQuery,
   Visual,
 } from "@/lib/analytics/query";
-import { api, errorMessage } from "@/lib/client/api";
+import { api, apiDownload, errorMessage } from "@/lib/client/api";
 import { formatDate, formatDateTime, formatMoney, formatQuantity } from "@/lib/format";
 import { cmp, dec, sum, toPlainString } from "@/lib/money/decimal";
+import type { ReportExportData, ReportExportTable } from "@/lib/reports/export-types";
 import styles from "./analytics-dashboards.module.css";
 
 type TableInfo = { name: string; columns: ColumnInfo[] };
@@ -210,6 +211,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
 }
 
 type Filters = { from: string; to: string; values: Record<string, string[]> };
+type PivotExportFor = { organisationId: string; organisationName: string; filters: Filters };
 
 /** One dashboard: its date range and slicers, and its tiles; Edit to change them. */
 export function DashboardView({ organisationId, dashboardId, startEditing }: { organisationId: string; dashboardId: string; startEditing: boolean }) {
@@ -638,8 +640,12 @@ function useTileResult(organisationId: string, query: TileQuery | null, filters:
 
 function TileBody({ organisationId, dashboardId, tile, filters }: { organisationId: string; dashboardId: string; tile: Tile; filters: Filters }) {
   const state = useTileResult(organisationId, tile.query, filters, { dashboardId, tileId: tile.id });
-  const [drill, setDrill] = useState<{ title: string; result: PivotDrillResult } | null>(null);
+  const { current } = useWorkspace();
+  const [opened, setDrill] = useState<{ title: string; result: PivotDrillResult; filtersKey: string } | null>(null);
   const [drillError, setDrillError] = useState<string | null>(null);
+  // Rows opened under other dates or slicers no longer match the tile, so they're put away.
+  const filtersKey = JSON.stringify(filters);
+  const drill = opened?.filtersKey === filtersKey ? opened : null;
   if (!state) return <p className={ui.muted}>Working it out…</p>;
   if (state.error) return <Notice tone="error">{state.error}</Notice>;
   const openDrill = async (selection: PivotDrillSelection, title: string) => {
@@ -656,7 +662,7 @@ function TileBody({ organisationId, dashboardId, tile, filters }: { organisation
           drill: selection,
         },
       });
-      setDrill({ title, result });
+      setDrill({ title, result, filtersKey });
     } catch (error) {
       setDrillError(errorMessage(error));
     }
@@ -668,6 +674,7 @@ function TileBody({ organisationId, dashboardId, tile, filters }: { organisation
         tile={tile}
         result={state.result!}
         onDrill={tile.visual === "pivot" ? (selection, title) => void openDrill(selection, title) : undefined}
+        exportFor={{ organisationId, organisationName: current?.id === organisationId ? current.displayName : "Organisation", filters }}
       />
       {drill ? (
         <div className={styles.drill}>
@@ -679,9 +686,9 @@ function TileBody({ organisationId, dashboardId, tile, filters }: { organisation
             <Empty>No matching rows.</Empty>
           ) : (
             <div className={ui.tableWrap}>
-              <table className={ui.table}>
+              <table className={ui.table} aria-label={drill.title}>
                 <thead>
-                  <tr>{drill.result.columns.map((column) => <th key={column.key}>{heading(column.label)}</th>)}</tr>
+                  <tr>{drill.result.columns.map((column) => <th key={column.key} scope="col" className={column.role === "measure" ? ui.num : undefined}>{heading(column.label)}</th>)}</tr>
                 </thead>
                 <tbody>
                   {drill.result.rows.map((row, index) => (
@@ -706,10 +713,12 @@ function TileResult({
   tile,
   result,
   onDrill,
+  exportFor,
 }: {
   tile: Pick<Tile, "title" | "visual">;
   result: QueryResult;
   onDrill?: (selection: PivotDrillSelection, title: string) => void;
+  exportFor?: PivotExportFor;
 }) {
   const measures = result.columns.filter((column) => column.role === "measure");
   const spec = useMemo<ChartSpec | null>(() => {
@@ -729,7 +738,7 @@ function TileResult({
   }, [tile.visual, measures]);
 
   if (tile.visual === "pivot") {
-    return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
+    return result.pivot ? <PivotTable title={tile.title} pivot={result.pivot} onDrill={onDrill} exportFor={exportFor} /> : <Notice tone="error">This pivot table needs to be saved again.</Notice>;
   }
   if (result.rows.length === 0) return <Empty>Nothing matches.</Empty>;
   const rows = tile.visual === "pie" || tile.visual === "donut" ? foldSlices(result.rows, measures[0]?.key ?? "m0") : result.rows;
@@ -791,69 +800,74 @@ function pivotColumnLabel(column: PivotColumn, pivot: PivotData): string {
   return column.pivotValue === null ? "(blank)" : showValue(column.pivotValue, pivot.columnField);
 }
 
-function pivotExportRows(pivot: PivotData): string[][] {
-  const headers = [
+/** The pivot as a report table for the existing CSV/Excel export (`/api/reports/export`), exact values kept as text. */
+export function pivotExportTable(pivot: PivotData): ReportExportTable {
+  const columns = [
     ...pivot.rowFields.map((field) => heading(field.label)),
     ...pivot.columns.map((column) =>
-      [column.total ? "Grand total" : pivot.columnField ? pivotColumnLabel(column, pivot) : "", column.measure.label].filter(Boolean).join(" · "),
+      [column.total ? "Grand total" : pivot.columnField ? `${heading(pivot.columnField.label)}: ${pivotColumnLabel(column, pivot)}` : "", column.measure.label]
+        .filter(Boolean)
+        .join(" · "),
     ),
   ];
-  const rows = pivot.rows.map((row) => [
-    ...pivot.rowFields.map((field, index) => pivotRowLabel(row, index, field)),
-    ...pivot.columns.map((column) => row.cells[column.key] ?? ""),
-  ]);
-  return [headers, ...rows];
-}
-
-function safeCsvCell(value: string): string {
-  const decimal = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
-  const safe = /^[=+\-@\t\r]/.test(value) && !decimal.test(value) ? `'${value}` : value;
-  return /[",\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
-}
-
-function downloadFile(content: BlobPart, contentType: string, fileName: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: contentType }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
+  const rows = pivot.rows.map((row) => ({
+    kind: row.kind === "detail" ? undefined : ("total" as const),
+    cells: [
+      ...pivot.rowFields.map((field, index) => ({ text: pivotRowLabel(row, index, field) })),
+      ...pivot.columns.map((column) => {
+        const value = row.cells[column.key] ?? null;
+        const text = showValue(value, column.measure);
+        return value !== null && /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) ? { text, value, numeric: true } : { text };
+      }),
+    ],
+  }));
+  return { columns, rows };
 }
 
 export function PivotTable({
   title,
   pivot,
   onDrill,
+  exportFor,
 }: {
   title: string;
   pivot: PivotData;
   onDrill?: (selection: PivotDrillSelection, title: string) => void;
+  /** Where the export comes from; without it (e.g. a preview) there's no export. */
+  exportFor?: PivotExportFor;
 }) {
   const [exportError, setExportError] = useState<string | null>(null);
-  const rows = pivotExportRows(pivot);
-  const fileName = (extension: string) => `${title.trim().replace(/[^a-z0-9-]+/gi, "-").replace(/^-|-$/g, "") || "pivot"}.${extension}`;
-  const exportCsv = () => {
-    downloadFile(rows.map((row) => row.map(safeCsvCell).join(",")).join("\r\n"), "text/csv;charset=utf-8", fileName("csv"));
-  };
-  const exportExcel = async () => {
+  const [exporting, setExporting] = useState(false);
+  const download = async (format: "csv" | "xlsx") => {
+    if (!exportFor) return;
     setExportError(null);
+    setExporting(true);
     try {
-      const ExcelJS = (await import("exceljs")).default;
-      const workbook = new ExcelJS.Workbook();
-      workbook.creator = "Tohyee";
-      workbook.subject = title;
-      const sheet = workbook.addWorksheet("Pivot");
-      for (const row of rows) sheet.addRow(row);
-      sheet.getRow(1).font = { bold: true };
-      sheet.views = [{ state: "frozen", ySplit: 1 }];
-      const bytes = new Uint8Array(await workbook.xlsx.writeBuffer());
-      downloadFile(
-        bytes,
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        fileName("xlsx"),
-      );
+      const { from, to, values } = exportFor.filters;
+      const data: ReportExportData = {
+        report: "analytics-pivot",
+        organisationName: exportFor.organisationName,
+        title,
+        period: from || to ? `${from ? formatDate(from) : "Start"} to ${to ? formatDate(to) : "today"}` : "All dates",
+        basis: null,
+        filters: Object.entries(values)
+          .filter(([, chosen]) => chosen.length > 0)
+          .map(([field, chosen]) => `${heading(field)}: ${chosen.join(", ")}`)
+          .slice(0, 30),
+        producedAt: new Date().toISOString(),
+        tables: [pivotExportTable(pivot)],
+      };
+      const blob = await apiDownload("/api/reports/export", { organisationId: exportFor.organisationId, format, data });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${title.trim().replace(/[^a-z0-9-]+/gi, "-").replace(/^-|-$/g, "") || "pivot"}.${format}`;
+      link.click();
+      URL.revokeObjectURL(url);
     } catch (error) {
       setExportError(errorMessage(error));
+    } finally {
+      setExporting(false);
     }
   };
   const click = (row: PivotRow, column: PivotColumn) => {
@@ -868,10 +882,12 @@ export function PivotTable({
   };
   return (
     <div className={styles.pivot}>
-      <div className={styles.pivotTools}>
-        <Button size="small" variant="secondary" onClick={exportCsv}>Export CSV</Button>
-        <Button size="small" variant="secondary" onClick={() => void exportExcel()}>Export Excel</Button>
-      </div>
+      {exportFor ? (
+        <div className={styles.pivotTools}>
+          <Button size="small" variant="secondary" disabled={exporting} onClick={() => void download("csv")}>Export CSV</Button>
+          <Button size="small" variant="secondary" disabled={exporting} onClick={() => void download("xlsx")}>Export Excel</Button>
+        </div>
+      ) : null}
       {exportError ? <Notice tone="error">{exportError}</Notice> : null}
       <div className={`${ui.tableWrap} ${styles.pivotWrap}`}>
         <table className={ui.table} aria-label={`${title} pivot table`}>

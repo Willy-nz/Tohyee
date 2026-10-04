@@ -29,7 +29,8 @@ describe("analytics pivot SQL", () => {
 
     expect(built.sql).toContain('"region""name"');
     expect(built.sql).toContain("grouping sets");
-    expect(built.sql).toContain("grouping_id");
+    expect(built.sql).toContain('order by grouping("_tohyee_pivot_row_0"), "_tohyee_pivot_row_0" asc nulls last');
+    expect(built.sql).not.toMatch(/\bavg\(|double/i);
     expect(built.sql).toContain("HUGEINT");
     expect(built.sql).not.toContain("Otago");
     expect(built.params).toEqual(["Otago' or '1'='1"]);

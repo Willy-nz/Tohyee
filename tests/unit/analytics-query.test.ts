@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runTile, sliceValues } from "@/lib/analytics/dashboards";
 import { closeAnalytics, loadCsv } from "@/lib/analytics/engine";
 import { formatOfType } from "@/lib/analytics/query";
+import { cmp, dec, sum } from "@/lib/money/decimal";
 
 const ORG = "query-test";
 let root: string;
@@ -200,6 +201,85 @@ describe("analytics tile queries (step 3)", () => {
       kind: "grand_total",
       cells: { total_m0: "1000000000000000.90", total_m1: "142857142857142.985714" },
     });
+  });
+
+  it("orders pivot rows under their subtotals and columns by value, with totals equal to their rows", async () => {
+    const file = path.join(root, "src", "order.csv");
+    fs.writeFileSync(
+      file,
+      [
+        "date,region,product,amount",
+        "2025-02-05,Otago,Widgets,0.10",
+        "2025-02-06,Otago,Widgets,0.20",
+        "2025-02-07,Otago,Apples,999999999999999.99",
+        "2025-01-03,Waikato,Widgets,0.10",
+        "2025-02-03,Waikato,Apples,0.20",
+        "2025-03-01,Canterbury,Widgets,0.30",
+        "2025-01-09,Canterbury,Apples,0.01",
+      ].join("\n") + "\n",
+    );
+    await loadCsv({
+      organisationId: ORG,
+      sourceFolder: path.dirname(file),
+      file,
+      table: "pivot_order",
+      columns: [
+        { source: "date", name: "date", kind: "date" },
+        { source: "region", name: "region", kind: "text" },
+        { source: "product", name: "product", kind: "text" },
+        { source: "amount", name: "amount", kind: "money" },
+      ],
+    });
+    const result = await runTile(ORG, {
+      table: "pivot_order",
+      pivot: { rows: [{ field: "region" }, { field: "product" }], column: { field: "date", grain: "month" } },
+      measures: [
+        { label: "Sales", aggregate: "sum", field: "amount" },
+        { label: "Average", aggregate: "avg", field: "amount" },
+      ],
+      filters: [],
+      dateField: "date",
+      sort: { by: "value", direction: "desc" },
+      limit: null,
+    });
+    const pivot = result.pivot!;
+    // Columns in date order, whatever order the rows meet them in.
+    expect(pivot.columnValues).toEqual(["2025-01-01", "2025-02-01", "2025-03-01"]);
+    // Each region's rows, then its subtotal; the grand total last. Hidden value sorts are ignored.
+    expect(pivot.rows.map((row) => [row.kind, ...row.dimensions.slice(0, row.depth)])).toEqual([
+      ["detail", "Canterbury", "Apples"],
+      ["detail", "Canterbury", "Widgets"],
+      ["subtotal", "Canterbury"],
+      ["detail", "Otago", "Apples"],
+      ["detail", "Otago", "Widgets"],
+      ["subtotal", "Otago"],
+      ["detail", "Waikato", "Apples"],
+      ["detail", "Waikato", "Widgets"],
+      ["subtotal", "Waikato"],
+      ["grand_total"],
+    ]);
+    // Sums: every subtotal and total is exactly the sum of the rows under it.
+    const sumKeys = pivot.columns.filter((column) => column.measure.key === "m0").map((column) => column.key);
+    const details = pivot.rows.filter((row) => row.kind === "detail");
+    const exactSum = (rows: typeof details, key: string) => sum(rows.map((row) => dec(row.cells[key] ?? "0")));
+    for (const key of sumKeys) {
+      for (const subtotal of pivot.rows.filter((row) => row.kind === "subtotal")) {
+        const under = details.filter((row) => row.dimensions[0] === subtotal.dimensions[0]);
+        expect(cmp(dec(subtotal.cells[key] ?? "0"), exactSum(under, key))).toBe(0);
+      }
+      expect(cmp(dec(pivot.rows.at(-1)!.cells[key] ?? "0"), exactSum(details, key))).toBe(0);
+    }
+    const grand = pivot.rows.at(-1)!;
+    expect(grand.cells.total_m0).toBe("1000000000000000.90");
+    expect(grand.cells.c1_m0).toBe("1000000000000000.49");
+    // Averages are over the underlying rows, not the average of averages.
+    expect(grand.cells.total_m1).toBe("142857142857142.985714");
+    expect(pivot.rows.find((row) => row.kind === "subtotal" && row.dimensions[0] === "Otago")!.cells.total_m1).toBe("333333333333333.430000");
+    // Row totals across the columns add up too.
+    for (const row of pivot.rows) {
+      const across = sum(pivot.columns.filter((column) => !column.total && column.measure.key === "m0").map((column) => dec(row.cells[column.key] ?? "0")));
+      expect(cmp(dec(row.cells.total_m0 ?? "0"), across)).toBe(0);
+    }
   });
 
   it("limits the full pivot grid, including subtotal and total cells", async () => {

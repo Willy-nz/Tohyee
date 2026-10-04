@@ -14,7 +14,9 @@ export const POST = route(async (request) => {
   const body = await readJson(request);
   if (body.format !== "csv" && body.format !== "xlsx" && body.format !== "pdf") throw new ValidationError("Choose CSV, Excel (.xlsx) or PDF.");
   const data = parseReportExport(body.data);
-  await withOrganisation(request, body.organisationId, "viewer", async () => undefined);
+  // An analytics pivot (decision 375) is shown to report viewers too; the file is made only from what their page already shows.
+  if (data.report === "analytics-pivot" && body.format === "pdf") throw new ValidationError("A pivot table exports to CSV or Excel.");
+  await withOrganisation(request, body.organisationId, data.report === "analytics-pivot" ? "report_viewer" : "viewer", async () => undefined);
   const content = body.format === "csv" ? reportCsv(data) : body.format === "xlsx" ? await reportXlsx(data) : await reportPdf(data);
   return new Response(content as unknown as BodyInit, {
     status: 200,

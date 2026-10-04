@@ -456,13 +456,12 @@ export function buildPivotSql(query: TileQuery, tableColumns: ColumnInfo[], dash
       : [`null::VARCHAR as pivot_column`, "0 as gc"]),
     ...query.measures.map((measure, index) => `${aggregate(measure)} as ${q(`m${index}`)}`),
   ];
-  const groupingId = `grouping_id(${rowAliases.map(q).join(", ")})`;
-  const order = query.sort.by === "value"
-    ? `${q("m0")} ${query.sort.direction} nulls last`
-    : `${q(rowAliases[0])} ${query.sort.direction} nulls last`;
-  const columnOrder = columnExpression ? `, grouping(${q(pivotAlias)}), ${q(pivotAlias)} asc nulls last` : "";
+  // Each group's rows, then its subtotal, then the next group; the grand total last. Rows sort by
+  // their fields, smallest first (the editor has no order for a pivot: each column has its own values).
+  const rowOrder = rowAliases.map((alias) => `grouping(${q(alias)}), ${q(alias)} asc nulls last`);
+  const columnOrder = columnExpression ? [`grouping(${q(pivotAlias)})`, `${q(pivotAlias)} asc nulls last`] : [];
   const sql = `${filtered} select ${grouped.join(", ")} from filtered group by grouping sets (${groupingSets.join(", ")}) ` +
-    `order by ${groupingId}, ${order}${columnOrder}`;
+    `order by ${[...rowOrder, ...columnOrder].join(", ")}`;
   return { sql, countSql, params, rowFields, columnField, measures, hasColumn: columnExpression !== null };
 }
 

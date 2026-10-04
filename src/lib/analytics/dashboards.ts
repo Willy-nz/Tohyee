@@ -295,8 +295,9 @@ export async function runTile(organisationId: string, query: unknown, filters: D
       throw new ValidationError("Too many rows and columns; filter or group further");
     }
     const grouped = await runBuiltQuery(organisationId, built.sql, built.params);
+    // The grand total row has every column value, already in column order.
     const columnValues = built.hasColumn
-      ? [...new Set(grouped.filter((row) => row.gc === "0").map((row) => row.pivot_column))]
+      ? grouped.filter((row) => row.gc === "0" && built.rowFields.every((_field, index) => row[`g${index}`] === "1")).map((row) => row.pivot_column)
       : [];
     const columns: PivotColumn[] = built.hasColumn
       ? [

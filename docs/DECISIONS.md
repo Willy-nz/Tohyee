@@ -2590,26 +2590,35 @@ approved 3 Oct 2026.
 ### Analytics: dashboard pivot tables (decision 375)
 
 375. **A pivot is a saved, read-only dashboard tile** (issue #120). It has one
-     to five row fields, zero or one column field, and one or more sum, count,
+     to five row fields, zero or one column field, and one to six sum, count,
      average, minimum or maximum values. Date fields group by month, quarter or
-     year. DuckDB groups the loaded data on the server and returns only pivot
-     cells, with row subtotals and grand totals; the full result is capped at
-     2,000 value cells. Each displayed cell can open at most 500 matching rows,
-     limited to the saved tile's dimensions and measure fields. Report viewers
-     can run and drill only pivots in dashboards shared with them, with the
-     same slicer restrictions as other tiles.
-     - Money remains DECIMAL and averages use `exactAverageSql`; totals are
-      calculated by DuckDB, not recomputed from floating-point browser values.
-     - Use an accessible HTML table rather than Perspective for this fixed
-      result: the current Perspective viewer is a 14 MB unpacked package,
-      initializes a browser-side WASM engine, and includes toolbar modes that
-      need additional restrictions to guarantee read-only use. Next.js 16's
-      lazy loading can defer it, but would not remove that payload or setup.
-      Revisit Perspective for a future interactive, client-side explore view.
-     - CSV and Excel exports contain the pivot result only; exact values are
-      exported as text.
+     year, as charts do. DuckDB groups the loaded data on the server (grouping
+     sets) and returns only pivot cells, with subtotals and grand totals; more
+     than 2,000 value cells, totals included, is refused with "Too many rows
+     and columns; filter or group further". Rows sort by their fields, each
+     group followed by its subtotal, the grand total last; columns sort by
+     value. Each cell can open at most 500 matching rows, showing only the
+     saved tile's fields (rows, column, values and date). Report viewers can
+     run and drill only pivots on dashboards shared with them, with the same
+     slicer restrictions as other tiles.
+     - Money remains DECIMAL and averages use `exactAverageSql`; every
+       subtotal and total is worked out by DuckDB from the underlying rows
+       (an average total is the average of the rows, not of the averages),
+       never added up in the browser.
+     - An accessible HTML table rather than Perspective (which decision 361
+       planned): the browser only ever gets at most 2,000 finished cells, so
+       Perspective's browser-side engine would have nothing to do but re-add
+       them; the current viewer (`@perspective-dev/viewer` 5.5) is 14 MB
+       unpacked plus a WASM engine, and its toolbar would need locking down
+       to stay read-only. Revisit it for an interactive explore view.
+     - CSV and Excel go through the standard report export
+       (`/api/reports/export`, report `analytics-pivot`), which report viewers
+       may use for pivots only (no PDF; the file is made from what their page
+       already shows). Values with more than 15 significant digits, which
+       Excel can't hold exactly, go into the workbook as decimal text (this
+       applies to every report export).
      - Theme previews: [light](screenshots/analytics-pivot-light.png) and
-      [dark](screenshots/analytics-pivot-dark.png).
+       [dark](screenshots/analytics-pivot-dark.png).
 
 ### Analytics: what DuckDB may touch (decision 377)
 
