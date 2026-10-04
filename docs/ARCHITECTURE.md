@@ -77,7 +77,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ project_invoices, project_invoice_items, project_staff_rates   what each project invoice billed, and staff cost rates per member
 ├─ customer_payment_batches, supplier_payment_batches   one payment for several invoices or bills (its parts are customer or supplier payments)
 ├─ custom_reports         custom report drafts, and published frozen copies with their figures
-├─ dashboard_preferences  per-user per-page dashboard hide/show and tile choices
+├─ dashboard_preferences  per-user per-page dashboard hide/show and tile choices (default tile ids and pinned `analytics:<dashboard>:<tile>` references)
 ├─ budgets, budget_amounts   budgets (post nothing; archived, never deleted) and their amounts per account and month
 ├─ sales_credit_notes, sales_credit_note_lines, sales_credit_note_numbering
 ├─ sales_credit_note_applications   credit applied to sales invoices
@@ -1531,6 +1531,18 @@ run time.
   `tileId`; a free question needs viewer. `/api/analytics/values` needs a
   shared dashboard with that slicer. The app shell sends report viewers to
   `/analytics` and shows no other app.
+- **Pinned tiles** (decision 374): a page's tiles in `dashboard_preferences`
+  may include `analytics:<dashboard id>:<tile id>` references
+  (`src/lib/dashboard/analytics-tile-reference.ts`); the pages with a
+  dashboard frame, their default tiles and the four-tile limit are in
+  `src/lib/dashboard/pages.ts`. `/api/dashboard-preferences` (report viewer
+  and up) filters the saved tiles on every read against the dashboards the
+  person can list now (`listDashboards` with their `DashboardReader`), and
+  refuses a save naming any other reference. The browser shows a pin by
+  loading the dashboard and running the tile through
+  `/api/analytics/query` with `dashboardId` and `tileId`
+  (`src/components/analytics/pinned-tile.tsx`), so the sharing checks there
+  apply too; a 403, 404 or 409 hides the tile.
 - **Shaped tables** store their base table and ordered steps in PostgreSQL.
   The shaping compiler checks each step against its current columns, quotes
   identifiers and binds values; it supports filters, column selection and

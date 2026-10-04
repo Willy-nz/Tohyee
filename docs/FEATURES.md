@@ -1324,6 +1324,15 @@ that something happened.
   (Share, in a dashboard's edit mode, for bookkeepers and up), using that
   dashboard's slicers and dates. They can't see the books, the data tables or
   anything else in the organisation.
+- **Pinned Analytics tiles** (decision 374, issue #119). "Pin to page" on a
+  dashboard tile puts it on Home, next to or in place of the default tiles
+  (still four at most); Customise lists both. A pinned tile shows the saved
+  question with the dashboard's own dates (a key figure, a small chart or a
+  table's first rows), has a dashed edge and "From <dashboard name>", and
+  opens the dashboard. Access is checked every time the page loads: report
+  viewers can only pin dashboards shared with them, and a pin from a deleted
+  or unshared dashboard or tile drops off, as all pins do while Analytics is
+  off.
 - **Search everything** (decision 373). Ctrl K finds records as well as
   pages: contacts, invoices, bills, credit notes, quotes and orders, payments,
   bank lines, journals, items, accounts, fixed assets and CRM records. Search

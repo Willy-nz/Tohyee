@@ -2587,6 +2587,38 @@ approved 3 Oct 2026.
      - **No indexes yet:** a plain `like` over the words is fast enough for the
        sizes Tohyee is used at; add indexes if that changes.
 
+### Pinned Analytics tiles (decision 374)
+
+374. **A dashboard tile can be pinned to a page with a dashboard frame**
+     (issue #119, step 3 of `docs/UI-REVIEW-2026.md`, no migration). Today
+     that's only Home; the pages are listed once, in
+     `src/lib/dashboard/pages.ts`, so Sales, Purchases, Banking and CRM home
+     can be added there.
+     - **Stored as a reference:** `analytics:<dashboard id>:<tile id>` in the
+       person's own `dashboard_preferences.tiles` for that page, next to the
+       default tile ids, still at most four tiles. Nothing of the tile is
+       copied. A reference is only read in the organisation it's saved in,
+       so it can never name another organisation's dashboard.
+     - **Access is checked on every load, not only when pinning.** The page's
+       tiles are filtered to the defaults plus the tiles of the dashboards the
+       person can open now (a report viewer: only those shared with them,
+       decision 368). A pin from a dashboard that's deleted, unshared or no
+       longer has the tile, or while Analytics is off, quietly drops off
+       (the defaults show if nothing is left); the saved row isn't rewritten,
+       so sharing again or switching Analytics back on brings it back, even
+       if the person saves the page's tiles in the meantime (decision 378). Saving a reference
+       the person can't open is refused as not found (so dashboards can't be
+       probed); while Analytics is off, pinning is refused.
+     - **Shown through the dashboard query path** (`dashboardId` + `tileId`),
+       with the dashboard's own dates and no slicers: a key figure, a small
+       chart, or a table's first rows. It has a dashed edge and "From
+       <dashboard name>", and opens the dashboard.
+     - **Pin to page** is on each tile in Analytics (not while the dashboard
+       is being edited); a full page offers to replace one of its tiles. It
+       only lists pages the person can open, so report viewers (who can't
+       open Home) don't see it.
+       Customise lists the page's defaults and the person's pinned tiles.
+
 ### Analytics: what DuckDB may touch (decision 377)
 
 377. **Each organisation's analytics database may only read its own source
@@ -2605,3 +2637,12 @@ approved 3 Oct 2026.
      - The first version allowed the whole analytics folder, which would have
        let one organisation's query attach another's file; fixed before
        release, with a test.
+
+### Pinned tiles: kept while hidden (decision 378)
+
+378. **Saving a page's tiles keeps pins that are hidden at the time**
+     (Analytics off, or the dashboard no longer shared with the person), in
+     their old places, as long as the dashboard and the tile still exist.
+     A pin whose dashboard or tile was deleted goes for good. At most 8 hidden
+     pins are kept per page. While hidden, a pin's slot isn't refilled: the
+     page just shows fewer tiles (Jess, Oct 2026).
