@@ -64,6 +64,21 @@ describeWithDatabase("analytics dashboard sharing", () => {
       sort: { by: "category", direction: "asc" },
     },
   });
+  const pivotTile = {
+    id: "pivot",
+    title: "Sales by region and channel",
+    visual: "pivot",
+    width: "full",
+    query: {
+      table: "sales",
+      pivot: { rows: [{ field: "region" }], column: { field: "channel" } },
+      measures: [{ label: "Sales", aggregate: "sum", field: "quantity", times: "unit_price" }],
+      filters: [],
+      dateField: "order_date",
+      sort: { by: "category", direction: "asc" },
+      limit: null,
+    },
+  };
 
   const makeDashboard = async (name: string, slicers: unknown[]) => {
     const made = await body(
@@ -71,7 +86,7 @@ describeWithDatabase("analytics dashboard sharing", () => {
         apiRequest("/api/analytics/dashboards", {
           method: "POST",
           cookie: ownerCookie,
-          body: { organisationId: ORG, name, settings: { slicers }, tiles: [tile("regions")] },
+          body: { organisationId: ORG, name, settings: { slicers }, tiles: [tile("regions"), pivotTile] },
         }),
         noContext,
       ),
@@ -95,7 +110,7 @@ describeWithDatabase("analytics dashboard sharing", () => {
     fs.mkdirSync(folder);
     fs.writeFileSync(
       path.join(folder, "sales.csv"),
-      "Date,Region,Channel,Qty,Price\n2026-03-05,Otago,Web,2,10.00\n2026-03-09,Canterbury,Shop,1,0.10\n2026-04-01,Otago,Shop,1,0.20\n",
+      "Date,Region,Channel,Qty,Price,Private note\n2026-03-05,Otago,Web,2,10.00,private web\n2026-03-09,Canterbury,Shop,1,0.10,private shop\n2026-04-01,Otago,Shop,1,0.20,private retail\n",
     );
     process.env.TOHYEE_ANALYTICS_DIR = path.join(root, "data");
     server = await startTestServer();
@@ -128,6 +143,7 @@ describeWithDatabase("analytics dashboard sharing", () => {
               { source: "Channel", name: "channel", kind: "text" },
               { source: "Qty", name: "quantity", kind: "quantity" },
               { source: "Price", name: "unit_price", kind: "money" },
+              { source: "Private note", name: "private_note", kind: "text" },
             ],
           },
         }),
@@ -210,6 +226,22 @@ describeWithDatabase("analytics dashboard sharing", () => {
     // channel isn't a slicer on this dashboard, so it's dropped rather than used to probe the data
     const probing = await body(await runTile(clientCookie, { dashboardId: sharedId, tileId: "regions", filters: { values: { channel: ["Web"] } } }));
     expect(probing.data.rows).toEqual(answer.data.rows);
+
+    const pivot = await body(await runTile(clientCookie, { dashboardId: sharedId, tileId: "pivot" }));
+    expect(pivot.status).toBe(200);
+    expect(pivot.data.pivot.columns.map((column: { key: string }) => column.key)).toEqual(["c0_m0", "c1_m0", "total_m0"]);
+    const otago = pivot.data.pivot.rows.find((row: { kind: string; dimensions: string[] }) => row.kind === "detail" && row.dimensions[0] === "Otago");
+    expect(otago.cells).toEqual({ c0_m0: "0.200000", c1_m0: "20.000000", total_m0: "20.200000" });
+    const drilled = await body(
+      await runTile(clientCookie, {
+        dashboardId: sharedId,
+        tileId: "pivot",
+        drill: { depth: 1, dimensions: ["Otago"], pivotValue: "Web", total: false },
+      }),
+    );
+    expect(drilled.data.rows).toEqual([{ d0: "Otago", d1: "Web", d2: "2.0000", d3: "10.00", d4: "2026-03-05" }]);
+    expect(drilled.data.columns.map((column: { label: string }) => column.label)).not.toContain("private_note");
+    expect(drilled.data.rows[0]).not.toHaveProperty("d5");
 
     const raw = await runTile(clientCookie, { query: tile("regions").query });
     expect(raw.status).toBe(403);

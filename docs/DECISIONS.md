@@ -2586,3 +2586,25 @@ approved 3 Oct 2026.
        Payroll employees aren't searched.
      - **No indexes yet:** a plain `like` over the words is fast enough for the
        sizes Tohyee is used at; add indexes if that changes.
+
+### Analytics: dashboard pivot tables (decision 375)
+
+375. **A pivot is a saved, read-only dashboard tile** (issue #120). It has one
+     to five row fields, zero or one column field, and one or more sum, count,
+     average, minimum or maximum values. Date fields group by month, quarter or
+     year. DuckDB groups the loaded data on the server and returns only pivot
+     cells, with row subtotals and grand totals; the full result is capped at
+     2,000 value cells. Each displayed cell can open at most 500 matching rows,
+     limited to the saved tile's dimensions and measure fields. Report viewers
+     can run and drill only pivots in dashboards shared with them, with the
+     same slicer restrictions as other tiles.
+     - Money remains DECIMAL and averages use `exactAverageSql`; totals are
+      calculated by DuckDB, not recomputed from floating-point browser values.
+     - Use an accessible HTML table rather than Perspective for this fixed
+      result: the current Perspective viewer is a 14 MB unpacked package,
+      initializes a browser-side WASM engine, and includes toolbar modes that
+      need additional restrictions to guarantee read-only use. Next.js 16's
+      lazy loading can defer it, but would not remove that payload or setup.
+      Revisit Perspective for a future interactive, client-side explore view.
+     - CSV and Excel exports contain the pivot result only; exact values are
+      exported as text.

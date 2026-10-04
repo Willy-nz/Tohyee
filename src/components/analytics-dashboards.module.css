@@ -169,6 +169,17 @@
   flex: none;
 }
 
+.pivotField {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.pivotField > label {
+  flex: 1 1 180px;
+}
+
 .addRow {
   display: flex;
   margin-bottom: 4px;
@@ -179,6 +190,68 @@
   border: 1px dashed var(--border);
   border-radius: var(--radius);
   margin-bottom: 12px;
+}
+
+.pivot {
+  display: grid;
+  gap: 8px;
+}
+
+.pivotTools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.pivotWrap {
+  max-height: 520px;
+}
+
+.pivotWrap caption {
+  padding: 8px 12px;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.pivotTotal th,
+.pivotTotal td {
+  background: var(--surface-sunken);
+  font-weight: 700;
+}
+
+.pivotCell {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.pivotCell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.drill {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.drillHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.drillHeader h3 {
+  margin: 0;
+  font-size: var(--text-base);
 }
 
 @media (max-width: 800px) {

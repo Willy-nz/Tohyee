@@ -42,6 +42,32 @@ beforeAll(async () => {
       { source: "cost", name: "cost", kind: "money" },
     ],
   });
+  const pivotFile = path.join(folder, "pivot.csv");
+  fs.writeFileSync(
+    pivotFile,
+    [
+      "date,region,product,amount",
+      "2025-01-10,Otago,Widgets,0.10",
+      "2025-01-20,Otago,Widgets,0.20",
+      "2025-01-21,Otago,Gadgets,999999999999999.99",
+      "2025-02-05,Otago,Gadgets,0.01",
+      "2025-01-25,Canterbury,Widgets,0.30",
+      "2025-02-08,Canterbury,Widgets,0.10",
+      "2025-02-09,Canterbury,Gadgets,0.20",
+    ].join("\n") + "\n",
+  );
+  await loadCsv({
+    organisationId: ORG,
+    sourceFolder: folder,
+    file: pivotFile,
+    table: "pivot_sales",
+    columns: [
+      { source: "date", name: "date", kind: "date" },
+      { source: "region", name: "region", kind: "text" },
+      { source: "product", name: "product", kind: "text" },
+      { source: "amount", name: "amount", kind: "money" },
+    ],
+  });
 });
 
 afterAll(async () => {
@@ -127,5 +153,95 @@ describe("analytics tile queries (step 3)", () => {
     expect(formatOfType("BIGINT")).toBe("integer");
     expect(formatOfType("DATE")).toBe("date");
     expect(formatOfType("VARCHAR")).toBe("text");
+  });
+
+  it("pivots on one column with exact detail, subtotal, and grand totals", async () => {
+    const result = await runTile(ORG, {
+      table: "pivot_sales",
+      pivot: {
+        rows: [{ field: "region" }, { field: "product" }],
+        column: { field: "date", grain: "quarter" },
+      },
+      measures: [
+        { label: "Sales", aggregate: "sum", field: "amount" },
+        { label: "Average", aggregate: "avg", field: "amount" },
+      ],
+      filters: [],
+      dateField: "date",
+      sort: { by: "category", direction: "asc" },
+      limit: null,
+    });
+
+    expect(result.pivot?.columnValues).toEqual(["2025-01-01"]);
+    expect(result.pivot?.columns.map(({ key, pivotValue, total }) => [key, pivotValue, total])).toEqual([
+      ["c0_m0", "2025-01-01", false],
+      ["c0_m1", "2025-01-01", false],
+      ["total_m0", null, true],
+      ["total_m1", null, true],
+    ]);
+    const row = (region: string, product: string) => result.pivot?.rows.find(
+      (entry) => entry.kind === "detail" && entry.dimensions[0] === region && entry.dimensions[1] === product,
+    );
+    expect(row("Otago", "Widgets")?.cells).toEqual({ c0_m0: "0.30", c0_m1: "0.150000", total_m0: "0.30", total_m1: "0.150000" });
+    expect(row("Otago", "Gadgets")?.cells).toEqual({
+      c0_m0: "1000000000000000.00",
+      c0_m1: "500000000000000.000000",
+      total_m0: "1000000000000000.00",
+      total_m1: "500000000000000.000000",
+    });
+    const otago = result.pivot?.rows.find((entry) => entry.kind === "subtotal" && entry.dimensions[0] === "Otago");
+    expect(otago?.cells).toEqual({
+      c0_m0: "1000000000000000.30",
+      c0_m1: "250000000000000.075000",
+      total_m0: "1000000000000000.30",
+      total_m1: "250000000000000.075000",
+    });
+    expect(result.pivot?.rows.at(-1)).toMatchObject({
+      kind: "grand_total",
+      cells: { total_m0: "1000000000000000.90", total_m1: "142857142857142.985714" },
+    });
+  });
+
+  it("limits the full pivot grid, including subtotal and total cells", async () => {
+    const file = path.join(root, "src", "wide.csv");
+    const pairs = Array.from({ length: 45 }, (_, index) => `Row ${index},Column ${index},1.00`);
+    fs.writeFileSync(file, `row_name,column_name,amount\n${pairs.join("\n")}\n`);
+    await loadCsv({
+      organisationId: ORG,
+      sourceFolder: path.dirname(file),
+      file,
+      table: "wide",
+      columns: [
+        { source: "row_name", name: "row_name", kind: "text" },
+        { source: "column_name", name: "column_name", kind: "text" },
+        { source: "amount", name: "amount", kind: "money" },
+      ],
+    });
+    await expect(
+      runTile(ORG, {
+        table: "wide",
+        pivot: { rows: [{ field: "row_name" }], column: { field: "column_name" } },
+        measures: [{ label: "Amount", aggregate: "sum", field: "amount" }],
+        filters: [],
+        dateField: null,
+        sort: { by: "category", direction: "asc" },
+        limit: null,
+      }),
+    ).rejects.toThrow("Too many rows and columns; filter or group further");
+  });
+
+  it("supports a pivot without a column field", async () => {
+    const result = await runTile(ORG, {
+      table: "pivot_sales",
+      pivot: { rows: [{ field: "region" }], column: null },
+      measures: [{ label: "Sales", aggregate: "sum", field: "amount" }],
+      filters: [],
+      dateField: null,
+      sort: { by: "category", direction: "asc" },
+      limit: null,
+    });
+    expect(result.pivot?.columnField).toBeNull();
+    expect(result.pivot?.columns.map((column) => column.key)).toEqual(["m0"]);
+    expect(result.pivot?.rows.at(-1)).toMatchObject({ kind: "grand_total", cells: { m0: "1000000000000000.90" } });
   });
 });

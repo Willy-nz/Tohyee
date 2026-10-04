@@ -202,9 +202,14 @@ built #107, #110 and #111; Claude reviewed and fixed them). All released in
 **v0.5.0** (3 Oct 2026). UI review step 1 (#117, decision 372, tenant
 migration 0089: top bar, notices bell, dashboard preferences, Home) and
 search everything (#118, decision 373, no migration) are built. Next
-numbers: tenant migration 0090, core migration 0007, decision 374. Still to do for Analytics: pivot tables (Perspective),
-reading Excel files (then saving Excel report emails), and limiting DuckDB's
-file access (`allowed_directories`).
+numbers: tenant migration 0090, core migration 0007, decision 374. Analytics
+pivot tiles are built (issue #120, decision 375): exact server-side DuckDB
+aggregates, a 2,000-cell cap, subtotals, a read-only HTML grid, restricted
+cell drill-down and CSV/Excel exports. Perspective was not added because its
+viewer package is 14 MB unpacked and needs browser-side WASM and controls to
+be explicitly locked down. Still to do for Analytics: reading Excel files
+(then saving Excel report emails) and limiting DuckDB's file access
+(`allowed_directories`).
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

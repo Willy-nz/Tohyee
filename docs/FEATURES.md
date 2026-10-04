@@ -1309,8 +1309,16 @@ that something happened.
   are checked against the table and typed values go in as parameters.
   Bookkeepers and up make dashboards; everyone in the organisation can see
   them. Tried with the made-up 1M-row CSV: a five-tile dashboard opens in
-  about 3 seconds. Tohyee's own books and CRM, sharing with clients,
-  shaping and pivot tables are the next steps.
+  about 3 seconds. Analytics also copies Tohyee's books and CRM, shares
+  dashboards with report viewers and supports shaping.
+  Pivot tiles have one to five row fields, an optional column field and
+  exact sum/count/average/minimum/maximum values, with date groups by month,
+  quarter or year. DuckDB returns the cells and subtotals without sending raw
+  source rows to the browser; results above 2,000 cells ask for more filtering
+  or grouping. Cells drill into up to 500 matching rows from the tile's own
+  dimensions and measures. Shared report viewers can see and drill only saved
+  pivots on dashboards shared with them. The read-only grid is an accessible
+  HTML table; CSV and Excel exports contain the pivot cells.
 
 - **Analytics, step 2: the books and CRM** (examples AB1-AB10, decision
   367). Each organisation's ledger lines, invoices, bills, contacts, items and

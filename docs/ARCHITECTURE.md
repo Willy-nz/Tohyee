@@ -1523,6 +1523,17 @@ run time.
   `tileId`; a free question needs viewer. `/api/analytics/values` needs a
   shared dashboard with that slicer. The app shell sends report viewers to
   `/analytics` and shows no other app.
+- **Pivot tiles** (decision 375) are evaluated in DuckDB by
+  `buildPivotSql()` (`src/lib/analytics/query.ts`): checked row and optional
+  column dimensions, exact aggregate expressions and grouping sets for
+  subtotals and grand totals. A count query checks the full rectangular result
+  including totals before cells are returned; more than 2,000 value cells is
+  refused. The browser receives only grouped cells and renders a read-only
+  accessible HTML table, not a client-side data engine or raw source rows.
+  Clicking a cell runs a saved-tile drill query limited to its dimensions and
+  measure fields, capped at 500 rows; report viewers still pass through the
+  dashboard-share and slicer checks. CSV and Excel exports use the already
+  returned pivot cells and keep decimal strings exact.
 - **Shaped tables** store their base table and ordered steps in PostgreSQL.
   The shaping compiler checks each step against its current columns, quotes
   identifiers and binds values; it supports filters, column selection and
