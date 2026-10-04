@@ -176,6 +176,11 @@ PREP8, WB7, XP14 and the HL section.
 
 Database upgrades run by themselves when Tohyee starts. Back up first if you install by hand.
 ```
+- **Next: the Xero top 10 add-ons plan** ([XERO-ADDONS-PLAN.md](XERO-ADDONS-PLAN.md),
+  Jess, 5 Oct 2026), with Jess's answers to its questions. Stage 1 (bank
+  rules with several conditions and split lines, contacts' default accounts
+  and tracking): examples BR1-BR10 and SD1-SD3 are written and **wait for
+  Jess's approval**; nothing is built yet.
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
