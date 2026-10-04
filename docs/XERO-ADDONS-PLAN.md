@@ -55,7 +55,16 @@ phone width).
    the contact named like the payee, and contacts' default accounts and
    tracking. **Built** (examples BR1-BR10 and SD1-SD3, approved by Jess
    5 Oct 2026; decisions 380-384; tenant migration 0091).
-2. **1b. More bank feeds:** a provider interface (Akahu becomes one of
+2. **1b. More bank feeds** (Jess, 5 Oct 2026: Claude chose the order). One PR
+   each: (i) automatic statement files, a folder and a mailbox per bank
+   account (examples BF1-BF10, waiting for Jess); (ii) SimpleFIN, an open
+   protocol whose SimpleFIN Bridge (US$15 a year, the organisation's own
+   account) reaches US banks, as Actual Budget uses it; (iii) Stripe;
+   (iv) PayPal; (v) Wise (its statement API needs a request-signing key the
+   organisation registers with Wise; foreign-currency examples first).
+   Australian banks: only CDR-accredited aggregators (Basiq, Fiskil) reach
+   them, aimed at businesses rather than one organisation; left out unless
+   Jess asks. Earlier notes: a provider interface (Akahu becomes one of
    several), then PayPal, Stripe and Wise (Jess to confirm the order); a
    watched folder and an email address per bank account using the existing
    statement importers; foreign-currency feeds need worked examples. Study
