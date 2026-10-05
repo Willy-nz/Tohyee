@@ -33,20 +33,30 @@ const WorkspaceContext = createContext<Workspace | null>(null);
 const STORAGE_KEY = "tohyee.currentOrganisation";
 const listeners = new Set<() => void>();
 
+/**
+ * Each tab keeps its own organisation (#143, Jess, 5 Oct 2026): this tab's
+ * choice is in sessionStorage; localStorage only holds the last one chosen,
+ * which a new tab starts on. Switching in another tab doesn't change this
+ * one, so a half-filled form can't end up in another organisation.
+ */
 function readStoredOrganisation(): string | null {
   try {
-    return window.localStorage.getItem(STORAGE_KEY);
+    const own = window.sessionStorage.getItem(STORAGE_KEY);
+    if (own) return own;
+    // A new tab starts on the last one chosen, then keeps it whatever other tabs do.
+    const last = window.localStorage.getItem(STORAGE_KEY);
+    if (last) window.sessionStorage.setItem(STORAGE_KEY, last);
+    return last;
   } catch {
     return null;
   }
 }
 
+/** Only this tab's own switches: no "storage" events from other tabs. */
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  window.addEventListener("storage", listener);
   return () => {
     listeners.delete(listener);
-    window.removeEventListener("storage", listener);
   };
 }
 
@@ -67,6 +77,7 @@ export function WorkspaceProvider({
 
   const selectOrganisation = useCallback((id: string) => {
     try {
+      window.sessionStorage.setItem(STORAGE_KEY, id);
       window.localStorage.setItem(STORAGE_KEY, id);
     } catch {
       // Private mode etc.: selection just won't persist.

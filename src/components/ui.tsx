@@ -1,6 +1,6 @@
 "use client";
 
-import { type ButtonHTMLAttributes, cloneElement, isValidElement, type ReactNode, useId } from "react";
+import { type ButtonHTMLAttributes, Children, cloneElement, isValidElement, type ReactElement, type ReactNode, useId } from "react";
 import styles from "./ui.module.css";
 
 export { styles as ui };
@@ -72,14 +72,19 @@ export function Field({
 }) {
   const generatedId = useId();
   const hintId = `${generatedId}-hint`;
-  let control = children;
+  let control: ReactNode = children;
   let controlId = generatedId;
-  if (isValidElement<{ id?: string; "aria-describedby"?: string }>(children)) {
-    controlId = children.props.id ?? generatedId;
-    control = cloneElement(children, {
+  // The first element is the control, also when something sits beside it (e.g. the Export badge by Customer, #157).
+  const parts = Children.toArray(children);
+  const at = parts.findIndex((part) => isValidElement(part));
+  if (at >= 0) {
+    const first = parts[at] as ReactElement<{ id?: string; "aria-describedby"?: string }>;
+    controlId = first.props.id ?? generatedId;
+    const labelled = cloneElement(first, {
       id: controlId,
-      "aria-describedby": hint ? hintId : children.props["aria-describedby"],
+      "aria-describedby": hint ? hintId : first.props["aria-describedby"],
     });
+    control = parts.length === 1 ? labelled : parts.map((part, index) => (index === at ? labelled : part));
   }
   return (
     <div className={styles.field}>

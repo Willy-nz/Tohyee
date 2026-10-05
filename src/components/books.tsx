@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { Account } from "@/lib/accounts/service";
 import { ACCOUNT_CLASSES, type AccountClass } from "@/lib/accounts/types";
 import { formatMoney } from "@/lib/format";
@@ -54,7 +54,9 @@ export function RequireOrganisation({ children }: { children: (organisationId: s
       </Notice>
     );
   }
-  return <>{children(current.id)}</>;
+  // Keyed by the organisation, so switching starts every page and form under it afresh: nothing typed (or loaded)
+  // for one organisation can be saved into another (#143).
+  return <Fragment key={current.id}>{children(current.id)}</Fragment>;
 }
 
 export function useAccounts(organisationId: string | null, includeArchived = false) {
