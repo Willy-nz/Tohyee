@@ -7576,10 +7576,11 @@ Decided on 2 Oct 2026: decisions 288-290. What was asked is kept below.
 - Is one tracking value per budget enough for grants and segments, or do
   you need a budget for a combination (e.g. a Department and a Grant)?
 
-## Expense claims (examples not yet approved by Jess)
+## Expense claims (approved by Jess, 5 Oct 2026)
 
 Written overnight from Xero's (older) expense claims and Tohyee's own bill
-and supplier payment rules (B1-B8, SP1-SP8); Jess hasn't approved them yet.
+and supplier payment rules (B1-B8, SP1-SP8); approved by Jess on 5 Oct 2026,
+with the mileage examples (MI1-MI7).
 A member (bookkeeper or above) enters the **receipts** they paid for
 themselves: date, supplier's name, description, account, tax code and the
 amount **including GST**, with optional tracking, and attaches photos or
@@ -7735,6 +7736,157 @@ Decided on 2 Oct 2026: decisions 291-295. What was asked is kept below.
   go to accounts payable (2000) as Xero's newer expenses do?
 - Should the claim date default to the approval date (as built) or the
   latest receipt's date?
+
+## Bills inbox, reading documents, duplicate bills and mileage (examples not yet approved by Jess)
+
+Item 3 of the Xero add-ons plan, after Dext (Jess, 5 Oct 2026: reading
+receipts and bills is done by **the AI connected in Tohyee's AI section only**,
+decisions 339-348; nothing new is installed; without a connected AI,
+documents are stored and typed in by hand). Tohyee itself calls no AI: the
+person's own AI connects to Tohyee and uses its tools (decision 339), so a
+document is only ever sent to an AI the organisation chose and connected.
+
+### Bills inbox
+
+- Each organisation has a **bills inbox**: supplier bills and receipts that
+  have arrived but aren't bills yet. Files come in three ways: uploaded by
+  hand (several at once), from a **mailbox folder or Gmail label** (the
+  same connections as automatic statement files, BF7: the admin's own CRM
+  mailbox or IMAP with an app password; PDF and image attachments are
+  taken, other files ignored), or added by the connected AI. Files are the
+  kinds a bill can have (NF7: PDF, JPG, PNG, HEIC), up to 10 MB each.
+- An inbox item is a file with where it came from (uploaded by whom, or the
+  email's sender, subject and date). It's **waiting** until a bill is made
+  from it, or someone removes it with a reason (kept in the history, like a
+  removed file, NF). Nothing is posted by the inbox itself.
+- **Making a bill from an item** opens a new draft bill with the file
+  attached (NF7) and the item marked as used by that bill. The supplier's
+  defaults fill the lines as for any new bill (SD1-SD3). Typing it in by
+  hand always works.
+- **With a connected AI** (a key at the draft level or above, decision 346),
+  the AI can list the inbox, read an item's file, and **create a draft bill
+  from an item**: supplier (an existing contact, or a new supplier it
+  names), the supplier's invoice number, dates, lines, amounts and tax
+  codes. It's a draft like any other: someone checks it against the file
+  and approves it (or a post-level key's owner does, decision 346). The
+  draft records that the AI made it (decision 348) and from which item.
+- Bookkeepers and above use the inbox; viewers see it.
+
+Setup: Kauri Supplies (supplier, default purchase account 6010, GST); a
+connected AI key at the draft level owned by Jess (admin).
+
+- **BI1** Jess uploads `kauri-K-200.pdf` and `cafe.jpg`. The inbox shows two
+  waiting items with who uploaded them and when. Nothing is posted.
+- **BI2** A rule in Jess's mailbox files supplier emails into the label
+  `Bills`, linked to the inbox. An email from accounts@kauri.co.nz with
+  `K-201.pdf` and `logo.png` arrives: the check adds **both** (they're image
+  and PDF files), each showing the sender and subject; a `.docx` attachment
+  is ignored. Each message is read once (as BF7).
+- **BI3** From the `kauri-K-200.pdf` item, a bookkeeper makes a bill: a new
+  draft for Kauri Supplies with the file attached and one line on 6010 with
+  GST (the supplier's defaults). They type invoice number K-200, 1 Oct
+  2026, 200.00 + GST 30.00 = **230.00**, and approve it (B1-B3). The item
+  shows "Made into bill K-200" and leaves the waiting list.
+- **BI4** Jess's AI lists the inbox, reads `K-201.pdf` and calls
+  `create_draft_bill_from_inbox_item` with Kauri Supplies, K-201, 3 Oct 2026,
+  one line "Timber" 400.00 on 6010 with GST. Tohyee makes the draft (460.00)
+  with the file attached, marked "drafted by AI key 'Claude'", and the item
+  shows the draft. Nothing is posted until someone approves it.
+- **BI5** With no AI connected, the same item is turned into a bill by hand
+  (BI3); nothing tells the person to connect one.
+- **BI6** `logo.png` isn't a bill: a bookkeeper removes it, reason "Email
+  signature". It leaves the waiting list; the history keeps who removed it,
+  when and why.
+- **BI7** An AI key at the read level can list and read the inbox but not
+  make drafts (decision 346); a viewer can see the inbox but not change it.
+
+### Duplicate bills
+
+Today a supplier can't have two bills with the same invoice number (B5,
+ignoring case and spaces). Like Dext's duplicate check, Tohyee also
+**warns** about likely duplicates it can't be sure of, and asks before
+approving one:
+
+- **DU1** The same file arrives twice (the same contents, SHA-256, NF7): the
+  second inbox item says "Same file as item 12, made into bill K-200".
+- **DU2** A draft for Kauri Supplies of **230.00** dated 2 Oct, invoice
+  number "K200A", is saved. It's a different number, so B5 doesn't stop it,
+  but bill K-200 is the same supplier and total within 7 days: the draft
+  shows "Possibly the same as K-200 (230.00, 1 Oct)". Approving it asks
+  "Approve anyway?"; saying yes approves it, and the history says who
+  approved it despite the warning.
+- **DU3** A bill for a different supplier with invoice number K-200 and the
+  same total 230.00 (perhaps the supplier was entered twice) is also warned
+  about: "Another supplier has a bill K-200 for the same amount".
+- **DU4** Same supplier, same total, 40 days apart (a monthly charge): no
+  warning.
+- **DU5** The connected AI is told about the warning when it creates a draft
+  (the tool's answer includes it), and can't approve past it: approving
+  anyway needs a person.
+
+### Mileage on expense claims
+
+Like Dext's mileage: an expense claim (EC1-EC12) can have **mileage lines**
+as well as receipts, paid at the IRD kilometre rates.
+
+- **Kilometre rates are a setting**, per income year (1 April - 31 March)
+  and vehicle type, entered by an admin. IRD publishes them after the year
+  ends; Tohyee starts with the rates IRD published for 2025-26 (OS 19/04,
+  in force 4 June 2026): petrol **1.20** (tier 1) / **0.37** (tier 2),
+  diesel 1.30 / 0.38, petrol hybrid 0.90 / 0.24, electric 1.22 / 0.23 per
+  km. Tier 1 is for the first 14,000 km of a vehicle's travel in a year.
+- A mileage line has a date, from, to, purpose, kilometres (one decimal
+  place), the vehicle type and the account (default 6120 Motor vehicle
+  expenses). Its amount is kilometres times the rate, rounded to the cent.
+- **Which year's rates:** the line's income year's rates when an admin has
+  entered them; otherwise the latest rates entered, and the line says so
+  (question 2).
+- **Tier 2:** once a claimant's mileage lines for one vehicle type in an
+  income year pass **14,000 km**, the rest are at the tier 2 rate (question
+  3). Tohyee can't know a vehicle's private travel, which IRD's threshold
+  counts.
+- **GST:** mileage lines have no GST (question 4).
+
+Setup: the 2025-26 rates above; no 2026-27 rates entered (IRD hasn't
+published them); Mere is a bookkeeper.
+
+- **MI1** An admin sees the 2025-26 rates, can add 2026-27 rates when IRD
+  publishes them, and can't change a year's rates once an approved claim
+  used them (the claim keeps the rate it was approved at).
+- **MI2** Mere adds a mileage line to a claim: 3 Oct 2026, Office to Kobe
+  Ltd and back, "Client meeting", **123.4 km**, petrol. There are no 2026-27
+  rates, so it uses 2025-26's 1.20: **148.08**, and says "2025-26 rates
+  (2026-27 not entered)". No GST.
+- **MI3** Mere's petrol mileage lines in the 2026-27 year already total
+  13,950 km; a new 120 km line is **50 km x 1.20 + 70 km x 0.37 = 85.90**,
+  showing both parts.
+- **MI4** 80 km in an electric car: 80 x 1.22 = **97.60**.
+- **MI5** Approving the claim (EC) posts the mileage like a receipt: debit
+  6120 with 148.08, credit expense claims payable; no GST.
+- **MI6** If an admin enters 2026-27 rates later, claims already approved
+  keep the 2025-26 rate; drafts are worked out again with the new rates.
+- **MI7** Kilometres of 0, negative, or more than 2,000 on one line are
+  refused ("Split long trips into days").
+
+**Questions for Jess (bills inbox, duplicates and mileage), decided** (Jess
+chose the proposed answers on 5 Oct 2026; the examples themselves are still
+waiting for her approval):
+1. Documents are read **only by the person's connected AI using Tohyee's
+   tools**; Tohyee never sends a document to an AI itself.
+2. When a year's kilometre rates aren't published, the **latest rates
+   entered** are used and the line says so.
+3. Tier 2 after **14,000 km of a claimant's mileage lines** per vehicle type
+   per income year; an admin can override the tier on a line.
+4. **No GST on mileage lines**, until Jess or her accountant say otherwise.
+5. Duplicate warnings **warn and ask, never block**; the AI can't approve
+   past one.
+6. The expense claim examples EC1-EC12 are approved too.
+
+Not supported yet: reading a document without a connected AI (no OCR is
+built in), receipts in the inbox becoming expense claim receipts (bills
+only for now), approval workflows (stage 5), supplier statements, and
+mileage for vehicles owned by the organisation (that's fringe benefit tax,
+not a reimbursement).
 
 ## Fixed assets (examples not yet approved by Jess)
 
