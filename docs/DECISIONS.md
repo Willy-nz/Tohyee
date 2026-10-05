@@ -3310,3 +3310,21 @@ think is best").
      (no minority interest, as standard NetSuite).
      - Screenshots: a consolidated balance sheet ([light](screenshots/consolidation-light.png),
        [dark](screenshots/consolidation-dark.png), [phone](screenshots/consolidation-phone.png)).
+
+### Report commentary (decision 446)
+
+446. **AI commentary is a suggestion only** (Jess, 5 Oct 2026; NetSuite
+     2025.1 writes variance explanations with its own built-in AI, Tohyee
+     has none, so only the connected AI of decisions 339-348 writes them).
+     The draft-level tool `suggest_report_commentary` saves a commentary on
+     the cash flow forecast (in the organisation's database, tenant
+     migration 0103) or on a group's consolidated profit and loss or balance
+     sheet (in the core database with the group, core migration 0008). It
+     shows as "Suggested by Jess's AI key Claude, not checked" until a
+     bookkeeper or above (of every member, for a group) accepts it, as it
+     is or edited, or removes it. Commentary a person writes is accepted
+     when written. Removed commentary is kept with who removed it, and every
+     change is in the audit log. Viewers can read it. Tohyee never shows a
+     suggestion as checked, and nothing in it changes the report.
+     - Screenshots: the commentary card on the forecast ([light](screenshots/commentary-light.png),
+       [dark](screenshots/commentary-dark.png), [phone](screenshots/commentary-phone.png)).

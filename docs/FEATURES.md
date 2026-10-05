@@ -478,6 +478,11 @@ that something happened.
   months), optionally drafts and sales and purchase orders. Shows the lowest
   balance and the first period below zero, each period's documents, and
   exports to CSV, Excel and PDF. The connected AI can read it.
+- **Report commentary** (AC1-AC2, decision 446, core migration 0008, tenant
+  migration 0103): a commentary card on the cash flow forecast and on a
+  group's consolidated profit and loss and balance sheet. The connected AI
+  can suggest one ("Suggested by Jess's AI key Claude, not checked") that a
+  bookkeeper accepts, edits or removes; people can write their own.
 - **Approval workflows** (Settings, Approval rules, and Purchases,
   Approvals; AW1-AW17, decisions 424-431, tenant migration 0100), like
   ApprovalMax and NetSuite's approval routing: rules for bills, purchase

@@ -1104,6 +1104,12 @@ Enforced by the app (and covered by tests):
   ledger by account and day, translates it with the parent's exchange rates
   list, and eliminates. ECB rates (`src/lib/fx/ecb.ts`) fetch the ECB's file
   outside any transaction and add rates in one.
+- Report commentary (`src/lib/commentary/`, decision 446): the forecast's
+  in `report_commentaries` in each organisation (tenant migration 0103), a
+  group's in `consolidation_commentaries` in the core database (core
+  migration 0008). The status is "suggested" when `tx.actor.via` is set
+  (the connected AI) and "accepted" otherwise; `src/components/report-commentary.tsx`
+  is the card on both reports.
 - The cash flow forecast (`src/lib/cash-flow/forecast.ts`, decisions
   432-436) is worked out on each request: it reuses `RECEIVABLES_SQL` and
   `PAYABLES_SQL` (with no as-at date) for what's due on each document, the

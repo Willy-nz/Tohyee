@@ -8701,6 +8701,24 @@ commentary on a forecast or consolidated report. It's shown as "Suggested by
 Jess's AI key Claude, not checked" until a person edits or accepts it, and
 it can be removed (question 5).
 
+- **AC1 (the forecast):** Jess's AI key Claude (draft level) reads the
+  forecast and suggests "Cash dips in week 6 when GST is paid." for
+  "Weeks from 5 Oct 2026 to 3 Jan 2027". It shows as **Suggested by Jess's
+  AI key Claude, not checked**. Vic (viewer) can read it but not accept or
+  add one. Mere (bookkeeper) edits it to "Cash dips in week 6 when GST of
+  4,200.00 is paid." and accepts it: it then shows who suggested it and
+  that Mere checked it. Mere's own commentary is accepted when written. A
+  removed one disappears from the report but is kept with who removed it.
+  A read-only key can't suggest one.
+- **AC2 (a group):** the same key suggests "Management fees eliminate." on
+  the group's October profit and loss. Vic (viewer of every member) reads
+  it but can't accept or add; Mere, who isn't in every member, can't see the
+  group at all. Jess accepts it as it is and writes her own on the balance
+  sheet. The amounts in the reports never change.
+
+Built (decision 446, core migration 0008, tenant migration 0103). Test:
+`tests/integration/report-commentary.test.ts` (AC1, AC2).
+
 **Questions for Jess (cash flow forecast and consolidation), decided**
 (Jess, 5 Oct 2026: show differences, wholly owned only, AI commentary as a
 suggestion, forecast like Cash 360, the AI can read groups, rates from the

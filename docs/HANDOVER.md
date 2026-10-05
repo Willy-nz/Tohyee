@@ -207,8 +207,9 @@ Database upgrades run by themselves when Tohyee starts. Back up first if you ins
   decisions 432-436, tenant migration 0101. Item 6 part 2, consolidation
   with ECB rates, is built: examples CO1-CO11 and FX1 approved by Jess 5 Oct
   2026, decisions 437-445, core migration 0007, tenant migration 0102.
-  Next: item 6 part 3, AI commentary as a suggestion (approved by Jess,
-  needs worked examples of the screens), then item 7.
+  Item 6 part 3, AI commentary as a suggestion (approved by Jess 5 Oct
+  2026), is built: examples AC1-AC2, decision 446, core migration 0008,
+  tenant migration 0103. That completes item 6. Next: item 7.
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
@@ -293,8 +294,9 @@ tenant migration 0096). Bills inbox, duplicate bill warnings and mileage
 workflows (item 5, decisions 424-431, tenant migration 0100). Cash flow
 forecast (item 6 part 1, decisions 432-436, tenant migration 0101).
 Consolidation and ECB rates (item 6 part 2, decisions 437-445, core
-migration 0007, tenant migration 0102). Next numbers: tenant migration
-0103, core migration 0008, decision 446.
+migration 0007, tenant migration 0102). Report commentary (item 6 part 3,
+decision 446, core migration 0008, tenant migration 0103). Next numbers:
+tenant migration 0104, core migration 0009, decision 447.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
