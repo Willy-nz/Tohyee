@@ -12,6 +12,16 @@ $ProgressPreference = 'SilentlyContinue'
 # (https://www.enterprisedb.com/download-postgresql-binaries).
 $PostgresVersion = '17.11'
 $PostgresUrl = 'https://sbp.enterprisedb.com/getfile.jsp?fileid=1260569'
+# The PostgreSQL major version existing installs' data folder
+# (%ProgramData%\Tohyee\pgdata) was made with. A new major version can't
+# start on an older major's data folder: an update would replace pgsql\bin
+# and leave every Windows install without a running database (issue #156).
+# Minor updates (17.x) are fine. Don't change this until configure-tohyee.ps1
+# upgrades the data folder with pg_upgrade (keeping the old bin folder for it).
+$PostgresMajorWithUpgradePath = '17'
+if ($PostgresVersion.Split('.')[0] -ne $PostgresMajorWithUpgradePath) {
+  throw "PostgreSQL $PostgresVersion is a different major version from $PostgresMajorWithUpgradePath. Installed data folders need pg_upgrade first: add that to configure-tohyee.ps1 before changing the major version."
+}
 $WinSwUrl = 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe'
 # Visual C++ 2015-2022 runtime 14.44.35211.0, from Microsoft's versioned
 # download URL (where https://aka.ms/vs/17/release/vc_redist.x64.exe pointed

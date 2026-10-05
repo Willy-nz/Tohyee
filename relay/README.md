@@ -6,7 +6,8 @@ web address like `k7m2q9x.tohyee.example`, so people can open their Tohyee on
 their phone without anyone signing up for anything.
 
 It's separate from the Tohyee app itself. It has its own `package.json`, its own
-tests, and nothing in the main app's build or tests touches it.
+tests, and nothing in the main app's build or tests touches it. CI checks it
+in its own job (typecheck and tests).
 
 ## How it works
 

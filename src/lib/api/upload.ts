@@ -85,9 +85,12 @@ export function fileResponse(file: { fileName: string; contentType: string; cont
       "content-disposition": disposition(inline ? "inline" : "attachment", file.fileName),
       "cache-control": "private, no-store",
       "x-content-type-options": "nosniff",
-      ...(file.contentType === "application/pdf"
-        ? {}
-        : { "content-security-policy": "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'" }),
+      // frame-ancestors: only Tohyee may frame it (the bills inbox shows PDFs
+      // in an iframe; issue #144). next.config.ts leaves /api/ CSPs to routes.
+      "content-security-policy":
+        file.contentType === "application/pdf"
+          ? "frame-ancestors 'self'"
+          : "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'self'",
     },
   });
 }

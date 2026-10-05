@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 
+/** Who may show Tohyee's pages in a frame: only Tohyee itself (issue #144). */
+const FRAME_ANCESTORS = "frame-ancestors 'self'";
+
 const nextConfig: NextConfig = {
   output: "standalone",
   // DuckDB (analytics, decision 354) is a native module: loaded by Node, not bundled.
@@ -11,6 +14,44 @@ const nextConfig: NextConfig = {
     // DuckDB's native library sits beside its .node file and is loaded by it
     // (libduckdb.so, duckdb.dll), so tracing doesn't see it (decision 354).
     "/api/analytics/**": ["node_modules/@duckdb/node-api/**", "node_modules/@duckdb/node-bindings/**", "node_modules/@duckdb/node-bindings-*/**"],
+  },
+  // Security headers on every response (issue #144). Framing is limited to
+  // Tohyee's own origin, not forbidden: the bills inbox shows a PDF in an
+  // iframe of the same origin (InboxItemPreview). 'self' is an origin, so
+  // another install on the shared Tohyee address domain (x.<domain> framing
+  // y.<domain>) is still refused. Only frame-ancestors for now; a full
+  // Content-Security-Policy needs nonces for the inline theme script.
+  //
+  // The CSP isn't set on /api/ responses here: Next keeps a header set in this
+  // config over the same header from a route, which would drop the sandbox
+  // policy that stored files and logos are sent with. Those set their own
+  // CSP including frame-ancestors (src/lib/api/upload.ts); X-Frame-Options
+  // still covers every API response.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "same-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+      {
+        source: "/:path((?!api/).*)",
+        headers: [{ key: "Content-Security-Policy", value: FRAME_ANCESTORS }],
+      },
+    ];
+  },
+  // Folders a running copy writes real data into (backups, analytics' DuckDB
+  // copies of the books, data) stay out of the routes' traces even if a
+  // dynamic path makes the tracer pull in the project folder (issue #155).
+  // Only a safety net: it doesn't cover instrumentation.ts's trace. The real
+  // fix is the turbopackIgnore hints on the dynamic paths themselves; the
+  // build warns ("Dynamic filesystem access causes tracing of the whole
+  // project") when a new one needs one.
+  outputFileTracingExcludes: {
+    "/*": ["analytics/**", "backups/**", "data/**"],
   },
   // The CRM moved from /operations/crm to its own app at /crm; old links and
   // bookmarks still reach the same pages (with their ?query). /operations/crm

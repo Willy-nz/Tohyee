@@ -1,3 +1,6 @@
+# For development only (npm run db:start): a local PostgreSQL with a
+# password written in this file. It listens on this computer only
+# (127.0.0.1). Not for running Tohyee for real.
 services:
   postgres:
     image: postgres:17
@@ -7,7 +10,7 @@ services:
       POSTGRES_USER: app_user
       POSTGRES_PASSWORD: app_password
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - tohyee_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,15 +19,5 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7
-    container_name: tohyee-redis
-    ports:
-      - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - tohyee_redis_data:/data
-
 volumes:
   tohyee_postgres_data:
-  tohyee_redis_data:
