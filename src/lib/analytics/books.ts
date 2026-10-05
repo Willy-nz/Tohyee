@@ -1,7 +1,7 @@
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ConflictError } from "@/lib/errors";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
-import { columnNameFrom, replaceTohyeeTables, type TableCopy } from "@/lib/analytics/engine";
+import { columnNameFrom, replaceTohyeeTables, type TableCopy, type TableCopyRow } from "@/lib/analytics/engine";
 import { type LoadRun, requireAnalytics } from "@/lib/analytics/sources";
 import { rebuildShapedTablesForTables } from "@/lib/analytics/shaped-tables";
 import { coreQuery } from "@/lib/db/transactions";
@@ -72,14 +72,45 @@ function customValues(look: Lookups, record: string, values: Record<string, unkn
     });
 }
 
-/** Every `tohyee_*` table, read in the caller's (read-only) transaction. */
-export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, string> = new Map()): Promise<TableCopy[]> {
+/** Rows read from PostgreSQL at a time for the big tables (ledger lines, invoices, bills and their lines). */
+export const BOOKS_BATCH_SIZE = 5000;
+
+/**
+ * Every `tohyee_*` table, read in the caller's (read-only) transaction. The
+ * big tables are read through server-side cursors, a batch at a time, while
+ * they're appended (issue 150), so they must be consumed (by
+ * `replaceTohyeeTables`) before that transaction ends.
+ */
+export async function readBooks(
+  tx: OrgTx,
+  ownerEmails: ReadonlyMap<string, string> = new Map(),
+  options: { batchSize?: number } = {},
+): Promise<TableCopy[]> {
+  const batchSize = options.batchSize ?? BOOKS_BATCH_SIZE;
+  if (!Number.isInteger(batchSize) || batchSize < 1) throw new Error("The batch size must be a positive whole number.");
+  let cursors = 0;
+  // The query only runs when the table is copied; each fetch replaces the last batch in memory.
+  async function* batches<T extends object>(sql: string, toRow: (row: T) => TableCopyRow): AsyncIterable<TableCopyRow[]> {
+    const cursor = `tohyee_books_${++cursors}`;
+    await tx.query(`declare ${cursor} no scroll cursor for ${sql}`);
+    try {
+      for (;;) {
+        const batch = await tx.query<T>(`fetch forward ${batchSize} from ${cursor}`);
+        if (batch.rows.length > 0) yield batch.rows.map(toRow);
+        if (batch.rows.length < batchSize) break;
+      }
+    } finally {
+      // Closed early when the copy stops part-way; a failed transaction closes it anyway.
+      await tx.query(`close ${cursor}`).catch(() => undefined);
+    }
+  }
+
   const look = await lookups(tx);
   const settings = await tx.query<{ crm_enabled: boolean }>("select crm_enabled from organisation_settings where id = true");
   const tables: TableCopy[] = [];
 
   // Ledger lines, with the contact of the document behind the journal where there is one.
-  const ledger = await tx.query<{
+  type LedgerRow = {
     journal_id: string;
     posting_date: string;
     origin: string;
@@ -99,7 +130,8 @@ export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, stri
     foreign_amount: string | null;
     exchange_rate: string | null;
     tracking: Record<string, string> | null;
-  }>(
+  };
+  const ledgerSql =
     `with journal_contacts as (
        select approval_journal_id as journal_id, contact_id from sales_invoices where approval_journal_id is not null
        union all select void_journal_id, contact_id from sales_invoices where void_journal_id is not null
@@ -123,8 +155,7 @@ export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, stri
        join accounts a on a.id = l.account_id
        left join one_contact oc on oc.journal_id = j.id
        left join contacts c on c.id = oc.contact_id
-      order by j.posting_date, j.id, l.line_order`,
-  );
+      order by j.posting_date, j.id, l.line_order`;
   tables.push({
     name: "tohyee_ledger_lines",
     columns: [
@@ -148,7 +179,7 @@ export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, stri
       { name: "exchange_rate", type: RATE },
       ...trackingColumns(look),
     ],
-    rows: ledger.rows.map((row) => {
+    rows: batches<LedgerRow>(ledgerSql, (row) => {
       // Pay runs: no employee names (Jess, 3 Oct 2026; AB10).
       const payroll = row.origin === "payroll";
       return [
@@ -182,7 +213,7 @@ export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, stri
     const parent = kind === "invoice" ? "invoice_id" : "bill_id";
     const number = kind === "invoice" ? "d.invoice_number" : "d.supplier_invoice_number";
     const date = kind === "invoice" ? "invoice_date" : "bill_date";
-    const head = await tx.query<Record<string, string | null> & { custom_fields: Record<string, unknown> | null }>(
+    const headSql =
       `select d.id::text, ${number} as number, d.status, d.${date}::text as date, d.due_date::text, d.void_date::text,
               c.name as contact, d.${kind === "invoice" ? "reference" : "supplier_invoice_number"} as reference,
               coalesce(d.base_subtotal, d.subtotal)::text as net, coalesce(d.base_tax_total, d.tax_total)::text as gst,
@@ -191,8 +222,7 @@ export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, stri
               d.custom_fields
          from ${documents} d join contacts c on c.id = d.contact_id
         where d.status in ('approved', 'voided')
-        order by d.${date}, d.id`,
-    );
+        order by d.${date}, d.id`;
     tables.push({
       name: `tohyee_${kind}s`,
       columns: [
@@ -212,7 +242,7 @@ export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, stri
         { name: "exchange_rate", type: RATE },
         ...customColumns(look, "document"),
       ],
-      rows: head.rows.map((row) => [
+      rows: batches<Record<string, string | null> & { custom_fields: Record<string, unknown> | null }>(headSql, (row) => [
         row.id,
         row.number,
         row.status,
@@ -230,7 +260,7 @@ export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, stri
         ...customValues(look, "document", row.custom_fields),
       ]),
     });
-    const detail = await tx.query<Record<string, string | null> & { tracking: Record<string, string> | null }>(
+    const detailSql =
       `select d.id::text as document_id, ${number} as number, d.status, d.${date}::text as date, c.name as contact,
               l.line_order::text, l.description, i.code as item_code, a.code as account_code, a.name as account_name,
               t.code as tax_code, l.quantity::text, l.unit_price::text,
@@ -243,8 +273,7 @@ export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, stri
          left join accounts a on a.id = l.account_id
          left join tax_codes t on t.id = l.tax_code_id
         where d.status in ('approved', 'voided')
-        order by d.${date}, d.id, l.line_order`,
-    );
+        order by d.${date}, d.id, l.line_order`;
     tables.push({
       name: `tohyee_${kind}_lines`,
       columns: [
@@ -265,7 +294,7 @@ export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, stri
         { name: "gst", type: MONEY },
         ...trackingColumns(look),
       ],
-      rows: detail.rows.map((row) => [
+      rows: batches<Record<string, string | null> & { tracking: Record<string, string> | null }>(detailSql, (row) => [
         row.document_id,
         row.number,
         row.status,
@@ -441,8 +470,9 @@ export async function readBooks(tx: OrgTx, ownerEmails: ReadonlyMap<string, stri
 
 /**
  * Copies the books and CRM now (nightly, or "Refresh now"). The copy is read
- * in one read-only transaction and swapped in only when every table has
- * loaded; the record of it is written before and after, like a CSV load.
+ * in one read-only transaction (the big tables in batches, appended as they
+ * arrive) and swapped in only when every table has loaded; the record of it
+ * is written before and after, like a CSV load.
  */
 export async function refreshBooks(organisation: OrganisationRecord, actor: Actor, trigger: "schedule" | "manual"): Promise<LoadRun> {
   const runId = await withOrganisationTransaction(organisation, actor, async (tx) => {
@@ -470,10 +500,18 @@ export async function refreshBooks(organisation: OrganisationRecord, actor: Acto
       [organisation.id],
     );
     const ownerEmails = new Map(members.rows.map((row) => [row.id, row.email]));
-    const tables = await withOrganisationTransaction(organisation, actor, (tx) => readBooks(tx, ownerEmails), { readOnly: true });
-    await replaceTohyeeTables(organisation.id, tables);
-    rows = tables.reduce((total, table) => total + table.rows.length, 0);
-    changedTables = tables.map((table) => table.name);
+    // Appended to DuckDB (a local file, not a network call) while the transaction is open, a batch at a time.
+    const copied = await withOrganisationTransaction(
+      organisation,
+      actor,
+      async (tx) => {
+        const tables = await readBooks(tx, ownerEmails);
+        return { rows: await replaceTohyeeTables(organisation.id, tables), names: tables.map((table) => table.name) };
+      },
+      { readOnly: true },
+    );
+    rows = copied.rows;
+    changedTables = copied.names;
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);
   }

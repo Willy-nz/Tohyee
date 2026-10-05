@@ -97,6 +97,35 @@ function allowedFolders(work: string, folder: string | null): string[] {
   return [...new Set(folders.map((entry) => (entry.endsWith(path.sep) ? entry : entry + path.sep)))];
 }
 
+/**
+ * How much memory one organisation's DuckDB may use, and how much it may
+ * spill to its work folder's `tmp` (issue 150). Without these DuckDB takes
+ * most of the server's memory and, when it spills, up to about 90% of the
+ * free disk, which PostgreSQL and backups share. Past either limit the query
+ * fails instead. Server admins can change them with these settings, as DuckDB
+ * sizes ("512MiB", "4GiB").
+ */
+export const DEFAULT_MEMORY_LIMIT = "1GiB";
+export const DEFAULT_TEMP_DIRECTORY_LIMIT = "2GiB";
+
+const DUCKDB_SIZE = /^\d+(\.\d+)?\s*(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)$/i;
+
+function sizeSetting(name: string, fallback: string): string {
+  const configured = process.env[name]?.trim();
+  if (!configured) return fallback;
+  if (DUCKDB_SIZE.test(configured)) return configured;
+  console.warn(`[tohyee] ${name} should be a size like 1GiB or 512MiB; using ${fallback}.`);
+  return fallback;
+}
+
+export function analyticsMemoryLimit(): string {
+  return sizeSetting("TOHYEE_ANALYTICS_MEMORY_LIMIT", DEFAULT_MEMORY_LIMIT);
+}
+
+export function analyticsTempDirectoryLimit(): string {
+  return sizeSetting("TOHYEE_ANALYTICS_TEMP_LIMIT", DEFAULT_TEMP_DIRECTORY_LIMIT);
+}
+
 async function open(organisationId: string, file: string, folder: string | null): Promise<DuckDBInstance> {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const work = analyticsWorkFolder(organisationId);
@@ -112,6 +141,8 @@ async function open(organisationId: string, file: string, folder: string | null)
   const setup = await instance.connect();
   try {
     await setup.run(`set temp_directory = ${quoteString(path.join(work, "tmp"))}`);
+    await setup.run(`set memory_limit = ${quoteString(analyticsMemoryLimit())}`);
+    await setup.run(`set max_temp_directory_size = ${quoteString(analyticsTempDirectoryLimit())}`);
     const list = allowedFolders(work, folder).map(quoteString).join(", ");
     await setup.run(`set allowed_directories = [${list}]`);
     await setup.run("set enable_external_access = false");
@@ -438,21 +469,66 @@ export async function loadSourceFile(input: {
   return loadCsv(input);
 }
 
+/** A shaped-table build stopped by its time limit (its message is shown as it is). */
+class ShapedBuildStopped extends Error {}
+
+/**
+ * Building a shaped table stops after this long (issue 150), so a merge that
+ * multiplies rows can't hold the organisation's write queue (and its disk)
+ * indefinitely. Server admins can change it with
+ * TOHYEE_ANALYTICS_BUILD_SECONDS.
+ */
+export const DEFAULT_BUILD_TIME_LIMIT_MS = 5 * 60_000;
+
+export function shapedTableBuildTimeLimitMs(): number {
+  const seconds = Number.parseInt(process.env.TOHYEE_ANALYTICS_BUILD_SECONDS ?? "", 10);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : DEFAULT_BUILD_TIME_LIMIT_MS;
+}
+
+function describeDuration(milliseconds: number): string {
+  if (milliseconds >= 60_000 && milliseconds % 60_000 === 0) {
+    const minutes = milliseconds / 60_000;
+    return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+  }
+  const seconds = Math.max(1, Math.round(milliseconds / 1000));
+  return seconds === 1 ? "1 second" : `${seconds} seconds`;
+}
+
 export async function replaceTableFromSelect(
   organisationId: string,
   table: string,
   sql: string,
   params: unknown[],
+  options: { timeLimitMs?: number } = {},
 ): Promise<CsvLoadResult> {
   assertTableName(table);
   if (table.startsWith(TOHYEE_TABLE_PREFIX)) throw new ValidationError("Table names starting with tohyee_ are kept for the copy of the books.");
+  const timeLimitMs = options.timeLimitMs ?? shapedTableBuildTimeLimitMs();
   return serialise(organisationId, () =>
     withAnalytics(organisationId, async (connection) => {
       const started = performance.now();
       const staging = `_tohyee_shape_${table}`;
       await connection.run(`drop table if exists ${quoteIdentifier(staging)}`);
       try {
-        await connection.runAndReadAll(`create table ${quoteIdentifier(staging)} as ${sql}`, params as never);
+        // The same time limit as questions (runBuiltQuery), for the build itself.
+        let stopped = false;
+        const timer = setTimeout(() => {
+          stopped = true;
+          connection.interrupt();
+        }, timeLimitMs);
+        try {
+          await connection.runAndReadAll(`create table ${quoteIdentifier(staging)} as ${sql}`, params as never);
+        } catch (error) {
+          if (stopped) {
+            throw new ShapedBuildStopped(
+              `The shaped table took more than ${describeDuration(timeLimitMs)} to build, so it was stopped and the last copy kept. ` +
+                "Filter or group the data sooner, or merge on columns that match fewer rows.",
+            );
+          }
+          throw error;
+        } finally {
+          clearTimeout(timer);
+        }
         const count = await connection.runAndReadAll(`select count(*)::bigint as n from ${quoteIdentifier(staging)}`);
         const rows = Number(count.getRows()[0][0]);
         await connection.run("begin transaction");
@@ -467,6 +543,7 @@ export async function replaceTableFromSelect(
         return { rows, milliseconds: Math.round(performance.now() - started) };
       } catch (error) {
         await connection.run(`drop table if exists ${quoteIdentifier(staging)}`).catch(() => undefined);
+        if (error instanceof ShapedBuildStopped) throw new ValidationError(error.message);
         throw new ValidationError(`The shaped table couldn't be rebuilt: ${loadErrorMessage(error)}`);
       }
     }),
@@ -703,8 +780,24 @@ export async function runBuiltQuery(
   });
 }
 
-/** A table copied into the analytics file: its columns (DuckDB types) and its rows as text. */
-export type TableCopy = { name: string; columns: Array<{ name: string; type: string }>; rows: Array<Array<string | null>> };
+/** One row of a copied table, as text. */
+export type TableCopyRow = Array<string | null>;
+
+/**
+ * A table copied into the analytics file: its columns (DuckDB types) and its
+ * rows as text, either all at once or (for big tables such as the ledger
+ * lines) as batches read while they're appended, so memory stays bounded.
+ */
+export type TableCopy = {
+  name: string;
+  columns: Array<{ name: string; type: string }>;
+  rows: TableCopyRow[] | AsyncIterable<TableCopyRow[]>;
+};
+
+async function* rowBatches(rows: TableCopy["rows"]): AsyncIterable<TableCopyRow[]> {
+  if (Array.isArray(rows)) yield rows;
+  else yield* rows;
+}
 
 export const TOHYEE_TABLE_PREFIX = "tohyee_";
 
@@ -713,9 +806,11 @@ export const TOHYEE_TABLE_PREFIX = "tohyee_";
  * written to a staging table first; only when all have loaded are they
  * swapped in together, and `tohyee_*` tables not in the set (e.g. the CRM's,
  * once it's off) are dropped. Values go in as text and DuckDB converts them
- * to each column's type, so decimals stay exact.
+ * to each column's type, so decimals stay exact. Returns how many rows were
+ * copied. Batched tables are read as they're appended, so they must still be
+ * readable when this runs (inside the read's transaction).
  */
-export function replaceTohyeeTables(organisationId: string, tables: readonly TableCopy[]): Promise<void> {
+export function replaceTohyeeTables(organisationId: string, tables: readonly TableCopy[]): Promise<number> {
   for (const table of tables) {
     if (!table.name.startsWith(TOHYEE_TABLE_PREFIX)) throw new ValidationError(`${table.name} isn't a Tohyee table.`);
     assertTableName(table.name);
@@ -724,6 +819,7 @@ export function replaceTohyeeTables(organisationId: string, tables: readonly Tab
   return serialise(organisationId, () =>
     withAnalytics(organisationId, async (connection) => {
       const staging = (name: string) => quoteIdentifier(`_tohyee_load_${name}`);
+      let copied = 0;
       try {
         for (const table of tables) {
           await connection.run(`drop table if exists ${staging(table.name)}`);
@@ -731,14 +827,28 @@ export function replaceTohyeeTables(organisationId: string, tables: readonly Tab
             `create table ${staging(table.name)} (${table.columns.map((column) => `${quoteIdentifier(column.name)} ${column.type}`).join(", ")})`,
           );
           const appender = await connection.createAppender(`_tohyee_load_${table.name}`);
-          for (const row of table.rows) {
-            for (const value of row) {
-              if (value === null || value === undefined) appender.appendNull();
-              else appender.appendVarchar(value);
+          try {
+            for await (const batch of rowBatches(table.rows)) {
+              for (const row of batch) {
+                for (const value of row) {
+                  if (value === null || value === undefined) appender.appendNull();
+                  else appender.appendVarchar(value);
+                }
+                appender.endRow();
+              }
+              copied += batch.length;
+              // Each batch goes into the staging table before the next is read.
+              appender.flushSync();
             }
-            appender.endRow();
+            appender.closeSync();
+          } catch (error) {
+            try {
+              appender.closeSync();
+            } catch {
+              // The first error is the one worth reporting.
+            }
+            throw error;
           }
-          appender.closeSync();
         }
         const existing = await connection.runAndReadAll(
           `select table_name from information_schema.tables where table_schema = 'main' and starts_with(table_name, 'tohyee_')`,
@@ -758,6 +868,7 @@ export function replaceTohyeeTables(organisationId: string, tables: readonly Tab
           await connection.run("rollback");
           throw error;
         }
+        return copied;
       } catch (error) {
         for (const table of tables) await connection.run(`drop table if exists ${staging(table.name)}`).catch(() => undefined);
         throw new ValidationError(`The books couldn't be copied: ${loadErrorMessage(error)}`);
