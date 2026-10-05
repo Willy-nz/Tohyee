@@ -198,6 +198,8 @@ export async function linkBankFeed(
     [akahuAccountId, accountId],
   );
   if (taken.rows[0]) throw new ValidationError("That Akahu account is already linked to another bank account.");
+  const simplefin = await tx.query("select 1 from simplefin_links where account_id = $1 and active", [accountId]);
+  if (simplefin.rowCount) throw new ValidationError(`${account.code} is linked to SimpleFIN. Unlink it first.`);
   await tx.query(
     `update bank_account_settings
         set akahu_account_id = $2, akahu_account_name = $3, akahu_connection_name = $4, feed_start_date = $5,

@@ -2823,3 +2823,38 @@ think is best").
      - Screenshots: the Bank feed tab ([light](screenshots/bank-file-feeds-light.png),
        [dark](screenshots/bank-file-feeds-dark.png), [phone](screenshots/bank-file-feeds-phone.png))
        and the server's [Bank files folders](screenshots/bank-files-folders-dark.png).
+
+### SimpleFIN bank feeds (decisions 388-391)
+
+388. **SimpleFIN is a second bank feed, for overseas accounts** (examples
+     SF1-SF10, approved by Jess on 5 Oct 2026; tenant migration 0093). Each
+     organisation connects its **own** SimpleFIN Bridge account (it pays
+     SimpleFIN; no relay) by pasting a setup token, which Tohyee claims once;
+     the access URL it gets back holds the credentials and is stored
+     encrypted, and deleted on disconnect. One connection per organisation
+     (Jess: one connection per provider). NZ banks stay with Akahu. Checked
+     against the protocol page, the Bridge's developer guide and its public
+     demo on 5 Oct 2026; not tried with a real bank.
+389. **A SimpleFIN account's currency must be the bank account's**, so a USD
+     account can feed a USD bank account (FXB10), unlike Akahu. An account
+     with an Akahu feed can't also have a SimpleFIN one (one feed per
+     account, so the same transaction can't arrive twice under two ids).
+390. **A line's date is SimpleFIN's `posted` time in the linked account's
+     time zone** (Jess, 5 Oct 2026), defaulting to the organisation's: the
+     protocol gives a moment, not the bank's date. Lines are kept as first
+     received (Jess, as Akahu), carry
+     `simplefin:<account id>:<transaction id>`, and pending transactions wait
+     until they post. Amounts must be to the cent; anything else is skipped
+     and listed with its reason. The account's balance and balance date
+     become the statement balance as SimpleFIN sends it; for a credit card
+     its sign hasn't been checked with a real card.
+391. **Tohyee keeps under the Bridge's 24 requests a day**: one sync asks for
+     every account at once, in 90-day pieces the first time and from 10 days
+     before the last line (or last good sync) after that; every request is
+     recorded. **Sync now stops at 20 in 24 hours** (Jess, 5 Oct 2026); the
+     schedule (every 6 hours by default, 1-24, in the quarter hour after a
+     minute picked at random per organisation, as the guide asks) stops at
+     24. `TOHYEE_SIMPLEFIN_SCHEDULER=off` turns the schedule off.
+     - Screenshots: the connection on Bank accounts ([dark](screenshots/simplefin-connection-dark.png)),
+       a linked USD account's Bank feed tab ([light](screenshots/simplefin-feed-light.png),
+       [phone](screenshots/simplefin-feed-phone.png)) and its lines ([light](screenshots/simplefin-lines-light.png)).

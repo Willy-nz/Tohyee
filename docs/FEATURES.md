@@ -550,7 +550,12 @@ that something happened.
   6 hours by default (1-24) or with Check now. Each file is imported as if
   by hand, read again only when it changes; CSV and Excel files must match
   the columns of the last file imported by hand, or they wait (examples
-  BF1-BF10, decisions 385-387). Duplicates are
+  BF1-BF10, decisions 385-387). **SimpleFIN bank feeds** for overseas
+  accounts (mostly US banks): the organisation connects its own SimpleFIN
+  Bridge account with a setup token, links each account (its currency must
+  match, so USD accounts work), chooses the bank's time zone, and transactions
+  come in every 6 hours or with Sync now, within the Bridge's 24 requests a
+  day (examples SF1-SF10, decisions 388-391). Duplicates are
   skipped; lines that look like a file-and-feed duplicate are flagged. Each
   line is reconciled by matching what's already posted (within 60 days),
   paying invoices or bills, creating spend or receive money (with GST), or a

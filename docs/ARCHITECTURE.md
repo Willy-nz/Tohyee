@@ -91,6 +91,9 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bank_statement_imports, bank_statement_lines   statement files and bank feed syncs
 ├─ bank_file_feeds        per bank/card account: folders and mailboxes statement files are read from (BF1-BF10; IMAP passwords encrypted)
 ├─ bank_file_feed_seen    what each place has given an account (file or message, SHA-256), kept when a feed is removed
+├─ simplefin_connections  the organisation's own SimpleFIN Bridge (access URL encrypted, cleared on disconnect), its account list and last sync
+├─ simplefin_links        a SimpleFIN account linked to a bank account: currency, start date, time zone, last sync and skipped transactions
+├─ simplefin_requests     every request made to the Bridge, to stay under its 24 a day
 ├─ bank_reconciliations, bank_reconciliation_items   which journal lines each statement line is
 ├─ bank_reconciliation_splits   one journal line reconciled across several statement lines
 ├─ bank_transactions, bank_transaction_lines   spend and receive money
@@ -1030,6 +1033,13 @@ Enforced by the app (and covered by tests):
   `server_settings`, `src/lib/bank/file-folders.ts`); subfolders are
   resolved through real paths and must stay inside it. Mailbox feeds reuse
   the report-email readers (`src/lib/analytics/report-email-providers.ts`).
+- SimpleFIN feeds (`src/lib/bank/simplefin/`, decisions 388-391) work like
+  Akahu's: a sync reads what to fetch and takes a 10-minute lease in one
+  short transaction, calls the Bridge (one request per 90 days, all accounts
+  at once, each recorded in `simplefin_requests`), then adds each account's
+  new lines in its own transaction. The client strips the credentials from
+  the access URL into a Basic header, and checks hosts are on the internet
+  (as IMAP hosts).
 - Tracking categories (advanced features): `tracking_categories` and a tree
   of `tracking_values` per organisation. Lines store their tags as a jsonb
   map `{categoryId: valueId}` (`tracking` on document lines and

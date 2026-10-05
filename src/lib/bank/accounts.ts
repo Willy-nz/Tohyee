@@ -26,6 +26,9 @@ export type BankFeedStatus = {
   lastSyncError: string | null;
 };
 
+/** The account's SimpleFIN feed (decision 388), when it has one. */
+export type SimpleFinFeedStatus = { active: true; lastSyncedAt: string | null; lastSyncStatus: "never" | "ok" | "failed" };
+
 export type BankAccount = {
   id: string;
   code: string;
@@ -50,6 +53,7 @@ export type BankAccount = {
   lastLineDate: string | null;
   importLayout: unknown;
   feed: BankFeedStatus;
+  simplefin: SimpleFinFeedStatus | null;
 };
 
 type BankAccountRow = {
@@ -73,6 +77,9 @@ type BankAccountRow = {
   last_synced_at: string | null;
   last_sync_status: "never" | "ok" | "failed" | null;
   last_sync_error: string | null;
+  simplefin_active: boolean | null;
+  simplefin_synced_at: string | null;
+  simplefin_status: "never" | "ok" | "failed" | null;
 };
 
 const BANK_ACCOUNT_SELECT = `
@@ -85,9 +92,11 @@ const BANK_ACCOUNT_SELECT = `
          (select max(b.line_date) from bank_statement_lines b where b.account_id = a.id and b.status <> 'deleted')::text
            as last_line_date,
          s.import_layout, s.akahu_account_id, s.akahu_account_name, s.akahu_connection_name, s.feed_start_date::text,
-         s.feed_active, s.last_synced_at, s.last_sync_status, s.last_sync_error
+         s.feed_active, s.last_synced_at, s.last_sync_status, s.last_sync_error,
+         sf.active as simplefin_active, sf.last_synced_at as simplefin_synced_at, sf.last_sync_status as simplefin_status
     from accounts a
     left join bank_account_settings s on s.account_id = a.id
+    left join simplefin_links sf on sf.account_id = a.id and sf.active
    where a.account_type in ('bank', 'credit_card')`;
 
 function toBankAccount(row: BankAccountRow, scale: number, baseCurrency: string): BankAccount {
@@ -121,6 +130,9 @@ function toBankAccount(row: BankAccountRow, scale: number, baseCurrency: string)
       lastSyncStatus: row.last_sync_status ?? "never",
       lastSyncError: row.last_sync_error,
     },
+    simplefin: row.simplefin_active
+      ? { active: true, lastSyncedAt: row.simplefin_synced_at, lastSyncStatus: row.simplefin_status ?? "never" }
+      : null,
   };
 }
 
@@ -168,7 +180,7 @@ export async function getBankAccount(tx: OrgTx, accountIdInput: unknown): Promis
 export async function lockStatementAccount(
   tx: OrgTx,
   accountId: string,
-  purpose: "lines" | "feed" | "delete" = "lines",
+  purpose: "lines" | "feed" | "simplefin" | "delete" = "lines",
 ): Promise<{ id: string; code: string; name: string; accountType: AccountType; currencyCode: string }> {
   const result = await tx.query<{
     id: string;
@@ -191,7 +203,7 @@ export async function lockStatementAccount(
       `${label} is in ${row.currency_code}. Akahu bank feeds can't be used for foreign-currency accounts yet: Akahu's transactions don't say their currency. Import statement files instead.`,
     );
   }
-  if (foreign && purpose === "lines" && (await foreignAccountState(tx, row.id)).needsOpeningBalance) {
+  if (foreign && (purpose === "lines" || purpose === "simplefin") && (await foreignAccountState(tx, row.id)).needsOpeningBalance) {
     throw new ValidationError(
       `${label} has postings from before Tohyee kept foreign amounts. Enter its ${row.currency_code} balance as at a date (its opening foreign balance) first.`,
     );
@@ -392,7 +404,7 @@ export type StatementLine = {
   externalId: string | null;
   status: StatementLineStatus;
   possibleDuplicateOf: string | null;
-  source: "file" | "akahu";
+  source: "file" | "akahu" | "simplefin";
   /** The line's currency (the account's). */
   currencyCode: string;
   /**
@@ -428,7 +440,7 @@ type StatementLineRow = {
   external_id: string | null;
   status: StatementLineStatus;
   possible_duplicate_of: string | null;
-  source: "file" | "akahu";
+  source: "file" | "akahu" | "simplefin";
   currency_code: string | null;
   reconciliation: StatementLine["reconciliation"];
 };

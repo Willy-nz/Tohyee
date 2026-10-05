@@ -139,7 +139,12 @@ export function FeedPanel({ organisationId, account, onChanged }: { organisation
   }
 
   if (account.currencyCode) {
-    return <Notice tone="info">Bank feeds are for accounts in the base currency; this account is in {account.currencyCode}.</Notice>;
+    return (
+      <Notice tone="info">
+        Akahu bank feeds are for accounts in the base currency; this account is in {account.currencyCode}. Use SimpleFIN or automatic statement
+        files below.
+      </Notice>
+    );
   }
 
   if (!feed.active) {

@@ -23,7 +23,7 @@ export type ParsedStatementLine = {
 
 export type StatementFormat = "csv" | "xlsx" | "ofx" | "qif" | "camt053" | "mt940";
 
-export const STATEMENT_FORMAT_LABELS: Readonly<Record<StatementFormat | "akahu", string>> = {
+export const STATEMENT_FORMAT_LABELS: Readonly<Record<StatementFormat | "akahu" | "simplefin", string>> = {
   csv: "CSV",
   xlsx: "Excel (.xlsx)",
   ofx: "OFX",
@@ -31,6 +31,7 @@ export const STATEMENT_FORMAT_LABELS: Readonly<Record<StatementFormat | "akahu",
   camt053: "ISO 20022 CAMT.053",
   mt940: "MT940",
   akahu: "Akahu bank feed",
+  simplefin: "SimpleFIN bank feed",
 };
 
 export type DateOrder = "dmy" | "mdy" | "ymd";

@@ -1499,6 +1499,123 @@ Not supported yet (refused rather than guessed): zipped statement files;
 Tohyee's own email addresses (no relay); checking a file's account number
 against the bank account; moving or deleting files after reading them.
 
+### SimpleFIN bank feeds (approved by Jess, 5 Oct 2026)
+
+Stage 1b, part 2, of the Xero add-ons plan. SimpleFIN is an open protocol
+(simplefin.org/protocol.html). Its **SimpleFIN Bridge** reaches banks through
+an aggregator; Actual Budget uses it. Jess won't run a relay, so each
+organisation pays for and sets up its **own** Bridge account (US$1.50 a
+month or US$15 a year, as the Bridge says on 5 Oct 2026), the way each
+organisation has its own Akahu app (BK15). Like Akahu, it's a feed: lines
+arrive unreconciled and nothing is posted.
+
+How it works (checked against the protocol page, the Bridge's developer
+guide and its public demo on 5 Oct 2026):
+
+- In the Bridge, the organisation connects its banks and makes a **setup
+  token**. An admin pastes it into Tohyee once. Tohyee claims it (the token
+  works only once) and keeps the **access URL** it gets back, encrypted like
+  Akahu's tokens. One SimpleFIN connection per organisation (Jess: one
+  connection per provider).
+- The admin links a SimpleFIN account to a Tohyee bank or credit card
+  account with a start date, as BK15. One account can't be linked twice.
+- **Currency:** each SimpleFIN account says its currency (ISO code). It must
+  be the Tohyee account's currency: the base currency, or the account's own
+  currency for a foreign-currency account (FXB10). Unlike Akahu, a USD
+  account in a NZD organisation can link to a USD bank account.
+- Each transaction has an `id`, a `posted` time, an `amount` (money in is
+  positive) and a `description`, and may have a `payee`, a `memo` and
+  `pending`. A line gets the description, the payee and the memo (as its
+  particulars). **Pending transactions are left out** until they post, as
+  BK15. Lines carry `simplefin:<account id>:<transaction id>`, because the
+  demo reuses the same transaction id in two accounts.
+- **The date:** `posted` is a moment in time, not a date (the demo's are at
+  08:00 and 16:00 UTC). A line's date is that moment's date **in the time
+  zone chosen when the account is linked**, defaulting to the organisation's
+  own (Pacific/Auckland). For a US bank choose its zone (e.g.
+  America/Los_Angeles); see question 2.
+- **The Bridge's limits:** at most 90 days per request and 24 requests a
+  day (its developer guide), with some allowance while setting up. One sync
+  asks for every linked account in one request, in 90-day pieces from the
+  start date the first time, then from 10 days before the last line (late
+  postings are caught, and lines already here are skipped, BK2). Syncs run
+  every 6 hours by default (1 to 24, as Akahu) at a minute picked at random
+  per organisation, as the guide asks. **Sync now** is refused, saying when
+  it can run, once Tohyee has made 20 requests in the last 24 hours, leaving
+  room for the schedule.
+- The account's `balance` with its `balance-date` is kept as the statement
+  balance (BK16).
+- Problems the Bridge reports (`errlist`, e.g. a bank that needs signing in
+  again) are shown on the connection and on each affected account. Lines
+  the Bridge did return are still added.
+
+Setup: as BK1, base currency NZD, 1000 Business bank account and a USD bank
+account 1020 (FXB setup). The organisation's Bridge connects "Chase" with
+two accounts, `ACT-1` Checking (USD) and `ACT-2` Savings (USD).
+
+- **SF1** An admin pastes a setup token. Tohyee claims it, stores the access
+  URL encrypted and lists the two accounts with their names, currencies and
+  balances. Pasting the same token again is refused: "This setup token has
+  been used. Make a new one in SimpleFIN Bridge." Nothing is posted; the
+  audit history says who connected.
+- **SF2** Linking `ACT-1` (USD) to 1000 (NZD) is refused: "SimpleFIN says
+  this account is in USD; 1000 is in NZD." Linking it to 1020 (USD) with a
+  start date of 1 Sep 2026 and the zone America/Los_Angeles works.
+- **SF3** The first sync gets, for `ACT-1`:
+  `{id "T1", posted 1788336000, amount "-10.00", description "Fishing bait",
+  payee "John's Fishin Shack", memo "JOHNS FISHIN SHACK BAIT"}`,
+  `{id "T2", posted 1788364800, amount "-130.00", description "Grocery store"}`
+  and `{id "T3", amount "-20.00", pending true}`. Two lines are added to
+  1020 in USD: -10.00 dated **2 Sep 2026** (01:00 in Los Angeles) and
+  -130.00 dated **2 Sep 2026** (09:00 in Los Angeles; it would be 3 Sep in
+  Pacific/Auckland). T3 isn't added. Syncing again adds none.
+- **SF4** Next day T3 posts as `{id "T3", posted 1788451200, amount
+  "-20.00"}`: the sync adds it (3 Sep). A transaction the bank changes after
+  it posted (same id, new amount) is not changed: lines are kept as first
+  received, as with Akahu (BK15), and the new amount isn't added twice.
+- **SF5** A start date of 1 Jan 2026 on 5 Oct 2026 is 277 days back: the
+  first sync makes 4 requests (90 + 90 + 90 + 7 days). A bank that has less
+  history returns less; Tohyee adds what it gets and says from which date.
+- **SF6** The Bridge's balance for `ACT-1`, "25401.15" dated 5 Oct 2026 00:00 UTC, is kept
+  as 1020's statement balance (USD 25,401.15) with its date, shown next to
+  the balance in Tohyee (FXB7).
+- **SF7** A USD CSV for 1020 imported before linking had -10.00 on 2 Sep. The
+  feed's -10.00 on 2 Sep is added and flagged as a possible duplicate (BK3,
+  BK15), to be excluded or matched.
+- **SF8** The response has `errlist: [{code "con.auth", msg "Chase needs you
+  to sign in again", conn_id "CON-1"}]`. The connection and 1020 show
+  "SimpleFIN: Chase needs you to sign in again (fix it in SimpleFIN
+  Bridge)". Lines returned for other connections are added; 1020's last
+  sync is marked failed.
+- **SF9** An amount with more than 2 decimal places (`"-1.005"`), a missing
+  amount or a currency that isn't the account's makes that one transaction
+  skipped and listed with the reason; the rest of the sync goes ahead.
+- **SF10** Disconnecting deletes the stored access URL and unlinks every
+  account. Lines and their reconciliations stay; nothing posted changes.
+  Connecting again with a new token and relinking adds no line twice (the
+  ids are the same).
+
+Only admins connect, link, unlink and disconnect; bookkeepers press Sync now;
+viewers see the last sync, as BK15.
+
+Tests: `tests/integration/bank-simplefin.test.ts`.
+
+**Questions for Jess (SimpleFIN), decided** (Jess approved the examples
+and chose the proposed answers on 5 Oct 2026):
+1. Offer SimpleFIN for organisations with US or other overseas accounts; NZ
+   banks stay with Akahu (the Bridge's own pages don't list countries, and
+   Tohyee hasn't checked which NZ or Australian banks it reaches).
+2. A line's date is the `posted` moment's date in a time zone chosen per
+   linked account, defaulting to the organisation's (SF3).
+3. Lines are kept as first received when the bank changes a posted
+   transaction (SF4), as with Akahu.
+4. Sync now is refused after 20 requests in 24 hours (the Bridge allows 24).
+
+Not supported (refused rather than guessed): pending transactions,
+investment holdings (the demo returns them; they're ignored), custom
+currencies (SimpleFIN allows a URL instead of an ISO code), and checking
+SimpleFIN account numbers against Tohyee's.
+
 ### One-click matching ("OK") (examples not yet approved by Jess)
 
 Like Xero's "OK" button. For each unreconciled line, Tohyee looks for
