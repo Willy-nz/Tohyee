@@ -6,7 +6,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { cmp, dec, isZero, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { requirePayrollAccess } from "@/lib/payroll/access";
-import { formatNzBankAccount, NZ_BANK_ACCOUNT_SHAPE, parseNzBankAccount } from "@/lib/payroll/bank-account-number";
+import { formatNzBankAccount, maskBankAccount, NZ_BANK_ACCOUNT_SHAPE, parseNzBankAccount } from "@/lib/payroll/bank-account-number";
 import { BANK_FILE_FORMAT_LABELS, BANK_FILE_FORMATS, type BankFile, type BankFileFormat, type BankFilePayment, makeBankFile, REFUSED_BANKS } from "@/lib/payroll/bank-files";
 import { listWagePayments } from "@/lib/payroll/wage-payments";
 import { decryptSecret } from "@/lib/secrets";
@@ -125,7 +125,14 @@ export async function setBankFileSetting(tx: OrgTx, accountIdInput: unknown, inp
   return toSetting(updated.rows[0]);
 }
 
-export type PayRunBankFile = BankFile & { payRunReference: string; bankAccountCode: string; format: BankFileFormat; dueDate: string };
+export type PayRunBankFile = BankFile & {
+  payRunReference: string;
+  bankAccountCode: string;
+  format: BankFileFormat;
+  dueDate: string;
+  /** Employees whose bank account changed after the pay run was approved (PBF8): the file pays the kept one. */
+  warnings: string[];
+};
 
 /**
  * Makes the bank file for an approved pay run's unpaid net wages (PBF1-PBF6):
@@ -162,16 +169,35 @@ export async function makePayRunBankFile(
     );
   }
   const owing = payments.employees.filter((entry) => cmp(dec(entry.unpaid), ZERO_DECIMAL) > 0);
-  const secrets = await tx.query<{ id: string; bank_account_ciphertext: string | null }>(
-    "select id, bank_account_ciphertext from payroll_employees where id = any($1::uuid[])",
-    [owing.map((entry) => entry.employeeId)],
+  // The account kept with each employee's pay when the run was approved, as the payslip shows (PSLIP7, PBF8, #139);
+  // pays approved before accounts were kept use the employee's current account, as before.
+  const secrets = await tx.query<{ id: string; current: string | null; kept: string | null }>(
+    `select e.id, e.bank_account_ciphertext as current, k.bank_account_ciphertext as kept
+       from payroll_employees e
+       left join payroll_pay_run_employees k on k.employee_id = e.id and k.pay_run_id = $2
+      where e.id = any($1::uuid[])`,
+    [owing.map((entry) => entry.employeeId), payments.payRunId],
   );
-  const ciphertexts = new Map(secrets.rows.map((row) => [row.id, row.bank_account_ciphertext]));
+  const accounts = new Map(secrets.rows.map((row) => [row.id, row]));
   const settings = await getOrganisationSettings(tx);
+  const warnings: string[] = [];
   const lines: BankFilePayment[] = owing.map((entry) => {
-    const ciphertext = ciphertexts.get(entry.employeeId) ?? null;
+    const row = accounts.get(entry.employeeId);
+    const ciphertext = row?.kept ?? row?.current ?? null;
     if (ciphertext === null) throw new ValidationError(`${entry.name} has no bank account. Add it under Payroll › Employees.`);
-    const account = parseNzBankAccount(decryptSecret(ciphertext));
+    const text = decryptSecret(ciphertext);
+    if (row?.kept && row.current) {
+      const now = parseNzBankAccount(decryptSecret(row.current));
+      const kept = parseNzBankAccount(text);
+      // The same account written another way (spaces, a 2- or 3-digit suffix) isn't a change.
+      const same = now && kept && now.bank === kept.bank && now.branch === kept.branch && now.base === kept.base && Number(now.suffix) === Number(kept.suffix);
+      if (!same) {
+        warnings.push(
+          `${entry.name}'s bank account has changed since ${reference} was approved. This file pays the account kept with the pay run (${maskBankAccount(text)}), as the payslip shows. To pay the new account instead, pay ${entry.name.split(" ")[0]} in your bank's own screens and record it as paid per employee.`,
+        );
+      }
+    }
+    const account = parseNzBankAccount(text);
     if (!account) {
       throw new ValidationError(`${entry.name}'s bank account isn't a New Zealand bank account number (${NZ_BANK_ACCOUNT_SHAPE}). Fix it under Payroll › Employees.`);
     }
@@ -197,5 +223,5 @@ export async function makePayRunBankFile(
     entityId: payments.payRunId,
     details: { payRunReference: reference, bankAccountCode: bank.code, format: bank.direct_credit_format, dueDate, payments: file.count },
   });
-  return { ...file, payRunReference: reference, bankAccountCode: bank.code, format: bank.direct_credit_format, dueDate };
+  return { ...file, payRunReference: reference, bankAccountCode: bank.code, format: bank.direct_credit_format, dueDate, warnings };
 }

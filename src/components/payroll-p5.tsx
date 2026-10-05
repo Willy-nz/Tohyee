@@ -37,7 +37,7 @@ export function PayRunBankFileCard({ organisationId, payRunId, payDate }: { orga
   const [dueDate, setDueDate] = useState(() => (todayInBrowser() > payDate ? todayInBrowser() : payDate));
   const [statementLines, setStatementLines] = useState<"one" | "each">("one");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: "success" | "warning" | "error"; text: string } | null>(null);
 
   const ready = (settings.data?.accounts ?? []).filter((account) => account.format !== null);
   const chosen = ready.find((account) => account.code === accountCode) ?? ready[0] ?? null;
@@ -54,8 +54,11 @@ export function PayRunBankFileCard({ organisationId, payRunId, payDate }: { orga
       });
       saveText(result.file.fileName, result.file.contentType, result.file.content);
       setMessage({
-        tone: "success",
-        text: `${result.file.fileName} saved: ${result.file.count} payment${result.file.count === 1 ? "" : "s"}, ${formatMoney(result.file.total)}, hash total ${result.file.hashTotal}. Upload it in your bank's business internet banking, then record the payment below. Nothing is marked paid until you do.`,
+        tone: result.file.warnings.length > 0 ? "warning" : "success",
+        text: [
+          `${result.file.fileName} saved: ${result.file.count} payment${result.file.count === 1 ? "" : "s"}, ${formatMoney(result.file.total)}, hash total ${result.file.hashTotal}. Upload it in your bank's business internet banking, then record the payment below. Nothing is marked paid until you do.`,
+          ...result.file.warnings,
+        ].join(" "),
       });
     } catch (cause) {
       setMessage({ tone: "error", text: errorMessage(cause) });
