@@ -7890,6 +7890,160 @@ only for now), approval workflows (stage 5), supplier statements, and
 mileage for vehicles owned by the organisation (that's fringe benefit tax,
 not a reimbursement).
 
+## Online invoice payments with Stripe (approved by Jess, 5 Oct 2026)
+
+Item 4 of the Xero add-ons plan, part 1 (PayPal is part 2, written once this
+is built). Like Xero's Stripe "Pay now": an approved invoice carries a link
+the customer pays by card on Stripe's own page, and Tohyee records the
+payment by itself. It builds on Stripe as a bank feed (ST1-ST10): the same
+Stripe connection (Jess, answer 8: one connection per provider serves its
+feed and its payments), and the same bank account (e.g. 1050 Stripe), which
+acts as the clearing account. Card fees and payouts keep arriving through the
+feed exactly as ST3 and ST8 describe; this part adds no new way of posting
+them.
+
+How it works (checked against Stripe's API reference on 5 Oct 2026; not
+tried with a real Stripe account):
+
+- **The payment link.** For an approved invoice with something due, Tohyee
+  creates a Stripe **Payment Link** (`POST /v1/payment_links`) with one line,
+  "Invoice INV-0010", for the **amount due in the invoice's currency**
+  (`line_items[0][price_data]`, quantity 1), limited to **one completed
+  payment** (`restrictions[completed_sessions][limit]=1`), with the invoice's
+  id in its metadata and the payment description "Payment for INV-0010"
+  (`payment_intent_data[description]`), which is what the feed line then
+  says (ST3). Nothing about the customer is sent to Stripe; Stripe's page
+  asks the customer for their card. The link (`https://buy.stripe.com/...`)
+  doesn't expire.
+- **Where it appears:** "Pay now" with the link in the invoice email and on
+  the PDF, and a "Copy payment link" button on the invoice. The link is
+  made the first time it's needed (emailing, printing or copying), not on
+  approval, so invoices never sent don't create links.
+- **When the amount due changes** (a payment recorded by hand, a credit note
+  or overpayment applied), the link is switched off in Stripe
+  (`active=false`, with the message "This invoice has changed. Use the
+  latest link from <organisation>.") and a new one is made the next time
+  it's needed. Paying, voiding or deleting the invoice switches it off too.
+- **Seeing payments.** Tohyee isn't usually reachable from the internet, so
+  it doesn't wait for Stripe to call it (no webhooks): every 15 minutes, and
+  with Check now, it asks Stripe for each open link's completed Checkout
+  Sessions (`GET /v1/checkout/sessions?payment_link=...&status=complete`).
+  A session that's **paid** (`payment_status` `paid`) becomes a **customer
+  payment** on the invoice, recorded as any payment is (CP1-CP8):
+  - date: the date of Stripe's charge in the organisation's time zone, the
+    same date the feed gives its line (ST3);
+  - amount: what was paid, in the invoice's currency;
+  - into the bank account linked to the Stripe balance the money went to
+    (ST2), usually 1050 Stripe;
+  - reference: "Stripe" and the payment's id.
+  Each session is recorded once (Tohyee keeps the session id). A payment
+  method that settles later (a bank debit) is recorded when Stripe says it's
+  paid.
+- Online payments need the Stripe feed's balance link (ST2) for the
+  currency the money lands in; without one, Tohyee doesn't guess an
+  account: it shows "A Stripe payment for INV-0010 (115.00) arrived, but no
+  bank account is linked to Stripe's NZD balance" until one is linked.
+
+Setup: the ST setup (1050 Stripe linked to the NZD balance; base currency
+NZD); Kobe Ltd with INV-0010 for 115.00 including GST, due 20 Oct 2026; the
+organisation is Aroha Ltd; online payments turned on.
+
+- **PN1** An admin turns on "Pay now with Stripe" (Settings, Online
+  payments). Without a Stripe connection it's refused: "Connect Stripe
+  first (Bank accounts, Stripe)." The audit history says who turned it on.
+  Bookkeepers and viewers see whether it's on; only admins change it.
+- **PN2** INV-0010 is emailed. Tohyee makes a Payment Link for **NZD
+  115.00**, "Invoice INV-0010", limited to one payment, and the email and
+  PDF say "Pay now: https://buy.stripe.com/...". Nothing is posted.
+  Emailing or printing it again uses the same link. A draft invoice, or one
+  with nothing due, gets no link.
+- **PN3** Kobe Ltd pays by card on 1 Oct 2026 at 10:15. At the next check
+  the session is complete and paid, NZD 115.00. Tohyee records a payment
+  of **115.00** on INV-0010 dated **1 Oct 2026** into **1050**, reference
+  "Stripe pi_3Q...": Dr 1050 Stripe 115.00 / Cr 1100 Accounts receivable
+  115.00. INV-0010 is **paid** and its link is switched off. The invoice's
+  history says "Paid online with Stripe". Checking again records nothing
+  more.
+- **PN4** The feed then brings ST3's lines into 1050: **+115.00** "Payment
+  for INV-0010" matches PN3's payment (BK4) and is
+  reconciled with OK, so the money is counted once; **-3.41** "Stripe fees"
+  is coded as any fee line (a bank rule, BR). The payout (ST8) is a transfer
+  to 1000 as before.
+- **PN5** INV-0011 for 230.00 has been emailed with its link. Kobe Ltd pays
+  100.00 by bank transfer, recorded by hand. The 230.00 link is switched
+  off in Stripe, and the next email, print or copy makes a new link for
+  **130.00**. Someone opening the old link sees Stripe's "This invoice has
+  changed. Use the latest link from Aroha Ltd." The customer can't choose
+  to pay part: the link is always for the whole amount due.
+- **PN6** INV-0012 (115.00) is paid by bank transfer and recorded by hand at
+  9:00; at 9:05, before the next check switched the link off, Kobe Ltd also
+  pays it by card. Tohyee records the card payment anyway, because the money
+  did arrive: it's an **overpayment** of **115.00** on Kobe Ltd's account
+  (OP4), credit to apply to another invoice or refund, and the invoice shows
+  "Paid twice: 115.00 is credit on Kobe Ltd's account".
+- **PN7** INV-0020 to a US customer is **USD 50.00**, approved at 1.65
+  (NZD 82.50). Its link is in **USD 50.00**. The customer pays; Stripe
+  converts it into the NZD balance as **NZD 85.00** (ST4, Stripe's rate
+  1.70). Tohyee records a payment of **USD 50.00** into 1050 at the rate
+  that gives exactly Stripe's NZD 85.00 (85.00 / 50.00 = 1.7; worked to 8
+  decimal places when it doesn't divide evenly), so the payment and the feed
+  line agree to the cent: Dr 1050 85.00 / Cr 1100 82.50 (USD 50.00 at 1.65)
+  / Cr **7020 Realised currency gains and losses 2.50**, as any foreign
+  payment into the base currency (MC6). If the organisation also has a USD Stripe balance linked
+  to a USD bank account and the money lands there, the payment goes into
+  that account in USD with no conversion.
+- **PN8** INV-0010 is refunded in Stripe's dashboard on 3 Oct (Tohyee never
+  refunds: it only ever takes money in). The feed brings **-115.00** (ST5).
+  Tohyee doesn't change the invoice by itself: the bookkeeper makes a credit
+  note for INV-0010 and refunds it from 1050 (CN8), which the -115.00
+  line matches.
+- **PN9** A card payment is disputed (ST6). The feed brings the dispute and
+  its fee; the invoice stays paid. Whoever reconciles decides (a credit note
+  if the dispute is lost, for example). Tohyee doesn't watch disputes.
+- **PN10** INV-0013 is voided while its link is open: the link is switched
+  off. If a payment still arrives for a voided or deleted invoice (paid in
+  the minutes before the switch-off), Tohyee records nothing and shows
+  "A Stripe payment of 115.00 arrived for INV-0013, which is voided. Refund
+  it in Stripe, or record it as a payment or overpayment by hand." The feed
+  line is there to reconcile either way.
+- **PN11** Turning online payments off, or disconnecting Stripe, switches
+  off every open link first (each one it can't reach is listed). Payments
+  already recorded stay. Emails and PDFs stop saying "Pay now".
+- **PN12** Who: admins turn it on and off; bookkeepers and admins copy links
+  and press Check now; viewers see an invoice's link and whether it was
+  paid online. Each link and each recorded payment is in the invoice's
+  history.
+
+Payments are recorded on the payment date like any other, so GST on the
+payments basis counts them then, and on the invoice basis nothing changes.
+
+**Questions for Jess (online payments with Stripe), decided** (Jess chose
+every proposed answer and approved the examples on 5 Oct 2026):
+1. Taking payments needs the **restricted key** (ST1, read only) to also
+   **write payment links** (and the price and product each link makes).
+   Proposed: accept a restricted key with those permissions (they can only
+   take money in), still refuse full secret keys, and say so on the screen.
+   The exact permission names haven't been checked with a real account.
+2. **No webhooks for now**: Tohyee checks every 15 minutes and with Check
+   now, even when remote access is on. Proposed: yes; webhooks later if
+   payments need to show faster.
+3. **Paid twice** (PN6): record the extra as an overpayment on the
+   customer's account. Proposed: yes.
+4. **A payment for a voided invoice** (PN10): a notice only, nothing
+   recorded. Proposed: yes.
+5. **Which invoices offer Pay now**: every approved invoice with something
+   due, in any currency Stripe takes, with a tick on the invoice to leave it
+   off (e.g. a large contract paid by bank transfer). Proposed: yes.
+6. **Card fees**: always the organisation's cost (from the feed), never
+   added to what the customer pays. Proposed: yes (surcharges aren't
+   allowed for every card scheme anyway).
+7. **Saved cards** (charging a customer's card again without them): not in
+   this part. Proposed: later, if wanted.
+
+Not supported in this part: PayPal (part 2), webhooks, saved cards and
+automatic charging, surcharges, refunds started from Tohyee, partial
+payments chosen by the customer, and Stripe's own invoices or tax.
+
 ## Fixed assets (examples not yet approved by Jess)
 
 Written overnight from Xero's fixed asset register and NZ practice; Jess
