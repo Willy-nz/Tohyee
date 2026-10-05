@@ -372,6 +372,36 @@ type RunRow = {
 };
 const RUN_COLUMNS = "id::text as id, organisation_id, trigger, status, started_at, finished_at, file_path, size_bytes::text as size_bytes, error";
 
+/**
+ * Backups cut off by a restart (#137): a run still "running" that began
+ * before `processStartedAt` and over an hour ago can't finish, so it's marked
+ * failed (and the nightly backup tries again), and the half-written
+ * `.partial` files left in the folder are removed.
+ */
+export async function markInterruptedBackups(processStartedAt: Date, now = new Date()): Promise<BackupRun[]> {
+  const cutOff = new Date(Math.min(processStartedAt.getTime(), now.getTime() - 60 * 60 * 1000));
+  const marked = await coreQuery<RunRow>(
+    `update backup_runs set status = 'failed', finished_at = now(), error = 'Interrupted: the server stopped while this backup ran.'
+      where status = 'running' and started_at < $1 returning ${RUN_COLUMNS}`,
+    [cutOff],
+  );
+  if (marked.rowCount) {
+    const root = (await getBackupSettings()).folder;
+    const folders = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+    for (const entry of folders) {
+      if (!entry.isDirectory()) continue;
+      const folder = path.join(root, entry.name);
+      for (const name of await fs.readdir(folder).catch(() => [] as string[])) {
+        if (!name.endsWith(`${BACKUP_EXTENSION}.partial`)) continue;
+        const file = path.join(folder, name);
+        const stat = await fs.stat(file).catch(() => null);
+        if (stat && stat.mtime < cutOff) await fs.rm(file, { force: true }).catch(() => undefined);
+      }
+    }
+  }
+  return marked.rows.map(toRun);
+}
+
 function toRun(row: RunRow): BackupRun {
   return {
     id: row.id,
@@ -486,6 +516,12 @@ export async function restoreBackupAsCopy(
   await withCoreTransaction(async (client) => {
     const exists = await client.query("select 1 from organisations where id = $1 or database_name = $2", [id, databaseName]);
     if (exists.rowCount) throw new ConflictError(`There's already an organisation with the ID ${id}. Choose another ID for the copy.`);
+    // A database by that name that isn't in the registry (another install sharing the server, or one left behind)
+    // is never touched: the copy is refused, so the clean-up below can't drop it (#135).
+    const taken = await getAdminPool().query("select 1 from pg_database where datname = $1", [databaseName]);
+    if (taken.rowCount) {
+      throw new ConflictError(`There's already a database called ${databaseName} on this PostgreSQL server. Choose another ID for the copy.`);
+    }
     const members = source
       ? (await client.query<{ user_id: string; role: string }>("select user_id, role from organisation_members where organisation_id = $1", [source.id])).rows
       : [];
@@ -515,8 +551,11 @@ export async function restoreBackupAsCopy(
     });
   });
 
+  // Only a database this call made is dropped if the restore fails (#135).
+  let created = false;
   try {
     await getAdminPool().query(`create database ${quoteSqlIdentifier(databaseName)}`);
+    created = true;
     const restore = startPgTool("pg_restore", ["--no-owner", "--no-privileges", "--exit-on-error", `--dbname=${databaseName}`], databaseName);
     restore.child.stdout?.resume();
     const [fed, restored] = await Promise.allSettled([readDecrypted(input.file, restore.child.stdin!, otherKey), restore.done]);
@@ -532,7 +571,7 @@ export async function restoreBackupAsCopy(
     await provisionOrganisation(id);
   } catch (error) {
     // Leave nothing half-restored behind.
-    await getAdminPool().query(`drop database if exists ${quoteSqlIdentifier(databaseName)} with (force)`).catch(() => undefined);
+    if (created) await getAdminPool().query(`drop database if exists ${quoteSqlIdentifier(databaseName)} with (force)`).catch(() => undefined);
     await withCoreTransaction(async (client) => {
       await client.query("delete from organisation_members where organisation_id = $1", [id]);
       await client.query("delete from organisations where id = $1", [id]);

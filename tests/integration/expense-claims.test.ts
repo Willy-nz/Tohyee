@@ -24,7 +24,7 @@ import {
   voidExpenseClaim,
   voidExpenseClaimPayment,
 } from "@/lib/expense-claims/service";
-import { getJournal, getJournalDetails } from "@/lib/ledger/journals";
+import { correctJournal, getJournal, getJournalDetails } from "@/lib/ledger/journals";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { addAttachment, getRecordExtras } from "@/lib/records/extras";
@@ -452,6 +452,22 @@ describeWithDatabase("expense claims", () => {
     const details = await w.as((tx) => getJournalDetails(tx, claim.approvalJournalId!));
     expect(details.canCorrect).toBe(false);
     expect((await w.as((tx) => getJournalDetails(tx, payment.journalId))).canCorrect).toBe(false);
+    // The API refuses too, not just the screen (#138).
+    const correct = (journalId: string) =>
+      w.as((tx) =>
+        correctJournal(tx, {
+          idempotencyKey: key("correct"),
+          originalJournalId: journalId,
+          postingDate: "2026-06-30",
+          reference: "Fix",
+          lines: [
+            { accountCode: "6000", debitAmount: "1.00" },
+            { accountCode: "2010", creditAmount: "1.00" },
+          ],
+        }),
+      );
+    await expect(correct(claim.approvalJournalId!)).rejects.toThrow("void the claim");
+    await expect(correct(payment.journalId)).rejects.toThrow("void the payment");
     const payableId = (await w.as((tx) => tx.query<{ id: string }>("select id::text from accounts where code = '2010'"))).rows[0].id;
     const report = await w.as((tx) => accountTransactions(tx, { accountId: payableId, from: "2026-06-01", to: "2026-06-30" }));
     expect(report.accounts[0].lines.map((line) => [line.source.label, line.source.href])).toEqual([

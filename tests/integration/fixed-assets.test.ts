@@ -32,7 +32,7 @@ import {
   updateFixedAsset,
   updateFixedAssetSettings,
 } from "@/lib/fixed-assets/service";
-import { getJournal, getJournalDetails, postJournal } from "@/lib/ledger/journals";
+import { correctJournal, getJournal, getJournalDetails, postJournal } from "@/lib/ledger/journals";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { accountTransactions } from "@/lib/reports/account-transactions";
@@ -761,6 +761,22 @@ describeWithDatabase("fixed assets", () => {
     expect((await w.as((tx) => getJournalDetails(tx, may.journalId!))).canCorrect).toBe(false);
     const sold = await w.dispose(desk.id, { disposalDate: "2026-06-10" });
     expect((await w.as((tx) => getJournalDetails(tx, sold.disposals[0].journalId))).canCorrect).toBe(false);
+    // The API refuses too, not just the screen (#138).
+    const correct = (journalId: string) =>
+      w.as((tx) =>
+        correctJournal(tx, {
+          idempotencyKey: key("correct"),
+          originalJournalId: journalId,
+          postingDate: "2026-06-30",
+          reference: "Fix",
+          lines: [
+            { accountCode: "6000", debitAmount: "1.00" },
+            { accountCode: "1610", creditAmount: "1.00" },
+          ],
+        }),
+      );
+    await expect(correct(may.journalId!)).rejects.toThrow("roll back the depreciation run");
+    await expect(correct(sold.disposals[0].journalId)).rejects.toThrow("undo the disposal");
     const accumulatedId = (await w.as((tx) => tx.query<{ id: string }>("select id::text from accounts where code = '1610'"))).rows[0].id;
     const report = await w.as((tx) => accountTransactions(tx, { accountId: accumulatedId, from: "2026-05-01", to: "2026-06-30" }));
     expect(report.accounts[0].lines.map((line) => [line.source.label, line.source.href])).toEqual([
