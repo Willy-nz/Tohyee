@@ -151,6 +151,7 @@ export const MENUS: Menu[] = [
           { href: "/operations/reports?report=sales", label: "Sales by salesperson", module: "reporting" },
           { href: "/operations/budgets", label: "Budgets" },
           { href: "/operations/reports?report=budget", label: "Budget vs actual" },
+          { href: "/operations/reports/cash-flow-forecast", label: "Cash flow forecast" },
           { href: "/operations/fixed-assets/register", label: "Fixed asset register" },
           { href: "/operations/project-reports/profitability", label: "Project profitability" },
           { href: "/operations/project-reports/time", label: "Time report" },

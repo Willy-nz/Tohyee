@@ -1,3 +1,4 @@
+import { cashFlowForecast } from "@/lib/cash-flow/forecast";
 import { listApprovalRequests } from "@/lib/approvals/requests";
 import { listAccounts } from "@/lib/accounts/service";
 import { boundedLimit, firstRows } from "@/lib/ai/limits";
@@ -532,6 +533,26 @@ export const READ_TOOLS: readonly AiTool[] = (
       const item = await getInboxItem(tx, args.itemId);
       const file = await getInboxItemContent(tx, item.id);
       return new ToolFileAnswer({ item: inboxItemSummary(item) }, { uri: `tohyee://bills-inbox/${item.id}/${encodeURIComponent(file.fileName)}`, ...file });
+    },
+  },
+  {
+    name: "cash_flow_forecast",
+    title: "Cash flow forecast",
+    description:
+      "The cash flow forecast: the bank balance today, then money expected in and out each day, week or month from open invoices and bills (on their due dates), repeating invoices and bills, unpaid expense claims, forecast items and account averages, with the closing balance, the lowest point and the first period below zero. Optionally drafts and sales and purchase orders.",
+    inputSchema: schema({
+      period: { type: "string", enum: ["day", "week", "month"], description: "Default week." },
+      count: { type: "integer", minimum: 1, maximum: 92, description: "How many periods (default about 3 months)." },
+      includeDrafts: { type: "boolean" },
+      includeOrders: { type: "boolean", description: "Include approved sales and purchase orders not yet invoiced or billed." },
+    }),
+    async run(tx, args) {
+      const forecast = await cashFlowForecast(tx, args);
+      return {
+        ...forecast,
+        // The documents behind each period, without links.
+        periods: forecast.periods.map((entry) => ({ ...entry, lines: entry.lines.map(({ source, label, date, direction, baseAmount, overdue, draft, fromOrder }) => ({ source, label, date, direction, amount: baseAmount, overdue, draft, fromOrder })) })),
+      };
     },
   },
   {

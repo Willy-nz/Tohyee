@@ -8368,10 +8368,12 @@ How it works (proposed, following Cash 360):
   - Ticked: approved **purchase orders**, for what's not yet billed, on their
     delivery date (else their order date) plus the supplier's payment terms.
 - **Account averages** (Cash 360's account categories): for chosen accounts
-  (e.g. 6200 Wages, or GST), the average daily movement over the last 3 or 6
-  whole months. Each period gets that daily amount times its number of days,
-  rounded per period. This is how wages and GST get in without Tohyee
-  guessing pay days or IRD's due dates.
+  (e.g. 6200 Wages), the average daily movement over the last 3 or 6 whole
+  months. Each period gets that daily amount times its number of days,
+  rounded per period. This is how wages get in without Tohyee guessing pay
+  days. (Built: the GST account's movement nets GST collected against GST
+  paid, so it doesn't measure GST payments; GST is a forecast item, decision
+  434.)
 - **Forecast items** (Cash 360's additional values; bookkeepers add them):
   money in or out, with a date and an amount, once or repeating every week
   or month until a date. For example, "GST payment".
@@ -8454,6 +8456,9 @@ Setup:
 - **CF9** Viewers can see the forecast; only bookkeepers add forecast items
   and choose the accounts to average. The connected AI (any level) can read
   it with `cash_flow_forecast`.
+
+Built (decisions 432-436, tenant migration 0101). Test:
+`tests/integration/cash-flow-forecast.test.ts` (CF1-CF9).
 
 ## Consolidation (approved by Jess, 5 Oct 2026)
 
