@@ -97,10 +97,10 @@ phone width).
    that needs signing in (Jess chose sign-in over single-use links),
    history.
 6. **Cash flow forecast and consolidation** (same server, members of all),
-   AI commentary as a suggestion only. Examples CF1-CF9 and CO1-CO10 written
-   5 Oct 2026 following NetSuite (Cash 360; OneWorld with currency
-   translation and different year ends, as Jess asked), waiting for Jess's
-   approval (with questions 1-5).
+   AI commentary as a suggestion only. Examples CF1-CF9, CO1-CO11 and FX1
+   approved by Jess 5 Oct 2026, following NetSuite (Cash 360; OneWorld with
+   currency translation, different year ends, ECB daily rates and budget
+   exchange rates). Part 1: cash flow forecast; part 2: consolidation.
 7. **More sales platforms, A2X style:** Shopify summary mode, then
    WooCommerce, Stripe sales, Square, Amazon, eBay, Etsy, PayPal (Jess picks
    the order); Shopify chargebacks and reserves.

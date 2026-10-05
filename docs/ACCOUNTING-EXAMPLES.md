@@ -8334,7 +8334,7 @@ approval by text message, and blocking over-budget documents.
 Built (decisions 424-431, tenant migration 0100). Test:
 `tests/integration/approval-workflows.test.ts` (AW1-AW17).
 
-## Cash flow forecast (examples not yet approved by Jess)
+## Cash flow forecast (approved by Jess, 5 Oct 2026)
 
 Item 6 of the Xero add-ons plan, part 1. It works like NetSuite's Cash 360
 (and Xero's short-term cash flow): what's expected to come into and go out of
@@ -8455,7 +8455,7 @@ Setup:
   and choose the accounts to average. The connected AI (any level) can read
   it with `cash_flow_forecast`.
 
-## Consolidation (examples not yet approved by Jess)
+## Consolidation (approved by Jess, 5 Oct 2026)
 
 Item 6, part 2. It works like NetSuite OneWorld and Syft's consolidations:
 one profit and loss and balance sheet for a group of organisations on the
@@ -8490,19 +8490,46 @@ How it works (proposed):
     each member's ledger by date, so "this year" and "current year earnings"
     always mean the group's year, whatever the member's own year end. (This
     is how NetSuite lines subsidiaries' periods up to the parent's calendar.)
-- **Consolidation exchange rates** (NetSuite's consolidated exchange rates):
-  for each member currency, by month, an **average rate** and a **month-end
-  rate** (group currency per 1 unit of the member's currency).
-  - They're typed in or imported (question 4). Tohyee never fetches or
-    guesses them.
-  - A report that needs a month's rate that isn't there is refused, and the
-    refusal lists the missing months.
+- **Daily rates come in from the European Central Bank** (Jess, 5 Oct 2026;
+  NetSuite's Currency Exchange Rate Integration does the same with its own
+  providers). An admin turns this on for an organisation. Each working day
+  Tohyee reads the ECB's euro reference rates and adds a rate for each
+  foreign currency the organisation uses to its exchange rates list (MC48),
+  with the source "European Central Bank".
+  - Rates against the organisation's base currency are worked out through
+    the euro: NZD per AUD = (NZD per EUR) / (AUD per EUR), rounded to 6
+    decimal places.
+  - A rate someone typed for a date is never replaced.
+  - The ECB publishes about 30 currencies, once each working day, and says
+    its rates are for information. A currency it doesn't publish is typed in
+    as today.
+- **Consolidation exchange rates** (NetSuite's consolidated exchange rates)
+  are worked out by Tohyee, for each member currency and month, from the
+  parent's exchange rates list (group currency per 1 unit of the member's
+  currency):
+  - **Current:** the rate in effect on the last day of the month.
+  - **Average:** the member's profit and loss amounts in the month, each
+    times the rate on its date, divided by their total (NetSuite's weighted
+    average).
+  - **Historical:** the same, using the member's equity amounts (capital,
+    drawings).
+  - A month with no amounts of a kind needs no rate of that kind.
+  - An admin can change a month's rates, with a reason. A changed rate isn't
+    worked out again, and the history keeps both.
+  - A report that needs a rate the list doesn't have is refused, and the
+    refusal lists the dates.
+- **Budget exchange rates** (NetSuite's budget exchange rates table; Jess,
+  5 Oct 2026): one rate per member currency per month, typed in or imported.
+  Budgets hold only profit and loss accounts, so one rate a month is enough.
+  These rates convert each member's budget for the **consolidated budget vs
+  actual**. Actuals use the consolidation rates.
 - **Translation** (as NetSuite and IAS 21: current, average and historical
   rates by account class):
   - **Profit and loss:** each month at that month's average rate.
-  - **Assets and liabilities:** at the month-end rate of the report date.
-  - **Equity** (capital, drawings): each amount at the average rate of the
-    month it was posted (its historical rate).
+  - **Assets and liabilities:** at the current rate of the report date's
+    month.
+  - **Equity** (capital, drawings): each month's postings at that month's
+    historical rate.
   - **Earnings:** the sum of the translated profit and loss.
   - The difference left over is the **foreign currency translation reserve**,
     on its own line in equity.
@@ -8550,8 +8577,9 @@ Setup:
 - Kowhai Pty Ltd started on 1 Sep 2026, when AUD 9,000.00 of capital was
   paid in (3000). In October it sold AUD 5,000.00 (4000) and spent
   AUD 3,000.00 (6200), all through its bank.
-- Consolidation rates, NZD per AUD: September average 1.1000 and month-end
-  1.1000; October average 1.1200 and month-end 1.1500.
+- Holdings' exchange rates list (from the ECB) has, in NZD per AUD,
+  1.1000 for every day in September, 1.1200 for 1-30 October and 1.1500 on
+  31 October.
 
 - **CO1** Jess makes "Kowhai group" with Holdings as the parent, so it
   reports in NZD with a 31 March year end.
@@ -8562,13 +8590,21 @@ Setup:
   - Someone who isn't an admin of Kowhai Pty Ltd can't add it.
 - **CO2** Holdings marks 1150 and 4150 as intercompany with Retail. Retail
   marks 2150 and 6250 as intercompany with Holdings.
-- **CO3** Kowhai Pty Ltd's October profit and loss, translated at the
-  October average 1.1200:
+- **CO3** Consolidation rates for AUD:
+  - September: current 1.1000; historical 1.1000 (the capital paid in on
+    1 Sep); no average, because there was no profit or loss.
+  - October: current **1.1500** (31 Oct); average **1.1200**, which is
+    (5,000.00 x 1.1200 + 3,000.00 x 1.1200) / 8,000.00. Had the sales been on
+    a day at 1.1100 and the wages on a day at 1.1400, the average would have
+    been (5,000.00 x 1.1100 + 3,000.00 x 1.1400) / 8,000.00 = **1.121250**.
+
+  Kowhai Pty Ltd's October profit and loss, translated at 1.1200:
   - Sales AUD 5,000.00 = **5,600.00**.
   - Wages AUD 3,000.00 = **3,360.00**.
   - Net profit AUD 2,000.00 = **2,240.00**.
-  - With no October rates entered, the report is refused: "Enter the AUD
-    rates for October 2026 (average and month-end)."
+  - If Holdings' list had no AUD rate on or before 10 Oct, the report would
+    be refused: "Holdings' exchange rates list has no AUD rate for 10 Oct
+    2026."
 - **CO4** Consolidated profit and loss, October 2026 (NZD):
 
   | Account | Holdings | Retail | Pty (NZD) | Eliminations | Consolidated |
@@ -8583,8 +8619,8 @@ Setup:
 
 - **CO5** Kowhai Pty Ltd's balance sheet at 31 Oct 2026, translated:
   - Bank AUD 11,000.00 at the month-end rate 1.1500 = **12,650.00**.
-  - Capital AUD 9,000.00 at September's average 1.1000 (the month it was
-    paid in) = **9,900.00**.
+  - Capital AUD 9,000.00 at September's historical rate 1.1000 (the month
+    it was paid in) = **9,900.00**.
   - Current year earnings 2,240.00 (CO3; no profit or loss in September).
   - Foreign currency translation reserve 12,650.00 - 9,900.00 - 2,240.00 =
     **510.00**.
@@ -8623,8 +8659,23 @@ Setup:
   50.00 put elsewhere, both sides are still eliminated. "Intercompany
   differences (check these)" shows **50.00**, with "Holdings 1150 10,000.00
   and Retail 2150 9,950.00 don't agree".
-- **CO10** The connected AI can't read a consolidation, because its key is
-  for one organisation (question 3).
+- **CO10** The connected AI can read a consolidation (question 3, Jess):
+  `list_consolidations` and `consolidated_report` show the groups whose
+  every organisation the key's owner can see, as they'd see them. It can't
+  change groups, rates or adjustments.
+- **CO11** Consolidated budget vs actual, October 2026: Kowhai Pty Ltd's
+  overall budget for 4000 Sales is AUD 4,500.00 and its October budget rate
+  is **1.1000**, so its budget is **4,950.00**. Its actual is 5,600.00 (CO3).
+  With Retail's 4000 budget of 18,000.00, the group's 4000 budget is
+  **22,950.00** against an actual of **25,600.00**.
+- **FX1** Holdings (NZD) turns on ECB rates. The ECB's rates for 5 Oct 2026
+  are, per EUR, NZD 1.9000 and AUD 1.7000, so Holdings' list gets AUD
+  **1.117647** on 5 Oct, from "European Central Bank". A rate Jess typed for
+  5 Oct stays, and the ECB one isn't added. Weekends and ECB holidays get
+  no rate; the rate before them applies (MC48). Kowhai Pty Ltd (AUD) gets
+  NZD 1.7000 / 1.9000 = **0.894737** for 5 Oct. If the ECB can't be reached,
+  the next run tries again, and the settings show when the last rates came
+  in.
 
 **AI commentary** (item 6): the plan says "AI commentary as a suggestion
 only". NetSuite 2025.1 writes explanations of variances and trends next to
@@ -8634,18 +8685,20 @@ commentary on a forecast or consolidated report. It's shown as "Suggested by
 Jess's AI key Claude, not checked" until a person edits or accepts it, and
 it can be removed (question 5).
 
-**Questions for Jess (cash flow forecast and consolidation):**
+**Questions for Jess (cash flow forecast and consolidation), decided**
+(Jess, 5 Oct 2026: show differences, wholly owned only, AI commentary as a
+suggestion, forecast like Cash 360, the AI can read groups, rates from the
+ECB with budget rates typed, and the examples approved):
 1. **Intercompany amounts that don't agree:** show the difference on its
    own line (proposed), or refuse to show the report until they agree? (We
    couldn't find what NetSuite does here.)
 2. **Members not wholly owned:** not supported for now (proposed), as in
    standard NetSuite?
-3. **The connected AI and consolidations:** leave it out (proposed: an AI
-   key belongs to one organisation), or let a key read groups its owner can
-   see?
-4. **Consolidation rates:** typed in or imported from a file (proposed), or
-   also offered from the parent organisation's exchange rates list (that has
-   month-end rates, but no averages)?
+3. **The connected AI and consolidations:** Jess: a key can read the groups
+   its owner can see.
+4. **Consolidation rates:** Jess: rates come in (from the ECB), and the
+   consolidation, current and historical rates are worked out from them, as
+   in NetSuite, with budget exchange rates typed per month.
 5. **AI commentary:** saved as a labelled suggestion that a person accepts,
    edits or removes (proposed)?
 
