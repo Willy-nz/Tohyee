@@ -212,8 +212,10 @@ Database upgrades run by themselves when Tohyee starts. Back up first if you ins
   tenant migration 0103. That completes item 6. Item 7 part 1, Shopify
   chargebacks and reserves, is built: examples SPC25-SPC31 approved by Jess
   5 Oct 2026, decisions 447-450, tenant migration 0104 (Jess: no summary
-  mode; GST on lost chargebacks is with IRD). Next: item 7 part 2,
-  WooCommerce (examples first).
+  mode; GST on lost chargebacks is with IRD). Item 7 part 2, WooCommerce orders, is built: examples WC1-WC10
+  approved by Jess 5 Oct 2026, decisions 451-455, tenant migration 0105.
+  Next: the rest of item 7 (Stripe sales, Square, Amazon, eBay, Etsy,
+  PayPal; Jess picks the order), examples first.
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
@@ -301,7 +303,9 @@ Consolidation and ECB rates (item 6 part 2, decisions 437-445, core
 migration 0007, tenant migration 0102). Report commentary (item 6 part 3,
 decision 446, core migration 0008, tenant migration 0103). Shopify chargebacks
 and reserves (item 7 part 1, decisions 447-450, tenant migration 0104).
-Next numbers: tenant migration 0105, core migration 0009, decision 451.
+WooCommerce orders (item 7
+part 2, decisions 451-455, tenant migration 0105). Next numbers: tenant
+migration 0106, core migration 0009, decision 456.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

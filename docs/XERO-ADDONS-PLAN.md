@@ -103,7 +103,8 @@ phone width).
    exchange rates). Part 1: cash flow forecast; part 2: consolidation;
    part 3: AI commentary (built, decision 446).
 7. **More sales platforms, A2X style:** Shopify chargebacks and reserves
-   (part 1, examples SPC25-SPC31), then WooCommerce (part 2), then Stripe
+   (part 1, examples SPC25-SPC31, built), then WooCommerce (part 2,
+   examples WC1-WC10, built), then Stripe
    sales, Square, Amazon, eBay, Etsy, PayPal. Jess, 5 Oct 2026: no summary
    mode (each order keeps its invoice and a payout matches them);
    chargebacks to a chargebacks account; reserves to a reserve account;

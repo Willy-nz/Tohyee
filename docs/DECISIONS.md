@@ -3361,3 +3361,34 @@ think is best").
      chosen (SPC30).
      - Screenshots: the chargebacks and reserve settings ([light](screenshots/shopify-chargebacks-light.png),
        [dark](screenshots/shopify-chargebacks-dark.png), [phone](screenshots/shopify-chargebacks-phone.png)).
+
+### WooCommerce orders (decisions 451-455)
+
+451. **WooCommerce is the second sales platform** (Jess, 5 Oct 2026), on the
+     same connector framework as Shopify: a REST API v3 key made in the
+     store, over https only; webhooks (`order.created`, `order.updated`)
+     signed with a secret Tohyee makes, which need a key with write access
+     (with a read key the catch-up sync brings orders in). No customer or
+     product sync: customers are matched by email, lines by SKU (Jess:
+     enough for now).
+452. **Each payment method is mapped to an account** (Jess, following
+     NetSuite's payment method mapping): an order's payment is recorded
+     into the bank account chosen for its WooCommerce payment method (e.g.
+     Stripe into the Stripe feed's account, so the feed's line matches the
+     payment), and refunds are paid back from it. A method seen on an order
+     but not chosen yet holds the order, which is tried again each sync.
+453. **Bank transfers are invoiced at once and left owing** (Jess): an
+     order placed with a "left owing" method is invoiced on its order date
+     with nothing paid, for the bank feed to match; Tohyee never records a
+     payment for it. A refund before it's paid is credited against what's
+     owed. Cancelled with nothing paid against it, the invoice is voided
+     (Jess); otherwise it's logged for a person.
+454. **WooPayments goes through a clearing account** (Jess): its payments
+     go into a bank account like any card gateway, and its deposits are
+     reconciled by hand (there's no documented API for them).
+455. **WooCommerce's amounts are before tax**: line and shipping totals
+     come with their tax beside them, so invoices are tax exclusive and
+     must come to the order's total. Surcharges (`fee_lines`) are refused
+     for now (Jess), like another currency.
+     - Screenshots: the payment method settings ([light](screenshots/woocommerce-light.png),
+       [dark](screenshots/woocommerce-dark.png), [phone](screenshots/woocommerce-phone.png)).

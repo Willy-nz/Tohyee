@@ -5811,7 +5811,7 @@ later; chargeback holds stay refused. What was asked:
 3. **Chargeback holds** (`CHARGEBACK_HOLD`, `CHARGEBACK_HOLD_RELEASE`):
    Shopify doesn't say what they are, so they stay refused (proposed)?
 
-### WooCommerce orders into the accounts (item 7 part 2, examples not yet approved by Jess)
+### WooCommerce orders into the accounts (item 7 part 2, approved by Jess, 5 Oct 2026)
 
 Jess, 5 Oct 2026: WooCommerce next; **each payment method is mapped to an
 account** (as NetSuite maps a store's payment methods); orders paid later
@@ -5855,8 +5855,10 @@ The rules (our choice where WooCommerce, NetSuite and Jess are silent):
   key's permission to the API, so the screen asks for a **Read** key.
   Stored encrypted (TOHYEE_SECRET_KEY), never shown or logged. A webhook
   secret is made by Tohyee and the webhooks `order.created` and
-  `order.updated` are added to the store; a catch-up sync runs every 15
-  minutes as for Shopify.
+  `order.updated` are added to the store; that needs a **Read/Write** key,
+  so with a Read key WooCommerce refuses them, the connection says so, and
+  the catch-up sync (every 15 minutes, as for Shopify) brings orders in.
+  WooCommerce's ping to a new webhook's address is answered and ignored.
 - **Settings** as Shopify's (start date, sales and shipping accounts, tax
   rate → tax code, untaxed code, guest checkouts), plus **payment
   methods**: each `payment_method` the store uses (shown once an order
@@ -5901,10 +5903,12 @@ melts as SPC.
 
 - **WC1** Connecting: `http://shop.glimmers.nz` is refused ("Use the
   store's https:// address"). With `https://`, key `ck_…` and secret
-  `cs_…`, Tohyee reads one order to check the key (a 401 is refused: "The
-  store didn't accept that key"), stores the key encrypted, adds the two
-  webhooks and shows the payment methods found. The audit history says who
-  connected.
+  `cs_…`, Tohyee reads one order to check the key (a 401 is refused:
+  "WooCommerce refused these credentials"), reads the store's currency and
+  tax setting, stores the key encrypted and adds the two webhooks (a Read
+  key: refused by WooCommerce, and the note says webhooks need write
+  access). Payment methods appear in the settings as orders use them. The
+  audit history says who connected.
 - **WC2** Paid by card through Stripe: order **#2001**, processing, paid
   2026-10-02T01:30Z, Aroha Ngata, 2 × Large candle, line `total` 40.00,
   `total_tax` 6.00, order `total` 46.00, `payment_method` stripe. Invoice
@@ -5938,8 +5942,10 @@ melts as SPC.
 - **WC7** Cancelled: #2005 on-hold by `bacs` (23.00, INV-0005 owing) is
   cancelled in WooCommerce on 8 Oct with nothing paid: INV-0005 is voided
   (its journal reversed). Had 10.00 been matched to it, nothing changes
-  and the log says "INV-0005 has payments; deal with it in Tohyee." #2006,
-  pending then failed, is never posted.
+  and the log says "INV-0005 has payments or credit against it; deal with
+  it in Tohyee." #2006, pending then failed, gets a sales order while
+  pending (as SPC20) that's cancelled when it fails; nothing reaches the
+  ledger.
 - **WC8** Unmapped method: #2007 paid by `cod` (Cash on delivery), not
   mapped: nothing posted; logged "Choose where cod (Cash on delivery)
   payments go in the WooCommerce settings." Mapping cod to Left owing and
@@ -5952,7 +5958,14 @@ melts as SPC.
   an order whose lines, shipping and tax come to 46.00 but `total` is
   45.00. Each is logged with the reason and nothing is posted.
 
-**Questions for Jess (WooCommerce)**
+Built (decisions 451-455, tenant migration 0105). Tests:
+`tests/integration/woocommerce-orders.test.ts` and
+`tests/unit/woocommerce.test.ts` (WC1-WC10).
+
+**Questions for Jess (WooCommerce)**, answered 5 Oct 2026: examples
+approved; surcharges refused for now; a cancelled bank-transfer order's
+unpaid invoice is voided; SKU and email matching is enough for now. What
+was asked:
 
 1. **Surcharges** (`fee_lines`, e.g. a card fee added at checkout): refuse
    for now (proposed), or post them to a chosen account?

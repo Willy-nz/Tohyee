@@ -1,12 +1,13 @@
 import { createTransfer, createBankTransaction } from "@/lib/bank/transactions";
 import { createContact } from "@/lib/contacts/service";
+import { applyCreditNote } from "@/lib/credit-notes/applications";
 import { approveCreditNote, createCreditNote } from "@/lib/credit-notes/service";
 import { refundCreditNote } from "@/lib/credit-notes/refunds";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { HttpError } from "@/lib/errors";
 import { recordPayment } from "@/lib/invoices/payments";
-import { approveInvoice } from "@/lib/invoices/service";
-import { cmp, dec } from "@/lib/money/decimal";
+import { approveInvoice, getInvoice, voidInvoice } from "@/lib/invoices/service";
+import { cmp, dec, isPositive } from "@/lib/money/decimal";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { approveSalesOrder, cancelSalesOrder, createSalesOrder, invoiceSalesOrder } from "@/lib/sales-orders/service";
 import type { PlatformCustomer, PlatformOrder, PlatformPayout } from "@/lib/sales-platforms/connector";
@@ -46,10 +47,13 @@ export type Posting = PostingRules & {
   startDate: string;
   /** The instant the start date begins in New Zealand. */
   startInstant: string;
-  clearingAccountId: string;
-  clearingAccountCode: string;
-  payoutAccountCode: string;
-  feesAccountCode: string;
+  /** Shopify's clearing, payout and fees accounts; null for WooCommerce, which has no payouts. */
+  clearingAccountId: string | null;
+  clearingAccountCode: string | null;
+  payoutAccountCode: string | null;
+  feesAccountCode: string | null;
+  /** WooCommerce (WC2-WC8): where each payment method's money goes; null when the platform uses the clearing account. */
+  paymentMethods: Map<string, { accountCode: string | null; leftOwing: boolean }> | null;
   /** Where disputed amounts go, and the bank account Shopify's reserve sits in (SPC25-SPC31); null until chosen. */
   chargebacksAccountCode: string | null;
   reserveAccountCode: string | null;
@@ -107,7 +111,14 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     [connectionId],
   );
   const row = found.rows[0];
-  if (!row || !row.post_to_accounts || !row.start_date || !row.clearing_account_id) return null;
+  const usesPaymentMethods = row?.platform === "woocommerce";
+  if (!row || !row.post_to_accounts || !row.start_date || (!usesPaymentMethods && !row.clearing_account_id)) return null;
+  const methods = usesPaymentMethods
+    ? await tx.query<{ method: string; code: string | null; left_owing: boolean }>(
+        `select m.method, a.code, m.left_owing from sales_platform_payment_methods m left join accounts a on a.id = m.account_id where m.connection_id = $1`,
+        [connectionId],
+      )
+    : null;
   const mapped = await tx.query<{ rate: string; code: string; code_rate: string }>(
     `select m.rate::text as rate, t.code, t.rate::text as code_rate
        from sales_platform_tax_codes m join tax_codes t on t.id = m.tax_code_id
@@ -122,9 +133,10 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     startDate: row.start_date,
     startInstant: startInstant(row.start_date),
     clearingAccountId: row.clearing_account_id,
-    clearingAccountCode: row.clearing_code!,
-    payoutAccountCode: row.payout_code!,
-    feesAccountCode: row.fees_code!,
+    clearingAccountCode: row.clearing_code,
+    payoutAccountCode: row.payout_code,
+    feesAccountCode: row.fees_code,
+    paymentMethods: methods ? new Map(methods.rows.map((entry) => [entry.method, { accountCode: entry.code, leftOwing: entry.left_owing }])) : null,
     chargebacksAccountCode: row.chargebacks_code,
     reserveAccountCode: row.reserve_code,
     guestContactId: row.guest_contact_id,
@@ -134,6 +146,7 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     exportTaxCode: settings.exportTaxCode,
     untaxedTaxCode: row.untaxed_code,
     taxCodes: mapped.rows.map((entry) => ({ rate: entry.rate, code: entry.code, codeRate: entry.code_rate })),
+    platformName: SALES_PLATFORM_LABELS[row.platform],
     salesAccountCode: row.sales_code!,
     shippingAccountCode: row.shipping_code!,
   };
@@ -149,13 +162,14 @@ type DocumentRow = {
   contact_id: string | null;
   sales_order_id: string | null;
   invoice_id: string | null;
+  customer_payment_id: string | null;
 };
 
 type RecordKind = "order" | "refund" | "payout";
 
 async function findDocument(tx: OrgTx, posting: Posting, kind: RecordKind, externalId: string): Promise<DocumentRow | null> {
   const result = await tx.query<DocumentRow>(
-    `select id, state, retry, contact_id, sales_order_id, invoice_id from sales_platform_documents
+    `select id, state, retry, contact_id, sales_order_id, invoice_id, customer_payment_id from sales_platform_documents
       where platform = $1 and store_domain = $2 and record_kind = $3 and external_id = $4 for update`,
     [posting.platform, posting.storeDomain, kind, externalId],
   );
@@ -263,6 +277,21 @@ const platformLabel = (posting: Posting) => SALES_PLATFORM_LABELS[posting.platfo
 /** The items linked to the order's variants (SPC17). */
 async function linkedItems(tx: OrgTx, posting: Posting, variantIds: string[]): Promise<Map<string, LinkedItem>> {
   if (variantIds.length === 0) return new Map();
+  if (posting.platform === "woocommerce") {
+    // WooCommerce lines carry their SKU in place of a variant: the active item with that code (Jess, 5 Oct 2026).
+    const found = await tx.query<{ code: string; id: string; item_type: string; income_code: string | null }>(
+      `select i.code, i.id, i.item_type, a.code as income_code from items i left join accounts a on a.id = i.income_account_id
+        where i.is_active and lower(i.code) = any($1::text[])`,
+      [variantIds.map((sku) => sku.toLowerCase())],
+    );
+    const byCode = new Map(found.rows.map((row) => [row.code.toLowerCase(), row]));
+    const items = new Map<string, LinkedItem>();
+    for (const sku of variantIds) {
+      const row = byCode.get(sku.toLowerCase());
+      if (row) items.set(sku, { id: row.id, code: row.code, itemType: row.item_type, incomeAccountCode: row.income_code });
+    }
+    return items;
+  }
   const result = await tx.query<{ external_id: string; id: string; code: string; item_type: string; income_code: string | null }>(
     `select m.external_id, i.id, i.code, i.item_type, a.code as income_code
        from sales_platform_mappings m
@@ -287,6 +316,34 @@ const errorText = (error: Error) => error.message.replace(/\s+$/, "");
 
 // ---------------------------------------------------------------------------
 // Orders and refunds (SPC11-SPC14, SPC16-SPC18, SPC20, SPC21, SPC23)
+
+type PaymentTarget = { ok: true; accountCode: string | null; leftOwing: boolean } | { ok: false; message: string };
+
+/**
+ * Where an order's money goes (WC2-WC8): Shopify's clearing account, or for
+ * WooCommerce the account its payment method is mapped to, or left owing
+ * for the bank feed to match. A method not seen before is added to the
+ * settings' list (unmapped), so an admin can choose.
+ */
+async function paymentTarget(tx: OrgTx, posting: Posting, order: PlatformOrder): Promise<PaymentTarget> {
+  if (!posting.paymentMethods) return { ok: true, accountCode: posting.clearingAccountCode, leftOwing: false };
+  const method = order.paymentMethod;
+  if (!method) return { ok: false, message: `${order.name} has no payment method, so Tohyee can't tell where its money went.` };
+  await tx.query(
+    `insert into sales_platform_payment_methods (connection_id, method, title) values ($1, $2, $3)
+     on conflict (connection_id, method) do update set title = coalesce(excluded.title, sales_platform_payment_methods.title)
+      where sales_platform_payment_methods.title is distinct from coalesce(excluded.title, sales_platform_payment_methods.title)`,
+    [posting.connectionId, method.id.slice(0, 100), method.title?.slice(0, 200) ?? null],
+  );
+  const mapped = posting.paymentMethods.get(method.id);
+  if (!mapped || (!mapped.accountCode && !mapped.leftOwing)) {
+    return { ok: false, message: `Choose where ${method.id}${method.title ? ` (${method.title})` : ""} payments go in the ${platformLabel(posting)} settings.` };
+  }
+  return { ok: true, accountCode: mapped.accountCode, leftOwing: mapped.leftOwing };
+}
+
+/** WooCommerce statuses of an order that's been placed and is waiting to be paid by bank transfer or similar (WC4). */
+const PLACED = ["ON_HOLD", "PROCESSING", "COMPLETED", "PAID"];
 
 /**
  * Brings one order in, as far as it can go: the approved sales order, then
@@ -439,9 +496,43 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
     return;
   }
 
-  // Paid: invoiced from the sales order, and the payment into the clearing account (SPC11-SPC13, SPC16, SPC17).
+  // A WooCommerce order left owing and cancelled before it was paid (WC7): the invoice is voided if nothing's paid against it.
+  if (doc.invoice_id !== null && doc.customer_payment_id === null && order.cancelledAt && !paid && posting.paymentMethods) {
+    const invoice = await getInvoice(tx, doc.invoice_id);
+    if (invoice.status === "voided") return;
+    if (cmp(dec(invoice.amountDue ?? "0"), dec(invoice.total)) !== 0) {
+      await refuse(`${order.name} was cancelled in ${shop}, but ${invoice.invoiceNumber} has payments or credit against it; deal with it in Tohyee.`);
+      return;
+    }
+    const voided = await attempt(tx, () =>
+      voidInvoice(tx, doc!.invoice_id, { source: SOURCE, idempotencyKey: keyFor(posting, "order", id, "invoice-void"), voidDate: localDate(order.cancelledAt!) }),
+    );
+    if (!voided.ok) {
+      await wait(`${order.name} was cancelled in ${shop}, but ${invoice.invoiceNumber} couldn't be voided: ${errorText(voided.error)}`);
+      return;
+    }
+    await saveDocument(tx, posting, kind, id, { state: "cancelled", retry: false, external_updated_at: order.updatedAt });
+    await log(tx, context, {
+      action: "cancelled",
+      recordKind: kind,
+      externalId: id,
+      documentType: "invoice",
+      documentId: doc.invoice_id,
+      message: `${order.name} was cancelled in ${shop} before it was paid, so ${invoice.invoiceNumber} was voided.`,
+    });
+    return;
+  }
+
+  // Invoiced from the sales order: paid, with the payment into the clearing account or the payment method's account
+  // (SPC11-SPC13, SPC16, SPC17, WC2, WC3, WC6), or placed and left owing (WC4).
   if (doc.invoice_id === null) {
-    if (!paid) {
+    const target = await paymentTarget(tx, posting, order);
+    if (!target.ok) {
+      if (paid || PLACED.includes(order.financialStatus ?? "")) await wait(`${target.message}`, "waiting");
+      return;
+    }
+    const owing = target.leftOwing && PLACED.includes(order.financialStatus ?? "");
+    if (!paid && !owing) {
       const status = (order.financialStatus ?? "unknown").toLowerCase().replace(/_/g, " ");
       if (await log(tx, context, { action: "waiting", recordKind: kind, externalId: id, message: `${order.name} isn't paid yet (${shop} says ${status}), so it isn't invoiced.` })) {
         context.counts.waiting = (context.counts.waiting ?? 0) + 1;
@@ -450,11 +541,11 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       return;
     }
     const payments = orderPayments(order);
-    if (payments.giftCard) {
+    if (!owing && payments.giftCard) {
       await refuse(`${order.name} was paid (at least partly) with a gift card; gift cards aren't supported yet, so it isn't invoiced.`);
       return;
     }
-    if (cmp(payments.amount, dec(order.total)) !== 0) {
+    if (!owing && cmp(payments.amount, dec(order.total)) !== 0) {
       await refuse(`${order.name}'s payments come to ${money(payments.amount)} but its total is ${money(order.total)}, so it isn't invoiced.`);
       return;
     }
@@ -467,7 +558,8 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       );
       return;
     }
-    let invoiceDate = localDate(payments.lastAt ?? order.processedAt);
+    // Left owing: invoiced on the order's date, nothing paid (WC4). Paid: on the day it was paid (decision 320).
+    let invoiceDate = localDate(owing ? order.processedAt : (payments.lastAt ?? order.processedAt));
     if (invoiceDate < salesOrder.rows[0].order_date) invoiceDate = salesOrder.rows[0].order_date;
     const invoiced = await attempt(tx, async () => {
       const { invoice } = await invoiceSalesOrder(tx, doc!.sales_order_id, {
@@ -477,12 +569,13 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
         dueDate: invoiceDate,
       });
       const approved = await approveInvoice(tx, invoice.id, { source: SOURCE, idempotencyKey: keyFor(posting, "order", id, "invoice-approve") });
+      if (owing) return { invoice: approved.invoice, payment: null };
       const { payment } = await recordPayment(tx, invoice.id, {
         source: SOURCE,
         idempotencyKey: keyFor(posting, "order", id, "payment"),
         paymentDate: invoiceDate,
         amount: money(order.total),
-        bankAccountCode: posting.clearingAccountCode,
+        bankAccountCode: target.accountCode!,
         reference: `${shop} ${order.name}`,
       });
       return { invoice: approved.invoice, payment };
@@ -495,7 +588,7 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       state: "done",
       retry: false,
       invoice_id: invoiced.value.invoice.id,
-      customer_payment_id: invoiced.value.payment.id,
+      ...(invoiced.value.payment ? { customer_payment_id: invoiced.value.payment.id } : {}),
       external_updated_at: order.updatedAt,
     });
     context.counts.posted = (context.counts.posted ?? 0) + 1;
@@ -506,14 +599,18 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       contactId: doc.contact_id,
       documentType: "invoice",
       documentId: invoiced.value.invoice.id,
-      message: `Invoiced ${order.name} as ${invoiced.value.invoice.invoiceNumber} (${money(invoiced.value.invoice.total)}) and recorded its payment into ${posting.clearingAccountCode} on ${invoiceDate}.`,
+      message: invoiced.value.payment
+        ? `Invoiced ${order.name} as ${invoiced.value.invoice.invoiceNumber} (${money(invoiced.value.invoice.total)}) and recorded its payment into ${target.accountCode} on ${invoiceDate}.`
+        : `Invoiced ${order.name} as ${invoiced.value.invoice.invoiceNumber} (${money(invoiced.value.invoice.total)}) on ${invoiceDate}, left owing for the bank feed to match.`,
     });
     doc = await findDocument(tx, posting, kind, id);
     if (!doc || doc.invoice_id === null) return;
   }
 
-  // Refunds (SPC14).
+  // Refunds (SPC14, WC5): paid back from where the payment went; an invoice left owing is credited instead.
   let failedRefund = false;
+  const refundTarget = order.refunds.length > 0 ? await paymentTarget(tx, posting, order) : null;
+  const owingInvoice = doc.customer_payment_id === null && posting.paymentMethods !== null;
   const overseas = await contactIsOverseas(tx, doc.contact_id!);
   const items = await linkedItems(tx, posting, order.lines.flatMap((line) => (line.variantId ? [line.variantId] : [])));
   for (const refund of order.refunds) {
@@ -526,6 +623,16 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
     }
     if (!plan.ok) {
       await refused(tx, context, "refund", refund.externalId, plan.reason);
+      continue;
+    }
+    if (!owingInvoice && (!refundTarget?.ok || !refundTarget.accountCode)) {
+      failedRefund = true;
+      await log(tx, context, {
+        action: "failed",
+        recordKind: "refund",
+        externalId: refund.externalId,
+        message: `${order.name}'s refund of ${plan.refunded} waits: ${refundTarget && !refundTarget.ok ? refundTarget.message : "there's no account it was paid from."} It's tried again at the next sync.`,
+      });
       continue;
     }
     const invoice = await tx.query<{ invoice_date: string; amounts_mode: string }>("select invoice_date::text, amounts_mode from sales_invoices where id = $1", [
@@ -544,15 +651,29 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
         returnInvoiceId: doc!.invoice_id,
       });
       const approved = await approveCreditNote(tx, creditNote.id, { source: SOURCE, idempotencyKey: keyFor(posting, "refund", refund.externalId, "approve") });
+      if (owingInvoice) {
+        // Left owing (WC5): the credit reduces what's still owed; anything more is left as credit to deal with.
+        const due = dec((await getInvoice(tx, doc!.invoice_id)).amountDue ?? "0");
+        const applied = cmp(due, dec(plan.total)) < 0 ? due : dec(plan.total);
+        if (isPositive(applied)) {
+          await applyCreditNote(tx, creditNote.id, {
+            source: SOURCE,
+            idempotencyKey: keyFor(posting, "refund", refund.externalId, "apply"),
+            applicationDate: date,
+            applications: [{ invoiceId: doc!.invoice_id, amount: money(applied) }],
+          });
+        }
+        return { creditNote: approved.creditNote, refund: null, applied: money(applied) };
+      }
       const { refund: paidBack } = await refundCreditNote(tx, creditNote.id, {
         source: SOURCE,
         idempotencyKey: keyFor(posting, "refund", refund.externalId, "refund"),
         refundDate: date,
         amount: plan.total,
-        bankAccountCode: posting.clearingAccountCode,
+        bankAccountCode: refundTarget?.ok ? refundTarget.accountCode! : "",
         reference: `${shop} ${order.name} refund`,
       });
-      return { creditNote: approved.creditNote, refund: paidBack };
+      return { creditNote: approved.creditNote, refund: paidBack, applied: null };
     });
     if (!credited.ok) {
       failedRefund = true;
@@ -570,7 +691,7 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       name: order.name,
       contact_id: doc.contact_id!,
       credit_note_id: credited.value.creditNote.id,
-      credit_note_refund_id: credited.value.refund.id,
+      ...(credited.value.refund ? { credit_note_refund_id: credited.value.refund.id } : {}),
     });
     context.counts.posted = (context.counts.posted ?? 0) + 1;
     await log(tx, context, {
@@ -580,7 +701,11 @@ export async function postOrder(tx: OrgTx, context: PostingContext, order: Platf
       contactId: doc.contact_id,
       documentType: "credit_note",
       documentId: credited.value.creditNote.id,
-      message: `Credited ${order.name}'s refund as ${credited.value.creditNote.creditNoteNumber} (${money(credited.value.creditNote.total)}) and paid it from ${posting.clearingAccountCode} on ${date}.`,
+      message: credited.value.refund
+        ? `Credited ${order.name}'s refund as ${credited.value.creditNote.creditNoteNumber} (${money(credited.value.creditNote.total)}) and paid it from ${refundTarget?.ok ? refundTarget.accountCode : ""} on ${date}.`
+        : `Credited ${order.name}'s refund as ${credited.value.creditNote.creditNoteNumber} (${money(credited.value.creditNote.total)}) against what's owed (${credited.value.applied} applied${
+            cmp(dec(credited.value.applied ?? "0"), dec(credited.value.creditNote.total)) < 0 ? "; the rest is left as credit to refund by hand" : ""
+          }).`,
     });
   }
   await saveDocument(tx, posting, kind, id, { retry: failedRefund, external_updated_at: order.updatedAt });
@@ -612,7 +737,16 @@ export type PayoutOutcome = "posted" | "done" | "waiting" | "refused" | "failed"
  * adjustments (no GST). "done" means there's nothing more to do with it.
  */
 export async function postPayout(tx: OrgTx, context: PostingContext, payout: PlatformPayout): Promise<PayoutOutcome> {
-  const posting = context.posting;
+  const given = context.posting;
+  // Only Shopify pays out, through its clearing account.
+  if (!given.clearingAccountId || !given.clearingAccountCode || !given.payoutAccountCode || !given.feesAccountCode) return "done";
+  const posting = {
+    ...given,
+    clearingAccountId: given.clearingAccountId,
+    clearingAccountCode: given.clearingAccountCode,
+    payoutAccountCode: given.payoutAccountCode,
+    feesAccountCode: given.feesAccountCode,
+  };
   const id = payout.externalId;
   if (await findDocument(tx, posting, "payout", id)) return "done";
   if (Date.parse(payout.issuedAt) < Date.parse(posting.startInstant)) return "done";
