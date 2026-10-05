@@ -3441,6 +3441,8 @@ Issues #139-#142, each with an example Jess approved on 5 Oct 2026.
      the dates with the pay (tenant migration 0107). Pays outside the dates
      use the normal rules. The employee PATCH route also now saves the ESCT
      rate, which the employee screen sent but the route dropped.
+     - Screenshots: the employee form ([light](screenshots/kiwisaver-reduction-light.png),
+       [dark](screenshots/kiwisaver-reduction-dark.png), [phone](screenshots/kiwisaver-reduction-phone.png)).
 464. **Salary back pay refuses a period not paid in full** (#142, XP11b,
      Jess: refuse rather than pro-rate): when the period's ordinary pay
      isn't the full salary at the rate before the new one, back pay is
