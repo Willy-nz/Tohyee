@@ -1253,6 +1253,15 @@ Enforced by the app (and covered by tests):
   `crm_calendar_events`, linked through `crm_participant_links`.
   Disconnecting deletes those rows. Every 15 minutes, off with
   TOHYEE_MAIL_SYNC_SCHEDULER=off. The code is in `src/lib/crm/mail/`.
+- WooCommerce (decisions 451-455, tenant migration 0105):
+  `src/lib/sales-platforms/woocommerce.ts` is the second connector (REST
+  API v3; `wooOrderFrom` turns an order and its refunds into the shared
+  `PlatformOrder`, with amounts before tax). Connectors say whether they
+  pay out (`hasPayouts`), use payment methods (`usesPaymentMethods`) and
+  sync records (`syncsRecords`). `sales_platform_payment_methods` holds
+  each method seen and where its money goes; `paymentTarget` in
+  `posting.ts` picks the account (or left owing) for an order. The network
+  hook is shared in `http.ts`.
 - Shopify chargebacks and reserves (decisions 447-450, tenant migration
   0104): `planPayout` in `src/lib/sales-platforms/orders.ts` lists the
   balance transaction types it posts with the sign each must have;

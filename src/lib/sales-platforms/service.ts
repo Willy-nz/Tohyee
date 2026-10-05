@@ -27,6 +27,7 @@ import { itemNameFor, mergeField, priceCopyable } from "@/lib/sales-platforms/me
 import { startOfLocalDate } from "@/lib/sales-platforms/orders";
 import { type PostingContext, loadPosting, ordersToRetry, postOrder, postPayout, postedPayoutIds } from "@/lib/sales-platforms/posting";
 import { shopifyConnector } from "@/lib/sales-platforms/shopify";
+import { woocommerceConnector } from "@/lib/sales-platforms/woocommerce";
 import {
   ORDER_SCOPE,
   PAYOUT_SCOPES,
@@ -39,7 +40,7 @@ import {
   type SyncResult,
 } from "@/lib/sales-platforms/types";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
-import { asRecord, optionalBoolean, optionalString, requireArray, requireId, requireOneOf } from "@/lib/validation";
+import { asRecord, optionalBoolean, optionalString, requireArray, requireId, requireOneOf, requireString } from "@/lib/validation";
 
 /**
  * Sales platform connections (examples SPC1-SPC23 in
@@ -54,7 +55,7 @@ import { asRecord, optionalBoolean, optionalString, requireArray, requireId, req
  * is called with nothing open, and the result is written in a second.
  */
 
-const CONNECTORS: Record<SalesPlatform, SalesPlatformConnector> = { shopify: shopifyConnector };
+const CONNECTORS: Record<SalesPlatform, SalesPlatformConnector> = { shopify: shopifyConnector, woocommerce: woocommerceConnector };
 
 /** Who the catch-up sync and webhooks act as (in the audit trail and the sync log). */
 export const SALES_PLATFORM_ACTOR: Actor = { userId: null, email: "sales-platform-sync@tohyee" };
@@ -112,6 +113,7 @@ type ConnectionRow = {
   reserve_account_code: string | null;
   untaxed_tax_code: string | null;
   tax_codes: Array<{ rate: string; taxCode: string }>;
+  payment_methods: Array<{ method: string; title: string | null; accountCode: string | null; leftOwing: boolean }>;
   guest_contact_id: string | null;
   guest_contact_name: string | null;
 };
@@ -129,7 +131,9 @@ const COLUMNS =
   ", (select t.code from tax_codes t where t.id = untaxed_tax_code_id) as untaxed_tax_code" +
   ", guest_contact_id::text, (select g.name from contacts g where g.id = guest_contact_id) as guest_contact_name" +
   ", (select coalesce(json_agg(json_build_object('rate', m.rate::text, 'taxCode', t.code) order by m.rate), '[]'::json)" +
-  "     from sales_platform_tax_codes m join tax_codes t on t.id = m.tax_code_id where m.connection_id = sales_platform_connections.id) as tax_codes";
+  "     from sales_platform_tax_codes m join tax_codes t on t.id = m.tax_code_id where m.connection_id = sales_platform_connections.id) as tax_codes" +
+  ", (select coalesce(json_agg(json_build_object('method', p.method, 'title', p.title, 'accountCode', a.code, 'leftOwing', p.left_owing) order by p.method), '[]'::json)" +
+  "     from sales_platform_payment_methods p left join accounts a on a.id = p.account_id where p.connection_id = sales_platform_connections.id) as payment_methods";
 
 const iso = (value: string | null): string | null => (value === null ? null : new Date(value).toISOString());
 
@@ -163,6 +167,7 @@ function toConnection(row: ConnectionRow): SalesPlatformConnection {
     shippingAccountCode: row.shipping_account_code,
     chargebacksAccountCode: row.chargebacks_account_code,
     reserveAccountCode: row.reserve_account_code,
+    paymentMethods: row.payment_methods,
     untaxedTaxCode: row.untaxed_tax_code,
     guestContactId: row.guest_contact_id,
     guestContactName: row.guest_contact_name,
@@ -328,7 +333,8 @@ async function setUpWebhooks(
       const orders = scopes.includes(ORDER_SCOPE);
       ids = await connector.registerWebhooks(context, token, address, { orders });
       note = null;
-      logMessage = `Asked ${label(row.platform)} to send customer${orders ? ", product and order" : " and product"} changes to this server as they happen (${ids.length} webhooks).`;
+      const what = !connector.syncsRecords ? "order" : `customer${orders ? ", product and order" : " and product"}`;
+      logMessage = `Asked ${label(row.platform)} to send ${what} changes to this server as they happen (${ids.length} webhooks).`;
     } catch (error) {
       note = `Webhooks couldn't be set up: ${error instanceof Error ? error.message : String(error)}. The catch-up sync still runs every 15 minutes.`;
       logMessage = note;
@@ -372,8 +378,9 @@ export async function connectStore(
   const platform = requireOneOf(body.platform ?? "shopify", "platform", SALES_PLATFORMS);
   const connector = connectorFor(platform);
   const input = connector.parseConnectInput(body);
-  const syncCustomers = optionalBoolean(body.syncCustomers, "syncCustomers") ?? true;
-  const syncProducts = optionalBoolean(body.syncProducts, "syncProducts") ?? true;
+  // WooCommerce has no customer or product sync: customers are matched by email and lines by SKU.
+  const syncCustomers = connector.syncsRecords && (optionalBoolean(body.syncCustomers, "syncCustomers") ?? true);
+  const syncProducts = connector.syncsRecords && (optionalBoolean(body.syncProducts, "syncProducts") ?? true);
   const now = options.now ?? new Date();
 
   // 1. A short read: is this store already connected? (No call to the store if so.)
@@ -527,7 +534,7 @@ const bankInBase = (baseCurrency: string) => (row: { account_type: string; curre
   row.account_type !== "bank"
     ? "it isn't a bank account."
     : row.currency_code && row.currency_code !== baseCurrency
-      ? `it's in ${row.currency_code}, and Shopify orders come in ${baseCurrency}.`
+      ? `it's in ${row.currency_code}, and orders come in ${baseCurrency}.`
       : null;
 
 type TaxCodeChoice = { id: string; code: string; rate: string; category: string };
@@ -628,6 +635,25 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     }
   }
 
+  // WooCommerce's payment methods (WC2): each method's bank account, or left owing; only methods already seen are listed.
+  let paymentMethods: Array<{ method: string; account: AccountChoice | null; leftOwing: boolean }> | undefined;
+  if (body.paymentMethods !== undefined) {
+    if (!connectorFor(row.platform).usesPaymentMethods) throw new ValidationError(`${shop} orders' money goes through the clearing account, so there are no payment methods to choose.`);
+    paymentMethods = [];
+    for (const [index, raw] of requireArray(body.paymentMethods, "paymentMethods", 50).entries()) {
+      const entry = asRecord(raw, `Payment method ${index + 1}`);
+      const method = requireString(entry.method, `Payment method ${index + 1}`, { maxLength: 100 });
+      if (!row.payment_methods.some((known) => known.method === method)) throw new ValidationError(`${shop} hasn't sent an order paid by ${method} yet.`);
+      const leftOwing = optionalBoolean(entry.leftOwing, `Payment method ${method} leftOwing`) ?? false;
+      const account =
+        entry.accountCode === undefined || entry.accountCode === null || entry.accountCode === ""
+          ? null
+          : await chooseAccount(tx, entry.accountCode, `paymentMethods[${index}].accountCode`, `account for ${method} payments`, bankInBase(tx.baseCurrency));
+      if (leftOwing && account) throw new ValidationError(`${method} payments can go into an account or be left owing, not both.`);
+      paymentMethods.push({ method, account, leftOwing });
+    }
+  }
+
   // Guest checkouts' contact (decision 317): an active customer, or null to refuse guest checkouts.
   let guest: { id: string; name: string } | null | undefined;
   if (body.guestContactId !== undefined) {
@@ -663,10 +689,16 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     throw new ValidationError("The reserve account must be different from the clearing account and the account payouts arrive in.");
   }
   if (postToAccounts) {
+    // WooCommerce has no payouts, so no clearing, payout or fees account (WC2).
+    const payouts = connectorFor(row.platform).hasPayouts;
     const missing = [
-      [next.clearing, "a clearing account"],
-      [next.payout, "the account payouts arrive in"],
-      [next.fees, "a fees account"],
+      ...(payouts
+        ? [
+            [next.clearing, "a clearing account"],
+            [next.payout, "the account payouts arrive in"],
+            [next.fees, "a fees account"],
+          ]
+        : []),
       [next.sales, "a sales account"],
       [next.shipping, "a shipping account"],
       [startDate, "a start date"],
@@ -701,6 +733,19 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   named(reserve, row.reserve_account_id, "reserve account");
   if (untaxed !== undefined && (untaxed?.id ?? null) !== row.untaxed_tax_code_id) changes.push(`untaxed sales: ${untaxed?.code ?? "none"}`);
   if (guest !== undefined && (guest?.id ?? null) !== row.guest_contact_id) changes.push(`guest checkouts: ${guest ? `to ${guest.name}` : "refused"}`);
+  if (paymentMethods !== undefined) {
+    for (const entry of paymentMethods) {
+      const current = row.payment_methods.find((known) => known.method === entry.method)!;
+      const now = entry.leftOwing ? "left owing" : entry.account ? `into ${entry.account.code} ${entry.account.name}` : "not chosen";
+      const was = current.leftOwing ? "left owing" : current.accountCode ? `into ${current.accountCode}` : "not chosen";
+      if ((entry.account?.code ?? null) === current.accountCode && entry.leftOwing === current.leftOwing) continue;
+      changes.push(`${entry.method} payments: ${now} (was ${was})`);
+      await tx.query(
+        "update sales_platform_payment_methods set account_id = $3, left_owing = $4, updated_at = now() where connection_id = $1 and method = $2",
+        [row.id, entry.method, entry.account?.id ?? null, entry.leftOwing],
+      );
+    }
+  }
   if (taxCodes !== undefined) {
     const before = row.tax_codes.map((entry) => `${toPlainString(dec(entry.rate))}=${entry.taxCode}`).join(",");
     const after = [...taxCodes].sort((a, b) => cmp(dec(a.rate), dec(b.rate))).map((entry) => `${toPlainString(dec(entry.rate))}=${entry.code.code}`).join(",");
@@ -1295,7 +1340,7 @@ function postingContext(tx: OrgTx, apply: ApplyContext, posting: NonNullable<Awa
 
 /** Whether a connection fetches and posts orders: the switch is on and it has a start date (SPC21). */
 const posts = (row: ConnectionRow) => row.post_to_accounts && row.start_date !== null;
-const readsPayouts = (row: ConnectionRow) => PAYOUT_SCOPES.every((scope) => row.granted_scopes.includes(scope));
+const readsPayouts = (row: ConnectionRow) => connectorFor(row.platform).hasPayouts && PAYOUT_SCOPES.every((scope) => row.granted_scopes.includes(scope));
 
 const NO_PAYOUT_SCOPES = `Payouts aren't brought in: the app hasn't been given ${PAYOUT_SCOPES.join(" and ")}. Add them to the app's access scopes and test the connection, or record payouts by hand.`;
 
@@ -1372,7 +1417,7 @@ export async function syncConnection(
           }
           payoutsUntil = firstOpen ?? last;
           for (const note of payouts.notes) await writeNote(tx, row.id, "sync", note);
-        } else {
+        } else if (connectorFor(current.platform).hasPayouts) {
           await writeNote(tx, row.id, "sync", NO_PAYOUT_SCOPES);
         }
       }
@@ -1532,6 +1577,8 @@ export async function receiveWebhook(
   const connector = connectorFor(row.platform);
 
   // 2. Check the signature, with nothing open.
+  // WooCommerce pings a new webhook's address before sending anything: answered, nothing done.
+  if (connector.isPing?.(headers, rawBody)) return { status: 200, message: "Ping received." };
   const delivery = connector.checkWebhook(headers, rawBody, connector.webhookSecret(credentialsOf(row)), row.store_domain);
   if (!delivery) return REFUSED;
   let body: unknown;

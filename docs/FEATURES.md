@@ -986,6 +986,14 @@ that something happened.
   Guest checkouts go to the customer contact chosen for them, or are
   refused (SPC24). Refused rather than guessed: test orders, other
   currencies, gift cards, tips or duties.
+- **WooCommerce orders** (WC1-WC10, decisions 451-455, tenant migration
+  0105; not tried against a real store): connect a store with a REST API
+  key; paid orders become invoices with their payment recorded into the
+  account chosen for the order's payment method (Stripe into the Stripe
+  feed's account, WooPayments into a clearing account); bank-transfer
+  orders are invoiced and left owing for the bank feed to match, and voided
+  if cancelled unpaid; refunds become credit notes. Customers matched by
+  email, lines by SKU. Surcharges and other currencies are refused.
 - **Shopify chargebacks and reserves** (SPC25-SPC31, decisions 447-450,
   tenant migration 0104): a payout's chargebacks go to the chargebacks
   account chosen in the settings (fees to fees), won disputes come back,
@@ -1566,8 +1574,8 @@ isn't acceptable, because people would trust it:
 - an import or reverse-charge tax code (imported services under the
   reverse charge, EX16-EX25), and a default purchase tax code on expense
   claims (their suppliers aren't contacts), cash coding and bank rules
-- sales platforms: WooCommerce, Square and Stripe, Shopify chargeback
-  holds, customers' addresses and companies,
+- sales platforms: Square and Stripe sales, WooCommerce product and
+  customer sync and surcharges, Shopify chargeback holds, customers' addresses and companies,
   stock levels, and anything written back to the store
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)

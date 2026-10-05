@@ -23,6 +23,7 @@ import {
   type StoreInfo,
   type WebhookRecords,
 } from "@/lib/sales-platforms/connector";
+import { platformFetch } from "@/lib/sales-platforms/http";
 import { SHOPIFY_AUTH_METHODS } from "@/lib/sales-platforms/types";
 import { requireOneOf, requireString } from "@/lib/validation";
 
@@ -83,12 +84,8 @@ const MAX_BALANCE_TRANSACTION_PAGES = 5;
 /** A cached token this close to expiring is renewed first. */
 const RENEW_BEFORE_MS = 5 * 60 * 1000;
 
-/** Lets tests swap the network for canned responses. */
-type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
-let fetcher: FetchLike = (input, init) => fetch(input, init);
-export function setSalesPlatformFetchForTests(replacement: FetchLike | null): void {
-  fetcher = replacement ?? ((input, init) => fetch(input, init));
-}
+/** Tests swap the network for canned responses (shared with the other connectors). */
+export { setSalesPlatformFetchForTests } from "@/lib/sales-platforms/http";
 
 /** Waiting for Shopify's rate limit to refill; tests swap it so they don't wait. */
 let sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -424,7 +421,7 @@ async function call(url: string, init: RequestInit): Promise<unknown> {
   let response: Response;
   try {
     // Redirects aren't followed: the access token header would go with them, to wherever they point.
-    response = await fetcher(url, { ...init, redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS) });
+    response = await platformFetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (error) {
     throw new PlatformError(0, `Couldn't reach ${host}: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -683,6 +680,9 @@ async function pages(
 
 export const shopifyConnector: SalesPlatformConnector = {
   platform: "shopify",
+  hasPayouts: true,
+  usesPaymentMethods: false,
+  syncsRecords: true,
 
   parseConnectInput(body): ConnectInput {
     const storeDomain = normaliseShopDomain(body.storeDomain);

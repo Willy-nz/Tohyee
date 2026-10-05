@@ -3,11 +3,12 @@
  * with the browser. No server imports here.
  */
 
-export const SALES_PLATFORMS = ["shopify"] as const;
+export const SALES_PLATFORMS = ["shopify", "woocommerce"] as const;
 export type SalesPlatform = (typeof SALES_PLATFORMS)[number];
 
 export const SALES_PLATFORM_LABELS: Record<SalesPlatform, string> = {
   shopify: "Shopify",
+  woocommerce: "WooCommerce",
 };
 
 export const SHOPIFY_AUTH_METHODS = ["access_token", "client_credentials"] as const;
@@ -16,6 +17,20 @@ export type ShopifyAuthMethod = (typeof SHOPIFY_AUTH_METHODS)[number];
 export const AUTH_METHOD_LABELS: Record<string, string> = {
   access_token: "Admin API access token",
   client_credentials: "Client ID and secret",
+  api_key: "REST API key",
+};
+
+/**
+ * WooCommerce (WC1-WC10): where each payment method's money goes. An
+ * account the payment is recorded into, or "Left owing" (bank transfer,
+ * cheque): the invoice is left for the bank feed to match. Neither: seen on
+ * an order but not chosen yet, so such orders wait (WC8).
+ */
+export type PaymentMethodMapping = {
+  method: string;
+  title: string | null;
+  accountCode: string | null;
+  leftOwing: boolean;
 };
 
 export type ConnectionStatus = "active" | "paused" | "disconnected";
@@ -54,6 +69,8 @@ export type SalesPlatformConnection = {
   chargebacksAccountCode: string | null;
   /** The bank account money Shopify holds back sits in (SPC28). */
   reserveAccountCode: string | null;
+  /** WooCommerce: each payment method seen and where its money goes (WC2); empty for Shopify. */
+  paymentMethods: PaymentMethodMapping[];
   /** The contact guest checkouts go to (decision 317), or null: guest checkouts are refused. */
   guestContactId: string | null;
   guestContactName: string | null;

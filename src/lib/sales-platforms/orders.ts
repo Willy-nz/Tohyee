@@ -49,6 +49,8 @@ export type PostingRules = {
   taxCodes: ReadonlyArray<{ rate: string; code: string; codeRate: string }>;
   salesAccountCode: string;
   shippingAccountCode: string;
+  /** The platform's name in messages ("Shopify", "WooCommerce"); Shopify when not given. */
+  platformName?: string;
 };
 
 /** A variant linked to an item. */
@@ -159,7 +161,7 @@ export function taxCodeFor(taxLines: readonly PlatformTaxLine[], rules: PostingR
     const rate = charged[0].rate;
     const mapped = rules.taxCodes.find((entry) => cmp(dec(entry.rate), dec(rate)) === 0);
     if (!mapped) {
-      return refuse(`${what} has Shopify's ${percent(rate)} tax, which isn't matched to a Tohyee tax code in the connection's settings.`);
+      return refuse(`${what} has ${rules.platformName ?? "Shopify"}'s ${percent(rate)} tax, which isn't matched to a Tohyee tax code in the connection's settings.`);
     }
     return { ok: true, code: mapped.code, rate: mapped.codeRate };
   }
@@ -249,10 +251,10 @@ export function planOrder(order: PlatformOrder, rules: PostingRules, items: Read
     const ours = sum(amounts.lines.map((line) => dec(line.taxAmount)));
     if (amountsMode === "no_tax") {
       if (isPositive(draft.shopifyTax)) {
-        notes.push(`${draft.what}: Shopify charged ${money(draft.shopifyTax)} tax; it's part of the sale because the organisation isn't GST registered.`);
+        notes.push(`${draft.what}: ${rules.platformName ?? "Shopify"} charged ${money(draft.shopifyTax)} tax; it's part of the sale because the organisation isn't GST registered.`);
       }
     } else if (cmp(ours, draft.shopifyTax) !== 0) {
-      notes.push(`${draft.what}: Tohyee works out GST of ${money(ours)} (per line, as on every invoice); Shopify's tax line says ${money(draft.shopifyTax)}.`);
+      notes.push(`${draft.what}: Tohyee works out GST of ${money(ours)} (per line, as on every invoice); ${rules.platformName ?? "Shopify"}'s tax line says ${money(draft.shopifyTax)}.`);
     }
     for (const part of parts) {
       lines.push({ description: draft.description, quantity: part.quantity, unitPrice: part.unitPrice, accountCode: draft.accountCode, taxCode: draft.tax.code, itemId: draft.itemId });
@@ -265,7 +267,7 @@ export function planOrder(order: PlatformOrder, rules: PostingRules, items: Read
     SCALE,
   ).total;
   if (cmp(dec(total), dec(order.total)) !== 0) {
-    return refuse(`${name}'s lines come to ${total} in Tohyee but Shopify's order total is ${money(order.total)} (tips, duties or other charges aren't supported yet), so it isn't brought in.`);
+    return refuse(`${name}'s lines come to ${total} in Tohyee but ${rules.platformName ?? "Shopify"}'s order total is ${money(order.total)} (tips, duties or other charges aren't supported yet), so it isn't brought in.`);
   }
   return { ok: true, amountsMode, lines, total, notes };
 }
@@ -365,7 +367,7 @@ export function planRefund(
     SCALE,
   ).total;
   if (cmp(dec(total), refunded) !== 0) {
-    return refuse(`${what}'s lines come to ${total} but Shopify refunded ${money(refunded)}, so nothing was posted.`);
+    return refuse(`${what}'s lines come to ${total} but ${rules.platformName ?? "Shopify"} refunded ${money(refunded)}, so nothing was posted.`);
   }
   return { ok: true, lines, total, refunded: money(refunded), date: localDate(at) };
 }

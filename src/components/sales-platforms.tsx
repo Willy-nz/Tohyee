@@ -11,6 +11,8 @@ import { formatDateTime } from "@/lib/format";
 import {
   AUTH_METHOD_LABELS,
   SALES_PLATFORM_LABELS,
+  SALES_PLATFORMS,
+  type SalesPlatform,
   type SalesPlatformConnection,
   SHOPIFY_AUTH_METHODS,
   type ShopifyAuthMethod,
@@ -28,6 +30,9 @@ import { useConfirm } from "@/components/confirm-dialog";
  * Everyone can read the connections and the log; only admins change
  * anything.
  */
+
+/** The payment method choice "left owing" (WC4), as opposed to an account code. */
+const OWING = "__owing__";
 
 const STATUS_BADGES: Record<SalesPlatformConnection["status"], { tone: "green" | "amber" | "neutral"; text: string }> = {
   active: { tone: "green", text: "Connected" },
@@ -57,6 +62,9 @@ export function describeSyncResult(result: SyncResult): string {
 }
 
 function ConnectForm({ organisationId, onConnected }: { organisationId: string; onConnected: (message: string) => void }) {
+  const [platform, setPlatform] = useState<SalesPlatform>("shopify");
+  const [consumerKey, setConsumerKey] = useState("");
+  const [consumerSecret, setConsumerSecret] = useState("");
   const [storeDomain, setStoreDomain] = useState("");
   const [authMethod, setAuthMethod] = useState<ShopifyAuthMethod>("client_credentials");
   const [accessToken, setAccessToken] = useState("");
@@ -73,15 +81,20 @@ function ConnectForm({ organisationId, onConnected }: { organisationId: string; 
     setBusy(true);
     setError(null);
     try {
-      const credentials = authMethod === "access_token" ? { accessToken, apiSecret } : { clientId, clientSecret };
-      const { connection } = await api<{ connection: SalesPlatformConnection }>("/api/sales-platforms/connections", {
-        method: "POST",
-        body: { organisationId, platform: "shopify", storeDomain, authMethod, ...credentials, syncCustomers, syncProducts },
-      });
+      const body =
+        platform === "woocommerce"
+          ? { organisationId, platform, storeDomain, consumerKey, consumerSecret }
+          : { organisationId, platform, storeDomain, authMethod, ...(authMethod === "access_token" ? { accessToken, apiSecret } : { clientId, clientSecret }), syncCustomers, syncProducts };
+      const { connection } = await api<{ connection: SalesPlatformConnection }>("/api/sales-platforms/connections", { method: "POST", body });
       setAccessToken("");
       setApiSecret("");
       setClientSecret("");
-      onConnected(`Connected ${connection.storeName ?? connection.storeDomain}. Choose "Sync now" to bring its customers and products in.`);
+      setConsumerSecret("");
+      onConnected(
+        platform === "woocommerce"
+          ? `Connected ${connection.storeName ?? connection.storeDomain}. Set up posting to the accounts below to bring its orders in.`
+          : `Connected ${connection.storeName ?? connection.storeDomain}. Choose "Sync now" to bring its customers and products in.`,
+      );
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -89,8 +102,50 @@ function ConnectForm({ organisationId, onConnected }: { organisationId: string; 
     }
   }
 
+  const platformField = (
+    <Field label="Platform">
+      <select value={platform} onChange={(event) => setPlatform(event.target.value as SalesPlatform)}>
+        {SALES_PLATFORMS.map((value) => (
+          <option key={value} value={value}>
+            {SALES_PLATFORM_LABELS[value]}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+  if (platform === "woocommerce") {
+    return (
+      <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
+        <Notice tone="info">
+          <strong>Before you start:</strong> in your store&apos;s WordPress admin, go to WooCommerce › Settings › Advanced › REST API and add a key for
+          Tohyee. A <strong>Read</strong> key is enough to bring orders in; webhooks (orders arriving as they happen) need <strong>Read/Write</strong>, and
+          without them the catch-up sync brings orders in every 15 minutes. Tohyee only reads orders. The store must use an https:// address.
+        </Notice>
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        <div className={ui.grid2}>
+          {platformField}
+          <Field label="Store address" hint="Like https://shop.example.nz">
+            <input value={storeDomain} onChange={(event) => setStoreDomain(event.target.value)} maxLength={255} autoComplete="off" required />
+          </Field>
+          <Field label="Consumer key" hint="Starts with ck_.">
+            <input value={consumerKey} onChange={(event) => setConsumerKey(event.target.value)} maxLength={200} autoComplete="off" required />
+          </Field>
+          <Field label="Consumer secret" hint="Starts with cs_. Stored encrypted on this server; never shown again.">
+            <input type="password" value={consumerSecret} onChange={(event) => setConsumerSecret(event.target.value)} maxLength={200} autoComplete="new-password" required />
+          </Field>
+        </div>
+        <div className={ui.actions}>
+          <Button type="submit" disabled={busy}>
+            {busy ? "Checking with WooCommerce…" : "Connect store"}
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
   return (
     <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
+      {platformField}
       <Notice tone="info">
         <strong>Before you start:</strong> Tohyee connects through an app in your own Shopify account, so no one else&apos;s app has access. In the
         Shopify Dev Dashboard (dev.shopify.com), create an app, give it only the Admin API access scopes <code>read_customers</code> and{" "}
@@ -240,7 +295,7 @@ export function ConnectionCard({
   const disconnect = async () => {
     if (
       !(await confirm(
-        `Disconnect ${connection.storeName ?? connection.storeDomain}? The contacts and items already brought in stay, and so does this log. Tohyee forgets the store's credentials and which Shopify record each contact and item came from.`,
+        `Disconnect ${connection.storeName ?? connection.storeDomain}? The contacts and items already brought in stay, and so does this log. Tohyee forgets the store's credentials and which ${SALES_PLATFORM_LABELS[connection.platform]} record each contact and item came from.`,
       ))
     ) {
       return;
@@ -268,7 +323,7 @@ export function ConnectionCard({
           <p className={ui.muted}>
             Connected by {connection.connectedByEmail} on {formatDateTime(connection.connectedAt)}.{" "}
             {connection.lastSyncAt ? `Last synced ${formatDateTime(connection.lastSyncAt)}.` : "Not synced yet."}{" "}
-            {connection.webhooksActive ? "Shopify also sends changes as they happen." : null}
+            {connection.webhooksActive ? `${SALES_PLATFORM_LABELS[connection.platform]} also sends changes as they happen.` : null}
           </p>
         ) : (
           <p className={ui.muted}>
@@ -277,12 +332,12 @@ export function ConnectionCard({
         )}
         {connected && connection.lastError ? <Notice tone="error">The last sync failed: {connection.lastError}</Notice> : null}
         {connected && connection.webhooksNote ? <Notice tone="warning">{connection.webhooksNote}</Notice> : null}
-        {connected && connection.pricesIncludeTax ? (
+        {connected && connection.platform === "shopify" && connection.pricesIncludeTax ? (
           <Notice tone="info">
             This store&apos;s prices include tax, so they aren&apos;t copied to items (Tohyee&apos;s item prices exclude GST). Items keep their own sale price.
           </Notice>
         ) : null}
-        {connected ? (
+        {connected && connection.platform === "shopify" ? (
           <div className={ui.actions}>
             <label className={ui.checkbox}>
               <input
@@ -418,10 +473,12 @@ function PostingSettings({
     shippingAccountCode: connection.shippingAccountCode ?? "",
     chargebacksAccountCode: connection.chargebacksAccountCode ?? "",
     reserveAccountCode: connection.reserveAccountCode ?? "",
+    paymentMethods: connection.paymentMethods.map((entry) => ({ method: entry.method, title: entry.title, choice: entry.leftOwing ? OWING : (entry.accountCode ?? "") })),
     untaxedTaxCode: connection.untaxedTaxCode ?? "",
     guestContactId: connection.guestContactId ?? "",
     taxCodes: connection.taxCodes.length > 0 ? connection.taxCodes.map((entry) => ({ ...entry })) : [{ rate: "15", taxCode: "" }],
   }));
+  const woo = connection.platform === "woocommerce";
   const list = accounts.data?.accounts ?? [];
   const codes = (taxCodes.data?.taxCodes ?? []).filter((code) => code.isActive && code.availableOn !== "purchases");
   const customers = (contacts.data?.contacts ?? []).filter((contact) => contact.isCustomer);
@@ -435,13 +492,23 @@ function PostingSettings({
           organisationId,
           postToAccounts: form.postToAccounts,
           startDate: form.startDate || null,
-          clearingAccountCode: form.clearingAccountCode || null,
-          payoutAccountCode: form.payoutAccountCode || null,
-          feesAccountCode: form.feesAccountCode || null,
           salesAccountCode: form.salesAccountCode || null,
           shippingAccountCode: form.shippingAccountCode || null,
-          chargebacksAccountCode: form.chargebacksAccountCode || null,
-          reserveAccountCode: form.reserveAccountCode || null,
+          ...(woo
+            ? {
+                paymentMethods: form.paymentMethods.map((entry) => ({
+                  method: entry.method,
+                  leftOwing: entry.choice === OWING,
+                  accountCode: entry.choice === OWING || entry.choice === "" ? null : entry.choice,
+                })),
+              }
+            : {
+                clearingAccountCode: form.clearingAccountCode || null,
+                payoutAccountCode: form.payoutAccountCode || null,
+                feesAccountCode: form.feesAccountCode || null,
+                chargebacksAccountCode: form.chargebacksAccountCode || null,
+                reserveAccountCode: form.reserveAccountCode || null,
+              }),
           untaxedTaxCode: form.untaxedTaxCode || null,
           guestContactId: form.guestContactId || null,
           taxCodes: form.taxCodes.filter((entry) => entry.rate !== "" && entry.taxCode !== ""),
@@ -463,19 +530,19 @@ function PostingSettings({
       <form onSubmit={save} style={{ display: "grid", gap: 12, marginTop: 12 }}>
         <fieldset disabled={!isAdmin || busy} style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 12 }}>
           <label className={ui.checkbox}>
-            <input type="checkbox" checked={form.postToAccounts} onChange={(event) => set({ postToAccounts: event.target.checked })} /> Post orders, refunds and payouts to the accounts
+            <input type="checkbox" checked={form.postToAccounts} onChange={(event) => set({ postToAccounts: event.target.checked })} /> {woo ? "Post orders and refunds to the accounts" : "Post orders, refunds and payouts to the accounts"}
           </label>
           <div className={ui.grid2}>
             <Field label="Start date" hint="Orders processed before it aren't brought in.">
               <input type="date" value={form.startDate} onChange={(event) => set({ startDate: event.target.value })} />
             </Field>
-            {accountField("Clearing account", "clearingAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds until it pays out.")}
-            {accountField("Payouts arrive in", "payoutAccountCode", (account) => account.accountType === "bank")}
-            {accountField("Fees", "feesAccountCode", (account) => account.accountClass === "expense")}
+            {woo ? null : accountField("Clearing account", "clearingAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds until it pays out.")}
+            {woo ? null : accountField("Payouts arrive in", "payoutAccountCode", (account) => account.accountType === "bank")}
+            {woo ? null : accountField("Fees", "feesAccountCode", (account) => account.accountClass === "expense")}
             {accountField("Sales", "salesAccountCode", (account) => account.accountClass === "revenue")}
             {accountField("Shipping", "shippingAccountCode", (account) => account.accountClass === "revenue")}
-            {accountField("Chargebacks", "chargebacksAccountCode", (account) => account.accountClass === "expense", "Disputed amounts Shopify takes back. Needed once a payout has a chargeback.")}
-            {accountField("Reserve", "reserveAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds back. Needed once a payout has a reserve.")}
+            {woo ? null : accountField("Chargebacks", "chargebacksAccountCode", (account) => account.accountClass === "expense", "Disputed amounts Shopify takes back. Needed once a payout has a chargeback.")}
+            {woo ? null : accountField("Reserve", "reserveAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds back. Needed once a payout has a reserve.")}
             <Field label="Tax code for untaxed sales" hint="Zero-rated or exempt; needed when the organisation is GST registered.">
               <select value={form.untaxedTaxCode} onChange={(event) => set({ untaxedTaxCode: event.target.value })}>
                 <option value="">Not chosen</option>
@@ -484,7 +551,7 @@ function PostingSettings({
                 ))}
               </select>
             </Field>
-            <Field label="Guest checkouts go to" hint="Orders without a Shopify customer. Not chosen: they're refused and logged.">
+            <Field label="Guest checkouts go to" hint={`Orders without a ${SALES_PLATFORM_LABELS[connection.platform]} customer. Not chosen: they're refused and logged.`}>
               <select value={form.guestContactId} onChange={(event) => set({ guestContactId: event.target.value })}>
                 <option value="">Not chosen (refused)</option>
                 {customers.map((contact) => (
@@ -493,8 +560,39 @@ function PostingSettings({
               </select>
             </Field>
           </div>
+          {woo ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              <strong>Payment methods</strong>
+              <p className={ui.muted} style={{ margin: 0 }}>
+                Where each payment method&apos;s money goes. A card gateway with a bank feed (e.g. Stripe) goes into that account, so the feed&apos;s line
+                matches the payment. Bank transfers are left owing for the bank feed to match. Methods appear here once an order uses them; orders wait
+                until their method is chosen.
+              </p>
+              {form.paymentMethods.length === 0 ? <p className={ui.muted}>No orders yet.</p> : null}
+              {form.paymentMethods.map((entry, index) => (
+                <Field key={entry.method} label={`${entry.title ?? entry.method} (${entry.method})`}>
+                  <select
+                    value={entry.choice}
+                    onChange={(event) =>
+                      set({ paymentMethods: form.paymentMethods.map((other, at) => (at === index ? { ...other, choice: event.target.value } : other)) })
+                    }
+                  >
+                    <option value="">Not chosen (orders wait)</option>
+                    <option value={OWING}>Left owing (bank transfer, cheque)</option>
+                    {list
+                      .filter((account) => account.accountType === "bank")
+                      .map((account) => (
+                        <option key={account.code} value={account.code}>
+                          Into {account.code} · {account.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              ))}
+            </div>
+          ) : null}
           <div>
-            <strong>Shopify&apos;s tax rates</strong>
+            <strong>{SALES_PLATFORM_LABELS[connection.platform]}&apos;s tax rates</strong>
             {form.taxCodes.map((entry, index) => (
               <div key={index} className={ui.actions}>
                 <input

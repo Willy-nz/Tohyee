@@ -138,6 +138,8 @@ export type PlatformOrder = {
   /** The total before returns, with taxes and discounts (Shopify's totalPriceSet). */
   total: string;
   customer: PlatformCustomer | null;
+  /** WooCommerce: the payment method the customer chose (WC2-WC8); null for Shopify, whose money goes through the clearing account. */
+  paymentMethod?: { id: string; title: string | null } | null;
   billingCountry: string | null;
   lines: PlatformOrderLine[];
   shipping: PlatformShippingLine[];
@@ -203,6 +205,14 @@ export type ConnectInput = {
 
 export interface SalesPlatformConnector {
   readonly platform: SalesPlatform;
+  /** Whether the platform pays out itself (Shopify Payments); WooCommerce doesn't (WC6). */
+  readonly hasPayouts: boolean;
+  /** Whether orders' money goes where their payment method is mapped (WooCommerce) rather than to the clearing account. */
+  readonly usesPaymentMethods: boolean;
+  /** Whether it can sync customers and products (Shopify's stage 1); WooCommerce matches by email and SKU instead. */
+  readonly syncsRecords: boolean;
+  /** A delivery that only checks the address works (WooCommerce's ping when a webhook is made): answered, nothing done. */
+  isPing?(headers: Headers, rawBody: Buffer): boolean;
   /** Checks what an admin typed: the store's address and the credentials. No network. */
   parseConnectInput(body: Record<string, unknown>): ConnectInput;
   /** A usable access token, asking the platform for a new one when needed. Network. */
