@@ -7,26 +7,26 @@ import { useApiData } from "@/components/hooks";
 import { Badge, Button, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { BankAccount } from "@/lib/bank/accounts";
-import type { StripeLink, StripeStatus, StripeSyncResult } from "@/lib/bank/stripe/service";
+import type { WiseLink, WiseStatus, WiseSyncResult } from "@/lib/bank/wise/service";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate, formatDateTime, personName, todayInBrowser } from "@/lib/format";
 
-function syncMessage(result: StripeSyncResult): { tone: "success" | "error"; text: string } {
+function syncMessage(result: WiseSyncResult): { tone: "success" | "error"; text: string } {
   const added = `${result.added} new ${result.added === 1 ? "line" : "lines"}${result.possibleDuplicates ? `, ${result.possibleDuplicates} flagged as possible duplicates` : ""}`;
   return result.status === "failed"
     ? { tone: "error", text: `Synced with problems: ${added}. ${result.error ?? ""}` }
     : { tone: "success", text: `Synced: ${added}.` };
 }
 
-/** The organisation's Stripe connection (ST1, ST10): connect with a restricted key, see balances and last sync, sync now, disconnect. */
-export function StripeSettingsCard({ organisationId }: { organisationId: string }) {
+/** The organisation's Wise connection (PP1, PP10): connect with the live app's client ID and secret, see balances and last sync, sync now, disconnect. */
+export function WiseSettingsCard({ organisationId }: { organisationId: string }) {
   const confirm = useConfirm();
   const { can } = useWorkspace();
-  const data = useApiData<{ stripe: StripeStatus }>("/api/bank-feeds/stripe", { organisationId });
-  const [apiKey, setApiKey] = useState("");
+  const data = useApiData<{ wise: WiseStatus }>("/api/bank-feeds/wise", { organisationId });
+  const [token, setToken] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const status = data.data?.stripe ?? null;
+  const status = data.data?.wise ?? null;
 
   async function run(label: string, work: () => Promise<void>) {
     setBusy(label);
@@ -43,30 +43,30 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
   const connect = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void run("connect", async () => {
-      await api("/api/bank-feeds/stripe", { method: "POST", body: { organisationId, apiKey } });
-      setApiKey("");
-      setMessage({ tone: "success", text: "Connected. Link Stripe's balance on its bank account's Bank feed tab." });
+      await api("/api/bank-feeds/wise", { method: "POST", body: { organisationId, token } });
+      setToken("");
+      setMessage({ tone: "success", text: "Connected. Link Wise's balance on its bank account's Bank feed tab." });
       data.reload();
     });
   };
   const sync = () =>
     run("sync", async () => {
-      const response = await api<{ result: StripeSyncResult }>("/api/bank-feeds/stripe/sync", { method: "POST", body: { organisationId } });
+      const response = await api<{ result: WiseSyncResult }>("/api/bank-feeds/wise/sync", { method: "POST", body: { organisationId } });
       setMessage(syncMessage(response.result));
       data.reload();
     });
   const changeHours = (hours: number) =>
     run("hours", async () => {
-      await api("/api/bank-feeds/stripe", { method: "PATCH", body: { organisationId, syncEveryHours: hours } });
+      await api("/api/bank-feeds/wise", { method: "PATCH", body: { organisationId, syncEveryHours: hours } });
       data.reload();
     });
   const disconnect = async () => {
     if (
-      !(await confirm("Disconnect Stripe? Tohyee deletes the key and unlinks its balances. Lines already brought in stay; nothing posted changes."))
+      !(await confirm("Disconnect Wise? Tohyee deletes the token and unlinks its balances. Lines already brought in stay; nothing posted changes."))
     )
       return;
     await run("disconnect", async () => {
-      await api("/api/bank-feeds/stripe", { method: "DELETE", query: { organisationId } });
+      await api("/api/bank-feeds/wise", { method: "DELETE", query: { organisationId } });
       data.reload();
     });
   };
@@ -78,37 +78,41 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {!status.secretsAvailable ? (
         <Notice tone="warning">
-          This server has no TOHYEE_SECRET_KEY, so the Stripe key can&apos;t be stored. The server admin needs to set it.
+          This server has no TOHYEE_SECRET_KEY, so the Wise token can&apos;t be stored. The server admin needs to set it.
         </Notice>
       ) : null}
       {!status.connected ? (
         can("admin") ? (
           <form onSubmit={connect} style={{ display: "grid", gap: 12 }} autoComplete="off">
             <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
-              <li>In this organisation&apos;s Stripe dashboard, open Developers → API keys and create a restricted key.</li>
-              <li>Give it read access to the balance (and nothing else), and copy it.</li>
-              <li>Paste it below. Tohyee checks it with Stripe, then stores it encrypted. Full secret keys aren&apos;t accepted.</li>
+              <li>Sign in to the organisation&apos;s Wise business account and open Your account → Connect and manage apps → API tokens.</li>
+              <li>Add a new token, and copy it (Wise shows it once).</li>
+              <li>Paste it below. Tohyee reads the business profile and balances with it, then stores it encrypted.</li>
             </ol>
+            <Notice tone="warning">
+              Wise has no read-only token: this token could also create and fund transfers. Tohyee only ever uses it to read your balances and
+              statements, and stores it encrypted; anyone who can see this server&apos;s secret key could use it. Wise allows statements with a token
+              only for accounts based in the US, Canada, Australia, New Zealand, Singapore or Malaysia.
+            </Notice>
             <div className={ui.grid2}>
-              <Field label="Restricted key" hint="Starts with rk_live_.">
-                <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value.trim())} required />
+              <Field label="Personal API token">
+                <input type="password" value={token} onChange={(event) => setToken(event.target.value.trim())} required />
               </Field>
             </div>
             <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
-              <Button type="submit" disabled={busy !== null || !apiKey || !status.secretsAvailable}>
-                {busy === "connect" ? "Checking with Stripe…" : "Connect"}
+              <Button type="submit" disabled={busy !== null || !token || !status.secretsAvailable}>
+                {busy === "connect" ? "Checking with Wise…" : "Connect"}
               </Button>
             </div>
           </form>
         ) : (
-          <Empty>Not connected. An organisation admin can connect Stripe.</Empty>
+          <Empty>Not connected. An organisation admin can connect Wise.</Empty>
         )
       ) : (
         <>
           <p>
             <Badge tone={status.lastSyncStatus === "failed" ? "red" : "green"}>{status.lastSyncStatus === "failed" ? "Problem" : "Connected"}</Badge>{" "}
-            {status.keyHint}
-            {status.liveMode ? null : <Badge tone="amber">Test mode</Badge>}
+            {status.profileName ?? `Profile ${status.profileId}`}
             <span className={ui.muted}>
               {" "}
               · connected {formatDateTime(status.createdAt)}
@@ -121,9 +125,8 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
             <table className={ui.table} style={{ minWidth: 480 }}>
               <thead>
                 <tr>
-                  <th>Stripe balance</th>
-                  <th className={ui.num}>Available</th>
-                  <th className={ui.num}>Pending</th>
+                  <th>Wise balance</th>
+                  <th className={ui.num}>Balance</th>
                   <th>Linked</th>
                 </tr>
               </thead>
@@ -131,8 +134,7 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
                 {status.balances.map((balance) => (
                   <tr key={balance.currency}>
                     <td>{balance.currency}</td>
-                    <td className={ui.num}>{balance.available}</td>
-                    <td className={ui.num}>{balance.pending}</td>
+                    <td className={ui.num}>{balance.amount ?? "—"}</td>
                     <td>{balance.linkedAccountId ? <Badge tone="green">Linked</Badge> : <span className={ui.muted}>Not linked</span>}</td>
                   </tr>
                 ))}
@@ -164,8 +166,8 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
             ) : null}
           </div>
           <p className={ui.muted}>
-            Each charge comes in at its full amount with Stripe&apos;s fees (and any tax on them) as separate lines. Reconcile payouts as transfers to
-            the bank account they landed in.
+            Each statement line comes in with Wise&apos;s fee as its own line when Wise&apos;s running balance confirms it. Reconcile conversions as
+            transfers between your Wise accounts, and payments to suppliers against their bills.
           </p>
         </>
       )}
@@ -181,7 +183,7 @@ function LinkForm({
 }: {
   organisationId: string;
   account: BankAccount;
-  status: StripeStatus;
+  status: WiseStatus;
   onLinked: () => void;
 }) {
   const today = todayInBrowser();
@@ -199,7 +201,7 @@ function LinkForm({
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/bank-accounts/${account.id}/stripe`, { method: "POST", body: { organisationId, currency: choice, startDate } });
+      await api(`/api/bank-accounts/${account.id}/wise`, { method: "POST", body: { organisationId, currency: choice, startDate } });
       onLinked();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -208,12 +210,12 @@ function LinkForm({
     }
   }
 
-  if (!free.length) return <Empty>Every Stripe balance is linked to another account.</Empty>;
+  if (!free.length) return <Empty>Every Wise balance is linked to another account.</Empty>;
   return (
     <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <div className={ui.grid3}>
-        <Field label="Stripe balance" hint={`Only Stripe's ${currency} balance can be linked to this account.`}>
+        <Field label="Wise balance" hint={`Only Wise's ${currency} balance can be linked to this account.`}>
           <select value={choice} onChange={(event) => setChoice(event.target.value)} required>
             <option value="">Choose the balance</option>
             {free.map((balance) => (
@@ -229,19 +231,19 @@ function LinkForm({
       </div>
       <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
         <Button type="submit" disabled={busy || !choice}>
-          {busy ? "Linking…" : "Link Stripe balance"}
+          {busy ? "Linking…" : "Link Wise balance"}
         </Button>
       </div>
     </form>
   );
 }
 
-/** The account's Stripe link (ST2-ST9): link it, see the last sync, sync now, unlink. */
-export function StripePanel({ organisationId, account, onChanged }: { organisationId: string; account: BankAccount; onChanged: () => void }) {
+/** The account's Wise link (PP2-PP9): link it, see the last sync, sync now, unlink. */
+export function WisePanel({ organisationId, account, onChanged }: { organisationId: string; account: BankAccount; onChanged: () => void }) {
   const confirm = useConfirm();
   const { can } = useWorkspace();
-  const status = useApiData<{ stripe: StripeStatus }>("/api/bank-feeds/stripe", { organisationId });
-  const link = useApiData<{ link: StripeLink | null }>(`/api/bank-accounts/${account.id}/stripe`, { organisationId });
+  const status = useApiData<{ wise: WiseStatus }>("/api/bank-feeds/wise", { organisationId });
+  const link = useApiData<{ link: WiseLink | null }>(`/api/bank-accounts/${account.id}/wise`, { organisationId });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
@@ -254,7 +256,7 @@ export function StripePanel({ organisationId, account, onChanged }: { organisati
     setBusy(true);
     setMessage(null);
     try {
-      const response = await api<{ result: StripeSyncResult }>("/api/bank-feeds/stripe/sync", { method: "POST", body: { organisationId } });
+      const response = await api<{ result: WiseSyncResult }>("/api/bank-feeds/wise/sync", { method: "POST", body: { organisationId } });
       setMessage(syncMessage(response.result));
       reload();
     } catch (caught) {
@@ -264,10 +266,10 @@ export function StripePanel({ organisationId, account, onChanged }: { organisati
     }
   }
   async function unlink() {
-    if (!(await confirm("Unlink this account from Stripe? Lines already brought in stay; nothing posted changes."))) return;
+    if (!(await confirm("Unlink this account from Wise? Lines already brought in stay; nothing posted changes."))) return;
     setBusy(true);
     try {
-      await api(`/api/bank-accounts/${account.id}/stripe`, { method: "DELETE", query: { organisationId } });
+      await api(`/api/bank-accounts/${account.id}/wise`, { method: "DELETE", query: { organisationId } });
       reload();
     } catch (caught) {
       setMessage({ tone: "error", text: errorMessage(caught) });
@@ -276,7 +278,7 @@ export function StripePanel({ organisationId, account, onChanged }: { organisati
     }
   }
 
-  const connected = status.data?.stripe.connected;
+  const connected = status.data?.wise.connected;
   const current = link.data?.link ?? null;
   if ((!status.data || !link.data) && !status.error && !link.error) return null;
   if (!connected && !current) return null;
@@ -284,29 +286,27 @@ export function StripePanel({ organisationId, account, onChanged }: { organisati
     ? "an Akahu"
     : account.simplefin
       ? "a SimpleFIN"
-      : account.paypal
-        ? "a PayPal"
+      : account.stripe
+        ? "a Stripe"
         : account.wise
           ? "a Wise"
           : null;
   return (
-    <section style={{ display: "grid", gap: 12, marginTop: 24 }} aria-labelledby="stripe-title">
-      <h3 id="stripe-title" style={{ margin: 0 }}>
-        Stripe
+    <section style={{ display: "grid", gap: 12, marginTop: 24 }} aria-labelledby="wise-title">
+      <h3 id="wise-title" style={{ margin: 0 }}>
+        Wise
       </h3>
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {status.error || link.error ? <Notice tone="error">{status.error ?? link.error}</Notice> : null}
       {!current ? (
         can("admin") && status.data ? (
           otherFeed ? (
-            <p className={ui.muted}>
-              This account has {otherFeed} bank feed. Stripe&apos;s balance needs its own account (e.g. &ldquo;Stripe&rdquo;).
-            </p>
+            <p className={ui.muted}>This account has {otherFeed} feed. Wise&apos;s balance needs its own account (e.g. &ldquo;Wise&rdquo;).</p>
           ) : (
-            <LinkForm organisationId={organisationId} account={account} status={status.data.stripe} onLinked={reload} />
+            <LinkForm organisationId={organisationId} account={account} status={status.data.wise} onLinked={reload} />
           )
         ) : (
-          <Empty>Not linked to Stripe. An organisation admin can link it.</Empty>
+          <Empty>Not linked to Wise. An organisation admin can link it.</Empty>
         )
       ) : (
         <>
@@ -315,7 +315,7 @@ export function StripePanel({ organisationId, account, onChanged }: { organisati
             <table className={ui.table}>
               <tbody>
                 <tr>
-                  <th scope="row">Stripe balance</th>
+                  <th scope="row">Wise balance</th>
                   <td>{current.currencyCode}</td>
                 </tr>
                 <tr>

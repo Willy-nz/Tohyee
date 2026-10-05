@@ -2923,3 +2923,42 @@ think is best").
      - Screenshots: a PayPal account's lines ([light](screenshots/paypal-lines-light.png),
        [phone](screenshots/paypal-lines-phone.png)) and its Bank feed tab
        ([dark](screenshots/paypal-feed-dark.png)).
+
+### Wise as a bank feed (decisions 400-403)
+
+400. **Each currency balance of an organisation's Wise business account is a
+     bank account in Tohyee** (examples WI1-WI10, approved by Jess on
+     5 Oct 2026; tenant migration 0096), read from Wise's balance statements
+     (COMPACT, at most 469 days per request): money received, card payments,
+     transfers, conversions and fees, with the payer or merchant, the payment
+     reference and Wise's running balance on each line. Nothing is posted.
+     One connection per organisation, using its business profile. Checked
+     against Wise's API reference and personal token guide (docs.wise.com,
+     the 2026Q4 API) on 5 Oct 2026; not tried with a real Wise account.
+401. **The personal API token is accepted although it isn't read-only**
+     (Jess, 5 Oct 2026): it could create and fund transfers. It's stored
+     encrypted, used only to read profiles, balances and statements, deleted
+     on disconnect, and the connect screen says so plainly. **Only accounts
+     based in the US, Canada, Australia, New Zealand, Singapore or Malaysia**
+     can be read (Wise's rule for personal tokens); others fail with Wise's
+     reason, and can use automatic statement files with Wise's CAMT.053
+     statements instead.
+402. **Wise's fee goes on its own line only when Wise's running balance
+     confirms how** (Jess): if the balance moved by the amount, the amount
+     includes the fee; if by the amount less the fee, it doesn't. Otherwise
+     (the first transaction read has nothing before it to compare with) the
+     amount is one line saying the fee wasn't split. A fee line only ever
+     comes with its own transaction's line, so a transaction first brought
+     in unsplit never gets its fee counted twice. WI8 was corrected after
+     approval to say this; as first written it claimed an unsplit line would
+     still add up to Wise's balance, which isn't so if Wise's amount leaves
+     the fee out.
+403. **Wise lines are dated in the organisation's time zone** (Jess), from
+     Wise's UTC times. An account has one feed: Akahu, SimpleFIN, Stripe,
+     PayPal or Wise. Syncs run every 6 hours by default (1-24) and with Sync
+     now, from three days before the last line; `TOHYEE_WISE_SCHEDULER=off`
+     turns the schedule off.
+     - Screenshots: a Wise account's lines ([light](screenshots/wise-lines-light.png)),
+       its Bank feed tab ([dark](screenshots/wise-feed-dark.png), [phone](screenshots/wise-feed-phone.png))
+       and the connection on Bank accounts ([light](screenshots/wise-connection-light.png)). An
+       account with a SimpleFIN, Stripe, PayPal or Wise feed no longer offers to link Akahu.

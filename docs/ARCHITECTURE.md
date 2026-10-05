@@ -98,6 +98,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ stripe_links           a Stripe balance currency linked to a bank account: start date and last sync
 ├─ paypal_connections     the organisation's PayPal REST app (secret encrypted, cleared on disconnect), balances and last sync
 ├─ paypal_links           a PayPal balance currency linked to a bank account: start date and last sync
+├─ wise_connections       the organisation's Wise business profile and personal token (encrypted, cleared on disconnect), balances and last sync
+├─ wise_links             a Wise currency balance linked to a bank account: balance id, start date and last sync
 ├─ bank_reconciliations, bank_reconciliation_items   which journal lines each statement line is
 ├─ bank_reconciliation_splits   one journal line reconciled across several statement lines
 ├─ bank_transactions, bank_transaction_lines   spend and receive money
@@ -1053,6 +1055,10 @@ Enforced by the app (and covered by tests):
   pattern: an OAuth token from the app's client credentials, then
   `/v1/reporting/balances` and each linked currency's
   `/v1/reporting/transactions` in 31-day pieces, outside any transaction.
+- Wise feeds (`src/lib/bank/wise/`, decisions 400-403) read `/profiles`,
+  `/profiles/{id}/balances` and each linked balance's `statement.json` in
+  469-day pieces outside any transaction, sort the transactions oldest first
+  and compare each with the running balance before it to split fees.
 - Tracking categories (advanced features): `tracking_categories` and a tree
   of `tracking_values` per organisation. Lines store their tags as a jsonb
   map `{categoryId: valueId}` (`tracking` on document lines and

@@ -55,11 +55,13 @@ export function FeedBadge({
   simplefin = null,
   stripe = null,
   paypal = null,
+  wise = null,
 }: {
   feed: BankFeedStatus;
   simplefin?: SimpleFinFeedStatus | null;
   stripe?: SimpleFinFeedStatus | null;
   paypal?: SimpleFinFeedStatus | null;
+  wise?: SimpleFinFeedStatus | null;
 }) {
   const other = feed.active
     ? null
@@ -69,7 +71,9 @@ export function FeedBadge({
         ? { name: "Stripe", status: stripe }
         : paypal
           ? { name: "PayPal", status: paypal }
-          : null;
+          : wise
+            ? { name: "Wise", status: wise }
+            : null;
   if (other) {
     if (other.status.lastSyncStatus === "failed") return <Badge tone="red">{other.name} failed</Badge>;
     if (other.status.lastSyncStatus === "never") return <Badge tone="amber">{other.name} waiting</Badge>;

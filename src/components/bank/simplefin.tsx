@@ -331,9 +331,11 @@ export function SimpleFinPanel({ organisationId, account, onChanged }: { organis
       {status.error || link.error ? <Notice tone="error">{status.error ?? link.error}</Notice> : null}
       {!current ? (
         can("admin") && status.data ? (
-          account.feed.active || account.stripe || account.paypal ? (
+          account.feed.active || account.stripe || account.paypal || account.wise ? (
             <p className={ui.muted}>
-              This account has {account.feed.active ? "an Akahu bank feed" : account.stripe ? "a Stripe feed" : "a PayPal feed"}. Stop it to link SimpleFIN instead.
+              This account has{" "}
+              {account.feed.active ? "an Akahu bank feed" : account.stripe ? "a Stripe feed" : account.paypal ? "a PayPal feed" : "a Wise feed"}. Stop
+              it to link SimpleFIN instead.
             </p>
           ) : (
             <LinkForm organisationId={organisationId} account={account} status={status.data.simplefin} onLinked={reload} />

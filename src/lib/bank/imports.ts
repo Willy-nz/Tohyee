@@ -26,9 +26,9 @@ import { optionalSource, requireId, requireIdempotencyKey, requireString } from 
 export type StatementImport = {
   id: string;
   accountId: string;
-  source: "file" | "akahu" | "simplefin" | "stripe" | "paypal";
+  source: "file" | "akahu" | "simplefin" | "stripe" | "paypal" | "wise";
   fileName: string | null;
-  fileFormat: StatementFormat | "akahu" | "simplefin" | "stripe" | "paypal";
+  fileFormat: StatementFormat | "akahu" | "simplefin" | "stripe" | "paypal" | "wise";
   /** Brought in by a folder or mailbox feed (BF1, BF7) rather than by hand. */
   fileFeed: "folder" | "mailbox" | null;
   lineCount: number;
@@ -47,9 +47,9 @@ export type StatementImport = {
 type ImportRow = {
   id: string;
   account_id: string;
-  source: "file" | "akahu" | "simplefin" | "stripe" | "paypal";
+  source: "file" | "akahu" | "simplefin" | "stripe" | "paypal" | "wise";
   file_name: string | null;
-  file_format: StatementFormat | "akahu" | "simplefin" | "stripe" | "paypal";
+  file_format: StatementFormat | "akahu" | "simplefin" | "stripe" | "paypal" | "wise";
   file_feed: "folder" | "mailbox" | null;
   line_count: number;
   duplicate_count: number;
