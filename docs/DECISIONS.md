@@ -3392,3 +3392,30 @@ think is best").
      for now (Jess), like another currency.
      - Screenshots: the payment method settings ([light](screenshots/woocommerce-light.png),
        [dark](screenshots/woocommerce-dark.png), [phone](screenshots/woocommerce-phone.png)).
+
+### Review fixes, 5 Oct 2026 (decisions 456-460)
+
+From the project review of 4 Oct 2026 (#158); issues #130-#138, #143,
+#146, #148, #149 and #157 are fixed in this change.
+
+456. **Sign-in tries are counted before they're checked** (#130): each
+     password and two-step code takes a try in one conditional update, so
+     tries sent at once can't go past the limits (5 per pending sign-in,
+     10 per account, 5 passwords). An email with no account gets the same
+     "too many attempts" answer after 5 tries, so it can't be told apart.
+     There's also a per-address limit of 30 sign-in tries a minute, only
+     when a proxy says the address.
+457. **The two-step reset email needs the server's public address** (#131,
+     Jess): the link only uses the configured address (Settings › Remote
+     access), never the request's Host. Without one the email reset isn't
+     offered and a server admin resets two-step.
+458. **Password and two-step resets revoke the person's AI keys** (#132,
+     Jess: always): changing or resetting a password, or resetting
+     two-step, stops every AI key the person made, in every organisation.
+459. **Each browser tab keeps its own organisation** (#143, Jess): the
+     tab's choice stays in that tab; a new tab starts on the last one
+     chosen. Switching organisation starts the page and its forms afresh.
+460. **An email that may have gone isn't sent again by itself** (#146): only
+     a send that certainly didn't reach the provider is retried; a timeout
+     or dropped connection after the message was handed over, or Google's
+     answer without the message's id, says to check the Sent folder first.
