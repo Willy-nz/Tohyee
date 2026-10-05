@@ -63,7 +63,8 @@ phone width).
    0093; **built**), an open
    protocol whose SimpleFIN Bridge (US$15 a year, the organisation's own
    account) reaches US banks, as Actual Budget uses it; (iii) Stripe (examples
-   ST1-ST10 written 5 Oct 2026, waiting for Jess);
+   ST1-ST10 approved by Jess 5 Oct 2026; decisions 392-395; tenant migration
+   0094; **built**);
    (iv) PayPal; (v) Wise (its statement API needs a request-signing key the
    organisation registers with Wise; foreign-currency examples first).
    Australian banks: only CDR-accredited aggregators (Basiq, Fiskil) reach

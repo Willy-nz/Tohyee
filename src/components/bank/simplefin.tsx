@@ -331,8 +331,10 @@ export function SimpleFinPanel({ organisationId, account, onChanged }: { organis
       {status.error || link.error ? <Notice tone="error">{status.error ?? link.error}</Notice> : null}
       {!current ? (
         can("admin") && status.data ? (
-          account.feed.active ? (
-            <p className={ui.muted}>This account has an Akahu bank feed. Stop it to link SimpleFIN instead.</p>
+          account.feed.active || account.stripe ? (
+            <p className={ui.muted}>
+              This account has {account.feed.active ? "an Akahu bank feed" : "a Stripe feed"}. Stop it to link SimpleFIN instead.
+            </p>
           ) : (
             <LinkForm organisationId={organisationId} account={account} status={status.data.simplefin} onLinked={reload} />
           )

@@ -46,6 +46,9 @@
  * And SimpleFIN bank feeds, which sync each organisation's SimpleFIN Bridge
  * accounts when due (off with TOHYEE_SIMPLEFIN_SCHEDULER=off).
  *
+ * And Stripe feeds, which bring each organisation's Stripe balance
+ * transactions in when due (off with TOHYEE_STRIPE_SCHEDULER=off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -168,6 +171,15 @@ export async function register() {
       startSimpleFinScheduler();
     } catch (error) {
       console.warn("[tohyee] SimpleFIN syncs couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (process.env.TOHYEE_STRIPE_SCHEDULER !== "off") {
+    try {
+      const { startStripeScheduler } = await import("@/lib/bank/stripe/service");
+      startStripeScheduler();
+    } catch (error) {
+      console.warn("[tohyee] Stripe syncs couldn't start:", error instanceof Error ? error.message : error);
     }
   }
 

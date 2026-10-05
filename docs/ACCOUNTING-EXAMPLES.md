@@ -1616,7 +1616,7 @@ investment holdings (the demo returns them; they're ignored), custom
 currencies (SimpleFIN allows a URL instead of an ISO code), and checking
 SimpleFIN account numbers against Tohyee's.
 
-### Stripe as a bank feed (examples not yet approved by Jess)
+### Stripe as a bank feed (approved by Jess, 5 Oct 2026)
 
 Stage 1b, part 3, of the Xero add-ons plan. Like Xero's Stripe feed, an
 organisation's **Stripe balance is a bank account in Tohyee** (e.g. 1050
@@ -1719,20 +1719,20 @@ account 1050 Stripe (NZD), Kobe Ltd with INV-0010 for 115.00 due.
 Only admins connect, link, unlink and disconnect; bookkeepers press Sync now;
 viewers see the last sync, as BK15.
 
-**Questions for Jess (Stripe), with proposed answers:**
-1. Accept only **restricted keys with read access** and refuse full secret
-   keys (which could move money)? Proposed: yes. Stripe's dashboard makes
-   restricted keys; the exact permission names for reading balance
-   transactions haven't been checked with a real account yet.
-2. Bring in **pending** transactions when they're created (they're already
-   in Stripe's balance, and a payout includes them later), rather than
-   waiting until they're available? Proposed: when created.
-3. Put the **tax part of Stripe's fees on its own line** (ST7) and leave the
-   GST code to you, since Stripe's help doesn't say which NZ fees carry GST?
-   Proposed: yes; never guess a GST code.
+**Questions for Jess (Stripe), decided** (Jess approved the examples and
+chose the proposed answers on 5 Oct 2026):
+1. Only **restricted keys** are accepted; full secret keys (`sk_...`) are
+   refused, since they could move money. The exact permission names for
+   reading balance transactions haven't been checked with a real account.
+2. **Pending** transactions come in when they're created.
+3. The **tax part of Stripe's fees** is its own line (ST7) and the GST code
+   is left to the person reconciling it.
 4. A line's date is the `created` time's date in the **organisation's time
-   zone**? Proposed: yes (Stripe accounts in NZ are in NZ time; Tohyee
-   hasn't checked that the API says which zone the dashboard uses).
+   zone**.
+
+Each link also has a first date to bring in, as Akahu's (BK15).
+
+Tests: `tests/integration/bank-stripe.test.ts`.
 
 Not supported (refused rather than guessed): taking payments (stage 4),
 Stripe Connect platform fees paid to you as a platform, Stripe Issuing

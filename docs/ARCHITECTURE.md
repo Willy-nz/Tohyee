@@ -94,6 +94,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ simplefin_connections  the organisation's own SimpleFIN Bridge (access URL encrypted, cleared on disconnect), its account list and last sync
 ├─ simplefin_links        a SimpleFIN account linked to a bank account: currency, start date, time zone, last sync and skipped transactions
 ├─ simplefin_requests     every request made to the Bridge, to stay under its 24 a day
+├─ stripe_connections     the organisation's restricted Stripe key (encrypted, cleared on disconnect), balances and last sync
+├─ stripe_links           a Stripe balance currency linked to a bank account: start date and last sync
 ├─ bank_reconciliations, bank_reconciliation_items   which journal lines each statement line is
 ├─ bank_reconciliation_splits   one journal line reconciled across several statement lines
 ├─ bank_transactions, bank_transaction_lines   spend and receive money
@@ -1040,6 +1042,11 @@ Enforced by the app (and covered by tests):
   new lines in its own transaction. The client strips the credentials from
   the access URL into a Basic header, and checks hosts are on the internet
   (as IMAP hosts).
+- Stripe feeds (`src/lib/bank/stripe/`, decisions 392-395) follow the same
+  pattern: a lease in one short transaction, then `GET /v1/balance` and each
+  linked currency's `GET /v1/balance_transactions` (paged, sources expanded)
+  outside any transaction, then each account's lines in its own. Amounts are
+  converted from Stripe's smallest units exactly (`src/lib/money/decimal.ts`).
 - Tracking categories (advanced features): `tracking_categories` and a tree
   of `tracking_values` per organisation. Lines store their tags as a jsonb
   map `{categoryId: valueId}` (`tracking` on document lines and

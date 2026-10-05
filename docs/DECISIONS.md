@@ -2858,3 +2858,35 @@ think is best").
      - Screenshots: the connection on Bank accounts ([dark](screenshots/simplefin-connection-dark.png)),
        a linked USD account's Bank feed tab ([light](screenshots/simplefin-feed-light.png),
        [phone](screenshots/simplefin-feed-phone.png)) and its lines ([light](screenshots/simplefin-lines-light.png)).
+
+### Stripe as a bank feed (decisions 392-395)
+
+392. **An organisation's Stripe balance is a bank account in Tohyee**
+     (examples ST1-ST10, approved by Jess on 5 Oct 2026; tenant migration
+     0094), as in Xero's Stripe feed. Each balance currency links to a bank
+     account in that currency; every balance transaction becomes a line for
+     its gross amount, and Stripe's fees a line of their own, so charges
+     can be matched to invoices, fees coded, and payouts reconciled as
+     transfers. Nothing is posted. One connection per organisation. Taking
+     payments through Stripe is stage 4. Checked against Stripe's API
+     reference on 5 Oct 2026; not tried with a real Stripe account.
+393. **Only restricted keys are accepted** (Jess, 5 Oct 2026): `rk_live_` or
+     `rk_test_`, checked by reading the balance, stored encrypted and deleted
+     on disconnect. Full secret keys (`sk_...`) are refused, because they can
+     move money. The exact permission names a restricted key needs haven't
+     been checked with a real account.
+394. **Every balance transaction comes in when it's created**, pending or
+     not (Jess), dated in the organisation's time zone (Jess), so the lines
+     always add up to Stripe's balance (available plus pending), which is the
+     statement balance. A charge Stripe converted from another currency is in
+     the balance currency, its description giving the original amount and
+     Stripe's rate (from the expanded source).
+395. **The tax part of Stripe's fees is its own line** (`fee_details` type
+     `tax`, Jess, 5 Oct 2026), and Tohyee never picks its GST code: Stripe's
+     NZ help says GST applies to "certain" fees without saying which. An
+     account has one feed: Akahu, SimpleFIN or Stripe. Syncs run every 6
+     hours by default (1-24) and with Sync now, from a day before the last
+     line; `TOHYEE_STRIPE_SCHEDULER=off` turns the schedule off.
+     - Screenshots: a Stripe account's lines ([light](screenshots/stripe-lines-light.png)),
+       its Bank feed tab ([dark](screenshots/stripe-feed-dark.png)) and the connection
+       on Bank accounts ([phone](screenshots/stripe-connection-phone.png)).

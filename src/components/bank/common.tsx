@@ -50,13 +50,22 @@ export function isStatementAccount(account: Account): boolean {
   return account.accountType === "bank" || account.accountType === "credit_card";
 }
 
-export function FeedBadge({ feed, simplefin = null }: { feed: BankFeedStatus; simplefin?: SimpleFinFeedStatus | null }) {
-  if (!feed.active && simplefin) {
-    if (simplefin.lastSyncStatus === "failed") return <Badge tone="red">SimpleFIN failed</Badge>;
-    if (simplefin.lastSyncStatus === "never") return <Badge tone="amber">SimpleFIN waiting</Badge>;
+export function FeedBadge({
+  feed,
+  simplefin = null,
+  stripe = null,
+}: {
+  feed: BankFeedStatus;
+  simplefin?: SimpleFinFeedStatus | null;
+  stripe?: SimpleFinFeedStatus | null;
+}) {
+  const other = !feed.active ? (simplefin ? { name: "SimpleFIN", status: simplefin } : stripe ? { name: "Stripe", status: stripe } : null) : null;
+  if (other) {
+    if (other.status.lastSyncStatus === "failed") return <Badge tone="red">{other.name} failed</Badge>;
+    if (other.status.lastSyncStatus === "never") return <Badge tone="amber">{other.name} waiting</Badge>;
     return (
-      <span title={simplefin.lastSyncedAt ? `Last synced ${formatDateTime(simplefin.lastSyncedAt)}` : undefined}>
-        <Badge tone="green">SimpleFIN on</Badge>
+      <span title={other.status.lastSyncedAt ? `Last synced ${formatDateTime(other.status.lastSyncedAt)}` : undefined}>
+        <Badge tone="green">{other.name} on</Badge>
       </span>
     );
   }
