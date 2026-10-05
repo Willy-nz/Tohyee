@@ -9,9 +9,8 @@ const CONTENT_TYPES = {
 } as const;
 
 export const POST = route(async (request) => {
-  const contentLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > 5_000_000) throw new ValidationError("The report is too large to export.");
-  const body = await readJson(request);
+  // The report's data comes in the body: up to 5 MB, counted as it's read rather than trusting Content-Length (#133).
+  const body = await readJson(request, { maxBytes: 5_000_000 });
   if (body.format !== "csv" && body.format !== "xlsx" && body.format !== "pdf") throw new ValidationError("Choose CSV, Excel (.xlsx) or PDF.");
   const data = parseReportExport(body.data);
   // An analytics pivot (decision 375) is shown to report viewers too; the file is made only from what their page already shows.

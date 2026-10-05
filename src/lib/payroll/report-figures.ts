@@ -1,4 +1,5 @@
 import { parseIsoDate } from "@/lib/dates";
+import { csvCell } from "@/lib/csv";
 import { ValidationError } from "@/lib/errors";
 import {
   add,
@@ -282,15 +283,8 @@ export const PAY_FIGURE_LABELS: Record<keyof PayFigures, string> = {
   employerCost: "Employer cost",
 };
 
-const NUMBER = /^-?\d+(\.\d+)?$/;
-
-/** One CSV cell: quoted when needed; text that a spreadsheet would run as a formula gets an apostrophe (decision 109). */
-export function csvCell(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "";
-  let text = String(value);
-  if (/^[=+\-@\t\r]/.test(text) && !NUMBER.test(text)) text = `'${text}`;
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
+/** One CSV cell (decision 109): shared with every export in `@/lib/csv`. */
+export { csvCell };
 
 /** Rows to CSV text, CR LF after every line (decision 109). */
 export function toCsv(rows: ReadonlyArray<ReadonlyArray<string | number | null | undefined>>): string {

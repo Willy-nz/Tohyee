@@ -1,6 +1,7 @@
 import { decodeText, RowError } from "@/lib/bank/formats/common";
 import { parseDelimited } from "@/lib/bank/formats/table";
 import { readXlsxRows } from "@/lib/bank/formats/xlsx";
+import { fromCsvCell } from "@/lib/csv";
 import { ValidationError } from "@/lib/errors";
 import { findHeaderRow, headingsOf, IMPORT_KINDS, type ImportKind } from "@/lib/import/fields";
 import { optionalString, requireOneOf } from "@/lib/validation";
@@ -48,7 +49,8 @@ export function readImportFile(input: { kind: unknown; fileName: unknown; fileBa
     if (error instanceof RowError) throw new ValidationError(error.message);
     throw error;
   }
-  rows = rows.map((row) => row.map((cell) => cell ?? ""));
+  // A cell Tohyee exported with an apostrophe (so it can't run as a formula, #148) comes back without it (IM16).
+  rows = rows.map((row) => row.map((cell) => fromCsvCell(cell ?? "")));
   while (rows.length > 0 && !rows[rows.length - 1].some((cell) => cell.trim() !== "")) rows.pop();
   if (rows.length === 0) throw new ValidationError("The file has no rows.");
   if (rows.length > MAX_IMPORT_ROWS + 20) {

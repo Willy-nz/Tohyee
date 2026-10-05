@@ -1,4 +1,4 @@
-import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { MAX_FILE_JSON_BYTES, json, readJson, route, withOrganisation } from "@/lib/api/http";
 import { importMasterRecords } from "@/lib/import/service";
 
 /**
@@ -7,7 +7,7 @@ import { importMasterRecords } from "@/lib/import/service";
  * refused means nothing is imported; the rows and reasons come back. Admins.
  */
 export const POST = route(async (request) => {
-  const body = await readJson(request);
+  const body = await readJson(request, { maxBytes: MAX_FILE_JSON_BYTES });
   const result = await withOrganisation(request, body.organisationId, "admin", (tx, { membership }) =>
     importMasterRecords(
       tx,
