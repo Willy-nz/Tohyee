@@ -1,9 +1,14 @@
 import { json, readJson, route, withOrganisation } from "@/lib/api/http";
+import { ensurePayPalInvoice, getInvoicePayPal } from "@/lib/payments/paypal";
 import { ensurePaymentLink, getInvoicePayNow } from "@/lib/payments/stripe";
 
 type Context = { params: Promise<{ invoiceId: string }> };
 
-/** POST: the invoice's payment link, made in Stripe if needed (Copy payment link, PN2, PN5). Bookkeepers and above. */
+/**
+ * POST `{ provider }` ("stripe", the default, or "paypal"): the invoice's
+ * payment link, made if needed (Copy payment link, PN2, PPN2). Bookkeepers
+ * and above.
+ */
 export const POST = route<Context>(async (request, context) => {
   const { invoiceId } = await context.params;
   const body = await readJson(request);
@@ -11,7 +16,10 @@ export const POST = route<Context>(async (request, context) => {
     organisation: membership.organisation,
     actor: { userId: auth.user.id, email: auth.user.email },
   }));
-  const url = await ensurePaymentLink(organisation, actor, invoiceId);
-  const payNow = await withOrganisation(request, body.organisationId, "viewer", (tx) => getInvoicePayNow(tx, invoiceId));
-  return json({ url, payNow });
+  const url = body.provider === "paypal" ? await ensurePayPalInvoice(organisation, actor, invoiceId) : await ensurePaymentLink(organisation, actor, invoiceId);
+  const result = await withOrganisation(request, body.organisationId, "viewer", async (tx) => ({
+    payNow: await getInvoicePayNow(tx, invoiceId),
+    paypal: await getInvoicePayPal(tx, invoiceId),
+  }));
+  return json({ url, ...result });
 });

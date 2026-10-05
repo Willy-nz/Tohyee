@@ -1,6 +1,6 @@
 import { json, readJson, route, withOrganisation } from "@/lib/api/http";
 import { voidInvoice } from "@/lib/invoices/service";
-import { refreshInvoicePaymentLink } from "@/lib/payments/stripe";
+import { refreshInvoiceLinks } from "@/lib/payments/links";
 
 type Context = { params: Promise<{ invoiceId: string }> };
 
@@ -14,6 +14,6 @@ export const POST = route<Context>(async (request, context) => {
     actor: { userId: auth.user.id, email: auth.user.email },
   }));
   // PN10: a voided invoice's payment link is switched off.
-  await refreshInvoicePaymentLink(organisation, actor, invoiceId);
+  await refreshInvoiceLinks(organisation, actor, invoiceId);
   return json(result, { status: result.created ? 201 : 200 });
 });

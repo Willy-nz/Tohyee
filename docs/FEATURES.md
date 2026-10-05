@@ -450,7 +450,13 @@ that something happened.
   when the amount due changes; paying twice becomes an overpayment; a
   payment Tohyee can't record (a voided invoice, no linked balance) waits as
   a notice. An invoice can leave Pay now off. No surcharges, saved cards,
-  webhooks or refunds from Tohyee.
+  webhooks or refunds from Tohyee. **Pay with PayPal** (PPN1-PPN10,
+  decisions 420-423, tenant migration 0099) works the same way through the
+  organisation's PayPal connection: Tohyee makes a copy of the invoice in
+  its PayPal account (one line for the amount due; PayPal doesn't email the
+  customer), links to PayPal's page, and records PayPal payments into the
+  PayPal bank account for the invoice's currency. Only invoices in a
+  currency whose PayPal balance is linked offer it.
 - **Bills inbox** (Purchases, `/operations/bills/inbox`; BI1-BI7, decisions
   404-406, tenant migration 0097), like Xero's files inbox and Dext: supplier
   bills and receipts (PDF, JPG, PNG, HEIC) waiting to be entered, uploaded

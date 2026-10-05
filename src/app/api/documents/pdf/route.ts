@@ -4,7 +4,7 @@ import { loadStatement, parseStatementOptions } from "@/lib/email/documents";
 import { statementFromParams } from "@/lib/email/params";
 import { getLogo } from "@/lib/organisations/logo";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
-import { linkBeforeSending } from "@/lib/payments/stripe";
+import { linkBeforeSending } from "@/lib/payments/links";
 import { renderDocumentPdf, renderStatementPdf } from "@/lib/pdf/documents";
 import { requireId } from "@/lib/validation";
 

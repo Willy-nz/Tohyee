@@ -1083,7 +1083,13 @@ Enforced by the app (and covered by tests):
   open link whose amount matches what's due. `checkOnlinePayments` takes a
   lease, reads each link's completed sessions outside any transaction,
   records each paid one with `recordPayment` in its own transaction (or a
-  notice), then switches off links that no longer match.
+  notice), then switches off links that no longer match. Pay with PayPal
+  (`src/lib/payments/paypal.ts`, decisions 420-423) shares those tables
+  (`provider` 'paypal') and `recordSession`; its "links" are PayPal
+  invoices made, read and cancelled through `/v2/invoicing` in
+  `src/lib/bank/paypal/client.ts`. `src/lib/payments/links.ts` makes both
+  before an invoice is emailed or printed, and switches both off after a
+  void or payment on the invoice's page.
 - Mileage (`src/lib/expense-claims/mileage.ts`, decisions 407-410) works
   out each line inside `resolveReceipts`: the rates for the line's income
   year (or the latest), kilometres already claimed per vehicle type from the

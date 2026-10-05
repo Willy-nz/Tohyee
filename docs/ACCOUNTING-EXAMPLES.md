@@ -59,6 +59,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/expense-mileage.test.ts` (MI1-MI7) and
   `tests/integration/bills-inbox.test.ts` (BI1-BI7, DU1-DU5) and
   `tests/integration/online-payments-stripe.test.ts` (PN1-PN12) and
+  `tests/integration/online-payments-paypal.test.ts` (PPN1-PPN10) and
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
   `tests/integration/projects.test.ts` (PJ1-PJ13) and
   `tests/integration/bank-quick.test.ts` (BK17-BK25) and
@@ -8121,8 +8122,9 @@ Pay with PayPal turned on; Stripe (PN) off.
   fee line.
 - **PPN5** INV-0012 for 230.00 has its PayPal invoice; 100.00 is paid by
   bank transfer and recorded by hand. Tohyee cancels the PayPal invoice
-  and the next email makes a new one for **130.00**. The customer can't
-  pay part of it on PayPal's page.
+  and the next email makes a new one for **130.00**, numbered
+  INV-0012-2 (PayPal keeps a cancelled invoice's number). The customer
+  can't pay part of it on PayPal's page.
 - **PPN6** Paid by hand and through PayPal (as PN6): the PayPal payment is
   recorded anyway as an **overpayment** on the customer's account, and the
   invoice says "Paid twice".
@@ -8157,6 +8159,8 @@ every proposed answer and approved the examples on 5 Oct 2026):
 5. The answers for Stripe (overpayments, notices for voided invoices, no
    surcharges, no saved cards, every invoice unless left off, checking every
    15 minutes) apply to PayPal too. Proposed: yes.
+
+Tests: `tests/integration/online-payments-paypal.test.ts`.
 
 Not supported in this part: PayPal Checkout (orders), PayPal's own invoice
 emails and reminders, partial payments chosen by the customer, refunds

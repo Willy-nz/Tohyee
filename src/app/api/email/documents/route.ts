@@ -1,7 +1,7 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { listDocumentEmails, queueDocumentEmail } from "@/lib/email/documents";
 import { kickEmailOutbox } from "@/lib/email/outbox";
-import { linkBeforeSending } from "@/lib/payments/stripe";
+import { linkBeforeSending } from "@/lib/payments/links";
 
 /** GET ?kind=&id=: the emails sent (or being sent) about a document, or to a customer for statements. */
 export const GET = route(async (request) => {
