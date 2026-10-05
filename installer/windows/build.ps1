@@ -13,12 +13,28 @@ $ProgressPreference = 'SilentlyContinue'
 $PostgresVersion = '17.11'
 $PostgresUrl = 'https://sbp.enterprisedb.com/getfile.jsp?fileid=1260569'
 $WinSwUrl = 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe'
-$VcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
+# Visual C++ 2015-2022 runtime 14.44.35211.0, from Microsoft's versioned
+# download URL (where https://aka.ms/vs/17/release/vc_redist.x64.exe pointed
+# on 5 Oct 2026; the URL contains the file's SHA-256). To update, follow that
+# aka.ms link and copy the new URL and hash.
+$VcRedistUrl = 'https://download.visualstudio.microsoft.com/download/pr/bd1c8d9d-ba95-4eee-bc6e-df1fcc876373/CC0FF0EB1DC3F5188AE6300FAEF32BF5BEEBA4BDD6E8E445A9184072096B713B/VC_redist.x64.exe'
+$VcRedistSha256 = 'cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b'
+# Inno Setup compiles the installer. Pinned, and checked against the SHA-256
+# of the file downloaded from that GitHub release on 5 Oct 2026.
+$InnoSetupVersion = '6.7.3'
+$InnoSetupUrl = "https://github.com/jrsoftware/issrc/releases/download/is-$($InnoSetupVersion -replace '\.', '_')/innosetup-$InnoSetupVersion.exe"
+$InnoSetupSha256 = '9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732'
 # cloudflared runs the Cloudflare Tunnel for remote access (Server > Remote access).
 # Pinned, and checked against the SHA-256 of that release's file.
 $CloudflaredVersion = '2026.9.3'
 $CloudflaredUrl = "https://github.com/cloudflare/cloudflared/releases/download/$CloudflaredVersion/cloudflared-windows-amd64.exe"
 $CloudflaredSha256 = 'f096265ec2fcbe9bb6e2d64268db167ced3fcbb83d894bdb9e2fcdb26f2ea7e2'
+
+# Throws unless the file's SHA-256 is the pinned one.
+function Assert-Sha256([string] $Path, [string] $Expected, [string] $Name) {
+  $actual = (Get-FileHash $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actual -ne $Expected) { throw "$Name download has SHA-256 $actual, expected $Expected." }
+}
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $out = Join-Path $root 'dist\windows'
@@ -68,13 +84,14 @@ foreach ($unused in @('pgAdmin 4', 'StackBuilder', 'doc', 'include', 'symbols'))
 
 Write-Host '== WinSW and the Visual C++ runtime'
 Invoke-WebRequest $WinSwUrl -OutFile (Join-Path $stage 'service\WinSW-x64.exe')
-Invoke-WebRequest $VcRedistUrl -OutFile (Join-Path $stage 'vc_redist.x64.exe')
+$vcRedist = Join-Path $stage 'vc_redist.x64.exe'
+Invoke-WebRequest $VcRedistUrl -OutFile $vcRedist
+Assert-Sha256 $vcRedist $VcRedistSha256 'Visual C++ runtime'
 
 Write-Host "== cloudflared $CloudflaredVersion"
 $cloudflaredExe = Join-Path $stage 'cloudflared\cloudflared.exe'
 Invoke-WebRequest $CloudflaredUrl -OutFile $cloudflaredExe
-$cloudflaredHash = (Get-FileHash $cloudflaredExe -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($cloudflaredHash -ne $CloudflaredSha256) { throw "cloudflared download has SHA-256 $cloudflaredHash, expected $CloudflaredSha256." }
+Assert-Sha256 $cloudflaredExe $CloudflaredSha256 'cloudflared'
 Invoke-WebRequest "https://raw.githubusercontent.com/cloudflare/cloudflared/$CloudflaredVersion/LICENSE" -OutFile (Join-Path $stage 'cloudflared\LICENSE.txt')
 
 Write-Host '== Tohyee server app (tray icon and server settings)'
@@ -88,17 +105,19 @@ foreach ($script in @('configure-tohyee.ps1', 'remove-services.ps1')) {
   Copy-Item (Join-Path $PSScriptRoot $script) (Join-Path $stage "scripts\$script")
 }
 
-Write-Host '== Inno Setup'
-$iscc = @(
-  "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-  "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
-  "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $iscc) {
-  choco install innosetup -y --no-progress | Out-Host
-  $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+Write-Host "== Inno Setup $InnoSetupVersion"
+# Always the pinned version rather than whatever the machine already has,
+# installed into dist\windows\downloads.
+$innoDir = Join-Path $downloads "innosetup-$InnoSetupVersion"
+$iscc = Join-Path $innoDir 'ISCC.exe'
+if (-not (Test-Path $iscc)) {
+  $innoSetup = Join-Path $downloads "innosetup-$InnoSetupVersion.exe"
+  Invoke-WebRequest $InnoSetupUrl -OutFile $innoSetup
+  Assert-Sha256 $innoSetup $InnoSetupSha256 'Inno Setup'
+  $p = Start-Process -FilePath $innoSetup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/CURRENTUSER', "/DIR=`"$innoDir`"") -Wait -PassThru
+  if ($p.ExitCode -ne 0) { throw "Installing Inno Setup failed with exit code $($p.ExitCode)" }
 }
-if (-not $iscc) { throw 'Inno Setup (ISCC.exe) not found.' }
+if (-not (Test-Path $iscc)) { throw "Inno Setup (ISCC.exe) not found in $innoDir." }
 & $iscc "/DAppVersion=$version" "/DSourceDir=$stage" "/DOutputDir=$out" (Join-Path $PSScriptRoot 'Tohyee.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
 
