@@ -5811,6 +5811,156 @@ later; chargeback holds stay refused. What was asked:
 3. **Chargeback holds** (`CHARGEBACK_HOLD`, `CHARGEBACK_HOLD_RELEASE`):
    Shopify doesn't say what they are, so they stay refused (proposed)?
 
+### WooCommerce orders into the accounts (item 7 part 2, examples not yet approved by Jess)
+
+Jess, 5 Oct 2026: WooCommerce next; **each payment method is mapped to an
+account** (as NetSuite maps a store's payment methods); orders paid later
+by **bank transfer are invoiced at once and left owing**; **WooPayments**
+goes through a clearing account and its deposits are reconciled by hand.
+The rest follows the Shopify rules (SPC11-SPC24) wherever WooCommerce
+works the same way. **None of this has been tried against a real store.**
+
+What WooCommerce says (REST API v3,
+[woocommerce.github.io/woocommerce-rest-api-docs](https://woocommerce.github.io/woocommerce-rest-api-docs/),
+read 5 Oct 2026):
+
+- **Connecting:** a key made in the store (WooCommerce › Settings ›
+  Advanced › REST API) is a consumer key and secret, sent "as the username
+  and ... password" with HTTP Basic Auth over **HTTPS**; plain HTTP needs
+  OAuth 1.0a. Endpoints are under `/wp-json/wc/v3`. Lists are paged with
+  `page` and `per_page`; `X-WP-Total` and `X-WP-TotalPages` give the count.
+- **Orders:** `status` (pending, processing, on-hold, completed,
+  cancelled, refunded, failed, trash), `currency`, `prices_include_tax`,
+  `date_paid_gmt`, `payment_method` and `payment_method_title`,
+  `customer_id` (0 for a guest), `billing` (with `email` and `country`),
+  `line_items` (`sku`, `quantity`, `subtotal` before discounts, `total`
+  after discounts, `total_tax`, and `taxes` by rate id), `shipping_lines`
+  (`total`, `total_tax`), `fee_lines`, `coupon_lines`, `tax_lines`
+  (`rate_id`, `rate_code`, `rate_percent`), `total` and `refunds`.
+- **Refunds** (`/orders/{id}/refunds`): `amount`, `date_created_gmt`,
+  `reason`, `line_items` (with negative quantities and totals) and
+  `api_refund` (whether the payment method gave the money back).
+- **Webhooks** carry `X-WC-Webhook-Topic` (e.g. `order.created`,
+  `order.updated`), `X-WC-Webhook-ID`, `X-WC-Webhook-Delivery-ID` and
+  `X-WC-Webhook-Signature`, a base64 HMAC-SHA256 of the body with the
+  webhook's secret.
+- **WooPayments** (WooCommerce's own card payments, available in New
+  Zealand) pays deposits into the bank, but we found no documented API for
+  them, so its deposits are reconciled by hand (WC6).
+
+The rules (our choice where WooCommerce, NetSuite and Jess are silent):
+
+- **Connecting** (admins): the store's address (must be `https://`), a
+  consumer key and secret. Tohyee only reads; WooCommerce doesn't tell a
+  key's permission to the API, so the screen asks for a **Read** key.
+  Stored encrypted (TOHYEE_SECRET_KEY), never shown or logged. A webhook
+  secret is made by Tohyee and the webhooks `order.created` and
+  `order.updated` are added to the store; a catch-up sync runs every 15
+  minutes as for Shopify.
+- **Settings** as Shopify's (start date, sales and shipping accounts, tax
+  rate → tax code, untaxed code, guest checkouts), plus **payment
+  methods**: each `payment_method` the store uses (shown once an order
+  has it) is mapped to a bank account the money is paid into, or to
+  **"Left owing"** (bank transfer, cheque). An order with a method not
+  mapped yet is logged and tried again at each sync until it is (WC8).
+- **Customers** are matched by email as Shopify's (SPC1-SPC10 rules), or
+  go to the guest contact (decision 317); **lines** use the item whose
+  code is the line's SKU (a stock item moves stock, SPC17), else the sales
+  account with the line's name.
+- **A paid order** (`date_paid_gmt` set; status processing or completed)
+  becomes an approved sales order and invoice dated the day paid (decision
+  320), and a payment into the mapped account on that day. An order with a
+  "Left owing" method (status on-hold) becomes an approved invoice on its
+  order date with nothing paid; when the money arrives the bank feed's line
+  is matched to the invoice (BK4). Tohyee never records a payment for a
+  "Left owing" method.
+- **Amounts:** each line's `total` (after discounts) and shipping's
+  `total` are amounts **before tax**, with `total_tax` beside them, so the
+  invoice's amounts are tax exclusive and its GST is WooCommerce's tax.
+  The invoice must come to the order's `total` exactly, or nothing is
+  posted and the log shows both amounts.
+- **Refunds** become a credit note against the invoice; if the order was
+  paid, the refund is paid out of the same account the payment went into;
+  if it was left owing and is unpaid, the credit note reduces what's owed.
+- **Cancelled** (or failed) before it's invoiced: the sales order is
+  cancelled (SPC20). A "Left owing" invoice cancelled in WooCommerce with
+  nothing paid against it is voided; with something paid, it's logged for
+  you to deal with.
+- **Refused rather than guessed** (logged, nothing posted): another
+  currency, `fee_lines` (surcharges), gift cards, a refund whose lines
+  don't add up to its amount, and anything SPC23 refuses.
+
+Setup: Glimmers Ltd as SPC11 (GST registered, NZD). Store
+`https://shop.glimmers.nz`, prices **include tax**, WooCommerce tax rate 1
+"GST" 15% → **GST**. Accounts: **1050 Stripe** (the Stripe feed's account,
+ST1), **1060 WooPayments clearing** (bank, NZD), 1000 Business bank
+account, 4000 Sales for sales and shipping. Payment methods: `stripe` →
+1050, `woocommerce_payments` → 1060, `bacs` (Direct bank transfer) → Left
+owing. Start date 2026-10-01. Items CANDLE-L Large candle and MELT-VAN Wax
+melts as SPC.
+
+- **WC1** Connecting: `http://shop.glimmers.nz` is refused ("Use the
+  store's https:// address"). With `https://`, key `ck_…` and secret
+  `cs_…`, Tohyee reads one order to check the key (a 401 is refused: "The
+  store didn't accept that key"), stores the key encrypted, adds the two
+  webhooks and shows the payment methods found. The audit history says who
+  connected.
+- **WC2** Paid by card through Stripe: order **#2001**, processing, paid
+  2026-10-02T01:30Z, Aroha Ngata, 2 × Large candle, line `total` 40.00,
+  `total_tax` 6.00, order `total` 46.00, `payment_method` stripe. Invoice
+  INV-0001 on 2 Oct: **Dr 1100 46.00 / Cr 4000 40.00 / Cr 2100 6.00**;
+  payment into 1050: **Dr 1050 46.00 / Cr 1100 46.00**. The Stripe feed's
+  line +46.00 on 1050 (ST3's way) is offered that payment as its exact
+  match, and Stripe's fee line is coded as in ST3.
+- **WC3** A coupon and shipping: order **#2002**, paid 3 Oct by stripe, 3 ×
+  Wax melts with line `total` 19.13 after a coupon (tax 2.87),
+  shipping `total` 6.00 (tax 0.90), order total **28.90**. Invoice lines
+  Wax melts 19.13 GST and Shipping 6.00 GST: **Dr 1100 28.90 / Cr 4000
+  25.13 / Cr 2100 3.77**; payment into 1050.
+- **WC4** Direct bank transfer: order **#2003**, on-hold, created
+  2026-10-04T02:00Z, `bacs`, 1 × Large candle total 20.00 tax 3.00 = 23.00,
+  no `date_paid`. Invoice INV-0003 on 4 Oct for **23.00**, owing:
+  **Dr 1100 23.00 / Cr 4000 20.00 / Cr 2100 3.00**, no payment. On 6 Oct
+  the bank feed brings +23.00 "A NGATA 2003" into 1000 and it's matched to
+  INV-0003 (BK4). WooCommerce then marks #2003 processing with
+  `date_paid`: nothing more is posted.
+- **WC5** A partial refund of WC2: refund 7001 on 2026-10-05T22:00Z,
+  `amount` 23.00, 1 × Large candle (−20.00, tax −3.00). Credit note CN-0001
+  on 6 Oct against INV-0001: **Dr 4000 20.00 / Dr 2100 3.00 / Cr 1100
+  23.00**, refunded from 1050: **Dr 1100 23.00 / Cr 1050 23.00**. A refund
+  whose lines come to 23.00 but `amount` 20.00 posts nothing; the log
+  shows both.
+- **WC6** WooPayments: order **#2004**, paid 7 Oct by
+  `woocommerce_payments`, 46.00: invoice as WC2, payment into **1060**.
+  WooPayments' deposit of **44.62** (46.00 less a 1.38 fee in this example) lands in 1000
+  on 9 Oct; you reconcile the bank line as a transfer from 1060 (44.62) and
+  code the 1.38 fee from 1060 to 6020 by hand. 1060 is then 0.00.
+- **WC7** Cancelled: #2005 on-hold by `bacs` (23.00, INV-0005 owing) is
+  cancelled in WooCommerce on 8 Oct with nothing paid: INV-0005 is voided
+  (its journal reversed). Had 10.00 been matched to it, nothing changes
+  and the log says "INV-0005 has payments; deal with it in Tohyee." #2006,
+  pending then failed, is never posted.
+- **WC8** Unmapped method: #2007 paid by `cod` (Cash on delivery), not
+  mapped: nothing posted; logged "Choose where cod (Cash on delivery)
+  payments go in the WooCommerce settings." Mapping cod to Left owing and
+  syncing again posts it once, as WC4.
+- **WC9** Webhooks: an `order.updated` delivery signed with the webhook
+  secret for #2001 brings it in once; the same `X-WC-Webhook-Delivery-ID`
+  again is "Already handled"; a wrong signature is refused (401) and
+  nothing changes.
+- **WC10** Refused: an order in AUD; an order with a `fee_lines` surcharge;
+  an order whose lines, shipping and tax come to 46.00 but `total` is
+  45.00. Each is logged with the reason and nothing is posted.
+
+**Questions for Jess (WooCommerce)**
+
+1. **Surcharges** (`fee_lines`, e.g. a card fee added at checkout): refuse
+   for now (proposed), or post them to a chosen account?
+2. **Cancelled bank-transfer orders:** void the unpaid invoice (proposed)?
+3. **Products:** lines use the Tohyee item whose code is the SKU; there's
+   no product or customer sync from WooCommerce like Shopify's stage 1
+   (proposed for now). Is that enough?
+
 ## Custom fields on CRM records (examples not yet approved by Jess)
 
 The owner asked (1 Oct 2026) for the CRM's records to carry many fields of
