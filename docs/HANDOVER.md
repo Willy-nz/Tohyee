@@ -195,9 +195,10 @@ Database upgrades run by themselves when Tohyee starts. Back up first if you ins
   the bills inbox (read by the connected AI only), duplicate bill warnings
   and mileage on expense claims, is built: examples BI1-BI7, DU1-DU5 and
   MI1-MI7 (and EC1-EC12) approved by Jess 5 Oct 2026, decisions 404-413,
-  tenant migration 0097. Next: item 4, online invoice payments (Stripe,
-  then PayPal); write its worked examples and ask Jess to approve them
-  before building.
+  tenant migration 0097. Item 4 part 1, Pay now with Stripe, is built:
+  examples PN1-PN12 approved by Jess 5 Oct 2026, decisions 414-419, tenant
+  migration 0098. Next: item 4 part 2, Pay now with PayPal; write its
+  worked examples and ask Jess to approve them before building.
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
@@ -276,8 +277,9 @@ Stripe as a bank feed (stage 1b part 3, decisions 392-395, tenant migration
 0094). PayPal as a bank feed (stage 1b part 4, decisions 396-399, tenant
 migration 0095). Wise as a bank feed (stage 1b part 5, decisions 400-403,
 tenant migration 0096). Bills inbox, duplicate bill warnings and mileage
-(item 3, decisions 404-413, tenant migration 0097). Next numbers: tenant
-migration 0098, core migration 0007, decision 414.
+(item 3, decisions 404-413, tenant migration 0097). Pay now with Stripe
+(item 4 part 1, decisions 414-419, tenant migration 0098). Next numbers:
+tenant migration 0099, core migration 0007, decision 420.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

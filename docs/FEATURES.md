@@ -439,6 +439,18 @@ that something happened.
   and total within 7 days, or another supplier with the same invoice number
   and total. Approving one asks "Approve anyway?" and the history notes it;
   a connected AI can't approve past a warning.
+- **Pay now with Stripe** (Settings, Online payments; PN1-PN12, decisions
+  414-419, tenant migration 0098), like Xero's: approved invoices with
+  something due get a Stripe payment link in their email and PDF (and Copy
+  payment link on the invoice), for the amount due in the invoice's
+  currency, through the organisation's own Stripe connection. Every 15
+  minutes (and with Check now) Tohyee records paid links as customer
+  payments into the Stripe bank account, where the Stripe feed's charge
+  line matches them and fees arrive as their own lines. A link is replaced
+  when the amount due changes; paying twice becomes an overpayment; a
+  payment Tohyee can't record (a voided invoice, no linked balance) waits as
+  a notice. An invoice can leave Pay now off. No surcharges, saved cards,
+  webhooks or refunds from Tohyee.
 - **Bills inbox** (Purchases, `/operations/bills/inbox`; BI1-BI7, decisions
   404-406, tenant migration 0097), like Xero's files inbox and Dext: supplier
   bills and receipts (PDF, JPG, PNG, HEIC) waiting to be entered, uploaded

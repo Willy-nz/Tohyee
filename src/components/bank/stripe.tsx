@@ -86,7 +86,10 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
           <form onSubmit={connect} style={{ display: "grid", gap: 12 }} autoComplete="off">
             <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
               <li>In this organisation&apos;s Stripe dashboard, open Developers → API keys and create a restricted key.</li>
-              <li>Give it read access to the balance (and nothing else), and copy it.</li>
+              <li>
+                Give it read access to the balance. To offer Pay now on invoices, also give it read access to Checkout Sessions and write access to
+                payment links (and the prices and products they make): these only take money in. Copy it.
+              </li>
               <li>Paste it below. Tohyee checks it with Stripe, then stores it encrypted. Full secret keys aren&apos;t accepted.</li>
             </ol>
             <div className={ui.grid2}>

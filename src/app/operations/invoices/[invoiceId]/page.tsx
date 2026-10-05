@@ -22,6 +22,7 @@ import { AMOUNTS_MODE_LABELS } from "@/lib/invoices/amounts";
 import type { OverpaymentApplication } from "@/lib/invoices/overpayments";
 import type { CustomerPayment } from "@/lib/invoices/payments";
 import type { Invoice } from "@/lib/invoices/service";
+import { InvoicePayNowCard } from "@/components/online-payments";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { useConfirm } from "@/components/confirm-dialog";
 
@@ -460,6 +461,9 @@ function InvoiceView({ organisationId, invoiceId }: { organisationId: string; in
             setMessage(text);
           }}
         />
+      ) : null}
+      {invoice.status !== "draft" ? (
+        <InvoicePayNowCard organisationId={organisationId} invoiceId={invoice.id} refreshKey={`${invoice.status}-${invoice.amountDue ?? ""}`} />
       ) : null}
       {creditApplied.length > 0 || overpaymentCreditApplied.length > 0 ? (
         <InvoiceCredit creditApplied={creditApplied} overpaymentCreditApplied={overpaymentCreditApplied} />

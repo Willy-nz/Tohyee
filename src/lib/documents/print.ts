@@ -6,6 +6,7 @@ import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, dec, toFixedString } from "@/lib/money/decimal";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { getPurchaseOrder } from "@/lib/purchase-orders/service";
+import { currentPaymentLinkUrl } from "@/lib/payments/stripe";
 import { getQuote } from "@/lib/quotes/service";
 import { type PrintKind, PRINT_KINDS, type TaxLabels, taxLabels } from "@/lib/documents/tax-invoice";
 import { requireOneOf } from "@/lib/validation";
@@ -46,6 +47,8 @@ export type PrintedDocument = {
   amountDue: string | null;
   /** Printed on approved invoices only (not credit notes or quotes). */
   paymentDetails: string | null;
+  /** Invoices with Pay now (PN2): the Stripe payment link for the amount due. */
+  payNowUrl: string | null;
   /** Purchase orders only (PO8): where and when to deliver. */
   deliveryDate: string | null;
   deliveryAddress: string | null;
@@ -129,6 +132,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
       amountPaid: approved ? paidAndCredited(invoice.amountPaid, invoice.amountCredited, invoice.currencyCode) : null,
       amountDue: approved ? invoice.amountDue : null,
       paymentDetails: approved ? settings.paymentDetails : null,
+      payNowUrl: approved ? await currentPaymentLinkUrl(tx, invoice.id) : null,
       ...NO_DELIVERY,
     };
   }
@@ -143,6 +147,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
       amountPaid: null,
       amountDue: null,
       paymentDetails: null,
+      payNowUrl: null,
       ...NO_DELIVERY,
     };
   }
@@ -158,6 +163,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
       amountPaid: null,
       amountDue: null,
       paymentDetails: null,
+      payNowUrl: null,
       deliveryDate: order.deliveryDate,
       deliveryAddress: order.deliveryAddress,
       deliveryInstructions: order.deliveryInstructions,
@@ -174,6 +180,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
     amountPaid: null,
     amountDue: null,
     paymentDetails: null,
+    payNowUrl: null,
     ...NO_DELIVERY,
   };
 }

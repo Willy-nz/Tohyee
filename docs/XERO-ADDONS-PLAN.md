@@ -83,7 +83,9 @@ phone width).
    BI1-BI7, DU1-DU5 and MI1-MI7 approved by Jess 5 Oct 2026; built,
    decisions 404-413, tenant migration 0097), duplicate check on bills,
    mileage claims (IRD kilometre rates as a setting).
-4. **Online invoice payments:** Stripe (hosted Checkout or Payment Links,
+4. **Online invoice payments** (Stripe part: examples PN1-PN12 approved
+   by Jess 5 Oct 2026; built, decisions 414-419, tenant migration 0098;
+   PayPal is part 2): Stripe (hosted Checkout or Payment Links,
    polling rather than webhooks unless remote access is on), then PayPal. A
    clearing account per provider, fees to expense, payouts matched to the
    bank deposit. Worked examples for part payments, refunds, disputes,

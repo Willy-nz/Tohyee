@@ -224,6 +224,14 @@ export function PrintedDocumentView({ organisationId, kind, id }: { organisation
             </p>
           </section>
         ) : null}
+        {doc.payNowUrl ? (
+          <section className={ui.reportPaperBlock}>
+            <strong>Pay now</strong>
+            <p style={{ margin: 0, overflowWrap: "anywhere" }}>
+              Pay online by card: <a href={doc.payNowUrl}>{doc.payNowUrl}</a>
+            </p>
+          </section>
+        ) : null}
       </article>
     </>
   );

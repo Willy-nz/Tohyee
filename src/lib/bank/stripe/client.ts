@@ -1,10 +1,11 @@
 import { UnavailableError, ValidationError } from "@/lib/errors";
 
 /**
- * A small read-only client for Stripe's API (https://docs.stripe.com/api),
- * used with the organisation's own restricted key (ST1-ST10). It reads the
- * balance and balance transactions only. Every call has a timeout, and none
- * is made inside a database transaction.
+ * A small client for Stripe's API (https://docs.stripe.com/api), used with
+ * the organisation's own restricted key (ST1-ST10, PN1-PN12). It reads the
+ * balance, balance transactions and checkout sessions, and makes and switches
+ * off payment links, which only ever take money in. Every call has a
+ * timeout, and none is made inside a database transaction.
  */
 export const STRIPE_API = "https://api.stripe.com/v1";
 
@@ -49,17 +50,35 @@ export function parseRestrictedKey(input: unknown): string {
   if (typeof input !== "string" || !input.trim()) throw new ValidationError("Paste the restricted key from your Stripe dashboard.");
   const key = input.trim();
   if (/^sk_(live|test)_/.test(key))
-    throw new ValidationError("Use a restricted key with read access only. Tohyee doesn't take full secret keys, which can move money.");
+    throw new ValidationError(
+      "Use a restricted key (read access, plus write access to payment links for Pay now). Tohyee doesn't take full secret keys, which can move money.",
+    );
   if (!/^rk_(live|test)_[A-Za-z0-9]{10,250}$/.test(key))
     throw new ValidationError("That isn't a Stripe restricted key. It starts with rk_live_ (or rk_test_ in test mode).");
   return key;
 }
 
-async function call<T>(key: string, path: string, params?: URLSearchParams): Promise<T> {
+/** Payment links with an inline price need this API version or later (Stripe changelog, 2025-07-30). */
+export const PAYMENT_LINKS_API_VERSION = "2025-07-30.basil";
+
+async function call<T>(
+  key: string,
+  path: string,
+  params?: URLSearchParams,
+  post?: { form: URLSearchParams; idempotencyKey?: string; version?: string },
+): Promise<T> {
   let response: Response;
   try {
     response = await fetcher(`${STRIPE_API}${path}${params ? `?${params.toString()}` : ""}`, {
-      headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+      method: post ? "POST" : "GET",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        Accept: "application/json",
+        ...(post ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+        ...(post?.idempotencyKey ? { "Idempotency-Key": post.idempotencyKey } : {}),
+        ...(post?.version ? { "Stripe-Version": post.version } : {}),
+      },
+      body: post ? post.form.toString() : undefined,
       redirect: "error",
       signal: AbortSignal.timeout(30_000),
     });
@@ -77,7 +96,12 @@ async function call<T>(key: string, path: string, params?: URLSearchParams): Pro
     const message = typeof detail === "string" ? detail : `Stripe answered ${response.status}.`;
     if (response.status === 401) throw new StripeError(401, `Stripe refused the key: ${message}`);
     if (response.status === 403)
-      throw new StripeError(403, `The key can't read this: ${message} Give the restricted key read access to the balance.`);
+      throw new StripeError(
+        403,
+        post
+          ? `The key can't make payment links: ${message} Give the restricted key write access to payment links (and the prices and products they make).`
+          : `The key can't read this: ${message} Give the restricted key read access to the balance.`,
+      );
     throw new StripeError(response.status, message);
   }
   return data as T;
@@ -119,6 +143,79 @@ export async function listBalanceTransactions(key: string, currency: string, sin
     after = items[items.length - 1].id;
   }
   throw new StripeError(0, "Stripe returned too many pages of balance transactions.");
+}
+
+export type StripePaymentLink = { id: string; url: string; active: boolean };
+
+/**
+ * Makes a payment link for one invoice (PN2): one line for the amount due in
+ * the invoice's currency, at most one completed payment, the invoice's id in
+ * its metadata and "Payment for INV-..." on the payment.
+ */
+export async function createPaymentLink(
+  key: string,
+  input: { invoiceId: string; invoiceNumber: string; currency: string; amountMinor: number; inactiveMessage: string; idempotencyKey: string },
+): Promise<StripePaymentLink> {
+  const form = new URLSearchParams();
+  form.set("line_items[0][price_data][currency]", input.currency.toLowerCase());
+  form.set("line_items[0][price_data][unit_amount]", String(input.amountMinor));
+  form.set("line_items[0][price_data][product_data][name]", `Invoice ${input.invoiceNumber}`);
+  form.set("line_items[0][quantity]", "1");
+  form.set("restrictions[completed_sessions][limit]", "1");
+  form.set("inactive_message", input.inactiveMessage.slice(0, 500));
+  form.set("metadata[tohyee_invoice_id]", input.invoiceId);
+  form.set("payment_intent_data[description]", `Payment for ${input.invoiceNumber}`);
+  form.set("payment_intent_data[metadata][tohyee_invoice_id]", input.invoiceId);
+  const data = await call<{ id?: unknown; url?: unknown; active?: unknown }>(key, "/payment_links", undefined, {
+    form,
+    idempotencyKey: input.idempotencyKey,
+    version: PAYMENT_LINKS_API_VERSION,
+  });
+  if (typeof data.id !== "string" || typeof data.url !== "string" || !data.url.startsWith("https://")) {
+    throw new StripeError(0, "Stripe didn't return a payment link.");
+  }
+  return { id: data.id, url: data.url, active: data.active !== false };
+}
+
+/** Switches a payment link off (PN5, PN10, PN11): anyone opening it sees its inactive message. */
+export async function deactivatePaymentLink(key: string, linkId: string): Promise<void> {
+  const form = new URLSearchParams({ active: "false" });
+  await call(key, `/payment_links/${encodeURIComponent(linkId)}`, undefined, { form, version: PAYMENT_LINKS_API_VERSION });
+}
+
+export type StripeCheckoutSession = {
+  id: string;
+  status?: string;
+  payment_status?: string;
+  amount_total?: number | null;
+  currency?: string | null;
+  created?: number;
+  payment_link?: string | null;
+  /** Expanded: the payment, its charge and the charge's balance transaction. */
+  payment_intent?:
+    | string
+    | {
+        id?: string;
+        latest_charge?: string | { id?: string; created?: number; balance_transaction?: string | StripeBalanceTransaction | null } | null;
+      }
+    | null;
+};
+
+/** A payment link's completed checkout sessions (PN3), with the payment, charge and balance transaction expanded. */
+export async function listCompletedSessions(key: string, linkId: string): Promise<StripeCheckoutSession[]> {
+  const all: StripeCheckoutSession[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 100; page += 1) {
+    const params = new URLSearchParams({ limit: "100", payment_link: linkId, status: "complete" });
+    params.append("expand[]", "data.payment_intent.latest_charge.balance_transaction");
+    if (after) params.set("starting_after", after);
+    const data: { data?: StripeCheckoutSession[]; has_more?: boolean } = await call(key, "/checkout/sessions", params);
+    const items = data.data ?? [];
+    all.push(...items);
+    if (!data.has_more || items.length === 0) return all;
+    after = items[items.length - 1].id;
+  }
+  throw new StripeError(0, "Stripe returned too many pages of checkout sessions.");
 }
 
 /** Turns a Stripe failure into a message for the person who asked. */

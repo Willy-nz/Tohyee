@@ -168,7 +168,7 @@ describeWithDatabase("Stripe as a bank feed (ST1-ST10)", () => {
     expect((await post(bookkeeperCookie, KEY)).status).toBe(403);
     const full = await post(ownerCookie, "sk_live_abcdefghijklmnop1234");
     expect(full.status).toBe(400);
-    expect(JSON.stringify(await full.json())).toContain("Use a restricted key with read access only.");
+    expect(JSON.stringify(await full.json())).toContain("Use a restricted key (read access, plus write access to payment links for Pay now).");
     const wrong = await post(ownerCookie, "rk_live_wrongwrongwrong123");
     expect(wrong.status).toBe(400);
     expect(JSON.stringify(await wrong.json())).toContain("Stripe refused the key");

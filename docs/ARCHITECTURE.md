@@ -52,6 +52,9 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bill_inbox_items       the bills inbox: files waiting to become bills (contents, SHA-256, sender and subject), the bill made, or why removed
 ├─ bill_inbox_mailboxes, bill_inbox_mail_seen   mailbox folders read into the inbox (IMAP password encrypted) and the messages each place has given
 ├─ mileage_rates          IRD kilometre rates per income year and vehicle type (tier 1 and tier 2)
+├─ online_payment_settings, invoice_payment_options   whether Pay now with Stripe is on (and its check lease), and invoices that leave it off
+├─ invoice_payment_links  each Stripe payment link made for an invoice: amount, currency, URL, open or closed
+├─ online_payments        each completed Stripe checkout session seen: the customer payment recorded, or a notice for a person
 ├─ purchase_orders, purchase_order_lines, purchase_order_numbering   purchase orders (post nothing; copied to bills)
 ├─ supplier_payments      money paid against bills
 ├─ expense_claims, expense_claim_receipts, expense_claim_payments   staff expense claims, their receipts and mileage lines (kind, km, vehicle, rates used) and payments
@@ -1071,6 +1074,16 @@ Enforced by the app (and covered by tests):
   (`src/lib/ai/mcp-protocol.ts`). Duplicate warnings
   (`src/lib/bills/duplicates.ts`) are worked out when the bill is shown and
   again in `approveBill`, which refuses without `approveDespiteWarnings`.
+- Pay now with Stripe (`src/lib/payments/stripe.ts`, decisions 414-419)
+  adds payment links and checkout sessions to the Stripe client
+  (`src/lib/bank/stripe/client.ts`, form-encoded POSTs with an idempotency
+  key and the API version that allows inline prices). Links are made by
+  `ensurePaymentLink` before an invoice is emailed or printed
+  (`linkBeforeSending` in those routes), and printed documents show only an
+  open link whose amount matches what's due. `checkOnlinePayments` takes a
+  lease, reads each link's completed sessions outside any transaction,
+  records each paid one with `recordPayment` in its own transaction (or a
+  notice), then switches off links that no longer match.
 - Mileage (`src/lib/expense-claims/mileage.ts`, decisions 407-410) works
   out each line inside `resolveReceipts`: the rates for the line's income
   year (or the latest), kilometres already claimed per vehicle type from the
