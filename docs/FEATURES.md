@@ -457,6 +457,18 @@ that something happened.
   customer), links to PayPal's page, and records PayPal payments into the
   PayPal bank account for the invoice's currency. Only invoices in a
   currency whose PayPal balance is linked offer it.
+- **Consolidation** (Reports, Consolidation; CO1-CO11, decisions 437-445,
+  core migration 0007, tenant migration 0102), like NetSuite OneWorld:
+  groups of organisations on this server in different currencies and with
+  different year ends, reported in the parent's currency (profit and loss
+  at monthly average rates, the balance sheet at the current rate, equity at
+  historical rates, with a translation reserve), with intercompany accounts
+  and what's owed between members eliminated and any differences shown.
+  Elimination adjustments, changed rates, budget exchange rates and a
+  consolidated budget vs actual. Seen only by people in every member.
+- **Exchange rates from the European Central Bank** (FX1, decision 437):
+  turned on per organisation, each working day's ECB rates are added to the
+  exchange rates list for the currencies in use; typed rates stay.
 - **Cash flow forecast** (Reports, Cash flow forecast; CF1-CF9, decisions
   432-436, tenant migration 0101), like NetSuite's Cash 360: today's bank
   balance, then money in and out by day, week or month (about 3 months by

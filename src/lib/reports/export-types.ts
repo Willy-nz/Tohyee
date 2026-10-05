@@ -7,6 +7,8 @@ export const REPORT_EXPORTS = [
   "bank-reconciliation",
   "budget-vs-actual",
   "cash-flow-forecast",
+  "consolidated-balance-sheet",
+  "consolidated-profit-and-loss",
   "customer-statement",
   "fixed-asset-register",
   "gst-audit",

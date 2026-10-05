@@ -49,6 +49,10 @@
  * And Stripe feeds, which bring each organisation's Stripe balance
  * transactions in when due (off with TOHYEE_STRIPE_SCHEDULER=off).
  *
+ * And European Central Bank exchange rates, added each working day to the
+ * exchange rates list of organisations that turned them on (off with
+ * TOHYEE_ECB_RATES_SCHEDULER=off).
+ *
  * And PayPal feeds, which bring each organisation's PayPal transactions in
  * when due (off with TOHYEE_PAYPAL_SCHEDULER=off).
  *
@@ -193,6 +197,15 @@ export async function register() {
       startStripeScheduler();
     } catch (error) {
       console.warn("[tohyee] Stripe syncs couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (process.env.TOHYEE_ECB_RATES_SCHEDULER !== "off") {
+    try {
+      const { startEcbRatesScheduler } = await import("@/lib/fx/ecb");
+      startEcbRatesScheduler();
+    } catch (error) {
+      console.warn("[tohyee] ECB exchange rates couldn't start:", error instanceof Error ? error.message : error);
     }
   }
 

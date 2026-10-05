@@ -52,6 +52,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bill_inbox_items       the bills inbox: files waiting to become bills (contents, SHA-256, sender and subject), the bill made, or why removed
 ├─ bill_inbox_mailboxes, bill_inbox_mail_seen   mailbox folders read into the inbox (IMAP password encrypted) and the messages each place has given
 ├─ mileage_rates          IRD kilometre rates per income year and vehicle type (tier 1 and tier 2)
+├─ intercompany_accounts, intercompany_contacts   accounts and contacts with another consolidation member (CO2)
+├─ ecb_rate_settings      whether ECB rates come in, extra currencies and the last check (FX1)
 ├─ cash_flow_items, cash_flow_account_averages   forecast items and the accounts forecast from their average (CF4, CF6)
 ├─ approval_rules, approval_rule_steps, approval_step_approvers   approval rules per document type: conditions, ordered steps, approvers (AW1)
 ├─ approval_requests, approval_actions   a document's trip through a rule (waiting, approved, declined, withdrawn) and each step's approvals; never deleted
@@ -1094,6 +1096,14 @@ Enforced by the app (and covered by tests):
   `src/lib/bank/paypal/client.ts`. `src/lib/payments/links.ts` makes both
   before an invoice is emailed or printed, and switches both off after a
   void or payment on the invoice's page.
+- Consolidation (`src/lib/consolidation/`, decisions 437-445): groups,
+  rate changes, budget rates and adjustments in the core database
+  (`groups.ts`; core migration 0007), intercompany settings in each
+  organisation (`intercompany.ts`), and `report.ts`, which opens a read-only
+  transaction on each member's database as the signed-in person, reads its
+  ledger by account and day, translates it with the parent's exchange rates
+  list, and eliminates. ECB rates (`src/lib/fx/ecb.ts`) fetch the ECB's file
+  outside any transaction and add rates in one.
 - The cash flow forecast (`src/lib/cash-flow/forecast.ts`, decisions
   432-436) is worked out on each request: it reuses `RECEIVABLES_SQL` and
   `PAYABLES_SQL` (with no as-at date) for what's due on each document, the
