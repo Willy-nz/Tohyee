@@ -62,7 +62,7 @@ async function body(response: Response) {
 }
 
 /**
- * Examples BK1-BK16 in docs/ACCOUNTING-EXAMPLES.md ("Bank accounts,
+ * Examples BK1-BK16 and BK29 in docs/ACCOUNTING-EXAMPLES.md ("Bank accounts,
  * statements and reconciliation"). Each example gets its own organisation:
  * 1000 Business bank account, 1010 Savings account, 2400 Credit card, GST at
  * 15%, Kobe Ltd with INV-0001 (I1, 115.00) and Kauri Supplies with B1
@@ -799,6 +799,104 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
       feed: { lastSyncStatus: "failed", lastSyncError: "Akahu refused the tokens: Token revoked. Check the App ID token and user token." },
     });
     expect((await world.lines(world.bank.id, "unreconciled")).length).toBe(3);
+  });
+
+  it("BK29: an Akahu sync reads 30 days back, so a back-dated transaction comes in and a deleted line stays deleted (#147)", async () => {
+    const world = await setup();
+    // Akahu as it behaves: only transactions after `start` (exclusive) come back.
+    type Item = { _id: string; _account: string; date: string; description: string; amount: number; balance?: number };
+    let items: Item[] = [];
+    let balance = 1000;
+    const starts: string[] = [];
+    setAkahuFetchForTests(async (url) => {
+      if (url.includes("/transactions")) {
+        const start = new URL(url).searchParams.get("start")!;
+        starts.push(start);
+        const after = items.filter((item) => Date.parse(item.date) > Date.parse(start));
+        return new Response(JSON.stringify({ success: true, items: after, cursor: { next: null } }), { status: 200 });
+      }
+      if (url.endsWith("/accounts")) {
+        return new Response(JSON.stringify({ success: true, items: [{ _id: "acc_1", name: "Business", type: "CHECKING", balance: { current: balance } }] }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    });
+    const saved = await akahuSettingsRoute.PUT(
+      apiRequest("/api/bank-feeds/akahu/settings", {
+        method: "PUT",
+        cookie: await sessionCookieFor(owner),
+        body: { organisationId: world.org, appToken: "app_token_abc", userToken: "user_token_xyz" },
+      }),
+      undefined as unknown,
+    );
+    expect(saved.status).toBe(200);
+    await world.asUser(owner, (tx) =>
+      linkBankFeed(tx, world.bank.id, { akahuAccountId: "acc_1", akahuAccountName: "Business", startDate: "2026-05-20" }),
+    );
+    const organisation = (await getOrganisation(world.org))!;
+    const sync = () => syncBankFeedAccount(organisation, world.bank.id);
+    const feedLines = async (status = "all") =>
+      (await world.lines(world.bank.id, status))
+        .filter((line) => line.source === "akahu")
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((line) => [line.date, line.amount, line.externalId]);
+
+    // Amounts arrive as JSON numbers; each is read exactly, to the cent, never through floating point rounding.
+    items = [
+      { _id: "t_a", _account: "acc_1", date: "2026-06-04T03:00:00.000Z", description: "CAFE", amount: 0.1, balance: 0.3 },
+      { _id: "t_b", _account: "acc_1", date: "2026-06-05T04:00:00.000Z", description: "CAFE", amount: 0.2, balance: 1234567.89 },
+    ];
+    balance = 1023.5;
+    expect(await sync()).toMatchObject({ added: 2, duplicates: 0 });
+    expect(await feedLines()).toEqual([
+      ["2026-06-04", "0.10", "akahu:t_a"],
+      ["2026-06-05", "0.20", "akahu:t_b"],
+    ]);
+    expect((await world.lines(world.bank.id)).map((line) => [line.externalId, line.balance]).sort()).toEqual([
+      ["akahu:t_a", "0.30"],
+      ["akahu:t_b", "1234567.89"],
+    ]);
+    expect(await world.asUser(viewer, (tx) => getBankAccount(tx, world.bank.id))).toMatchObject({ statementBalance: "1023.50" });
+
+    // The next sync brings in 20 June. Then the first import (the 4 and 5 June lines) is deleted.
+    items.push({ _id: "t_c", _account: "acc_1", date: "2026-06-20T03:00:00.000Z", description: "Z ENERGY", amount: -46 });
+    expect(await sync()).toMatchObject({ added: 1, duplicates: 2 });
+    const firstImport = (
+      await world.sql(
+        `select i.id::text from bank_statement_imports i join bank_statement_lines b on b.import_id = i.id where b.external_id = 'akahu:t_a'`,
+      )
+    ).rows[0].id as string;
+    await world.asUser(bookkeeper, (tx) => deleteImport(tx, firstImport));
+
+    // A card purchase from 10 June settles late under its own date, 10 days before the newest line (20 June).
+    // The sync reads from 30 days before 20 June (less two days for the time zone): it comes in, and the
+    // deleted 4 and 5 June lines, also in that window, aren't brought back.
+    items.push({ _id: "t_d", _account: "acc_1", date: "2026-06-10T03:00:00.000Z", description: "KAURI SUPPLIES", amount: -230 });
+    expect(await sync()).toMatchObject({ added: 1, duplicates: 3 });
+    expect(starts.at(-1)).toBe("2026-05-19T00:00:00.000Z");
+    expect(await feedLines("unreconciled")).toEqual([
+      ["2026-06-10", "-230.00", "akahu:t_d"],
+      ["2026-06-20", "-46.00", "akahu:t_c"],
+    ]);
+    expect(await feedLines("deleted")).toEqual([
+      ["2026-06-04", "0.10", "akahu:t_a"],
+      ["2026-06-05", "0.20", "akahu:t_b"],
+    ]);
+    // The window never reaches before the start date (20 May): the first two syncs asked from two days before it.
+    expect(starts).toEqual(["2026-05-18T00:00:00.000Z", "2026-05-18T00:00:00.000Z", "2026-05-19T00:00:00.000Z"]);
+
+    // An amount finer than a cent is refused, not rounded, and nothing is added.
+    items.push({ _id: "t_e", _account: "acc_1", date: "2026-06-21T03:00:00.000Z", description: "ODD", amount: 1.005 });
+    await expect(sync()).rejects.toThrow("Akahu's amount for transaction t_e can have at most 2 decimal places.");
+    expect((await feedLines("unreconciled")).length).toBe(2);
+
+    // Lines from a file are different: deleting an OFX import and importing the file again by hand brings them back (BK12, BF6).
+    const ofx = `OFXHEADER:100\n<OFX><BANKTRANLIST>\n<STMTTRN><DTPOSTED>20260601<TRNAMT>-9.00<FITID>F1<NAME>PARKING\n</BANKTRANLIST></OFX>`;
+    const ofxImport = (await world.importFile(world.bank.id, ofx, "statement.ofx")).import;
+    expect(ofxImport).toMatchObject({ lineCount: 1 });
+    await world.asUser(bookkeeper, (tx) => deleteImport(tx, ofxImport.id));
+    expect((await world.importFile(world.bank.id, ofx, "statement.ofx")).import).toMatchObject({ lineCount: 1, duplicateCount: 0 });
   });
 
   it("migration 0011 upgrades an organisation database on 0010, turning the starting chart's credit card into a credit card account", async () => {

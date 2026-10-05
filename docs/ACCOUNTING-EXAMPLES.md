@@ -1354,12 +1354,18 @@ organisation's bank or credit card accounts, with a start date for the
 history to bring in.
 
 - Syncing reads settled transactions only (pending ones wait until they
-  settle) from two days before the last line it brought in (lines already
-  there are skipped by Akahu's id), or from the start date the first time, as far back as Akahu and the bank allow. Network calls
+  settle) from 30 days before the last line it brought in, but never before
+  the start date, so a transaction that settles late under its original date
+  still comes in (issue #147). Lines already there are skipped by Akahu's id,
+  and so are lines someone deleted (Jess: a line someone deleted stays
+  deleted). The first time, it reads from the start date, as far back as
+  Akahu and the bank allow. Network calls
   happen outside database transactions; each account's lines are then added
   in one transaction.
 - Akahu's amount is signed the same way as statement lines (negative is money
-  out). Its date is converted to the New Zealand date. Particulars, code,
+  out). Akahu sends amounts and balances as numbers; each is read exactly
+  and must be whole cents (1.005 makes the sync fail with the reason rather
+  than being rounded). Its date is converted to the New Zealand date. Particulars, code,
   reference and the merchant name come across when Akahu has them.
 - Accounts sync on a schedule (every 6 hours by default, 1-24 per
   organisation) and on demand. A failed sync keeps the error on the account
@@ -1374,6 +1380,16 @@ history to bring in.
   possible duplicate of the feed line.
 - **BK16** Akahu's balance for the account is kept as the statement balance
   with its date, shown next to the ledger balance.
+- **BK29** (issue #147; to be checked by Jess) An Akahu account linked to
+  1000 with a start date of 20 May 2026. The first sync brings in +0.10 on
+  4 Jun and +0.20 on 5 Jun, read exactly from Akahu's numbers 0.1 and 0.2; the
+  next brings in -46.00 on 20 Jun. The first import is deleted. A -230.00
+  card purchase dated 10 Jun then settles late. The next sync reads from 21
+  May (30 days before 20 Jun; Akahu is asked from 19 May 00:00 UTC to cover
+  the time zone): the 10 Jun line is added, and the deleted 4 and 5 Jun
+  lines are not brought back. Lines from files are different: deleting an
+  OFX import and importing the file again by hand brings its lines back
+  (BK12, BF6).
 
 ### Automatic statement files: a folder and a mailbox per bank account (approved by Jess, 5 Oct 2026)
 

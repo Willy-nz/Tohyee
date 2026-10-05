@@ -277,11 +277,22 @@ function sourceKind(externalId: string | null): string {
   return externalId ? externalId.split(":")[0] : "none";
 }
 
+/**
+ * Where ids from bank feeds come from (Akahu, SimpleFIN, Stripe, PayPal,
+ * Wise). Feeds read an overlapping window on every sync, so a deleted line
+ * would come straight back: a deleted feed line's id still counts (issue #147;
+ * Jess: a line someone deleted stays deleted). Ids from files (OFX, CAMT, a
+ * CSV id column) don't: importing the file again by hand after deleting its
+ * import brings its lines back (BK12, BF6).
+ */
+const FEED_ID_SOURCES = ["akahu", "simplefin", "stripe", "paypal", "wise"];
+
 export type AddLinesResult = { added: number; duplicates: number; possibleDuplicates: number };
 
 /**
  * Works out which parsed lines are new (example BK2): a line with the bank's
- * own id is added unless a line with that id is already on the account;
+ * own id is added unless a line with that id is already on the account (for
+ * a feed's id, even a deleted one: FEED_ID_SOURCES);
  * lines without one are added only when the batch has more of that line than
  * the account already has. New lines that match a line from another source
  * on date and amount are flagged as possible duplicates (BK3, BK15). The
@@ -299,8 +310,9 @@ export async function addStatementLines(
     (
       await tx.query<{ external_id: string }>(
         `select external_id from bank_statement_lines
-          where account_id = $1 and status <> 'deleted' and external_id = any($2::text[])`,
-        [accountId, keyed.flatMap((line) => (line.externalId ? [line.externalId] : []))],
+          where account_id = $1 and external_id = any($2::text[])
+            and (status <> 'deleted' or split_part(external_id, ':', 1) = any($3::text[]))`,
+        [accountId, keyed.flatMap((line) => (line.externalId ? [line.externalId] : [])), FEED_ID_SOURCES],
       )
     ).rows.map((row) => row.external_id),
   );
