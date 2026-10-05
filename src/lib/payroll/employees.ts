@@ -6,6 +6,7 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { cmp, dec, parseDecimalInput, toPlainString } from "@/lib/money/decimal";
 import { requirePayrollAccess } from "@/lib/payroll/access";
 import { primaryDepartments } from "@/lib/payroll/allocations";
+import { markEmployeeDetailsChanged } from "@/lib/payroll/draft-changes";
 import { checkGroupForEmployee, PAY_FREQUENCIES, PAY_FREQUENCY_WORDS } from "@/lib/payroll/groups";
 import { KIWI_SAVER_STATUSES } from "@/lib/payroll/pay-calculation";
 import { currentPay, firstPayRate, insertStartingPayRate, PAY_BASES, type PayDetails, parsePayDetails } from "@/lib/payroll/pay-rates";
@@ -444,6 +445,10 @@ export async function createEmployee(
   return { created: true, employee: await decorate(tx, row) };
 }
 
+function sameRate(a: string | null, b: string | null): boolean {
+  return a === null || b === null ? a === b : cmp(dec(a), dec(b)) === 0;
+}
+
 export async function updateEmployee(tx: OrgTx, id: string, input: Record<string, unknown>): Promise<Employee> {
   await requirePayrollAccess(tx);
   if (input.reportsToId !== undefined) {
@@ -490,6 +495,22 @@ export async function updateEmployee(tx: OrgTx, id: string, input: Record<string
     ],
   );
   const row = result.rows[0];
+  // What their draft pay runs pay depends on these, so whoever changes them counts as preparing those drafts (PRUN7b).
+  const bankChanged =
+    input.bankAccount !== undefined &&
+    (current.bank_account_ciphertext === null ? null : decryptSecret(current.bank_account_ciphertext)) !==
+      (parsed.bank_account_ciphertext === null ? null : decryptSecret(parsed.bank_account_ciphertext));
+  if (
+    bankChanged ||
+    parsed.tax_code !== current.tax_code ||
+    parsed.student_loan !== current.student_loan ||
+    parsed.kiwisaver_status !== current.kiwisaver_status ||
+    !sameRate(parsed.kiwisaver_employee_rate, current.kiwisaver_employee_rate) ||
+    !sameRate(parsed.kiwisaver_employer_rate, current.kiwisaver_employer_rate) ||
+    !sameRate(parsed.esct_rate, current.esct_rate)
+  ) {
+    await markEmployeeDetailsChanged(tx, id);
+  }
   if (row.start_date !== current.start_date) {
     // Their pay from the new start date is their first rate (PE7).
     const first = await firstPayRate(tx, id);

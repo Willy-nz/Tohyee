@@ -11722,7 +11722,7 @@ Payroll deductions payable**.
 - **PRUN7b Changing an employee counts as preparing** (#140;
   approved by Jess, 5 Oct 2026). With PRUN7's setting on, Ana prepares PAYRUN-7, which
   includes Hemi. While it's a draft, Ben changes Hemi's bank account (or
-  his tax code, KiwiSaver rates or reduction, ESCT rate or a
+  his tax code, student loan, KiwiSaver rates or reduction, ESCT rate or a
   pay rate): what PAYRUN-7 pays now depends on Ben's change, so Ben is
   counted as preparing it. Ben approving PAYRUN-7 is refused: "You changed
   Hemi Walker's payroll details while PAYRUN-7 was a draft, so someone else

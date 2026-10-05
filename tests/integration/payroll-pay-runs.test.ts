@@ -620,7 +620,8 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
       const run = created.body.payRun as PayRun;
       runId = run.id;
       expect(run.periodEnd).toBe("2026-10-11");
-      await asUser(jess, (tx) => updateEmployee(tx, people.aroha, { taxCode: "M" }));
+      // Mere, not Jess: Jess approves in PRUN7, and changing an employee counts as preparing (PRUN7b).
+      await asUser(mere, (tx) => updateEmployee(tx, people.aroha, { taxCode: "M" }));
       const broken = await asUser(ben, (tx) => getPayRun(tx, runId));
       expect(pay(broken, people.aroha)).toMatchObject({
         pay: null,
@@ -630,7 +631,7 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
       const refused = await approve(jess, runId);
       expect(refused.status).toBe(400);
       expect(refused.body.error).toContain("Aroha Ngata has a student loan but tax code M has no SL.");
-      await asUser(jess, (tx) => updateEmployee(tx, people.aroha, { taxCode: "M SL" }));
+      await asUser(mere, (tx) => updateEmployee(tx, people.aroha, { taxCode: "M SL" }));
     });
 
     it("PRUN3: IRD's ESS example 4 figures", async () => {
@@ -901,6 +902,63 @@ describeWithDatabase("payroll pay items and pay runs (PRUN1-PRUN11)", () => {
       });
       expect((left.body.payRun as PayRun).employees).toEqual([]);
       expect((await approve(jess, run.id)).body.error).toContain("has nobody on it");
+    });
+  });
+
+  describe("PRUN7b: changing an employee counts as preparing", () => {
+    it("whoever changes someone's payroll details while they're on a draft can't approve it", async () => {
+      const put = (approverMustDiffer: boolean) => call(settingsRoute.PUT, mere, "/api/payroll/settings", { method: "PUT", body: { approverMustDiffer } });
+      expect((await put(true)).status).toBe(200);
+      const fortnightly = await group("Fortnightly (PRUN7b)", "fortnightly");
+      const hemi = await employee({ firstName: "Hemi", lastName: "Walker", payFrequency: "fortnightly", annualSalary: "70000.00", payGroupId: fortnightly });
+      const kiri = await employee({ firstName: "Kiri", lastName: "Walker", payFrequency: "fortnightly", annualSalary: "52000.00", payGroupId: fortnightly });
+      const off = await employee({ firstName: "Pita", lastName: "Offrun", payFrequency: "weekly", annualSalary: "50000.00" });
+      const changedBy = async (runId: string) =>
+        (await asUser(jess, (tx) => tx.query<{ changed: unknown[] }>("select details_changed_by as changed from payroll_pay_runs where id = $1", [runId]))).rows[0].changed;
+
+      // Made before the draft was created: doesn't count.
+      await asUser(ben, (tx) => updateEmployee(tx, hemi, { taxCode: "ME" }));
+      const created = await createRun(mere, { payGroupId: fortnightly, periodStart: "2026-10-05", payDate: "2026-10-21" });
+      expect(created.status).toBe(201);
+      const run = created.body.payRun as PayRun;
+      expect(run.employees.map((entry) => entry.employeeId).sort()).toEqual([hemi, kiri].sort());
+
+      // Someone not on the draft, or a change that changes nothing: doesn't count.
+      await asUser(ben, (tx) => updateEmployee(tx, off, { bankAccount: "12-3456-7654321-00" }));
+      await asUser(ben, (tx) => updateEmployee(tx, hemi, { kiwiSaverEmployeeRate: "3.50", bankAccount: "03-1234-0123456-00", firstName: "Hemi" }));
+      expect(await changedBy(run.id)).toEqual([]);
+
+      // Ben changes Hemi's bank account, then adds Kiri a pay rate.
+      await asUser(ben, (tx) => updateEmployee(tx, hemi, { bankAccount: "12-3456-7654321-00" }));
+      await asUser(ben, (tx) =>
+        addPayRate(tx, kiri, { idempotencyKey: key("rate"), effectiveFrom: "2026-10-05", payBasis: "salary", annualSalary: "54000.00" }),
+      );
+      expect(await changedBy(run.id)).toEqual([
+        { userId: ben.id, employeeId: hemi, name: "Hemi Walker" },
+        { userId: ben.id, employeeId: kiri, name: "Kiri Walker" },
+      ]);
+
+      const byBen = await approve(ben, run.id);
+      expect(byBen.status).toBe(403);
+      expect(byBen.body.error).toBe(`You changed Hemi Walker's payroll details while ${run.reference} was a draft, so someone else has to approve it.`);
+      const byMere = await approve(mere, run.id);
+      expect(byMere.status).toBe(403);
+      expect(byMere.body.error).toBe("You prepared this pay run, so someone else has to approve it.");
+      const byJess = await approve(jess, run.id);
+      expect(byJess.status).toBe(201);
+
+      // Once it's approved, changes don't touch it.
+      await asUser(ben, (tx) => updateEmployee(tx, hemi, { taxCode: "M" }));
+      expect(await changedBy(run.id)).toHaveLength(2);
+      await put(false);
+    });
+
+    it("with the setting off, a change doesn't stop the person approving", async () => {
+      const weekly = await group("Weekly (PRUN7b)", "weekly");
+      const tui = await employee({ firstName: "Tui", lastName: "Settingoff", payFrequency: "weekly", annualSalary: "52000.00", payGroupId: weekly });
+      const run = (await createRun(mere, { payGroupId: weekly, periodStart: "2026-10-05", payDate: "2026-10-14" })).body.payRun as PayRun;
+      await asUser(ben, (tx) => updateEmployee(tx, tui, { studentLoan: true, taxCode: "M SL" }));
+      expect((await approve(ben, run.id)).status).toBe(201);
     });
   });
 

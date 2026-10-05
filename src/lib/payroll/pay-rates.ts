@@ -5,6 +5,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { cmp, dec, parseDecimalInput, toPlainString } from "@/lib/money/decimal";
 import { requirePayrollAccess } from "@/lib/payroll/access";
+import { markEmployeeDetailsChanged } from "@/lib/payroll/draft-changes";
 import { keyedSecretHash } from "@/lib/secrets";
 import { optionalString, requireIdempotencyKey, requireOneOf } from "@/lib/validation";
 
@@ -261,6 +262,8 @@ export async function addPayRate(
     if (winner) return winner;
     throw new ConflictError("The pay rate couldn't be saved. Try again with a new idempotency key.");
   }
+  // A new pay rate changes what their draft pay runs pay (PRUN7b).
+  await markEmployeeDetailsChanged(tx, employeeId);
   await writeAuditEvent(tx, {
     eventType: "payroll_pay_rate.added",
     entityType: "payroll_employee",

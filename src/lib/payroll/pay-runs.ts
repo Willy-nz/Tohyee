@@ -1531,6 +1531,15 @@ export async function approvePayRun(
   if ((await approverMustDiffer(tx)) && tx.actor.userId !== null && run.prepared_by_user_ids.includes(tx.actor.userId)) {
     throw new ForbiddenError("You prepared this pay run, so someone else has to approve it.");
   }
+  if ((await approverMustDiffer(tx)) && tx.actor.userId !== null) {
+    const changed = await tx.query<{ name: string }>(
+      "select entry->>'name' as name from payroll_pay_runs r, jsonb_array_elements(r.details_changed_by) entry where r.id = $1 and entry->>'userId' = $2 limit 1",
+      [run.id, tx.actor.userId],
+    );
+    if (changed.rows[0]) {
+      throw new ForbiddenError(`You changed ${changed.rows[0].name}'s payroll details while ${reference} was a draft, so someone else has to approve it.`);
+    }
+  }
   await assertPostingDateAllowed(tx, run.pay_date);
 
   const calculated = await calculateRun(tx, run);
