@@ -44,18 +44,30 @@ export function privateAddress(address: string): boolean {
   );
 }
 
-export async function assertPublicMailHost(host: string): Promise<void> {
+/**
+ * Resolves a mail server's name and checks every address it gives. "local"
+ * means the name or an address is this server or a private, loopback or
+ * link-local network; "not_found" that the name doesn't resolve. On success,
+ * the checked addresses, so a caller can connect to one of them rather than
+ * look the name up again (it could answer differently the second time).
+ */
+export async function checkMailHost(host: string): Promise<{ ok: true; addresses: string[] } | { ok: false; reason: "local" | "not_found" }> {
   const name = host.toLowerCase().replace(/\.$/, "");
-  if (name === "localhost" || name.endsWith(".localhost")) {
-    throw new ValidationError("The mail server must be on the internet, not this server or its local network.");
-  }
+  if (name === "localhost" || name.endsWith(".localhost")) return { ok: false, reason: "local" };
   let addresses: string[];
   try {
     addresses = isIP(host) ? [host] : await resolve(host);
   } catch {
-    throw new ValidationError(`Couldn't find the mail server ${host}. Check its name.`);
+    return { ok: false, reason: "not_found" };
   }
-  if (addresses.length === 0 || addresses.some(privateAddress)) {
-    throw new ValidationError("The mail server must be on the internet, not this server or its local network.");
-  }
+  if (addresses.length === 0) return { ok: false, reason: "not_found" };
+  if (addresses.some(privateAddress)) return { ok: false, reason: "local" };
+  return { ok: true, addresses };
+}
+
+export async function assertPublicMailHost(host: string): Promise<void> {
+  const checked = await checkMailHost(host);
+  if (checked.ok) return;
+  if (checked.reason === "not_found") throw new ValidationError(`Couldn't find the mail server ${host}. Check its name.`);
+  throw new ValidationError("The mail server must be on the internet, not this server or its local network.");
 }

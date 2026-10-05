@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { headerText, isEmailAddress, optionalAddress, requireAddresses, splitAddresses } from "@/lib/email/addresses";
 import { emailSummary, escapeHtml, paragraphs, renderEmailHtml } from "@/lib/email/html";
 import { explainGraphError, GraphSendError, graphMessage, sendViaGraph } from "@/lib/email/microsoft";
+import { SmtpServerNotAllowedError } from "@/lib/email/settings";
 import { explainSmtpError } from "@/lib/email/smtp";
 import { fitLogo, imageSize } from "@/lib/organisations/logo";
 import { checkTemplate, DEFAULT_TEMPLATES, EMAIL_DOCUMENT_KINDS, fillTemplate, unknownPlaceholders } from "@/lib/email/templates";
@@ -70,7 +71,31 @@ describe("SMTP errors in plain English", () => {
     const result = explainSmtpError(error({ code: "EAUTH", responseCode: 535, response: "535-5.7.8 Username and Password not accepted." }), account);
     expect(result.retryable).toBe(false);
     expect(result.message).toMatch(/^The email server didn't accept the username and password\. For Gmail, use an app password/);
-    expect(result.message).toContain('(The server said: "535-5.7.8 Username and Password not accepted.")');
+    // What the server said isn't passed on to the organisation's admins (#145).
+    expect(result.message).not.toContain("535-5.7.8");
+    expect(result.message).not.toContain("The server said");
+  });
+
+  it("never echoes the far end's reply, and doesn't say whether a port was refused or timed out", () => {
+    const banner = "SSH-2.0-OpenSSH_9.6 Ubuntu";
+    for (const failure of [
+      error({ code: "EPROTOCOL", response: banner }, `Invalid greeting. response=${banner}`),
+      error({ code: "EMESSAGE", responseCode: 554, response: `554 ${banner}` }),
+      error({ code: "EMESSAGE", responseCode: 421, response: `421 ${banner}` }),
+      error({ code: "EAUTH", responseCode: 535, response: `535 ${banner}` }),
+      error({}, banner),
+    ]) {
+      expect(explainSmtpError(failure, account).message).not.toContain("OpenSSH");
+    }
+    expect(explainSmtpError(error({ code: "ECONNECTION" }, "connect ECONNREFUSED 10.0.0.5:25"), account).message).toBe(
+      explainSmtpError(error({ code: "ETIMEDOUT" }, "Connection timeout"), account).message,
+    );
+  });
+
+  it("passes on why a server isn't allowed, as it is", () => {
+    const refused = new SmtpServerNotAllowedError('The email server 127.0.0.1 is on this computer or its local network. Ask about "Allow local mail relay".');
+    expect(explainSmtpError(refused, account)).toEqual({ message: refused.message, retryable: false });
+    expect(explainSmtpError(new SmtpServerNotAllowedError("Couldn't find it.", true), account)).toEqual({ message: "Couldn't find it.", retryable: true });
   });
 
   it("busy servers and lost connections are retried; refusals aren't", () => {

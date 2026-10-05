@@ -1540,6 +1540,19 @@ document; bigger is refused before sending); 200 with the message id is
 "sent". Each sign-in state records its provider, so one can't be finished at
 the other's callback. Disconnecting a mailbox falls back to the method in use,
 then SMTP, then the other mailbox.
+An organisation's SMTP server is checked when it's saved and again before
+each connection (`checkSmtpServer` in `settings.ts`, #145), since
+organisation admins aren't server admins: the port must be 25, 465, 587 or
+2525, and the name is resolved with the IMAP mailboxes' check
+(`analytics/mail-host.ts`) so every address must be on the internet, not
+loopback, private or link-local; the connection then goes to an address that
+was checked (TLS still checks the certificate against the name), so a name
+re-pointed in between can't slip through. A server admin can turn on "Allow
+local mail relay" (Server settings > Email, or `email local-relay --on`; the
+`local_mail_relay` server setting, audited), which skips the address check
+and allows a connection without encryption to localhost; with it off, no
+connection is unencrypted. Error messages don't repeat what the SMTP server
+said; that goes to the server's log.
 `sender.ts` hides which it is from the job and the test email. Every email
 has an HTML part (`html.ts`: escaped text, a summary box, the contact
 details, and the logo as an inline `cid:` attachment, no remote images)

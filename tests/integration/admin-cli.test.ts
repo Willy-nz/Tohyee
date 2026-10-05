@@ -237,6 +237,20 @@ describeWithDatabase("admin CLI", () => {
     expect((await cli(["email", "show"])).stdout).toBe("Email isn't set up.");
   });
 
+  it("email: turns the local mail relay switch on and off (#145), audited as the command line", async () => {
+    expect((await cli(["email", "local-relay"])).stdout).toBe("Allow local mail relay: off");
+    expect((await cli(["email", "local-relay", "--on"])).stdout).toMatch(/^Local mail relay allowed/);
+    expect((await cli(["email", "local-relay"])).stdout).toBe("Allow local mail relay: on");
+    expect((await cli(["email", "local-relay", "--off"])).stdout).toMatch(/^Local mail relay not allowed/);
+    const audit = await coreQuery<{ actor_email: string; details: { allowed: boolean } }>(
+      "select actor_email, details from admin_audit_events where event_type = 'server.local_mail_relay_updated' order by id",
+    );
+    expect(audit.rows).toEqual([
+      { actor_email: "cli", details: { allowed: true } },
+      { actor_email: "cli", details: { allowed: false } },
+    ]);
+  });
+
   it("the bundled tool (tohyee-admin.cjs, shipped in the Docker image) runs with plain Node", async () => {
     await run(process.execPath, ["scripts/build-admin.mjs"], { timeout: 60_000 });
     const bundled = [path.join(process.cwd(), "dist", "tohyee-admin.cjs")];

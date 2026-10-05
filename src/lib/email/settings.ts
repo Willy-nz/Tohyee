@@ -1,6 +1,8 @@
+import { checkMailHost } from "@/lib/analytics/mail-host";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { headerText, optionalAddress } from "@/lib/email/addresses";
+import { localMailRelayAllowed } from "@/lib/email/local-relay";
 import {
   checkTemplate,
   DEFAULT_TEMPLATES,
@@ -26,8 +28,61 @@ import { optionalString, requireOneOf, requireString } from "@/lib/validation";
 export const SMTP_SECURITY = ["ssl", "starttls", "none"] as const;
 export type SmtpSecurity = (typeof SMTP_SECURITY)[number];
 
-/** Plain connections (no TLS) are only allowed to a mail relay on the server computer itself. */
+/**
+ * Plain connections (no TLS) are only allowed to a mail relay on the server
+ * computer itself, and only when a server admin has turned on "Allow local
+ * mail relay" (`local-relay.ts`).
+ */
 export const LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1"];
+
+/** The ports mail is submitted on. Anything else is refused, so the setting can't be used to reach other services. */
+export const SMTP_PORTS = [25, 465, 587, 2525] as const;
+
+const ASK_SERVER_ADMIN =
+  'If your organisation really does send through a mail server on this computer or your local network, ask your Tohyee server admin to turn on "Allow local mail relay" in the server settings (Email).';
+
+/** The organisation's SMTP server isn't one Tohyee may connect to (#145): refused on save and before each connection. */
+export class SmtpServerNotAllowedError extends ValidationError {
+  readonly retryable: boolean;
+
+  constructor(message: string, retryable = false) {
+    super(message);
+    this.retryable = retryable;
+  }
+}
+
+/**
+ * Checks an SMTP server against the rules, and says where to connect: the
+ * port must be a mail port; without "Allow local mail relay" the name is
+ * resolved and every address must be on the internet (not loopback,
+ * private or link-local), and the connection goes to one of the addresses
+ * checked here, not to the name looked up again, so a name that is
+ * re-pointed in between can't slip through. With the switch on, the name
+ * is used as it is. Connections without encryption need the switch and a
+ * host on this computer. Looks up DNS and reads the server's settings, so
+ * it's never called inside a database transaction.
+ */
+export async function checkSmtpServer(server: { host: string; port: number; security: SmtpSecurity }): Promise<{ connectHost: string }> {
+  if (!(SMTP_PORTS as readonly number[]).includes(server.port)) {
+    throw new SmtpServerNotAllowedError(`Tohyee only sends email on port 465 (SSL/TLS), 587 (STARTTLS), 25 or 2525, not ${server.port}.`);
+  }
+  if (server.security === "none" && !LOCAL_HOSTS.includes(server.host)) {
+    throw new SmtpServerNotAllowedError(
+      `Connections without encryption are only allowed to a mail server on this computer (localhost), and only if your Tohyee server admin has turned on "Allow local mail relay". Choose SSL/TLS (usually port 465) or STARTTLS (usually port 587).`,
+    );
+  }
+  // Past here, a connection without encryption is to localhost, which the check below refuses unless the switch is on.
+  if (await localMailRelayAllowed()) return { connectHost: server.host };
+  const checked = await checkMailHost(server.host);
+  if (!checked.ok) {
+    if (checked.reason === "not_found") {
+      throw new SmtpServerNotAllowedError(`Tohyee couldn't find the email server ${server.host}. Check its name in Settings > Email, and that this server can reach the internet.`, true);
+    }
+    throw new SmtpServerNotAllowedError(`The email server ${server.host} is on this computer or its local network, which this Tohyee server doesn't allow. ${ASK_SERVER_ADMIN}`);
+  }
+  // IPv4 first, as nodemailer itself prefers when given a name.
+  return { connectHost: checked.addresses.find((address) => !address.includes(":")) ?? checked.addresses[0] };
+}
 
 /** How documents are sent: SMTP (with a password), or a Microsoft 365 / Outlook or Gmail / Google Workspace mailbox an admin signed in to. */
 export const SENDING_METHODS = ["smtp", "microsoft", "google"] as const;
@@ -228,12 +283,37 @@ function parsePort(input: unknown): number {
   if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535) {
     throw new ValidationError("The port must be a number such as 465 or 587.");
   }
+  if (!(SMTP_PORTS as readonly number[]).includes(port)) {
+    throw new ValidationError("The port must be 465 (SSL/TLS), 587 (STARTTLS), 25 or 2525.");
+  }
   return port;
+}
+
+const NO_SECRET_KEY =
+  "This server has no TOHYEE_SECRET_KEY, so it can't store an email password safely. A server admin needs to set it (the Windows installer does) and restart Tohyee.";
+
+const CHECKED = Symbol("checked SMTP server");
+
+/** An SMTP server that passed `checkSmtpServer`, made only by `prepareSmtpServer`. */
+export type CheckedSmtpServer = { host: string; port: number; security: SmtpSecurity; readonly [CHECKED]: true };
+
+/**
+ * Reads and checks the SMTP server an admin entered (host, port, security),
+ * before the transaction that saves it: the check looks the name up in DNS.
+ */
+export async function prepareSmtpServer(input: { host?: unknown; port?: unknown; security?: unknown }): Promise<CheckedSmtpServer> {
+  if (!secretsAvailable()) throw new UnavailableError(NO_SECRET_KEY);
+  const host = parseHost(input.host);
+  const port = parsePort(input.port);
+  const security = requireOneOf(input.security, "security", SMTP_SECURITY);
+  await checkSmtpServer({ host, port, security });
+  return { host, port, security, [CHECKED]: true };
 }
 
 /**
  * Saves the account (admins). A blank password keeps the saved one;
- * `clear: true` removes the whole setup.
+ * `clear: true` removes the whole setup. Saving SMTP details needs `server`
+ * from `prepareSmtpServer`, checked before the transaction.
  */
 export async function updateOrganisationEmailSettings(
   tx: OrgTx,
@@ -241,14 +321,12 @@ export async function updateOrganisationEmailSettings(
     fromName?: unknown;
     fromAddress?: unknown;
     replyTo?: unknown;
-    host?: unknown;
-    port?: unknown;
-    security?: unknown;
     username?: unknown;
     password?: unknown;
     clear?: unknown;
     sendingMethod?: unknown;
   },
+  server?: CheckedSmtpServer,
 ): Promise<OrganisationEmailSettings> {
   if (input.clear === true) {
     await tx.query("delete from organisation_email_settings");
@@ -273,19 +351,9 @@ export async function updateOrganisationEmailSettings(
     await writeAuditEvent(tx, { eventType: "email_settings.method_changed", entityType: "email_settings", entityId: "email", details: { sendingMethod: method, fromName, replyTo } });
     return getOrganisationEmailSettings(tx);
   }
-  if (!secretsAvailable()) {
-    throw new UnavailableError(
-      "This server has no TOHYEE_SECRET_KEY, so it can't store an email password safely. A server admin needs to set it (the Windows installer does) and restart Tohyee.",
-    );
-  }
-  const host = parseHost(input.host);
-  const port = parsePort(input.port);
-  const security = requireOneOf(input.security, "security", SMTP_SECURITY);
-  if (security === "none" && !LOCAL_HOSTS.includes(host)) {
-    throw new ValidationError(
-      "Connections without encryption are only allowed to a mail server on this computer (localhost). Choose SSL/TLS (usually port 465) or STARTTLS (usually port 587).",
-    );
-  }
+  if (!secretsAvailable()) throw new UnavailableError(NO_SECRET_KEY);
+  if (server?.[CHECKED] !== true) throw new Error("Check the SMTP server with prepareSmtpServer before saving it.");
+  const { host, port, security } = server;
   const username = requireString(input.username, "username", { maxLength: 254 });
   const fromAddress = optionalAddress(input.fromAddress, "The from address") ?? optionalAddress(username, "The from address");
   if (!fromAddress) throw new ValidationError("Enter the from address: the email address customers will see.");
