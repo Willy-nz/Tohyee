@@ -168,8 +168,10 @@ export async function renderDocumentPdf(doc: PrintedDocument, options: { logo?: 
     writer.text("How to pay", { bold: true });
     writer.text(text, { gap: 10 });
   }
-  if (doc.payNowUrl) {
-    const text = `Pay online by card: ${doc.payNowUrl}`;
+  if (doc.payNowUrl || doc.payPalUrl) {
+    const text = [doc.payNowUrl ? `Pay online by card: ${doc.payNowUrl}` : null, doc.payPalUrl ? `Pay with PayPal: ${doc.payPalUrl}` : null]
+      .filter(Boolean)
+      .join("\n");
     writer.ensure(writer.measure(text, CONTENT_WIDTH) + 16);
     writer.text("Pay now", { bold: true });
     writer.text(text, { gap: 10 });

@@ -1,6 +1,4 @@
-import { withOrganisation } from "@/lib/api/http";
 import { writeAuditEvent } from "@/lib/audit";
-import { roleAtLeast } from "@/lib/auth/roles";
 import { FEED_ACTOR } from "@/lib/bank/akahu/sync";
 import {
   createPaymentLink,
@@ -42,6 +40,7 @@ const MAX_NOTICE = 1000;
 
 export type OnlinePayment = {
   id: string;
+  provider: "stripe" | "paypal";
   sessionId: string;
   invoiceId: string | null;
   invoiceNumber: string | null;
@@ -89,8 +88,9 @@ type SettingsRow = {
   updated_by_email: string | null;
 };
 
-type PaymentRow = {
+export type PaymentRow = {
   id: string;
+  provider: "stripe" | "paypal";
   session_id: string;
   invoice_id: string | null;
   invoice_number: string | null;
@@ -105,14 +105,15 @@ type PaymentRow = {
   created_at: string;
 };
 
-const PAYMENT_SELECT = `
-  select p.id::text, p.session_id, p.invoice_id::text, i.invoice_number, p.provider_payment_id, p.currency_code, p.amount::text,
+export const PAYMENT_SELECT = `
+  select p.id::text, p.provider, p.session_id, p.invoice_id::text, i.invoice_number, p.provider_payment_id, p.currency_code, p.amount::text,
          p.paid_date::text, p.status, p.payment_id::text, p.notice, p.waiting_for_link, p.created_at
     from online_payments p left join sales_invoices i on i.id = p.invoice_id`;
 
-function toPayment(row: PaymentRow): OnlinePayment {
+export function toPayment(row: PaymentRow): OnlinePayment {
   return {
     id: row.id,
+    provider: row.provider,
     sessionId: row.session_id,
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
@@ -173,7 +174,7 @@ export async function enableOnlinePayments(tx: OrgTx): Promise<OnlinePaymentStat
   return getOnlinePaymentStatus(tx);
 }
 
-type LinkRow = {
+export type LinkRow = {
   id: string;
   invoice_id: string;
   provider_link_id: string;
@@ -184,7 +185,7 @@ type LinkRow = {
   created_at: string;
 };
 
-const LINK_COLUMNS = "id::text, invoice_id::text, provider_link_id, url, currency_code, amount::text, status, created_at";
+export const LINK_COLUMNS = "id::text, invoice_id::text, provider_link_id, url, currency_code, amount::text, status, created_at";
 
 /**
  * Switches off every open link (PN11), for turning payments off or
@@ -194,7 +195,7 @@ const LINK_COLUMNS = "id::text, invoice_id::text, provider_link_id, url, currenc
  */
 export async function closeAllPaymentLinks(organisation: OrganisationRecord, actor: Actor, reason: string): Promise<{ closed: number; failed: string[] }> {
   const { links, key } = await withOrganisationTransaction(organisation, actor, async (tx) => ({
-    links: (await tx.query<LinkRow>(`select ${LINK_COLUMNS} from invoice_payment_links where status = 'open' order by id`)).rows,
+    links: (await tx.query<LinkRow>(`select ${LINK_COLUMNS} from invoice_payment_links where provider = 'stripe' and status = 'open' order by id`)).rows,
     key: (await stripeConnection(tx))?.key ?? null,
   }));
   const failed: string[] = [];
@@ -230,7 +231,7 @@ export async function disableOnlinePayments(organisation: OrganisationRecord, ac
   return { status, failed };
 }
 
-async function closeLink(tx: OrgTx, linkId: string, reason: string): Promise<void> {
+export async function closeLink(tx: OrgTx, linkId: string, reason: string): Promise<void> {
   const closed = await tx.query<{ invoice_id: string; url: string }>(
     `update invoice_payment_links set status = 'closed', closed_reason = $2, closed_at = now() where id = $1 and status = 'open'
      returning invoice_id::text, url`,
@@ -276,10 +277,10 @@ async function payNowState(
 }
 
 async function openLink(tx: OrgTx, invoiceId: string): Promise<LinkRow | null> {
-  return (await tx.query<LinkRow>(`select ${LINK_COLUMNS} from invoice_payment_links where invoice_id = $1 and status = 'open'`, [invoiceId])).rows[0] ?? null;
+  return (await tx.query<LinkRow>(`select ${LINK_COLUMNS} from invoice_payment_links where provider = 'stripe' and invoice_id = $1 and status = 'open'`, [invoiceId])).rows[0] ?? null;
 }
 
-function linkMatches(link: LinkRow, invoice: { currencyCode: string; amountDue: string | null }): boolean {
+export function linkMatches(link: LinkRow, invoice: { currencyCode: string; amountDue: string | null }): boolean {
   return link.currency_code === invoice.currencyCode && invoice.amountDue !== null && cmp(dec(link.amount), dec(invoice.amountDue)) === 0;
 }
 
@@ -342,7 +343,7 @@ export async function ensurePaymentLink(organisation: OrganisationRecord, actor:
   const before = await withOrganisationTransaction(organisation, actor, async (tx) => {
     const state = await payNowState(tx, invoiceId);
     const link = await openLink(tx, invoiceId);
-    const count = Number((await tx.query<{ n: string }>("select count(*)::text as n from invoice_payment_links where invoice_id = $1", [invoiceId])).rows[0].n);
+    const count = Number((await tx.query<{ n: string }>("select count(*)::text as n from invoice_payment_links where provider = 'stripe' and invoice_id = $1", [invoiceId])).rows[0].n);
     const settings = await getOrganisationSettings(tx);
     return { state, link, count, organisationName: settings.displayName, key: (await stripeConnection(tx))?.key ?? null };
   });
@@ -398,26 +399,6 @@ export async function ensurePaymentLink(organisation: OrganisationRecord, actor:
   });
 }
 
-/**
- * Before an invoice is emailed or printed by a bookkeeper or admin (PN2):
- * makes sure its payment link exists, best effort. Viewers only see a link
- * that's already there.
- */
-export async function linkBeforeSending(
-  request: Request,
-  organisationId: unknown,
-  kind: unknown,
-  invoiceId: unknown,
-): Promise<void> {
-  if (kind !== "invoice" || invoiceId == null || invoiceId === "") return;
-  const found = await withOrganisation(request, organisationId, "viewer", async (_tx, { auth, membership }) => ({
-    organisation: membership.organisation,
-    actor: { userId: auth.user.id, email: auth.user.email },
-    allowed: roleAtLeast(membership.role, "bookkeeper"),
-  }));
-  if (found.allowed) await tryEnsurePaymentLink(found.organisation, found.actor, invoiceId);
-}
-
 /** Best-effort: the invoice's link, for emails and printing; a Stripe problem doesn't stop them (the link is left out). */
 export async function tryEnsurePaymentLink(organisation: OrganisationRecord, actor: Actor, invoiceId: unknown): Promise<void> {
   try {
@@ -452,7 +433,7 @@ export async function refreshInvoicePaymentLink(organisation: OrganisationRecord
 
 // ---------------------------------------------------------------- checking
 
-function dateIn(seconds: number, timeZone: string): string {
+export function dateIn(seconds: number, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(seconds * 1000));
 }
 
@@ -488,7 +469,8 @@ export function exactRate(amount: string, settled: string, baseScale: number): s
   return toPlainString(divide(dec(settled), dec(amount), 8));
 }
 
-type Recordable = {
+export type Recordable = {
+  provider: "stripe" | "paypal";
   sessionId: string;
   linkId: string | null;
   invoiceId: string;
@@ -505,7 +487,8 @@ type Recordable = {
  * a customer payment into the account linked to the balance it went to, or
  * a notice for a person. Returns what happened.
  */
-async function recordSession(organisation: OrganisationRecord, actor: Actor, item: Recordable, existingId: string | null): Promise<"recorded" | "notice" | "waiting"> {
+export async function recordSession(organisation: OrganisationRecord, actor: Actor, item: Recordable, existingId: string | null): Promise<"recorded" | "notice" | "waiting"> {
+  const provider = PROVIDERS[item.provider];
   const notice = async (text: string, waitingForLink = false) => {
     await withOrganisationTransaction(organisation, actor, async (tx) => {
       if (existingId) {
@@ -514,8 +497,8 @@ async function recordSession(organisation: OrganisationRecord, actor: Actor, ite
       }
       await tx.query(
         `insert into online_payments (session_id, link_id, invoice_id, provider_payment_id, currency_code, amount, paid_date, settled_currency,
-                                      settled_amount, waiting_for_link, status, notice)
-         values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9::numeric, $10, 'notice', $11) on conflict (session_id) do nothing`,
+                                      settled_amount, waiting_for_link, status, notice, provider)
+         values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9::numeric, $10, 'notice', $11, $12) on conflict (session_id) do nothing`,
         [
           item.sessionId,
           item.linkId,
@@ -528,6 +511,7 @@ async function recordSession(organisation: OrganisationRecord, actor: Actor, ite
           item.settledAmount,
           waitingForLink,
           text.slice(0, MAX_NOTICE),
+          item.provider,
         ],
       );
       await writeAuditEvent(tx, {
@@ -547,38 +531,38 @@ async function recordSession(organisation: OrganisationRecord, actor: Actor, ite
       );
       const found = invoiceRow.rows[0];
       const label = found?.invoice_number ?? `invoice #${item.invoiceId}`;
-      const money = `${item.currencyCode} ${item.amount}`;
+      const money = `${item.currencyCode} ${toFixedString(dec(item.amount), currencyMinorUnits(item.currencyCode))}`;
       if (!found || found.status !== "approved") {
         throw new NoticeOnly(
-          `A Stripe payment of ${money} arrived for ${label}, which is ${found ? found.status : "deleted"}. Refund it in Stripe, or record it as a payment or overpayment by hand.`,
+          `A ${provider.name} payment of ${money} arrived for ${label}, which is ${found ? found.status : "deleted"}. Refund it in ${provider.name}, or record it as a payment or overpayment by hand.`,
         );
       }
       const settledCurrency = item.settledCurrency ?? item.currencyCode;
       const settledAmount = item.settledAmount ?? item.amount;
       const linked = await tx.query<{ code: string }>(
-        "select a.code from stripe_links l join accounts a on a.id = l.account_id where l.active and l.currency_code = $1",
+        `select a.code from ${provider.linksTable} l join accounts a on a.id = l.account_id where l.active and l.currency_code = $1`,
         [settledCurrency],
       );
       const bank = linked.rows[0]?.code;
       if (!bank) {
-        throw new NoticeOnly(`A Stripe payment for ${label} (${money}) arrived, but no bank account is linked to Stripe's ${settledCurrency} balance.`, true);
+        throw new NoticeOnly(`A ${provider.name} payment for ${label} (${money}) arrived, but no bank account is linked to ${provider.name}'s ${settledCurrency} balance.`, true);
       }
       let exchangeRate: string | undefined;
       if (settledCurrency !== found.currency_code) {
         if (settledCurrency !== tx.baseCurrency) {
           throw new NoticeOnly(
-            `A Stripe payment for ${label} (${money}) went to Stripe's ${settledCurrency} balance, which isn't the invoice's currency or ${tx.baseCurrency}. Record it by hand.`,
+            `A ${provider.name} payment for ${label} (${money}) went to ${provider.name}'s ${settledCurrency} balance, which isn't the invoice's currency or ${tx.baseCurrency}. Record it by hand.`,
           );
         }
         exchangeRate = exactRate(item.amount, settledAmount, currencyMinorUnits(tx.baseCurrency));
       }
       const result = await recordPayment(tx, item.invoiceId, {
-        source: "stripe",
-        idempotencyKey: `stripe-${item.sessionId}`.slice(0, 120),
+        source: item.provider,
+        idempotencyKey: `${item.provider}-${item.sessionId}`.replace(/[^A-Za-z0-9._:-]/g, "-").slice(0, 120),
         paymentDate: item.paidDate,
         amount: item.amount,
         bankAccountCode: bank,
-        reference: `Stripe ${item.providerPaymentId ?? item.sessionId}`.slice(0, 100),
+        reference: `${provider.name} ${item.providerPaymentId ?? item.sessionId}`.slice(0, 100),
         ...(exchangeRate ? { exchangeRate } : {}),
       });
       const overpaid = cmp(dec(result.payment.overpaymentAmount), dec("0")) > 0;
@@ -606,25 +590,31 @@ async function recordSession(organisation: OrganisationRecord, actor: Actor, ite
       } else {
         await tx.query(
           `insert into online_payments (session_id, link_id, invoice_id, provider_payment_id, currency_code, amount, paid_date, settled_currency,
-                                        settled_amount, status, payment_id, notice)
-           values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9::numeric, 'recorded', $10, $11)`,
-          values,
+                                        settled_amount, status, payment_id, notice, provider)
+           values ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9::numeric, 'recorded', $10, $11, $12)`,
+          [...values, item.provider],
         );
       }
       await writeAuditEvent(tx, {
         eventType: "invoice.paid_online",
         entityType: "sales_invoice",
         entityId: item.invoiceId,
-        details: { provider: "stripe", amount: item.amount, currencyCode: item.currencyCode, paymentDate: item.paidDate, paymentId: result.payment.id, overpaid },
+        details: { provider: item.provider, amount: item.amount, currencyCode: item.currencyCode, paymentDate: item.paidDate, paymentId: result.payment.id, overpaid },
       });
       return "recorded" as const;
     });
   } catch (error) {
     if (error instanceof NoticeOnly) return notice(error.message, error.waitingForLink);
-    if (error instanceof HttpError) return notice(`A Stripe payment of ${item.currencyCode} ${item.amount} couldn't be recorded: ${error.message}`);
+    if (error instanceof HttpError) return notice(`A ${provider.name} payment of ${item.currencyCode} ${toFixedString(dec(item.amount), currencyMinorUnits(item.currencyCode))} couldn't be recorded: ${error.message}`);
     throw error;
   }
 }
+
+/** What differs between the providers when a payment is recorded. */
+const PROVIDERS = {
+  stripe: { name: "Stripe", linksTable: "stripe_links" },
+  paypal: { name: "PayPal", linksTable: "paypal_links" },
+} as const;
 
 class NoticeOnly extends Error {
   constructor(
@@ -651,11 +641,11 @@ export async function checkOnlinePayments(organisation: OrganisationRecord, acto
     await tx.query("update online_payment_settings set lease_until = now() + interval '10 minutes' where provider = 'stripe'");
     const links = await tx.query<LinkRow>(
       `select ${LINK_COLUMNS} from invoice_payment_links
-        where status = 'open' or closed_at > $1::timestamptz - make_interval(hours => ${RECHECK_CLOSED_HOURS}) order by id`,
+        where provider = 'stripe' and (status = 'open' or closed_at > $1::timestamptz - make_interval(hours => ${RECHECK_CLOSED_HOURS})) order by id`,
       [now.toISOString()],
     );
     const seen = await tx.query<{ id: string; session_id: string; status: string; waiting_for_link: boolean }>(
-      "select id::text, session_id, status, waiting_for_link from online_payments",
+      "select id::text, session_id, status, waiting_for_link from online_payments where provider = 'stripe'",
     );
     const waiting = await tx.query<{
       id: string;
@@ -671,7 +661,7 @@ export async function checkOnlinePayments(organisation: OrganisationRecord, acto
     }>(
       `select id::text, session_id, link_id::text, invoice_id::text, provider_payment_id, currency_code, amount::text, paid_date::text,
               settled_currency, settled_amount::text
-         from online_payments where status = 'notice' and waiting_for_link and dismissed_at is null`,
+         from online_payments where provider = 'stripe' and status = 'notice' and waiting_for_link and dismissed_at is null`,
     );
     return { links: links.rows, seen: seen.rows, waiting: waiting.rows, key: (await stripeConnection(tx))?.key ?? null, enabled: row.enabled };
   });
@@ -694,6 +684,7 @@ export async function checkOnlinePayments(organisation: OrganisationRecord, acto
           organisation,
           actor,
           {
+            provider: "stripe",
             sessionId: row.session_id,
             linkId: row.link_id,
             invoiceId: row.invoice_id,
@@ -723,6 +714,7 @@ export async function checkOnlinePayments(organisation: OrganisationRecord, acto
         const settled = settledOf(session);
         const currency = session.currency.toUpperCase();
         const item: Recordable = {
+          provider: "stripe",
           sessionId: session.id,
           linkId: link.id,
           invoiceId: link.invoice_id,
@@ -739,7 +731,7 @@ export async function checkOnlinePayments(organisation: OrganisationRecord, acto
     }
     // Links no longer right are switched off (PN3, PN5, PN10, question 5).
     const stale = await withOrganisationTransaction(organisation, actor, async (tx) => {
-      const open = (await tx.query<LinkRow>(`select ${LINK_COLUMNS} from invoice_payment_links where status = 'open' order by id`)).rows;
+      const open = (await tx.query<LinkRow>(`select ${LINK_COLUMNS} from invoice_payment_links where provider = 'stripe' and status = 'open' order by id`)).rows;
       const result: Array<{ link: LinkRow; reason: string }> = [];
       for (const link of open) {
         const state = await payNowState(tx, link.invoice_id);
@@ -799,7 +791,7 @@ export async function checkDueOnlinePayments(): Promise<{ checked: number; faile
         due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) => {
           const found = await tx.query(
             `select 1 from online_payment_settings s
-              where s.provider = 'stripe' and (s.enabled or exists (select 1 from invoice_payment_links where status = 'open'))
+              where s.provider = 'stripe' and (s.enabled or exists (select 1 from invoice_payment_links where provider = 'stripe' and status = 'open'))
                 and (s.lease_until is null or s.lease_until < now())
                 and exists (select 1 from stripe_connections where status = 'active')`,
           );

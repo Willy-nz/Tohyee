@@ -6,6 +6,7 @@ import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, dec, toFixedString } from "@/lib/money/decimal";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
 import { getPurchaseOrder } from "@/lib/purchase-orders/service";
+import { currentPayPalUrl } from "@/lib/payments/paypal";
 import { currentPaymentLinkUrl } from "@/lib/payments/stripe";
 import { getQuote } from "@/lib/quotes/service";
 import { type PrintKind, PRINT_KINDS, type TaxLabels, taxLabels } from "@/lib/documents/tax-invoice";
@@ -49,6 +50,8 @@ export type PrintedDocument = {
   paymentDetails: string | null;
   /** Invoices with Pay now (PN2): the Stripe payment link for the amount due. */
   payNowUrl: string | null;
+  /** Invoices with Pay with PayPal (PPN2): PayPal's page for its copy of the invoice. */
+  payPalUrl: string | null;
   /** Purchase orders only (PO8): where and when to deliver. */
   deliveryDate: string | null;
   deliveryAddress: string | null;
@@ -133,6 +136,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
       amountDue: approved ? invoice.amountDue : null,
       paymentDetails: approved ? settings.paymentDetails : null,
       payNowUrl: approved ? await currentPaymentLinkUrl(tx, invoice.id) : null,
+      payPalUrl: approved ? await currentPayPalUrl(tx, invoice.id) : null,
       ...NO_DELIVERY,
     };
   }
@@ -148,6 +152,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
       amountDue: null,
       paymentDetails: null,
       payNowUrl: null,
+      payPalUrl: null,
       ...NO_DELIVERY,
     };
   }
@@ -164,6 +169,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
       amountDue: null,
       paymentDetails: null,
       payNowUrl: null,
+      payPalUrl: null,
       deliveryDate: order.deliveryDate,
       deliveryAddress: order.deliveryAddress,
       deliveryInstructions: order.deliveryInstructions,
@@ -181,6 +187,7 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
     amountDue: null,
     paymentDetails: null,
     payNowUrl: null,
+    payPalUrl: null,
     ...NO_DELIVERY,
   };
 }

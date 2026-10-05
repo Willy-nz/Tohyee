@@ -146,6 +146,91 @@ export async function listTransactions(token: string, currency: string, start: D
   throw new PayPalError(0, "PayPal returned too many pages of transactions.");
 }
 
+// ---------------------------------------------------------------- invoices (PPN1-PPN10)
+
+async function invoicing<T>(token: string, method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+  const { status, data } = await send(`${PAYPAL_API}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      ...(body !== undefined ? { "Content-Type": "application/json", Prefer: "return=representation" } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (status === 401 || status === 403) {
+    throw new PayPalError(403, `PayPal won't let the app make invoices: ${messageOf(data, status)}. Give the app Invoicing in PayPal's developer dashboard.`);
+  }
+  if (status < 200 || status > 299) {
+    const details = Array.isArray(data.details) ? (data.details as Array<{ description?: unknown }>).map((entry) => entry.description).filter((text) => typeof text === "string") : [];
+    throw new PayPalError(status, [messageOf(data, status), ...details].join(" "));
+  }
+  return data as T;
+}
+
+export type PayPalInvoiceTransaction = { payment_id?: unknown; payment_date?: unknown; method?: unknown; type?: unknown; amount?: Money };
+
+export type PayPalInvoice = {
+  id: string;
+  status: string;
+  url: string | null;
+  transactions: PayPalInvoiceTransaction[];
+};
+
+function toInvoice(data: Record<string, unknown>): PayPalInvoice {
+  const detail = (data.detail ?? {}) as { metadata?: { recipient_view_url?: unknown } };
+  const payments = (data.payments ?? {}) as { transactions?: unknown };
+  const id = typeof data.id === "string" ? data.id : null;
+  if (!id) throw new PayPalError(0, "PayPal didn't return the invoice.");
+  const url = detail.metadata?.recipient_view_url;
+  return {
+    id,
+    status: typeof data.status === "string" ? data.status : "UNKNOWN",
+    url: typeof url === "string" && url.startsWith("https://") ? url : null,
+    transactions: Array.isArray(payments.transactions) ? (payments.transactions as PayPalInvoiceTransaction[]) : [],
+  };
+}
+
+/**
+ * Makes a PayPal invoice for one Tohyee invoice (PPN2): one item for the
+ * amount due, partial payments off, no customer email (PayPal never emails
+ * them); then makes it payable without sending it, and returns it with the
+ * customer's link (`recipient_view_url`).
+ */
+export async function createPayableInvoice(
+  token: string,
+  input: { invoiceNumber: string; currency: string; amount: string; invoiceDate: string },
+): Promise<PayPalInvoice> {
+  const created = await invoicing<Record<string, unknown>>(token, "POST", "/v2/invoicing/invoices", {
+    detail: { invoice_number: input.invoiceNumber.slice(0, 25), currency_code: input.currency, invoice_date: input.invoiceDate },
+    items: [{ name: `Invoice ${input.invoiceNumber}`.slice(0, 200), quantity: "1", unit_amount: { currency_code: input.currency, value: input.amount } }],
+    configuration: { allow_partial_payment: false, allow_tip: false },
+  });
+  const id =
+    typeof created.id === "string"
+      ? created.id
+      : typeof created.href === "string"
+        ? created.href.split("/").pop()!
+        : Array.isArray(created.links)
+          ? String((created.links as Array<{ rel?: unknown; href?: unknown }>).find((link) => link.rel === "self")?.href ?? "").split("/").pop()
+          : "";
+  if (!id) throw new PayPalError(0, "PayPal didn't say which invoice it made.");
+  await invoicing(token, "POST", `/v2/invoicing/invoices/${encodeURIComponent(id)}/send`, { send_to_recipient: false, send_to_invoicer: false });
+  const invoice = await getPayPalInvoice(token, id);
+  if (!invoice.url) throw new PayPalError(0, "PayPal didn't give a link to pay the invoice.");
+  return invoice;
+}
+
+/** A PayPal invoice's status and payments (PPN3). */
+export async function getPayPalInvoice(token: string, id: string): Promise<PayPalInvoice> {
+  return toInvoice(await invoicing<Record<string, unknown>>(token, "GET", `/v2/invoicing/invoices/${encodeURIComponent(id)}`));
+}
+
+/** Cancels a PayPal invoice without telling the customer (PPN5, PPN9). */
+export async function cancelPayPalInvoice(token: string, id: string): Promise<void> {
+  await invoicing(token, "POST", `/v2/invoicing/invoices/${encodeURIComponent(id)}/cancel`, { send_to_recipient: false, send_to_invoicer: false });
+}
+
 /** Turns a PayPal failure into a message for the person who asked. */
 export function payPalProblem(error: unknown): Error {
   if (error instanceof PayPalError)

@@ -1,7 +1,7 @@
 import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { prepareDocumentEmail } from "@/lib/email/documents";
 import { statementFromParams } from "@/lib/email/params";
-import { linkBeforeSending } from "@/lib/payments/stripe";
+import { linkBeforeSending } from "@/lib/payments/links";
 
 /**
  * GET ?kind=invoice|credit_note|quote|purchase_order|statement&id=: what the

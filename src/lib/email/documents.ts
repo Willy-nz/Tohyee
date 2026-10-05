@@ -181,6 +181,7 @@ export async function loadEmailSubject(
       "amount due": printed.amountDue === null ? null : formatMoney(printed.amountDue),
       reference: printed.reference,
       "payment link": printed.payNowUrl,
+      "paypal link": printed.payPalUrl,
     },
     statement: null,
     printed,
@@ -206,9 +207,12 @@ export type PreparedEmail = {
 };
 
 /** The invoice's Pay now link (PN2), added to the message unless the template already has it. */
-function withPayNow(body: string, url: string | null): string {
-  if (!url || body.includes(url)) return body;
-  return `${body.trimEnd()}\n\nPay now by card: ${url}`;
+function withPayNow(body: string, url: string | null, payPalUrl: string | null): string {
+  const lines = [
+    url && !body.includes(url) ? `Pay now by card: ${url}` : null,
+    payPalUrl && !body.includes(payPalUrl) ? `Pay with PayPal: ${payPalUrl}` : null,
+  ].filter(Boolean);
+  return lines.length ? `${body.trimEnd()}\n\n${lines.join("\n")}` : body;
 }
 
 /** What the email dialog starts with: the contact's address and the filled-in template. */
@@ -240,7 +244,7 @@ export async function prepareDocumentEmail(tx: OrgTx, input: { kind?: unknown; i
     to: subject.defaultTo,
     cc: [],
     subject: headerText(fillTemplate(template.subject, subject.values), MAX_SUBJECT_LENGTH),
-    body: withPayNow(fillTemplate(template.body, subject.values), subject.printed?.payNowUrl ?? null),
+    body: withPayNow(fillTemplate(template.body, subject.values), subject.printed?.payNowUrl ?? null, subject.printed?.payPalUrl ?? null),
     attachmentName: subject.attachmentName,
     label: subject.label,
     contactName: subject.contactName,

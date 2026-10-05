@@ -3099,3 +3099,38 @@ think is best").
        ([dark](screenshots/pay-now-invoice-dark.png), [phone](screenshots/pay-now-invoice-phone.png))
        and an invoice paid online ([light](screenshots/pay-now-paid-light.png)).
 
+### Pay with PayPal (decisions 420-423)
+
+420. **Pay with PayPal uses PayPal's own invoices** (examples PPN1-PPN10,
+     approved by Jess on 5 Oct 2026; tenant migration 0099), because PayPal's
+     payment links API documents no way to find the payments made through a
+     link. Tohyee makes a PayPal invoice in the organisation's own account
+     with the invoice's number, one item for the amount due, partial
+     payments and tips off, and no customer address, then makes it payable
+     without sending it (`send_to_recipient` false), so PayPal never emails
+     the customer; the link is its `recipient_view_url`. PayPal keeps a
+     cancelled invoice's number, so a replacement is numbered INV-0012-2.
+     The app needs Invoicing; without it, emails and printing go ahead
+     without the link and Copy shows PayPal's message. Checked against
+     PayPal's developer documentation on 5 Oct 2026; not tried with a real
+     PayPal account.
+421. **Only invoices in a currency whose PayPal balance is linked offer it**
+     (question 2), and the payment goes into that bank account in the
+     invoice's currency; Tohyee never guesses a conversion rate. With Stripe
+     also on, emails and PDFs show both links (question 3).
+422. **PayPal payments are recorded by the same code as Stripe's** (decision
+     417): each new transaction on an open (or recently closed) PayPal
+     invoice, once by its `payment_id`, dated its `payment_date`, reference
+     "PayPal" and the id. Payments typed into PayPal by hand (`type`
+     EXTERNAL) are left out. Overpayments, notices and dismissing them are as
+     Stripe's (question 5).
+423. **A PayPal invoice no longer right is cancelled** without notifying
+     anyone (the amount due changed, the invoice paid or voided, Pay now left
+     off or turned off, PayPal disconnected), unless PayPal has already
+     finished with it (paid, cancelled or refunded), when Tohyee just closes
+     its link. Checks run every 15 minutes and with Check now, alongside
+     Stripe's; `TOHYEE_ONLINE_PAYMENTS_SCHEDULER=off` turns both off.
+     - Screenshots: Settings, Online payments with both on ([dark](screenshots/pay-with-paypal-settings-dark.png),
+       [phone](screenshots/pay-with-paypal-settings-phone.png)) and an invoice's Stripe and PayPal links
+       ([light](screenshots/pay-with-paypal-invoice-light.png), [phone](screenshots/pay-with-paypal-invoice-phone.png)).
+
