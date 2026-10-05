@@ -8336,59 +8336,86 @@ Built (decisions 424-431, tenant migration 0100). Test:
 
 ## Cash flow forecast (examples not yet approved by Jess)
 
-Item 6 of the Xero add-ons plan, part 1, like Syft's and Xero's short-term
-cash flow: what's expected to come into and go out of the bank over the
-next 13 weeks, from what's already in the books. It **posts nothing** and
-stores nothing but the forecast items a person adds.
+Item 6 of the Xero add-ons plan, part 1. It works like NetSuite's Cash 360
+(and Xero's short-term cash flow): what's expected to come into and go out of
+the bank, worked out from what's already in the books. It **posts nothing**.
+The only thing it stores is the forecast items a person adds.
 
-How it works (proposed):
+How it works (proposed, following Cash 360):
 
-- **Start:** the ledger balance today (business time zone) of the bank
-  accounts chosen (all bank accounts by default; credit cards can be added).
-- **Weeks** run Monday to Sunday; week 1 is the week with today in it, and
-  there are 13 of them. Each week shows money in, money out, the net and
-  the closing balance, and the lowest closing balance is pointed out.
-- **Money in:** approved sales invoices with something due, on their due
-  date (overdue ones in week 1, marked overdue), for the amount still due
-  after payments and credit; and repeating invoices due to be made, on the
-  due date their template gives them, for their total.
-- **Money out:** approved bills the same way; repeating bills; and approved
-  expense claims still to be paid (no due date, so week 1).
-- **In another currency:** the amount due at the latest rate on or before
-  today (the exchange rates list, else the last rate used), never a guess;
-  with no rate it's left out and listed.
-- **Drafts** (invoices and bills) are left out unless "include drafts" is
-  ticked, and then they're marked.
-- **Forecast items** a person adds (bookkeepers): money in or out, a date
-  and an amount, once or every week or month until a date, e.g. "GST
-  payment", "Wages". Payroll and GST aren't forecast automatically in this
-  part (questions 2 and 3).
-- Every amount opens the documents it's made of. Exported like other
-  reports (CSV, Excel, PDF).
+- **Start:** the ledger balance of the chosen bank accounts today, in the
+  business time zone. All bank accounts are chosen by default; credit cards
+  can be added.
+- **Periods:** days, weeks (Monday to Sunday) or months, counted from the
+  period with today in it, for 3 months by default (Cash 360's default),
+  up to 12. Each period shows money in, money out, the net and the closing
+  balance. The lowest closing balance is pointed out, and so is the first
+  period that closes below zero.
+- **Money in:**
+  - Approved sales invoices with something still due, after payments and
+    credit, on their due date. Overdue ones go in the first period, marked
+    overdue. Cash 360 also puts open invoices in by due date, and Tohyee
+    doesn't predict late payment.
+  - Repeating invoices due to be made, for their total, on the due date their
+    template gives them.
+  - Ticked: approved **sales orders**, for what's not yet invoiced, on their
+    expected date (else their order date) plus the customer's payment terms.
+- **Money out:**
+  - Approved bills, in the same way as invoices.
+  - Repeating bills.
+  - Approved expense claims still to be paid. They have no due date, so they
+    go in the first period.
+  - Ticked: approved **purchase orders**, for what's not yet billed, on their
+    delivery date (else their order date) plus the supplier's payment terms.
+- **Account averages** (Cash 360's account categories): for chosen accounts
+  (e.g. 6200 Wages, or GST), the average daily movement over the last 3 or 6
+  whole months. Each period gets that daily amount times its number of days,
+  rounded per period. This is how wages and GST get in without Tohyee
+  guessing pay days or IRD's due dates.
+- **Forecast items** (Cash 360's additional values; bookkeepers add them):
+  money in or out, with a date and an amount, once or repeating every week
+  or month until a date. For example, "GST payment".
+- **Other currencies:** an amount due in another currency is converted at
+  the latest rate on or before today: the exchange rates list's rate, or else
+  the last rate used. Tohyee never guesses a rate. With no rate, the amount
+  is left out and listed.
+- **Drafts:** draft invoices and bills are left out unless "include drafts"
+  is ticked, and then they're marked as drafts.
+- **Drill-down and export:** every amount opens the documents it's made of.
+  The forecast is exported like other reports (CSV, Excel, PDF).
 
-Setup: Kowhai Ltd, NZD, today is **Monday 5 Oct 2026**. 1000 Business
-account **12,000.00** and 1010 Savings **5,000.00**: start **17,000.00**.
-Weeks: week 1 is 5-11 Oct, week 2 12-18 Oct, ... week 13 28 Dec-3 Jan.
-USD rate on the exchange rates list: 1.6500 NZD per USD from 1 Oct.
+Setup:
+
+- Kowhai Ltd, NZD. Today is **Monday 5 Oct 2026**.
+- Bank accounts: 1000 Business account **12,000.00** and 1010 Savings
+  **5,000.00**, so the forecast starts at **17,000.00**.
+- Weekly periods, 13 weeks: week 1 is 5-11 Oct, week 2 is 12-18 Oct, and so
+  on to week 13, 28 Dec-3 Jan.
+- The exchange rates list has a USD rate of 1.6500 NZD per USD from 1 Oct.
 
 - **CF1** Money in from invoices:
-  - INV-0101 Aroha Cafe, due 30 Sep, **2,300.00** due: week 1, overdue.
+  - INV-0101 Aroha Cafe, due 30 Sep, **2,300.00** still due: week 1,
+    marked overdue.
   - INV-0102 Kobe Ltd, due 15 Oct, **1,150.00**: week 2.
   - INV-0103 Pacific Co, USD 1,000.00 due 20 Oct: **1,650.00** at 1.6500,
     week 3.
   - INV-0104 Tui Ltd, total 2,000.00 with 500.00 paid, due 31 Oct:
     **1,500.00**, week 4.
-  - A voided invoice and a paid one aren't in it.
-- **CF2** Money out from bills and claims: K-301 Kauri, **460.00** due 9 Oct
-  (week 1); K-300 Kauri, **1,150.00** due 20 Oct (week 3); approved claim
-  CLAIM-12, **345.00** unpaid (week 1).
-- **CF3** Repeating documents: a repeating invoice to Aroha Cafe, 575.00 a
-  month from 1 Nov, due 20 days after: **575.00** on 21 Nov (week 7) and 21
-  Dec (week 12). A repeating bill for rent, 2,300.00 on the 1st, due the same
-  day: 1 Nov (week 4), 1 Dec (week 9), 1 Jan 2027 (week 13). A paused
-  template isn't in it; one that ends on 30 Nov only gives 1 Nov.
-- **CF4** A forecast item "GST payment", money out **3,200.00** on 28 Oct
-  (week 4), added by Mere; the history says who added and changed it.
+  - A voided invoice and a paid one aren't in the forecast.
+- **CF2** Money out from bills and claims:
+  - K-301 Kauri, **460.00** due 9 Oct: week 1.
+  - K-300 Kauri, **1,150.00** due 20 Oct: week 3.
+  - Approved claim CLAIM-12, **345.00** unpaid: week 1.
+- **CF3** Repeating documents:
+  - A repeating invoice to Aroha Cafe, 575.00 a month from 1 Nov, due 20
+    days after it's made: **575.00** on 21 Nov (week 7) and on 21 Dec
+    (week 12).
+  - A repeating bill for rent, 2,300.00 on the 1st of each month, due the
+    same day: 1 Nov (week 4), 1 Dec (week 9) and 1 Jan 2027 (week 13).
+  - A paused template isn't in the forecast. A template that ends on 30 Nov
+    gives only 1 Nov.
+- **CF4** Mere adds a forecast item "GST payment": money out, **3,200.00**
+  on 28 Oct (week 4). The history says who added and changed it.
 - **CF5** The forecast:
 
   | Week | In | Out | Closing |
@@ -8405,132 +8432,222 @@ USD rate on the exchange rates list: 1.6500 NZD per USD from 1 Oct.
   | 12 | 575.00 | 0.00 | 14,995.00 |
   | 13 (28 Dec-3 Jan) | 0.00 | 2,300.00 | **12,695.00** |
 
-  Lowest closing balance: **12,695.00**, week 13.
-- **CF6** With "include drafts": a draft invoice to Kobe for 400.00 due 8 Oct
-  adds 400.00 to week 1 (marked draft). A USD invoice when there's no USD
-  rate at all is left out and listed: "INV-0105 (USD 300.00): no USD
+  Lowest closing balance: **12,695.00**, in week 13. Shown by month instead,
+  the same amounts give October in 6,600.00 / out 5,155.00 (rent on 1 Nov is
+  in November).
+- **CF6** Account average for 6200 Wages over the last 3 months: July,
+  August and September 2026 (92 days) total 36,800.00, which is **400.00 a
+  day**. That's **2,800.00** out each week (12,400.00 in October by month).
+  Week 13 now closes at 12,695.00 - 36,400.00 = **-23,705.00**. The first
+  week below zero is week 6 (9-15 Nov), which closes at **-655.00**.
+- **CF7** "Include sales orders and purchase orders" ticked:
+  - SO-0004 to Kobe Ltd, 2,300.00 with 1,150.00 already invoiced, expected
+    1 Oct; Kobe's terms are 20th of the next month. **1,150.00** comes in on
+    20 Nov (week 7).
+  - PO-0007 from Kauri, 920.00 with nothing billed, delivery 14 Oct, with
+    supplier terms of 14 days. **920.00** goes out on 28 Oct (week 4).
+  - Both are marked as from orders.
+- **CF8** "Include drafts" ticked: a draft invoice to Kobe for 400.00 due 8
+  Oct adds 400.00 to week 1, marked as a draft. A USD invoice when there's
+  no USD rate at all is left out and listed: "INV-0105 (USD 300.00): no USD
   exchange rate to convert it."
-- **CF7** Viewers can see it; only bookkeepers add forecast items. The
-  connected AI (any level) can read it (`cash_flow_forecast`).
+- **CF9** Viewers can see the forecast; only bookkeepers add forecast items
+  and choose the accounts to average. The connected AI (any level) can read
+  it with `cash_flow_forecast`.
 
 ## Consolidation (examples not yet approved by Jess)
 
-Item 6, part 2, like Syft's consolidations: one profit and loss and balance
-sheet for several organisations on the same Tohyee server, with
-intercompany amounts eliminated. Jess's answer (5 Oct 2026): **only
-organisations on the same server, with eliminations; only people who are
-members of every organisation in it can see it.** It posts nothing in any
-organisation's books; elimination adjustments live only in the
-consolidation.
+Item 6, part 2. It works like NetSuite OneWorld and Syft's consolidations:
+one profit and loss and balance sheet for a group of organisations on the
+same Tohyee server. The organisations can be in **different currencies and
+have different year ends**. Everything is converted into the group's
+currency and intercompany amounts are eliminated.
+
+Jess's answers (5 Oct 2026):
+
+- Only organisations on the same server, with eliminations.
+- Only people who are members of every organisation in it can see it.
+- Organisations with different year ends and currencies can still be
+  consolidated, so one report covers the whole group across all countries,
+  as in NetSuite.
+
+A consolidation posts nothing in any organisation's books. Its exchange
+rates and elimination adjustments live only in the consolidation.
 
 How it works (proposed):
 
-- A **consolidation group** (name, organisations) is made by someone who is
-  an admin or owner of every organisation in it, and is seen by anyone who
-  is a member (viewer or above) of every one. Someone who stops being a
-  member of one stops seeing it.
-- **Same base currency and financial year end** in this part (question 5);
-  otherwise adding the organisation is refused and says why.
-- **Accounts are matched by code** across the organisations, shown with
-  the first organisation's name for the code (question 6). Each report has
-  a column per organisation, an eliminations column and the consolidated
-  total.
-- **Intercompany accounts:** in each organisation an admin marks accounts
-  that hold amounts with another group member (a loan, a current account,
-  management fees), naming the other organisation. Their balances are
-  eliminated. **What's owed between members** in accounts receivable and
-  payable is found from the contact each organisation links to the other
-  organisation, and eliminated too.
-- If the two sides don't agree (e.g. one side is 50.00 short), both are
-  still eliminated and the difference shows on its own line, "Intercompany
-  differences (check these)", with a warning, so the balance sheet
-  balances and nothing is hidden (question 7).
+- **The group:**
+  - A consolidation group has a name, a **parent organisation** and the other
+    organisations in it.
+  - It's made by someone who is an admin or owner of every organisation in
+    it.
+  - It's seen by anyone who is a member (viewer or above) of every one.
+    Someone who stops being a member of one stops seeing it.
+- **The group's currency and year:**
+  - The group reports in the parent's base currency, with the parent's year
+    end.
+  - Members with another year end are fine. Every report is worked out from
+    each member's ledger by date, so "this year" and "current year earnings"
+    always mean the group's year, whatever the member's own year end. (This
+    is how NetSuite lines subsidiaries' periods up to the parent's calendar.)
+- **Consolidation exchange rates** (NetSuite's consolidated exchange rates):
+  for each member currency, by month, an **average rate** and a **month-end
+  rate** (group currency per 1 unit of the member's currency).
+  - They're typed in or imported (question 4). Tohyee never fetches or
+    guesses them.
+  - A report that needs a month's rate that isn't there is refused, and the
+    refusal lists the missing months.
+- **Translation** (as NetSuite and IAS 21: current, average and historical
+  rates by account class):
+  - **Profit and loss:** each month at that month's average rate.
+  - **Assets and liabilities:** at the month-end rate of the report date.
+  - **Equity** (capital, drawings): each amount at the average rate of the
+    month it was posted (its historical rate).
+  - **Earnings:** the sum of the translated profit and loss.
+  - The difference left over is the **foreign currency translation reserve**,
+    on its own line in equity.
+- **Accounts:** they're matched by code across the organisations and shown
+  with the parent's name for the code. This is the nearest Tohyee can get to
+  NetSuite's one shared chart. Each report has a column per organisation (in
+  the group currency), an eliminations column and the consolidated total. A
+  member's column can also be shown in its own currency.
+- **Intercompany** (NetSuite's intercompany accounts, with "Eliminate
+  Intercompany Transactions" ticked):
+  - In each organisation, an admin marks the accounts that hold amounts with
+    another group member, naming that member.
+  - What members owe each other in accounts receivable and payable is found
+    from the contact each organisation links to the other organisation.
+  - All of these are eliminated.
+  - If the two sides don't agree, both are still eliminated. The difference
+    shows on its own line, "Intercompany differences (check these)", with a
+    warning, so the balance sheet still balances and nothing is hidden
+    (question 1). This includes differences from exchange rates.
 - **Elimination adjustments** (bookkeepers of every organisation): lines by
-  account code and organisation, with a date and a description, e.g. the
-  investment in a subsidiary against its share capital. They post nothing
-  in any organisation.
-- 100% owned members only: no minority interests (question 8).
+  account code and organisation, with a date and a description. For example,
+  the investment in a subsidiary against its share capital. They're in the
+  group currency and post nothing in any organisation.
+- **Ownership:** only wholly owned members are supported, so there's no
+  minority interest. Standard NetSuite doesn't work minority interest out
+  either; it's done there with journals or an add-on (question 2).
 
-Setup: **Kowhai Holdings Ltd** and **Kowhai Retail Ltd** on the same server,
-both NZD with a 31 March year end. Jess is owner of both; Mere is a
-bookkeeper of Retail only. Holdings lent Retail 10,000.00 (Holdings 1150
-Loan to Kowhai Retail; Retail 2150 Loan from Kowhai Holdings), invested
-4,000.00 in its shares (Holdings 1160 Investment in Kowhai Retail; Retail
-3000 Owner funds introduced 4,000.00), and invoices Retail a management fee
-of 1,000.00 + GST each month (Holdings 4150 Management fees; Retail 6250
-Management fees). October's fee, 1,150.00, is unpaid: Holdings' contact
-"Kowhai Retail Ltd" and Retail's contact "Kowhai Holdings Ltd" are linked to
-each other's organisation.
+Setup:
 
-- **CO1** Jess makes the group "Kowhai group" with both. Mere can't see it
-  (she isn't a member of Holdings); a viewer of both can. A NZD organisation
-  with a 30 June year end, or an AUD one, is refused.
-- **CO2** Holdings marks 1150 and 4150 as intercompany with Retail; Retail
+- **Kowhai Holdings Ltd** (the parent): NZD, 31 March year end.
+- **Kowhai Retail Ltd**: NZD, 31 March year end.
+- **Kowhai Pty Ltd**: AUD, **30 June** year end.
+- All three are on the same server.
+- Jess is the owner of all three. Mere is a bookkeeper of Retail only.
+- Holdings and Retail:
+  - Holdings lent Retail 10,000.00 (Holdings 1150 Loan to Kowhai Retail;
+    Retail 2150 Loan from Kowhai Holdings).
+  - Holdings invested 4,000.00 in Retail's shares (Holdings 1160 Investment
+    in Kowhai Retail; Retail 3000 Owner funds introduced 4,000.00).
+  - Holdings invoices Retail a management fee of 1,000.00 + GST each month
+    (Holdings 4150 Management fees; Retail 6250 Management fees).
+  - October's fee, 1,150.00, is unpaid. Holdings' contact "Kowhai Retail
+    Ltd" and Retail's contact "Kowhai Holdings Ltd" are linked to each
+    other's organisation.
+- Kowhai Pty Ltd started on 1 Sep 2026, when AUD 9,000.00 of capital was
+  paid in (3000). In October it sold AUD 5,000.00 (4000) and spent
+  AUD 3,000.00 (6200), all through its bank.
+- Consolidation rates, NZD per AUD: September average 1.1000 and month-end
+  1.1000; October average 1.1200 and month-end 1.1500.
+
+- **CO1** Jess makes "Kowhai group" with Holdings as the parent, so it
+  reports in NZD with a 31 March year end.
+  - Kowhai Pty Ltd joins although its currency (AUD) and year end
+    (30 June) differ.
+  - Mere can't see the group, because she isn't a member of Holdings. A
+    viewer of all three can.
+  - Someone who isn't an admin of Kowhai Pty Ltd can't add it.
+- **CO2** Holdings marks 1150 and 4150 as intercompany with Retail. Retail
   marks 2150 and 6250 as intercompany with Holdings.
-- **CO3** Consolidated profit and loss, October 2026:
+- **CO3** Kowhai Pty Ltd's October profit and loss, translated at the
+  October average 1.1200:
+  - Sales AUD 5,000.00 = **5,600.00**.
+  - Wages AUD 3,000.00 = **3,360.00**.
+  - Net profit AUD 2,000.00 = **2,240.00**.
+  - With no October rates entered, the report is refused: "Enter the AUD
+    rates for October 2026 (average and month-end)."
+- **CO4** Consolidated profit and loss, October 2026 (NZD):
 
-  | Account | Holdings | Retail | Eliminations | Consolidated |
-  | --- | ---: | ---: | ---: | ---: |
-  | 4000 Sales | | 20,000.00 | | 20,000.00 |
-  | 4150 Management fees | 1,000.00 | | -1,000.00 | 0.00 |
-  | 5000 Cost of goods sold | | 8,000.00 | | 8,000.00 |
-  | 6010 Accounting fees | 200.00 | | | 200.00 |
-  | 6200 Wages and salaries | | 6,000.00 | | 6,000.00 |
-  | 6250 Management fees | | 1,000.00 | -1,000.00 | 0.00 |
-  | **Net profit** | **800.00** | **5,000.00** | **0.00** | **5,800.00** |
+  | Account | Holdings | Retail | Pty (NZD) | Eliminations | Consolidated |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | 4000 Sales | | 20,000.00 | 5,600.00 | | 25,600.00 |
+  | 4150 Management fees | 1,000.00 | | | -1,000.00 | 0.00 |
+  | 5000 Cost of goods sold | | 8,000.00 | | | 8,000.00 |
+  | 6010 Accounting fees | 200.00 | | | | 200.00 |
+  | 6200 Wages and salaries | | 6,000.00 | 3,360.00 | | 9,360.00 |
+  | 6250 Management fees | | 1,000.00 | | -1,000.00 | 0.00 |
+  | **Net profit** | **800.00** | **5,000.00** | **2,240.00** | **0.00** | **8,040.00** |
 
-- **CO4** Consolidated balance sheet at 31 Oct 2026, before adjustments:
-  Holdings: 1000 bank 4,800.00, 1100 receivable 1,150.00 (all from Retail),
-  1150 loan 10,000.00, 1160 investment 4,000.00 = 19,950.00; GST 150.00,
-  3000 19,000.00, current year earnings 800.00. Retail: bank 17,150.00, 1400
-  inventory 3,000.00 = 20,150.00; 2000 payable 1,150.00 (all to Holdings),
-  2150 loan 10,000.00, 3000 4,000.00, current year earnings 5,000.00.
-  Eliminated: the loan (10,000.00 each side) and what's owed (1,150.00 each
-  side). Consolidated: bank **21,950.00**, inventory **3,000.00**,
-  investment **4,000.00** = **28,950.00**; GST **150.00**; 3000
-  **23,000.00**; current year earnings **5,800.00** = **28,950.00**.
-- **CO5** Jess adds the elimination adjustment "Investment in Retail" at 31
-  Oct 2026: Dr Retail 3000 4,000.00 / Cr Holdings 1160 4,000.00. The
-  consolidated balance sheet is now assets **24,950.00** = GST 150.00 + 3000
-  **19,000.00** + earnings **5,800.00**. Refused: an adjustment that doesn't
-  balance, an account code an organisation doesn't have, by Mere (not a
-  bookkeeper of Holdings). Nothing is posted in either organisation.
-- **CO6** If Retail had recorded the loan as 9,950.00 (50.00 put elsewhere),
-  both sides are still eliminated and "Intercompany differences (check
-  these)" shows **50.00** with "Holdings 1150 10,000.00 and Retail 2150
-  9,950.00 don't agree".
-- **CO7** The connected AI can't read a consolidation (its key is for one
-  organisation; question 9).
+- **CO5** Kowhai Pty Ltd's balance sheet at 31 Oct 2026, translated:
+  - Bank AUD 11,000.00 at the month-end rate 1.1500 = **12,650.00**.
+  - Capital AUD 9,000.00 at September's average 1.1000 (the month it was
+    paid in) = **9,900.00**.
+  - Current year earnings 2,240.00 (CO3; no profit or loss in September).
+  - Foreign currency translation reserve 12,650.00 - 9,900.00 - 2,240.00 =
+    **510.00**.
+  - Its own year started on 1 July, but in the group, "current year" means
+    the group's year, from 1 April 2026.
+- **CO6** Consolidated balance sheet at 31 Oct 2026, before adjustments:
+  - Holdings: 1000 bank 4,800.00, 1100 receivable 1,150.00 (all from
+    Retail), 1150 loan 10,000.00 and 1160 investment 4,000.00, totalling
+    19,950.00; GST 150.00, 3000 19,000.00 and current year earnings 800.00.
+  - Retail: bank 17,150.00 and 1400 inventory 3,000.00, totalling
+    20,150.00; 2000 payable 1,150.00 (all to Holdings), 2150 loan
+    10,000.00, 3000 4,000.00 and current year earnings 5,000.00.
+  - Kowhai Pty Ltd as in CO5.
+  - Eliminated: the loan (10,000.00 on each side) and what's owed (1,150.00
+    on each side).
+  - Consolidated assets: bank **34,600.00**, inventory **3,000.00** and
+    investment **4,000.00**, totalling **41,600.00**.
+  - Consolidated liabilities and equity: GST **150.00**, 3000
+    **32,900.00**, current year earnings **8,040.00** and foreign currency
+    translation reserve **510.00**, totalling **41,600.00**.
+- **CO7** Jess adds the elimination adjustment "Investment in Retail" at 31
+  Oct 2026: Dr Retail 3000 4,000.00 / Cr Holdings 1160 4,000.00.
+  - The consolidated balance sheet is now assets **37,600.00** = GST 150.00
+    + 3000 **28,900.00** + earnings **8,040.00** + reserve **510.00**.
+  - Refused: an adjustment that doesn't balance; an account code an
+    organisation doesn't have; an adjustment by Mere, who isn't a bookkeeper
+    of Holdings.
+  - Nothing is posted in any organisation.
+- **CO8** Different year ends: the consolidated profit and loss for the
+  group's year to date, 1 Apr-31 Oct 2026, includes Kowhai Pty Ltd's
+  September and October (each at its own month's average rate), although
+  Pty's own year started on 1 July. A report for 1 Jul 2026-30 Jun 2027 can
+  be run too: any dates work, and only the "year" totals follow the
+  parent's year.
+- **CO9** Differences: if Retail had recorded the loan as 9,950.00, with
+  50.00 put elsewhere, both sides are still eliminated. "Intercompany
+  differences (check these)" shows **50.00**, with "Holdings 1150 10,000.00
+  and Retail 2150 9,950.00 don't agree".
+- **CO10** The connected AI can't read a consolidation, because its key is
+  for one organisation (question 3).
 
 **AI commentary** (item 6): the plan says "AI commentary as a suggestion
-only" (question 10).
+only". NetSuite 2025.1 writes explanations of variances and trends next to
+its reports with its own built-in AI. Tohyee has no built-in AI, only the
+connected one (decisions 339-348). Proposed: the connected AI can save a
+commentary on a forecast or consolidated report. It's shown as "Suggested by
+Jess's AI key Claude, not checked" until a person edits or accepts it, and
+it can be removed (question 5).
 
 **Questions for Jess (cash flow forecast and consolidation):**
-1. **Customers paying late:** forecast each invoice on its due date
-   (proposed), or on the date the customer usually pays (their average days
-   late)?
-2. **Payroll:** add wages as forecast items for now (proposed), or forecast
-   from each pay group's last pay run and pay frequency?
-3. **GST:** add GST payments as forecast items (proposed: Tohyee doesn't
-   guess IRD's due dates or the next return's amount), or forecast the
-   current period's GST on its due date?
-4. **Purchase orders and quotes:** leave them out (proposed), or include
-   approved purchase orders on their delivery date and accepted quotes?
-5. **Different base currencies or year ends in a consolidation:** refuse in
-   this part (proposed)?
-6. **Different charts of accounts:** match accounts by code (proposed), or
-   map each organisation's accounts to the group's own chart?
-7. **Intercompany amounts that don't agree:** show the difference on its
-   own line (proposed), or refuse to show the report until they agree?
-8. **Members not wholly owned:** not supported for now (proposed)?
-9. **The connected AI and consolidations:** leave it out (proposed: an AI
+1. **Intercompany amounts that don't agree:** show the difference on its
+   own line (proposed), or refuse to show the report until they agree? (We
+   couldn't find what NetSuite does here.)
+2. **Members not wholly owned:** not supported for now (proposed), as in
+   standard NetSuite?
+3. **The connected AI and consolidations:** leave it out (proposed: an AI
    key belongs to one organisation), or let a key read groups its owner can
    see?
-10. **AI commentary:** the connected AI can read the forecast and reports
-    already (decisions 339-348). Is a written commentary needed inside
-    Tohyee? Proposed: the connected AI can save a commentary on a forecast
-    or consolidated report, shown as "Suggested by Jess's AI key Claude, not
-    checked" until a person edits or accepts it, and removable.
+4. **Consolidation rates:** typed in or imported from a file (proposed), or
+   also offered from the parent organisation's exchange rates list (that has
+   month-end rates, but no averages)?
+5. **AI commentary:** saved as a labelled suggestion that a person accepts,
+   edits or removes (proposed)?
 
 ## Fixed assets (examples not yet approved by Jess)
 
