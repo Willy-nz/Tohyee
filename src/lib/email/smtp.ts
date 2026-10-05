@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { maybeSentMessage } from "@/lib/email/maybe-sent";
 import type { SendingAccount, SmtpAccount } from "@/lib/email/settings";
 
 /**
@@ -142,6 +143,14 @@ export function explainSmtpError(error: unknown, account: Pick<SmtpAccount, "hos
   }
   if (code === "EDNS" || /ENOTFOUND|EAI_AGAIN/.test(err.message)) {
     return { message: `Tohyee couldn't find the email server ${account.host}. Check its name in Settings > Email, and that this server can reach the internet.${saidPart}`, retryable: true };
+  }
+  // A timeout or dropped connection once the session had started (nodemailer says "CONN" whatever the stage) may
+  // have come after the message was handed over, so it isn't tried again automatically (#146). Not reaching the
+  // server at all ("Connection timeout", "Greeting never received", refused, not found) is safe to try again.
+  const neverConnected =
+    /^(Connection timeout|Greeting never received)$/.test(err.message) || /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH/.test(err.message);
+  if ((code === "ETIMEDOUT" || code === "ECONNECTION" || code === "ESOCKET") && !neverConnected && !/wrong version number|ssl3_get_record|tls/i.test(err.message)) {
+    return { message: maybeSentMessage(`the mailbox on ${where}`, `the connection ended before the server confirmed it.${saidPart}`), retryable: false };
   }
   if (code === "ETIMEDOUT") {
     return { message: `The email server ${where} didn't answer in time.${saidPart}`, retryable: true };

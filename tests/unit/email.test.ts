@@ -79,7 +79,14 @@ describe("SMTP errors in plain English", () => {
       retryable: true,
       message: expect.stringMatching(/^Tohyee couldn't connect to the email server smtp\.gmail\.com:465/),
     });
-    expect(explainSmtpError(error({ code: "ETIMEDOUT" }), account).retryable).toBe(true);
+    expect(explainSmtpError(error({ code: "ETIMEDOUT" }, "Connection timeout"), account).retryable).toBe(true);
+    expect(explainSmtpError(error({ code: "ETIMEDOUT" }, "Greeting never received"), account).retryable).toBe(true);
+    // Once the session started, a timeout or dropped connection may have come after the message went: not retried (#146).
+    expect(explainSmtpError(error({ code: "ETIMEDOUT" }, "Timeout"), account)).toMatchObject({
+      retryable: false,
+      message: expect.stringMatching(/^It isn't clear whether the email was sent: .* Check the Sent folder of the mailbox on smtp\.gmail\.com:465/),
+    });
+    expect(explainSmtpError(error({ code: "ECONNECTION" }, "Connection closed unexpectedly"), account).retryable).toBe(false);
     expect(explainSmtpError(error({ code: "EDNS" }, "getaddrinfo ENOTFOUND smtp.gmial.com"), account).message).toMatch(/couldn't find the email server/);
     expect(explainSmtpError(error({ code: "EENVELOPE", responseCode: 550 }), account)).toMatchObject({ retryable: false, message: expect.stringMatching(/refused the sender or recipient/) });
     expect(explainSmtpError(error({ code: "EMESSAGE", responseCode: 552, response: "552 Message too big" }), account)).toMatchObject({ retryable: false });
