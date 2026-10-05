@@ -29,7 +29,7 @@ const PRESETS: Record<Exclude<Preset, "other">, { host: string; port: number; se
 const SECURITY_LABELS: Record<SmtpSecurity, string> = {
   ssl: "SSL/TLS (usually port 465)",
   starttls: "STARTTLS (usually port 587)",
-  none: "None (only a mail server on this computer)",
+  none: "None (only a mail server on this computer, if a server admin allows it)",
 };
 
 function presetOf(host: string | null): Preset {
@@ -163,7 +163,7 @@ function AccountForm({ organisationId, settings, onSaved }: { organisationId: st
         <Field label="SMTP server">
           <input value={host} onChange={(event) => setHost(event.target.value)} disabled={preset !== "other"} required />
         </Field>
-        <Field label="Port">
+        <Field label="Port" hint="465, 587, 25 or 2525.">
           <input inputMode="numeric" value={port} onChange={(event) => setPort(event.target.value)} disabled={preset !== "other"} required />
         </Field>
         <Field label="Security">

@@ -12,6 +12,7 @@ import { createApprovalRule, listApprovalRules, moveApprovalRule, updateApproval
 import { approvalBudget, approveApprovalStep, declineApprovalStep, documentApproval, submitForApproval, withdrawApprovalRequest } from "@/lib/approvals/service";
 import type { ApprovalDocumentType, ApprovalRule } from "@/lib/approvals/types";
 import type { Role } from "@/lib/auth/roles";
+import { COMMAND_LINE_ADMIN } from "@/lib/audit";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { approveBill, createBill, deleteBill, getBill, updateBill } from "@/lib/bills/service";
 import { getBudget, listBudgets, setBudgetAmounts } from "@/lib/budgets/service";
@@ -19,7 +20,9 @@ import { createContact, type Contact } from "@/lib/contacts/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { processOrganisationOutbox } from "@/lib/email/outbox";
-import { updateOrganisationEmailSettings } from "@/lib/email/settings";
+import { updateLocalMailRelay } from "@/lib/email/local-relay";
+import { prepareSmtpServer, updateOrganisationEmailSettings } from "@/lib/email/settings";
+import { setSmtpPortForTests } from "@/lib/email/smtp";
 import { approveExpenseClaim, createExpenseClaim, declineExpenseClaim, getExpenseClaim, submitExpenseClaim } from "@/lib/expense-claims/service";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { getJournal, postJournal } from "@/lib/ledger/journals";
@@ -126,9 +129,13 @@ describeWithDatabase("approval workflows (AW1-AW17)", () => {
     });
     await new Promise<void>((resolve) => smtp.listen(0, "127.0.0.1", resolve));
     smtpPort = (smtp.server.address() as AddressInfo).port;
+    // Saved as an allowed mail port, sent to the test server's own; it runs on this computer, which a server admin allows (#145).
+    setSmtpPortForTests(smtpPort);
+    await updateLocalMailRelay(COMMAND_LINE_ADMIN, { allowed: true });
   });
 
   afterAll(async () => {
+    setSmtpPortForTests(null);
     await new Promise<void>((resolve) => smtp?.close(() => resolve()));
     await server?.teardown();
   });
@@ -467,9 +474,8 @@ describeWithDatabase("approval workflows (AW1-AW17)", () => {
   it("AW12: Tama's email has the bill and a link that needs signing in; another member sees who it's waiting for, with no buttons", async () => {
     const w = await setup();
     await w.overThousand();
-    await w.as(jess, (tx) =>
-      updateOrganisationEmailSettings(tx, { fromName: "Kowhai", fromAddress: SMTP_USER, host: "127.0.0.1", port: smtpPort, security: "none", username: SMTP_USER, password: SMTP_PASSWORD }),
-    );
+    const smtpServer = await prepareSmtpServer({ host: "127.0.0.1", port: 2525, security: "none" });
+    await w.as(jess, (tx) => updateOrganisationEmailSettings(tx, { fromName: "Kowhai", fromAddress: SMTP_USER, username: SMTP_USER, password: SMTP_PASSWORD }, smtpServer));
     const request = await w.submit(mere, "bill", (await w.bill(mere, { supplierInvoiceNumber: "K-300" })).id);
     const link = `${ORIGIN}/login?next=${encodeURIComponent(`/operations/purchases/approvals/${request.id}/in/${w.org}`)}`;
     const toTama = (await w.emails(request.id)).find((email) => email.to_email === tama.email)!;

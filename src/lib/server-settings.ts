@@ -57,3 +57,14 @@ export async function writeServerSetting<V, S>(
 export async function deleteServerSetting(client: DbClient, key: string): Promise<void> {
   await client.query("delete from server_settings where key = $1", [key]);
 }
+
+/** A setting with no secrets: works without TOHYEE_SECRET_KEY. */
+export async function writeServerValue<V>(client: DbClient, key: string, value: V, updatedByEmail: string): Promise<void> {
+  await client.query(
+    `insert into server_settings (key, value, secret_ciphertext, updated_by_email, updated_at)
+     values ($1, $2::jsonb, null, $3, now())
+     on conflict (key) do update set value = excluded.value, secret_ciphertext = null,
+                                     updated_by_email = excluded.updated_by_email, updated_at = now()`,
+    [key, JSON.stringify(value), updatedByEmail],
+  );
+}

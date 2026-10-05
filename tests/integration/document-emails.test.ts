@@ -3,11 +3,12 @@ import type { AddressInfo } from "node:net";
 import { simpleParser, type ParsedMail } from "mailparser";
 import { SMTPServer } from "smtp-server";
 import { extractText, getDocumentProxy } from "unpdf";
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import * as pdfRoute from "@/app/api/documents/pdf/route";
 import * as emailsRoute from "@/app/api/email/documents/route";
 import * as retryRoute from "@/app/api/email/documents/[emailId]/retry/route";
 import * as prepareRoute from "@/app/api/email/prepare/route";
+import * as localRelayRoute from "@/app/api/admin/email/local-relay/route";
 import * as settingsRoute from "@/app/api/email/settings/route";
 import * as testRoute from "@/app/api/email/settings/test/route";
 import * as statementsRoute from "@/app/api/email/statements/route";
@@ -19,6 +20,8 @@ import * as googleCallbackRoute from "@/app/api/email/google/callback/route";
 import * as googleConnectRoute from "@/app/api/email/google/connect/route";
 import * as googleDisconnectRoute from "@/app/api/email/google/disconnect/route";
 import * as logoRoute from "@/app/api/organisations/[organisationId]/logo/route";
+import { setMailHostResolverForTests } from "@/lib/analytics/mail-host";
+import { COMMAND_LINE_ADMIN } from "@/lib/audit";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createContact } from "@/lib/contacts/service";
 import { approveCreditNote, createCreditNote } from "@/lib/credit-notes/service";
@@ -28,7 +31,10 @@ import { createPerson } from "@/lib/crm/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import type { DocumentEmail, StatementRun, StatementRunPreview } from "@/lib/email/documents";
+import { updateLocalMailRelay } from "@/lib/email/local-relay";
 import { processOrganisationOutbox } from "@/lib/email/outbox";
+import { readSendingAccount, type SmtpAccount } from "@/lib/email/settings";
+import { openAccountTransport, setSmtpPortForTests } from "@/lib/email/smtp";
 import { approveInvoice, createInvoice, getInvoice } from "@/lib/invoices/service";
 import { getOrganisation } from "@/lib/organisations/registry";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
@@ -58,6 +64,8 @@ import {
 
 const SMTP_USER = "accounts@glimmers.test";
 const SMTP_PASSWORD = "app-password-1234";
+/** The saved port (one of the mail ports Tohyee allows); the transport is pointed at the test server's real port. */
+const SMTP_PORT = 2525;
 const noContext = undefined as unknown;
 
 type Received = { from: string; recipients: string[]; mail: ParsedMail };
@@ -121,9 +129,14 @@ describeWithDatabase("emailing documents", () => {
     });
     await new Promise<void>((resolve) => smtp.listen(0, "127.0.0.1", resolve));
     smtpPort = (smtp.server.address() as AddressInfo).port;
+    setSmtpPortForTests(smtpPort);
+    // The test SMTP server runs on this computer, which a server admin has to allow (#145).
+    await updateLocalMailRelay(COMMAND_LINE_ADMIN, { allowed: true });
   });
 
   afterAll(async () => {
+    setSmtpPortForTests(null);
+    setMailHostResolverForTests(null);
     await new Promise<void>((resolve) => smtp?.close(() => resolve()));
     await server?.teardown();
   });
@@ -195,7 +208,7 @@ describeWithDatabase("emailing documents", () => {
           fromAddress: SMTP_USER,
           replyTo: "jess@glimmers.test",
           host: "127.0.0.1",
-          port: smtpPort,
+          port: SMTP_PORT,
           security: "none",
           username: SMTP_USER,
           password: SMTP_PASSWORD,
@@ -242,7 +255,7 @@ describeWithDatabase("emailing documents", () => {
     // A blank password keeps the saved one.
     const kept = await call(settingsRoute.PUT, "/api/email/settings", {
       method: "PUT",
-      body: { organisationId: w.org, fromName: "Glimmers Ltd", host: "127.0.0.1", port: smtpPort, security: "none", username: SMTP_USER, password: "" },
+      body: { organisationId: w.org, fromName: "Glimmers Ltd", host: "127.0.0.1", port: SMTP_PORT, security: "none", username: SMTP_USER, password: "" },
     });
     expect(kept.json.settings).toMatchObject({ configured: true, fromName: "Glimmers Ltd", fromAddress: SMTP_USER });
 
@@ -257,12 +270,133 @@ describeWithDatabase("emailing documents", () => {
     const w = await setup();
     await call(settingsRoute.PUT, "/api/email/settings", {
       method: "PUT",
-      body: { organisationId: w.org, fromName: "Glimmers", host: "127.0.0.1", port: smtpPort, security: "none", username: SMTP_USER, password: "wrong" },
+      body: { organisationId: w.org, fromName: "Glimmers", host: "127.0.0.1", port: SMTP_PORT, security: "none", username: SMTP_USER, password: "wrong" },
     });
     const tested = await call(testRoute.POST, "/api/email/settings/test", { method: "POST", body: { organisationId: w.org, to: "me@glimmers.test" } });
     expect(tested.json.ok).toBe(false);
     expect(tested.json.error).toMatch(/didn't accept the username and password\. For Gmail, use an app password/);
     expect(tested.json.settings).toMatchObject({ lastTest: { ok: false } });
+  });
+
+  describe("the organisation's SMTP server (#145)", () => {
+    const relay = (allowed: boolean, cookie = ownerCookie) =>
+      call(localRelayRoute.PUT, "/api/admin/email/local-relay", { method: "PUT", cookie, body: { allowed } });
+    const saveSmtp = (org: string, server: { host: string; port: number; security: string }) =>
+      call(settingsRoute.PUT, "/api/email/settings", {
+        method: "PUT",
+        body: { organisationId: org, fromName: "Glimmers", fromAddress: SMTP_USER, username: SMTP_USER, password: SMTP_PASSWORD, ...server },
+      });
+    const names: Record<string, string[]> = {
+      "smtp.glimmers.test": ["203.0.113.10"],
+      "relay.internal.test": ["10.0.0.5"],
+      "metadata.internal.test": ["169.254.169.254"],
+      "mixed.glimmers.test": ["203.0.113.11", "192.168.1.20"],
+    };
+
+    beforeEach(() => {
+      setMailHostResolverForTests(async (host) => {
+        const found = names[host];
+        if (!found) throw new Error(`getaddrinfo ENOTFOUND ${host}`);
+        return found;
+      });
+    });
+
+    afterEach(async () => {
+      setMailHostResolverForTests(null);
+      await updateLocalMailRelay(COMMAND_LINE_ADMIN, { allowed: true });
+    });
+
+    it("only a server admin turns the local mail relay switch on or off, and it's audited", async () => {
+      expect((await call(localRelayRoute.GET, "/api/admin/email/local-relay")).json.localRelay).toMatchObject({ allowed: true });
+      expect((await relay(false, bookkeeperCookie)).status).toBe(403);
+      expect((await call(localRelayRoute.PUT, "/api/admin/email/local-relay", { method: "PUT", body: { allowed: "yes" } })).status).toBe(400);
+      const off = await relay(false);
+      expect(off.status).toBe(200);
+      expect(off.json.localRelay).toMatchObject({ allowed: false, updatedByEmail: owner.email });
+      const audit = await coreQuery<{ actor_email: string; details: { allowed: boolean } }>(
+        "select actor_email, details from admin_audit_events where event_type = 'server.local_mail_relay_updated' order by id desc limit 1",
+      );
+      expect(audit.rows[0]).toMatchObject({ actor_email: owner.email, details: { allowed: false } });
+    });
+
+    it("with the switch off, refuses servers on this computer or its network, plain connections and other ports when saving", async () => {
+      const w = await setup({ emailSetUp: false });
+      await relay(false);
+      for (const host of ["127.0.0.1", "localhost", "::1", "relay.internal.test", "metadata.internal.test", "mixed.glimmers.test", "169.254.169.254"]) {
+        const refused = await saveSmtp(w.org, { host, port: 587, security: "starttls" });
+        expect(refused.status).toBe(400);
+        expect(refused.json.error).toMatch(/on this computer or its local network.*ask your Tohyee server admin to turn on "Allow local mail relay"/);
+      }
+      const plainLocal = await saveSmtp(w.org, { host: "127.0.0.1", port: SMTP_PORT, security: "none" });
+      expect(plainLocal.status).toBe(400);
+      expect(plainLocal.json.error).toMatch(/127\.0\.0\.1 is on this computer or its local network.*"Allow local mail relay"/);
+      const plain = await saveSmtp(w.org, { host: "smtp.glimmers.test", port: SMTP_PORT, security: "none" });
+      expect(plain.status).toBe(400);
+      expect(plain.json.error).toMatch(/without encryption are only allowed .*"Allow local mail relay"/);
+      for (const port of [22, 5432, 6379, 2526]) {
+        const wrongPort = await saveSmtp(w.org, { host: "smtp.glimmers.test", port, security: "starttls" });
+        expect(wrongPort.status).toBe(400);
+        expect(wrongPort.json.error).toMatch(/The port must be 465 \(SSL\/TLS\), 587 \(STARTTLS\), 25 or 2525/);
+      }
+      const unknown = await saveSmtp(w.org, { host: "smtp.nowhere.test", port: 587, security: "starttls" });
+      expect(unknown.status).toBe(400);
+      expect(unknown.json.error).toMatch(/couldn't find the email server smtp\.nowhere\.test/);
+      expect((await w.as((tx) => tx.query("select 1 from organisation_email_settings"))).rowCount).toBe(0);
+
+      const saved = await saveSmtp(w.org, { host: "smtp.glimmers.test", port: 587, security: "starttls" });
+      expect(saved.status).toBe(200);
+      expect(saved.json.settings).toMatchObject({ host: "smtp.glimmers.test", port: 587, security: "starttls" });
+      // It connects to the address that was checked, and TLS checks the certificate against the name.
+      const account = (await w.as((tx) => readSendingAccount(tx))) as SmtpAccount;
+      const transport = await openAccountTransport(account);
+      const options = transport.options as { host?: string; tls?: { servername?: string } };
+      expect(options.host).toBe("203.0.113.10");
+      expect(options.tls?.servername).toBe("smtp.glimmers.test");
+      transport.close();
+    });
+
+    it("checks again before connecting: a saved local server, or a name now pointing at one, isn't used", async () => {
+      // Saved while the switch was on (as on servers from before #145), then the switch is turned off.
+      const w = await setup();
+      await relay(false);
+      const tested = await call(testRoute.POST, "/api/email/settings/test", { method: "POST", body: { organisationId: w.org } });
+      expect(tested.json.ok).toBe(false);
+      expect(tested.json.error).toMatch(/127\.0\.0\.1 is on this computer or its local network.*ask your Tohyee server admin to turn on "Allow local mail relay"/);
+      const invoice = await w.invoice();
+      await queue(w.org, { kind: "invoice", id: invoice.id, to: "accounts@kobe.test", subject: "Invoice", body: "Hello" });
+      expect(await w.send()).toMatchObject({ sent: 0, failed: 1 });
+      const [email] = await emailsFor(w.org, "invoice", invoice.id);
+      expect(email).toMatchObject({ status: "failed" });
+      expect(email.lastError).toMatch(/"Allow local mail relay"/);
+      expect(received).toHaveLength(0);
+
+      // A public name, re-pointed at the server's own network after it was saved.
+      const other = await setup({ emailSetUp: false });
+      expect((await saveSmtp(other.org, { host: "smtp.glimmers.test", port: 587, security: "starttls" })).status).toBe(200);
+      names["smtp.glimmers.test"] = ["127.0.0.1"];
+      try {
+        const repointed = await call(testRoute.POST, "/api/email/settings/test", { method: "POST", body: { organisationId: other.org } });
+        expect(repointed.json.ok).toBe(false);
+        expect(repointed.json.error).toMatch(/smtp\.glimmers\.test is on this computer or its local network/);
+      } finally {
+        names["smtp.glimmers.test"] = ["203.0.113.10"];
+      }
+      expect(received).toHaveLength(0);
+
+      // Turned back on, the saved local relay works again.
+      await relay(true);
+      expect((await call(testRoute.POST, "/api/email/settings/test", { method: "POST", body: { organisationId: w.org } })).json).toMatchObject({ ok: true });
+      expect(received).toHaveLength(1);
+    });
+
+    it("doesn't pass on what the SMTP server said", async () => {
+      const w = await setup();
+      mode = "reject";
+      const tested = await call(testRoute.POST, "/api/email/settings/test", { method: "POST", body: { organisationId: w.org } });
+      expect(tested.json.ok).toBe(false);
+      expect(tested.json.error).toMatch(/refused the sender or recipient address/);
+      expect(tested.json.error).not.toContain("No such user here");
+    });
   });
 
   it("emails an approved invoice with its PDF, from the organisation's account, and records it in the history", async () => {
@@ -378,7 +512,8 @@ describeWithDatabase("emailing documents", () => {
     let [email] = await emailsFor(w.org, "invoice", invoice.id);
     expect(email).toMatchObject({ status: "queued", attempts: 1 });
     expect(email.lastError).toMatch(/busy or is limiting how much this account sends.*try again later/);
-    expect(email.lastError).toContain("Too many messages, try again later");
+    // What the server said isn't passed on to the organisation (#145).
+    expect(email.lastError).not.toContain("Too many messages");
     mode = "ok";
     // Not due yet: nothing happens.
     expect(await w.send()).toMatchObject({ sent: 0, waiting: 1 });
@@ -797,7 +932,7 @@ describeWithDatabase("emailing documents", () => {
       // SMTP details can be saved as well (switching to SMTP), and switched back.
       const smtp = await call(settingsRoute.PUT, "/api/email/settings", {
         method: "PUT",
-        body: { organisationId: w.org, fromName: "Glimmers", fromAddress: SMTP_USER, host: "127.0.0.1", port: smtpPort, security: "none", username: SMTP_USER, password: SMTP_PASSWORD },
+        body: { organisationId: w.org, fromName: "Glimmers", fromAddress: SMTP_USER, host: "127.0.0.1", port: SMTP_PORT, security: "none", username: SMTP_USER, password: SMTP_PASSWORD },
       });
       expect(smtp.json.settings).toMatchObject({ sendingMethod: "smtp", configured: true, microsoft: { email: "accounts@glimmers.nz" } });
       const switched = await call(settingsRoute.PUT, "/api/email/settings", { method: "PUT", body: { organisationId: w.org, sendingMethod: "microsoft", replyTo: "jess@glimmers.test" } });
@@ -1016,7 +1151,7 @@ describeWithDatabase("emailing documents", () => {
       // SMTP details can be saved as well (switching to SMTP), and switched back.
       const smtp = await call(settingsRoute.PUT, "/api/email/settings", {
         method: "PUT",
-        body: { organisationId: w.org, fromName: "Glimmers", fromAddress: SMTP_USER, host: "127.0.0.1", port: smtpPort, security: "none", username: SMTP_USER, password: SMTP_PASSWORD },
+        body: { organisationId: w.org, fromName: "Glimmers", fromAddress: SMTP_USER, host: "127.0.0.1", port: SMTP_PORT, security: "none", username: SMTP_USER, password: SMTP_PASSWORD },
       });
       expect(smtp.json.settings).toMatchObject({ sendingMethod: "smtp", configured: true, google: { email: "accounts@glimmers.co.nz" } });
       const switched = await call(settingsRoute.PUT, "/api/email/settings", { method: "PUT", body: { organisationId: w.org, sendingMethod: "google", replyTo: "jess@glimmers.test" } });

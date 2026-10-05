@@ -16,6 +16,7 @@ import { normaliseEmail, parseDisplayName } from "@/lib/auth/service";
 import { resetTwoStep } from "@/lib/auth/two-step";
 import { closeAllPools } from "@/lib/db/pools";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
+import { getLocalMailRelay, updateLocalMailRelay } from "@/lib/email/local-relay";
 import { getEmailSettings, sendEmail, updateEmailSettings } from "@/lib/email/mailer";
 import {
   createOrganisation,
@@ -78,6 +79,8 @@ Email (for security alerts and two-step reset links)
                                             password: TOHYEE_EMAIL_PASSWORD or asked (blank keeps the saved one)
   email test --to EMAIL
   email clear
+  email local-relay [--on|--off]            let organisations send through a mail server on this
+                                            computer or its local network (off by default)
 
 Backups (encrypted with TOHYEE_SECRET_KEY: keep a copy of that key somewhere safe)
   backups status [--json]                   each database's latest and last good backup
@@ -451,6 +454,19 @@ async function email(command: string | undefined, args: string[]) {
   if (command === "clear") {
     await updateEmailSettings(COMMAND_LINE_ADMIN, { clear: true });
     console.log("Email settings removed.");
+    return;
+  }
+  if (command === "local-relay") {
+    if (!flag(args, "on") && !flag(args, "off")) {
+      console.log(`Allow local mail relay: ${(await getLocalMailRelay()).allowed ? "on" : "off"}`);
+      return;
+    }
+    const relay = await updateLocalMailRelay(COMMAND_LINE_ADMIN, { allowed: onOff(args) });
+    console.log(
+      relay.allowed
+        ? "Local mail relay allowed: organisations can send through a mail server on this computer or its local network."
+        : "Local mail relay not allowed: organisations' mail servers must be on the internet.",
+    );
     return;
   }
   throw new UsageError(`Unknown email command${command ? ` "${command}"` : ""}.`);
