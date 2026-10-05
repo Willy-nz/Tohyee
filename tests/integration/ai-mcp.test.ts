@@ -11,7 +11,10 @@ import { createBill, approveBill } from "@/lib/bills/service";
 import { createGroup } from "@/lib/consolidation/groups";
 import { createContact } from "@/lib/contacts/service";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
-import { coreQuery } from "@/lib/db/transactions";
+import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
+import { changeOwnPassword } from "@/lib/auth/service";
+import { resetTwoStep } from "@/lib/auth/two-step";
+import { updateUser } from "@/lib/users/admin";
 import { approveInvoice, createInvoice } from "@/lib/invoices/service";
 import { createJournalDraft } from "@/lib/ledger/journal-drafts";
 import { getOrganisation } from "@/lib/organisations/registry";
@@ -25,6 +28,7 @@ import {
   params,
   sessionCookieFor,
   startTestServer,
+  TEST_PASSWORD,
   type TestServer,
 } from "../helpers/test-server";
 
@@ -410,6 +414,39 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
     expect((await rpc(token2, "ping")).status).toBe(200);
     await coreQuery("update users set is_active = false where id = $1", [leaver.id]);
     expect((await rpc(token2, "ping")).status).toBe(401);
+  });
+
+  it("a person's keys stop when their password is changed or reset, or their two-step is reset (#132)", async () => {
+    const person = await createTestUser("keys-person@example.com");
+    await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", [ORG, person.id]);
+    // A fresh sign-in each time: changing the password signs the person out elsewhere.
+    const newKey = async (name: string) => {
+      const token = (await makeKey(await sessionCookieFor(person), name)).body.token as string;
+      expect((await rpc(token, "ping")).status).toBe(200);
+      return token;
+    };
+
+    const first = await newKey("Before the password change");
+    await changeOwnPassword(person.id, "0".repeat(64), { currentPassword: TEST_PASSWORD, newPassword: "a-brand-new-password-123" });
+    expect((await rpc(first, "ping")).status).toBe(401);
+
+    const second = await newKey("Before the two-step reset");
+    await withCoreTransaction((client) => resetTwoStep(client, person.id, { userId: owner.id, email: owner.email }, "admin"));
+    expect((await rpc(second, "ping")).status).toBe(401);
+
+    const third = await newKey("Before the admin reset");
+    await updateUser({ id: owner.id, email: owner.email }, person.id, { newPassword: "another-new-password-456" });
+    expect((await rpc(third, "ping")).status).toBe(401);
+
+    const audit = await coreQuery<{ event_type: string; ai: string | null }>(
+      "select event_type, details->>'aiKeysRevoked' as ai from admin_audit_events where entity_id = $1 and event_type in ('user.password_changed', 'user.two_step_reset', 'user.updated') order by id",
+      [person.id],
+    );
+    expect(audit.rows).toEqual([
+      { event_type: "user.password_changed", ai: "1" },
+      { event_type: "user.two_step_reset", ai: "1" },
+      { event_type: "user.updated", ai: "1" },
+    ]);
   });
 
   it("records when a key was last used, answers GET with 405, rejects bad JSON and unknown protocol versions", async () => {

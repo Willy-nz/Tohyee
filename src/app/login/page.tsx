@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
+import { configuredOrigin } from "@/lib/auth/origin";
 import { getPageSessionState } from "@/lib/auth/page-session";
 import { needsSetup } from "@/lib/auth/service";
 import { emailConfigured } from "@/lib/email/mailer";
@@ -28,7 +29,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         next={next}
         initialStage={state.stage}
         initialEmail={state.user.email}
-        emailResetAvailable={state.stage === "verify" && (await emailConfigured())}
+        emailResetAvailable={state.stage === "verify" && (await emailConfigured()) && (await configuredOrigin()) !== null}
       />
     );
   }

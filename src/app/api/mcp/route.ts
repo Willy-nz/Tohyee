@@ -13,8 +13,11 @@ import { authenticateAiToken } from "@/lib/ai/tokens";
  * key); session cookies are ignored, so a signed-in browser can't use it.
  * There's no same-origin check because AI services call it from elsewhere;
  * a cross-site browser page can't send the header without a CORS preflight,
- * which this route doesn't answer. Read-only: every tool runs in a read-only
- * transaction.
+ * which this route doesn't answer. Read tools run in a read-only
+ * transaction; a key with draft or post access can also use the write tools
+ * up to its level, as its owner (src/lib/ai/write-tools.ts). A key stops when
+ * revoked, when its owner leaves the organisation, or when its owner's
+ * password or two-step sign-in is reset (#132).
  */
 
 const limiter = new RequestLimiter(MCP_REQUESTS_PER_MINUTE);

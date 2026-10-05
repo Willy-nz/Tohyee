@@ -1,3 +1,4 @@
+import { revokeUserAiKeys } from "@/lib/ai/tokens";
 import { createHash, randomBytes } from "node:crypto";
 import QRCode from "qrcode";
 import { writeAdminAuditEvent } from "@/lib/audit";
@@ -118,42 +119,74 @@ async function insertBackupCodes(client: DbClient, userId: string): Promise<stri
   return codes;
 }
 
-/** Counts a wrong code against the pending session and the user; throws the message to show. */
+/**
+ * Counts this attempt against the pending session and the user **before** the
+ * code is checked (#130), in one statement each, so codes sent at once can't
+ * be tried more times than the limits allow. Refused while the account is
+ * locked or the session has used its tries. A right code resets the counts
+ * (fullSessionReplacing); a wrong one may then lock (recordFailure).
+ */
+async function claimAttempt(state: SessionState): Promise<void> {
+  const outcome = await withCoreTransaction(async (client) => {
+    const user = await client.query(
+      `update users set two_step_failed_count = two_step_failed_count + 1
+        where id = $1 and (locked_until is null or locked_until <= $3) and two_step_failed_count < $2`,
+      [state.user.id, MAX_USER_FAILURES, new Date()],
+    );
+    if (user.rowCount !== 1) return "locked" as const;
+    const session = await client.query(
+      "update sessions set two_step_failures = two_step_failures + 1 where id = $1 and two_step_pending and two_step_failures < $2",
+      [state.sessionId, MAX_SESSION_FAILURES],
+    );
+    if (session.rowCount !== 1) {
+      await client.query("delete from sessions where id = $1 and two_step_pending", [state.sessionId]);
+      return "ended" as const;
+    }
+    return "ok" as const;
+  });
+  if (outcome === "locked") throw new TooManyRequestsError("Too many wrong codes. Try again later.");
+  if (outcome === "ended") throw new UnauthorizedError("Too many wrong codes. Sign in with your password again.");
+}
+
+/** After a wrong code (already counted by claimAttempt): locks the account or ends the session at the limits; throws the message to show. */
 async function recordFailure(state: SessionState): Promise<never> {
   const result = await withCoreTransaction(async (client) => {
-    const session = await client.query<{ failures: number }>(
-      "update sessions set two_step_failures = two_step_failures + 1 where id = $1 returning two_step_failures as failures",
-      [state.sessionId],
+    const user = await client.query<{ count: number; locked: boolean }>(
+      "select two_step_failed_count as count, (locked_until is not null and locked_until > $2) as locked from users where id = $1 for update",
+      [state.user.id, new Date()],
     );
-    const user = await client.query<{ locked: boolean }>(
-      `update users
-          set two_step_failed_count = case when two_step_failed_count + 1 >= $2 then 0 else two_step_failed_count + 1 end,
-              locked_until = case when two_step_failed_count + 1 >= $2 then now() + ($3::int * interval '1 minute') else locked_until end
-        where id = $1
-        returning (locked_until is not null and locked_until > now()) as locked`,
-      [state.user.id, MAX_USER_FAILURES, LOCKOUT_MINUTES],
-    );
-    const locked = user.rows[0]?.locked ?? false;
+    const session = await client.query<{ failures: number }>("select two_step_failures as failures from sessions where id = $1", [state.sessionId]);
+    const lockNow = !user.rows[0]?.locked && (user.rows[0]?.count ?? MAX_USER_FAILURES) >= MAX_USER_FAILURES;
+    if (lockNow) {
+      await client.query("update users set two_step_failed_count = 0, locked_until = $3::timestamptz + ($2::int * interval '1 minute') where id = $1", [
+        state.user.id,
+        LOCKOUT_MINUTES,
+        new Date(),
+      ]);
+    }
+    const locked = lockNow || (user.rows[0]?.locked ?? false);
     const sessionFailures = session.rows[0]?.failures ?? MAX_SESSION_FAILURES;
     if (locked) {
       await client.query("delete from sessions where user_id = $1 and two_step_pending", [state.user.id]);
     } else if (sessionFailures >= MAX_SESSION_FAILURES) {
       await client.query("delete from sessions where id = $1", [state.sessionId]);
     }
-    return { locked, ended: locked || sessionFailures >= MAX_SESSION_FAILURES };
+    return { locked, alert: lockNow, ended: locked || sessionFailures >= MAX_SESSION_FAILURES };
   });
-  if (result.locked) {
+  if (result.alert) {
     await sendSecurityAlert(state.user.email, "sign-in locked after wrong codes", [
       `Someone entered your password correctly but then ${MAX_USER_FAILURES} wrong two-step codes, so your account is locked for ${LOCKOUT_MINUTES} minutes.`,
     ]);
-    throw new TooManyRequestsError(`Too many wrong codes. Your account is locked for ${LOCKOUT_MINUTES} minutes.`);
   }
+  if (result.locked) throw new TooManyRequestsError(`Too many wrong codes. Your account is locked for ${LOCKOUT_MINUTES} minutes.`);
   if (result.ended) throw new UnauthorizedError("Too many wrong codes. Sign in with your password again.");
   throw new ValidationError("That code isn't right. Check the time on your phone is set automatically, then try the newest code.");
 }
 
 async function fullSessionReplacing(client: DbClient, state: SessionState, meta: SessionMeta): Promise<Signed> {
-  await client.query("delete from sessions where id = $1", [state.sessionId]);
+  // Only one request can turn a pending session into a full one (#130).
+  const ended = await client.query("delete from sessions where id = $1", [state.sessionId]);
+  if (ended.rowCount !== 1) throw new UnauthorizedError("Sign in with your password again.");
   await client.query(
     "update users set failed_login_count = 0, two_step_failed_count = 0, locked_until = null, last_login_at = now() where id = $1",
     [state.user.id],
@@ -179,6 +212,7 @@ export async function completeEnrolment(
   const stored = found.rows[0]?.totp_pending_ciphertext;
   if (!stored) throw new ConflictError("Start again: the QR code expired. Reload the page to get a new one.");
   const secret = decryptSecret(stored);
+  await claimAttempt(state);
   const step = matchTotp(secret, code);
   if (step === null) return recordFailure(state);
   const result = await withCoreTransaction(async (client) => {
@@ -221,9 +255,6 @@ export async function verifySecondStep(
   );
   const user = found.rows[0];
   if (!user) throw new UnauthorizedError();
-  if (user.locked_until && new Date(user.locked_until).getTime() > Date.now()) {
-    throw new TooManyRequestsError("Too many wrong codes. Try again later.");
-  }
 
   let secret: string;
   try {
@@ -249,6 +280,8 @@ export async function verifySecondStep(
     );
   }
 
+  // Counted before it's checked, so parallel guesses can't get past the limits (#130).
+  await claimAttempt(state);
   if (normaliseTotpInput(code)) {
     const step = matchTotp(secret, code, {
       lastUsedStep: user.totp_last_step === null ? null : Number(user.totp_last_step),
@@ -349,11 +382,12 @@ export async function resetTwoStep(
   await client.query("delete from user_backup_codes where user_id = $1", [userId]);
   await client.query("delete from sessions where user_id = $1", [userId]);
   await client.query("update two_step_reset_tokens set used_at = coalesce(used_at, now()) where user_id = $1", [userId]);
+  const aiKeysRevoked = await revokeUserAiKeys(client, userId);
   await writeAdminAuditEvent(client, actor, {
     eventType: "user.two_step_reset",
     entityType: "user",
     entityId: userId,
-    details: { how },
+    details: { how, aiKeysRevoked },
   });
 }
 

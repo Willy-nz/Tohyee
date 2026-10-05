@@ -1,4 +1,5 @@
 import { json, readJson, route, searchParams } from "@/lib/api/http";
+import { assertSignInRate } from "@/lib/auth/rate-limit";
 import { assertSameOrigin, authenticateAnyStage } from "@/lib/auth/guard";
 import { sessionCookieHeader, sessionMetaFrom } from "@/lib/auth/sessions";
 import { completeEnrolment, startEnrolment } from "@/lib/auth/two-step";
@@ -12,6 +13,7 @@ export const GET = route(async (request) => {
 /** Confirms the app with its first `code`, turns two-step sign-in on and returns the backup codes (shown once). */
 export const POST = route(async (request) => {
   assertSameOrigin(request);
+  assertSignInRate(request);
   const state = await authenticateAnyStage(request);
   const body = await readJson(request);
   const result = await completeEnrolment(state, { code: body.code }, sessionMetaFrom(request));
