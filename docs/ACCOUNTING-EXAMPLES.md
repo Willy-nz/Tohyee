@@ -1860,7 +1860,7 @@ Not supported (refused rather than guessed): taking payments (stage 4),
 PayPal Here card readers' settlement details, and PayPal accounts the
 organisation doesn't own (partner access).
 
-### Wise as a bank feed (examples not yet approved by Jess)
+### Wise as a bank feed (approved by Jess, 5 Oct 2026)
 
 Stage 1b, part 5, the last of the Xero add-ons plan's bank feeds. Each
 currency balance in an organisation's **Wise business account** is a bank
@@ -1892,11 +1892,13 @@ token guide, docs.wise.com, on 5 Oct 2026):
   description; the sender's name and payment reference for money received;
   the merchant for card payments; amounts and rate for conversions), a
   `runningBalance` after it, and Wise's unique `referenceNumber`.
-- **Each transaction becomes a line, and its fee its own line** (question 3):
-  the line is the amount less the fee, and the fee line is the fee, so the
-  two add up to what Wise took from or added to the balance. Tohyee checks
-  each transaction against Wise's running balance first; if they don't add
-  up that way, it doesn't split the fee and says why. Lines carry
+- **Each transaction becomes a line, and its fee its own line** (question 3),
+  when Wise's running balance confirms how: if the balance moved by the
+  amount, the amount includes the fee, so the line is the amount less the
+  fee; if it moved by the amount less the fee, the line is the amount as
+  given. Either way the fee line is the fee and the lines add up to what
+  Wise took from or added to the balance. Each line keeps Wise's running
+  balance. Lines carry
   `wise:<referenceNumber>` (and `:fee`). The payee is the sender's name or
   the merchant, the reference the payment reference.
 - **Dates:** the transaction's date in the organisation's time zone
@@ -1936,11 +1938,14 @@ owes USD 500.00 on INV-0012; Kauri Supplies is owed 400.00 on bill B7.
 - **WI7** Bill B7 is paid by Wise transfer on 6 Oct: `{DEBIT, -404.10,
   totalFees 4.10, details {TRANSFER, description "To Kauri Supplies"}}`.
   Lines: **-400.00** (matchable to B7) and **-4.10** "Wise fees".
-- **WI8** If a transaction's amount, fee and running balance don't add up
-  as above (for example, Wise reports the amount without the fee), Tohyee
-  brings the amount in as one line, doesn't add a fee line, and notes on the
-  line "Wise fee 0.20 not split: the running balance doesn't show it". The
-  lines then still add up to Wise's balance.
+- **WI8** If Tohyee can't confirm it (the first transaction it reads has no
+  earlier running balance to compare with, or neither way adds up), the
+  amount comes in as one line, with no fee line, and the line says "Wise fee
+  0.20 not split: Wise's running balance couldn't confirm it", so someone
+  checks it against Wise. (Corrected after approval, 5 Oct 2026: as first
+  written, WI8 said the lines would still add up to Wise's balance, which
+  isn't so if Wise's amount leaves the fee out; the running balance now
+  settles both cases.)
 - **WI9** After WI3-WI7, 1080's lines are 489.12 - 46.00 - 22.25 - 0.20 -
   400.00 - 4.10 = **16.57** and 1090's 500.00 - 297.75 - 2.25 =
   **200.00**, each the change in that Wise balance, which is kept as the
@@ -1951,23 +1956,21 @@ owes USD 500.00 on INV-0012; Kauri Supplies is owed 400.00 on bill B7.
 Only admins connect, link, unlink and disconnect; bookkeepers press Sync now;
 viewers see the last sync, as BK15.
 
-**Questions for Jess (Wise), with proposed answers:**
-1. Wise has **no read-only token**: the personal token could also create and
-   fund transfers. Accept it as with PayPal (stored encrypted, used only to
-   read profiles, balances and statements, the screen says so)? Proposed:
-   yes.
-2. Offer Wise only for accounts based in the **US, Canada, Australia, New
-   Zealand, Singapore or Malaysia** (where Wise allows statements with a
-   personal token), and refuse the rest with Wise's reason? Proposed: yes;
-   EU and UK accounts can use automatic statement files (BF1-BF10) with
-   Wise's emailed or downloaded CAMT.053 statements.
-3. **Split Wise's fee onto its own line** when the running balance confirms
-   the amount includes it (WI4, WI6, WI7), and leave it in one line with a
-   note when it doesn't (WI8)? Proposed: yes. Wise's reference doesn't say
-   whether `amount` includes `totalFees`; Tohyee hasn't seen a real Wise
-   statement, so the running balance decides.
-4. Date lines in the **organisation's time zone**, as Stripe (Wise gives UTC
-   times)? Proposed: yes.
+**Questions for Jess (Wise), decided** (Jess approved the examples and chose
+the proposed answers on 5 Oct 2026):
+1. The personal token is accepted although it isn't read-only: stored
+   encrypted, used only to read profiles, balances and statements, and the
+   connect screen says so plainly.
+2. Only accounts based in the US, Canada, Australia, New Zealand, Singapore
+   or Malaysia; others are refused with Wise's reason.
+3. Wise's fee is split onto its own line when the running balance confirms
+   how (WI4, WI6, WI7), and left in one line with a note when it can't
+   (WI8).
+4. Lines are dated in the organisation's time zone.
+
+Each link also has a first date to bring in, as Akahu's (BK15).
+
+Tests: `tests/integration/bank-wise.test.ts`.
 
 Not supported (refused rather than guessed): Wise savings ("jars") balances,
 Wise accounts based outside the six countries above, and sending or funding

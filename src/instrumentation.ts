@@ -52,6 +52,9 @@
  * And PayPal feeds, which bring each organisation's PayPal transactions in
  * when due (off with TOHYEE_PAYPAL_SCHEDULER=off).
  *
+ * And Wise feeds, which bring each organisation's Wise balance statements
+ * in when due (off with TOHYEE_WISE_SCHEDULER=off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -192,6 +195,15 @@ export async function register() {
       startPayPalScheduler();
     } catch (error) {
       console.warn("[tohyee] PayPal syncs couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (process.env.TOHYEE_WISE_SCHEDULER !== "off") {
+    try {
+      const { startWiseScheduler } = await import("@/lib/bank/wise/service");
+      startWiseScheduler();
+    } catch (error) {
+      console.warn("[tohyee] Wise syncs couldn't start:", error instanceof Error ? error.message : error);
     }
   }
 

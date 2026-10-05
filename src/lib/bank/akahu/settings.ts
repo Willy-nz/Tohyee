@@ -199,7 +199,7 @@ export async function linkBankFeed(
   );
   if (taken.rows[0]) throw new ValidationError("That Akahu account is already linked to another bank account.");
   const other = await tx.query<{ feed: string }>(
-    "select 'SimpleFIN' as feed from simplefin_links where account_id = $1 and active union all select 'Stripe' from stripe_links where account_id = $1 and active union all select 'PayPal' from paypal_links where account_id = $1 and active",
+    "select 'SimpleFIN' as feed from simplefin_links where account_id = $1 and active union all select 'Stripe' from stripe_links where account_id = $1 and active union all select 'PayPal' from paypal_links where account_id = $1 and active union all select 'Wise' from wise_links where account_id = $1 and active",
     [accountId],
   );
   if (other.rows[0]) throw new ValidationError(`${account.code} is linked to ${other.rows[0].feed}. Unlink it first.`);

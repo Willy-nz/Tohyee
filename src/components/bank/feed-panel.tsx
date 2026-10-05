@@ -138,6 +138,9 @@ export function FeedPanel({ organisationId, account, onChanged }: { organisation
     }
   }
 
+  // One feed per account: an account linked to SimpleFIN, Stripe, PayPal or Wise doesn't offer Akahu.
+  if (!feed.active && (account.simplefin || account.stripe || account.paypal || account.wise)) return null;
+
   if (account.currencyCode) {
     return (
       <Notice tone="info">

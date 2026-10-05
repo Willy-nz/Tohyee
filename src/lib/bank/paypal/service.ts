@@ -220,7 +220,8 @@ export async function linkPayPalBalance(tx: OrgTx, accountIdInput: unknown, inpu
   const other = await tx.query<{ feed: string }>(
     `select 'Akahu' as feed from bank_account_settings where account_id = $1 and feed_active
      union all select 'SimpleFIN' from simplefin_links where account_id = $1 and active
-     union all select 'Stripe' from stripe_links where account_id = $1 and active`,
+     union all select 'Stripe' from stripe_links where account_id = $1 and active
+     union all select 'Wise' from wise_links where account_id = $1 and active`,
     [accountId],
   );
   if (other.rows[0]) throw new ConflictError(`${account.code} already has a ${other.rows[0].feed} feed. Stop it first.`);

@@ -565,7 +565,12 @@ that something happened.
   ID and secret (stored encrypted; PayPal has no read-only credentials, which
   the screen says), each completed payment with its fee as a separate line,
   refunds, chargebacks, holds, currency conversions and withdrawals as PayPal
-  reports them (examples PP1-PP10, decisions 396-399). Duplicates are
+  reports them (examples PP1-PP10, decisions 396-399). **Wise as a bank
+  feed**: each currency balance of the organisation's Wise business account
+  (based in NZ, Australia, the US, Canada, Singapore or Malaysia), connected
+  with a personal API token stored encrypted, with Wise's fees split onto
+  their own lines when Wise's running balance confirms them (examples
+  WI1-WI10, decisions 400-403). Duplicates are
   skipped; lines that look like a file-and-feed duplicate are flagged. Each
   line is reconciled by matching what's already posted (within 60 days),
   paying invoices or bills, creating spend or receive money (with GST), or a

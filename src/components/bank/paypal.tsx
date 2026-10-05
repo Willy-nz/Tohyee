@@ -291,7 +291,15 @@ export function PayPalPanel({ organisationId, account, onChanged }: { organisati
   const current = link.data?.link ?? null;
   if ((!status.data || !link.data) && !status.error && !link.error) return null;
   if (!connected && !current) return null;
-  const otherFeed = account.feed.active ? "an Akahu" : account.simplefin ? "a SimpleFIN" : account.stripe ? "a Stripe" : null;
+  const otherFeed = account.feed.active
+    ? "an Akahu"
+    : account.simplefin
+      ? "a SimpleFIN"
+      : account.stripe
+        ? "a Stripe"
+        : account.wise
+          ? "a Wise"
+          : null;
   return (
     <section style={{ display: "grid", gap: 12, marginTop: 24 }} aria-labelledby="paypal-title">
       <h3 id="paypal-title" style={{ margin: 0 }}>

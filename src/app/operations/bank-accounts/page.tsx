@@ -7,6 +7,7 @@ import { CurrencyMoney } from "@/components/bank/foreign";
 import { SimpleFinSettingsCard } from "@/components/bank/simplefin";
 import { PayPalSettingsCard } from "@/components/bank/paypal";
 import { StripeSettingsCard } from "@/components/bank/stripe";
+import { WiseSettingsCard } from "@/components/bank/wise";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -321,7 +322,7 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
                       )}
                     </td>
                     <td>
-                      <FeedBadge feed={account.feed} simplefin={account.simplefin} stripe={account.stripe} paypal={account.paypal} />
+                      <FeedBadge feed={account.feed} simplefin={account.simplefin} stripe={account.stripe} paypal={account.paypal} wise={account.wise} />
                       {account.feed.akahuAccountName ? <div className={ui.muted}>{account.feed.akahuAccountName}</div> : null}
                     </td>
                   </tr>
@@ -358,6 +359,12 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
         description="This organisation's PayPal balance as a bank account: payments, PayPal's fees, refunds, chargebacks, conversions and withdrawals come in as statement lines."
       >
         <PayPalSettingsCard organisationId={organisationId} />
+      </Card>
+      <Card
+        title="Wise"
+        description="Each currency balance in this organisation's Wise business account as a bank account: money received, card payments, transfers, conversions and Wise's fees come in as statement lines."
+      >
+        <WiseSettingsCard organisationId={organisationId} />
       </Card>
     </>
   );

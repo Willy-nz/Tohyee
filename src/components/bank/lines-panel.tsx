@@ -167,7 +167,7 @@ export function StatementLinesPanel({
                         </>
                       ) : null}
                       <LineDetails line={line} />
-                      <div className={ui.muted}>{line.source === "akahu" ? "Bank feed" : line.source === "simplefin" ? "SimpleFIN feed" : line.source === "stripe" ? "Stripe feed" : line.source === "paypal" ? "PayPal feed" : "Imported file"}</div>
+                      <div className={ui.muted}>{line.source === "akahu" ? "Bank feed" : line.source === "simplefin" ? "SimpleFIN feed" : line.source === "stripe" ? "Stripe feed" : line.source === "paypal" ? "PayPal feed" : line.source === "wise" ? "Wise feed" : "Imported file"}</div>
                       {account.isForeign ? <LineBaseValue line={line} baseCurrency={current?.baseCurrency ?? "NZD"} /> : null}
                     </td>
                     <InOutCells amount={line.amount} />
