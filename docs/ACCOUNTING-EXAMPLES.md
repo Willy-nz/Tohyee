@@ -8051,6 +8051,118 @@ Not supported in this part: PayPal (part 2), webhooks, saved cards and
 automatic charging, surcharges, refunds started from Tohyee, partial
 payments chosen by the customer, and Stripe's own invoices or tax.
 
+## Online invoice payments with PayPal (approved by Jess, 5 Oct 2026)
+
+Item 4 of the Xero add-ons plan, part 2, after Stripe (PN1-PN12). The
+organisation's existing PayPal connection (PP1-PP10; Jess, answer 8: one
+connection per provider) is used, and the same PayPal bank account (e.g.
+1060 PayPal) is the clearing account: PayPal's fees, refunds and
+withdrawals keep arriving through the feed exactly as PP3-PP8 describe.
+
+**Why PayPal invoices, not PayPal payment links** (checked against PayPal's
+developer documentation on 5 Oct 2026; not tried with a real PayPal
+account): PayPal's payment links API (`/v1/checkout/payment-resources`)
+documents no way to find the payments made through a link, so Tohyee
+couldn't record them. PayPal's **Invoicing API** (`/v2/invoicing/invoices`)
+keeps each invoice's status and its payments, so Tohyee can. So, for Pay
+now with PayPal, Tohyee makes a copy of the invoice in the organisation's
+own PayPal account and links to PayPal's page for it (question 1). Orders
+(PayPal Checkout) aren't used: their approval links expire after hours, and
+Tohyee's own pages usually can't be reached from the internet.
+
+How it works:
+
+- **The PayPal invoice.** When a bookkeeper or admin emails, prints or
+  copies an approved invoice with something due, Tohyee creates a PayPal
+  invoice (`POST /v2/invoicing/invoices`): the same invoice number, the
+  invoice's currency, one item "Invoice INV-0011" for the **amount due**,
+  partial payments off (`configuration.allow_partial_payment` false), and
+  no customer email address, so PayPal never emails the customer. It then
+  makes it payable without sending it (`POST .../send` with
+  `send_to_recipient` false), and the link is the invoice's
+  `detail.metadata.recipient_view_url`. The customer pays on PayPal's page
+  with PayPal (or a card, where PayPal offers it).
+- **Where it appears:** beside Stripe's (both when both are on), as "Pay with
+  PayPal" in the email, on the PDF and on the invoice (question 3).
+- **Seeing payments.** Every 15 minutes and with Check now, Tohyee reads
+  each open PayPal invoice (`GET /v2/invoicing/invoices/{id}`). Each new
+  `payments.transactions` entry paid through PayPal is recorded once (by its
+  `payment_id`) as a customer payment, as PN3: dated `payment_date`, for its
+  amount, into the bank account linked to PayPal's balance in the invoice's
+  currency (PP2), reference "PayPal" and the payment id.
+- **Only invoices in a currency whose PayPal balance is linked** offer Pay
+  with PayPal (question 2). A USD invoice offers it only when PayPal's USD
+  balance is linked to a USD bank account (e.g. 1070); Tohyee never guesses
+  a conversion rate. (PayPal converting a balance later is PP5's transfer.)
+- **When the amount due changes**, or the invoice is paid, voided or deleted,
+  Tohyee cancels the PayPal invoice (`POST .../cancel`, no notification) and
+  makes a new one the next time it's needed, as PN5.
+
+Setup: the PP setup (1060 PayPal linked to NZD, 1070 PayPal USD linked to
+USD); Kobe Ltd with INV-0011 for 115.00 due 20 Oct 2026; Acme Inc (USD);
+Pay with PayPal turned on; Stripe (PN) off.
+
+- **PPN1** An admin turns on "Pay with PayPal" (Settings, Online payments).
+  Without a PayPal connection it's refused: "Connect PayPal first (Bank
+  accounts, PayPal)." If PayPal refuses to make invoices for the app (the
+  app doesn't have Invoicing), the first email or copy shows PayPal's
+  message and the invoice goes without the link.
+- **PPN2** INV-0011 is emailed: Tohyee makes PayPal invoice INV-0011 for
+  **NZD 115.00** and the email and PDF say "Pay with PayPal:" and PayPal's link to it. PayPal sends the customer
+  nothing. Nothing is posted. Emailing it again uses the same one.
+- **PPN3** Kobe Ltd pays it with PayPal on 1 Oct 2026. At the next check the
+  PayPal invoice is PAID with one transaction `{payment_id "1AB",
+  payment_date "2026-10-01", amount NZD 115.00, method PAYPAL}`. Tohyee
+  records a payment of **115.00** on INV-0011 dated **1 Oct 2026** into
+  **1060**, reference "PayPal 1AB": Dr 1060 115.00 / Cr 1100 115.00.
+  INV-0011 is **paid**. Checking again records nothing more.
+- **PPN4** The PayPal feed then brings PP3's lines into 1060: **+115.00**
+  matches PPN3's payment (BK4) and **-4.12** "PayPal fees" is coded as any
+  fee line.
+- **PPN5** INV-0012 for 230.00 has its PayPal invoice; 100.00 is paid by
+  bank transfer and recorded by hand. Tohyee cancels the PayPal invoice
+  and the next email makes a new one for **130.00**. The customer can't
+  pay part of it on PayPal's page.
+- **PPN6** Paid by hand and through PayPal (as PN6): the PayPal payment is
+  recorded anyway as an **overpayment** on the customer's account, and the
+  invoice says "Paid twice".
+- **PPN7** INV-0020 for **USD 50.00** to Acme Inc: PayPal's USD balance is
+  linked to 1070, so it offers Pay with PayPal in USD. Paid: Tohyee records
+  USD 50.00 into **1070** (a USD account, so no conversion), at the
+  payment date's rate as any USD payment into a USD account (MC5), with
+  any difference from the invoice's rate on 7020. If PayPal's USD balance weren't linked, the
+  invoice wouldn't offer Pay with PayPal: "Link PayPal's USD balance to a
+  bank account first."
+- **PPN8** A payment for a voided invoice (paid in the minutes before the
+  cancel) is a notice only, as PN10; refunds and chargebacks come in only
+  through the feed, as PN8-PN9. Tohyee never refunds through PayPal.
+- **PPN9** Turning Pay with PayPal off, or disconnecting PayPal, cancels
+  every open PayPal invoice first (listing any PayPal couldn't be reached
+  for). Payments already recorded stay.
+- **PPN10** Who: as PN12. An invoice's "Leave Pay now off" tick (PN, question
+  5) leaves off both Stripe and PayPal.
+
+**Questions for Jess (online payments with PayPal), decided** (Jess chose
+every proposed answer and approved the examples on 5 Oct 2026):
+1. Use **PayPal's invoices** (a copy in the organisation's own PayPal
+   account, with PayPal's page to pay it) rather than payment links, so
+   Tohyee can see each payment. Proposed: yes.
+2. **Only invoices in a currency whose PayPal balance is linked** offer Pay
+   with PayPal; Tohyee never guesses a rate. Proposed: yes.
+3. With Stripe and PayPal both on, the email and PDF show **both links**.
+   Proposed: yes.
+4. The PayPal invoice has **one line for the amount due** (not every line,
+   and no GST of its own), and **no customer email address**, so PayPal
+   doesn't email or remind the customer. Proposed: yes.
+5. The answers for Stripe (overpayments, notices for voided invoices, no
+   surcharges, no saved cards, every invoice unless left off, checking every
+   15 minutes) apply to PayPal too. Proposed: yes.
+
+Not supported in this part: PayPal Checkout (orders), PayPal's own invoice
+emails and reminders, partial payments chosen by the customer, refunds
+from Tohyee, and recording a PayPal payment PayPal converted into another
+currency.
+
 ## Fixed assets (examples not yet approved by Jess)
 
 Written overnight from Xero's fixed asset register and NZ practice; Jess

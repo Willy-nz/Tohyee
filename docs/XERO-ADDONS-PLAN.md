@@ -85,7 +85,7 @@ phone width).
    mileage claims (IRD kilometre rates as a setting).
 4. **Online invoice payments** (Stripe part: examples PN1-PN12 approved
    by Jess 5 Oct 2026; built, decisions 414-419, tenant migration 0098;
-   PayPal is part 2): Stripe (hosted Checkout or Payment Links,
+   PayPal is part 2: examples PPN1-PPN10 approved by Jess 5 Oct 2026): Stripe (hosted Checkout or Payment Links,
    polling rather than webhooks unless remote access is on), then PayPal. A
    clearing account per provider, fees to expense, payouts matched to the
    bank deposit. Worked examples for part payments, refunds, disputes,
