@@ -66,8 +66,9 @@ phone width).
    ST1-ST10 approved by Jess 5 Oct 2026; decisions 392-395; tenant migration
    0094; **built**);
    (iv) PayPal (examples PP1-PP10 approved by Jess 5 Oct 2026;
-   decisions 396-399; tenant migration 0095; **built**); (v) Wise (its statement API needs a request-signing key the
-   organisation registers with Wise; foreign-currency examples first).
+   decisions 396-399; tenant migration 0095; **built**); (v) Wise (examples WI1-WI10 written 5 Oct 2026, waiting
+   for Jess; Wise needs no request signing for accounts based in NZ, AU,
+   US, CA, SG or MY, so EU and UK accounts are left out).
    Australian banks: only CDR-accredited aggregators (Basiq, Fiskil) reach
    them, aimed at businesses rather than one organisation; left out unless
    Jess asks. Earlier notes: a provider interface (Akahu becomes one of

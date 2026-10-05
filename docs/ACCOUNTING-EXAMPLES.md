@@ -1860,6 +1860,119 @@ Not supported (refused rather than guessed): taking payments (stage 4),
 PayPal Here card readers' settlement details, and PayPal accounts the
 organisation doesn't own (partner access).
 
+### Wise as a bank feed (examples not yet approved by Jess)
+
+Stage 1b, part 5, the last of the Xero add-ons plan's bank feeds. Each
+currency balance in an organisation's **Wise business account** is a bank
+account in Tohyee (e.g. 1080 Wise NZD, 1090 Wise USD), and Wise's balance
+statement for it arrives as statement lines: money received, card payments,
+transfers out, conversions between currencies, and Wise's fees. Nothing is
+posted.
+
+How it works (checked against Wise's API reference and its personal API
+token guide, docs.wise.com, on 5 Oct 2026):
+
+- An admin creates a **personal API token** in the organisation's own Wise
+  business account (Your account → Connect and manage apps → API tokens)
+  and pastes it into Tohyee, which stores it encrypted. Wise lets balance
+  statements be read with a personal token only for accounts **based in the
+  US, Canada, Australia, New Zealand, Singapore or Malaysia**; elsewhere
+  (the EU and UK) it needs signing Tohyee can't do with a personal token, so
+  those accounts are refused with Wise's reason. The same token can also
+  create and fund transfers (Wise has no read-only token); see question 1.
+- Tohyee lists the token's business profile (`GET /profiles`) and its
+  currency balances (`GET /profiles/{id}/balances?types=STANDARD`), and the
+  admin links each currency to a Tohyee bank account in that currency.
+- Tohyee reads each linked balance's statement
+  (`GET /profiles/{id}/balance-statements/{balanceId}/statement.json`), at
+  most 469 days per request (Wise's limit). Each transaction has a `type`
+  (`DEBIT` or `CREDIT`), a `date` (UTC), an `amount` (negative for debits),
+  `totalFees`, `details` (its kind: `CARD`, `CONVERSION`, `DEPOSIT`,
+  `TRANSFER`, `MONEY_ADDED`, `DIRECT_DEBIT`, `BALANCE_INTEREST`, ...; a
+  description; the sender's name and payment reference for money received;
+  the merchant for card payments; amounts and rate for conversions), a
+  `runningBalance` after it, and Wise's unique `referenceNumber`.
+- **Each transaction becomes a line, and its fee its own line** (question 3):
+  the line is the amount less the fee, and the fee line is the fee, so the
+  two add up to what Wise took from or added to the balance. Tohyee checks
+  each transaction against Wise's running balance first; if they don't add
+  up that way, it doesn't split the fee and says why. Lines carry
+  `wise:<referenceNumber>` (and `:fee`). The payee is the sender's name or
+  the merchant, the reference the payment reference.
+- **Dates:** the transaction's date in the organisation's time zone
+  (question 4).
+- The statement balance is Wise's balance for that currency.
+- Syncs run every 6 hours by default (1-24) and with Sync now, from three
+  days before the last line, skipping lines already here (BK2).
+
+Setup: base currency NZD, 1080 Wise NZD (NZD), 1090 Wise USD (USD); Acme Inc
+owes USD 500.00 on INV-0012; Kauri Supplies is owed 400.00 on bill B7.
+
+- **WI1** An admin pastes the token. Tohyee reads the business profile and
+  its balances (NZD, USD), stores the token encrypted, and never shows it
+  again. A token for an account based outside those six countries is
+  refused when the first statement is read, with Wise's message and what it
+  means.
+- **WI2** NZD links to 1080, USD to 1090; NZD to 1090 is refused: "Wise's
+  balance is in NZD; 1090 is in USD."
+- **WI3** Acme pays INV-0012 into the USD account details on 1 Oct 2026:
+  `{type CREDIT, amount USD 500.00, totalFees 0.00, details {type DEPOSIT,
+  senderName "ACME INC", paymentReference "INV-0012"}, referenceNumber
+  "DEPOSIT-111"}`. One line on 1090: **+500.00** (USD), payee ACME INC,
+  reference INV-0012, matchable to INV-0012 (BK17).
+- **WI4** USD 300.00 is converted to NZD on 2 Oct: the USD statement has
+  `{DEBIT, amount -300.00, totalFees 2.25, details {CONVERSION, sourceAmount
+  USD 300.00, targetAmount NZD 489.12, fee USD 2.25, rate 1.6427}}` and the
+  NZD statement `{CREDIT, amount 489.12}`. Lines: 1090 **-297.75** "Converted
+  USD to NZD" and **-2.25** "Wise fees"; 1080 **+489.12**. The -297.75 and
+  +489.12 reconcile as one transfer with both amounts (FXB transfers); the
+  fee is coded to bank fees.
+- **WI5** A card payment in NZD on 3 Oct: `{DEBIT, -46.00, details {CARD,
+  merchant {name "Z Energy"}}}`. Line on 1080: **-46.00**, payee Z Energy.
+- **WI6** A card payment abroad on 4 Oct: AUD 20.00 charged to the NZD
+  balance as `{DEBIT, -22.45, totalFees 0.20, exchangeDetails {forAmount AUD
+  20.00}}`. Lines: **-22.25** "Card payment (AUD 20.00)" and **-0.20** "Wise
+  fees".
+- **WI7** Bill B7 is paid by Wise transfer on 6 Oct: `{DEBIT, -404.10,
+  totalFees 4.10, details {TRANSFER, description "To Kauri Supplies"}}`.
+  Lines: **-400.00** (matchable to B7) and **-4.10** "Wise fees".
+- **WI8** If a transaction's amount, fee and running balance don't add up
+  as above (for example, Wise reports the amount without the fee), Tohyee
+  brings the amount in as one line, doesn't add a fee line, and notes on the
+  line "Wise fee 0.20 not split: the running balance doesn't show it". The
+  lines then still add up to Wise's balance.
+- **WI9** After WI3-WI7, 1080's lines are 489.12 - 46.00 - 22.25 - 0.20 -
+  400.00 - 4.10 = **16.57** and 1090's 500.00 - 297.75 - 2.25 =
+  **200.00**, each the change in that Wise balance, which is kept as the
+  statement balance.
+- **WI10** Disconnecting deletes the token. Lines stay. Connecting again and
+  relinking adds no line twice: Wise's reference numbers are the same.
+
+Only admins connect, link, unlink and disconnect; bookkeepers press Sync now;
+viewers see the last sync, as BK15.
+
+**Questions for Jess (Wise), with proposed answers:**
+1. Wise has **no read-only token**: the personal token could also create and
+   fund transfers. Accept it as with PayPal (stored encrypted, used only to
+   read profiles, balances and statements, the screen says so)? Proposed:
+   yes.
+2. Offer Wise only for accounts based in the **US, Canada, Australia, New
+   Zealand, Singapore or Malaysia** (where Wise allows statements with a
+   personal token), and refuse the rest with Wise's reason? Proposed: yes;
+   EU and UK accounts can use automatic statement files (BF1-BF10) with
+   Wise's emailed or downloaded CAMT.053 statements.
+3. **Split Wise's fee onto its own line** when the running balance confirms
+   the amount includes it (WI4, WI6, WI7), and leave it in one line with a
+   note when it doesn't (WI8)? Proposed: yes. Wise's reference doesn't say
+   whether `amount` includes `totalFees`; Tohyee hasn't seen a real Wise
+   statement, so the running balance decides.
+4. Date lines in the **organisation's time zone**, as Stripe (Wise gives UTC
+   times)? Proposed: yes.
+
+Not supported (refused rather than guessed): Wise savings ("jars") balances,
+Wise accounts based outside the six countries above, and sending or funding
+transfers from Tohyee.
+
 ### One-click matching ("OK") (examples not yet approved by Jess)
 
 Like Xero's "OK" button. For each unreconciled line, Tohyee looks for
