@@ -9,7 +9,9 @@ import type { BankFileSettings, PayRunBankFile } from "@/lib/payroll/bank-file-s
 import { updateEmployee } from "@/lib/payroll/employees";
 import type { PayRunPayments, WagePayment } from "@/lib/payroll/wage-payments";
 import { type P5World, setUpP5World } from "../helpers/payroll-p5";
-import { describeWithDatabase, key, params, startTestServer, type TestServer } from "../helpers/test-server";
+import pg from "pg";
+import { getOrganisation } from "@/lib/organisations/registry";
+import { describeWithDatabase, key, params, startTestServer, testDatabaseUrl, type TestServer, withDb } from "../helpers/test-server";
 
 /**
  * Examples PBF1-PBF7 in docs/ACCOUNTING-EXAMPLES.md ("NZ payroll — bank
@@ -124,6 +126,27 @@ describeWithDatabase("payroll: bank files (PBF1-PBF7)", () => {
       expect(await payments(run1)).toMatchObject({ unpaid: "3699.50", paid: "0.00", payments: [] });
       // The due date defaults to the pay date.
       expect((await fileOf(run1, { bankAccountCode: "1000" })).content.split(CRLF)[0]).toBe(`1,,,,,,20261014,${yyyymmdd(today)},`);
+      expect(file.warnings).toEqual([]);
+    });
+
+    it("PBF8: the account kept at approval is paid, with a warning when it has changed since (#139)", async () => {
+      const before = await fileOf(run1, { bankAccountCode: "1000", dueDate: "2026-10-14" });
+      await w.asUser(w.jess, (tx) => updateEmployee(tx, w.people.hemi, { bankAccount: "12-3456-7654321-00" }));
+      try {
+        const after = await fileOf(run1, { bankAccountCode: "1000", dueDate: "2026-10-14" });
+        expect(after.content).toBe(before.content);
+        expect(after.hashTotal).toBe("34330777777");
+        expect(after.warnings).toEqual([
+          "Hemi Walker's bank account has changed since PAYRUN-1 was approved. This file pays the account kept with the pay run (**-****-******6-00), as the payslip shows. To pay the new account instead, pay Hemi in your bank's own screens and record it as paid per employee.",
+        ]);
+        expect(JSON.stringify(after.warnings)).not.toContain("7654321");
+      } finally {
+        await w.asUser(w.jess, (tx) => updateEmployee(tx, w.people.hemi, { bankAccount: "01-0242-0123456-00" }));
+      }
+      // The same account written another way isn't a change.
+      await w.asUser(w.jess, (tx) => updateEmployee(tx, w.people.hemi, { bankAccount: "010242012345600" }));
+      expect((await fileOf(run1, { bankAccountCode: "1000", dueDate: "2026-10-14" })).warnings).toEqual([]);
+      await w.asUser(w.jess, (tx) => updateEmployee(tx, w.people.hemi, { bankAccount: "01-0242-0123456-00" }));
     });
 
     it("PBF2: ASB MT9 file for PAYRUN-1, byte for byte", async () => {
@@ -202,6 +225,17 @@ describeWithDatabase("payroll: bank files (PBF1-PBF7)", () => {
 
   describe("refused and access", () => {
     it("PBF6: employees' bank accounts, unset bank accounts and drafts", async () => {
+      // PAYRUN-2 as if approved before accounts were kept with the pay: the employee's current account is used.
+      const database = (await getOrganisation("payroll-bank-files-co"))!.databaseName;
+      const admin = new pg.Client({ connectionString: withDb(testDatabaseUrl!, database) });
+      await admin.connect();
+      try {
+        await admin.query("alter table payroll_pay_run_employees disable trigger payroll_pay_run_employees_guard");
+        await admin.query("update payroll_pay_run_employees set bank_account_ciphertext = null where pay_run_id = $1", [run2]);
+        await admin.query("alter table payroll_pay_run_employees enable trigger payroll_pay_run_employees_guard");
+      } finally {
+        await admin.end();
+      }
       await w.asUser(w.jess, (tx) => updateEmployee(tx, w.people.aroha, { bankAccount: "02-0108-098765-000" }));
       const bad = await makeFile(w.ben, run2, { bankAccountCode: "1000" });
       expect(bad.status).toBe(400);

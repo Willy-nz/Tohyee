@@ -449,5 +449,35 @@ describeWithDatabase("extra pays, back pay and final pays (XP8-XP14)", () => {
       expect(none.body.error).toBe("No back pay is owed for that pay rate: it starts on 2 Nov 2026, not before this pay period.");
       await asUser(ben, (tx) => deletePayRun(tx, week4.id));
     });
+
+    it("XP11b: a salary period that wasn't paid in full is refused; weeks paid in full get their back pay", async () => {
+      const salaries = (await asUser(jess, (tx) => createPayGroup(tx, { idempotencyKey: key("group"), name: "Salaries (XP11b)", payFrequency: "weekly" }))).group.id;
+      const salary = { payBasis: "salary", annualSalary: "52000.00", hourlyRate: null, ordinaryHoursPerWeek: null, payGroupId: salaries };
+      const mereSalary = await employee({ firstName: "Mere", lastName: "Salary", ...salary });
+      const fullWeeks = await employee({ firstName: "Wiremu", lastName: "Fullweeks", ...salary });
+      const week1 = await draft(salaries, "2026-10-05", "2026-10-14");
+      expect(pay(week1, mereSalary).lines).toMatchObject([{ amount: "1000.00" }]);
+      await approve(week1.id);
+      const week2 = await draft(salaries, "2026-10-12", "2026-10-21");
+      await setLines(week2.id, mereSalary, [{ payItemId: items["Ordinary time"].id, amount: "600.00", description: "Two unpaid days" }]);
+      const week2Reference = (await approve(week2.id)).reference;
+      const newSalary = (id: string) =>
+        asUser(jess, (tx) => addPayRate(tx, id, { idempotencyKey: key("rate"), effectiveFrom: "2026-10-05", payBasis: "salary", annualSalary: "57200.00" })).then(
+          (result) => result.payRate.id,
+        );
+      const mereRate = await newSalary(mereSalary);
+      const wiremuRate = await newSalary(fullWeeks);
+
+      const week3 = await draft(salaries, "2026-10-19", "2026-10-28");
+      const refusedBackPay = await backPay("POST", week3.id, mereSalary, { payItemId: items["Back pay"].id, payRateId: mereRate });
+      expect(refusedBackPay.status).toBe(400);
+      expect(refusedBackPay.body.error).toBe(
+        `${NOT_SUPPORTED}: back pay for ${week2Reference}: Mere Salary's ordinary pay that week was $600.00, not their full salary of $1,000.00. Work out its back pay and add it as an amount.`,
+      );
+      const added = await backPay("POST", week3.id, fullWeeks, { payItemId: items["Back pay"].id, payRateId: wiremuRate });
+      expect(added.status).toBe(200);
+      expect(pay(added.body.payRun!, fullWeeks).lines.filter((line) => line.payItemName === "Back pay").map((line) => line.amount)).toEqual(["100.00", "100.00"]);
+      await asUser(ben, (tx) => deletePayRun(tx, week3.id));
+    });
   });
 });

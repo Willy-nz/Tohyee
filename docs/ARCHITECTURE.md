@@ -70,7 +70,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ payroll_pay_groups, payroll_employee_groups   pay groups (with a pay frequency) and employee groups for reporting
 ├─ payroll_access           who has payroll access, by core user id (grants and removals in audit_events)
 ├─ payroll_pay_items        pay items: earnings, after-tax deductions and employer KiwiSaver, each with its account and tax treatment (archived, never deleted)
-├─ payroll_pay_runs, payroll_pay_run_employees, payroll_pay_run_lines   pay runs: drafts, then approved (with a snapshot of each person's pay) or voided; frozen once approved
+├─ payroll_pay_runs, payroll_pay_run_employees, payroll_pay_run_lines   pay runs: drafts (with who changed their employees' payroll details, PRUN7b), then approved (with a snapshot of each person's pay, bank account and KiwiSaver rate reduction) or voided; frozen once approved
 ├─ payroll_pay_run_postings  how each approved pay run's earnings and employer KiwiSaver were split per employee by allocation, and which journal line each went to (append-only; payroll access only)
 ├─ payroll_pay_run_shares, payroll_pay_run_timesheets   each employee's shares on an approved pay run (timesheet row or allocation line, hours, weight, tags, R&D activity) and the approved timesheets it used (append-only)
 ├─ payroll_timesheets, payroll_timesheet_entries, payroll_timesheet_history   weekly timesheets (draft, submitted, approved), hours per day stamped by the database (replaced or removed, never changed or deleted) and each step with who and when
