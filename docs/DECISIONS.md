@@ -3134,3 +3134,70 @@ think is best").
        [phone](screenshots/pay-with-paypal-settings-phone.png)) and an invoice's Stripe and PayPal links
        ([light](screenshots/pay-with-paypal-invoice-light.png), [phone](screenshots/pay-with-paypal-invoice-phone.png)).
 
+
+### Approval workflows (decisions 424-431)
+
+424. **Approval rules are per document type: bills, purchase orders and
+     expense claims** (examples AW1-AW17, approved by Jess on 5 Oct 2026;
+     tenant migration 0100). A rule's conditions must all hold (total at
+     least an amount, the supplier or claimant, an account on any line, a
+     tracking value on any line); rules are tried in their order and the
+     first that matches is used. Admins add, change, reorder and archive
+     rules (never delete them); everyone can see them. Totals are compared
+     in the base currency (question 7): a bill's base total, and a foreign
+     purchase order at the exchange rates list's rate for its order date
+     (a purchase order has no rate of its own); with no rate, submitting is
+     refused and says to add one.
+425. **A tracking value condition matches lines tagged with the value or a
+     value under it**, as reports filter (TC8). The examples only tag the
+     value itself (AW11); this is our reading for nested values.
+426. **A waiting request follows its rule as it is now** (AW6): an "any
+     one" step is done once anyone approved it at that step (someone since
+     removed from the rule still counts), an "all" step when every current
+     approver has. Approvals are kept per step number in
+     `approval_actions`, so an admin changing a stuck step's approvers lets
+     the request carry on. Requests and actions are never changed or
+     deleted once finished (database triggers).
+427. **Nobody approves a document they submitted or made** (question 4):
+     the submitter, a bill's or purchase order's creator, and a claim's
+     claimant, whatever their role. Saving a rule warns about a step with
+     one approver (or "all of" approvers), since it can't be done for that
+     person's documents; the approval page says who's stuck.
+428. **The last approval approves the document exactly as today**, by the
+     last approver (B1-B3, PO2, EC3): a claim's last approver chooses the
+     claim date, and a bill's sees any duplicate warning and approves anyway
+     there (DU2). If that approval is refused (a locked period, AW10), the
+     step's approval is rolled back (a savepoint), the request keeps the
+     reason (`last_error`), and the route answers 409 after committing it.
+     Approving a document a rule matches, or one waiting, is refused
+     everywhere else, including repeating bills (submitted instead, run
+     outcome `submitted`, AW14) and the connected AI (`approve_bill` says it
+     needs a person's approval; `submit_for_approval` and `list_approvals`
+     are its tools; it never approves or declines a step).
+429. **Withdrawing**: a bill or purchase order by its submitter or an admin;
+     a claim only by its claimant (AW8, AW17). Declining needs a reason and
+     sends a claim back exactly as EC6. The examples only show the
+     submitter withdrawing; letting admins withdraw bills and purchase
+     orders is our call, so a stuck document can be freed without its
+     submitter.
+430. **Approvers are emailed through the organisation's own email** by the
+     email job (`approval_emails`, retried like document emails; a failure
+     shows on the approval page and holds nothing up). The email is plain
+     text with the document, its total and a link to
+     `/login?next=/operations/purchases/approvals/{id}/in/{organisation}`,
+     which opens after signing in as that person and approves nothing by
+     itself (question 2). The link uses the address the submitter's request
+     came in on (the remote access public address when set); a repeating
+     bill or the AI uses the remote access address, or with none the email
+     says to open Tohyee's Approvals page.
+431. **The budget at approval** (question 3) is for the month of the bill
+     date, order date or a claim's latest receipt: for each profit and loss
+     account on the document, the budget of a line's tracking value when one
+     has a budget, otherwise the overall budget; what's posted to the
+     account in that whole month (filtered to the budget's tracking value);
+     this document excluding GST in the base currency; and what's left, with
+     "Over budget by" when it's negative. Shown only; it never blocks.
+     - Screenshots: Settings, Approval rules ([light](screenshots/approval-rules-light.png),
+       [phone](screenshots/approval-rules-phone.png)), an approval page with the budget
+       ([dark](screenshots/approval-request-dark.png), [phone](screenshots/approval-request-phone.png))
+       and a bill waiting for approval ([light](screenshots/approval-bill-light.png)).

@@ -64,6 +64,7 @@ export const MENUS: Menu[] = [
           { href: "/operations/purchase-orders", label: "Purchase orders" },
           { href: "/operations/supplier-credit-notes", label: "Supplier credit notes" },
           { href: "/operations/repeating-bills", label: "Repeating bills" },
+          { href: "/operations/purchases/approvals", label: "Approvals" },
         ],
       },
       {
@@ -222,6 +223,7 @@ export const MENUS: Menu[] = [
           { href: "/operations/settings/bank-files", label: "Bank files", minRole: "bookkeeper" },
           { href: "/operations/settings/kilometre-rates", label: "Kilometre rates" },
           { href: "/operations/settings/online-payments", label: "Online payments" },
+          { href: "/operations/settings/approval-rules", label: "Approval rules" },
           { href: "/operations/settings/payroll-access", label: "Payroll access", minRole: "admin" },
           { href: "/crm/record-types", label: "CRM record types", minRole: "admin", module: "crm" },
           { href: "/crm/stages", label: "CRM opportunity stages", minRole: "admin", module: "crm" },

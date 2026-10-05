@@ -241,6 +241,7 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "get_draft_journal",
         "list_bill_inbox",
         "read_bill_inbox_item",
+        "list_approvals",
       ].sort(),
     );
     for (const tool of tools) {

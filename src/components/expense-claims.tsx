@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { approvalBlocksApproving, DocumentApprovalPanel, useDocumentApproval } from "@/components/approvals";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { RdLineTags } from "@/components/rd";
@@ -461,6 +462,10 @@ function ClaimActions({ organisationId, claim, onChanged }: { organisationId: st
   const [error, setError] = useState<string | null>(null);
   const mine = claim.claimantUserId ? claim.claimantUserId === user.id : claim.claimantEmail.toLowerCase() === user.email.toLowerCase();
   const canApprove = can("bookkeeper") && (!mine || can("admin"));
+  // Under an approval rule its steps' approvers approve or decline it on its approval page (AW15).
+  const approval = useDocumentApproval(organisationId, "expense_claim", claim.id);
+  const approvalState = approval.data?.approval;
+  const underRule = approvalBlocksApproving(approvalState) && claim.status === "submitted";
   const banks = (accounts.data?.accounts ?? []).filter((account) => account.isActive && isPaymentAccount(account));
   const bank = bankCode ?? (banks.find((account) => account.systemKey === "bank") ?? banks[0])?.code ?? "";
 
@@ -482,6 +487,21 @@ function ClaimActions({ organisationId, claim, onChanged }: { organisationId: st
   return (
     <Card title="Actions">
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {claim.status === "draft" || claim.status === "submitted" ? (
+        <DocumentApprovalPanel
+          organisationId={organisationId}
+          documentType="expense_claim"
+          documentId={claim.id}
+          documentStatus={claim.status}
+          approval={approvalState}
+          canSubmit={claim.status === "submitted" && mine}
+          onChanged={async (text) => {
+            approval.reload();
+            const fresh = await api<{ claim: ExpenseClaim }>(`/api/expense-claims/${claim.id}`, { query: { organisationId } });
+            onChanged(fresh.claim, text);
+          }}
+        />
+      ) : null}
       {claim.status === "draft" && mine ? (
         <div className={ui.actions}>
           <Button onClick={() => void run(() => post("/submit", {}), "Submitted for approval.")} disabled={busy || claim.receipts.length === 0}>
@@ -507,7 +527,7 @@ function ClaimActions({ organisationId, claim, onChanged }: { organisationId: st
         </div>
       ) : null}
       {claim.status === "draft" && !mine ? <p className={ui.muted}>Only {personName(claim, "claimant")} can change or submit this draft.</p> : null}
-      {claim.status === "submitted" && can("bookkeeper") ? (
+      {claim.status === "submitted" && can("bookkeeper") && (approval.data || approval.error) && !underRule ? (
         <>
           {canApprove ? (
             <div className={ui.inlineForm}>

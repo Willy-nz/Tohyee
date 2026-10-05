@@ -1,3 +1,6 @@
+import { startApprovalRequest } from "@/lib/approvals/requests";
+import { loadDocumentFacts, matchingRule } from "@/lib/approvals/rules";
+import { configuredOrigin } from "@/lib/auth/origin";
 import { writeAuditEvent } from "@/lib/audit";
 import { assertListedRateForRepeating } from "@/lib/fx/documents";
 import {
@@ -537,6 +540,13 @@ const BILLS: RepeatingKind<RepeatingBill> = {
     // In another currency, only at a rate from the exchange rates list (MC51); otherwise left as a draft.
     const rate = (await tx.query<{ exchange_rate: string | null }>("select exchange_rate::text from bills where id = $1", [billId])).rows[0]?.exchange_rate ?? null;
     await assertListedRateForRepeating(tx, { currencyCode: template.currencyCode, date, exchangeRate: rate, document: "bill" });
+    // A bill an approval rule matches is submitted for approval instead (AW14).
+    const facts = await loadDocumentFacts(tx, "bill", billId);
+    const rule = await matchingRule(tx, facts);
+    if (rule) {
+      await startApprovalRequest(tx, facts, rule, { origin: await configuredOrigin() });
+      return { submitted: `Submitted for approval (rule: ${rule.name})` };
+    }
     await approveBill(tx, billId, { source: "repeating", idempotencyKey: `repeating-bill-${template.id}-${date}-approve`, repeatingBillId: template.id });
     return null;
   },

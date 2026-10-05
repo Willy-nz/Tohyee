@@ -5,6 +5,7 @@ import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
+import { assertNoApprovalNeeded, assertNotWaitingForApproval } from "@/lib/approvals/requests";
 import { billDuplicateWarnings } from "@/lib/bills/duplicates";
 import { assertInventoryLines, planDocumentStock, planDocumentVoid, stockLinesAtBase } from "@/lib/inventory/stock";
 import { fillLinesFromItems, isBlank, LINE_ITEM_COLUMNS, LINE_ITEM_JOINS, lineForHash, lineItemFields, type LineItemFields, type LineItemRef, type LineItemRow, parseLineItem, resolveLineItems, type ResolvedLineItem } from "@/lib/items/lines";
@@ -1153,6 +1154,8 @@ export async function createBill(
 export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInput): Promise<Bill> {
   const current = await lockBill(tx, requireId(billIdInput, "billId"));
   assertDraft(current, "edited");
+  // A bill waiting for approval is withdrawn first (AW3, AW8).
+  await assertNotWaitingForApproval(tx, "bill", current.id, "edited");
   const saved = draftOf(current);
   const draft = parseDraft({
     contactId: input.contactId === undefined ? saved.contactId : input.contactId,
@@ -1231,6 +1234,7 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
 export async function deleteBill(tx: OrgTx, billIdInput: unknown): Promise<void> {
   const current = await lockBill(tx, requireId(billIdInput, "billId"));
   assertDraft(current, "deleted");
+  await assertNotWaitingForApproval(tx, "bill", current.id, "deleted");
   // Its notes and files go with it (NF12).
   await removeRecordExtras(tx, "bill", current.id);
   // A bills inbox item it was made from waits again (BI3).
@@ -1281,6 +1285,8 @@ export async function approveBill(
     approveDespiteWarnings?: unknown;
     /** The repeating bill approving a bill it just made: its other bills aren't duplicates of it. */
     repeatingBillId?: string;
+    /** The approval request whose last step is approving it (AW5); otherwise a bill under an approval rule is refused (AW3). */
+    viaApprovalRequestId?: string;
   },
 ): Promise<{ created: boolean; bill: Bill }> {
   const billId = requireId(billIdInput, "billId");
@@ -1316,6 +1322,9 @@ export async function approveBill(
       `Add the supplier's invoice number before approving: this draft bill from ${current.contactName} doesn't have one yet. Type it from their invoice when it arrives.`,
     );
   }
+
+  // A bill an approval rule matches goes through its steps (AW3).
+  await assertNoApprovalNeeded(tx, "bill", billId, command.viaApprovalRequestId);
 
   // A likely duplicate is approved only when the person says so (DU2, DU3); the AI can't (DU5).
   const warnings = await billDuplicateWarnings(tx, billId, { repeatingBillId: command.repeatingBillId });

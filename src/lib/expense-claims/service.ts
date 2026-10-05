@@ -1,3 +1,5 @@
+import { assertNoApprovalNeeded, startApprovalRequest, waitingRequestFor } from "@/lib/approvals/requests";
+import { loadDocumentFacts, matchingRule } from "@/lib/approvals/rules";
 import { formatDate } from "@/lib/format";
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
@@ -851,11 +853,20 @@ export async function deleteExpenseClaim(tx: OrgTx, idInput: unknown): Promise<v
   await writeAuditEvent(tx, { eventType: "expense_claim.deleted", entityType: "expense_claim", entityId: id, details: { total: current.total } });
 }
 
-/** Sends a draft for approval (EC2). It needs a receipt, and its receipts are checked again, including required tracking. */
-export async function submitExpenseClaim(tx: OrgTx, idInput: unknown): Promise<ExpenseClaim> {
+/**
+ * Sends a draft for approval (EC2). It needs a receipt, and its receipts are
+ * checked again, including required tracking. When an approval rule matches
+ * it, the rule's steps start instead of any bookkeeper approving it (AW15);
+ * submitting a claim that's already submitted starts them if a rule now
+ * matches. `origin` is Tohyee's address, for the approvers' emails.
+ */
+export async function submitExpenseClaim(tx: OrgTx, idInput: unknown, options: { origin?: string | null } = {}): Promise<ExpenseClaim> {
   const id = requireId(idInput, "claimId");
   const current = await lockClaim(tx, id);
-  if (current.status === "submitted") return current;
+  if (current.status === "submitted") {
+    if (isClaimant(tx, current) && !(await waitingRequestFor(tx, "expense_claim", id))) await startClaimRule(tx, id, options.origin ?? null);
+    return getExpenseClaim(tx, id);
+  }
   assertOwnDraft(tx, current, "submit");
   if (current.receipts.length === 0) throw new ValidationError("Add at least one receipt before submitting the claim.");
   // Mileage is worked out again with the latest rates and kilometres claimed before it's sent (MI6).
@@ -867,7 +878,15 @@ export async function submitExpenseClaim(tx: OrgTx, idInput: unknown): Promise<E
     [id],
   );
   await writeAuditEvent(tx, { eventType: "expense_claim.submitted", entityType: "expense_claim", entityId: id, details: { total: fresh.total } });
+  await startClaimRule(tx, id, options.origin ?? null);
   return getExpenseClaim(tx, id);
+}
+
+/** Starts the steps of the first approval rule that matches a submitted claim, if any (AW15). */
+async function startClaimRule(tx: OrgTx, id: string, origin: string | null): Promise<void> {
+  const facts = await loadDocumentFacts(tx, "expense_claim", id);
+  const rule = await matchingRule(tx, facts);
+  if (rule) await startApprovalRequest(tx, facts, rule, { origin });
 }
 
 /** Receipts worked out again give the same amounts, and required tracking is there (EC2, EC9). */
@@ -897,12 +916,23 @@ function assertApprover(role: Role): void {
 }
 
 /** Returns a submitted claim to its claimant as a draft, with a reason (EC6). Posts nothing. */
-export async function declineExpenseClaim(tx: OrgTx, role: Role, idInput: unknown, command: { reason: unknown }): Promise<ExpenseClaim> {
+export async function declineExpenseClaim(
+  tx: OrgTx,
+  role: Role,
+  idInput: unknown,
+  command: { reason: unknown },
+  options: { viaApprovalRequestId?: string } = {},
+): Promise<ExpenseClaim> {
   assertApprover(role);
   const id = requireId(idInput, "claimId");
   const reason = requireString(command.reason, "The reason", { maxLength: 500 });
   const current = await lockClaim(tx, id);
   if (current.status !== "submitted") throw new ConflictError(`${claimReference(id)} is ${current.status}; only submitted claims can be declined.`);
+  // A claim waiting at an approval rule's step is declined by that step's approvers (AW16).
+  const waiting = await waitingRequestFor(tx, "expense_claim", id);
+  if (waiting && waiting.id !== options.viaApprovalRequestId) {
+    throw new ConflictError(`This expense claim is waiting for approval (rule: ${waiting.rule_name}). Its approvers approve or decline it on its approval page (Purchases › Approvals).`);
+  }
   await tx.query(
     `update expense_claims set status = 'draft', submitted_at = null, declined_at = now(), declined_by_email = $2, decline_reason = $3,
             updated_at = now() where id = $1`,
@@ -938,7 +968,7 @@ export async function approveExpenseClaim(
   tx: OrgTx,
   role: Role,
   idInput: unknown,
-  command: { source?: unknown; idempotencyKey: unknown; claimDate: unknown },
+  command: { source?: unknown; idempotencyKey: unknown; claimDate: unknown; viaApprovalRequestId?: string },
 ): Promise<{ created: boolean; claim: ExpenseClaim }> {
   assertApprover(role);
   const id = requireId(idInput, "claimId");
@@ -962,6 +992,8 @@ export async function approveExpenseClaim(
       current.status === "draft" ? `${claimReference(id)} hasn't been submitted yet.` : `${claimReference(id)} is already ${current.status}.`,
     );
   }
+  // A claim under an approval rule goes through its steps, where nobody approves their own (AW15, AW17).
+  await assertNoApprovalNeeded(tx, "expense_claim", id, command.viaApprovalRequestId);
   if (isClaimant(tx, current) && !roleAtLeast(role, "admin")) {
     throw new ForbiddenError("You can't approve your own expense claim. Ask another bookkeeper or an admin.");
   }

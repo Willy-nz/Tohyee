@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { approvalBlocksApproving, DocumentApprovalPanel, useDocumentApproval, waitingForApproval } from "@/components/approvals";
 import { EmailDocumentPanel, pdfHref } from "@/components/documents/email-document";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -34,6 +35,9 @@ function PurchaseOrderActions({
 }) {
   const confirm = useConfirm();
   const router = useRouter();
+  // An approval rule that applies, or a waiting approval (AW11): submitted, not approved here.
+  const approval = useDocumentApproval(organisationId, "purchase_order", purchaseOrder.id);
+  const approvalState = approval.data?.approval;
   const [approveKey] = useState(() => newIdempotencyKey("po-approve"));
   const [copyKey] = useState(() => newIdempotencyKey("po-bill"));
   const [cancelKey] = useState(() => newIdempotencyKey("po-cancel"));
@@ -134,16 +138,36 @@ function PurchaseOrderActions({
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
       {purchaseOrder.status === "draft" ? (
+        <DocumentApprovalPanel
+          organisationId={organisationId}
+          documentType="purchase_order"
+          documentId={purchaseOrder.id}
+          documentStatus={purchaseOrder.status}
+          approval={approvalState}
+          canSubmit
+          onChanged={(text) => {
+            approval.reload();
+            onChanged(purchaseOrder, text);
+          }}
+        />
+      ) : null}
+      {purchaseOrder.status === "draft" && (approval.data || approval.error) ? (
         <div className={ui.actions}>
-          <Button onClick={approve} disabled={busy}>
-            {busy ? "Working…" : "Approve"}
-          </Button>
-          <Button variant="secondary" onClick={() => router.push(`/operations/purchase-orders/${purchaseOrder.id}/edit`)} disabled={busy}>
-            Edit
-          </Button>
-          <Button variant="danger" onClick={remove} disabled={busy}>
-            Delete draft
-          </Button>
+          {approvalBlocksApproving(approvalState) ? null : (
+            <Button onClick={approve} disabled={busy}>
+              {busy ? "Working…" : "Approve"}
+            </Button>
+          )}
+          {waitingForApproval(approvalState) ? null : (
+            <>
+              <Button variant="secondary" onClick={() => router.push(`/operations/purchase-orders/${purchaseOrder.id}/edit`)} disabled={busy}>
+                Edit
+              </Button>
+              <Button variant="danger" onClick={remove} disabled={busy}>
+                Delete draft
+              </Button>
+            </>
+          )}
         </div>
       ) : null}
       {purchaseOrder.status === "approved" && hasRemaining ? (

@@ -8331,6 +8331,9 @@ signing in, delegating approvals while someone's away, reminders and
 escalation after a time, approval rules for sales invoices or journals,
 approval by text message, and blocking over-budget documents.
 
+Built (decisions 424-431, tenant migration 0100). Test:
+`tests/integration/approval-workflows.test.ts` (AW1-AW17).
+
 ## Fixed assets (examples not yet approved by Jess)
 
 Written overnight from Xero's fixed asset register and NZ practice; Jess

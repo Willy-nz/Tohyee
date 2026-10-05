@@ -22,6 +22,7 @@ const OUTCOMES: Record<RepeatingRun["outcome"], string> = {
   draft: "Saved as a draft",
   approved: "Approved",
   approval_refused: "Left as a draft",
+  submitted: "Submitted for approval",
 };
 
 /** Run now, pause, resume and end (RI2, RI7). */
