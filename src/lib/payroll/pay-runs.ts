@@ -1193,10 +1193,13 @@ type PaidLine = { kind: PayItemKind; quantity: string | null; rate: string | nul
  * period) and Overtime paid at the old rate x its multiplier, less what was
  * paid. Refuses what it can't work out honestly.
  */
+const PERIOD_WORDS: Record<PayFrequency, string> = { weekly: "week", fortnightly: "fortnight", four_weekly: "four-week period", monthly: "month" };
+
 function backPayForPeriod(
   target: BackPayTarget,
   lines: PaidLine[],
   rate: { pay_basis: "salary" | "hourly"; annual_salary: string | null; hourly_rate: string | null; effective_from: string },
+  employee: { name: string; previous: { pay_basis: "salary" | "hourly"; annual_salary: string | null } | null },
 ): { amount: Decimal; description: string } {
   const reference = payRunReference(target.run_number);
   const refuse = (what: string) => new ValidationError(`${NOT_SUPPORTED}: back pay ${what} (${reference}).`);
@@ -1215,6 +1218,16 @@ function backPayForPeriod(
     if (ordinary.some((line) => line.quantity !== null)) throw refuse("when the pay basis changed from hourly to a salary");
     if (overtime.length > 0) throw refuse("on overtime at a typed rate");
     for (const line of ordinary) paid = add(paid, dec(line.amount));
+    // A period that wasn't paid the full salary (unpaid days, say) would have them paid at the new rate (XP11b).
+    const previous = employee.previous;
+    if (previous?.pay_basis === "salary") {
+      const full = dec(salaryForPeriod(previous.annual_salary!, target.pay_frequency));
+      if (cmp(paid, full) !== 0) {
+        throw new ValidationError(
+          `${NOT_SUPPORTED}: back pay for ${reference}: ${employee.name}'s ordinary pay that ${PERIOD_WORDS[target.pay_frequency]} was $${formatMoney(toFixedString(paid, 2))}, not their full salary of $${formatMoney(toFixedString(full, 2))}. Work out its back pay and add it as an amount.`,
+        );
+      }
+    }
     owed = dec(salaryForPeriod(rate.annual_salary!, target.pay_frequency));
     description = `Back pay for ${reference} (${period}): salary of $${formatMoney(rate.annual_salary)} a year from ${formatDate(rate.effective_from)}`;
   } else {
@@ -1288,6 +1301,13 @@ export async function addBackPay(
   if (rate.effective_from >= run.period_start) {
     throw new ValidationError(`No back pay is owed for that pay rate: it starts on ${formatDate(rate.effective_from)}, not before this pay period.`);
   }
+  // The rate before this one, which the periods it now covers were paid at.
+  const previous = await tx.query<{ pay_basis: "salary" | "hourly"; annual_salary: string | null }>(
+    `select p.pay_basis, p.annual_salary::text from payroll_pay_rates p, payroll_pay_rates r
+      where r.id = $2 and p.employee_id = $1 and (p.effective_from, p.entry_number) < (r.effective_from, r.entry_number)
+      order by p.effective_from desc, p.entry_number desc limit 1`,
+    [employeeId, rate.id],
+  );
   const targets = await tx.query<BackPayTarget>(
     `select r.id, r.run_number::text, r.period_start::text, r.period_end::text, r.pay_frequency
        from payroll_pay_runs r join payroll_pay_run_employees pe on pe.pay_run_id = r.id
@@ -1323,7 +1343,7 @@ export async function addBackPay(
         order by l.line_number`,
       [target.id, employeeId],
     );
-    const result = backPayForPeriod(target, paid.rows, rate);
+    const result = backPayForPeriod(target, paid.rows, rate, { name: onRun.rows[0].name, previous: previous.rows[0] ?? null });
     if (isPositive(result.amount)) {
       added.push({ targetId: target.id, amount: toFixedString(result.amount, 2), description: result.description });
     }

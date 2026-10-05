@@ -13845,9 +13845,10 @@ pay), "Holiday pay on finishing" and "Redundancy".
   backdated to week 1. Back pay for week 2 would be $1,100.00 − $600.00 =
   $500.00, paying the unpaid days at the new rate, so it's refused instead:
   "Not supported yet (refused rather than guessed): back pay for PAYRUN-2:
-  Mere's ordinary pay that week was $600.00, not her full salary of
-  $1,000.00. Work out its back pay and add it as an amount." Weeks paid in
-  full get their back pay as in XP10 ($100.00 each).
+  Mere Salary's ordinary pay that week was $600.00, not their full salary of
+  $1,000.00. Work out its back pay and add it as an amount." (Tohyee uses
+  the full name and "their", as its other messages do.) Weeks paid in full
+  get their back pay as in XP10 ($100.00 each).
 
 ### Final pays
 
