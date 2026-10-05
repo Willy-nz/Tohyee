@@ -985,7 +985,13 @@ that something happened.
   tax codes; untaxed lines take the zero-rated or exempt code chosen.
   Guest checkouts go to the customer contact chosen for them, or are
   refused (SPC24). Refused rather than guessed: test orders, other
-  currencies, gift cards, tips or duties, chargebacks and reserves.
+  currencies, gift cards, tips or duties.
+- **Shopify chargebacks and reserves** (SPC25-SPC31, decisions 447-450,
+  tenant migration 0104): a payout's chargebacks go to the chargebacks
+  account chosen in the settings (fees to fees), won disputes come back,
+  and money Shopify holds back moves to a reserve bank account until it's
+  released. Chargeback holds and anything Shopify doesn't explain are
+  still refused. No summary mode (Jess): each order keeps its invoice.
 - **Remote access (remote access)**, three ways, one on at a time (switching
   asks first and turns the other off), all needing two-step sign-in to be in
   force (decided with Jess, 30 Sep 2026):
@@ -1560,8 +1566,8 @@ isn't acceptable, because people would trust it:
 - an import or reverse-charge tax code (imported services under the
   reverse charge, EX16-EX25), and a default purchase tax code on expense
   claims (their suppliers aren't contacts), cash coding and bank rules
-- sales platforms: WooCommerce, Square and Stripe, Shopify chargebacks
-  and reserves, customers' addresses and companies,
+- sales platforms: WooCommerce, Square and Stripe, Shopify chargeback
+  holds, customers' addresses and companies,
   stock levels, and anything written back to the store
 - stock "recomputation" (transfers between locations are built; editing or
   voiding a transfer, and transfers in transit, aren't)

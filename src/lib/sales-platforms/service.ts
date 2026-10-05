@@ -97,6 +97,8 @@ type ConnectionRow = {
   fees_account_id: string | null;
   sales_account_id: string | null;
   shipping_account_id: string | null;
+  chargebacks_account_id: string | null;
+  reserve_account_id: string | null;
   untaxed_tax_code_id: string | null;
   granted_scopes: string[];
   orders_synced_until: string | null;
@@ -106,6 +108,8 @@ type ConnectionRow = {
   fees_account_code: string | null;
   sales_account_code: string | null;
   shipping_account_code: string | null;
+  chargebacks_account_code: string | null;
+  reserve_account_code: string | null;
   untaxed_tax_code: string | null;
   tax_codes: Array<{ rate: string; taxCode: string }>;
   guest_contact_id: string | null;
@@ -119,8 +123,9 @@ const COLUMNS =
   "access_token_ciphertext, access_token_expires_at, webhook_key, webhook_subscription_ids, webhooks_note, sync_customers, " +
   "sync_products, status, customers_synced_until, products_synced_until, last_sync_at, last_error, failures, connected_by_email, " +
   "connected_at, disconnected_by_email, disconnected_at, post_to_accounts, start_date, clearing_account_id, payout_account_id, " +
-  "fees_account_id, sales_account_id, shipping_account_id, untaxed_tax_code_id, granted_scopes, orders_synced_until, payouts_synced_until, " +
-  ["clearing_account_id", "payout_account_id", "fees_account_id", "sales_account_id", "shipping_account_id"].map(accountCode).join(", ") +
+  "fees_account_id, sales_account_id, shipping_account_id, chargebacks_account_id, reserve_account_id, untaxed_tax_code_id, granted_scopes, " +
+  "orders_synced_until, payouts_synced_until, " +
+  ["clearing_account_id", "payout_account_id", "fees_account_id", "sales_account_id", "shipping_account_id", "chargebacks_account_id", "reserve_account_id"].map(accountCode).join(", ") +
   ", (select t.code from tax_codes t where t.id = untaxed_tax_code_id) as untaxed_tax_code" +
   ", guest_contact_id::text, (select g.name from contacts g where g.id = guest_contact_id) as guest_contact_name" +
   ", (select coalesce(json_agg(json_build_object('rate', m.rate::text, 'taxCode', t.code) order by m.rate), '[]'::json)" +
@@ -156,6 +161,8 @@ function toConnection(row: ConnectionRow): SalesPlatformConnection {
     feesAccountCode: row.fees_account_code,
     salesAccountCode: row.sales_account_code,
     shippingAccountCode: row.shipping_account_code,
+    chargebacksAccountCode: row.chargebacks_account_code,
+    reserveAccountCode: row.reserve_account_code,
     untaxedTaxCode: row.untaxed_tax_code,
     guestContactId: row.guest_contact_id,
     guestContactName: row.guest_contact_name,
@@ -585,6 +592,15 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   const sales = body.salesAccountCode === undefined ? undefined : await chooseAccount(tx, body.salesAccountCode, "salesAccountCode", "sales account", revenue);
   const shipping =
     body.shippingAccountCode === undefined ? undefined : await chooseAccount(tx, body.shippingAccountCode, "shippingAccountCode", "shipping account", revenue);
+  // Chargebacks and reserves (SPC25-SPC31): only needed once a payout has one.
+  const chargebacks =
+    body.chargebacksAccountCode === undefined
+      ? undefined
+      : await chooseAccount(tx, body.chargebacksAccountCode, "chargebacksAccountCode", "chargebacks account", (a) =>
+          a.account_class === "expense" ? null : "it isn't an expense account.",
+        );
+  const reserve =
+    body.reserveAccountCode === undefined ? undefined : await chooseAccount(tx, body.reserveAccountCode, "reserveAccountCode", "reserve account", bankInBase(tx.baseCurrency));
 
   let untaxed: TaxCodeChoice | null | undefined;
   if (body.untaxedTaxCode !== undefined) {
@@ -635,11 +651,16 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     fees: pick(fees?.id ?? fees, row.fees_account_id),
     sales: pick(sales?.id ?? sales, row.sales_account_id),
     shipping: pick(shipping?.id ?? shipping, row.shipping_account_id),
+    chargebacks: pick(chargebacks?.id ?? chargebacks, row.chargebacks_account_id),
+    reserve: pick(reserve?.id ?? reserve, row.reserve_account_id),
     untaxed: pick(untaxed?.id ?? untaxed, row.untaxed_tax_code_id),
     guest: pick(guest?.id ?? guest, row.guest_contact_id),
   };
   if (next.clearing !== null && next.clearing === next.payout) {
     throw new ValidationError("The clearing account and the account payouts arrive in must be different accounts.");
+  }
+  if (next.reserve !== null && (next.reserve === next.clearing || next.reserve === next.payout)) {
+    throw new ValidationError("The reserve account must be different from the clearing account and the account payouts arrive in.");
   }
   if (postToAccounts) {
     const missing = [
@@ -676,6 +697,8 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
   named(fees, row.fees_account_id, "fees account");
   named(sales, row.sales_account_id, "sales account");
   named(shipping, row.shipping_account_id, "shipping account");
+  named(chargebacks, row.chargebacks_account_id, "chargebacks account");
+  named(reserve, row.reserve_account_id, "reserve account");
   if (untaxed !== undefined && (untaxed?.id ?? null) !== row.untaxed_tax_code_id) changes.push(`untaxed sales: ${untaxed?.code ?? "none"}`);
   if (guest !== undefined && (guest?.id ?? null) !== row.guest_contact_id) changes.push(`guest checkouts: ${guest ? `to ${guest.name}` : "refused"}`);
   if (taxCodes !== undefined) {
@@ -696,9 +719,24 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
     `update sales_platform_connections
         set sync_customers = $2, sync_products = $3, post_to_accounts = $4, start_date = $5, clearing_account_id = $6, payout_account_id = $7,
             fees_account_id = $8, sales_account_id = $9, shipping_account_id = $10, untaxed_tax_code_id = $11, guest_contact_id = $12::bigint,
-            updated_at = now()
+            chargebacks_account_id = $13, reserve_account_id = $14, updated_at = now()
       where id = $1`,
-    [row.id, syncCustomers, syncProducts, postToAccounts, startDate, next.clearing, next.payout, next.fees, next.sales, next.shipping, next.untaxed, next.guest],
+    [
+      row.id,
+      syncCustomers,
+      syncProducts,
+      postToAccounts,
+      startDate,
+      next.clearing,
+      next.payout,
+      next.fees,
+      next.sales,
+      next.shipping,
+      next.untaxed,
+      next.guest,
+      next.chargebacks,
+      next.reserve,
+    ],
   );
   const message = changes.join("; ");
   await writeLog(tx, row.id, { source: "connection", action: "settings", message: `${message.charAt(0).toUpperCase()}${message.slice(1)}.` });

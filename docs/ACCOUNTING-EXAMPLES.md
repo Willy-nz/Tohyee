@@ -5683,7 +5683,7 @@ of app. Still open:
 - **Shipping**: shipping goes to the shipping account chosen in settings
   (4000 Sales to start with). Should it be its own account?
 
-### Shopify chargebacks and reserves (item 7 part 1, examples not yet approved by Jess)
+### Shopify chargebacks and reserves (item 7 part 1, approved by Jess, 5 Oct 2026)
 
 Jess, 5 Oct 2026: **no summary mode** (each order keeps its own invoice,
 and a payout matches them, as SPC15 and NetSuite do); a disputed amount goes
@@ -5721,7 +5721,7 @@ API 2026-07, 5 Oct 2026):
 The rules:
 
 - **Settings** (admins): a **chargebacks account** (an expense account,
-  e.g. 6030 Shopify chargebacks) and a **reserve account** (a bank account
+  e.g. 6025 Shopify chargebacks) and a **reserve account** (a bank account
   in the base currency, e.g. 1015 Shopify reserve, shown with the bank
   accounts in current assets; not the clearing or payout account). Neither
   is needed until a payout has a chargeback or reserve; such a payout is
@@ -5745,7 +5745,7 @@ The rules:
   account by transfer, the payout is checked to add up to its net, and each
   document is made once (idempotency keys per payout and step).
 
-Setup (on top of SPC11-SPC24's): 6030 Shopify chargebacks (expense) and
+Setup (on top of SPC11-SPC24's): 6025 Shopify chargebacks (expense) and
 1015 Shopify reserve (bank, NZD) chosen in the connection's settings. Orders
 #1005-#1010 are paid orders posted as SPC11 (invoice paid into 1010).
 
@@ -5753,7 +5753,7 @@ Setup (on top of SPC11-SPC24's): 6030 Shopify chargebacks (expense) and
   PAID, issued 2026-10-21T03:00Z, net **13.03**: CHARGE #1005 69.00 (fee
   2.07, net 66.93), DISPUTE_WITHDRAWAL #1002 −28.90 (fee 0.00, net −28.90),
   CHARGEBACK_FEE −25.00 (net −25.00; 25.00 is just this example's fee).
-  Posted 21 Oct: spend money from 1010 to Shopify **Dr 6020 2.07 / Dr 6030
+  Posted 21 Oct: spend money from 1010 to Shopify **Dr 6020 2.07 / Dr 6025
   28.90 ("Chargeback on #1002") / Dr 6020 25.00 ("Chargeback fee") / Cr
   1010 55.97** (no GST), and the transfer **Dr 1000 13.03 / Cr 1010 13.03**.
   1010 is back to **0.00** (69.00 − 55.97 − 13.03). INV-0002 (#1002) stays
@@ -5762,11 +5762,11 @@ Setup (on top of SPC11-SPC24's): 6030 Shopify chargebacks (expense) and
   2026-11-04T03:00Z, net **76.23**: DISPUTE_REVERSAL #1002 +28.90,
   CHARGEBACK_FEE_REFUND +25.00, CHARGE #1006 23.00 (fee 0.67, net 22.33).
   Posted 4 Nov: receive money into 1010 from Shopify **Dr 1010 53.90 / Cr
-  6030 28.90 / Cr 6020 25.00**, spend money **Dr 6020 0.67 / Cr 1010
+  6025 28.90 / Cr 6020 25.00**, spend money **Dr 6020 0.67 / Cr 1010
   0.67**, transfer **Dr 1000 76.23 / Cr 1010 76.23**. 1010: 23.00 + 53.90 −
-  0.67 − 76.23 = **0.00**; 6030 is back to **0.00**. Had Shopify not
+  0.67 − 76.23 = **0.00**; 6025 is back to **0.00**. Had Shopify not
   refunded the fee, there'd be no 25.00 line and the net would be 51.23.
-  Had the dispute been lost, nothing more comes: the 28.90 stays in 6030.
+  Had the dispute been lost, nothing more comes: the 28.90 stays in 6025.
 - **SPC27** An inquiry (no money taken) adds no transaction to a payout, so
   nothing is posted.
 - **SPC28** Shopify holds back a reserve. Payout **70005**, issued
@@ -5783,7 +5783,7 @@ Setup (on top of SPC11-SPC24's): 6030 Shopify chargebacks (expense) and
   **0.00**. The bank line "+54.62 SHOPIFY PAYOUT" matches the transfer.
 - **SPC30** No accounts chosen: payout 70003 in an organisation without a
   chargebacks account posts nothing and logs "Choose a chargebacks account
-  in the Shopify settings." Choosing 6030 and syncing again posts SPC25 once.
+  in the Shopify settings." Choosing 6025 and syncing again posts SPC25 once.
 - **SPC31** Still refused, logged, nothing posted: CHARGEBACK_HOLD,
   CHARGEBACK_HOLD_RELEASE, RESERVED_FUNDS_WITHDRAWAL and every other type
   not above (Shopify doesn't say what they do); a DISPUTE_WITHDRAWAL or
@@ -5791,7 +5791,15 @@ Setup (on top of SPC11-SPC24's): 6030 Shopify chargebacks (expense) and
   RESERVED_FUNDS_REVERSAL that's negative; a payout whose transactions don't
   add up to its net. The log names the type and amount.
 
-**Questions for Jess (chargebacks and reserves)**
+Built (decisions 447-450, tenant migration 0104). Tests:
+`tests/unit/sales-platform-orders.test.ts` and
+`tests/integration/sales-platform-orders.test.ts` (SPC25-SPC31). 6025 is
+used because 6030 is Cleaning in the default chart.
+
+**Questions for Jess (chargebacks and reserves)**, answered 5 Oct 2026:
+examples approved; GST on a lost chargeback: Jess is checking with IRD
+(Tohyee leaves GST alone meanwhile); build now and check a real payout
+later; chargeback holds stay refused. What was asked:
 
 1. **GST on a lost chargeback:** Tohyee leaves the sale's GST as it was
    (the money went back to the cardholder, but the invoice stands). Whether

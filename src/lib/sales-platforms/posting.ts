@@ -19,6 +19,7 @@ import {
   money,
   orderPayments,
   planOrder,
+  type PayoutLine,
   planPayout,
   planRefund,
 } from "@/lib/sales-platforms/orders";
@@ -49,6 +50,9 @@ export type Posting = PostingRules & {
   clearingAccountCode: string;
   payoutAccountCode: string;
   feesAccountCode: string;
+  /** Where disputed amounts go, and the bank account Shopify's reserve sits in (SPC25-SPC31); null until chosen. */
+  chargebacksAccountCode: string | null;
+  reserveAccountCode: string | null;
   /** The contact guest checkouts go to (decision 317), or null to refuse them. */
   guestContactId: string | null;
 };
@@ -74,6 +78,8 @@ type ConnectionSettingsRow = {
   sales_code: string | null;
   shipping_code: string | null;
   untaxed_code: string | null;
+  chargebacks_code: string | null;
+  reserve_code: string | null;
   guest_contact_id: string | null;
 };
 
@@ -86,13 +92,16 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
   const found = await tx.query<ConnectionSettingsRow>(
     `select c.id, c.platform, c.store_domain, c.post_to_accounts, c.start_date::text as start_date, c.clearing_account_id,
             clearing.code as clearing_code, payout.code as payout_code, fees.code as fees_code, sales.code as sales_code,
-            shipping.code as shipping_code, untaxed.code as untaxed_code, c.guest_contact_id::text
+            shipping.code as shipping_code, untaxed.code as untaxed_code, c.guest_contact_id::text,
+            chargebacks.code as chargebacks_code, reserve.code as reserve_code
        from sales_platform_connections c
        left join accounts clearing on clearing.id = c.clearing_account_id
        left join accounts payout on payout.id = c.payout_account_id
        left join accounts fees on fees.id = c.fees_account_id
        left join accounts sales on sales.id = c.sales_account_id
        left join accounts shipping on shipping.id = c.shipping_account_id
+       left join accounts chargebacks on chargebacks.id = c.chargebacks_account_id
+       left join accounts reserve on reserve.id = c.reserve_account_id
        left join tax_codes untaxed on untaxed.id = c.untaxed_tax_code_id
       where c.id = $1`,
     [connectionId],
@@ -116,6 +125,8 @@ export async function loadPosting(tx: OrgTx, connectionId: string, startInstant:
     clearingAccountCode: row.clearing_code!,
     payoutAccountCode: row.payout_code!,
     feesAccountCode: row.fees_code!,
+    chargebacksAccountCode: row.chargebacks_code,
+    reserveAccountCode: row.reserve_code,
     guestContactId: row.guest_contact_id,
     baseCurrency: tx.baseCurrency,
     gstRegistered: Boolean(settings.gstNumber),
@@ -164,6 +175,9 @@ type DocumentValues = Partial<{
   credit_note_refund_id: string;
   transfer_id: string;
   bank_transaction_id: string;
+  receipt_bank_transaction_id: string;
+  reserve_held_transfer_id: string;
+  reserve_released_transfer_id: string;
   external_updated_at: string | null;
 }>;
 
@@ -180,6 +194,9 @@ const DOCUMENT_COLUMNS = [
   "credit_note_refund_id",
   "transfer_id",
   "bank_transaction_id",
+  "receipt_bank_transaction_id",
+  "reserve_held_transfer_id",
+  "reserve_released_transfer_id",
   "external_updated_at",
 ] as const;
 
@@ -609,17 +626,50 @@ export async function postPayout(tx: OrgTx, context: PostingContext, payout: Pla
     await refused(tx, context, "payout", id, plan.reason);
     return "refused";
   }
+  // Chargebacks and reserves need their accounts chosen first (SPC30). That's
+  // fixed on Tohyee's side, so the payout is tried again at each sync ("failed").
+  const needsChargebacks = [...plan.charges, ...plan.receipts].some((line) => line.account === "chargebacks");
+  const missing = needsChargebacks && !posting.chargebacksAccountCode ? "chargebacks" : (plan.reserveHeld || plan.reserveReleased) && !posting.reserveAccountCode ? "reserve" : null;
+  if (missing) {
+    const what = missing === "chargebacks" ? "a chargeback" : "a reserve";
+    await refused(tx, context, "payout", id, `Payout ${id} has ${what}. Choose a ${missing} account in the ${platformLabel(posting)} settings.`);
+    return "failed";
+  }
+  const accountFor = (line: PayoutLine) => (line.account === "chargebacks" ? posting.chargebacksAccountCode! : posting.feesAccountCode);
   const reference = `${platformLabel(posting)} payout ${id}`;
   const made = await attempt(tx, async () => {
-    const { transfer } = await createTransfer(tx, {
-      source: SOURCE,
-      idempotencyKey: keyFor(posting, "payout", id, "transfer"),
-      fromAccountCode: posting.clearingAccountCode,
-      toAccountCode: posting.payoutAccountCode,
-      date: plan.date,
-      amount: plan.net,
-      reference,
-    });
+    const moveReserve = async (step: string, amount: string | null, from: string, to: string, what: string) =>
+      amount === null
+        ? null
+        : (
+            await createTransfer(tx, {
+              source: SOURCE,
+              idempotencyKey: keyFor(posting, "payout", id, step),
+              fromAccountCode: from,
+              toAccountCode: to,
+              date: plan.date,
+              amount,
+              reference: `${platformLabel(posting)} reserve ${what}, payout ${id}`,
+            })
+          ).transfer.id;
+    // Money coming back into the clearing account first (won disputes, a released reserve), so it's there to pay out.
+    let receiptId: string | null = null;
+    if (plan.receipts.length > 0) {
+      const { bankTransaction } = await createBankTransaction(tx, {
+        source: SOURCE,
+        idempotencyKey: keyFor(posting, "payout", id, "receipts"),
+        kind: "receive",
+        accountId: posting.clearingAccountId,
+        contactId: await platformContact(tx, posting),
+        date: plan.date,
+        reference,
+        amountsMode: "no_tax",
+        lines: plan.receipts.map((line) => ({ description: line.description, accountCode: accountFor(line), taxCode: null, amount: line.amount })),
+      });
+      receiptId = bankTransaction.id;
+    }
+    const releasedId = await moveReserve("reserve-released", plan.reserveReleased, posting.reserveAccountCode!, posting.clearingAccountCode, "released");
+    const heldId = await moveReserve("reserve-held", plan.reserveHeld, posting.clearingAccountCode, posting.reserveAccountCode!, "held");
     let bankTransactionId: string | null = null;
     if (plan.charges.length > 0) {
       const { bankTransaction } = await createBankTransaction(tx, {
@@ -631,11 +681,20 @@ export async function postPayout(tx: OrgTx, context: PostingContext, payout: Pla
         date: plan.date,
         reference,
         amountsMode: "no_tax",
-        lines: plan.charges.map((charge) => ({ description: charge.description, accountCode: posting.feesAccountCode, taxCode: null, amount: charge.amount })),
+        lines: plan.charges.map((line) => ({ description: line.description, accountCode: accountFor(line), taxCode: null, amount: line.amount })),
       });
       bankTransactionId = bankTransaction.id;
     }
-    return { transferId: transfer.id, bankTransactionId };
+    const { transfer } = await createTransfer(tx, {
+      source: SOURCE,
+      idempotencyKey: keyFor(posting, "payout", id, "transfer"),
+      fromAccountCode: posting.clearingAccountCode,
+      toAccountCode: posting.payoutAccountCode,
+      date: plan.date,
+      amount: plan.net,
+      reference,
+    });
+    return { transferId: transfer.id, bankTransactionId, receiptId, heldId, releasedId };
   });
   if (!made.ok) {
     await log(tx, context, {
@@ -647,21 +706,29 @@ export async function postPayout(tx: OrgTx, context: PostingContext, payout: Pla
     context.counts.failed += 1;
     return "failed";
   }
+  const value = made.value;
   await saveDocument(tx, posting, "payout", id, {
     state: "done",
     name: `Payout ${id}`,
-    transfer_id: made.value.transferId,
-    ...(made.value.bankTransactionId ? { bank_transaction_id: made.value.bankTransactionId } : {}),
+    transfer_id: value.transferId,
+    ...(value.bankTransactionId ? { bank_transaction_id: value.bankTransactionId } : {}),
+    ...(value.receiptId ? { receipt_bank_transaction_id: value.receiptId } : {}),
+    ...(value.heldId ? { reserve_held_transfer_id: value.heldId } : {}),
+    ...(value.releasedId ? { reserve_released_transfer_id: value.releasedId } : {}),
   });
   context.counts.posted = (context.counts.posted ?? 0) + 1;
-  const fees = plan.charges.length === 0 ? "" : ` and ${plan.charges.map((charge) => charge.amount).join(" + ")} of fees and adjustments to ${posting.feesAccountCode}`;
+  const parts = [`${plan.net} from ${posting.clearingAccountCode} to ${posting.payoutAccountCode}`];
+  if (plan.charges.length > 0) parts.push(`${plan.charges.map((line) => `${line.amount} to ${accountFor(line)}`).join(", ")} paid out of ${posting.clearingAccountCode}`);
+  if (plan.receipts.length > 0) parts.push(`${plan.receipts.map((line) => `${line.amount} from ${accountFor(line)}`).join(", ")} back into ${posting.clearingAccountCode}`);
+  if (plan.reserveHeld) parts.push(`${plan.reserveHeld} held in ${posting.reserveAccountCode}`);
+  if (plan.reserveReleased) parts.push(`${plan.reserveReleased} released from ${posting.reserveAccountCode}`);
   await log(tx, context, {
     action: "posted",
     recordKind: "payout",
     externalId: id,
     documentType: "transfer",
-    documentId: made.value.transferId,
-    message: `Posted payout ${id} on ${plan.date}: ${plan.net} from ${posting.clearingAccountCode} to ${posting.payoutAccountCode}${fees}.`,
+    documentId: value.transferId,
+    message: `Posted payout ${id} on ${plan.date}: ${parts.join("; ")}.`,
   });
   return "posted";
 }

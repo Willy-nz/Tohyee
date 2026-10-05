@@ -1,6 +1,7 @@
 import { businessTimeZone } from "@/lib/dates";
 import { type AmountsMode, calculateInvoice } from "@/lib/invoices/amounts";
 import {
+  abs,
   add,
   cmp,
   dec,
@@ -17,6 +18,7 @@ import {
   ZERO_DECIMAL,
 } from "@/lib/money/decimal";
 import type {
+  PlatformBalanceTransaction,
   PlatformOrder,
   PlatformOrderLine,
   PlatformPayout,
@@ -371,32 +373,72 @@ export function planRefund(
 // ---------------------------------------------------------------------------
 // Payouts
 
+/** Which settings account a payout line goes to. */
+export type PayoutLineAccount = "fees" | "chargebacks";
+
+export type PayoutLine = { description: string; amount: string; account: PayoutLineAccount };
+
 export type PayoutPlan =
   | {
       ok: true;
       date: string;
       net: string;
-      /** The spend money's lines: the fees, then each adjustment. */
-      charges: Array<{ description: string; amount: string }>;
+      /** The spend money's lines: the fees, each adjustment, chargebacks and chargeback fees. */
+      charges: PayoutLine[];
+      /** The receive money's lines: won disputes and chargeback fees given back (SPC26). */
+      receipts: PayoutLine[];
+      /** Moved from the clearing account to the reserve account (SPC28), or back (SPC29); null for none. */
+      reserveHeld: string | null;
+      reserveReleased: string | null;
     }
   | Refusal;
 
-const POSTABLE = ["CHARGE", "REFUND", "ADJUSTMENT"];
+/**
+ * The balance transaction types Tohyee posts, and the sign each must have
+ * (SPC25-SPC31). Shopify names the types without saying what they do, so
+ * the steps and signs are Tohyee's reading of the names: a transaction
+ * with the other sign refuses the payout rather than being guessed at.
+ */
+const POSTABLE: Record<string, "any" | "negative" | "positive"> = {
+  CHARGE: "any",
+  REFUND: "any",
+  ADJUSTMENT: "any",
+  DISPUTE_WITHDRAWAL: "negative",
+  CHARGEBACK_FEE: "negative",
+  DISPUTE_REVERSAL: "positive",
+  CHARGEBACK_FEE_REFUND: "positive",
+  RESERVED_FUNDS: "negative",
+  RESERVED_FUNDS_REVERSAL: "positive",
+};
+
+const DISPUTES = ["DISPUTE_WITHDRAWAL", "DISPUTE_REVERSAL", "CHARGEBACK_FEE", "CHARGEBACK_FEE_REFUND"];
 
 /**
- * A Shopify Payments payout (SPC15): the transfer to the bank for its net,
- * and the fees and adjustments as one spend money from the clearing account.
- * Refused if anything in it isn't a charge, refund or adjustment, or the
- * balance transactions don't add up to the payout.
+ * A Shopify Payments payout (SPC15, SPC25-SPC31): the transfer to the bank
+ * for its net; the fees, adjustments, chargebacks and chargeback fees as one
+ * spend money from the clearing account; won disputes and chargeback fees
+ * given back as one receive money; and reserves held or released as
+ * transfers to or from the reserve account. Refused if anything in it is
+ * another type or has an unexpected sign, or the balance transactions don't
+ * add up to the payout.
  */
 export function planPayout(payout: PlatformPayout, baseCurrency: string): PayoutPlan {
   const what = `Payout ${payout.externalId}`;
   if (payout.direction !== "DEPOSIT") return refuse(`${what} is a ${payout.direction.toLowerCase()} (money taken from the bank); those aren't supported yet.`);
   if (payout.currency !== baseCurrency) return refuse(`${what} is in ${payout.currency}; Tohyee only brings in payouts in ${baseCurrency}.`);
   if (payout.incomplete) return refuse(`${what} has more balance transactions than Tohyee reads.`);
-  const others = [...new Set(payout.transactions.filter((t) => !POSTABLE.includes(t.type)).map((t) => t.type))];
+  const others = [...new Set(payout.transactions.filter((t) => !(t.type in POSTABLE)).map((t) => t.type))];
   if (others.length > 0) {
-    return refuse(`${what} has ${others.join(", ").toLowerCase()} transactions; only charges, refunds and adjustments are posted, so record this payout by hand.`);
+    return refuse(
+      `${what} has ${others.join(", ").toLowerCase()} transactions; only charges, refunds, adjustments, chargebacks and reserves are posted, so record this payout by hand.`,
+    );
+  }
+  for (const t of payout.transactions) {
+    const sign = POSTABLE[t.type];
+    const amount = dec(t.amount);
+    if ((sign === "negative" && !isNegative(amount)) || (sign === "positive" && !isPositive(amount))) {
+      return refuse(`${what} has a ${t.type.toLowerCase()} transaction of ${money(amount)}; Tohyee expects it to be ${sign}, so record this payout by hand.`);
+    }
   }
   const net = dec(payout.net);
   const nets = sum(payout.transactions.map((t) => dec(t.net)));
@@ -404,14 +446,29 @@ export function planPayout(payout: PlatformPayout, baseCurrency: string): Payout
   if (!isPositive(net)) return refuse(`${what} is ${money(net)}; only payouts of more than nothing are posted.`);
   const fees = sum(payout.transactions.map((t) => dec(t.fee)));
   if (isNegative(fees)) return refuse(`${what}'s fees come to ${money(fees)} (fees given back); that isn't supported yet.`);
-  const charges: Array<{ description: string; amount: string }> = [];
-  if (isPositive(fees)) charges.push({ description: `Shopify Payments fees, payout ${payout.externalId}`, amount: money(fees) });
+  const charges: PayoutLine[] = [];
+  const receipts: PayoutLine[] = [];
+  if (isPositive(fees)) charges.push({ description: `Shopify Payments fees, payout ${payout.externalId}`, amount: money(fees), account: "fees" });
   for (const t of payout.transactions.filter((entry) => entry.type === "ADJUSTMENT")) {
     // An adjustment's own fee is already in the fees; its amount is what's left.
     const amount = sub(dec(t.net), sub(ZERO_DECIMAL, dec(t.fee)));
     if (isPositive(amount)) return refuse(`${what} has an adjustment that adds ${money(amount)}; adjustments in Tohyee's favour aren't supported yet.`);
     if (isZero(amount)) continue;
-    charges.push({ description: `Shopify adjustment${t.adjustmentReason ? `: ${t.adjustmentReason}` : ""}, payout ${payout.externalId}`, amount: money(sub(ZERO_DECIMAL, amount)) });
+    charges.push({ description: `Shopify adjustment${t.adjustmentReason ? `: ${t.adjustmentReason}` : ""}, payout ${payout.externalId}`, amount: money(sub(ZERO_DECIMAL, amount)), account: "fees" });
   }
-  return { ok: true, date: localDate(payout.issuedAt), net: money(net), charges };
+  const on = (t: PlatformBalanceTransaction) => (t.orderName ? ` on ${t.orderName}` : "");
+  for (const t of payout.transactions.filter((entry) => DISPUTES.includes(entry.type))) {
+    // Each one's fee is already in the fees; its amount (taken or given back) is the line.
+    const amount = dec(t.amount);
+    const line: PayoutLine =
+      t.type === "DISPUTE_WITHDRAWAL" || t.type === "DISPUTE_REVERSAL"
+        ? { description: `${t.type === "DISPUTE_WITHDRAWAL" ? "Chargeback" : "Chargeback won"}${on(t)}, payout ${payout.externalId}`, amount: money(abs(amount)), account: "chargebacks" }
+        : { description: `${t.type === "CHARGEBACK_FEE" ? "Chargeback fee" : "Chargeback fee given back"}${on(t)}, payout ${payout.externalId}`, amount: money(abs(amount)), account: "fees" };
+    (isNegative(amount) ? charges : receipts).push(line);
+  }
+  const reserve = (type: string) => {
+    const total = sum(payout.transactions.filter((t) => t.type === type).map((t) => abs(dec(t.amount))));
+    return isZero(total) ? null : money(total);
+  };
+  return { ok: true, date: localDate(payout.issuedAt), net: money(net), charges, receipts, reserveHeld: reserve("RESERVED_FUNDS"), reserveReleased: reserve("RESERVED_FUNDS_REVERSAL") };
 }

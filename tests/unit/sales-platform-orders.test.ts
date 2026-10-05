@@ -28,6 +28,10 @@ import {
   orderNode,
   payout70001,
   payout70002,
+  payout70003,
+  payout70004,
+  payout70005,
+  payout70006,
   type OrderFixture,
   type PayoutFixture,
   payoutNode,
@@ -229,7 +233,10 @@ describe("payouts (SPC15)", () => {
       ok: true,
       date: "2026-10-07",
       net: "49.38",
-      charges: [{ description: "Shopify Payments fees, payout 70001", amount: "2.52" }],
+      charges: [{ description: "Shopify Payments fees, payout 70001", amount: "2.52", account: "fees" }],
+      receipts: [],
+      reserveHeld: null,
+      reserveReleased: null,
     });
   });
 
@@ -239,23 +246,78 @@ describe("payouts (SPC15)", () => {
       date: "2026-10-14",
       net: "17.33",
       charges: [
-        { description: "Shopify Payments fees, payout 70002", amount: "0.67" },
-        { description: "Shopify adjustment: Shopify adjustment, payout 70002", amount: "5.00" },
+        { description: "Shopify Payments fees, payout 70002", amount: "0.67", account: "fees" },
+        { description: "Shopify adjustment: Shopify adjustment, payout 70002", amount: "5.00", account: "fees" },
       ],
+      receipts: [],
+      reserveHeld: null,
+      reserveReleased: null,
     });
   });
 
-  it("refuses chargebacks, withdrawals and transactions that don't add up", () => {
-    const chargeback = payout70001({ transactions: [...payout70001().transactions, { id: 80009, type: "CHARGEBACK", amount: "-10.00", fee: "0.00", net: "-10.00" }], net: "39.38" });
-    expect(planPayout(payout(chargeback), "NZD")).toEqual({
+  it("refuses other types, withdrawals and transactions that don't add up", () => {
+    const hold = payout70001({ transactions: [...payout70001().transactions, { id: 80009, type: "CHARGEBACK_HOLD", amount: "-10.00", fee: "0.00", net: "-10.00" }], net: "39.38" });
+    expect(planPayout(payout(hold), "NZD")).toEqual({
       ok: false,
-      reason: "Payout 70001 has chargeback transactions; only charges, refunds and adjustments are posted, so record this payout by hand.",
+      reason: "Payout 70001 has chargeback_hold transactions; only charges, refunds, adjustments, chargebacks and reserves are posted, so record this payout by hand.",
     });
     expect(planPayout(payout(payout70001({ net: "50.00" })), "NZD")).toEqual({
       ok: false,
       reason: "Payout 70001's transactions come to 49.38 but the payout is 50.00, so nothing was posted.",
     });
     expect(planPayout(payout(payout70001({ direction: "WITHDRAWAL" })), "NZD")).toMatchObject({ ok: false });
+  });
+});
+
+describe("chargebacks and reserves (SPC25-SPC31)", () => {
+  it("SPC25 70003: the chargeback to the chargebacks account, its fee to fees, 13.03 paid out", () => {
+    expect(planPayout(payout(payout70003()), "NZD")).toEqual({
+      ok: true,
+      date: "2026-10-21",
+      net: "13.03",
+      charges: [
+        { description: "Shopify Payments fees, payout 70003", amount: "2.07", account: "fees" },
+        { description: "Chargeback on #1002, payout 70003", amount: "28.90", account: "chargebacks" },
+        { description: "Chargeback fee on #1002, payout 70003", amount: "25.00", account: "fees" },
+      ],
+      receipts: [],
+      reserveHeld: null,
+      reserveReleased: null,
+    });
+  });
+
+  it("SPC26 70004: the won dispute and the fee given back come in; 76.23 paid out", () => {
+    expect(planPayout(payout(payout70004()), "NZD")).toEqual({
+      ok: true,
+      date: "2026-11-04",
+      net: "76.23",
+      charges: [{ description: "Shopify Payments fees, payout 70004", amount: "0.67", account: "fees" }],
+      receipts: [
+        { description: "Chargeback won on #1002, payout 70004", amount: "28.90", account: "chargebacks" },
+        { description: "Chargeback fee given back on #1002, payout 70004", amount: "25.00", account: "fees" },
+      ],
+      reserveHeld: null,
+      reserveReleased: null,
+    });
+  });
+
+  it("SPC28 and SPC29: 10.00 held in reserve, then released", () => {
+    expect(planPayout(payout(payout70005()), "NZD")).toMatchObject({ ok: true, net: "87.10", reserveHeld: "10.00", reserveReleased: null, receipts: [] });
+    expect(planPayout(payout(payout70006()), "NZD")).toMatchObject({ ok: true, date: "2027-03-11", net: "54.62", reserveHeld: null, reserveReleased: "10.00" });
+  });
+
+  it("SPC31: refuses a chargeback or reserve with the sign the other way, and types Shopify doesn't explain", () => {
+    const positive = payout70003({ transactions: [payout70003().transactions[0], { id: 80007, type: "DISPUTE_WITHDRAWAL", amount: "28.90", fee: "0.00", net: "28.90" }], net: "95.83" });
+    expect(planPayout(payout(positive), "NZD")).toEqual({
+      ok: false,
+      reason: "Payout 70003 has a dispute_withdrawal transaction of 28.90; Tohyee expects it to be negative, so record this payout by hand.",
+    });
+    const released = payout70006({ transactions: [{ id: 80014, type: "RESERVED_FUNDS_REVERSAL", amount: "-10.00", fee: "0.00", net: "-10.00" }, payout70006().transactions[1]], net: "34.62" });
+    expect(planPayout(payout(released), "NZD")).toMatchObject({ ok: false });
+    for (const type of ["CHARGEBACK_HOLD_RELEASE", "RESERVED_FUNDS_WITHDRAWAL"]) {
+      const other = payout70005({ transactions: [payout70005().transactions[0], { id: 80013, type, amount: "-10.00", fee: "0.00", net: "-10.00" }] });
+      expect(planPayout(payout(other), "NZD")).toMatchObject({ ok: false });
+    }
   });
 });
 

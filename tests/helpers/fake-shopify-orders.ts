@@ -348,6 +348,68 @@ export function payout70002(overrides: Partial<PayoutFixture> = {}): PayoutFixtu
   };
 }
 
+/** SPC25: payout 70003 (net 13.03): a charge, a chargeback on #1002 and its fee. */
+export function payout70003(overrides: Partial<PayoutFixture> = {}): PayoutFixture {
+  return {
+    id: 70003,
+    issuedAt: "2026-10-21T03:00:00Z",
+    status: "PAID",
+    net: "13.03",
+    transactions: [
+      { id: 80006, type: "CHARGE", amount: "69.00", fee: "2.07", net: "66.93", orderName: "#1005" },
+      { id: 80007, type: "DISPUTE_WITHDRAWAL", amount: "-28.90", fee: "0.00", net: "-28.90", orderName: "#1002" },
+      { id: 80008, type: "CHARGEBACK_FEE", amount: "-25.00", fee: "0.00", net: "-25.00", orderName: "#1002" },
+    ],
+    ...overrides,
+  };
+}
+
+/** SPC26: payout 70004 (net 76.23): the dispute won, its fee given back, and a charge. */
+export function payout70004(overrides: Partial<PayoutFixture> = {}): PayoutFixture {
+  return {
+    id: 70004,
+    issuedAt: "2026-11-04T03:00:00Z",
+    status: "PAID",
+    net: "76.23",
+    transactions: [
+      { id: 80009, type: "DISPUTE_REVERSAL", amount: "28.90", fee: "0.00", net: "28.90", orderName: "#1002" },
+      { id: 80010, type: "CHARGEBACK_FEE_REFUND", amount: "25.00", fee: "0.00", net: "25.00", orderName: "#1002" },
+      { id: 80011, type: "CHARGE", amount: "23.00", fee: "0.67", net: "22.33", orderName: "#1006" },
+    ],
+    ...overrides,
+  };
+}
+
+/** SPC28: payout 70005 (net 87.10): a charge and 10.00 held in reserve. */
+export function payout70005(overrides: Partial<PayoutFixture> = {}): PayoutFixture {
+  return {
+    id: 70005,
+    issuedAt: "2026-11-11T03:00:00Z",
+    status: "PAID",
+    net: "87.10",
+    transactions: [
+      { id: 80012, type: "CHARGE", amount: "100.00", fee: "2.90", net: "97.10", orderName: "#1007" },
+      { id: 80013, type: "RESERVED_FUNDS", amount: "-10.00", fee: "0.00", net: "-10.00" },
+    ],
+    ...overrides,
+  };
+}
+
+/** SPC29: payout 70006 (net 54.62): the reserve released and a charge. */
+export function payout70006(overrides: Partial<PayoutFixture> = {}): PayoutFixture {
+  return {
+    id: 70006,
+    issuedAt: "2027-03-11T03:00:00Z",
+    status: "PAID",
+    net: "54.62",
+    transactions: [
+      { id: 80014, type: "RESERVED_FUNDS_REVERSAL", amount: "10.00", fee: "0.00", net: "10.00" },
+      { id: 80015, type: "CHARGE", amount: "46.00", fee: "1.38", net: "44.62", orderName: "#1010" },
+    ],
+    ...overrides,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // The pretend store
 

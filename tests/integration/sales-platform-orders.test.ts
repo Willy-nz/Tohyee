@@ -3,9 +3,11 @@ import * as connectionRoute from "@/app/api/sales-platforms/connections/[connect
 import * as logRoute from "@/app/api/sales-platforms/connections/[connectionId]/log/route";
 import * as webhookRoute from "@/app/api/sales-platforms/webhooks/[organisationId]/[webhookKey]/route";
 import type { SessionUser } from "@/lib/auth/sessions";
-import { listStatementLines } from "@/lib/bank/accounts";
+import { createAccount } from "@/lib/accounts/service";
+import { createBankAccount, listStatementLines } from "@/lib/bank/accounts";
 import { importStatementFile } from "@/lib/bank/imports";
 import { suggestionsForLine } from "@/lib/bank/reconcile";
+import { createBankTransaction } from "@/lib/bank/transactions";
 import { approveBill, createBill } from "@/lib/bills/service";
 import { createContact, getContact } from "@/lib/contacts/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -33,6 +35,10 @@ import {
   orderWebhookBody,
   payout70001,
   payout70002,
+  payout70003,
+  payout70004,
+  payout70005,
+  payout70006,
   refund6001,
   refundWebhookBody,
   signedWebhook,
@@ -311,6 +317,124 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
     await w.sync("2026-10-15T04:00:00Z");
     expect(w.state.calls.filter((call) => call.startsWith("balance:"))).toEqual([]);
     expect(await count(w, "ledger_journals")).toBe(before);
+  });
+
+  it("SPC25-SPC30: chargebacks to the chargebacks account, reserves held and released, each payout once", async () => {
+    const w = await setup();
+    const clearing = (await w.as((tx) => tx.query<{ id: string }>("select id from accounts where code = '1010'"))).rows[0].id;
+    const customer = await w.as((tx) => createContact(tx, { idempotencyKey: key("c"), name: "Shopify sales", isCustomer: true }));
+    // The orders' payments in the clearing account (SPC11 posts these from each order; here they stand in for #1005-#1010).
+    const paid = (date: string, amount: string) =>
+      w.as((tx) =>
+        createBankTransaction(tx, {
+          idempotencyKey: key("paid"),
+          kind: "receive",
+          accountId: clearing,
+          contactId: customer.contact.id,
+          date,
+          reference: "Orders paid",
+          amountsMode: "no_tax",
+          lines: [{ description: "Orders", accountCode: "4000", taxCode: null, amount }],
+        }),
+      );
+    const docOf = async (id: string) =>
+      (
+        await w.as((tx) =>
+          tx.query<{ transfer_id: string | null; bank_transaction_id: string | null; receipt_bank_transaction_id: string | null; reserve_held_transfer_id: string | null; reserve_released_transfer_id: string | null }>(
+            `select transfer_id::text, bank_transaction_id::text, receipt_bank_transaction_id::text, reserve_held_transfer_id::text, reserve_released_transfer_id::text
+               from sales_platform_documents where record_kind = 'payout' and external_id = $1`,
+            [id],
+          ),
+        )
+      ).rows[0];
+    const lines = async (transactionId: string | null) =>
+      (
+        await w.as((tx) =>
+          tx.query<{ code: string; debit: string; credit: string; description: string | null }>(
+            `select a.code, to_char(l.debit_amount, 'FM990.00') as debit, to_char(l.credit_amount, 'FM990.00') as credit, l.description
+               from ledger_journal_lines l join accounts a on a.id = l.account_id join bank_transactions t on t.journal_id = l.journal_id
+              where t.id = $1 order by l.id`,
+            [transactionId],
+          ),
+        )
+      ).rows.map((row) => [row.code, row.debit, row.credit]);
+
+    // SPC30: payout 70003 has a chargeback but there's no chargebacks account yet: nothing posted, logged, tried again.
+    await paid("2026-10-20", "69.00");
+    w.state.payouts.push(payout70003());
+    await w.sync("2026-10-21T04:00:00Z");
+    expect(await docOf("70003")).toBeUndefined();
+    expect((await logFor(w, "70003")).at(-1)).toMatchObject({ action: "failed", message: "Payout 70003 has a chargeback. Choose a chargebacks account in the Shopify settings." });
+    await w.as(async (tx) => {
+      await createAccount(tx, { code: "6025", name: "Shopify chargebacks", accountType: "expense" });
+      await createBankAccount(tx, { code: "1015", name: "Shopify reserve", accountType: "bank" });
+    });
+    // The reserve account can't be the clearing or payout account, and must be a bank account.
+    await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { reserveAccountCode: "1010" }))).rejects.toThrow("The reserve account must be different");
+    await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { reserveAccountCode: "6025" }))).rejects.toThrow("it isn't a bank account.");
+    await expect(w.as((tx) => updateConnectionSettings(tx, w.connectionId, { chargebacksAccountCode: "1015" }))).rejects.toThrow("it isn't an expense account.");
+    expect(await w.as((tx) => updateConnectionSettings(tx, w.connectionId, { chargebacksAccountCode: "6025", reserveAccountCode: "1015" }))).toMatchObject({
+      chargebacksAccountCode: "6025",
+      reserveAccountCode: "1015",
+    });
+
+    // SPC25: posted once the account is chosen.
+    await w.sync("2026-10-21T05:00:00Z");
+    const p70003 = (await docOf("70003"))!;
+    expect(await journal(w, await journalIdOf(w, "bank_transfers", "journal_id", p70003.transfer_id))).toEqual({ "1000": "13.03", "1010": "-13.03" });
+    expect(await lines(p70003.bank_transaction_id)).toEqual([
+      ["6020", "2.07", "0.00"],
+      ["6025", "28.90", "0.00"],
+      ["6020", "25.00", "0.00"],
+      ["1010", "0.00", "55.97"],
+    ]);
+    expect(p70003.receipt_bank_transaction_id).toBeNull();
+    expect(await balance(w, "1010")).toBe("0.00");
+    expect(await balance(w, "6025")).toBe("28.90");
+    await w.sync("2026-10-22T04:00:00Z");
+    expect(await count(w, "bank_transfers")).toBe(1);
+
+    // SPC26: the dispute is won and the fee given back.
+    await paid("2026-11-03", "23.00");
+    w.state.payouts.push(payout70004());
+    await w.sync("2026-11-04T04:00:00Z");
+    const p70004 = (await docOf("70004"))!;
+    expect(await lines(p70004.receipt_bank_transaction_id)).toEqual([
+      ["6025", "0.00", "28.90"],
+      ["6020", "0.00", "25.00"],
+      ["1010", "53.90", "0.00"],
+    ]);
+    expect(await lines(p70004.bank_transaction_id)).toEqual([
+      ["6020", "0.67", "0.00"],
+      ["1010", "0.00", "0.67"],
+    ]);
+    expect(await journal(w, await journalIdOf(w, "bank_transfers", "journal_id", p70004.transfer_id))).toEqual({ "1000": "76.23", "1010": "-76.23" });
+    expect(await balance(w, "1010")).toBe("0.00");
+    expect(await balance(w, "6025")).toBe("0.00");
+
+    // SPC28: 10.00 held in reserve.
+    await paid("2026-11-10", "100.00");
+    w.state.payouts.push(payout70005());
+    await w.sync("2026-11-11T04:00:00Z");
+    const p70005 = (await docOf("70005"))!;
+    expect(await journal(w, await journalIdOf(w, "bank_transfers", "journal_id", p70005.reserve_held_transfer_id))).toEqual({ "1010": "-10.00", "1015": "10.00" });
+    expect(await journal(w, await journalIdOf(w, "bank_transfers", "journal_id", p70005.transfer_id))).toEqual({ "1000": "87.10", "1010": "-87.10" });
+    expect(await balance(w, "1010")).toBe("0.00");
+    expect(await balance(w, "1015")).toBe("10.00");
+
+    // SPC29: the reserve released.
+    await paid("2027-03-10", "46.00");
+    w.state.payouts.push(payout70006());
+    await w.sync("2027-03-11T04:00:00Z");
+    const p70006 = (await docOf("70006"))!;
+    expect(await journal(w, await journalIdOf(w, "bank_transfers", "journal_id", p70006.reserve_released_transfer_id))).toEqual({ "1010": "10.00", "1015": "-10.00" });
+    expect(await journal(w, await journalIdOf(w, "bank_transfers", "journal_id", p70006.transfer_id))).toEqual({ "1000": "54.62", "1010": "-54.62" });
+    expect(await balance(w, "1010")).toBe("0.00");
+    expect(await balance(w, "1015")).toBe("0.00");
+    expect((await logFor(w, "70006")).at(-1)).toMatchObject({
+      action: "posted",
+      message: "Posted payout 70006 on 2027-03-11: 54.62 from 1010 to 1000; 1.38 to 6020 paid out of 1010; 10.00 released from 1015.",
+    });
   });
 
   it("SPC12: a non-GST-registered organisation's order has no tax, and the log says why", async () => {
