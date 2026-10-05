@@ -1,3 +1,4 @@
+import { listApprovalRequests } from "@/lib/approvals/requests";
 import { listAccounts } from "@/lib/accounts/service";
 import { boundedLimit, firstRows } from "@/lib/ai/limits";
 import type { AiAccessLevel } from "@/lib/ai/access-levels";
@@ -531,6 +532,33 @@ export const READ_TOOLS: readonly AiTool[] = (
       const item = await getInboxItem(tx, args.itemId);
       const file = await getInboxItemContent(tx, item.id);
       return new ToolFileAnswer({ item: inboxItemSummary(item) }, { uri: `tohyee://bills-inbox/${item.id}/${encodeURIComponent(file.fileName)}`, ...file });
+    },
+  },
+  {
+    name: "list_approvals",
+    title: "Waiting for approval",
+    description:
+      "Bills, purchase orders and expense claims waiting for approval under an approval rule: the document, its total, the rule, the step it's at and who it's waiting for. Only people approve or decline them, in Tohyee.",
+    inputSchema: schema({}),
+    async run(tx, _args, context) {
+      const requests = await listApprovalRequests(tx, { userId: tx.actor.userId, email: tx.actor.email, role: context.role });
+      return {
+        requests: requests.map((request) => ({
+          requestId: request.id,
+          documentType: request.documentType,
+          documentId: request.documentId,
+          document: request.documentLabel,
+          total: request.total,
+          currencyCode: request.currencyCode,
+          rule: request.ruleName,
+          step: request.currentStep,
+          steps: request.stepCount,
+          waitingFor: request.waitingFor,
+          submittedBy: request.submittedByEmail,
+          submittedAt: request.submittedAt,
+          lastError: request.lastError,
+        })),
+      };
     },
   },
   ] satisfies Omit<AiTool, "level">[]

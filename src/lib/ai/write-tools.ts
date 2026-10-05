@@ -1,3 +1,7 @@
+import { approvalNeededForAi } from "@/lib/approvals/requests";
+import { submitForApproval } from "@/lib/approvals/service";
+import { configuredOrigin } from "@/lib/auth/origin";
+import { kickEmailOutbox } from "@/lib/email/outbox";
 import { randomBytes } from "node:crypto";
 import { type AiTool, billSummary, DATE, documentLines, inboxItemSummary, invoiceSummary, type JsonSchema, schema } from "@/lib/ai/tools";
 import { billDuplicateWarnings } from "@/lib/bills/duplicates";
@@ -9,7 +13,8 @@ import { createContact, getContact, updateContact } from "@/lib/contacts/service
 import { recordPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, getInvoice, updateInvoice } from "@/lib/invoices/service";
 import { createJournalDraft, postJournalDraft, updateJournalDraft } from "@/lib/ledger/journal-drafts";
-import { requireIdempotencyKey } from "@/lib/validation";
+import { ConflictError } from "@/lib/errors";
+import { requireId, requireIdempotencyKey } from "@/lib/validation";
 
 /**
  * Tools that change the books (decisions 346-348). "draft" tools make and
@@ -298,6 +303,34 @@ export const WRITE_TOOLS: readonly AiTool[] = [
       return { draft: await updateJournalDraft(tx, args.draftId, journalInput(args)) };
     },
   },
+  {
+    name: "submit_for_approval",
+    title: "Submit for approval",
+    level: "draft",
+    description:
+      "Submits a draft bill or purchase order (or an expense claim) for approval under the first approval rule that matches it. It stays a draft, can't be edited until a person withdraws it, and the rule's approvers are asked. Only people approve or decline it.",
+    inputSchema: schema(
+      {
+        documentType: { type: "string", enum: ["bill", "purchase_order", "expense_claim"], description: "What kind of document." },
+        documentId: ID("document"),
+      },
+      ["documentType", "documentId"],
+    ),
+    async run(tx, args, context) {
+      const request = await submitForApproval(tx, { userId: tx.actor.userId, email: tx.actor.email, role: context.role }, args.documentType, args.documentId, {
+        origin: await configuredOrigin(),
+      });
+      kickEmailOutbox(context.organisationId);
+      return {
+        requestId: request.id,
+        document: request.documentLabel,
+        rule: request.ruleName,
+        step: request.currentStep,
+        steps: request.stepCount,
+        waitingFor: request.waitingFor,
+      };
+    },
+  },
   // ---------------------------------------------------------------- post level
   {
     name: "approve_invoice",
@@ -315,9 +348,12 @@ export const WRITE_TOOLS: readonly AiTool[] = [
     title: "Approve a bill",
     level: "post",
     description:
-      "Approves a draft bill: posts it to the ledger on its date. It can't be undone here (only voided by a person). A bill that looks like one already entered is refused: only a person can approve it anyway.",
+      "Approves a draft bill: posts it to the ledger on its date. It can't be undone here (only voided by a person). A bill that looks like one already entered is refused: only a person can approve it anyway. So is a bill an approval rule applies to: submit it for approval instead (submit_for_approval).",
     inputSchema: schema({ billId: ID("bill"), idempotencyKey: IDEMPOTENCY }, ["billId"]),
     async run(tx, args, context) {
+      // A bill under an approval rule is approved by people only (AW13, question 6).
+      const needed = await approvalNeededForAi(tx, "bill", requireId(args.billId, "billId"));
+      if (needed) throw new ConflictError(needed);
       // Never past a duplicate warning (DU5): that's for a person.
       const result = await approveBill(tx, args.billId, { source: context.source, idempotencyKey: idempotencyKey(args.idempotencyKey) });
       return { created: result.created, bill: await billDetail(tx, result.bill.id) };

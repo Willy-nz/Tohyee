@@ -52,6 +52,9 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bill_inbox_items       the bills inbox: files waiting to become bills (contents, SHA-256, sender and subject), the bill made, or why removed
 ├─ bill_inbox_mailboxes, bill_inbox_mail_seen   mailbox folders read into the inbox (IMAP password encrypted) and the messages each place has given
 ├─ mileage_rates          IRD kilometre rates per income year and vehicle type (tier 1 and tier 2)
+├─ approval_rules, approval_rule_steps, approval_step_approvers   approval rules per document type: conditions, ordered steps, approvers (AW1)
+├─ approval_requests, approval_actions   a document's trip through a rule (waiting, approved, declined, withdrawn) and each step's approvals; never deleted
+├─ approval_emails        the email asking each approver of a step, sent by the email job
 ├─ online_payment_settings, invoice_payment_options   whether Pay now with Stripe is on (and its check lease), and invoices that leave it off
 ├─ invoice_payment_links  each Stripe payment link made for an invoice: amount, currency, URL, open or closed
 ├─ online_payments        each completed Stripe checkout session seen: the customer payment recorded, or a notice for a person
@@ -1090,6 +1093,18 @@ Enforced by the app (and covered by tests):
   `src/lib/bank/paypal/client.ts`. `src/lib/payments/links.ts` makes both
   before an invoice is emailed or printed, and switches both off after a
   void or payment on the invoice's page.
+- Approval workflows (`src/lib/approvals/`, decisions 424-431): `rules.ts`
+  (rules, `loadDocumentFacts` and `matchingRule`), `requests.ts` (a
+  request's progress worked out from its rule as it is now, the gates
+  `assertNoApprovalNeeded` and `assertNotWaitingForApproval` that
+  `approveBill`, `approvePurchaseOrder`, `approveExpenseClaim` and the edit
+  and delete functions call, and queueing approver emails) and
+  `service.ts` (submit, approve a step, decline, withdraw, the budget). The
+  document services import only `requests.ts` and `rules.ts`, never
+  `service.ts`, which calls them. The last step approves the document with
+  `viaApprovalRequestId` inside a savepoint, so a refusal is rolled back and
+  only the reason is kept. `emails.ts` sends `approval_emails` from
+  `processOrganisationOutbox`, before document emails.
 - Mileage (`src/lib/expense-claims/mileage.ts`, decisions 407-410) works
   out each line inside `resolveReceipts`: the rates for the line's income
   year (or the latest), kilometres already claimed per vehicle type from the

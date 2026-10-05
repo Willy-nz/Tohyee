@@ -24,6 +24,7 @@ import { RdLineTags } from "@/components/rd";
 import { RecordExtrasPanel } from "@/components/records/record-extras";
 import { BillAssetPrompt } from "@/components/fixed-assets";
 import { useConfirm } from "@/components/confirm-dialog";
+import { approvalBlocksApproving, DocumentApprovalPanel, useDocumentApproval, waitingForApproval } from "@/components/approvals";
 
 function journalHref(journalId: string): string {
   return `/operations/ledger-journals?journal=${journalId}`;
@@ -43,6 +44,9 @@ function BillActions({
 }) {
   const confirm = useConfirm();
   const router = useRouter();
+  // An approval rule that applies, or a waiting approval (AW3): submitted, not approved here.
+  const approval = useDocumentApproval(organisationId, "bill", bill.id);
+  const approvalState = approval.data?.approval;
   // One key per action on this page, so a retry after a dropped connection
   // returns the first result instead of posting again.
   const [approveKey] = useState(() => newIdempotencyKey("bill-approve"));
@@ -127,16 +131,36 @@ function BillActions({
         </Notice>
       ) : null}
       {bill.status === "draft" ? (
+        <DocumentApprovalPanel
+          organisationId={organisationId}
+          documentType="bill"
+          documentId={bill.id}
+          documentStatus={bill.status}
+          approval={approvalState}
+          canSubmit
+          onChanged={(text) => {
+            approval.reload();
+            onChanged(bill, text);
+          }}
+        />
+      ) : null}
+      {bill.status === "draft" && !approval.data && !approval.error ? null : bill.status === "draft" ? (
         <div className={ui.actions}>
-          <Button onClick={approve} disabled={busy}>
-            {busy ? "Working…" : warnings.length > 0 ? "Approve anyway…" : "Approve"}
-          </Button>
-          <Button variant="secondary" onClick={() => router.push(`/operations/bills/${bill.id}/edit`)} disabled={busy}>
-            Edit
-          </Button>
-          <Button variant="danger" onClick={remove} disabled={busy}>
-            Delete draft
-          </Button>
+          {approvalBlocksApproving(approvalState) ? null : (
+            <Button onClick={approve} disabled={busy}>
+              {busy ? "Working…" : warnings.length > 0 ? "Approve anyway…" : "Approve"}
+            </Button>
+          )}
+          {waitingForApproval(approvalState) ? null : (
+            <>
+              <Button variant="secondary" onClick={() => router.push(`/operations/bills/${bill.id}/edit`)} disabled={busy}>
+                Edit
+              </Button>
+              <Button variant="danger" onClick={remove} disabled={busy}>
+                Delete draft
+              </Button>
+            </>
+          )}
         </div>
       ) : (
         <div className={ui.inlineForm}>

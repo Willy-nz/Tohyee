@@ -457,6 +457,21 @@ that something happened.
   customer), links to PayPal's page, and records PayPal payments into the
   PayPal bank account for the invoice's currency. Only invoices in a
   currency whose PayPal balance is linked offer it.
+- **Approval workflows** (Settings, Approval rules, and Purchases,
+  Approvals; AW1-AW17, decisions 424-431, tenant migration 0100), like
+  ApprovalMax and NetSuite's approval routing: rules for bills, purchase
+  orders and expense claims (a total at least an amount in the base
+  currency, a supplier or claimant, an account or tracking value on any
+  line) send a document through approval steps, each needing any one or all
+  of its approvers. A matching draft is submitted rather than approved, and
+  can't be edited until it's approved, declined (with a reason) or
+  withdrawn. Each approver is asked on the Approvals page and by email (a
+  link that needs signing in). The approval page shows the steps, who has
+  approved, and the month's budget for each account ("Over budget by
+  900.00"), never blocking. The last approval approves the document as
+  usual; a locked period leaves it waiting with the reason. Nobody approves
+  their own document. The connected AI can submit and list, never approve.
+  Repeating bills under a rule are submitted instead.
 - **Bills inbox** (Purchases, `/operations/bills/inbox`; BI1-BI7, decisions
   404-406, tenant migration 0097), like Xero's files inbox and Dext: supplier
   bills and receipts (PDF, JPG, PNG, HEIC) waiting to be entered, uploaded

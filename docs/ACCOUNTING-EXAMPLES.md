@@ -8167,6 +8167,173 @@ emails and reminders, partial payments chosen by the customer, refunds
 from Tohyee, and recording a PayPal payment PayPal converted into another
 currency.
 
+## Approval workflows (approved by Jess, 5 Oct 2026)
+
+Item 5 of the Xero add-ons plan, like ApprovalMax (and NetSuite's approval
+routing): rules that send a bill or purchase order through one or more
+approval steps before it's approved, with the budget shown at approval, an
+email to each approver, and the history of who approved what. Today a
+bookkeeper approves a draft in one step; that stays exactly as it is when
+no rule applies.
+
+How it works:
+
+- **Rules** (admins, Settings, Approval rules) are per document type:
+  bills, purchase orders and expense claims (question 1). A rule has
+  **conditions** (all must hold: total at least an amount, in the base
+  currency; the supplier, or for a claim the claimant; an account on any
+  line; a tracking value on any line) and **steps** in
+  order. Each step names **approvers** (members, bookkeeper or above) and
+  whether **any one** or **all** of them must approve. Rules are checked in
+  their order; the first that matches is used. A document no rule matches
+  is approved as today.
+- **Submitting.** A draft that a rule matches can't be approved directly:
+  "This bill needs approval (rule: Over $1,000). Submit it for approval."
+  Submitting freezes it: it stays a draft (it posts nothing) but can't be
+  edited, and step 1's approvers are asked. Editing it means withdrawing
+  it first, which ends the request; submitting again starts from step 1
+  (question 5).
+- **Approving.** An approver of the current step approves or declines (with
+  a reason). When a step is done, the next step's approvers are asked.
+  When the last step is done the document is **approved as today** (a bill
+  posts on its bill date, B1-B3; a purchase order becomes approved, PO2),
+  by the last approver, with the period and other checks as usual; if those
+  checks refuse it (a locked period), the request waits and says why. A
+  decline sends it back to draft with the reason, for the person who
+  submitted it.
+- **Nobody approves their own** (question 4): whoever submitted (or made)
+  the document can't approve any step of it, whatever their role.
+- **Budget at approval** (question 3): the approval page shows, for each
+  profit and loss account on the document (and its tracking value, if a
+  budget has one), the month's budget (BU), what's been spent so far in the
+  month (the ledger, like budget vs actual), this document, and what's
+  left, with "Over budget by 150.00" in red. It's shown, never blocks.
+- **Asking approvers.** The approvals page (Purchases, Approvals) lists
+  what's waiting for the signed-in person. Each approver is also emailed
+  (through the organisation's email, if it's set up) with the document,
+  its total and a link to the approval page. **Following the link needs
+  signing in to Tohyee as that person** (question 2): nothing can be
+  approved from the email alone. The link only works where Tohyee can be
+  reached (the office network, or remote access).
+- **History.** Every submit, approval, decline, withdrawal and the final
+  approval is in the document's history (who, when, which step, the
+  reason), and the approval page shows the steps with who did each.
+- **Connected AI** (decisions 346-348): an AI key can submit a document it
+  drafted (draft level and above) but can't approve or decline a step
+  (question 6): `approve_bill` on a document under a rule says it needs a
+  person's approval.
+- A repeating bill set to approve (RB) that a rule matches is submitted for
+  approval instead, and its run says so.
+
+Setup: Jess (owner), Mere and Tama (bookkeepers), Ana (admin); Kauri
+Supplies; the overall budget for 6010 Accounting fees in October 2026 is
+1,000.00 and 900.00 has been spent; Department values Retail and Wholesale.
+Rule **"Over $1,000"** for bills: total at least 1,000.00; step 1 any one
+of Tama or Ana; step 2 all of Jess.
+
+- **AW1** An admin adds the rule. Refused: no steps; a step with no
+  approvers; a viewer as an approver; an amount below 0. A bookkeeper can
+  see the rules but not change them. The history says who changed a rule.
+- **AW2** Mere's draft bill from Kauri for **460.00** doesn't match the
+  rule: she approves it directly, as today (B1).
+- **AW3** Mere's draft bill K-300 for **1,150.00** (1,000.00 + GST, 6010)
+  matches. Approving it directly is refused: "This bill needs approval
+  (rule: Over $1,000). Submit it for approval." She submits it: it's still
+  a draft, nothing is posted, and editing it is refused ("Withdraw it from
+  approval first"). Tama and Ana are asked (the approvals page and an
+  email each); Jess isn't yet.
+- **AW4** The approval page shows the budget: 6010 October budget
+  **1,000.00**, spent **900.00**, this bill **1,000.00** (excluding GST),
+  left **-900.00**: "Over budget by 900.00". Approving isn't blocked.
+- **AW5** Tama approves step 1. Ana is no longer asked (any one of them).
+  Step 2: Jess is asked. Jess approves: K-300 is **approved** and posted on
+  its bill date, Dr 6010 1,000.00 / Dr GST 150.00 / Cr accounts payable
+  1,150.00, approved by Jess. The history lists submitted (Mere), step 1
+  approved (Tama), step 2 approved (Jess), bill approved.
+- **AW6** Mere can't approve her own submitted bill at any step, even if
+  she were an approver; neither can Jess approve a bill she made herself.
+  A step whose only approver is the submitter can never be done, so saving
+  a rule warns when a step has one approver, and the approval page says
+  "Only Jess can approve this step, and Jess submitted it": an admin then
+  changes the rule's approvers, and the request continues with them.
+- **AW7** Ana declines step 1 of another bill with the reason "Wrong
+  supplier". It goes back to Mere as a draft she can edit, showing the
+  reason. Submitting again starts at step 1.
+- **AW8** Mere withdraws a submitted bill to fix a line: it's an ordinary
+  draft again; approvals already given are dropped (they're in the history).
+- **AW9** A step of "all of Tama and Ana": both must approve before step 2;
+  the page shows who has and who hasn't.
+- **AW10** The period is locked to 30 September when Jess approves step 2
+  of a bill dated 28 September: the approval is refused as any approval
+  would be (period locks), and the request stays at step 2, saying why.
+  After the lock date is changed (or the bill re-dated: withdraw, edit,
+  resubmit), Jess approves again.
+- **AW11** A rule for purchase orders "Tama for Retail": any line tagged
+  Department: Retail, one step with Tama. A purchase order with a Retail
+  line goes to Tama; once approved it's an approved purchase order (PO2) and
+  can be billed. Rules are tried in order: a bill matching two rules uses
+  the first.
+- **AW12** The email to Tama has the bill's supplier, number, total and a
+  link to its approval page. Opening the link signed out shows the sign-in
+  page, then the approval page. The link can't approve anything by itself,
+  and opening it as another member shows "Waiting for Tama or Ana" with no
+  buttons.
+- **AW13** Jess's AI key (post level) drafts a 1,150.00 bill and submits it
+  (allowed). Its `approve_bill` is refused: "This bill needs a person's
+  approval (rule: Over $1,000)." The AI can list what's waiting but not
+  approve or decline.
+- **AW14** A repeating bill set to approve, whose bill matches the rule, is
+  submitted instead; its run shows "Submitted for approval (rule: Over
+  $1,000)".
+
+**Expense claims** (question 1) already have a submit step (EC2). With a
+rule, submitting a claim starts the rule's steps instead of waiting for any
+bookkeeper (EC3), and declining a step is EC6's decline.
+
+- **AW15** Rule "Claims over $300" for expense claims: total at least
+  300.00; one step, any one of Ana or Jess. Tama's claim for **345.00** is
+  submitted (EC2): it's waiting for Ana or Jess. Mere (a bookkeeper, not an
+  approver) can't approve it, though without a rule she could (EC3).
+- **AW16** Ana approves the step, choosing the claim date as EC3's approver
+  does: the claim is **approved** and posted as EC3 (Dr each account and
+  GST / Cr expense claims payable), approved by Ana. If Ana declines with a
+  reason instead, it goes back to Tama as a draft with the reason, exactly
+  as EC6.
+- **AW17** Jess's own claim for 400.00 matches the rule: Jess can't approve
+  it (nobody approves their own, question 4, even an owner, although
+  without a rule EC3 lets an owner approve their own); Ana does. A claim for
+  120.00 matches no rule and is approved as EC3 today. Tama can withdraw a
+  submitted claim back to draft (as AW8).
+
+**Questions for Jess (approval workflows), decided** (Jess, 5 Oct 2026:
+expense claims too for question 1, the proposed answer for every other
+question, and the examples approved):
+1. **Which documents:** bills, purchase orders **and expense claims**
+   (Jess). Sales invoices and journals aren't included.
+2. **Approving from an email:** the email links to Tohyee and the approver
+   **must sign in**; nothing is approved from the email alone. The link only
+   works where Tohyee can be reached (office network or remote access).
+   Proposed: yes (no single-use "approve" links that work without signing
+   in).
+3. **Budget at approval:** shown, never blocks; the overall budget, or a
+   budget for the line's tracking value when there is one. Proposed: yes.
+4. **Nobody approves their own document** in a workflow, whatever their
+   role (owners included). Proposed: yes.
+5. **Editing a submitted document** needs withdrawing it, and submitting
+   again starts from step 1. Proposed: yes.
+6. **The connected AI can submit but never approve or decline a step.**
+   Proposed: yes.
+7. **Amounts in rules** are compared in the base currency (a USD bill at
+   its rate). Proposed: yes.
+
+Not supported in this part: approving from a single-use link without
+signing in, delegating approvals while someone's away, reminders and
+escalation after a time, approval rules for sales invoices or journals,
+approval by text message, and blocking over-budget documents.
+
+Built (decisions 424-431, tenant migration 0100). Test:
+`tests/integration/approval-workflows.test.ts` (AW1-AW17).
+
 ## Fixed assets (examples not yet approved by Jess)
 
 Written overnight from Xero's fixed asset register and NZ practice; Jess

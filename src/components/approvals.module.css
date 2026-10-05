@@ -1,0 +1,28 @@
+/* Approval workflows (AW1-AW17). */
+
+.stepsHeading {
+  margin: 16px 0 4px;
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.step {
+  margin: 8px 0;
+}
+
+.step > legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.overBudget {
+  color: var(--danger-text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.history {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.7;
+}

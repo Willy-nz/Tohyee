@@ -1,3 +1,4 @@
+import { assertNoApprovalNeeded, assertNotWaitingForApproval } from "@/lib/approvals/requests";
 import { writeAuditEvent } from "@/lib/audit";
 import {
   type Bill,
@@ -449,6 +450,8 @@ function assertDraft(order: PurchaseOrder, action: string): void {
 export async function updatePurchaseOrder(tx: OrgTx, idInput: unknown, input: PurchaseOrderInput): Promise<PurchaseOrder> {
   const current = await lockOrder(tx, requireId(idInput, "purchaseOrderId"));
   assertDraft(current, "edited");
+  // One waiting for approval is withdrawn first (AW11).
+  await assertNotWaitingForApproval(tx, "purchase_order", current.id, "edited");
   const saved = asSent(current);
   const pick = <K extends keyof PurchaseOrderInput>(key: K) => (input[key] === undefined ? saved[key] : input[key]);
   const parsed = parseOrder({
@@ -485,6 +488,7 @@ export async function updatePurchaseOrder(tx: OrgTx, idInput: unknown, input: Pu
 export async function deletePurchaseOrder(tx: OrgTx, idInput: unknown): Promise<void> {
   const current = await lockOrder(tx, requireId(idInput, "purchaseOrderId"));
   assertDraft(current, "deleted");
+  await assertNotWaitingForApproval(tx, "purchase_order", current.id, "deleted");
   await tx.query("delete from purchase_order_lines where purchase_order_id = $1", [current.id]);
   await tx.query("delete from purchase_orders where id = $1", [current.id]);
   await writeAuditEvent(tx, {
@@ -515,7 +519,7 @@ function sameAsStored(resolved: ResolvedDraft, current: PurchaseOrder): boolean 
 export async function approvePurchaseOrder(
   tx: OrgTx,
   idInput: unknown,
-  command: { source?: unknown; idempotencyKey: unknown },
+  command: { source?: unknown; idempotencyKey: unknown; viaApprovalRequestId?: string },
 ): Promise<{ created: boolean; purchaseOrder: PurchaseOrder }> {
   const id = requireId(idInput, "purchaseOrderId");
   const source = optionalSource(command.source);
@@ -533,6 +537,8 @@ export async function approvePurchaseOrder(
   const meanwhile = await replay();
   if (meanwhile) return meanwhile;
   if (current.status !== "draft") throw new ConflictError(`${label(current)} is already ${current.status}.`);
+  // An approval rule's purchase orders go through its steps (AW11).
+  await assertNoApprovalNeeded(tx, "purchase_order", id, command.viaApprovalRequestId);
   const resolved = await resolveFor(tx, parseOrder(asSent(current)).draft, current);
   if (!sameAsStored(resolved, current)) {
     throw new ConflictError("This draft's amounts no longer match its tax codes. Open it and save it again, then check the totals.");

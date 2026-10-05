@@ -27,7 +27,7 @@ export const REPEATING_STATUSES = ["active", "paused", "ended"] as const;
 export type RepeatingStatus = (typeof REPEATING_STATUSES)[number];
 export const SAVE_AS = ["draft", "approve"] as const;
 export type SaveAs = (typeof SAVE_AS)[number];
-export type RunOutcome = "draft" | "approved" | "approval_refused";
+export type RunOutcome = "draft" | "approved" | "approval_refused" | "submitted";
 export type RunResult = { made: number; approved: number; refused: number; failed: number };
 
 /** At most this many dates are made per template in one run (the rest next run). */
@@ -64,8 +64,12 @@ export type RepeatingKind<T extends ScheduledTemplate> = {
   get(tx: OrgTx, id: string): Promise<T>;
   /** Makes the draft document for `date`, the template's `sequence`th (from 1); returns its id. */
   make(tx: OrgTx, template: T, date: string, sequence: number): Promise<string>;
-  /** Approves it; returns a note for the history (e.g. a credit limit warning), or null. */
-  approve(tx: OrgTx, template: T, date: string, documentId: string): Promise<string | null>;
+  /**
+   * Approves it; returns a note for the history (e.g. a credit limit
+   * warning), or null; or `submitted` when an approval rule sent it for
+   * approval instead (AW14).
+   */
+  approve(tx: OrgTx, template: T, date: string, documentId: string): Promise<string | null | { submitted: string }>;
 };
 
 function capitalised(text: string): string {
@@ -213,10 +217,16 @@ export async function runTemplates<T extends ScheduledTemplate>(
       if (template.saveAs === "approve") {
         await tx.query("savepoint repeating_approve");
         try {
-          message = await kind.approve(tx, template, date, documentId);
+          const approved = await kind.approve(tx, template, date, documentId);
           await tx.query("release savepoint repeating_approve");
-          outcome = "approved";
-          result.approved += 1;
+          if (approved !== null && typeof approved === "object") {
+            outcome = "submitted";
+            message = approved.submitted;
+          } else {
+            message = approved;
+            outcome = "approved";
+            result.approved += 1;
+          }
         } catch (error) {
           await tx.query("rollback to savepoint repeating_approve");
           if (!(error instanceof HttpError)) console.warn(`[tohyee] ${noun} ${template.id} approval on ${date}:`, error);

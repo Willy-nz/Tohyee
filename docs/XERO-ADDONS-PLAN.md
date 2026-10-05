@@ -91,8 +91,11 @@ phone width).
    clearing account per provider, fees to expense, payouts matched to the
    bank deposit. Worked examples for part payments, refunds, disputes,
    foreign-currency invoices and GST on fees. Saved cards later (ask Jess).
-5. **Approval workflows:** rules, steps, budget at approval, approve by a
-   signed single-use email link (ask Jess about sign-in), history.
+5. **Approval workflows** (examples AW1-AW17 approved by Jess 5 Oct 2026;
+   bills, purchase orders and expense claims; built, decisions 424-431,
+   tenant migration 0100): rules, steps, budget at approval, an email link
+   that needs signing in (Jess chose sign-in over single-use links),
+   history.
 6. **Cash flow forecast and consolidation** (same server, members of all),
    AI commentary as a suggestion only.
 7. **More sales platforms, A2X style:** Shopify summary mode, then
