@@ -8,6 +8,7 @@ import { CurrencyMoney, OpeningBalancePanel } from "@/components/bank/foreign";
 import { FeedPanel } from "@/components/bank/feed-panel";
 import { FileFeedsPanel } from "@/components/bank/file-feeds-panel";
 import { SimpleFinPanel } from "@/components/bank/simplefin";
+import { PayPalPanel } from "@/components/bank/paypal";
 import { StripePanel } from "@/components/bank/stripe";
 import { ImportPanel } from "@/components/bank/import-panel";
 import { StatementLinesPanel, TransactionsPanel } from "@/components/bank/lines-panel";
@@ -80,7 +81,7 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
         <Stat label="Lines to reconcile" value={account.unreconciledCount} />
         <Stat
           label={account.lastLineDate ? `Latest line ${formatDate(account.lastLineDate)}` : "Bank feed"}
-          value={<FeedBadge feed={account.feed} simplefin={account.simplefin} stripe={account.stripe} />}
+          value={<FeedBadge feed={account.feed} simplefin={account.simplefin} stripe={account.stripe} paypal={account.paypal} />}
         />
       </div>
       {account.isForeign ? (
@@ -126,6 +127,7 @@ function BankAccountView({ organisationId, accountId }: { organisationId: string
             <FeedPanel organisationId={organisationId} account={account} onChanged={detail.reload} />
             <SimpleFinPanel organisationId={organisationId} account={account} onChanged={detail.reload} />
             <StripePanel organisationId={organisationId} account={account} onChanged={detail.reload} />
+            <PayPalPanel organisationId={organisationId} account={account} onChanged={detail.reload} />
             <FileFeedsPanel organisationId={organisationId} account={account} onChanged={detail.reload} />
           </>
         ) : null}

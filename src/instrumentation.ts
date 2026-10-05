@@ -49,6 +49,9 @@
  * And Stripe feeds, which bring each organisation's Stripe balance
  * transactions in when due (off with TOHYEE_STRIPE_SCHEDULER=off).
  *
+ * And PayPal feeds, which bring each organisation's PayPal transactions in
+ * when due (off with TOHYEE_PAYPAL_SCHEDULER=off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -180,6 +183,15 @@ export async function register() {
       startStripeScheduler();
     } catch (error) {
       console.warn("[tohyee] Stripe syncs couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (process.env.TOHYEE_PAYPAL_SCHEDULER !== "off") {
+    try {
+      const { startPayPalScheduler } = await import("@/lib/bank/paypal/service");
+      startPayPalScheduler();
+    } catch (error) {
+      console.warn("[tohyee] PayPal syncs couldn't start:", error instanceof Error ? error.message : error);
     }
   }
 

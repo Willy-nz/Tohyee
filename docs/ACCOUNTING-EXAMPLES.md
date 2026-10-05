@@ -1739,6 +1739,127 @@ Stripe Connect platform fees paid to you as a platform, Stripe Issuing
 cards, and looking up each charge's customer name (one more request per
 charge; the description is used instead).
 
+### PayPal as a bank feed (approved by Jess, 5 Oct 2026)
+
+Stage 1b, part 4, of the Xero add-ons plan. As with Stripe (ST1-ST10), an
+organisation's **PayPal balance is a bank account in Tohyee** (e.g. 1060
+PayPal), and everything that changes it arrives as statement lines:
+payments received, PayPal's fees, refunds, chargebacks, currency
+conversions and withdrawals to the bank. Nothing is posted. Taking invoice
+payments through PayPal is stage 4, not this.
+
+How it works (checked against PayPal's Transaction Search API specification,
+`paypal/paypal-rest-api-specifications` on GitHub, and its transaction event
+code reference, on 5 Oct 2026):
+
+- The organisation creates a REST app in its own PayPal developer dashboard
+  (live, not sandbox), turns on Transaction Search for it, and an admin
+  pastes its **client ID and secret** into Tohyee. Tohyee gets a token with
+  them (OAuth client credentials), checks it can read the balances
+  (`GET /v1/reporting/balances`, scope `reporting/balances/read`), and
+  stores the secret encrypted. One PayPal connection per organisation. The
+  secret can also send payments through other PayPal APIs; PayPal has no
+  read-only key like Stripe's, so this is the only way (see question 1).
+- PayPal keeps a balance per currency. The admin links each currency to a
+  Tohyee bank account in that currency (usually NZD to 1060; a USD balance
+  to a USD account).
+- Tohyee reads `GET /v1/reporting/transactions` (scope
+  `reporting/search/read`, `fields=all`), at most **31 days per request**
+  (PayPal's limit), for each linked currency. PayPal says a transaction can
+  take **up to three hours** to appear, and keeps three years.
+- Each transaction has a `transaction_id`, a five-character
+  `transaction_event_code` (`T0006` checkout payment, `T0007` standard
+  payment, `T01xx` fees, `T0200` currency conversion, `T0400` withdrawal to
+  a bank, `T1107` refund, `T1201` chargeback, `T15xx` holds), a gross
+  `transaction_amount`, a `fee_amount`, a `transaction_status` (`S`
+  completed, `P` pending, `D` denied, `V` reversed), a
+  `transaction_initiation_date` in **the PayPal account's own time zone**,
+  and may have `transaction_subject`, `invoice_id` and the payer's name.
+- **Each transaction becomes one line for its gross amount and, when there's
+  a fee, one line for it**, as Stripe (ST3). Charged fees are debits and
+  refunded fees credits (PayPal's event code reference); the line keeps
+  PayPal's sign. Lines carry `paypal:<transaction id>` (and `:fee`). The
+  line's payee is the payer's name, its description the subject (or what
+  the event code means), its reference the `invoice_id`.
+- **Dates:** the date part of `transaction_initiation_date`, as PayPal
+  expresses it (the account's own time zone, as on PayPal's statements).
+- **Pending and denied** transactions are left out until PayPal completes
+  them (question 2). Reversed ones (`V`) are kept: the reversal comes as
+  its own transaction.
+- The statement balance is PayPal's `total_balance` for that currency.
+- Syncs run every 6 hours by default (1-24) and with Sync now, from three
+  days before the last line (PayPal's delay), skipping lines already here
+  (BK2).
+
+Setup: base currency NZD, 1000 Business bank account (Akahu feed), 1060
+PayPal (NZD), 1070 PayPal USD (USD), Kobe Ltd with INV-0011 for 115.00 due.
+
+- **PP1** An admin pastes the client ID and secret. Tohyee gets a token,
+  reads the balances (NZD 0.00, USD 0.00) and stores the secret encrypted;
+  the client ID is shown, the secret never. A wrong secret is refused with
+  PayPal's message. A sandbox app's credentials are refused: "Use the live
+  app's client ID and secret."
+- **PP2** NZD links to 1060 and USD to 1070. Linking NZD to 1070 is refused:
+  "PayPal's balance is in NZD; 1070 is in USD."
+- **PP3** Kobe Ltd pays INV-0011 on 1 Oct 2026:
+  `{transaction_id "1AB", transaction_event_code "T0006",
+  transaction_initiation_date "2026-10-01T10:15:00+1300",
+  transaction_amount {NZD "115.00"}, fee_amount {NZD "-4.12"},
+  transaction_status "S", invoice_id "INV-0011", payer "Kobe Ltd"}`. Lines
+  on 1060, 1 Oct: **+115.00** (payee Kobe Ltd, reference INV-0011) and
+  **-4.12** "PayPal fees". The +115.00 can be matched to INV-0011 with OK
+  (BK17).
+- **PP4** A full refund on 3 Oct: `{T1107, transaction_amount "-115.00",
+  fee_amount "3.82"}`. Lines: **-115.00** "Refund" and **+3.82** "PayPal
+  fees" (PayPal returned part of the fee). Whatever PayPal returns is what
+  comes in.
+- **PP5** USD 200.00 is converted to NZD on 4 Oct: PayPal gives two
+  `T0200` transactions, `-200.00 USD` and `+320.00 NZD`. 1070 gets
+  **-200.00** and 1060 **+320.00**, each "Currency conversion". They reconcile as one
+  transfer between 1070 and 1060 with both amounts (as FXB transfers).
+- **PP6** A chargeback on 6 Oct: `{T1201, "-60.00"}` and PayPal's chargeback
+  fee `{T0106, "-20.00"}` as its own transaction. Lines: **-60.00**
+  "Chargeback" and **-20.00** "Chargeback fee".
+- **PP7** A withdrawal to the bank on 8 Oct: `{T0400, "-100.00"}`. Line on
+  1060: **-100.00** "Withdrawal to bank"; the Akahu feed brings **+100.00**
+  into 1000; they reconcile as one transfer (as ST8).
+- **PP8** An eCheck payment `{T0006, "50.00", status "P"}` isn't brought in.
+  When PayPal completes it (`S`), the next sync adds it, dated as PayPal
+  dates it. A denied one (`D`) never comes in.
+- **PP9** The lines on 1060 after PP3-PP7 (115.00 - 4.12 - 115.00 + 3.82 +
+  320.00 - 60.00 - 20.00 - 100.00 = **139.70**) are the change in PayPal's
+  NZD balance; PayPal's `total_balance` is kept as the statement balance, so
+  the bank reconciliation report (BK20) shows any gap.
+- **PP10** Disconnecting deletes the secret. Lines stay. Connecting again and
+  relinking adds no line twice: the ids are PayPal's.
+
+Only admins connect, link, unlink and disconnect; bookkeepers press Sync now;
+viewers see the last sync, as BK15.
+
+**Questions for Jess (PayPal), decided** (Jess approved the examples and
+chose the proposed answers on 5 Oct 2026):
+1. The client secret is accepted although PayPal has no read-only
+   credentials: stored encrypted, used only for Transaction Search and
+   balances, and the connect screen says so plainly.
+2. Pending and denied transactions are left out until PayPal completes them
+   (PP8).
+3. Holds come in like everything else, so the lines add up to PayPal's
+   balance.
+4. Lines are dated as PayPal dates them (the PayPal account's own time zone).
+
+Each link also has a first date to bring in, as Akahu's (BK15).
+
+Tests: `tests/integration/bank-paypal.test.ts`.
+
+Not checked with a real PayPal account: the sign PayPal uses on
+`fee_amount` (its reference says charged fees are debits), whether
+Transaction Search is on by default for a new app, and how the sandbox is
+told apart (Tohyee would use PayPal's live API address only).
+
+Not supported (refused rather than guessed): taking payments (stage 4),
+PayPal Here card readers' settlement details, and PayPal accounts the
+organisation doesn't own (partner access).
+
 ### One-click matching ("OK") (examples not yet approved by Jess)
 
 Like Xero's "OK" button. For each unreconciled line, Tohyee looks for

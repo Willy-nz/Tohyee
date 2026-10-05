@@ -187,8 +187,10 @@ Database upgrades run by themselves when Tohyee starts. Back up first if you ins
   accounts, is built: examples SF1-SF10 approved by Jess 5 Oct 2026,
   decisions 388-391, tenant migration 0093. Stage 1b part 3, Stripe as a
   bank feed, is built: examples ST1-ST10 approved by Jess 5 Oct 2026,
-  decisions 392-395, tenant migration 0094. Next: PayPal and Wise; write
-  each one's worked examples and ask Jess to approve them before building.
+  decisions 392-395, tenant migration 0094. Stage 1b part 4, PayPal as a
+  bank feed, is built: examples PP1-PP10 approved by Jess 5 Oct 2026,
+  decisions 396-399, tenant migration 0095. Next: Wise; write its worked
+  examples and ask Jess to approve them before building.
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
@@ -264,8 +266,9 @@ Automatic statement files from a folder or mailbox per bank account
 (stage 1b part 1, decisions 385-387, tenant migration 0092). SimpleFIN
 bank feeds (stage 1b part 2, decisions 388-391, tenant migration 0093).
 Stripe as a bank feed (stage 1b part 3, decisions 392-395, tenant migration
-0094). Next numbers: tenant migration 0095, core migration 0007, decision
-396.
+0094). PayPal as a bank feed (stage 1b part 4, decisions 396-399, tenant
+migration 0095). Next numbers: tenant migration 0096, core migration 0007,
+decision 400.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

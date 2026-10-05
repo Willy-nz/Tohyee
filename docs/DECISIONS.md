@@ -2890,3 +2890,36 @@ think is best").
      - Screenshots: a Stripe account's lines ([light](screenshots/stripe-lines-light.png)),
        its Bank feed tab ([dark](screenshots/stripe-feed-dark.png)) and the connection
        on Bank accounts ([phone](screenshots/stripe-connection-phone.png)).
+
+### PayPal as a bank feed (decisions 396-399)
+
+396. **An organisation's PayPal balance is a bank account in Tohyee**
+     (examples PP1-PP10, approved by Jess on 5 Oct 2026; tenant migration
+     0095), as Stripe's (decision 392): each PayPal currency links to a bank
+     account in that currency, each completed transaction is a line for its
+     gross amount, and its fee a line with PayPal's sign (charged fees
+     debits, returned fees credits). Payer name, subject and invoice id go on
+     the line. Nothing is posted. One connection per organisation, read with
+     PayPal's Transaction Search API (31 days per request; up to three hours'
+     delay, so later syncs look back three days). Checked against PayPal's
+     API specification and event code reference on 5 Oct 2026; not tried
+     with a real PayPal account.
+397. **The live app's client secret is accepted although it isn't read-only**
+     (Jess, 5 Oct 2026): PayPal offers no read-only credentials. It's stored
+     encrypted, used only for Transaction Search and balances, deleted on
+     disconnect, and the connect screen says plainly that it could send
+     money. Sandbox credentials fail against the live API and are refused.
+398. **Pending and denied PayPal transactions are left out** until PayPal
+     completes them (Jess); reversed ones (`V`) stay, their reversal coming
+     as its own transaction. **Holds come in like everything else** (Jess),
+     so the lines add up to PayPal's balance; whether PayPal's
+     `total_balance` counts held money hasn't been checked.
+399. **PayPal lines are dated as PayPal dates them** (Jess): the date part of
+     `transaction_initiation_date`, which is in the PayPal account's own time
+     zone, so lines match PayPal's statements. An account has one feed:
+     Akahu, SimpleFIN, Stripe or PayPal. Syncs run every 6 hours by default
+     (1-24) and with Sync now; `TOHYEE_PAYPAL_SCHEDULER=off` turns the
+     schedule off.
+     - Screenshots: a PayPal account's lines ([light](screenshots/paypal-lines-light.png),
+       [phone](screenshots/paypal-lines-phone.png)) and its Bank feed tab
+       ([dark](screenshots/paypal-feed-dark.png)).
