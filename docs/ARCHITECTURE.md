@@ -1672,6 +1672,16 @@ run time.
   (`src/lib/analytics/engine.ts`). The folder is checked on each use and a
   change reopens the file. Previews have a 10-second limit
   (`PREVIEW_TIME_LIMIT_MS`, via `connection.interrupt()`).
+- **Resource limits** (issue 150): before the configuration is locked each
+  DuckDB gets `memory_limit` (default 1GiB, `TOHYEE_ANALYTICS_MEMORY_LIMIT`)
+  and `max_temp_directory_size` (default 2GiB, `TOHYEE_ANALYTICS_TEMP_LIMIT`),
+  so spilling can't fill the disk PostgreSQL and backups share. Building a
+  shaped table (`replaceTableFromSelect`) stops after 5 minutes
+  (`TOHYEE_ANALYTICS_BUILD_SECONDS`) and keeps the last copy. The books copy
+  reads the ledger lines, invoices, bills and their lines through
+  server-side cursors (`declare … cursor` / `fetch`, `BOOKS_BATCH_SIZE` rows
+  at a time) inside its read-only transaction and appends each batch to
+  DuckDB as it arrives, so its memory doesn't grow with the ledger.
 - **Sharing** (decision 368): the `report_viewer` role ranks below viewer
   (`src/lib/auth/roles.ts`), so routes guarded at viewer refuse it. The
   dashboard routes accept it and filter through `analytics_dashboard_shares`
