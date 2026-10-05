@@ -62,7 +62,8 @@ phone width).
    SF1-SF10 approved by Jess 5 Oct 2026; decisions 388-391; tenant migration
    0093; **built**), an open
    protocol whose SimpleFIN Bridge (US$15 a year, the organisation's own
-   account) reaches US banks, as Actual Budget uses it; (iii) Stripe;
+   account) reaches US banks, as Actual Budget uses it; (iii) Stripe (examples
+   ST1-ST10 written 5 Oct 2026, waiting for Jess);
    (iv) PayPal; (v) Wise (its statement API needs a request-signing key the
    organisation registers with Wise; foreign-currency examples first).
    Australian banks: only CDR-accredited aggregators (Basiq, Fiskil) reach

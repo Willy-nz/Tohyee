@@ -1616,6 +1616,129 @@ investment holdings (the demo returns them; they're ignored), custom
 currencies (SimpleFIN allows a URL instead of an ISO code), and checking
 SimpleFIN account numbers against Tohyee's.
 
+### Stripe as a bank feed (examples not yet approved by Jess)
+
+Stage 1b, part 3, of the Xero add-ons plan. Like Xero's Stripe feed, an
+organisation's **Stripe balance is a bank account in Tohyee** (e.g. 1050
+Stripe), and everything that changes the balance arrives as statement lines:
+charges, Stripe's fees, refunds, disputes and payouts to the bank. Nothing
+is posted. Lines are reconciled as any others: a charge matched to the
+invoice it paid (BK4, one-click matching BK17), fees coded with a bank rule,
+a payout reconciled as a transfer to the bank account the money landed in.
+Taking invoice payments through Stripe (Checkout, payment links) is stage 4,
+not this.
+
+How it works (checked against Stripe's API reference on 5 Oct 2026):
+
+- The organisation creates a **restricted API key** in its own Stripe
+  dashboard with read access only, and an admin pastes it into Tohyee. It's
+  checked with Stripe, then stored encrypted. One Stripe connection per
+  organisation (Jess: one connection per provider). See question 1.
+- Stripe keeps a balance per currency. The admin links each balance currency
+  to a Tohyee bank account in that currency (usually just NZD to 1050).
+- Tohyee reads Stripe's **balance transactions**
+  (`GET /v1/balance_transactions`). Each has a gross `amount`, a `fee` and
+  its breakdown `fee_details` (types `stripe_fee`, `application_fee`,
+  `payment_method_passthrough_fee`, `tax`, `withheld_tax`), a `net`, a
+  `currency`, a `type` (`charge`, `refund`, `payout`, `adjustment`,
+  `stripe_fee`, ...), a `created` time and a `status` (`pending` or
+  `available`). Amounts are in cents (the currency's smallest unit).
+- **Each balance transaction becomes one line for its gross amount, plus one
+  line for each kind of fee**, so fees can be coded separately, the way Xero
+  shows them. Lines carry `stripe:<transaction id>` (and `:fee`, `:tax` for
+  fee lines). Every balance transaction is brought in, whatever its type, so
+  the lines always add up to the change in Stripe's balance.
+- **Foreign cards:** Stripe converts the charge into the balance currency
+  before it reaches the balance. The line is in the balance currency, and
+  its description says the original amount and Stripe's rate.
+- **Dates:** a line's date is the `created` time's date in the
+  organisation's time zone (question 4). Pending transactions come in when
+  created (question 2).
+- The statement balance is Stripe's balance for that currency (`GET
+  /v1/balance`: available plus pending).
+- Syncs run every 6 hours by default (1-24) and with Sync now. Each asks for
+  transactions created since a day before the last line; lines already here
+  are skipped (BK2).
+
+Setup: base currency NZD, 1000 Business bank account (Akahu feed), a new bank
+account 1050 Stripe (NZD), Kobe Ltd with INV-0010 for 115.00 due.
+
+- **ST1** An admin pastes a restricted key `rk_live_...` with read access.
+  Tohyee checks it with Stripe (it can read the balance), stores it
+  encrypted and shows the balance currencies: NZD. A full secret key
+  (`sk_live_...`, which can move money) is refused: "Use a restricted key
+  with read access only." The audit history says who connected.
+- **ST2** Linking the NZD balance to 1000 is allowed (both NZD), but the
+  admin links it to 1050. Linking it to a USD account is refused: "Stripe's
+  balance is in NZD; 1020 is in USD."
+- **ST3** Kobe Ltd pays INV-0010 by card on 1 Oct 2026 at 10:15. Stripe's
+  balance transaction: `{id "txn_1", type "charge", amount 11500, fee 341,
+  fee_details [{type "stripe_fee", amount 341}], net 11159, currency "nzd",
+  created 1 Oct 10:15 NZDT, status "pending", description "Payment for
+  INV-0010"}`. Two lines on 1050, both 1 Oct: **+115.00** "Payment for
+  INV-0010" (`stripe:txn_1`) and **-3.41** "Stripe fees" (`stripe:txn_1:fee`).
+  The +115.00 line can be matched to INV-0010 with OK (BK17). Syncing again
+  adds none.
+- **ST4** A US customer pays USD 50.00. Stripe converts it at 1.70:
+  `{id "txn_2", type "charge", amount 8500, fee 305, currency "nzd",
+  exchange_rate 1.7}`. Lines: **+85.00** "Charge (USD 50.00 at 1.7)" and
+  **-3.05** "Stripe fees". The line is NZD; there's no foreign amount to
+  revalue, because Stripe already converted it.
+- **ST5** INV-0010 is refunded in full on 3 Oct: `{id "txn_3", type
+  "refund", amount -11500, fee 0}`. One line, **-115.00**. Stripe doesn't
+  give back the 3.41 fee in this example (it shows `fee 0` on the refund),
+  so no fee line.
+- **ST6** A customer disputes the txn_2 charge on 6 Oct: `{id "txn_4", type
+  "adjustment", reporting_category "dispute", amount -8500, fee 2500}`. Lines:
+  **-85.00** "Dispute" and **-25.00** "Stripe fees". If the dispute is won,
+  a later `{type "adjustment", reporting_category "dispute_reversal", amount
+  8500, fee 0}` adds **+85.00**. Whatever Stripe charges or returns is what
+  comes in; Tohyee doesn't work fees out itself.
+- **ST7** A charge on 7 Oct whose fee includes tax: `{id "txn_5", type
+  "charge", amount 10000, fee 345, fee_details [{type "stripe_fee", amount
+  300}, {type "tax", amount 45}]}`. Lines: **+100.00**, **-3.00** "Stripe
+  fees" and **-0.45** "Tax on Stripe fees" (`stripe:txn_5:tax`). Tohyee doesn't decide whether that tax is GST you can
+  claim: you code the line (Stripe's NZ help says GST applies to "certain"
+  Stripe fees and sends a monthly tax invoice for it; see question 3).
+- **ST8** Stripe pays out on 8 Oct: `{id "txn_6", type "payout", amount
+  -5000, fee 0}`. Line on 1050: **-50.00** "Payout to bank". The Akahu feed
+  brings **+50.00** "STRIPE" into 1000 the next day. The two are
+  reconciled as one transfer from 1050 to 1000 (BK transfers), so the
+  payout isn't counted as income twice.
+- **ST9** After ST3-ST8 (the dispute not yet decided), the eleven lines on
+  1050 add up to 115.00 - 3.41 + 85.00 - 3.05 - 115.00 - 85.00 - 25.00 +
+  100.00 - 3.00 - 0.45 - 50.00 = **15.09**, the change in Stripe's NZD
+  balance (each transaction's `net` added up: 111.59 + 81.95 - 115.00 -
+  110.00 + 96.55 - 50.00 = 15.09). Stripe's own balance (available plus
+  pending) is kept as 1050's statement balance, so the bank reconciliation
+  report (BK20) shows any gap.
+- **ST10** Disconnecting deletes the stored key. Lines and reconciliations
+  stay. Connecting again (a new key) and relinking adds no line twice: the
+  ids are Stripe's.
+
+Only admins connect, link, unlink and disconnect; bookkeepers press Sync now;
+viewers see the last sync, as BK15.
+
+**Questions for Jess (Stripe), with proposed answers:**
+1. Accept only **restricted keys with read access** and refuse full secret
+   keys (which could move money)? Proposed: yes. Stripe's dashboard makes
+   restricted keys; the exact permission names for reading balance
+   transactions haven't been checked with a real account yet.
+2. Bring in **pending** transactions when they're created (they're already
+   in Stripe's balance, and a payout includes them later), rather than
+   waiting until they're available? Proposed: when created.
+3. Put the **tax part of Stripe's fees on its own line** (ST7) and leave the
+   GST code to you, since Stripe's help doesn't say which NZ fees carry GST?
+   Proposed: yes; never guess a GST code.
+4. A line's date is the `created` time's date in the **organisation's time
+   zone**? Proposed: yes (Stripe accounts in NZ are in NZ time; Tohyee
+   hasn't checked that the API says which zone the dashboard uses).
+
+Not supported (refused rather than guessed): taking payments (stage 4),
+Stripe Connect platform fees paid to you as a platform, Stripe Issuing
+cards, and looking up each charge's customer name (one more request per
+charge; the description is used instead).
+
 ### One-click matching ("OK") (examples not yet approved by Jess)
 
 Like Xero's "OK" button. For each unreconciled line, Tohyee looks for
