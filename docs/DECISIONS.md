@@ -2052,7 +2052,8 @@ needing its own worked examples first.
      comes from the order's own billing country, not that contact. Built
      (SPC24).
 318. **Payouts with chargebacks, reserves or other kinds stay refused**
-     (kept): where a chargeback goes needs its own example.
+     (kept): where a chargeback goes needs its own example. Replaced for
+     chargebacks and reserves by decisions 448-450 (5 Oct 2026).
 319. **Adjustments go to the fees account** (kept).
 320. **A paid order is invoiced on the day it was paid** (kept): that's
      when the sale is settled; the sales order keeps the order's date.
@@ -3328,3 +3329,35 @@ think is best").
      suggestion as checked, and nothing in it changes the report.
      - Screenshots: the commentary card on the forecast ([light](screenshots/commentary-light.png),
        [dark](screenshots/commentary-dark.png), [phone](screenshots/commentary-phone.png)).
+
+### Shopify chargebacks and reserves (decisions 447-450)
+
+447. **No summary mode** (Jess, 5 Oct 2026): each Shopify order keeps its
+     own invoice, paid into the clearing account, and a payout moves the
+     net to the bank (SPC15), as NetSuite does. A2X's one-summary-per-payout
+     isn't built. WooCommerce is the next platform (item 7 part 2).
+448. **Chargebacks go to a chargebacks account** (Jess, replacing decision
+     318 for chargebacks): the disputed amount (`DISPUTE_WITHDRAWAL`) goes
+     on the payout's spend money to the expense account chosen in the
+     settings, the chargeback fee (`CHARGEBACK_FEE`) to the fees account; a
+     won dispute (`DISPUTE_REVERSAL`) and a fee given back
+     (`CHARGEBACK_FEE_REFUND`) come back on a receive money. The order's
+     invoice, sales and GST stay as they are. Whether GST on a lost
+     chargeback can be claimed back is open: Jess is checking with IRD, and
+     Tohyee does nothing to GST until then.
+449. **Reserves go to a reserve account** (Jess, replacing decision 318 for
+     reserves): money held (`RESERVED_FUNDS`) is a transfer from the
+     clearing account to the bank account chosen as the reserve account,
+     and money released (`RESERVED_FUNDS_REVERSAL`) a transfer back, so the
+     reserve account shows what Shopify holds.
+450. **Shopify's type names are read, not trusted** (Jess: build now, check
+     a real payout later): Shopify names these types without saying what
+     they do, so each is posted only with the sign Tohyee expects
+     (withdrawals and fees negative, reversals and refunds positive); the
+     other sign, `CHARGEBACK_HOLD`, `CHARGEBACK_HOLD_RELEASE` (Jess: keep
+     refusing), `RESERVED_FUNDS_WITHDRAWAL` and every other type still
+     refuse the payout. A payout needing an account not chosen yet is
+     logged and tried again at each sync, so it posts once the account is
+     chosen (SPC30).
+     - Screenshots: the chargebacks and reserve settings ([light](screenshots/shopify-chargebacks-light.png),
+       [dark](screenshots/shopify-chargebacks-dark.png), [phone](screenshots/shopify-chargebacks-phone.png)).

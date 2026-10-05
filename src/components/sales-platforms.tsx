@@ -416,6 +416,8 @@ function PostingSettings({
     feesAccountCode: connection.feesAccountCode ?? "",
     salesAccountCode: connection.salesAccountCode ?? "",
     shippingAccountCode: connection.shippingAccountCode ?? "",
+    chargebacksAccountCode: connection.chargebacksAccountCode ?? "",
+    reserveAccountCode: connection.reserveAccountCode ?? "",
     untaxedTaxCode: connection.untaxedTaxCode ?? "",
     guestContactId: connection.guestContactId ?? "",
     taxCodes: connection.taxCodes.length > 0 ? connection.taxCodes.map((entry) => ({ ...entry })) : [{ rate: "15", taxCode: "" }],
@@ -438,6 +440,8 @@ function PostingSettings({
           feesAccountCode: form.feesAccountCode || null,
           salesAccountCode: form.salesAccountCode || null,
           shippingAccountCode: form.shippingAccountCode || null,
+          chargebacksAccountCode: form.chargebacksAccountCode || null,
+          reserveAccountCode: form.reserveAccountCode || null,
           untaxedTaxCode: form.untaxedTaxCode || null,
           guestContactId: form.guestContactId || null,
           taxCodes: form.taxCodes.filter((entry) => entry.rate !== "" && entry.taxCode !== ""),
@@ -446,7 +450,7 @@ function PostingSettings({
       return "Posting settings saved.";
     });
   };
-  const accountField = (label: string, key: "clearingAccountCode" | "payoutAccountCode" | "feesAccountCode" | "salesAccountCode" | "shippingAccountCode", filter: (account: (typeof list)[number]) => boolean, hint?: string) => (
+  const accountField = (label: string, key: "clearingAccountCode" | "payoutAccountCode" | "feesAccountCode" | "salesAccountCode" | "shippingAccountCode" | "chargebacksAccountCode" | "reserveAccountCode", filter: (account: (typeof list)[number]) => boolean, hint?: string) => (
     <Field label={label} hint={hint}>
       <AccountSelect accounts={list} filter={filter} placeholder="Not chosen" value={form[key]} onChange={(code) => set({ [key]: code } as Partial<typeof form>)} />
     </Field>
@@ -470,6 +474,8 @@ function PostingSettings({
             {accountField("Fees", "feesAccountCode", (account) => account.accountClass === "expense")}
             {accountField("Sales", "salesAccountCode", (account) => account.accountClass === "revenue")}
             {accountField("Shipping", "shippingAccountCode", (account) => account.accountClass === "revenue")}
+            {accountField("Chargebacks", "chargebacksAccountCode", (account) => account.accountClass === "expense", "Disputed amounts Shopify takes back. Needed once a payout has a chargeback.")}
+            {accountField("Reserve", "reserveAccountCode", (account) => account.accountType === "bank", "A bank account for money Shopify holds back. Needed once a payout has a reserve.")}
             <Field label="Tax code for untaxed sales" hint="Zero-rated or exempt; needed when the organisation is GST registered.">
               <select value={form.untaxedTaxCode} onChange={(event) => set({ untaxedTaxCode: event.target.value })}>
                 <option value="">Not chosen</option>

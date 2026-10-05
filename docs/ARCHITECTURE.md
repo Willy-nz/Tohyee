@@ -1253,6 +1253,13 @@ Enforced by the app (and covered by tests):
   `crm_calendar_events`, linked through `crm_participant_links`.
   Disconnecting deletes those rows. Every 15 minutes, off with
   TOHYEE_MAIL_SYNC_SCHEDULER=off. The code is in `src/lib/crm/mail/`.
+- Shopify chargebacks and reserves (decisions 447-450, tenant migration
+  0104): `planPayout` in `src/lib/sales-platforms/orders.ts` lists the
+  balance transaction types it posts with the sign each must have;
+  `postPayout` in `posting.ts` makes, in order, a receive money (won
+  disputes), the reserve transfers, the spend money (fees, adjustments,
+  chargebacks) and the transfer to the bank, recording each in
+  `sales_platform_documents`.
 - Sales platform connections (SPC1-SPC10, migration 0056; not tried against
   a real store): a connector framework in `src/lib/sales-platforms/`
   (`connector.ts` is what each platform provides; `shopify.ts` is the first,

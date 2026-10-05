@@ -50,6 +50,10 @@ export type SalesPlatformConnection = {
   feesAccountCode: string | null;
   salesAccountCode: string | null;
   shippingAccountCode: string | null;
+  /** Where a disputed amount goes (SPC25). */
+  chargebacksAccountCode: string | null;
+  /** The bank account money Shopify holds back sits in (SPC28). */
+  reserveAccountCode: string | null;
   /** The contact guest checkouts go to (decision 317), or null: guest checkouts are refused. */
   guestContactId: string | null;
   guestContactName: string | null;

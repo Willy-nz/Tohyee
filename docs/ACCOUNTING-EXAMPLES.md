@@ -5683,6 +5683,134 @@ of app. Still open:
 - **Shipping**: shipping goes to the shipping account chosen in settings
   (4000 Sales to start with). Should it be its own account?
 
+### Shopify chargebacks and reserves (item 7 part 1, approved by Jess, 5 Oct 2026)
+
+Jess, 5 Oct 2026: **no summary mode** (each order keeps its own invoice,
+and a payout matches them, as SPC15 and NetSuite do); a disputed amount goes
+to a **chargebacks account** with the chargeback fee to fees; money Shopify
+holds back goes to a **reserve account** until it's released; WooCommerce
+comes next (part 2).
+
+What Shopify says (read on shopify.dev and help.shopify.com, Admin GraphQL
+API 2026-07, 5 Oct 2026):
+
+- When a chargeback opens, "the bank takes the disputed amount from you
+  right away. The cardholder's bank also takes a chargeback fee from you";
+  with Shopify Payments "the amount is deducted from your next available
+  payout". If you win, "you get the disputed amount back, and Shopify might
+  refund the chargeback fee depending on your country or region". An
+  inquiry doesn't "take the disputed amount or a fee right away"
+  ([managing chargebacks](https://help.shopify.com/manual/payments/shopify-payments/managing-chargebacks)).
+- A reserve is "a temporary hold on a portion, in some cases a full amount,
+  of transactions"; "negative reserve transactions" are the part of payouts
+  put in reserve and "positive reserve transactions" the funds that become
+  available after the reserve ends
+  ([reserves](https://help.shopify.com/en/manual/payments/shopify-payments/reserves)).
+- The balance transaction types
+  ([ShopifyPaymentsTransactionType](https://shopify.dev/docs/api/admin-graphql/2026-07/enums/ShopifyPaymentsTransactionType))
+  include `DISPUTE_WITHDRAWAL`, `DISPUTE_REVERSAL`, `CHARGEBACK_FEE`,
+  `CHARGEBACK_FEE_REFUND`, `CHARGEBACK_HOLD`, `CHARGEBACK_HOLD_RELEASE`,
+  `RESERVED_FUNDS`, `RESERVED_FUNDS_REVERSAL` and
+  `RESERVED_FUNDS_WITHDRAWAL`; Shopify describes each only as "The
+  dispute_withdrawal transaction type" and so on. **Which type is which
+  step, and its sign, is our reading of the names**, so each is posted only
+  when its amount has the sign below, and a payout with any other sign or
+  type is still refused for you to record by hand (SPC31). Please check one
+  real chargeback and one reserve against this (question 2).
+
+The rules:
+
+- **Settings** (admins): a **chargebacks account** (an expense account,
+  e.g. 6025 Shopify chargebacks) and a **reserve account** (a bank account
+  in the base currency, e.g. 1015 Shopify reserve, shown with the bank
+  accounts in current assets; not the clearing or payout account). Neither
+  is needed until a payout has a chargeback or reserve; such a payout is
+  refused until it's chosen: "Choose a chargebacks account in the Shopify
+  settings."
+- `DISPUTE_WITHDRAWAL` (negative: the disputed amount taken) goes on the
+  payout's spend money to the chargebacks account, described "Chargeback on
+  #1002"; `CHARGEBACK_FEE` (negative) and any `fee` on these transactions go
+  to the fees account, as Shopify's other fees (decision 319).
+- `DISPUTE_REVERSAL` (positive: a won dispute) and `CHARGEBACK_FEE_REFUND`
+  (positive) come back on a **receive money** into the clearing account from
+  contact Shopify, to the chargebacks and fees accounts.
+- The order's invoice and sales stay as they are: a chargeback doesn't
+  reduce sales or GST (Jess chose the chargebacks account over treating it
+  as a refund; see question 1 about GST).
+- `RESERVED_FUNDS` (negative: held) is a **transfer** from the clearing
+  account to the reserve account; `RESERVED_FUNDS_REVERSAL` (positive:
+  released) a transfer back. So the reserve account always shows what
+  Shopify is holding.
+- Everything else is as SPC15: the net goes from clearing to the payout
+  account by transfer, the payout is checked to add up to its net, and each
+  document is made once (idempotency keys per payout and step).
+
+Setup (on top of SPC11-SPC24's): 6025 Shopify chargebacks (expense) and
+1015 Shopify reserve (bank, NZD) chosen in the connection's settings. Orders
+#1005-#1010 are paid orders posted as SPC11 (invoice paid into 1010).
+
+- **SPC25** A chargeback opens on #1002 (28.90, SPC15). Payout **70003**,
+  PAID, issued 2026-10-21T03:00Z, net **13.03**: CHARGE #1005 69.00 (fee
+  2.07, net 66.93), DISPUTE_WITHDRAWAL #1002 −28.90 (fee 0.00, net −28.90),
+  CHARGEBACK_FEE −25.00 (net −25.00; 25.00 is just this example's fee).
+  Posted 21 Oct: spend money from 1010 to Shopify **Dr 6020 2.07 / Dr 6025
+  28.90 ("Chargeback on #1002") / Dr 6020 25.00 ("Chargeback fee") / Cr
+  1010 55.97** (no GST), and the transfer **Dr 1000 13.03 / Cr 1010 13.03**.
+  1010 is back to **0.00** (69.00 − 55.97 − 13.03). INV-0002 (#1002) stays
+  paid; sales and GST are unchanged.
+- **SPC26** The dispute is won. Payout **70004**, issued
+  2026-11-04T03:00Z, net **76.23**: DISPUTE_REVERSAL #1002 +28.90,
+  CHARGEBACK_FEE_REFUND +25.00, CHARGE #1006 23.00 (fee 0.67, net 22.33).
+  Posted 4 Nov: receive money into 1010 from Shopify **Dr 1010 53.90 / Cr
+  6025 28.90 / Cr 6020 25.00**, spend money **Dr 6020 0.67 / Cr 1010
+  0.67**, transfer **Dr 1000 76.23 / Cr 1010 76.23**. 1010: 23.00 + 53.90 −
+  0.67 − 76.23 = **0.00**; 6025 is back to **0.00**. Had Shopify not
+  refunded the fee, there'd be no 25.00 line and the net would be 51.23.
+  Had the dispute been lost, nothing more comes: the 28.90 stays in 6025.
+- **SPC27** An inquiry (no money taken) adds no transaction to a payout, so
+  nothing is posted.
+- **SPC28** Shopify holds back a reserve. Payout **70005**, issued
+  2026-11-11T03:00Z, net **87.10**: CHARGE #1007 100.00 (fee 2.90, net
+  97.10), RESERVED_FUNDS −10.00 (net −10.00). Posted 11 Nov: transfer **Dr
+  1015 10.00 / Cr 1010 10.00** ("Shopify reserve held, payout 70005"), spend
+  money **Dr 6020 2.90 / Cr 1010 2.90**, transfer **Dr 1000 87.10 / Cr 1010
+  87.10**. 1010 is **0.00**; 1015 shows **10.00** held.
+- **SPC29** The reserve is released. Payout **70006**, issued
+  2027-03-11T03:00Z, net **54.62**: RESERVED_FUNDS_REVERSAL +10.00, CHARGE
+  #1010 46.00 (fee 1.38, net 44.62). Posted 11 Mar: transfer **Dr 1010
+  10.00 / Cr 1015 10.00**, spend money **Dr 6020 1.38 / Cr 1010 1.38**,
+  transfer **Dr 1000 54.62 / Cr 1010 54.62**. 1010 and 1015 are both
+  **0.00**. The bank line "+54.62 SHOPIFY PAYOUT" matches the transfer.
+- **SPC30** No accounts chosen: payout 70003 in an organisation without a
+  chargebacks account posts nothing and logs "Choose a chargebacks account
+  in the Shopify settings." Choosing 6025 and syncing again posts SPC25 once.
+- **SPC31** Still refused, logged, nothing posted: CHARGEBACK_HOLD,
+  CHARGEBACK_HOLD_RELEASE, RESERVED_FUNDS_WITHDRAWAL and every other type
+  not above (Shopify doesn't say what they do); a DISPUTE_WITHDRAWAL or
+  RESERVED_FUNDS that's positive, or a DISPUTE_REVERSAL or
+  RESERVED_FUNDS_REVERSAL that's negative; a payout whose transactions don't
+  add up to its net. The log names the type and amount.
+
+Built (decisions 447-450, tenant migration 0104). Tests:
+`tests/unit/sales-platform-orders.test.ts` and
+`tests/integration/sales-platform-orders.test.ts` (SPC25-SPC31). 6025 is
+used because 6030 is Cleaning in the default chart.
+
+**Questions for Jess (chargebacks and reserves)**, answered 5 Oct 2026:
+examples approved; GST on a lost chargeback: Jess is checking with IRD
+(Tohyee leaves GST alone meanwhile); build now and check a real payout
+later; chargeback holds stay refused. What was asked:
+
+1. **GST on a lost chargeback:** Tohyee leaves the sale's GST as it was
+   (the money went back to the cardholder, but the invoice stands). Whether
+   GST can be claimed back (e.g. as a bad debt) is a tax question we won't
+   guess; check with IRD or your accountant. Leave GST alone (proposed)?
+2. **Check a real payout:** the type names and signs above are our reading
+   of Shopify's names. Can someone look at one real chargeback and one
+   reserve in Shopify's payout export and confirm the types and signs?
+3. **Chargeback holds** (`CHARGEBACK_HOLD`, `CHARGEBACK_HOLD_RELEASE`):
+   Shopify doesn't say what they are, so they stay refused (proposed)?
+
 ## Custom fields on CRM records (examples not yet approved by Jess)
 
 The owner asked (1 Oct 2026) for the CRM's records to carry many fields of

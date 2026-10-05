@@ -102,9 +102,12 @@ phone width).
    currency translation, different year ends, ECB daily rates and budget
    exchange rates). Part 1: cash flow forecast; part 2: consolidation;
    part 3: AI commentary (built, decision 446).
-7. **More sales platforms, A2X style:** Shopify summary mode, then
-   WooCommerce, Stripe sales, Square, Amazon, eBay, Etsy, PayPal (Jess picks
-   the order); Shopify chargebacks and reserves.
+7. **More sales platforms, A2X style:** Shopify chargebacks and reserves
+   (part 1, examples SPC25-SPC31), then WooCommerce (part 2), then Stripe
+   sales, Square, Amazon, eBay, Etsy, PayPal. Jess, 5 Oct 2026: no summary
+   mode (each order keeps its invoice and a payout matches them);
+   chargebacks to a chargebacks account; reserves to a reserve account;
+   WooCommerce next.
 8. **Jobs and scheduling inside Projects:** jobs with site address, visits
    on a calendar, time and materials, checklists, photos and signatures,
    invoice from the job, service reminders, Google and Microsoft calendar
