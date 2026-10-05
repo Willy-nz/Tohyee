@@ -97,7 +97,8 @@ phone width).
    that needs signing in (Jess chose sign-in over single-use links),
    history.
 6. **Cash flow forecast and consolidation** (same server, members of all),
-   AI commentary as a suggestion only.
+   AI commentary as a suggestion only. Examples CF1-CF7 and CO1-CO7 written
+   5 Oct 2026, waiting for Jess's approval (with questions 1-10).
 7. **More sales platforms, A2X style:** Shopify summary mode, then
    WooCommerce, Stripe sales, Square, Amazon, eBay, Etsy, PayPal (Jess picks
    the order); Shopify chargebacks and reserves.
