@@ -1,3 +1,5 @@
+import { listGroups } from "@/lib/consolidation/groups";
+import { consolidatedBalanceSheet, consolidatedBudgetVsActual, consolidatedProfitAndLoss } from "@/lib/consolidation/report";
 import { cashFlowForecast } from "@/lib/cash-flow/forecast";
 import { listApprovalRequests } from "@/lib/approvals/requests";
 import { listAccounts } from "@/lib/accounts/service";
@@ -553,6 +555,39 @@ export const READ_TOOLS: readonly AiTool[] = (
         // The documents behind each period, without links.
         periods: forecast.periods.map((entry) => ({ ...entry, lines: entry.lines.map(({ source, label, date, direction, baseAmount, overdue, draft, fromOrder }) => ({ source, label, date, direction, amount: baseAmount, overdue, draft, fromOrder })) })),
       };
+    },
+  },
+  {
+    name: "list_consolidations",
+    title: "Consolidation groups",
+    description: "The consolidation groups the key's owner can see (a member of every organisation in the group): name, parent, group currency and members with their currencies.",
+    inputSchema: schema({}),
+    async run(tx) {
+      if (!tx.actor.userId) return { groups: [] };
+      return { groups: await listGroups({ id: tx.actor.userId, email: tx.actor.email }) };
+    },
+  },
+  {
+    name: "consolidated_report",
+    title: "Consolidated report",
+    description:
+      "A consolidation group's profit and loss (dates), balance sheet (as at a date) or budget vs actual, in the group's currency: each organisation translated (profit and loss at the month's average rate, assets and liabilities at the current rate, equity at historical rates), with intercompany amounts eliminated and any differences listed.",
+    inputSchema: schema(
+      {
+        groupId: { type: "string", description: "From list_consolidations." },
+        report: { type: "string", enum: ["profit_and_loss", "balance_sheet", "budget_vs_actual"] },
+        from: DATE,
+        to: DATE,
+        asAt: DATE,
+      },
+      ["groupId", "report"],
+    ),
+    async run(tx, args) {
+      if (!tx.actor.userId) throw new ValidationError("This key has no person behind it, so it can't read consolidations.");
+      const user = { id: tx.actor.userId, email: tx.actor.email };
+      if (args.report === "balance_sheet") return consolidatedBalanceSheet(user, args.groupId, { asAt: args.asAt });
+      if (args.report === "budget_vs_actual") return consolidatedBudgetVsActual(user, args.groupId, { from: args.from, to: args.to });
+      return consolidatedProfitAndLoss(user, args.groupId, { from: args.from, to: args.to });
     },
   },
   {

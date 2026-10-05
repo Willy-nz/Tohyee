@@ -25,6 +25,8 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "list_bill_inbox", level: "read", words: "The bills inbox: supplier bills and receipts waiting to be entered" },
   { name: "read_bill_inbox_item", level: "read", words: "Read a file in the bills inbox (the PDF or picture itself)" },
   { name: "cash_flow_forecast", level: "read", words: "The cash flow forecast: money expected in and out, and the bank balance ahead" },
+  { name: "list_consolidations", level: "read", words: "Consolidation groups you can see" },
+  { name: "consolidated_report", level: "read", words: "A consolidated profit and loss, balance sheet or budget vs actual for a group" },
   { name: "list_approvals", level: "read", words: "What's waiting for approval, and who it's waiting for" },
   { name: "create_contact", level: "draft", words: "Add a customer or supplier" },
   { name: "update_contact", level: "draft", words: "Edit a contact's details (not archive it)" },

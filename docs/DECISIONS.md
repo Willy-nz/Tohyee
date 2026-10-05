@@ -3241,3 +3241,72 @@ think is best").
      (`cash_flow_forecast`, any level) but can't add items.
      - Screenshots: the forecast ([light](screenshots/cash-flow-light.png), [dark](screenshots/cash-flow-dark.png),
        [phone](screenshots/cash-flow-phone.png)).
+
+### Consolidation and ECB rates (decisions 437-445)
+
+437. **Daily rates come from the European Central Bank** (FX1, Jess, 5 Oct
+     2026), like NetSuite's Currency Exchange Rate Integration but without
+     its contracted providers (Tohyee has no relay service). An admin turns
+     it on per organisation; every hour Tohyee checks organisations last
+     checked more than 6 hours ago, reads the ECB's public 90-day file
+     (`eurofxref-hist-90d.xml`, free, no account, reuse with attribution,
+     "for information") and adds, for each day since it was turned on (and
+     always the latest day), a rate for each foreign currency the
+     organisation uses (contacts, accounts, documents, the list) or names as
+     an extra, worked out through the euro and rounded to 6 decimal places.
+     A rate already in the list for that currency and date is never
+     replaced. `TOHYEE_ECB_RATES_SCHEDULER=off` turns the job off.
+438. **Consolidation groups live in the core database** (core migration
+     0007): a group, its members, changed rates, budget rates and
+     elimination adjustments. Nothing is posted in any organisation; each
+     report reads every member's own database as the signed-in person. A
+     group is made and changed by an admin or owner of every organisation in
+     it and seen by a member (viewer or above, not report viewer) of every
+     one; to anyone else it doesn't exist (not found).
+439. **Translation follows NetSuite's consolidated exchange rates** (Jess:
+     different currencies and year ends, like NetSuite): from the parent's
+     exchange rates list (the rate on or before each date), current = the
+     rate on the report date (the month's end for the rates screen); average
+     = the month's profit and loss amounts (debits plus credits) each times
+     its day's rate, over their total; historical = the same with equity
+     postings. Profit and loss is translated month by month at the average,
+     assets and liabilities at the current rate, equity month by month at
+     the historical rate, each rounded to cents per account and month; the
+     remainder is the foreign currency translation reserve. A rate missing
+     from the list refuses the report and names the dates. An admin can
+     change a month's rate with a reason (kept with who and when); changed
+     rates apply to every member in that currency.
+440. **Intercompany** (NetSuite's intercompany accounts and entities): in
+     each organisation an admin marks accounts held with another group
+     organisation (not bank, card, receivable or payable accounts) and links
+     one contact to each other organisation; open receivables and payables
+     with that contact (from the aged reports' figures at the date) are
+     eliminated from accounts receivable and payable. Marks with an
+     organisation outside the group are ignored.
+441. **Eliminations never change profit or net assets**: each eliminated
+     amount is taken off its account, and what the two sides don't agree on
+     (per pair of organisations, intercompany accounts and what's owed each
+     compared on their own) goes back on an "Intercompany differences (check
+     these)" line (in the profit and loss; in the balance sheet as an asset
+     when a debit, a liability when a credit) with a notice naming the
+     amounts (CO9, question 1).
+442. **Earnings follow the group's year** (the parent's year end): current
+     year earnings are the translated profit since the group's year start,
+     retained earnings (previous years) everything before, whatever each
+     member's own year end (CO8).
+443. **Accounts are matched by code** and named as in the parent's chart
+     (else the first member's). Elimination adjustments are balanced lines
+     by organisation and account code in the group's currency, checked
+     against that organisation's chart, made and removed by a bookkeeper or
+     above of every organisation; a profit and loss code in an adjustment
+     goes into earnings in the balance sheet.
+444. **Budget vs actual** uses each member's overall budget at the month's
+     typed budget exchange rate (one per currency and month; budgets hold
+     only profit and loss) against the consolidated actuals; a missing
+     budget rate refuses it and names the months.
+445. **The connected AI reads consolidations** (Jess): `list_consolidations`
+     and `consolidated_report` work as the key's owner, showing only groups
+     whose every organisation the owner can see. Only wholly owned members
+     (no minority interest, as standard NetSuite).
+     - Screenshots: a consolidated balance sheet ([light](screenshots/consolidation-light.png),
+       [dark](screenshots/consolidation-dark.png), [phone](screenshots/consolidation-phone.png)).

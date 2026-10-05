@@ -1,5 +1,6 @@
 "use client";
 
+import { EcbRatesCard } from "@/components/consolidation";
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -34,6 +35,7 @@ export function ExchangeRatesManager({ organisationId }: { organisationId: strin
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
+      <EcbRatesCard organisationId={organisationId} canAdmin={can("admin")} onChanged={list.reload} />
       <Card
         title="In effect today"
         description={`New foreign-currency invoices, bills, credit notes, payments, refunds and bank statement lines start with the rate in effect on their date (${data.baseCurrency} per 1 unit). You can still change it on each one. With no rate here, they start with the last rate used in the books.`}

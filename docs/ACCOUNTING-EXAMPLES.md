@@ -8635,24 +8635,29 @@ Setup:
   - Holdings: 1000 bank 4,800.00, 1100 receivable 1,150.00 (all from
     Retail), 1150 loan 10,000.00 and 1160 investment 4,000.00, totalling
     19,950.00; GST 150.00, 3000 19,000.00 and current year earnings 800.00.
-  - Retail: bank 17,150.00 and 1400 inventory 3,000.00, totalling
-    20,150.00; 2000 payable 1,150.00 (all to Holdings), 2150 loan
-    10,000.00, 3000 4,000.00 and current year earnings 5,000.00.
+  - Retail: bank 17,000.00, 1410 goods for resale 3,000.00 (bought outside
+    the stock records; 1400 only moves with stock items) and GST 150.00
+    claimable on Holdings' fee, totalling 20,150.00; 2000 payable 1,150.00
+    (all to Holdings), 2150 loan 10,000.00, 3000 4,000.00 and current year
+    earnings 5,000.00. (Corrected 5 Oct 2026 when built: as first written,
+    Retail's bank was 17,150.00 with no GST, which doesn't follow from the
+    setup; the totals were the same.)
   - Kowhai Pty Ltd as in CO5.
   - Eliminated: the loan (10,000.00 on each side) and what's owed (1,150.00
-    on each side).
-  - Consolidated assets: bank **34,600.00**, inventory **3,000.00** and
-    investment **4,000.00**, totalling **41,600.00**.
-  - Consolidated liabilities and equity: GST **150.00**, 3000
-    **32,900.00**, current year earnings **8,040.00** and foreign currency
-    translation reserve **510.00**, totalling **41,600.00**.
+    on each side). Both organisations' GST (Holdings owes 150.00, Retail can
+    claim 150.00) is on 2100, so it nets to 0.00.
+  - Consolidated assets: bank **34,450.00**, goods for resale **3,000.00**
+    and investment **4,000.00**, totalling **41,450.00**.
+  - Consolidated liabilities and equity: GST **0.00**, 3000 **32,900.00**,
+    current year earnings **8,040.00** and foreign currency translation
+    reserve **510.00**, totalling **41,450.00**.
 - **CO7** Jess adds the elimination adjustment "Investment in Retail" at 31
   Oct 2026: Dr Retail 3000 4,000.00 / Cr Holdings 1160 4,000.00.
-  - The consolidated balance sheet is now assets **37,600.00** = GST 150.00
-    + 3000 **28,900.00** + earnings **8,040.00** + reserve **510.00**.
+  - The consolidated balance sheet is now assets **37,450.00** = 3000
+    **28,900.00** + earnings **8,040.00** + reserve **510.00**.
   - Refused: an adjustment that doesn't balance; an account code an
     organisation doesn't have; an adjustment by Mere, who isn't a bookkeeper
-    of Holdings.
+    of Holdings (to her the group doesn't exist).
   - Nothing is posted in any organisation.
 - **CO8** Different year ends: the consolidated profit and loss for the
   group's year to date, 1 Apr-31 Oct 2026, includes Kowhai Pty Ltd's
@@ -8663,7 +8668,9 @@ Setup:
 - **CO9** Differences: if Retail had recorded the loan as 9,950.00, with
   50.00 put elsewhere, both sides are still eliminated. "Intercompany
   differences (check these)" shows **50.00**, with "Holdings 1150 10,000.00
-  and Retail 2150 9,950.00 don't agree".
+  and Retail 2150 9,950.00 don't agree". It's an asset line when the difference is a debit
+  (as here) and a liability line when it's a credit, so the totals are
+  41,500.00 on both sides.
 - **CO10** The connected AI can read a consolidation (question 3, Jess):
   `list_consolidations` and `consolidated_report` show the groups whose
   every organisation the key's owner can see, as they'd see them. It can't
@@ -8681,6 +8688,10 @@ Setup:
   NZD 1.7000 / 1.9000 = **0.894737** for 5 Oct. If the ECB can't be reached,
   the next run tries again, and the settings show when the last rates came
   in.
+
+Built (decisions 437-445, core migration 0007, tenant migration 0102).
+Test: `tests/integration/consolidation.test.ts` (CO1-CO11, FX1). AI
+commentary is item 6 part 3.
 
 **AI commentary** (item 6): the plan says "AI commentary as a suggestion
 only". NetSuite 2025.1 writes explanations of variances and trends next to
