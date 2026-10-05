@@ -14,14 +14,16 @@ export function analyticsFolder(): string {
   if (process.platform === "win32") {
     return path.join(process.env.ProgramData || "C:\\ProgramData", "Tohyee", "analytics");
   }
-  return path.join(process.cwd(), "analytics");
+  // The ignore hint stops the build's file tracer copying the whole project
+  // into the standalone output (issue #155): this folder is made at run time.
+  return path.join(/* turbopackIgnore: true */ process.cwd(), "analytics");
 }
 
 const ORGANISATION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 export function analyticsFilePath(organisationId: string): string {
   if (!ORGANISATION_ID.test(organisationId)) throw new ValidationError("Unknown organisation.");
-  return path.join(analyticsFolder(), `${organisationId}.duckdb`);
+  return path.join(/* turbopackIgnore: true */ analyticsFolder(), `${organisationId}.duckdb`);
 }
 
 /**
@@ -32,5 +34,5 @@ export function analyticsFilePath(organisationId: string): string {
  */
 export function analyticsWorkFolder(organisationId: string): string {
   if (!ORGANISATION_ID.test(organisationId)) throw new ValidationError("Unknown organisation.");
-  return path.join(analyticsFolder(), `${organisationId}.work`);
+  return path.join(/* turbopackIgnore: true */ analyticsFolder(), `${organisationId}.work`);
 }

@@ -43,6 +43,16 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Folders a running copy writes real data into (backups, analytics' DuckDB
+  // copies of the books, data) stay out of the routes' traces even if a
+  // dynamic path makes the tracer pull in the project folder (issue #155).
+  // Only a safety net: it doesn't cover instrumentation.ts's trace. The real
+  // fix is the turbopackIgnore hints on the dynamic paths themselves; the
+  // build warns ("Dynamic filesystem access causes tracing of the whole
+  // project") when a new one needs one.
+  outputFileTracingExcludes: {
+    "/*": ["analytics/**", "backups/**", "data/**"],
+  },
   // The CRM moved from /operations/crm to its own app at /crm; old links and
   // bookmarks still reach the same pages (with their ?query). /operations/crm
   // itself listed the companies.
