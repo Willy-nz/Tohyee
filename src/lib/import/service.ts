@@ -1,4 +1,5 @@
 import { type Account, createAccount, listAccounts, parseAccountCodeInput, updateAccount } from "@/lib/accounts/service";
+import { toCsv } from "@/lib/csv";
 import { ACCOUNT_TYPES, type AccountType, type SystemKey } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
 import type { Role } from "@/lib/auth/roles";
@@ -469,14 +470,6 @@ export async function saveMapping(tx: OrgTx, kindInput: unknown, input: unknown)
 // headings the import reads, so a file can be checked or edited and brought
 // back in.
 
-function csvCell(value: string | null | undefined): string {
-  const text = value ?? "";
-  return /[",\n\r]/.test(text) || /^\s|\s$/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function toCsv(rows: ReadonlyArray<ReadonlyArray<string | null | undefined>>): string {
-  return `${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
-}
 
 const labelOf = (kind: MasterKind, key: string) => IMPORT_FIELDS[kind].find((field) => field.key === key)!.label;
 

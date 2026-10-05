@@ -839,8 +839,10 @@ function canBeCorrected(journal: Journal, alreadyReversed: boolean): boolean {
  * open period). A replacement can itself be corrected later. Journals created
  * by stock movements, FX revaluations, sales invoices, customer payments,
  * bills, supplier payments, sales credit notes, credit note refunds, supplier
- * credit notes, refunds received from suppliers or refunds of customer
- * overpayments must be corrected at their
+ * credit notes, refunds received from suppliers, refunds of customer
+ * overpayments, bank transactions and transfers, expense claims and their
+ * payments, depreciation runs, disposals, opening balances or payroll must be
+ * corrected at their
  * source, so those records and the ledger stay in step.
  */
 export async function correctJournal(
@@ -954,6 +956,27 @@ export async function correctJournal(
   if (original.origin === "bank_transfer") {
     throw new ValidationError(
       `Journal #${original.id} was posted by a transfer between bank accounts (${original.reference}), so it can't be corrected in the ledger. To undo it, void the transfer.`,
+    );
+  }
+  // These match canBeCorrected (#138): the screen hid the button, but the API let them through.
+  if (original.origin === "expense_claim" || original.origin === "expense_claim_payment") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by ${original.origin === "expense_claim" ? "an expense claim" : "an expense claim payment"} (${original.reference}), so it can't be corrected in the ledger (EC12). To undo it, void the ${original.origin === "expense_claim" ? "claim" : "payment"}.`,
+    );
+  }
+  if (original.origin === "fixed_asset_depreciation") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a depreciation run (${original.reference}), so it can't be corrected in the ledger. To undo it, roll back the depreciation run under Fixed assets.`,
+    );
+  }
+  if (original.origin === "fixed_asset_disposal") {
+    throw new ValidationError(
+      `Journal #${original.id} was posted by a fixed asset disposal (${original.reference}), so it can't be corrected in the ledger. To undo it, undo the disposal on the asset.`,
+    );
+  }
+  if (original.origin === "opening_balance") {
+    throw new ValidationError(
+      `Journal #${original.id} posted the opening balances (${original.reference}), so it can't be corrected like a manual journal (IM6).`,
     );
   }
   if (original.correctionKind === "reversal") {

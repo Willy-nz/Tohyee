@@ -21,7 +21,7 @@ import { exportCsv, importMasterRecords } from "@/lib/import/service";
 import { createItem, listItems } from "@/lib/items/service";
 import { recordPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, getInvoice, listInvoices } from "@/lib/invoices/service";
-import { getJournal, postJournal } from "@/lib/ledger/journals";
+import { correctJournal, getJournal, postJournal } from "@/lib/ledger/journals";
 import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
@@ -190,6 +190,21 @@ describeWithDatabase("bringing in existing books", () => {
 
     const journal = await world.asUser(admin, (tx) => getJournal(tx, posted.journalId!));
     expect(journal).toMatchObject({ origin: "opening_balance", postingDate: "2026-03-31", reference: "OPENING", totalDebit: "17985.00" });
+    // It can't be corrected like a manual journal, through the API either (IM6, #138).
+    await expect(
+      world.asUser(admin, (tx) =>
+        correctJournal(tx, {
+          idempotencyKey: key("correct"),
+          originalJournalId: posted.journalId,
+          postingDate: "2026-04-30",
+          reference: "Fix",
+          lines: [
+            { accountCode: "1000", debitAmount: "1.00" },
+            { accountCode: "3000", creditAmount: "1.00" },
+          ],
+        }),
+      ),
+    ).rejects.toThrow("can't be corrected like a manual journal");
     expect(await world.journalLines(posted.journalId!)).toEqual([
       ["1000", "12450.00", "0.00"],
       ["3900", "1725.00", "0.00"],

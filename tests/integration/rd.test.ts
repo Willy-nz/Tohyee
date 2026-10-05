@@ -21,7 +21,7 @@ import { createContact } from "@/lib/contacts/service";
 import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
-import { approveExpenseClaim, createExpenseClaim, submitExpenseClaim } from "@/lib/expense-claims/service";
+import { approveExpenseClaim, createExpenseClaim, submitExpenseClaim, voidExpenseClaim } from "@/lib/expense-claims/service";
 import { createFixedAsset, createFixedAssetType, listBillLinesForAssets } from "@/lib/fixed-assets/service";
 import { correctJournal, postJournal } from "@/lib/ledger/journals";
 import { addAllocation } from "@/lib/payroll/allocations";
@@ -468,7 +468,7 @@ describeWithDatabase("R&D activity register and tagging (RD1-RD3, RD7-RD9, RD11-
   });
 
 
-  it("RD9: a corrected expense claim journal is counted once: the claim's receipt stops counting and the replacement journal isn't tagged", async () => {
+  it("RD9: a claim's receipt is counted once: its journal can't be corrected in the ledger, and voiding the claim stops it counting", async () => {
     const w = await setup();
     const { claim } = await w.asHana((tx) =>
       createExpenseClaim(tx, {
@@ -482,29 +482,27 @@ describeWithDatabase("R&D activity register and tagging (RD1-RD3, RD7-RD9, RD11-
     const tagged = await w.tag(receipt, { activityId: w.c1.id, eligibility: "eligible", category: "materials_overheads" });
     expect((await w.costs()).countedAmount).toBe("200.00");
 
-    // The claim's journal is corrected in the ledger (reversed and replaced).
-    const corrected = await w.as((tx) =>
-      correctJournal(tx, {
-        idempotencyKey: key("correct"),
-        originalJournalId: approved.claim.approvalJournalId,
-        postingDate: "2026-08-07",
-        reference: "Claim fix",
-        lines: [
-          { accountCode: "6140", debitAmount: "200.00" },
-          { accountCode: "2100", debitAmount: "30.00" },
-          { accountCode: "2010", creditAmount: "230.00" },
-        ],
-      }),
-    );
-    // The replacement's expense line isn't a manual journal's line, so it can't be tagged a second time.
-    const replacementLine = (await w.linesOf("journal", corrected.replacementJournal.id)).find((line) => line.accountCode === "6140")!;
-    expect(replacementLine.taggable).toBe(false);
-    await expect(w.tag(replacementLine, { activityId: w.c1.id, eligibility: "eligible", category: "materials_overheads" })).rejects.toThrow("Only manual journals");
-    // The receipt's tag drops out of the totals, listed apart as reversed.
+    // The claim's journal can't be corrected in the ledger (EC12, #138), so no replacement journal could count it again.
+    await expect(
+      w.as((tx) =>
+        correctJournal(tx, {
+          idempotencyKey: key("correct"),
+          originalJournalId: approved.claim.approvalJournalId,
+          postingDate: "2026-08-07",
+          reference: "Claim fix",
+          lines: [
+            { accountCode: "6140", debitAmount: "200.00" },
+            { accountCode: "2100", debitAmount: "30.00" },
+            { accountCode: "2010", creditAmount: "230.00" },
+          ],
+        }),
+      ),
+    ).rejects.toThrow("void the claim");
+    // Voiding the claim: the receipt's tag drops out of the totals, listed apart as voided or reversed.
+    await w.as((tx) => voidExpenseClaim(tx, "owner", claim.id, { idempotencyKey: key("void"), voidDate: "2026-08-07" }));
     const after = await w.costs();
     expect(after.countedAmount).toBe("0.00");
     expect(after.voidedTags.map((t) => t.id)).toEqual([tagged.id]);
-    expect((await w.as((tx) => getTag(tx, tagged.id))).warnings.join(" ")).toContain("reversed");
 
     // A manual journal's replacement, even corrected twice, is still a manual journal's line.
     const manual = await w.as((tx) =>

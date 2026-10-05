@@ -76,6 +76,27 @@ describe("sending through the Gmail API", () => {
     expect(result).toEqual({ messageId: "gmail:18c0ffee", response: "Accepted by the Gmail API (200), message 18c0ffee", rejected: [] });
   });
 
+  it("doesn't send again when it can't tell whether Google sent it (#146)", async () => {
+    // 200 without the message's id.
+    setMailFetchForTests(async () => Response.json({}));
+    const noId = await sendRawViaGmail("token", Buffer.from("x")).catch((caught: unknown) => caught);
+    expect(explainGmailError(noId)).toEqual({
+      message: "It isn't clear whether the email was sent: Google accepted it but didn't say the sent message's id. Check the Sent folder of the Gmail mailbox before sending it again.",
+      retryable: false,
+    });
+    // A timeout after the message was handed over.
+    setMailFetchForTests(async () => {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    });
+    expect(explainGmailError(await sendRawViaGmail("token", Buffer.from("x")).catch((caught: unknown) => caught)).retryable).toBe(false);
+    // Never connected: safe to try again.
+    setMailFetchForTests(async () => {
+      throw new TypeError("fetch failed", { cause: Object.assign(new Error("connect ECONNREFUSED 142.250.0.1:443"), { code: "ECONNREFUSED" }) });
+    });
+    expect(explainGmailError(await sendRawViaGmail("token", Buffer.from("x")).catch((caught: unknown) => caught)).retryable).toBe(true);
+    setMailFetchForTests(null);
+  });
+
   it("explains Google's refusals in plain English, and retries only what goes away by itself", () => {
     const google = (status: number, reason: string, message = "Request had insufficient authentication scopes.") => new GmailSendError(status, `STATUS: ${message}`, [reason]);
     expect(explainGmailError(new GmailSendError(401, "UNAUTHENTICATED: Invalid Credentials", ["authError"]))).toMatchObject({

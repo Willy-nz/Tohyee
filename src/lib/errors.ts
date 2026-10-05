@@ -45,6 +45,12 @@ export class ConflictError extends HttpError {
   }
 }
 
+export class PayloadTooLargeError extends HttpError {
+  constructor(message: string) {
+    super(413, "payload_too_large", message);
+  }
+}
+
 export class TooManyRequestsError extends HttpError {
   constructor(message: string) {
     super(429, "too_many_requests", message);

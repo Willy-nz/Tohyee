@@ -174,6 +174,32 @@ describeWithDatabase("two-step sign-in (authenticator app and backup codes)", ()
     adminCookie = cookieFrom(ok);
   });
 
+  it("codes and passwords sent all at once can't get past the limits (#130)", async () => {
+    later();
+    const pending = cookieFrom(await login("jess@example.com"));
+    const codes = await Promise.all(Array.from({ length: 20 }, (_, index) => post(verifyRoute, "/api/auth/two-step/verify", pending, { code: String(100000 + index) })));
+    // At most the session's 5 tries are checked; the rest are refused before any code is looked at.
+    expect(codes.filter((response) => response.status === 400).length).toBeLessThanOrEqual(5);
+    expect(codes.every((response) => [400, 401, 429].includes(response.status))).toBe(true);
+    const counted = await coreQuery<{ failures: number }>("select coalesce(max(two_step_failures), 0) as failures from sessions s join users u on u.id = s.user_id where u.email = 'jess@example.com' and s.two_step_pending");
+    expect(counted.rows[0].failures).toBeLessThanOrEqual(5);
+
+    // Passwords: 20 wrong ones at once are only checked up to the limit of 5; then the account is locked.
+    later();
+    const passwords = await Promise.all(Array.from({ length: 20 }, (_, index) => login("jess@example.com", `wrong-password-${index}`)));
+    expect(passwords.filter((response) => response.status === 401).length).toBeLessThanOrEqual(5);
+    expect(passwords.filter((response) => response.status === 429).length).toBeGreaterThanOrEqual(15);
+    expect((await login("jess@example.com")).status).toBe(429);
+
+    // An email with no account gets the same answer after 5 tries, so it can't be told apart.
+    for (let attempt = 1; attempt <= 5; attempt += 1) expect((await login("nobody@example.com", "wrong")).status).toBe(401);
+    expect((await login("nobody@example.com", "wrong")).status).toBe(429);
+
+    later(16);
+    const unlocked = cookieFrom(await login("jess@example.com"));
+    expect((await post(verifyRoute, "/api/auth/two-step/verify", unlocked, { code: totpCode(secret, currentStep()) })).status).toBe(200);
+  });
+
   it("new backup codes need a current code and replace the old ones", async () => {
     later();
     const codes = (globalThis as { __codes?: string[] }).__codes!;
@@ -193,6 +219,17 @@ describeWithDatabase("two-step sign-in (authenticator app and backup codes)", ()
     );
     later();
     const pending = cookieFrom(await login("jess@example.com"));
+    // Without the server's public address there's no safe address for the link, so it isn't offered (#131).
+    expect(await body(await twoStepRoute.GET(apiRequest("/api/auth/two-step", { cookie: pending }), noContext))).toMatchObject({
+      stage: "verify",
+      emailResetAvailable: false,
+    });
+    expect((await post(emailResetRoute, "/api/auth/two-step/email-reset", pending)).status).toBe(409);
+    expect(sent).toHaveLength(0);
+    await coreQuery(
+      `insert into server_settings (key, value, secret_ciphertext, updated_by_email) values ('remote_access', '{"publicUrl": "https://books.example.nz"}', null, 'test')
+       on conflict (key) do update set value = excluded.value`,
+    );
     expect(await body(await twoStepRoute.GET(apiRequest("/api/auth/two-step", { cookie: pending }), noContext))).toMatchObject({
       stage: "verify",
       emailResetAvailable: true,
@@ -203,7 +240,8 @@ describeWithDatabase("two-step sign-in (authenticator app and backup codes)", ()
     expect(requested.status).toBe(200);
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ to: "jess@example.com", subject: "Tohyee: reset two-step sign-in" });
-    const link = /http:\/\/tohyee\.test\/login\/reset-two-step\?token=(\S+)/.exec(sent[0].text);
+    // The link uses the configured address, whatever Host the request came with.
+    const link = /https:\/\/books\.example\.nz\/login\/reset-two-step\?token=(\S+)/.exec(sent[0].text);
     expect(link).not.toBeNull();
     const token = decodeURIComponent(link![1]);
     expect((await post(emailResetRoute, "/api/auth/two-step/email-reset", pending)).status).toBe(429);

@@ -336,13 +336,14 @@ export async function listImapFolders(credentials: ImapCredentials): Promise<Mai
 }
 
 type ImapPart = { name: string; size: number; part: string; encodedSize: number; decodedUpperBound: number; encoding: string; exactSize: boolean };
-function mimeParts(structure: MessageStructureObject | undefined): ImapPart[] {
+/** The attachments Tohyee saves from an IMAP message (exported for tests). */
+export function mimeParts(structure: MessageStructureObject | undefined): ImapPart[] {
   const parts: ImapPart[] = [];
   let nodes = 0;
   function visit(node: MessageStructureObject, depth: number, path: number[]) {
     if (++nodes > 1000 || depth > 20) throw new ValidationError("The report email has too many MIME parts.");
     const name = node.dispositionParameters?.filename ?? node.parameters?.name;
-    if (name && /\.(csv|tsv|txt|zip)$/i.test(name) && !node.childNodes?.length) {
+    if (name && /\.(csv|tsv|txt|zip|xlsx)$/i.test(name) && !node.childNodes?.length) {
       const encodedSize = node.size ?? -1;
       const encoding = node.encoding?.toLowerCase() ?? "7bit";
       const transformedText = ["text/plain", "text/html", "text/x-amp-html"].includes(node.type) &&

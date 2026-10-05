@@ -1,7 +1,7 @@
 import { writeAdminAuditEvent } from "@/lib/audit";
 import type { AuthContext } from "@/lib/auth/guard";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
-import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
+import { coreQuery, type DbClient, withCoreTransaction } from "@/lib/db/transactions";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import { getMembership, type Membership } from "@/lib/organisations/registry";
 import { readServerSetting } from "@/lib/server-settings";
@@ -198,4 +198,14 @@ export async function authenticateAiToken(token: string): Promise<AiTokenIdentit
 export async function remoteAccessAddress(): Promise<string | null> {
   const stored = await readServerSetting<{ enabled?: boolean; publicUrl?: string | null }, Record<string, never>>("remote_access");
   return stored.value.enabled && stored.value.publicUrl ? stored.value.publicUrl.replace(/\/+$/, "") : null;
+}
+
+/**
+ * Stops every AI key a person made, in every organisation (#132): when their
+ * password is changed or reset, or their two-step sign-in is reset, a key
+ * made by whoever had their account shouldn't keep working. Returns how many.
+ */
+export async function revokeUserAiKeys(client: DbClient, userId: string): Promise<number> {
+  const revoked = await client.query("update ai_access_tokens set revoked_at = now() where user_id = $1 and revoked_at is null", [userId]);
+  return revoked.rowCount ?? 0;
 }

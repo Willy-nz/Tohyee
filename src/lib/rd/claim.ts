@@ -1,4 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
+import { csvCell } from "@/lib/csv";
 import { todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { cmp, dec, sum, toFixedString, ZERO_DECIMAL, type Decimal } from "@/lib/money/decimal";
@@ -580,10 +581,6 @@ async function lastExport(tx: OrgTx, year: number, now: Record<string, string>):
   };
 }
 
-function csvCell(value: string | number | null | undefined): string {
-  const text = value == null ? "" : String(value);
-  return /[",\n\r]/.test(text) || /^\s|\s$/.test(text) || /^[=+\-@]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 /** The report as CSV: one row per figure, then the lines behind them (RD27, RD42). */
 export function claimCsv(report: RdClaimReport): string {

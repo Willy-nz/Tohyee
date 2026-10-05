@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { assertSameOrigin, authenticate, type AuthContext, requireOrganisationRole } from "@/lib/auth/guard";
 import type { Role } from "@/lib/auth/roles";
 import { type OrgRunner, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
-import { HttpError, ValidationError } from "@/lib/errors";
+import { HttpError, PayloadTooLargeError, ValidationError } from "@/lib/errors";
 import type { Membership } from "@/lib/organisations/registry";
 import { parseOrganisationId } from "@/lib/organisations/registry";
 import { PAYROLL_MINIMUM_ROLE, requirePayrollAccess } from "@/lib/payroll/access";
@@ -60,10 +60,38 @@ export function route<Context = unknown>(handler: Handler<Context>): Handler<Con
   };
 }
 
-export async function readJson(request: Request): Promise<Record<string, unknown>> {
+/** The most a JSON request body may be (#133); routes that carry a file (base64) or many rows pass a larger `maxBytes`. */
+export const MAX_JSON_BYTES = 2 * 1024 * 1024;
+/** For the import and statement routes: a 10 MB file as base64 (about 13.4 MB) and its form fields, or 5,000 parsed rows. */
+export const MAX_FILE_JSON_BYTES = 20 * 1024 * 1024;
+
+/** The body's text, stopping as soon as it's bigger than `maxBytes`, so a huge body can't use up memory first (#133). */
+async function readLimitedText(request: Request, maxBytes: number): Promise<string> {
+  const declared = Number(request.headers.get("content-length"));
+  const tooLarge = () => new PayloadTooLargeError(`The request is too large (at most ${Math.round(maxBytes / (1024 * 1024))} MB).`);
+  if (Number.isFinite(declared) && declared > maxBytes) throw tooLarge();
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+export async function readJson(request: Request, options: { maxBytes?: number } = {}): Promise<Record<string, unknown>> {
+  const text = await readLimitedText(request, options.maxBytes ?? MAX_JSON_BYTES);
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(text);
   } catch {
     throw new ValidationError("The request body must be JSON.");
   }

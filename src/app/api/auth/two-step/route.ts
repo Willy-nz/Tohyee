@@ -1,5 +1,6 @@
 import { json, route } from "@/lib/api/http";
 import { authenticateAnyStage } from "@/lib/auth/guard";
+import { configuredOrigin } from "@/lib/auth/origin";
 import { getTwoStepStatus } from "@/lib/auth/two-step";
 import { emailConfigured } from "@/lib/email/mailer";
 
@@ -11,6 +12,7 @@ export const GET = route(async (request) => {
     stage: state.pending && state.stage === "full" ? "signed_out" : state.stage,
     email: state.user.email,
     status,
-    emailResetAvailable: state.stage === "verify" && (await emailConfigured()),
+    // Needs email and the server's public address for the link (#131).
+    emailResetAvailable: state.stage === "verify" && (await emailConfigured()) && (await configuredOrigin()) !== null,
   });
 });

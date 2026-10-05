@@ -1,4 +1,4 @@
-import { backUpNow, type BackupRun, getBackupSettings, localParts } from "@/lib/backups/service";
+import { backUpNow, type BackupRun, getBackupSettings, localParts, markInterruptedBackups } from "@/lib/backups/service";
 import { coreQuery } from "@/lib/db/transactions";
 import { sendSecurityAlert } from "@/lib/email/mailer";
 
@@ -45,14 +45,20 @@ async function emailServerAdmins(failed: BackupRun[]): Promise<void> {
 }
 
 let running = false;
+/** When this server process started: a run "running" from before then was cut off by a restart (#137). */
+const PROCESS_STARTED_AT = new Date();
 
 /** Makes whatever backups are due. Returns what it did (for tests and logs). */
-export async function runDueBackups(now = new Date()): Promise<BackupRun[]> {
+export async function runDueBackups(now = new Date(), processStartedAt = PROCESS_STARTED_AT): Promise<BackupRun[]> {
   if (running) return [];
   running = true;
   try {
     const settings = await getBackupSettings();
     if (!settings.enabled || !settings.keySet) return [];
+    // Otherwise a cut-off run counts as "running" all day and blocks that day's backups.
+    const interrupted = await markInterruptedBackups(processStartedAt, now);
+    for (const run of interrupted) console.warn(`[tohyee] Backup of ${run.organisationId ?? "the server database"} was interrupted by a restart; it's tried again.`);
+    if (interrupted.length > 0) await emailServerAdmins(interrupted).catch(() => undefined);
     const organisations = await coreQuery<{ id: string }>("select id from organisations where provisioning_status = 'ready'");
     const targetIds = [null, ...organisations.rows.map((row) => row.id)];
     const recent = await coreQuery<{ organisation_id: string | null; trigger: RecentRun["trigger"]; status: string; started_at: Date }>(

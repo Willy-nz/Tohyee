@@ -10505,10 +10505,9 @@ tags**, never a payroll calculation of its own (decision 37).
   (GST number 111-222-333, needed over $200, EC13), "Potting mix and pots
   for soil trials", **230.00 including GST** with the GST tax code:
   posts 200.00 to expense and 30.00 GST. Tagged C1: **200.00** counts.
-  (Stage R2 behaviour, not part of the example: if the claim's journal is
-  later corrected in the ledger, the receipt's tag stops counting and is
-  listed as reversed, and the replacement journal's lines can't be tagged,
-  because only a manual journal or a correction of one is tagged; so the
+  (Not part of the example: the claim's journal can't be corrected in the
+  ledger (EC12; since #138 the API refuses it too). Voiding the claim makes
+  the receipt's tag stop counting, listed as voided or reversed, so the
   200.00 is never counted twice.)
 - **RD10** Overheads by floor area (IR1240 p 15, p 63). Rent is **4,000.00
   + GST** a month for 200 m²; the lab is 30 m² and used only for R&D. Tohyee
@@ -11409,6 +11408,16 @@ files), `tests/unit/payroll-calculations.test.ts` (PR2-PR15) and
   row Tohyee's M, ME and SL (or SB-SA and SL), KiwiSaver at every rate, and
   net employer contribution and ESCT at every ESCT rate match IRD's figures
   exactly.
+- **PR13b A temporary rate reduction approved by IRD** (#141;
+  approved by Jess, 5 Oct 2026). Under Payroll › Employees, Hemi's KiwiSaver has
+  "Temporary rate reduction approved by IRD", from **1 Apr 2026** to **31
+  Mar 2027** (the dates on IRD's approval). His pay dated 15 May 2026,
+  gross $1,000.00, takes **$30.00** at 3% and the employer contributes
+  **$30.00** at 3% (PR12, PR13). Approving keeps the reduction with his
+  pay, like his bank account (PSLIP7). A pay dated after 31 Mar 2027 at 3%
+  is refused, as for anyone without one. Pays dated before 1 Apr 2026 don't
+  need it (3% was the rate then). Who set it, and when, is in the audit
+  history; setting it counts as changing payroll details (PRUN7b).
 
 ### Not supported yet (refused rather than guessed)
 
@@ -11710,6 +11719,16 @@ Payroll deductions payable**.
   has to approve it." Jess, who didn't touch it, can approve. With it off
   (the default), Ben can approve his own pay run. Who prepared and approved
   is taken from the signed-in user, never from the request.
+- **PRUN7b Changing an employee counts as preparing** (#140;
+  approved by Jess, 5 Oct 2026). With PRUN7's setting on, Ana prepares PAYRUN-7, which
+  includes Hemi. While it's a draft, Ben changes Hemi's bank account (or
+  his tax code, KiwiSaver rates or reduction, ESCT rate or a
+  pay rate): what PAYRUN-7 pays now depends on Ben's change, so Ben is
+  counted as preparing it. Ben approving PAYRUN-7 is refused: "You changed
+  Hemi Walker's payroll details while PAYRUN-7 was a draft, so someone else
+  has to approve it." Ana is refused as before; Jess, who touched neither,
+  approves. Changes to someone not on the draft, or made before the draft
+  was created, don't count. With the setting off, nothing changes.
 
 ### Refused and access
 
@@ -12263,6 +12282,22 @@ PostgreSQL and the API routes).
   audit event "payroll_bank_file.made" holds the pay run, the bank
   account's code, the format, the due date and how many payments, never an
   amount or an account number (decision 6, PPAY10).
+
+- **PBF8 The account kept at approval** (#139; approved by Jess,
+  5 Oct 2026: "use the approved one, and warn"). Approving a
+  pay run keeps each employee's bank account with their pay (PSLIP7). After
+  PAYRUN-1 is approved, Hemi changes his account to 12-3456-7654321-00. The
+  ANZ file for PAYRUN-1 still pays the account kept with his pay,
+  01-0242-0123456-00: the file is exactly PBF1's (hash total
+  34330777777), as his payslip shows. The screen warns: "Hemi Walker's bank
+  account has changed since PAYRUN-1 was approved. This file pays the
+  account kept with the pay run (\*\*-\*\*\*\*-\*\*\*\*\*\*6-00), as the payslip
+  shows. To pay the new account instead, pay Hemi in your bank's own
+  screens and record it as paid per employee." Neither account number is
+  shown in full or logged (PBF7). A later pay run, approved after the change, pays
+  the new account with no warning. A pay run approved before accounts were
+  kept with the pay uses the employee's current account, as before, with no
+  warning.
 
 ### Questions for Jess (bank files), decided
 
@@ -13803,6 +13838,16 @@ pay), "Holiday pay on finishing" and "Redundancy".
   (hourly to salary); overtime at a typed rate; a period that already had
   back pay. A rate that starts on or after this draft's period owes no back
   pay ("No back pay is owed for that pay rate").
+- **XP11b A salary period that wasn't paid in full** (#142;
+  approved by Jess, 5 Oct 2026: refuse rather than pro-rate). Mere's salary is $52,000.00 a year, weekly: $1,000.00
+  a week. Week 2 paid her ordinary time as a typed amount, **$600.00**
+  (two unpaid days). A new salary of $57,200.00 ($1,100.00 a week) is
+  backdated to week 1. Back pay for week 2 would be $1,100.00 − $600.00 =
+  $500.00, paying the unpaid days at the new rate, so it's refused instead:
+  "Not supported yet (refused rather than guessed): back pay for PAYRUN-2:
+  Mere's ordinary pay that week was $600.00, not her full salary of
+  $1,000.00. Work out its back pay and add it as an amount." Weeks paid in
+  full get their back pay as in XP10 ($100.00 each).
 
 ### Final pays
 

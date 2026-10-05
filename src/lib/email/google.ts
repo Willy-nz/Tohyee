@@ -15,6 +15,7 @@ import { googleApp } from "@/lib/crm/mail/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { claimProviderState, fallbackMethod, newSendingState } from "@/lib/email/microsoft";
 import type { GoogleAccount } from "@/lib/email/settings";
+import { EmailMaybeSentError, fetchMayHaveDelivered, maybeSentMessage } from "@/lib/email/maybe-sent";
 import { composeRawMessage, type OutgoingMessage, type SendResult } from "@/lib/email/smtp";
 import { ForbiddenError, UnavailableError, ValidationError } from "@/lib/errors";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
@@ -227,7 +228,10 @@ export async function sendRawViaGmail(accessToken: string, raw: Buffer): Promise
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (error) {
-    throw new UnavailableError(`Couldn't reach gmail.googleapis.com: ${error instanceof Error ? error.message : String(error)}`);
+    const said = error instanceof Error ? error.message : String(error);
+    // Handed over but no answer (a timeout or a dropped connection): it may have been sent (#146).
+    if (fetchMayHaveDelivered(error)) throw new EmailMaybeSentError(`Google didn't answer (${said}).`);
+    throw new UnavailableError(`Couldn't reach gmail.googleapis.com: ${said}`);
   }
   const text = await response.text().catch(() => "");
   if (!response.ok) {
@@ -250,7 +254,8 @@ export async function sendRawViaGmail(accessToken: string, raw: Buffer): Promise
   } catch {
     // not JSON
   }
-  if (!id) throw new GmailSendError(502, "Google answered without the sent message's id, so Tohyee can't be sure it was sent.");
+  // Google said yes (200) but not which message: it was most likely sent, so it isn't sent again (#146).
+  if (!id) throw new EmailMaybeSentError("Google accepted it but didn't say the sent message's id.");
   return { messageId: `gmail:${id}`, response: `Accepted by the Gmail API (${response.status}), message ${id}`, rejected: [] };
 }
 
@@ -261,6 +266,7 @@ export async function sendViaGmail(accessToken: string, account: Pick<GoogleAcco
 
 /** What went wrong sending through Google, in plain English, and whether it's worth trying again later. */
 export function explainGmailError(error: unknown): { message: string; retryable: boolean } {
+  if (error instanceof EmailMaybeSentError) return { message: maybeSentMessage("the Gmail mailbox", error.detail), retryable: false };
   if (error instanceof GmailSendError) {
     const said = ` (Google said: "${error.detail}")`;
     const reasons = error.reasons.map((reason) => reason.toLowerCase());

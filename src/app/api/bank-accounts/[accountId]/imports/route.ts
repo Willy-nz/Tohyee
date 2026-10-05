@@ -1,4 +1,4 @@
-import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { MAX_FILE_JSON_BYTES, json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { importStatementFile, listImports } from "@/lib/bank/imports";
 
 type Context = { params: Promise<{ accountId: string }> };
@@ -15,7 +15,7 @@ export const GET = route<Context>(async (request, context) => {
 /** Imports a statement file (`fileName`, `fileBase64`, optional CSV/Excel `layout`). Adds only lines not already there; posts nothing. */
 export const POST = route<Context>(async (request, context) => {
   const { accountId } = await context.params;
-  const body = await readJson(request);
+  const body = await readJson(request, { maxBytes: MAX_FILE_JSON_BYTES });
   const result = await withOrganisation(request, body.organisationId, "bookkeeper", (tx) =>
     importStatementFile(tx, accountId, {
       source: body.source,

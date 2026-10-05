@@ -1,3 +1,4 @@
+import { revokeUserAiKeys } from "@/lib/ai/tokens";
 import { timingSafeEqual } from "node:crypto";
 import { writeAdminAuditEvent } from "@/lib/audit";
 import {
@@ -112,6 +113,37 @@ type UserAuthRow = {
   two_step_enabled: boolean;
 };
 
+/**
+ * Failed tries for emails with no account, kept in memory like the real
+ * accounts' counts, so "too many attempts" can't be used to tell which emails
+ * have accounts (#130). A restart forgets them.
+ */
+const unknownEmailFailures = new Map<string, { count: number; lockedUntil: number }>();
+
+function unknownEmailLocked(email: string, now = Date.now()): number | null {
+  const entry = unknownEmailFailures.get(email);
+  return entry && entry.lockedUntil > now ? entry.lockedUntil : null;
+}
+
+function countUnknownEmailFailure(email: string, now = Date.now()): void {
+  if (unknownEmailFailures.size > 10_000) {
+    for (const [key, entry] of unknownEmailFailures) if (entry.lockedUntil <= now && entry.count === 0) unknownEmailFailures.delete(key);
+    if (unknownEmailFailures.size > 10_000) unknownEmailFailures.clear();
+  }
+  const entry = unknownEmailFailures.get(email) ?? { count: 0, lockedUntil: 0 };
+  entry.count += 1;
+  if (entry.count >= MAX_FAILED_ATTEMPTS) {
+    entry.count = 0;
+    entry.lockedUntil = now + LOCKOUT_MINUTES * 60_000;
+  }
+  unknownEmailFailures.set(email, entry);
+}
+
+function lockedError(until: number): TooManyRequestsError {
+  const minutes = Math.max(1, Math.ceil((until - Date.now()) / 60000));
+  return new TooManyRequestsError(`Too many failed sign-in attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`);
+}
+
 export async function signIn(
   input: { email: unknown; password: unknown },
   meta: SessionMeta,
@@ -131,26 +163,33 @@ export async function signIn(
   );
   const user = found.rows[0];
   if (!user) {
+    const locked = unknownEmailLocked(email);
+    if (locked) throw lockedError(locked);
     await verifyAgainstDummy(password);
+    countUnknownEmailFailure(email);
     throw new UnauthorizedError(SIGN_IN_FAILED);
   }
 
-  if (user.locked_until && new Date(user.locked_until).getTime() > Date.now()) {
-    const minutes = Math.ceil((new Date(user.locked_until).getTime() - Date.now()) / 60000);
-    throw new TooManyRequestsError(
-      `Too many failed sign-in attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
-    );
+  // Counted before the password is checked, in one statement, so passwords sent at once can't get past the limit (#130).
+  const claimed = await coreQuery(
+    `update users set failed_login_count = failed_login_count + 1
+      where id = $1 and (locked_until is null or locked_until <= $3) and failed_login_count < $2`,
+    [user.id, MAX_FAILED_ATTEMPTS, new Date()],
+  );
+  if (claimed.rowCount !== 1) {
+    const now = await coreQuery<{ locked_until: string | null }>("select locked_until from users where id = $1", [user.id]);
+    const until = now.rows[0]?.locked_until ? new Date(now.rows[0].locked_until).getTime() : 0;
+    throw lockedError(until > Date.now() ? until : Date.now() + LOCKOUT_MINUTES * 60_000);
   }
 
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid || !user.is_active) {
     if (!valid) {
+      // The limit reached: lock (the count starts again after the lock).
       await coreQuery(
-        `update users
-            set failed_login_count = case when failed_login_count + 1 >= $2 then 0 else failed_login_count + 1 end,
-                locked_until = case when failed_login_count + 1 >= $2 then now() + ($3::int * interval '1 minute') else locked_until end
-          where id = $1`,
-        [user.id, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES],
+        `update users set failed_login_count = 0, locked_until = $4::timestamptz + ($3::int * interval '1 minute')
+          where id = $1 and failed_login_count >= $2`,
+        [user.id, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES, new Date()],
       );
     }
     throw new UnauthorizedError(SIGN_IN_FAILED);
@@ -210,10 +249,12 @@ export async function changeOwnPassword(
       userId,
       currentSessionId,
     ]);
+    const aiKeysRevoked = await revokeUserAiKeys(client, userId);
     await writeAdminAuditEvent(client, { userId, email: row.email }, {
       eventType: "user.password_changed",
       entityType: "user",
       entityId: userId,
+      details: { aiKeysRevoked },
     });
   });
 }

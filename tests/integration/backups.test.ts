@@ -14,7 +14,10 @@ import * as keyCheckRoute from "@/app/api/admin/backups/key/check/route";
 import { backupKeyNeedsSaving, backupKeyStatus, checkSavedBackupKey, revealBackupKey } from "@/lib/backups/key";
 import { backUpNow, checkBackup, listBackupFiles, restoreBackupAsCopy, updateBackupSettings } from "@/lib/backups/service";
 import type { Actor } from "@/lib/db/org-transaction";
+import { databaseNameFor } from "@/lib/organisations/admin";
+import { getAdminPool } from "@/lib/db/pools";
 import { coreQuery } from "@/lib/db/transactions";
+import { quoteSqlIdentifier } from "@/lib/db/sql";
 import { postJournal } from "@/lib/ledger/journals";
 import { trialBalance } from "@/lib/reports/financial";
 import {
@@ -158,6 +161,19 @@ describeWithDatabase("backups and restores", () => {
     await expect(restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: serverFile.path })).rejects.toThrow(
       /server's own database/,
     );
+    // A database by the copy's name that isn't an organisation here (another install on the same server) is
+    // refused before anything is made, and never dropped (#135).
+    const stray = databaseNameFor("stray-co");
+    await getAdminPool().query(`create database ${quoteSqlIdentifier(stray)}`);
+    try {
+      await expect(restoreBackupAsCopy({ id: owner.id, email: owner.email }, { file: file.path, id: "stray-co" })).rejects.toThrow(
+        `There's already a database called ${stray}`,
+      );
+      expect((await getAdminPool().query("select 1 from pg_database where datname = $1", [stray])).rowCount).toBe(1);
+      expect((await coreQuery("select 1 from organisations where id = 'stray-co'")).rowCount).toBe(0);
+    } finally {
+      await getAdminPool().query(`drop database if exists ${quoteSqlIdentifier(stray)} with (force)`);
+    }
   });
 
   it("server admins see backups through the server settings address, with no paths outside the folder", async () => {
@@ -191,6 +207,28 @@ describeWithDatabase("backups and restores", () => {
       ].sort(),
     );
     expect(await runDueBackups()).toEqual([]);
+
+    // #137: a run cut off by a restart (still "running", from before this process started, over an hour ago) is
+    // marked failed and its half-written file removed, so it doesn't block the day; a run that just started is left.
+    await coreQuery("delete from backup_runs");
+    await coreQuery(
+      "insert into backup_runs (organisation_id, trigger, status, started_at) values ($1, 'schedule', 'running', now() - interval '90 minutes'), (null, 'manual', 'running', now() - interval '5 minutes')",
+      [ORG],
+    );
+    const partial = path.join(folder, ORG, `${ORG}_2000-01-01_000000.tohyee-backup.partial`);
+    await fs.writeFile(partial, "half");
+    const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await fs.utimes(partial, old, old);
+    await runDueBackups(new Date(), new Date());
+    const after = await coreQuery<{ organisation_id: string | null; status: string; error: string | null }>(
+      "select organisation_id, status, error from backup_runs where started_at < now() - interval '1 minute' order by started_at",
+    );
+    expect(after.rows).toEqual([
+      { organisation_id: ORG, status: "failed", error: "Interrupted: the server stopped while this backup ran." },
+      { organisation_id: null, status: "running", error: null },
+    ]);
+    await expect(fs.stat(partial)).rejects.toThrow();
+    await coreQuery("delete from backup_runs where status = 'running'");
     await updateBackupSettings({ user: owner }, { enabled: false });
     await coreQuery("delete from backup_runs");
     expect(await runDueBackups()).toEqual([]);

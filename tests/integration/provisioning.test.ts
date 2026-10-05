@@ -4,6 +4,10 @@ import { databaseNameOf, getDatabaseUrl, withDatabaseName } from "@/lib/db/conne
 import { migrateAllOrganisations, migrateCoreDatabase } from "@/lib/db/migrations";
 import { applyMigrations } from "@/lib/db/migrations/runner";
 import { tenantMigrations } from "@/lib/db/migrations/tenant";
+import { getAdminPool } from "@/lib/db/pools";
+import { quoteSqlIdentifier } from "@/lib/db/sql";
+import { createOrganisation, databaseNameFor } from "@/lib/organisations/admin";
+import { provisionOrganisation } from "@/lib/organisations/provisioning";
 import { getOrganisation } from "@/lib/organisations/registry";
 import { NZ_DEFAULT_TAX_CODES } from "@/lib/tax/default-codes";
 import {
@@ -71,6 +75,26 @@ describeWithDatabase("one database per organisation", () => {
       tx.query<{ organisation_id: string }>("select organisation_id from organisation_settings"),
     );
     expect(settings.rows[0].organisation_id).toBe("beta");
+  });
+
+  it("won't take over a database it doesn't know, and provisions one organisation at a time (#136)", async () => {
+    const owner = await createTestUser("stray-owner@example.com", { serverAdmin: true });
+    const stray = databaseNameFor("stray");
+    await getAdminPool().query(`create database ${quoteSqlIdentifier(stray)}`);
+    try {
+      await expect(createOrganisation({ id: owner.id, email: owner.email }, { id: "stray", displayName: "Stray" })).rejects.toThrow(
+        `There's already a database called ${stray}`,
+      );
+      expect(await getOrganisation("stray")).toBeNull();
+      expect((await getAdminPool().query("select 1 from pg_database where datname = $1", [stray])).rowCount).toBe(1);
+    } finally {
+      await getAdminPool().query(`drop database if exists ${quoteSqlIdentifier(stray)} with (force)`);
+    }
+    // Provisioning the same organisation twice at once: both finish, one after the other, with one database.
+    const made = await createTestOrganisation(owner, "twice");
+    await Promise.all([provisionOrganisation("twice"), provisionOrganisation("twice")]);
+    expect((await getOrganisation("twice"))?.provisioningStatus).toBe("ready");
+    expect(made.databaseName).toBe(databaseNameFor("twice"));
   });
 
   it("migration 0031 gives existing organisations with no tax codes the standard ones, and leaves the rest alone", async () => {

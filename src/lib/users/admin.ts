@@ -1,3 +1,4 @@
+import { revokeUserAiKeys } from "@/lib/ai/tokens";
 import { type AdminActor, writeAdminAuditEvent } from "@/lib/audit";
 import { normaliseEmail, parseDisplayName } from "@/lib/auth/service";
 import { hashPassword, validateNewPassword } from "@/lib/auth/password";
@@ -156,6 +157,8 @@ export async function updateUser(
     if (isActive === false || newPasswordHash) {
       await client.query("delete from sessions where user_id = $1", [userId]);
     }
+    // A reset password stops their AI keys too (#132).
+    const aiKeysRevoked = newPasswordHash ? await revokeUserAiKeys(client, userId) : 0;
 
     await writeAdminAuditEvent(client, { userId: actor.id, email: actor.email }, {
       eventType: "user.updated",
@@ -166,6 +169,7 @@ export async function updateUser(
         isActive,
         isServerAdmin,
         passwordReset: Boolean(newPasswordHash),
+        aiKeysRevoked,
       },
     });
 

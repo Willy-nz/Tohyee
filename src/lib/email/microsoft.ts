@@ -14,6 +14,7 @@ import {
 import { microsoftApp } from "@/lib/crm/mail/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import type { MicrosoftAccount } from "@/lib/email/settings";
+import { EmailMaybeSentError, fetchMayHaveDelivered, maybeSentMessage } from "@/lib/email/maybe-sent";
 import type { OutgoingMessage, SendResult } from "@/lib/email/smtp";
 import { ForbiddenError, UnavailableError, ValidationError } from "@/lib/errors";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
@@ -276,7 +277,10 @@ export async function sendViaGraph(accessToken: string, account: Pick<MicrosoftA
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (error) {
-    throw new UnavailableError(`Couldn't reach graph.microsoft.com: ${error instanceof Error ? error.message : String(error)}`);
+    const said = error instanceof Error ? error.message : String(error);
+    // Handed over but no answer (a timeout or a dropped connection): it may have been sent (#146).
+    if (fetchMayHaveDelivered(error)) throw new EmailMaybeSentError(`Microsoft didn't answer (${said}).`);
+    throw new UnavailableError(`Couldn't reach graph.microsoft.com: ${said}`);
   }
   if (response.status !== 202) {
     const text = await response.text().catch(() => "");
@@ -305,6 +309,7 @@ export class GraphSendError extends Error {
 
 /** What went wrong sending through Microsoft, in plain English, and whether it's worth trying again later. */
 export function explainGraphError(error: unknown): { message: string; retryable: boolean } {
+  if (error instanceof EmailMaybeSentError) return { message: maybeSentMessage("the Microsoft 365 mailbox", error.detail), retryable: false };
   if (error instanceof GraphSendError) {
     const said = ` (Microsoft said: "${error.detail}")`;
     if (error.status === 413) return { message: error.detail, retryable: false };

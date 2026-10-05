@@ -216,6 +216,10 @@ Database upgrades run by themselves when Tohyee starts. Back up first if you ins
   approved by Jess 5 Oct 2026, decisions 451-455, tenant migration 0105.
   Next: the rest of item 7 (Stripe sales, Square, Amazon, eBay, Etsy,
   PayPal; Jess picks the order), examples first.
+- Project review of 4 Oct 2026 (#158, issues #130-#157): fixes are going
+  in by batch. Fixed (decisions 456-460): #130-#138, #143, #146, #148,
+  #149, #157. Still open: #139-#142 and #151 (payroll and FX: worked
+  examples and Jess's approval first), #144, #145, #147, #150, #152-#156.
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
@@ -304,8 +308,9 @@ migration 0007, tenant migration 0102). Report commentary (item 6 part 3,
 decision 446, core migration 0008, tenant migration 0103). Shopify chargebacks
 and reserves (item 7 part 1, decisions 447-450, tenant migration 0104).
 WooCommerce orders (item 7
-part 2, decisions 451-455, tenant migration 0105). Next numbers: tenant
-migration 0106, core migration 0009, decision 456.
+part 2, decisions 451-455, tenant migration 0105). Review fixes
+(decisions 456-460, no migrations). Next numbers: tenant migration 0106,
+core migration 0009, decision 461.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,
