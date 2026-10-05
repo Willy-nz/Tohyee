@@ -11,7 +11,22 @@ export type ReportAttachment = { name: string; size: number; read: () => Promise
  * this one message can't be read (too big, malformed): the check notes it and
  * carries on. A network failure still stops the whole check, to try again later.
  */
-export type ReportMessage = { id: string; receivedAt: string | null; attachments: ReportAttachment[]; problem?: string };
+export type ReportMessage = {
+  id: string;
+  receivedAt: string | null;
+  attachments: ReportAttachment[];
+  problem?: string;
+  /** The sender and subject, when the mailbox gave them (the bills inbox shows them, BI2). */
+  from?: string | null;
+  subject?: string | null;
+};
+
+/** A header value cut to a sensible length, without control characters. */
+function headerText(value: unknown, max = 500): string | null {
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
+  return cleaned ? cleaned.slice(0, max) : null;
+}
 /** Messages already dealt with, skipped before they're downloaded. */
 export type SkipMessage = (messageId: string) => boolean;
 export type ImapCredentials = { host: string; port: number; username: string; password: string };
@@ -147,7 +162,16 @@ export async function listReportFolders(provider: MailProvider, token: string): 
   return folders;
 }
 
-type GmailPart = { filename?: string; body?: { size?: number; attachmentId?: string; data?: string }; parts?: GmailPart[] };
+type GmailPart = {
+  filename?: string;
+  body?: { size?: number; attachmentId?: string; data?: string };
+  parts?: GmailPart[];
+  headers?: { name?: string; value?: string }[];
+};
+
+function gmailHeader(part: GmailPart | undefined, name: string): string | null {
+  return headerText(part?.headers?.find((header) => header.name?.toLowerCase() === name)?.value, name === "subject" ? 1000 : 500);
+}
 function gmailAttachments(part: GmailPart | undefined, messageId: string, token: string): ReportAttachment[] {
   const attachments: ReportAttachment[] = [];
   let nodes = 0;
@@ -200,7 +224,12 @@ export async function* reportMessages(provider: MailProvider, token: string, fol
           const message = await request<{ internalDate: string; payload?: GmailPart }>(
             `${GOOGLE}/messages/${id(listed.id)}?format=full`, token, MAX_ENCODED_BYTES,
           );
-          return { receivedAt: received(Number(message.internalDate)), attachments: gmailAttachments(message.payload, listed.id, token) };
+          return {
+            receivedAt: received(Number(message.internalDate)),
+            attachments: gmailAttachments(message.payload, listed.id, token),
+            from: gmailHeader(message.payload, "from"),
+            subject: gmailHeader(message.payload, "subject"),
+          };
         });
       }
       pageToken = page.nextPageToken ?? "";
@@ -210,8 +239,14 @@ export async function* reportMessages(provider: MailProvider, token: string, fol
     return;
   }
   const folder = `${GRAPH}/mailFolders/${id(folderId)}`;
-  for await (const page of graphPages<{ id: string; receivedDateTime: string; hasAttachments: boolean }>(
-    `${folder}/messages?$top=100&$select=id,receivedDateTime,hasAttachments&$orderby=receivedDateTime%20asc`, token,
+  for await (const page of graphPages<{
+    id: string;
+    receivedDateTime: string;
+    hasAttachments: boolean;
+    subject?: string;
+    from?: { emailAddress?: { name?: string; address?: string } };
+  }>(
+    `${folder}/messages?$top=100&$select=id,receivedDateTime,hasAttachments,subject,from&$orderby=receivedDateTime%20asc`, token,
   )) {
     for (const message of page) {
       if (skip(message.id)) continue;
@@ -235,7 +270,13 @@ export async function* reportMessages(provider: MailProvider, token: string, fol
           }
         }
       }
-      return { receivedAt: received(message.receivedDateTime), attachments };
+      const sender = message.from?.emailAddress;
+      return {
+        receivedAt: received(message.receivedDateTime),
+        attachments,
+        from: headerText(sender?.name && sender.address ? `${sender.name} <${sender.address}>` : (sender?.address ?? sender?.name)),
+        subject: headerText(message.subject, 1000),
+      };
       });
     }
   }
@@ -249,7 +290,7 @@ type ImapClient = {
   list: () => Promise<{ path: string; name: string; flags: Set<string> }[]>;
   mailbox: false | { uidValidity: bigint; exists: number };
   getMailboxLock: (folder: string, options: { readOnly: boolean; acquireTimeout: number }) => Promise<{ release: () => void }>;
-  fetch: (range: string, query: { uid: boolean; internalDate: boolean; size: boolean; bodyStructure: boolean }) => AsyncIterable<FetchMessageObject>;
+  fetch: (range: string, query: { uid: boolean; internalDate: boolean; size: boolean; bodyStructure: boolean; envelope?: boolean }) => AsyncIterable<FetchMessageObject>;
   download: (uid: string, part: string, options: { uid: boolean; maxBytes: number }) => Promise<{ content?: Readable; meta?: { encoding?: string } }>;
 };
 type ImapFactory = (options: ImapFlowOptions) => ImapClient;
@@ -373,7 +414,7 @@ export async function* imapReportMessages(credentials: ImapCredentials, folderId
     for (let start = 1; start <= count; start += 100) {
       // Finish each FETCH before yielding: ImapFlow cannot issue a download while FETCH is active.
       const page: FetchMessageObject[] = [];
-      for await (const message of client.fetch(`${start}:${Math.min(start + 99, count)}`, { uid: true, internalDate: true, size: true, bodyStructure: true })) {
+      for await (const message of client.fetch(`${start}:${Math.min(start + 99, count)}`, { uid: true, internalDate: true, size: true, bodyStructure: true, envelope: true })) {
         if (page.length >= 100) throw new ValidationError("The IMAP mailbox returned too many messages in one page.");
         page.push(message);
       }
@@ -384,7 +425,13 @@ export async function* imapReportMessages(credentials: ImapCredentials, folderId
           const attachments = mimeParts(message.bodyStructure).map((part) => ({
             name: part.name, size: part.size, read: () => readImapAttachment(credentials, folderId, validity, message.uid, part),
           }));
-          return { receivedAt: received(message.internalDate ?? ""), attachments };
+          const sender = message.envelope?.from?.[0];
+          return {
+            receivedAt: received(message.internalDate ?? ""),
+            attachments,
+            from: headerText(sender?.name && sender.address ? `${sender.name} <${sender.address}>` : (sender?.address ?? sender?.name)),
+            subject: headerText(message.envelope?.subject, 1000),
+          };
         });
       }
     }

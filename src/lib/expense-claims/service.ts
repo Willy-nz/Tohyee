@@ -18,6 +18,8 @@ import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, cmp, dec, type Decimal, isPositive, isZero, parseDecimalInput, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
 import { personName } from "@/lib/people/names";
 import { removeRecordExtras } from "@/lib/records/extras";
+import { type Claimant, type MileageInput, type MileageWorking, parseMileage, parseTierOverride, workOutMileage } from "@/lib/expense-claims/mileage";
+import type { VehicleType } from "@/lib/expense-claims/mileage-types";
 import {
   assertRequiredTags,
   checkNewTags,
@@ -53,9 +55,28 @@ export const EXPENSE_CLAIMS_PAYABLE: ControlAccount = {
 
 const MAX_RECEIPTS = 100;
 
+export type ExpenseClaimMileage = {
+  fromPlace: string;
+  toPlace: string;
+  km: string;
+  vehicleType: VehicleType;
+  rateYearEnding: number;
+  tier1Km: string;
+  tier1Rate: string;
+  tier2Km: string;
+  tier2Rate: string;
+  /** e.g. "2025-26 rates (2026-27 not entered)" (question 2), or null. */
+  rateNote: string | null;
+  /** An admin chose the tier (question 3). */
+  tierOverride: "tier1" | "tier2" | null;
+};
+
 export type ExpenseClaimReceipt = {
   id: string;
   lineOrder: number;
+  /** A receipt, or a mileage line (MI2) paid at the kilometre rate with no GST. */
+  kind: "receipt" | "mileage";
+  mileage: ExpenseClaimMileage | null;
   receiptDate: string;
   supplierName: string;
   /** The supplier's GST number from the receipt, digits only (decision 293), or null. */
@@ -202,6 +223,18 @@ function toSummary(row: ClaimRow, scale: number): ExpenseClaimSummary {
 type ReceiptRow = {
   id: string;
   line_order: number;
+  kind: "receipt" | "mileage";
+  from_place: string | null;
+  to_place: string | null;
+  km: string | null;
+  vehicle_type: VehicleType | null;
+  rate_year_ending: number | null;
+  tier1_km: string | null;
+  tier1_rate: string | null;
+  tier2_km: string | null;
+  tier2_rate: string | null;
+  rate_note: string | null;
+  tier_override: "tier1" | "tier2" | null;
   receipt_date: string;
   supplier_name: string;
   supplier_gst_number: string | null;
@@ -241,7 +274,9 @@ export async function getExpenseClaim(tx: OrgTx, idInput: unknown): Promise<Expe
   if (!found.rows[0]) throw new NotFoundError("Expense claim not found.");
   const receipts = await tx.query<ReceiptRow>(
     `select r.id::text, r.line_order, r.receipt_date, r.supplier_name, r.supplier_gst_number, r.description, r.account_id::text, a.code, a.name,
-            r.tax_code_id::text, t.code as tax_code, r.tax_rate::text, r.amount::text, r.net_amount::text, r.tax_amount::text, r.tracking
+            r.tax_code_id::text, t.code as tax_code, r.tax_rate::text, r.amount::text, r.net_amount::text, r.tax_amount::text, r.tracking,
+            r.kind, r.from_place, r.to_place, r.km::text, r.vehicle_type, r.rate_year_ending, r.tier1_km::text, r.tier1_rate::text,
+            r.tier2_km::text, r.tier2_rate::text, r.rate_note, r.tier_override
        from expense_claim_receipts r join accounts a on a.id = r.account_id left join tax_codes t on t.id = r.tax_code_id
       where r.claim_id = $1 order by r.line_order`,
     [id],
@@ -258,6 +293,23 @@ export async function getExpenseClaim(tx: OrgTx, idInput: unknown): Promise<Expe
     receipts: receipts.rows.map((row) => ({
       id: row.id,
       lineOrder: row.line_order,
+      kind: row.kind,
+      mileage:
+        row.kind === "mileage"
+          ? {
+              fromPlace: row.from_place!,
+              toPlace: row.to_place!,
+              km: toPlainString(dec(row.km!)),
+              vehicleType: row.vehicle_type!,
+              rateYearEnding: row.rate_year_ending!,
+              tier1Km: toPlainString(dec(row.tier1_km!)),
+              tier1Rate: toPlainString(dec(row.tier1_rate!)),
+              tier2Km: toPlainString(dec(row.tier2_km!)),
+              tier2Rate: toPlainString(dec(row.tier2_rate!)),
+              rateNote: row.rate_note,
+              tierOverride: row.tier_override,
+            }
+          : null,
       receiptDate: row.receipt_date,
       supplierName: row.supplier_name,
       supplierGstNumber: row.supplier_gst_number,
@@ -330,9 +382,12 @@ type ReceiptInput = {
   taxCode: string | null;
   amount: string;
   tracking: TrackingTags;
+  /** Mileage lines only (MI2): the amount is worked out from these. */
+  mileage: MileageInput | null;
 };
 
 type ResolvedReceipt = ReceiptInput & {
+  mileageWorking: MileageWorking | null;
   accountId: string;
   accountCode: string;
   accountClass: AccountClass;
@@ -385,6 +440,22 @@ function parseReceipts(input: unknown, scale: number): ReceiptInput[] {
   return raw.map((entry, index) => {
     const label = `Receipt ${index + 1}`;
     const line = asRecord(entry, label);
+    if (line.kind === "mileage") {
+      // Mileage (MI2): no supplier, GST or amount typed; the amount is kilometres times the rate.
+      const mileageLabel = `Mileage line ${index + 1}`;
+      return {
+        receiptDate: parseIsoDate(line.receiptDate, `${mileageLabel} date`),
+        supplierName: "Mileage",
+        supplierGstNumber: null,
+        description: requireString(line.description, `${mileageLabel} purpose`, { maxLength: 500 }),
+        accountCode: parseAccountCodeInput(line.accountCode, `${mileageLabel} account`),
+        taxCode: null,
+        amount: "0",
+        tracking: sortedTags(parseTrackingInput(line.tracking, mileageLabel)),
+        mileage: { ...parseMileage(line, mileageLabel), tierOverride: null, fixed: null },
+      };
+    }
+    if (line.kind !== undefined && line.kind !== null && line.kind !== "receipt") throw new ValidationError(`${label} kind must be receipt or mileage.`);
     const amount = parseDecimalInput(line.amount, `${label} amount`, { maxScale: scale });
     return {
       receiptDate: parseIsoDate(line.receiptDate, `${label} date`),
@@ -395,8 +466,48 @@ function parseReceipts(input: unknown, scale: number): ReceiptInput[] {
       taxCode: optionalString(line.taxCode, `${label} tax code`, { maxLength: 20 })?.toUpperCase() ?? null,
       amount: toFixedString(dec(amount), scale),
       tracking: sortedTags(parseTrackingInput(line.tracking, label)),
+      mileage: null,
     };
   });
+}
+
+/** A stored line as input: mileage on a draft is worked out again unless `keepMileage` (MI6). */
+function receiptInput(receipt: ExpenseClaimReceipt, keepMileage: boolean): ReceiptInput {
+  const mileage = receipt.mileage;
+  return {
+    receiptDate: receipt.receiptDate,
+    supplierName: receipt.supplierName,
+    supplierGstNumber: receipt.supplierGstNumber,
+    description: receipt.description,
+    accountCode: receipt.accountCode,
+    taxCode: receipt.taxCode,
+    amount: receipt.amount,
+    tracking: receipt.tracking,
+    mileage: mileage
+      ? {
+          fromPlace: mileage.fromPlace,
+          toPlace: mileage.toPlace,
+          km: mileage.km,
+          vehicleType: mileage.vehicleType,
+          tierOverride: mileage.tierOverride,
+          fixed: keepMileage
+            ? {
+                rateYearEnding: mileage.rateYearEnding,
+                tier1Km: mileage.tier1Km,
+                tier1Rate: mileage.tier1Rate,
+                tier2Km: mileage.tier2Km,
+                tier2Rate: mileage.tier2Rate,
+                rateNote: mileage.rateNote,
+                amount: receipt.amount,
+              }
+            : null,
+        }
+      : null,
+  };
+}
+
+function claimantOf(claim: ExpenseClaimSummary): Claimant {
+  return { claimId: claim.id, userId: claim.claimantUserId, email: claim.claimantEmail };
 }
 
 /**
@@ -405,8 +516,20 @@ function parseReceipts(input: unknown, scale: number): ReceiptInput[] {
  * on bills), each tax code active and in effect on the receipt's date, and
  * tags usable. A receipt with no tax code has no GST (not a GST receipt).
  */
-async function resolveReceipts(tx: OrgTx, receipts: ReceiptInput[], kept: ReadonlySet<string>): Promise<{ receipts: ResolvedReceipt[]; subtotal: string; taxTotal: string; total: string }> {
+async function resolveReceipts(
+  tx: OrgTx,
+  input: ReceiptInput[],
+  kept: ReadonlySet<string>,
+  claimant: Claimant,
+): Promise<{ receipts: ResolvedReceipt[]; subtotal: string; taxTotal: string; total: string }> {
   const scale = currencyMinorUnits(tx.baseCurrency);
+  const working = await workOutMileage(
+    tx,
+    claimant,
+    input.flatMap((receipt, index) => (receipt.mileage ? [{ index, receiptDate: receipt.receiptDate, mileage: receipt.mileage, label: `Mileage line ${index + 1}` }] : [])),
+    scale,
+  );
+  const receipts = input.map((receipt, index) => (receipt.mileage ? { ...receipt, taxCode: null, amount: working.get(index)!.amount } : receipt));
   const tracking = await loadTrackingContext(tx);
   receipts.forEach((receipt, index) => checkNewTags(tracking, receipt.tracking, `Receipt ${index + 1}`, kept));
   const accounts = await tx.query<{
@@ -458,7 +581,15 @@ async function resolveReceipts(tx: OrgTx, receipts: ReceiptInput[], kept: Readon
       taxCodeId = taxCode.id;
       taxRate = toPlainString(dec(taxCode.rate));
     }
-    return { ...receipt, accountId: account.id, accountCode: account.code, accountClass: account.account_class, taxCodeId, taxRate };
+    return {
+      ...receipt,
+      accountId: account.id,
+      accountCode: account.code,
+      accountClass: account.account_class,
+      taxCodeId,
+      taxRate,
+      mileageWorking: working.get(index) ?? null,
+    };
   });
   // Tax inclusive, GST worked out and rounded per receipt, as on bills (B2).
   const amounts = calculateInvoice(
@@ -479,8 +610,11 @@ async function writeReceipts(tx: OrgTx, claimId: string, receipts: ResolvedRecei
   for (const [index, receipt] of receipts.entries()) {
     await tx.query(
       `insert into expense_claim_receipts (claim_id, line_order, receipt_date, supplier_name, description, account_id, tax_code_id,
-                                           tax_rate, amount, net_amount, tax_amount, tracking, supplier_gst_number)
-       values ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9::numeric, $10::numeric, $11::numeric, $12::jsonb, $13)`,
+                                           tax_rate, amount, net_amount, tax_amount, tracking, supplier_gst_number,
+                                           kind, from_place, to_place, km, vehicle_type, rate_year_ending, tier1_km, tier1_rate,
+                                           tier2_km, tier2_rate, rate_note, tier_override)
+       values ($1, $2, $3, $4, $5, $6, $7, $8::numeric, $9::numeric, $10::numeric, $11::numeric, $12::jsonb, $13,
+               $14, $15, $16, $17::numeric, $18, $19, $20::numeric, $21::numeric, $22::numeric, $23::numeric, $24, $25)`,
       [
         claimId,
         index + 1,
@@ -495,6 +629,18 @@ async function writeReceipts(tx: OrgTx, claimId: string, receipts: ResolvedRecei
         receipt.taxAmount,
         JSON.stringify(receipt.tracking),
         receipt.supplierGstNumber,
+        receipt.mileage ? "mileage" : "receipt",
+        receipt.mileage?.fromPlace ?? null,
+        receipt.mileage?.toPlace ?? null,
+        receipt.mileage?.km ?? null,
+        receipt.mileage?.vehicleType ?? null,
+        receipt.mileageWorking?.rateYearEnding ?? null,
+        receipt.mileageWorking?.tier1Km ?? null,
+        receipt.mileageWorking?.tier1Rate ?? null,
+        receipt.mileageWorking?.tier2Km ?? null,
+        receipt.mileageWorking?.tier2Rate ?? null,
+        receipt.mileageWorking?.rateNote ?? null,
+        receipt.mileage?.tierOverride ?? null,
       ],
     );
   }
@@ -545,7 +691,7 @@ export async function createExpenseClaim(
     assertSameRequest(earlier.rows[0].request_hash, hash, "expense claim");
     return { created: false, claim: await getExpenseClaim(tx, earlier.rows[0].id) };
   }
-  const resolved = await resolveReceipts(tx, receipts, new Set());
+  const resolved = await resolveReceipts(tx, receipts, new Set(), { claimId: null, userId: tx.actor.userId, email: tx.actor.email });
   const inserted = await tx.query<{ id: string }>(
     `insert into expense_claims (command_source, idempotency_key, request_hash, claimant_user_id, claimant_email, description,
                                  currency_code, total, tax_total)
@@ -574,18 +720,9 @@ export async function updateExpenseClaim(tx: OrgTx, idInput: unknown, command: {
   const description = command.description === undefined ? current.description : parseDescription(command.description);
   const receipts =
     command.receipts === undefined
-      ? current.receipts.map((receipt) => ({
-          receiptDate: receipt.receiptDate,
-          supplierName: receipt.supplierName,
-          supplierGstNumber: receipt.supplierGstNumber,
-          description: receipt.description,
-          accountCode: receipt.accountCode,
-          taxCode: receipt.taxCode,
-          amount: receipt.amount,
-          tracking: receipt.tracking,
-        }))
-      : parseReceipts(command.receipts, scale);
-  const resolved = await resolveReceipts(tx, receipts, keptValues(current.receipts));
+      ? current.receipts.map((receipt) => receiptInput(receipt, false))
+      : keepTierOverrides(current.receipts, parseReceipts(command.receipts, scale));
+  const resolved = await resolveReceipts(tx, receipts, keptValues(current.receipts), claimantOf(current));
   await tx.query("update expense_claims set description = $2, total = $3::numeric, tax_total = $4::numeric, updated_at = now() where id = $1", [
     id,
     description,
@@ -600,6 +737,107 @@ export async function updateExpenseClaim(tx: OrgTx, idInput: unknown, command: {
     details: { total: resolved.total, receipts: resolved.receipts.length },
   });
   return getExpenseClaim(tx, id);
+}
+
+/**
+ * An admin's tier on a mileage line (question 3) stays when the claimant
+ * saves the claim again with the same line (same place in the claim, date,
+ * kilometres and vehicle type); otherwise it's worked out again.
+ */
+function keepTierOverrides(current: readonly ExpenseClaimReceipt[], next: ReceiptInput[]): ReceiptInput[] {
+  return next.map((receipt, index) => {
+    const before = current[index]?.mileage;
+    const same =
+      before &&
+      receipt.mileage &&
+      before.tierOverride &&
+      current[index].receiptDate === receipt.receiptDate &&
+      before.km === receipt.mileage.km &&
+      before.vehicleType === receipt.mileage.vehicleType;
+    return same ? { ...receipt, mileage: { ...receipt.mileage!, tierOverride: before.tierOverride } } : receipt;
+  });
+}
+
+/**
+ * Sets (or clears) the tier of a draft claim's mileage line (question 3):
+ * tier 1 or tier 2 for the whole line, instead of working it out from the
+ * claimant's kilometres. Admins only; the claim's amounts are worked out
+ * again.
+ */
+export async function setMileageTier(tx: OrgTx, role: Role, idInput: unknown, command: { lineOrder: unknown; tier: unknown }): Promise<ExpenseClaim> {
+  if (!roleAtLeast(role, "admin")) throw new ForbiddenError("Only admins can choose a mileage line's tier.");
+  const id = requireId(idInput, "claimId");
+  const current = await lockClaim(tx, id);
+  if (current.status !== "draft") {
+    throw new ConflictError(`${claimReference(id)} is ${current.status}. A tier can only be chosen while the claim is a draft (decline it first).`);
+  }
+  const lineOrder = Number(command.lineOrder);
+  const line = current.receipts.find((receipt) => receipt.lineOrder === lineOrder);
+  if (!line || line.kind !== "mileage") throw new NotFoundError("Mileage line not found.");
+  const tier = parseTierOverride(command.tier);
+  const receipts = current.receipts.map((receipt) => {
+    const input = receiptInput(receipt, false);
+    return receipt.lineOrder === lineOrder ? { ...input, mileage: { ...input.mileage!, tierOverride: tier } } : input;
+  });
+  const resolved = await resolveReceipts(tx, receipts, keptValues(current.receipts), claimantOf(current));
+  await tx.query("update expense_claims set total = $2::numeric, tax_total = $3::numeric, updated_at = now() where id = $1", [id, resolved.total, resolved.taxTotal]);
+  await writeReceipts(tx, id, resolved.receipts);
+  await writeAuditEvent(tx, {
+    eventType: "expense_claim.mileage_tier_set",
+    entityType: "expense_claim",
+    entityId: id,
+    details: { lineOrder, tier: tier ?? "worked out", total: resolved.total },
+  });
+  return getExpenseClaim(tx, id);
+}
+
+/**
+ * Works out every draft claim's mileage again (MI6), after an admin changes
+ * kilometre rates. Submitted and approved claims keep theirs. Returns how
+ * many claims changed.
+ */
+export async function recalculateDraftMileage(tx: OrgTx): Promise<number> {
+  const drafts = await tx.query<{ id: string }>(
+    `select c.id::text from expense_claims c
+      where c.status = 'draft' and exists (select 1 from expense_claim_receipts r where r.claim_id = c.id and r.kind = 'mileage')
+      order by c.id for update of c`,
+  );
+  let changed = 0;
+  for (const { id } of drafts.rows) {
+    if (await refreshMileage(tx, await getExpenseClaim(tx, id))) changed += 1;
+  }
+  return changed;
+}
+
+/**
+ * Works a draft's mileage out again with today's rates and kilometres
+ * (MI6), saving it when anything changed. Returns whether it did.
+ */
+async function refreshMileage(tx: OrgTx, current: ExpenseClaim): Promise<boolean> {
+  if (current.status !== "draft" || !current.receipts.some((receipt) => receipt.kind === "mileage")) return false;
+  const resolved = await resolveReceipts(
+    tx,
+    current.receipts.map((receipt) => receiptInput(receipt, false)),
+    keptValues(current.receipts),
+    claimantOf(current),
+  );
+  const state = (lines: readonly { amount: string; working: Pick<MileageWorking, "rateYearEnding" | "tier1Km" | "rateNote"> | null }[]) =>
+    JSON.stringify(lines.map((line) => [line.amount, line.working?.rateYearEnding, line.working?.tier1Km, line.working?.rateNote]));
+  if (
+    state(resolved.receipts.map((receipt) => ({ amount: receipt.amount, working: receipt.mileageWorking }))) ===
+    state(current.receipts.map((receipt) => ({ amount: receipt.amount, working: receipt.mileage })))
+  ) {
+    return false;
+  }
+  await tx.query("update expense_claims set total = $2::numeric, tax_total = $3::numeric, updated_at = now() where id = $1", [current.id, resolved.total, resolved.taxTotal]);
+  await writeReceipts(tx, current.id, resolved.receipts);
+  await writeAuditEvent(tx, {
+    eventType: "expense_claim.mileage_recalculated",
+    entityType: "expense_claim",
+    entityId: current.id,
+    details: { total: resolved.total, before: current.total },
+  });
+  return true;
 }
 
 /** Deletes a draft (never submitted, or declined). Only its claimant can. */
@@ -620,31 +858,26 @@ export async function submitExpenseClaim(tx: OrgTx, idInput: unknown): Promise<E
   if (current.status === "submitted") return current;
   assertOwnDraft(tx, current, "submit");
   if (current.receipts.length === 0) throw new ValidationError("Add at least one receipt before submitting the claim.");
-  await checkStillValid(tx, current);
+  // Mileage is worked out again with the latest rates and kilometres claimed before it's sent (MI6).
+  const fresh = (await refreshMileage(tx, current)) ? await getExpenseClaim(tx, id) : current;
+  await checkStillValid(tx, fresh);
   await tx.query(
     `update expense_claims set status = 'submitted', submitted_at = now(), declined_at = null, declined_by_email = null, decline_reason = null,
             updated_at = now() where id = $1`,
     [id],
   );
-  await writeAuditEvent(tx, { eventType: "expense_claim.submitted", entityType: "expense_claim", entityId: id, details: { total: current.total } });
+  await writeAuditEvent(tx, { eventType: "expense_claim.submitted", entityType: "expense_claim", entityId: id, details: { total: fresh.total } });
   return getExpenseClaim(tx, id);
 }
 
 /** Receipts worked out again give the same amounts, and required tracking is there (EC2, EC9). */
 async function checkStillValid(tx: OrgTx, claim: ExpenseClaim): Promise<ResolvedReceipt[]> {
+  // Mileage keeps the amounts it was submitted with (MI6).
   const resolved = await resolveReceipts(
     tx,
-    claim.receipts.map((receipt) => ({
-      receiptDate: receipt.receiptDate,
-      supplierName: receipt.supplierName,
-      supplierGstNumber: receipt.supplierGstNumber,
-      description: receipt.description,
-      accountCode: receipt.accountCode,
-      taxCode: receipt.taxCode,
-      amount: receipt.amount,
-      tracking: receipt.tracking,
-    })),
+    claim.receipts.map((receipt) => receiptInput(receipt, true)),
     keptValues(claim.receipts),
+    claimantOf(claim),
   );
   const changed = resolved.receipts.some(
     (receipt, index) => receipt.taxAmount !== claim.receipts[index].taxAmount || receipt.netAmount !== claim.receipts[index].netAmount,

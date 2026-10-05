@@ -98,8 +98,9 @@ describeWithDatabase("bills", () => {
         }),
       )
     ).bill;
+  // Test bills share a supplier and total, so approving goes past the duplicate warning (DU2).
   const approve = (billId: string, idempotencyKey = key("approve")) =>
-    asUser(bookkeeper, (tx) => approveBill(tx, billId, { idempotencyKey }));
+    asUser(bookkeeper, (tx) => approveBill(tx, billId, { idempotencyKey, approveDespiteWarnings: true }));
   const voidIt = (billId: string, voidDate: string, idempotencyKey = key("void")) =>
     asUser(bookkeeper, (tx) => voidBill(tx, billId, { idempotencyKey, voidDate }));
   const journal = (journalId: string) => asUser(owner, (tx) => getJournal(tx, journalId));

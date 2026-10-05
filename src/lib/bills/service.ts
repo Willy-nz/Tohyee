@@ -5,6 +5,7 @@ import { type CustomValues, customValuesKey } from "@/lib/custom-fields/values";
 import { assertRequiredTags, checkNewTags, hashableLine, keptValues, loadTrackingContext, parseTrackingInput, sortedTags, trackingKey, type TrackingTags } from "@/lib/tracking/service";
 import type { AccountClass, AccountType } from "@/lib/accounts/types";
 import { writeAuditEvent } from "@/lib/audit";
+import { billDuplicateWarnings } from "@/lib/bills/duplicates";
 import { assertInventoryLines, planDocumentStock, planDocumentVoid, stockLinesAtBase } from "@/lib/inventory/stock";
 import { fillLinesFromItems, isBlank, LINE_ITEM_COLUMNS, LINE_ITEM_JOINS, lineForHash, lineItemFields, type LineItemFields, type LineItemRef, type LineItemRow, parseLineItem, resolveLineItems, type ResolvedLineItem } from "@/lib/items/lines";
 import { billLineAccountProblem } from "@/lib/bills/accounts";
@@ -1232,6 +1233,8 @@ export async function deleteBill(tx: OrgTx, billIdInput: unknown): Promise<void>
   assertDraft(current, "deleted");
   // Its notes and files go with it (NF12).
   await removeRecordExtras(tx, "bill", current.id);
+  // A bills inbox item it was made from waits again (BI3).
+  await tx.query("update bill_inbox_items set bill_id = null, made_by_email = null, made_via = null, made_at = null where bill_id = $1", [current.id]);
   await tx.query("delete from bill_lines where bill_id = $1", [current.id]);
   await tx.query("delete from bills where id = $1", [current.id]);
   await writeAuditEvent(tx, {
@@ -1272,7 +1275,13 @@ async function billControlAccounts(tx: OrgTx): Promise<{ payable: string; gst: s
 export async function approveBill(
   tx: OrgTx,
   billIdInput: unknown,
-  command: { source?: unknown; idempotencyKey: unknown },
+  command: {
+    source?: unknown;
+    idempotencyKey: unknown;
+    approveDespiteWarnings?: unknown;
+    /** The repeating bill approving a bill it just made: its other bills aren't duplicates of it. */
+    repeatingBillId?: string;
+  },
 ): Promise<{ created: boolean; bill: Bill }> {
   const billId = requireId(billIdInput, "billId");
   const source = optionalSource(command.source);
@@ -1305,6 +1314,14 @@ export async function approveBill(
   if (number === null) {
     throw new ValidationError(
       `Add the supplier's invoice number before approving: this draft bill from ${current.contactName} doesn't have one yet. Type it from their invoice when it arrives.`,
+    );
+  }
+
+  // A likely duplicate is approved only when the person says so (DU2, DU3); the AI can't (DU5).
+  const warnings = await billDuplicateWarnings(tx, billId, { repeatingBillId: command.repeatingBillId });
+  if (warnings.length > 0 && command.approveDespiteWarnings !== true) {
+    throw new ConflictError(
+      `${warnings.map((warning) => warning.message).join(". ")}. Check it isn't the same bill. A person can approve it anyway on the bill's page.`,
     );
   }
 
@@ -1417,6 +1434,7 @@ export async function approveBill(
       journalId: posted.journal.id,
       billDate: current.billDate,
       total: resolved.total,
+      ...(warnings.length > 0 ? { approvedDespite: warnings.map((warning) => warning.message) } : {}),
     },
   });
   return { created: true, bill: await getBill(tx, billId) };

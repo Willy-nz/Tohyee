@@ -1,5 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { type AiTool, billSummary, DATE, documentLines, invoiceSummary, type JsonSchema, schema } from "@/lib/ai/tools";
+import { type AiTool, billSummary, DATE, documentLines, inboxItemSummary, invoiceSummary, type JsonSchema, schema } from "@/lib/ai/tools";
+import { billDuplicateWarnings } from "@/lib/bills/duplicates";
+import { addInboxItem, createBillFromInboxItem } from "@/lib/bills/inbox";
+import { ValidationError } from "@/lib/errors";
 import { recordSupplierPayment } from "@/lib/bills/payments";
 import { approveBill, createBill, getBill, updateBill } from "@/lib/bills/service";
 import { createContact, getContact, updateContact } from "@/lib/contacts/service";
@@ -204,6 +207,64 @@ export const WRITE_TOOLS: readonly AiTool[] = [
     },
   },
   {
+    name: "create_draft_bill_from_inbox_item",
+    title: "Draft a bill from the bills inbox",
+    level: "draft",
+    description:
+      "Saves a draft bill from a bills inbox item you've read (read_bill_inbox_item): the item's file is attached to the draft and the item leaves the waiting list. Use the supplier's contact id (add the supplier with create_contact first if it's new). A person checks the draft against the file and approves it. The answer says if it looks like a bill already entered.",
+    inputSchema: schema({ itemId: ID("bills inbox item"), ...BILL_FIELDS, idempotencyKey: IDEMPOTENCY }, ["itemId", "contactId", "billDate", "amountsMode", "lines"]),
+    async run(tx, args, context) {
+      const { contactId, billDate, dueDate, supplierInvoiceNumber, amountsMode, lines } = args;
+      const result = await createBillFromInboxItem(tx, context.role, args.itemId, {
+        source: context.source,
+        idempotencyKey: idempotencyKey(args.idempotencyKey),
+        contactId,
+        billDate,
+        dueDate,
+        supplierInvoiceNumber,
+        amountsMode,
+        lines,
+      });
+      // DU5: the AI is told, and can't approve past it.
+      const warnings = (await billDuplicateWarnings(tx, result.bill.id)).map((warning) => warning.message);
+      return {
+        created: result.created,
+        bill: await billDetail(tx, result.bill.id),
+        item: inboxItemSummary(result.item),
+        possibleDuplicates: warnings,
+        ...(warnings.length > 0 ? { note: "This may be a bill already entered. Tell the person; only a person can approve it anyway." } : {}),
+      };
+    },
+  },
+  {
+    name: "add_bill_inbox_item",
+    title: "Add a file to the bills inbox",
+    level: "draft",
+    description: "Adds a supplier bill or receipt (a PDF, JPG, PNG or HEIC file, at most 10 MB) to the bills inbox, for someone to make a bill from. Nothing is posted.",
+    inputSchema: schema(
+      {
+        fileName: { type: "string", description: "The file's name, ending .pdf, .jpg, .png or .heic." },
+        contentBase64: { type: "string", description: "The file's bytes, base64 encoded." },
+        idempotencyKey: IDEMPOTENCY,
+      },
+      ["fileName", "contentBase64"],
+    ),
+    async run(tx, args, context) {
+      if (typeof args.contentBase64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(args.contentBase64.replace(/\s/g, ""))) {
+        throw new ValidationError("contentBase64 must be the file's bytes, base64 encoded.");
+      }
+      const content = new Uint8Array(Buffer.from(args.contentBase64.replace(/\s/g, ""), "base64"));
+      const result = await addInboxItem(tx, {
+        source: context.source,
+        idempotencyKey: idempotencyKey(args.idempotencyKey),
+        fileName: args.fileName,
+        content,
+        via: "ai",
+      });
+      return { created: result.created, item: inboxItemSummary(result.item) };
+    },
+  },
+  {
     name: "update_draft_bill",
     title: "Edit a draft bill",
     level: "draft",
@@ -253,9 +314,11 @@ export const WRITE_TOOLS: readonly AiTool[] = [
     name: "approve_bill",
     title: "Approve a bill",
     level: "post",
-    description: "Approves a draft bill: posts it to the ledger on its date. It can't be undone here (only voided by a person).",
+    description:
+      "Approves a draft bill: posts it to the ledger on its date. It can't be undone here (only voided by a person). A bill that looks like one already entered is refused: only a person can approve it anyway.",
     inputSchema: schema({ billId: ID("bill"), idempotencyKey: IDEMPOTENCY }, ["billId"]),
     async run(tx, args, context) {
+      // Never past a duplicate warning (DU5): that's for a person.
       const result = await approveBill(tx, args.billId, { source: context.source, idempotencyKey: idempotencyKey(args.idempotencyKey) });
       return { created: result.created, bill: await billDetail(tx, result.bill.id) };
     },

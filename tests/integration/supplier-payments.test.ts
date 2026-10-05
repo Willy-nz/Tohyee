@@ -79,7 +79,8 @@ describeWithDatabase("supplier payments", () => {
   /** An approved copy of example B1, with 230.00 due. */
   const approved = async (): Promise<Bill> => {
     const saved = await draft();
-    return (await asUser(bookkeeper, (tx) => approveBill(tx, saved.id, { idempotencyKey: key("approve") }))).bill;
+    // Test bills share a supplier and total, so approving goes past the duplicate warning (DU2).
+    return (await asUser(bookkeeper, (tx) => approveBill(tx, saved.id, { idempotencyKey: key("approve"), approveDespiteWarnings: true }))).bill;
   };
   /** Pays 230.00 from 1000 on 20 May 2026 unless told otherwise. */
   const pay = (billId: string, fields: Record<string, unknown> = {}) =>

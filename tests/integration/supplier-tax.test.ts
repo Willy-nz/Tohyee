@@ -61,7 +61,8 @@ describeWithDatabase("a supplier's default purchase tax code", () => {
         lines,
       }),
     );
-  const approve = async (billId: string) => (await run((tx) => approveBill(tx, billId, { idempotencyKey: key("approve") }))).bill;
+  // Test bills share a supplier and total, so approving goes past the duplicate warning (DU2).
+  const approve = async (billId: string) => (await run((tx) => approveBill(tx, billId, { idempotencyKey: key("approve"), approveDespiteWarnings: true }))).bill;
   const contact = async (name: string, fields: Record<string, unknown> = {}) => {
     people[name] = (await run((tx) => createContact(tx, { idempotencyKey: key("contact"), name, isSupplier: true, ...fields }))).contact;
     return people[name];

@@ -124,7 +124,14 @@ function Bills({ organisationId }: { organisationId: string }) {
     <Card
       title="Bills"
       description="Latest entered first. Drafts post nothing; approving posts the bill to accounts payable on its bill date. Amount due is the total less the bill's payments."
-      actions={can("bookkeeper") ? <Button onClick={() => router.push("/operations/bills/new")}>New bill</Button> : null}
+      actions={
+        <>
+          <Button variant="secondary" onClick={() => router.push("/operations/bills/inbox")}>
+            Bills inbox
+          </Button>
+          {can("bookkeeper") ? <Button onClick={() => router.push("/operations/bills/new")}>New bill</Button> : null}
+        </>
+      }
     >
       <div className={ui.tabs} role="tablist" aria-label="Bill status">
         {FILTERS.map((entry) => (

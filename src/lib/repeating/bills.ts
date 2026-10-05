@@ -537,7 +537,7 @@ const BILLS: RepeatingKind<RepeatingBill> = {
     // In another currency, only at a rate from the exchange rates list (MC51); otherwise left as a draft.
     const rate = (await tx.query<{ exchange_rate: string | null }>("select exchange_rate::text from bills where id = $1", [billId])).rows[0]?.exchange_rate ?? null;
     await assertListedRateForRepeating(tx, { currencyCode: template.currencyCode, date, exchangeRate: rate, document: "bill" });
-    await approveBill(tx, billId, { source: "repeating", idempotencyKey: `repeating-bill-${template.id}-${date}-approve` });
+    await approveBill(tx, billId, { source: "repeating", idempotencyKey: `repeating-bill-${template.id}-${date}-approve`, repeatingBillId: template.id });
     return null;
   },
 };

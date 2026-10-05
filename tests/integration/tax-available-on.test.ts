@@ -136,7 +136,8 @@ describeWithDatabase("a tax code's Available on", () => {
     await expect(invoice([sale("100.00", "PUR")])).rejects.toThrow(refusal("PUR", "purchases", "sales"));
     const { bill: draft } = await bill([cost("200.00", "PUR")]);
     expect(draft).toMatchObject({ taxTotal: "30.00", total: "230.00" });
-    const approved = (await run((tx) => approveBill(tx, draft.id, { idempotencyKey: key("approve") }))).bill;
+    // Test bills share a supplier and total, so approving goes past the duplicate warning (DU2).
+    const approved = (await run((tx) => approveBill(tx, draft.id, { idempotencyKey: key("approve"), approveDespiteWarnings: true }))).bill;
     const journal = await run((tx) => getJournal(tx, approved.approvalJournalId!));
     expect(journal.lines.map((entry) => [entry.accountCode, entry.debitAmount, entry.creditAmount])).toEqual([
       ["6010", "200.00", "0.00"],
@@ -388,7 +389,7 @@ describeWithDatabase("a tax code's Available on", () => {
     const sold = await invoice([sale("100.00", "SAL")], "2026-07-02", org);
     await inOrg((tx) => approveInvoice(tx, sold.invoice.id, { idempotencyKey: key("approve") }));
     const bought = await bill([cost("200.00", "PUR")], "2026-07-03", org);
-    await inOrg((tx) => approveBill(tx, bought.bill.id, { idempotencyKey: key("approve") }));
+    await inOrg((tx) => approveBill(tx, bought.bill.id, { idempotencyKey: key("approve"), approveDespiteWarnings: true }));
     const july = await inOrg((tx) => calculateGstReturn(tx, { periodStart: "2026-07-01", periodEnd: "2026-07-31" }));
     expect(july.boxes).toMatchObject({ box5: "115.00", box6: "0.00", box7: "115.00", box8: "15.00", box11: "230.00", box12: "30.00" });
   });

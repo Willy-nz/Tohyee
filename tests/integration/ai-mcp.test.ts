@@ -6,6 +6,7 @@ import * as memberRoute from "@/app/api/organisations/[organisationId]/members/[
 import { AI_TOOLS } from "@/lib/ai/catalogue";
 import { hashAiToken } from "@/lib/ai/token-format";
 import type { SessionUser } from "@/lib/auth/sessions";
+import { addInboxItem } from "@/lib/bills/inbox";
 import { createBill, approveBill } from "@/lib/bills/service";
 import { createContact } from "@/lib/contacts/service";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
@@ -238,6 +239,8 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
         "trial_balance",
         "list_draft_journals",
         "get_draft_journal",
+        "list_bill_inbox",
+        "read_bill_inbox_item",
       ].sort(),
     );
     for (const tool of tools) {
@@ -292,7 +295,10 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
   });
 
   it("every tool runs inside a read-only transaction without error", async () => {
+    const pdf = new Uint8Array(Buffer.from("%PDF-1.7\nA bill".padEnd(120, ".")));
+    const inboxItem = (await asOwner((tx) => addInboxItem(tx, { idempotencyKey: key("inbox"), fileName: "bill.pdf", content: pdf, via: "upload" }))).item;
     const args: Record<string, Json> = {
+      read_bill_inbox_item: { itemId: inboxItem.id },
       account_transactions: { accountCode: "1100" },
       gst_return: { periodStart: "2026-05-01", periodEnd: "2026-06-30" },
       get_invoice: { number: "INV-0001" },

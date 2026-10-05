@@ -2,6 +2,7 @@ import { listAccounts } from "@/lib/accounts/service";
 import { boundedLimit, firstRows } from "@/lib/ai/limits";
 import type { AiAccessLevel } from "@/lib/ai/access-levels";
 import type { Role } from "@/lib/auth/roles";
+import { getInboxItem, getInboxItemContent, type InboxItem, listInbox } from "@/lib/bills/inbox";
 import { getBill, listBills, type BillSummary } from "@/lib/bills/service";
 import { listContacts } from "@/lib/contacts/service";
 import { todayIsoDate } from "@/lib/dates";
@@ -36,6 +37,17 @@ export type ToolContext = {
 };
 
 export type JsonSchema = Record<string, unknown>;
+
+/**
+ * An answer with a file attached (BI4): the MCP server sends `answer` as
+ * JSON text and the file's bytes after it, so the person's AI can read it.
+ */
+export class ToolFileAnswer {
+  constructor(
+    readonly answer: unknown,
+    readonly file: { uri: string; fileName: string; contentType: string; content: Buffer },
+  ) {}
+}
 
 export type AiTool = {
   name: string;
@@ -113,6 +125,24 @@ type DocumentLine = {
   netAmount: string;
   taxAmount: string;
 };
+
+/** A bills inbox item for the AI: no file, just what it is and where it came from. */
+export function inboxItemSummary(item: InboxItem) {
+  return {
+    id: item.id,
+    status: item.status,
+    fileName: item.fileName,
+    fileType: item.contentType,
+    arrived: item.createdAt,
+    source: item.source,
+    emailFrom: item.emailFrom,
+    emailSubject: item.emailSubject,
+    billId: item.billId,
+    billNumber: item.billNumber,
+    removedReason: item.removedReason,
+    sameFile: item.sameFile.map((entry) => entry.text),
+  };
+}
 
 export function documentLines(lines: readonly DocumentLine[]) {
   const kept = firstRows(lines, MAX_DOCUMENT_LINES);
@@ -476,6 +506,32 @@ export const READ_TOOLS: readonly AiTool[] = (
     description: "One draft manual journal with its lines.",
     inputSchema: schema({ draftId: { type: "string", description: "The draft's id from list_draft_journals." } }, ["draftId"]),
     run: (tx, args) => getJournalDraft(tx, args.draftId),
+  },
+  {
+    name: "list_bill_inbox",
+    title: "Bills inbox",
+    description:
+      "Supplier bills and receipts that arrived but aren't bills yet (the bills inbox): file name, where it came from (uploaded, or an email's sender and subject), and whether the same file arrived before. Waiting items by default.",
+    inputSchema: schema({
+      status: { type: "string", enum: ["waiting", "made", "removed", "all"], description: "Default waiting." },
+      limit: { type: "integer", minimum: 1, maximum: MAX_LIST, description: `Default 50, at most ${MAX_LIST}.` },
+    }),
+    async run(tx, args) {
+      const items = await listInbox(tx, { status: args.status, limit: boundedLimit(args.limit, 50, MAX_LIST) });
+      return { items: items.map(inboxItemSummary) };
+    },
+  },
+  {
+    name: "read_bill_inbox_item",
+    title: "Read a bills inbox file",
+    description:
+      "One bills inbox item with its file (a PDF, or a picture), so you can read the supplier, invoice number, dates, lines and GST from it. Then make a draft bill from it with create_draft_bill_from_inbox_item.",
+    inputSchema: schema({ itemId: { type: "string", description: "The item's id from list_bill_inbox." } }, ["itemId"]),
+    async run(tx, args) {
+      const item = await getInboxItem(tx, args.itemId);
+      const file = await getInboxItemContent(tx, item.id);
+      return new ToolFileAnswer({ item: inboxItemSummary(item) }, { uri: `tohyee://bills-inbox/${item.id}/${encodeURIComponent(file.fileName)}`, ...file });
+    },
   },
   ] satisfies Omit<AiTool, "level">[]
 ).map((tool) => ({ ...tool, level: "read" as const }));

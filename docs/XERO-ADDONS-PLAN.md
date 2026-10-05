@@ -79,8 +79,10 @@ phone width).
    Note: GoCardless's old "Bank Account Data" product was discontinued on
    18 Dec 2023 (gocardless.com/bank-account-data/announcement), and covered
    European banks, so it isn't a provider here.
-3. **Bills inbox and reading documents** (connected AI only), duplicate check
-   on bills, mileage claims (IRD kilometre rates as a setting).
+3. **Bills inbox and reading documents** (connected AI only; examples
+   BI1-BI7, DU1-DU5 and MI1-MI7 approved by Jess 5 Oct 2026; built,
+   decisions 404-413, tenant migration 0097), duplicate check on bills,
+   mileage claims (IRD kilometre rates as a setting).
 4. **Online invoice payments:** Stripe (hosted Checkout or Payment Links,
    polling rather than webhooks unless remote access is on), then PayPal. A
    clearing account per provider, fees to expense, payouts matched to the
