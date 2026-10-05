@@ -37,24 +37,75 @@ WHERE THINGS ARE KEPT
 ---------------------
 - Your data: in Docker Desktop, in a volume called tohyee_postgres_data.
   Uninstalling Docker Desktop or deleting that volume deletes your data.
+- Backups: in the backups folder next to these files (e.g. C:\Tohyee\backups),
+  outside Docker Desktop, so they survive if Docker Desktop is reset or
+  removed. See BACKUPS below.
 - Passwords: %LOCALAPPDATA%\Tohyee\tohyee.env
-  It holds the database password. Keep it private, and keep a copy with
-  your backups. Don't delete it: a new one won't open your existing data.
+  It holds the database password and the backup key (TOHYEE_SECRET_KEY).
+  Keep it private, and keep a copy somewhere safe that ISN'T the backup
+  folder (a password manager, say). Don't delete it: a new one won't open
+  your existing data or your backups.
 
 
 BACKUPS
 -------
-Double-click Backup-Tohyee.cmd. It saves everything (all organisations) to
-Documents\Tohyee backups\tohyee-<date>.sql. Copy those files somewhere off
-this computer too, e.g. a USB drive or cloud storage.
-Restoring a backup is a manual job for now; ask for help before you need it.
+Tohyee backs up every night (2am by default): each organisation, and its own
+database of users and settings, into the backup folder, one sub-folder per
+organisation. The files are encrypted, checked after they're written, and
+the last 14 daily and 12 monthly backups are kept.
+
+To back up now (before an update, say), double-click Backup-Tohyee.cmd. It
+makes the same encrypted backup, straight away.
+
+The backup folder is the backups folder next to these files, unless you
+choose another: set TOHYEE_BACKUP_FOLDER in tohyee.env (e.g.
+TOHYEE_BACKUP_FOLDER=C:\Users\you\OneDrive\Tohyee backups) and run
+Install-Tohyee.cmd again. A cloud-synced folder (OneDrive) gets copies off
+this computer by itself; otherwise copy the folder to a USB drive or cloud
+storage now and then. Don't delete this folder when you update Tohyee.
+
+THE BACKUP KEY: backups are encrypted with this server's TOHYEE_SECRET_KEY
+(in tohyee.env). Without it they can't be opened, so if this computer is
+lost, so are your backups unless you kept a copy of the key. To see it and
+save it (in a password manager, not with the backups), open a Command
+Prompt in this folder and run:
+
+  docker compose --env-file "%LOCALAPPDATA%\Tohyee\tohyee.env" exec tohyee node tohyee-admin.cjs backups key show
+
+then check your saved copy (paste it when asked):
+
+  docker compose --env-file "%LOCALAPPDATA%\Tohyee\tohyee.env" exec tohyee node tohyee-admin.cjs backups key check
+
+Until someone has done that, Tohyee shows server admins a reminder.
+
+RESTORING: restoring makes a copy of an organisation (with the same people)
+next to the current one, so nothing is overwritten. In a Command Prompt in
+this folder:
+
+  docker compose --env-file "%LOCALAPPDATA%\Tohyee\tohyee.env" exec tohyee node tohyee-admin.cjs backups list
+  docker compose --env-file "%LOCALAPPDATA%\Tohyee\tohyee.env" exec tohyee node tohyee-admin.cjs backups restore --file /backups/<organisation>/<file>.tohyee-backup
+
+Inside Docker the backup folder is called /backups, so a file at
+C:\Tohyee\backups\green-island\x.tohyee-backup is
+/backups/green-island/x.tohyee-backup. To restore a backup kept elsewhere,
+copy it into the backup folder first. "backups check --file ..." proves a
+backup opens with this computer's key. On a new computer (a new key), add
+--other-key to the restore and paste the old computer's key when asked.
+Restoring the server's own database (the _server sub-folder) is a job for a
+database administrator.
+
+Before this version the nightly backups went to a Docker volume called
+tohyee_backups instead. It's still there: once new backups show up in the
+backup folder, you can save the old ones from Docker Desktop (Volumes >
+tohyee_backups) if you want them, then delete the volume.
 
 
 UPDATING TO A NEW RELEASE
 -------------------------
-Download the new release's Windows zip, extract it (it can replace the old
-folder), and double-click its Install-Tohyee.cmd. Your data and passwords
-are kept. Take a backup first.
+Take a backup first (Backup-Tohyee.cmd). Download the new release's
+Windows zip, extract it over the old folder (so the backups folder stays
+where it is), and double-click its Install-Tohyee.cmd. Your data, backups
+and passwords are kept.
 
 
 USING TOHYEE FROM OTHER COMPUTERS ON YOUR NETWORK

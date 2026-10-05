@@ -35,10 +35,13 @@ services:
       TOHYEE_SECRET_KEY: ${TOHYEE_SECRET_KEY:-}
       TOHYEE_TIME_ZONE: Pacific/Auckland
     volumes:
-      # Nightly backups (encrypted). To have them in OneDrive, set
-      # TOHYEE_BACKUP_FOLDER in .env to a folder such as
+      # Backups (encrypted with TOHYEE_SECRET_KEY, the backup key). They go in
+      # a normal Windows folder, not inside Docker Desktop's own disk, so
+      # resetting or removing Docker Desktop doesn't take them with your data:
+      # by default the backups folder next to this file. To have them in
+      # OneDrive, set TOHYEE_BACKUP_FOLDER in tohyee.env to a folder such as
       # C:\Users\you\OneDrive\Tohyee backups and run Install-Tohyee.cmd again.
-      - ${TOHYEE_BACKUP_FOLDER:-backups}:/backups
+      - ${TOHYEE_BACKUP_FOLDER:-./backups}:/backups
     ports:
       # Only this computer can open Tohyee. To let other computers on your
       # network use it, set TOHYEE_LISTEN=0.0.0.0 in .env and run
@@ -47,4 +50,3 @@ services:
 
 volumes:
   postgres_data:
-  backups:
