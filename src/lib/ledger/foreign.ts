@@ -209,6 +209,31 @@ export async function recordForeignOpeningBalance(
   return { created: true, openingBalance };
 }
 
+/** SQL: the revaluation run aliased `r` hasn't been voided (FXB12). */
+export const RUN_NOT_VOIDED = "not exists (select 1 from ledger_fx_revaluation_voids v where v.run_id = r.id)";
+
+/**
+ * The latest revaluation of an account that isn't voided and isn't reversed
+ * until after a date, or null (FXB12): a transfer out dated before its
+ * reversal would take the unrealised amount as carrying value.
+ */
+export async function revaluationReversedAfter(
+  tx: OrgTx,
+  accountId: string,
+  date: string,
+): Promise<{ reference: string; revaluationDate: string; reversalPostingDate: string } | null> {
+  const row = (
+    await tx.query<{ reference: string; revaluation_date: string; reversal_posting_date: string }>(
+      `select r.reference, r.revaluation_date::text, r.reversal_posting_date::text
+         from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id
+        where i.account_id = $1 and r.reversal_posting_date > $2 and ${RUN_NOT_VOIDED}
+        order by r.reversal_posting_date desc, r.id desc limit 1`,
+      [accountId, date],
+    )
+  ).rows[0];
+  return row ? { reference: row.reference, revaluationDate: row.revaluation_date, reversalPostingDate: row.reversal_posting_date } : null;
+}
+
 export type RateUsed = {
   rate: string;
   /** The date it was used on, or for the list, the date it takes effect. */
@@ -224,7 +249,7 @@ export type RateUsed = {
  * The rates used for each currency, newest first (D4): rates posted lines were
  * converted at ("rate" and "implied" lines, any account, and foreign-currency
  * invoices', bills' and credit notes' own rates, MC3), payments' rates and
- * revaluations' closing rates. Money leaving at its carrying value isn't a market rate and
+ * revaluations' closing rates (not voided ones, FXB12). Money leaving at its carrying value isn't a market rate and
  * isn't included.
  */
 export async function ratesUsed(tx: OrgTx, currencies: readonly string[]): Promise<Map<string, RateUsed[]>> {
@@ -249,7 +274,7 @@ export async function ratesUsed(tx: OrgTx, currencies: readonly string[]): Promi
        union all
        select i.currency_code, i.closing_rate::text, i.revaluation_date::text, 'revaluation', r.created_at, i.id
          from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id
-        where i.currency_code = any($1::text[])
+        where i.currency_code = any($1::text[]) and ${RUN_NOT_VOIDED}
      ) rates
      order by rate_date desc, created_at desc, ord desc`,
     [wanted],

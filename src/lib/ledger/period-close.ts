@@ -13,7 +13,7 @@ import {
 } from "@/lib/financial-year";
 import { previewDepreciationRun } from "@/lib/fixed-assets/runs";
 import { formatDate, formatMoney } from "@/lib/format";
-import { foreignAccountState } from "@/lib/ledger/foreign";
+import { foreignAccountState, RUN_NOT_VOIDED } from "@/lib/ledger/foreign";
 import { openCurrencyBalances } from "@/lib/ledger/fx-revaluation";
 import { getPeriodControls, type PeriodControls, setLockDate } from "@/lib/ledger/period-controls";
 import { currencyMinorUnits } from "@/lib/money/currency";
@@ -329,7 +329,7 @@ async function fxCheck(tx: OrgTx, periodEnd: string): Promise<PeriodCheck> {
   const accounts = await tx.query<{ id: string; code: string; name: string; currency_code: string; revalued: boolean }>(
     `select a.id::text, a.code, a.name, a.currency_code,
             exists (select 1 from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id
-                     where i.account_id = a.id and r.revaluation_date = $1) as revalued
+                     where i.account_id = a.id and r.revaluation_date = $1 and ${RUN_NOT_VOIDED}) as revalued
        from accounts a where a.currency_code is not null and a.currency_code <> $2 order by a.code`,
     [periodEnd, tx.baseCurrency],
   );
@@ -343,7 +343,7 @@ async function fxCheck(tx: OrgTx, periodEnd: string): Promise<PeriodCheck> {
   for (const open of await openCurrencyBalances(tx, periodEnd)) {
     const revalued = await tx.query(
       `select 1 from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id
-        where i.account_id = $1 and i.currency_code = $2 and r.revaluation_date = $3`,
+        where i.account_id = $1 and i.currency_code = $2 and r.revaluation_date = $3 and ${RUN_NOT_VOIDED}`,
       [open.accountId, open.currencyCode, periodEnd],
     );
     needing.push({ id: open.accountId, code: open.accountCode, name: open.accountName, currency_code: open.currencyCode, revalued: (revalued.rowCount ?? 0) > 0 });

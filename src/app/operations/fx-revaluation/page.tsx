@@ -2,8 +2,10 @@
 
 import { type FormEvent, Fragment, useState } from "react";
 import { AccountSelect, Money, RequireOrganisation, useAccounts } from "@/components/books";
+import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
-import { Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatMoney, todayInBrowser, personName } from "@/lib/format";
@@ -321,7 +323,46 @@ function RevaluationForm({
   );
 }
 
+/**
+ * Voids a revaluation, the whole run (FXB12): the server posts the exact
+ * reversal of its journal and of its reversal journal, and refuses it once a
+ * later revaluation of its accounts exists.
+ */
+function VoidRevaluation({ organisationId, run, onVoided }: { organisationId: string; run: FxRevaluationRun; onVoided: (run: FxRevaluationRun) => void }) {
+  const confirm = useConfirm();
+  const [key] = useState(() => newIdempotencyKey("fx-void"));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function voidRun() {
+    const accounts = run.items.map((item) => `${item.accountCode} ${item.currencyCode}`).join(", ");
+    const message = `Void ${run.reference}? It posts the exact reversal of its journal on ${formatDate(run.revaluationDate)} and of its reversal on ${formatDate(run.reversalPostingDate)}, for every account it revalued (${accounts}).`;
+    if (!(await confirm(message, { title: "Void revaluation", confirmLabel: "Void", danger: true }))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ run: FxRevaluationRun }>(`/api/ledger/revaluations/${run.id}/void`, {
+        method: "POST",
+        body: { organisationId, source: "ui", idempotencyKey: key },
+      });
+      onVoided(result.run);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <Button variant="danger" size="small" onClick={() => void voidRun()} disabled={busy}>
+        {busy ? "Voiding…" : "Void"}
+      </Button>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+    </>
+  );
+}
+
 function FxRevaluation({ organisationId }: { organisationId: string }) {
+  const { can } = useWorkspace();
   const accounts = useAccounts(organisationId);
   const accountsHaveCurrency = (code: string) => Boolean(accounts.data?.accounts.find((account) => account.code === code)?.currencyCode);
   const runs = useApiData<{ revaluations: FxRevaluationRun[] }>("/api/ledger/revaluations", { organisationId });
@@ -358,6 +399,27 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
                 <tr>
                   <th colSpan={6}>
                     {run.reference} · {formatDate(run.revaluationDate)} · {run.rateSource} · by {personName(run, "operator")}
+                    {run.voided ? (
+                      <>
+                        {" "}
+                        <Badge tone="red">Voided</Badge>{" "}
+                        <span className={ui.muted} style={{ fontWeight: "normal" }}>
+                          by {personName(run.voided, "voidedBy")} on {formatDate(String(run.voided.voidedAt).slice(0, 10))}
+                        </span>
+                      </>
+                    ) : can("bookkeeper") ? (
+                      <>
+                        {" "}
+                        <VoidRevaluation
+                          organisationId={organisationId}
+                          run={run}
+                          onVoided={(voided) => {
+                            setMessage(`Voided revaluation ${voided.reference} (journals #${voided.voided?.voidJournalId} and #${voided.voided?.voidReversalJournalId}).`);
+                            runs.reload();
+                          }}
+                        />
+                      </>
+                    ) : null}
                   </th>
                 </tr>
                 <tr>

@@ -14,6 +14,7 @@ const APPEND_ONLY_TABLES = [
   "ledger_journal_lines",
   "ledger_fx_revaluation_runs",
   "ledger_fx_revaluation_run_items",
+  "ledger_fx_revaluation_voids",
   "inventory_movements",
   "gst_returns",
   "gst_return_adjustments",

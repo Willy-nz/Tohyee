@@ -32,6 +32,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ accounts, ledger_journals, ledger_journal_lines
 ├─ ledger_journal_drafts, ledger_journal_draft_lines   draft manual journals (post nothing; a posted one links its journal and can't change)
 ├─ ledger_fx_revaluation_runs / _items / _documents   revaluations, per account and currency, and the open documents they revalued (MC39)
+├─ ledger_fx_revaluation_voids   a revaluation's void, once per run: its two reversing journals and who voided it (FXB12)
 ├─ ledger_foreign_opening_balances   a foreign-currency account's foreign balance as at a date, entered once (FXB1)
 ├─ inventory_item_balances, inventory_movements   stock by item code and location (a Location tracking value)
 ├─ stock_transfers        stock moved between locations (append-only; its two movements and journal point at it)
@@ -304,7 +305,7 @@ Per organisation (lowest to highest):
 | Role | Can |
 | --- | --- |
 | viewer | fill in and submit their own timesheets when linked to an employee (Payroll › Timesheets; hours only); read journals, stock, expense claims, fixed assets (with runs and the register), contacts, invoices, customer payments, credit notes (with their applications and refunds), bills, supplier payments, supplier credit notes (with their applications and refunds), reports (including custom report drafts and published copies, budgets and budget vs actual), the GST return, filed GST returns, the GST audit report and customer statements, quotes, sales orders (with their invoices), repeating invoices, repeating bills and purchase orders, projects (with profitability, the time report and staff cost rates), the R&D activity register, tags, tagged R&D costs, overhead rules and the R&D claim report (each employee's pay only with payroll access), and export the claim report as CSV; print invoices, credit notes, quotes and purchase orders; read notes, download files and see the history |
-| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations; add and archive exchange rates; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept (as an invoice or a sales order), decline, copy and delete draft quotes; save, approve, invoice, close, cancel and delete draft sales orders; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add and change R&D activities, enter approvals, tag lines to R&D activities, enter assets' tax depreciation and log their use, set, change and end R&D overhead rules, and add or replace R&D files; add notes and files, and edit, delete or remove their own |
+| bookkeeper | + post journals, corrections, stock movements and transfers, FX revaluations (and void them); add and archive exchange rates; add, edit and archive contacts; save, approve, void and delete draft invoices; record and void customer payments (one invoice or several); save, approve, void and delete draft credit notes, apply and remove their credit, record and void their refunds; save, approve, void and delete draft bills; record and void supplier payments (one bill or several); enter a foreign-currency bank account's opening foreign balance; save, approve, void and delete draft supplier credit notes, apply and remove their credit, record and void their refunds; make, change, publish, archive and delete custom reports; add, change, quick fill and archive budgets; make, change, submit and delete their own expense claims, and approve (not their own), decline, pay and void claims and void their payments; register, change and archive fixed assets, run depreciation and roll back the latest run, dispose of assets and undo disposals; close a month on Period close when every check passes; save, finalise, accept (as an invoice or a sales order), decline, copy and delete draft quotes; save, approve, invoice, close, cancel and delete draft sales orders; save, approve, cancel, copy to a bill and delete draft purchase orders; save, change, run, pause, resume and end repeating invoices and repeating bills; start and change projects and tasks, record, change and remove their own time, link and remove expenses, invoice, close and reopen projects; add and change R&D activities, enter approvals, tag lines to R&D activities, enter assets' tax depreciation and log their use, set, change and end R&D overhead rules, and add or replace R&D files; add notes and files, and edit, delete or remove their own |
 | admin | + archive and restore R&D activities and withdraw R&D approvals; see R&D deadline reminders; approve their own expense claims; staff cost rates, and recording and changing other members' project time; fixed asset types and the part-month settings; chart of accounts, tax codes, closing a month with checks that need attention (after confirming) and reopening months (with a reason) on Period close, settings (including payment terms, customer groups, price levels, the credit limit setting and the GST number, address and payment details printed on documents), people; mark GST returns as filed; edit and delete anyone's notes and remove anyone's files |
 | owner | + manage other owners (an organisation always keeps one) |
 
@@ -637,7 +638,10 @@ Enforced by the database itself, not just the app:
   account's base balance at that date with a foreign balance of the same
   sign, no postings after the date), and then nothing dated on or before
   it. Nothing but a revaluation is posted to a foreign-currency account
-  dated before its latest transfer out. An account's currency can't change
+  dated before its latest transfer out, and a transfer out (a
+  `carrying_value` credit) can't be dated before the reversal date of a
+  revaluation of the account that isn't voided (FXB12, migration 0108).
+  An account's currency can't change
   once it has postings.
 - **Foreign-currency documents** (built overnight 1 Oct 2026 following
   NetSuite as Jess asked; migration 0042; examples MC1-MC13, not yet
@@ -663,7 +667,8 @@ Enforced by the database itself, not just the app:
   between foreign-currency documents store both sides' base and the gain,
   with its own journal. A document's open base value is its base total less
   its active settlements' base cleared (`src/lib/fx/documents.ts`).
-  Revaluation items are unique per account, currency and date, so accounts
+  Revaluation items are unique per account, currency and date, not
+  counting voided runs (a trigger since migration 0108), so accounts
   receivable and payable revalue each currency's open balance.
   Migration 0043 (examples MC14-MC30, not yet approved) adds: a foreign
   payment's `base_overpayment` (its overpayment at the payment's rate,
@@ -700,7 +705,7 @@ Enforced by the database itself, not just the app:
   (`assertListedRateForRepeating`); otherwise the scheduler records the
   refused approval.
 - Posted history is append-only: `ledger_journals`, `ledger_journal_lines`,
-  `inventory_movements`, `stock_transfers`, FX revaluation runs and `audit_events` reject
+  `inventory_movements`, `stock_transfers`, FX revaluation runs and their voids and `audit_events` reject
   `UPDATE`, `DELETE` and `TRUNCATE`. Corrections are new rows.
 - Stock on hand and carrying value can't go negative unless the
   organisation allows negative stock, and that setting can't be turned off
@@ -914,7 +919,15 @@ Enforced by the app (and covered by tests):
   it's known (FXB7; a typed one must agree) and the typed one otherwise
   (F1-F7 for accounts with base-only postings and no opening foreign
   balance). Its lines on the account have a foreign amount of 0 at the
-  closing rate.
+  closing rate. A revaluation is refused while an earlier one of the same
+  account and currency isn't reversed yet (MC8, FXB13). Voiding one
+  (FXB12, `voidFxRevaluation`, the whole run) posts the exact reversal of
+  its journal, dated the revaluation date, and of its reversal journal,
+  dated the reversal date, and records `ledger_fx_revaluation_voids`; it's
+  refused once a later revaluation of any of its accounts and currencies
+  exists. A voided revaluation counts nowhere (`RUN_NOT_VOIDED` in
+  `src/lib/ledger/foreign.ts`): not for the transfer-out and overlap
+  refusals, F5, the rate shown on statement lines or period close.
 - Idempotency: every command carries an idempotency key. A retry with the
   same key and content returns the original result; the same key with
   different content is refused (409). The key check happens before anything

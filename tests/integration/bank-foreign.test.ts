@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import * as openingRoute from "@/app/api/bank-accounts/[accountId]/opening-foreign-balance/route";
+import * as voidRevaluationRoute from "@/app/api/ledger/revaluations/[revaluationId]/void/route";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createBankAccount, getBankAccount, listStatementLines, type StatementLine } from "@/lib/bank/accounts";
 import { linkBankFeed } from "@/lib/bank/akahu/settings";
@@ -11,8 +12,9 @@ import { type Contact, createContact } from "@/lib/contacts/service";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
 import { approveInvoice, createInvoice } from "@/lib/invoices/service";
-import { recordForeignOpeningBalance } from "@/lib/ledger/foreign";
-import { postFxRevaluation } from "@/lib/ledger/fx-revaluation";
+import { foreignAccountState, recordForeignOpeningBalance } from "@/lib/ledger/foreign";
+import { type FxRevaluationRun, postFxRevaluation, voidFxRevaluation } from "@/lib/ledger/fx-revaluation";
+import { updatePeriodControls } from "@/lib/ledger/period-controls";
 import { getJournal, postJournal } from "@/lib/ledger/journals";
 import { dec, sub, toFixedString } from "@/lib/money/decimal";
 import { bankReconciliationReport } from "@/lib/reports/bank-reconciliation";
@@ -48,7 +50,7 @@ const NZD_CSV = `Date,Amount,Payee,Particulars,Code,Reference
 `;
 
 /**
- * Examples FXB1-FXB11 in docs/ACCOUNTING-EXAMPLES.md (foreign-currency bank
+ * Examples FXB1-FXB14 in docs/ACCOUNTING-EXAMPLES.md (foreign-currency bank
  * accounts, not yet approved by Jess), one organisation worked through in
  * order: 1000 Business bank account (NZD) and 1030 USD account, set to USD
  * before Tohyee kept foreign amounts, with one NZD-only posting on 1 Jun 2026
@@ -65,6 +67,7 @@ describeWithDatabase("foreign-currency bank accounts", () => {
   let aws: Contact;
   let kobe: Contact;
   let invoiceId: string;
+  let fxb7: FxRevaluationRun;
 
   const as = <T>(user: SessionUser, work: (tx: OrgTx) => Promise<T>) => inOrganisation(ORG, { userId: user.id, email: user.email }, work);
   const run = <T>(work: (tx: OrgTx) => Promise<T>) => as(bookkeeper, work);
@@ -423,6 +426,7 @@ describeWithDatabase("foreign-currency bank accounts", () => {
       "Account 1030: the ledger has USD 2060.00 on 2026-07-31, not 2000.00. Leave the foreign amount blank to use the ledger's.",
     );
     const { run: revaluation } = await revalue({});
+    fxb7 = revaluation;
     expect(revaluation.items[0]).toMatchObject({ foreignAmount: "2060.00", carryingAmount: "3358.15", revaluedAmount: "3378.40", deltaAmount: "20.25" });
     expect(await posted(revaluation.revaluationJournalId)).toEqual([
       ["1030", "20.25", "0.00"],
@@ -442,6 +446,142 @@ describeWithDatabase("foreign-currency bank accounts", () => {
     expect(report.bankNotInTohyee.items).toEqual([]);
     expect(report.tohyeeNotInBank.items).toEqual([]);
     expect((await lineOn(usd.id, "2026-08-05", "-2060.00")).suggestedRate).toEqual({ rate: "1.64", date: "2026-07-31", source: "revaluation" });
+  });
+
+  it("FXB12: a transfer out before a revaluation is reversed is refused; void the revaluation, transfer, revalue again", async () => {
+    const transferOut = (date: string) =>
+      run((tx) => createTransfer(tx, { idempotencyKey: key("t"), fromAccountCode: "1030", toAccountCode: "1000", date, amount: "2060.00", toAmount: "3400.00" }));
+    const refusal =
+      "1030 (USD account) was revalued on 2026-07-31 (FX-2026-07), and that isn't reversed until 2026-08-01. A transfer out dated before then isn't supported: void the revaluation, post the transfer, then revalue again, or date the transfer 2026-08-01 or later.";
+    // 1030 holds USD 2,060.00 = NZD 3,378.40 on 31 Jul (3,358.15 carrying plus the 20.25 revaluation).
+    expect((await run((tx) => foreignAccountState(tx, usd.id, "2026-07-31"))).baseBalance).toBe("3378.40");
+    await expect(transferOut("2026-07-31")).rejects.toThrow(refusal);
+    // Dated before the revaluation, too: the revaluation would count money that had already gone.
+    await expect(transferOut("2026-07-30")).rejects.toThrow(refusal);
+    // The database refuses it too, whatever the app does.
+    await expect(
+      run(async (tx) => {
+        const journal = await tx.query<{ id: string }>(
+          `insert into ledger_journals (command_source, idempotency_key, request_hash, origin, posting_date, reference, currency_code, total_debit, total_credit)
+           values ('test', $1, 'x', 'manual', '2026-07-31', 'X', 'NZD', 3378.40, 3378.40) returning id`,
+          [key("raw")],
+        );
+        await tx.query(
+          `insert into ledger_journal_lines (journal_id, line_order, account_id, debit_amount, credit_amount, foreign_currency_code, foreign_amount, exchange_rate, fx_kind)
+           values ($1, 1, $2, 0, 3378.40, 'USD', 2060.00, 1.64, 'carrying_value')`,
+          [journal.rows[0].id, usd.id],
+        );
+      }),
+    ).rejects.toThrow(/1030 \(USD account\) was revalued on 2026-07-31 \(FX-2026-07\), and that isn't reversed until 2026-08-01\. A transfer out dated before then isn't supported/);
+
+    // Period locks apply to the void's dates; nothing is posted.
+    await as(owner, (tx) => updatePeriodControls(tx, { lockDate: "2026-07-31" }));
+    await expect(run((tx) => voidFxRevaluation(tx, fxb7.id, { idempotencyKey: key("void") }))).rejects.toThrow(/2026-07-31 is in a locked period/);
+    await as(owner, (tx) => updatePeriodControls(tx, { lockDate: null, reason: "FXB12 test" }));
+    expect((await run((tx) => foreignAccountState(tx, usd.id, "2026-07-31"))).baseBalance).toBe("3378.40");
+
+    // Voiding it posts the exact reversal of its journal on 31 Jul and of its reversal on 1 Aug.
+    const cookie = await sessionCookieFor(bookkeeper);
+    const body = { organisationId: ORG, idempotencyKey: key("void") };
+    const response = await voidRevaluationRoute.POST(
+      apiRequest(`/api/ledger/revaluations/${fxb7.id}/void`, { method: "POST", cookie, body }),
+      params({ revaluationId: fxb7.id }),
+    );
+    expect(response.status).toBe(201);
+    const voided = ((await response.json()) as { run: FxRevaluationRun }).run;
+    expect(voided.voided).toMatchObject({ voidedByEmail: bookkeeper.email });
+    const retry = await voidRevaluationRoute.POST(
+      apiRequest(`/api/ledger/revaluations/${fxb7.id}/void`, { method: "POST", cookie, body }),
+      params({ revaluationId: fxb7.id }),
+    );
+    expect(retry.status).toBe(200);
+    const { voidJournalId, voidReversalJournalId } = voided.voided!;
+    const voidJournal = await run((tx) => getJournal(tx, voidJournalId));
+    const voidReversal = await run((tx) => getJournal(tx, voidReversalJournalId));
+    expect([voidJournal.postingDate, voidReversal.postingDate]).toEqual(["2026-07-31", "2026-08-01"]);
+    expect(await posted(voidJournalId)).toEqual([
+      ["1030", "0.00", "20.25"],
+      ["7000", "20.25", "0.00"],
+    ]);
+    expect(await posted(voidReversalJournalId)).toEqual([
+      ["1030", "20.25", "0.00"],
+      ["7000", "0.00", "20.25"],
+    ]);
+    expect(await foreignOf(voidJournalId, "1030")).toEqual({ currencyCode: "USD", amount: "0.00", rate: "1.64", kind: "revaluation" });
+    const audit = await run((tx) => tx.query("select 1 from audit_events where event_type = 'ledger.fx_revaluation_voided' and entity_id = $1", [fxb7.id]));
+    expect(audit.rowCount).toBe(1);
+    await expect(run((tx) => voidFxRevaluation(tx, fxb7.id, { idempotencyKey: key("void") }))).rejects.toThrow("FX-2026-07 has already been voided.");
+    expect((await run((tx) => foreignAccountState(tx, usd.id, "2026-07-31"))).baseBalance).toBe("3358.15");
+    // Its rate isn't shown on statement lines any more: the 5 Aug line shows the 20 Jul transfer's.
+    expect((await lineOn(usd.id, "2026-08-05", "-2060.00")).suggestedRate).toEqual({ rate: "1.63934426", date: "2026-07-20", source: "posted" });
+
+    // Then: all USD 2,060.00 out on 31 Jul for NZD 3,400.00: carrying 3,358.15, gain 41.85.
+    const out = await transferOut("2026-07-31");
+    expect(out.transfer).toMatchObject({ carryingAmount: "3358.15", realisedGain: "41.85" });
+    expect(await posted(out.transfer.journalId)).toEqual([
+      ["1000", "3400.00", "0.00"],
+      ["1030", "0.00", "3358.15"],
+      ["7020", "0.00", "41.85"],
+    ]);
+    expect(await foreignOf(out.transfer.journalId, "1030")).toMatchObject({ amount: "2060.00", kind: "carrying_value" });
+    expect(await balances()).toEqual(["0.00", "0.00"]);
+    // Revaluing 1030 on 31 Jul again: the voided one doesn't count (F5), and there's nothing to revalue (USD 0.00).
+    await expect(
+      run((tx) =>
+        postFxRevaluation(tx, {
+          idempotencyKey: key("fx"),
+          reference: "FX-2026-07-AGAIN",
+          revaluationDate: "2026-07-31",
+          reversalPostingDate: "2026-08-01",
+          rateDate: "2026-07-31",
+          rateSource: "RBNZ",
+          unrealisedGainAccountCode: "7000",
+          unrealisedLossAccountCode: "7010",
+          balances: [{ accountCode: "1030", closingRate: "1.64" }],
+        }),
+      ),
+    ).rejects.toThrow(/Nothing to revalue/);
+
+    // Undone, so FXB8 can follow on from FXB7 (the transfer and its void net to nothing).
+    await run((tx) => voidTransfer(tx, out.transfer.id, { idempotencyKey: key("void"), voidDate: "2026-07-31" }));
+    expect(await balances()).toEqual(["2060.00", "3358.15"]);
+  });
+
+  it("FXB13: a bank account isn't revalued again before an earlier revaluation is reversed", async () => {
+    const revalue = (reference: string, revaluationDate: string, reversalPostingDate: string, closingRate: string) =>
+      run((tx) =>
+        postFxRevaluation(tx, {
+          idempotencyKey: key("fx"),
+          reference,
+          revaluationDate,
+          reversalPostingDate,
+          rateDate: revaluationDate,
+          rateSource: "RBNZ",
+          unrealisedGainAccountCode: "7000",
+          unrealisedLossAccountCode: "7010",
+          balances: [{ accountCode: "1030", closingRate }],
+        }),
+      );
+    // FXB7's revaluation again (it was voided, so 31 Jul can be revalued again, F5), but reversed on 1 Sep.
+    const { run: july } = await revalue("FX-2026-07B", "2026-07-31", "2026-09-01", "1.64");
+    expect(july.items[0]).toMatchObject({ foreignAmount: "2060.00", carryingAmount: "3358.15", revaluedAmount: "3378.40", deltaAmount: "20.25" });
+    await expect(revalue("FX-MID", "2026-08-15", "2026-08-16", "1.65")).rejects.toThrow(
+      "Account 1030 USD was revalued on 2026-07-31 (FX-2026-07B), and that isn't reversed until 2026-09-01. Revaluing it again before then isn't supported yet.",
+    );
+    // A transfer out before 1 Sep is refused too (FXB12).
+    await expect(
+      run((tx) => createTransfer(tx, { idempotencyKey: key("t"), fromAccountCode: "1030", toAccountCode: "1000", date: "2026-08-05", amount: "100.00", toAmount: "165.00" })),
+    ).rejects.toThrow(/was revalued on 2026-07-31 \(FX-2026-07B\), and that isn't reversed until 2026-09-01/);
+    // One dated 1 Sep or later is allowed: 2,060.00 x 1.65 = 3,399.00 against 3,358.15.
+    const { run: september } = await revalue("FX-2026-09", "2026-09-01", "2026-09-02", "1.65");
+    expect(september.items[0]).toMatchObject({ carryingAmount: "3358.15", revaluedAmount: "3399.00", deltaAmount: "40.85" });
+    // A revaluation isn't voided once a later one of its accounts exists.
+    await expect(run((tx) => voidFxRevaluation(tx, july.id, { idempotencyKey: key("void") }))).rejects.toThrow(
+      "1030 USD was revalued again on 2026-09-01 (FX-2026-09), after FX-2026-07B. Void that revaluation first.",
+    );
+    await run((tx) => voidFxRevaluation(tx, september.id, { idempotencyKey: key("void") }));
+    await run((tx) => voidFxRevaluation(tx, july.id, { idempotencyKey: key("void") }));
+    expect(await balances()).toEqual(["2060.00", "3358.15"]);
   });
 
   it("FXB8: transfer everything left: the whole NZD 3,358.15 leaves; gain 41.85 (a loss when less arrives)", async () => {
@@ -504,5 +644,44 @@ describeWithDatabase("foreign-currency bank accounts", () => {
     ]);
     expect(await foreignOf(voided.bankTransaction.voidJournalId!, "1030")).toEqual({ currencyCode: "USD", amount: "50.00", rate: "1.66", kind: "rate" });
     expect(await balances()).toEqual(["50.00", "83.00"]);
+  });
+
+  it("FXB14: a JPY statement line (no cents) coded as spend money at 0.0105 is NZD 10.50", async () => {
+    const jpy = await as(owner, (tx) => createBankAccount(tx, { code: "1050", name: "JPY account", accountType: "bank" }));
+    await run((tx) =>
+      postJournal(tx, {
+        idempotencyKey: key("old"),
+        postingDate: "2026-06-01",
+        reference: "JPY-IN",
+        lines: [
+          { accountCode: "1050", debitAmount: "1050.00" },
+          { accountCode: "3000", creditAmount: "1050.00" },
+        ],
+      }),
+    );
+    await as(owner, async (tx) => {
+      await tx.query("alter table accounts disable trigger accounts_currency_guard");
+      await tx.query("update accounts set currency_code = 'JPY' where id = $1", [jpy.id]);
+      await tx.query("alter table accounts enable trigger accounts_currency_guard");
+    });
+    const opening = await run((tx) => recordForeignOpeningBalance(tx, jpy.id, { idempotencyKey: key("opening"), asAtDate: "2026-06-30", foreignBalance: "100000" }));
+    expect(opening.openingBalance).toMatchObject({ foreignBalance: "100000", baseBalance: "1050.00" });
+    await run((tx) =>
+      importStatementFile(tx, jpy.id, { idempotencyKey: key("import"), fileName: "jpy.csv", fileBase64: b64("Date,Amount,Payee\n10/07/2026,-1000,AMAZON WEB SERVICES\n") }),
+    );
+    // Statement lines show amounts to 2 places, whatever the currency.
+    const line = await lineOn(jpy.id, "2026-07-10", "-1000.00");
+    const done = await reconcile(line.id, {
+      kind: "bank_transaction",
+      contactId: aws.id,
+      amountsMode: "inclusive",
+      exchangeRate: "0.0105",
+      lines: [{ description: "Hosting", accountCode: "6040", taxCode: "NONE", amount: "1000" }],
+    });
+    expect(await posted(journalOf(done.line))).toEqual([
+      ["6040", "10.50", "0.00"],
+      ["1050", "0.00", "10.50"],
+    ]);
+    expect(await foreignOf(journalOf(done.line), "1050")).toEqual({ currencyCode: "JPY", amount: "1000", rate: "0.0105", kind: "rate" });
   });
 });

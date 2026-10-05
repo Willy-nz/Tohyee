@@ -3,10 +3,10 @@ import { writeAuditEvent } from "@/lib/audit";
 import { RECEIVABLES_SQL } from "@/lib/customers/service";
 import { parseIsoDate, parseOptionalIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
-import { ConflictError, ValidationError } from "@/lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertSameRequest, requestHash } from "@/lib/idempotency";
-import { foreignAccountState } from "@/lib/ledger/foreign";
-import { type ForeignAmount, type JournalBody, parseJournalBody, postJournalBody } from "@/lib/ledger/journals";
+import { foreignAccountState, RUN_NOT_VOIDED } from "@/lib/ledger/foreign";
+import { type ForeignAmount, getJournal, type JournalBody, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
 import { currencyMinorUnits, parseCurrencyCode } from "@/lib/money/currency";
 import { PAYABLES_SQL } from "@/lib/reports/aged-payables";
 import {
@@ -30,6 +30,7 @@ import {
   optionalSource,
   optionalString,
   requireArray,
+  requireId,
   requireIdempotencyKey,
   requireString,
 } from "@/lib/validation";
@@ -92,7 +93,18 @@ export type FxRevaluationRun = {
   revaluationJournalId: string;
   reversalJournalId: string;
   createdAt: string;
+  /** Set once the revaluation has been voided (FXB12): it then counts nowhere. */
+  voided: FxRevaluationVoid | null;
   items: FxRevaluationItem[];
+};
+
+export type FxRevaluationVoid = {
+  /** Reverses the revaluation journal, dated the revaluation date. */
+  voidJournalId: string;
+  /** Reverses the automatic reversal journal, dated the reversal date. */
+  voidReversalJournalId: string;
+  voidedByEmail: string;
+  voidedAt: string;
 };
 
 type RunRow = {
@@ -111,16 +123,22 @@ type RunRow = {
   revaluation_journal_id: string;
   reversal_journal_id: string;
   created_at: string;
+  void_journal_id: string | null;
+  void_reversal_journal_id: string | null;
+  voided_by_email: string | null;
+  voided_at: string | null;
 };
 
 const RUN_SELECT = `
   select r.id, r.request_hash, r.reference, r.description, r.base_currency, r.revaluation_date,
          r.reversal_posting_date, r.rate_date, r.rate_source, r.operator_email,
          g.code as gain_code, l.code as loss_code,
-         r.revaluation_journal_id, r.reversal_journal_id, r.created_at
+         r.revaluation_journal_id, r.reversal_journal_id, r.created_at,
+         v.void_journal_id::text, v.void_reversal_journal_id::text, v.voided_by_email, v.voided_at
     from ledger_fx_revaluation_runs r
     join accounts g on g.id = r.unrealised_gain_account_id
-    join accounts l on l.id = r.unrealised_loss_account_id`;
+    join accounts l on l.id = r.unrealised_loss_account_id
+    left join ledger_fx_revaluation_voids v on v.run_id = r.id`;
 
 async function loadRuns(tx: OrgTx, where: string, values: unknown[], limit = 50): Promise<FxRevaluationRun[]> {
   const runs = await tx.query<RunRow>(`${RUN_SELECT} ${where} order by r.id desc limit ${limit}`, values);
@@ -205,6 +223,15 @@ async function loadRuns(tx: OrgTx, where: string, values: unknown[], limit = 50)
     revaluationJournalId: run.revaluation_journal_id,
     reversalJournalId: run.reversal_journal_id,
     createdAt: run.created_at,
+    voided:
+      run.void_journal_id === null
+        ? null
+        : {
+            voidJournalId: run.void_journal_id,
+            voidReversalJournalId: run.void_reversal_journal_id!,
+            voidedByEmail: run.voided_by_email!,
+            voidedAt: run.voided_at!,
+          },
     items: items.rows
       .filter((item) => item.run_id === run.id)
       .map((item) => ({
@@ -255,6 +282,35 @@ async function revaluedForeignAmount(
     );
   }
   return normal;
+}
+
+/**
+ * Refuses revaluing an account in a currency while an earlier revaluation of
+ * it isn't reversed yet (MC8 for receivables and payables, FXB13 for bank and
+ * other accounts): NetSuite would revalue from that revaluation's rate;
+ * Tohyee's reverse on a date the user picks, so it isn't supported. Voided
+ * revaluations don't count (FXB12).
+ */
+async function refuseOverlappingRevaluation(
+  tx: OrgTx,
+  account: { id: string; code: string },
+  currencyCode: string,
+  revaluationDate: string,
+): Promise<void> {
+  const unreversed = await tx.query<{ reference: string; revaluation_date: string; reversal_posting_date: string }>(
+    `select r.reference, r.revaluation_date::text, r.reversal_posting_date::text
+       from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id
+      where i.account_id = $1 and i.currency_code = $2 and i.revaluation_date < $3 and r.reversal_posting_date > $3
+        and ${RUN_NOT_VOIDED}
+      order by r.revaluation_date limit 1`,
+    [account.id, currencyCode, revaluationDate],
+  );
+  if (unreversed.rows[0]) {
+    const earlier = unreversed.rows[0];
+    throw new ValidationError(
+      `Account ${account.code} ${currencyCode} was revalued on ${earlier.revaluation_date} (${earlier.reference}), and that isn't reversed until ${earlier.reversal_posting_date}. Revaluing it again before then isn't supported yet.`,
+    );
+  }
 }
 
 /** Whether an account is accounts receivable or payable, which hold foreign-currency documents (MC8). */
@@ -406,19 +462,7 @@ async function revalueOpenDocuments(
 ): Promise<{ foreignAmount: string; carrying: string; revalued: string; delta: Decimal; documents: Array<OpenForeignDocument & { delta: string }> }> {
   const foreignScale = currencyMinorUnits(currencyCode);
   const baseScale = currencyMinorUnits(tx.baseCurrency);
-  const unreversed = await tx.query<{ reference: string; revaluation_date: string; reversal_posting_date: string }>(
-    `select r.reference, r.revaluation_date::text, r.reversal_posting_date::text
-       from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id
-      where i.account_id = $1 and i.currency_code = $2 and i.revaluation_date < $3 and r.reversal_posting_date > $3
-      order by r.revaluation_date limit 1`,
-    [account.id, currencyCode, revaluationDate],
-  );
-  if (unreversed.rows[0]) {
-    const earlier = unreversed.rows[0];
-    throw new ValidationError(
-      `Account ${account.code} ${currencyCode} was revalued on ${earlier.revaluation_date} (${earlier.reference}), and that isn't reversed until ${earlier.reversal_posting_date}. Revaluing it again before then isn't supported yet.`,
-    );
-  }
+  await refuseOverlappingRevaluation(tx, account, currencyCode, revaluationDate);
   const systemKey = account.systemKey === "accounts_payable" ? "accounts_payable" : "accounts_receivable";
   const documents = await openForeignDocuments(tx, systemKey, currencyCode, revaluationDate);
   if (documents.length === 0) {
@@ -627,10 +671,15 @@ export async function postFxRevaluation(
     return { created: false, run };
   }
 
+  // Revaluing and voiding the same accounts wait for each other.
+  await tx.query("select id from accounts where id = any($1::bigint[]) order by id for update", [prepared.map((item) => item.account.id)]);
+  // F5: once per account, currency and date; a voided revaluation doesn't count (FXB12).
   const already = await tx.query<{ code: string; currency_code: string }>(
     `select a.code, i.currency_code from ledger_fx_revaluation_run_items i
+       join ledger_fx_revaluation_runs r on r.id = i.run_id
        join accounts a on a.id = i.account_id
-      where i.revaluation_date = $1 and (i.account_id, i.currency_code) in (select * from unnest($2::bigint[], $3::text[]))`,
+      where i.revaluation_date = $1 and (i.account_id, i.currency_code) in (select * from unnest($2::bigint[], $3::text[]))
+        and ${RUN_NOT_VOIDED}`,
     [revaluationDate, prepared.map((item) => item.account.id), prepared.map((item) => item.currencyCode)],
   );
   if (already.rows.length > 0) {
@@ -652,6 +701,8 @@ export async function postFxRevaluation(
       computed.push({ ...item, ...(await revalueOpenDocuments(tx, item.account, item.currencyCode, item.typed, item.balance.closingRate, revaluationDate)) });
       continue;
     }
+    // FXB13: as for receivables and payables, not while an earlier revaluation isn't reversed yet.
+    await refuseOverlappingRevaluation(tx, item.account, item.currencyCode, revaluationDate);
     const totals = await tx.query<{ debits: string; credits: string }>(
       `select coalesce(sum(l.debit_amount), 0)::text as debits,
               coalesce(sum(l.credit_amount), 0)::text as credits
@@ -861,4 +912,104 @@ export async function postFxRevaluation(
 
   const [created] = await loadRuns(tx, "where r.id = $1", [runId], 1);
   return { created: true, run: created };
+}
+
+/**
+ * Voids a revaluation, the whole run (FXB12): posts the exact reversal of its
+ * journal, dated the revaluation date, and of its automatic reversal journal,
+ * dated the reversal date (period locks apply to both). Refused once a later
+ * revaluation of any of its accounts exists, and when it's already voided.
+ * The run is kept, shown as voided; it then counts nowhere (FXB12, FXB13, F5,
+ * the rate shown on statement lines).
+ */
+export async function voidFxRevaluation(
+  tx: OrgTx,
+  runIdInput: unknown,
+  command: { source?: unknown; idempotencyKey: unknown },
+): Promise<{ created: boolean; run: FxRevaluationRun }> {
+  const id = requireId(runIdInput, "revaluationId");
+  const source = optionalSource(command.source);
+  const idempotencyKey = requireIdempotencyKey(command.idempotencyKey);
+  const hash = requestHash("fx_revaluation_void", { id });
+  const replay = async () => {
+    const earlier = await tx.query<{ run_id: string; request_hash: string }>(
+      "select run_id::text, request_hash from ledger_fx_revaluation_voids where command_source = $1 and idempotency_key = $2",
+      [source, idempotencyKey],
+    );
+    if (!earlier.rows[0]) return null;
+    assertSameRequest(earlier.rows[0].request_hash, hash, "FX revaluation void");
+    const [run] = await loadRuns(tx, "where r.id = $1", [earlier.rows[0].run_id], 1);
+    return { created: false, run };
+  };
+  const earlier = await replay();
+  if (earlier) return earlier;
+  const [run] = await loadRuns(tx, "where r.id = $1", [id], 1);
+  if (!run) throw new NotFoundError("Revaluation not found.");
+  // Revaluing and voiding the same accounts wait for each other.
+  await tx.query("select id from accounts where id = any($1::bigint[]) order by id for update", [run.items.map((item) => item.accountId)]);
+  const meanwhile = await replay();
+  if (meanwhile) return meanwhile;
+  const voided = await tx.query("select 1 from ledger_fx_revaluation_voids where run_id = $1", [id]);
+  if ((voided.rowCount ?? 0) > 0) throw new ConflictError(`${run.reference} has already been voided.`);
+  const later = await tx.query<{ reference: string; revaluation_date: string; code: string; currency_code: string }>(
+    `select r.reference, r.revaluation_date::text, a.code, i.currency_code
+       from ledger_fx_revaluation_run_items i join ledger_fx_revaluation_runs r on r.id = i.run_id join accounts a on a.id = i.account_id
+      where (i.account_id, i.currency_code) in (select * from unnest($1::bigint[], $2::text[]))
+        and r.id <> $3 and (i.revaluation_date > $4 or (i.revaluation_date = $4 and r.id > $3)) and ${RUN_NOT_VOIDED}
+      order by i.revaluation_date desc, r.id desc limit 1`,
+    [run.items.map((item) => item.accountId), run.items.map((item) => item.currencyCode), id, run.revaluationDate],
+  );
+  if (later.rows[0]) {
+    const row = later.rows[0];
+    throw new ConflictError(
+      `${row.code} ${row.currency_code} was revalued again on ${row.revaluation_date} (${row.reference}), after ${run.reference}. Void that revaluation first.`,
+    );
+  }
+  const reverse = async (journalId: string, key: string, label: string) => {
+    const original = await getJournal(tx, journalId);
+    return postJournalBody(
+      tx,
+      "fx_revaluation:void",
+      `${id}:${key}`,
+      parseJournalBody(
+        tx,
+        {
+          postingDate: original.postingDate,
+          reference: `VOID-${original.reference}`.slice(0, 100),
+          description: `Void of ${label} ${run.reference}`.slice(0, 500),
+          lines: original.lines.map((line) => ({
+            accountCode: line.accountCode,
+            debitAmount: line.creditAmount,
+            creditAmount: line.debitAmount,
+            description: line.description,
+            ...sameForeign(line),
+          })),
+        },
+        { internal: true },
+      ),
+      { origin: "fx_revaluation", relatedJournalId: original.id, correctionKind: "reversal" },
+    );
+  };
+  const voidJournal = await reverse(run.revaluationJournalId, "journal", "FX revaluation");
+  const voidReversal = await reverse(run.reversalJournalId, "reversal", "the automatic reversal of FX revaluation");
+  await tx.query(
+    `insert into ledger_fx_revaluation_voids (run_id, command_source, idempotency_key, request_hash, void_journal_id, void_reversal_journal_id,
+                                              voided_by_user_id, voided_by_email)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [id, source, idempotencyKey, hash, voidJournal.journal.id, voidReversal.journal.id, tx.actor.userId, tx.actor.email],
+  );
+  await writeAuditEvent(tx, {
+    eventType: "ledger.fx_revaluation_voided",
+    entityType: "ledger_fx_revaluation_run",
+    entityId: id,
+    details: {
+      reference: run.reference,
+      revaluationDate: run.revaluationDate,
+      reversalPostingDate: run.reversalPostingDate,
+      voidJournalId: voidJournal.journal.id,
+      voidReversalJournalId: voidReversal.journal.id,
+    },
+  });
+  const [updated] = await loadRuns(tx, "where r.id = $1", [id], 1);
+  return { created: true, run: updated };
 }
