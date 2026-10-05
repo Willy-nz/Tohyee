@@ -54,12 +54,22 @@ export function FeedBadge({
   feed,
   simplefin = null,
   stripe = null,
+  paypal = null,
 }: {
   feed: BankFeedStatus;
   simplefin?: SimpleFinFeedStatus | null;
   stripe?: SimpleFinFeedStatus | null;
+  paypal?: SimpleFinFeedStatus | null;
 }) {
-  const other = !feed.active ? (simplefin ? { name: "SimpleFIN", status: simplefin } : stripe ? { name: "Stripe", status: stripe } : null) : null;
+  const other = feed.active
+    ? null
+    : simplefin
+      ? { name: "SimpleFIN", status: simplefin }
+      : stripe
+        ? { name: "Stripe", status: stripe }
+        : paypal
+          ? { name: "PayPal", status: paypal }
+          : null;
   if (other) {
     if (other.status.lastSyncStatus === "failed") return <Badge tone="red">{other.name} failed</Badge>;
     if (other.status.lastSyncStatus === "never") return <Badge tone="amber">{other.name} waiting</Badge>;

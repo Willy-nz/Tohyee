@@ -65,8 +65,8 @@ phone width).
    account) reaches US banks, as Actual Budget uses it; (iii) Stripe (examples
    ST1-ST10 approved by Jess 5 Oct 2026; decisions 392-395; tenant migration
    0094; **built**);
-   (iv) PayPal (examples PP1-PP10 written 5 Oct 2026, waiting for
-   Jess); (v) Wise (its statement API needs a request-signing key the
+   (iv) PayPal (examples PP1-PP10 approved by Jess 5 Oct 2026;
+   decisions 396-399; tenant migration 0095; **built**); (v) Wise (its statement API needs a request-signing key the
    organisation registers with Wise; foreign-currency examples first).
    Australian banks: only CDR-accredited aggregators (Basiq, Fiskil) reach
    them, aimed at businesses rather than one organisation; left out unless

@@ -561,7 +561,11 @@ that something happened.
   its full amount, with Stripe's fees and any tax on them as separate lines,
   and refunds, disputes and payouts as Stripe reports them, so charges match
   invoices and payouts reconcile as transfers (examples ST1-ST10, decisions
-  392-395). Duplicates are
+  392-395). **PayPal as a bank feed**, the same way: the live REST app's client
+  ID and secret (stored encrypted; PayPal has no read-only credentials, which
+  the screen says), each completed payment with its fee as a separate line,
+  refunds, chargebacks, holds, currency conversions and withdrawals as PayPal
+  reports them (examples PP1-PP10, decisions 396-399). Duplicates are
   skipped; lines that look like a file-and-feed duplicate are flagged. Each
   line is reconciled by matching what's already posted (within 60 days),
   paying invoices or bills, creating spend or receive money (with GST), or a

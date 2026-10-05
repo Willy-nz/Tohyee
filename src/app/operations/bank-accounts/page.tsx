@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { ACCOUNT_TYPE_LABELS, FeedBadge } from "@/components/bank/common";
 import { CurrencyMoney } from "@/components/bank/foreign";
 import { SimpleFinSettingsCard } from "@/components/bank/simplefin";
+import { PayPalSettingsCard } from "@/components/bank/paypal";
 import { StripeSettingsCard } from "@/components/bank/stripe";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
@@ -320,7 +321,7 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
                       )}
                     </td>
                     <td>
-                      <FeedBadge feed={account.feed} simplefin={account.simplefin} stripe={account.stripe} />
+                      <FeedBadge feed={account.feed} simplefin={account.simplefin} stripe={account.stripe} paypal={account.paypal} />
                       {account.feed.akahuAccountName ? <div className={ui.muted}>{account.feed.akahuAccountName}</div> : null}
                     </td>
                   </tr>
@@ -351,6 +352,12 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
         description="This organisation's Stripe balance as a bank account: charges, Stripe's fees, refunds, disputes and payouts come in as statement lines."
       >
         <StripeSettingsCard organisationId={organisationId} />
+      </Card>
+      <Card
+        title="PayPal"
+        description="This organisation's PayPal balance as a bank account: payments, PayPal's fees, refunds, chargebacks, conversions and withdrawals come in as statement lines."
+      >
+        <PayPalSettingsCard organisationId={organisationId} />
       </Card>
     </>
   );

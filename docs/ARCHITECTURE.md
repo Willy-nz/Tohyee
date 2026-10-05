@@ -96,6 +96,8 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ simplefin_requests     every request made to the Bridge, to stay under its 24 a day
 ├─ stripe_connections     the organisation's restricted Stripe key (encrypted, cleared on disconnect), balances and last sync
 ├─ stripe_links           a Stripe balance currency linked to a bank account: start date and last sync
+├─ paypal_connections     the organisation's PayPal REST app (secret encrypted, cleared on disconnect), balances and last sync
+├─ paypal_links           a PayPal balance currency linked to a bank account: start date and last sync
 ├─ bank_reconciliations, bank_reconciliation_items   which journal lines each statement line is
 ├─ bank_reconciliation_splits   one journal line reconciled across several statement lines
 ├─ bank_transactions, bank_transaction_lines   spend and receive money
@@ -1047,6 +1049,10 @@ Enforced by the app (and covered by tests):
   linked currency's `GET /v1/balance_transactions` (paged, sources expanded)
   outside any transaction, then each account's lines in its own. Amounts are
   converted from Stripe's smallest units exactly (`src/lib/money/decimal.ts`).
+- PayPal feeds (`src/lib/bank/paypal/`, decisions 396-399) follow the same
+  pattern: an OAuth token from the app's client credentials, then
+  `/v1/reporting/balances` and each linked currency's
+  `/v1/reporting/transactions` in 31-day pieces, outside any transaction.
 - Tracking categories (advanced features): `tracking_categories` and a tree
   of `tracking_values` per organisation. Lines store their tags as a jsonb
   map `{categoryId: valueId}` (`tracking` on document lines and

@@ -1739,7 +1739,7 @@ Stripe Connect platform fees paid to you as a platform, Stripe Issuing
 cards, and looking up each charge's customer name (one more request per
 charge; the description is used instead).
 
-### PayPal as a bank feed (examples not yet approved by Jess)
+### PayPal as a bank feed (approved by Jess, 5 Oct 2026)
 
 Stage 1b, part 4, of the Xero add-ons plan. As with Stripe (ST1-ST10), an
 organisation's **PayPal balance is a bank account in Tohyee** (e.g. 1060
@@ -1836,23 +1836,20 @@ PayPal (NZD), 1070 PayPal USD (USD), Kobe Ltd with INV-0011 for 115.00 due.
 Only admins connect, link, unlink and disconnect; bookkeepers press Sync now;
 viewers see the last sync, as BK15.
 
-**Questions for Jess (PayPal), with proposed answers:**
-1. PayPal has **no read-only credentials**: the client secret Tohyee stores
-   could, through other PayPal APIs, also send money. Accept that, stored
-   encrypted and only ever used to read Transaction Search and balances?
-   Proposed: yes, and say so plainly on the connect screen. (Stripe's
-   restricted keys avoid this; PayPal doesn't offer them.)
-2. Leave **pending** PayPal transactions out until they complete (PP8)?
-   Proposed: yes. Unlike Stripe's pending card payments, PayPal's pending
-   ones (eChecks, payment reviews) can still be denied.
-3. **Holds** (`T15xx`, and holds in `T02xx`): bring them in like everything
-   else (a hold and its release then cancel out, and can both be excluded),
-   or leave them out? Proposed: bring them in, so the lines always add up to
-   PayPal's balance; Tohyee hasn't checked with a real account whether
-   PayPal's `total_balance` counts held money.
-4. Date lines **as PayPal dates them** (the PayPal account's own time zone),
-   rather than in the organisation's? Proposed: as PayPal does, so lines
-   match PayPal's own statements.
+**Questions for Jess (PayPal), decided** (Jess approved the examples and
+chose the proposed answers on 5 Oct 2026):
+1. The client secret is accepted although PayPal has no read-only
+   credentials: stored encrypted, used only for Transaction Search and
+   balances, and the connect screen says so plainly.
+2. Pending and denied transactions are left out until PayPal completes them
+   (PP8).
+3. Holds come in like everything else, so the lines add up to PayPal's
+   balance.
+4. Lines are dated as PayPal dates them (the PayPal account's own time zone).
+
+Each link also has a first date to bring in, as Akahu's (BK15).
+
+Tests: `tests/integration/bank-paypal.test.ts`.
 
 Not checked with a real PayPal account: the sign PayPal uses on
 `fee_amount` (its reference says charged fees are debits), whether

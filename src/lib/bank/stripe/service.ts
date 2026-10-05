@@ -242,7 +242,8 @@ export async function linkStripeBalance(tx: OrgTx, accountIdInput: unknown, inpu
     throw new ValidationError(`Stripe's balance is in ${currency}; ${account.code} is in ${account.currencyCode}.`);
   const other = await tx.query<{ feed: string }>(
     `select 'Akahu' as feed from bank_account_settings where account_id = $1 and feed_active
-     union all select 'SimpleFIN' from simplefin_links where account_id = $1 and active`,
+     union all select 'SimpleFIN' from simplefin_links where account_id = $1 and active
+     union all select 'PayPal' from paypal_links where account_id = $1 and active`,
     [accountId],
   );
   if (other.rows[0]) throw new ConflictError(`${account.code} already has a ${other.rows[0].feed} bank feed. Stop it first.`);

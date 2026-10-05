@@ -56,6 +56,8 @@ export type BankAccount = {
   simplefin: SimpleFinFeedStatus | null;
   /** The account's Stripe feed (decision 392), when it has one; same shape. */
   stripe: SimpleFinFeedStatus | null;
+  /** The account's PayPal feed (decision 396), when it has one; same shape. */
+  paypal: SimpleFinFeedStatus | null;
 };
 
 type BankAccountRow = {
@@ -85,6 +87,9 @@ type BankAccountRow = {
   stripe_active: boolean | null;
   stripe_synced_at: string | null;
   stripe_status: "never" | "ok" | "failed" | null;
+  paypal_active: boolean | null;
+  paypal_synced_at: string | null;
+  paypal_status: "never" | "ok" | "failed" | null;
 };
 
 const BANK_ACCOUNT_SELECT = `
@@ -99,11 +104,13 @@ const BANK_ACCOUNT_SELECT = `
          s.import_layout, s.akahu_account_id, s.akahu_account_name, s.akahu_connection_name, s.feed_start_date::text,
          s.feed_active, s.last_synced_at, s.last_sync_status, s.last_sync_error,
          sf.active as simplefin_active, sf.last_synced_at as simplefin_synced_at, sf.last_sync_status as simplefin_status,
-         st.active as stripe_active, st.last_synced_at as stripe_synced_at, st.last_sync_status as stripe_status
+         st.active as stripe_active, st.last_synced_at as stripe_synced_at, st.last_sync_status as stripe_status,
+         pp.active as paypal_active, pp.last_synced_at as paypal_synced_at, pp.last_sync_status as paypal_status
     from accounts a
     left join bank_account_settings s on s.account_id = a.id
     left join simplefin_links sf on sf.account_id = a.id and sf.active
     left join stripe_links st on st.account_id = a.id and st.active
+    left join paypal_links pp on pp.account_id = a.id and pp.active
    where a.account_type in ('bank', 'credit_card')`;
 
 function toBankAccount(row: BankAccountRow, scale: number, baseCurrency: string): BankAccount {
@@ -141,6 +148,7 @@ function toBankAccount(row: BankAccountRow, scale: number, baseCurrency: string)
       ? { active: true, lastSyncedAt: row.simplefin_synced_at, lastSyncStatus: row.simplefin_status ?? "never" }
       : null,
     stripe: row.stripe_active ? { active: true, lastSyncedAt: row.stripe_synced_at, lastSyncStatus: row.stripe_status ?? "never" } : null,
+    paypal: row.paypal_active ? { active: true, lastSyncedAt: row.paypal_synced_at, lastSyncStatus: row.paypal_status ?? "never" } : null,
   };
 }
 
@@ -188,7 +196,7 @@ export async function getBankAccount(tx: OrgTx, accountIdInput: unknown): Promis
 export async function lockStatementAccount(
   tx: OrgTx,
   accountId: string,
-  purpose: "lines" | "feed" | "simplefin" | "stripe" | "delete" = "lines",
+  purpose: "lines" | "feed" | "simplefin" | "stripe" | "paypal" | "delete" = "lines",
 ): Promise<{ id: string; code: string; name: string; accountType: AccountType; currencyCode: string }> {
   const result = await tx.query<{
     id: string;
@@ -211,7 +219,7 @@ export async function lockStatementAccount(
       `${label} is in ${row.currency_code}. Akahu bank feeds can't be used for foreign-currency accounts yet: Akahu's transactions don't say their currency. Import statement files instead.`,
     );
   }
-  if (foreign && (purpose === "lines" || purpose === "simplefin" || purpose === "stripe") && (await foreignAccountState(tx, row.id)).needsOpeningBalance) {
+  if (foreign && (purpose === "lines" || purpose === "simplefin" || purpose === "stripe" || purpose === "paypal") && (await foreignAccountState(tx, row.id)).needsOpeningBalance) {
     throw new ValidationError(
       `${label} has postings from before Tohyee kept foreign amounts. Enter its ${row.currency_code} balance as at a date (its opening foreign balance) first.`,
     );
@@ -412,7 +420,7 @@ export type StatementLine = {
   externalId: string | null;
   status: StatementLineStatus;
   possibleDuplicateOf: string | null;
-  source: "file" | "akahu" | "simplefin" | "stripe";
+  source: "file" | "akahu" | "simplefin" | "stripe" | "paypal";
   /** The line's currency (the account's). */
   currencyCode: string;
   /**
@@ -448,7 +456,7 @@ type StatementLineRow = {
   external_id: string | null;
   status: StatementLineStatus;
   possible_duplicate_of: string | null;
-  source: "file" | "akahu" | "simplefin" | "stripe";
+  source: "file" | "akahu" | "simplefin" | "stripe" | "paypal";
   currency_code: string | null;
   reconciliation: StatementLine["reconciliation"];
 };
