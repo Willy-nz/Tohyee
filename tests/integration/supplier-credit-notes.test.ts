@@ -131,8 +131,9 @@ describeWithDatabase("supplier credit notes", () => {
         )
       ).bill;
     };
+    // Test bills share a supplier and total, so approving goes past the duplicate warning (DU2).
     const approveTheBill = async (bill: Bill): Promise<Bill> =>
-      (await asUser(bookkeeper, (tx) => approveBill(tx, bill.id, { idempotencyKey: key("approve-bill") }))).bill;
+      (await asUser(bookkeeper, (tx) => approveBill(tx, bill.id, { idempotencyKey: key("approve-bill"), approveDespiteWarnings: true }))).bill;
     const approvedBill = async (fields: Record<string, unknown> = {}) => approveTheBill(await draftBill(fields));
 
     const b1 = await approvedBill();

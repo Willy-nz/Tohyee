@@ -2962,3 +2962,89 @@ think is best").
        its Bank feed tab ([dark](screenshots/wise-feed-dark.png), [phone](screenshots/wise-feed-phone.png))
        and the connection on Bank accounts ([light](screenshots/wise-connection-light.png)). An
        account with a SimpleFIN, Stripe, PayPal or Wise feed no longer offers to link Akahu.
+
+### Bills inbox, duplicate bills and mileage (decisions 404-413)
+
+404. **Each organisation has a bills inbox** (examples BI1-BI7, approved by
+     Jess on 5 Oct 2026; tenant migration 0097): PDF, JPG, PNG and HEIC
+     files up to 10 MB (the kinds a bill can have, NF7), kept in the
+     organisation's own database (`bill_inbox_items`) so its backup has
+     them. An item is waiting, made into a bill, or removed with a reason;
+     removing drops the file and keeps the row for the history. Making a bill
+     saves the draft, attaches the file to it (`record_attachments`) and
+     marks the item, in one transaction; deleting that draft puts the item
+     back on the waiting list. Nothing in the inbox posts. Bookkeepers and
+     above change it; viewers see it.
+405. **Mailboxes read into the inbox use the same connections as automatic
+     statement files** (BF7): an admin's own CRM Gmail or Microsoft mailbox,
+     or IMAP with an app password stored encrypted, reading one folder or
+     label as that admin, every hour by default (1-24) and with Check now;
+     `TOHYEE_BILL_INBOX_SCHEDULER=off` turns the schedule off. Each message is
+     read once (remembered by place, so setting the mailbox up again doesn't
+     read old mail twice); its PDF and picture attachments become items with
+     the sender and subject (Gmail's headers, Microsoft Graph's `from` and
+     `subject`, IMAP's envelope), other files are ignored, and one that isn't
+     really that kind of file or is over 10 MB is skipped and counted.
+406. **Documents are read only by the organisation's own connected AI**
+     (question 1): Tohyee never sends a document anywhere and has no OCR.
+     The MCP tools `list_bill_inbox` and `read_bill_inbox_item` are at the
+     read level; the second answers with the item's details as text and the
+     file itself, as MCP image content for JPG and PNG and an embedded
+     resource (`blob`) for PDF and HEIC. `create_draft_bill_from_inbox_item`
+     and `add_bill_inbox_item` are at the draft level. A draft made by the AI
+     is like any other draft: the history shows the key it came through
+     (decision 348) and the item shows it too.
+407. **Kilometre rates are a setting per income year and vehicle type**
+     (examples MI1-MI7, approved by Jess on 5 Oct 2026): petrol, diesel,
+     petrol hybrid and electric, tier 1 and tier 2, entered by admins for all
+     four types at once. Tohyee starts with the rates IRD published for
+     2025-26 (operational statement OS 19/04: petrol 1.20 / 0.37, diesel
+     1.30 / 0.38, petrol hybrid 0.90 / 0.24, electric 1.22 / 0.23). A year's
+     rates can't change once an approved (or since voided) claim used them.
+     When a line's own year has no rates, the latest rates entered are used
+     and the line says so (question 2).
+408. **A mileage line is a line of the expense claim** (`kind = 'mileage'`
+     on `expense_claim_receipts`): date, from, to, purpose, kilometres (more
+     than 0, at most 2,000, one decimal place), vehicle type and account
+     (6120 Motor vehicle expenses by default in the editor). Its amount is
+     tier 1 km x tier 1 rate + tier 2 km x tier 2 rate, rounded to the cent,
+     with no GST (question 4); the rates, kilometres per tier and note are
+     kept on the line. Approving posts it like a receipt.
+409. **Tier 2 starts after 14,000 km of a claimant's mileage lines per
+     vehicle type in an income year** (question 3), counting their submitted
+     and approved claims, then this claim's earlier lines (by date, then line
+     order); drafts and voided claims don't count. Tohyee can't know a
+     vehicle's private travel, which IRD's threshold counts. An admin can put
+     a draft claim's line all on tier 1 or tier 2; that stays when the
+     claimant saves the same line again (same place, date, kilometres and
+     vehicle type) and is dropped if they change it.
+410. **Draft claims' mileage is worked out again** when an admin saves
+     kilometre rates and when the claim is submitted; submitted and approved
+     claims keep the amounts they were sent with (MI6), and approving checks
+     the stored amounts rather than working them out again.
+411. **Likely duplicate bills are warned about, never blocked** (examples
+     DU1-DU5, question 5): another bill from the same supplier with the same
+     total and currency dated within 7 days either side (7 counts), or a bill
+     from another supplier with the same invoice number (compared as B5 does)
+     and total. Drafts count; voided bills don't. Bills made by the same
+     repeating bill aren't warned about each other (a weekly charge), including
+     while the repeating bill approves one it has just made.
+412. **Approving a bill with a warning needs the person to say so**
+     (`approveDespiteWarnings`): otherwise it's refused with the warnings,
+     and the bill page asks "Approve anyway?". The approval's history entry
+     lists the warnings it was approved despite. The AI's `approve_bill`
+     never sends it (DU5): the AI is told of the warnings when it drafts and
+     must leave the approval to a person. A repeating bill set to approve
+     leaves such a bill as a draft with the warning as its reason.
+413. **The same file twice is spotted by its SHA-256** (DU1): an inbox item
+     lists earlier items with the same contents (and what became of them)
+     and bills the same file is attached to.
+     - Screenshots: the bills inbox ([light](screenshots/bills-inbox-light.png),
+       [phone](screenshots/bills-inbox-phone.png)), making a bill from a file
+       ([dark](screenshots/bills-inbox-new-bill-dark.png)), a likely duplicate
+       ([light](screenshots/bill-duplicate-light.png), [phone](screenshots/bill-duplicate-phone.png)),
+       an expense claim with mileage ([light](screenshots/expense-mileage-light.png),
+       [editing, dark](screenshots/expense-mileage-edit-dark.png), [phone](screenshots/expense-mileage-phone.png))
+       and kilometre rates ([light](screenshots/kilometre-rates-light.png),
+       [phone](screenshots/kilometre-rates-phone.png)).
+

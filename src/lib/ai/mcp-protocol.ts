@@ -40,8 +40,18 @@ export type ToolInfo = {
   inputSchema: Record<string, unknown>;
 };
 
+/**
+ * A tool's answer: text, and for a tool that hands over a file (BI4, the
+ * bills inbox) the file itself, as an image (JPG, PNG) or an embedded
+ * resource with its bytes (PDF, HEIC), both base64.
+ */
+export type ToolContent =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string }
+  | { type: "resource"; resource: { uri: string; mimeType: string; blob: string } };
+
 export type CallToolResult = {
-  content: { type: "text"; text: string }[];
+  content: ToolContent[];
   isError?: boolean;
 };
 

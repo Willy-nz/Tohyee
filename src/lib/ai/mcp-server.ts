@@ -2,7 +2,8 @@ import packageJson from "../../../package.json";
 import { AI_ACCESS_LEVEL_LABELS, levelAllows } from "@/lib/ai/access-levels";
 import { findAiTool, toolsForLevel } from "@/lib/ai/catalogue";
 import { boundedJson, MAX_TOOL_TEXT } from "@/lib/ai/limits";
-import type { CallToolResult, McpServer } from "@/lib/ai/mcp-protocol";
+import type { CallToolResult, McpServer, ToolContent } from "@/lib/ai/mcp-protocol";
+import { ToolFileAnswer } from "@/lib/ai/tools";
 import type { AiTokenIdentity } from "@/lib/ai/tokens";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { HttpError } from "@/lib/errors";
@@ -10,6 +11,14 @@ import { loadMemberNames } from "@/lib/people/names";
 
 function text(value: string, isError = false): CallToolResult {
   return isError ? { content: [{ type: "text", text: value }], isError: true } : { content: [{ type: "text", text: value }] };
+}
+
+/** A file as MCP content: pictures the AI can see as images, PDFs and HEIC as an embedded resource. */
+function fileContent(file: ToolFileAnswer["file"]): ToolContent {
+  const data = file.content.toString("base64");
+  return file.contentType === "image/jpeg" || file.contentType === "image/png"
+    ? { type: "image", data, mimeType: file.contentType }
+    : { type: "resource", resource: { uri: file.uri, mimeType: file.contentType, blob: data } };
 }
 
 /** How an AI key shows in the history and on drafts: AI key "Claude on my laptop". */
@@ -63,13 +72,15 @@ export function mcpServerFor(identity: AiTokenIdentity): McpServer {
           (tx) => tool.run(tx, args, { role: identity.membership.role, organisationId: organisation.id, source: `ai-${identity.tokenId}` }),
           { people, readOnly: tool.level === "read" },
         );
-        const json = boundedJson(result);
+        const answer = result instanceof ToolFileAnswer ? result.answer : result;
+        const json = boundedJson(answer);
         if (json === null) {
           return text(
             `That answer is more than ${MAX_TOOL_TEXT.toLocaleString("en-NZ")} characters. Ask for a shorter date range, a lower limit or a filter.`,
             true,
           );
         }
+        if (result instanceof ToolFileAnswer) return { content: [{ type: "text", text: json }, fileContent(result.file)] };
         return text(json);
       } catch (error) {
         if (error instanceof HttpError) return text(error.message, true);

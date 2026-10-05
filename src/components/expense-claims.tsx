@@ -13,7 +13,8 @@ import { useWorkspace } from "@/components/workspace";
 import type { Account } from "@/lib/accounts/service";
 import { billLineAccountProblem } from "@/lib/bills/accounts";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
-import type { ExpenseClaim, ExpenseClaimStatus, ExpenseClaimSummary } from "@/lib/expense-claims/service";
+import { formatKmRate, incomeYearLabel, VEHICLE_TYPE_LABELS, VEHICLE_TYPES, type VehicleType } from "@/lib/expense-claims/mileage-types";
+import type { ExpenseClaim, ExpenseClaimMileage, ExpenseClaimStatus, ExpenseClaimSummary } from "@/lib/expense-claims/service";
 import { formatDate, formatDateTime, formatGstNumber, todayInBrowser, personName } from "@/lib/format";
 import { calculateInvoice, PAID_STATUS_LABELS } from "@/lib/invoices/amounts";
 import { isDecimalString } from "@/lib/money/decimal";
@@ -67,6 +68,31 @@ function blankReceipt(taxCode: string): ReceiptDraft {
   return { receiptDate: todayInBrowser(), supplierName: "", supplierGstNumber: "", description: "", accountCode: "", taxCode, amount: "", tracking: {} };
 }
 
+/** A mileage line as typed (MI2): its amount is worked out by Tohyee when it's saved. */
+type MileageDraft = {
+  receiptDate: string;
+  fromPlace: string;
+  toPlace: string;
+  description: string;
+  km: string;
+  vehicleType: VehicleType;
+  accountCode: string;
+  tracking: TrackingTags;
+};
+
+function blankMileage(accountCode: string, vehicleType: VehicleType = "petrol"): MileageDraft {
+  return { receiptDate: todayInBrowser(), fromPlace: "", toPlace: "", description: "", km: "", vehicleType, accountCode, tracking: {} };
+}
+
+/** "123.4 km, petrol: 50 km x 1.2 + 73.4 km x 0.37" */
+export function mileageWorking(mileage: ExpenseClaimMileage): string {
+  const parts = [
+    ...(mileage.tier1Km !== "0" ? [`${mileage.tier1Km} km x ${formatKmRate(mileage.tier1Rate)}`] : []),
+    ...(mileage.tier2Km !== "0" ? [`${mileage.tier2Km} km x ${formatKmRate(mileage.tier2Rate)} (tier 2)`] : []),
+  ];
+  return `${mileage.km} km, ${VEHICLE_TYPE_LABELS[mileage.vehicleType].toLowerCase()}: ${parts.join(" + ")} · ${mileage.rateNote ?? `${incomeYearLabel(mileage.rateYearEnding)} rates`}${mileage.tierOverride ? ` · ${mileage.tierOverride === "tier1" ? "tier 1" : "tier 2"} chosen by an admin` : ""}`;
+}
+
 /** Enter or change a draft claim's receipts (tax inclusive). Totals are worked out with the same code as the server. */
 export function ExpenseClaimEditor({
   organisationId,
@@ -88,7 +114,7 @@ export function ExpenseClaimEditor({
   const [description, setDescription] = useState(claim?.description ?? "");
   const [receipts, setReceipts] = useState<ReceiptDraft[] | null>(
     claim
-      ? claim.receipts.map((receipt) => ({
+      ? claim.receipts.filter((receipt) => receipt.kind !== "mileage").map((receipt) => ({
           receiptDate: receipt.receiptDate,
           supplierName: receipt.supplierName,
           supplierGstNumber: receipt.supplierGstNumber ?? "",
@@ -100,11 +126,31 @@ export function ExpenseClaimEditor({
         }))
       : null,
   );
+  const motor = accounts.data?.accounts.find((account) => account.code === "6120" && account.isActive && takesReceipts(account))?.code ?? "";
+  const [mileage, setMileage] = useState<MileageDraft[]>(
+    (claim?.receipts ?? []).flatMap((receipt) =>
+      receipt.mileage
+        ? [
+            {
+              receiptDate: receipt.receiptDate,
+              fromPlace: receipt.mileage.fromPlace,
+              toPlace: receipt.mileage.toPlace,
+              description: receipt.description,
+              km: receipt.mileage.km,
+              vehicleType: receipt.mileage.vehicleType,
+              accountCode: receipt.accountCode,
+              tracking: receipt.tracking,
+            },
+          ]
+        : [],
+    ),
+  );
   const [createKey] = useState(() => newIdempotencyKey("claim"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!taxCodes.data || !accounts.data) return <p className={ui.muted}>Loading…</p>;
-  const rows = receipts ?? [blankReceipt(defaultTax)];
+  const rows = receipts ?? (claim ? [] : [blankReceipt(defaultTax)]);
+  const setTrip = (index: number, change: Partial<MileageDraft>) => setMileage(mileage.map((row, i) => (i === index ? { ...row, ...change } : row)));
   const set = (index: number, change: Partial<ReceiptDraft>) => setReceipts(rows.map((row, i) => (i === index ? { ...row, ...change } : row)));
   const rate = (code: string) => active.find((taxCode) => taxCode.code === code)?.rate ?? "0";
   const totals = calculateInvoice(
@@ -120,7 +166,10 @@ export function ExpenseClaimEditor({
     const body = {
       organisationId,
       description: description.trim() || null,
-      receipts: rows.map((row) => ({ ...row, taxCode: row.taxCode || null, supplierGstNumber: row.supplierGstNumber.trim() || null })),
+      receipts: [
+        ...rows.map((row) => ({ ...row, taxCode: row.taxCode || null, supplierGstNumber: row.supplierGstNumber.trim() || null })),
+        ...mileage.map((row) => ({ kind: "mileage", ...row })),
+      ],
     };
     try {
       const result = claim
@@ -199,7 +248,7 @@ export function ExpenseClaimEditor({
                   <div className={ui.muted}>GST {totals.lines[index]?.taxAmount}</div>
                 </td>
                 <td>
-                  <Button size="small" variant="secondary" onClick={() => setReceipts(rows.filter((_, i) => i !== index))} disabled={rows.length === 1}>
+                  <Button size="small" variant="secondary" onClick={() => setReceipts(rows.filter((_, i) => i !== index))} disabled={rows.length + mileage.length === 1}>
                     Remove
                   </Button>
                 </td>
@@ -208,16 +257,93 @@ export function ExpenseClaimEditor({
           </tbody>
         </table>
       </div>
+      {mileage.length > 0 ? (
+        <div className={ui.tableWrap}>
+          <table className={`${ui.table} ${ui.stackOnPhone}`}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Purpose</th>
+                <th>Vehicle</th>
+                <th className={ui.num}>Kilometres</th>
+                <th>Account</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {mileage.map((row, index) => (
+                <tr key={index}>
+                  <td data-label="Date">
+                    <input type="date" aria-label={`Mileage ${index + 1} date`} value={row.receiptDate} onChange={(event) => setTrip(index, { receiptDate: event.target.value })} required />
+                  </td>
+                  <td data-label="From">
+                    <input aria-label={`Mileage ${index + 1} from`} value={row.fromPlace} maxLength={200} onChange={(event) => setTrip(index, { fromPlace: event.target.value })} required />
+                  </td>
+                  <td data-label="To">
+                    <input aria-label={`Mileage ${index + 1} to`} value={row.toPlace} maxLength={200} onChange={(event) => setTrip(index, { toPlace: event.target.value })} required />
+                  </td>
+                  <td data-label="Purpose">
+                    <input aria-label={`Mileage ${index + 1} purpose`} value={row.description} maxLength={500} onChange={(event) => setTrip(index, { description: event.target.value })} required />
+                    <TrackingSelects setup={tracking.data} value={row.tracking} onChange={(tags) => setTrip(index, { tracking: tags })} labelPrefix={`Mileage ${index + 1} `} />
+                  </td>
+                  <td data-label="Vehicle">
+                    <select aria-label={`Mileage ${index + 1} vehicle`} style={{ minWidth: 130 }} value={row.vehicleType} onChange={(event) => setTrip(index, { vehicleType: event.target.value as VehicleType })}>
+                      {VEHICLE_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {VEHICLE_TYPE_LABELS[type]}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td data-label="Kilometres" className={ui.num}>
+                    <input aria-label={`Mileage ${index + 1} kilometres`} inputMode="decimal" size={7} value={row.km} onChange={(event) => setTrip(index, { km: event.target.value })} required />
+                  </td>
+                  <td data-label="Account">
+                    <AccountSelect
+                      accounts={accounts.data!.accounts}
+                      value={row.accountCode}
+                      onChange={(code) => setTrip(index, { accountCode: code })}
+                      filter={takesReceipts}
+                      ariaLabel={`Mileage ${index + 1} account`}
+                      required
+                    />
+                  </td>
+                  <td>
+                    <Button size="small" variant="secondary" onClick={() => setMileage(mileage.filter((_, i) => i !== index))} disabled={rows.length + mileage.length === 1}>
+                      Remove
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
       <div className={ui.actions}>
-        <Button variant="secondary" onClick={() => setReceipts([...rows, blankReceipt(defaultTax)])} disabled={rows.length >= 100}>
+        <Button variant="secondary" onClick={() => setReceipts([...rows, blankReceipt(defaultTax)])} disabled={rows.length + mileage.length >= 100}>
           Add a receipt
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => setMileage([...mileage, blankMileage(mileage.at(-1)?.accountCode ?? motor, mileage.at(-1)?.vehicleType)])}
+          disabled={rows.length + mileage.length >= 100}
+        >
+          Add mileage
         </Button>
       </div>
       <div className={ui.grid3}>
         <Stat label="Excluding GST" value={<Money value={totals.subtotal} />} />
         <Stat label="GST" value={<Money value={totals.taxTotal} />} />
-        <Stat label="Total" value={<Money value={totals.total} />} />
+        <Stat label={mileage.length > 0 ? "Receipts total" : "Total"} value={<Money value={totals.total} />} />
       </div>
+      {mileage.length > 0 ? (
+        <p className={ui.muted}>
+          Plus mileage, worked out when you save: kilometres times IRD&apos;s kilometre rate for the vehicle (tier 2 after 14,000 km of your mileage
+          in the income year), with no GST. See the <Link href="/operations/settings/kilometre-rates">kilometre rates</Link>.
+        </p>
+      ) : null}
       <p className={ui.muted}>Choose &quot;No GST&quot; when the receipt isn&apos;t a valid GST receipt or the supplier isn&apos;t GST registered. Attach photos of the receipts after saving.</p>
       <div className={ui.actions}>
         <Button type="submit" disabled={busy}>
@@ -512,7 +638,50 @@ function PaymentRows({ organisationId, claim, onChanged }: { organisationId: str
   );
 }
 
+/** An admin's tier for a draft claim's mileage line (question 3). */
+function TierChoice({
+  organisationId,
+  claim,
+  lineOrder,
+  tier,
+  onChanged,
+}: {
+  organisationId: string;
+  claim: ExpenseClaim;
+  lineOrder: number;
+  tier: "tier1" | "tier2" | null;
+  onChanged: (claim: ExpenseClaim, message: string) => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <select
+        aria-label={`Mileage line ${lineOrder} tier`}
+        value={tier ?? ""}
+        onChange={async (event) => {
+          setError(null);
+          try {
+            const result = await api<{ claim: ExpenseClaim }>(`/api/expense-claims/${claim.id}/mileage-tier`, {
+              method: "POST",
+              body: { organisationId, lineOrder, tier: event.target.value || null },
+            });
+            onChanged(result.claim, "Mileage tier changed.");
+          } catch (caught) {
+            setError(errorMessage(caught));
+          }
+        }}
+      >
+        <option value="">Tier worked out</option>
+        <option value="tier1">All at tier 1</option>
+        <option value="tier2">All at tier 2</option>
+      </select>
+    </div>
+  );
+}
+
 export function ExpenseClaimView({ organisationId, claimId }: { organisationId: string; claimId: string }) {
+  const { can } = useWorkspace();
   const loaded = useApiData<{ claim: ExpenseClaim }>(`/api/expense-claims/${encodeURIComponent(claimId)}`, { organisationId });
   const tracking = useTracking(organisationId);
   const [updated, setUpdated] = useState<ExpenseClaim | null>(null);
@@ -563,6 +732,14 @@ export function ExpenseClaimView({ organisationId, claimId }: { organisationId: 
                   </td>
                   <td data-label="Description">
                     {receipt.description}
+                    {receipt.mileage ? (
+                      <div className={ui.muted}>
+                        {receipt.mileage.fromPlace} to {receipt.mileage.toPlace} · {mileageWorking(receipt.mileage)}
+                      </div>
+                    ) : null}
+                    {receipt.mileage && claim.status === "draft" && can("admin") ? (
+                      <TierChoice organisationId={organisationId} claim={claim} lineOrder={receipt.lineOrder} tier={receipt.mileage.tierOverride} onChanged={changed} />
+                    ) : null}
                     <TrackingTagsText setup={tracking.data} tags={receipt.tracking} />
                   </td>
                   <td data-label="Account">

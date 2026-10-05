@@ -1,16 +1,28 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
+import { billDuplicateWarnings } from "@/lib/bills/duplicates";
+import { inboxItemForBill } from "@/lib/bills/inbox";
 import { deleteBill, getBill, updateBill } from "@/lib/bills/service";
 import { listBillCredit } from "@/lib/supplier-credit-notes/applications";
 import { repeatingForBill } from "@/lib/repeating/bills";
 
 type Context = { params: Promise<{ billId: string }> };
 
-/** GET: the bill, the credit applied to it from supplier credit notes (active and removed, oldest first), and the repeating bill that made it (RB2). */
+/**
+ * GET: the bill, the credit applied to it from supplier credit notes (active
+ * and removed, oldest first), the repeating bill that made it (RB2), the
+ * bills inbox item it was made from (BI3), and likely duplicates (DU2, DU3).
+ */
 export const GET = route<Context>(async (request, context) => {
   const { billId } = await context.params;
   const result = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", async (tx) => {
     const bill = await getBill(tx, billId);
-    return { bill, creditApplied: await listBillCredit(tx, bill.id), fromRepeating: await repeatingForBill(tx, bill.id) };
+    return {
+      bill,
+      creditApplied: await listBillCredit(tx, bill.id),
+      fromRepeating: await repeatingForBill(tx, bill.id),
+      fromInbox: await inboxItemForBill(tx, bill.id),
+      duplicateWarnings: await billDuplicateWarnings(tx, bill.id),
+    };
   });
   return json(result);
 });

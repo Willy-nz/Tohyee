@@ -56,6 +56,8 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/stock-transfers.test.ts` (TR1-TR6) and
   `tests/integration/budgets.test.ts` (BU1-BU8) and
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
+  `tests/integration/expense-mileage.test.ts` (MI1-MI7) and
+  `tests/integration/bills-inbox.test.ts` (BI1-BI7, DU1-DU5) and
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
   `tests/integration/projects.test.ts` (PJ1-PJ13) and
   `tests/integration/bank-quick.test.ts` (BK17-BK25) and
@@ -7737,7 +7739,7 @@ Decided on 2 Oct 2026: decisions 291-295. What was asked is kept below.
 - Should the claim date default to the approval date (as built) or the
   latest receipt's date?
 
-## Bills inbox, reading documents, duplicate bills and mileage (examples not yet approved by Jess)
+## Bills inbox, reading documents, duplicate bills and mileage (approved by Jess, 5 Oct 2026)
 
 Item 3 of the Xero add-ons plan, after Dext (Jess, 5 Oct 2026: reading
 receipts and bills is done by **the AI connected in Tohyee's AI section only**,
@@ -7869,8 +7871,8 @@ published them); Mere is a bookkeeper.
   refused ("Split long trips into days").
 
 **Questions for Jess (bills inbox, duplicates and mileage), decided** (Jess
-chose the proposed answers on 5 Oct 2026; the examples themselves are still
-waiting for her approval):
+chose the proposed answers on 5 Oct 2026 and approved the examples the same
+day):
 1. Documents are read **only by the person's connected AI using Tohyee's
    tools**; Tohyee never sends a document to an AI itself.
 2. When a year's kilometre rates aren't published, the **latest rates

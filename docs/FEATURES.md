@@ -329,7 +329,7 @@ that something happened.
   more than was ordered (the database refuses too). An approved purchase
   order with no bills can be cancelled. Stock comes in on the bill (ST1).
   "Print or save as PDF" like quotes, or emailed as a PDF (below).
-- **Expense claims** (Purchases; EC1-EC12, not yet approved by Jess), like
+- **Expense claims** (Purchases; EC1-EC12, approved by Jess 5 Oct 2026), like
   Xero's older expense claims: a member enters the receipts they paid for
   themselves (date, supplier, description, account, tax code, amount
   including GST, optional tracking) and attaches the receipts as files;
@@ -340,8 +340,17 @@ that something happened.
   in parts, from a bank account) clears the liability and matches in bank
   reconciliation; payments and unpaid approved claims can be voided (exact
   reversals). Locked periods apply. The GST return counts claims like
-  bills (receipts with no tax code are left out). Mileage, batch payments
-  and a submit-only role aren't built.
+  bills (receipts with no tax code are left out). **Mileage** (MI1-MI7,
+  decisions 407-410): a claim can have mileage lines (date, from, to,
+  purpose, kilometres, vehicle type, account, 6120 by default) paid at IRD's
+  kilometre rates with no GST: tier 1 for the first 14,000 km of the
+  person's mileage per vehicle type in the income year, tier 2 after that,
+  with the working shown on the line. **Kilometre rates** (Settings) are per
+  income year and vehicle type; Tohyee starts with IRD's 2025-26 rates,
+  admins enter later years, and a year an approved claim used can't change.
+  Without the line's year's rates, the latest are used and the line says so.
+  An admin can choose a draft line's tier. Batch payments and a submit-only
+  role aren't built.
 - **Fixed assets** (Accounting; FA1-FA14, not yet approved by Jess), like
   Xero's fixed asset register: **asset types** (admins) with their asset,
   accumulated depreciation and depreciation expense accounts and a default
@@ -425,7 +434,22 @@ that something happened.
   rounded per line as on sales invoices. Approving posts Dr each line's
   account and GST / Cr accounts payable on the bill date, and voiding posts
   the exact reversal on the void date. Period locks apply; approving and
-  voiding are idempotent. See examples B1-B8.
+  voiding are idempotent. See examples B1-B8. **Likely duplicates** are
+  warned about on the bill (DU1-DU5, decisions 411-413): the same supplier
+  and total within 7 days, or another supplier with the same invoice number
+  and total. Approving one asks "Approve anyway?" and the history notes it;
+  a connected AI can't approve past a warning.
+- **Bills inbox** (Purchases, `/operations/bills/inbox`; BI1-BI7, decisions
+  404-406, tenant migration 0097), like Xero's files inbox and Dext: supplier
+  bills and receipts (PDF, JPG, PNG, HEIC) waiting to be entered, uploaded
+  several at a time or read from a **mailbox folder or Gmail label** (an
+  admin's own CRM mailbox or IMAP, every hour or with Check now, each email
+  once, with its sender and subject). **Make bill** opens a new draft with
+  the file beside it and attaches it when saved; files that aren't bills are
+  removed with a reason. The same file arriving twice says where it went
+  before. **The organisation's connected AI** (with a "Make drafts" key) can
+  list the inbox, read each file and make the draft bill from it, which a
+  person then checks and approves; Tohyee itself reads no documents (no OCR).
 - **Supplier payments** against one approved bill at a time: recording a
   payment posts Dr accounts payable / Cr the bank account on the payment date,
   and voiding it posts the exact reversal on the void date. A bill's amount
@@ -1304,7 +1328,8 @@ that something happened.
   AI page (`/operations/ai`) lets each member make personal access keys for
   the organisation (shown once, stored hashed, at most 10, revocable), each
   with a level: **Look only** (the default), **Make drafts** (also add and
-  edit contacts and make and edit draft invoices, bills and journals) or
+  edit contacts, make and edit draft invoices, bills and journals, add files
+  to the bills inbox and make draft bills from them) or
   **Make and post** (also approve invoices and bills, post draft journals
   and record payments). The level is capped by the person's role (a
   viewer's key only looks). It shows how to connect Claude Desktop (through
@@ -1312,7 +1337,8 @@ that something happened.
   to `/api/mcp`. The AI can look up the organisation's settings, chart of
   accounts, profit and loss, balance sheet, trial balance, aged receivables
   and payables, invoices, bills, contacts, account transactions, draft
-  journals and the GST return for a period, in a read-only database
+  journals, the GST return for a period and the bills inbox (reading each
+  file, BI4), in a read-only database
   transaction; writing tools use the same services as the screens, as the
   key's owner, and the history shows "<person> via AI key <name>". It
   **never deletes**: nothing at any level deletes, voids, archives, rolls

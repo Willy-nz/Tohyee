@@ -99,7 +99,8 @@ describeWithDatabase("multi-currency invoices and bills", () => {
         { foreignCurrency: true },
       ),
     );
-    const approved = await run((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("approve") }));
+    // Test bills share a supplier and total, so approving goes past the duplicate warning (DU2).
+    const approved = await run((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("approve"), approveDespiteWarnings: true }));
     bills[name] = approved.bill.id;
     return approved.bill;
   };
@@ -516,11 +517,11 @@ describeWithDatabase("multi-currency invoices and bills", () => {
       ),
     );
     expect(draft.bill).toMatchObject({ status: "draft", currencyCode: "EUR", dueDate: "2026-10-10", supplierInvoiceNumber: null, exchangeRate: "1.9", baseTotal: "190.00" });
-    await expect(run((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("approve") }))).rejects.toThrow(
+    await expect(run((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("approve"), approveDespiteWarnings: true }))).rejects.toThrow(
       "Add the supplier's invoice number before approving: this draft bill from Berlin Hosting GmbH doesn't have one yet.",
     );
     await run((tx) => updateBill(tx, draft.bill.id, { supplierInvoiceNumber: "BH-100" }));
-    const approved = await run((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("approve") }));
+    const approved = await run((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("approve"), approveDespiteWarnings: true }));
     expect(approved.bill).toMatchObject({ status: "approved", supplierInvoiceNumber: "BH-100", exchangeRate: "1.9", dueDate: "2026-10-10" });
     expect(await posted(approved.bill.approvalJournalId!)).toEqual([
       ["6040", "190.00", "0.00"],

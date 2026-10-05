@@ -141,11 +141,13 @@ type FormProps = {
   tracking: TrackingSetup;
   customSetup: CustomFieldSetup;
   bill?: Bill;
+  /** A new bill made from this bills inbox item (BI3): its file is attached when it's saved. */
+  inboxItemId?: string;
   onSaved: (bill: Bill) => void;
   onCancel: () => void;
 };
 
-function BillForm({ organisationId, items, baseCurrency, accounts, contacts: givenContacts, taxCodes, tracking, customSetup, bill, onSaved, onCancel }: FormProps) {
+function BillForm({ organisationId, items, baseCurrency, accounts, contacts: givenContacts, taxCodes, tracking, customSetup, bill, inboxItemId, onSaved, onCancel }: FormProps) {
   // Suppliers added here with "New supplier…" join the list straight away.
   const [added, setAdded] = useState<Contact[]>([]);
   const [addingSupplier, setAddingSupplier] = useState(false);
@@ -218,7 +220,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts: giv
           })
         : await api<{ bill: Bill }>("/api/bills", {
             method: "POST",
-            body: { organisationId, source: "ui", idempotencyKey, ...fields },
+            body: { organisationId, source: "ui", idempotencyKey, ...fields, ...(inboxItemId ? { inboxItemId } : {}) },
           });
       onSaved(result.bill);
     } catch (caught) {
@@ -608,12 +610,14 @@ export function BillEditor({
   organisationId,
   baseCurrency,
   bill,
+  inboxItemId,
   onSaved,
   onCancel,
 }: {
   organisationId: string;
   baseCurrency: string;
   bill?: Bill;
+  inboxItemId?: string;
   onSaved: (bill: Bill) => void;
   onCancel: () => void;
 }) {
@@ -641,6 +645,7 @@ export function BillEditor({
       tracking={tracking.data}
       customSetup={customSetup.data}
       bill={bill}
+      inboxItemId={inboxItemId}
       onSaved={onSaved}
       onCancel={onCancel}
     />

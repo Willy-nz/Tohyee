@@ -13,6 +13,7 @@ import { TrackingTagsText, useTracking } from "@/components/tracking";
 import { formatRate, formatUnitPrice, PaidStatusBadge } from "@/components/invoices/invoice-editor";
 import { Badge, Button, Card, Field, Notice, Page, PageHeader, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
+import type { DuplicateWarning } from "@/lib/bills/duplicates";
 import type { Bill } from "@/lib/bills/service";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, formatMoney, formatQuantity, todayInBrowser, personName } from "@/lib/format";
@@ -31,10 +32,13 @@ function journalHref(journalId: string): string {
 function BillActions({
   organisationId,
   bill,
+  warnings,
   onChanged,
 }: {
   organisationId: string;
   bill: Bill;
+  /** Likely duplicates (DU2, DU3): approving asks first. */
+  warnings: DuplicateWarning[];
   onChanged: (bill: Bill, message: string) => void;
 }) {
   const confirm = useConfirm();
@@ -60,13 +64,17 @@ function BillActions({
   }
 
   async function approve() {
-    if (!(await confirm(`Approve this bill? It's posted to the ledger on ${formatDate(bill.billDate)}, owing ${bill.contactName} through accounts payable. After that it can only be voided.`))) {
+    const question =
+      warnings.length > 0
+        ? `${warnings.map((warning) => warning.message).join(". ")}. Approve anyway? It's posted to the ledger on ${formatDate(bill.billDate)}, and the history notes you approved it despite the warning.`
+        : `Approve this bill? It's posted to the ledger on ${formatDate(bill.billDate)}, owing ${bill.contactName} through accounts payable. After that it can only be voided.`;
+    if (!(await confirm(question))) {
       return;
     }
     void run(async () => {
       const result = await api<{ bill: Bill }>(`/api/bills/${bill.id}/approve`, {
         method: "POST",
-        body: { organisationId, source: "ui", idempotencyKey: approveKey },
+        body: { organisationId, source: "ui", idempotencyKey: approveKey, approveDespiteWarnings: warnings.length > 0 },
       });
       onChanged(result.bill, `Approved bill ${result.bill.supplierInvoiceNumber} and posted it to the ledger.`);
     });
@@ -121,7 +129,7 @@ function BillActions({
       {bill.status === "draft" ? (
         <div className={ui.actions}>
           <Button onClick={approve} disabled={busy}>
-            {busy ? "Working…" : "Approve"}
+            {busy ? "Working…" : warnings.length > 0 ? "Approve anyway…" : "Approve"}
           </Button>
           <Button variant="secondary" onClick={() => router.push(`/operations/bills/${bill.id}/edit`)} disabled={busy}>
             Edit
@@ -236,6 +244,8 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
     bill: Bill;
     creditApplied: SupplierCreditNoteApplication[];
     fromRepeating: { id: string; scheduledDate: string } | null;
+    fromInbox: { id: string; fileName: string } | null;
+    duplicateWarnings: DuplicateWarning[];
   }>(
     `/api/bills/${encodeURIComponent(billId)}`,
     { organisationId },
@@ -259,10 +269,22 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
   }
   const bill = updated ?? details.data.bill;
   const hasTax = bill.amountsMode !== "no_tax";
-  const { creditApplied, fromRepeating } = details.data;
+  const { creditApplied, fromRepeating, fromInbox } = details.data;
+  // Approving or voiding changes what counts as a duplicate; the next load shows it.
+  const warnings = updated ? [] : details.data.duplicateWarnings;
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
+      {warnings.length > 0 ? (
+        <Notice tone="warning">
+          {warnings.map((warning) => (
+            <div key={`${warning.kind}-${warning.billId}`}>
+              <Link href={`/operations/bills/${warning.billId}`}>{warning.message}</Link>
+            </div>
+          ))}
+          {bill.status === "draft" ? <div>Check it isn&apos;t the same bill before approving it.</div> : null}
+        </Notice>
+      ) : null}
       {bill.status === "approved" && bill.paidStatus !== "paid" ? (
         <UnusedCredit organisationId={organisationId} bill={bill} />
       ) : null}
@@ -294,6 +316,11 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
         {bill.purchaseOrderId ? (
           <div>
             From purchase order <Link href={`/operations/purchase-orders/${bill.purchaseOrderId}`}>{bill.purchaseOrderNumber}</Link>.
+          </div>
+        ) : null}
+        {fromInbox ? (
+          <div>
+            Made from <Link href="/operations/bills/inbox">bills inbox</Link> file {fromInbox.fileName} (it&apos;s attached below).
           </div>
         ) : null}
         {fromRepeating ? (
@@ -397,6 +424,7 @@ function BillView({ organisationId, billId }: { organisationId: string; billId: 
           key={bill.status}
           organisationId={organisationId}
           bill={bill}
+          warnings={warnings}
           onChanged={(next, text) => {
             setUpdated(next);
             setMessage(text);

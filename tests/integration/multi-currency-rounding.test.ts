@@ -111,7 +111,8 @@ describeWithDatabase("multi-currency rounding and revaluing each document", () =
           { foreignCurrency: true },
         ),
       );
-      return (await run((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("approve") }))).bill;
+      // Test bills share a supplier and total, so approving goes past the duplicate warning (DU2).
+      return (await run((tx) => approveBill(tx, draft.bill.id, { idempotencyKey: key("approve"), approveDespiteWarnings: true }))).bill;
     };
     const supplierCredit = async (contactId: string, number: string, creditNoteDate: string, amount: string, exchangeRate: string) => {
       const draft = await run((tx) =>

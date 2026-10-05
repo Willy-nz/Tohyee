@@ -49,9 +49,12 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ customer_overpayment_applications   overpayments applied to other sales invoices
 ├─ customer_overpayment_refunds        overpayments paid back to customers
 ├─ bills, bill_lines      bills from suppliers (with the purchase order and line they came from, if any)
+├─ bill_inbox_items       the bills inbox: files waiting to become bills (contents, SHA-256, sender and subject), the bill made, or why removed
+├─ bill_inbox_mailboxes, bill_inbox_mail_seen   mailbox folders read into the inbox (IMAP password encrypted) and the messages each place has given
+├─ mileage_rates          IRD kilometre rates per income year and vehicle type (tier 1 and tier 2)
 ├─ purchase_orders, purchase_order_lines, purchase_order_numbering   purchase orders (post nothing; copied to bills)
 ├─ supplier_payments      money paid against bills
-├─ expense_claims, expense_claim_receipts, expense_claim_payments   staff expense claims, their receipts and payments
+├─ expense_claims, expense_claim_receipts, expense_claim_payments   staff expense claims, their receipts and mileage lines (kind, km, vehicle, rates used) and payments
 ├─ payroll_employees        employee payroll details (IRD and bank details encrypted), job title, reports-to, pay and employee group
 ├─ payroll_pay_rates        pay rate history: salary or hourly rate from a date (append-only)
 ├─ payroll_cost_allocations, payroll_cost_allocation_lines   where pay is charged, split by % from a date (append-only; lines total 100.00%)
@@ -1055,6 +1058,26 @@ Enforced by the app (and covered by tests):
   pattern: an OAuth token from the app's client credentials, then
   `/v1/reporting/balances` and each linked currency's
   `/v1/reporting/transactions` in 31-day pieces, outside any transaction.
+- The bills inbox (`src/lib/bills/inbox.ts`, `inbox-mailbox.ts`, decisions
+  404-406) keeps files in `bill_inbox_items`; making a bill calls
+  `createBill`, then `addAttachment` and marks the item, in one
+  transaction. Mailboxes are read with the same helpers as automatic
+  statement files (`src/lib/analytics/report-email-providers.ts`, which now
+  also returns each message's sender and subject), a lease per mailbox, each
+  attachment in its own transaction and each message remembered in
+  `bill_inbox_mail_seen`. MCP tool answers can now carry a file
+  (`ToolFileAnswer` in `src/lib/ai/tools.ts`): the server sends the JSON
+  text, then the file as `image` or embedded `resource` content
+  (`src/lib/ai/mcp-protocol.ts`). Duplicate warnings
+  (`src/lib/bills/duplicates.ts`) are worked out when the bill is shown and
+  again in `approveBill`, which refuses without `approveDespiteWarnings`.
+- Mileage (`src/lib/expense-claims/mileage.ts`, decisions 407-410) works
+  out each line inside `resolveReceipts`: the rates for the line's income
+  year (or the latest), kilometres already claimed per vehicle type from the
+  claimant's submitted and approved claims, then the claim's earlier lines.
+  The working is stored on the line, so approving and voiding are unchanged;
+  `recalculateDraftMileage` reworks drafts when rates are saved
+  (`mileage-rates.ts`).
 - Wise feeds (`src/lib/bank/wise/`, decisions 400-403) read `/profiles`,
   `/profiles/{id}/balances` and each linked balance's `statement.json` in
   469-day pieces outside any transaction, sort the transactions oldest first

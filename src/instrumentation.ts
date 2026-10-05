@@ -55,6 +55,10 @@
  * And Wise feeds, which bring each organisation's Wise balance statements
  * in when due (off with TOHYEE_WISE_SCHEDULER=off).
  *
+ * And bills inbox mailboxes, which bring PDF and picture attachments into
+ * each organisation's bills inbox when due (off with
+ * TOHYEE_BILL_INBOX_SCHEDULER=off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -204,6 +208,15 @@ export async function register() {
       startWiseScheduler();
     } catch (error) {
       console.warn("[tohyee] Wise syncs couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (process.env.TOHYEE_BILL_INBOX_SCHEDULER !== "off") {
+    try {
+      const { startBillInboxScheduler } = await import("@/lib/bills/inbox-mailbox");
+      startBillInboxScheduler();
+    } catch (error) {
+      console.warn("[tohyee] Bills inbox mailboxes couldn't start:", error instanceof Error ? error.message : error);
     }
   }
 

@@ -222,6 +222,12 @@ function summarise(eventType: string, details: Record<string, unknown>): string 
         : "Journal corrected";
     case "ledger.journal_posted":
       return "Journal posted";
+    case "bill.approved":
+      return Array.isArray(details.approvedDespite) && details.approvedDespite.length > 0
+        ? `Bill approved despite a possible duplicate: ${details.approvedDespite.filter((item) => typeof item === "string").join("; ")}`
+        : "Bill approved";
+    case "bill.made_from_inbox":
+      return `Made from bills inbox item ${text(details.inboxItemId) ?? ""} (${text(details.fileName) ?? "file"})`;
     case "document_email.queued":
       return `Email to ${addresses(details.to)} asked for: "${text(details.subject) ?? ""}"`;
     case "document_email.sent": {
