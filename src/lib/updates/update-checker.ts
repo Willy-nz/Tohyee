@@ -1,4 +1,10 @@
-import { getLatestReleaseCheck, type LatestReleaseCheck, type ReleaseAsset } from "@/lib/updates/server-updates";
+import {
+  getLatestReleaseCheck,
+  isTimeout,
+  UPDATE_FETCH_TIMEOUT_MS,
+  type LatestReleaseCheck,
+  type ReleaseAsset,
+} from "@/lib/updates/server-updates";
 
 /**
  * Checks GitHub for a new Tohyee release by itself (decision 328): a minute
@@ -145,15 +151,24 @@ export async function windowsSetupFor(
   const sidecar = check.release.assets.find((other) => other.name.toLowerCase() === `${asset.name.toLowerCase()}.sha256`);
   if (sidecar) {
     try {
-      const response = await fetcher(sidecar.downloadUrl, { headers: { "user-agent": "tohyee-update-check" }, cache: "no-store" });
+      const response = await fetcher(sidecar.downloadUrl, {
+        headers: { "user-agent": "tohyee-update-check" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(UPDATE_FETCH_TIMEOUT_MS),
+      });
       if (response.ok) {
         const hash = sha256FromFile(await response.text(), asset.name);
         if (hash) {
           return { setup: { name: asset.name, downloadUrl: asset.downloadUrl, size: asset.size, sha256: hash, sha256From: "sha256-file" } };
         }
       }
-    } catch {
-      // Falls through to the refusal below.
+    } catch (error) {
+      if (isTimeout(error)) {
+        return {
+          problem: `GitHub didn't send the SHA-256 fingerprint for ${asset.name} within ${UPDATE_FETCH_TIMEOUT_MS / 1000} seconds, so the download can't be checked. Try again later, or download it from the release page and run it yourself.`,
+        };
+      }
+      // Anything else falls through to the refusal below.
     }
   }
   return {
