@@ -351,6 +351,8 @@ export async function linkSimpleFinAccount(
   }
   const akahu = await tx.query("select 1 from bank_account_settings where account_id = $1 and feed_active", [accountId]);
   if (akahu.rowCount) throw new ConflictError(`${account.code} already has an Akahu bank feed. Stop it first.`);
+  const stripe = await tx.query("select 1 from stripe_links where account_id = $1 and active", [accountId]);
+  if (stripe.rowCount) throw new ConflictError(`${account.code} is linked to Stripe. Unlink it first.`);
   const taken = await tx.query("select 1 from simplefin_links where active and simplefin_account_id = $1 and account_id <> $2", [
     simplefinAccountId,
     accountId,

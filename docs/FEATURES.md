@@ -555,7 +555,13 @@ that something happened.
   Bridge account with a setup token, links each account (its currency must
   match, so USD accounts work), chooses the bank's time zone, and transactions
   come in every 6 hours or with Sync now, within the Bridge's 24 requests a
-  day (examples SF1-SF10, decisions 388-391). Duplicates are
+  day (examples SF1-SF10, decisions 388-391). **Stripe as a bank feed**:
+  the organisation's Stripe balance becomes a bank account (e.g. 1050
+  Stripe), connected with a read-only restricted key; each charge comes in at
+  its full amount, with Stripe's fees and any tax on them as separate lines,
+  and refunds, disputes and payouts as Stripe reports them, so charges match
+  invoices and payouts reconcile as transfers (examples ST1-ST10, decisions
+  392-395). Duplicates are
   skipped; lines that look like a file-and-feed duplicate are flagged. Each
   line is reconciled by matching what's already posted (within 60 days),
   paying invoices or bills, creating spend or receive money (with GST), or a

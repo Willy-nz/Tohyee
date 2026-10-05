@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { ACCOUNT_TYPE_LABELS, FeedBadge } from "@/components/bank/common";
 import { CurrencyMoney } from "@/components/bank/foreign";
 import { SimpleFinSettingsCard } from "@/components/bank/simplefin";
+import { StripeSettingsCard } from "@/components/bank/stripe";
 import { Money, RequireOrganisation } from "@/components/books";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
@@ -319,7 +320,7 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
                       )}
                     </td>
                     <td>
-                      <FeedBadge feed={account.feed} simplefin={account.simplefin} />
+                      <FeedBadge feed={account.feed} simplefin={account.simplefin} stripe={account.stripe} />
                       {account.feed.akahuAccountName ? <div className={ui.muted}>{account.feed.akahuAccountName}</div> : null}
                     </td>
                   </tr>
@@ -344,6 +345,12 @@ function BankAccounts({ organisationId }: { organisationId: string }) {
         description="For overseas bank accounts (mostly US banks): this organisation's own SimpleFIN Bridge account brings in their transactions. NZ banks use Akahu."
       >
         <SimpleFinSettingsCard organisationId={organisationId} />
+      </Card>
+      <Card
+        title="Stripe"
+        description="This organisation's Stripe balance as a bank account: charges, Stripe's fees, refunds, disputes and payouts come in as statement lines."
+      >
+        <StripeSettingsCard organisationId={organisationId} />
       </Card>
     </>
   );
