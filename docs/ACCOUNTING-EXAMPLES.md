@@ -1380,7 +1380,7 @@ history to bring in.
   possible duplicate of the feed line.
 - **BK16** Akahu's balance for the account is kept as the statement balance
   with its date, shown next to the ledger balance.
-- **BK29** (issue #147; to be checked by Jess) An Akahu account linked to
+- **BK29** (issue #147; approved by Jess, 5 Oct 2026, for every API feed) An Akahu account linked to
   1000 with a start date of 20 May 2026. The first sync brings in +0.10 on
   4 Jun and +0.20 on 5 Jun, read exactly from Akahu's numbers 0.1 and 0.2; the
   next brings in -46.00 on 20 Jun. The first import is deleted. A -230.00
@@ -2684,10 +2684,11 @@ Date,Amount,Payee,Particulars,Code,Reference,Balance
   received) took 3,378.40 "at carrying value" (gain 21.60), then the 1 Aug
   reversal credited 1030 another 20.25: USD 0.00 but **NZD -20.25**, with
   20.25 of the real gain missing.
-  - **Refused**: "1030 (USD account) was revalued on 31 Jul 2026 (FXREV-n),
-    and that isn't reversed until 1 Aug 2026. A transfer out dated before
+  - **Refused**: "1030 (USD account) was revalued on 2026-07-31 (FXREV-n),
+    and that isn't reversed until 2026-08-01. A transfer out dated before
     then isn't supported: void the revaluation, post the transfer, then
-    revalue again, or date the transfer 1 Aug 2026 or later." The same for a
+    revalue again, or date the transfer 2026-08-01 or later." (Dates as in
+    the existing MC8 message.) The same for a
     transfer out dated before the revaluation (e.g. 30 Jul), which would
     leave the revaluation counting money that had already gone. Dated 1 Aug
     or later it's allowed (FXB8).
@@ -2710,8 +2711,8 @@ Date,Amount,Payee,Particulars,Code,Reference,Balance
 - **FXB13 Overlapping revaluations of a bank account** (#151; approved by
   Jess, 5 Oct 2026). Had FXB7's reversal been dated 1 Sep, a revaluation of
   1030 on 15 Aug would be refused, as receivables and payables already are
-  (MC8): "Account 1030 USD was revalued on 31 Jul 2026 (…), and that isn't
-  reversed until 1 Sep 2026. Revaluing it again before then isn't supported
+  (MC8): "Account 1030 USD was revalued on 2026-07-31 (…), and that isn't
+  reversed until 2026-09-01. Revaluing it again before then isn't supported
   yet." One dated 1 Sep or later is allowed.
 - **FXB14 A currency with no cents** (#151; approved by Jess, 5 Oct 2026). 1050
   **JPY account** (bank, JPY), opening foreign balance JPY 100,000 = NZD
