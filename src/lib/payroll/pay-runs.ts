@@ -328,6 +328,8 @@ type EmployeeRow = {
   kiwisaver_employee_rate: string;
   kiwisaver_employer_rate: string;
   esct_rate: string | null;
+  kiwisaver_reduction_from: string | null;
+  kiwisaver_reduction_to: string | null;
   is_archived: boolean;
   start_date: string;
   finish_date: string | null;
@@ -371,6 +373,8 @@ async function loadEmployees(tx: OrgTx, run: RunRow): Promise<EmployeeRow[]> {
             ${pick("kiwisaver_employee_rate", "::text")} as kiwisaver_employee_rate,
             ${pick("kiwisaver_employer_rate", "::text")} as kiwisaver_employer_rate,
             ${pick("esct_rate", "::text")} as esct_rate,
+            ${pick("kiwisaver_reduction_from", "::text")} as kiwisaver_reduction_from,
+            ${pick("kiwisaver_reduction_to", "::text")} as kiwisaver_reduction_to,
             e.is_archived, e.start_date::text, e.finish_date::text,
             pe.gross::text, pe.taxable_earnings::text, pe.non_taxable_earnings::text, pe.kiwisaver_earnings::text,
             pe.paye::text, pe.student_loan_deduction::text, pe.kiwisaver_employee::text, pe.deductions::text,
@@ -515,6 +519,10 @@ function calculate(
       kiwiSaverEmployeeRate: employee.kiwisaver_employee_rate,
       kiwiSaverEmployerRate: employee.kiwisaver_employer_rate,
       esctRate: employee.esct_rate,
+      kiwiSaverReduction:
+        employee.kiwisaver_reduction_from && employee.kiwisaver_reduction_to
+          ? { from: employee.kiwisaver_reduction_from, to: employee.kiwisaver_reduction_to }
+          : null,
       lines: lines.map((line) => ({
         category: line.category === "deduction" ? "deduction" : "earnings",
         taxable: line.subject_to_paye,
@@ -1681,7 +1689,8 @@ export async function approvePayRun(
               net_pay = $18, kiwisaver_employer = $19, esct = $20, kiwisaver_employer_net = $21, employer_cost = $22,
               extra_pay = $23, extra_pay_tax = $24, extra_pay_tax_rate = $25, extra_pay_method = $26, extra_pay_annualised = $27,
               lump_sum_lowest_rate = $28, finish_date = $29,
-              bank_account_ciphertext = (select e.bank_account_ciphertext from payroll_employees e where e.id = $2)
+              bank_account_ciphertext = (select e.bank_account_ciphertext from payroll_employees e where e.id = $2),
+              kiwisaver_reduction_from = $30, kiwisaver_reduction_to = $31
         where pay_run_id = $1 and employee_id = $2`,
       [
         run.id,
@@ -1713,6 +1722,8 @@ export async function approvePayRun(
         isPositive(dec(pay.extraPay)) ? (entry.basis?.annualised ?? null) : null,
         pay.lumpSumLowestRate,
         entry.finishDate,
+        entry.employee.kiwisaver_reduction_from,
+        entry.employee.kiwisaver_reduction_to,
       ],
     );
   }

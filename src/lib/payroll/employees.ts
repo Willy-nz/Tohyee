@@ -36,6 +36,9 @@ export type Employee = {
   kiwiSaverEmployerRate: string;
   /** For employer KiwiSaver contributions (spec 5.21); null until it's set (PRUN8). */
   esctRate: string | null;
+  /** A KiwiSaver temporary rate reduction approved by IRD, with the dates on IRD's approval (PR13b). */
+  kiwiSaverReductionFrom: string | null;
+  kiwiSaverReductionTo: string | null;
   studentLoan: boolean;
   payFrequency: (typeof PAY_FREQUENCIES)[number];
   payBasis: (typeof PAY_BASES)[number];
@@ -76,6 +79,8 @@ type EmployeeRow = {
   kiwisaver_employee_rate: string;
   kiwisaver_employer_rate: string;
   esct_rate: string | null;
+  kiwisaver_reduction_from: string | null;
+  kiwisaver_reduction_to: string | null;
   student_loan: boolean;
   pay_frequency: (typeof PAY_FREQUENCIES)[number];
   pay_basis: (typeof PAY_BASES)[number];
@@ -104,7 +109,8 @@ type Extras = {
 const EMPLOYEE_COLUMNS = `
   id, first_name, last_name, email, phone, postal_address, date_of_birth::text,
   tax_code, ird_number_ciphertext, kiwisaver_status, kiwisaver_employee_rate::text,
-  kiwisaver_employer_rate::text, esct_rate::text, student_loan, pay_frequency, pay_basis,
+  kiwisaver_employer_rate::text, esct_rate::text, kiwisaver_reduction_from::text, kiwisaver_reduction_to::text,
+  student_loan, pay_frequency, pay_basis,
   annual_salary::text, hourly_rate::text, ordinary_hours_per_week::text,
   start_date::text, finish_date::text, bank_account_ciphertext, is_archived,
   job_title, reports_to_id, pay_group_id, employee_group_id,
@@ -176,6 +182,14 @@ function parseEmployee(input: Record<string, unknown>, current?: EmployeeRow): P
     }
     esctRate = rate;
   }
+  const reductionFrom = parseOptionalIsoDate(currentValue(input, "kiwiSaverReductionFrom", current?.kiwisaver_reduction_from), "Temporary rate reduction from");
+  const reductionTo = parseOptionalIsoDate(currentValue(input, "kiwiSaverReductionTo", current?.kiwisaver_reduction_to), "Temporary rate reduction to");
+  if ((reductionFrom === null) !== (reductionTo === null)) {
+    throw new ValidationError("A temporary rate reduction needs both dates on IRD's approval: from and to.");
+  }
+  if (reductionFrom && reductionTo && reductionTo < reductionFrom) {
+    throw new ValidationError("A temporary rate reduction can't end before it starts.");
+  }
   const studentLoan = requireBoolean(currentValue(input, "studentLoan", current?.student_loan), "Student loan");
   const payFrequency = requireOneOf(currentValue(input, "payFrequency", current?.pay_frequency), "Pay frequency", PAY_FREQUENCIES);
   // Pay is set once here, as the starting pay; after that it changes under Pay rates, with a date (PE7).
@@ -221,6 +235,8 @@ function parseEmployee(input: Record<string, unknown>, current?: EmployeeRow): P
     kiwisaver_employee_rate: kiwiSaverEmployeeRate,
     kiwisaver_employer_rate: kiwiSaverEmployerRate,
     esct_rate: esctRate,
+    kiwisaver_reduction_from: reductionFrom,
+    kiwisaver_reduction_to: reductionTo,
     student_loan: studentLoan,
     pay_frequency: payFrequency,
     pay_basis: pay.payBasis,
@@ -264,6 +280,8 @@ function toEmployeeWithoutSecrets(row: EmployeeRow, extras: Extras): Omit<Employ
     kiwiSaverEmployeeRate: toPlainString(dec(row.kiwisaver_employee_rate)),
     kiwiSaverEmployerRate: toPlainString(dec(row.kiwisaver_employer_rate)),
     esctRate: plain(row.esct_rate),
+    kiwiSaverReductionFrom: row.kiwisaver_reduction_from,
+    kiwiSaverReductionTo: row.kiwisaver_reduction_to,
     studentLoan: row.student_loan,
     payFrequency: row.pay_frequency,
     payBasis: pay.payBasis,
@@ -381,10 +399,10 @@ export async function createEmployee(
        tax_code, ird_number_ciphertext, kiwisaver_status, kiwisaver_employee_rate, kiwisaver_employer_rate,
        student_loan, pay_frequency, pay_basis, annual_salary, hourly_rate, ordinary_hours_per_week,
        start_date, finish_date, bank_account_ciphertext, job_title, reports_to_id, pay_group_id, employee_group_id,
-       esct_rate
+       esct_rate, kiwisaver_reduction_from, kiwisaver_reduction_to
      ) values (
        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
-       $23, $24, $25, $26, $27
+       $23, $24, $25, $26, $27, $28, $29
      )
      on conflict (idempotency_key) do nothing
      returning ${EMPLOYEE_COLUMNS}`,
@@ -416,6 +434,8 @@ export async function createEmployee(
       parsed.pay_group_id,
       parsed.employee_group_id,
       parsed.esct_rate,
+      parsed.kiwisaver_reduction_from,
+      parsed.kiwisaver_reduction_to,
     ],
   );
   const row = inserted.rows[0];
@@ -466,7 +486,8 @@ export async function updateEmployee(tx: OrgTx, id: string, input: Record<string
        tax_code = $8, ird_number_ciphertext = $9, kiwisaver_status = $10, kiwisaver_employee_rate = $11,
        kiwisaver_employer_rate = $12, student_loan = $13, pay_frequency = $14, start_date = $15,
        finish_date = $16, bank_account_ciphertext = $17, job_title = $18, reports_to_id = $19,
-       pay_group_id = $20, employee_group_id = $21, esct_rate = $22, updated_at = now()
+       pay_group_id = $20, employee_group_id = $21, esct_rate = $22, kiwisaver_reduction_from = $23,
+       kiwisaver_reduction_to = $24, updated_at = now()
      where id = $1
      returning ${EMPLOYEE_COLUMNS}`,
     [
@@ -492,6 +513,8 @@ export async function updateEmployee(tx: OrgTx, id: string, input: Record<string
       parsed.pay_group_id,
       parsed.employee_group_id,
       parsed.esct_rate,
+      parsed.kiwisaver_reduction_from,
+      parsed.kiwisaver_reduction_to,
     ],
   );
   const row = result.rows[0];
@@ -507,7 +530,9 @@ export async function updateEmployee(tx: OrgTx, id: string, input: Record<string
     parsed.kiwisaver_status !== current.kiwisaver_status ||
     !sameRate(parsed.kiwisaver_employee_rate, current.kiwisaver_employee_rate) ||
     !sameRate(parsed.kiwisaver_employer_rate, current.kiwisaver_employer_rate) ||
-    !sameRate(parsed.esct_rate, current.esct_rate)
+    !sameRate(parsed.esct_rate, current.esct_rate) ||
+    parsed.kiwisaver_reduction_from !== current.kiwisaver_reduction_from ||
+    parsed.kiwisaver_reduction_to !== current.kiwisaver_reduction_to
   ) {
     await markEmployeeDetailsChanged(tx, id);
   }

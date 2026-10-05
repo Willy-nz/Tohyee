@@ -35,6 +35,8 @@ const EMPTY_DRAFT: Draft = {
   kiwiSaverEmployeeRate: "",
   kiwiSaverEmployerRate: "",
   esctRate: null,
+  kiwiSaverReductionFrom: "",
+  kiwiSaverReductionTo: "",
   studentLoan: null,
   payFrequency: "",
   payBasis: "",
@@ -99,6 +101,8 @@ function fieldsFrom(draft: Draft, isNew: boolean) {
       ...rest,
       ...job,
       esctRate: draft.esctRate || null,
+      kiwiSaverReductionFrom: draft.kiwiSaverReductionFrom || null,
+      kiwiSaverReductionTo: draft.kiwiSaverReductionTo || null,
       email: draft.email || null,
       phone: draft.phone || null,
       postalAddress: draft.postalAddress || null,
@@ -110,6 +114,8 @@ function fieldsFrom(draft: Draft, isNew: boolean) {
     ...draft,
     ...job,
     esctRate: draft.esctRate || null,
+    kiwiSaverReductionFrom: draft.kiwiSaverReductionFrom || null,
+    kiwiSaverReductionTo: draft.kiwiSaverReductionTo || null,
     email: draft.email || null,
     phone: draft.phone || null,
     postalAddress: draft.postalAddress || null,
@@ -262,6 +268,12 @@ export function PayrollEmployees({ organisationId }: { organisationId: string })
                 <option value="">Not set</option>
                 {ESCT_RATES.map((rate) => <option key={rate} value={rate}>{rate}%</option>)}
               </select>
+            </Field>
+            <Field label="Temporary rate reduction from" hint="Only if IRD has approved a temporary rate reduction: the dates on IRD's approval.">
+              <input type="date" value={draft.kiwiSaverReductionFrom ?? ""} onChange={(event) => change("kiwiSaverReductionFrom", event.target.value)} />
+            </Field>
+            <Field label="Temporary rate reduction to">
+              <input type="date" value={draft.kiwiSaverReductionTo ?? ""} onChange={(event) => change("kiwiSaverReductionTo", event.target.value)} />
             </Field>
             <Field label="Pay frequency">
               <select required value={draft.payFrequency} onChange={(event) => change("payFrequency", event.target.value as Draft["payFrequency"])}>

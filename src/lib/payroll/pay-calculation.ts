@@ -10,7 +10,7 @@ import {
   kiwiSaverEmployerContribution,
 } from "./calculations";
 import type { PayFrequency } from "./groups";
-import { NOT_SUPPORTED } from "./rates";
+import { NOT_SUPPORTED, payrollRatesOn } from "./rates";
 
 /**
  * One employee's pay in a pay run (examples PRUN1-PRUN4, PRUN8), on top of
@@ -97,6 +97,8 @@ export type EmployeePayInput = {
   kiwiSaverEmployeeRate: string;
   kiwiSaverEmployerRate: string;
   esctRate: string | null;
+  /** A KiwiSaver temporary rate reduction approved by IRD, with its dates (PR13b). */
+  kiwiSaverReduction?: { from: string; to: string } | null;
   lines: readonly PayLineInput[];
   /**
    * The annualised income the extra pays are taxed against (annualiseForExtraPay,
@@ -195,7 +197,14 @@ export function calculateEmployeePay(input: EmployeePayInput): EmployeePayResult
   let esct = "0.00";
   let kiwiSaverEmployerNet = "0.00";
   if (input.kiwiSaverStatus === "enrolled") {
-    const contribution = { gross: money(kiwiSaverEarnings), payDate: input.payDate };
+    // The reduction applies to pays dated within IRD's approval, once IRD has one (1 April 2026, PR13b).
+    const reduction = input.kiwiSaverReduction;
+    const temporaryRateReduction =
+      !!reduction &&
+      reduction.from <= input.payDate &&
+      input.payDate <= reduction.to &&
+      payrollRatesOn(input.payDate).kiwiSaver.temporaryRateReduction !== null;
+    const contribution = { gross: money(kiwiSaverEarnings), payDate: input.payDate, temporaryRateReduction };
     kiwiSaverEmployee = kiwiSaverEmployeeContribution({ ...contribution, rate: input.kiwiSaverEmployeeRate });
     kiwiSaverEmployer = kiwiSaverEmployerContribution({ ...contribution, rate: input.kiwiSaverEmployerRate });
     if (cmp(dec(kiwiSaverEmployer), ZERO_DECIMAL) > 0) {
