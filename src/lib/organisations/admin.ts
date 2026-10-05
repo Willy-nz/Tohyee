@@ -1,4 +1,5 @@
 import { type AdminActor, writeAdminAuditEvent } from "@/lib/audit";
+import { getAdminPool } from "@/lib/db/pools";
 import { normaliseEmail } from "@/lib/auth/service";
 import { organisationDatabasePrefix } from "@/lib/db/connection";
 import { getOrganisationPool } from "@/lib/db/pools";
@@ -53,6 +54,12 @@ export async function createOrganisation(
   const ownerEmail =
     input.ownerEmail == null || input.ownerEmail === "" ? actor.email : normaliseEmail(input.ownerEmail);
   const databaseName = databaseNameFor(id);
+  // A database by that name that this server doesn't know (another install on the same PostgreSQL, or one left
+  // behind) is never taken over (#136).
+  const taken = await getAdminPool().query("select 1 from pg_database where datname = $1", [databaseName]);
+  if (taken.rowCount) {
+    throw new ConflictError(`There's already a database called ${databaseName} on this PostgreSQL server. Choose another ID.`);
+  }
 
   await withCoreTransaction(async (client) => {
     const owner = await client.query<{ id: string }>(

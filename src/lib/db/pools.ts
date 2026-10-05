@@ -91,11 +91,16 @@ export function getOrganisationPool(databaseName: string): pg.Pool {
 
   const maxPools = positiveInt(process.env.TOHYEE_MAX_ORG_POOLS, 25);
   if (pools.organisations.size > maxPools) {
-    const [oldestName, oldest] = [...pools.organisations.entries()]
-      .filter(([name]) => name !== databaseName)
+    // Only an idle pool is closed: ending one with a transaction in flight would break it (#136). If every pool
+    // is busy, there are a few more open for a while.
+    const idle = (entry: { pool: pg.Pool }) => entry.pool.totalCount === entry.pool.idleCount && entry.pool.waitingCount === 0;
+    const oldest = [...pools.organisations.entries()]
+      .filter(([name, entry]) => name !== databaseName && idle(entry))
       .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)[0];
-    pools.organisations.delete(oldestName);
-    void oldest.pool.end().catch(() => undefined);
+    if (oldest) {
+      pools.organisations.delete(oldest[0]);
+      void oldest[1].pool.end().catch(() => undefined);
+    }
   }
 
   return pool;

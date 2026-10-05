@@ -1,5 +1,6 @@
 import { NZ_DEFAULT_CHART } from "@/lib/accounts/default-chart";
 import { classOfType } from "@/lib/accounts/types";
+import { coreDatabaseName } from "@/lib/db/connection";
 import { restrictDatabaseConnect } from "@/lib/db/grants";
 import { applyTenantMigrations } from "@/lib/db/migrations";
 import { connectAsAdmin, getAdminPool } from "@/lib/db/pools";
@@ -32,6 +33,20 @@ async function databaseExists(databaseName: string): Promise<boolean> {
  * Safe to run again after a failure; every step is idempotent.
  */
 export async function provisionOrganisation(organisationId: string): Promise<void> {
+  // One provisioning of an organisation at a time, whichever process starts it (#136): two at once could both
+  // create and migrate the database.
+  // Its own connection (not the admin pool's), so waiting for the lock never holds a connection provisioning needs.
+  const lock = await connectAsAdmin(coreDatabaseName());
+  try {
+    await lock.query("select pg_advisory_lock(hashtext($1))", [`tohyee-provision:${organisationId}`]);
+    await provisionLocked(organisationId);
+  } finally {
+    // Ending the session releases the lock too.
+    await lock.end().catch(() => undefined);
+  }
+}
+
+async function provisionLocked(organisationId: string): Promise<void> {
   const found = await coreQuery<ProvisioningRow>(
     `select id, display_name, database_name, base_currency, provisioning_status
        from organisations where id = $1`,
