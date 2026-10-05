@@ -8635,11 +8635,11 @@ Setup:
   - Holdings: 1000 bank 4,800.00, 1100 receivable 1,150.00 (all from
     Retail), 1150 loan 10,000.00 and 1160 investment 4,000.00, totalling
     19,950.00; GST 150.00, 3000 19,000.00 and current year earnings 800.00.
-  - Retail: bank 17,000.00, 1410 goods for resale 3,000.00 (bought outside
-    the stock records; 1400 only moves with stock items) and GST 150.00
-    claimable on Holdings' fee, totalling 20,150.00; 2000 payable 1,150.00
-    (all to Holdings), 2150 loan 10,000.00, 3000 4,000.00 and current year
-    earnings 5,000.00. (Corrected 5 Oct 2026 when built: as first written,
+  - Retail: bank 17,000.00 and 1410 goods for resale 3,000.00 (bought
+    outside the stock records; 1400 only moves with stock items), totalling
+    20,000.00; 2000 payable 1,150.00 (all to Holdings), 2100 GST -150.00
+    (claimable on Holdings' fee, on the GST liability account), 2150 loan
+    10,000.00, 3000 4,000.00 and current year earnings 5,000.00. (Corrected 5 Oct 2026 when built: as first written,
     Retail's bank was 17,150.00 with no GST, which doesn't follow from the
     setup; the totals were the same.)
   - Kowhai Pty Ltd as in CO5.

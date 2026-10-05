@@ -8,6 +8,7 @@ import { hashAiToken } from "@/lib/ai/token-format";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { addInboxItem } from "@/lib/bills/inbox";
 import { createBill, approveBill } from "@/lib/bills/service";
+import { createGroup } from "@/lib/consolidation/groups";
 import { createContact } from "@/lib/contacts/service";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { coreQuery } from "@/lib/db/transactions";
@@ -301,7 +302,12 @@ describeWithDatabase("connect your own AI (MCP, decisions 339-345)", () => {
   it("every tool runs inside a read-only transaction without error", async () => {
     const pdf = new Uint8Array(Buffer.from("%PDF-1.7\nA bill".padEnd(120, ".")));
     const inboxItem = (await asOwner((tx) => addInboxItem(tx, { idempotencyKey: key("inbox"), fileName: "bill.pdf", content: pdf, via: "upload" }))).item;
+    // A consolidation group the viewer can see: a member of both organisations in it (CO10).
+    await createTestOrganisation(owner, "ai-group-member");
+    await coreQuery("insert into organisation_members (organisation_id, user_id, role) values ($1, $2, 'viewer')", ["ai-group-member", viewer.id]);
+    const consolidation = await createGroup({ id: owner.id, email: owner.email }, { name: "AI test group", parentOrganisationId: ORG, organisationIds: ["ai-group-member"] });
     const args: Record<string, Json> = {
+      consolidated_report: { groupId: consolidation.id, report: "profit_and_loss", from: "2026-04-01", to: "2026-06-30" },
       read_bill_inbox_item: { itemId: inboxItem.id },
       account_transactions: { accountCode: "1100" },
       gst_return: { periodStart: "2026-05-01", periodEnd: "2026-06-30" },
