@@ -457,6 +457,15 @@ that something happened.
   customer), links to PayPal's page, and records PayPal payments into the
   PayPal bank account for the invoice's currency. Only invoices in a
   currency whose PayPal balance is linked offer it.
+- **Cash flow forecast** (Reports, Cash flow forecast; CF1-CF9, decisions
+  432-436, tenant migration 0101), like NetSuite's Cash 360: today's bank
+  balance, then money in and out by day, week or month (about 3 months by
+  default) from open invoices and bills on their due dates, repeating
+  invoices and bills, unpaid expense claims, forecast items (once or every
+  week or month) and account averages (e.g. wages from the last 3 or 6
+  months), optionally drafts and sales and purchase orders. Shows the lowest
+  balance and the first period below zero, each period's documents, and
+  exports to CSV, Excel and PDF. The connected AI can read it.
 - **Approval workflows** (Settings, Approval rules, and Purchases,
   Approvals; AW1-AW17, decisions 424-431, tenant migration 0100), like
   ApprovalMax and NetSuite's approval routing: rules for bills, purchase

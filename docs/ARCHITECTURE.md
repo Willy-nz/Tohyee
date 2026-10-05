@@ -52,6 +52,7 @@ tohyee_org_glimmers     one database per organisation (organisation "glimmers")
 ├─ bill_inbox_items       the bills inbox: files waiting to become bills (contents, SHA-256, sender and subject), the bill made, or why removed
 ├─ bill_inbox_mailboxes, bill_inbox_mail_seen   mailbox folders read into the inbox (IMAP password encrypted) and the messages each place has given
 ├─ mileage_rates          IRD kilometre rates per income year and vehicle type (tier 1 and tier 2)
+├─ cash_flow_items, cash_flow_account_averages   forecast items and the accounts forecast from their average (CF4, CF6)
 ├─ approval_rules, approval_rule_steps, approval_step_approvers   approval rules per document type: conditions, ordered steps, approvers (AW1)
 ├─ approval_requests, approval_actions   a document's trip through a rule (waiting, approved, declined, withdrawn) and each step's approvals; never deleted
 ├─ approval_emails        the email asking each approver of a step, sent by the email job
@@ -1093,6 +1094,12 @@ Enforced by the app (and covered by tests):
   `src/lib/bank/paypal/client.ts`. `src/lib/payments/links.ts` makes both
   before an invoice is emailed or printed, and switches both off after a
   void or payment on the invoice's page.
+- The cash flow forecast (`src/lib/cash-flow/forecast.ts`, decisions
+  432-436) is worked out on each request: it reuses `RECEIVABLES_SQL` and
+  `PAYABLES_SQL` (with no as-at date) for what's due on each document, the
+  repeating schedules (`datesBetween` from the day after the last date
+  made), payment terms for orders, `lastRateFor` for other currencies, then
+  adds forecast items and account averages and totals each period.
 - Approval workflows (`src/lib/approvals/`, decisions 424-431): `rules.ts`
   (rules, `loadDocumentFacts` and `matchingRule`), `requests.ts` (a
   request's progress worked out from its rule as it is now, the gates

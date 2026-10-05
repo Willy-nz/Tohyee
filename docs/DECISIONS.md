@@ -3201,3 +3201,43 @@ think is best").
        [phone](screenshots/approval-rules-phone.png)), an approval page with the budget
        ([dark](screenshots/approval-request-dark.png), [phone](screenshots/approval-request-phone.png))
        and a bill waiting for approval ([light](screenshots/approval-bill-light.png)).
+
+### Cash flow forecast (decisions 432-436)
+
+432. **The cash flow forecast follows NetSuite's Cash 360** (examples CF1-CF9,
+     approved by Jess on 5 Oct 2026; tenant migration 0101). It starts from
+     the ledger balance today (business time zone) of the chosen bank
+     accounts (all active bank accounts by default; cards can be ticked) and
+     shows days (from today), weeks (Monday to Sunday) or months, about 3
+     months by default (31 days, 13 weeks or 3 months), at most 92 days, 52
+     weeks or 12 months. Open invoices and bills (what's due after payments
+     and credit) go on their due dates; anything due before the first
+     period, unpaid expense claims (no due date), and repeating documents
+     made late go in the first period, overdue ones marked. Repeating
+     invoices and bills give their total on the due date their template
+     gives. It posts nothing and is worked out each time.
+433. **Another currency** is converted at the latest rate on or before today:
+     the exchange rates list, else the last rate used (`lastRateFor`, as
+     MC3/MC48). With no rate the amount is left out and listed, never
+     guessed.
+434. **Account averages** are an account's net movement over the last 3 or 6
+     whole months before this month (debits less credits for money out,
+     credits less debits for money in; nothing when that's negative),
+     divided by the days in those months, times each period's days, rounded
+     per period. Bank, card, accounts receivable and payable accounts can't
+     be averaged (their money is already in the forecast). An account whose
+     bills are also open is counted twice if averaged, so the screen warns.
+     The examples suggested GST as an average, but the GST account's net
+     movement offsets GST collected against GST paid, so it doesn't measure
+     payments to IRD: GST is a forecast item.
+435. **Sales and purchase orders** (ticked): an approved order's total less
+     the invoices or bills made from it that aren't voided (drafts
+     included), on its expected or delivery date (else its order date) plus
+     the customer's or supplier's payment terms (or on that date with
+     none). Drafts (ticked) give their total on their due date.
+436. **Forecast items** are kept with a version (two people can't overwrite
+     each other) and removed by archiving, with who added, changed and
+     removed each in the history. The connected AI reads the forecast
+     (`cash_flow_forecast`, any level) but can't add items.
+     - Screenshots: the forecast ([light](screenshots/cash-flow-light.png), [dark](screenshots/cash-flow-dark.png),
+       [phone](screenshots/cash-flow-phone.png)).
