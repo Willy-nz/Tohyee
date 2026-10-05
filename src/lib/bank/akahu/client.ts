@@ -1,4 +1,5 @@
 import { UnavailableError, ValidationError } from "@/lib/errors";
+import { dec, parseDecimalInput, toFixedString } from "@/lib/money/decimal";
 
 /**
  * A small client for Akahu's API (NZ open finance), used for bank feeds.
@@ -32,6 +33,15 @@ export type AkahuTransaction = {
   merchant?: { name?: string } | null;
   meta?: { particulars?: string | null; code?: string | null; reference?: string | null; other_account?: string | null } | null;
 };
+
+/**
+ * Akahu sends money as JSON numbers. Each is read through its shortest string
+ * form (so 0.1 stays "0.1") and must be whole cents: anything finer, like
+ * 1.005, is refused rather than rounded (issue #147).
+ */
+export function akahuMoney(value: number, fieldName: string): string {
+  return toFixedString(dec(parseDecimalInput(value, fieldName, { maxScale: 2, allowNegative: true, allowZero: true })), 2);
+}
 
 /** Lets tests swap the network for canned responses. */
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
