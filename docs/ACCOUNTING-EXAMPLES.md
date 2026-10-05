@@ -8167,7 +8167,7 @@ emails and reminders, partial payments chosen by the customer, refunds
 from Tohyee, and recording a PayPal payment PayPal converted into another
 currency.
 
-## Approval workflows (examples not yet approved by Jess)
+## Approval workflows (approved by Jess, 5 Oct 2026)
 
 Item 5 of the Xero add-ons plan, like ApprovalMax (and NetSuite's approval
 routing): rules that send a bill or purchase order through one or more
@@ -8178,10 +8178,11 @@ no rule applies.
 
 How it works:
 
-- **Rules** (admins, Settings, Approval rules) are per document type: bills
-  and purchase orders (question 1). A rule has **conditions** (all must
-  hold: total at least an amount, in the base currency; the supplier; an
-  account on any line; a tracking value on any line) and **steps** in
+- **Rules** (admins, Settings, Approval rules) are per document type:
+  bills, purchase orders and expense claims (question 1). A rule has
+  **conditions** (all must hold: total at least an amount, in the base
+  currency; the supplier, or for a claim the claimant; an account on any
+  line; a tracking value on any line) and **steps** in
   order. Each step names **approvers** (members, bookkeeper or above) and
   whether **any one** or **all** of them must approve. Rules are checked in
   their order; the first that matches is used. A document no rule matches
@@ -8285,10 +8286,30 @@ of Tama or Ana; step 2 all of Jess.
   submitted instead; its run shows "Submitted for approval (rule: Over
   $1,000)".
 
-**Questions for Jess (approval workflows):**
-1. **Which documents:** bills and purchase orders now (as ApprovalMax for
-   Xero). Expense claims keep their own submit and approve (EC2-EC3), and
-   sales invoices aren't included. Proposed: yes.
+**Expense claims** (question 1) already have a submit step (EC2). With a
+rule, submitting a claim starts the rule's steps instead of waiting for any
+bookkeeper (EC3), and declining a step is EC6's decline.
+
+- **AW15** Rule "Claims over $300" for expense claims: total at least
+  300.00; one step, any one of Ana or Jess. Tama's claim for **345.00** is
+  submitted (EC2): it's waiting for Ana or Jess. Mere (a bookkeeper, not an
+  approver) can't approve it, though without a rule she could (EC3).
+- **AW16** Ana approves the step, choosing the claim date as EC3's approver
+  does: the claim is **approved** and posted as EC3 (Dr each account and
+  GST / Cr expense claims payable), approved by Ana. If Ana declines with a
+  reason instead, it goes back to Tama as a draft with the reason, exactly
+  as EC6.
+- **AW17** Jess's own claim for 400.00 matches the rule: Jess can't approve
+  it (nobody approves their own, question 4, even an owner, although
+  without a rule EC3 lets an owner approve their own); Ana does. A claim for
+  120.00 matches no rule and is approved as EC3 today. Tama can withdraw a
+  submitted claim back to draft (as AW8).
+
+**Questions for Jess (approval workflows), decided** (Jess, 5 Oct 2026:
+expense claims too for question 1, the proposed answer for every other
+question, and the examples approved):
+1. **Which documents:** bills, purchase orders **and expense claims**
+   (Jess). Sales invoices and journals aren't included.
 2. **Approving from an email:** the email links to Tohyee and the approver
    **must sign in**; nothing is approved from the email alone. The link only
    works where Tohyee can be reached (office network or remote access).
@@ -8307,8 +8328,8 @@ of Tama or Ana; step 2 all of Jess.
 
 Not supported in this part: approving from a single-use link without
 signing in, delegating approvals while someone's away, reminders and
-escalation after a time, approval rules for expense claims, sales invoices
-or journals, approval by text message, and blocking over-budget documents.
+escalation after a time, approval rules for sales invoices or journals,
+approval by text message, and blocking over-budget documents.
 
 ## Fixed assets (examples not yet approved by Jess)
 

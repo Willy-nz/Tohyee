@@ -91,8 +91,8 @@ phone width).
    clearing account per provider, fees to expense, payouts matched to the
    bank deposit. Worked examples for part payments, refunds, disputes,
    foreign-currency invoices and GST on fees. Saved cards later (ask Jess).
-5. **Approval workflows** (examples AW1-AW14 written 5 Oct 2026, waiting
-   for Jess): rules, steps, budget at approval, approve by a signed
+5. **Approval workflows** (examples AW1-AW17 approved by Jess 5 Oct 2026;
+   bills, purchase orders and expense claims): rules, steps, budget at approval, approve by a signed
    single-use email link (ask Jess about sign-in), history.
 6. **Cash flow forecast and consolidation** (same server, members of all),
    AI commentary as a suggestion only.
