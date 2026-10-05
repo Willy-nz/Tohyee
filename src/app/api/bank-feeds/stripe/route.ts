@@ -1,5 +1,6 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { connectStripe, disconnectStripe, getStripeStatus, updateStripeSettings } from "@/lib/bank/stripe/service";
+import { closeAllPaymentLinks } from "@/lib/payments/stripe";
 
 /** Whether Stripe is connected, its balances and last sync (the key is never returned). */
 export const GET = route(async (request) => {
@@ -24,8 +25,17 @@ export const PATCH = route(async (request) => {
   return json({ stripe });
 });
 
-/** Disconnects: the key is deleted and currencies unlinked. Lines stay. Admins. */
+/**
+ * Disconnects: open payment links are switched off first (PN11), then the
+ * key is deleted and currencies unlinked. Lines stay. Admins.
+ */
 export const DELETE = route(async (request) => {
-  const stripe = await withOrganisation(request, searchParams(request).get("organisationId"), "admin", (tx) => disconnectStripe(tx));
-  return json({ stripe });
+  const organisationId = searchParams(request).get("organisationId");
+  const { organisation, actor } = await withOrganisation(request, organisationId, "admin", async (_tx, { auth, membership }) => ({
+    organisation: membership.organisation,
+    actor: { userId: auth.user.id, email: auth.user.email },
+  }));
+  const links = await closeAllPaymentLinks(organisation, actor, "Stripe disconnected");
+  const stripe = await withOrganisation(request, organisationId, "admin", (tx) => disconnectStripe(tx));
+  return json({ stripe, linksNotSwitchedOff: links.failed });
 });

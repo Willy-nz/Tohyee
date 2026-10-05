@@ -1,6 +1,7 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { listDocumentEmails, queueDocumentEmail } from "@/lib/email/documents";
 import { kickEmailOutbox } from "@/lib/email/outbox";
+import { linkBeforeSending } from "@/lib/payments/stripe";
 
 /** GET ?kind=&id=: the emails sent (or being sent) about a document, or to a customer for statements. */
 export const GET = route(async (request) => {
@@ -16,6 +17,7 @@ export const GET = route(async (request) => {
  */
 export const POST = route(async (request) => {
   const body = await readJson(request);
+  await linkBeforeSending(request, body.organisationId, body.kind, body.id);
   const result = await withOrganisation(request, body.organisationId, "bookkeeper", async (tx) => ({
     ...(await queueDocumentEmail(tx, {
       kind: body.kind,

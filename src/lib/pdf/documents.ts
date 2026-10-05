@@ -168,6 +168,12 @@ export async function renderDocumentPdf(doc: PrintedDocument, options: { logo?: 
     writer.text("How to pay", { bold: true });
     writer.text(text, { gap: 10 });
   }
+  if (doc.payNowUrl) {
+    const text = `Pay online by card: ${doc.payNowUrl}`;
+    writer.ensure(writer.measure(text, CONTENT_WIDTH) + 16);
+    writer.text("Pay now", { bold: true });
+    writer.text(text, { gap: 10 });
+  }
   return { fileName: documentFileName(doc), bytes: await writer.finish() };
 }
 

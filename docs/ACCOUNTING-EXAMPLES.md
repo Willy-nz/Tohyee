@@ -58,6 +58,7 @@ proves it". Test names start with the example IDs they cover:
   `tests/integration/expense-claims.test.ts` (EC1-EC12) and
   `tests/integration/expense-mileage.test.ts` (MI1-MI7) and
   `tests/integration/bills-inbox.test.ts` (BI1-BI7, DU1-DU5) and
+  `tests/integration/online-payments-stripe.test.ts` (PN1-PN12) and
   `tests/integration/fixed-assets.test.ts` (FA1-FA14) and
   `tests/integration/projects.test.ts` (PJ1-PJ13) and
   `tests/integration/bank-quick.test.ts` (BK17-BK25) and
@@ -7921,9 +7922,11 @@ tried with a real Stripe account):
   approval, so invoices never sent don't create links.
 - **When the amount due changes** (a payment recorded by hand, a credit note
   or overpayment applied), the link is switched off in Stripe
-  (`active=false`, with the message "This invoice has changed. Use the
-  latest link from <organisation>.") and a new one is made the next time
-  it's needed. Paying, voiding or deleting the invoice switches it off too.
+  (`active=false`; anyone opening it sees "This invoice has been paid or
+  has changed. Use the latest link from <organisation>.") and a new one is
+  made the next time it's needed. Paying, voiding or deleting the invoice
+  switches it off too: at once when it's done on the invoice's page, and
+  otherwise at the next check.
 - **Seeing payments.** Tohyee isn't usually reachable from the internet, so
   it doesn't wait for Stripe to call it (no webhooks): every 15 minutes, and
   with Check now, it asks Stripe for each open link's completed Checkout
@@ -7954,7 +7957,8 @@ organisation is Aroha Ltd; online payments turned on.
   Bookkeepers and viewers see whether it's on; only admins change it.
 - **PN2** INV-0010 is emailed. Tohyee makes a Payment Link for **NZD
   115.00**, "Invoice INV-0010", limited to one payment, and the email and
-  PDF say "Pay now: https://buy.stripe.com/...". Nothing is posted.
+  PDF say "Pay now by card: https://buy.stripe.com/...". Nothing is
+  posted; a viewer printing it doesn't make a link.
   Emailing or printing it again uses the same link. A draft invoice, or one
   with nothing due, gets no link.
 - **PN3** Kobe Ltd pays by card on 1 Oct 2026 at 10:15. At the next check
@@ -7973,7 +7977,8 @@ organisation is Aroha Ltd; online payments turned on.
   100.00 by bank transfer, recorded by hand. The 230.00 link is switched
   off in Stripe, and the next email, print or copy makes a new link for
   **130.00**. Someone opening the old link sees Stripe's "This invoice has
-  changed. Use the latest link from Aroha Ltd." The customer can't choose
+  been paid or has changed. Use the latest link from Aroha Ltd." The
+  customer can't choose
   to pay part: the link is always for the whole amount due.
 - **PN6** INV-0012 (115.00) is paid by bank transfer and recorded by hand at
   9:00; at 9:05, before the next check switched the link off, Kobe Ltd also
@@ -8039,6 +8044,8 @@ every proposed answer and approved the examples on 5 Oct 2026):
    allowed for every card scheme anyway).
 7. **Saved cards** (charging a customer's card again without them): not in
    this part. Proposed: later, if wanted.
+
+Tests: `tests/integration/online-payments-stripe.test.ts`.
 
 Not supported in this part: PayPal (part 2), webhooks, saved cards and
 automatic charging, surcharges, refunds started from Tohyee, partial

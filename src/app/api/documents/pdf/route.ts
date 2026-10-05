@@ -4,6 +4,7 @@ import { loadStatement, parseStatementOptions } from "@/lib/email/documents";
 import { statementFromParams } from "@/lib/email/params";
 import { getLogo } from "@/lib/organisations/logo";
 import { getOrganisationSettings } from "@/lib/organisations/settings";
+import { linkBeforeSending } from "@/lib/payments/stripe";
 import { renderDocumentPdf, renderStatementPdf } from "@/lib/pdf/documents";
 import { requireId } from "@/lib/validation";
 
@@ -17,6 +18,7 @@ import { requireId } from "@/lib/validation";
 export const GET = route(async (request) => {
   const params = searchParams(request);
   const kind = params.get("kind");
+  await linkBeforeSending(request, params.get("organisationId"), kind, params.get("id"));
   const loaded = await withOrganisation(request, params.get("organisationId"), "viewer", async (tx) => {
     const logo = await getLogo(tx);
     if (kind === "statement") {

@@ -59,6 +59,9 @@
  * each organisation's bills inbox when due (off with
  * TOHYEE_BILL_INBOX_SCHEDULER=off).
  *
+ * And online invoice payments, which ask Stripe for paid payment links every
+ * 15 minutes (off with TOHYEE_ONLINE_PAYMENTS_SCHEDULER=off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -217,6 +220,15 @@ export async function register() {
       startBillInboxScheduler();
     } catch (error) {
       console.warn("[tohyee] Bills inbox mailboxes couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (process.env.TOHYEE_ONLINE_PAYMENTS_SCHEDULER !== "off") {
+    try {
+      const { startOnlinePaymentScheduler } = await import("@/lib/payments/stripe");
+      startOnlinePaymentScheduler();
+    } catch (error) {
+      console.warn("[tohyee] Online payments couldn't start:", error instanceof Error ? error.message : error);
     }
   }
 

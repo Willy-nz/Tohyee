@@ -3048,3 +3048,54 @@ think is best").
        and kilometre rates ([light](screenshots/kilometre-rates-light.png),
        [phone](screenshots/kilometre-rates-phone.png)).
 
+### Online invoice payments with Stripe (decisions 414-419)
+
+414. **Pay now uses Stripe payment links** (examples PN1-PN12, approved by
+     Jess on 5 Oct 2026; tenant migration 0098), made with the
+     organisation's existing Stripe connection (Jess, answer 8). Each link is
+     for one invoice's amount due in its currency (an inline price, Stripe API
+     version 2025-07-30.basil or later), at most one completed payment, with
+     the invoice's id in its metadata and "Payment for INV-..." as the
+     payment's description, so the feed's charge line says which invoice it
+     paid. Nothing about the customer is sent to Stripe. Links don't expire;
+     they're made the first time a bookkeeper or admin emails, prints or
+     copies the invoice (a viewer printing it only sees one that exists), and
+     a link that no longer matches the amount due is switched off and
+     replaced. Checked against Stripe's API reference on 5 Oct 2026; not
+     tried with a real Stripe account.
+415. **The restricted key may also write payment links** (Jess, question 1):
+     they only take money in. Full secret keys are still refused. The key
+     needs read access to Checkout Sessions too; the exact permission names
+     haven't been checked with a real account.
+416. **Tohyee asks Stripe; Stripe doesn't call Tohyee** (question 2): every
+     15 minutes and with Check now, each open link's completed checkout
+     sessions (and those of links closed in the last 48 hours, for a payment
+     made just before) are read with the payment, charge and balance
+     transaction expanded. `TOHYEE_ONLINE_PAYMENTS_SCHEDULER=off` turns the
+     schedule off.
+417. **A paid session is a customer payment**, recorded once (by session id)
+     through the same code as a payment typed in: dated by the charge in the
+     organisation's time zone, into the bank account linked to the Stripe
+     balance the money went to, with "Stripe" and the payment's id as the
+     reference. A foreign-currency invoice paid into the base-currency
+     balance is recorded at the rate (8 decimal places) that gives exactly
+     Stripe's converted amount, so it matches the feed line to the cent
+     (PN7). Paying more than is due is an overpayment on the customer's
+     account (question 3, PN6).
+418. **What Tohyee can't record is a notice for a person** (question 4):
+     a payment for a voided, draft or deleted invoice, a payment into a
+     balance in neither the invoice's nor the base currency, or one that the
+     payment rules refuse (a locked period). A payment whose balance has no
+     linked bank account waits as a notice and is tried again at each check.
+     Notices are put away by a bookkeeper. Tohyee never refunds or charges:
+     refunds and disputes come in only through the feed (PN8, PN9).
+419. **Pay now is on every approved invoice with something due** (question
+     5), unless left off on that invoice; card fees are never added to what
+     the customer pays (question 6); saved cards are for later (question 7).
+     Turning it off or disconnecting Stripe switches open links off first,
+     listing any Stripe couldn't be reached for.
+     - Screenshots: Settings, Online payments ([light](screenshots/online-payments-light.png),
+       [phone](screenshots/online-payments-phone.png)), an invoice's Pay now card
+       ([dark](screenshots/pay-now-invoice-dark.png), [phone](screenshots/pay-now-invoice-phone.png))
+       and an invoice paid online ([light](screenshots/pay-now-paid-light.png)).
+
