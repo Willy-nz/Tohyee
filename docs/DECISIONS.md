@@ -3419,3 +3419,31 @@ From the project review of 4 Oct 2026 (#158); issues #130-#138, #143,
      a send that certainly didn't reach the provider is retried; a timeout
      or dropped connection after the message was handed over, or Google's
      answer without the message's id, says to check the Sent folder first.
+
+### Review fixes, payroll, 5 Oct 2026 (decisions 461-464)
+
+Issues #139-#142, each with an example Jess approved on 5 Oct 2026.
+
+461. **A bank file pays the account kept at approval** (#139, PBF8, Jess:
+     "use the approved one, warn"): approving keeps each employee's bank
+     account with their pay; the bank file pays that one and warns, masked,
+     when the employee's account has changed since. Pay runs approved
+     before accounts were kept use the current account, as before.
+462. **Changing an employee counts as preparing their drafts** (#140,
+     PRUN7b): with "approver must be different" on, whoever changes a draft
+     pay run's employee's tax code, student loan, KiwiSaver status or
+     rates, temporary rate reduction, ESCT rate, bank account or pay rate
+     can't approve it (tenant migration 0106, `details_changed_by`).
+     Changes before the draft existed, or to people not on it, don't count.
+463. **KiwiSaver temporary rate reduction** (#141, PR13b): set under
+     Employees with the dates on IRD's approval; pays dated within them
+     take the reduced rates (3%/3% from 1 April 2026), and approving keeps
+     the dates with the pay (tenant migration 0107). Pays outside the dates
+     use the normal rules. The employee PATCH route also now saves the ESCT
+     rate, which the employee screen sent but the route dropped.
+464. **Salary back pay refuses a period not paid in full** (#142, XP11b,
+     Jess: refuse rather than pro-rate): when the period's ordinary pay
+     isn't the full salary at the rate before the new one, back pay is
+     refused and the user adds it as an amount. The message uses the full
+     name and "their", not the example's "her", because Tohyee doesn't
+     know employees' pronouns.

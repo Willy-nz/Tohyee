@@ -309,8 +309,9 @@ decision 446, core migration 0008, tenant migration 0103). Shopify chargebacks
 and reserves (item 7 part 1, decisions 447-450, tenant migration 0104).
 WooCommerce orders (item 7
 part 2, decisions 451-455, tenant migration 0105). Review fixes
-(decisions 456-460, no migrations). Next numbers: tenant migration 0106,
-core migration 0009, decision 461.
+(decisions 456-460, no migrations). Payroll review fixes (decisions
+461-464, tenant migrations 0106-0107). Next numbers: tenant migration 0108,
+core migration 0009, decision 465.
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

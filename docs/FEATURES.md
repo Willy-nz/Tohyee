@@ -43,7 +43,8 @@ that something happened.
   sign-in lockout; admin CLI for recovery.
 - **Payroll employee records** (PE1-PE12; examples not yet approved by Jess):
   employee details, pay frequency, tax code, student loan and KiwiSaver
-  settings; IRD numbers and bank accounts are encrypted. Employees are
+  settings (including a temporary rate reduction approved by IRD, with its
+  dates, PR13b); IRD numbers and bank accounts are encrypted. Employees are
   archived, never deleted. Job title, reports-to, pay groups (each with a pay
   frequency) and employee groups. **Pay rate history**: salary or hourly rate
   from a date, kept for ever; the current rate is the one in effect today.
@@ -1088,7 +1089,9 @@ that something happened.
   lines show totals by account and tracking, never a person; the per-person
   split is kept separately for people with payroll access. Locked and closed
   periods are respected, and an organisation can require someone other than
-  the preparer to approve. Approved pay runs can't be changed, only voided
+  the preparer to approve (someone who changed a draft's employee's tax
+  code, student loan, KiwiSaver, ESCT, bank account or pay rate counts as
+  preparing it, PRUN7b). Approved pay runs can't be changed, only voided
   with a reversing journal. Refused rather than guessed: child
   support, payroll giving, negative amounts, pay rate changes inside a
   period, tax codes and KiwiSaver rates IRD's rates don't support, and
@@ -1123,7 +1126,9 @@ that something happened.
   accounts are checked (bank-branch-account-suffix) first. Making a file
   posts nothing; record the payment under Wages paid after uploading it.
   Westpac and Kiwibank are refused (no published file specification), as is
-  ASB's CSV format.
+  ASB's CSV format. The file pays the bank account kept when the pay run
+  was approved, with a warning if the employee's account has changed since
+  (PBF8).
 - **Payslips** (payroll stage P5, PSLIP1-PSLIP6, not yet approved by Jess;
   bookkeeper role and payroll access). For each employee on an approved pay
   run: employer, employee and start date, pay period and pay date, tax
@@ -1255,7 +1260,8 @@ that something happened.
   for ND and NSW or where the levy's maximum falls inside mixed extra pays,
   a higher rate on request, separate extra-pay pay runs, holiday pay on
   back pay and periods with holiday pay, rates starting part-way through a
-  paid period, lower rates, a change of basis, overtime at a typed rate.
+  paid period, lower rates, a change of basis, overtime at a typed rate,
+  and a salary period that wasn't paid the full salary (XP11b).
 
 - **R&D Tax Incentive register and tagging** (RDTI stage R2; RD1-RD3, RD8,
   RD9, RD11-RD13 and RD21-RD23 tested, examples not yet approved by Jess;
