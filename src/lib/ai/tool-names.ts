@@ -39,6 +39,7 @@ export const AI_TOOL_PLAIN_WORDS: readonly { name: string; level: AiAccessLevel;
   { name: "create_draft_journal", level: "draft", words: "Make a draft journal" },
   { name: "update_draft_journal", level: "draft", words: "Edit a draft journal" },
   { name: "submit_for_approval", level: "draft", words: "Submit a draft bill, purchase order or expense claim for approval (only people approve it)" },
+  { name: "suggest_report_commentary", level: "draft", words: "Suggest a commentary on the cash flow forecast or a consolidated report (a person checks it)" },
   { name: "approve_invoice", level: "post", words: "Approve a draft invoice (it's numbered and posted)" },
   { name: "approve_bill", level: "post", words: "Approve a draft bill (it's posted)" },
   { name: "post_draft_journal", level: "post", words: "Post a draft journal" },

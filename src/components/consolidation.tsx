@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Money } from "@/components/books";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
+import { ReportCommentary } from "@/components/report-commentary";
 import { ReportExport } from "@/components/reports/report-export";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -223,7 +224,7 @@ function SectionRows({
   );
 }
 
-function Reports({ group, kind }: { group: ConsolidationGroup; kind: "profit_and_loss" | "balance_sheet" }) {
+function Reports({ group, kind, canEdit }: { group: ConsolidationGroup; kind: "profit_and_loss" | "balance_sheet"; canEdit: boolean }) {
   const today = todayInBrowser();
   const [from, setFrom] = useState(monthStart(today));
   const [to, setTo] = useState(today);
@@ -233,47 +234,50 @@ function Reports({ group, kind }: { group: ConsolidationGroup; kind: "profit_and
   const title = kind === "balance_sheet" ? "Consolidated balance sheet" : "Consolidated profit and loss";
   const period = kind === "balance_sheet" ? `As at ${formatDate(to)}` : `${formatDate(from)} to ${formatDate(to)}`;
   return (
-    <Card
-      title={title}
-      actions={
-        <div className={ui.inlineForm}>
-          {kind === "profit_and_loss" ? (
-            <Field label="From">
-              <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+    <>
+      <Card
+        title={title}
+        actions={
+          <div className={ui.inlineForm}>
+            {kind === "profit_and_loss" ? (
+              <Field label="From">
+                <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+              </Field>
+            ) : null}
+            <Field label={kind === "balance_sheet" ? "As at" : "To"}>
+              <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
             </Field>
-          ) : null}
-          <Field label={kind === "balance_sheet" ? "As at" : "To"}>
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-          </Field>
-          {group.members.some((member) => member.currencyCode !== group.currencyCode) ? (
-            <label className={ui.checkbox}>
-              <input type="checkbox" checked={showOwn} onChange={(event) => setShowOwn(event.target.checked)} /> Own currencies too
-            </label>
-          ) : null}
-        </div>
-      }
-    >
-      {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
-      {!report && !loaded.error ? <p className={ui.muted}>Loading…</p> : null}
-      {report ? (
-        <>
-          {report.notices.map((notice) => (
-            <Notice key={notice} tone="warning">
-              {notice}
-            </Notice>
-          ))}
-          <ReportExport
-            organisationId={group.parentOrganisationId}
-            report={kind === "balance_sheet" ? "consolidated-balance-sheet" : "consolidated-profit-and-loss"}
-            title={`${title}: ${group.name}`}
-            period={period}
-            filters={[`In ${report.currencyCode}; the group's year starts ${formatDate(report.yearStart)}`]}
-            tables={[{ id: `consolidated-${kind}` }]}
-          />
-          <ReportTable report={report} id={`consolidated-${kind}`} showOwn={showOwn} />
-        </>
-      ) : null}
-    </Card>
+            {group.members.some((member) => member.currencyCode !== group.currencyCode) ? (
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={showOwn} onChange={(event) => setShowOwn(event.target.checked)} /> Own currencies too
+              </label>
+            ) : null}
+          </div>
+        }
+      >
+        {loaded.error ? <Notice tone="error">{loaded.error}</Notice> : null}
+        {!report && !loaded.error ? <p className={ui.muted}>Loading…</p> : null}
+        {report ? (
+          <>
+            {report.notices.map((notice) => (
+              <Notice key={notice} tone="warning">
+                {notice}
+              </Notice>
+            ))}
+            <ReportExport
+              organisationId={group.parentOrganisationId}
+              report={kind === "balance_sheet" ? "consolidated-balance-sheet" : "consolidated-profit-and-loss"}
+              title={`${title}: ${group.name}`}
+              period={period}
+              filters={[`In ${report.currencyCode}; the group's year starts ${formatDate(report.yearStart)}`]}
+              tables={[{ id: `consolidated-${kind}` }]}
+            />
+            <ReportTable report={report} id={`consolidated-${kind}`} showOwn={showOwn} />
+          </>
+        ) : null}
+      </Card>
+      <ReportCommentary path={`/api/consolidation/groups/${group.id}/commentary`} report={`consolidated_${kind}`} periodLabel={period} canEdit={canEdit} />
+    </>
   );
 }
 
@@ -787,7 +791,7 @@ export function ConsolidationGroupView({ groupId }: { groupId: string }) {
           </button>
         ))}
       </div>
-      {tab === "profit_and_loss" || tab === "balance_sheet" ? <Reports key={tab} group={detail.group} kind={tab} /> : null}
+      {tab === "profit_and_loss" || tab === "balance_sheet" ? <Reports key={tab} group={detail.group} kind={tab} canEdit={everyAtLeast(["bookkeeper", "admin", "owner"])} /> : null}
       {tab === "budget_vs_actual" ? <BudgetVsActual group={detail.group} /> : null}
       {tab === "rates" ? <Rates detail={detail} canAdmin={everyAtLeast(["admin", "owner"])} onChanged={loaded.reload} /> : null}
       {tab === "adjustments" ? <Adjustments detail={detail} canEdit={everyAtLeast(["bookkeeper", "admin", "owner"])} onChanged={loaded.reload} /> : null}

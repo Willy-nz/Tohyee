@@ -1,3 +1,4 @@
+import { addForecastCommentary, addGroupCommentary } from "@/lib/commentary/service";
 import { approvalNeededForAi } from "@/lib/approvals/requests";
 import { submitForApproval } from "@/lib/approvals/service";
 import { configuredOrigin } from "@/lib/auth/origin";
@@ -328,6 +329,31 @@ export const WRITE_TOOLS: readonly AiTool[] = [
         step: request.currentStep,
         steps: request.stepCount,
         waitingFor: request.waitingFor,
+      };
+    },
+  },
+  {
+    name: "suggest_report_commentary",
+    title: "Suggest a report commentary",
+    level: "draft",
+    description:
+      "Saves a written commentary on the cash flow forecast or a consolidation group's profit and loss or balance sheet, as a suggestion: it shows as suggested by this AI key and not checked until a person accepts, edits or removes it. Read the report first (cash_flow_forecast or consolidated_report) and say which period it's about.",
+    inputSchema: schema(
+      {
+        report: { type: "string", enum: ["cash_flow_forecast", "consolidated_profit_and_loss", "consolidated_balance_sheet"] },
+        groupId: { type: "string", description: "For a consolidated report: the group from list_consolidations." },
+        periodLabel: { type: "string", description: 'What it covers, e.g. "Weeks from 5 Oct 2026 to 3 Jan 2027".' },
+        text: { type: "string", description: "The commentary, plain text, at most 5,000 characters." },
+      },
+      ["report", "periodLabel", "text"],
+    ),
+    async run(tx, args) {
+      if (args.report === "cash_flow_forecast") {
+        return { commentary: await addForecastCommentary(tx, { periodLabel: args.periodLabel, body: args.text }) };
+      }
+      if (!tx.actor.userId) throw new ConflictError("This key has no person behind it, so it can't comment on consolidations.");
+      return {
+        commentary: await addGroupCommentary({ id: tx.actor.userId, email: tx.actor.email, via: tx.actor.via }, args.groupId, { report: args.report, periodLabel: args.periodLabel, body: args.text }),
       };
     },
   },

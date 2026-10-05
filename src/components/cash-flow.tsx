@@ -5,6 +5,7 @@ import { Fragment, useState } from "react";
 import { AccountSelect, Money, useAccounts } from "@/components/books";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useApiData } from "@/components/hooks";
+import { ReportCommentary } from "@/components/report-commentary";
 import { ReportExport } from "@/components/reports/report-export";
 import { Badge, Button, Card, Empty, Field, Notice, Stat, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -460,6 +461,15 @@ export function CashFlowForecastView({ organisationId }: { organisationId: strin
           </>
         ) : null}
       </Card>
+      {forecast ? (
+        <ReportCommentary
+          path="/api/cash-flow/commentary"
+          organisationId={organisationId}
+          report="cash_flow_forecast"
+          periodLabel={`${KIND_WORDS[forecast.period]} from ${formatDate(forecast.periods[0].start)} to ${formatDate(forecast.periods[forecast.periods.length - 1].end)}`}
+          canEdit={can("bookkeeper")}
+        />
+      ) : null}
       <ForecastItems organisationId={organisationId} canEdit={can("bookkeeper")} onChanged={loaded.reload} />
       <AccountAverages organisationId={organisationId} canEdit={can("bookkeeper")} onChanged={loaded.reload} />
     </>

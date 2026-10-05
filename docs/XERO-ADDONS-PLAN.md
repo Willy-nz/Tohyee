@@ -100,7 +100,8 @@ phone width).
    AI commentary as a suggestion only. Examples CF1-CF9, CO1-CO11 and FX1
    approved by Jess 5 Oct 2026, following NetSuite (Cash 360; OneWorld with
    currency translation, different year ends, ECB daily rates and budget
-   exchange rates). Part 1: cash flow forecast; part 2: consolidation.
+   exchange rates). Part 1: cash flow forecast; part 2: consolidation;
+   part 3: AI commentary (built, decision 446).
 7. **More sales platforms, A2X style:** Shopify summary mode, then
    WooCommerce, Stripe sales, Square, Amazon, eBay, Etsy, PayPal (Jess picks
    the order); Shopify chargebacks and reserves.
