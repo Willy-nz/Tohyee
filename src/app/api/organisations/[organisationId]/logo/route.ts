@@ -26,7 +26,7 @@ export const GET = route<Context>(async (request, context) => {
       "cache-control": "private, max-age=300",
       etag: `"${logo.sha256}"`,
       "x-content-type-options": "nosniff",
-      "content-security-policy": "sandbox; default-src 'none'",
+      "content-security-policy": "sandbox; default-src 'none'; frame-ancestors 'self'",
     },
   });
 });

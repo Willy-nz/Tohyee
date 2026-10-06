@@ -34,6 +34,15 @@ export type AkahuTransaction = {
   meta?: { particulars?: string | null; code?: string | null; reference?: string | null; other_account?: string | null } | null;
 };
 
+/**
+ * Akahu sends money as JSON numbers. Each is read through its shortest string
+ * form (so 0.1 stays "0.1") and must be whole cents: anything finer, like
+ * 1.005, is refused rather than rounded (issue #147).
+ */
+export function akahuMoney(value: number, fieldName: string): string {
+  return toFixedString(dec(parseDecimalInput(value, fieldName, { maxScale: 2, allowNegative: true, allowZero: true })), 2);
+}
+
 /** Lets tests swap the network for canned responses. */
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 let fetcher: FetchLike = (input, init) => fetch(input, init);
@@ -127,27 +136,7 @@ export async function refreshAkahuAccount(credentials: AkahuCredentials, account
   }
 }
 
-/**
- * Akahu sends money as JSON numbers. They're read as decimals at their
- * shortest exact form, never rounded through floats: anything finer than
- * cents is refused rather than quietly rounded (issue #147).
- */
-export function akahuMoney(value: number, what: string): string {
-  const parsed = parseDecimalInput(value, `Akahu's ${what}`, { maxScale: 2, allowNegative: true, allowZero: true });
-  return toFixedString(dec(parsed), 2);
-}
-
 /** Turns an Akahu failure into a message for the person who asked. */
-/**
- * Akahu sends money as JSON numbers. They're read as decimals at their
- * shortest exact form, never rounded through floats: anything finer than
- * cents is refused rather than quietly rounded (issue #147).
- */
-export function akahuMoney(value: number, what: string): string {
-  const parsed = parseDecimalInput(value, `Akahu's ${what}`, { maxScale: 2, allowNegative: true, allowZero: true });
-  return toFixedString(dec(parsed), 2);
-}
-
 export function akahuProblem(error: unknown): Error {
   if (error instanceof AkahuError) {
     return error.status === 401 || error.status === 403

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import packageJson from "../../package.json";
-import { getLatestReleaseCheck, UPDATE_FETCH_TIME_LIMIT_MS } from "@/lib/updates/server-updates";
+import { getLatestReleaseCheck, UPDATE_FETCH_TIMEOUT_MS } from "@/lib/updates/server-updates";
 
 /** A GitHub "latest release" response for this tag. */
 function release(tagName: string, assetNames: string[] = []) {
@@ -45,9 +45,6 @@ describe("update check", () => {
       headers: { accept: "application/vnd.github+json", "user-agent": "tohyee-update-check" },
       cache: "no-store",
     });
-    // Issue #154: a stalled connection gives up rather than holding the check.
-    expect(init?.signal).toBeInstanceOf(AbortSignal);
-    expect(UPDATE_FETCH_TIME_LIMIT_MS).toBe(15_000);
     expect(check).toMatchObject({
       repository: "Willy-nz/Tohyee",
       currentVersion: packageJson.version,
@@ -92,5 +89,17 @@ describe("update check", () => {
     await expect(getLatestReleaseCheck()).rejects.toThrow("No GitHub releases found.");
     stubGitHub(503);
     await expect(getLatestReleaseCheck()).rejects.toThrow("GitHub release check failed with status 503.");
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async () => Promise.reject(new TypeError("fetch failed"))));
+    await expect(getLatestReleaseCheck()).rejects.toThrow("Couldn't reach GitHub for the release check: fetch failed");
+  });
+
+  it("gives up after 15 seconds instead of hanging on a stalled connection", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError")),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(getLatestReleaseCheck()).rejects.toThrow("GitHub didn't answer the release check within 15 seconds.");
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(UPDATE_FETCH_TIMEOUT_MS).toBe(15_000);
   });
 });

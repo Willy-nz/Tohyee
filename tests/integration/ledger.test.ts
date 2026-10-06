@@ -136,6 +136,7 @@ describeWithDatabase("ledger", () => {
         "ledger_fx_revaluation_documents",
         "ledger_fx_revaluation_run_items",
         "ledger_fx_revaluation_runs",
+        "ledger_fx_revaluation_voids",
         "ledger_journal_lines",
         "ledger_journals",
         "sales_platform_sync_log",

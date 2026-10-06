@@ -73,8 +73,10 @@ export function defaultBackupFolder(): string {
   const configured = process.env.TOHYEE_BACKUP_DIR?.trim();
   if (configured) return configured;
   if (process.platform === "win32") {
-    return path.join(/* turbopackIgnore: true */ process.env.ProgramData || "C:\\ProgramData", "Tohyee", "backups");
+    return path.join(process.env.ProgramData || "C:\\ProgramData", "Tohyee", "backups");
   }
+  // The ignore hint stops the build's file tracer copying the whole project
+  // into the standalone output (issue #155): this folder is made at run time.
   return path.join(/* turbopackIgnore: true */ process.cwd(), "backups");
 }
 
@@ -470,7 +472,7 @@ export async function listBackupFiles(organisationId?: string): Promise<BackupFi
 export async function backupFileInFolder(name: unknown): Promise<string> {
   if (typeof name !== "string" || !name.trim()) throw new ValidationError("Say which backup file.");
   const root = path.resolve(/* turbopackIgnore: true */ (await getBackupSettings()).folder);
-  const full = path.resolve(root, name.trim());
+  const full = path.resolve(/* turbopackIgnore: true */ root, name.trim());
   if (!full.startsWith(root + path.sep) || !full.endsWith(BACKUP_EXTENSION)) {
     throw new ValidationError("That isn't a backup file in the backup folder.");
   }

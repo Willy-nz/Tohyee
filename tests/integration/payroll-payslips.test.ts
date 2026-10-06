@@ -9,7 +9,10 @@ import * as voidRoute from "@/app/api/payroll/pay-runs/[payRunId]/void/route";
 import * as payslipPdfRoute from "@/app/api/payroll/pay-runs/[payRunId]/payslips/[employeeId]/pdf/route";
 import * as payslipRoute from "@/app/api/payroll/pay-runs/[payRunId]/payslips/[employeeId]/route";
 import * as payslipsRoute from "@/app/api/payroll/pay-runs/[payRunId]/payslips/route";
+import { COMMAND_LINE_ADMIN } from "@/lib/audit";
+import { updateLocalMailRelay } from "@/lib/email/local-relay";
 import { processOrganisationOutbox } from "@/lib/email/outbox";
+import { setSmtpPortForTests } from "@/lib/email/smtp";
 import { getOrganisation } from "@/lib/organisations/registry";
 import { updateEmployee } from "@/lib/payroll/employees";
 import type { PayItem } from "@/lib/payroll/pay-items";
@@ -91,6 +94,9 @@ describeWithDatabase("payroll: payslips (PSLIP1-PSLIP6)", () => {
       },
     });
     await new Promise<void>((resolve) => smtp.listen(0, "127.0.0.1", resolve));
+    // Saved as an allowed mail port, sent to the test server's own; it runs on this computer, which a server admin allows (#145).
+    setSmtpPortForTests((smtp.server.address() as AddressInfo).port);
+    await updateLocalMailRelay(COMMAND_LINE_ADMIN, { allowed: true });
 
     w = await setUpP5World("payroll-payslips-co", "paypayslips.test", { hemi: "hemi@harbourcafe.test" });
     run1 = await w.approvedRun(w.groups.fortnightly, "2026-09-28");
@@ -118,6 +124,7 @@ describeWithDatabase("payroll: payslips (PSLIP1-PSLIP6)", () => {
   });
 
   afterAll(async () => {
+    setSmtpPortForTests(null);
     await new Promise<void>((resolve) => smtp?.close(() => resolve()));
     await server?.teardown();
     if (previousSecret === undefined) delete process.env.TOHYEE_SECRET_KEY;
@@ -303,7 +310,7 @@ describeWithDatabase("payroll: payslips (PSLIP1-PSLIP6)", () => {
           fromName: "Harbour Cafe Ltd",
           fromAddress: SMTP_USER,
           host: "127.0.0.1",
-          port: (smtp.server.address() as AddressInfo).port,
+          port: 2525,
           security: "none",
           username: SMTP_USER,
           password: SMTP_PASSWORD,

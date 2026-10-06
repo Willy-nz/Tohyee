@@ -3,7 +3,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { explainGmailError, googleAccessToken, saveGoogleRefreshedTokens, sendViaGmail } from "@/lib/email/google";
 import { explainGraphError, microsoftAccessToken, saveRefreshedTokens, sendViaGraph } from "@/lib/email/microsoft";
 import type { SendingAccount } from "@/lib/email/settings";
-import { createAccountTransport, explainSmtpError, type OutgoingMessage, sendMessage, type SendResult } from "@/lib/email/smtp";
+import { explainSmtpError, openAccountTransport, type OutgoingMessage, sendMessage, type SendResult } from "@/lib/email/smtp";
 
 /**
  * One way of sending for the outbox and the test email, whichever the
@@ -41,7 +41,8 @@ export async function openSender(account: SendingAccount, saveTokens: (tokens: T
       close: () => undefined,
     };
   }
-  const transport = createAccountTransport(account);
+  // Checks the SMTP server first (#145): a refused server is an open error, explained like any other.
+  const transport = await openAccountTransport(account);
   return {
     via: "smtp",
     send: (message) => sendMessage(transport, account, message),

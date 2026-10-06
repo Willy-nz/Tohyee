@@ -28,6 +28,9 @@ const SHADE = rgb(0.95, 0.96, 0.97);
 let fontFiles: Promise<{ regular: Uint8Array; bold: Uint8Array }> | null = null;
 
 function fontsFolder(): string {
+  // The ignore hint stops the build's file tracer copying the whole project
+  // into the standalone output (issue #155); next.config.ts includes the
+  // fonts themselves (outputFileTracingIncludes).
   return process.env.TOHYEE_PDF_FONTS_DIR?.trim() || path.join(/* turbopackIgnore: true */ process.cwd(), "src", "lib", "pdf", "fonts");
 }
 

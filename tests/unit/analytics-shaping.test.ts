@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll } from "vitest";
 import { describe, expect, it } from "vitest";
-import { closeAnalytics, listTables, loadCsv, replaceTableFromSelect, runBuiltQuery, SHAPE_BUILD_TIME_LIMIT_MS } from "@/lib/analytics/engine";
+import { closeAnalytics, DEFAULT_BUILD_TIME_LIMIT_MS, listTables, loadCsv, replaceTableFromSelect, runBuiltQuery } from "@/lib/analytics/engine";
 import { buildShapeQuery } from "@/lib/analytics/shaping";
 
 const ORG = "shaping-query-test";
@@ -219,14 +219,15 @@ describe("analytics shaping query builder", () => {
     expect(await runBuiltQuery(ORG, "select table_name from information_schema.tables where starts_with(table_name, '_tohyee_shape_')", [])).toEqual([]);
   });
 
-  it("stops a rebuild that runs past its time limit and keeps the last table (issue #150)", async () => {
-    expect(SHAPE_BUILD_TIME_LIMIT_MS).toBe(10 * 60 * 1000);
-    // A merge that multiplies rows: far more than 50ms of work.
-    await expect(
-      replaceTableFromSelect(ORG, "shaped_orders", "select a.range as a, b.range as b from range(1000000) a cross join range(1000000) b", [], {
-        timeLimitMs: 50,
-      }),
-    ).rejects.toThrow("The shaped table took more than 10 minutes to rebuild, so it was stopped and the last one kept.");
+  it("stops a shaped-table build that runs too long and keeps the last copy (issue 150)", async () => {
+    expect(DEFAULT_BUILD_TIME_LIMIT_MS).toBe(5 * 60_000);
+    // A cross join big enough to run far past the limit.
+    const heavy = "select count(*) as n from range(100000000) a, range(100000000) b";
+    const started = Date.now();
+    await expect(replaceTableFromSelect(ORG, "shaped_orders", heavy, [], { timeLimitMs: 200 })).rejects.toThrow(
+      "The shaped table took more than 1 second to build, so it was stopped and the last copy kept. Filter or group the data sooner, or merge on columns that match fewer rows.",
+    );
+    expect(Date.now() - started).toBeLessThan(10_000);
     expect(await runBuiltQuery(ORG, "select total::varchar as total from shaped_orders where zone = $1", ["West"])).toEqual([{ total: "0.80" }]);
     expect(await runBuiltQuery(ORG, "select table_name from information_schema.tables where starts_with(table_name, '_tohyee_shape_')", [])).toEqual([]);
   });

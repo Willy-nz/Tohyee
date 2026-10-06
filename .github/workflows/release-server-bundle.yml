@@ -4,6 +4,11 @@ name: Release server bundle
 # - tohyee-v<version>-windows.zip: Docker Desktop installer for Windows
 # - tohyee-v<version>-linux-x64.tar.gz: the plain Node.js bundle
 # and the Docker image ghcr.io/willy-nz/tohyee:<version> (and :latest).
+#
+# The token is read-only by default. The build job runs npm ci (third-party
+# install scripts) with no write access; the image job can push packages
+# only; the publish job, which runs none of the repo's code, attaches the
+# built files to the release.
 
 on:
   push:
@@ -11,17 +16,17 @@ on:
       - "v*"
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
         with:
-          # The token isn't left in .git/config for the build steps (issue #154).
           persist-credentials: false
 
       - name: Setup Node.js
@@ -40,7 +45,6 @@ jobs:
             echo "Tag ${GITHUB_REF_NAME} does not match package version ${expected_tag}."
             exit 1
           fi
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Build production app
         run: npm run build
@@ -50,6 +54,31 @@ jobs:
 
       - name: Package Windows installer
         run: node scripts/package-windows.mjs
+
+      - name: Keep the release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          if-no-files-found: error
+          path: |
+            dist/release/*.zip
+            dist/release/*.tar.gz
+            dist/release/*.sha256
+
+  image:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Version from the tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -76,14 +105,32 @@ jobs:
             org.opencontainers.image.licenses=AGPL-3.0-only
             org.opencontainers.image.version=${{ env.VERSION }}
 
+  # Never replaces a file already on the release (no --clobber): servers
+  # update from these files, so a second upload under the same name fails
+  # instead. To redo one, delete the asset from the release by hand first.
+  publish:
+    needs: [build, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get the release files
+        uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: dist/release
+
       - name: Ensure release exists
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
-            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes || \
+            { sleep 30; gh release view "${GITHUB_REF_NAME}" >/dev/null; }
 
       - name: Attach files to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${GITHUB_REF_NAME}" dist/release/*.zip dist/release/*.tar.gz dist/release/*.sha256 --clobber
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/release/*.zip dist/release/*.tar.gz dist/release/*.sha256

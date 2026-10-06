@@ -13,7 +13,7 @@ import type { OrgTx } from "@/lib/db/org-transaction";
 import { recordPayment, voidPayment } from "@/lib/invoices/payments";
 import { approveInvoice, createInvoice, getInvoice } from "@/lib/invoices/service";
 import { periodChecklist } from "@/lib/ledger/period-close";
-import { postFxRevaluation } from "@/lib/ledger/fx-revaluation";
+import { type FxRevaluationRun, postFxRevaluation, voidFxRevaluation } from "@/lib/ledger/fx-revaluation";
 import { getJournal, postJournal } from "@/lib/ledger/journals";
 import { updateOrganisationSettings } from "@/lib/organisations/settings";
 import { recordPaymentBatch } from "@/lib/payments/batches";
@@ -116,6 +116,8 @@ describeWithDatabase("multi-currency invoices and bills", () => {
     usd = await as(owner, (tx) => createBankAccount(tx, { code: "1030", name: "USD account", accountType: "bank", currencyCode: "USD" }));
     await as(owner, (tx) => createBankAccount(tx, { code: "1040", name: "EUR account", accountType: "bank", currencyCode: "EUR" }));
   });
+
+  let mc8: FxRevaluationRun;
 
   afterAll(async () => {
     await server?.teardown();
@@ -441,6 +443,50 @@ describeWithDatabase("multi-currency invoices and bills", () => {
     expect((await run((tx) => getJournal(tx, fx.reversalJournalId))).postingDate).toBe("2026-08-01");
     expect((await checks()).status).toBe("pass");
     await expect(revalue([{ accountCode: "1100", currencyCode: "USD", closingRate: "1.63" }])).rejects.toThrow(/1100 \(USD\) already revalued on 2026-07-31/);
+    mc8 = fx;
+  });
+
+  it("FXB12: MC8's revaluation of 1030, 1100 USD and 2000 USD is voided as a whole, then run again", async () => {
+    const checks = async () => (await run((tx) => periodChecklist(tx, { periodEnd: "2026-07-31" }))).checks.find((entry) => entry.key === "fx_revaluation")!;
+    const { run: voided } = await run((tx) => voidFxRevaluation(tx, mc8.id, { idempotencyKey: key("void") }));
+    const voidJournal = await run((tx) => getJournal(tx, voided.voided!.voidJournalId));
+    const voidReversal = await run((tx) => getJournal(tx, voided.voided!.voidReversalJournalId));
+    expect([voidJournal.postingDate, voidReversal.postingDate]).toEqual(["2026-07-31", "2026-08-01"]);
+    // The exact reversal of every line, foreign amount (USD 0.00 at 1.62) included.
+    expect(await posted(voided.voided!.voidJournalId)).toEqual([
+      ["1030", "20.00", "0.00", "USD 0.00 revaluation"],
+      ["7010", "0.00", "20.00"],
+      ["1100", "0.00", "38.00", "USD 0.00 revaluation"],
+      ["7000", "38.00", "0.00"],
+      ["2000", "0.00", "2.00", "USD 0.00 revaluation"],
+      ["7000", "2.00", "0.00"],
+    ]);
+    expect(await posted(voided.voided!.voidReversalJournalId)).toEqual(await posted(mc8.revaluationJournalId));
+    // No longer revalued on 31 Jul for period close; MC8's refusal to revalue 1100 USD again doesn't apply.
+    expect((await checks()).items.map((item) => item.label)).toEqual(["1030 USD account", "1100 Accounts receivable", "2000 Accounts payable"]);
+    const { run: again } = await run((tx) =>
+      postFxRevaluation(tx, {
+        idempotencyKey: key("fx"),
+        reference: "FX-JUL-2",
+        revaluationDate: "2026-07-31",
+        reversalPostingDate: "2026-08-01",
+        rateDate: "2026-07-31",
+        rateSource: "RBNZ",
+        unrealisedGainAccountCode: "7000",
+        unrealisedLossAccountCode: "7010",
+        balances: [
+          { accountCode: "1030", closingRate: "1.62" },
+          { accountCode: "1100", currencyCode: "USD", closingRate: "1.62" },
+          { accountCode: "2000", currencyCode: "USD", closingRate: "1.62" },
+        ],
+      }),
+    );
+    expect(again.items.map((item) => [item.accountCode, item.deltaAmount])).toEqual([
+      ["1030", "-20.00"],
+      ["1100", "38.00"],
+      ["2000", "-2.00"],
+    ]);
+    expect((await checks()).status).toBe("pass");
   });
 
   it("MC9: aged receivables and payables show the document currency and NZD; they tie to the ledger with the revaluation", async () => {

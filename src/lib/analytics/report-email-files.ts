@@ -231,7 +231,7 @@ async function writeReportFile(
   }
   const messageHash = createHash("sha256").update(messageId).digest("hex");
   const name = replace ? fileName : `${receivedAt.slice(0, 10)}-${messageHash.slice(0, 16)}-${fileName}`;
-  const root = path.resolve(sourceFolder);
+  const root = path.resolve(/* turbopackIgnore: true */ sourceFolder);
   const handles: FileHandle[] = [];
   let staging: string | null = null;
   try {

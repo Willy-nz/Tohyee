@@ -133,6 +133,17 @@ describe("the Windows installer and its fingerprint (decision 331)", () => {
       problem: "Release v1.2.0 has no TohyeeSetup-1.2.0.exe, so it can't be installed from here.",
     });
   });
+
+  it("gives up on the .sha256 file after 15 seconds and says why", async () => {
+    const stalled = vi.fn<typeof fetch>(async () =>
+      Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError")),
+    );
+    expect(await windowsSetupFor(latest("1.2.0", [{ name: "TohyeeSetup-1.2.0.exe" }, { name: "TohyeeSetup-1.2.0.exe.sha256" }]), stalled)).toEqual({
+      problem:
+        "GitHub didn't send the SHA-256 fingerprint for TohyeeSetup-1.2.0.exe within 15 seconds, so the download can't be checked. Try again later, or download it from the release page and run it yourself.",
+    });
+    expect(stalled.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+  });
 });
 
 describe("what a start records (decision 330)", () => {

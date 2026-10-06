@@ -6,7 +6,8 @@ import * as booksRoute from "@/app/api/analytics/books/route";
 import * as analyticsRoute from "@/app/api/analytics/route";
 import * as sourcesRoute from "@/app/api/analytics/sources/route";
 import { runTile } from "@/lib/analytics/dashboards";
-import { closeAnalytics, queryAnalytics } from "@/lib/analytics/engine";
+import { readBooks } from "@/lib/analytics/books";
+import { closeAnalytics, queryAnalytics, replaceTohyeeTables, type TableCopy, type TableCopyRow } from "@/lib/analytics/engine";
 import { runDueLoads } from "@/lib/analytics/scheduler";
 import type { SessionUser } from "@/lib/auth/sessions";
 import { createContact } from "@/lib/contacts/service";
@@ -239,6 +240,45 @@ describeWithDatabase("analytics: the books and CRM", () => {
       { reference: null, journal_description: "Pay run", description: "Pay run", contact: null },
     ]);
     expect(JSON.stringify(await queryAnalytics(ORG, "select * from tohyee_ledger_lines"))).not.toContain("Aroha");
+  });
+
+  it("reads the big tables in batches (issue 150) and copies the same rows as one batch", async () => {
+    // Every table's rows, read in the transaction; batched tables are collected batch by batch.
+    const read = (batchSize?: number) =>
+      as(async (tx) => {
+        const tables = await readBooks(tx, new Map(), batchSize === undefined ? {} : { batchSize });
+        const copies: Array<{ name: string; columns: TableCopy["columns"]; rows: TableCopyRow[]; batches: number[] }> = [];
+        for (const table of tables) {
+          const rows: TableCopyRow[] = [];
+          const batches: number[] = [];
+          if (Array.isArray(table.rows)) rows.push(...table.rows);
+          else {
+            for await (const batch of table.rows) {
+              batches.push(batch.length);
+              rows.push(...batch);
+            }
+          }
+          copies.push({ name: table.name, columns: table.columns, rows, batches });
+        }
+        return copies;
+      });
+    const whole = await read();
+    const small = await read(3);
+    const strip = (copies: typeof whole) => copies.map(({ name, columns, rows }) => ({ name, columns, rows }));
+    expect(strip(small)).toEqual(strip(whole));
+    const ledger = small.find((table) => table.name === "tohyee_ledger_lines")!;
+    // 10 setup journals, AB6's invoice journals, AB8's and AB10's: more lines than one batch of 3.
+    expect(ledger.rows.length).toBeGreaterThan(20);
+    expect(ledger.batches.every((size) => size <= 3)).toBe(true);
+    expect(ledger.batches.length).toBe(Math.ceil(ledger.rows.length / 3));
+    expect(whole.find((table) => table.name === "tohyee_ledger_lines")!.batches).toEqual([ledger.rows.length]);
+
+    // Appended batch by batch into DuckDB, the copy is the same as the nightly one.
+    const before = await queryAnalytics(ORG, "select count(*)::int as n, sum(amount)::varchar as total, string_agg(account_code, ',' order by journal_id, line) as codes from tohyee_ledger_lines");
+    const copied = await as(async (tx) => replaceTohyeeTables(ORG, await readBooks(tx, new Map(), { batchSize: 3 })));
+    expect(copied).toBe(small.reduce((total, table) => total + table.rows.length, 0));
+    expect(await queryAnalytics(ORG, "select count(*)::int as n, sum(amount)::varchar as total, string_agg(account_code, ',' order by journal_id, line) as codes from tohyee_ledger_lines")).toEqual(before);
+    expect(before[0].n).toBe(ledger.rows.length);
   });
 
   it("only admins and owners refresh; CSV sources can't take tohyee_ names; anyone can see when it was copied", async () => {

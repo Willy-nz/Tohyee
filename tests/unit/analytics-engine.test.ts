@@ -5,7 +5,11 @@ import ExcelJS from "exceljs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   analyticsFilePath,
+  analyticsMemoryLimit,
+  analyticsTempDirectoryLimit,
   closeAnalytics,
+  DEFAULT_MEMORY_LIMIT,
+  DEFAULT_TEMP_DIRECTORY_LIMIT,
   loadCsv,
   loadXlsx,
   inspectXlsx,
@@ -245,5 +249,28 @@ describe("analytics engine (decisions 354-358)", () => {
     expect(Date.now() - started).toBeLessThan(10_000);
     // The connection is usable again straight after.
     expect(await runBuiltQuery(ORG, "select 1 as one", [])).toEqual([{ one: "1" }]);
+  });
+
+  it("caps DuckDB's memory and spill files, and they can't be changed back (issue 150)", async () => {
+    expect([DEFAULT_MEMORY_LIMIT, DEFAULT_TEMP_DIRECTORY_LIMIT]).toEqual(["1GiB", "2GiB"]);
+    expect(
+      await runBuiltQuery(ORG, "select current_setting('memory_limit') as memory, current_setting('max_temp_directory_size') as spill", []),
+    ).toEqual([{ memory: "1.0 GiB", spill: "2.0 GiB" }]);
+    await expect(runBuiltQuery(ORG, "set max_temp_directory_size = '1TB'", [])).rejects.toThrow(/locked/);
+  });
+
+  it("takes the limits from the server's settings, ignoring ones that aren't sizes", () => {
+    const saved = { memory: process.env.TOHYEE_ANALYTICS_MEMORY_LIMIT, spill: process.env.TOHYEE_ANALYTICS_TEMP_LIMIT };
+    try {
+      process.env.TOHYEE_ANALYTICS_MEMORY_LIMIT = "512MiB";
+      process.env.TOHYEE_ANALYTICS_TEMP_LIMIT = "10GB'; drop table x; --";
+      expect(analyticsMemoryLimit()).toBe("512MiB");
+      expect(analyticsTempDirectoryLimit()).toBe("2GiB");
+    } finally {
+      if (saved.memory === undefined) delete process.env.TOHYEE_ANALYTICS_MEMORY_LIMIT;
+      else process.env.TOHYEE_ANALYTICS_MEMORY_LIMIT = saved.memory;
+      if (saved.spill === undefined) delete process.env.TOHYEE_ANALYTICS_TEMP_LIMIT;
+      else process.env.TOHYEE_ANALYTICS_TEMP_LIMIT = saved.spill;
+    }
   });
 });

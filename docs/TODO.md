@@ -18,26 +18,28 @@ Where each concern stands (6 Oct 2026, for 0.7.0):
       PostgreSQL to 127.0.0.1 and has no Redis.
 - [x] #156 CI checks `relay/`; the Windows build refuses a PostgreSQL major
       version other than 17 until `pg_upgrade` is built.
-- [ ] #147 Akahu: amounts are now read as exact decimals (sub-cent refused).
-      Still open: the sync window. The issue suggests going back further,
-      but approved example BK15 says "two days before the last line"; Jess
-      to decide before it changes. Credit card balance sign to confirm
-      against a real Akahu card account.
-- [ ] #150 Analytics: a shaped table rebuild now stops after 10 minutes and
-      keeps the last one (the limit is new: Jess to confirm). Still open:
-      DuckDB temp-disk and memory caps, and streaming the books copy.
-- [ ] #153 Docker zip: README.txt now explains the encrypted nightly
-      backups, the backup key, restoring with the command-line tool, and
-      that Backup-Tohyee's file isn't encrypted (the script says so too).
-      Still open: defaulting `TOHYEE_BACKUP_FOLDER` to a folder outside
-      Docker (needs trying on Windows).
-- [ ] #154 release supply chain: checkouts no longer keep the token, and
-      update checks time out after 15 seconds. Still open: signing the
-      installer, verifying bundled downloads' hashes, splitting release jobs.
-- [ ] #145 organisation SMTP pointing at the server or private network:
-      blocking it would break local mail relays; needs a server setting
-      (to confirm with Jess).
-- [ ] #151 FX revaluation of foreign bank accounts: needs worked examples.
+- [x] #147 Akahu: amounts are read as exact decimals (sub-cent refused);
+      each sync re-reads the last 30 days, and lines deleted from any API
+      feed stay deleted (BK29, Jess). Still open: the credit card balance
+      sign, to confirm against a real Akahu card account.
+- [x] #150 Analytics: DuckDB memory (1 GiB) and spill (2 GiB) caps, a
+      5-minute limit on rebuilding a shaped table (keeping the last one),
+      all three changeable by environment variable, and the books copy read
+      in batches (decision 468).
+- [x] #153 Docker zip: Backup-Tohyee runs Tohyee's encrypted backup, and the
+      nightly backups go to a `backups` folder beside the compose file
+      (Jess). Not yet tried on Windows with Docker Desktop.
+- [x] #154 release supply chain: read-only tokens except the publishing
+      jobs, no overwriting a release's files, Visual C++ and Inno Setup
+      pinned by SHA-256, checkouts don't keep the token, and update checks
+      time out after 15 seconds. Still open: signing (Jess: later, once
+      there's a certificate).
+- [x] #145 organisations' SMTP: public addresses and ports 25/465/587/2525
+      only, unless a server admin turns on "Allow local mail relay" (Jess).
+- [x] #151 FX: a transfer out before a revaluation's reversal is refused,
+      revaluations can be voided, one revaluation at a time for every
+      account, and JPY/XPF statement lines can be coded (FXB12-FXB14,
+      approved by Jess).
 - [ ] #152 Windows service account and data folder permissions: needs
       trying on Windows.
 

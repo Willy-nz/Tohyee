@@ -2,6 +2,16 @@ import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { akahuMoney, akahuProblem, listAkahuAccounts } from "@/lib/bank/akahu/client";
 import { akahuCredentialsFor } from "@/lib/bank/akahu/settings";
 
+/** The balance shown when choosing an account to link: blank rather than rounded if it isn't whole cents. */
+function shownBalance(value: unknown): string | null {
+  if (typeof value !== "number") return null;
+  try {
+    return akahuMoney(value, "Akahu's account balance");
+  } catch {
+    return null;
+  }
+}
+
 /** GET: the Akahu accounts this organisation can link, and which of its bank accounts each is linked to. */
 export const GET = route(async (request) => {
   const organisationId = searchParams(request).get("organisationId");
@@ -28,7 +38,7 @@ export const GET = route(async (request) => {
       type: account.type ?? null,
       status: account.status ?? null,
       connectionName: account.connection?.name ?? null,
-      balance: typeof account.balance?.current === "number" ? akahuMoney(account.balance.current, "account balance") : null,
+      balance: shownBalance(account.balance?.current),
       linkedAccountId: linkedTo.get(account._id) ?? null,
     })),
   });

@@ -10,15 +10,15 @@ import {
 import { akahuCredentialsForAccount } from "@/lib/bank/akahu/settings";
 import { makeLine, type ParsedStatementLine } from "@/lib/bank/formats/common";
 import { writeAuditEvent } from "@/lib/audit";
-import { abs, dec, neg, toFixedString } from "@/lib/money/decimal";
 import { businessTimeZone } from "@/lib/dates";
 import { type Actor, withOrganisationTransaction } from "@/lib/db/org-transaction";
+import { abs, dec, neg, toFixedString } from "@/lib/money/decimal";
 import { listAllOrganisations } from "@/lib/organisations/admin";
 import { secretsAvailable } from "@/lib/secrets";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 
 /**
- * Bank feed syncs (examples BK15, BK16): read settled transactions from Akahu
+ * Bank feed syncs (examples BK15, BK16, BK29): read settled transactions from Akahu
  * for a linked account and add the new ones as statement lines. The network
  * calls happen between two short database transactions, never inside one.
  */
@@ -30,23 +30,31 @@ function nzDate(iso: string): string {
   );
 }
 
-function dayBefore(date: string): string {
+function daysBefore(date: string, days: number): string {
   const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCDate(value.getUTCDate() - 1);
+  value.setUTCDate(value.getUTCDate() - days);
   return value.toISOString().slice(0, 10);
 }
+
+/**
+ * How far before the newest feed line each sync reads again (issue #147). A
+ * bank can settle a transaction days later under its original date; lines
+ * already here are skipped by Akahu's id, and deleted ones stay deleted.
+ */
+export const AKAHU_OVERLAP_DAYS = 30;
 
 /** An Akahu transaction as a statement line (money out is negative on both sides). */
 export function lineFromAkahu(transaction: AkahuTransaction): ParsedStatementLine {
   return makeLine({
     date: nzDate(transaction.date),
-    amount: akahuMoney(transaction.amount, `amount for ${transaction._id}`),
+    amount: akahuMoney(transaction.amount, `Akahu's amount for transaction ${transaction._id}`),
     description: transaction.description,
     payee: transaction.merchant?.name ?? null,
     particulars: transaction.meta?.particulars ?? null,
     code: transaction.meta?.code ?? null,
     reference: transaction.meta?.reference ?? null,
-    balance: typeof transaction.balance === "number" ? akahuMoney(transaction.balance, `balance for ${transaction._id}`) : null,
+    balance:
+      typeof transaction.balance === "number" ? akahuMoney(transaction.balance, `Akahu's balance for transaction ${transaction._id}`) : null,
     externalId: `akahu:${transaction._id}`,
   });
 }
@@ -71,16 +79,23 @@ export async function syncBankFeedAccount(
       return { ...link, lastFeedDate: last.rows[0]?.last ?? null };
     });
     if (options.refresh) await refreshAkahuAccount(prepared.credentials, prepared.akahuAccountId);
-    const from = prepared.lastFeedDate && prepared.lastFeedDate > prepared.startDate ? prepared.lastFeedDate : prepared.startDate;
+    // From AKAHU_OVERLAP_DAYS before the newest feed line, never before the start date. The extra two
+    // days before that cover the gap between the New Zealand date and Akahu's UTC times.
+    const overlap = prepared.lastFeedDate ? daysBefore(prepared.lastFeedDate, AKAHU_OVERLAP_DAYS) : null;
+    const from = overlap && overlap > prepared.startDate ? overlap : prepared.startDate;
     const [transactions, accounts] = await Promise.all([
-      listAkahuTransactions(prepared.credentials, prepared.akahuAccountId, `${dayBefore(dayBefore(from))}T00:00:00.000Z`),
+      listAkahuTransactions(prepared.credentials, prepared.akahuAccountId, `${daysBefore(from, 2)}T00:00:00.000Z`),
       listAkahuAccounts(prepared.credentials),
     ]);
     const lines = transactions.map(lineFromAkahu).filter((line) => line.date >= prepared.startDate);
     const akahuAccount = accounts.find((account) => account._id === prepared.akahuAccountId);
-    const balance = typeof akahuAccount?.balance?.current === "number" ? akahuMoney(akahuAccount.balance.current, "account balance") : null;
+    const current =
+      typeof akahuAccount?.balance?.current === "number" ? dec(akahuMoney(akahuAccount.balance.current, "Akahu's account balance")) : null;
     // Akahu reports a credit card's balance as what's owed; statement lines count what's owed as negative.
+    // Open (#147): forcing it negative gets a card in credit wrong if Akahu signs that as a credit; Akahu's
+    // sign convention for CREDITCARD balances isn't confirmed yet, so this is unchanged.
     const isCard = akahuAccount?.type === "CREDITCARD";
+    const balance = current === null ? null : toFixedString(isCard ? neg(abs(current)) : current, 2);
     return await withOrganisationTransaction(organisation, actor, async (tx) => {
       await lockStatementAccount(tx, accountId, "feed");
       const counts = await addStatementLines(tx, accountId, null, lines, { dryRun: true });
@@ -107,7 +122,7 @@ export async function syncBankFeedAccount(
                 updated_at = now()
           where account_id = $1
           returning last_synced_at as at`,
-        [accountId, balance === null ? null : isCard ? toFixedString(neg(abs(dec(balance))), 2) : balance],
+        [accountId, balance],
       );
       return { ...counts, syncedAt: synced.rows[0].at };
     });

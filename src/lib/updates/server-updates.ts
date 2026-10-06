@@ -1,9 +1,6 @@
 import packageJson from "../../../package.json";
 
 const GITHUB_REPOSITORY = "Willy-nz/Tohyee";
-/** How long the update check waits for GitHub (the release, and its .sha256 file). */
-export const UPDATE_FETCH_TIME_LIMIT_MS = 15_000;
-
 const GITHUB_RELEASES_LATEST_URL = `https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest`;
 
 type GitHubReleaseAsset = {
@@ -185,16 +182,31 @@ function selectPreferredAsset(assets: ReleaseAsset[]) {
   return ranked[0] ?? null;
 }
 
+/** How long the update check waits for GitHub before giving up. */
+export const UPDATE_FETCH_TIMEOUT_MS = 15_000;
+
+/** True when a fetch was stopped by AbortSignal.timeout(). */
+export function isTimeout(error: unknown): boolean {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
 export async function getLatestReleaseCheck(): Promise<LatestReleaseCheck> {
-  const response = await fetch(GITHUB_RELEASES_LATEST_URL, {
-    headers: {
-      accept: "application/vnd.github+json",
-      "user-agent": "tohyee-update-check",
-    },
-    cache: "no-store",
-    // A stalled connection mustn't hold the daily check or Install (issue #154).
-    signal: AbortSignal.timeout(UPDATE_FETCH_TIME_LIMIT_MS),
-  });
+  let response: Response;
+  try {
+    response = await fetch(GITHUB_RELEASES_LATEST_URL, {
+      headers: {
+        accept: "application/vnd.github+json",
+        "user-agent": "tohyee-update-check",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(UPDATE_FETCH_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (isTimeout(error)) {
+      throw new Error(`GitHub didn't answer the release check within ${UPDATE_FETCH_TIMEOUT_MS / 1000} seconds.`);
+    }
+    throw new Error(`Couldn't reach GitHub for the release check: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   if (response.status === 404) {
     throw new Error("No GitHub releases found.");
@@ -204,7 +216,15 @@ export async function getLatestReleaseCheck(): Promise<LatestReleaseCheck> {
     throw new Error(`GitHub release check failed with status ${response.status}.`);
   }
 
-  const payload = (await response.json()) as GitHubReleaseResponse;
+  let payload: GitHubReleaseResponse;
+  try {
+    payload = (await response.json()) as GitHubReleaseResponse;
+  } catch (error) {
+    if (isTimeout(error)) {
+      throw new Error(`GitHub didn't finish sending the release check within ${UPDATE_FETCH_TIMEOUT_MS / 1000} seconds.`);
+    }
+    throw error;
+  }
   const currentVersion = packageJson.version;
   const latestVersion = normalizeVersion(payload.tag_name);
   const assets = payload.assets.map((asset) => ({

@@ -11,7 +11,7 @@ import { assertSameRequest, requestHash } from "@/lib/idempotency";
 import { AMOUNTS_MODES, calculateInvoice, type AmountsMode } from "@/lib/invoices/amounts";
 import { controlAccountCode, GST_ACCOUNT } from "@/lib/invoices/service";
 import { type AvailableOn, sideRefusal } from "@/lib/tax/available-on";
-import { carryingValueOut, convertAtRate, foreignAccountState, impliedRate } from "@/lib/ledger/foreign";
+import { carryingValueOut, convertAtRate, foreignAccountState, impliedRate, revaluationReversedAfter } from "@/lib/ledger/foreign";
 import { type ForeignAmount, getJournal, parseExchangeRate, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
 import { add, dec, isZero, parseDecimalInput, significantScale, sub, toFixedString, toPlainString, ZERO_DECIMAL } from "@/lib/money/decimal";
@@ -491,9 +491,11 @@ export async function createBankTransaction(
     custom.body,
     resolved.resolvedLines.map((line, index) => ({ values: custom.lines[index], accountClass: line.accountClass })),
   );
-  if (options.expectedTotal !== undefined && toFixedString(dec(options.expectedTotal), 2) !== resolved.total) {
+  // At the line's currency's own decimal places (FXB14: JPY 1,000 is "1000", not "1000.00").
+  const lineScale = currencyMinorUnits(resolved.foreignCurrency ?? tx.baseCurrency);
+  if (options.expectedTotal !== undefined && toFixedString(dec(options.expectedTotal), lineScale) !== resolved.total) {
     throw new ValidationError(
-      `The bank transaction comes to ${resolved.total}, but the statement line is ${toFixedString(dec(options.expectedTotal), 2)}.`,
+      `The bank transaction comes to ${resolved.total}, but the statement line is ${toFixedString(dec(options.expectedTotal), lineScale)}.`,
     );
   }
   const gst = isZero(dec(resolved.taxTotal)) ? null : await controlAccountCode(tx, GST_ACCOUNT, "bank transactions with GST can't be posted");
@@ -979,6 +981,13 @@ async function planTransfer(
   // Out of a foreign account (FXB5, FXB8): at its carrying value, the rest a realised gain or loss.
   const currency = from.foreignCurrency!;
   const received = fixed(rawToAmount, base, "toAmount");
+  // FXB12: not before a revaluation's reversal, or the unrealised amount would leave as carrying value.
+  const revaluation = await revaluationReversedAfter(tx, from.id, date);
+  if (revaluation) {
+    throw new ValidationError(
+      `${from.code} (${from.name}) was revalued on ${revaluation.revaluationDate} (${revaluation.reference}), and that isn't reversed until ${revaluation.reversalPostingDate}. A transfer out dated before then isn't supported: void the revaluation, post the transfer, then revalue again, or date the transfer ${revaluation.reversalPostingDate} or later.`,
+    );
+  }
   const state = await foreignAccountState(tx, from.id, date);
   if (state.foreignBalance === null) {
     throw new ValidationError(

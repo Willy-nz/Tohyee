@@ -165,9 +165,11 @@ From the project review of 4 Oct 2026 (#158):
 - Journal corrections are limited to the journals they're meant for (#138). Switching organisation in another tab no longer posts this tab's form to the other organisation (#143). Emails aren't sent twice after an unclear result (#146). CSV exports neutralise spreadsheet formulas (#148). IMAP report emails save .xlsx attachments (#149). The Customer field is labelled for screen readers (#157).
 - Payroll: bank files pay the account kept when the run was approved, approvers can't change an employee's tax code, KiwiSaver or bank account and still approve, KiwiSaver temporary rate reductions, and salary back pay after a reduced period (#139-#142).
 - Security headers on every page and API response: frame-ancestors, X-Frame-Options, Referrer-Policy and nosniff (#144).
-- Akahu bank feed amounts are read as exact decimals; sub-cent amounts are refused (part of #147).
-- Rebuilding a shaped Analytics table stops after 10 minutes and keeps the last one (part of #150).
-- Update checks time out after 15 seconds (part of #154).
+- Organisations' email servers must be public addresses on ports 25, 465, 587 or 2525. **If an organisation sends through a mail server on the Tohyee server or its local network, a server admin must turn on "Allow local mail relay" (Server settings › Email) after updating, or its emails stop** (#145).
+- Akahu bank feeds re-read the last 30 days so late transactions arrive, lines deleted from any bank feed stay deleted, and amounts are read as exact decimals (#147).
+- Foreign currency: revaluations can be voided; a transfer out of a foreign account before a revaluation is reversed is refused; one revaluation at a time per account; JPY and XPF statement lines can be coded (#151).
+- Analytics: DuckDB memory and temporary-disk caps, a 5-minute limit on rebuilding a shaped table (keeping the last one), and the books copy read in batches (#150).
+- Update checks time out after 15 seconds (#154).
 
 New since 0.5.0:
 - Bank: rules with several conditions and split lines, contact defaults, statement files read from a folder or mailbox, and SimpleFIN, Stripe, PayPal and Wise feeds.
@@ -178,14 +180,14 @@ New since 0.5.0:
 - A simpler top bar, page dashboards, a new Home, and search everything with Ctrl K.
 
 ## Documentation & Website
-- README and the website list the new features; the Docker zip's README.txt explains the encrypted nightly backups, the backup key and restoring (part of #153).
+- README and the website list the new features; the Docker zip's README.txt explains the encrypted nightly backups, the backup folder, the backup key and restoring (#153).
 - The dev docker-compose.yml is labelled dev-only, binds PostgreSQL to 127.0.0.1 and drops the unused Redis (#155).
 
 ## Packaging & Windows Installer
 - Release bundles and the Docker image no longer pick up the repository or local analytics/, backups/ or data/ folders (#155).
 - The Windows build refuses a PostgreSQL major version other than 17 until upgrades are built (#156). CI now checks relay/ (#156).
-- Release workflows don't keep the GitHub token in the checkout (part of #154).
-- Backup-Tohyee (Docker zip) warns that its file isn't encrypted (part of #153).
+- Release workflows run with read-only tokens except the jobs that publish, never overwrite a release's files, and pin the Visual C++ and Inno Setup downloads by SHA-256 (#154; signing comes later).
+- Docker zip: Backup-Tohyee makes Tohyee's encrypted backup, and nightly backups go to a `backups` folder beside the compose file instead of inside Docker (#153; not yet tried on Windows).
 
 Database upgrades run by themselves when Tohyee starts. Back up first if you install by hand.
 ```
@@ -231,8 +233,10 @@ Database upgrades run by themselves when Tohyee starts. Back up first if you ins
   PayPal; Jess picks the order), examples first.
 - Project review of 4 Oct 2026 (#158, issues #130-#157): fixed (decisions
   456-460): #130-#138, #143, #146, #148, #149, #157 (PR #174), #139-#142
-  (PR #175), and #144, #155, #156 for 0.7.0. Partly done: #147, #150, #153,
-  #154. Still open: #145, #151, #152. Details in [TODO.md](TODO.md).
+  (PR #175), #144, #155, #156 (PR #176), and #144, #145, #147, #150, #151,
+  #153, #154, #155, #156 in full (decisions 465-473). Still open: #152
+  (Windows testing), #154 signing, the Akahu card balance sign (#147).
+  Details in [TODO.md](TODO.md).
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
@@ -323,8 +327,12 @@ and reserves (item 7 part 1, decisions 447-450, tenant migration 0104).
 WooCommerce orders (item 7
 part 2, decisions 451-455, tenant migration 0105). Review fixes
 (decisions 456-460, no migrations). Payroll review fixes (decisions
-461-464, tenant migrations 0106-0107). Next numbers: tenant migration 0108,
-core migration 0009, decision 465.
+461-464, tenant migrations 0106-0107). Review fixes part 3 (decisions
+465-473, tenant migration 0108). Next numbers: tenant migration 0109,
+core migration 0009, decision 474. Still open from the review: #152
+(Windows service account and folder permissions; needs testing on
+Windows), #153's changes untried on Windows, #154 code signing, and
+Akahu's credit card balance sign (#147).
 
 Merged 1-2 Oct 2026 (built in Claude sessions): Shopify stage 2 (#77, 0061),
 payroll P4 paying wages and IRD (#78, 0062), P5 bank files and payslips (#79,

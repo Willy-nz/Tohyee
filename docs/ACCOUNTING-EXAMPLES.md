@@ -1354,12 +1354,18 @@ organisation's bank or credit card accounts, with a start date for the
 history to bring in.
 
 - Syncing reads settled transactions only (pending ones wait until they
-  settle) from two days before the last line it brought in (lines already
-  there are skipped by Akahu's id), or from the start date the first time, as far back as Akahu and the bank allow. Network calls
+  settle) from 30 days before the last line it brought in, but never before
+  the start date, so a transaction that settles late under its original date
+  still comes in (issue #147). Lines already there are skipped by Akahu's id,
+  and so are lines someone deleted (Jess: a line someone deleted stays
+  deleted). The first time, it reads from the start date, as far back as
+  Akahu and the bank allow. Network calls
   happen outside database transactions; each account's lines are then added
   in one transaction.
 - Akahu's amount is signed the same way as statement lines (negative is money
-  out). Its date is converted to the New Zealand date. Particulars, code,
+  out). Akahu sends amounts and balances as numbers; each is read exactly
+  and must be whole cents (1.005 makes the sync fail with the reason rather
+  than being rounded). Its date is converted to the New Zealand date. Particulars, code,
   reference and the merchant name come across when Akahu has them.
 - Accounts sync on a schedule (every 6 hours by default, 1-24 per
   organisation) and on demand. A failed sync keeps the error on the account
@@ -1374,6 +1380,16 @@ history to bring in.
   possible duplicate of the feed line.
 - **BK16** Akahu's balance for the account is kept as the statement balance
   with its date, shown next to the ledger balance.
+- **BK29** (issue #147; approved by Jess, 5 Oct 2026, for every API feed) An Akahu account linked to
+  1000 with a start date of 20 May 2026. The first sync brings in +0.10 on
+  4 Jun and +0.20 on 5 Jun, read exactly from Akahu's numbers 0.1 and 0.2; the
+  next brings in -46.00 on 20 Jun. The first import is deleted. A -230.00
+  card purchase dated 10 Jun then settles late. The next sync reads from 21
+  May (30 days before 20 Jun; Akahu is asked from 19 May 00:00 UTC to cover
+  the time zone): the 10 Jun line is added, and the deleted 4 and 5 Jun
+  lines are not brought back. Lines from files are different: deleting an
+  OFX import and importing the file again by hand brings its lines back
+  (BK12, BF6).
 
 ### Automatic statement files: a folder and a mailbox per bank account (approved by Jess, 5 Oct 2026)
 
@@ -2660,6 +2676,52 @@ Date,Amount,Payee,Particulars,Code,Reference,Balance
   in NZD: 1030 **0.00**, 7020 **48.70** credit (6.85 + 41.85), 7000 nothing
   (the revaluation was reversed), 4000 1,754.30 credit (FXB2's 1,654.30 and
   INV-0001's 100.00), 6040 83.00 debit.
+- **FXB12 A transfer out before a revaluation is reversed** (#151;
+  approved by Jess, 5 Oct 2026: refuse, and let a revaluation be voided).
+  After FXB7, 1030 holds USD 2,060.00 = NZD 3,378.40 on 31 Jul (3,358.15
+  carrying plus the 20.25 revaluation, reversed on 1 Aug). Before this fix,
+  all USD 2,060.00 transferred to 1000 dated **31 Jul** (NZD 3,400.00
+  received) took 3,378.40 "at carrying value" (gain 21.60), then the 1 Aug
+  reversal credited 1030 another 20.25: USD 0.00 but **NZD -20.25**, with
+  20.25 of the real gain missing.
+  - **Refused**: "1030 (USD account) was revalued on 2026-07-31 (FXREV-n),
+    and that isn't reversed until 2026-08-01. A transfer out dated before
+    then isn't supported: void the revaluation, post the transfer, then
+    revalue again, or date the transfer 2026-08-01 or later." (Dates as in
+    the existing MC8 message.) The same for a
+    transfer out dated before the revaluation (e.g. 30 Jul), which would
+    leave the revaluation counting money that had already gone. Dated 1 Aug
+    or later it's allowed (FXB8).
+  - **Voiding a revaluation** posts the exact reversal of its journal, dated
+    the revaluation date, and of its reversal journal, dated the reversal
+    date, for every account it revalued (a run covering 1030, 1100 USD and
+    2000 USD is voided as a whole). Period locks apply to both dates. It's
+    refused once a later revaluation of any of its accounts exists, and
+    voiding twice is refused. The revaluation is kept, shown as voided, with
+    who voided it and when (audit history). A voided revaluation no longer
+    counts for FXB12, FXB13, F5 or the statement line rate (its rate isn't
+    shown).
+  - **Then**: void FXB7's revaluation (1030 back to NZD 3,358.15 on 31
+    Jul), transfer all USD 2,060.00 out on 31 Jul for NZD 3,400.00: carrying
+    **3,358.15**, gain **41.85**: Dr 1000 3,400.00 / Cr 1030 3,358.15 (USD
+    2,060.00) / Cr 7020 41.85. 1030: USD 0.00 / NZD 0.00. Revaluing 1030 on
+    31 Jul again: "nothing to revalue" (USD 0.00). NetSuite gets the same
+    result by revaluing at period end, after everything in the period is
+    posted.
+- **FXB13 Overlapping revaluations of a bank account** (#151; approved by
+  Jess, 5 Oct 2026). Had FXB7's reversal been dated 1 Sep, a revaluation of
+  1030 on 15 Aug would be refused, as receivables and payables already are
+  (MC8): "Account 1030 USD was revalued on 2026-07-31 (…), and that isn't
+  reversed until 2026-09-01. Revaluing it again before then isn't supported
+  yet." One dated 1 Sep or later is allowed.
+- **FXB14 A currency with no cents** (#151; approved by Jess, 5 Oct 2026). 1050
+  **JPY account** (bank, JPY), opening foreign balance JPY 100,000 = NZD
+  1,050.00. A statement line of JPY -1,000 coded as spend money, 6040,
+  NONE, at **0.0105**: NZD **10.50**: Dr 6040 10.50 / Cr 1050 10.50 (JPY
+  1,000 at 0.0105). Today it's refused because the line total is compared
+  as "1000.00" against "1000"; the fix compares at the currency's own
+  decimal places and posts nothing different. (An organisation whose own
+  currency has no cents, e.g. JPY, isn't covered by this example.)
 
 ### Not supported yet (refused rather than guessed)
 

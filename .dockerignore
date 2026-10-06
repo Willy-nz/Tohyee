@@ -11,8 +11,10 @@ deploy
 .env.*
 *.log
 relay
-# Data a development server writes into the working copy (DuckDB copies of
-# real books, backups): never part of an image.
+# Data a local copy writes at run time (issue #155): backups, analytics' DuckDB
+# copies of the books, and data. Never part of an image.
 analytics
 backups
 data
+# Coding agents' working copies (.claude/worktrees).
+.claude

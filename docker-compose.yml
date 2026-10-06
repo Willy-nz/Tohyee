@@ -1,7 +1,6 @@
-# For development only (`npm run db:start`): PostgreSQL 17 for `npm run dev`
-# and the tests, reachable from this computer only. The password is a
-# throwaway; don't use this file for a real install (see deploy/windows and
-# the README's Docker section).
+# For development only (npm run db:start): a local PostgreSQL with a
+# password written in this file. It listens on this computer only
+# (127.0.0.1). Not for running Tohyee for real.
 services:
   postgres:
     image: postgres:17
