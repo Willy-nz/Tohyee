@@ -3,123 +3,482 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tohyee: free accounting you run yourself</title>
-<meta name="description" content="Tohyee is free, open-source accounting software for New Zealand, including GST returns, invoices, bills and bank reconciliation, that runs on your own computer.">
+<title>Tohyee: accounting that's yours</title>
+<meta name="description" content="Tohyee is free, open-source accounting for New Zealand: invoices, bank feeds and reconciliation, GST returns, payroll and reports. It runs on your own computer, with no monthly fee.">
+<meta name="theme-color" content="#0e7467" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c1110" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="Tohyee: accounting that's yours">
+<meta property="og:description" content="Free, open-source accounting for New Zealand that runs on your own computer.">
+<meta property="og:image" content="https://willy-nz.github.io/Tohyee/img/home-light.png">
+<meta property="og:type" content="website">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  /* Inter (SIL Open Font License, fonts/INTER-LICENSE.txt), served from this site: no third-party font requests. */
+  @font-face { font-family: "Inter"; src: url("fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+  @font-face { font-family: "Inter"; src: url("fonts/inter-latin-ext-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap;
+    unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
   :root {
-    --bg: #f3f5f9; --surface: #ffffff; --ink: #0f172a; --muted: #5b6474;
-    --line: #e2e8f0; --accent: #2563eb; --accent-strong: #1d4ed8; --accent-soft: #eff6ff;
-    --warn-soft: #fffbeb; --warn-line: #fde68a;
+    --bg: #f6f8f7; --bg-tint: #eaf3f0; --surface: #ffffff; --surface-2: #f1f5f3;
+    --ink: #101a17; --muted: #55625d; --faint: #7d8984; --line: #e1e7e4; --line-strong: #cdd6d2;
+    --accent: #0e7467; --accent-hover: #0a5f54; --accent-soft: #e2f1ed; --accent-ink: #0a5248; --on-accent: #ffffff;
+    --glow-a: rgba(14, 116, 103, 0.20); --glow-b: rgba(52, 195, 168, 0.16);
+    --warn-bg: #fdf6e3; --warn-line: #efd28f; --warn-ink: #7a4b08;
+    --shadow: 0 1px 2px rgba(16, 26, 23, .05), 0 8px 24px rgba(16, 26, 23, .06);
+    --shadow-xl: 0 2px 6px rgba(16, 26, 23, .06), 0 30px 80px -20px rgba(16, 26, 23, .28);
+    --radius: 14px; --radius-lg: 22px;
+    --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0b1120; --surface: #111a2e; --ink: #e5e9f0; --muted: #9aa4b5;
-      --line: #22304a; --accent: #60a5fa; --accent-strong: #93c5fd; --accent-soft: #15213a;
-      --warn-soft: #231c0b; --warn-line: #5b4712;
+      --bg: #0b100f; --bg-tint: #0f1a17; --surface: #121a18; --surface-2: #17211e;
+      --ink: #e4ebe8; --muted: #9ba8a3; --faint: #74817c; --line: #222d2a; --line-strong: #2e3b37;
+      --accent: #34c3a8; --accent-hover: #5fd6bf; --accent-soft: #12302a; --accent-ink: #7fe0cc; --on-accent: #06221d;
+      --glow-a: rgba(52, 195, 168, 0.16); --glow-b: rgba(14, 116, 103, 0.22);
+      --warn-bg: #241d0c; --warn-line: #5a4614; --warn-ink: #f0cf86;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+      --shadow-xl: 0 2px 6px rgba(0,0,0,.4), 0 30px 80px -20px rgba(0,0,0,.7);
+      color-scheme: dark;
     }
-    .btn.primary, .btn.primary:hover { color: #0b1120; }
   }
+
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  a { color: var(--accent); }
-  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
-  header.top { display: flex; align-items: center; justify-content: space-between; padding: 18px 0; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; color: var(--ink); text-decoration: none; }
-  .brand img { width: 34px; height: 34px; }
-  nav a { margin-left: 18px; color: var(--muted); text-decoration: none; font-size: 15px; }
-  nav a:hover { color: var(--ink); }
-  .hero { padding: 56px 0 40px; display: grid; gap: 28px; }
-  .hero h1 { font-size: clamp(32px, 5vw, 50px); line-height: 1.1; margin: 0; letter-spacing: -0.02em; max-width: 16ch; }
-  .hero p.lede { font-size: 20px; color: var(--muted); margin: 0; max-width: 60ch; }
-  .buttons { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-  .btn { display: inline-block; padding: 13px 22px; border-radius: 10px; font-weight: 600; text-decoration: none; }
-  .btn.primary { background: var(--accent); color: #fff; }
-  .btn.primary:hover { background: var(--accent-strong); }
-  .btn.ghost { border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { animation: none !important; transition: none !important; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--font); font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; }
+  img { max-width: 100%; height: auto; display: block; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  .wrap { width: min(1160px, 100% - 32px); margin-inline: auto; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--accent-ink); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); padding: 5px 12px 5px 6px; border-radius: 999px; text-decoration: none; }
+  .eyebrow b { background: var(--accent); color: var(--on-accent); padding: 1px 8px; border-radius: 999px; font-size: 12px; }
+  .kicker { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
+  h1, h2, h3 { letter-spacing: -0.025em; line-height: 1.08; margin: 0; }
+  h2 { font-size: clamp(28px, 3.6vw, 44px); }
+  h3 { font-size: 19px; letter-spacing: -0.01em; line-height: 1.3; }
+  .lede { font-size: clamp(17px, 1.6vw, 20px); color: var(--muted); margin: 18px 0 0; max-width: 62ch; }
+  .muted { color: var(--muted); }
   .small { font-size: 14px; color: var(--muted); }
-  section { padding: 36px 0; }
-  h2 { font-size: 28px; margin: 0 0 18px; letter-spacing: -0.01em; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
-  .card h3 { margin: 0 0 6px; font-size: 18px; }
-  .card p, .card ul { margin: 0; color: var(--muted); font-size: 15.5px; }
-  .card ul { padding-left: 18px; }
-  .points { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-  .point strong { display: block; font-size: 17px; margin-bottom: 2px; }
-  .point span { color: var(--muted); font-size: 15.5px; }
-  ol.steps { padding-left: 22px; margin: 0; }
-  ol.steps li { margin-bottom: 10px; }
-  .notice { background: var(--warn-soft); border: 1px solid var(--warn-line); border-radius: 14px; padding: 20px 22px; }
-  .notice h2 { font-size: 22px; }
-  .notice ul { margin: 0; padding-left: 20px; }
-  footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 14px; }
-  footer p { margin: 4px 0; }
-  @media (max-width: 560px) { nav { display: none; } .hero { padding-top: 32px; } }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 12px; font-weight: 600; font-size: 15.5px; text-decoration: none; border: 1px solid transparent; transition: transform .15s ease, background .15s ease, border-color .15s ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn.primary { background: var(--accent); color: var(--on-accent); box-shadow: 0 6px 20px -6px color-mix(in srgb, var(--accent) 60%, transparent); }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.ghost { background: var(--surface); color: var(--ink); border-color: var(--line-strong); }
+  .btn.ghost:hover { border-color: var(--accent); }
+  .btn.small { padding: 8px 14px; font-size: 14px; border-radius: 10px; }
+
+  /* Header */
+  header.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: saturate(160%) blur(14px); -webkit-backdrop-filter: saturate(160%) blur(14px); border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+  header.top .wrap { display: flex; align-items: center; gap: 24px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 19px; color: var(--ink); text-decoration: none; letter-spacing: -0.01em; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  nav.links { display: flex; gap: 4px; margin-left: 8px; }
+  nav.links a { color: var(--muted); text-decoration: none; font-size: 14.5px; font-weight: 500; padding: 6px 10px; border-radius: 8px; }
+  nav.links a:hover { color: var(--ink); background: var(--surface-2); }
+  .top-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .gh { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 14.5px; font-weight: 500; padding: 6px 10px; border-radius: 8px; }
+  .gh:hover { color: var(--ink); background: var(--surface-2); }
+  .gh svg { width: 18px; height: 18px; }
+
+  /* Hero */
+  .hero { position: relative; padding: 72px 0 40px; text-align: center; overflow: hidden; }
+  .hero::before { content: ""; position: absolute; inset: -120px -10% auto; height: 640px; z-index: -1;
+    background: radial-gradient(42% 60% at 30% 30%, var(--glow-a), transparent 70%), radial-gradient(40% 55% at 72% 22%, var(--glow-b), transparent 70%); filter: blur(10px); }
+  .hero h1 { font-size: clamp(40px, 6.6vw, 78px); letter-spacing: -0.04em; margin: 22px auto 0; max-width: 15ch; }
+  .hero h1 em { font-style: normal; background: linear-gradient(100deg, var(--accent) 10%, color-mix(in srgb, var(--accent) 55%, #34c3a8) 90%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero .lede { margin-inline: auto; text-align: center; }
+  .hero .buttons { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 30px; }
+  .trust { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; margin: 22px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--muted); }
+  .trust li { display: inline-flex; align-items: center; gap: 7px; }
+  .trust svg { width: 16px; height: 16px; color: var(--accent); }
+
+  /* Browser frame */
+  .frame { border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-xl); overflow: hidden; }
+  .frame .bar { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  .frame .bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line-strong); }
+  .frame .bar span { margin: 0 auto; font: 12.5px var(--mono); color: var(--faint); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 2px 14px; }
+  .hero-shot { margin: 56px auto 0; max-width: 1080px; position: relative; }
+  .hero-shot::after { content: ""; position: absolute; inset: auto 6% -30px; height: 60px; background: var(--glow-a); filter: blur(40px); z-index: -1; }
+  .shot-dark { display: none; }
+  @media (prefers-color-scheme: dark) { .shot-light.has-dark { display: none; } .shot-dark { display: block; } }
+
+  /* Sections */
+  section { padding: 96px 0 0; }
+  .section-head { max-width: 760px; margin-bottom: 44px; }
+  .section-head.center { margin-inline: auto; text-align: center; }
+  .section-head.center .lede { margin-inline: auto; }
+
+  /* Stat strip */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-top: 72px; }
+  .stats div { background: var(--surface); padding: 22px 24px; }
+  .stats strong { display: block; font-size: 28px; letter-spacing: -0.03em; }
+  .stats span { color: var(--muted); font-size: 14px; }
+
+  /* Bento */
+  .bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 26px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); overflow: hidden; position: relative; }
+  .tile p { margin: 0; color: var(--muted); font-size: 15px; }
+  .tile ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 14.5px; color: var(--muted); }
+  .tile li { display: flex; gap: 8px; }
+  .tile li::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-top: 9px; }
+  .tile .icon { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink); }
+  .tile .icon svg { width: 21px; height: 21px; }
+  .tile .peek { margin: 14px -26px -26px; border-top: 1px solid var(--line); }
+  .span-2 { grid-column: span 2; } .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; } .span-6 { grid-column: span 6; }
+
+  /* Feature rows */
+  .feature { display: grid; grid-template-columns: 1fr 1.35fr; gap: 56px; align-items: center; margin-top: 96px; }
+  .feature.flip { grid-template-columns: 1.35fr 1fr; }
+  .feature.flip .copy { order: 2; }
+  .feature .copy p { color: var(--muted); margin: 14px 0 0; }
+  .checks { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 10px; }
+  .checks li { display: flex; gap: 10px; align-items: flex-start; }
+  .checks svg { flex: none; width: 20px; height: 20px; color: var(--accent); margin-top: 2px; }
+
+  /* Compare */
+  .compare { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); font-size: 15px; }
+  .compare th, .compare td { padding: 15px 20px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .compare tr:last-child td { border-bottom: 0; }
+  .compare thead th { background: var(--surface-2); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .compare td:first-child { color: var(--muted); width: 28%; }
+  .compare .us { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); font-weight: 600; }
+  .compare thead .us { color: var(--accent-ink); }
+
+  /* Phones */
+  .phones { display: flex; gap: 28px; justify-content: center; align-items: flex-end; }
+  .phone { width: min(280px, 44vw); border-radius: 38px; padding: 10px; background: #0d1412; box-shadow: var(--shadow-xl); }
+  .phone img { border-radius: 29px; }
+  .phone.raise { transform: translateY(-36px); }
+
+  /* Install */
+  .install { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .install .tile { gap: 12px; }
+  .install ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 15px; display: grid; gap: 6px; }
+  .install .tile .btn { align-self: flex-start; margin-top: auto; }
+  pre { margin: 0; background: #0d1412; color: #d8e6e1; font: 13px/1.6 var(--mono); padding: 14px 16px; border-radius: 12px; overflow-x: auto; }
+  pre .c { color: #7f9a92; }
+  code { font-family: var(--mono); font-size: .92em; }
+
+  /* New, notice, FAQ */
+  .new { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .new .tile h3 { font-size: 17px; }
+  .notice { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: var(--radius-lg); padding: 28px 30px; color: var(--ink); }
+  .notice h2 { font-size: 24px; color: var(--warn-ink); }
+  .notice ul { margin: 14px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+  .faq { display: grid; gap: 10px; max-width: 820px; margin-inline: auto; }
+  .faq details { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 20px; }
+  .faq summary { cursor: pointer; font-weight: 600; padding: 14px 0; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; color: var(--accent); font-size: 22px; line-height: 1; font-weight: 400; }
+  .faq details[open] summary::after { content: "−"; }
+  .faq details p { margin: 0 0 16px; color: var(--muted); }
+
+  /* CTA + footer */
+  .cta { margin-top: 110px; text-align: center; padding: 64px 24px; border-radius: 28px; background:
+      radial-gradient(60% 120% at 50% 0%, var(--glow-a), transparent 70%), var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .cta .buttons { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 26px; }
+  footer { margin-top: 80px; border-top: 1px solid var(--line); padding: 36px 0 48px; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 40px; justify-content: space-between; }
+  footer nav { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--ink); }
+
+  @media (max-width: 960px) {
+    nav.links { display: none; }
+    .bento { grid-template-columns: 1fr 1fr; }
+    .span-2, .span-3, .span-4, .span-6 { grid-column: span 2; }
+    .bento .half { grid-column: span 1; }
+    .feature, .feature.flip { grid-template-columns: 1fr; gap: 28px; margin-top: 72px; }
+    .feature.flip .copy { order: 0; }
+    .install, .new { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 600px) {
+    section { padding-top: 72px; }
+    .hero { padding-top: 44px; }
+    .bento .half { grid-column: span 2; }
+    .gh span { display: none; }
+    .compare th, .compare td { padding: 12px 12px; font-size: 14px; }
+    .compare td:first-child { width: auto; }
+    .phone.raise { transform: none; }
+    .notice { padding: 22px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <a class="brand" href="./"><img src="favicon.svg" alt="">Tohyee</a>
-    <nav>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="logo.svg" alt="">Tohyee</a>
+    <nav class="links" aria-label="Sections">
       <a href="#features">Features</a>
+      <a href="#why">Why Tohyee</a>
       <a href="#install">Install</a>
-      <a href="#important">Before you start</a>
-      <a href="https://github.com/Willy-nz/Tohyee">Source code</a>
+      <a href="#new">What's new</a>
+      <a href="#faq">FAQ</a>
     </nav>
-  </header>
-
-  <main>
-    <div class="hero">
-      <h1>Accounting that runs on your own computer.</h1>
-      <p class="lede">Tohyee is free, open-source accounting software made in New Zealand. It covers GST returns, invoices, bills and bank reconciliation. Your books stay on your computer, and there's no monthly fee.</p>
-      <div class="buttons">
-        <a class="btn primary" href="https://github.com/Willy-nz/Tohyee/releases/latest">Download for Windows</a>
-        <a class="btn ghost" href="#install">How to install</a>
-      </div>
-      <p class="small">Free under the GNU AGPL v3 licence. Also available for Docker and Linux. Still early: please read <a href="#important">before you start</a>.</p>
+    <div class="top-actions">
+      <a class="gh" href="https://github.com/Willy-nz/Tohyee" aria-label="Source code on GitHub">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.18a10.9 10.9 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.62 1.58.23 2.75.11 3.04.74.8 1.18 1.82 1.18 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        <span>GitHub</span>
+      </a>
+      <a class="btn primary small" href="https://github.com/Willy-nz/Tohyee/releases/latest">Download</a>
     </div>
+  </div>
+</header>
 
-    <section>
-      <div class="points">
-        <div class="point"><strong>Your books, your computer</strong><span>Everything is stored on a computer you control, like a media server at home. Nobody else holds your data.</span></div>
-        <div class="point"><strong>No subscription</strong><span>It's free to use, for as many organisations and people as you like.</span></div>
-        <div class="point"><strong>Built for New Zealand</strong><span>GST on the invoice, payments or hybrid basis, and a GST return set out box by box.</span></div>
-        <div class="point"><strong>Backed up every night</strong><span>Encrypted backups of every organisation, into a folder you choose, such as OneDrive.</span></div>
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <a class="eyebrow" href="#new"><b>0.7.0</b> Bank feeds, approvals, cash flow forecast and more →</a>
+      <h1>Accounting that's <em>yours.</em></h1>
+      <p class="lede">Invoices, bank feeds, GST returns, payroll and reports, built for New Zealand. Tohyee runs on your own computer, so your books stay with you, and there's no monthly fee.</p>
+      <div class="buttons">
+        <a class="btn primary" href="https://github.com/Willy-nz/Tohyee/releases/latest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg>
+          Download for Windows
+        </a>
+        <a class="btn ghost" href="#install">Docker &amp; Linux</a>
       </div>
-    </section>
+      <ul class="trust">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Free and open source</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Your data stays on your computer</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Encrypted nightly backups</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Made in Aotearoa</li>
+      </ul>
 
-    <section id="features">
-      <h2>What it does</h2>
-      <div class="grid">
-        <div class="card"><h3>Sales</h3><ul><li>Quotes, invoices and credit notes</li><li>Repeating invoices</li><li>Customer payments and statements</li><li>Pay now links through Stripe or PayPal</li><li>Shopify and WooCommerce orders</li><li>Print or save as PDF</li></ul></div>
-        <div class="card"><h3>Purchases</h3><ul><li>Bills and supplier credit notes</li><li>Purchase orders</li><li>Paying several bills at once</li><li>Expense claims and mileage</li><li>A bills inbox and approval rules</li></ul></div>
-        <div class="card"><h3>Bank</h3><ul><li>Bank and credit card accounts</li><li>Statement import, from a folder or mailbox too</li><li>Bank rules and bank reconciliation</li><li>Bank feeds: Akahu for NZ banks, SimpleFIN, Stripe, PayPal and Wise</li></ul></div>
-        <div class="card"><h3>GST and reports</h3><ul><li>GST return with an audit report behind every box</li><li>Profit and loss, balance sheet, trial balance</li><li>Aged receivables and payables</li><li>Custom reports and budgets</li><li>Cash flow forecast and consolidation</li></ul></div>
-        <div class="card"><h3>Stock and assets</h3><ul><li>Products and services</li><li>Stock at weighted average cost, by location</li><li>Fixed asset register and depreciation</li></ul></div>
-        <div class="card"><h3>Bigger organisations</h3><ul><li>Departments, classes and locations</li><li>Custom fields and projects with time tracking</li><li>A built-in CRM with email and calendar sync</li></ul></div>
-        <div class="card"><h3>Payroll</h3><ul><li>Pay runs with PAYE, KiwiSaver and student loan</li><li>Holidays Act leave and timesheets</li><li>Payslips, bank files and payday filing</li></ul></div>
-        <div class="card"><h3>Analytics</h3><ul><li>CSV and Excel sources, the books and CRM</li><li>Dashboards and pivots</li><li>Shared with clients or emailed as reports</li></ul></div>
+      <div class="hero-shot">
+        <div class="frame">
+          <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tohyee.local</span></div>
+          <img class="shot-light has-dark" src="img/home-light.png" width="2880" height="1800" alt="Tohyee's Home page: money in the bank, invoices owed, bills due and a to-do list for a small coffee roaster">
+          <img class="shot-dark" src="img/home-dark.png" width="2880" height="1800" alt="" loading="lazy">
+        </div>
       </div>
-    </section>
 
-    <section id="install">
-      <h2>Install on Windows</h2>
-      <div class="card">
-        <ol class="steps">
-          <li>Download <strong>TohyeeSetup</strong> from the <a href="https://github.com/Willy-nz/Tohyee/releases/latest">latest release</a> and run it on the computer that will keep your books.</li>
-          <li>The installer's last page shows a <strong>setup token</strong>. Keep it open for the next step.</li>
-          <li>Choose <strong>Open Tohyee</strong> from the Start menu, use the setup token to create your first login, and set up your organisation.</li>
-          <li>Tohyee starts by itself whenever that computer starts, and its icon sits by the clock. <strong>Save a copy of your backup key</strong> somewhere safe.</li>
-        </ol>
-        <p class="small" style="margin-top:12px">Docker and Linux instructions are in the <a href="https://github.com/Willy-nz/Tohyee#running-on-a-server">read-me</a>.</p>
+      <div class="stats">
+        <div><strong>$0</strong><span>a month, for every organisation and person</span></div>
+        <div><strong>GST101A</strong><span>return, with the documents behind every box</span></div>
+        <div><strong>7</strong><span>bank feeds and statement sources</span></div>
+        <div><strong>2,000+</strong><span>automated tests on every change</span></div>
       </div>
-    </section>
+    </div>
+  </div>
 
-    <section id="important">
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker">Features</p>
+        <h2>Everything a New Zealand business runs on.</h2>
+        <p class="lede">From the first quote to the GST return and the pay run, in one place, with the same care for the numbers your accountant has.</p>
+      </div>
+
+      <div class="bento">
+        <div class="tile span-4">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M5 10V20m4-10v10m6-10v10m4-10v10M3 20h18M12 3 3 8h18z"/></svg></div>
+          <h3>Bank feeds and reconciliation</h3>
+          <p>Akahu for NZ banks, SimpleFIN for overseas banks, Stripe, PayPal and Wise, or statement files from a folder or mailbox. Bank rules with conditions and splits fill in the everyday lines.</p>
+          <div class="peek"><img src="img/reconcile-light.png" width="2880" height="1800" alt="Reconciling bank statement lines against invoices and bills" loading="lazy"></div>
+        </div>
+        <div class="tile span-2">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4m-4 4h4"/></svg></div>
+          <h3>GST, the NZ way</h3>
+          <p>Invoice, payments or hybrid basis. The GST101A return set out box by box, with an audit report listing the documents behind every figure.</p>
+          <ul><li>Monthly, two-monthly or six-monthly</li><li>Month-end close locks the period</li></ul>
+        </div>
+        <div class="tile span-2 half">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h9l5 5v15H6zM14 2v6h6M9 13h6m-6 4h6"/></svg></div>
+          <h3>Sales</h3>
+          <ul><li>Quotes, invoices, credit notes</li><li>Pay now links (Stripe, PayPal)</li><li>Emailed from your own mailbox</li><li>Shopify and WooCommerce orders</li></ul>
+        </div>
+        <div class="tile span-2 half">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4zM4 9h16M9 9v11"/></svg></div>
+          <h3>Purchases</h3>
+          <ul><li>Bills, purchase orders, expense claims</li><li>A bills inbox from your mailbox</li><li>Duplicate bill warnings</li><li>Approval rules for who signs off</li></ul>
+        </div>
+        <div class="tile span-2">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 11a4 4 0 1 0-8 0M3 21a9 9 0 0 1 18 0M12 3v4"/></svg></div>
+          <h3>Payroll</h3>
+          <ul><li>PAYE, ACC, KiwiSaver, student loan</li><li>Holidays Act leave and timesheets</li><li>Payslips, bank files, payday filing</li></ul>
+        </div>
+        <div class="tile span-3">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg></div>
+          <h3>Reports that explain themselves</h3>
+          <p>Profit and loss, balance sheet, aged receivables and payables, budgets, custom layouts, a cash flow forecast and consolidation across organisations, with commentary a person checks.</p>
+        </div>
+        <div class="tile span-3">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2"/></svg></div>
+          <h3>Analytics and a built-in CRM</h3>
+          <p>Bring in CSV and Excel files alongside the books, shape them into dashboards and pivots, and share them with clients. A CRM with Gmail and Microsoft 365 email and calendar sync is included.</p>
+        </div>
+        <div class="tile span-2 half">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></svg></div>
+          <h3>Stock and assets</h3>
+          <ul><li>Weighted average cost by location</li><li>Fixed asset register, depreciation</li></ul>
+        </div>
+        <div class="tile span-2 half">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div>
+          <h3>Foreign currency</h3>
+          <ul><li>Invoices, bills and bank accounts</li><li>Realised and unrealised gains</li></ul>
+        </div>
+        <div class="tile span-2">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <h3>Safe by design</h3>
+          <ul><li>Two-step sign-in for everyone</li><li>Posted history can't be edited</li><li>Each organisation in its own database</li></ul>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="copy">
+          <p class="kicker">Bank reconciliation</p>
+          <h2>Match the bank in minutes, not afternoons.</h2>
+          <p>Statement lines arrive from your bank feed and Tohyee suggests the invoice, bill or rule that fits. Confident matches are one click, and anything unusual is easy to code with splits and transfers.</p>
+          <ul class="checks">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Pay several invoices or bills from one line</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Rules with conditions, split lines and contact defaults</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>CSV, Excel, OFX, QIF, CAMT.053 and MT940 files too</li>
+          </ul>
+        </div>
+        <div class="frame">
+          <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>Banking · Reconcile</span></div>
+          <img class="shot-light has-dark" src="img/reconcile-light.png" width="2880" height="1800" alt="The bank reconciliation screen" loading="lazy">
+          <img class="shot-dark" src="img/reconcile-dark.png" width="2880" height="1800" alt="" loading="lazy">
+        </div>
+      </div>
+
+      <div class="feature flip">
+        <div class="copy">
+          <p class="kicker">GST returns</p>
+          <h2>A GST return you can check, box by box.</h2>
+          <p>Every figure on the return links to the invoices, bills and bank transactions behind it, so you, or your accountant, can see exactly where it came from before you file with IRD.</p>
+          <ul class="checks">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Invoice, payments or hybrid basis</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>GST audit report behind every box</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Lock the period when you close the month</li>
+          </ul>
+        </div>
+        <div class="frame">
+          <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>Reports · GST return</span></div>
+          <img src="img/gst-light.png" width="2880" height="1800" alt="A GST return in Tohyee" loading="lazy">
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="copy">
+          <p class="kicker">Everyday speed</p>
+          <h2>Find anything with <kbd style="font:600 .7em var(--mono);border:1px solid var(--line-strong);border-radius:8px;padding:2px 8px;background:var(--surface)">Ctrl K</kbd></h2>
+          <p>Jump to any screen, invoice, contact or report from the keyboard. A simple top bar, light and dark themes that follow your computer, and screens that work on a phone.</p>
+          <ul class="checks">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>One + New button for everything you create</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Notes, files and history on every transaction</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Connect your own AI to draft and explain</li>
+          </ul>
+        </div>
+        <div class="frame">
+          <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>Search</span></div>
+          <img src="img/search-light.png" width="2880" height="1800" alt="The Ctrl K search palette" loading="lazy">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="why">
+    <div class="wrap">
+      <div class="section-head center">
+        <p class="kicker">Why Tohyee</p>
+        <h2>Your books, on your terms.</h2>
+        <p class="lede">Tohyee works like a media server at home: it runs on a computer you control, and you reach it from anywhere.</p>
+      </div>
+      <table class="compare">
+        <thead><tr><th scope="col"></th><th scope="col" class="us">Tohyee</th><th scope="col">Typical subscription accounting</th></tr></thead>
+        <tbody>
+          <tr><td>Cost</td><td class="us">Free, for every organisation and user</td><td>A monthly fee per organisation, often per add-on</td></tr>
+          <tr><td>Where your books live</td><td class="us">On your computer, or a server you choose</td><td>On the provider's servers</td></tr>
+          <tr><td>If the provider changes</td><td class="us">The code is open (AGPL v3); it keeps working</td><td>Prices, plans and features change for you</td></tr>
+          <tr><td>Backups</td><td class="us">Encrypted, nightly, to a folder you choose</td><td>Kept by the provider</td></tr>
+          <tr><td>Each organisation</td><td class="us">Its own database: back up, restore or move it alone</td><td>Shared infrastructure</td></tr>
+          <tr><td>Reaching it away from home</td><td class="us">Remote access built in, with two-step sign-in</td><td>Anywhere, through the provider</td></tr>
+        </tbody>
+      </table>
+
+      <div class="feature flip" style="margin-top:96px">
+        <div class="copy">
+          <p class="kicker">On the go</p>
+          <h2>Works on your phone.</h2>
+          <p>Check what's owed, approve a bill or send an invoice from your phone. Turn on remote access through your own domain on Cloudflare, or Tailscale, without opening ports on your router.</p>
+        </div>
+        <div class="phones">
+          <div class="phone"><img src="img/phone-home.png" width="1170" height="2532" alt="Tohyee's Home page on a phone" loading="lazy"></div>
+          <div class="phone raise"><img src="img/phone-invoice.png" width="1170" height="2532" alt="An invoice on a phone" loading="lazy"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <div class="section-head center">
+        <p class="kicker">Install</p>
+        <h2>Up and running in minutes.</h2>
+        <p class="lede">Put Tohyee on the computer that will keep your books. Everyone else signs in from their browser.</p>
+      </div>
+      <div class="install">
+        <div class="tile">
+          <h3>Windows</h3>
+          <ol>
+            <li>Download <strong>TohyeeSetup</strong> and run it.</li>
+            <li>Keep the <strong>setup token</strong> from its last page.</li>
+            <li>Open Tohyee from the Start menu, create your login and organisation.</li>
+            <li>Save a copy of your <strong>backup key</strong> somewhere safe.</li>
+          </ol>
+          <a class="btn primary small" href="https://github.com/Willy-nz/Tohyee/releases/latest">Download TohyeeSetup</a>
+        </div>
+        <div class="tile">
+          <h3>Docker</h3>
+          <p>One image for each release, with a ready compose file (PostgreSQL included) and scripts in the release's Docker zip.</p>
+<pre><span class="c"># the image for each release</span>
+docker pull ghcr.io/willy-nz/tohyee:0.7.0</pre>
+          <a class="btn ghost small" href="https://github.com/Willy-nz/Tohyee#running-on-a-server">Docker guide</a>
+        </div>
+        <div class="tile">
+          <h3>Linux server</h3>
+          <p>A server bundle to run with Node.js 20.19 or later. Point it at PostgreSQL 15 or later, set two environment variables and start it; put it behind HTTPS.</p>
+<pre><span class="c"># after unpacking the bundle</span>
+export DATABASE_URL=postgres://…
+export TOHYEE_SECRET_KEY=…
+PORT=3000 ./start.sh</pre>
+          <a class="btn ghost small" href="https://github.com/Willy-nz/Tohyee#running-on-a-server">Server guide</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="new">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker">What's new in 0.7.0</p>
+        <h2>The biggest release yet.</h2>
+        <p class="lede">Everything since 0.5.0, plus the fixes from a full security and reliability review. <a href="https://github.com/Willy-nz/Tohyee/releases/tag/v0.7.0">Read the release notes</a>.</p>
+      </div>
+      <div class="new">
+        <div class="tile"><h3>More bank feeds</h3><p>SimpleFIN, Stripe, PayPal and Wise join Akahu, plus statement files picked up from a folder or mailbox.</p></div>
+        <div class="tile"><h3>Smarter bank rules</h3><p>Conditions, split lines and contact defaults, so the usual lines code themselves.</p></div>
+        <div class="tile"><h3>Bills inbox and approvals</h3><p>Bills from your mailbox become drafts, duplicates are flagged, and approval rules decide who signs off.</p></div>
+        <div class="tile"><h3>Get paid faster</h3><p>Pay now links on invoices through your own Stripe or PayPal account, recorded for you.</p></div>
+        <div class="tile"><h3>Plan ahead</h3><p>A cash flow forecast, consolidation across organisations, and report commentary a person checks.</p></div>
+        <div class="tile"><h3>Hardened</h3><p>Stricter sign-in limits, security headers, safer restores and backups, and a FX revaluation you can void.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="important">
+    <div class="wrap">
       <div class="notice">
         <h2>Before you start</h2>
         <ul>
@@ -130,13 +489,52 @@
           <li>Tohyee isn't affiliated with, or endorsed by, Inland Revenue or any other accounting software company.</li>
         </ul>
       </div>
-    </section>
-  </main>
+    </div>
+  </section>
 
-  <footer>
-    <p>Tohyee is open source under the <a href="https://github.com/Willy-nz/Tohyee/blob/main/LICENSE">GNU AGPL v3</a>. <a href="https://github.com/Willy-nz/Tohyee">Source code and releases on GitHub</a>. Found a problem? <a href="https://github.com/Willy-nz/Tohyee/issues">Report it here</a>.</p>
-    <p>Made in Aotearoa New Zealand.</p>
-  </footer>
-</div>
+  <section id="faq">
+    <div class="wrap">
+      <div class="section-head center">
+        <p class="kicker">Questions</p>
+        <h2>Frequently asked.</h2>
+      </div>
+      <div class="faq">
+        <details><summary>Is it really free?</summary><p>Yes. Tohyee is open source under the GNU AGPL v3. There's no subscription and no limit on organisations or people. Some connections use other services that may charge, such as your bank feed provider or Stripe's card fees.</p></details>
+        <details><summary>Where is my data kept?</summary><p>On the computer or server where you install Tohyee, in a PostgreSQL database for each organisation. Nothing is sent anywhere unless you connect a service, such as a bank feed or your email account.</p></details>
+        <details><summary>Can my accountant or team use it?</summary><p>Yes. Add people with a role (owner, admin, bookkeeper or viewer). Everyone signs in from their own browser with two-step sign-in, from the office or, with remote access, from anywhere.</p></details>
+        <details><summary>Does it file my GST return with IRD?</summary><p>Tohyee prepares the GST101A return and the audit report behind it. You file the return yourself in myIR. Payroll makes the payday filing file to upload.</p></details>
+        <details><summary>What happens if my computer dies?</summary><p>Tohyee makes encrypted backups every night into a folder you choose, such as one synced to OneDrive. Restore them on a new computer with your backup key, which is why you should keep a copy of the key somewhere safe.</p></details>
+        <details><summary>Can I move from another accounting system?</summary><p>Yes. Import contacts, products, a chart of accounts and opening balances from CSV, and bring in bank statements from files or a bank feed.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap">
+    <div class="cta">
+      <h2>Take your books home.</h2>
+      <p class="lede" style="margin-inline:auto">Free, open source, and made in New Zealand.</p>
+      <div class="buttons">
+        <a class="btn primary" href="https://github.com/Willy-nz/Tohyee/releases/latest">Download for Windows</a>
+        <a class="btn ghost" href="https://github.com/Willy-nz/Tohyee">View the source</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <a class="brand" href="./" style="font-size:16px"><img src="logo.svg" alt="" style="width:24px;height:24px">Tohyee</a>
+      <p style="margin:10px 0 0">Open source under the <a href="https://github.com/Willy-nz/Tohyee/blob/main/LICENSE">GNU AGPL v3</a>. Made in Aotearoa New Zealand.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="https://github.com/Willy-nz/Tohyee/releases">Releases</a>
+      <a href="https://github.com/Willy-nz/Tohyee/blob/main/docs/FEATURES.md">All features</a>
+      <a href="https://github.com/Willy-nz/Tohyee#running-on-a-server">Server guide</a>
+      <a href="https://github.com/Willy-nz/Tohyee/issues">Report a problem</a>
+      <a href="https://github.com/Willy-nz/Tohyee">Source code</a>
+    </nav>
+  </div>
+</footer>
 </body>
 </html>
