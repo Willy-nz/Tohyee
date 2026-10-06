@@ -393,35 +393,37 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
         {runs.error ? <Notice tone="error">{runs.error}</Notice> : null}
         {runs.data && runs.data.revaluations.length === 0 ? <Empty>None yet.</Empty> : null}
         {(runs.data?.revaluations ?? []).map((run) => (
-          <div key={run.id} className={ui.tableWrap}>
+          <div key={run.id}>
+            {/* Above the table, not in it: on a phone the table scrolls sideways and would hide the Void button. */}
+            <div className={ui.actions} style={{ flexWrap: "wrap", fontWeight: 600, marginTop: 12 }}>
+              <span>
+                {run.reference} · {formatDate(run.revaluationDate)} · {run.rateSource} · by {personName(run, "operator")}
+                {run.voided ? (
+                  <>
+                    {" "}
+                    <Badge tone="red">Voided</Badge>{" "}
+                    <span className={ui.muted} style={{ fontWeight: "normal" }}>
+                      by {personName(run.voided, "voidedBy")} on {formatDate(String(run.voided.voidedAt).slice(0, 10))}
+                    </span>
+                  </>
+                ) : can("bookkeeper") ? (
+                  <>
+                    {" "}
+                    <VoidRevaluation
+                      organisationId={organisationId}
+                      run={run}
+                      onVoided={(voided) => {
+                        setMessage(`Voided revaluation ${voided.reference} (journals #${voided.voided?.voidJournalId} and #${voided.voided?.voidReversalJournalId}).`);
+                        runs.reload();
+                      }}
+                    />
+                  </>
+                ) : null}
+              </span>
+            </div>
+            <div className={ui.tableWrap}>
             <table className={ui.table}>
               <thead>
-                <tr>
-                  <th colSpan={6}>
-                    {run.reference} · {formatDate(run.revaluationDate)} · {run.rateSource} · by {personName(run, "operator")}
-                    {run.voided ? (
-                      <>
-                        {" "}
-                        <Badge tone="red">Voided</Badge>{" "}
-                        <span className={ui.muted} style={{ fontWeight: "normal" }}>
-                          by {personName(run.voided, "voidedBy")} on {formatDate(String(run.voided.voidedAt).slice(0, 10))}
-                        </span>
-                      </>
-                    ) : can("bookkeeper") ? (
-                      <>
-                        {" "}
-                        <VoidRevaluation
-                          organisationId={organisationId}
-                          run={run}
-                          onVoided={(voided) => {
-                            setMessage(`Voided revaluation ${voided.reference} (journals #${voided.voided?.voidJournalId} and #${voided.voided?.voidReversalJournalId}).`);
-                            runs.reload();
-                          }}
-                        />
-                      </>
-                    ) : null}
-                  </th>
-                </tr>
                 <tr>
                   <th>Account</th>
                   <th className={ui.num}>Foreign</th>
@@ -475,6 +477,7 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         ))}
       </Card>
