@@ -3449,3 +3449,65 @@ Issues #139-#142, each with an example Jess approved on 5 Oct 2026.
      refused and the user adds it as an amount. The message uses the full
      name and "their", not the example's "her", because Tohyee doesn't
      know employees' pronouns.
+
+### Review fixes, part 3, 6 Oct 2026 (decisions 465-473)
+
+Issues #144, #145, #147, #150, #151, #153, #154 (not signing), #155 and
+#156 from the review of 4 Oct 2026 (#158). Still open: #152 (needs Windows
+testing) and #154's code signing (later, Jess).
+
+465. **Security headers** (#144): every page is sent `frame-ancestors
+     'self'`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: same-origin`
+     and `nosniff`, so another install on the shared address domain can't
+     frame Tohyee. `'self'` rather than `'none'` because the bills inbox
+     previews a stored PDF in a same-origin frame. A full content security
+     policy (scripts and styles) needs nonces and is a later step; adding
+     the shared domain to the Public Suffix List is Jess's to submit.
+466. **Organisations' SMTP servers** (#145, Jess: a server-admin switch):
+     only ports 25, 465, 587 and 2525, and only public addresses, checked
+     when saving and again on connecting (to the address checked), unless a
+     server admin turns on "Allow local mail relay" (Server settings ›
+     Email, or `email local-relay --on`). Unencrypted SMTP only to
+     localhost with the switch on. The remote server's reply is no longer
+     shown to the organisation, only logged. Existing installs relaying
+     through a local mail server need the switch turned on.
+467. **Akahu re-reads 30 days** (#147, BK29, Jess: deleted lines stay
+     deleted, for every API feed): late-settling transactions are picked up;
+     a line deleted from an Akahu, SimpleFIN, Stripe, PayPal or Wise feed is
+     never brought back by the feed. Lines from files imported by hand still
+     come back when the file is imported again (BK12, BF6). Akahu amounts go
+     through the decimal module; a sub-cent amount is refused, not rounded.
+     The credit card balance's sign is unchanged until Akahu's convention
+     is confirmed.
+468. **Analytics limits** (#150): DuckDB is capped at 1 GiB of memory and 2
+     GiB of spill files, and a shaped-table build at 5 minutes (keeping the
+     last copy); `TOHYEE_ANALYTICS_MEMORY_LIMIT`, `_TEMP_LIMIT` and
+     `_BUILD_SECONDS` change them. The books copy is read in batches of
+     5,000 rows.
+469. **No transfer out across a revaluation; revaluations can be voided**
+     (#151, FXB12, Jess: refuse, and let a revaluation be voided): voiding
+     reverses both journals, for the whole run, on their own dates (period
+     locks apply), refused once a later revaluation of the same account and
+     currency exists. The void is kept in its own append-only table (tenant
+     migration 0108), so revaluation runs stay append-only. A voided
+     revaluation counts nowhere, period close included.
+470. **One revaluation at a time for every account** (#151, FXB13), as for
+     receivables and payables; and statement lines in currencies without
+     cents (JPY, XPF) can be coded (FXB14). Organisations whose own currency
+     has no cents still aren't supported.
+471. **Release supply chain** (#154, Jess: signing later): release workflows
+     run with read-only tokens except the jobs that publish, never
+     overwrite a release's files, and pin Visual C++ and Inno Setup by
+     SHA-256; update checks time out after 15 seconds. The tray screenshots
+     job keeps its own write token on pull requests (Jess) but runs no repo
+     code.
+472. **Docker zip backups** (#153, Jess: encrypted): Backup-Tohyee runs
+     Tohyee's encrypted backup instead of a plain dump to Documents, and the
+     nightly backups go to a `backups` folder beside the compose file rather
+     than inside Docker. Not yet tried on Windows.
+473. **Build and packaging** (#155, #156): the standalone build no longer
+     copies the whole repository (books, backups, docs); `.dockerignore`
+     leaves out data folders; the development compose file binds PostgreSQL
+     to localhost and drops the unused Redis; the Windows build refuses a
+     PostgreSQL major-version change until an upgrade path exists; the
+     relay is checked in CI.

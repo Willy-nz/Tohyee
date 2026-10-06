@@ -69,7 +69,10 @@ that something happened.
   foreign-currency invoices, bills, credit notes and overpayments on
   accounts receivable and payable, one currency at a time and, like
   NetSuite, each document on its own at its own rate, listed on the
-  revaluation (MC8, MC39-MC43).
+  revaluation (MC8, MC39-MC43). A revaluation can be **voided** (both its
+  journals reversed); a transfer out of a foreign account dated before a
+  revaluation's reversal is refused, as is revaluing an account again
+  before its last revaluation is reversed (FXB12-FXB13).
 - **Multi-currency invoices, bills, credit notes and payments** (built
   overnight 1 Oct 2026 following NetSuite, examples MC1-MC13 not yet approved
   by Jess): a contact has a currency (like NetSuite's primary currency); its
@@ -626,7 +629,9 @@ that something happened.
   with column mapping that's remembered per account, OFX/QFX/QBO, QIF,
   CAMT.053 and MT940; up to 10 MB) or through an **Akahu bank feed** (NZ),
   which can bring in history from a chosen start date (as far back as Akahu
-  and the bank allow) and then syncs in the background. **Automatic
+  and the bank allow) and then syncs in the background, re-reading the last
+  30 days so late-settling transactions arrive; lines deleted from any API
+  feed stay deleted (BK29). **Automatic
   statement files**: for banks without a feed, each account can read new
   statement files by itself from a folder inside the organisation's bank
   files folder (chosen by a server admin) or from a mailbox folder or Gmail
@@ -913,7 +918,9 @@ that something happened.
   unverified for up to 100 people, while Testing ends the connection after 7
   days; not yet tried with a real Google app); or **SMTP**: Gmail or
   Google Workspace with an app password, Microsoft 365 with Authenticated
-  SMTP, or any SMTP server; from name, from address, reply-to; the password
+  SMTP, or any SMTP server on port 25, 465, 587 or 2525 at a public
+  address (a mail server on the Tohyee server or its local network needs a
+  server admin to turn on "Allow local mail relay"); from name, from address, reply-to; the password
   and tokens encrypted with TOHYEE_SECRET_KEY and never sent back to the
   browser; a **Send test email** button). Emails are **HTML** with the
   organisation's **logo** (Settings: PNG or JPEG up to 512 KB, stored in
