@@ -1,11 +1,13 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Tohyee" width="112" height="112" />
+  <img src="website/logo.svg" alt="Tohyee" width="96" height="96" />
 </p>
 
 <h1 align="center">Tohyee</h1>
 
 <p align="center">
-  Free, open-source accounting for New Zealand that runs on your own computer.
+  <strong>Accounting that's yours.</strong><br />
+  Free, open-source accounting for New Zealand: invoices, bank feeds, GST
+  returns, payroll and reports, on your own computer with no monthly fee.
 </p>
 
 <p align="center">
@@ -38,8 +40,17 @@ up, restored or moved on its own.
 people working on the code.
 
 <p align="center">
-  <img src="docs/screenshots/journal-editor.png" alt="Posting a journal in Tohyee" width="720" />
+  <img src="website/img/home-light.webp" alt="Tohyee's Home page for a demo coffee roaster: cash in the bank, money owed, bills to pay, the next GST return and a to-do list" width="860" />
 </p>
+
+| | |
+| --- | --- |
+| **Bank feeds and reconciliation**<br />Akahu, SimpleFIN, Stripe, PayPal and Wise, or statement files; suggested matches are one click. | **GST, the NZ way**<br />The GST101A return box by box, with the documents behind every figure. |
+| <img src="website/img/reconcile-light.webp" alt="Bank reconciliation" width="420" /> | <img src="website/img/gst-light.webp" alt="GST return" width="420" /> |
+| **Invoices and getting paid**<br />GST per line, gap-free numbering, Pay now links, and who owes what. | **Find anything with Ctrl K**<br />Every screen, contact, invoice and report from the keyboard. |
+| <img src="website/img/invoices-light.webp" alt="Sales invoices" width="420" /> | <img src="website/img/search-light.webp" alt="Ctrl K search" width="420" /> |
+
+<sub>Screenshots show a fictional demo business, Kōwhai Coffee Roasters Ltd.</sub>
 
 ## What it does
 
@@ -119,9 +130,7 @@ people working on the code.
 See [docs/FEATURES.md](docs/FEATURES.md) for the full list, what's
 deliberately not built, and what's next.
 
-<p align="center">
-  <img src="docs/screenshots/balance-sheet.png" alt="Balance sheet report" width="620" />
-</p>
+
 
 ## Run it locally
 
