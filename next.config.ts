@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
-/** Who may show Tohyee's pages in a frame: only Tohyee itself (issue #144). */
-const FRAME_ANCESTORS = "frame-ancestors 'self'";
+/**
+ * The page Content-Security-Policy (issue #144): only Tohyee itself may frame
+ * its pages, and no <base> or plugin content. Scripts aren't limited yet: the
+ * theme script and Next's own page data are inline, and need a nonce first.
+ */
+const PAGE_CONTENT_SECURITY_POLICY = "frame-ancestors 'self'; base-uri 'self'; object-src 'none'";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -39,7 +43,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/:path((?!api/).*)",
-        headers: [{ key: "Content-Security-Policy", value: FRAME_ANCESTORS }],
+        headers: [{ key: "Content-Security-Policy", value: PAGE_CONTENT_SECURITY_POLICY }],
       },
     ];
   },
@@ -50,8 +54,25 @@ const nextConfig: NextConfig = {
   // fix is the turbopackIgnore hints on the dynamic paths themselves; the
   // build warns ("Dynamic filesystem access causes tracing of the whole
   // project") when a new one needs one.
+  // The repository's other folders (docs, tests, installer, ...) and source
+  // files are never needed at run time either.
   outputFileTracingExcludes: {
-    "/*": ["analytics/**", "backups/**", "data/**"],
+    "**": [
+      "analytics/**",
+      "assets/**",
+      "backups/**",
+      "coverage/**",
+      "data/**",
+      "deploy/**",
+      "dist/**",
+      "docs/**",
+      "installer/**",
+      "relay/**",
+      "scripts/**",
+      "tests/**",
+      "website/**",
+      "src/**/*.{ts,tsx,css,md}",
+    ],
   },
   // The CRM moved from /operations/crm to its own app at /crm; old links and
   // bookmarks still reach the same pages (with their ?query). /operations/crm

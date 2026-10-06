@@ -4,6 +4,45 @@ Changes the project owner (Jess) has asked for, newest list first. Coding
 agents: these come before the "Next" list in docs/FEATURES.md. Anything marked
 "to confirm" needs an answer from Jess before it's built; ask rather than guess.
 
+## Project review of 4 October 2026 (issues #130-#158)
+
+Where each concern stands (6 Oct 2026, for 0.7.0):
+
+- [x] Fixed by PR #174: #130, #131, #132, #133, #134, #135, #136, #137,
+      #138, #143, #146, #148, #149, #157.
+- [x] Fixed by PR #175: #139, #140, #141, #142.
+- [x] #144 security headers on every response (CSP `frame-ancestors`,
+      `X-Frame-Options`, `Referrer-Policy`, `nosniff`).
+- [x] #155 standalone builds no longer copy the repository (or local
+      `analytics/`, `backups/`, `data/` folders); the dev compose file binds
+      PostgreSQL to 127.0.0.1 and has no Redis.
+- [x] #156 CI checks `relay/`; the Windows build refuses a PostgreSQL major
+      version other than 17 until `pg_upgrade` is built.
+- [x] #147 Akahu: amounts are read as exact decimals (sub-cent refused);
+      each sync re-reads the last 30 days, and lines deleted from any API
+      feed stay deleted (BK29, Jess). Still open: the credit card balance
+      sign, to confirm against a real Akahu card account.
+- [x] #150 Analytics: DuckDB memory (1 GiB) and spill (2 GiB) caps, a
+      5-minute limit on rebuilding a shaped table (keeping the last one),
+      all three changeable by environment variable, and the books copy read
+      in batches (decision 468).
+- [x] #153 Docker zip: Backup-Tohyee runs Tohyee's encrypted backup, and the
+      nightly backups go to a `backups` folder beside the compose file
+      (Jess). Not yet tried on Windows with Docker Desktop.
+- [x] #154 release supply chain: read-only tokens except the publishing
+      jobs, no overwriting a release's files, Visual C++ and Inno Setup
+      pinned by SHA-256, checkouts don't keep the token, and update checks
+      time out after 15 seconds. Still open: signing (Jess: later, once
+      there's a certificate).
+- [x] #145 organisations' SMTP: public addresses and ports 25/465/587/2525
+      only, unless a server admin turns on "Allow local mail relay" (Jess).
+- [x] #151 FX: a transfer out before a revaluation's reversal is refused,
+      revaluations can be voided, one revaluation at a time for every
+      account, and JPY/XPF statement lines can be coded (FXB12-FXB14,
+      approved by Jess).
+- [ ] #152 Windows service account and data folder permissions: needs
+      trying on Windows.
+
 ## List of 3 October 2026
 
 Jess (3 Oct 2026): "eventually we will need practice manager software, tax
@@ -169,12 +208,12 @@ the same night for 0.4.0 (decisions 333-338), except where noted.
 ## List of 27 September 2026
 
 1. **Server admin completely separate from accounting.** When dealing with the server there is no accounting anywhere: only server information and settings (organisations, users, updates, server details). A Tohyee icon in the Windows tray (by the clock), like a media server's tray icon, shows the server is running and opens the server screen. Decided with Jess (28 Sep 2026): the server settings become a **Windows tray app** installed on the server, not done in the browser at all; Docker/Linux servers use the command-line tool. Done so far: the server screens are out of the accounting menus, in their own area that only opens on the server computer itself (127.0.0.1, main port + 1), and the Windows tray app (installer/windows/tray; starts when you sign in to Windows, like a media server's, as Jess asked). The command-line tool now covers everything the server screens do, for Docker/Linux (`docker compose exec tohyee node tohyee-admin.cjs help`). To do: remove the browser server pages once Jess has tried the app on her server.
-2. **Bank feeds and bank reconciliation.** Done: bank accounts, statement import, reconciliation, bank rules and Akahu bank feeds, each organisation connecting its own Akahu personal app (examples BK1-BK16).
+2. **Bank feeds and bank reconciliation.** Done: bank accounts, statement import, reconciliation, bank rules and Akahu bank feeds, each organisation connecting its own Akahu personal app (examples BK1-BK16). Since then (PRs #159-#164): bank rules with conditions and split lines, contact defaults, statement files read from a folder or mailbox, and SimpleFIN, Stripe, PayPal and Wise feeds.
 3. **Xero-style menus.** A top bar with the organisation switcher, then exactly: Home, Sales, Purchases, Reporting, Accounting, Tax, Contacts. Each drops down to an overview page, its lists and that area's settings. Home shows a card per bank account with the balance and "Reconcile N items" (needs item 2). Our own look, not Xero's branding. Built, with a ☰ menu on phones; Home also shows money owed, bills to pay and the next GST return (Jess's choice, examples H1-H4).
 4. **Custom reports.** Reports area with tabs Home, Custom, Drafts, Published, Archived. Edit layout: the report as a page with an editable title, organisation and period, columns per period, grouped rows with totals, formula rows (e.g. Gross Profit), and a toolbar (text block, table, rows/columns, move up/down, delete, PDF). Decided with Jess (29 Sep 2026): start from a standard report; columns for several periods, difference and %, year to date (and budget, once budgets exist); "Published" is a frozen copy; the text block is a note and the table button adds a second accounts table. Built (examples CR1-CR10), with "Print or save as PDF" using the browser's print. The budget column (and actual less budget) is built too, with budgets (built overnight 30 Sep 2026, examples BU1-BU8 not yet approved by Jess).
 5. **History, notes and attachments** on journals: show who did what and when (already in the audit log), add notes, and attach files (stored with the organisation's data so backups include them). Confirmed with Jess (28 Sep 2026): invoices, bills, credit notes and contacts too; files stored in the organisation's database, PDF/images/Office/CSV up to 10 MB; notes editable by their author or an admin with the history kept. Built (examples NF1-NF14).
 
-6. **Use Tohyee from anywhere** (phone or laptop, away from home), the way a media server lets you reach it remotely. Decided with Jess (28 Sep 2026): Cloudflare Tunnel; two-step sign-in with an authenticator app and backup codes, required for everyone; email (Gmail/Outlook SMTP) for security alerts and reset links, not sign-in codes. Built: the tunnel (Remote access in the server settings), two-step sign-in and server email, and phone screens (a ☰ menu, and line editors that stack on a phone). **Decided with Jess (30 Sep 2026): three ways — Tohyee address (run by the project, one click, no sign-up), own domain via Cloudflare (free for business), Tailscale Funnel (paid for business).** Built: all three on the Windows server app's Phone access page (one on at a time, each with the address, a QR code, Copy, Open and Turn off); the server gets the Tohyee address (so `remote-access address --on` works on Linux/Docker too) and records the method (tohyee, cloudflare or tailscale); Connect to Cloudflare replaces pasting a token from the Zero Trust dashboard (pasting is kept as a fallback). Still to do: build and deploy the Tohyee address service (a Cloudflare Worker; another branch) and point `TOHYEE_ADDRESS_SERVICE_URL`'s default at it; try Connect to Cloudflare and Tailscale on a real Windows computer (sign-in pages, UAC, surviving a restart); a Linux/Docker way to use Funnel (by hand for now: `tailscale funnel --bg <port>` and set the public address).
+6. **Use Tohyee from anywhere** (phone or laptop, away from home), the way a media server lets you reach it remotely. Decided with Jess (28 Sep 2026): Cloudflare Tunnel; two-step sign-in with an authenticator app and backup codes, required for everyone; email (Gmail/Outlook SMTP) for security alerts and reset links, not sign-in codes. Built: the tunnel (Remote access in the server settings), two-step sign-in and server email, and phone screens (a ☰ menu, and line editors that stack on a phone). **Decided with Jess (30 Sep 2026): three ways — Tohyee address (run by the project, one click, no sign-up), own domain via Cloudflare (free for business), Tailscale Funnel (paid for business).** Built: all three on the Windows server app's Remote access page (first called Phone access) (one on at a time, each with the address, a QR code, Copy, Open and Turn off); the server gets the Tohyee address (so `remote-access address --on` works on Linux/Docker too) and records the method (tohyee, cloudflare or tailscale); Connect to Cloudflare replaces pasting a token from the Zero Trust dashboard (pasting is kept as a fallback). Still to do: build and deploy the Tohyee address service (a Cloudflare Worker; another branch) and point `TOHYEE_ADDRESS_SERVICE_URL`'s default at it; try Connect to Cloudflare and Tailscale on a real Windows computer (sign-in pages, UAC, surviving a restart); a Linux/Docker way to use Funnel (by hand for now: `tailscale funnel --bg <port>` and set the public address).
 7. **Backups.** Decided with Jess (28 Sep 2026): every night; keep 14 daily and 12 monthly; saved to a folder that a cloud service picks up (her server uses OneDrive); encrypted, with a copy of the key kept somewhere safe; restoring makes a copy of the organisation rather than overwriting it. Built: nightly encrypted backups of each organisation and the server's own database, checked after writing, failures retried hourly and emailed; Backups tab in the Windows server app and `backups ...` in the command-line tool; restore as a copy (tested). Jess asked (29 Sep 2026) that people don't lose the key: server admins can see the key (with their password) and check a saved copy by pasting it back, are reminded on every page until someone has, and can restore on a new server with the old server's key. Not yet tried on a real OneDrive folder.
 
 8. **NetSuite-style detail for bigger organisations.** Jess asked (29 Sep 2026) for the extra detail NetSuite has, behind a setting; she chose one "Advanced (ERP) features" switch per organisation (off by default) and custom fields in the first round. The plan sent to her, in order: (1) Department, Class and Location on every line, with the profit and loss split and filtered by them; (2) custom fields and custom segments, in the first round; (3) salespeople on invoices and a sales-by-salesperson report; (4) richer customers and items; (5) a GST audit report. Not planned: subsidiaries/consolidation and commission calculations. Built: (1) (examples TC1-TC10), (2) following NetSuite as Jess asked (examples CS1-CS3, CF1-CF10), (3) salespeople and sales by salesperson (examples SR1-SR8), and (4) richer customers and items, stock tracking (examples RC1-RC12, IT1-IT9, ST1-ST12): payment terms (for everyone, like Xero), credit limits that warn or block, billing and delivery addresses, contact people (the CRM's people, one primary), customer groups, price levels, parent customers and an aged receivables report that can roll subs up; a products and services list for everyone like Xero's, with NetSuite's units of measure, price level prices, supplier prices and kits behind the switch; and stock items on bills, invoices and credit notes moving stock at weighted average per location, with cost of sales on approval and an optional negative stock setting (examples ST1-ST12 approved by Jess, 30 Sep 2026), and (5) the GST audit report (built overnight 30 Sep 2026, examples GA1-GA4 not yet approved by Jess), for every organisation rather than behind the switch since every GST-registered organisation needs it.

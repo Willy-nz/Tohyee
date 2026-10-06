@@ -119,6 +119,8 @@ describe("the Windows installer and its fingerprint (decision 331)", () => {
     const fromFile = await windowsSetupFor(latest("1.2.0", [{ name: "TohyeeSetup-1.2.0.exe" }, { name: "TohyeeSetup-1.2.0.exe.sha256" }]), sidecar);
     expect(fromFile).toMatchObject({ setup: { sha256: HASH, sha256From: "sha256-file" } });
     expect(sidecar.mock.calls[0][0]).toBe("https://github.com/Willy-nz/Tohyee/releases/download/v1.2.0/TohyeeSetup-1.2.0.exe.sha256");
+    // Issue #154: the fingerprint fetch has a time limit too.
+    expect(sidecar.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
 
     expect(await windowsSetupFor(latest("1.2.0", [{ name: "TohyeeSetup-1.2.0.exe" }]), noFetch)).toEqual({
       problem: "Couldn't get a SHA-256 fingerprint for TohyeeSetup-1.2.0.exe from GitHub, so the download can't be checked. Download it from the release page and run it yourself instead.",

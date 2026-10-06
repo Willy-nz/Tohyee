@@ -61,6 +61,12 @@ New-Item -ItemType Directory -Force -Path $stage, $downloads, (Join-Path $stage 
 
 Write-Host "== App $version"
 Copy-Item -Recurse (Join-Path $root '.next\standalone') (Join-Path $stage 'app')
+# The build can trace data a development server wrote into the working copy
+# (DuckDB copies of real books, backups) into .next\standalone (issue #155).
+# It's never part of a release.
+foreach ($data in @('analytics', 'backups', 'data')) {
+  Remove-Item -Recurse -Force (Join-Path $stage "app\$data") -ErrorAction SilentlyContinue
+}
 Copy-Item -Recurse (Join-Path $root '.next\static') (Join-Path $stage 'app\.next\static')
 Copy-Item -Recurse (Join-Path $root 'public') (Join-Path $stage 'app\public')
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $stage 'LICENSE.txt')

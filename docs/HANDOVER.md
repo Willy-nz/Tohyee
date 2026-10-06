@@ -138,19 +138,13 @@ PREP8, WB7, XP14 and the HL section.
 
 - **Latest release: v0.5.0** (3 Oct 2026), published with the Windows
   installer, the Docker zip and the Linux bundle.
-- **0.6.0 is ready to publish** (4 Oct 2026): `package.json` says 0.6.0 on
-  main. Jess to publish the `v0.6.0` release on main from her Windows
-  desktop Chrome (the tag can't be pushed from a Claude cloud session); the
-  release notes are below. In it:
-  - UI step 1: simpler top bar, page dashboards and the new Home (#117)
-  - search everything from Ctrl K (#118)
-  - DuckDB limited to each organisation's own folders, and a 10-second
-    limit on shaping previews (#125, #128; decision 377)
-  - pinned Analytics tiles on Home (#122; decisions 374 and 378)
-  - pivot tables on dashboards, and a 30-second limit on every Analytics
-    question (#123; decisions 375 and 379)
-  - Excel (.xlsx) sources and report-email attachments (#124; decision 376,
-    tenant migration 0090)
+- **0.7.0 is ready to publish** (6 Oct 2026): `package.json` says 0.7.0.
+  0.6.0 was prepared (4 Oct 2026) but never tagged, so 0.7.0 carries
+  everything since 0.5.0: UI step 1 and Ctrl K search (#117, #118), the
+  Analytics changes (#122-#125, #128), the Xero add-ons (#159-#173) and
+  the review fixes (#174, #175 and this release). Jess to publish the
+  `v0.7.0` release on main (pushing the tag starts the release workflows);
+  the release notes are below.
 - Visual check before 0.6.0 (4 Oct 2026, built app in Chromium, light and
   dark, desktop and phone width): Home with two pinned tiles, the dashboard
   with a pivot and its drill-down, Customise, and an Excel source's sheet
@@ -160,19 +154,40 @@ PREP8, WB7, XP14 and the HL section.
   say Excel attachments are saved. No page scrolls sideways; no console
   errors.
 
-**0.6.0 release notes** (paste into the release):
+**0.7.0 release notes** (paste into the release):
 
 ```
-**Analytics**
-- Pin dashboard tiles to Home: a key figure, small chart or table, next to Home's own tiles. Pins follow dashboard sharing, and come back if a dashboard is shared again or Analytics is switched back on.
-- Pivot tables on dashboards: up to five row fields and one column field, with subtotals and grand totals worked out exactly on the server. Click a figure to see the rows behind it (up to 500). Export to CSV or Excel.
-- Excel workbooks (.xlsx) as data sources: choose the sheet (hidden sheets are marked). Report emails save .xlsx attachments too. Old .xls, macro and password-protected workbooks are refused.
-- Every Analytics question stops after 30 seconds, with a hint to filter or group further.
-- Each organisation's Analytics can only read its own folders on the server.
+## Fixes & Improvements
 
-**Also**
-- A simpler top bar, dashboards on the main pages (hide or customise them) and a new Home.
-- Search everything with Ctrl K.
+From the project review of 4 Oct 2026 (#158):
+- Sign-in limits hold under many requests at once; two-step reset emails only use the server's set public address; personal AI keys stop after a password or two-step reset; request bodies are size-limited before sign-in is checked; crafted .xlsx files can't freeze the server (#130-#134).
+- Backups and organisations: a failed restore never drops an existing database, a new organisation never takes over an existing database, and a backup cut off by a restart no longer blocks the day's backups (#135-#137).
+- Journal corrections are limited to the journals they're meant for (#138). Switching organisation in another tab no longer posts this tab's form to the other organisation (#143). Emails aren't sent twice after an unclear result (#146). CSV exports neutralise spreadsheet formulas (#148). IMAP report emails save .xlsx attachments (#149). The Customer field is labelled for screen readers (#157).
+- Payroll: bank files pay the account kept when the run was approved, approvers can't change an employee's tax code, KiwiSaver or bank account and still approve, KiwiSaver temporary rate reductions, and salary back pay after a reduced period (#139-#142).
+- Security headers on every page and API response: frame-ancestors, X-Frame-Options, Referrer-Policy and nosniff (#144).
+- Organisations' email servers must be public addresses on ports 25, 465, 587 or 2525. **If an organisation sends through a mail server on the Tohyee server or its local network, a server admin must turn on "Allow local mail relay" (Server settings › Email) after updating, or its emails stop** (#145).
+- Akahu bank feeds re-read the last 30 days so late transactions arrive, lines deleted from any bank feed stay deleted, and amounts are read as exact decimals (#147).
+- Foreign currency: revaluations can be voided; a transfer out of a foreign account before a revaluation is reversed is refused; one revaluation at a time per account; JPY and XPF statement lines can be coded (#151).
+- Analytics: DuckDB memory and temporary-disk caps, a 5-minute limit on rebuilding a shaped table (keeping the last one), and the books copy read in batches (#150).
+- Update checks time out after 15 seconds (#154).
+
+New since 0.5.0:
+- Bank: rules with several conditions and split lines, contact defaults, statement files read from a folder or mailbox, and SimpleFIN, Stripe, PayPal and Wise feeds.
+- Purchases: a bills inbox, duplicate bill warnings, mileage on expense claims, and approval workflows for bills, purchase orders and expense claims.
+- Sales: Pay now links with Stripe and PayPal; WooCommerce orders; Shopify chargebacks and reserves.
+- Reports: a cash flow forecast, consolidation with ECB rates, and AI-suggested commentary that a person checks.
+- Analytics: pinned tiles on Home, pivot tables, Excel (.xlsx) sources, a 30-second limit per question, and each organisation limited to its own folders.
+- A simpler top bar, page dashboards, a new Home, and search everything with Ctrl K.
+
+## Documentation & Website
+- README and the website list the new features; the Docker zip's README.txt explains the encrypted nightly backups, the backup folder, the backup key and restoring (#153).
+- The dev docker-compose.yml is labelled dev-only, binds PostgreSQL to 127.0.0.1 and drops the unused Redis (#155).
+
+## Packaging & Windows Installer
+- Release bundles and the Docker image no longer pick up the repository or local analytics/, backups/ or data/ folders (#155).
+- The Windows build refuses a PostgreSQL major version other than 17 until upgrades are built (#156). CI now checks relay/ (#156).
+- Release workflows run with read-only tokens except the jobs that publish, never overwrite a release's files, and pin the Visual C++ and Inno Setup downloads by SHA-256 (#154; signing comes later).
+- Docker zip: Backup-Tohyee makes Tohyee's encrypted backup, and nightly backups go to a `backups` folder beside the compose file instead of inside Docker (#153; not yet tried on Windows).
 
 Database upgrades run by themselves when Tohyee starts. Back up first if you install by hand.
 ```
@@ -216,10 +231,12 @@ Database upgrades run by themselves when Tohyee starts. Back up first if you ins
   approved by Jess 5 Oct 2026, decisions 451-455, tenant migration 0105.
   Next: the rest of item 7 (Stripe sales, Square, Amazon, eBay, Etsy,
   PayPal; Jess picks the order), examples first.
-- Project review of 4 Oct 2026 (#158, issues #130-#157): fixes are going
-  in by batch. Fixed (decisions 456-460): #130-#138, #143, #146, #148,
-  #149, #157. Still open: #139-#142 and #151 (payroll and FX: worked
-  examples and Jess's approval first), #144, #145, #147, #150, #152-#156.
+- Project review of 4 Oct 2026 (#158, issues #130-#157): fixed (decisions
+  456-460): #130-#138, #143, #146, #148, #149, #157 (PR #174), #139-#142
+  (PR #175), #144, #155, #156 (PR #176), and #144, #145, #147, #150, #151,
+  #153, #154, #155, #156 in full (decisions 465-473). Still open: #152
+  (Windows testing), #154 signing, the Akahu card balance sign (#147).
+  Details in [TODO.md](TODO.md).
 - Design rule from Jess: **follow NetSuite where it has an answer, otherwise
   Xero.** Never guess tax rates or legal rules; cite IRD.
 
