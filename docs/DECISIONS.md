@@ -3471,6 +3471,8 @@ testing) and #154's code signing (later, Jess).
      localhost with the switch on. The remote server's reply is no longer
      shown to the organisation, only logged. Existing installs relaying
      through a local mail server need the switch turned on.
+     - Screenshots: Server settings › Email ([light](screenshots/local-mail-relay-light.png),
+       [dark](screenshots/local-mail-relay-dark.png), [phone](screenshots/local-mail-relay-phone.png)).
 467. **Akahu re-reads 30 days** (#147, BK29, Jess: deleted lines stay
      deleted, for every API feed): late-settling transactions are picked up;
      a line deleted from an Akahu, SimpleFIN, Stripe, PayPal or Wise feed is
@@ -3491,6 +3493,8 @@ testing) and #154's code signing (later, Jess).
      currency exists. The void is kept in its own append-only table (tenant
      migration 0108), so revaluation runs stay append-only. A voided
      revaluation counts nowhere, period close included.
+     - Screenshots: Past revaluations with Void and a voided run ([light](screenshots/fx-revaluation-void-light.png),
+       [dark](screenshots/fx-revaluation-void-dark.png), [phone](screenshots/fx-revaluation-void-phone.png)).
 470. **One revaluation at a time for every account** (#151, FXB13), as for
      receivables and payables; and statement lines in currencies without
      cents (JPY, XPF) can be coded (FXB14). Organisations whose own currency

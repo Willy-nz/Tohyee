@@ -393,9 +393,9 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
         {runs.error ? <Notice tone="error">{runs.error}</Notice> : null}
         {runs.data && runs.data.revaluations.length === 0 ? <Empty>None yet.</Empty> : null}
         {(runs.data?.revaluations ?? []).map((run) => (
-          <div key={run.id}>
+          <div key={run.id} style={{ minWidth: 0 }}>
             {/* Above the table, not in it: on a phone the table scrolls sideways and would hide the Void button. */}
-            <div className={ui.actions} style={{ flexWrap: "wrap", fontWeight: 600, marginTop: 12 }}>
+            <p style={{ fontWeight: 600, margin: "12px 0 6px", overflowWrap: "anywhere" }}>
               <span>
                 {run.reference} · {formatDate(run.revaluationDate)} · {run.rateSource} · by {personName(run, "operator")}
                 {run.voided ? (
@@ -420,7 +420,7 @@ function FxRevaluation({ organisationId }: { organisationId: string }) {
                   </>
                 ) : null}
               </span>
-            </div>
+            </p>
             <div className={ui.tableWrap}>
             <table className={ui.table}>
               <thead>
