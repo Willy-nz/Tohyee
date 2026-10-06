@@ -11,3 +11,8 @@ deploy
 .env.*
 *.log
 relay
+# Data a development server writes into the working copy (DuckDB copies of
+# real books, backups): never part of an image.
+analytics
+backups
+data

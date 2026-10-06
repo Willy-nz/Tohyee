@@ -438,21 +438,40 @@ export async function loadSourceFile(input: {
   return loadCsv(input);
 }
 
+/**
+ * Rebuilding a shaped table stops after this long (issue #150), so a shape
+ * whose merges multiply the rows can't hold the organisation's analytics (and
+ * the server's disk) for the whole night. The old table is kept.
+ */
+export const SHAPE_BUILD_TIME_LIMIT_MS = 10 * 60 * 1000;
+
 export async function replaceTableFromSelect(
   organisationId: string,
   table: string,
   sql: string,
   params: unknown[],
+  /** Tests only: a shorter limit (the message still says 10 minutes). */
+  options: { timeLimitMs?: number } = {},
 ): Promise<CsvLoadResult> {
   assertTableName(table);
   if (table.startsWith(TOHYEE_TABLE_PREFIX)) throw new ValidationError("Table names starting with tohyee_ are kept for the copy of the books.");
+  const timeLimitMs = options.timeLimitMs ?? SHAPE_BUILD_TIME_LIMIT_MS;
   return serialise(organisationId, () =>
     withAnalytics(organisationId, async (connection) => {
       const started = performance.now();
       const staging = `_tohyee_shape_${table}`;
       await connection.run(`drop table if exists ${quoteIdentifier(staging)}`);
+      let stopped = false;
       try {
-        await connection.runAndReadAll(`create table ${quoteIdentifier(staging)} as ${sql}`, params as never);
+        const timer = setTimeout(() => {
+          stopped = true;
+          connection.interrupt();
+        }, timeLimitMs);
+        try {
+          await connection.runAndReadAll(`create table ${quoteIdentifier(staging)} as ${sql}`, params as never);
+        } finally {
+          clearTimeout(timer);
+        }
         const count = await connection.runAndReadAll(`select count(*)::bigint as n from ${quoteIdentifier(staging)}`);
         const rows = Number(count.getRows()[0][0]);
         await connection.run("begin transaction");
@@ -467,6 +486,11 @@ export async function replaceTableFromSelect(
         return { rows, milliseconds: Math.round(performance.now() - started) };
       } catch (error) {
         await connection.run(`drop table if exists ${quoteIdentifier(staging)}`).catch(() => undefined);
+        if (stopped) {
+          throw new ValidationError(
+            "The shaped table took more than 10 minutes to rebuild, so it was stopped and the last one kept. Filter the rows sooner, or check merges match on columns with few repeats.",
+          );
+        }
         throw new ValidationError(`The shaped table couldn't be rebuilt: ${loadErrorMessage(error)}`);
       }
     }),

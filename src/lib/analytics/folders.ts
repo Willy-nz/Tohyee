@@ -32,7 +32,7 @@ export async function sourceFolderStatus(organisationId: string): Promise<{ chos
   if (!folder) return { chosen: false, readable: false };
   try {
     fs.accessSync(folder, fs.constants.R_OK);
-    return { chosen: true, readable: fs.statSync(folder).isDirectory() };
+    return { chosen: true, readable: fs.statSync(/* turbopackIgnore: true */ folder).isDirectory() };
   } catch {
     return { chosen: true, readable: false };
   }
@@ -50,7 +50,7 @@ export async function listSourceFolders(): Promise<Array<{ organisationId: strin
     if (folder) {
       try {
         fs.accessSync(folder, fs.constants.R_OK);
-        readable = fs.statSync(folder).isDirectory();
+        readable = fs.statSync(/* turbopackIgnore: true */ folder).isDirectory();
       } catch {
         readable = false;
       }
@@ -72,7 +72,7 @@ export async function setSourceFolder(auth: ServerAdminAuth, organisationId: str
     folder = path.normalize(text);
     let stat: fs.Stats;
     try {
-      stat = fs.statSync(folder);
+      stat = fs.statSync(/* turbopackIgnore: true */ folder);
       fs.accessSync(folder, fs.constants.R_OK);
     } catch {
       throw new ValidationError("Tohyee can't open that folder. Check it exists and the Tohyee service can read it.");
@@ -80,7 +80,7 @@ export async function setSourceFolder(auth: ServerAdminAuth, organisationId: str
     if (!stat.isDirectory()) throw new ValidationError("That's a file, not a folder.");
     // Tohyee's own analytics data isn't a source.
     const own = path.resolve(analyticsFolder());
-    const chosen = path.resolve(folder);
+    const chosen = path.resolve(/* turbopackIgnore: true */ folder);
     if (chosen === own || chosen.startsWith(own + path.sep) || own.startsWith(chosen + path.sep)) {
       throw new ValidationError("Choose a folder outside Tohyee's own analytics data folder.");
     }

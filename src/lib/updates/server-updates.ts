@@ -1,6 +1,9 @@
 import packageJson from "../../../package.json";
 
 const GITHUB_REPOSITORY = "Willy-nz/Tohyee";
+/** How long the update check waits for GitHub (the release, and its .sha256 file). */
+export const UPDATE_FETCH_TIME_LIMIT_MS = 15_000;
+
 const GITHUB_RELEASES_LATEST_URL = `https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest`;
 
 type GitHubReleaseAsset = {
@@ -189,6 +192,8 @@ export async function getLatestReleaseCheck(): Promise<LatestReleaseCheck> {
       "user-agent": "tohyee-update-check",
     },
     cache: "no-store",
+    // A stalled connection mustn't hold the daily check or Install (issue #154).
+    signal: AbortSignal.timeout(UPDATE_FETCH_TIME_LIMIT_MS),
   });
 
   if (response.status === 404) {

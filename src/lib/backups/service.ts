@@ -73,9 +73,9 @@ export function defaultBackupFolder(): string {
   const configured = process.env.TOHYEE_BACKUP_DIR?.trim();
   if (configured) return configured;
   if (process.platform === "win32") {
-    return path.join(process.env.ProgramData || "C:\\ProgramData", "Tohyee", "backups");
+    return path.join(/* turbopackIgnore: true */ process.env.ProgramData || "C:\\ProgramData", "Tohyee", "backups");
   }
-  return path.join(process.cwd(), "backups");
+  return path.join(/* turbopackIgnore: true */ process.cwd(), "backups");
 }
 
 /** Local date and time parts in the business time zone. */
@@ -188,7 +188,7 @@ export async function updateBackupSettings(
 type Target = { organisationId: string | null; displayName: string | null; databaseName: string; schemaVersion: string | null };
 
 function folderFor(root: string, target: Target): string {
-  return path.join(root, target.organisationId ?? SERVER_FOLDER);
+  return path.join(/* turbopackIgnore: true */ root, target.organisationId ?? SERVER_FOLDER);
 }
 
 function filePrefix(target: Target): string {
@@ -387,7 +387,7 @@ export async function markInterruptedBackups(processStartedAt: Date, now = new D
   );
   if (marked.rowCount) {
     const root = (await getBackupSettings()).folder;
-    const folders = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+    const folders = await fs.readdir(/* turbopackIgnore: true */ root, { withFileTypes: true }).catch(() => []);
     for (const entry of folders) {
       if (!entry.isDirectory()) continue;
       const folder = path.join(root, entry.name);
@@ -446,7 +446,7 @@ export async function recentBackupRuns(limit = 50): Promise<BackupRun[]> {
 /** The backup files in the backup folder (one organisation's, or all), newest first. */
 export async function listBackupFiles(organisationId?: string): Promise<BackupFile[]> {
   const root = (await getBackupSettings()).folder;
-  const folders = organisationId ? [parseOrganisationId(organisationId)] : await fs.readdir(root).catch(() => [] as string[]);
+  const folders = organisationId ? [parseOrganisationId(organisationId)] : await fs.readdir(/* turbopackIgnore: true */ root).catch(() => [] as string[]);
   const files: BackupFile[] = [];
   for (const folder of folders) {
     const names = await fs.readdir(path.join(root, folder)).catch(() => [] as string[]);
@@ -469,7 +469,7 @@ export async function listBackupFiles(organisationId?: string): Promise<BackupFi
 /** A backup file named relative to the backup folder, refusing anything outside it. */
 export async function backupFileInFolder(name: unknown): Promise<string> {
   if (typeof name !== "string" || !name.trim()) throw new ValidationError("Say which backup file.");
-  const root = path.resolve((await getBackupSettings()).folder);
+  const root = path.resolve(/* turbopackIgnore: true */ (await getBackupSettings()).folder);
   const full = path.resolve(root, name.trim());
   if (!full.startsWith(root + path.sep) || !full.endsWith(BACKUP_EXTENSION)) {
     throw new ValidationError("That isn't a backup file in the backup folder.");

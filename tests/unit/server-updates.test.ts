@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import packageJson from "../../package.json";
-import { getLatestReleaseCheck } from "@/lib/updates/server-updates";
+import { getLatestReleaseCheck, UPDATE_FETCH_TIME_LIMIT_MS } from "@/lib/updates/server-updates";
 
 /** A GitHub "latest release" response for this tag. */
 function release(tagName: string, assetNames: string[] = []) {
@@ -45,6 +45,9 @@ describe("update check", () => {
       headers: { accept: "application/vnd.github+json", "user-agent": "tohyee-update-check" },
       cache: "no-store",
     });
+    // Issue #154: a stalled connection gives up rather than holding the check.
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    expect(UPDATE_FETCH_TIME_LIMIT_MS).toBe(15_000);
     expect(check).toMatchObject({
       repository: "Willy-nz/Tohyee",
       currentVersion: packageJson.version,

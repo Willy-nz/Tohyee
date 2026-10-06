@@ -1,5 +1,5 @@
 import { json, route, searchParams, withOrganisation } from "@/lib/api/http";
-import { akahuProblem, listAkahuAccounts } from "@/lib/bank/akahu/client";
+import { akahuMoney, akahuProblem, listAkahuAccounts } from "@/lib/bank/akahu/client";
 import { akahuCredentialsFor } from "@/lib/bank/akahu/settings";
 
 /** GET: the Akahu accounts this organisation can link, and which of its bank accounts each is linked to. */
@@ -28,7 +28,7 @@ export const GET = route(async (request) => {
       type: account.type ?? null,
       status: account.status ?? null,
       connectionName: account.connection?.name ?? null,
-      balance: typeof account.balance?.current === "number" ? account.balance.current.toFixed(2) : null,
+      balance: typeof account.balance?.current === "number" ? akahuMoney(account.balance.current, "account balance") : null,
       linkedAccountId: linkedTo.get(account._id) ?? null,
     })),
   });

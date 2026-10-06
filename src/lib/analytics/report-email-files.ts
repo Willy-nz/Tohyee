@@ -238,8 +238,8 @@ async function writeReportFile(
     const rootHandle = await directory(root, false);
     if (rootHandle) handles.push(rootHandle);
     const canonicalRoot = await fs.realpath(root);
-    const emailPath = path.join(root, "email");
-    const emailHandle = await directory(path.join(pinned(rootHandle, root), "email"), true);
+    const emailPath = path.join(/* turbopackIgnore: true */ root, "email");
+    const emailHandle = await directory(path.join(/* turbopackIgnore: true */ pinned(rootHandle, root), "email"), true);
     if (emailHandle) handles.push(emailHandle);
     const mailboxPath = path.join(emailPath, mailboxId);
     const mailboxHandle = await directory(path.join(pinned(emailHandle, emailPath), mailboxId), true);

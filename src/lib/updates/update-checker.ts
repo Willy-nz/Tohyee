@@ -1,4 +1,4 @@
-import { getLatestReleaseCheck, type LatestReleaseCheck, type ReleaseAsset } from "@/lib/updates/server-updates";
+import { getLatestReleaseCheck, UPDATE_FETCH_TIME_LIMIT_MS, type LatestReleaseCheck, type ReleaseAsset } from "@/lib/updates/server-updates";
 
 /**
  * Checks GitHub for a new Tohyee release by itself (decision 328): a minute
@@ -145,7 +145,11 @@ export async function windowsSetupFor(
   const sidecar = check.release.assets.find((other) => other.name.toLowerCase() === `${asset.name.toLowerCase()}.sha256`);
   if (sidecar) {
     try {
-      const response = await fetcher(sidecar.downloadUrl, { headers: { "user-agent": "tohyee-update-check" }, cache: "no-store" });
+      const response = await fetcher(sidecar.downloadUrl, {
+        headers: { "user-agent": "tohyee-update-check" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(UPDATE_FETCH_TIME_LIMIT_MS),
+      });
       if (response.ok) {
         const hash = sha256FromFile(await response.text(), asset.name);
         if (hash) {

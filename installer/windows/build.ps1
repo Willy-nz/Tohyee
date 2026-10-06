@@ -12,6 +12,15 @@ $ProgressPreference = 'SilentlyContinue'
 # (https://www.enterprisedb.com/download-postgresql-binaries).
 $PostgresVersion = '17.11'
 $PostgresUrl = 'https://sbp.enterprisedb.com/getfile.jsp?fileid=1260569'
+# The major version every installed data folder (%ProgramData%\Tohyee\pgdata)
+# was made with. An update replaces pgsql\bin, and a new major version can't
+# start on the old data folder, so moving to another major version needs
+# pg_upgrade in configure-tohyee.ps1 first (issue #156). Until then the build
+# refuses it.
+$PostgresMajor = '17'
+if ($PostgresVersion.Split('.')[0] -ne $PostgresMajor) {
+  throw "PostgreSQL $PostgresVersion isn't version $PostgresMajor. Installed servers can't start on a new major version until configure-tohyee.ps1 runs pg_upgrade (issue #156)."
+}
 $WinSwUrl = 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe'
 $VcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
 # cloudflared runs the Cloudflare Tunnel for remote access (Server > Remote access).
@@ -35,6 +44,12 @@ New-Item -ItemType Directory -Force -Path $stage, $downloads, (Join-Path $stage 
 
 Write-Host "== App $version"
 Copy-Item -Recurse (Join-Path $root '.next\standalone') (Join-Path $stage 'app')
+# The build can trace data a development server wrote into the working copy
+# (DuckDB copies of real books, backups) into .next\standalone (issue #155).
+# It's never part of a release.
+foreach ($data in @('analytics', 'backups', 'data')) {
+  Remove-Item -Recurse -Force (Join-Path $stage "app\$data") -ErrorAction SilentlyContinue
+}
 Copy-Item -Recurse (Join-Path $root '.next\static') (Join-Path $stage 'app\.next\static')
 Copy-Item -Recurse (Join-Path $root 'public') (Join-Path $stage 'app\public')
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $stage 'LICENSE.txt')
