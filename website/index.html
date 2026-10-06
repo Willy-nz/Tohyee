@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0c1110" media="(prefers-color-scheme: dark)">
 <meta property="og:title" content="Tohyee: accounting that's yours">
 <meta property="og:description" content="Free, open-source accounting for New Zealand that runs on your own computer.">
-<meta property="og:image" content="https://willy-nz.github.io/Tohyee/img/home-light.png">
+<meta property="og:image" content="https://willy-nz.github.io/Tohyee/img/og-home.png">
 <meta property="og:type" content="website">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -131,6 +131,7 @@
   .tile .icon { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink); }
   .tile .icon svg { width: 21px; height: 21px; }
   .tile .peek { margin: 14px -26px -26px; border-top: 1px solid var(--line); }
+  .tall { grid-row: span 2; }
   .span-2 { grid-column: span 2; } .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; } .span-6 { grid-column: span 6; }
 
   /* Feature rows */
@@ -161,8 +162,10 @@
   .install { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
   .install .tile { gap: 12px; }
   .install ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 15px; display: grid; gap: 6px; }
+  .install ol li { display: list-item; }
+  .install ol li::before { content: none; }
   .install .tile .btn { align-self: flex-start; margin-top: auto; }
-  pre { margin: 0; background: #0d1412; color: #d8e6e1; font: 13px/1.6 var(--mono); padding: 14px 16px; border-radius: 12px; overflow-x: auto; }
+  pre { margin: 0; background: #0d1412; color: #d8e6e1; font: 12.5px/1.6 var(--mono); padding: 14px 16px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
   pre .c { color: #7f9a92; }
   code { font-family: var(--mono); font-size: .92em; }
 
@@ -194,6 +197,7 @@
     nav.links { display: none; }
     .bento { grid-template-columns: 1fr 1fr; }
     .span-2, .span-3, .span-4, .span-6 { grid-column: span 2; }
+    .tall { grid-row: auto; }
     .bento .half { grid-column: span 1; }
     .feature, .feature.flip { grid-template-columns: 1fr; gap: 28px; margin-top: 72px; }
     .feature.flip .copy { order: 0; }
@@ -257,8 +261,8 @@
       <div class="hero-shot">
         <div class="frame">
           <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tohyee.local</span></div>
-          <img class="shot-light has-dark" src="img/home-light.png" width="2880" height="1800" alt="Tohyee's Home page: money in the bank, invoices owed, bills due and a to-do list for a small coffee roaster">
-          <img class="shot-dark" src="img/home-dark.png" width="2880" height="1800" alt="" loading="lazy">
+          <img class="shot-light has-dark" src="img/home-light.webp" width="2880" height="1800" alt="Tohyee's Home page for a demo coffee roaster: cash in the bank, money owed, bills to pay, the next GST return and a to-do list">
+          <img class="shot-dark" src="img/home-dark.webp" width="2880" height="1800" alt="" loading="lazy">
         </div>
       </div>
 
@@ -280,11 +284,11 @@
       </div>
 
       <div class="bento">
-        <div class="tile span-4">
+        <div class="tile span-4 tall">
           <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M5 10V20m4-10v10m6-10v10m4-10v10M3 20h18M12 3 3 8h18z"/></svg></div>
           <h3>Bank feeds and reconciliation</h3>
           <p>Akahu for NZ banks, SimpleFIN for overseas banks, Stripe, PayPal and Wise, or statement files from a folder or mailbox. Bank rules with conditions and splits fill in the everyday lines.</p>
-          <div class="peek"><img src="img/reconcile-light.png" width="2880" height="1800" alt="Reconciling bank statement lines against invoices and bills" loading="lazy"></div>
+          <div class="peek"><img class="shot-light has-dark" src="img/reconcile-light.webp" width="2880" height="2000" alt="Reconciling bank statement lines against invoices and bills" loading="lazy"><img class="shot-dark" src="img/reconcile-dark.webp" width="2880" height="2000" alt="" loading="lazy"></div>
         </div>
         <div class="tile span-2">
           <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10v18l-2.5-1.5L12 21l-2.5-1.5L7 21zM10 8h4m-4 4h4"/></svg></div>
@@ -307,16 +311,6 @@
           <h3>Payroll</h3>
           <ul><li>PAYE, ACC, KiwiSaver, student loan</li><li>Holidays Act leave and timesheets</li><li>Payslips, bank files, payday filing</li></ul>
         </div>
-        <div class="tile span-3">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg></div>
-          <h3>Reports that explain themselves</h3>
-          <p>Profit and loss, balance sheet, aged receivables and payables, budgets, custom layouts, a cash flow forecast and consolidation across organisations, with commentary a person checks.</p>
-        </div>
-        <div class="tile span-3">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2"/></svg></div>
-          <h3>Analytics and a built-in CRM</h3>
-          <p>Bring in CSV and Excel files alongside the books, shape them into dashboards and pivots, and share them with clients. A CRM with Gmail and Microsoft 365 email and calendar sync is included.</p>
-        </div>
         <div class="tile span-2 half">
           <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></svg></div>
           <h3>Stock and assets</h3>
@@ -332,23 +326,37 @@
           <h3>Safe by design</h3>
           <ul><li>Two-step sign-in for everyone</li><li>Posted history can't be edited</li><li>Each organisation in its own database</li></ul>
         </div>
+        <div class="tile span-2 half">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h6"/></svg></div>
+          <h3>Projects and tracking</h3>
+          <ul><li>Departments, classes, locations</li><li>Projects with time tracking</li></ul>
+        </div>
+        <div class="tile span-3">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg></div>
+          <h3>Reports that explain themselves</h3>
+          <p>Profit and loss, balance sheet, aged receivables and payables, budgets, custom layouts, a cash flow forecast and consolidation across organisations, with commentary a person checks.</p>
+        </div>
+        <div class="tile span-3">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2"/></svg></div>
+          <h3>Analytics and a built-in CRM</h3>
+          <p>Bring in CSV and Excel files alongside the books, shape them into dashboards and pivots, and share them with clients. A CRM with Gmail and Microsoft 365 email and calendar sync is included.</p>
+        </div>
       </div>
 
       <div class="feature">
         <div class="copy">
-          <p class="kicker">Bank reconciliation</p>
-          <h2>Match the bank in minutes, not afternoons.</h2>
-          <p>Statement lines arrive from your bank feed and Tohyee suggests the invoice, bill or rule that fits. Confident matches are one click, and anything unusual is easy to code with splits and transfers.</p>
+          <p class="kicker">Sales</p>
+          <h2>Invoice, get paid, and see who owes what.</h2>
+          <p>GST is worked out on every line, invoices are numbered with no gaps when you approve them, and each one shows what's paid and what's still owing. Email them from your own mailbox with a Pay now link.</p>
           <ul class="checks">
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Pay several invoices or bills from one line</li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Rules with conditions, split lines and contact defaults</li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>CSV, Excel, OFX, QIF, CAMT.053 and MT940 files too</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Quotes, repeating invoices and credit notes</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Payments matched straight from the bank feed</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Customer statements and aged receivables</li>
           </ul>
         </div>
         <div class="frame">
-          <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>Banking · Reconcile</span></div>
-          <img class="shot-light has-dark" src="img/reconcile-light.png" width="2880" height="1800" alt="The bank reconciliation screen" loading="lazy">
-          <img class="shot-dark" src="img/reconcile-dark.png" width="2880" height="1800" alt="" loading="lazy">
+          <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>Sales · Invoices</span></div>
+          <img src="img/invoices-light.webp" width="2880" height="1800" alt="The sales invoices list with approved, draft, unpaid and part-paid invoices" loading="lazy">
         </div>
       </div>
 
@@ -365,14 +373,14 @@
         </div>
         <div class="frame">
           <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>Reports · GST return</span></div>
-          <img src="img/gst-light.png" width="2880" height="1800" alt="A GST return in Tohyee" loading="lazy">
+          <img src="img/gst-light.webp" width="2880" height="1800" alt="A GST return in Tohyee" loading="lazy">
         </div>
       </div>
 
       <div class="feature">
         <div class="copy">
           <p class="kicker">Everyday speed</p>
-          <h2>Find anything with <kbd style="font:600 .7em var(--mono);border:1px solid var(--line-strong);border-radius:8px;padding:2px 8px;background:var(--surface)">Ctrl K</kbd></h2>
+          <h2>Find anything with <kbd style="font:600 .7em var(--mono);border:1px solid var(--line-strong);border-radius:8px;padding:2px 8px;background:var(--surface);white-space:nowrap;vertical-align:.12em">Ctrl&nbsp;K</kbd></h2>
           <p>Jump to any screen, invoice, contact or report from the keyboard. A simple top bar, light and dark themes that follow your computer, and screens that work on a phone.</p>
           <ul class="checks">
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>One + New button for everything you create</li>
@@ -382,7 +390,7 @@
         </div>
         <div class="frame">
           <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>Search</span></div>
-          <img src="img/search-light.png" width="2880" height="1800" alt="The Ctrl K search palette" loading="lazy">
+          <img src="img/search-light.webp" width="2880" height="1800" alt="The Ctrl K search palette" loading="lazy">
         </div>
       </div>
     </div>
@@ -414,8 +422,7 @@
           <p>Check what's owed, approve a bill or send an invoice from your phone. Turn on remote access through your own domain on Cloudflare, or Tailscale, without opening ports on your router.</p>
         </div>
         <div class="phones">
-          <div class="phone"><img src="img/phone-home.png" width="1170" height="2532" alt="Tohyee's Home page on a phone" loading="lazy"></div>
-          <div class="phone raise"><img src="img/phone-invoice.png" width="1170" height="2532" alt="An invoice on a phone" loading="lazy"></div>
+          <div class="phone"><img src="img/phone-home.webp" width="1170" height="2532" alt="Tohyee's Home page on a phone" loading="lazy"></div>
         </div>
       </div>
     </div>

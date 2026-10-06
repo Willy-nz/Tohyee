@@ -138,6 +138,14 @@ PREP8, WB7, XP14 and the HL section.
 
 - **Latest release: v0.5.0** (3 Oct 2026), published with the Windows
   installer, the Docker zip and the Linux bundle.
+- **Website and README redesigned** (6 Oct 2026, for 0.7.0): `website/` is
+  one static page in the app's colours, with Inter served from the site (no
+  third-party requests), light and dark, and screenshots of a fictional demo
+  business (Kōwhai Coffee Roasters) in `website/img/`, also used by the
+  README. The demo data was seeded with the real services in a scratch test
+  file, not committed; the payroll and phone-invoice shots were left out
+  because they show layout problems (pay run totals tables, the phone line
+  table cut off) worth fixing in the app.
 - **0.7.0 is ready to publish** (6 Oct 2026): `package.json` says 0.7.0.
   0.6.0 was prepared (4 Oct 2026) but never tagged, so 0.7.0 carries
   everything since 0.5.0: UI step 1 and Ctrl K search (#117, #118), the
