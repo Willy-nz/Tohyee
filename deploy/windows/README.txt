@@ -44,10 +44,33 @@ WHERE THINGS ARE KEPT
 
 BACKUPS
 -------
-Double-click Backup-Tohyee.cmd. It saves everything (all organisations) to
-Documents\Tohyee backups\tohyee-<date>.sql. Copy those files somewhere off
-this computer too, e.g. a USB drive or cloud storage.
-Restoring a backup is a manual job for now; ask for help before you need it.
+Every night (2am) Tohyee backs up each organisation, encrypted with the
+backup key, and checks each file after writing it.
+- By default they go to a Docker volume called tohyee_backups. That's
+  inside Docker Desktop, on the same disk as your data: uninstalling Docker
+  Desktop deletes both. To keep them in a folder you can see (and copy off
+  this computer, e.g. OneDrive), add a line such as
+    TOHYEE_BACKUP_FOLDER=C:\Users\you\OneDrive\Tohyee backups
+  to %LOCALAPPDATA%\Tohyee\tohyee.env and run Install-Tohyee.cmd again.
+- Save a copy of the backup key somewhere safe that isn't the backup folder
+  (a password manager). Without it the backups can't be opened. To see it:
+    docker exec -it tohyee-tohyee-1 node tohyee-admin.cjs backups key show
+  (in PowerShell or Command Prompt), then check your saved copy with
+    docker exec -it tohyee-tohyee-1 node tohyee-admin.cjs backups key check
+- To back up straight away:
+    docker exec -it tohyee-tohyee-1 node tohyee-admin.cjs backups run
+- To restore, as a copy that never overwrites the current books:
+    docker exec -it tohyee-tohyee-1 node tohyee-admin.cjs backups list
+    docker exec -it tohyee-tohyee-1 node tohyee-admin.cjs backups restore --file <a File shown by the list>
+  ("help" lists the rest.)
+
+Backup-Tohyee.cmd is different: it saves one file of everything (every
+organisation, the logins and their sessions) to
+Documents\Tohyee backups\tohyee-<date>.sql, and that file is NOT
+encrypted. Anyone who can open it can read all your books. Keep it off
+cloud-synced folders (Windows often syncs Documents to OneDrive), and
+delete it once you've copied it somewhere private. Prefer the encrypted
+backups above.
 
 
 UPDATING TO A NEW RELEASE

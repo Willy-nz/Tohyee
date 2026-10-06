@@ -54,17 +54,26 @@ people working on the code.
   PDFs, in HTML emails with the organisation's logo) from the organisation's
   own Microsoft 365, Outlook, Gmail or Google Workspace mailbox (signed in
   once), or any other email account.
+- **Pay now** links on invoices through the organisation's own Stripe or
+  PayPal account, with the payments recorded for you.
+- Shopify and WooCommerce orders and refunds brought in as sales (and
+  Shopify payouts, with their fees).
 
 **Purchases**
 - Bills (due dates from each supplier's payment terms), repeating bills,
   supplier credit notes, purchase orders billed in parts, paying one or
-  several bills at once, and expense claims.
+  several bills at once, and expense claims with mileage.
+- A bills inbox (bills uploaded or read from a mailbox, made into drafts),
+  warnings about possible duplicate bills, and approval rules for who
+  approves what.
 
 **Bank**
 - Bank and credit card accounts. Import statements (CSV, Excel, OFX, QIF,
-  CAMT.053, MT940) or use an Akahu bank feed for NZ banks. Reconcile each line by
-  matching, paying invoices or bills, spend or receive money, or a transfer.
-  Bank rules fill in the usual ones.
+  CAMT.053, MT940), have statement files picked up from a folder or
+  mailbox, or use a bank feed: Akahu for NZ banks, SimpleFIN for overseas
+  banks, and Stripe, PayPal and Wise. Reconcile each line by matching, paying
+  invoices or bills, spend or receive money, or a transfer. Bank rules (with
+  conditions and split lines) and contact defaults fill in the usual ones.
 
 **GST and reports**
 - GST return (GST101A, boxes 5-15) on the invoice, payments or hybrid basis,
@@ -74,6 +83,9 @@ people working on the code.
   retained earnings, as in NetSuite), profit and loss, balance sheet, account transactions, journal
   report, aged receivables and payables, budgets with budget vs actual, and
   custom reports with your own layout.
+- A cash flow forecast, consolidation of several organisations (with
+  exchange rates from the European Central Bank), and report commentary
+  that the organisation's connected AI can suggest and a person checks.
 
 **Accounting**
 - A starting NZ chart of accounts, manual journals, corrections by reversal,
@@ -84,6 +96,16 @@ people working on the code.
   Foreign-currency revaluation.
 - Departments, classes and locations on every line, custom fields and custom
   segments, and projects with time tracking.
+
+**Payroll**
+- NZ payroll: employees, pay runs with PAYE, ACC, student loan, KiwiSaver
+  and ESCT, Holidays Act leave, timesheets, payslips, bank files for paying
+  wages, payday filing files for IRD, and payroll reports.
+
+**Analytics**
+- Data from CSV and Excel files, the books and CRM, shaped and shown
+  in dashboards and pivots, pinned to pages, shared with clients, or emailed
+  as reports.
 
 **Everything else**
 - A built-in CRM (companies, people, a pipeline, tasks) with Gmail and
@@ -107,7 +129,7 @@ You need Node.js 22 or 24 and Docker (for PostgreSQL).
 
 ```bash
 npm install
-npm run db:start                  # PostgreSQL 17 on localhost:5432
+npm run db:start                  # PostgreSQL 17 on localhost:5432 (for development only)
 cp .env.example .env.local        # then set SETUP_TOKEN to a long random value
 npm run dev                       # http://localhost:3000
 ```
@@ -160,7 +182,8 @@ The installer is built and tested on Windows by
 `.github/workflows/windows-installer.yml` from [`installer/windows`](installer/windows).
 
 **Docker:** `tohyee-v<version>-windows-docker.zip` runs Tohyee in Docker
-Desktop instead (see [`deploy/windows`](deploy/windows)). The image is `ghcr.io/willy-nz/tohyee:<version>`. It needs
+Desktop instead (see [`deploy/windows`](deploy/windows) and its
+`README.txt`, including where the backups go). The image is `ghcr.io/willy-nz/tohyee:<version>`. It needs
 `DATABASE_URL` (a PostgreSQL 15+ login that can create databases), for the
 first run `SETUP_TOKEN`, and `TOHYEE_SECRET_KEY` (32+ random characters: it
 turns on two-step sign-in and encrypts stored secrets; the installers create
@@ -180,7 +203,7 @@ network.
 
 **From anywhere (phone or laptop):** there are three ways, and each gives
 Tohyee an https address without opening ports on your router. Only one is on
-at a time. On Windows they're on the Tohyee server app's **Phone access**
+at a time. On Windows they're on the Tohyee server app's **Remote access**
 page, which shows the address with a QR code to scan with your phone.
 
 - **A Tohyee address (recommended for most):** one click, no sign-up. Tohyee
