@@ -127,7 +127,6 @@ export async function refreshAkahuAccount(credentials: AkahuCredentials, account
   }
 }
 
-/** Turns an Akahu failure into a message for the person who asked. */
 /**
  * Akahu sends money as JSON numbers. They're read as decimals at their
  * shortest exact form, never rounded through floats: anything finer than
@@ -138,6 +137,7 @@ export function akahuMoney(value: number, what: string): string {
   return toFixedString(dec(parsed), 2);
 }
 
+/** Turns an Akahu failure into a message for the person who asked. */
 export function akahuProblem(error: unknown): Error {
   if (error instanceof AkahuError) {
     return error.status === 401 || error.status === 403
