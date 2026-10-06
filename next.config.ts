@@ -53,26 +53,11 @@ const nextConfig: NextConfig = {
   // Only a safety net: it doesn't cover instrumentation.ts's trace. The real
   // fix is the turbopackIgnore hints on the dynamic paths themselves; the
   // build warns ("Dynamic filesystem access causes tracing of the whole
-  // project") when a new one needs one.
-  // The repository's other folders (docs, tests, installer, ...) and source
-  // files are never needed at run time either.
+  // project") when a new one needs one. Keep this list to those folders: a
+  // wider one (docs/**, dist/**, ...) also matches inside node_modules and
+  // dropped Next's own runtime (next/dist) from the standalone build.
   outputFileTracingExcludes: {
-    "**": [
-      "analytics/**",
-      "assets/**",
-      "backups/**",
-      "coverage/**",
-      "data/**",
-      "deploy/**",
-      "dist/**",
-      "docs/**",
-      "installer/**",
-      "relay/**",
-      "scripts/**",
-      "tests/**",
-      "website/**",
-      "src/**/*.{ts,tsx,css,md}",
-    ],
+    "/*": ["analytics/**", "backups/**", "data/**"],
   },
   // The CRM moved from /operations/crm to its own app at /crm; old links and
   // bookmarks still reach the same pages (with their ?query). /operations/crm
