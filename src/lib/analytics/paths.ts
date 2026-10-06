@@ -12,9 +12,9 @@ export function analyticsFolder(): string {
   const configured = process.env.TOHYEE_ANALYTICS_DIR?.trim();
   if (configured) return configured;
   if (process.platform === "win32") {
-    return path.join(process.env.ProgramData || "C:\\ProgramData", "Tohyee", "analytics");
+    return path.join(/* turbopackIgnore: true */ process.env.ProgramData || "C:\\ProgramData", "Tohyee", "analytics");
   }
-  return path.join(process.cwd(), "analytics");
+  return path.join(/* turbopackIgnore: true */ process.cwd(), "analytics");
 }
 
 const ORGANISATION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;

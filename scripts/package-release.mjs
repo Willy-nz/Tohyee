@@ -38,6 +38,13 @@ fs.mkdirSync(path.dirname(runtimeRoot), { recursive: true });
 
 fs.cpSync(standaloneDir, runtimeRoot, { recursive: true });
 
+// The build can trace data a development server wrote into the working copy
+// (DuckDB copies of real books, backups) into .next/standalone (issue #155).
+// It's never part of a release.
+for (const folder of ["analytics", "backups", "data"]) {
+  fs.rmSync(path.join(runtimeRoot, folder), { recursive: true, force: true });
+}
+
 const bundledStaticDir = path.join(runtimeRoot, ".next", "static");
 fs.mkdirSync(path.dirname(bundledStaticDir), { recursive: true });
 if (fs.existsSync(staticDir)) {

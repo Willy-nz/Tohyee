@@ -29,7 +29,7 @@ rules are well settled; then the larger scope items.
 | 7 | **Expense claims** (staff paid back) | Common in Xero | Medium. Built overnight (examples EC) |
 | 8 | **Projects and time tracking** | In Jess's scope | Large. Built overnight (examples PJ) |
 | 9 | **Multi-currency invoices and bills** | In Jess's scope | Large. Rounding gains and losses and revaluation per open document (examples MC31-MC43), the currency exchange rates list (examples MC46-MC53), and projects and CRM opportunities in a customer's currency (examples MC61-MC70): Built overnight. Standard-rated GST on foreign-currency documents: Built overnight (examples MC71-MC83) |
-| 10 | **NZ payroll** (PAYE, KiwiSaver, ACC, student loan, payday filing) | Employee records, pay rates, allocation and payroll access are built (PE1-PE12); IRD rates and calculations are built (PR1-PR16); pay calculations, filing and Jess's decisions remain | Very large |
+| 10 | **NZ payroll** (PAYE, KiwiSaver, ACC, student loan, payday filing) | Built since (employee records and stages P2-P12, see FEATURES.md): IRD rates, pay runs, paying wages and IRD, bank files, payslips, payday filing files, Holidays Act leave, timesheets, payroll reports, workforce budgets, extra and final pays. Most examples not yet approved by Jess | Very large. Built |
 | 11 | **Not-for-profit module** (funds/grants, restricted funds, PBE reporting) | In Jess's scope; tracking categories and custom segments cover part of it | Large |
 | 12 | **Exports**: a country on contacts, NetSuite's Foreign trade setting and Tax code for exports, a contact's own sales tax code, and an export flag on sales documents | Exports are zero-rated (IR375) whatever the invoice's currency; Jess asked for "an option and a flag" | Medium. Built overnight (examples EX1-EX15); a supplier's default purchase tax code: Built overnight (examples EX16-EX25); a tax code's Available on (Sales, Purchases or Both, following NetSuite): Built overnight (examples TAO1-TAO12); import and reverse-charge codes not built |
 
@@ -37,3 +37,14 @@ Also noticed, smaller: supplier overpayments and prepayments (waiting on
 Jess's GST decision), emailing documents to customers (built: sent from each
 organisation's own email account, as Jess decided on 30 Sep 2026), CSV import
 and export of contacts and items, year-end close.
+
+## Since this review (6 October 2026)
+
+Also built after this list, from Jess's Xero add-ons list (PRs #159-#173):
+more bank feeds (SimpleFIN, Stripe, PayPal, Wise) and statement files from a
+folder or mailbox, bank rules with conditions and splits, a bills inbox and
+duplicate bill warnings, mileage, Pay now links (Stripe, PayPal), approval
+workflows, a cash flow forecast, consolidation, report commentary, Shopify
+chargebacks and reserves, and WooCommerce orders. Item 11 (not-for-profit
+module) is still not built. The security and reliability review of 4 October
+2026 is tracked in issue #158 and in [TODO.md](TODO.md).

@@ -1,4 +1,5 @@
 import { UnavailableError, ValidationError } from "@/lib/errors";
+import { dec, parseDecimalInput, toFixedString } from "@/lib/money/decimal";
 
 /**
  * A small client for Akahu's API (NZ open finance), used for bank feeds.
@@ -124,6 +125,16 @@ export async function refreshAkahuAccount(credentials: AkahuCredentials, account
   } catch {
     // A refresh is a request, not a promise; the sync reads whatever Akahu has.
   }
+}
+
+/**
+ * Akahu sends money as JSON numbers. They're read as decimals at their
+ * shortest exact form, never rounded through floats: anything finer than
+ * cents is refused rather than quietly rounded (issue #147).
+ */
+export function akahuMoney(value: number, what: string): string {
+  const parsed = parseDecimalInput(value, `Akahu's ${what}`, { maxScale: 2, allowNegative: true, allowZero: true });
+  return toFixedString(dec(parsed), 2);
 }
 
 /** Turns an Akahu failure into a message for the person who asked. */

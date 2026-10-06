@@ -33,4 +33,6 @@ if ($copied -ne 0) {
 
 $size = [math]::Round((Get-Item $target).Length / 1MB, 2)
 Write-Host "Backed up to $target ($size MB)." -ForegroundColor Green
-Write-Host 'Copy it somewhere off this computer too (a USB drive or cloud storage).'
+Write-Host 'This file is NOT encrypted: anyone who can open it can read all your books.' -ForegroundColor Yellow
+Write-Host 'Keep it out of OneDrive and other synced folders, copy it somewhere private, then delete it here.'
+Write-Host 'The nightly backups are encrypted; see BACKUPS in README.txt.'

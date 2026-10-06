@@ -1,5 +1,6 @@
 import { addStatementLines, lockStatementAccount } from "@/lib/bank/accounts";
 import {
+  akahuMoney,
   akahuProblem,
   listAkahuAccounts,
   listAkahuTransactions,
@@ -9,6 +10,7 @@ import {
 import { akahuCredentialsForAccount } from "@/lib/bank/akahu/settings";
 import { makeLine, type ParsedStatementLine } from "@/lib/bank/formats/common";
 import { writeAuditEvent } from "@/lib/audit";
+import { abs, dec, neg, toFixedString } from "@/lib/money/decimal";
 import { businessTimeZone } from "@/lib/dates";
 import { type Actor, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { listAllOrganisations } from "@/lib/organisations/admin";
@@ -38,13 +40,13 @@ function dayBefore(date: string): string {
 export function lineFromAkahu(transaction: AkahuTransaction): ParsedStatementLine {
   return makeLine({
     date: nzDate(transaction.date),
-    amount: transaction.amount.toFixed(2),
+    amount: akahuMoney(transaction.amount, `amount for ${transaction._id}`),
     description: transaction.description,
     payee: transaction.merchant?.name ?? null,
     particulars: transaction.meta?.particulars ?? null,
     code: transaction.meta?.code ?? null,
     reference: transaction.meta?.reference ?? null,
-    balance: typeof transaction.balance === "number" ? transaction.balance.toFixed(2) : null,
+    balance: typeof transaction.balance === "number" ? akahuMoney(transaction.balance, `balance for ${transaction._id}`) : null,
     externalId: `akahu:${transaction._id}`,
   });
 }
@@ -76,7 +78,7 @@ export async function syncBankFeedAccount(
     ]);
     const lines = transactions.map(lineFromAkahu).filter((line) => line.date >= prepared.startDate);
     const akahuAccount = accounts.find((account) => account._id === prepared.akahuAccountId);
-    const balance = typeof akahuAccount?.balance?.current === "number" ? akahuAccount.balance.current : null;
+    const balance = typeof akahuAccount?.balance?.current === "number" ? akahuMoney(akahuAccount.balance.current, "account balance") : null;
     // Akahu reports a credit card's balance as what's owed; statement lines count what's owed as negative.
     const isCard = akahuAccount?.type === "CREDITCARD";
     return await withOrganisationTransaction(organisation, actor, async (tx) => {
@@ -105,7 +107,7 @@ export async function syncBankFeedAccount(
                 updated_at = now()
           where account_id = $1
           returning last_synced_at as at`,
-        [accountId, balance === null ? null : (isCard ? -Math.abs(balance) : balance).toFixed(2)],
+        [accountId, balance === null ? null : isCard ? toFixedString(neg(abs(dec(balance))), 2) : balance],
       );
       return { ...counts, syncedAt: synced.rows[0].at };
     });
