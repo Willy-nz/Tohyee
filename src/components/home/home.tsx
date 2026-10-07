@@ -91,7 +91,7 @@ export function NextGstTile({ summary }: { summary: HomeSummary }) {
             <Money value={gst.box15.replace(/^-/, "")} />
           </div>
           <div className={ui.muted}>
-            Estimate · {gst.box15.startsWith("-") ? "Refundable" : "Payable"}
+            Estimate · {/^-?0(\.0+)?$/.test(gst.box15) ? "Nothing to pay so far" : gst.box15.startsWith("-") ? "Refundable" : "Payable"}
             <br />{formatDate(gst.periodStart)} – {formatDate(gst.periodEnd)}
           </div>
         </>
@@ -181,18 +181,38 @@ function RecentActivity({ summary }: { summary: HomeSummary }) {
   );
 }
 
+/** How many bank accounts Home shows; the rest are a click away under Banking. */
+export const HOME_BANK_ACCOUNT_LIMIT = 5;
+
+/** The bank feed Banking shows for an account (the same precedence when more than one is set up). */
+function feedOf(account: BankAccount) {
+  return account.feed.active ? account.feed : account.simplefin ?? account.stripe ?? account.paypal ?? account.wise ?? null;
+}
+
+/**
+ * The active accounts Home shows: those whose feed failed first, then the rest
+ * in Banking's order, up to HOME_BANK_ACCOUNT_LIMIT. An organisation can have
+ * a hundred accounts, so Home doesn't list them all.
+ */
+export function bankAccountsForHome(accounts: BankAccount[]): { shown: BankAccount[]; total: number } {
+  const active = accounts.filter((account) => account.isActive);
+  const failed = (account: BankAccount) => (feedOf(account)?.lastSyncStatus === "failed" ? 0 : 1);
+  const ordered = active.map((account, index) => ({ account, index })).sort((a, b) => failed(a.account) - failed(b.account) || a.index - b.index);
+  return { shown: ordered.slice(0, HOME_BANK_ACCOUNT_LIMIT).map((entry) => entry.account), total: active.length };
+}
+
 /** Bank health uses the same source as Banking; a failed feed never changes a balance. */
 export function BankHealth({ organisationId, currency }: { organisationId: string; currency: string }) {
   const banks = useApiData<{ bankAccounts: BankAccount[] }>("/api/bank-accounts", { organisationId });
+  const list = banks.data ? bankAccountsForHome(banks.data.bankAccounts) : null;
   return (
     <section className={styles.tile} aria-label="Bank accounts">
       <div className={styles.tileTitle}><h2>Bank accounts</h2><Link href="/operations/bank-accounts">View all</Link></div>
       <p className={ui.muted}>Current ledger balances · {currency}</p>
-      {banks.error ? <Notice tone="error">{banks.error}</Notice> : !banks.data ? <p role="status">Loading bank accounts…</p> : banks.data.bankAccounts.length === 0 ? <p className={ui.muted}>No bank accounts yet.</p> : (
+      {banks.error ? <Notice tone="error">{banks.error}</Notice> : !list ? <p role="status">Loading bank accounts…</p> : list.total === 0 ? <p className={ui.muted}>No bank accounts yet.</p> : (
         <div className={styles.banks}>
-          {banks.data.bankAccounts.filter((account) => account.isActive).map((account) => {
-            // Match Banking's precedence when more than one provider is configured.
-            const feed = account.feed.active ? account.feed : account.simplefin ?? account.stripe ?? account.paypal ?? account.wise;
+          {list.shown.map((account) => {
+            const feed = feedOf(account);
             const feeds = feed ? [feed] : [];
             const failed = feeds.some((feed) => feed.lastSyncStatus === "failed");
             const connected = feeds.some((feed) => feed.lastSyncStatus === "ok");
@@ -209,6 +229,12 @@ export function BankHealth({ organisationId, currency }: { organisationId: strin
               </div>
             );
           })}
+          {list.total > HOME_BANK_ACCOUNT_LIMIT ? (
+            <p className={ui.muted}>
+              Showing {HOME_BANK_ACCOUNT_LIMIT} of {list.total} accounts ·{" "}
+              <Link href="/operations/bank-accounts">See them all under Banking</Link>
+            </p>
+          ) : null}
         </div>
       )}
     </section>

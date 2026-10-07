@@ -32,8 +32,6 @@ import {
   visibleNewActions,
 } from "@/components/navigation";
 import { ThemeSwitch } from "@/components/theme";
-import { MONTH_NAMES } from "@/lib/financial-year";
-import type { OrganisationSettings } from "@/lib/organisations/settings";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import styles from "./app-shell.module.css";
 import {
@@ -115,20 +113,6 @@ function SparkIcon() {
   );
 }
 
-/** Consistent outline icons; the adjacent label carries the meaning. */
-function NavigationIcon({ label }: { label: string }) {
-  const paths: Record<string, string> = {
-    Home: "m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9",
-    Banking: "m3 8 9-5 9 5H3Zm2 3v7m7-7v7m7-7v7M3 21h18",
-    Sales: "M4 20V4m0 16h16M8 15l4-5 4 2 5-7",
-    Purchases: "M3 4h3l3 12h10l2-9H7M10 20h.01M18 20h.01",
-    Accountant: "M6 3h12v18H6ZM9 7h6M9 11h1m4 0h1m-6 4h1m4 0h1",
-    Reports: "M5 3h10l4 4v14H5ZM14 3v5h5M9 17v-4m3 4v-6m3 6v-2",
-    Payroll: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 4a4 4 0 0 1 0 7m2 4a4 4 0 0 1 3 4v2",
-  };
-  return <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={paths[label] ?? "M4 4h6v6H4Zm10 0h6v6h-6ZM4 14h6v6H4Zm10 0h6v6h-6Z"} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
-}
-
 /** A dropdown's links, arranged as labelled columns. */
 function MenuPanel({
   id,
@@ -206,11 +190,7 @@ function DesktopMenus({ menus }: { menus: Menu[] }) {
 
   return (
     <nav aria-label="Main" className={styles.menuBar} ref={bar}>
-      {[...menus].sort((a, b) => {
-        const order = ["Home", "Banking", "Sales", "Purchases", "Accountant", "Reports"];
-        const rank = (label: string) => order.includes(label) ? order.indexOf(label) : order.length;
-        return rank(a.label) - rank(b.label);
-      }).map((menu) => {
+      {menus.map((menu) => {
         const active = inArea(pathname, menu);
         if (menu.href) {
           return (
@@ -221,8 +201,7 @@ function DesktopMenus({ menus }: { menus: Menu[] }) {
               aria-current={active ? "page" : undefined}
               onClick={close}
             >
-              <NavigationIcon label={menu.label} />
-              {menu.label === "Accountant" ? "Accounting" : menu.label}
+              {menu.label}
             </Link>
           );
         }
@@ -240,8 +219,7 @@ function DesktopMenus({ menus }: { menus: Menu[] }) {
               aria-controls={panelId}
               onClick={() => setOpen(isOpen ? null : menu.label)}
             >
-              <NavigationIcon label={menu.label} />
-              <span>{menu.label === "Accountant" ? "Accounting" : menu.label}</span>
+              {menu.label}
               <Caret />
             </button>
             {isOpen ? (
@@ -281,11 +259,11 @@ function NewMenu({ groups }: { groups: MenuGroup[] }) {
         className={styles.newButton}
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label="Create"
+        aria-label="New"
         onClick={() => setOpen((value) => !value)}
       >
         <PlusIcon />
-        <span className={styles.newLabel}>Create</span>
+        <span className={styles.newLabel}>New</span>
       </button>
       {open ? (
         <MenuPanel
@@ -433,6 +411,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
     const previous = document.body.style.overflow;
     const returnFocus = trigger.current;
     document.body.style.overflow = "hidden";
+    // Keep keyboard focus inside the open menu, and give it back to the button when it closes.
     const focusable = () => Array.from(dialog.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), select, input, [tabindex="0"]') ?? []);
     focusable()[0]?.focus();
     function onKey(event: KeyboardEvent) {
@@ -444,8 +423,13 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
         const elements = focusable();
         const first = elements[0];
         const last = elements.at(-1);
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
       }
     }
     document.addEventListener("keydown", onKey);
@@ -485,7 +469,6 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
       </button>
       {open ? (
         <div ref={dialog} className={styles.phoneMenu} style={{ top }} role="dialog" aria-modal="true" aria-label="Menu">
-          <button type="button" className={styles.phoneSection} onClick={close}>Close menu <span aria-hidden="true">×</span></button>
           <div className={styles.phoneApps}>
             <AppSwitcher current={app} modules={modules} reportViewer={reportViewer} />
           </div>
@@ -571,9 +554,6 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
 
 function OrganisationPicker() {
   const { organisations, current, selectOrganisation } = useWorkspace();
-  const id = useId();
-  const settings = useApiData<{ settings: OrganisationSettings }>(current && current.role !== "report_viewer" ? `/api/organisations/${current.id}/settings` : null);
-  const yearEndMonth = settings.data?.settings.financialYearEndMonth;
   if (organisations.length === 0) {
     return <span className={styles.orgMeta}>No organisations yet</span>;
   }
@@ -583,7 +563,7 @@ function OrganisationPicker() {
         {(current?.displayName ?? "?").trim().charAt(0).toUpperCase()}
       </span>
       <select
-        id={id}
+        id="organisation-picker"
         aria-label="Organisation"
         title={current ? `${current.displayName} · ${ROLE_LABELS[current.role]} · ${current.baseCurrency}` : undefined}
         value={current?.id ?? ""}
@@ -595,10 +575,6 @@ function OrganisationPicker() {
           </option>
         ))}
       </select>
-      <div className={styles.orgContext}>
-        <span>{current?.baseCurrency}</span>
-        {yearEndMonth ? <span>Year end {MONTH_NAMES[yearEndMonth - 1]}</span> : null}
-      </div>
     </div>
   );
 }
@@ -636,12 +612,12 @@ function TopBarActions({
   const aiCurrent = pathname === AI_LINK.href || pathname.startsWith(`${AI_LINK.href}/`);
   return (
     <div className={styles.actions}>
+      <NewMenu groups={newActions} />
       <button type="button" className={styles.searchButton} onClick={onSearch} aria-label={`Search (${shortcut})`} aria-keyshortcuts="Control+K Meta+K">
         <SearchIcon />
         <span className={styles.searchText}>Search</span>
         <kbd className={styles.kbd}>{shortcut}</kbd>
       </button>
-      <NewMenu groups={newActions} />
       <Link
         href={AI_LINK.href}
         className={`${styles.aiLink} ${aiCurrent ? styles.aiLinkActive : ""}`}
@@ -723,28 +699,20 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
       <a href="#main-content" className={styles.skipLink} data-print="hide">
         Skip to content
       </a>
-      <aside className={styles.sidebar} data-print="hide" aria-label="Workspace">
-        <Link href={app === "crm" ? "/crm" : app === "analytics" ? "/analytics" : "/operations"} className={styles.brand} aria-label="Tohyee home">
-          <BrandMark size={26} className={styles.brandMark} />
-          <span className={styles.brandText}>Tohyee</span>
-        </Link>
-        <OrganisationPicker />
-        <Suspense fallback={<nav aria-label="Main" className={styles.menuBar} />}>
-          <DesktopMenus menus={menus} />
-        </Suspense>
-        <div className={styles.sidebarFooter}>
-          <AppSwitcher current={app} modules={modules} reportViewer={reportViewer} />
-          <span className={styles.orgMeta}>Workspace apps</span>
-        </div>
-      </aside>
       <header className={styles.topbar} data-print="hide">
         <div className={styles.topRow}>
-          <div className={styles.mobileContext}>
-            <Link href={app === "crm" ? "/crm" : app === "analytics" ? "/analytics" : "/operations"} className={styles.brand} aria-label="Tohyee home">
-              <BrandMark size={26} className={styles.brandMark} />
-            </Link>
-            <OrganisationPicker />
+          <Link href={app === "crm" ? "/crm" : app === "analytics" ? "/analytics" : "/operations"} className={styles.brand} aria-label="Tohyee home">
+            <BrandMark size={26} className={styles.brandMark} />
+            <span className={styles.brandText}>Tohyee</span>
+          </Link>
+          <div className={styles.desktopOnly}>
+            <AppSwitcher current={app} modules={modules} reportViewer={reportViewer} />
           </div>
+          <OrganisationPicker />
+          <span className={styles.divider} aria-hidden />
+          <Suspense fallback={<nav aria-label="Main" className={styles.menuBar} />}>
+            <DesktopMenus menus={menus} />
+          </Suspense>
           <Suspense fallback={<div className={styles.actions} />}>
             <TopBarActions newActions={newActions} notices={notices} onSearch={() => setPaletteOpen(true)} onSignOut={() => void signOut()} />
           </Suspense>

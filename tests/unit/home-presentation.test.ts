@@ -1,7 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { NeedsAttention, NextGstTile } from "@/components/home/home";
+import { bankAccountsForHome, HOME_BANK_ACCOUNT_LIMIT, NeedsAttention, NextGstTile } from "@/components/home/home";
+import type { BankAccount } from "@/lib/bank/accounts";
 import type { HomeSummary } from "@/lib/reports/home";
 
 vi.mock("next/link", () => ({ default: "a" }));
@@ -59,5 +60,25 @@ describe("Home presentation preserves financial meaning", () => {
     } }));
     expect(html).toContain("You&#x27;re up to date.");
     expect(html).not.toContain("View all");
+  });
+  it("says there's nothing to pay when the estimate is zero, not Payable", () => {
+    const html = gst({ status: "ready", periodStart: "2026-10-01", periodEnd: "2026-11-30", basis: "invoice", box15: "0.00" });
+    expect(html).toContain("Estimate · Nothing to pay so far");
+    expect(html).not.toContain("Payable");
+    expect(html).not.toContain("Refundable");
+  });
+
+  it("lists at most five active bank accounts on Home, failed feeds first", () => {
+    const account = (n: number, failed = false, isActive = true) =>
+      ({
+        id: `a${n}`, code: String(1000 + n), name: `Account ${n}`, isActive,
+        feed: { active: failed, lastSyncStatus: failed ? "failed" : null },
+        simplefin: null, stripe: null, paypal: null, wise: null,
+      }) as unknown as BankAccount;
+    const accounts = [...Array.from({ length: 100 }, (_, i) => account(i)), account(200, true), account(300, false, false)];
+    const { shown, total } = bankAccountsForHome(accounts);
+    expect(HOME_BANK_ACCOUNT_LIMIT).toBe(5);
+    expect(total).toBe(101);
+    expect(shown.map((entry) => entry.name)).toEqual(["Account 200", "Account 0", "Account 1", "Account 2", "Account 3"]);
   });
 });

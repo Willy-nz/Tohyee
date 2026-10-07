@@ -8,16 +8,21 @@ accounting services retain their existing behaviour.
 
 - Warm light tokens, pounamu actions, Georgia heading fallback and existing
   self-hosted Inter. Financial values remain sans serif and tabular.
-- 232px desktop sidebar, existing menus in the proposed order, and a compact
-  utility row. Payroll remains available. Accounting includes the existing
-  accountant and organisation-settings destinations.
-- Organisation currency and configured year-end month in the sidebar;
-  full organisation name and financial year in Home's greeting. The greeting
+- **No sidebar (Jess, 8 Oct 2026: keep the top bar).** The spec's 232px
+  sidebar was tried in this branch and taken out again. The menus, organisation
+  picker and app switcher stay in the existing top bar, in their existing
+  order and with their existing names ("Accountant", "New"). Wide screens
+  (1800px and up) keep their 1,560px pages (2 Oct 2026).
+- Full organisation name and financial year in Home's greeting. The greeting
   uses the browser's local time and updates each minute.
 - Open financial strip, dominant bank total, one Needs attention list,
   flat recent activity and bank health loaded from Banking's existing API.
 - Explicit GST estimate, payable/refundable direction, basis and period.
-  Failed or unconfigured GST estimates display Unavailable instead of zero.
+  Failed or unconfigured GST estimates display Unavailable instead of zero,
+  and a zero estimate says "Nothing to pay so far".
+- Home's bank panel shows at most 5 active accounts (failed feeds first),
+  with "Showing 5 of N" and a link to Banking, since an organisation can
+  have about a hundred.
 - Existing entity-keyed forms and request-keyed loads are preserved. Phone
   navigation contains keyboard focus and restores it when dismissed.
 - Shared panel, button, input, table and dialog presentation; existing dark
