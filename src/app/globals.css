@@ -35,7 +35,6 @@
   --accent-text: #ffffff;
   --accent-soft: #e6eef9;
   --accent-soft-text: #1b2533;
-  --mtn-snow: #ffffff;
 
   /* Status */
   --success-bg: #e7f4eb;
@@ -140,7 +139,6 @@
     --accent-text: #06172e;
     --accent-soft: #14243d;
     --accent-soft-text: #a9cbf7;
-    --mtn-snow: #c9d8ec;
     --success-bg: #0f281b;
     --success-text: #74d89a;
     --success-border: #1f4c33;
@@ -189,7 +187,6 @@
   --accent-text: #06172e;
   --accent-soft: #14243d;
   --accent-soft-text: #a9cbf7;
-  --mtn-snow: #c9d8ec;
   --success-bg: #0f281b;
   --success-text: #74d89a;
   --success-border: #1f4c33;
@@ -416,7 +413,6 @@ hr {
     --accent-text: #ffffff;
     --accent-soft: #e6eef9;
     --accent-soft-text: #173f73;
-    --mtn-snow: #ffffff;
     --success-bg: #e7f4eb;
     --success-text: #146c2e;
     --warning-bg: #fdf4de;

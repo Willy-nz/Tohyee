@@ -3572,3 +3572,16 @@ testing) and #154's code signing (later, Jess).
      foothills and the lake, in shades of the accent blended with the page
      colour so it suits light and dark. Not yet changed: printed
      documents and emails, the Windows server app and the website.
+
+### Aoraki photo on Home (decision 477)
+
+477. **Jess's photo of Aoraki, tinted blue, behind Home's greeting**
+     (Jess, 8 Oct 2026: chose ChatGPT's photo approach over the drawing,
+     but "too grey"). Only the mountain strip is stored
+     (`public/images/aoraki-strip.jpg`, 700x202, no metadata), never the
+     whole photo, which shows a number plate, browser tabs and an
+     Instagram name; PR #188, which committed the whole photo, was closed.
+     The strip is shown in the theme's blue (luminosity blend with
+     `--accent`) at 35%, fading in from the left and out at the bottom,
+     and hidden on phones. The faint vertical stripes come from the source
+     being a photo of a screen; the original image file would remove them.
