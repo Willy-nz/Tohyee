@@ -111,9 +111,11 @@ function Assert-LeastPrivilege($Settings) {
     $sids = @($acl.Access | ForEach-Object { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value })
     $open = @($sids | Where-Object { $everyone -contains $_ })
     if ($open.Count -ne 0) { throw "$path can be opened by every local user ($($open -join ', '))." }
-    $owner = (New-Object System.Security.Principal.NTAccount($acl.Owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
-    if ($owner -ne 'S-1-5-32-544' -and $owner -ne 'S-1-5-18' -and $path -ne (Join-Path $dataRoot 'pgdata\base')) { throw "$path belongs to $($acl.Owner), not Administrators." }
   }
+  # The folder itself is taken by Administrators (anything made inside it later
+  # can belong to the admin account that ran the installer, which is fine).
+  $rootOwner = (New-Object System.Security.Principal.NTAccount((Get-Acl -LiteralPath $dataRoot).Owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+  if ($rootOwner -ne 'S-1-5-32-544') { throw "$dataRoot belongs to $rootOwner, not Administrators." }
   $trayAcl = Get-Acl -LiteralPath (Join-Path $dataRoot 'tray.ini')
   $traySids = @($trayAcl.Access | ForEach-Object { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value })
   if (-not ($traySids -contains 'S-1-5-32-545')) { throw 'tray.ini is no longer readable by the tray app.' }
@@ -286,5 +288,17 @@ try {
   Write-Host 'Uninstalled; services removed, data kept.'
 } catch {
   Show-Logs
+  # Also as annotations, which can be read without the full job log.
+  function Write-Annotation([string]$Title, [string]$Text) {
+    $escaped = $Text.Replace('%', '%25').Replace("`r", '').Replace("`n", '%0A')
+    Write-Host "::error title=$Title::$escaped"
+  }
+  Write-Annotation 'Install test failed' "$($_.Exception.Message)"
+  foreach ($file in @((Join-Path $dataRoot 'logs\setup.log')) + @(Get-ChildItem (Join-Path $dataRoot 'logs') -Filter '*.err.log' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })) {
+    if (Test-Path $file) { Write-Annotation ([System.IO.Path]::GetFileName($file)) ((Get-Content $file -Tail 40) -join "`n") }
+  }
+  Get-ChildItem $out -Filter 'install-*.log' -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Annotation $_.Name ((Get-Content $_.FullName -Tail 25) -join "`n")
+  }
   throw
 }
