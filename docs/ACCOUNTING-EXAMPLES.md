@@ -15131,3 +15131,231 @@ cost of goods sold 400.00 (13 May) and 300.00 (9 Jun); interest 20.00
 - **AB10** A pay run's wages journal is copied as lines on the wages and
   bank (or wages payable) accounts with no contact and the description
   "Pay run".
+
+## Drafts for issues #180-#183, 8 Oct 2026 (examples not yet approved by Jess)
+
+Drafted before anything is built, as AGENTS.md asks. Nothing here is
+decided: each part ends with the questions that need Jess's answer, and the
+examples change with the answers. Where a draft goes against an earlier
+decision, it says so.
+
+### Not registered for GST (#180)
+
+Today an organisation counts as GST registered when Settings has a GST
+number (PD6, SPC12), but only printing, the Shopify sync, period close and
+the AI tool look at that. New lines still default to the 15% GST code, the
+GST return and GST audit are always in the menus, and there's no date for
+registering or deregistering.
+
+Setup: Kowhai Crafts, NZD, the standard chart and GST codes (GST 15%, ZERO,
+EXEMPT, NONE "No GST"). Settings › GST has **Registered for GST** turned off,
+so the GST number, basis and filing frequency are hidden. Kobe Cafe is a
+customer and Paper Co a GST-registered supplier.
+
+- **NR1** A new invoice to Kobe Cafe: each line's tax code starts as **No
+  GST** and amounts as **No GST**, whatever the account's, contact's or
+  item's usual code is. 2 x 50.00 to 4000 Sales: total **100.00**, Dr 1100
+  Accounts receivable 100.00, Cr 4000 Sales 100.00; nothing goes to 2200
+  GST. It prints **Invoice**, with no GST lines and no warning (as PD6).
+- **NR2** Choosing the GST 15% code on a sales or purchase line is refused:
+  "Kowhai Crafts isn't registered for GST, so it can't charge or claim GST."
+  Zero-rated and exempt codes are refused the same way, because only a
+  registered business makes zero-rated or exempt supplies for GST.
+- **NR3** A bill from Paper Co for **115.00** including GST: the line is No
+  GST and the whole 115.00 is the cost. Dr 6010 115.00, Cr 2100 Accounts
+  payable 115.00. Expense claims, spend money, bank rules and cash coding
+  work the same way (a 23.00 receipt is a 23.00 cost).
+- **NR4** The GST return and GST audit are hidden from the menus. Opening
+  their address shows "Kowhai Crafts isn't registered for GST". Period
+  close shows the GST check as **Not applicable (not registered for
+  GST)**.
+- **NR5** Registering: Kowhai Crafts turns on Registered for GST **from 1
+  Nov 2026**, GST number 123-456-789, invoice basis, two-monthly ending
+  December. A new invoice dated 1 Nov starts with GST 15% (2 x 50.00 is
+  100.00 + 15.00 GST = **115.00**, printed **Tax invoice**). An invoice
+  dated 31 Oct still can't have GST (NR2). The first GST return is **1 Nov
+  - 31 Dec 2026**, and nothing dated before 1 Nov is in it.
+- **NR6** Deregistering: GST registration ends **31 Mar 2027**. Invoices
+  dated from 1 Apr 2027 are No GST only. The last return covers up to 31 Mar
+  2027 and period close still asks for it. Tohyee shows the fixed assets
+  still held on that date as a reminder that GST may be due on them in the
+  final return, but doesn't work that GST out (question 4).
+- **NR7** Approved documents never change when registration changes: an
+  invoice dated 15 Nov 2026 with GST stays as it is after deregistering.
+- **NR8** Existing organisations: one with a GST number is registered from
+  the earliest date in its books (so nothing changes for it). One without a
+  number is not registered.
+
+Questions for Jess:
+
+1. Should **Registered for GST** be its own switch with a "from" date (and
+   an "until" date when deregistering), as above? The other choice is to
+   keep "no GST number means not registered", which has no dates.
+2. I don't know exactly how Xero sets this in NZ, and the design rule is to
+   look at Xero first. Could you check what Xero's financial settings
+   show for an organisation that isn't registered?
+3. Refuse GST, zero-rated and exempt codes while not registered (NR2), or
+   only warn?
+4. On deregistering, GST may be due on assets still held. Should Tohyee
+   work that out (it needs each asset's market value), or remind the user
+   and leave it to them (NR6)?
+5. #181 asks for a "Tax" module that can be turned off. Should turning Tax
+   off simply mean "not registered for GST"?
+
+### Turning Accounting and Tax off (#181)
+
+Today Accounting and Tax are always on; CRM, Analytics, Advanced reporting
+and Not-for-profit can be switched. Several things are built on the books:
+CRM companies are accounting contacts, an opportunity can become an
+invoice, Shopify and WooCommerce orders post to the books, and Analytics
+copies the ledger. Server setup (`/setup`) only makes the first server
+admin; organisations are created later, so modules would be chosen when an
+organisation is created, not at `/setup`.
+
+Setup: a server admin creates two organisations: **Kobe Leads** with only
+CRM, and **Kobe Numbers** with only Analytics.
+
+- **MOD2** Kobe Leads: the app switcher shows only CRM, signing in goes to
+  `/crm`, and no Accounting menus show. Opening an Accounting address (say
+  `/operations/invoices`) shows "Accounting is off for Kobe Leads" with a
+  link to its Modules settings. Those settings move to a page every app can
+  reach, since `/operations/settings` belongs to Accounting.
+- **MOD3** In Kobe Leads, companies, people, opportunities and activities
+  work as now. "Make an invoice" on an opportunity is hidden, and the API
+  refuses it: "Accounting is off". Companies are still kept as contacts, so
+  turning Accounting on later shows them as contacts.
+- **MOD4** Kobe Numbers: signing in goes to `/analytics`; CSV and Excel
+  sources load as now; the books copy has no ledger, invoice or item tables.
+- **MOD5** The last module can't be turned off: "Keep at least one of
+  Accounting, CRM or Analytics on." Advanced reporting and Not-for-profit
+  need Accounting, so turning Accounting off turns them off too, after a
+  confirmation that lists them.
+- **MOD6** Turning Accounting off in an organisation with posted journals
+  keeps everything. Bank feeds, Shopify and WooCommerce syncs, repeating
+  documents and payroll reminders pause while it's off. Turning it back on
+  shows everything as it was, and feeds catch up from where they stopped.
+- **MOD7** Existing organisations keep Accounting and Tax on, so nothing
+  changes for them.
+
+Questions for Jess:
+
+1. Choose modules when **creating an organisation**, not at `/setup` (as
+   above)? `/setup` makes no organisation today.
+2. Should "Tax" be the GST registration from #180, rather than a separate
+   module?
+3. Pause syncs and repeating documents while Accounting is off (MOD6), or
+   refuse to turn it off while a sales platform or bank feed is connected?
+4. Is payroll part of Accounting for this (it is today)?
+
+### Several bank feed logins per organisation (#182)
+
+This goes against an earlier decision. Decision 388 (Jess: "one connection
+per provider") gives each organisation one connection per provider, and
+today saving new Akahu tokens replaces the old ones. SimpleFIN, Stripe,
+PayPal and Wise each have one connection too. Decision 389 (one feed per
+account) would stay.
+
+Setup: Glimmers has two Akahu personal apps: **Jess's ANZ login** and
+**Will's BNZ login**. Account 1000 is linked to Jess's ANZ cheque account,
+and 1010 to Will's BNZ savings.
+
+- **BK30** Adding Will's BNZ login doesn't replace Jess's: Bank feeds
+  lists both, each with its own name, token hint and sync hours. A name is
+  required and can't be used twice.
+- **BK31** Linking 1010 lists the accounts from both logins, each shown as
+  "login name · account name" (for example "Will's BNZ login · BNZ
+  Savings"). The link remembers which login it came from.
+- **BK32** Each account syncs with its own login's tokens. Syncing 1000
+  never uses Will's tokens.
+- **BK33** Akahu refuses Will's tokens (401). 1010 shows "Will's BNZ login
+  needs new tokens", and so does that login's row under Bank feeds. 1000
+  keeps syncing. Nothing is retried with Jess's tokens.
+- **BK34** New tokens saved for Will's BNZ login: 1010 carries on from where
+  it stopped (BK29's 30-day re-read covers the gap). If the new tokens can't
+  see 1010's Akahu account, 1010 shows "This account isn't in Will's BNZ
+  login any more" and stays unlinked from syncing until it's linked again.
+- **BK35** Removing Will's BNZ login stops 1010's feed and keeps its lines.
+  Jess's login is untouched.
+- **BK36** A joint account visible in both logins can still be linked to
+  only one Tohyee account (decision 389). The second link is refused,
+  naming the account it's already linked to.
+- **BK37** Upgrading: the existing connection becomes a login called
+  "Akahu", and every existing link points to it. Nothing needs to be
+  entered again.
+
+Questions for Jess:
+
+1. Change decision 388 for every API feed (SimpleFIN, Stripe, PayPal,
+   Wise), or only Akahu for now? For Stripe, PayPal and Wise, the "one
+   balance per currency" rules would become per login.
+2. I'm not certain whether one Akahu personal app can hold more than one
+   person's bank logins. If it can, some of this may not be needed. Do you
+   know from setting yours up?
+3. Can every organisation admin see and remove every login, or only the
+   person who added it?
+
+### Choosing where exchange rates come from (#183)
+
+Today rates come from the list under Accounting › Exchange rates: typed,
+pasted, or added by the ECB job when it's turned on (FX1). A typed rate on
+a document always wins (MC48). Approved documents keep their own rate. No
+rate records where it came from, apart from the ECB job's note.
+
+What Inland Revenue says (checked 8 Oct 2026, [Overseas currency conversion to NZ dollars](https://www.ird.govt.nz/managing-my-tax/overseas-currency-conversion-to-nz-dollars)):
+- Acceptable sources include rates IRD publishes, the Reserve Bank's, and
+  other countries' central banks (so the ECB counts), or another rate that
+  suits the transaction.
+- Use the same sources and methods over time, and keep a record of why
+  if you change.
+- Keep a record of each rate's source, type and date.
+
+The wording in #183's suggested warning isn't IRD's own, so the message
+below is written from that page.
+
+RBNZ: an R package's documentation
+([RBNZ package overview](https://cran.r-project.org/web/packages/RBNZ/vignettes/Overview.html))
+says the Reserve Bank's website now blocks automatic downloads unless the
+Bank approves your IP address. I couldn't confirm that on the Bank's own
+site. So an automatic RBNZ feed may not work for self-hosted servers; RBNZ
+rates may need to come in as the Bank's downloaded file.
+
+Setup: Glimmers (NZD, year 1 Apr - 31 Mar) has used **ECB** rates since
+1 Jul 2026, and has USD invoices.
+
+- **FX2** Settings › Exchange rates has **Rate source**: ECB (automatic,
+  daily), RBNZ, or Typed only. Every rate in the list shows its source:
+  **ECB**, **RBNZ** or **Typed**. Rates from before this change show ECB if
+  the ECB job added them, else Typed.
+- **FX3** Changing ECB to RBNZ on 1 Nov 2026 asks for a reason and shows:
+  "Inland Revenue asks you to use the same exchange rate source over time.
+  This year (from 1 Apr 2026) has used ECB rates, so it would use two
+  sources. Keep a note of why you're changing." The reason is kept in the
+  history.
+- **FX4** Changing the source changes nothing already in the books: INV-0042
+  (USD 1,000.00 at **1.6543**, NZD 1,654.30) stays exactly as it is. No
+  rates are archived.
+- **FX5** RBNZ quotes USD per NZD 1. RBNZ's **0.6045** for 3 Nov 2026
+  goes in the list as **1.654260** NZD per USD (1 / 0.6045, to 6 decimal
+  places). An invoice for USD 500.00 dated 3 Nov takes it: **NZD 827.13**.
+- **FX6** With RBNZ chosen, the ECB job stops adding rates for Glimmers.
+  For dates from 1 Nov, a new document takes the latest RBNZ or typed rate
+  on or before its date, not an ECB one. If there isn't one, it asks for a
+  rate (MC49).
+- **FX7** A rate typed on a document (say the bank's settlement rate
+  1.6610) still wins. The document records that its rate was **Typed**.
+- **FX8** **Typed only**: nothing is added automatically; documents work as
+  MC48-MC49.
+
+Questions for Jess:
+
+1. How should RBNZ rates come in? I'd suggest uploading the Bank's
+   exchange rate file (or saving it to a folder Tohyee reads, like the
+   Analytics folders). Asking the Reserve Bank whether Tohyee servers may
+   download it automatically is the other way.
+2. Warn when the source changes mid-year (FX3, as #183 asks), or refuse
+   until the start of the next financial year?
+3. IRD also describes mid-month, end-of-month and rolling 12-month
+   average methods. Should Tohyee offer any of those, or stay with
+   daily rates?
+4. Should documents record their rate's source (FX7)? This needs a new
+   column on documents, and older documents wouldn't have one.

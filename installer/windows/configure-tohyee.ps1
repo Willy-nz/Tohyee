@@ -58,6 +58,29 @@ try {
     Invoke-Checked 'icacls.exe' (@($Path, '/inheritance:r', '/grant:r') + $grants + @('/Q'))
   }
 
+  # Issue #152: only Administrators and SYSTEM can open anything in the data
+  # folder (the database files, analytics copies of the books, backups, logs).
+  # ProgramData's own permissions let every local user read new folders, and
+  # anyone can make a folder there, so: take ownership of everything (in case
+  # someone else made the folder first), reset the folder's permissions, then
+  # clear any permissions set further down so everything inherits from it.
+  # The services are stopped first because PostgreSQL's files are included;
+  # its own access is granted again further down.
+  function Protect-DataRoot {
+    foreach ($name in @('Tohyee', 'TohyeePostgres')) {
+      if (Get-Service -Name $name -ErrorAction SilentlyContinue) { Stop-Service -Name $name -Force }
+    }
+    Invoke-Checked 'icacls.exe' @($DataRoot, '/setowner', '*S-1-5-32-544', '/T', '/C', '/Q')
+    Invoke-Checked 'icacls.exe' @($DataRoot, '/reset', '/Q')
+    Protect-Path $DataRoot
+    foreach ($child in Get-ChildItem -LiteralPath $DataRoot -Force) {
+      $resetArgs = @($child.FullName, '/reset')
+      if ($child.PSIsContainer) { $resetArgs += '/T' }
+      Invoke-Checked 'icacls.exe' ($resetArgs + @('/C', '/Q'))
+    }
+  }
+  Protect-DataRoot
+
   # --- Settings and passwords -------------------------------------------------
   $settings = [ordered]@{}
   if (Test-Path $EnvFile) {
@@ -74,6 +97,10 @@ try {
     $settings['POSTGRES_PASSWORD'] = New-Secret 32
     $settings['SETUP_TOKEN'] = New-Secret 32
   }
+  # The two everyday database logins (issue #152); POSTGRES_PASSWORD's superuser is only used here.
+  # Added on upgrade too.
+  if (-not $settings.Contains('TOHYEE_DB_ADMIN_PASSWORD')) { $settings['TOHYEE_DB_ADMIN_PASSWORD'] = New-Secret 32 }
+  if (-not $settings.Contains('TOHYEE_DB_APP_PASSWORD')) { $settings['TOHYEE_DB_APP_PASSWORD'] = New-Secret 32 }
   # Encrypts bank feed tokens. Added on upgrade too; changing it later makes saved tokens unreadable.
   if (-not $settings.Contains('TOHYEE_SECRET_KEY')) { $settings['TOHYEE_SECRET_KEY'] = New-Secret 48 }
   foreach ($default in @(@('TOHYEE_PORT', '3000'), @('TOHYEE_LISTEN', '127.0.0.1'), @('POSTGRES_PORT', '5433'))) {
@@ -92,6 +119,8 @@ try {
     '# Written by the Tohyee installer for the tray app. Change the ports in tohyee.env instead.',
     "PORT=$($settings['TOHYEE_PORT'])",
     "ADMIN_PORT=$($settings['TOHYEE_ADMIN_PORT'])"))
+  # The tray app runs as whoever is signed in, so everyone can read this one file.
+  Invoke-Checked 'icacls.exe' @((Join-Path $DataRoot 'tray.ini'), '/grant', '*S-1-5-32-545:R', '/Q')
 
   $pgPort = $settings['POSTGRES_PORT']
   $env:PGPASSWORD = $settings['POSTGRES_PASSWORD']
@@ -101,10 +130,17 @@ try {
     Write-Host 'Creating the database cluster.'
     $pwFile = Join-Path $env:TEMP "tohyee-pw-$([guid]::NewGuid()).txt"
     [System.IO.File]::WriteAllText($pwFile, $settings['POSTGRES_PASSWORD'])
+    # initdb drops administrator rights while it runs, so it can't write in
+    # the data folder (Administrators and SYSTEM only). Give the account
+    # running setup the empty pgdata folder just while initdb runs.
+    New-Item -ItemType Directory -Force -Path $PgData | Out-Null
+    $installingUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    Invoke-Checked 'icacls.exe' @($PgData, '/grant', "*$($installingUser):(OI)(CI)F", '/Q')
     try {
       Invoke-Checked (Join-Path $PgBin 'initdb.exe') @('-D', $PgData, '-U', 'tohyee', "--pwfile=$pwFile", '-E', 'UTF8', '--locale=C', '-A', 'scram-sha-256')
     } finally {
       Remove-Item -Force $pwFile -ErrorAction SilentlyContinue
+      Invoke-Checked 'icacls.exe' @($PgData, '/remove:g', "*$installingUser", '/T', '/C', '/Q')
     }
     Add-Content -Path (Join-Path $PgData 'postgresql.conf') -Encoding ascii -Value @(
       '', '# Tohyee', "listen_addresses = 'localhost'", "port = $pgPort")
@@ -130,9 +166,40 @@ try {
   $psql = Join-Path $PgBin 'psql.exe'
   $exists = & $psql -h localhost -p $pgPort -U tohyee -d postgres -tAc "select 1 from pg_database where datname = 'tohyee'"
   if ($LASTEXITCODE -ne 0) { throw 'Could not connect to PostgreSQL.' }
+
+  # Issue #152: Tohyee runs with two ordinary logins rather than the superuser,
+  # so a bug in the app can't reach the rest of the computer through
+  # PostgreSQL (COPY ... TO PROGRAM, reading server files). tohyee_admin
+  # (CREATEDB) owns the databases and runs migrations; tohyee_app only reads
+  # and writes data. Names and passwords go in through PGOPTIONS, never on a
+  # command line.
+  $sqlDir = Join-Path $InstallDir 'scripts'
+  $env:PGOPTIONS = "-c tohyee.admin_role=tohyee_admin -c tohyee.admin_password=$($settings['TOHYEE_DB_ADMIN_PASSWORD']) -c tohyee.app_role=tohyee_app -c tohyee.app_password=$($settings['TOHYEE_DB_APP_PASSWORD'])"
+  try {
+    Write-Host 'Setting up the database logins.'
+    Invoke-Checked $psql @('-h', 'localhost', '-p', $pgPort, '-U', 'tohyee', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '-f', (Join-Path $sqlDir 'database-logins.sql'))
+  } finally {
+    Remove-Item Env:PGOPTIONS -ErrorAction SilentlyContinue
+  }
+
   if ("$exists".Trim() -ne '1') {
     Write-Host 'Creating the tohyee database.'
-    Invoke-Checked $psql @('-h', 'localhost', '-p', $pgPort, '-U', 'tohyee', '-d', 'postgres', '-c', 'create database tohyee')
+    Invoke-Checked $psql @('-h', 'localhost', '-p', $pgPort, '-U', 'tohyee', '-d', 'postgres', '-c', 'create database tohyee owner tohyee_admin')
+  }
+
+  # Installs made before issue #152 had the superuser own every database and
+  # table: hand them to tohyee_admin. Does nothing once that's done. Tohyee
+  # grants tohyee_app its access itself when it starts.
+  $databases = & $psql -h localhost -p $pgPort -U tohyee -d postgres -tAc "select datname from pg_database where datname = 'tohyee' or datname like 'tohyee\_org\_%' order by datname"
+  if ($LASTEXITCODE -ne 0) { throw 'Could not list the Tohyee databases.' }
+  $env:PGOPTIONS = '-c tohyee.admin_role=tohyee_admin'
+  try {
+    foreach ($database in @($databases | ForEach-Object { "$_".Trim() } | Where-Object { $_ })) {
+      Write-Host "Checking who owns $database."
+      Invoke-Checked $psql @('-h', 'localhost', '-p', $pgPort, '-U', 'tohyee', '-d', $database, '-v', 'ON_ERROR_STOP=1', '-q', '-f', (Join-Path $sqlDir 'database-owner.sql'))
+    }
+  } finally {
+    Remove-Item Env:PGOPTIONS -ErrorAction SilentlyContinue
   }
 
   # --- Tohyee service (WinSW) ------------------------------------------------------
@@ -155,7 +222,8 @@ try {
     $addressServiceEnv = "  <env name=""TOHYEE_ADDRESS_SERVICE_URL"" value=""$(X $settings['TOHYEE_ADDRESS_SERVICE_URL'])""/>`r`n"
   }
 
-  $databaseUrl = "postgresql://tohyee:$($settings['POSTGRES_PASSWORD'])@localhost:$pgPort/tohyee"
+  $databaseUrl = "postgresql://tohyee_app:$($settings['TOHYEE_DB_APP_PASSWORD'])@localhost:$pgPort/tohyee"
+  $databaseAdminUrl = "postgresql://tohyee_admin:$($settings['TOHYEE_DB_ADMIN_PASSWORD'])@localhost:$pgPort/tohyee"
   $xml = @"
 <service>
   <id>Tohyee</id>
@@ -180,6 +248,7 @@ try {
   <env name="HOSTNAME" value="$(X $settings['TOHYEE_LISTEN'])"/>
   <env name="TOHYEE_ADMIN_PORT" value="$(X $settings['TOHYEE_ADMIN_PORT'])"/>
   <env name="DATABASE_URL" value="$(X $databaseUrl)"/>
+  <env name="DATABASE_ADMIN_URL" value="$(X $databaseAdminUrl)"/>
   <env name="SETUP_TOKEN" value="$(X $settings['SETUP_TOKEN'])"/>
   <env name="TOHYEE_SECRET_KEY" value="$(X $settings['TOHYEE_SECRET_KEY'])"/>
   <env name="TOHYEE_TIME_ZONE" value="Pacific/Auckland"/>
