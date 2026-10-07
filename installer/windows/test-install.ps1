@@ -78,6 +78,48 @@ function Read-Settings {
   return $settings
 }
 
+# Issue #152: Tohyee uses ordinary database logins, and local users can't read its data.
+function Assert-LeastPrivilege($Settings) {
+  Write-Host '== Database logins and data folder permissions (#152)'
+  $serviceConfig = [xml](Get-Content (Join-Path $dataRoot 'service\TohyeeServer.xml') -Raw)
+  $runtimeUrl = ($serviceConfig.service.env | Where-Object name -eq 'DATABASE_URL').value
+  $adminDbUrl = ($serviceConfig.service.env | Where-Object name -eq 'DATABASE_ADMIN_URL').value
+  if (-not $runtimeUrl.StartsWith('postgresql://tohyee_app:')) { throw 'DATABASE_URL does not use the tohyee_app login.' }
+  if (-not $adminDbUrl.StartsWith('postgresql://tohyee_admin:')) { throw 'DATABASE_ADMIN_URL does not use the tohyee_admin login.' }
+
+  $psql = Join-Path $installDir 'pgsql\bin\psql.exe'
+  $env:PGPASSWORD = $Settings['POSTGRES_PASSWORD']
+  try {
+    $roles = & $psql -h localhost -p $Settings['POSTGRES_PORT'] -U tohyee -d postgres -tAc "select rolname || ':' || rolsuper || ':' || rolcreatedb from pg_roles where rolname in ('tohyee_admin', 'tohyee_app') order by rolname"
+    if ($LASTEXITCODE -ne 0) { throw 'Could not read the database logins.' }
+    $roles = @($roles | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+    Write-Host "Logins: $($roles -join ', ')"
+    if (($roles -join ',') -ne 'tohyee_admin:false:true,tohyee_app:false:false') { throw "Unexpected database logins: $($roles -join ', ')" }
+    $owners = & $psql -h localhost -p $Settings['POSTGRES_PORT'] -U tohyee -d postgres -tAc "select distinct pg_get_userbyid(datdba) from pg_database where datname = 'tohyee' or datname like 'tohyee\_org\_%'"
+    $owners = @($owners | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+    if (($owners -join ',') -ne 'tohyee_admin') { throw "Tohyee's databases should all belong to tohyee_admin, not: $($owners -join ', ')" }
+  } finally {
+    Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+  }
+
+  # Users (S-1-5-32-545), Authenticated Users (S-1-5-11) and Everyone (S-1-1-0).
+  $everyone = @('S-1-5-32-545', 'S-1-5-11', 'S-1-1-0')
+  foreach ($path in @($dataRoot, (Join-Path $dataRoot 'pgdata'), (Join-Path $dataRoot 'pgdata\base'), (Join-Path $dataRoot 'analytics'),
+      (Join-Path $dataRoot 'backups'), (Join-Path $dataRoot 'logs'), (Join-Path $dataRoot 'tohyee.env'), (Join-Path $dataRoot 'service'))) {
+    if (-not (Test-Path -LiteralPath $path)) { continue }
+    $acl = Get-Acl -LiteralPath $path
+    $sids = @($acl.Access | ForEach-Object { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value })
+    $open = @($sids | Where-Object { $everyone -contains $_ })
+    if ($open.Count -ne 0) { throw "$path can be opened by every local user ($($open -join ', '))." }
+    $owner = (New-Object System.Security.Principal.NTAccount($acl.Owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+    if ($owner -ne 'S-1-5-32-544' -and $owner -ne 'S-1-5-18' -and $path -ne (Join-Path $dataRoot 'pgdata\base')) { throw "$path belongs to $($acl.Owner), not Administrators." }
+  }
+  $trayAcl = Get-Acl -LiteralPath (Join-Path $dataRoot 'tray.ini')
+  $traySids = @($trayAcl.Access | ForEach-Object { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value })
+  if (-not ($traySids -contains 'S-1-5-32-545')) { throw 'tray.ini is no longer readable by the tray app.' }
+  Write-Host 'Database logins and data folder permissions are as expected.'
+}
+
 function Show-Logs {
   Write-Host '== Logs'
   Get-ChildItem $out -Filter 'install-*.log' -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "--- $($_.Name)"; Get-Content $_.FullName -Tail 60 }
@@ -132,14 +174,17 @@ try {
   # Use the installed Node and admin tool with the service's actual database settings.
   $serviceConfig = [xml](Get-Content (Join-Path $dataRoot 'service\TohyeeServer.xml') -Raw)
   $previousDatabaseUrl = $env:DATABASE_URL
+  $previousDatabaseAdminUrl = $env:DATABASE_ADMIN_URL
   $previousAnalyticsDir = $env:TOHYEE_ANALYTICS_DIR
   try {
     $env:DATABASE_URL = ($serviceConfig.service.env | Where-Object name -eq 'DATABASE_URL').value
+    $env:DATABASE_ADMIN_URL = ($serviceConfig.service.env | Where-Object name -eq 'DATABASE_ADMIN_URL').value
     $env:TOHYEE_ANALYTICS_DIR = ($serviceConfig.service.env | Where-Object name -eq 'TOHYEE_ANALYTICS_DIR').value
     & (Join-Path $installDir 'node\node.exe') (Join-Path $installDir 'app\tohyee-admin.cjs') analytics folder --id ci --folder $sourceFolder
     if ($LASTEXITCODE -ne 0) { throw "Setting the analytics folder failed with exit code $LASTEXITCODE" }
   } finally {
     $env:DATABASE_URL = $previousDatabaseUrl
+    $env:DATABASE_ADMIN_URL = $previousDatabaseAdminUrl
     $env:TOHYEE_ANALYTICS_DIR = $previousAnalyticsDir
   }
   $sourceBody = @{
@@ -171,6 +216,8 @@ try {
   Write-Host "Restored: $($restored.organisation.id), $($restored.organisation.provisioningStatus)"
   if ($restored.organisation.provisioningStatus -ne 'ready') { throw 'The restored copy is not ready.' }
 
+  Assert-LeastPrivilege $first
+
   Write-Host '== The Tohyee server app (tray icon and server settings)'
   $trayExe = Join-Path $installDir 'tray\TohyeeTray.exe'
   if (-not (Test-Path $trayExe)) { throw 'TohyeeTray.exe was not installed.' }
@@ -201,7 +248,10 @@ try {
   Assert-Services
   Wait-Healthy
   $second = Read-Settings
-  if ($second['POSTGRES_PASSWORD'] -ne $first['POSTGRES_PASSWORD']) { throw 'The update changed the database password.' }
+  foreach ($name in @('POSTGRES_PASSWORD', 'TOHYEE_DB_ADMIN_PASSWORD', 'TOHYEE_DB_APP_PASSWORD')) {
+    if ($second[$name] -ne $first[$name]) { throw "The update changed $name." }
+  }
+  Assert-LeastPrivilege $second
   $login = @{ email = 'ci@example.com'; password = 'ci-password-long-enough-123' } | ConvertTo-Json
   $again = New-Object Microsoft.PowerShell.Commands.WebRequestSession
   $signedIn = Invoke-RestMethod -Uri "$url/api/auth/login" -Method Post -ContentType 'application/json' -Headers $origin -Body $login -WebSession $again

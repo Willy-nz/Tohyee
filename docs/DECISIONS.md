@@ -3515,3 +3515,29 @@ testing) and #154's code signing (later, Jess).
      to localhost and drops the unused Redis; the Windows build refuses a
      PostgreSQL major-version change until an upgrade path exists; the
      relay is checked in CI.
+
+### Windows install: ordinary database logins and a private data folder (decision 474)
+
+474. **Windows install runs Tohyee with ordinary database logins, and only
+     Administrators and SYSTEM can open its data folder** (#152, Jess: keep
+     the service on SYSTEM for now). The installer makes `tohyee_admin`
+     (NOSUPERUSER CREATEDB: owns the databases, runs migrations,
+     `DATABASE_ADMIN_URL`) and `tohyee_app` (data access only,
+     `DATABASE_URL`), with their passwords in `tohyee.env`
+     (`TOHYEE_DB_ADMIN_PASSWORD`, `TOHYEE_DB_APP_PASSWORD`). initdb's
+     superuser is used only while installing, so the app can't run programs
+     or read files through PostgreSQL. An update hands existing databases
+     and everything in them to `tohyee_admin` (`installer/windows/
+     database-owner.sql`; REASSIGN OWNED can't be used on initdb's
+     superuser), tested in `tests/integration/windows-database-logins.test.ts`.
+     The whole `%ProgramData%\Tohyee` folder now belongs to Administrators,
+     with permissions reset on every install or update, so a folder made
+     beforehand by another user is taken back; PostgreSQL's service
+     (Network Service) keeps access to `pgdata`, and `tray.ini` stays
+     readable by everyone for the tray app. The Start menu's "Tohyee logs"
+     shortcut now needs an administrator. The Docker zip still runs as
+     PostgreSQL's superuser inside its container.
+     - Not done: running the Tohyee service as something other than SYSTEM.
+       A restricted account couldn't write to backup or analytics folders in
+       someone's own profile (OneDrive) unless each folder were granted to it
+       (Jess, 8 Oct 2026: keep SYSTEM for now).
