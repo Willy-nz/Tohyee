@@ -130,10 +130,17 @@ try {
     Write-Host 'Creating the database cluster.'
     $pwFile = Join-Path $env:TEMP "tohyee-pw-$([guid]::NewGuid()).txt"
     [System.IO.File]::WriteAllText($pwFile, $settings['POSTGRES_PASSWORD'])
+    # initdb drops administrator rights while it runs, so it can't write in
+    # the data folder (Administrators and SYSTEM only). Give the account
+    # running setup the empty pgdata folder just while initdb runs.
+    New-Item -ItemType Directory -Force -Path $PgData | Out-Null
+    $installingUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    Invoke-Checked 'icacls.exe' @($PgData, '/grant', "*$($installingUser):(OI)(CI)F", '/Q')
     try {
       Invoke-Checked (Join-Path $PgBin 'initdb.exe') @('-D', $PgData, '-U', 'tohyee', "--pwfile=$pwFile", '-E', 'UTF8', '--locale=C', '-A', 'scram-sha-256')
     } finally {
       Remove-Item -Force $pwFile -ErrorAction SilentlyContinue
+      Invoke-Checked 'icacls.exe' @($PgData, '/remove:g', "*$installingUser", '/T', '/C', '/Q')
     }
     Add-Content -Path (Join-Path $PgData 'postgresql.conf') -Encoding ascii -Value @(
       '', '# Tohyee', "listen_addresses = 'localhost'", "port = $pgPort")
