@@ -117,7 +117,7 @@ if ($LASTEXITCODE -ne 0) { throw "Building the Tohyee server app failed with exi
 if (-not (Test-Path (Join-Path $stage 'tray\TohyeeTray.exe'))) { throw 'The Tohyee server app (TohyeeTray.exe) was not built.' }
 Get-ChildItem (Join-Path $stage 'tray') -Include *.pdb, *.xml -Recurse | Remove-Item -Force
 
-foreach ($script in @('configure-tohyee.ps1', 'remove-services.ps1')) {
+foreach ($script in @('configure-tohyee.ps1', 'remove-services.ps1', 'database-logins.sql', 'database-owner.sql')) {
   Copy-Item (Join-Path $PSScriptRoot $script) (Join-Path $stage "scripts\$script")
 }
 
