@@ -37,10 +37,12 @@ accounting services retain their existing behaviour.
   A historical cash-flow implementation needs an approved worked example and
   tests under the project's accounting rules. No forecast or accrual values
   have been relabelled as actual cash flow, and no inactive toggle is shown.
-- **Mountain watermark:** done as a stylised drawing (flat shapes, not the
-  photo) traced from Jess's own photo, behind Home's greeting only, fading
-  in from the left; hidden on phones so the greeting stays readable
-  (`src/components/mountain-watermark.tsx`).
+- **Mountain watermark:** the owner's supplied photograph replaces the stylised
+  drawing. The original JPEG is stored unchanged at
+  `public/images/aoraki-mount-cook-source.jpg`; CSS crops to Aoraki and its
+  adjoining ridge, excluding the photographed screen chrome and foreground.
+  Home's header uses a 5% monochrome treatment, fading left and bottom,
+  with greeting text on solid canvas; hidden below 768px.
 - **Source limitations:** current bank totals include the existing ledger
   postings rather than a historical date cutoff. They are labelled current
   ledger balances, separately from outstanding-document dates. Bank identifiers
