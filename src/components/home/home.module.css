@@ -172,3 +172,59 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Financial hierarchy: open metrics, working panels and a flat activity ledger. */
+.grid {
+  grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin-bottom: 0;
+  padding: 16px 0 24px;
+  border-bottom: 1px solid var(--border);
+}
+.grid > .tile { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.tile { padding: 24px; gap: 16px; box-shadow: none; }
+.tileTitle { flex-wrap: wrap; font-size: 18px; line-height: 26px; }
+.tileTitle h2 { font-size: inherit; font-weight: 600; }
+.grid .tileTitle { font-size: 14px; line-height: 22px; }
+.figure { font-size: 26px; font-weight: 600; line-height: 34px; overflow-wrap: anywhere; }
+.mainStat .figure { font-size: 48px; font-weight: 500; line-height: 56px; }
+.kind { border-radius: 4px; font-weight: 500; }
+.split { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 24px; }
+.row { padding: 12px 0; min-height: 44px; align-items: baseline; }
+.row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.row > a { flex-shrink: 0; }
+.activity { min-width: 0; padding: 8px 0; }
+.activity > .tileTitle { margin-bottom: 16px; }
+.activityMeta { display: block; margin-top: 4px; color: var(--text-muted); font-size: 12px; line-height: 18px; font-weight: 400; }
+.banks { display: grid; }
+.bank { display: grid; gap: 8px; padding: 16px 0; border-top: 1px solid var(--border); }
+.bank .row { padding: 0; border: 0; }
+.summaryMeta { display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--text-muted); font-size: 12px; line-height: 18px; }
+.summaryMeta span:first-child { font-weight: 600; color: var(--text); }
+.chartMeta { color: var(--text-muted); font-size: 12px; font-weight: 400; }
+.unavailable { font-size: 26px; line-height: 34px; font-weight: 500; }
+.loading { display: grid; gap: 24px; color: var(--text-muted); }
+.skeleton { min-height: 100px; border-radius: 8px; background: var(--surface-sunken); }
+
+@media (max-width: 1439px) and (min-width: 1200px) {
+  /* 560px chart + 280px actions + gap need 864px of content. */
+  .split { grid-template-columns: 1fr; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mainStat .figure { font-size: 36px; line-height: 44px; }
+}
+@media (max-width: 1199px) {
+  .split { grid-template-columns: 1fr; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mainStat .figure { font-size: 36px; line-height: 44px; }
+}
+@media (max-width: 767px) {
+  .grid { grid-template-columns: 1fr; gap: 16px; }
+  .tile { padding: 16px; }
+  .grid > .tile:not(.mainStat) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 12px; }
+  .grid > .tile:not(.mainStat) .figure { text-align: right; }
+  .grid > .tile:not(.mainStat) > :last-child { grid-column: 1 / -1; }
+  .row { flex-wrap: wrap; gap: 8px; }
+  .activity .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+}
+
+.figure > span { white-space: normal; overflow-wrap: anywhere; }

@@ -7,6 +7,7 @@ import styles from "./chart.module.css";
 
 type ChartProps = {
   spec: ChartSpec;
+  palette?: "default" | "pounamu";
   rows: Record<string, string | number | null>[];
 };
 
@@ -20,7 +21,7 @@ const DEFAULT_THEME: ChartTheme = {
   palette: CHART_SLOTS,
 };
 
-function readTheme(): ChartTheme {
+function readTheme(palette: "default" | "pounamu"): ChartTheme {
   const css = getComputedStyle(document.documentElement);
   const color = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
   return {
@@ -29,7 +30,7 @@ function readTheme(): ChartTheme {
     grid: color("--border", DEFAULT_THEME.grid),
     background: color("--surface", DEFAULT_THEME.background),
     // The chart series colours in their fixed order (--chart-1 to --chart-8 in globals.css).
-    palette: CHART_SLOTS.map((fallback, index) => color(`--chart-${index + 1}`, fallback)),
+    palette: palette === "pounamu" ? [color("--accent", "#0e7467"), color("--text-muted", "#53625c"), color("--text", "#202e2b")] : CHART_SLOTS.map((fallback, index) => color(`--chart-${index + 1}`, fallback)),
   };
 }
 
@@ -41,7 +42,7 @@ function isKpiSummary(option: EChartsOption | KpiSummary): option is KpiSummary 
   return !isChartOption(option);
 }
 
-export function Chart({ spec, rows }: ChartProps) {
+export function Chart({ spec, rows, palette = "default" }: ChartProps) {
   const id = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ECharts | null>(null);
@@ -52,7 +53,7 @@ export function Chart({ spec, rows }: ChartProps) {
   const title = spec.title || spec.series.map((series) => series.label).join(", ") || "Chart";
 
   useEffect(() => {
-    const updateTheme = () => setTheme(readTheme());
+    const updateTheme = () => setTheme(readTheme(palette));
     updateTheme();
     const observer = new MutationObserver(updateTheme);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -62,7 +63,7 @@ export function Chart({ spec, rows }: ChartProps) {
       observer.disconnect();
       media.removeEventListener("change", updateTheme);
     };
-  }, []);
+  }, [palette]);
 
   useEffect(() => {
     optionRef.current = option;

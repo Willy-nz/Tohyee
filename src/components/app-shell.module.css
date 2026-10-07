@@ -25,9 +25,8 @@
   top: 0;
   z-index: 40;
   border-bottom: 1px solid var(--border);
-  background: var(--topbar-bg);
-  backdrop-filter: saturate(1.6) blur(14px);
-  -webkit-backdrop-filter: saturate(1.6) blur(14px);
+  background: var(--surface);
+
 }
 
 .topRow {
@@ -295,9 +294,9 @@
   gap: 8px;
   height: 32px;
   min-width: 180px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
+  background: var(--surface);
   padding: 0 6px 0 10px;
   color: var(--text-muted);
   font-size: var(--text-base);
@@ -410,7 +409,7 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 85%, white), var(--accent));
+  background: var(--accent);
   color: var(--accent-text);
   font-size: 0.72rem;
   font-weight: 700;
@@ -523,38 +522,8 @@
   font-weight: 800;
 }
 
-/* Laptops: tighten the bar before the menus have to move behind ☰. */
-@media (max-width: 1400px) {
-  .searchButton {
-    min-width: 0;
-  }
-
-  .searchText {
-    display: none;
-  }
-
-  .menuButton {
-    padding: 0 8px;
-  }
-
-  .menuButtonActive::after {
-    left: 8px;
-    right: 8px;
-  }
-}
-
-@media (max-width: 1320px) {
-  .brandText {
-    display: none;
-  }
-
-  .aiLink {
-    padding: 0 8px;
-  }
-}
-
 /* Phones and narrower windows: the menus move behind the ☰ button. */
-@media (max-width: 1180px) {
+@media (max-width: 1199px) {
   .topRow {
     gap: 8px;
     padding: 0 12px 0 16px;
@@ -831,4 +800,73 @@
 .appLauncherLinkActive:hover {
   background: var(--accent-soft);
   color: var(--accent-soft-text);
+}
+
+/* Warm workspace shell. Existing permission-filtered menus keep their destinations. */
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 42;
+  width: 232px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  border-right: 1px solid var(--border);
+  background: var(--surface-sunken);
+  padding: 24px 12px;
+}
+.sidebar > .brand { margin: 0 12px; font-size: 20px; }
+.sidebar .orgPicker { flex-wrap: wrap; width: 100%; flex-shrink: 0; }
+.sidebar .orgPicker select { min-height: 40px; border-color: var(--border-strong); background-color: var(--surface); }
+.sidebar .orgInitial { top: 10px; }
+.orgContext { display: flex; flex-wrap: wrap; gap: 4px 12px; width: 100%; padding: 8px 4px 0; color: var(--text-muted); font-size: var(--text-xs); }
+.sidebar .menuBar { display: flex; flex: 0 1 auto; align-items: stretch; flex-direction: column; gap: 4px; }
+.sidebar .menuButton { display: flex; width: 100%; height: 40px; gap: 12px; padding: 0 16px; font-weight: 500; text-align: left; }
+.sidebar .menuButton svg { flex-shrink: 0; }
+.sidebar .menuButton .caret { margin-left: auto; }
+.sidebar .menuButtonActive { background: var(--accent-soft); color: var(--link); font-weight: 600; }
+.sidebar .menuButtonActive::after { left: 0; top: 10px; bottom: auto; right: auto; width: 3px; height: 20px; }
+.sidebar .dropdown { top: 0; left: calc(100% + 16px); max-height: calc(100dvh - 32px); overflow-y: auto; }
+.sidebarFooter { display: flex; align-items: center; gap: 8px; margin-top: auto; padding: 12px; }
+.sidebarFooter .appLauncherPanel { top: auto; bottom: calc(100% + 8px); }
+.topbar, .content { margin-left: 232px; }
+.topRow { min-height: 72px; height: auto; padding: 16px 32px; }
+.mobileContext { display: none; }
+.actions { width: 100%; }
+.actions > .searchButton { margin-right: auto; width: 280px; height: 40px; }
+.newButton { height: 40px; box-shadow: none; }
+.content { padding: 32px 32px 48px; }
+.page { max-width: 1440px; margin-inline: auto; }
+.dropdown { max-height: calc(100dvh - 96px); overflow-y: auto; }
+
+@media (min-width: 1200px) and (max-width: 1439px) {
+  .content { padding: 24px; }
+  .topRow { padding-inline: 24px; }
+}
+@media (max-width: 1199px) {
+  .sidebar { display: none; }
+  .topbar, .content { margin-left: 0; }
+  .topRow { padding: 12px 24px; gap: 12px; }
+  .mobileContext { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
+  .orgContext { display: none; }
+  .actions { width: auto; }
+  .actions > .searchButton { margin-right: 0; width: 40px; height: 40px; padding: 0; }
+  .searchText, .searchButton .kbd { display: none; }
+  .newButton { width: 40px; height: 40px; }
+  .phoneMenuButton { width: 40px; height: 40px; }
+  .content { padding: 24px; }
+}
+@media (max-width: 767px) {
+  .content { padding: 24px 16px 40px; }
+  .topRow { padding: 12px 16px; gap: 6px; }
+  .mobileContext > .brand { display: none; }
+  .orgPicker select { padding-left: 6px; min-height: 40px; }
+  .orgInitial { display: none; }
+}
+@media print {
+  .content { margin-left: 0; padding: 0; }
+}
+
+@media (max-width: 1199px) {
+  .actions > .searchButton { min-width: 0; }
 }
