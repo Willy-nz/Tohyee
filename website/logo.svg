@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="t">
   <title id="t">Tohyee</title>
-  <rect width="512" height="512" rx="112" fill="#0e7467"/>
+  <rect width="512" height="512" rx="112" fill="#1f5fae"/>
   <!-- ears -->
   <path d="M112 236 L142 70 Q150 52 166 64 L250 150 Z" fill="#ffffff"/>
   <path d="M400 236 L370 70 Q362 52 346 64 L262 150 Z" fill="#ffffff"/>

@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tohyee: accounting that's yours</title>
 <meta name="description" content="Tohyee is free, open-source accounting for New Zealand: invoices, bank feeds and reconciliation, GST returns, payroll and reports. It runs on your own computer, with no monthly fee.">
-<meta name="theme-color" content="#0e7467" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0c1110" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#1f5fae" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1018" media="(prefers-color-scheme: dark)">
 <meta property="og:title" content="Tohyee: accounting that's yours">
 <meta property="og:description" content="Free, open-source accounting for New Zealand that runs on your own computer.">
 <meta property="og:image" content="https://willy-nz.github.io/Tohyee/img/og-home.png">
@@ -22,13 +22,13 @@
     unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 
   :root {
-    --bg: #f6f8f7; --bg-tint: #eaf3f0; --surface: #ffffff; --surface-2: #f1f5f3;
-    --ink: #101a17; --muted: #55625d; --faint: #7d8984; --line: #e1e7e4; --line-strong: #cdd6d2;
-    --accent: #0e7467; --accent-hover: #0a5f54; --accent-soft: #e2f1ed; --accent-ink: #0a5248; --on-accent: #ffffff;
-    --glow-a: rgba(14, 116, 103, 0.20); --glow-b: rgba(52, 195, 168, 0.16);
+    --bg: #f5f7fa; --bg-tint: #e8eff9; --surface: #ffffff; --surface-2: #eef2f7;
+    --ink: #121a26; --muted: #546072; --faint: #7d8796; --line: #dde3eb; --line-strong: #c8d0db;
+    --accent: #1f5fae; --accent-hover: #184d8f; --accent-soft: #e6eef9; --accent-ink: #173f73; --on-accent: #ffffff;
+    --glow-a: rgba(31, 95, 174, 0.20); --glow-b: rgba(91, 156, 240, 0.16);
     --warn-bg: #fdf6e3; --warn-line: #efd28f; --warn-ink: #7a4b08;
-    --shadow: 0 1px 2px rgba(16, 26, 23, .05), 0 8px 24px rgba(16, 26, 23, .06);
-    --shadow-xl: 0 2px 6px rgba(16, 26, 23, .06), 0 30px 80px -20px rgba(16, 26, 23, .28);
+    --shadow: 0 1px 2px rgba(15, 23, 35, .05), 0 8px 24px rgba(15, 23, 35, .06);
+    --shadow-xl: 0 2px 6px rgba(15, 23, 35, .06), 0 30px 80px -20px rgba(15, 23, 35, .28);
     --radius: 14px; --radius-lg: 22px;
     --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -36,10 +36,10 @@
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0b100f; --bg-tint: #0f1a17; --surface: #121a18; --surface-2: #17211e;
-      --ink: #e4ebe8; --muted: #9ba8a3; --faint: #74817c; --line: #222d2a; --line-strong: #2e3b37;
-      --accent: #34c3a8; --accent-hover: #5fd6bf; --accent-soft: #12302a; --accent-ink: #7fe0cc; --on-accent: #06221d;
-      --glow-a: rgba(52, 195, 168, 0.16); --glow-b: rgba(14, 116, 103, 0.22);
+      --bg: #0b1018; --bg-tint: #0f1724; --surface: #121925; --surface-2: #18202e;
+      --ink: #e4e9f1; --muted: #9ba6b6; --faint: #748196; --line: #232c3b; --line-strong: #2f3a4c;
+      --accent: #5b9cf0; --accent-hover: #82b4f5; --accent-soft: #14243d; --accent-ink: #a9cbf7; --on-accent: #06172e;
+      --glow-a: rgba(91, 156, 240, 0.16); --glow-b: rgba(31, 95, 174, 0.22);
       --warn-bg: #241d0c; --warn-line: #5a4614; --warn-ink: #f0cf86;
       --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
       --shadow-xl: 0 2px 6px rgba(0,0,0,.4), 0 30px 80px -20px rgba(0,0,0,.7);
@@ -92,7 +92,7 @@
   .hero::before { content: ""; position: absolute; inset: -120px -10% auto; height: 640px; z-index: -1;
     background: radial-gradient(42% 60% at 30% 30%, var(--glow-a), transparent 70%), radial-gradient(40% 55% at 72% 22%, var(--glow-b), transparent 70%); filter: blur(10px); }
   .hero h1 { font-size: clamp(40px, 6.6vw, 78px); letter-spacing: -0.04em; margin: 22px auto 0; max-width: 15ch; }
-  .hero h1 em { font-style: normal; background: linear-gradient(100deg, var(--accent) 10%, color-mix(in srgb, var(--accent) 55%, #34c3a8) 90%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero h1 em { font-style: normal; background: linear-gradient(100deg, var(--accent) 10%, color-mix(in srgb, var(--accent) 55%, #5b9cf0) 90%); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .hero .lede { margin-inline: auto; text-align: center; }
   .hero .buttons { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 30px; }
   .trust { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; margin: 22px 0 0; padding: 0; list-style: none; font-size: 14px; color: var(--muted); }
@@ -154,7 +154,7 @@
 
   /* Phones */
   .phones { display: flex; gap: 28px; justify-content: center; align-items: flex-end; }
-  .phone { width: min(280px, 44vw); border-radius: 38px; padding: 10px; background: #0d1412; box-shadow: var(--shadow-xl); }
+  .phone { width: min(280px, 44vw); border-radius: 38px; padding: 10px; background: #0d1220; box-shadow: var(--shadow-xl); }
   .phone img { border-radius: 29px; }
   .phone.raise { transform: translateY(-36px); }
 
@@ -165,8 +165,8 @@
   .install ol li { display: list-item; }
   .install ol li::before { content: none; }
   .install .tile .btn { align-self: flex-start; margin-top: auto; }
-  pre { margin: 0; background: #0d1412; color: #d8e6e1; font: 12.5px/1.6 var(--mono); padding: 14px 16px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
-  pre .c { color: #7f9a92; }
+  pre { margin: 0; background: #0d1220; color: #d8e1ee; font: 12.5px/1.6 var(--mono); padding: 14px 16px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre .c { color: #7f8ea6; }
   code { font-family: var(--mono); font-size: .92em; }
 
   /* New, notice, FAQ */
@@ -261,7 +261,7 @@
       <div class="hero-shot">
         <div class="frame">
           <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>tohyee.local</span></div>
-          <img class="shot-light has-dark" src="img/home-light.webp" width="2880" height="1800" alt="Tohyee's Home page for a demo coffee roaster: cash in the bank, money owed, bills to pay, the next GST return and a to-do list">
+          <img class="shot-light has-dark" src="img/home-light.webp" width="2880" height="1800" alt="Tohyee's Home page for a demo coffee roaster: cash in the bank, money owed, bills to pay, the GST position and what needs attention">
           <img class="shot-dark" src="img/home-dark.webp" width="2880" height="1800" alt="" loading="lazy">
         </div>
       </div>
