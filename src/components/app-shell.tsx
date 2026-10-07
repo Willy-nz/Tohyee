@@ -138,6 +138,7 @@ function MenuPanel({
     if (!element) return;
     if (getComputedStyle(element).position === "fixed") return;
     const rect = element.getBoundingClientRect();
+    element.style.maxHeight = `${Math.max(160, window.innerHeight - Math.max(12, rect.top) - 12)}px`;
     const overflow = rect.right - (window.innerWidth - 12);
     if (overflow > 0) element.style.setProperty("translate", `-${Math.min(overflow, Math.max(0, rect.left - 12))}px 0`);
     else if (rect.left < 12) element.style.setProperty("translate", `${12 - rect.left}px 0`);
@@ -400,20 +401,42 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
   const reportViewer = current?.role === "report_viewer";
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   // The list opens under the top bar.
   const [top, setTop] = useState(56);
 
   useEffect(() => {
     if (!open) return;
     const previous = document.body.style.overflow;
+    const returnFocus = trigger.current;
     document.body.style.overflow = "hidden";
+    // Keep keyboard focus inside the open menu, and give it back to the button when it closes.
+    const focusable = () => Array.from(dialog.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), select, input, [tabindex="0"]') ?? []);
+    focusable()[0]?.focus();
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+      }
+      if (event.key === "Tab") {
+        const elements = focusable();
+        const first = elements[0];
+        const last = elements.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
     }
     document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = previous;
       document.removeEventListener("keydown", onKey);
+      returnFocus?.focus();
     };
   }, [open]);
 
@@ -426,6 +449,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
     <>
       <button
         type="button"
+        ref={trigger}
         className={`${styles.iconButton} ${styles.phoneMenuButton}`}
         aria-expanded={open}
         aria-label={open ? "Close menu" : "Open menu"}
@@ -444,7 +468,7 @@ function PhoneMenu({ app, modules, menus, onSignOut }: { app: AppKey; modules: M
         </span>
       </button>
       {open ? (
-        <div className={styles.phoneMenu} style={{ top }} role="dialog" aria-modal="true" aria-label="Menu">
+        <div ref={dialog} className={styles.phoneMenu} style={{ top }} role="dialog" aria-modal="true" aria-label="Menu">
           <div className={styles.phoneApps}>
             <AppSwitcher current={app} modules={modules} reportViewer={reportViewer} />
           </div>
