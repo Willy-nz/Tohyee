@@ -6,35 +6,36 @@
  * The choice is `data-theme="light|dark"` on <html>, set before paint by the
  * inline script in src/app/layout.tsx (no attribute = follow the computer).
  *
- * The accent is a deep pounamu green; neutrals lean very slightly green so
- * the greys don't read as cold blue-grey.
+ * The accent is a deep blue (Jess, 8 Oct 2026: blue rather than green), and
+ * the neutrals are cool slate greys to match it.
  */
 :root {
   color-scheme: light;
 
   /* Surfaces */
-  --bg: #f7f6f2;
+  --bg: #f5f7fa;
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-sunken: #efeee8;
-  --surface-hover: #efeee8;
-  --overlay: rgba(16, 24, 21, 0.38);
+  --surface-sunken: #eef1f5;
+  --surface-hover: #eef1f5;
+  --overlay: rgba(15, 23, 35, 0.38);
 
   /* Lines */
-  --border: #dcddd5;
-  --border-strong: #7c8881;
+  --border: #dde2e9;
+  --border-strong: #7a8594;
 
   /* Text */
-  --text: #202e2b;
-  --text-muted: #53625c;
-  --link: #0e7467;
+  --text: #1b2533;
+  --text-muted: #546072;
+  --link: #1f5fae;
 
   /* Accent */
-  --accent: #0e7467;
-  --accent-hover: #095d53;
+  --accent: #1f5fae;
+  --accent-hover: #184d8f;
   --accent-text: #ffffff;
-  --accent-soft: #e4eee8;
-  --accent-soft-text: #202e2b;
+  --accent-soft: #e6eef9;
+  --accent-soft-text: #1b2533;
+  --mtn-snow: #ffffff;
 
   /* Status */
   --success-bg: #e7f4eb;
@@ -58,11 +59,11 @@
   --chart-7: #4a3aa7;
   --chart-8: #e34948;
   --info-border: #c6d8f1;
-  --neutral-bg: #eef1ef;
-  --neutral-text: #3d4843;
+  --neutral-bg: #eef1f5;
+  --neutral-text: #3c4757;
 
   /* The logo's square (same in both themes) */
-  --brand: #0e7467;
+  --brand: #1f5fae;
 
   /* Topbar */
   --topbar-bg: #ffffff;
@@ -74,9 +75,9 @@
   --radius-pill: 999px;
 
   /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(16, 24, 21, 0.05);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 35, 0.05);
   --shadow: none;
-  --shadow-lg: 0 2px 6px rgba(16, 24, 21, 0.06), 0 16px 40px rgba(16, 24, 21, 0.14);
+  --shadow-lg: 0 2px 6px rgba(15, 23, 35, 0.06), 0 16px 40px rgba(15, 23, 35, 0.14);
   --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 
   /* Spacing (4px steps) */
@@ -123,22 +124,23 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #0c1110;
-    --surface: #131a18;
-    --surface-raised: #19211e;
-    --surface-sunken: #101614;
-    --surface-hover: #1e2724;
+    --bg: #0b1018;
+    --surface: #121925;
+    --surface-raised: #18202e;
+    --surface-sunken: #0f1520;
+    --surface-hover: #1d2635;
     --overlay: rgba(0, 0, 0, 0.6);
-    --border: #25302c;
-    --border-strong: #6c8277;
-    --text: #e3eae7;
-    --text-muted: #9aa7a1;
-    --link: #62d1bb;
-    --accent: #34c3a8;
-    --accent-hover: #5bd3bb;
-    --accent-text: #03221c;
-    --accent-soft: #12302a;
-    --accent-soft-text: #86e2cf;
+    --border: #263041;
+    --border-strong: #6b7a90;
+    --text: #e4e9f1;
+    --text-muted: #9ba6b6;
+    --link: #7fb3f5;
+    --accent: #5b9cf0;
+    --accent-hover: #82b4f5;
+    --accent-text: #06172e;
+    --accent-soft: #14243d;
+    --accent-soft-text: #a9cbf7;
+    --mtn-snow: #c9d8ec;
     --success-bg: #0f281b;
     --success-text: #74d89a;
     --success-border: #1f4c33;
@@ -159,8 +161,8 @@
     --chart-7: #9085e9;
     --chart-8: #e66767;
     --info-border: #284470;
-    --neutral-bg: #1f2825;
-    --neutral-text: #c4ceca;
+    --neutral-bg: #1f2733;
+    --neutral-text: #c5cdd8;
     --topbar-bg: rgba(19, 26, 24, 0.86);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -171,22 +173,23 @@
 /* …or always, when Dark was picked. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0c1110;
-  --surface: #131a18;
-  --surface-raised: #19211e;
-  --surface-sunken: #101614;
-  --surface-hover: #1e2724;
+  --bg: #0b1018;
+  --surface: #121925;
+  --surface-raised: #18202e;
+  --surface-sunken: #0f1520;
+  --surface-hover: #1d2635;
   --overlay: rgba(0, 0, 0, 0.6);
-  --border: #25302c;
-  --border-strong: #6c8277;
-  --text: #e3eae7;
-  --text-muted: #9aa7a1;
-  --link: #62d1bb;
-  --accent: #34c3a8;
-  --accent-hover: #5bd3bb;
-  --accent-text: #03221c;
-  --accent-soft: #12302a;
-  --accent-soft-text: #86e2cf;
+  --border: #263041;
+  --border-strong: #6b7a90;
+  --text: #e4e9f1;
+  --text-muted: #9ba6b6;
+  --link: #7fb3f5;
+  --accent: #5b9cf0;
+  --accent-hover: #82b4f5;
+  --accent-text: #06172e;
+  --accent-soft: #14243d;
+  --accent-soft-text: #a9cbf7;
+  --mtn-snow: #c9d8ec;
   --success-bg: #0f281b;
   --success-text: #74d89a;
   --success-border: #1f4c33;
@@ -207,8 +210,8 @@
   --chart-7: #9085e9;
   --chart-8: #e66767;
   --info-border: #284470;
-  --neutral-bg: #1f2825;
-  --neutral-text: #c4ceca;
+  --neutral-bg: #1f2733;
+  --neutral-text: #c5cdd8;
   --topbar-bg: rgba(19, 26, 24, 0.86);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -402,17 +405,18 @@ hr {
     --bg: #ffffff;
     --surface: #ffffff;
     --surface-raised: #ffffff;
-    --surface-sunken: #f7f9f8;
-    --surface-hover: #eef2f0;
-    --border: #e1e6e3;
-    --border-strong: #c7d0cb;
-    --text: #15201c;
-    --text-muted: #57635e;
-    --link: #0b6b5f;
-    --accent: #0e7467;
+    --surface-sunken: #f6f8fb;
+    --surface-hover: #eef1f5;
+    --border: #dde2e9;
+    --border-strong: #c3cbd6;
+    --text: #1b2533;
+    --text-muted: #546072;
+    --link: #1a56a0;
+    --accent: #1f5fae;
     --accent-text: #ffffff;
-    --accent-soft: #e2f1ed;
-    --accent-soft-text: #0a5248;
+    --accent-soft: #e6eef9;
+    --accent-soft-text: #173f73;
+    --mtn-snow: #ffffff;
     --success-bg: #e7f4eb;
     --success-text: #146c2e;
     --warning-bg: #fdf4de;
@@ -429,8 +433,8 @@ hr {
     --chart-6: #008300;
     --chart-7: #4a3aa7;
     --chart-8: #e34948;
-    --neutral-bg: #eef1ef;
-    --neutral-text: #3d4843;
+    --neutral-bg: #eef1f5;
+    --neutral-text: #3c4757;
     --shadow: none;
     --shadow-sm: none;
   }

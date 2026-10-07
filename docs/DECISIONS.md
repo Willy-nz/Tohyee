@@ -3558,3 +3558,17 @@ testing) and #154's code signing (later, Jess).
      line of technical notes above Home's figures was left out (too much
      information), and the top bar tightens from 1,520px so the CRM's
      nine links fit at 1,440px.
+
+### Blue instead of green (decision 476)
+
+476. **Blue colours, and a clearer Aoraki on Home** (Jess, 8 Oct 2026:
+     "change it to blue shades"; the first mountain drawing wasn't
+     recognisable). The accent is a deep blue (#1f5fae light, #5b9cf0
+     dark) and the greys are cool slate rather than green-tinged; status
+     colours (green for done, red for overdue) are unchanged, as are the
+     chart series colours. Home's greeting has a flat illustration of
+     Aoraki / Mt Cook from Lake Pukaki, drawn from Jess's photo: the sharp
+     summit, a sunlit snow face with rock ribs, the shadowed east face,
+     foothills and the lake, in shades of the accent blended with the page
+     colour so it suits light and dark. Not yet changed: printed
+     documents and emails, the Windows server app and the website.

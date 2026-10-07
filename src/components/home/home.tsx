@@ -297,7 +297,7 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
           </div>
           <p className={ui.muted}>Accrual profit from the profit and loss report.</p>
           <Chart
-            palette="pounamu"
+            palette="accent"
             spec={{ kind: "column", category: "month", series: [{ field: "netProfit", label: "Net profit" }], valueFormat: "money", currency: summary.currencyCode }}
             rows={chartRows}
           />
