@@ -131,7 +131,7 @@ export async function reportXlsx(data: ReportExportData): Promise<Uint8Array> {
     const header = sheet.addRow(table.columns);
     headerRow = header.number;
     header.font = { bold: true };
-    header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2F1ED" } };
+    header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6EEF9" } };
     for (const item of table.rows) {
       const row = sheet.addRow(
         Array.from({ length: table.columns.length }, (_, index) => {

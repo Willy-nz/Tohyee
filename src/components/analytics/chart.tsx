@@ -7,21 +7,21 @@ import styles from "./chart.module.css";
 
 type ChartProps = {
   spec: ChartSpec;
-  palette?: "default" | "pounamu";
+  palette?: "default" | "accent";
   rows: Record<string, string | number | null>[];
 };
 
 const CHART_SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
 
 const DEFAULT_THEME: ChartTheme = {
-  text: "#15201c",
-  mutedText: "#57635e",
-  grid: "#e1e6e3",
+  text: "#1b2533",
+  mutedText: "#546072",
+  grid: "#dde2e9",
   background: "#ffffff",
   palette: CHART_SLOTS,
 };
 
-function readTheme(palette: "default" | "pounamu"): ChartTheme {
+function readTheme(palette: "default" | "accent"): ChartTheme {
   const css = getComputedStyle(document.documentElement);
   const color = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
   return {
@@ -30,7 +30,7 @@ function readTheme(palette: "default" | "pounamu"): ChartTheme {
     grid: color("--border", DEFAULT_THEME.grid),
     background: color("--surface", DEFAULT_THEME.background),
     // The chart series colours in their fixed order (--chart-1 to --chart-8 in globals.css).
-    palette: palette === "pounamu" ? [color("--accent", "#0e7467"), color("--text-muted", "#53625c"), color("--text", "#202e2b")] : CHART_SLOTS.map((fallback, index) => color(`--chart-${index + 1}`, fallback)),
+    palette: palette === "accent" ? [color("--accent", "#1f5fae"), color("--text-muted", "#546072"), color("--text", "#1b2533")] : CHART_SLOTS.map((fallback, index) => color(`--chart-${index + 1}`, fallback)),
   };
 }
 
