@@ -3551,5 +3551,10 @@ testing) and #154's code signing (later, Jess).
      with the financial year, the cash figure first, one "Needs attention"
      list, recent activity and a bank accounts panel (at most 5 accounts,
      failed feeds first). A GST estimate that can't be worked out shows
-     "Unavailable" rather than 0.00. The spec's sidebar and mountain
-     watermark aren't used (`docs/UI-IMPLEMENTATION.md`).
+     "Unavailable" rather than 0.00. The spec's sidebar isn't used
+     (`docs/UI-IMPLEMENTATION.md`). Home's greeting has a faint stylised
+     drawing of the Southern Alps traced from Jess's own photo (Lake
+     Pukaki towards Aoraki), in the theme colour, hidden on phones. The
+     line of technical notes above Home's figures was left out (too much
+     information), and the top bar tightens from 1,520px so the CRM's
+     nine links fit at 1,440px.

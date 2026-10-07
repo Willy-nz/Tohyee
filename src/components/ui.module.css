@@ -25,6 +25,41 @@
   min-width: 0;
 }
 
+/* Home's header: a faint drawing of the mountains behind the greeting. */
+.pageHeaderDecorated {
+  position: relative;
+  isolation: isolate;
+  min-height: 150px;
+  padding-top: 24px;
+}
+
+.watermark {
+  position: absolute;
+  inset: auto 0 0 auto;
+  z-index: -1;
+  width: min(760px, 70%);
+  height: auto;
+  aspect-ratio: 1855 / 360;
+  color: var(--accent);
+  pointer-events: none;
+  /* Fades in from the left so the drawing has no hard edge. */
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 30%);
+  mask-image: linear-gradient(to right, transparent, #000 30%);
+}
+
+/* On a phone the header is narrow and the greeting wraps, so the drawing is left out. */
+@media (max-width: 767px) {
+  .watermark {
+    display: none;
+  }
+}
+
+@media print {
+  .watermark {
+    display: none;
+  }
+}
+
 .pageTitle {
   font-size: var(--text-2xl);
   font-family: "Source Serif 4", Georgia, serif;

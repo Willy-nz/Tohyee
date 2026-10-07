@@ -1,6 +1,7 @@
 "use client";
 
 import { type ButtonHTMLAttributes, Children, cloneElement, isValidElement, type ReactElement, type ReactNode, useId } from "react";
+import { MountainWatermark } from "@/components/mountain-watermark";
 import styles from "./ui.module.css";
 
 export { styles as ui };
@@ -13,13 +14,17 @@ export function PageHeader({
   title,
   description,
   actions,
+  decorated = false,
 }: {
   title: string;
   description?: ReactNode;
   actions?: ReactNode;
+  /** Adds the faint mountain watermark behind the header (Home only). */
+  decorated?: boolean;
 }) {
   return (
-    <header className={styles.pageHeader}>
+    <header className={decorated ? `${styles.pageHeader} ${styles.pageHeaderDecorated}` : styles.pageHeader}>
+      {decorated ? <MountainWatermark className={styles.watermark} /> : null}
       <div>
         <h1 className={styles.pageTitle}>{title}</h1>
         {description ? <p className={styles.pageDescription}>{description}</p> : null}

@@ -521,8 +521,9 @@
   font-weight: 800;
 }
 
-/* Laptops: tighten the bar before the menus have to move behind ☰. */
-@media (max-width: 1400px) {
+/* Laptops: tighten the bar before the menus have to move behind ☰.
+   1520px rather than 1400px since the text grew slightly (#184), so the CRM's nine links fit at 1440px. */
+@media (max-width: 1520px) {
   .searchButton {
     min-width: 0;
   }

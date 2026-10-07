@@ -37,8 +37,10 @@ accounting services retain their existing behaviour.
   A historical cash-flow implementation needs an approved worked example and
   tests under the project's accounting rules. No forecast or accrual values
   have been relabelled as actual cash flow, and no inactive toggle is shown.
-- **Mountain watermark:** only the Markdown spec was attached. The source
-  mountain photograph is still required. No substitute artwork was added.
+- **Mountain watermark:** done as a stylised drawing (flat shapes, not the
+  photo) traced from Jess's own photo, behind Home's greeting only, fading
+  in from the left; hidden on phones so the greeting stays readable
+  (`src/components/mountain-watermark.tsx`).
 - **Source limitations:** current bank totals include the existing ledger
   postings rather than a historical date cutoff. They are labelled current
   ledger balances, separately from outstanding-document dates. Bank identifiers

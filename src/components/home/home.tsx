@@ -276,11 +276,6 @@ export function HomeTiles({ organisationId }: { organisationId: string }) {
           />
         }
       >
-        <div className={styles.summaryMeta}>
-          <span>Financial position · {summary.currencyCode}</span>
-          <span>Outstanding documents as at {formatDate(summary.today)} · bank totals from current ledger</span>
-          <span>Base currency · foreign amounts at recorded ledger rates</span>
-        </div>
         <div className={styles.grid}>
           {dashboard.tiles.map((tile) => {
             const reference = parseAnalyticsTileReference(tile);
