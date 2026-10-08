@@ -228,7 +228,9 @@ namespace Tohyee.Tray
             var last = list.Columns[list.Columns.Count - 1];
             // Leave room for a vertical scroll bar if the rows don't all fit.
             var rows = (list.Items.Count + 1) * Theme.S(28);
-            var room = list.ClientSize.Width - used - 4 - (rows > list.ClientSize.Height ? SystemInformation.VerticalScrollBarWidth : 0);
+            // To the very edge: the 4 pixels left over showed Windows' own light header beside the
+            // dark one (the white strip in #198's screenshots).
+            var room = list.ClientSize.Width - used - (rows > list.ClientSize.Height ? SystemInformation.VerticalScrollBarWidth : 0);
             var needed = last.Tag is int ? (int)last.Tag : last.Width;
             last.Width = Math.Max(needed, room);
         }

@@ -357,7 +357,8 @@ describeWithDatabase("payroll: payslips (PSLIP1-PSLIP6)", () => {
         ["document_email.queued", "payroll_pay_run", run1.id, w.people.hemi, "payslip"],
         ["document_email.sent", "payroll_pay_run", run1.id, w.people.hemi, "payslip"],
       ]);
-      const everything = JSON.stringify(events.rows);
+      // Ids are left out: a random UUID can contain "2042" (it did on CI, 8 Oct 2026).
+      const everything = JSON.stringify(events.rows).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, "<id>");
       for (const figure of ["2042", "2,042", "2692", "555.58", "94.23", "0123456"]) expect(everything).not.toContain(figure);
       const stored = await w.asUser(w.jess, (tx) => tx.query<{ body: string; subject: string }>("select subject, body from document_emails where document_kind = 'payslip'"));
       expect(JSON.stringify(stored.rows)).not.toContain("2,042.50");
