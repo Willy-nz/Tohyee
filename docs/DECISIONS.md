@@ -3731,3 +3731,32 @@ testing) and #154's code signing (later, Jess).
      X-Forwarded-For. If Funnel doesn't, the per-address limit behind
      Funnel is as before (the per-account lockout still applies).
 
+### Setup links instead of passwords (decision 484)
+
+484. **New logins get a setup link** (#208 item 2, 9 Oct 2026; Jess: "local
+     network only" doesn't work because new users may be miles from the
+     server, and she agreed to setup links).
+     - **Creating a login:** with two-step sign-in on (the server has its
+       secret key), a server admin no longer chooses a password. Adding a
+       login, or resetting someone's two-step sign-in, makes a one-time
+       setup link valid for 7 days (core migration 0009,
+       `user_setup_links`, only a hash kept).
+     - **Sending it:** it's emailed when the server can send email, and can
+       always be copied (server app, `/server/users`, `tohyee-admin users
+       create | reset-two-step | setup-link`). It starts with remote
+       access's public address, or this computer's name with a note that it
+       only works on the local network.
+     - **Using it:** at `/login/setup-account` the person chooses their
+       password and goes straight on to set up their authenticator app.
+       Making a new link retires the old one.
+     - **Sign-in:** a correct password for a login without two-step is now
+       refused ("open the setup link…") instead of starting two-step set-up,
+       so a stolen password can't register someone else's authenticator.
+     - **Still possible:** the first admin (`SETUP_TOKEN`), the emailed
+       lost-phone reset (password plus email) and the changed-secret-key
+       path start set-up as before.
+     - **Without the secret key:** nothing changes; there's no two-step
+       sign-in, and admins set temporary passwords as before.
+     - **On upgrade:** existing logins that never set up two-step need a
+       setup link ("Send setup link" on the Users page).
+

@@ -1,7 +1,10 @@
+import { randomBytes } from "node:crypto";
 import { revokeUserAiKeys } from "@/lib/ai/tokens";
 import { type AdminActor, writeAdminAuditEvent } from "@/lib/audit";
 import { normaliseEmail, parseDisplayName } from "@/lib/auth/service";
 import { hashPassword, validateNewPassword } from "@/lib/auth/password";
+import { createSetupLink, emailSetupLink, type SetupLink } from "@/lib/auth/setup-links";
+import { twoStepRequired } from "@/lib/auth/sessions";
 import { resetTwoStep } from "@/lib/auth/two-step";
 import { sendSecurityAlert } from "@/lib/email/mailer";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
@@ -18,6 +21,8 @@ export type UserSummary = {
   createdAt: string;
   organisationCount: number;
   twoStepEnabled: boolean;
+  /** When an unused setup link for this login runs out (null: none waiting). */
+  setupLinkExpiresAt: string | null;
 };
 
 type UserRow = {
@@ -30,6 +35,7 @@ type UserRow = {
   created_at: string;
   organisation_count: string;
   two_step_enabled: boolean;
+  setup_link_expires_at: string | null;
 };
 
 function toSummary(row: UserRow): UserSummary {
@@ -43,13 +49,15 @@ function toSummary(row: UserRow): UserSummary {
     createdAt: row.created_at,
     organisationCount: Number(row.organisation_count),
     twoStepEnabled: row.two_step_enabled,
+    setupLinkExpiresAt: row.setup_link_expires_at ? new Date(row.setup_link_expires_at).toISOString() : null,
   };
 }
 
 const USER_SELECT = `
   select u.id, u.email, u.display_name, u.is_server_admin, u.is_active,
          u.last_login_at, u.created_at, u.totp_enabled_at is not null as two_step_enabled,
-         (select count(*) from organisation_members m where m.user_id = u.id)::text as organisation_count
+         (select count(*) from organisation_members m where m.user_id = u.id)::text as organisation_count,
+         (select max(l.expires_at) from user_setup_links l where l.user_id = u.id and l.used_at is null and l.expires_at > now()) as setup_link_expires_at
     from users u`;
 
 export async function listUsers(): Promise<UserSummary[]> {
@@ -64,16 +72,28 @@ function assertUuid(id: string): string {
   return id;
 }
 
+/**
+ * Adds a login. With two-step sign-in on (the server has its secret key), no
+ * password is chosen here: the person gets a setup link (emailed when the
+ * server can send email; the admin can always copy it) and chooses their own
+ * password through it (#208 item 2). Without the secret key, the admin sets a
+ * temporary password as before.
+ */
 export async function createUser(
   actor: AdminActor,
-  input: { email: unknown; displayName: unknown; password: unknown; isServerAdmin?: unknown },
-): Promise<UserSummary> {
+  input: { email: unknown; displayName: unknown; password?: unknown; isServerAdmin?: unknown },
+): Promise<{ user: UserSummary; setupLink: SetupLink | null }> {
   const email = normaliseEmail(input.email);
   const displayName = parseDisplayName(input.displayName);
-  const passwordHash = await hashPassword(validateNewPassword(input.password));
+  const withLink = twoStepRequired();
+  if (withLink && input.password != null && input.password !== "") {
+    throw new ValidationError("People choose their own password through their setup link, so don't set one here.");
+  }
+  // Without a password chosen, the login has one nobody knows until the link is used.
+  const passwordHash = await hashPassword(withLink ? randomBytes(32).toString("base64url") : validateNewPassword(input.password));
   const isServerAdmin = optionalBoolean(input.isServerAdmin, "isServerAdmin") ?? false;
 
-  return withCoreTransaction(async (client) => {
+  const created = await withCoreTransaction(async (client) => {
     const inserted = await client.query<{ id: string }>(
       `insert into users (email, display_name, password_hash, is_server_admin)
        values ($1, $2, $3, $4)
@@ -91,9 +111,16 @@ export async function createUser(
       entityId: id,
       details: { email, isServerAdmin },
     });
+    const link = withLink ? await createSetupLink(client, id, actor) : null;
     const row = await client.query<UserRow>(`${USER_SELECT} where u.id = $1`, [id]);
-    return toSummary(row.rows[0]);
+    return { user: toSummary(row.rows[0]), link };
   });
+  if (!created.link) return { user: created.user, setupLink: null };
+  const emailed = await emailSetupLink(created.user, created.link, actor.email);
+  return {
+    user: created.user,
+    setupLink: { url: created.link.url, expiresAt: created.link.expiresAt, emailed, localOnly: created.link.localOnly },
+  };
 }
 
 /**
@@ -180,20 +207,23 @@ export async function updateUser(
 
 /**
  * Resets someone's two-step sign-in (a server admin, for a lost phone). They
- * are signed out everywhere and set it up again at their next sign-in.
+ * are signed out everywhere and get a setup link to set it up again (#208).
  */
-export async function resetUserTwoStep(actor: AdminActor, userIdInput: string): Promise<UserSummary> {
+export async function resetUserTwoStep(actor: AdminActor, userIdInput: string): Promise<{ user: UserSummary; setupLink: SetupLink | null }> {
   const userId = assertUuid(userIdInput);
-  const summary = await withCoreTransaction(async (client) => {
+  const { summary, link } = await withCoreTransaction(async (client) => {
     const found = await client.query<UserRow>(`${USER_SELECT} where u.id = $1 for update of u`, [userId]);
     if (!found.rows[0]) throw new NotFoundError("User not found.");
     await resetTwoStep(client, userId, { userId: actor.id, email: actor.email }, "admin");
+    const setup = twoStepRequired() && found.rows[0].is_active ? await createSetupLink(client, userId, actor) : null;
     const after = await client.query<UserRow>(`${USER_SELECT} where u.id = $1`, [userId]);
-    return toSummary(after.rows[0]);
+    return { summary: toSummary(after.rows[0]), link: setup };
   });
   await sendSecurityAlert(summary.email, "two-step sign-in was reset", [
     `A server admin (${actor.email}) reset two-step sign-in for your Tohyee account and signed out its sessions.`,
-    "You'll set up your authenticator app again the next time you sign in.",
+    link ? "You'll set up your authenticator app again with a setup link from your server admin." : "You'll set up your authenticator app again the next time you sign in.",
   ]);
-  return summary;
+  if (!link) return { user: summary, setupLink: null };
+  const emailed = await emailSetupLink(summary, link, actor.email);
+  return { user: summary, setupLink: { url: link.url, expiresAt: link.expiresAt, emailed, localOnly: link.localOnly } };
 }

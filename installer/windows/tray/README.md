@@ -41,7 +41,11 @@ Tohyee (the books) are at the bottom.
   access, the organisations and email (click one to go to its page; grey bars
   until they load; two to a row in a narrow window); and the latest news as a
   short list, the conference with it.
-- **Organisations, Users, Email**: as before.
+- **Organisations, Email**: as before.
+- **Users**: with two-step sign-in on, adding someone (or resetting their
+  two-step sign-in) gives a one-time setup link to send them, emailed too
+  when the server can send email; they choose their own password with it
+  (decision 484). "Send setup link" makes a new one.
 - **Stats**: CPU, memory, requests, people using Tohyee, disk space and
   database sizes, with graphs of the last 1, 6 or 24 hours (decision 332).
 - **Updates**: what the server's daily check found, the last update and any

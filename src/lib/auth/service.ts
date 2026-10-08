@@ -9,8 +9,10 @@ import {
 } from "@/lib/auth/password";
 import { createSession, type SessionMeta, type SessionStage, type SessionUser, twoStepRequired } from "@/lib/auth/sessions";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
+import { SETUP_NEEDED } from "@/lib/auth/setup-links";
 import {
   ConflictError,
+  ForbiddenError,
   TooManyRequestsError,
   UnauthorizedError,
   UnavailableError,
@@ -206,9 +208,14 @@ export async function signIn(
   }
 
   // With two-step sign-in, the password only opens a pending session; the
-  // second step (or setting it up) finishes signing in.
+  // second step finishes signing in. Setting two-step up needs a setup link
+  // (#208 item 2), so a password alone can't register an authenticator app.
   const required = twoStepRequired();
-  const stage: SessionStage = !required ? "full" : user.two_step_enabled ? "verify" : "enrol";
+  if (required && !user.two_step_enabled) {
+    await coreQuery("update users set failed_login_count = 0 where id = $1", [user.id]);
+    throw new ForbiddenError(SETUP_NEEDED);
+  }
+  const stage: SessionStage = !required ? "full" : "verify";
   return withCoreTransaction(async (client) => {
     await client.query(
       `update users

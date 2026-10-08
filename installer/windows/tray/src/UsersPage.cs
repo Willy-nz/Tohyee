@@ -6,15 +6,17 @@ using System.Windows.Forms;
 namespace Tohyee.Tray
 {
     /// <summary>
-    /// Users: logins for this server. Add someone, set a new password, make them
-    /// a server admin or not, reset their two-step sign-in (lost phone), or turn
-    /// their login off.
+    /// Users: logins for this server. Add someone (they get a setup link, #208),
+    /// set a new password, make them a server admin or not, reset their two-step
+    /// sign-in (lost phone) or send a new setup link, or turn their login off.
     /// </summary>
     internal sealed class UsersPage : UserControl
     {
         private readonly TohyeeApi _api;
         private readonly ListView _list = Ui.List("Name", "Email", "Server admin", "Two-step", "Login", "Organisations", "Last sign-in");
         private readonly Label _status = Ui.Status();
+        /// <summary>The server has two-step sign-in on, so new logins get a setup link, not a password (#208).</summary>
+        private bool _setupLinks = true;
 
         public UsersPage(TohyeeApi api)
         {
@@ -28,6 +30,7 @@ namespace Tohyee.Tray
             buttons.Controls.Add(Ui.Btn("Set password…", async (s, e) => await SetPassword()));
             buttons.Controls.Add(Ui.Btn("Server admin on/off", async (s, e) => await ToggleAdmin()));
             buttons.Controls.Add(Ui.Btn("Reset two-step", async (s, e) => await ResetTwoStep()));
+            buttons.Controls.Add(Ui.Btn("Send setup link", async (s, e) => await SendSetupLink()));
             buttons.Controls.Add(Ui.Btn("Login on/off", async (s, e) => await ToggleActive()));
             buttons.Controls.Add(Ui.Btn("Refresh", async (s, e) => await Reload()));
             card.Body.Controls.Add(buttons);
@@ -43,8 +46,10 @@ namespace Tohyee.Tray
         {
             await Ui.Busy(this, _status, async () =>
             {
-                var users = J.List(await _api.Get("/api/admin/users"), "users");
+                var answer = await _api.Get("/api/admin/users");
+                var users = J.List(answer, "users");
                 if (IsDisposed) return;
+                _setupLinks = !answer.ContainsKey("twoStepRequired") || J.Bool(answer, "twoStepRequired");
                 var selected = Ui.SelectedKey(_list, tag => J.Str((Dictionary<string, object>)tag, "id"));
                 _list.BeginUpdate();
                 _list.Items.Clear();
@@ -55,7 +60,7 @@ namespace Tohyee.Tray
                         J.Str(user, "displayName"),
                         J.Str(user, "email"),
                         J.Bool(user, "isServerAdmin") ? "Yes" : "",
-                        J.Bool(user, "twoStepEnabled") ? "On" : "Not set up",
+                        J.Bool(user, "twoStepEnabled") ? "On" : J.Str(user, "setupLinkExpiresAt") != null ? "Setup link sent" : "Not set up",
                         J.Bool(user, "isActive") ? "On" : "Off",
                         J.Int(user, "organisationCount").ToString(),
                         J.When(J.Str(user, "lastLoginAt")),
@@ -99,23 +104,57 @@ namespace Tohyee.Tray
 
         private async Task Create()
         {
-            using (var dialog = new NewUserDialog())
+            using (var dialog = new NewUserDialog(_setupLinks))
             {
                 if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
+                Dictionary<string, object> created = null;
                 if (await Ui.Busy(this, _status, async () =>
                 {
-                    await _api.Post("/api/admin/users", new Dictionary<string, object>
+                    var body = new Dictionary<string, object>
                     {
                         { "displayName", dialog.DisplayName },
                         { "email", dialog.Email },
-                        { "password", dialog.Password },
                         { "isServerAdmin", dialog.IsServerAdmin },
-                    });
-                    Ui.Show(_status, "Added " + dialog.Email + ". They set up two-step sign-in the first time they sign in.", false);
+                    };
+                    if (!_setupLinks) body["password"] = dialog.Password;
+                    created = await _api.Post("/api/admin/users", body);
+                    Ui.Show(_status, "Added " + dialog.Email + ".", false);
                 }))
                 {
+                    ShowSetupLink(dialog.Email, J.Obj(created, "setupLink"));
                     await Reload();
                 }
+            }
+        }
+
+        /// <summary>The setup link to send (#208): the person chooses their password and sets up two-step with it.</summary>
+        private void ShowSetupLink(string email, Dictionary<string, object> link)
+        {
+            if (link == null) return;
+            using (var dialog = new SetupLinkDialog(email, J.Str(link, "url"), J.When(J.Str(link, "expiresAt")), J.Bool(link, "emailed"), J.Bool(link, "localOnly")))
+            {
+                dialog.ShowDialog(FindForm());
+            }
+        }
+
+        private async Task SendSetupLink()
+        {
+            var user = Selected();
+            if (user == null) return;
+            if (J.Bool(user, "twoStepEnabled"))
+            {
+                Ui.Show(_status, J.Str(user, "email") + " has already set up two-step sign-in. If they've lost their phone, use Reset two-step.", true);
+                return;
+            }
+            Dictionary<string, object> answer = null;
+            if (await Ui.Busy(this, _status, async () =>
+            {
+                answer = await _api.Post(UserPath(user) + "/setup-link", new Dictionary<string, object>());
+                Ui.Show(_status, "New setup link for " + J.Str(user, "email") + "; any earlier one stopped working.", false);
+            }))
+            {
+                ShowSetupLink(J.Str(user, "email"), J.Obj(answer, "setupLink"));
+                await Reload();
             }
         }
 
@@ -152,13 +191,15 @@ namespace Tohyee.Tray
         {
             var user = Selected();
             if (user == null) return;
-            if (!Ui.Confirm(FindForm(), "Reset two-step sign-in for " + J.Str(user, "email") + "? Do this if they've lost their phone. They set it up again the next time they sign in.")) return;
+            if (!Ui.Confirm(FindForm(), "Reset two-step sign-in for " + J.Str(user, "email") + "? Do this if they've lost their phone, and only if you're sure it's really them asking. They're signed out everywhere and get a setup link to set it up again.")) return;
+            Dictionary<string, object> answer = null;
             if (await Ui.Busy(this, _status, async () =>
             {
-                await _api.Delete(UserPath(user) + "/two-step");
+                answer = await _api.Delete(UserPath(user) + "/two-step");
                 Ui.Show(_status, "Two-step sign-in reset for " + J.Str(user, "email") + ".", false);
             }))
             {
+                ShowSetupLink(J.Str(user, "email"), answer != null ? J.Obj(answer, "setupLink") : null);
                 await Reload();
             }
         }
@@ -177,7 +218,7 @@ namespace Tohyee.Tray
         public string Password { get { return _password.Text; } }
         public bool IsServerAdmin { get { return _admin.Checked; } }
 
-        public NewUserDialog()
+        public NewUserDialog(bool setupLinks)
         {
             Text = "New user";
             Font = Ui.Body;
@@ -191,10 +232,12 @@ namespace Tohyee.Tray
             var form = Ui.Form();
             Ui.Field(form, "Name", _name);
             Ui.Field(form, "Email", _email);
-            Ui.Field(form, "Password", _password);
+            if (!setupLinks) Ui.Field(form, "Password", _password);
             page.Controls.Add(form);
             page.Controls.Add(_admin);
-            page.Controls.Add(Ui.Note("Give them the password privately. They can change it after signing in."));
+            page.Controls.Add(Ui.Note(setupLinks
+                ? "They get a setup link (emailed if this server can send email; you can copy it too). With it they choose their own password and set up two-step sign-in, from anywhere."
+                : "Give them the password privately. They can change it after signing in."));
             page.Controls.Add(_error);
             var ok = Ui.Primary("Add user", null);
             var cancel = Ui.Btn("Cancel", null);
@@ -202,7 +245,7 @@ namespace Tohyee.Tray
             ok.Click += (s, e) =>
             {
                 if (DisplayName.Length == 0 || !Email.Contains("@")) Ui.Show(_error, "Enter their name and email.", true);
-                else if (Password.Length < 10) Ui.Show(_error, "Passwords need at least 10 characters.", true);
+                else if (!setupLinks && Password.Length < 10) Ui.Show(_error, "Passwords need at least 10 characters.", true);
                 else DialogResult = DialogResult.OK;
             };
             var buttons = Ui.Row();
@@ -212,6 +255,55 @@ namespace Tohyee.Tray
             Controls.Add(page);
             AcceptButton = ok;
             CancelButton = cancel;
+            Theme.Apply(this);
+        }
+    }
+
+    /// <summary>A setup link to copy and send (#208).</summary>
+    internal sealed class SetupLinkDialog : Form
+    {
+        public SetupLinkDialog(string email, string url, string until, bool emailed, bool localOnly)
+        {
+            Text = "Setup link for " + email;
+            Font = Ui.Body;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            StartPosition = FormStartPosition.CenterParent;
+            MinimizeBox = false;
+            MaximizeBox = false;
+            AutoSize = true;
+            AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Padding = new Padding(20), WrapContents = false };
+            page.Controls.Add(Ui.Note((emailed ? "It was emailed to " + email + ". " : "This server can't send email, so send it to them yourself (a text or message). ")
+                + "It works once, until " + until + ". With it they choose their password and set up two-step sign-in."));
+            var box = Ui.Input(new TextBox { Text = url, ReadOnly = true, Width = Theme.S(560) });
+            page.Controls.Add(box);
+            if (localOnly) page.Controls.Add(new Label { Text = "Remote access is off, so this link only works on the same network as this server.", ForeColor = Theme.Warning, AutoSize = true, MaximumSize = new System.Drawing.Size(Theme.S(560), 0), Margin = new Padding(0, 8, 0, 0) });
+            var copied = Ui.Status();
+            var copy = Ui.Primary("Copy link", (s, e) =>
+            {
+                try
+                {
+                    Clipboard.SetText(url);
+                    Ui.Show(copied, "Copied.", false);
+                }
+                catch (Exception)
+                {
+                    box.SelectAll();
+                    box.Focus();
+                    Ui.Show(copied, "Couldn't copy; select the link and press Ctrl+C.", true);
+                }
+            });
+            var close = Ui.Btn("Close", null);
+            close.DialogResult = DialogResult.OK;
+            var buttons = Ui.Row();
+            buttons.Margin = new Padding(0, 12, 0, 0);
+            buttons.Controls.Add(copy);
+            buttons.Controls.Add(close);
+            page.Controls.Add(buttons);
+            page.Controls.Add(copied);
+            Controls.Add(page);
+            AcceptButton = close;
+            CancelButton = close;
             Theme.Apply(this);
         }
     }

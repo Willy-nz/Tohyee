@@ -112,10 +112,10 @@ describeWithDatabase("remote access hardening (#208)", () => {
     expect((await body(local)).stage).toBe("full");
     expect((await sessionRoute.GET(apiRequest("/api/auth/session", { cookie }), noContext)).status).toBe(200);
 
-    // With the key back, remote sign-in works again (and goes on to two-step).
+    // With the key back, remote sign-in gets past this check again; this login then needs its setup link (item 2).
     process.env.TOHYEE_SECRET_KEY = KEY;
     const remote = await login("no-key@example.com", { "cf-ray": "8c1f-AKL", "x-forwarded-for": "203.0.113.10" });
-    expect(remote.status).toBe(200);
-    expect((await body(remote)).stage).toBe("enrol");
+    expect(remote.status).toBe(403);
+    expect((await body(remote)).error).toContain("hasn't been set up yet");
   });
 });
