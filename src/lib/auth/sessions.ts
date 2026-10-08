@@ -224,9 +224,29 @@ export function clearSessionCookieHeader(request: Request): string {
 }
 
 export function sessionMetaFrom(request: Request): SessionMeta {
-  const forwardedFor = request.headers.get("x-forwarded-for");
   return {
     userAgent: request.headers.get("user-agent"),
-    ipAddress: forwardedFor ? forwardedFor.split(",")[0].trim() : request.headers.get("x-real-ip"),
+    ipAddress: clientAddress(request.headers),
   };
+}
+
+const isLoopback = (address: string) => address === "::1" || address.startsWith("127.") || address.startsWith("::ffff:127.");
+
+/**
+ * The address a request came from (#208 item 3). Proxies add the address they
+ * saw to the END of X-Forwarded-For (Cloudflare appends the visitor's address
+ * to whatever the visitor sent; Next.js fills it in from the connection when
+ * it's missing), so the last entry that isn't this computer is the one a proxy
+ * wrote. The first entry is whatever the visitor typed, and taking it let the
+ * per-address sign-in limit be dodged by changing it on every try.
+ */
+export function clientAddress(headers: Headers): string | null {
+  const forwarded = (headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  for (let index = forwarded.length - 1; index >= 0; index -= 1) {
+    if (!isLoopback(forwarded[index])) return forwarded[index];
+  }
+  return forwarded.at(-1) ?? headers.get("x-real-ip");
 }

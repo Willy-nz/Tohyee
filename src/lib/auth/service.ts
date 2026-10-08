@@ -144,6 +144,33 @@ function lockedError(until: number): TooManyRequestsError {
   return new TooManyRequestsError(`Too many failed sign-in attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`);
 }
 
+/**
+ * Counts a password try before the password is checked, in one statement, so
+ * passwords sent at once can't get past the limit (#130). Throws while the
+ * account is locked. Signing in and the emailed two-step reset (#208) share it.
+ */
+export async function claimPasswordTry(userId: string): Promise<void> {
+  const claimed = await coreQuery(
+    `update users set failed_login_count = failed_login_count + 1
+      where id = $1 and (locked_until is null or locked_until <= $3) and failed_login_count < $2`,
+    [userId, MAX_FAILED_ATTEMPTS, new Date()],
+  );
+  if (claimed.rowCount !== 1) {
+    const now = await coreQuery<{ locked_until: string | null }>("select locked_until from users where id = $1", [userId]);
+    const until = now.rows[0]?.locked_until ? new Date(now.rows[0].locked_until).getTime() : 0;
+    throw lockedError(until > Date.now() ? until : Date.now() + LOCKOUT_MINUTES * 60_000);
+  }
+}
+
+/** After a wrong password: with the limit reached, locks the account (the count starts again after the lock). */
+export async function lockIfTooManyFailures(userId: string): Promise<void> {
+  await coreQuery(
+    `update users set failed_login_count = 0, locked_until = $4::timestamptz + ($3::int * interval '1 minute')
+      where id = $1 and failed_login_count >= $2`,
+    [userId, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES, new Date()],
+  );
+}
+
 export async function signIn(
   input: { email: unknown; password: unknown },
   meta: SessionMeta,
@@ -170,28 +197,11 @@ export async function signIn(
     throw new UnauthorizedError(SIGN_IN_FAILED);
   }
 
-  // Counted before the password is checked, in one statement, so passwords sent at once can't get past the limit (#130).
-  const claimed = await coreQuery(
-    `update users set failed_login_count = failed_login_count + 1
-      where id = $1 and (locked_until is null or locked_until <= $3) and failed_login_count < $2`,
-    [user.id, MAX_FAILED_ATTEMPTS, new Date()],
-  );
-  if (claimed.rowCount !== 1) {
-    const now = await coreQuery<{ locked_until: string | null }>("select locked_until from users where id = $1", [user.id]);
-    const until = now.rows[0]?.locked_until ? new Date(now.rows[0].locked_until).getTime() : 0;
-    throw lockedError(until > Date.now() ? until : Date.now() + LOCKOUT_MINUTES * 60_000);
-  }
+  await claimPasswordTry(user.id);
 
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid || !user.is_active) {
-    if (!valid) {
-      // The limit reached: lock (the count starts again after the lock).
-      await coreQuery(
-        `update users set failed_login_count = 0, locked_until = $4::timestamptz + ($3::int * interval '1 minute')
-          where id = $1 and failed_login_count >= $2`,
-        [user.id, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES, new Date()],
-      );
-    }
+    if (!valid) await lockIfTooManyFailures(user.id);
     throw new UnauthorizedError(SIGN_IN_FAILED);
   }
 

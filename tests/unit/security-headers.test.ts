@@ -14,6 +14,8 @@ describe("security headers", () => {
     expect(headers.get("x-frame-options")).toBe("SAMEORIGIN");
     expect(headers.get("referrer-policy")).toBe("same-origin");
     expect(headers.get("x-content-type-options")).toBe("nosniff");
+    // #208: HTTPS from then on for an address reached over HTTPS (browsers ignore it on plain HTTP).
+    expect(headers.get("strict-transport-security")).toBe("max-age=31536000");
   });
 
   it.each(["/", "/sign-in", "/sales/invoices", "/crm/companies/42", "/apis", "/api"])("page %s may only be framed by Tohyee", async (pathname) => {

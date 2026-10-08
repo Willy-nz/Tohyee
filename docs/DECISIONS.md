@@ -3704,3 +3704,30 @@ testing) and #154's code signing (later, Jess).
      GoCardless webhooks (the check polls instead, as the other
      providers), reading GoCardless's events for the reason a payment
      failed, and foreign-currency invoices.
+
+### Remote access hardening (decision 483)
+
+483. **Remote access hardening, part 1** (#208 items 3-6, 9 Oct 2026, from
+     the safety review Jess asked for).
+     - **Sign-in address:** the per-address sign-in limit and the address
+       saved with a session use the last X-Forwarded-For entry that isn't
+       this computer (the one the nearest proxy wrote), not the first,
+       which a visitor could change on every try.
+     - **Emailed two-step reset:** wrong passwords there now count towards
+       the account's lockout (shared `claimPasswordTry`), and it and setup
+       have the per-address limit too.
+     - **Server settings address:** it refuses requests carrying a proxy's
+       headers or addressed to anything but 127.0.0.1 or localhost, so
+       pointing a tunnel route at it doesn't reach server settings.
+     - **Without `TOHYEE_SECRET_KEY`** (no two-step sign-in), sign-ins and
+       sessions that came through remote access (Cloudflare's headers, or a
+       Tailscale Funnel `*.ts.net` address) are refused, and the server
+       app's Home flags remote access left on.
+     - **HSTS:** `Strict-Transport-Security: max-age=31536000` on every
+       response, without `includeSubDomains`.
+
+     Not checked against a real tunnel: that Cloudflare's tunnel and
+     Tailscale Funnel add the visitor's address at the end of
+     X-Forwarded-For. If Funnel doesn't, the per-address limit behind
+     Funnel is as before (the per-account lockout still applies).
+

@@ -230,9 +230,9 @@ export function key(label = "k"): string {
  */
 export function apiRequest(
   path: string,
-  options: { method?: string; cookie?: string; body?: unknown; origin?: string | null; local?: boolean } = {},
+  options: { method?: string; cookie?: string; body?: unknown; origin?: string | null; local?: boolean; headers?: Record<string, string> } = {},
 ): Request {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...(options.headers ?? {}) };
   if (options.cookie) headers.cookie = options.cookie;
   const local = options.local ?? (path.startsWith("/api/admin") || path.startsWith("/api/updates"));
   if (local) headers[LOCAL_ADMIN_HEADER] = localAdminSecret();

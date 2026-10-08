@@ -39,6 +39,11 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Referrer-Policy", value: "same-origin" },
           { key: "X-Content-Type-Options", value: "nosniff" },
+          // #208 item 6: browsers that reached Tohyee over HTTPS (remote access) use HTTPS for that
+          // address from then on. Browsers ignore this header on plain HTTP (RFC 6797 section 8.1),
+          // so the local network address isn't affected. No includeSubDomains: other names under
+          // your own domain aren't Tohyee's to decide.
+          { key: "Strict-Transport-Security", value: "max-age=31536000" },
         ],
       },
       {

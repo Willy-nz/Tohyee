@@ -245,7 +245,9 @@ re-runs the whole sequence.
   runs). A lockout message does reveal that the email has an account.
 - State-changing requests from another site are rejected (`Origin` /
   `Sec-Fetch-Site` check) on top of `SameSite` cookies.
-- Every API route needs a signed-in user and checks their role, except two: `/api/mcp` (below), and
+- Every API route needs a signed-in user and checks their role, except the sign-in routes themselves
+  (`/api/auth/*`: setup, login, logout, two-step and the emailed reset), `/api/health`,
+  `/api/mcp` (below), and
   the sales platform webhook address
   (`/api/sales-platforms/webhooks/<organisation>/<random key>`), which a
   store calls. It authenticates only by the platform's signature (Shopify:
@@ -1501,6 +1503,21 @@ installer and the Docker image include a pinned, checksum-verified
 `cloudflared`; elsewhere set `TOHYEE_CLOUDFLARED_PATH` or put it on the
 `PATH`. Emailed links use the saved public address rather than the request's
 Host header.
+
+Hardening (#208, decision 483):
+- **The visitor's address** is the last X-Forwarded-For entry that isn't this
+  computer (the one Cloudflare appends), not the first, which the visitor
+  writes (`clientAddress`).
+- **The server settings address** (127.0.0.1, `TOHYEE_ADMIN_PORT`) refuses
+  anything carrying a proxy's headers (`cf-ray`, `x-forwarded-for`, and so on)
+  or addressed to any name but 127.0.0.1 or localhost. A tunnel route pointed
+  at that port gets a 403.
+- **Without the secret key** (so without two-step sign-in), sign-ins and
+  sessions arriving through remote access are refused. Remote means Cloudflare's
+  headers, or a `*.ts.net` address for Tailscale Funnel, which keeps running
+  in Tailscale's own service when Tohyee's connector stops.
+- **HSTS** (`max-age=31536000`, no subdomains) on every response; browsers
+  ignore it over plain HTTP.
 
 ## Background work
 

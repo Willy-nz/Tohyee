@@ -213,6 +213,11 @@ namespace Tohyee.Tray
                 var method = J.Str(remote, "method") ?? "cloudflare";
                 var url = J.Str(remote, "publicUrl");
                 var connected = method == "tailscale" ? J.Bool(remote, "enabled") : J.Str(J.Obj(remote, "tunnel"), "status") == "connected";
+                if (J.Bool(remote, "enabled") && remote != null && remote.ContainsKey("twoStepRequired") && !J.Bool(remote, "twoStepRequired"))
+                {
+                    // #208: without the secret key there's no two-step sign-in, so the server refuses everything that comes through remote access.
+                    problems.Add(new Attention("Remote access is on, but two-step sign-in is off.", "This server has no secret key (TOHYEE_SECRET_KEY), so sign-ins through remote access are refused. Turn remote access off, or set the key and restart Tohyee.", "Open Remote access", "phone", Theme.Danger));
+                }
                 if (connected && url != null)
                 {
                     _phone.Show("On", Host(url), Theme.Success);

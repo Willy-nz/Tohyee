@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import QRCode from "qrcode";
 import { writeAdminAuditEvent } from "@/lib/audit";
 import { hashPassword, verifyAgainstDummy, verifyPassword } from "@/lib/auth/password";
+import { claimPasswordTry, lockIfTooManyFailures } from "@/lib/auth/service";
 import { createSession, type SessionMeta, type SessionState, type SessionUser, twoStepRequired } from "@/lib/auth/sessions";
 import {
   generateBackupCodes,
@@ -449,7 +450,13 @@ export async function completeTwoStepReset(input: { token: unknown; password: un
     await verifyAgainstDummy(password);
     throw new UnauthorizedError("This reset link has expired or was already used. Sign in and ask for a new one.");
   }
-  if (!(await verifyPassword(password, row.password_hash))) throw new UnauthorizedError("That password isn't right.");
+  // Wrong passwords here count towards the account's lockout, as at sign-in (#208).
+  await claimPasswordTry(row.user_id);
+  if (!(await verifyPassword(password, row.password_hash))) {
+    await lockIfTooManyFailures(row.user_id);
+    throw new UnauthorizedError("That password isn't right.");
+  }
+  await coreQuery("update users set failed_login_count = 0 where id = $1", [row.user_id]);
   const signed = await withCoreTransaction(async (client) => {
     const claimed = await client.query("update two_step_reset_tokens set used_at = now() where token_hash = $1 and used_at is null", [
       hashResetToken(token),
