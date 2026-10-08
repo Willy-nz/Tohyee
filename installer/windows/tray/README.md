@@ -24,12 +24,23 @@ sign-in. There's no browser involved.
 ## The window
 
 A dark window in the style of a media server's app (`src/Theme.cs`): a
-sidebar with the logo and the pages, and each page a column of cards.
+sidebar with the logo and the pages in groups (Home; People: Organisations,
+Users; Keep safe: Backups, Updates; Connect: Remote access, Email,
+Analytics; Server: Stats), a badge on a page when something there needs
+attention, and each page a column of cards. Signed in as, Sign out and Open
+Tohyee (the books) are at the bottom.
 
-- **Home** (it opens here): whether the server is running (version, and how
-  long it's been up when Windows lets the app see the service's process),
-  quick looks at remote access, the last backup and the organisations (click
-  one to go to its page), the latest news and the conference card.
+- **Home** (it opens here; redesigned from the mock-up Jess approved on 9 Oct
+  2026): the title with the server's state beside it (running, version, how
+  long it's been up when Windows lets the app see the service's process) and
+  Open Tohyee; a **Needs attention** card, only when something does (the
+  server isn't running, no backup key or no saved copy of it, a failed backup,
+  nightly backups off, an update out or an organisation not upgraded, an
+  organisation that couldn't be set up, remote access on but not connected),
+  each with a button to its page; quick looks at the last backup, remote
+  access, the organisations and email (click one to go to its page; grey bars
+  until they load; two to a row in a narrow window); and the latest news as a
+  short list, the conference with it.
 - **Organisations, Users, Email**: as before.
 - **Stats**: CPU, memory, requests, people using Tohyee, disk space and
   database sizes, with graphs of the last 1, 6 or 24 hours (decision 332).
@@ -65,7 +76,7 @@ Sizes are in pixels at 100% and multiplied by the screen's scale
 `https://willy-nz.github.io/Tohyee/news.json` (falling back to the raw file on
 GitHub). Edit that file on main to post news without a release: items have a
 `date` (YYYY-MM-DD), `title`, `body`, and optionally a `link` (https only) and
-`"kind": "conference"` for the conference card. The app fetches at most every
+`"kind": "conference"` for the conference line. The app fetches at most every
 four hours (GitHub allows 60 unauthenticated requests an hour), caches in
 `%LocalAppData%\Tohyee\news-cache.json`, and says "Couldn't load news" when
 it's offline with nothing cached.
