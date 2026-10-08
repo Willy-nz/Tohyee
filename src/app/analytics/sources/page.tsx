@@ -10,7 +10,7 @@ export default function AnalyticsPage() {
     <Page>
       <PageHeader
         title="Data sources"
-        description="Files from this organisation's folder on the server, loaded every night after 4am, ready for reports and dashboards."
+        description="Connect data once, check its fields and reuse it across your reports."
       />
       <Suspense fallback={null}>
         <RequireOrganisation>{(organisationId) => <DataSourcesPage key={organisationId} organisationId={organisationId} />}</RequireOrganisation>

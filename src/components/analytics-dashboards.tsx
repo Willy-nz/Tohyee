@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AnalyticsNavigation } from "@/components/analytics/studio";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
@@ -146,6 +147,10 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
   const list = useApiData<{ dashboards: Dashboard[] }>("/api/analytics/dashboards", { organisationId });
   // Report viewers see only shared dashboards, not the tables (decision 360).
   const tables = useApiData<{ tables: TableInfo[] }>(can("viewer") ? "/api/analytics/tables" : null, { organisationId });
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("recent");
+  const [view, setView] = useState<"grid" | "list">("grid");
+  const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +161,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
     try {
       const { dashboard } = await api<{ dashboard: Dashboard }>("/api/analytics/dashboards", {
         method: "POST",
-        body: { organisationId, name: name.trim() || "New dashboard", tiles: [] },
+        body: { organisationId, name: name.trim() || "Untitled report", tiles: [] },
       });
       router.push(`/analytics/dashboards/${dashboard.id}?edit=1`);
     } catch (caught) {
@@ -166,47 +171,34 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
   }
 
   const noTables = tables.data && tables.data.tables.length === 0;
+  const reports = (list.data?.dashboards ?? []).filter((report) => `${report.name} ${report.description ?? ""}`.toLowerCase().includes(search.toLowerCase().trim()))
+    .slice().sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : b.updatedAt.localeCompare(a.updatedAt));
   return (
     <>
+      <AnalyticsNavigation active="reports" />
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {noTables ? (
-        <Notice tone="info">
-          Nothing is loaded yet. Set up a file under <Link href="/analytics/sources">Data sources</Link> first; dashboards are built from loaded
-          tables.
-        </Notice>
-      ) : null}
-      <Card
-        title="Dashboards"
-        actions={
-          can("bookkeeper") ? (
-            <div className={ui.rowButtons}>
-              <input aria-label="New dashboard name" placeholder="New dashboard name" value={name} maxLength={100} onChange={(event) => setName(event.target.value)} />
-              <Button onClick={() => void create()} disabled={busy || Boolean(noTables)}>
-                {busy ? "Making…" : "New dashboard"}
-              </Button>
-            </div>
-          ) : null
-        }
-      >
-        {list.error ? <Notice tone="error">{list.error}</Notice> : null}
-        {!list.data ? (
-          <p className={ui.muted}>Loading…</p>
-        ) : list.data.dashboards.length === 0 ? (
-          <Empty>{can("viewer") ? "No dashboards yet." : "Nothing has been shared with you yet."}</Empty>
-        ) : (
-          <div className={styles.dashboardCards}>
-            {list.data.dashboards.map((dashboard) => (
-              <Link key={dashboard.id} href={`/analytics/dashboards/${dashboard.id}`} className={styles.dashboardCard}>
-                <strong>{dashboard.name}</strong>
-                {dashboard.description ? <span className={ui.muted}>{dashboard.description}</span> : null}
-                <span className={ui.muted}>
-                  {dashboard.tiles.length} {dashboard.tiles.length === 1 ? "tile" : "tiles"} · changed {formatDateTime(dashboard.updatedAt)}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </Card>
+      <div className={styles.libraryIntro}>
+        <div><span className={styles.eyebrow}>YOUR ANALYTICS WORKSPACE</span><h2>From data to decisions</h2><p>Build a report once. Explore it with filters, share it with clients and return to the numbers that matter.</p></div>
+        {can("bookkeeper") ? <Button onClick={() => setCreating(true)}>+ Create report</Button> : null}
+      </div>
+      {creating ? <Card title="Create a report" description="Start with a blank canvas, then add charts, scorecards and pivot tables from your connected data.">
+        <form onSubmit={(event) => { event.preventDefault(); void create(); }}>
+          <Field label="Report name"><input autoFocus value={name} maxLength={100} placeholder="e.g. Sales and gross profit" onChange={(event) => setName(event.target.value)} /></Field>
+          {noTables ? <Notice tone="info">Connect and load a <Link href="/analytics/sources">data source</Link> before adding charts.</Notice> : null}
+          <div className={ui.rowButtons}><Button type="submit" disabled={busy}>{busy ? "Creating…" : "Create report"}</Button><Button variant="secondary" disabled={busy} onClick={() => setCreating(false)}>Cancel</Button></div>
+        </form>
+      </Card> : null}
+      <div className={styles.libraryToolbar}>
+        <Field label="Search reports"><input type="search" placeholder="Find a report…" value={search} onChange={(event) => setSearch(event.target.value)} /></Field>
+        <Field label="Sort by"><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="recent">Last updated</option><option value="name">Name</option></select></Field>
+        <div className={ui.rowButtons}><Button variant="secondary" aria-pressed={view === "grid"} onClick={() => setView("grid")}>Grid</Button><Button variant="secondary" aria-pressed={view === "list"} onClick={() => setView("list")}>List</Button></div>
+      </div>
+      {list.error ? <Notice tone="error">{list.error}</Notice> : !list.data ? <p className={ui.muted}>Loading reports…</p> : !reports.length ? <Empty>{search ? "No reports match your search." : can("bookkeeper") ? "Your first report starts here. Choose Create report to build it." : "No reports are available to you yet."}</Empty> : view === "list" ? (
+        <div className={ui.tableWrap}><table className={ui.table}><thead><tr><th>Report</th><th>Charts and tables</th><th>Last updated</th></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td><Link href={`/analytics/dashboards/${report.id}`}>{report.name}</Link><div className={ui.muted}>{report.description}</div></td><td>{report.tiles.length}</td><td>{formatDateTime(report.updatedAt)}</td></tr>)}</tbody></table></div>
+      ) : <div className={styles.dashboardCards}>{reports.map((report) => <Link key={report.id} href={`/analytics/dashboards/${report.id}`} className={styles.dashboardCard}>
+        <div className={styles.reportThumbnail} aria-hidden="true">{report.tiles.length ? report.tiles.slice(0, 4).map((tile) => <span key={tile.id}>{VISUALS.find((visual) => visual.value === tile.visual)?.label ?? tile.visual}</span>) : <span>Blank report</span>}</div>
+        <strong>{report.name}</strong>{report.description ? <span className={ui.muted}>{report.description}</span> : null}<span className={styles.reportMeta}>{report.tiles.length} charts and tables · {formatDateTime(report.updatedAt)}</span>
+      </Link>)}</div>}
     </>
   );
 }
@@ -230,7 +222,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
   const loaded = useApiData<{ dashboard: Dashboard }>(`/api/analytics/dashboards/${dashboardId}`, { organisationId });
   const tables = useApiData<{ tables: TableInfo[] }>(can("bookkeeper") ? "/api/analytics/tables" : null, { organisationId });
   const [draft, setDraft] = useState<Dashboard | null>(null);
-  const [editing, setEditing] = useState(startEditing);
+  const [editing, setEditing] = useState(startEditing && can("bookkeeper"));
+  const [sharing, setSharing] = useState(false);
   const [editingTile, setEditingTile] = useState<Tile | "new" | null>(null);
   const [filters, setFilters] = useState<Filters | null>(null);
   const [busy, setBusy] = useState(false);
@@ -283,6 +276,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
   return (
     <>
+      <AnalyticsNavigation active="reports" />
       <div className={styles.header}>
         <div>
           {editing ? (
@@ -302,10 +296,11 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
           )}
         </div>
         <div className={ui.rowButtons}>
+          {canEdit ? <Button variant="secondary" aria-expanded={sharing} onClick={() => setSharing(!sharing)}>Share</Button> : null}
           {canEdit && editing ? (
             <>
-              <Button variant="secondary" onClick={() => setEditingTile("new")} disabled={busy}>
-                Add tile
+              <Button variant="secondary" onClick={() => setEditingTile("new")} disabled={busy || Boolean(editingTile) || !tables.data?.tables.length}>
+                + Add chart
               </Button>
               <Button
                 onClick={async () => {
@@ -314,11 +309,11 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
                     setEditingTile(null);
                   }
                 }}
-                disabled={busy}
+                disabled={busy || Boolean(editingTile)}
               >
-                {busy ? "Saving…" : "Done"}
+                {busy ? "Saving…" : "Save and view"}
               </Button>
-              <Button variant="danger" onClick={() => void remove()} disabled={busy}>
+              <Button variant="danger" onClick={() => void remove()} disabled={busy || Boolean(editingTile)}>
                 Delete
               </Button>
             </>
@@ -330,6 +325,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         </div>
       </div>
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {editing && tables.error ? <Notice tone="error">{tables.error}</Notice> : null}
+      {editing && tables.data?.tables.length === 0 ? <Notice tone="info">Connect and load a <Link href="/analytics/sources">data source</Link> to start adding charts.</Notice> : null}
 
       <FilterBar
         organisationId={organisationId}
@@ -342,10 +339,12 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         onSettings={(settings) => setDraft({ ...dashboard, settings })}
       />
 
-      {editing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
+      {sharing && canEdit ? <ShareCard organisationId={organisationId} dashboardId={dashboard.id} /> : null}
 
-      {editingTile ? (
+      {editingTile && canEdit ? (
         <TileEditor
+          key={editingTile === "new" ? "new" : editingTile.id}
+          saving={busy}
           organisationId={organisationId}
           tables={tables.data?.tables ?? []}
           tile={editingTile === "new" ? null : editingTile}
@@ -359,8 +358,8 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
         />
       ) : null}
 
-      {dashboard.tiles.length === 0 ? (
-        <Empty>{canEdit ? "No tiles yet. Edit, then Add tile." : "No tiles yet."}</Empty>
+      {!editingTile && (dashboard.tiles.length === 0 ? (
+        <Empty>{canEdit ? editing ? "Start your report with Add chart. Choose a source, a visual and the fields to show." : "This report is empty. Choose Edit to add a chart." : "No tiles yet."}</Empty>
       ) : (
         <div className={styles.grid}>
           {dashboard.tiles.map((tile, index) => (
@@ -402,7 +401,7 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
             </section>
           ))}
         </div>
-      )}
+      ))}
     </>
   );
 }
@@ -976,6 +975,7 @@ function blankQuery(table: TableInfo | undefined): TileQuery {
 
 /** Adding or changing a tile, with a live preview. */
 function TileEditor({
+  saving,
   organisationId,
   tables,
   tile,
@@ -983,6 +983,7 @@ function TileEditor({
   onSave,
   onCancel,
 }: {
+  saving: boolean;
   organisationId: string;
   tables: TableInfo[];
   tile: Tile | null;
@@ -990,6 +991,8 @@ function TileEditor({
   onSave: (tile: Tile) => void;
   onCancel: () => void;
 }) {
+  const { can } = useWorkspace();
+  const [fieldSearch, setFieldSearch] = useState("");
   const [title, setTitle] = useState(tile?.title ?? "");
   const [visual, setVisual] = useState<Visual>(tile?.visual ?? "column");
   const [width, setWidth] = useState<"half" | "full">(tile?.width ?? "half");
@@ -1036,8 +1039,35 @@ function TileEditor({
   };
 
   return (
-    <Card title={tile ? `Change ${tile.title}` : "Add a tile"} description="Choose a loaded table, what to group by and which values to show. The preview uses the dashboard's dates and slicers.">
-      <div className={ui.grid3}>
+    <section className={styles.editor} aria-label="Chart editor">
+      <aside className={styles.fieldsPanel}>
+        <h2>Data</h2><p className={ui.muted}>Fields in the selected source</p>
+        <Field label="Search fields"><input type="search" value={fieldSearch} onChange={(event) => setFieldSearch(event.target.value)} placeholder="Find a field…" /></Field>
+        <div className={styles.fieldList}>{columns.filter((column) => column.name.toLowerCase().includes(fieldSearch.toLowerCase().trim())).map((column) => <div className={styles.fieldItem} key={column.name}><span className={styles.fieldType}>{isNumber(column.type) ? "123" : isDate(column.type) ? "Date" : "ABC"}</span><span>{heading(column.name)}<small>{column.type}</small></span></div>)}</div>
+        {!columns.length ? <p>No fields loaded. <Link href="/analytics/sources">Add a data source</Link>.</p> : null}
+        {can("admin") ? <Link href="/analytics/shaping">Prepare or combine data →</Link> : null}
+      </aside>
+      <div className={styles.canvasPanel}>
+        <div className={styles.canvasHeading}><span className={styles.eyebrow}>REPORT CANVAS · LIVE PREVIEW</span><h2>{title || "Untitled chart"}</h2><p className={ui.muted}>Using the report’s date range and filters</p></div>
+        <div className={styles.visualPicker} aria-label="Chart type">{VISUALS.map((entry) => <button type="button" key={entry.value} aria-pressed={visual === entry.value} onClick={() => changeVisual(entry.value)}>{entry.label}</button>)}</div>
+      <h3 className={styles.subheading}>
+        Preview {preview?.result?.truncated ? <Badge tone="amber">first 5,000 rows</Badge> : null}
+      </h3>
+      <div className={styles.preview}>
+        {!preview ? (
+          <p className={ui.muted}>Working it out…</p>
+        ) : preview.error ? (
+          <Notice tone="error">{preview.error}</Notice>
+        ) : (
+          <TileResult tile={{ title: title || "Preview", visual }} result={preview.result!} />
+        )}
+      </div>
+
+      </div>
+      <aside className={styles.propertiesPanel} aria-label="Chart properties">
+        <h2>{tile ? "Chart properties" : "Add a chart"}</h2>
+        <fieldset disabled={saving} className={styles.propertyFields}>
+      <div className={styles.propertyGrid}>
         <Field label="Title">
           <input value={title} maxLength={100} placeholder="e.g. Sales by month" onChange={(event) => setTitle(event.target.value)} />
         </Field>
@@ -1056,7 +1086,7 @@ function TileEditor({
             <option value="full">Full</option>
           </select>
         </Field>
-        <Field label="Table">
+        <Field label="Data source">
           <select value={query.table} onChange={(event) => setQuery(blankQuery(tables.find((entry) => entry.name === event.target.value)))}>
             {tables.map((entry) => (
               <option key={entry.name} value={entry.name}>
@@ -1335,21 +1365,10 @@ function TileEditor({
         </Button>
       </div>
 
-      <h3 className={styles.subheading}>
-        Preview {preview?.result?.truncated ? <Badge tone="amber">first 5,000 rows</Badge> : null}
-      </h3>
-      <div className={styles.preview}>
-        {!preview ? (
-          <p className={ui.muted}>Working it out…</p>
-        ) : preview.error ? (
-          <Notice tone="error">{preview.error}</Notice>
-        ) : (
-          <TileResult tile={{ title: title || "Preview", visual }} result={preview.result!} />
-        )}
-      </div>
 
       <div className={ui.rowButtons}>
         <Button
+          disabled={saving || !query.table || !preview?.result || Boolean(preview.error)}
           onClick={() =>
             onSave({
               id: tile?.id ?? `t${Date.now().toString(36)}`,
@@ -1360,12 +1379,14 @@ function TileEditor({
             })
           }
         >
-          {tile ? "Save tile" : "Add tile"}
+          {saving ? "Saving…" : tile ? "Apply changes" : "Add to report"}
         </Button>
         <Button variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
       </div>
-    </Card>
+        </fieldset>
+      </aside>
+    </section>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AnalyticsNavigation, ConnectorPicker, type Connector } from "@/components/analytics/studio";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
@@ -63,6 +64,9 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
   const modules = useModules(organisationId);
   const { can } = useWorkspace();
   const overview = useApiData<Overview>("/api/analytics", { organisationId });
+  const [tab, setTab] = useState<"sources" | "connect" | "history">("sources");
+  const [connector, setConnector] = useState<Connector | null>(null);
+  const [search, setSearch] = useState("");
   const [setUp, setSetUp] = useState<{ file: string; source?: AnalyticsSource } | null>(null);
 
   if (!modules) return <p className={ui.muted}>Loading…</p>;
@@ -84,41 +88,56 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
   const data = overview.data;
   if (!data) return <p className={ui.muted}>Loading…</p>;
 
+  const visibleSources = data.sources.filter((source) => `${source.name} ${source.fileName} ${source.tableName}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const visibleFiles = data.files.filter((file) => connector === "excel" ? /\.xlsx$/i.test(file.name) : !/\.xlsx$/i.test(file.name));
   const usedFiles = new Set(data.sources.map((source) => source.fileName));
   return (
     <>
-      {!data.folder.chosen ? (
+      <AnalyticsNavigation active="sources" />
+      <div className={ui.rowButtons} style={{ marginBottom: 20, flexWrap: "wrap", gap: 8 }}>
+        <Button variant={tab === "sources" ? "primary" : "secondary"} aria-pressed={tab === "sources"} onClick={() => setTab("sources")}>Connected sources ({data.sources.length})</Button>
+        {data.canManage ? <Button variant={tab === "connect" ? "primary" : "secondary"} aria-pressed={tab === "connect"} onClick={() => setTab("connect")}>Add data source</Button> : null}
+        <Button variant={tab === "history" ? "primary" : "secondary"} aria-pressed={tab === "history"} onClick={() => setTab("history")}>Load history</Button>
+      </div>
+      {tab === "connect" && data.canManage ? <ConnectorPicker selected={connector} onSelect={(next) => { setConnector(next); setSetUp(null); }} /> : null}
+      {tab === "connect" && (connector === "csv" || connector === "excel" || connector === "email") && !data.folder.chosen ? (
         <Notice tone="warning">
           This organisation doesn&apos;t have an analytics folder yet. A server admin chooses it on the server computer, in the
           server settings under Analytics folders. Tohyee only reads files in that folder.
         </Notice>
-      ) : !data.folder.readable ? (
+      ) : tab === "connect" && connector && connector !== "books" && !data.folder.readable ? (
         <Notice tone="error">Tohyee can&apos;t open this organisation&apos;s analytics folder. A server admin needs to check it still exists.</Notice>
       ) : null}
 
-      {setUp ? (
+      {tab !== "history" && setUp ? (
         <SourceSetup
+          key={`${setUp.file}-${setUp.source?.id ?? "new"}`}
           organisationId={organisationId}
           file={setUp.file}
           existing={setUp.source}
           takenTables={data.sources.filter((source) => source.id !== setUp.source?.id).map((source) => source.tableName)}
           onDone={() => {
             setSetUp(null);
+            setTab("sources");
             overview.reload();
           }}
           onCancel={() => setSetUp(null)}
         />
       ) : null}
 
-      <BooksCard organisationId={organisationId} data={data} onChanged={overview.reload} />
+      {tab === "sources" || (tab === "connect" && connector === "books") ? <BooksCard organisationId={organisationId} data={data} onChanged={overview.reload} /> : null}
 
-      <SourcesCard organisationId={organisationId} data={data} onEdit={(source) => setSetUp({ file: source.fileName, source })} onChanged={overview.reload} />
+      {tab === "sources" ? <>
+      <Field label="Search data sources"><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, file or table…" /></Field>
+      {search && !visibleSources.length ? <p role="status">No sources match your search.</p> : null}
+      <SourcesCard organisationId={organisationId} data={{ ...data, sources: visibleSources }} onEdit={(source) => setSetUp({ file: source.fileName, source })} onChanged={overview.reload} />
+      </> : null}
 
-      {data.canManage ? <ReportEmailsCard key={organisationId} organisationId={organisationId} folderChosen={data.folder.chosen && data.folder.readable} onChanged={overview.reload} /> : null}
+      {tab === "connect" && connector === "email" && data.canManage ? <ReportEmailsCard key={organisationId} organisationId={organisationId} folderChosen={data.folder.chosen && data.folder.readable} onChanged={overview.reload} /> : null}
 
-      {data.canManage && data.folder.readable ? (
+      {tab === "connect" && (connector === "csv" || connector === "excel") && data.canManage && data.folder.readable ? (
         <Card title="Files in the folder" description="CSV and Excel (.xlsx) files in this organisation's folder and its subfolders, newest first. Set one up to load it.">
-          {data.files.length === 0 ? (
+          {visibleFiles.length === 0 ? (
             <Empty>No data files yet. Save or copy CSV or .xlsx exports into the folder and they&apos;ll show here.</Empty>
           ) : (
             <div className={ui.tableWrap}>
@@ -132,7 +151,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
                   </tr>
                 </thead>
                 <tbody>
-                  {data.files.map((file) => (
+                  {visibleFiles.map((file) => (
                     <tr key={file.name}>
                       <td>{file.name}</td>
                       <td className={ui.num}>{fileSize(file.sizeBytes)}</td>
@@ -155,7 +174,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
         </Card>
       ) : null}
 
-      <Card title="Load history" description="Every load, nightly or by hand, as the loader recorded it.">
+      {tab === "history" ? <Card title="Load history" description="Every load, nightly or by hand, as the loader recorded it.">
         {data.loads.length === 0 ? (
           <Empty>Nothing has been loaded yet.</Empty>
         ) : (
@@ -192,7 +211,7 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
             </table>
           </div>
         )}
-      </Card>
+      </Card> : null}
     </>
   );
 }
@@ -318,7 +337,7 @@ function SourcesCard({
     <Card title="Sources" description="Each source loads one file into one table. Money columns load as exact decimals.">
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {data.sources.length === 0 ? (
-        <Empty>{data.canManage ? "No sources yet. Set one up from the files below." : "No sources yet. An admin sets them up."}</Empty>
+        <Empty>{data.canManage ? "No sources yet. Choose Add data source to connect a file." : "No sources yet. An admin sets them up."}</Empty>
       ) : (
         <div className={ui.tableWrap}>
           <table className={ui.table}>
@@ -336,6 +355,7 @@ function SourcesCard({
                 <tr key={source.id}>
                   <td>
                     <strong>{source.name}</strong>
+                    <details><summary>View {source.columns.length} fields</summary><dl>{source.columns.map((column) => <div key={column.name}><dt><code>{column.name}</code></dt><dd>{KINDS.find((kind) => kind.value === column.kind)?.label ?? column.kind} · from {column.source}</dd></div>)}</dl></details>
                     <div className={ui.muted}>
                       {source.fileName}{source.sheetName ? ` · ${source.sheetName}` : ""} · {source.columns.length} columns · {source.reloadDaily ? "loads nightly" : "loads by hand only"}
                     </div>

@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function AnalyticsDashboardsPage() {
   return (
     <Page>
-      <PageHeader title="Dashboards" description="Charts, tables and key figures from your loaded data, with date ranges and slicers." />
+      <PageHeader title="Analytics" description="Your reports, connected data and tools for exploring the numbers." />
       <Suspense fallback={null}>
         <RequireOrganisation>{(organisationId) => <DashboardsList key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
       </Suspense>
