@@ -1,4 +1,5 @@
 import type { OrgTx } from "@/lib/db/org-transaction";
+import { isRegisteredOn } from "@/lib/tax/registration";
 import { getCreditNote } from "@/lib/credit-notes/service";
 import { getInvoice, type InvoiceLine } from "@/lib/invoices/service";
 import type { AmountsMode } from "@/lib/invoices/amounts";
@@ -73,6 +74,12 @@ function printedLines(lines: Array<Pick<InvoiceLine, "lineOrder" | "description"
   }));
 }
 
+/** The date that decides whether a document is a tax document. */
+function documentDate(loaded: { kind: string; document: unknown }): string {
+  const document = loaded.document as { invoiceDate?: string; creditNoteDate?: string; quoteDate?: string; orderDate?: string; date?: string };
+  return document.invoiceDate ?? document.creditNoteDate ?? document.quoteDate ?? document.orderDate ?? document.date ?? "9999-12-31";
+}
+
 export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown): Promise<PrintedDocument> {
   const kind = requireOneOf(kindInput, "kind", PRINT_KINDS);
   const settings = await getOrganisationSettings(tx);
@@ -106,6 +113,11 @@ export async function printedDocument(tx: OrgTx, kindInput: unknown, id: unknown
     total: document.total,
     taxTotal: document.taxTotal,
     organisationGstNumber: settings.gstNumber,
+    // NR5-NR6: a tax document only when registered for GST on its date.
+    gstRegisteredOnDate: isRegisteredOn(
+      { registered: settings.gstRegistered, from: settings.gstRegisteredFrom, until: settings.gstRegisteredUntil },
+      documentDate(loaded),
+    ),
     buyerIdentifier: identifier,
   });
   const base = {

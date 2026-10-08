@@ -1,5 +1,6 @@
 "use client";
 
+import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useAccounts } from "@/components/books";
@@ -67,7 +68,7 @@ export function RepeatingBillEditor({
   const accounts = useAccounts(organisationId);
   const items = useItems(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useDocumentTaxCodes(organisationId);
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error;
@@ -113,7 +114,7 @@ function RepeatingBillForm({
   const lineDefaults = startingValues(data.customSetup, "line", ["bill"]);
   const [contactId, setContactId] = useState(template?.contactId ?? "");
   const [numberPattern, setNumberPattern] = useState(template ? (template.supplierInvoiceNumber ?? "") : "{date}");
-  const [amountsMode, setAmountsMode] = useState<AmountsMode>(template?.amountsMode ?? "exclusive");
+  const [amountsMode, setAmountsMode] = useState<AmountsMode>(template?.amountsMode ?? (onlyNoGstCodes(data.taxCodes) ? "no_tax" : "exclusive"));
   const [customFields, setCustomFields] = useState<CustomValues>(() => template?.customFields ?? startingValues(data.customSetup, "document", ["bill"]));
   const [lines, setLines] = useState<EditorLine[]>(() => (template ? editorLines(template.lines, defaultTaxCode) : [blankLine(defaultTaxCode, lineDefaults)]));
   const [every, setEvery] = useState(String(template?.every ?? 1));

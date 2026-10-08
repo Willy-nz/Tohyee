@@ -1,5 +1,6 @@
 "use client";
 
+import { useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { type FormEvent, type ReactNode, useState } from "react";
 import {
@@ -1167,7 +1168,7 @@ export function ReconcilePanel({
   });
   const accounts = useApiData<{ accounts: Account[] }>("/api/accounts", { organisationId });
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useDocumentTaxCodes(organisationId);
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const lookupError = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error;

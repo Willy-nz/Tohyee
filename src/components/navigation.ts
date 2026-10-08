@@ -2,7 +2,7 @@ import type { Modules } from "@/components/modules";
 import type { Role } from "@/lib/auth/roles";
 
 /** An optional module a menu or link belongs to (example MOD1); shown only while it's on. */
-export type ModuleKey = "crm" | "reporting" | "notForProfit" | "analytics";
+export type ModuleKey = "crm" | "reporting" | "notForProfit" | "analytics" | "gst";
 export type MenuLink = { href: string; label: string; minRole?: Role; module?: ModuleKey };
 export type MenuGroup = { heading: string; links: MenuLink[] };
 /** `area`: the paths that show the menu as current (default: AREAS by its label). */
@@ -201,8 +201,8 @@ export const MENUS: Menu[] = [
       {
         heading: "Tax and R&D",
         links: [
-          { href: "/operations/gst-return", label: "GST return" },
-          { href: "/operations/gst-audit", label: "GST audit report" },
+          { href: "/operations/gst-return", label: "GST return", module: "gst" },
+          { href: "/operations/gst-audit", label: "GST audit report", module: "gst" },
           { href: "/operations/tax", label: "Tax codes" },
           { href: "/operations/rd", label: "R&D activities" },
           { href: "/operations/rd/costs", label: "Tagged R&D costs" },

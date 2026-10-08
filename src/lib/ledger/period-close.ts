@@ -1,3 +1,4 @@
+import { getGstRegistration } from "@/lib/tax/registration";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
 import { parseIsoDate, parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -453,6 +454,11 @@ async function gstCheck(tx: OrgTx, periodEnd: string): Promise<PeriodCheck> {
   const fix = { href: "/operations/gst-return", label: "GST return" };
   const last = await latestFiledGstPeriod(tx);
   const setting = await loadGstPeriodSetting(tx);
+  // NR4: not registered for GST by the period's end (or ever), so no returns are due.
+  const registration = await getGstRegistration(tx);
+  if (!registration.registered || (registration.from !== null && registration.from > periodEnd)) {
+    return notApplicable("gst", title, "Not applicable (not registered for GST).");
+  }
   if (!last) {
     const registered = (await tx.query<{ gst_number: string | null }>("select gst_number from organisation_settings where id = true")).rows[0].gst_number;
     if (!registered) return notApplicable("gst", title, "No GST number is set and no GST return has been filed in Tohyee.");
@@ -466,7 +472,12 @@ async function gstCheck(tx: OrgTx, periodEnd: string): Promise<PeriodCheck> {
     };
   }
   const unfiled: CheckItem[] = [];
-  for (let next = gstPeriodAfter(setting, last); next.periodEnd <= periodEnd; next = gstPeriodAfter(setting, next)) {
+  // NR6: returns are due up to the period the registration ended in, not after.
+  for (
+    let next = gstPeriodAfter(setting, last);
+    next.periodEnd <= periodEnd && (registration.until === null || next.periodStart <= registration.until);
+    next = gstPeriodAfter(setting, next)
+  ) {
     unfiled.push({ label: `${longDate(next.periodStart)} to ${longDate(next.periodEnd)}`, detail: "Not filed yet.", href: "/operations/gst-return" });
   }
   const basis = setting ? `GST period setting: ${describeGstPeriodSetting(setting)}.` : "No GST period setting, so each period is as long as the latest filed return (set it in Settings).";

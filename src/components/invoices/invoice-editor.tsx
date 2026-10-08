@@ -1,5 +1,6 @@
 "use client";
 
+import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
 import Link from "next/link";
@@ -176,7 +177,7 @@ function InvoiceForm({
     if (fromTerms) setDueDate(fromTerms);
   };
   const [reference, setReference] = useState(invoice?.reference ?? "");
-  const [amountsMode, setAmountsMode] = useState<AmountsMode>(invoice?.amountsMode ?? "exclusive");
+  const [amountsMode, setAmountsMode] = useState<AmountsMode>(invoice?.amountsMode ?? (onlyNoGstCodes(taxCodes) ? "no_tax" : "exclusive"));
   // A new document takes the customer's default salesperson when the customer is chosen (SR1).
   const [salespersonId, setSalespersonId] = useState<string>(invoice?.salespersonId ?? "");
   const lineDefaults = startingValues(customSetup, "line", ["invoice"]);
@@ -662,7 +663,7 @@ export function useSalesEditorData(organisationId: string) {
   const accounts = useAccounts(organisationId);
   const items = useItems(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useDocumentTaxCodes(organisationId);
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const salespeople = useSalespeople(organisationId);
@@ -756,7 +757,7 @@ export function InvoiceEditor({
   const accounts = useAccounts(organisationId);
   const items = useItems(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useDocumentTaxCodes(organisationId);
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const salespeople = useSalespeople(organisationId);

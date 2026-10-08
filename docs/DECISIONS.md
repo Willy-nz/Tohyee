@@ -3585,3 +3585,23 @@ testing) and #154's code signing (later, Jess).
      `--accent`) at 35%, fading in from the left and out at the bottom,
      and hidden on phones. The faint vertical stripes come from the source
      being a photo of a screen; the original image file would remove them.
+
+### Not registered for GST (decision 478)
+
+478. **Registration is a switch with dates, on by default** (#180, examples
+     NR1-NR8 approved by Jess, 8 Oct 2026). `organisation_settings` gets
+     `gst_registered` (default true) and optional inclusive
+     `gst_registered_from` and `gst_registered_until` (migration 0109); a
+     blank "from" means from the start. Whether GST applies is decided by
+     the document's own date, so registering or deregistering never changes
+     an approved document (NR7). Changed from the draft NR8, which made an
+     organisation without a GST number not registered: many organisations
+     (and most tests) have GST in their books without a number typed in
+     Settings, so registration defaults to on, and the upgrade only turns
+     it off where there's no number and nothing has ever been posted to the
+     GST account. Turning registration on asks for the number; dates that
+     would leave GST already posted outside them are refused, so
+     deregistering means setting the end date, not switching off. A blank
+     tax code is still refused on tax-exclusive or inclusive lines (the
+     editors start unregistered organisations on No GST amounts); an
+     item's GST code isn't copied onto the line while not registered.

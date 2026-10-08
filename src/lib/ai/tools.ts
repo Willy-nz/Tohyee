@@ -208,7 +208,9 @@ export const READ_TOOLS: readonly AiTool[] = (
         financialYearEndMonth: settings.financialYearEndMonth,
         gstBasis: settings.gstBasis,
         gstPeriod: settings.gstPeriod,
-        gstRegistered: settings.gstNumber !== null,
+        gstRegistered: settings.gstRegistered,
+        gstRegisteredFrom: settings.gstRegisteredFrom,
+        gstRegisteredUntil: settings.gstRegisteredUntil,
         gstNumber: settings.gstNumber ? formatGstNumber(settings.gstNumber) : null,
         modules: {
           advancedReporting: settings.advancedFeatures,

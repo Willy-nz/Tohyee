@@ -1,5 +1,6 @@
 "use client";
 
+import { onlyNoGstCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { CustomFieldInputs, startingValues } from "@/components/custom-fields";
@@ -83,7 +84,7 @@ function QuoteForm({
   const [expiryDate, setExpiryDate] = useState(quote ? (quote.expiryDate ?? "") : addDays(today, 30));
   const [reference, setReference] = useState(quote?.reference ?? "");
   const [terms, setTerms] = useState(quote?.terms ?? "");
-  const [amountsMode, setAmountsMode] = useState<AmountsMode>(quote?.amountsMode ?? "exclusive");
+  const [amountsMode, setAmountsMode] = useState<AmountsMode>(quote?.amountsMode ?? (onlyNoGstCodes(data.taxCodes) ? "no_tax" : "exclusive"));
   const [salespersonId, setSalespersonId] = useState(quote?.salespersonId ?? "");
   const [customFields, setCustomFields] = useState<CustomValues>(() => quote?.customFields ?? startingValues(data.customSetup, "document", ["invoice"]));
   const [lines, setLines] = useState<EditorLine[]>(() => (quote ? editorLines(quote.lines, defaults) : [blankLine(defaults, lineDefaults)]));

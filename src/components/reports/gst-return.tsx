@@ -44,6 +44,8 @@ type Calculated = GstReturnFigures & {
   filedReturns: FiledGstReturnSummary[];
   basisChange: GstBasisChange | null;
   lateClaims: GstLateClaim[];
+  /** NR6: registration ended in this period, with the fixed assets still held then. */
+  registrationEnded?: { until: string; assetsHeld: Array<{ assetNumber: string; name: string; cost: string }> } | null;
 };
 
 const DOCUMENT_LABELS: Record<GstReturnLine["documentType"], string> = {
@@ -781,6 +783,18 @@ export function GstReturnReport({ organisationId }: { organisationId: string }) 
                   .map((entry) => `${formatDate(entry.periodStart)} to ${formatDate(entry.periodEnd)}`)
                   .join(", ")}
                 ). Its stored figures are under Filed returns.
+              </Notice>
+            ) : null}
+            {data.registrationEnded ? (
+              <Notice tone="warning">
+                GST registration ended on {formatDate(data.registrationEnded.until)}, so this is the final return. GST may be due on
+                assets still held then (Tohyee doesn&apos;t work that out: it needs each one&apos;s market value; add it as an
+                adjustment).{" "}
+                {data.registrationEnded.assetsHeld.length === 0
+                  ? "No fixed assets were held then."
+                  : `Fixed assets held then: ${data.registrationEnded.assetsHeld
+                      .map((asset) => `${asset.assetNumber} ${asset.name} (cost ${asset.cost})`)
+                      .join(", ")}.`}
               </Notice>
             ) : null}
             {data.basisChange ? (

@@ -1,11 +1,17 @@
 import { json, readJson, route, searchParams, withOrganisation } from "@/lib/api/http";
 import { createTaxCode, listTaxCodes } from "@/lib/tax/codes";
+import { getGstRegistration } from "@/lib/tax/registration";
 
 export const GET = route(async (request) => {
-  const taxCodes = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", (tx) =>
-    listTaxCodes(tx),
-  );
-  return json({ taxCodes });
+  const { taxCodes, gstRegistration } = await withOrganisation(request, searchParams(request).get("organisationId"), "viewer", async (tx) => {
+    const registration = await getGstRegistration(tx);
+    return {
+      taxCodes: await listTaxCodes(tx),
+      // So document screens can offer only no-GST codes while not registered (issue #180, NR1-NR2).
+      gstRegistration: { registered: registration.registered, from: registration.from, until: registration.until },
+    };
+  });
+  return json({ taxCodes, gstRegistration });
 });
 
 export const POST = route(async (request) => {

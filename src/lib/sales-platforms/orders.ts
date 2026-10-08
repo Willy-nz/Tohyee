@@ -1,4 +1,5 @@
 import { businessTimeZone } from "@/lib/dates";
+import { type GstRegistration, isRegisteredOn } from "@/lib/tax/registration";
 import { type AmountsMode, calculateInvoice } from "@/lib/invoices/amounts";
 import {
   abs,
@@ -39,8 +40,10 @@ const SCALE = 2;
 /** What the connection's settings and the organisation say, for planning. */
 export type PostingRules = {
   baseCurrency: string;
-  /** Has a GST number in Settings (as on its tax invoices, PD2-PD7). */
+  /** Registered for GST (issue #180). When `gstRegistration` is given, each order uses its own date instead. */
   gstRegistered: boolean;
+  /** The organisation's GST registration, so an order dated before or after it isn't taxed (NR5, NR6). */
+  gstRegistration?: GstRegistration;
   foreignTrade: boolean;
   exportTaxCode: string | null;
   /** For lines Shopify charged no tax on. */
@@ -177,7 +180,13 @@ type Draft = { what: string; amount: Decimal; quantity: string; shopifyTax: Deci
  * or why it can't come in. `items` are the items linked to the order's
  * variants; `overseas` is whether the customer's contact is overseas.
  */
-export function planOrder(order: PlatformOrder, rules: PostingRules, items: ReadonlyMap<string, LinkedItem>, overseas: boolean): OrderPlan {
+/** The rules as they apply on a date: registered for GST on that date or not (issue #180). */
+function rulesOn(rules: PostingRules, date: string): PostingRules {
+  return rules.gstRegistration ? { ...rules, gstRegistered: isRegisteredOn(rules.gstRegistration, date) } : rules;
+}
+
+export function planOrder(order: PlatformOrder, givenRules: PostingRules, items: ReadonlyMap<string, LinkedItem>, overseas: boolean): OrderPlan {
+  const rules = rulesOn(givenRules, localDate(order.processedAt));
   const name = order.name;
   if (order.test) return refuse(`${name} is a test order, so it isn't brought in.`);
   if (order.currency !== rules.baseCurrency) return refuse(`${name} is in ${order.currency}; Tohyee only brings in orders in ${rules.baseCurrency}.`);
@@ -317,8 +326,10 @@ export function planRefund(
   if (refund.adjustments > 0) return refuse(`${what} has an order adjustment (a refund that differs from its lines); refunds like that aren't supported yet.`);
   if (returned.some((t) => t.gateway === "gift_card")) return refuse(`${what} went back to a gift card; gift cards aren't supported yet.`);
   if (!isPositive(refunded)) return { ok: "nothing", reason: `${what} returned no money, so there's nothing to post.` };
-  const amountsMode: AmountsMode = !rules.gstRegistered ? "no_tax" : order.taxesIncluded ? "inclusive" : "exclusive";
   const at = refund.processedAt ?? refund.createdAt ?? returned[0]?.processedAt ?? order.processedAt;
+  // A refund is taxed as the order was: registered or not on the order's date.
+  rules = rulesOn(rules, localDate(order.processedAt));
+  const amountsMode: AmountsMode = !rules.gstRegistered ? "no_tax" : order.taxesIncluded ? "inclusive" : "exclusive";
   const lines: PlannedLine[] = [];
   const rates: Array<string | null> = [];
   const byId = new Map<string, PlatformOrderLine>(order.lines.map((line) => [line.externalId, line]));

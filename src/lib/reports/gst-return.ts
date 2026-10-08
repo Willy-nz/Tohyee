@@ -1,3 +1,4 @@
+import { getGstRegistration } from "@/lib/tax/registration";
 import { writeAuditEvent } from "@/lib/audit";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { parseOptionalIsoDate, todayIsoDate } from "@/lib/dates";
@@ -951,7 +952,34 @@ export async function calculateGstReturn(
     filedReturns: await overlappingReturns(tx, periodStart, periodEnd),
     /** The IR546 adjustment when the basis changed since the last filed return. */
     basisChange: await basisChangeFor(tx, basis, periodStart),
+    /** NR6: GST registration ended in this period; the fixed assets still held then, as a reminder (not worked out). */
+    registrationEnded: await registrationEndedIn(tx, periodStart, periodEnd),
   };
+}
+
+/**
+ * NR6: when GST registration ends in this period, the final return may need
+ * GST on assets still held. Tohyee lists the fixed assets held on that date
+ * as a reminder; it doesn't work the GST out (it needs each one's market
+ * value).
+ */
+async function registrationEndedIn(
+  tx: OrgTx,
+  periodStart: string,
+  periodEnd: string,
+): Promise<{ until: string; assetsHeld: Array<{ assetNumber: string; name: string; cost: string }> } | null> {
+  const registration = await getGstRegistration(tx);
+  const until = registration.registered ? registration.until : null;
+  if (until === null || until < periodStart || until > periodEnd) return null;
+  const held = await tx.query<{ asset_number: string; name: string; cost: string }>(
+    `select a.asset_number, a.name, a.cost::text as cost
+       from fixed_assets a
+      where a.purchase_date <= $1::date and a.status <> 'archived'
+        and not exists (select 1 from fixed_asset_disposals d where d.asset_id = a.id and d.status = 'active' and d.disposal_date <= $1::date)
+      order by a.asset_number`,
+    [until],
+  );
+  return { until, assetsHeld: held.rows.map((row) => ({ assetNumber: row.asset_number, name: row.name, cost: row.cost })) };
 }
 
 /** The organisation's GST period setting (GP1), or null when it isn't set. */

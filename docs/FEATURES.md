@@ -231,6 +231,18 @@ that something happened.
   behind Box 5, 6 and 11, the Box 9 and 13 adjustments and the lines left
   out, grouped from the GST return's own lines so each list adds up to its
   box to the cent. Each of these five reports has "Print or save as PDF".
+- **Not registered for GST** (#180, NR1-NR8, approved by Jess 8 Oct 2026;
+  decision 478): Settings › GST has **Registered for GST** with optional
+  "Registered from" and "Registration ended" dates. On a date the
+  organisation isn't registered, only No GST codes can be used on sales,
+  purchases, expense claims and bank lines, items don't add their GST code,
+  new documents start with No GST amounts, documents print as **Invoice**,
+  and the Shopify and WooCommerce postings leave GST out. While not
+  registered the GST return and GST audit leave the menus, and period close
+  shows the GST check as not applicable. The last return before
+  deregistering lists the fixed assets still held as a reminder. Approved
+  documents never change; dates that would leave GST in the books outside
+  the registration are refused.
 - **Tax codes** as settings. Sales invoices and bills apply them; manual
   journals don't. A new organisation starts with the standard NZ codes
   (GST 15%, Zero rated, Exempt, No GST, from 1 Oct 2010); existing

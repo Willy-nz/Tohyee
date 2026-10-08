@@ -1,5 +1,6 @@
 "use client";
 
+import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { useAccounts } from "@/components/books";
@@ -71,7 +72,7 @@ export function PurchaseOrderEditor({
   const accounts = useAccounts(organisationId);
   const items = useItems(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useDocumentTaxCodes(organisationId);
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error;
@@ -124,7 +125,7 @@ function PurchaseOrderForm({
   const [deliveryAddress, setDeliveryAddress] = useState(purchaseOrder ? (purchaseOrder.deliveryAddress ?? "") : (deliveryAddressDefault ?? ""));
   const [deliveryInstructions, setDeliveryInstructions] = useState(purchaseOrder?.deliveryInstructions ?? "");
   const [reference, setReference] = useState(purchaseOrder?.reference ?? "");
-  const [amountsMode, setAmountsMode] = useState<AmountsMode>(purchaseOrder?.amountsMode ?? "exclusive");
+  const [amountsMode, setAmountsMode] = useState<AmountsMode>(purchaseOrder?.amountsMode ?? (onlyNoGstCodes(data.taxCodes) ? "no_tax" : "exclusive"));
   const [customFields, setCustomFields] = useState<CustomValues>(() => purchaseOrder?.customFields ?? startingValues(data.customSetup, "document", ["bill"]));
   const [lines, setLines] = useState<EditorLine[]>(() =>
     purchaseOrder ? editorLines(purchaseOrder.lines, defaultTaxCode) : [blankLine(defaultTaxCode, lineDefaults)],
