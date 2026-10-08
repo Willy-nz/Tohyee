@@ -15423,11 +15423,13 @@ dated outside every uploaded period asks for a rate rather than falling back
 - A file can have currencies Tohyee doesn't support (IRD's lists have
   dozens); those are skipped with the unused ones.
 
-## Drafts for the remaining add-on stages (#196), 8 Oct 2026 (not yet approved by Jess)
+## The remaining add-on stages (#196), 8 Oct 2026 (approved by Jess with the suggestions)
 
 Drafted before anything is built, as AGENTS.md asks, from the audit in #196
-and stages 7-10 of docs/XERO-ADDONS-PLAN.md. Nothing here is decided: each
-part ends with the questions that need Jess's answers. Glimmers by Jess
+and stages 7-10 of docs/XERO-ADDONS-PLAN.md. Jess approved them on 8 Oct
+2026 with the suggested answers ("Ok"), recorded after each part's
+questions. Order: check Shopify against the real store first (Jess connects
+it), then GoCardless, then jobs and rosters. Glimmers by Jess
 (NZD, GST registered, invoice basis) is the organisation throughout.
 
 ### Jobs and visits inside Projects (stage 8, ServiceM8 and Tradify)
@@ -15484,6 +15486,10 @@ Questions for Jess:
 5. Is a staff member who isn't a Tohyee user (no login) assigned to visits,
    or does everyone on the calendar need a login?
 
+Answered (8 Oct 2026, the suggestions): 1, Start/Finish fill in the hours
+and the staff member confirms them before they count; 2-5 not discussed
+yet, so the draft stands until they are.
+
 ### Rosters and clocking in inside Payroll (stage 9, Deputy)
 
 Setup: Glimmers' shop, Saturdays 9:00-17:00. Employees Aroha (hourly,
@@ -15521,6 +15527,11 @@ Questions for Jess:
    and KiwiSaver as drafted?
 4. Do employees without a Tohyee login need to clock in (a shared device
    with a PIN)?
+
+Answered (8 Oct 2026, the suggestions): 1, no location recorded (a shared
+device at the shop); 2, no rounding: exact minutes, with paid hours settled
+at timesheet approval (rounding that cuts paid time may breach employment
+law; not checked, so not offered); 3-4 not discussed yet.
 
 ### Direct debit with GoCardless (stage 10, BECS NZ)
 
@@ -15577,6 +15588,13 @@ Questions for Jess:
 4. GoCardless gets the fees as a separate report; is it acceptable for the
    payout (GC5) to be matched by hand at first?
 
+Answered (8 Oct 2026, the suggestions): 1, every invoice of a customer with
+an active authority is collected on its due date, with a "don't collect
+this one" tick on the invoice; 2, no automatic retry: a failure shows on the
+invoice and Home with "Try again"; 3, not known, so fees are posted without
+GST until a GoCardless invoice shows otherwise; 4, not discussed (the draft
+stands).
+
 ### The next sales platform (stage 7)
 
 Stripe sales, Square, Amazon, eBay, Etsy and PayPal sales remain. Each
@@ -15591,3 +15609,7 @@ are already connected for payments, so:
 - **Square** suits in-person sales at markets.
 
 Question for Jess: which one next, and is it one Glimmers uses?
+
+Answered (8 Oct 2026, the suggestion): no new platform yet; first check the
+Shopify connection against Glimmers' real store, the one thing the audit
+found never checked.
