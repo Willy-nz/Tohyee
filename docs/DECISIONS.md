@@ -3678,3 +3678,29 @@ testing) and #154's code signing (later, Jess).
      payments use the first Stripe or PayPal login. The SimpleFIN request
      limit (decision 391) is still counted per organisation.
 
+### Direct debit with GoCardless (decision 482)
+
+482. **Direct debit with GoCardless, BECS NZ** (stage 10, examples GC1-GC10
+     approved by Jess with the suggestions, 8 Oct 2026; tenant migration
+     0113). One GoCardless connection per organisation, with its own
+     access token stored encrypted (live or sandbox). A customer's
+     authority is asked for with a GoCardless billing request and its
+     hosted page; Tohyee never sees bank details. Every approved invoice
+     in the base currency for a customer with an active authority is
+     collected on its due date unless ticked "don't collect this one";
+     the collection is asked for three days before, for the amount due
+     then, with an idempotency key per invoice and attempt. A check every
+     15 minutes (and Check now) follows each collection: confirmed, it's
+     recorded as a customer payment into the clearing bank account;
+     failed or charged back, that payment is voided and the invoice is
+     due again. There's no automatic retry: "Try again" asks GoCardless to
+     retry (at most three times). A collection the invoice no longer needs
+     (voided, ticked, or less is due) is cancelled if GoCardless still
+     can; otherwise the invoice says so. Paid payouts are posted as one
+     journal (Dr payout bank account, Dr fees, Cr clearing account), once
+     each, with fees posted without GST until it's known whether
+     GoCardless's NZ fees include GST. The scheduler is off while
+     Accounting is off and with TOHYEE_GOCARDLESS_SCHEDULER=off. Not done:
+     GoCardless webhooks (the check polls instead, as the other
+     providers), reading GoCardless's events for the reason a payment
+     failed, and foreign-currency invoices.

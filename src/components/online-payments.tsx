@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Notice, ui } from "@/components/ui";
+import { GoCardlessSettingsCard } from "@/components/direct-debit";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage } from "@/lib/client/api";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
@@ -135,6 +136,7 @@ export function OnlinePaymentsSettings({ organisationId }: { organisationId: str
           </div>
         ) : null}
       </Card>
+      <GoCardlessSettingsCard organisationId={organisationId} />
       <Card title="Payments waiting for you" description="Stripe and PayPal payments Tohyee couldn't record by itself. Deal with each, then put it away.">
         {current.notices.length === 0 ? <Empty>Nothing is waiting.</Empty> : null}
         {current.notices.map((notice) => (

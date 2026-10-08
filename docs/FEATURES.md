@@ -473,6 +473,17 @@ that something happened.
   customer), links to PayPal's page, and records PayPal payments into the
   PayPal bank account for the invoice's currency. Only invoices in a
   currency whose PayPal balance is linked offer it.
+- **Direct debit with GoCardless** (Settings, Online payments; GC1-GC10,
+  decision 482, tenant migration 0113): an admin connects the
+  organisation's own GoCardless account with an access token and chooses
+  a clearing bank account, the payout bank account and a fees account. A
+  contact gets a link to GoCardless's page to sign a BECS NZ authority.
+  Then every approved NZD invoice for that customer is collected on its due
+  date unless ticked "don't collect this one"; confirmed collections are
+  recorded as payments into the clearing account, failures are voided and
+  shown on the invoice and in the top bar with "Try again" (no automatic
+  retry), and payouts are posted with their fees (without GST). Tested
+  against a pretend GoCardless only.
 - **Consolidation** (Reports, Consolidation; CO1-CO11, decisions 437-445,
   core migration 0007, tenant migration 0102), like NetSuite OneWorld:
   groups of organisations on this server in different currencies and with

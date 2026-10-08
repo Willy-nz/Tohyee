@@ -66,6 +66,10 @@
  * And online invoice payments, which ask Stripe for paid payment links and
  * PayPal for paid invoices every 15 minutes (off with TOHYEE_ONLINE_PAYMENTS_SCHEDULER=off).
  *
+ * And GoCardless direct debit, which asks for collections on invoices about to
+ * fall due, follows them and posts payouts every 15 minutes (off with
+ * TOHYEE_GOCARDLESS_SCHEDULER=off).
+ *
  * It also starts the Cloudflare Tunnel connector if remote access is turned on
  * (set TOHYEE_REMOTE_ACCESS=off to keep it off, e.g. on a test copy).
  */
@@ -244,6 +248,15 @@ export async function register() {
       startPayPalPaymentScheduler();
     } catch (error) {
       console.warn("[tohyee] Online payments couldn't start:", error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (process.env.TOHYEE_GOCARDLESS_SCHEDULER !== "off") {
+    try {
+      const { startGoCardlessScheduler } = await import("@/lib/payments/gocardless");
+      startGoCardlessScheduler();
+    } catch (error) {
+      console.warn("[tohyee] GoCardless direct debit couldn't start:", error instanceof Error ? error.message : error);
     }
   }
 

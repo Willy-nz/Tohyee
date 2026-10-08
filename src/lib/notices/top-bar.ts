@@ -1,3 +1,4 @@
+import { listFailedCollections } from "@/lib/payments/gocardless";
 import { accountingEnabled } from "@/lib/organisations/accounting-switch";
 import type { OrgTx } from "@/lib/db/org-transaction";
 
@@ -24,6 +25,15 @@ export async function listTopBarNotices(tx: OrgTx): Promise<TopBarNotice[]> {
       id: "bank-feeds-reconnect",
       message: reconnectCount === 1 ? "1 bank feed needs reconnecting." : `${reconnectCount} bank feeds need reconnecting.`,
       href: "/operations/bank-accounts",
+    });
+  }
+  // GC6: direct debit collections that failed and haven't been tried again.
+  const failedCount = (await listFailedCollections(tx)).length;
+  if (failedCount > 0) {
+    notices.push({
+      id: "gocardless-failed",
+      message: failedCount === 1 ? "1 direct debit collection failed." : `${failedCount} direct debit collections failed.`,
+      href: "/operations/settings/online-payments",
     });
   }
   return notices;
