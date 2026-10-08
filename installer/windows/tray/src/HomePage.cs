@@ -134,15 +134,16 @@ namespace Tohyee.Tray
             try
             {
                 ShowServer();
+                // What can need attention first, so the card (which pushes the rest down) comes early.
                 await ShowBackup();
+                if (IsDisposed) return;
+                await ShowUpdates();
                 if (IsDisposed) return;
                 await ShowPhone();
                 if (IsDisposed) return;
                 await ShowOrganisations();
                 if (IsDisposed) return;
                 await ShowEmail();
-                if (IsDisposed) return;
-                await ShowUpdates();
             }
             catch (ObjectDisposedException) when (IsDisposed)
             {
@@ -494,9 +495,9 @@ namespace Tohyee.Tray
             var text = item.Body.Trim();
             var stop = text.IndexOf(". ", StringComparison.Ordinal);
             if (stop > 0) text = text.Substring(0, stop + 1);
-            if (text.Length <= 100) return text;
-            var cut = text.LastIndexOf(' ', 97);
-            return text.Substring(0, cut > 40 ? cut : 97).TrimEnd(' ', ',', ';') + "…";
+            if (text.Length <= 80) return text;
+            var cut = text.LastIndexOf(' ', 77);
+            return text.Substring(0, cut > 30 ? cut : 77).TrimEnd(' ', ',', ';') + "…";
         }
 
         /// <summary>Something that needs attention: what, why, and the page that sorts it.</summary>
