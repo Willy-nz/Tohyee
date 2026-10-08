@@ -37,7 +37,8 @@ namespace Tohyee.Tray
             card.Body.Controls.Add(_list);
             card.Body.Controls.Add(_status);
             Controls.Add(page);
-            Load += async (s, e) => await Reload();
+            // Again when shown after a minute away (#198); the selected row stays selected.
+            Ui.LoadWhenShown(this, Reload, TimeSpan.FromMinutes(1));
         }
 
         private static string StatusText(Dictionary<string, object> organisation)
@@ -57,6 +58,8 @@ namespace Tohyee.Tray
             await Ui.Busy(this, _status, async () =>
             {
                 _organisations = J.List(await _api.Get("/api/admin/organisations"), "organisations");
+                if (IsDisposed) return;
+                var selected = Ui.SelectedKey(_list, tag => J.Str((Dictionary<string, object>)tag, "id"));
                 _list.BeginUpdate();
                 _list.Items.Clear();
                 foreach (var organisation in _organisations)
@@ -79,6 +82,7 @@ namespace Tohyee.Tray
                 }
                 Ui.FitColumns(_list);
                 _list.EndUpdate();
+                Ui.Reselect(_list, selected, tag => J.Str((Dictionary<string, object>)tag, "id"));
                 if (_organisations.Count == 0) Ui.Show(_status, "No organisations yet. Use New organisation to create the first one.", false);
             });
         }

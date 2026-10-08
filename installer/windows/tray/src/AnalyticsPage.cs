@@ -33,13 +33,23 @@ namespace Tohyee.Tray
             await Ui.Busy(this, _message, async () =>
             {
                 var result = await _api.Get("/api/admin/analytics-folders");
-                foreach (var card in _cards)
+                if (IsDisposed) return;
+                // One layout for the whole batch, not one per card removed and added (#198).
+                _page.SuspendLayout();
+                try
                 {
-                    _page.Controls.Remove(card);
-                    card.Dispose();
+                    foreach (var card in _cards)
+                    {
+                        _page.Controls.Remove(card);
+                        card.Dispose();
+                    }
+                    _cards.Clear();
+                    foreach (var entry in J.List(result, "folders")) AddOrganisation(entry);
                 }
-                _cards.Clear();
-                foreach (var entry in J.List(result, "folders")) AddOrganisation(entry);
+                finally
+                {
+                    _page.ResumeLayout(true);
+                }
             });
         }
 
