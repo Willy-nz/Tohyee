@@ -191,6 +191,11 @@ export function BillsInbox({ organisationId }: { organisationId: string }) {
         }
       >
         {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+        <Notice tone="info">
+          Tohyee doesn&apos;t read bills by itself: there&apos;s no built-in scanning. If this organisation has an AI connected (the{" "}
+          <Link href="/operations/ai">AI</Link> page), it can read these files and make draft bills; without one, open each file and
+          type the bill in. Check what the AI read against the file before approving.
+        </Notice>
         {can("bookkeeper") ? <Upload organisationId={organisationId} onDone={done} /> : null}
         <div className={ui.tabs} role="tablist" aria-label="Bills inbox">
           {TABS.map((entry) => (
