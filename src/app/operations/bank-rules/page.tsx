@@ -1,5 +1,6 @@
 "use client";
 
+import { useDocumentTaxCodes } from "@/components/document-tax-codes";
 import { type FormEvent, useState } from "react";
 import { takesBankTransactionLines } from "@/components/bank/common";
 import { AccountSelect, RequireOrganisation, useAccounts } from "@/components/books";
@@ -12,7 +13,6 @@ import type { BankRule, RuleCondition, RuleLine, RuleTextField } from "@/lib/ban
 import type { TrackingTags } from "@/lib/tracking/service";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Contact } from "@/lib/contacts/service";
-import type { TaxCode } from "@/lib/tax/codes";
 import { isAvailableOn, onlyWords, ruleSides } from "@/lib/tax/available-on";
 import { useConfirm } from "@/components/confirm-dialog";
 import { TrackingSelects, TrackingTagsText, useTracking } from "@/components/tracking";
@@ -128,7 +128,7 @@ function RuleForm({
 }) {
   const accounts = useAccounts(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useDocumentTaxCodes(organisationId);
   const bankAccounts = useApiData<{ bankAccounts: BankAccount[] }>("/api/bank-accounts", { organisationId });
   const tracking = useTracking(organisationId);
   const active = (taxCodes.data?.taxCodes ?? []).filter((taxCode) => taxCode.isActive);

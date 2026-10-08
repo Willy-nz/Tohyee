@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { destinations, MENUS, NEW_ACTIONS, searchDestinations, visibleMenus, visibleNewActions } from "@/components/navigation";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
 
-const access = (role: Role, modules = { crm: false, reporting: false, notForProfit: false, analytics: false }) => ({
+const access = (role: Role, modules = { crm: false, reporting: false, notForProfit: false, analytics: false, gst: true }) => ({
   can: (wanted: Role) => roleAtLeast(role, wanted),
   modules,
 });
@@ -52,7 +52,7 @@ describe("top bar menus", () => {
     const viewerLinks = visibleMenus("accounting", access("viewer")).flatMap((menu) => menu.groups.flatMap((group) => group.links));
     expect(viewerLinks.some((link) => link.label === "People and roles")).toBe(false);
     expect(viewerLinks.some((link) => link.label === "Sales by salesperson")).toBe(false);
-    const adminWithModules = visibleMenus("accounting", access("admin", { crm: true, reporting: true, notForProfit: true, analytics: false }));
+    const adminWithModules = visibleMenus("accounting", access("admin", { crm: true, reporting: true, notForProfit: true, analytics: false, gst: true }));
     const labels = adminWithModules.flatMap((menu) => menu.groups.flatMap((group) => group.links.map((link) => link.label)));
     expect(labels).toEqual(expect.arrayContaining(["People and roles", "Sales by salesperson", "CRM record types", "Fund activity"]));
   });

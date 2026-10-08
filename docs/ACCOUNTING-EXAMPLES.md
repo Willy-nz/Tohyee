@@ -15132,12 +15132,13 @@ cost of goods sold 400.00 (13 May) and 300.00 (9 Jun); interest 20.00
   bank (or wages payable) accounts with no contact and the description
   "Pay run".
 
-## Drafts for issues #180-#183, 8 Oct 2026 (examples not yet approved by Jess)
+## Issues #180-#183, 8 Oct 2026 (approved by Jess)
 
-Drafted before anything is built, as AGENTS.md asks. Nothing here is
-decided: each part ends with the questions that need Jess's answer, and the
-examples change with the answers. Where a draft goes against an earlier
-decision, it says so.
+Drafted before anything was built, as AGENTS.md asks, then approved by Jess
+on 8 Oct 2026 with her answers ("Yes, use the suggestions" for the
+questions left open). Each part says what was answered and anything that
+changed while it was built. Where a draft goes against an earlier decision,
+it says so.
 
 ### Not registered for GST (#180)
 
@@ -15182,16 +15183,26 @@ customer and Paper Co a GST-registered supplier.
   final return, but doesn't work that GST out (question 4).
 - **NR7** Approved documents never change when registration changes: an
   invoice dated 15 Nov 2026 with GST stays as it is after deregistering.
-- **NR8** Existing organisations: one with a GST number is registered from
-  the earliest date in its books (so nothing changes for it). One without a
-  number is not registered.
+- **NR8** Existing and new organisations: **Registered for GST** starts
+  on, with no dates (registered from the start), so nothing changes for
+  them. An existing organisation with no GST number and nothing ever posted
+  to the GST account is switched to not registered when it's upgraded. One
+  without a number but with GST in its books stays registered (turning it
+  off would leave that GST outside the registration), and Settings asks
+  for the number before anything else changes. A blank "from" date means
+  registered from the start; registration dates that would leave GST
+  already in the books outside them are refused.
 
-Answered by Jess, 8 Oct 2026: **Registered for GST** is its own switch with
-a "from" date and an "until" date when deregistering (NR5-NR6); "Tax off"
-in #181 means this switch. Still open: questions 3 (refuse or warn on GST
-codes; the draft refuses) and 4 (GST on assets held at deregistration; the
-draft reminds rather than works it out). How Xero shows this hasn't been
-checked.
+Approved by Jess, 8 Oct 2026 ("Yes, use the suggestions"):
+**Registered for GST** is its own switch with a "from" date and an "until"
+date when deregistering (NR5-NR6); "Tax off" in #181 means this switch.
+GST, zero-rated and exempt codes are refused while not registered (NR2),
+and the last return reminds about assets held rather than working out their
+GST (NR6). NR8 changed while it was built (decision 478): the draft said an
+organisation without a number becomes not registered, but most
+organisations, and the tests, have GST in their books without a number
+typed in Settings, so registration defaults to on. How Xero shows this
+hasn't been checked.
 
 ### Turning Accounting and Tax off (#181)
 

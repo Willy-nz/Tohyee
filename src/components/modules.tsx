@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Notice, ui } from "@/components/ui";
 import { api, errorMessage } from "@/lib/client/api";
@@ -12,7 +12,7 @@ import { useWorkspace } from "@/components/workspace";
  * Accounting and Tax are always on; the other modules are switched on per
  * organisation.
  */
-export type Modules = { crm: boolean; reporting: boolean; notForProfit: boolean; analytics: boolean };
+export type Modules = { crm: boolean; reporting: boolean; notForProfit: boolean; analytics: boolean; /** Registered for GST at any time (issue #180): the GST return and GST audit show. */ gst: boolean };
 
 const CHANGED = "tohyee:modules-changed";
 
@@ -27,13 +27,14 @@ export function useModules(organisationId: string | null): Modules | null {
     window.addEventListener(CHANGED, reload);
     return () => window.removeEventListener(CHANGED, reload);
   }, [reload]);
-  if (reportViewer) return { crm: false, reporting: false, notForProfit: false, analytics: true };
+  if (reportViewer) return { crm: false, reporting: false, notForProfit: false, analytics: true, gst: false };
   if (!settings.data) return null;
   return {
     crm: settings.data.settings.crmEnabled,
     reporting: settings.data.settings.advancedFeatures,
     notForProfit: settings.data.settings.notForProfitEnabled,
     analytics: settings.data.settings.analyticsEnabled,
+    gst: settings.data.settings.gstRegistered,
   };
 }
 
@@ -165,4 +166,23 @@ export function ModulesCard({ organisationId }: { organisationId: string }) {
       </div>
     </Card>
   );
+}
+
+/**
+ * Shown instead of the GST return and GST audit while the organisation has
+ * never been registered for GST (issue #180, NR4).
+ */
+export function RequireGstRegistered({ organisationId, children }: { organisationId: string; children: ReactNode }) {
+  const modules = useModules(organisationId);
+  const { current } = useWorkspace();
+  if (!modules) return <p className={ui.muted}>Loading…</p>;
+  if (!modules.gst) {
+    return (
+      <Notice tone="info">
+        {current?.displayName ?? "This organisation"} isn&apos;t registered for GST, so there are no GST returns.{" "}
+        <Link href="/operations/settings">Settings</Link> turns registration on.
+      </Notice>
+    );
+  }
+  return <>{children}</>;
 }

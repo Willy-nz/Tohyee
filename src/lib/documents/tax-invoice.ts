@@ -42,6 +42,8 @@ export type TaxLabelInput = {
   total: string;
   taxTotal: string;
   organisationGstNumber: string | null;
+  /** Registered for GST on the document's date (issue #180); true when not given. */
+  gstRegisteredOnDate?: boolean;
   /** The buyer's identifier (decision 270): their billing address, email or phone, whichever is first. */
   buyerIdentifier: string | null;
 };
@@ -62,7 +64,8 @@ export type TaxLabels = {
 
 export function taxLabels(input: TaxLabelInput): TaxLabels {
   const hasTax = input.amountsMode !== "no_tax";
-  const registered = input.organisationGstNumber !== null;
+  const registeredOnDate = input.gstRegisteredOnDate ?? true;
+  const registered = input.organisationGstNumber !== null && registeredOnDate;
   const draft = input.status === "draft";
   const voided = input.status === "voided";
   const warnings: string[] = [];
@@ -91,7 +94,11 @@ export function taxLabels(input: TaxLabelInput): TaxLabels {
     );
   }
   if (input.kind !== "quote" && hasTax && !registered && !isZero(dec(input.taxTotal))) {
-    warnings.push(`This ${noun} charges GST, but there's no GST number in Settings, so it isn't printed as a tax ${noun}. An admin can add it in Settings.`);
+    warnings.push(
+      registeredOnDate
+        ? `This ${noun} charges GST, but there's no GST number in Settings, so it isn't printed as a tax ${noun}. An admin can add it in Settings.`
+        : `This ${noun} charges GST, but the organisation wasn't registered for GST on its date, so it isn't printed as a tax ${noun}.`,
+    );
   }
   return {
     title,

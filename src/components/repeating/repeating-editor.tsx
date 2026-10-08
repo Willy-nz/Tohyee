@@ -1,5 +1,6 @@
 "use client";
 
+import { onlyNoGstCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { CustomFieldInputs, startingValues } from "@/components/custom-fields";
@@ -81,7 +82,7 @@ function RepeatingForm({
   const lineDefaults = startingValues(data.customSetup, "line", ["invoice"]);
   const [contactId, setContactId] = useState(template?.contactId ?? "");
   const [reference, setReference] = useState(template?.reference ?? "");
-  const [amountsMode, setAmountsMode] = useState<AmountsMode>(template?.amountsMode ?? "exclusive");
+  const [amountsMode, setAmountsMode] = useState<AmountsMode>(template?.amountsMode ?? (onlyNoGstCodes(data.taxCodes) ? "no_tax" : "exclusive"));
   const [salespersonId, setSalespersonId] = useState(template?.salespersonId ?? "");
   const [customFields, setCustomFields] = useState<CustomValues>(
     () => template?.customFields ?? startingValues(data.customSetup, "document", ["invoice"]),

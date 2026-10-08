@@ -1,5 +1,6 @@
 "use client";
 
+import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
 import Link from "next/link";
@@ -126,7 +127,7 @@ function SupplierCreditNoteForm({
     creditNote?.supplierCreditNoteNumber ?? "",
   );
   const [reference, setReference] = useState(initial?.reference ?? "");
-  const [amountsMode, setAmountsMode] = useState<AmountsMode>(initial?.amountsMode ?? "exclusive");
+  const [amountsMode, setAmountsMode] = useState<AmountsMode>(initial?.amountsMode ?? (onlyNoGstCodes(taxCodes) ? "no_tax" : "exclusive"));
   const lineDefaults = startingValues(customSetup, "line", ["supplier_credit_note"]);
   // A copy from an invoice or bill keeps the values of fields also used here (CF6).
   const [customFields, setCustomFields] = useState<CustomValues>(
@@ -488,7 +489,7 @@ export function SupplierCreditNoteEditor({
   const accounts = useAccounts(organisationId);
   const items = useItems(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useDocumentTaxCodes(organisationId);
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error;

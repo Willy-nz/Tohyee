@@ -105,6 +105,7 @@ describeWithDatabase("Shopify orders into the accounts (stage 2)", () => {
       await createTaxCode(tx, { idempotencyKey: key("tax"), code: "EXPORT", label: "Exports", category: "zero_rated", rate: "0", effectiveFrom: "2010-10-01" });
       await updateOrganisationSettings(tx, {
         gstNumber: options.gst === false ? null : "123-456-789",
+        gstRegistered: options.gst !== false,
         foreignTrade: options.foreignTrade === true,
         exportTaxCode: "EXPORT",
       });

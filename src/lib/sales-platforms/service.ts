@@ -711,7 +711,7 @@ export async function updateConnectionSettings(tx: OrgTx, connectionIdInput: unk
         `${shop} hasn't given the app the ${ORDER_SCOPE} scope, so orders can't be read. Add it to the app's access scopes in ${shop}, then test the connection and try again.`,
       );
     }
-    if ((await getOrganisationSettings(tx)).gstNumber && next.untaxed === null) {
+    if ((await getOrganisationSettings(tx)).gstRegistered && next.untaxed === null) {
       throw new ValidationError("The organisation is GST registered, so posting needs a tax code for untaxed sales (zero-rated or exempt).");
     }
   }

@@ -60,6 +60,10 @@ function SettingsForm({
   );
   const [postalAddress, setPostalAddress] = useState(settings.postalAddress ?? "");
   const [gstNumber, setGstNumber] = useState(settings.gstNumber ? formatGstNumber(settings.gstNumber) : "");
+  // Issue #180: registered for GST, optionally from and until a date (NR5, NR6).
+  const [gstRegistered, setGstRegistered] = useState(settings.gstRegistered);
+  const [gstRegisteredFrom, setGstRegisteredFrom] = useState(settings.gstRegisteredFrom ?? "");
+  const [gstRegisteredUntil, setGstRegisteredUntil] = useState(settings.gstRegisteredUntil ?? "");
   const [paymentDetails, setPaymentDetails] = useState(settings.paymentDetails ?? "");
   const [error, setError] = useState<string | null>(null);
 
@@ -81,6 +85,9 @@ function SettingsForm({
           ...(exportTaxCode ? { exportTaxCode } : {}),
           postalAddress: postalAddress.trim() || null,
           gstNumber: gstNumber.trim() || null,
+          gstRegistered,
+          gstRegisteredFrom: gstRegistered ? gstRegisteredFrom || null : null,
+          gstRegisteredUntil: gstRegistered ? gstRegisteredUntil || null : null,
           paymentDetails: paymentDetails.trim() || null,
         },
       });
@@ -122,30 +129,49 @@ function SettingsForm({
             ))}
           </select>
         </Field>
-        <Field label="GST basis" hint="How GST returns are worked out. The payments basis is for sales of $2 million or less in the last 12 months (Tohyee doesn't check this). After a change, the next GST return suggests the adjustment IRD asks for.">
-          <select value={gstBasis} onChange={(event) => setGstBasis(event.target.value as GstBasis)}>
-            {GST_BASES.map((basis) => (
-              <option key={basis} value={basis}>
-                {GST_BASIS_LABELS[basis]}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field
-          label="GST filing frequency"
-          hint="How often you file GST with IRD, and which months periods end in (IRD lines two-monthly and six-monthly periods up with your balance date unless you asked otherwise). The GST return, Home and the period close use it."
-        >
-          <select value={gstPeriod} onChange={(event) => setGstPeriod(event.target.value)}>
-            {GST_PERIOD_CHOICES.map((choice) => (
-              <option key={choice.value} value={choice.value}>
-                {choice.label}
-              </option>
-            ))}
-          </select>
-        </Field>
       </div>
-      <h3 style={{ margin: "8px 0 0" }}>Exports</h3>
-      <div className={ui.grid3}>
+      <h3 style={{ margin: "8px 0 0" }}>GST</h3>
+      <label className={ui.checkbox}>
+        <input type="checkbox" checked={gstRegistered} onChange={(event) => setGstRegistered(event.target.checked)} />
+        Registered for GST. When it&apos;s off, documents use only tax codes with no GST, print as &ldquo;Invoice&rdquo;, and the
+        GST return and GST audit are hidden.
+      </label>
+      {gstRegistered ? (
+        <div className={ui.grid3}>
+          <Field label="GST number" hint="Printed on tax invoices and credit notes. Without it, invoices print as “Invoice”, not “Tax invoice”.">
+            <input value={gstNumber} onChange={(event) => setGstNumber(event.target.value)} maxLength={20} placeholder="123-456-789" />
+          </Field>
+          <Field label="Registered from" hint="Blank if registered from the start. Documents dated before it can't have GST.">
+            <input type="date" value={gstRegisteredFrom} onChange={(event) => setGstRegisteredFrom(event.target.value)} />
+          </Field>
+          <Field label="Registration ended" hint="Blank while still registered. Documents dated after it can't have GST; the last GST return covers up to it.">
+            <input type="date" value={gstRegisteredUntil} onChange={(event) => setGstRegisteredUntil(event.target.value)} />
+          </Field>
+          <Field label="GST basis" hint="How GST returns are worked out. The payments basis is for sales of $2 million or less in the last 12 months (Tohyee doesn't check this). After a change, the next GST return suggests the adjustment IRD asks for.">
+            <select value={gstBasis} onChange={(event) => setGstBasis(event.target.value as GstBasis)}>
+              {GST_BASES.map((basis) => (
+                <option key={basis} value={basis}>
+                  {GST_BASIS_LABELS[basis]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="GST filing frequency"
+            hint="How often you file GST with IRD, and which months periods end in (IRD lines two-monthly and six-monthly periods up with your balance date unless you asked otherwise). The GST return, Home and the period close use it."
+          >
+            <select value={gstPeriod} onChange={(event) => setGstPeriod(event.target.value)}>
+              {GST_PERIOD_CHOICES.map((choice) => (
+                <option key={choice.value} value={choice.value}>
+                  {choice.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      ) : null}
+      {gstRegistered ? <h3 style={{ margin: "8px 0 0" }}>Exports</h3> : null}
+      <div className={ui.grid3} hidden={!gstRegistered}>
         <label className={ui.checkbox}>
           <input type="checkbox" checked={foreignTrade} onChange={(event) => setForeignTrade(event.target.checked)} />
           Foreign trade: new sales lines for customers outside New Zealand (by their delivery country, else their billing country)
@@ -167,9 +193,6 @@ function SettingsForm({
       </div>
       <h3 style={{ margin: "8px 0 0" }}>On printed invoices, credit notes and quotes</h3>
       <div className={ui.grid3}>
-        <Field label="GST number" hint="Printed on tax invoices and credit notes. Without it, invoices print as “Invoice”, not “Tax invoice”.">
-          <input value={gstNumber} onChange={(event) => setGstNumber(event.target.value)} maxLength={20} placeholder="123-456-789" />
-        </Field>
         <Field label="Address" hint="Your postal or business address, printed under your name.">
           <textarea value={postalAddress} onChange={(event) => setPostalAddress(event.target.value)} maxLength={500} rows={3} />
         </Field>

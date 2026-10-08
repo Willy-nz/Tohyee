@@ -1,3 +1,5 @@
+import { getGstRegistration, registrationRefusal } from "@/lib/tax/registration";
+import type { TaxCategory } from "@/lib/tax/categories";
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { assertRequiredFields, parseCustomInput, resolveDocumentCustom } from "@/lib/custom-fields/service";
 import type { CustomValues } from "@/lib/custom-fields/values";
@@ -364,6 +366,7 @@ async function resolveInput(tx: OrgTx, input: ParsedInput): Promise<Resolved> {
     [[...new Set(input.lines.flatMap((line) => (line.taxCode ? [line.taxCode] : [])))]],
   );
   const taxByCode = new Map(taxCodes.rows.map((row) => [row.code, row]));
+  const registration = await getGstRegistration(tx);
   const lines = input.lines.map((line, index) => {
     const lineLabel = `Line ${index + 1}`;
     const target = byCode.get(line.accountCode.toLowerCase());
@@ -384,6 +387,9 @@ async function resolveInput(tx: OrgTx, input: ParsedInput): Promise<Resolved> {
       // Receive money is sales, spend money purchases (TAO4).
       const offSide = sideRefusal(lineLabel, taxCode.code, taxCode.available_on, input.kind === "receive" ? "sales" : "purchases");
       if (offSide) throw new ValidationError(offSide);
+      // Not registered for GST on the date (NR2, NR3).
+      const unregistered = registrationRefusal(lineLabel, taxCode.code, taxCode.category as TaxCategory, registration, input.date);
+      if (unregistered) throw new ValidationError(unregistered);
       if (taxCode.effective_from > input.date || (taxCode.effective_to !== null && taxCode.effective_to < input.date)) {
         throw new ValidationError(`${lineLabel}: tax code ${taxCode.code} isn't in effect on ${input.date}.`);
       }

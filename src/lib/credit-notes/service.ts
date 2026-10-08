@@ -1,3 +1,4 @@
+import { getGstRegistration, isRegisteredOn, registrationRefusal } from "@/lib/tax/registration";
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { parseSalespersonInput, resolveSalesperson } from "@/lib/salespeople/service";
 import { assertRequiredFields, type CustomFieldContext, keptCustom, parseCustomInput, resolveDocumentCustom } from "@/lib/custom-fields/service";
@@ -453,7 +454,9 @@ async function resolveDraft(
     assertForeignLinesSupported("credit_note", currencyCode, tx.baseCurrency, sent.lines);
   }
   // Blanks on item lines are filled from the item (IT2); what was sent is kept.
-  const draft: DraftDetails = { ...sent, lines: await fillLinesFromItems(tx, sent.lines, { side: "sale", contactId: sent.contactId, noTax: sent.amountsMode === "no_tax" }) };
+  // Not registered for GST on the date: no tax codes from items or contacts (NR1), and only no-GST codes (NR2).
+  const registration = await getGstRegistration(tx);
+  const draft: DraftDetails = { ...sent, lines: await fillLinesFromItems(tx, sent.lines, { side: "sale", contactId: sent.contactId, noTax: sent.amountsMode === "no_tax" || !isRegisteredOn(registration, sent.creditNoteDate) }) };
   const salesperson = await resolveSalesperson(tx, draft.salespersonInput, { contactId: draft.contactId, kept: keptSalesperson });
   const custom = await resolveDocumentCustom(tx, "credit_note", draft.customInput, draft.lines.map((line) => line.customFields), keptFields);
   const tracking = await loadTrackingContext(tx);
@@ -522,6 +525,8 @@ async function resolveDraft(
       // Only codes available on sales (TAO2-TAO4); a draft with one that no longer is can't be saved or approved (TAO9).
       const offSide = sideRefusal(label, taxCode.code, taxCode.available_on, "sales");
       if (offSide) throw new ValidationError(offSide);
+      const unregistered = registrationRefusal(label, taxCode.code, taxCode.category, registration, draft.creditNoteDate);
+      if (unregistered) throw new ValidationError(unregistered);
       if (
         taxCode.effective_from > draft.creditNoteDate ||
         (taxCode.effective_to !== null && taxCode.effective_to < draft.creditNoteDate)

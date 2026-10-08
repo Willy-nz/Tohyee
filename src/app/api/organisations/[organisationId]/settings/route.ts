@@ -35,6 +35,9 @@ export const PATCH = route<Context>(async (request, context) => {
       exportTaxCode: body.exportTaxCode,
       postalAddress: body.postalAddress,
       gstNumber: body.gstNumber,
+      gstRegistered: body.gstRegistered,
+      gstRegisteredFrom: body.gstRegisteredFrom,
+      gstRegisteredUntil: body.gstRegisteredUntil,
       paymentDetails: body.paymentDetails,
     }),
   );

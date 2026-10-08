@@ -1,5 +1,6 @@
 "use client";
 
+import { onlyNoGstCodes, useDocumentTaxCodes } from "@/components/document-tax-codes";
 import { defaultsCheckers, withContactDefaults } from "@/lib/contacts/line-defaults";
 import { usualTaxCode } from "@/lib/accounts/types";
 import Link from "next/link";
@@ -166,7 +167,7 @@ function BillForm({ organisationId, items, baseCurrency, accounts, contacts: giv
     const fromTerms = dueFromSupplierTerms(termsSetup, known ?? contacts.find((contact) => contact.id === supplierId), date);
     if (fromTerms) setDueDate(fromTerms);
   };
-  const [amountsMode, setAmountsMode] = useState<AmountsMode>(bill?.amountsMode ?? "exclusive");
+  const [amountsMode, setAmountsMode] = useState<AmountsMode>(bill?.amountsMode ?? (onlyNoGstCodes(taxCodes) ? "no_tax" : "exclusive"));
   const lineDefaults = startingValues(customSetup, "line", ["bill"]);
   const [customFields, setCustomFields] = useState<CustomValues>(
     () => bill?.customFields ?? startingValues(customSetup, "document", ["bill"]),
@@ -624,7 +625,7 @@ export function BillEditor({
   const accounts = useAccounts(organisationId);
   const items = useItems(organisationId);
   const contacts = useApiData<{ contacts: Contact[] }>("/api/contacts", { organisationId });
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useDocumentTaxCodes(organisationId);
   const tracking = useTracking(organisationId);
   const customSetup = useCustomFields(organisationId);
   const error = accounts.error ?? contacts.error ?? taxCodes.error ?? tracking.error ?? customSetup.error;

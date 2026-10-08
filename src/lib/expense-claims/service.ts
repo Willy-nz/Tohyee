@@ -1,3 +1,5 @@
+import { getGstRegistration, registrationRefusal } from "@/lib/tax/registration";
+import type { TaxCategory } from "@/lib/tax/categories";
 import { assertNoApprovalNeeded, startApprovalRequest, waitingRequestFor } from "@/lib/approvals/requests";
 import { loadDocumentFacts, matchingRule } from "@/lib/approvals/rules";
 import { formatDate } from "@/lib/format";
@@ -548,8 +550,9 @@ async function resolveReceipts(
     [[...new Set(receipts.map((receipt) => receipt.accountCode.toLowerCase()))]],
   );
   const accountsByCode = new Map(accounts.rows.map((row) => [row.code.toLowerCase(), row]));
-  const taxCodes = await tx.query<{ id: string; code: string; rate: string; is_active: boolean; effective_from: string; effective_to: string | null; available_on: AvailableOn }>(
-    "select id::text, code, rate::text, is_active, effective_from, effective_to, available_on from tax_codes where code = any($1::text[])",
+  const registration = await getGstRegistration(tx);
+  const taxCodes = await tx.query<{ id: string; code: string; rate: string; category: TaxCategory; is_active: boolean; effective_from: string; effective_to: string | null; available_on: AvailableOn }>(
+    "select id::text, code, rate::text, category, is_active, effective_from, effective_to, available_on from tax_codes where code = any($1::text[])",
     [[...new Set(receipts.flatMap((receipt) => (receipt.taxCode ? [receipt.taxCode] : [])))]],
   );
   const taxCodesByCode = new Map(taxCodes.rows.map((row) => [row.code, row]));
@@ -577,6 +580,9 @@ async function resolveReceipts(
       // Receipts are purchases (TAO4).
       const offSide = sideRefusal(label, taxCode.code, taxCode.available_on, "purchases");
       if (offSide) throw new ValidationError(offSide);
+      // Not registered for GST on the receipt's date: the whole amount is the cost (NR3).
+      const unregistered = registrationRefusal(label, taxCode.code, taxCode.category, registration, receipt.receiptDate);
+      if (unregistered) throw new ValidationError(unregistered);
       if (taxCode.effective_from > receipt.receiptDate || (taxCode.effective_to !== null && taxCode.effective_to < receipt.receiptDate)) {
         throw new ValidationError(`${label}: tax code ${taxCode.code} isn't in effect on ${receipt.receiptDate}.`);
       }

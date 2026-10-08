@@ -8,6 +8,7 @@ import { parseCurrencyCode } from "@/lib/money/currency";
 import { type GstPeriodSetting, gstPeriodSetting } from "@/lib/reports/gst-boxes";
 import { type AvailableOn, isAvailableOn, onlyWords } from "@/lib/tax/available-on";
 import { GST_BASES, type GstBasis } from "@/lib/tax/categories";
+import { parseIsoDate } from "@/lib/dates";
 import { optionalString, requireOneOf, requireString } from "@/lib/validation";
 
 /** A GST number as digits (8 or 9), the same check as contacts'. */
@@ -52,6 +53,12 @@ export type OrganisationSettings = {
   postalAddress: string | null;
   /** The organisation's GST number, as digits (PD1); shown on tax invoices. */
   gstNumber: string | null;
+  /** Registered for GST (issue #180, NR1-NR8); new organisations start registered. */
+  gstRegistered: boolean;
+  /** Registered from this date (NR5); null = from the start. */
+  gstRegisteredFrom: string | null;
+  /** Registration ended on this date (NR6), or null while still registered. */
+  gstRegisteredUntil: string | null;
   /** How customers pay, e.g. the bank account number (PD1); shown on printed invoices. */
   paymentDetails: string | null;
   hasPostings: boolean;
@@ -75,12 +82,15 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     export_tax_code: string | null;
     postal_address: string | null;
     gst_number: string | null;
+    gst_registered: boolean;
+    gst_registered_from: string | null;
+    gst_registered_until: string | null;
     payment_details: string | null;
     has_postings: boolean;
   }>(
     `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, gst_period_months, gst_period_end_month, advanced_features, crm_enabled, analytics_enabled, not_for_profit_enabled, allow_negative_stock,
             foreign_trade, (select t.code from tax_codes t where t.id = export_tax_code_id) as export_tax_code,
-            postal_address, gst_number, payment_details,
+            postal_address, gst_number, gst_registered, gst_registered_from::text, gst_registered_until::text, payment_details,
             exists (select 1 from ledger_journals) as has_postings
        from organisation_settings where id = true`,
   );
@@ -104,6 +114,9 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     exportTaxCode: row.export_tax_code,
     postalAddress: row.postal_address,
     gstNumber: row.gst_number,
+    gstRegistered: row.gst_registered,
+    gstRegisteredFrom: row.gst_registered_from,
+    gstRegisteredUntil: row.gst_registered_until,
     paymentDetails: row.payment_details,
     hasPostings: row.has_postings,
   };
@@ -191,6 +204,9 @@ export async function updateOrganisationSettings(
     exportTaxCode?: unknown;
     postalAddress?: unknown;
     gstNumber?: unknown;
+    gstRegistered?: unknown;
+    gstRegisteredFrom?: unknown;
+    gstRegisteredUntil?: unknown;
     paymentDetails?: unknown;
   },
 ): Promise<OrganisationSettings> {
@@ -264,6 +280,22 @@ export async function updateOrganisationSettings(
   const gstNumber = input.gstNumber === undefined ? current.gstNumber : parseGstNumber(input.gstNumber);
   const paymentDetails =
     input.paymentDetails === undefined ? current.paymentDetails : optionalString(input.paymentDetails, "paymentDetails", { maxLength: 1000 });
+  const optionalDate = (value: unknown, field: string) => (value === null || value === "" ? null : parseIsoDate(value, field));
+  if (input.gstRegistered !== undefined && typeof input.gstRegistered !== "boolean") {
+    throw new ValidationError("gstRegistered must be true or false.");
+  }
+  const gstRegistered = input.gstRegistered === undefined ? current.gstRegistered : input.gstRegistered;
+  const gstRegisteredFrom = !gstRegistered
+    ? null
+    : input.gstRegisteredFrom === undefined
+      ? current.gstRegisteredFrom
+      : optionalDate(input.gstRegisteredFrom, "The date GST registration starts");
+  const gstRegisteredUntil = !gstRegistered
+    ? null
+    : input.gstRegisteredUntil === undefined
+      ? current.gstRegisteredUntil
+      : optionalDate(input.gstRegisteredUntil, "The date GST registration ended");
+  await checkGstRegistration(tx, current, { gstNumber, gstRegistered, gstRegisteredFrom, gstRegisteredUntil });
 
   if (financialYearEndMonth !== current.financialYearEndMonth) {
     await assertFinancialYearEndChangeable(tx, current.financialYearEndMonth);
@@ -280,7 +312,8 @@ export async function updateOrganisationSettings(
             advanced_features = $5, crm_enabled = $6, not_for_profit_enabled = $7, allow_negative_stock = $8,
             postal_address = $9, gst_number = $10, payment_details = $11, gst_period_months = $12,
             gst_period_end_month = $13, foreign_trade = $14,
-            export_tax_code_id = coalesce($15::bigint, export_tax_code_id), analytics_enabled = $16, updated_at = now()
+            export_tax_code_id = coalesce($15::bigint, export_tax_code_id), analytics_enabled = $16,
+            gst_registered = $19, gst_registered_from = $17::date, gst_registered_until = $18::date, updated_at = now()
       where id = true`,
     [
       displayName,
@@ -299,6 +332,9 @@ export async function updateOrganisationSettings(
       foreignTrade,
       exportTax?.id ?? null,
       analyticsEnabled,
+      gstRegisteredFrom,
+      gstRegisteredUntil,
+      gstRegistered,
     ],
   );
   await writeAuditEvent(tx, {
@@ -322,6 +358,9 @@ export async function updateOrganisationSettings(
       ...(foreignTrade !== current.foreignTrade ? { foreignTrade } : {}),
       ...(exportTaxCode !== current.exportTaxCode ? { exportTaxCode } : {}),
       ...(analyticsEnabled !== current.analyticsEnabled ? { analyticsEnabled } : {}),
+      ...(gstRegistered !== current.gstRegistered ? { gstRegistered } : {}),
+      ...(gstRegisteredFrom !== current.gstRegisteredFrom ? { gstRegisteredFrom } : {}),
+      ...(gstRegisteredUntil !== current.gstRegisteredUntil ? { gstRegisteredUntil } : {}),
     },
   });
   return {
@@ -340,8 +379,57 @@ export async function updateOrganisationSettings(
     exportTaxCode,
     postalAddress,
     gstNumber,
+    gstRegistered,
+    gstRegisteredFrom,
+    gstRegisteredUntil,
     paymentDetails,
   };
+}
+
+/**
+ * GST registration (issue #180, NR5-NR8): turning it on needs a GST number;
+ * the end can't be before the start; and the change can't leave GST already
+ * in the books (on the GST account) outside the registration, since approved
+ * documents never change (NR7).
+ */
+async function checkGstRegistration(
+  tx: OrgTx,
+  current: OrganisationSettings,
+  next: { gstNumber: string | null; gstRegistered: boolean; gstRegisteredFrom: string | null; gstRegisteredUntil: string | null },
+): Promise<void> {
+  if (next.gstRegistered && !current.gstRegistered && next.gstNumber === null) {
+    throw new ValidationError("Enter the GST number to register for GST.");
+  }
+  if (next.gstRegisteredUntil !== null && next.gstRegisteredFrom !== null && next.gstRegisteredUntil < next.gstRegisteredFrom) {
+    throw new ValidationError(`GST registration can't end (${next.gstRegisteredUntil}) before it starts (${next.gstRegisteredFrom}).`);
+  }
+  if (
+    next.gstRegistered === current.gstRegistered &&
+    next.gstRegisteredFrom === current.gstRegisteredFrom &&
+    next.gstRegisteredUntil === current.gstRegisteredUntil
+  ) {
+    return;
+  }
+  const outside = await tx.query<{ first: string | null; last: string | null }>(
+    `select min(j.posting_date)::text as first, max(j.posting_date)::text as last
+       from ledger_journal_lines l
+       join ledger_journals j on j.id = l.journal_id
+       join accounts a on a.id = l.account_id
+      where a.system_key = 'gst'
+        and (not $1::boolean
+             or ($2::date is not null and j.posting_date < $2::date)
+             or ($3::date is not null and j.posting_date > $3::date))`,
+    [next.gstRegistered, next.gstRegisteredFrom, next.gstRegisteredUntil],
+  );
+  const row = outside.rows[0];
+  if (row?.first) {
+    const span = `${row.first}${row.last !== row.first ? ` to ${row.last}` : ""}`;
+    throw new ValidationError(
+      !next.gstRegistered
+        ? `GST has already been charged or claimed in the books (${span}), so this organisation can't be made not registered. Set the date its registration ended instead.`
+        : `GST has been charged or claimed in the books on dates outside these registration dates (${span}). Approved documents don't change, so choose dates that cover them.`,
+    );
+  }
 }
 
 /**

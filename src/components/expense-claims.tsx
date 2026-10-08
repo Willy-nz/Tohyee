@@ -1,5 +1,6 @@
 "use client";
 
+import { useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -19,7 +20,6 @@ import type { ExpenseClaim, ExpenseClaimMileage, ExpenseClaimStatus, ExpenseClai
 import { formatDate, formatDateTime, formatGstNumber, todayInBrowser, personName } from "@/lib/format";
 import { calculateInvoice, PAID_STATUS_LABELS } from "@/lib/invoices/amounts";
 import { isDecimalString } from "@/lib/money/decimal";
-import type { TaxCode } from "@/lib/tax/codes";
 import { codesForSide } from "@/lib/tax/available-on";
 import type { TrackingTags } from "@/lib/tracking/service";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -107,7 +107,7 @@ export function ExpenseClaimEditor({
   onCancel: () => void;
 }) {
   const accounts = useAccounts(organisationId);
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useDocumentTaxCodes(organisationId);
   const tracking = useTracking(organisationId);
   // Receipts are purchases: only codes available on purchases (TAO6).
   const active = codesForSide(taxCodes.data?.taxCodes ?? [], "purchases").filter((taxCode) => taxCode.isActive);

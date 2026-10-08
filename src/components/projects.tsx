@@ -1,5 +1,6 @@
 "use client";
 
+import { useDocumentTaxCodes } from "@/components/document-tax-codes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -25,7 +26,6 @@ import type {
   TimeEntry,
   TimeReport,
 } from "@/lib/projects/service";
-import type { TaxCode } from "@/lib/tax/codes";
 import { codesForSide } from "@/lib/tax/available-on";
 import { useExportSettings } from "@/components/exports";
 import { contactSalesTaxCode } from "@/lib/tax/exports";
@@ -711,7 +711,7 @@ function ExpensesCard({ organisationId, project, onChanged }: { organisationId: 
 function InvoiceCard({ organisationId, project, onChanged }: { organisationId: string; project: Project; onChanged: (project: Project, message: string) => void }) {
   const { can } = useWorkspace();
   const accounts = useAccounts(organisationId);
-  const taxCodes = useApiData<{ taxCodes: TaxCode[] }>("/api/tax/codes", { organisationId });
+  const taxCodes = useDocumentTaxCodes(organisationId);
   const router = useRouter();
   const time = project.timeEntries.filter((entry) => entry.status === "active" && entry.chargeType === "hourly" && !entry.billedOn && !entry.writtenOffAt);
   const fixed = project.tasks.filter((task) => task.chargeType === "fixed" && task.status === "active" && !task.billedOn && !task.writtenOffAt);
