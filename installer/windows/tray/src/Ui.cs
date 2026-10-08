@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -227,7 +228,9 @@ namespace Tohyee.Tray
             var last = list.Columns[list.Columns.Count - 1];
             // Leave room for a vertical scroll bar if the rows don't all fit.
             var rows = (list.Items.Count + 1) * Theme.S(28);
-            var room = list.ClientSize.Width - used - 4 - (rows > list.ClientSize.Height ? SystemInformation.VerticalScrollBarWidth : 0);
+            // To the very edge: the 4 pixels left over showed Windows' own light header beside the
+            // dark one (the white strip in #198's screenshots).
+            var room = list.ClientSize.Width - used - (rows > list.ClientSize.Height ? SystemInformation.VerticalScrollBarWidth : 0);
             var needed = last.Tag is int ? (int)last.Tag : last.Width;
             last.Width = Math.Max(needed, room);
         }
@@ -269,6 +272,11 @@ namespace Tohyee.Tray
         /// </summary>
         public static async Task<bool> Busy(Control owner, Label status, Func<Task> work)
         {
+            // Several pieces of work can overlap on one page (#198): the page is enabled
+            // again only when the last of them has finished, not when the first does.
+            int running;
+            BusyCounts.TryGetValue(owner, out running);
+            BusyCounts[owner] = running + 1;
             owner.Cursor = Cursors.WaitCursor;
             owner.Enabled = false;
             try
@@ -278,19 +286,84 @@ namespace Tohyee.Tray
             }
             catch (ApiException error)
             {
-                if (status != null) Show(status, error.Message, true);
-                else MessageBox.Show(error.Message, "Tohyee", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                // A page closed (or signed out of) while it waited says nothing (#198).
+                if (owner.IsDisposed) return false;
+                if (status != null && !status.IsDisposed) Show(status, error.Message, true);
+                else if (status == null) MessageBox.Show(error.Message, "Tohyee", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+            catch (ObjectDisposedException) when (owner.IsDisposed)
+            {
+                // The answer arrived after the page had gone; nothing to show it on.
                 return false;
             }
             finally
             {
-                if (!owner.IsDisposed)
+                int left;
+                BusyCounts.TryGetValue(owner, out left);
+                left -= 1;
+                if (left <= 0) BusyCounts.Remove(owner);
+                else BusyCounts[owner] = left;
+                if (left <= 0 && !owner.IsDisposed)
                 {
                     owner.Enabled = true;
                     owner.Cursor = Cursors.Default;
                 }
             }
         }
+
+        /// <summary>
+        /// Loads a page when it's first made and again when it's shown after being away for at
+        /// least <paramref name="minimumAge"/> (#198: Organisations and Users kept showing what
+        /// they had when first opened). Only one load runs at a time. For pages with nothing typed
+        /// that a reload could wipe.
+        /// </summary>
+        public static void LoadWhenShown(Control page, Func<Task> load, TimeSpan minimumAge)
+        {
+            var running = false;
+            var loadedAt = DateTime.MinValue;
+            Func<Task> once = async () =>
+            {
+                if (running || page.IsDisposed) return;
+                running = true;
+                try
+                {
+                    await load();
+                    loadedAt = DateTime.UtcNow;
+                }
+                finally
+                {
+                    running = false;
+                }
+            };
+            page.HandleCreated += async (s, e) => await once();
+            page.VisibleChanged += async (s, e) =>
+            {
+                if (page.Visible && page.IsHandleCreated && DateTime.UtcNow - loadedAt >= minimumAge) await once();
+            };
+        }
+
+        /// <summary>The selected row's key, to select the same row again after a reload.</summary>
+        public static string SelectedKey(ListView list, Func<object, string> key)
+        {
+            return list.SelectedItems.Count == 0 ? null : key(list.SelectedItems[0].Tag);
+        }
+
+        public static void Reselect(ListView list, string selected, Func<object, string> key)
+        {
+            if (selected == null) return;
+            foreach (ListViewItem item in list.Items)
+            {
+                if (key(item.Tag) != selected) continue;
+                item.Selected = true;
+                item.Focused = true;
+                item.EnsureVisible();
+                return;
+            }
+        }
+
+        /// <summary>How many pieces of <see cref="Busy"/> work each control is waiting on (all on the UI thread).</summary>
+        private static readonly Dictionary<Control, int> BusyCounts = new Dictionary<Control, int>();
 
         /// <summary>A short "3 days", "5 hours" for how long something has been going.</summary>
         public static string Duration(TimeSpan span)

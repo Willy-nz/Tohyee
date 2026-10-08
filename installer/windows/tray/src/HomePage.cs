@@ -79,11 +79,16 @@ namespace Tohyee.Tray
             Load += async (s, e) =>
             {
                 _timer.Start();
+                // The news doesn't wait for the server's status checks, nor they for it (#198).
+                var news = LoadNews();
                 await Reload();
-                await LoadNews();
+                await news;
             };
             VisibleChanged += async (s, e) =>
             {
+                // The server line only ticks while Home is showing (#198).
+                if (Visible) _timer.Start();
+                else _timer.Stop();
                 if (Visible && IsHandleCreated) await Reload();
             };
         }
@@ -119,8 +124,14 @@ namespace Tohyee.Tray
             {
                 ShowServer();
                 await ShowPhone();
+                if (IsDisposed) return;
                 await ShowBackup();
+                if (IsDisposed) return;
                 await ShowOrganisations();
+            }
+            catch (ObjectDisposedException) when (IsDisposed)
+            {
+                // Signed out or closed while the answers were on their way (#198).
             }
             finally
             {

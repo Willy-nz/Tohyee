@@ -79,6 +79,9 @@ namespace Tohyee.Tray
             };
             VisibleChanged += async (s, e) =>
             {
+                // Asks the server every 15 seconds only while Stats is showing (#198).
+                if (Visible) _timer.Start();
+                else _timer.Stop();
                 if (Visible && IsHandleCreated) await Reload();
             };
         }
@@ -95,13 +98,15 @@ namespace Tohyee.Tray
             _loading = true;
             try
             {
-                _stats = await _api.Get("/api/admin/stats");
+                var stats = await _api.Get("/api/admin/stats");
+                if (IsDisposed) return;
+                _stats = stats;
                 _status.Text = "";
                 ShowStats();
             }
             catch (ApiException error)
             {
-                Ui.Show(_status, error.Message, true);
+                if (!IsDisposed) Ui.Show(_status, error.Message, true);
             }
             finally
             {

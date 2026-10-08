@@ -468,6 +468,15 @@ namespace Tohyee.Tray
 
         private void FitHeight()
         {
+            // An auto-sized body is only resized when the card itself lays out, which doesn't
+            // always happen after content arrives later: Home's news body stayed 0 pixels high
+            // with all its news in it, so the card looked blank (#198, from the control layout
+            // the screenshots now write). Size the body to what it needs here as well.
+            if (Body.AutoSize)
+            {
+                var needed = Body.GetPreferredSize(new Size(InnerWidth, 0)).Height;
+                if (Body.Height != needed) Body.Height = needed;
+            }
             var height = Math.Max(ContentHeight, _minContentHeight);
             if (Height != height) Height = height;
         }
@@ -487,6 +496,7 @@ namespace Tohyee.Tray
             Body.SuspendLayout();
             foreach (Control child in Body.Controls) Fit(child, InnerWidth);
             Body.ResumeLayout();
+            FitHeight();
         }
 
         private void Fit(Control child)

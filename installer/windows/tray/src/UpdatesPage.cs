@@ -56,13 +56,31 @@ namespace Tohyee.Tray
             };
         }
 
+        /// <summary>The newest refresh asked for; an older answer never replaces a newer one (#198).</summary>
+        private int _refreshGeneration;
+        private bool _refreshing;
+
         private async Task Reload(bool checkNow)
         {
-            await Ui.Busy(this, _status, async () =>
+            // Opening the page (Load, then becoming visible) or flicking away and back while a
+            // refresh is on its way doesn't start another; "Check now" always does.
+            if (_refreshing && !checkNow) return;
+            var generation = ++_refreshGeneration;
+            _refreshing = true;
+            try
             {
-                _details = checkNow ? await _app.Api.Post("/api/admin/updates/check", null) : await _app.Api.Get("/api/admin/updates");
-                ShowDetails();
-            });
+                await Ui.Busy(this, _status, async () =>
+                {
+                    var details = checkNow ? await _app.Api.Post("/api/admin/updates/check", null) : await _app.Api.Get("/api/admin/updates");
+                    if (generation != _refreshGeneration || IsDisposed) return;
+                    _details = details;
+                    ShowDetails();
+                });
+            }
+            finally
+            {
+                if (generation == _refreshGeneration) _refreshing = false;
+            }
         }
 
         private void ShowDetails()

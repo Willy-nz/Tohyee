@@ -24,6 +24,32 @@ the client's own account), one PR per stage, all checks pass.
 | 9 | Tradify | Jobs, scheduling with calendar sync, job photos, service reminders | Partly (as ServiceM8) |
 | 10 | A2X | Marketplace payouts as summary entries with fees, refunds and COGS | Partly: Shopify orders, refunds and payouts. Missing: other platforms, chargebacks and reserves, summary mode |
 
+## Where it stands (8 Oct 2026, after the audit in #196)
+
+The table above is the starting point on 5 Oct and is kept as it was. This is
+now. "Tested" means the database-backed integration tests for it pass: in
+CI (PostgreSQL 17, Node 22 and 24, every database test running) on main at
+43d7af32, 8 Oct 2026, and locally (2,099 tests). Every provider in those
+tests is simulated; **none of this has been checked against a real Stripe,
+PayPal, Shopify, WooCommerce, mailbox or connected AI account yet.**
+
+| # | App | Built | Tested (simulated providers) | Checked with the real service | Not built |
+|---|-----|-------|------------------------------|-------------------------------|-----------|
+| 1 | Syft | Analytics, budgets, custom reports, cash flow forecast, consolidation, AI commentary as a suggestion | CF1-CF9, CO1-CO11, FX1, AC1-AC2 | n/a (nothing external) | Full Syft parity isn't claimed |
+| 2 | Dext | Bills inbox (upload and mailbox), file-to-draft, duplicate checks, supplier defaults, richer bank rules, mileage | BI1-BI7, DU1-DU5, MI1-MI7, BR1-BR10, SD1-SD3 | No: no real mailbox, and AI reading hasn't been measured on real bills | Built-in reading (by choice: only the connected AI reads files; the inbox now says so) |
+| 3 | Stripe | Pay now links, payments recorded into the Stripe bank account, the Stripe feed | PN1-PN12, ST1-ST10 | No | Saved cards (deferred); refunds and disputes aren't applied to the invoice by themselves (by design, PN8-PN9; the Online payments page now explains what to do) |
+| 4 | ApprovalMax | Rules, steps, budget at approval, email link with sign-in, history | AW1-AW17 | n/a | Approving without signing in (by choice) |
+| 5 | PayPal | Pay with PayPal, payments into linked balances, the PayPal feed | PPN1-PPN10, PP1-PP10 | No | PayPal sales as a sales platform (stage 7) |
+| 6 | ServiceM8 | Foundations: projects, tasks, time, expenses, quotes, invoices, CRM | Projects tests | n/a | Stage 8: visits calendar, dispatch, checklists, signatures, job photos, service reminders |
+| 7 | Deputy | Foundations: employees, leave, timesheets, workforce budgets | Payroll tests | n/a | Stage 9: rosters, shift costs, unavailability, clock in and out |
+| 8 | GoCardless | Nothing | - | - | Stage 10: all of it. Not offered anywhere in Tohyee |
+| 9 | Tradify | As ServiceM8 (one jobs workflow for both, stage 8) | - | - | As ServiceM8, plus calendar sync |
+| 10 | A2X | Shopify orders, refunds, payouts, chargebacks, reserves; WooCommerce orders | SPC1-SPC31, WC1-WC10 | No | Stripe sales, Square, Amazon, eBay, Etsy, PayPal sales. Summary posting: declined by Jess, not missing |
+
+Since #182, an organisation can have several logins per provider; online
+payments use the first Stripe or PayPal login (decision 481), which updates
+answer 8 below.
+
 ## Jess's answers (5 Oct 2026)
 
 1. **Order:** the stage order below.
