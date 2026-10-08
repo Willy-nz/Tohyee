@@ -64,6 +64,15 @@ namespace Tohyee.Tray
                     // Where every control ended up, to find blank cards like Home's news (#198).
                     if (Transitions) File.WriteAllText(Path.Combine(folder, "layout-" + Name(page) + ".txt"), Layout(form, 0));
                 }
+                // Home in a narrow window: the quick looks two to a row.
+                var wide = form.ClientSize;
+                form.ClientSize = new Size(Theme.S(900), Theme.S(700));
+                form.Navigate("home");
+                Pump();
+                Save(form, folder, "1-home-narrow");
+                form.ClientSize = wide;
+                Pump();
+
                 if (Transitions)
                 {
                     // Coming back to a page that's already made.

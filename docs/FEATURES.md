@@ -15,9 +15,10 @@ that something happened.
   logo with a green, amber or red dot; started when you sign in, like a
   media server's) that shows whether Tohyee is running, restarts it, backs it
   up and opens the logs, and a dark window for the settings with a sidebar
-  (Home, Organisations, Users, Remote access, Backups, Email, Stats, Updates). **Home**
-  shows whether the server is running (version, how long it's been up),
-  remote access, the last backup and the organisations at a glance, the latest
+  (Home; Organisations and Users; Backups and Updates; Remote access, Email
+  and Analytics; Stats, with a badge where something needs attention). **Home**
+  shows whether the server is running (version, how long it's been up), what
+  needs attention, the last backup, remote access, the organisations and email at a glance, the latest
   Tohyee news (GitHub releases plus announcements from `website/news.json`,
   fetched at most every four hours and kept for when the computer is
   offline) and a (light-hearted) conference card. On Docker and Linux they're a **command-line tool**

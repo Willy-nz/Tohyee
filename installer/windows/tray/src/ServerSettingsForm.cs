@@ -27,8 +27,8 @@ namespace Tohyee.Tray
 
     /// <summary>
     /// The server settings window. Signing in as a server admin (with two-step
-    /// sign-in) comes first; then a sidebar with Home, Organisations, Users,
-    /// Remote access, Backups, Analytics, Email, Stats and Updates. Nothing here touches the books.
+    /// sign-in) comes first; then a sidebar with Home; Organisations and Users;
+    /// Backups and Updates; Remote access, Email and Analytics; and Stats. Nothing here touches the books.
     /// </summary>
     internal sealed class ServerSettingsForm : Form
     {
@@ -140,7 +140,7 @@ namespace Tohyee.Tray
         {
             switch (key)
             {
-                case "home": return new HomePage(_app, Navigate);
+                case "home": return new HomePage(_app, Navigate, SetBadge);
                 case "organisations": return new OrganisationsPage(_app.Api);
                 case "users": return new UsersPage(_app.Api);
                 case "phone": return new RemoteAccessPage(_app.Api, _app.Settings, _app.Tailscale, _app.Cloudflare);
@@ -151,6 +151,12 @@ namespace Tohyee.Tray
                 case "stats": return new StatsPage(_app.Api);
                 default: throw new ArgumentException(key);
             }
+        }
+
+        /// <summary>Home's checks set the sidebar's badges (Backups, Updates, Organisations, Remote access).</summary>
+        private void SetBadge(string key, int count, Color colour)
+        {
+            if (_sidebar != null && !_sidebar.IsDisposed) _sidebar.SetBadge(key, count, colour);
         }
 
         /// <summary>Shows a page (made the first time it's opened, then kept, like tabs).</summary>
@@ -256,16 +262,22 @@ namespace Tohyee.Tray
         }
     }
 
-    /// <summary>The left side of the window: the logo, the pages, and who's signed in.</summary>
+    /// <summary>
+    /// The left side of the window: the logo, the pages in groups (People, Keep
+    /// safe, Connect, Server) with a badge where something needs attention, and
+    /// who's signed in (the server app redesign, approved by Jess on 9 Oct 2026).
+    /// </summary>
     internal sealed class Sidebar : Panel
     {
         private readonly List<NavItem> _items = new List<NavItem>();
+        /// <summary>Group headings and items, top to bottom.</summary>
+        private readonly List<Control> _order = new List<Control>();
         private readonly Picture _logo = Picture.Logo(36);
         private readonly Label _name = new Label { Text = "Tohyee", Font = Theme.F("Segoe UI Semibold", 14f), ForeColor = Color.White, AutoSize = true, BackColor = Theme.Sidebar };
         private readonly Label _kind = new Label { Text = "SERVER", Font = Theme.SmallCaps, ForeColor = Theme.AccentText, AutoSize = true, BackColor = Theme.Sidebar };
         private readonly Label _who = new Label { ForeColor = Theme.Muted, Font = Theme.Small, AutoSize = false, AutoEllipsis = true, BackColor = Theme.Sidebar };
+        private readonly LinkLabel _signOut = new LinkLabel { Text = "Sign out", Font = Theme.Small, AutoSize = true, BackColor = Theme.Sidebar, LinkBehavior = LinkBehavior.HoverUnderline };
         private readonly FlatButton _open;
-        private readonly NavItem _signOut;
 
         public Sidebar(string email, Action<string> navigate, Action openBooks, Action signOut)
         {
@@ -278,23 +290,36 @@ namespace Tohyee.Tray
             Controls.Add(_name);
             Controls.Add(_kind);
             Add(navigate, "home", "Home", Glyph.Home);
+            Group("People");
             Add(navigate, "organisations", "Organisations", Glyph.Organisations);
             Add(navigate, "users", "Users", Glyph.Users);
-            Add(navigate, "phone", "Remote access", Glyph.Phone);
+            Group("Keep safe");
             Add(navigate, "backups", "Backups", Glyph.Backups);
-            Add(navigate, "analytics", "Analytics", Glyph.Stats);
-            Add(navigate, "email", "Email", Glyph.Email);
-            Add(navigate, "stats", "Stats", Glyph.Stats);
             Add(navigate, "updates", "Updates", Glyph.Updates);
+            Group("Connect");
+            Add(navigate, "phone", "Remote access", Glyph.Phone);
+            Add(navigate, "email", "Email", Glyph.Email);
+            Add(navigate, "analytics", "Analytics", Glyph.Stats);
+            Group("Server");
+            Add(navigate, "stats", "Stats", Glyph.Stats);
 
-            _who.Text = "Signed in as\n" + (email ?? "");
+            _who.Text = "Signed in as " + (email ?? "");
             Controls.Add(_who);
+            _signOut.LinkColor = Theme.AccentText;
+            _signOut.ActiveLinkColor = Color.White;
+            _signOut.VisitedLinkColor = Theme.AccentText;
+            _signOut.LinkClicked += (s, e) => signOut();
+            Controls.Add(_signOut);
             _open = new FlatButton("Open Tohyee (the books)", ButtonKind.Primary) { AutoSize = false, Height = Theme.S(36) };
             _open.Click += (s, e) => openBooks();
             Controls.Add(_open);
-            _signOut = new NavItem("signout", "Sign out", Glyph.SignOut);
-            _signOut.Click += (s, e) => signOut();
-            Controls.Add(_signOut);
+        }
+
+        private void Group(string text)
+        {
+            var heading = new Label { Text = text.ToUpperInvariant(), Font = Theme.SmallCaps, ForeColor = Theme.Muted, AutoSize = true, BackColor = Theme.Sidebar };
+            _order.Add(heading);
+            Controls.Add(heading);
         }
 
         private void Add(Action<string> navigate, string key, string text, Glyph glyph)
@@ -302,6 +327,7 @@ namespace Tohyee.Tray
             var item = new NavItem(key, text, glyph);
             item.Click += (s, e) => navigate(key);
             _items.Add(item);
+            _order.Add(item);
             Controls.Add(item);
         }
 
@@ -310,28 +336,46 @@ namespace Tohyee.Tray
             foreach (var item in _items) item.Selected = item.Key == key;
         }
 
+        /// <summary>A badge on a page's item: how many things there need attention (0 removes it).</summary>
+        public void SetBadge(string key, int count, Color colour)
+        {
+            foreach (var item in _items)
+            {
+                if (item.Key == key) item.SetBadge(count, colour);
+            }
+        }
+
         protected override void OnLayout(LayoutEventArgs levent)
         {
             base.OnLayout(levent);
-            if (_open == null || _signOut == null) return; // still being built
+            if (_open == null) return; // still being built
             var side = Theme.S(12);
             var width = Width - side * 2 - 1;
-            var item40 = Theme.S(40);
+            var itemHeight = Theme.S(36);
             _logo.Location = new Point(side + Theme.S(8), Theme.S(22));
             var block = _name.Height + _kind.Height - Theme.S(2);
             _name.Location = new Point(_logo.Right + Theme.S(10), _logo.Top + (_logo.Height - block) / 2 - Theme.S(2));
             _kind.Location = new Point(_logo.Right + Theme.S(12), _name.Bottom - Theme.S(2));
-            var y = Theme.S(92);
-            foreach (var item in _items)
+            var y = Theme.S(80);
+            foreach (var control in _order)
             {
-                item.SetBounds(side, y, width, item40);
-                y += item40 + Theme.S(2);
+                if (control is NavItem)
+                {
+                    control.SetBounds(side, y, width, itemHeight);
+                    y += itemHeight + Theme.S(2);
+                }
+                else
+                {
+                    y += Theme.S(10);
+                    control.Location = new Point(side + Theme.S(12), y);
+                    y += control.Height + Theme.S(4);
+                }
             }
             var bottom = Height - Theme.S(16);
-            _signOut.SetBounds(side, bottom - item40, width, item40);
-            _open.SetBounds(side, _signOut.Top - Theme.S(46), width, Theme.S(36));
-            var who = TextRenderer.MeasureText("Signed in as\nx", _who.Font).Height;
-            _who.SetBounds(side + Theme.S(8), _open.Top - who - Theme.S(8), width - Theme.S(8), who);
+            _open.SetBounds(side, bottom - Theme.S(36), width, Theme.S(36));
+            var line = TextRenderer.MeasureText("x", _who.Font).Height;
+            _signOut.Location = new Point(side + Theme.S(8), _open.Top - Theme.S(8) - _signOut.Height);
+            _who.SetBounds(side + Theme.S(8), _signOut.Top - line - Theme.S(2), width - Theme.S(8), line);
         }
 
         protected override void OnPaint(PaintEventArgs e)

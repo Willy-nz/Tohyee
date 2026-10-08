@@ -423,10 +423,14 @@ namespace Tohyee.Tray
         /// <summary>A coloured strip along the card's left edge (e.g. the accent), or empty.</summary>
         public Color Strip { get; set; }
 
+        /// <summary>The outline (Home's "Needs attention" card is amber).</summary>
+        public Color Border { get; set; }
+
         public Card()
         {
             Fill = Theme.Card;
             Strip = Color.Empty;
+            Border = Theme.CardBorder;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
             BackColor = Theme.Bg;
             Margin = new Padding(0, 0, 0, Theme.S(16));
@@ -537,7 +541,7 @@ namespace Tohyee.Tray
             g.SmoothingMode = SmoothingMode.AntiAlias;
             using (var path = Theme.Rounded(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), Theme.S(10)))
             using (var brush = new SolidBrush(Fill))
-            using (var pen = new Pen(Theme.CardBorder))
+            using (var pen = new Pen(Border))
             {
                 g.FillPath(brush, path);
                 if (Strip != Color.Empty)
@@ -653,6 +657,70 @@ namespace Tohyee.Tray
                 foreach (var card in _cards) height = Math.Max(height, card.ContentHeight);
                 foreach (var card in _cards) card.MinContentHeight = height;
                 if (Height != height) Height = height;
+            }
+            finally
+            {
+                _fitting = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Cards in a grid: all in one row when there's room, otherwise two to a row
+    /// (Home's quick looks in a narrow window). Cards in a row are as tall as the tallest.
+    /// </summary>
+    internal sealed class CardGrid : Panel
+    {
+        private readonly Card[] _cards;
+        private readonly int _minCardWidth;
+        private bool _fitting;
+
+        public CardGrid(Card[] cards, int minCardWidth)
+        {
+            _cards = cards;
+            _minCardWidth = minCardWidth;
+            BackColor = Theme.Bg;
+            Margin = new Padding(0, 0, 0, Theme.S(16));
+            Tag = "stretch";
+            foreach (var card in cards)
+            {
+                card.Margin = new Padding(0);
+                Controls.Add(card);
+                card.Body.SizeChanged += (s, e) => PerformLayout();
+            }
+        }
+
+        protected override void OnLayout(LayoutEventArgs levent)
+        {
+            base.OnLayout(levent);
+            if (_fitting || _cards.Length == 0) return;
+            _fitting = true;
+            try
+            {
+                var gap = SplitRow.Gap;
+                var columns = _cards.Length;
+                while (columns > 1 && (Width - gap * (columns - 1)) / columns < _minCardWidth) columns = columns > 2 ? 2 : 1;
+                var y = 0;
+                for (var start = 0; start < _cards.Length; start += columns)
+                {
+                    var count = Math.Min(columns, _cards.Length - start);
+                    var free = Width - gap * (columns - 1);
+                    var x = 0;
+                    var height = 0;
+                    for (var i = 0; i < count; i++)
+                    {
+                        var card = _cards[start + i];
+                        var width = i == columns - 1 ? Width - x : free / columns;
+                        card.Location = new Point(x, y);
+                        if (card.Width != width) card.Width = width;
+                        x += width + gap;
+                    }
+                    for (var i = 0; i < count; i++) height = Math.Max(height, _cards[start + i].ContentHeight);
+                    for (var i = 0; i < count; i++) _cards[start + i].MinContentHeight = height;
+                    y += height + gap;
+                }
+                var total = Math.Max(0, y - gap);
+                if (Height != total) Height = total;
             }
             finally
             {
@@ -778,6 +846,18 @@ namespace Tohyee.Tray
             set { _selected = value; Invalidate(); }
         }
 
+        private int _badge;
+        private Color _badgeColour = Theme.Warning;
+
+        /// <summary>How many things on this page need attention (0: no badge).</summary>
+        public void SetBadge(int count, Color colour)
+        {
+            if (_badge == count && _badgeColour == colour) return;
+            _badge = count;
+            _badgeColour = colour;
+            Invalidate();
+        }
+
         public NavItem(string key, string text, Glyph glyph)
         {
             Key = key;
@@ -833,7 +913,21 @@ namespace Tohyee.Tray
             }
             var colour = _selected ? Color.White : Theme.Muted;
             Icons.Draw(g, Glyph, new RectangleF(Theme.S(16), (Height - Theme.S(20)) / 2f, Theme.S(20), Theme.S(20)), _selected ? Theme.AccentText : colour);
-            TextRenderer.DrawText(g, Text, _selected ? Theme.NavSelectedFont : Theme.Nav, new Rectangle(Theme.S(48), 0, Width - Theme.S(52), Height), colour,
+            var textRight = Width - Theme.S(4);
+            if (_badge > 0)
+            {
+                var number = _badge > 9 ? "9+" : _badge.ToString();
+                var size = TextRenderer.MeasureText(number, Theme.SmallCaps);
+                var pill = new RectangleF(Width - Theme.S(12) - Math.Max(Theme.S(20), size.Width + Theme.S(8)), (Height - Theme.S(18)) / 2f, Math.Max(Theme.S(20), size.Width + Theme.S(8)), Theme.S(18));
+                using (var path = Theme.Rounded(pill, Theme.S(9)))
+                using (var brush = new SolidBrush(_badgeColour))
+                {
+                    g.FillPath(brush, path);
+                }
+                TextRenderer.DrawText(g, number, Theme.SmallCaps, Rectangle.Round(pill), Theme.Sidebar, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+                textRight = (int)pill.Left - Theme.S(6);
+            }
+            TextRenderer.DrawText(g, Text, _selected ? Theme.NavSelectedFont : Theme.Nav, new Rectangle(Theme.S(48), 0, Math.Max(0, textRight - Theme.S(48)), Height), colour,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
         }
     }
