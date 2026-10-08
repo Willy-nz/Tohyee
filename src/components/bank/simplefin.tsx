@@ -34,6 +34,9 @@ export function SimpleFinSettingsCard({ organisationId }: { organisationId: stri
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const status = data.data?.simplefin ?? null;
+  // Another login (#182, BK30): its name.
+  const [adding, setAdding] = useState(false);
+  const [loginName, setLoginName] = useState("");
 
   async function run(label: string, work: () => Promise<void>) {
     setBusy(label);
@@ -50,37 +53,37 @@ export function SimpleFinSettingsCard({ organisationId }: { organisationId: stri
   const connect = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void run("connect", async () => {
-      await api("/api/bank-feeds/simplefin", { method: "POST", body: { organisationId, setupToken } });
+      await api("/api/bank-feeds/simplefin", { method: "POST", body: { organisationId, name: loginName.trim() || undefined, setupToken } });
+      setLoginName("");
+      setAdding(false);
       setSetupToken("");
       setMessage({ tone: "success", text: "Connected. Link each account on its bank account's Bank feed tab." });
       data.reload();
     });
   };
-  const sync = () =>
+  const sync = (connectionId: string | null) =>
     run("sync", async () => {
-      const response = await api<{ result: SimpleFinSyncResult }>("/api/bank-feeds/simplefin/sync", { method: "POST", body: { organisationId } });
+      const response = await api<{ result: SimpleFinSyncResult }>("/api/bank-feeds/simplefin/sync", { method: "POST", body: { organisationId, connectionId } });
       setMessage(syncMessage(response.result));
       data.reload();
     });
-  const refresh = () =>
+  const refresh = (connectionId: string | null) =>
     run("refresh", async () => {
-      await api("/api/bank-feeds/simplefin/accounts", { method: "POST", body: { organisationId } });
+      await api("/api/bank-feeds/simplefin/accounts", { method: "POST", body: { organisationId, connectionId } });
       data.reload();
     });
-  const changeHours = (hours: number) =>
+  const changeHours = (connectionId: string | null, hours: number) =>
     run("hours", async () => {
-      await api("/api/bank-feeds/simplefin", { method: "PATCH", body: { organisationId, syncEveryHours: hours } });
+      await api("/api/bank-feeds/simplefin", { method: "PATCH", body: { organisationId, connectionId, syncEveryHours: hours } });
       data.reload();
     });
-  const disconnect = async () => {
+  const disconnect = async (connectionId: string | null, name: string | null) => {
     if (
-      !(await confirm(
-        "Disconnect SimpleFIN? Tohyee deletes its access and unlinks every account. Lines already brought in stay; nothing posted changes.",
-      ))
+      !(await confirm(`Disconnect ${name ?? "SimpleFIN"}? Tohyee deletes its access and unlinks every account. Lines already brought in stay; nothing posted changes.`))
     )
       return;
     await run("disconnect", async () => {
-      await api("/api/bank-feeds/simplefin", { method: "DELETE", query: { organisationId } });
+      await api("/api/bank-feeds/simplefin", { method: "DELETE", query: { organisationId, ...(connectionId ? { connectionId } : {}) } });
       data.reload();
     });
   };
@@ -95,43 +98,22 @@ export function SimpleFinSettingsCard({ organisationId }: { organisationId: stri
           This server has no TOHYEE_SECRET_KEY, so the SimpleFIN connection can&apos;t be stored. The server admin needs to set it.
         </Notice>
       ) : null}
-      {!status.connected ? (
-        can("admin") ? (
-          <form onSubmit={connect} style={{ display: "grid", gap: 12 }} autoComplete="off">
-            <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
-              <li>Sign up at bridge.simplefin.org with this organisation&apos;s own account (SimpleFIN charges for it) and connect its banks.</li>
-              <li>Create a new app connection there, and copy its setup token.</li>
-              <li>Paste it below. It works once; Tohyee keeps the access it gives, encrypted.</li>
-            </ol>
-            <div className={ui.grid2}>
-              <Field label="Setup token">
-                <input type="password" value={setupToken} onChange={(event) => setSetupToken(event.target.value.trim())} required />
-              </Field>
-            </div>
-            <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
-              <Button type="submit" disabled={busy !== null || !setupToken || !status.secretsAvailable}>
-                {busy === "connect" ? "Connecting…" : "Connect"}
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <Empty>Not connected. An organisation admin can connect SimpleFIN.</Empty>
-        )
-      ) : (
-        <>
+      {status.connections.map((connection) => (
+        <div key={connection.connectionId} style={{ display: "grid", gap: 12 }}>
+          {status.connections.length > 1 || connection.name !== "SimpleFIN" ? <h4 style={{ margin: 0 }}>{connection.name}</h4> : null}
           <p>
-            <Badge tone={status.lastSyncStatus === "failed" ? "red" : "green"}>{status.lastSyncStatus === "failed" ? "Problem" : "Connected"}</Badge>{" "}
-            {status.host}
+            <Badge tone={connection.lastSyncStatus === "failed" ? "red" : "green"}>{connection.lastSyncStatus === "failed" ? "Problem" : "Connected"}</Badge>{" "}
+            {connection.host}
             <span className={ui.muted}>
               {" "}
-              · connected {formatDateTime(status.createdAt)}
-              {personName(status, "createdBy") ? ` by ${personName(status, "createdBy")}` : ""} · last synced{" "}
-              {status.lastSyncedAt ? formatDateTime(status.lastSyncedAt) : "not yet"} · {status.requestsLast24h} of 24 requests used in the last 24
+              · connected {formatDateTime(connection.createdAt)}
+              {personName(connection, "createdBy") ? ` by ${personName(connection, "createdBy")}` : ""} · last synced{" "}
+              {connection.lastSyncedAt ? formatDateTime(connection.lastSyncedAt) : "not yet"} · {connection.requestsLast24h} of 24 requests used in the last 24
               hours
             </span>
           </p>
-          {status.lastSyncError ? <Notice tone="error">{status.lastSyncError}</Notice> : null}
-          {status.problems.length && !status.lastSyncError ? <Notice tone="error">{status.problems.join(" ")}</Notice> : null}
+          {connection.lastSyncError ? <Notice tone="error">{connection.lastSyncError}</Notice> : null}
+          {connection.problems.length && !connection.lastSyncError ? <Notice tone="error">{connection.problems.join(" ")}</Notice> : null}
           <div className={ui.tableWrap}>
             <table className={ui.table} style={{ minWidth: 520 }}>
               <thead>
@@ -143,7 +125,7 @@ export function SimpleFinSettingsCard({ organisationId }: { organisationId: stri
                 </tr>
               </thead>
               <tbody>
-                {status.accounts.map((account) => (
+                {connection.accounts.map((account) => (
                   <tr key={account.id}>
                     <td>
                       {account.name}
@@ -159,18 +141,18 @@ export function SimpleFinSettingsCard({ organisationId }: { organisationId: stri
           </div>
           <div className={ui.actions} style={{ justifyContent: "flex-start", alignItems: "center", flexWrap: "wrap" }}>
             {can("bookkeeper") ? (
-              <Button onClick={() => void sync()} disabled={busy !== null}>
+              <Button onClick={() => void sync(connection.connectionId)} disabled={busy !== null}>
                 {busy === "sync" ? "Syncing…" : "Sync now"}
               </Button>
             ) : null}
             {can("admin") ? (
               <>
-                <Button variant="secondary" onClick={() => void refresh()} disabled={busy !== null}>
+                <Button variant="secondary" onClick={() => void refresh(connection.connectionId)} disabled={busy !== null}>
                   {busy === "refresh" ? "Asking…" : "Refresh account list"}
                 </Button>
                 <label style={{ display: "flex", gap: 8, alignItems: "center", whiteSpace: "nowrap" }}>
                   Sync every
-                  <select value={status.syncEveryHours} disabled={busy !== null} onChange={(event) => void changeHours(Number(event.target.value))}>
+                  <select value={connection.syncEveryHours} disabled={busy !== null} onChange={(event) => void changeHours(connection.connectionId, Number(event.target.value))}>
                     {[1, 2, 3, 4, 6, 8, 12, 24].map((hours) => (
                       <option key={hours} value={hours}>
                         {hours === 1 ? "hour" : `${hours} hours`}
@@ -178,7 +160,7 @@ export function SimpleFinSettingsCard({ organisationId }: { organisationId: stri
                     ))}
                   </select>
                 </label>
-                <Button variant="secondary" onClick={() => void disconnect()} disabled={busy !== null}>
+                <Button variant="secondary" onClick={() => void disconnect(connection.connectionId, connection.name)} disabled={busy !== null}>
                   Disconnect
                 </Button>
               </>
@@ -188,8 +170,47 @@ export function SimpleFinSettingsCard({ organisationId }: { organisationId: stri
             SimpleFIN Bridge allows 24 requests a day. Sync now stops at 20, leaving room for the schedule. Pending transactions come in once they
             post.
           </p>
-        </>
-      )}
+        </div>
+      ))}
+      {!status.connected || adding ? (
+        can("admin") ? (
+          <form onSubmit={connect} style={{ display: "grid", gap: 12 }} autoComplete="off">
+            <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
+              <li>Sign up at bridge.simplefin.org with this organisation&apos;s own account (SimpleFIN charges for it) and connect its banks.</li>
+              <li>Create a new app connection there, and copy its setup token.</li>
+              <li>Paste it below. It works once; Tohyee keeps the access it gives, encrypted.</li>
+            </ol>
+            <div className={ui.grid2}>
+              {status.connected ? (
+                <Field label="Name" hint="Whose login this is, to tell it apart.">
+                  <input value={loginName} onChange={(event) => setLoginName(event.target.value)} maxLength={100} required />
+                </Field>
+              ) : null}
+              <Field label="Setup token">
+                <input type="password" value={setupToken} onChange={(event) => setSetupToken(event.target.value.trim())} required />
+              </Field>
+            </div>
+            <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+              <Button type="submit" disabled={busy !== null || !setupToken || !status.secretsAvailable}>
+                {busy === "connect" ? "Connecting…" : "Connect"}
+              </Button>
+              {adding ? (
+                <Button variant="secondary" onClick={() => setAdding(false)}>
+                  Cancel
+                </Button>
+              ) : null}
+            </div>
+          </form>
+        ) : (
+          <Empty>Not connected. An organisation admin can connect SimpleFIN.</Empty>
+        )
+      ) : can("admin") ? (
+        <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+          <Button variant="secondary" onClick={() => setAdding(true)}>
+            Add another SimpleFIN login
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -216,7 +237,11 @@ function LinkForm({
   const today = todayInBrowser();
   const zones = useMemo(() => timeZones(), []);
   const currency = account.currencyCode ?? account.statementCurrency;
-  const free = status.accounts.filter((option) => !option.linkedAccountId || option.linkedAccountId === account.id);
+  // Every login's accounts (#182, BK31).
+  const several = status.connections.length > 1;
+  const free = status.connections
+    .flatMap((connection) => connection.accounts.map((option) => ({ ...option, connectionId: connection.connectionId ?? "", loginName: connection.name ?? "" })))
+    .filter((option) => !option.linkedAccountId || option.linkedAccountId === account.id);
   const [simplefinAccountId, setSimplefinAccountId] = useState("");
   const [startDate, setStartDate] = useState(() =>
     account.lastLineDate && account.lastLineDate < today ? account.lastLineDate : daysBefore(today, 90),
@@ -230,7 +255,11 @@ function LinkForm({
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/bank-accounts/${account.id}/simplefin`, { method: "POST", body: { organisationId, simplefinAccountId, startDate, timeZone } });
+      const [connectionId, accountId] = simplefinAccountId.split("|");
+      await api(`/api/bank-accounts/${account.id}/simplefin`, {
+        method: "POST",
+        body: { organisationId, connectionId, simplefinAccountId: accountId, startDate, timeZone },
+      });
       onLinked();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -249,8 +278,8 @@ function LinkForm({
           <select value={simplefinAccountId} onChange={(event) => setSimplefinAccountId(event.target.value)} required>
             <option value="">Choose the account</option>
             {free.map((option) => (
-              <option key={option.id} value={option.id} disabled={option.currency !== currency}>
-                {[option.connectionName, option.name].filter(Boolean).join(" · ")} ({option.currency})
+              <option key={`${option.connectionId}|${option.id}`} value={`${option.connectionId}|${option.id}`} disabled={option.currency !== currency}>
+                {[several ? option.loginName : null, option.connectionName, option.name].filter(Boolean).join(" · ")} ({option.currency})
               </option>
             ))}
           </select>
@@ -296,7 +325,7 @@ export function SimpleFinPanel({ organisationId, account, onChanged }: { organis
     setBusy(true);
     setMessage(null);
     try {
-      const response = await api<{ result: SimpleFinSyncResult }>("/api/bank-feeds/simplefin/sync", { method: "POST", body: { organisationId } });
+      const response = await api<{ result: SimpleFinSyncResult }>("/api/bank-feeds/simplefin/sync", { method: "POST", body: { organisationId, connectionId: link.data?.link?.connectionId ?? null } });
       setMessage(syncMessage(response.result));
       reload();
     } catch (caught) {

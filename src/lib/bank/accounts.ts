@@ -19,6 +19,9 @@ export type BankFeedStatus = {
   akahuAccountId: string | null;
   akahuAccountName: string | null;
   akahuConnectionName: string | null;
+  /** The Akahu login it syncs with (#182, BK31), and whether that login needs new tokens (BK33). */
+  akahuLoginName: string | null;
+  akahuLoginProblem: string | null;
   startDate: string | null;
   active: boolean;
   lastSyncedAt: string | null;
@@ -78,6 +81,8 @@ type BankAccountRow = {
   akahu_account_id: string | null;
   akahu_account_name: string | null;
   akahu_connection_name: string | null;
+  akahu_login_name: string | null;
+  akahu_login_problem: string | null;
   feed_start_date: string | null;
   feed_active: boolean | null;
   last_synced_at: string | null;
@@ -107,6 +112,7 @@ const BANK_ACCOUNT_SELECT = `
          (select max(b.line_date) from bank_statement_lines b where b.account_id = a.id and b.status <> 'deleted')::text
            as last_line_date,
          s.import_layout, s.akahu_account_id, s.akahu_account_name, s.akahu_connection_name, s.feed_start_date::text,
+         ac.name as akahu_login_name, ac.token_problem as akahu_login_problem,
          s.feed_active, s.last_synced_at, s.last_sync_status, s.last_sync_error,
          sf.active as simplefin_active, sf.last_synced_at as simplefin_synced_at, sf.last_sync_status as simplefin_status,
          st.active as stripe_active, st.last_synced_at as stripe_synced_at, st.last_sync_status as stripe_status,
@@ -114,6 +120,7 @@ const BANK_ACCOUNT_SELECT = `
          wi.active as wise_active, wi.last_synced_at as wise_synced_at, wi.last_sync_status as wise_status
     from accounts a
     left join bank_account_settings s on s.account_id = a.id
+    left join akahu_connections ac on ac.id = s.akahu_connection_id and ac.status = 'active'
     left join simplefin_links sf on sf.account_id = a.id and sf.active
     left join stripe_links st on st.account_id = a.id and st.active
     left join paypal_links pp on pp.account_id = a.id and pp.active
@@ -145,6 +152,8 @@ function toBankAccount(row: BankAccountRow, scale: number, baseCurrency: string)
       akahuAccountId: row.akahu_account_id,
       akahuAccountName: row.akahu_account_name,
       akahuConnectionName: row.akahu_connection_name,
+      akahuLoginName: row.akahu_login_name,
+      akahuLoginProblem: row.akahu_login_problem,
       startDate: row.feed_start_date,
       active: row.feed_active ?? false,
       lastSyncedAt: row.last_synced_at,

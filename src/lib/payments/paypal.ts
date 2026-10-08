@@ -63,7 +63,8 @@ async function settingsRow(tx: OrgTx, lock = false): Promise<SettingsRow | null>
 
 async function connection(tx: OrgTx): Promise<{ clientId: string; clientSecret: string | null } | null> {
   const found = await tx.query<{ client_id: string; client_secret_ciphertext: string }>(
-    "select client_id, client_secret_ciphertext from paypal_connections where status = 'active'",
+    // With several PayPal logins (#182), online payments use the first one connected.
+    "select client_id, client_secret_ciphertext from paypal_connections where status = 'active' order by id limit 1",
   );
   const row = found.rows[0];
   if (!row) return null;
@@ -148,7 +149,11 @@ async function payPalState(tx: OrgTx, invoiceId: string) {
   const settings = await settingsRow(tx);
   const credentials = await connection(tx);
   const option = await tx.query<{ pay_now: boolean }>("select pay_now from invoice_payment_options where invoice_id = $1", [invoice.id]);
-  const linked = await tx.query("select 1 from paypal_links where active and currency_code = $1", [invoice.currencyCode]);
+  const linked = await tx.query(
+    `select 1 from paypal_links where active and currency_code = $1
+        and connection_id = (select c.id from paypal_connections c where c.status = 'active' order by c.id limit 1)`,
+    [invoice.currencyCode],
+  );
   const available = Boolean(settings?.enabled) && credentials !== null;
   const reason = !settings?.enabled
     ? "Pay with PayPal is off (Settings, Online payments)."

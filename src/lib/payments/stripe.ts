@@ -140,7 +140,8 @@ async function settingsRow(tx: OrgTx, lock = false): Promise<SettingsRow | null>
 
 async function stripeConnection(tx: OrgTx): Promise<{ id: string; key: string | null; liveMode: boolean } | null> {
   const found = await tx.query<{ id: string; api_key_ciphertext: string; live_mode: boolean }>(
-    "select id::text, api_key_ciphertext, live_mode from stripe_connections where status = 'active'",
+    // With several Stripe logins (#182), online payments use the first one connected.
+    "select id::text, api_key_ciphertext, live_mode from stripe_connections where status = 'active' order by id limit 1",
   );
   const row = found.rows[0];
   if (!row) return null;
@@ -541,7 +542,9 @@ export async function recordSession(organisation: OrganisationRecord, actor: Act
       const settledCurrency = item.settledCurrency ?? item.currencyCode;
       const settledAmount = item.settledAmount ?? item.amount;
       const linked = await tx.query<{ code: string }>(
-        `select a.code from ${provider.linksTable} l join accounts a on a.id = l.account_id where l.active and l.currency_code = $1`,
+        `select a.code from ${provider.linksTable} l join accounts a on a.id = l.account_id
+          where l.active and l.currency_code = $1
+            and l.connection_id = (select c.id from ${provider.connectionsTable} c where c.status = 'active' order by c.id limit 1)`,
         [settledCurrency],
       );
       const bank = linked.rows[0]?.code;
@@ -613,8 +616,9 @@ export async function recordSession(organisation: OrganisationRecord, actor: Act
 
 /** What differs between the providers when a payment is recorded. */
 const PROVIDERS = {
-  stripe: { name: "Stripe", linksTable: "stripe_links" },
-  paypal: { name: "PayPal", linksTable: "paypal_links" },
+  // Online payments use each provider's first login (#182).
+  stripe: { name: "Stripe", linksTable: "stripe_links", connectionsTable: "stripe_connections" },
+  paypal: { name: "PayPal", linksTable: "paypal_links", connectionsTable: "paypal_connections" },
 } as const;
 
 class NoticeOnly extends Error {

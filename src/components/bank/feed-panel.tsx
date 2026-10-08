@@ -21,14 +21,22 @@ type AkahuAccountOption = {
   connectionName: string | null;
   balance: string | null;
   linkedAccountId: string | null;
+  /** The login it's shared with (#182, BK31). */
+  connectionId: string;
+  loginName: string;
+  /** "Will's BNZ login · BNZ Savings" when there are several logins. */
+  label: string;
 };
 
 type SyncResult = { added: number; duplicates: number; possibleDuplicates: number; syncedAt: string };
 
 function LinkFeedForm({ organisationId, account, onLinked }: { organisationId: string; account: BankAccount; onLinked: () => void }) {
   const today = todayInBrowser();
-  const options = useApiData<{ accounts: AkahuAccountOption[] }>("/api/bank-feeds/akahu/accounts", { organisationId });
-  const [akahuAccountId, setAkahuAccountId] = useState("");
+  const options = useApiData<{ accounts: AkahuAccountOption[]; problems: Array<{ loginName: string; message: string }> }>("/api/bank-feeds/akahu/accounts", {
+    organisationId,
+  });
+  // "connectionId|akahuAccountId": a joint account can be shared with two logins (BK36).
+  const [choice, setChoice] = useState("");
   // A year back by default; Akahu may have more or less depending on the bank.
   const [startDate, setStartDate] = useState(() => (account.lastLineDate && account.lastLineDate < today ? account.lastLineDate : daysBefore(today, 365)));
   const [busy, setBusy] = useState(false);
@@ -39,7 +47,8 @@ function LinkFeedForm({ organisationId, account, onLinked }: { organisationId: s
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/bank-accounts/${account.id}/feed`, { method: "POST", body: { organisationId, akahuAccountId, startDate } });
+      const [connectionId, akahuAccountId] = choice.split("|");
+      await api(`/api/bank-accounts/${account.id}/feed`, { method: "POST", body: { organisationId, connectionId, akahuAccountId, startDate } });
       onLinked();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -57,23 +66,31 @@ function LinkFeedForm({ organisationId, account, onLinked }: { organisationId: s
   }
   if (!options.data) return <p className={ui.muted}>Asking Akahu which accounts are shared…</p>;
   const free = options.data.accounts.filter((option) => !option.linkedAccountId || option.linkedAccountId === account.id);
+  const problems = options.data.problems.length ? (
+    <Notice tone="warning">{options.data.problems.map((problem) => `${problem.loginName}: ${problem.message}`).join(" ")}</Notice>
+  ) : null;
   if (free.length === 0) {
     return (
+      <>
+        {problems}
       <Empty>
         Akahu has no unlinked accounts to offer. Connect more banks, or share more accounts with the personal app, at my.akahu.nz.
       </Empty>
+      </>
     );
   }
   return (
     <form onSubmit={(event) => void submit(event)} style={{ display: "grid", gap: 12 }}>
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {problems}
       <div className={ui.grid2}>
         <Field label="Akahu account">
-          <select value={akahuAccountId} onChange={(event) => setAkahuAccountId(event.target.value)} required>
+          <select value={choice} onChange={(event) => setChoice(event.target.value)} required>
             <option value="">Choose the bank account</option>
             {free.map((option) => (
-              <option key={option.id} value={option.id}>
-                {[option.connectionName, option.name, option.formattedAccount].filter(Boolean).join(" · ")}
+              <option key={`${option.connectionId}|${option.id}`} value={`${option.connectionId}|${option.id}`}>
+                {/* BK31: the login first when there are several, else the bank as before. */}
+                {[option.label === option.name ? option.connectionName : option.loginName, option.name, option.formattedAccount].filter(Boolean).join(" · ")}
                 {option.balance !== null ? ` (${option.balance})` : ""}
                 {option.status && option.status !== "ACTIVE" ? ` [${option.status.toLowerCase()}]` : ""}
               </option>
@@ -197,7 +214,10 @@ export function FeedPanel({ organisationId, account, onChanged }: { organisation
             </tr>
             <tr>
               <th scope="row">Akahu account</th>
-              <td>{[feed.akahuConnectionName, feed.akahuAccountName].filter(Boolean).join(" · ")}</td>
+              <td>
+                {[feed.akahuLoginName, feed.akahuConnectionName, feed.akahuAccountName].filter(Boolean).join(" · ")}
+                {feed.akahuLoginProblem ? <Notice tone="warning">{feed.akahuLoginProblem}</Notice> : null}
+              </td>
             </tr>
             <tr>
               <th scope="row">Transactions from</th>

@@ -1,6 +1,7 @@
 import { ACCOUNTING_ON_SQL } from "@/lib/organisations/accounting-switch";
 import { addStatementLines, lockStatementAccount } from "@/lib/bank/accounts";
 import {
+  AkahuError,
   akahuMoney,
   akahuProblem,
   listAkahuAccounts,
@@ -8,7 +9,8 @@ import {
   refreshAkahuAccount,
   type AkahuTransaction,
 } from "@/lib/bank/akahu/client";
-import { akahuCredentialsForAccount } from "@/lib/bank/akahu/settings";
+import { akahuCredentialsForAccount, markAkahuTokenProblem } from "@/lib/bank/akahu/settings";
+import { ValidationError } from "@/lib/errors";
 import { makeLine, type ParsedStatementLine } from "@/lib/bank/formats/common";
 import { writeAuditEvent } from "@/lib/audit";
 import { businessTimeZone } from "@/lib/dates";
@@ -69,6 +71,8 @@ export async function syncBankFeedAccount(
   actor: Actor = FEED_ACTOR,
   options: { refresh?: boolean } = {},
 ): Promise<SyncResult> {
+  let login: { connectionId: string; loginName: string } | null = null;
+  let gone = false;
   try {
     const prepared = await withOrganisationTransaction(organisation, actor, async (tx) => {
       const link = await akahuCredentialsForAccount(tx, accountId);
@@ -79,6 +83,7 @@ export async function syncBankFeedAccount(
       );
       return { ...link, lastFeedDate: last.rows[0]?.last ?? null };
     });
+    login = { connectionId: prepared.connectionId, loginName: prepared.loginName };
     if (options.refresh) await refreshAkahuAccount(prepared.credentials, prepared.akahuAccountId);
     // From AKAHU_OVERLAP_DAYS before the newest feed line, never before the start date. The extra two
     // days before that cover the gap between the New Zealand date and Akahu's UTC times.
@@ -90,6 +95,11 @@ export async function syncBankFeedAccount(
     ]);
     const lines = transactions.map(lineFromAkahu).filter((line) => line.date >= prepared.startDate);
     const akahuAccount = accounts.find((account) => account._id === prepared.akahuAccountId);
+    if (!akahuAccount) {
+      // BK34: the login can't see this account any more, so the feed stops until it's linked again.
+      gone = true;
+      throw new ValidationError(`This account isn't in ${prepared.loginName} any more. Link it again to carry on.`);
+    }
     const current =
       typeof akahuAccount?.balance?.current === "number" ? dec(akahuMoney(akahuAccount.balance.current, "Akahu's account balance")) : null;
     // Akahu reports a credit card's balance as what's owed; statement lines count what's owed as negative.
@@ -128,15 +138,19 @@ export async function syncBankFeedAccount(
       return { ...counts, syncedAt: synced.rows[0].at };
     });
   } catch (error) {
-    const problem = akahuProblem(error);
+    let problem = akahuProblem(error);
+    const refused = error instanceof AkahuError && (error.status === 401 || error.status === 403);
     try {
-      await withOrganisationTransaction(organisation, actor, (tx) =>
-        tx.query(
-          `update bank_account_settings set last_synced_at = now(), last_sync_status = 'failed', last_sync_error = $2, updated_at = now()
+      await withOrganisationTransaction(organisation, actor, async (tx) => {
+        // BK33: refused tokens are the login's problem, shown on its accounts and its row. Nothing is retried with another login's.
+        if (refused && login) problem = new ValidationError(`${await markAkahuTokenProblem(tx, login.connectionId)} ${problem.message}`);
+        await tx.query(
+          `update bank_account_settings set last_synced_at = now(), last_sync_status = 'failed', last_sync_error = $2,
+                  feed_active = feed_active and not $3, updated_at = now()
             where account_id = $1`,
-          [accountId, problem.message.slice(0, 500)],
-        ),
-      );
+          [accountId, problem.message.slice(0, 500), gone],
+        );
+      });
     } catch {
       // The failure itself is what matters; it's rethrown below.
     }
@@ -166,7 +180,7 @@ export async function syncDueBankFeeds(): Promise<{ synced: number; failed: numb
             await tx.query<{ account_id: string }>(
               `select s.account_id
                  from bank_account_settings s
-                 join akahu_connections c on c.status = 'active'
+                 join akahu_connections c on c.id = s.akahu_connection_id and c.status = 'active' and c.token_problem is null
                 where s.feed_active and ${ACCOUNTING_ON_SQL}
                   and (s.last_synced_at is null or s.last_synced_at < now() - make_interval(hours => c.sync_every_hours))
                 order by s.last_synced_at nulls first`,

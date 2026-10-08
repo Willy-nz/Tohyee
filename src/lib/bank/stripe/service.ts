@@ -20,6 +20,7 @@ import { toFixedString } from "@/lib/money/decimal";
 import { listAllOrganisations } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
+import { newLoginName, pickLogin } from "@/lib/bank/logins";
 import { requireId } from "@/lib/validation";
 
 /**
@@ -33,8 +34,11 @@ const DAY = 86_400;
 
 export type StripeBalanceOption = { currency: string; available: string; pending: string; linkedAccountId: string | null };
 
-export type StripeStatus = {
+export type StripeConnectionStatus = {
   connected: boolean;
+  /** The login (#182, BK30): its id and name; null when nothing is connected. */
+  connectionId: string | null;
+  name: string | null;
   keyHint: string | null;
   liveMode: boolean;
   syncEveryHours: number;
@@ -47,8 +51,14 @@ export type StripeStatus = {
   secretsAvailable: boolean;
 };
 
+/** The first login's status (as before several logins), and every login's. */
+export type StripeStatus = StripeConnectionStatus & { connections: StripeConnectionStatus[] };
+
 export type StripeLink = {
   currencyCode: string;
+  /** The login it syncs with (#182). */
+  connectionId: string | null;
+  loginName: string | null;
   startDate: string;
   lastSyncedAt: string | null;
   lastSyncStatus: "never" | "ok" | "failed";
@@ -57,6 +67,7 @@ export type StripeLink = {
 
 type ConnectionRow = {
   id: string;
+  name: string;
   api_key_ciphertext: string;
   key_hint: string;
   live_mode: boolean;
@@ -78,13 +89,18 @@ function requireSecrets(): void {
   }
 }
 
-async function activeConnection(tx: OrgTx, lock = false): Promise<ConnectionRow | null> {
+async function activeConnections(tx: OrgTx, lock = false): Promise<ConnectionRow[]> {
   const result = await tx.query<ConnectionRow>(
-    `select id::text, api_key_ciphertext, key_hint, live_mode, sync_every_hours, balances, last_synced_at, last_sync_status, last_sync_error,
+    `select id::text, name, api_key_ciphertext, key_hint, live_mode, sync_every_hours, balances, last_synced_at, last_sync_status, last_sync_error,
             lease_until, created_at, created_by_email
-       from stripe_connections where status = 'active' ${lock ? "for update" : ""}`,
+       from stripe_connections where status = 'active' order by id ${lock ? "for update" : ""}`,
   );
-  return result.rows[0] ?? null;
+  return result.rows;
+}
+
+/** The login a command is for (#182): the one chosen by `connectionId`, or the only one. */
+async function activeConnection(tx: OrgTx, lock = false, connectionId?: unknown): Promise<ConnectionRow | null> {
+  return pickLogin(await activeConnections(tx, lock), connectionId, "stripe");
 }
 
 function parseHours(input: unknown, fallback: number): number {
@@ -106,13 +122,21 @@ function dateIn(seconds: number, timeZone: string): string {
 }
 
 export async function getStripeStatus(tx: OrgTx): Promise<StripeStatus> {
-  const row = await activeConnection(tx);
-  const links = await tx.query<{ account_id: string; currency_code: string }>(
-    "select account_id::text, currency_code from stripe_links where active",
+  const rows = await activeConnections(tx);
+  const links = await tx.query<{ account_id: string; currency_code: string; connection_id: string | null }>(
+    "select account_id::text, currency_code, connection_id::text from stripe_links where active",
   );
-  const linked = new Map(links.rows.map((link) => [link.currency_code, link.account_id]));
+  const connections = rows.map((row) => connectionStatus(row, links.rows));
+  return { ...(connections[0] ?? connectionStatus(null, [])), connections };
+}
+
+function connectionStatus(row: ConnectionRow | null, links: ReadonlyArray<{ account_id: string; currency_code: string; connection_id: string | null }>): StripeConnectionStatus {
+  // One link per currency per login (#182).
+  const linked = new Map(links.filter((link) => row !== null && link.connection_id === row.id).map((link) => [link.currency_code, link.account_id]));
   return {
     connected: row !== null,
+    connectionId: row?.id ?? null,
+    name: row?.name ?? null,
     keyHint: row?.key_hint ?? null,
     liveMode: row?.live_mode ?? true,
     syncEveryHours: row?.sync_every_hours ?? DEFAULT_STRIPE_HOURS,
@@ -138,13 +162,14 @@ export async function getStripeStatus(tx: OrgTx): Promise<StripeStatus> {
 export async function connectStripe(
   organisation: OrganisationRecord,
   actor: Actor,
-  input: { apiKey?: unknown; syncEveryHours?: unknown },
+  input: { name?: unknown; apiKey?: unknown; syncEveryHours?: unknown },
 ): Promise<StripeStatus> {
   requireSecrets();
   const key = parseRestrictedKey(input.apiKey);
   const hours = parseHours(input.syncEveryHours, DEFAULT_STRIPE_HOURS);
   await withOrganisationTransaction(organisation, actor, async (tx) => {
-    if (await activeConnection(tx)) throw new ConflictError("Stripe is already connected. Disconnect it first to use another key.");
+    // Several logins (#182): only the name must be new.
+    await newLoginName(tx, "stripe", input.name);
   });
   let balances: StripeBalance;
   try {
@@ -153,12 +178,13 @@ export async function connectStripe(
     throw stripeProblem(error);
   }
   return withOrganisationTransaction(organisation, actor, async (tx) => {
-    if (await activeConnection(tx, true)) throw new ConflictError("Stripe is already connected. Disconnect it first to use another key.");
+    await tx.query("lock table stripe_connections in share row exclusive mode");
+    const name = await newLoginName(tx, "stripe", input.name);
     const hint = `${key.slice(0, 12)}…${key.slice(-4)}`;
     const inserted = await tx.query<{ id: string }>(
-      `insert into stripe_connections (api_key_ciphertext, key_hint, live_mode, sync_every_hours, balances, created_by_email)
-       values ($1, $2, $3, $4, $5::jsonb, $6) returning id::text`,
-      [encryptSecret(key), hint, key.startsWith("rk_live_"), hours, JSON.stringify(balances), tx.actor.email],
+      `insert into stripe_connections (api_key_ciphertext, key_hint, live_mode, sync_every_hours, balances, created_by_email, name)
+       values ($1, $2, $3, $4, $5::jsonb, $6, $7) returning id::text`,
+      [encryptSecret(key), hint, key.startsWith("rk_live_"), hours, JSON.stringify(balances), tx.actor.email, name],
     );
     await writeAuditEvent(tx, {
       eventType: "bank_feed.stripe_connected",
@@ -171,8 +197,8 @@ export async function connectStripe(
 }
 
 /** Changes how often Stripe is synced (1-24 hours). Admins. */
-export async function updateStripeSettings(tx: OrgTx, input: { syncEveryHours?: unknown }): Promise<StripeStatus> {
-  const row = await activeConnection(tx, true);
+export async function updateStripeSettings(tx: OrgTx, input: { syncEveryHours?: unknown; connectionId?: unknown }): Promise<StripeStatus> {
+  const row = await activeConnection(tx, true, input.connectionId);
   if (!row) throw new NotFoundError("Stripe isn't connected.");
   const hours = parseHours(input.syncEveryHours, row.sync_every_hours);
   await tx.query("update stripe_connections set sync_every_hours = $2 where id = $1", [row.id, hours]);
@@ -186,11 +212,15 @@ export async function updateStripeSettings(tx: OrgTx, input: { syncEveryHours?: 
 }
 
 /** Disconnects (ST10): the stored key is deleted and every currency unlinked. Lines stay. Admins. */
-export async function disconnectStripe(tx: OrgTx): Promise<StripeStatus> {
-  const row = await activeConnection(tx, true);
+export async function disconnectStripe(tx: OrgTx, connectionId?: unknown): Promise<StripeStatus> {
+  const row = await activeConnection(tx, true, connectionId);
   if (!row) throw new NotFoundError("Stripe isn't connected.");
   if (row.lease_until && new Date(row.lease_until).getTime() > Date.now()) throw new ConflictError("Stripe is syncing. Try again in a minute.");
-  const unlinked = await tx.query("update stripe_links set active = false, connection_id = null, updated_at = now() where active");
+  const unlinked = await tx.query(
+    // Only this login's accounts (#182, BK35).
+    "update stripe_links set active = false, connection_id = null, updated_at = now() where active and connection_id = $1",
+    [row.id],
+  );
   await tx.query(
     "update stripe_connections set status = 'removed', api_key_ciphertext = null, removed_at = now(), removed_by_email = $2 where id = $1",
     [row.id, tx.actor.email],
@@ -213,12 +243,17 @@ export async function getStripeLink(tx: OrgTx, accountIdInput: unknown): Promise
     last_synced_at: string | null;
     last_sync_status: "never" | "ok" | "failed";
     last_sync_error: string | null;
-  }>("select currency_code, start_date::text, last_synced_at, last_sync_status, last_sync_error from stripe_links where account_id = $1 and active", [
+    connection_id: string | null;
+    login_name: string | null;
+  }>(`select l.currency_code, l.start_date::text, l.last_synced_at, l.last_sync_status, l.last_sync_error, l.connection_id::text, c.name as login_name
+       from stripe_links l left join stripe_connections c on c.id = l.connection_id where l.account_id = $1 and l.active`, [
     accountId,
   ]);
   const row = result.rows[0];
   if (!row) return null;
   return {
+    connectionId: row.connection_id,
+    loginName: row.login_name,
     currencyCode: row.currency_code,
     startDate: row.start_date,
     lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at).toISOString() : null,
@@ -231,12 +266,12 @@ export async function getStripeLink(tx: OrgTx, accountIdInput: unknown): Promise
  * Links a Stripe balance currency to a bank account in that currency (ST2).
  * One feed per account: not with an Akahu or SimpleFIN feed. Admins.
  */
-export async function linkStripeBalance(tx: OrgTx, accountIdInput: unknown, input: { currency?: unknown; startDate?: unknown }): Promise<StripeLink> {
+export async function linkStripeBalance(tx: OrgTx, accountIdInput: unknown, input: { currency?: unknown; startDate?: unknown; connectionId?: unknown }): Promise<StripeLink> {
   const accountId = requireId(accountIdInput, "accountId");
   if (typeof input.currency !== "string" || !/^[A-Za-z]{3}$/.test(input.currency)) throw new ValidationError("Choose Stripe's balance currency.");
   const currency = input.currency.toUpperCase();
   const startDate = parseIsoDate(input.startDate, "startDate");
-  const connection = await activeConnection(tx);
+  const connection = await activeConnection(tx, false, input.connectionId);
   if (!connection) throw new ValidationError("Connect Stripe first (Bank accounts → Stripe).");
   const account = await lockStatementAccount(tx, accountId, "stripe");
   if (currency !== account.currencyCode)
@@ -249,8 +284,12 @@ export async function linkStripeBalance(tx: OrgTx, accountIdInput: unknown, inpu
     [accountId],
   );
   if (other.rows[0]) throw new ConflictError(`${account.code} already has a ${other.rows[0].feed} bank feed. Stop it first.`);
-  const taken = await tx.query("select 1 from stripe_links where active and currency_code = $1 and account_id <> $2", [currency, accountId]);
-  if (taken.rowCount) throw new ConflictError(`Stripe's ${currency} balance is already linked to another bank account.`);
+  const taken = await tx.query("select 1 from stripe_links where active and currency_code = $1 and account_id <> $2 and connection_id = $3", [
+    currency,
+    accountId,
+    connection.id,
+  ]);
+  if (taken.rowCount) throw new ConflictError(`${connection.name}'s ${currency} balance is already linked to another bank account.`);
   await tx.query(
     `insert into stripe_links (account_id, connection_id, currency_code, start_date, active, created_by_email)
      values ($1, $2, $3, $4, true, $5)
@@ -355,10 +394,10 @@ type ActiveLink = { account_id: string; currency_code: string; start_date: strin
  * balance transactions created since a day before its last line (or since
  * its start date), added as lines in one transaction per account.
  */
-export async function syncStripe(organisation: OrganisationRecord, actor: Actor): Promise<StripeSyncResult> {
+export async function syncStripe(organisation: OrganisationRecord, actor: Actor, options: { connectionId?: unknown } = {}): Promise<StripeSyncResult> {
   const prepared = await withOrganisationTransaction(organisation, actor, async (tx) => {
     requireSecrets();
-    const row = await activeConnection(tx, true);
+    const row = await activeConnection(tx, true, options.connectionId);
     if (!row) throw new ValidationError("Stripe isn't connected. An admin can connect it under Bank accounts → Stripe.");
     if (row.lease_until && new Date(row.lease_until).getTime() > Date.now()) throw new ConflictError("Stripe is already syncing.");
     await tx.query("update stripe_connections set lease_until = now() + interval '10 minutes' where id = $1", [row.id]);
@@ -486,28 +525,32 @@ export async function syncDueStripe(): Promise<{ synced: number; failed: number 
   try {
     for (const organisation of await listAllOrganisations()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
-      let due = false;
+      let due: string[] = [];
       try {
-        due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) => {
-          const result = await tx.query(
-            `select 1 from stripe_connections c
-              where c.status = 'active' and exists (select 1 from stripe_links l where l.active) and ${ACCOUNTING_ON_SQL}
+        // Each login that's due, on its own (#182).
+        due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) =>
+          (
+            await tx.query<{ id: string }>(
+              `select c.id::text from stripe_connections c
+                where c.status = 'active' and exists (select 1 from stripe_links l where l.active and l.connection_id = c.id) and ${ACCOUNTING_ON_SQL}
                 and (c.last_synced_at is null or c.last_synced_at < now() - make_interval(hours => c.sync_every_hours))
-                and (c.lease_until is null or c.lease_until < now())`,
-          );
-          return (result.rowCount ?? 0) > 0;
-        });
+                and (c.lease_until is null or c.lease_until < now())
+                order by c.id`,
+            )
+          ).rows.map((row) => row.id),
+        );
       } catch {
         continue;
       }
-      if (!due) continue;
-      try {
-        const result = await syncStripe(organisation, FEED_ACTOR);
-        if (result.status === "failed") failed += 1;
-        else synced += 1;
-      } catch (error) {
-        failed += 1;
-        console.warn(`[tohyee] Stripe sync failed for ${organisation.id}: ${error instanceof Error ? error.message : error}`);
+      for (const connectionId of due) {
+        try {
+          const result = await syncStripe(organisation, FEED_ACTOR, { connectionId });
+          if (result.status === "failed") failed += 1;
+          else synced += 1;
+        } catch (error) {
+          failed += 1;
+          console.warn(`[tohyee] Stripe sync failed for ${organisation.id}: ${error instanceof Error ? error.message : error}`);
+        }
       }
     }
     return { synced, failed };

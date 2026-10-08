@@ -8,7 +8,7 @@ export const POST = route(async (request) => {
     organisation: membership.organisation,
     actor: { userId: auth.user.id, email: auth.user.email },
   }));
-  const result = await syncWise(organisation, actor);
+  const result = await syncWise(organisation, actor, new Date(), { connectionId: body.connectionId });
   const wise = await withOrganisation(request, body.organisationId, "viewer", (tx) => getWiseStatus(tx));
   return json({ result, wise });
 });

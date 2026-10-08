@@ -173,9 +173,12 @@ describeWithDatabase("SimpleFIN bank feeds (SF1-SF10)", () => {
     );
     expect(audit.rows).toEqual([{ actor_email: owner.email }]);
 
-    // The token works once; a second connection is refused anyway.
+    // A second login needs its own name (#182, BK30); the token works once anyway.
     await expect(connectSimpleFin(await organisation(), actorOf(owner), { setupToken: token("A") })).rejects.toThrow(
-      "SimpleFIN is already connected",
+      'Name this SimpleFIN login, e.g. "Will\'s BNZ login".',
+    );
+    await expect(connectSimpleFin(await organisation(), actorOf(owner), { name: "simplefin", setupToken: token("A") })).rejects.toThrow(
+      "SimpleFIN already has a login called simplefin.",
     );
     await as(owner, (tx) => disconnectSimpleFin(tx));
     await expect(connectSimpleFin(await organisation(), actorOf(owner), { setupToken: token("A") })).rejects.toThrow(
