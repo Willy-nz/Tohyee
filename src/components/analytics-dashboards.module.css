@@ -264,3 +264,33 @@
   display: grid;
   gap: 8px;
 }
+
+.eyebrow { font-size:11px; font-weight:700; letter-spacing:.1em; color:var(--accent); }
+.libraryToolbar { display:flex; align-items:flex-end; flex-wrap:wrap; gap:16px; margin-bottom:24px; }
+.libraryToolbar > :first-child { flex:1; min-width:200px; }
+.reportThumbnail { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:18px; min-height:130px; background:var(--surface-sunken); border-radius:6px; margin-bottom:12px; }
+.reportThumbnail span { display:grid; place-items:center; font-size:11px; color:var(--text-muted); border:1px solid var(--border); border-radius:4px; background:var(--surface); }
+.reportMeta { font-size:var(--text-xs); color:var(--text-muted); margin-top:10px; }
+.editor { display:grid; grid-template-columns:190px minmax(260px,1fr) minmax(300px,360px); align-items:start; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-sunken); overflow:clip; margin-bottom:24px; }
+.fieldsPanel,.propertiesPanel { padding:18px; min-width:0; background:var(--surface); }
+.fieldsPanel h2,.propertiesPanel h2 { font-size:var(--text-base); margin:0 0 12px; }
+.fieldsPanel { border-right:1px solid var(--border); }
+.propertiesPanel { border-left:1px solid var(--border); }
+.propertyFields { padding:0; margin:0; border:0; min-width:0; }
+.propertyGrid { display:grid; gap:12px; }
+.fieldList { display:grid; gap:4px; margin:16px 0; max-height:500px; overflow:auto; }
+.fieldItem { display:flex; align-items:center; gap:8px; padding:8px 0; font-size:12px; overflow-wrap:anywhere; }
+.fieldType { color:var(--accent); font-size:10px; min-width:30px; font-weight:700; }
+.fieldItem small { display:block; color:var(--text-muted); font-size:10px; margin-top:3px; }
+.canvasPanel { padding:24px; min-width:0; position:sticky; top:16px; }
+.canvasHeading h2 { margin:12px 0 4px; font-size:var(--text-xl); }
+.visualPicker { display:flex; flex-wrap:wrap; gap:6px; margin:20px 0; }
+.visualPicker button { font:inherit; font-size:12px; padding:7px 10px; border:1px solid var(--border); border-radius:5px; color:var(--text); background:var(--surface); cursor:pointer; }
+.visualPicker button[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--on-accent,white); }
+.canvasPanel .preview { min-height:300px; padding:20px; border:1px solid var(--border); background:var(--surface); }
+.propertiesPanel .measureRow { padding:10px; border:1px solid var(--border); border-radius:6px; }
+.propertiesPanel .measureRow > input,.propertiesPanel .measureRow > select { flex-basis:100%; }
+.tileTools { flex-wrap:wrap; }
+@media (max-width:1100px) { .editor { grid-template-columns:minmax(0,1fr) 330px; } .fieldsPanel { grid-column:1 / -1; border-right:0; border-bottom:1px solid var(--border); } .fieldList { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); max-height:120px; } }
+@media (max-width:760px) { .editor { grid-template-columns:minmax(0,1fr); } .canvasPanel { position:static; padding:16px; } .propertiesPanel { border-left:0; border-top:1px solid var(--border); } }
+.header > div:last-child { flex-wrap:wrap; gap:6px; max-width:100%; }
