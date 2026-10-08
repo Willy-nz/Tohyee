@@ -1,19 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
-import { useWorkspace } from "@/components/workspace";
 import { Field } from "@/components/ui";
 import styles from "./studio.module.css";
-
-export function AnalyticsNavigation({ active }: { active: "reports" | "sources" | "shaping" }) {
-  const { can } = useWorkspace();
-  return <nav className={styles.navigation} aria-label="Analytics workspace">
-    <Link href="/analytics" aria-current={active === "reports" ? "page" : undefined}>Reports</Link>
-    {can("viewer") ? <Link href="/analytics/sources" aria-current={active === "sources" ? "page" : undefined}>Data sources</Link> : null}
-    {can("admin") ? <Link href="/analytics/shaping" aria-current={active === "shaping" ? "page" : undefined}>Prepare data</Link> : null}
-  </nav>;
-}
 
 export type Connector = "books" | "csv" | "excel" | "email";
 const connectors: { id: Connector; icon: string; title: string; description: string }[] = [

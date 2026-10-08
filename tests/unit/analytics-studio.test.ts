@@ -1,25 +1,15 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { AnalyticsNavigation, ConnectorPicker } from "@/components/analytics/studio";
+import { ConnectorPicker } from "@/components/analytics/studio";
+import { ANALYTICS_MENUS } from "@/components/navigation";
 
 const access = vi.hoisted(() => ({ role: "admin" }));
 vi.mock("@/components/workspace", () => ({ useWorkspace: () => ({ can: (role: string) => access.role === "admin" || (access.role === "viewer" && role === "viewer") }) }));
 
 describe("Analytics workspace access and connectors", () => {
-  it("keeps source and shaping navigation away from report viewers", () => {
-    access.role = "report_viewer";
-    const html = renderToStaticMarkup(createElement(AnalyticsNavigation, { active: "reports" }));
-    expect(html).toContain("Reports");
-    expect(html).not.toContain("Data sources");
-    expect(html).not.toContain("Prepare data");
-  });
-  it("gives members a source library and admins data preparation", () => {
-    access.role = "admin";
-    const html = renderToStaticMarkup(createElement(AnalyticsNavigation, { active: "sources" }));
-    expect(html).toContain('aria-current="page"');
-    expect(html).toContain("Data sources");
-    expect(html).toContain("Prepare data");
+  it("names the Analytics tabs in the top bar Reports, Data sources and Prepare data", () => {
+    expect(ANALYTICS_MENUS.map((menu) => menu.label)).toEqual(["Reports", "Data sources", "Prepare data"]);
   });
   it("offers implemented connectors and explains external service limitations", () => {
     const html = renderToStaticMarkup(createElement(ConnectorPicker, { selected: null, onSelect: () => undefined }));

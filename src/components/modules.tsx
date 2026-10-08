@@ -64,9 +64,9 @@ const OPTIONAL: ModuleRow[] = [
     description:
       "Load CSV files from a folder on the server (sales exports, emailed reports, anything with rows and columns) every night, and build dashboards from them like Power BI: charts, tables and key figures with date ranges and slicers. A server admin chooses the folder.",
     links: [
-      { href: "/analytics", label: "Dashboards" },
+      { href: "/analytics", label: "Reports" },
       { href: "/analytics/sources", label: "Data sources" },
-      { href: "/analytics/shaping", label: "Shaping" },
+      { href: "/analytics/shaping", label: "Prepare data" },
     ],
   },
   {

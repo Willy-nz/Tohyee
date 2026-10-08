@@ -131,7 +131,7 @@ export async function searchEverything(tx: OrgTx, input: SearchInput): Promise<S
         status: null,
         href: DASHBOARDS_HREF,
       }));
-    return { query, filter, groups: [{ key: "dashboard", label: "Dashboards", records }] };
+    return { query, filter, groups: [{ key: "dashboard", label: "Reports", records }] };
   }
 
   const groups: SearchGroup[] = [];

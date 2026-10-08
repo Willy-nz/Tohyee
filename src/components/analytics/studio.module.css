@@ -1,7 +1,3 @@
-.navigation { display:flex; flex-wrap:wrap; gap:8px; border-bottom:1px solid var(--border); margin-bottom:24px; }
-.navigation a { padding:12px 18px; text-decoration:none; color:var(--text-muted); border-bottom:3px solid transparent; font-weight:600; }
-.navigation a[aria-current="page"] { color:var(--accent); border-bottom-color:var(--accent); }
-.navigation a:hover { background:var(--surface-sunken); }
 .connectorSection { margin:20px 0; }
 .sectionHeading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:16px; margin-bottom:20px; }
 .sectionHeading h2 { margin:0 0 6px; font-size:var(--text-lg); }

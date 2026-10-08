@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { AnalyticsNavigation } from "@/components/analytics/studio";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Chart } from "@/components/analytics/chart";
@@ -175,12 +174,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
     .slice().sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : b.updatedAt.localeCompare(a.updatedAt));
   return (
     <>
-      <AnalyticsNavigation active="reports" />
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <div className={styles.libraryIntro}>
-        <div><span className={styles.eyebrow}>YOUR ANALYTICS WORKSPACE</span><h2>From data to decisions</h2><p>Build a report once. Explore it with filters, share it with clients and return to the numbers that matter.</p></div>
-        {can("bookkeeper") ? <Button onClick={() => setCreating(true)}>+ Create report</Button> : null}
-      </div>
       {creating ? <Card title="Create a report" description="Start with a blank canvas, then add charts, scorecards and pivot tables from your connected data.">
         <form onSubmit={(event) => { event.preventDefault(); void create(); }}>
           <Field label="Report name"><input autoFocus value={name} maxLength={100} placeholder="e.g. Sales and gross profit" onChange={(event) => setName(event.target.value)} /></Field>
@@ -192,6 +186,7 @@ function DashboardsListInner({ organisationId }: { organisationId: string }) {
         <Field label="Search reports"><input type="search" placeholder="Find a report…" value={search} onChange={(event) => setSearch(event.target.value)} /></Field>
         <Field label="Sort by"><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="recent">Last updated</option><option value="name">Name</option></select></Field>
         <div className={ui.rowButtons}><Button variant="secondary" aria-pressed={view === "grid"} onClick={() => setView("grid")}>Grid</Button><Button variant="secondary" aria-pressed={view === "list"} onClick={() => setView("list")}>List</Button></div>
+        {can("bookkeeper") && !creating ? <Button onClick={() => setCreating(true)}>+ Create report</Button> : null}
       </div>
       {list.error ? <Notice tone="error">{list.error}</Notice> : !list.data ? <p className={ui.muted}>Loading reports…</p> : !reports.length ? <Empty>{search ? "No reports match your search." : can("bookkeeper") ? "Your first report starts here. Choose Create report to build it." : "No reports are available to you yet."}</Empty> : view === "list" ? (
         <div className={ui.tableWrap}><table className={ui.table}><thead><tr><th>Report</th><th>Charts and tables</th><th>Last updated</th></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td><Link href={`/analytics/dashboards/${report.id}`}>{report.name}</Link><div className={ui.muted}>{report.description}</div></td><td>{report.tiles.length}</td><td>{formatDateTime(report.updatedAt)}</td></tr>)}</tbody></table></div>
@@ -276,7 +271,6 @@ function DashboardViewInner({ organisationId, dashboardId, startEditing }: { org
 
   return (
     <>
-      <AnalyticsNavigation active="reports" />
       <div className={styles.header}>
         <div>
           {editing ? (

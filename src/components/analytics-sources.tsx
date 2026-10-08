@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AnalyticsNavigation, ConnectorPicker, type Connector } from "@/components/analytics/studio";
+import { ConnectorPicker, type Connector } from "@/components/analytics/studio";
 import { useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { useModules } from "@/components/modules";
@@ -93,7 +93,6 @@ export function DataSourcesPage({ organisationId }: { organisationId: string }) 
   const usedFiles = new Set(data.sources.map((source) => source.fileName));
   return (
     <>
-      <AnalyticsNavigation active="sources" />
       <div className={ui.rowButtons} style={{ marginBottom: 20, flexWrap: "wrap", gap: 8 }}>
         <Button variant={tab === "sources" ? "primary" : "secondary"} aria-pressed={tab === "sources"} onClick={() => setTab("sources")}>Connected sources ({data.sources.length})</Button>
         {data.canManage ? <Button variant={tab === "connect" ? "primary" : "secondary"} aria-pressed={tab === "connect"} onClick={() => setTab("connect")}>Add data source</Button> : null}
