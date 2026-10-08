@@ -1,3 +1,4 @@
+import { ACCOUNTING_ON_SQL } from "@/lib/organisations/accounting-switch";
 import { writeAuditEvent } from "@/lib/audit";
 import { FEED_ACTOR } from "@/lib/bank/akahu/sync";
 import {
@@ -791,7 +792,7 @@ export async function checkDueOnlinePayments(): Promise<{ checked: number; faile
         due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) => {
           const found = await tx.query(
             `select 1 from online_payment_settings s
-              where s.provider = 'stripe' and (s.enabled or exists (select 1 from invoice_payment_links where provider = 'stripe' and status = 'open'))
+              where s.provider = 'stripe' and ${ACCOUNTING_ON_SQL} and (s.enabled or exists (select 1 from invoice_payment_links where provider = 'stripe' and status = 'open'))
                 and (s.lease_until is null or s.lease_until < now())
                 and exists (select 1 from stripe_connections where status = 'active')`,
           );

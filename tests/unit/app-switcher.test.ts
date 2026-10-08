@@ -51,4 +51,9 @@ describe("app switcher", () => {
     expect(availableApps({ crm: true, reporting: true, notForProfit: true, analytics: true, gst: true }, true)).toEqual(["analytics"]);
     expect(renderToStaticMarkup(createElement(AppSwitcher, { current: "analytics", modules: { crm: true, reporting: true, notForProfit: true, analytics: true, gst: true }, reportViewer: true }))).toBe("");
   });
+
+  it("leaves Accounting out while it's off (#181, MOD2)", () => {
+    expect(availableApps({ crm: true, reporting: false, notForProfit: false, analytics: false, gst: false, accounting: false })).toEqual(["crm"]);
+    expect(availableApps({ crm: true, reporting: false, notForProfit: false, analytics: true, gst: false, accounting: false })).toEqual(["crm", "analytics"]);
+  });
 });

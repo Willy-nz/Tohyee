@@ -485,6 +485,16 @@ that something happened.
 - **Exchange rates from the European Central Bank** (FX1, decision 437):
   turned on per organisation, each working day's ECB rates are added to the
   exchange rates list for the currencies in use; typed rates stay.
+- **Accounting as a module** (#181, MOD2-MOD7 approved by Jess 8 Oct 2026,
+  decision 480, tenant migration 0111): a server admin chooses an
+  organisation's modules when creating it (Accounting, Tax = registered for
+  GST, CRM, Analytics), and admins change them under Modules (account menu,
+  every app). With Accounting off the organisation is CRM or Analytics
+  only: no Accounting menus, its pages say it's off, an opportunity can't
+  make an invoice, the books copy has only CRM tables, and bank feeds,
+  sales platform syncs, repeating documents and the other Accounting jobs
+  pause until it's back on. At least one of Accounting, CRM or Analytics
+  stays on; Advanced reporting and Not-for-profit need Accounting.
 - **Rate source and uploaded rate sets** (#183, FX2-FX9 approved by Jess 8
   Oct 2026, decision 479, tenant migration 0110): Accounting › Exchange
   rates chooses where rates come from: ECB (daily), uploaded rate sets, or

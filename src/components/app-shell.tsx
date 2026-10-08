@@ -32,6 +32,7 @@ import {
   visibleNewActions,
 } from "@/components/navigation";
 import { ThemeSwitch } from "@/components/theme";
+import { Page, PageHeader } from "@/components/ui";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import styles from "./app-shell.module.css";
 import {
@@ -300,7 +301,7 @@ function initials(name: string): string {
 }
 
 function UserMenu({ onSignOut }: { onSignOut: () => void }) {
-  const { user, current } = useWorkspace();
+  const { user, current, can } = useWorkspace();
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -337,6 +338,12 @@ function UserMenu({ onSignOut }: { onSignOut: () => void }) {
           <Link href="/operations/profile" className={styles.dropdownLink} onClick={close}>
             Profile and two-step sign-in
           </Link>
+          {current && can("admin") ? (
+            // Reachable from every app, even with Accounting off (#181, MOD2).
+            <Link href="/operations/modules" className={styles.dropdownLink} onClick={close}>
+              Modules
+            </Link>
+          ) : null}
           <div className={styles.userTheme}>
             <ThemeSwitch />
           </div>
@@ -634,6 +641,32 @@ function TopBarActions({
   );
 }
 
+/** Pages under /operations that work with Accounting off (MOD2): your profile, the organisation's members and its modules. */
+const ACCOUNTING_OFF_PAGES = ["/operations/profile", "/operations/members", "/operations/modules"];
+
+/** Shown instead of an Accounting page while Accounting is off (MOD2). */
+function AccountingOff() {
+  const { current, can } = useWorkspace();
+  const pathname = usePathname();
+  if (pathname === "/operations") return null;
+  return (
+    <Page>
+      <PageHeader
+        title={`Accounting is off for ${current?.displayName ?? "this organisation"}`}
+        description={
+          can("admin") ? (
+            <>
+              An admin can turn it on under <Link href="/operations/modules">Modules</Link>. Everything entered before is kept.
+            </>
+          ) : (
+            "An admin can turn it on under Modules. Everything entered before is kept."
+          )
+        }
+      />
+    </Page>
+  );
+}
+
 function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; warnings: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -662,7 +695,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
       destinations(menus, newActions, [
         { href: AI_LINK.href, label: "AI assistant", group: "AI" },
         { href: "/operations/profile", label: "Profile and two-step sign-in", group: "You" },
-        ...(app !== "accounting" && !reportViewer ? [{ href: "/operations", label: "Accounting", group: "Apps" }] : []),
+        ...(app !== "accounting" && !reportViewer && modules?.accounting !== false ? [{ href: "/operations", label: "Accounting", group: "Apps" }] : []),
         ...(app !== "crm" && modules?.crm ? [{ href: "/crm", label: "CRM", group: "Apps" }] : []),
         ...(app !== "analytics" && modules?.analytics ? [{ href: "/analytics", label: "Analytics", group: "Apps" }] : []),
       ]),
@@ -674,6 +707,12 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
   useEffect(() => {
     if (reportViewer && app !== "analytics") router.replace("/analytics");
   }, [reportViewer, app, router]);
+  // MOD2: with Accounting off, its home goes to the app that's on, and its other pages say it's off.
+  const accountingOff = app === "accounting" && !reportViewer && modules?.accounting === false;
+  const accountingPageOff = accountingOff && !ACCOUNTING_OFF_PAGES.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  useEffect(() => {
+    if (accountingOff && pathname === "/operations") router.replace(modules?.crm ? "/crm" : "/analytics");
+  }, [accountingOff, pathname, modules, router]);
   const page = useRef<HTMLDivElement>(null);
   usePageEntrance(page, pathname);
 
@@ -724,7 +763,7 @@ function Shell({ app, children, warnings }: { app: AppKey; children: ReactNode; 
       <main id="main-content" className={styles.content} tabIndex={-1}>
         <div ref={page} className={styles.page}>
           {/* Not rendered for a report viewer outside Analytics, so the page doesn't ask for anything before the redirect. */}
-          {reportViewer && app !== "analytics" ? null : children}
+          {reportViewer && app !== "analytics" ? null : accountingPageOff ? <AccountingOff /> : children}
         </div>
       </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} items={items} />

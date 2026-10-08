@@ -1,3 +1,4 @@
+import { ACCOUNTING_ON_SQL } from "@/lib/organisations/accounting-switch";
 import { writeAuditEvent } from "@/lib/audit";
 import { FEED_ACTOR } from "@/lib/bank/akahu/sync";
 import {
@@ -446,7 +447,7 @@ export async function checkDuePayPalPayments(): Promise<{ checked: number; faile
         due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) => {
           const found = await tx.query(
             `select 1 from online_payment_settings s
-              where s.provider = 'paypal' and (s.enabled or exists (select 1 from invoice_payment_links where provider = 'paypal' and status = 'open'))
+              where s.provider = 'paypal' and ${ACCOUNTING_ON_SQL} and (s.enabled or exists (select 1 from invoice_payment_links where provider = 'paypal' and status = 'open'))
                 and (s.lease_until is null or s.lease_until < now())
                 and exists (select 1 from paypal_connections where status = 'active')`,
           );

@@ -1,3 +1,4 @@
+import { ACCOUNTING_ON_SQL } from "@/lib/organisations/accounting-switch";
 import { writeAuditEvent } from "@/lib/audit";
 import { setRateSource } from "@/lib/fx/sources";
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
@@ -208,7 +209,7 @@ export async function refreshDueEcbRates(): Promise<number> {
     for (const organisation of await listAllOrganisations()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
       const due = await withOrganisationTransaction(organisation, ACTOR, (tx) =>
-        tx.query("select 1 from ecb_rate_settings where enabled and (last_run_at is null or last_run_at < now() - interval '6 hours')"),
+        tx.query(`select 1 from ecb_rate_settings where enabled and ${ACCOUNTING_ON_SQL} and (last_run_at is null or last_run_at < now() - interval '6 hours')`),
       ).catch(() => null);
       if (!due || (due.rowCount ?? 0) === 0) continue;
       try {

@@ -13,11 +13,16 @@ const APPS: Array<{ key: AppKey; label: string; href: string }> = [
   { key: "analytics", label: "Analytics", href: "/analytics" },
 ];
 
-/** The apps someone can switch to: the CRM only while it's on for the organisation (MOD1). */
+/** The apps someone can switch to: the CRM only while it's on for the organisation (MOD1), Accounting unless it's off (MOD2). */
 export function availableApps(modules: Modules | null, reportViewer = false): AppKey[] {
   // Report viewers only have Analytics (decision 360).
   if (reportViewer) return ["analytics"];
-  return APPS.filter((app) => (app.key !== "crm" || modules?.crm === true) && (app.key !== "analytics" || modules?.analytics === true)).map((app) => app.key);
+  return APPS.filter(
+    (app) =>
+      (app.key !== "accounting" || modules?.accounting !== false) &&
+      (app.key !== "crm" || modules?.crm === true) &&
+      (app.key !== "analytics" || modules?.analytics === true),
+  ).map((app) => app.key);
 }
 
 /**

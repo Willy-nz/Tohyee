@@ -349,6 +349,8 @@ function filterGroups(groups: MenuGroup[], access: Access): MenuGroup[] {
 
 /** The menus someone may see in an app: their role and the organisation's modules decide. */
 export function visibleMenus(app: "accounting" | "crm" | "analytics", access: Access): Menu[] {
+  // MOD2: no Accounting menus while it's off.
+  if (app === "accounting" && access.modules?.accounting === false) return [];
   return (app === "crm" ? CRM_MENUS : app === "analytics" ? ANALYTICS_MENUS : MENUS)
     .filter((menu) => (!menu.module || Boolean(access.modules?.[menu.module])) && (!menu.minRole || access.can(menu.minRole)))
     .map((menu) => ({ ...menu, groups: filterGroups(menu.groups, access) }));
@@ -356,6 +358,7 @@ export function visibleMenus(app: "accounting" | "crm" | "analytics", access: Ac
 
 /** The "+ New" actions someone may start (bookkeepers and up, today). */
 export function visibleNewActions(access: Access): MenuGroup[] {
+  if (access.modules?.accounting === false) return [];
   return filterGroups(NEW_ACTIONS, access);
 }
 

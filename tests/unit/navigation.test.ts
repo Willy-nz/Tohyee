@@ -2,13 +2,20 @@ import { describe, expect, it } from "vitest";
 import { destinations, MENUS, NEW_ACTIONS, searchDestinations, visibleMenus, visibleNewActions } from "@/components/navigation";
 import { type Role, roleAtLeast } from "@/lib/auth/roles";
 
-const access = (role: Role, modules = { crm: false, reporting: false, notForProfit: false, analytics: false, gst: true }) => ({
+const access = (role: Role, modules: { crm: boolean; reporting: boolean; notForProfit: boolean; analytics: boolean; gst: boolean; accounting?: boolean } = { crm: false, reporting: false, notForProfit: false, analytics: false, gst: true }) => ({
   can: (wanted: Role) => roleAtLeast(role, wanted),
   modules,
 });
 
 /** The top bar's menus after the 2026 redesign: a few labelled groups each, creating things under "+ New". */
 describe("top bar menus", () => {
+  it("shows no Accounting menus or + New while Accounting is off (#181, MOD2)", () => {
+    const off = access("owner", { crm: true, reporting: false, notForProfit: false, analytics: false, gst: false, accounting: false });
+    expect(visibleMenus("accounting", off)).toEqual([]);
+    expect(visibleNewActions(off)).toEqual([]);
+    expect(visibleMenus("crm", off).length).toBeGreaterThan(0);
+  });
+
   it("uses the simplified accounting menus", () => {
     expect(MENUS.map((menu) => menu.label)).toEqual(["Home", "Sales", "Purchases", "Banking", "Payroll", "Reports", "Accountant"]);
   });

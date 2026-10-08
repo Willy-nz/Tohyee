@@ -37,6 +37,8 @@ export type OrganisationSettings = {
   gstPeriod: GstPeriodSetting | null;
   /** The Advanced reporting module: tracking categories, custom fields and salespeople (TC1-TC10, CF1-CF10, SR1-SR8). */
   advancedFeatures: boolean;
+  /** The Accounting module (#181, MOD2-MOD7); on unless the organisation only uses the CRM or Analytics. */
+  accountingEnabled: boolean;
   /** The CRM module (MOD1, CRM1-CRM9). */
   crmEnabled: boolean;
   /** The Analytics module (decision 353). */
@@ -74,6 +76,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     gst_period_months: number | null;
     gst_period_end_month: number | null;
     advanced_features: boolean;
+    accounting_enabled: boolean;
     crm_enabled: boolean;
     analytics_enabled: boolean;
     not_for_profit_enabled: boolean;
@@ -88,7 +91,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
     payment_details: string | null;
     has_postings: boolean;
   }>(
-    `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, gst_period_months, gst_period_end_month, advanced_features, crm_enabled, analytics_enabled, not_for_profit_enabled, allow_negative_stock,
+    `select organisation_id, display_name, base_currency, financial_year_end_month, gst_basis, gst_period_months, gst_period_end_month, advanced_features, accounting_enabled, crm_enabled, analytics_enabled, not_for_profit_enabled, allow_negative_stock,
             foreign_trade, (select t.code from tax_codes t where t.id = export_tax_code_id) as export_tax_code,
             postal_address, gst_number, gst_registered, gst_registered_from::text, gst_registered_until::text, payment_details,
             exists (select 1 from ledger_journals) as has_postings
@@ -106,6 +109,7 @@ export async function getOrganisationSettings(tx: OrgTx): Promise<OrganisationSe
         ? null
         : gstPeriodSetting(row.gst_period_months, row.gst_period_end_month),
     advancedFeatures: row.advanced_features,
+    accountingEnabled: row.accounting_enabled,
     crmEnabled: row.crm_enabled,
     analyticsEnabled: row.analytics_enabled,
     notForProfitEnabled: row.not_for_profit_enabled,
@@ -196,6 +200,7 @@ export async function updateOrganisationSettings(
     gstPeriodMonths?: unknown;
     gstPeriodEndMonth?: unknown;
     advancedFeatures?: unknown;
+    accountingEnabled?: unknown;
     crmEnabled?: unknown;
     analyticsEnabled?: unknown;
     notForProfitEnabled?: unknown;
@@ -236,7 +241,7 @@ export async function updateOrganisationSettings(
   if (input.advancedFeatures !== undefined && typeof input.advancedFeatures !== "boolean") {
     throw new ValidationError("advancedFeatures must be true or false.");
   }
-  const advancedFeatures = input.advancedFeatures === undefined ? current.advancedFeatures : input.advancedFeatures;
+  let advancedFeatures = input.advancedFeatures === undefined ? current.advancedFeatures : input.advancedFeatures;
   if (input.crmEnabled !== undefined && typeof input.crmEnabled !== "boolean") {
     throw new ValidationError("crmEnabled must be true or false.");
   }
@@ -248,7 +253,23 @@ export async function updateOrganisationSettings(
   if (input.notForProfitEnabled !== undefined && typeof input.notForProfitEnabled !== "boolean") {
     throw new ValidationError("notForProfitEnabled must be true or false.");
   }
-  const notForProfitEnabled = input.notForProfitEnabled === undefined ? current.notForProfitEnabled : input.notForProfitEnabled;
+  let notForProfitEnabled = input.notForProfitEnabled === undefined ? current.notForProfitEnabled : input.notForProfitEnabled;
+  if (input.accountingEnabled !== undefined && typeof input.accountingEnabled !== "boolean") {
+    throw new ValidationError("accountingEnabled must be true or false.");
+  }
+  const accountingEnabled = input.accountingEnabled === undefined ? current.accountingEnabled : input.accountingEnabled;
+  // MOD5: one app stays on; Advanced reporting and Not-for-profit need Accounting.
+  if (!accountingEnabled && !crmEnabled && !analyticsEnabled) {
+    throw new ValidationError("Keep at least one of Accounting, CRM or Analytics on.");
+  }
+  if (!accountingEnabled) {
+    if (input.advancedFeatures === true || input.notForProfitEnabled === true) {
+      throw new ValidationError("Advanced reporting and Not-for-profit need Accounting. Turn Accounting on first.");
+    }
+    // Turning Accounting off turns them off too (the screen asks first, listing them).
+    advancedFeatures = false;
+    notForProfitEnabled = false;
+  }
   if (input.allowNegativeStock !== undefined && typeof input.allowNegativeStock !== "boolean") {
     throw new ValidationError("allowNegativeStock must be true or false.");
   }
@@ -313,7 +334,7 @@ export async function updateOrganisationSettings(
             postal_address = $9, gst_number = $10, payment_details = $11, gst_period_months = $12,
             gst_period_end_month = $13, foreign_trade = $14,
             export_tax_code_id = coalesce($15::bigint, export_tax_code_id), analytics_enabled = $16,
-            gst_registered = $19, gst_registered_from = $17::date, gst_registered_until = $18::date, updated_at = now()
+            gst_registered = $19, gst_registered_from = $17::date, gst_registered_until = $18::date, accounting_enabled = $20, updated_at = now()
       where id = true`,
     [
       displayName,
@@ -335,6 +356,7 @@ export async function updateOrganisationSettings(
       gstRegisteredFrom,
       gstRegisteredUntil,
       gstRegistered,
+      accountingEnabled,
     ],
   );
   await writeAuditEvent(tx, {
@@ -358,6 +380,7 @@ export async function updateOrganisationSettings(
       ...(foreignTrade !== current.foreignTrade ? { foreignTrade } : {}),
       ...(exportTaxCode !== current.exportTaxCode ? { exportTaxCode } : {}),
       ...(analyticsEnabled !== current.analyticsEnabled ? { analyticsEnabled } : {}),
+      ...(accountingEnabled !== current.accountingEnabled ? { accountingEnabled } : {}),
       ...(gstRegistered !== current.gstRegistered ? { gstRegistered } : {}),
       ...(gstRegisteredFrom !== current.gstRegisteredFrom ? { gstRegisteredFrom } : {}),
       ...(gstRegisteredUntil !== current.gstRegisteredUntil ? { gstRegisteredUntil } : {}),
@@ -371,6 +394,7 @@ export async function updateOrganisationSettings(
     gstBasis,
     gstPeriod,
     advancedFeatures,
+    accountingEnabled,
     crmEnabled,
     analyticsEnabled,
     notForProfitEnabled,

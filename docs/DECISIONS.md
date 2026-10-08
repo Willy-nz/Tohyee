@@ -3633,3 +3633,28 @@ testing) and #154's code signing (later, Jess).
      in `exchange_rate_source_changes`. No RBNZ feed: its site may block
      automatic downloads, so its rates come in as an uploaded file.
 
+### Accounting as a module (decision 480)
+
+480. **Accounting can be off; modules are chosen when an organisation is
+     created** (#181, examples MOD2-MOD7 approved by Jess, 8 Oct 2026).
+     `organisation_settings.accounting_enabled` (default on, so existing
+     organisations don't change, MOD7; migration 0111) with database checks
+     that one of Accounting, CRM or Analytics is on and that Advanced
+     reporting and Not-for-profit are off without Accounting (MOD5). "Tax"
+     is the GST registration switch from #180, not another flag. The
+     server admin's "New organisation" form sends the modules; they're
+     applied as a settings change once the database is ready. Turning
+     Accounting off keeps everything: background jobs skip the
+     organisation through one SQL condition in their "what's due" queries,
+     and pick up from where they stopped (feeds re-read from their last
+     sync; repeating templates make every missed date). Sales platform
+     webhooks are answered 200 but not recorded while it's off, so the
+     platform doesn't drop the address and the catch-up sync brings the
+     orders in later. The Modules page lives at `/operations/modules` and
+     opens from the account menu in every app; with Accounting off, it,
+     the profile and members pages are the only Accounting pages that
+     open. Only the CRM's invoice and sales order actions are refused on
+     the server; other Accounting API routes still work for anyone calling
+     them directly. That gap is known (told to Jess) and can be closed
+     later by checking the switch in the Accounting API routes.
+

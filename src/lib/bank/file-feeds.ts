@@ -1,3 +1,4 @@
+import { ACCOUNTING_ON_SQL } from "@/lib/organisations/accounting-switch";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -524,7 +525,7 @@ export async function checkDueFileFeeds(): Promise<{ checked: number; failed: nu
           await withOrganisationTransaction(organisation, FEED_ACTOR, (tx) =>
             tx.query<{ id: string; kind: string; mail_kind: string | null }>(
               `select id::text, kind, mail_kind from bank_file_feeds
-                where (last_check_at is null or last_check_at < now() - make_interval(hours => sync_every_hours))
+                where ${ACCOUNTING_ON_SQL} and (last_check_at is null or last_check_at < now() - make_interval(hours => sync_every_hours))
                   and (lease_until is null or lease_until < now())
                 order by last_check_at nulls first`,
             ),
