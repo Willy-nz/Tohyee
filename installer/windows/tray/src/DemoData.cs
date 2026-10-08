@@ -61,6 +61,8 @@ namespace Tohyee.Tray
                     Pump();
                     if (Transitions) PumpFor(20);
                     Save(form, folder, Name(page));
+                    // Where every control ended up, to find blank cards like Home's news (#198).
+                    if (Transitions) File.WriteAllText(Path.Combine(folder, "layout-" + Name(page) + ".txt"), Layout(form, 0));
                 }
                 if (Transitions)
                 {
@@ -155,6 +157,24 @@ namespace Tohyee.Tray
                 Application.DoEvents();
                 Thread.Sleep(15);
             }
+        }
+
+        /// <summary>Each visible control's type, bounds, visibility and text, indented by depth.</summary>
+        private static string Layout(Control control, int depth)
+        {
+            var text = control.Text ?? "";
+            if (text.Length > 40) text = text.Substring(0, 40) + "…";
+            var line = new string(' ', depth * 2) + control.GetType().Name + " " + control.Bounds + (control.Visible ? "" : " hidden")
+                + (control.AutoSize ? " auto" : "") + (text.Length > 0 ? " \"" + text.Replace("\n", " ") + "\"" : "") + Environment.NewLine;
+            var sb = new System.Text.StringBuilder(line);
+            if (depth < 14)
+            {
+                foreach (Control child in control.Controls)
+                {
+                    if (child.Visible || depth < 3) sb.Append(Layout(child, depth + 1));
+                }
+            }
+            return sb.ToString();
         }
 
         /// <summary>Time since the last page was asked for, for the transition frames.</summary>
