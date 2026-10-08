@@ -1,3 +1,4 @@
+import { ACCOUNTING_ON_SQL } from "@/lib/organisations/accounting-switch";
 import { randomInt } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import { addStatementLines, lockStatementAccount } from "@/lib/bank/accounts";
@@ -490,7 +491,7 @@ export async function syncDueStripe(): Promise<{ synced: number; failed: number 
         due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) => {
           const result = await tx.query(
             `select 1 from stripe_connections c
-              where c.status = 'active' and exists (select 1 from stripe_links l where l.active)
+              where c.status = 'active' and exists (select 1 from stripe_links l where l.active) and ${ACCOUNTING_ON_SQL}
                 and (c.last_synced_at is null or c.last_synced_at < now() - make_interval(hours => c.sync_every_hours))
                 and (c.lease_until is null or c.lease_until < now())`,
           );

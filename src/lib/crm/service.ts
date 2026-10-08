@@ -18,6 +18,7 @@ import { parseOptionalIsoDate } from "@/lib/dates";
 import { listMembers } from "@/lib/organisations/members";
 import { syncedFor } from "@/lib/crm/mail/service";
 import { crmEnabled, requireCrm, requirePeople } from "@/lib/crm/switch";
+import { requireAccounting } from "@/lib/organisations/accounting-switch";
 import {
   type ForecastCategory,
   isForecastCategory,
@@ -755,6 +756,8 @@ export async function makeInvoiceFromOpportunity(
   input: { exchangeRate?: unknown } = {},
 ): Promise<{ created: boolean; invoice: Invoice }> {
   await requireCrm(tx);
+  // MOD3: no invoice while Accounting is off.
+  await requireAccounting(tx);
   const typedRate = parseRateInput(input.exchangeRate);
   const current = await getOpportunity(tx, idInput);
   await tx.query("select id from crm_opportunities where id = $1 for update", [current.id]);
@@ -819,6 +822,7 @@ export async function makeInvoiceFromOpportunity(
  */
 export async function makeSalesOrderFromOpportunity(tx: OrgTx, idInput: unknown): Promise<{ created: boolean; salesOrder: SalesOrder }> {
   await requireCrm(tx);
+  await requireAccounting(tx);
   const current = await getOpportunity(tx, idInput);
   await tx.query("select id from crm_opportunities where id = $1 for update", [current.id]);
   const locked = await getOpportunity(tx, current.id);

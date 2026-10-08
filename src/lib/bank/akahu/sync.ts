@@ -1,3 +1,4 @@
+import { ACCOUNTING_ON_SQL } from "@/lib/organisations/accounting-switch";
 import { addStatementLines, lockStatementAccount } from "@/lib/bank/accounts";
 import {
   akahuMoney,
@@ -166,7 +167,7 @@ export async function syncDueBankFeeds(): Promise<{ synced: number; failed: numb
               `select s.account_id
                  from bank_account_settings s
                  join akahu_connections c on c.status = 'active'
-                where s.feed_active
+                where s.feed_active and ${ACCOUNTING_ON_SQL}
                   and (s.last_synced_at is null or s.last_synced_at < now() - make_interval(hours => c.sync_every_hours))
                 order by s.last_synced_at nulls first`,
             )

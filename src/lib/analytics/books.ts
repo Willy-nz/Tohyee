@@ -106,7 +106,9 @@ export async function readBooks(
   }
 
   const look = await lookups(tx);
-  const settings = await tx.query<{ crm_enabled: boolean }>("select crm_enabled from organisation_settings where id = true");
+  const settings = await tx.query<{ crm_enabled: boolean; accounting_enabled: boolean }>(
+    "select crm_enabled, accounting_enabled from organisation_settings where id = true",
+  );
   const tables: TableCopy[] = [];
 
   // Ledger lines, with the contact of the document behind the journal where there is one.
@@ -465,7 +467,8 @@ export async function readBooks(
       rows: companies.rows.map((row) => [row.id, row.name, row.is_customer, row.is_prospect, row.billing_country, row.opportunities]),
     });
   }
-  return tables;
+  // With Accounting off (MOD4), only the CRM's tables: no ledger, documents, contacts or items.
+  return settings.rows[0]?.accounting_enabled === false ? tables.filter((table) => table.name.startsWith("tohyee_crm_")) : tables;
 }
 
 /**

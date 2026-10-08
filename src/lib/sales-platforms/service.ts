@@ -1,3 +1,4 @@
+import { ACCOUNTING_ON_SQL, accountingEnabled } from "@/lib/organisations/accounting-switch";
 import { randomBytes } from "node:crypto";
 import { parseAccountCodeInput } from "@/lib/accounts/service";
 import { writeAuditEvent } from "@/lib/audit";
@@ -1492,7 +1493,7 @@ export async function syncAllSalesPlatforms(): Promise<{ synced: number; failed:
       let ids: string[] = [];
       try {
         ids = await withOrganisationTransaction(organisation, SALES_PLATFORM_ACTOR, async (tx) =>
-          (await tx.query<{ id: string }>("select id from sales_platform_connections where status = 'active' order by last_sync_at nulls first, id")).rows.map(
+          (await tx.query<{ id: string }>(`select id from sales_platform_connections where status = 'active' and ${ACCOUNTING_ON_SQL} order by last_sync_at nulls first, id`)).rows.map(
             (row) => row.id,
           ),
         );
@@ -1581,6 +1582,11 @@ export async function receiveWebhook(
   if (connector.isPing?.(headers, rawBody)) return { status: 200, message: "Ping received." };
   const delivery = connector.checkWebhook(headers, rawBody, connector.webhookSecret(credentialsOf(row)), row.store_domain);
   if (!delivery) return REFUSED;
+  // Paused while Accounting is off (MOD6): accepted, so the platform doesn't give up on the address, but
+  // not recorded, so the catch-up sync brings it in once Accounting is back on.
+  if (!(await withOrganisationTransaction(organisation, SALES_PLATFORM_ACTOR, (tx) => accountingEnabled(tx)))) {
+    return { status: 200, message: "Accounting is off for this organisation; this is brought in once it's back on." };
+  }
   let body: unknown;
   try {
     body = JSON.parse(rawBody.toString("utf8"));

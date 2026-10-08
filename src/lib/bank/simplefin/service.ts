@@ -1,3 +1,4 @@
+import { ACCOUNTING_ON_SQL } from "@/lib/organisations/accounting-switch";
 import { randomInt } from "node:crypto";
 import { writeAuditEvent } from "@/lib/audit";
 import { addStatementLines, lockStatementAccount } from "@/lib/bank/accounts";
@@ -716,7 +717,7 @@ export async function syncDueSimpleFin(now = new Date()): Promise<{ synced: numb
         due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) => {
           const row = await activeConnection(tx);
           if (!row) return false;
-          const links = await tx.query("select 1 from simplefin_links where active limit 1");
+          const links = await tx.query(`select 1 from simplefin_links where active and ${ACCOUNTING_ON_SQL} limit 1`);
           if (!links.rowCount) return false;
           const minute = (now.getUTCMinutes() - row.sync_minute + 60) % 60;
           const last = row.last_synced_at ? new Date(row.last_synced_at).getTime() : 0;

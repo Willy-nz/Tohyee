@@ -15240,10 +15240,31 @@ CRM, and **Kobe Numbers** with only Analytics.
   changes for them.
 
 Answered by Jess, 8 Oct 2026: modules are chosen when an organisation is
-created (and changed in Settings), not at `/setup`; "Tax" is the GST
-registration switch from #180, not a separate module. Still open: pause or
-refuse while a feed is connected (the draft pauses, MOD6), and payroll stays
-part of Accounting.
+created (and changed later), not at `/setup`; "Tax" is the GST registration
+switch from #180, not a separate module. Approved with the suggestions:
+feeds pause while Accounting is off (MOD6) rather than refusing, and payroll
+stays part of Accounting. As built (decision 480):
+
+- The Modules page is `/operations/modules`, opened from the account menu
+  (top right) in every app, like the profile page. It, the profile and the
+  members page still open with Accounting off; any other Accounting address
+  shows "Accounting is off for Kobe Leads", and `/operations` itself goes to
+  the CRM (or Analytics).
+- With one app on there's no app switcher at all (it only shows when
+  there's somewhere to switch to).
+- MOD4: with Accounting off the books copy has no contacts table either, so
+  only the CRM's tables are copied (when the CRM is on).
+- MOD6: paused while off: bank feeds (Akahu, SimpleFIN, Stripe, PayPal,
+  Wise and statement files), Shopify and WooCommerce syncs (webhooks are
+  accepted but left for the catch-up sync), repeating invoices and bills
+  (missed dates are made once it's back on), the bills inbox, online
+  payment checks and ECB rates. Accounting's top-bar notices are hidden.
+  There is no payroll reminder job to pause.
+- Only making an invoice or sales order from an opportunity is refused on
+  the server (MOD3); other Accounting API calls aren't refused while it's
+  off, only hidden from the screens.
+- If the new organisation's database can't be created straight away, its
+  modules keep their defaults and are set under Modules after the repair.
 
 ### Several bank feed logins per organisation (#182)
 

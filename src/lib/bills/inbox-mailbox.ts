@@ -1,3 +1,4 @@
+import { ACCOUNTING_ON_SQL } from "@/lib/organisations/accounting-switch";
 import { createHash } from "node:crypto";
 import { assertPublicMailHost } from "@/lib/analytics/mail-host";
 import { imapReportMessages, reportMessages } from "@/lib/analytics/report-email-providers";
@@ -334,7 +335,7 @@ export async function checkDueInboxMailboxes(): Promise<{ checked: number; faile
           await withOrganisationTransaction(organisation, FEED_ACTOR, (tx) =>
             tx.query<{ id: string }>(
               `select id::text from bill_inbox_mailboxes
-                where (last_check_at is null or last_check_at < now() - make_interval(hours => sync_every_hours))
+                where ${ACCOUNTING_ON_SQL} and (last_check_at is null or last_check_at < now() - make_interval(hours => sync_every_hours))
                   and (lease_until is null or lease_until < now())
                 order by last_check_at nulls first`,
             ),

@@ -1,3 +1,4 @@
+import { accountingEnabled } from "@/lib/organisations/accounting-switch";
 import type { OrgTx } from "@/lib/db/org-transaction";
 
 export type TopBarNotice = {
@@ -8,6 +9,8 @@ export type TopBarNotice = {
 
 /** Non-blocking top-bar notices for the current organisation. */
 export async function listTopBarNotices(tx: OrgTx): Promise<TopBarNotice[]> {
+  // Accounting's notices (bank feeds) aren't shown while it's off (MOD6).
+  if (!(await accountingEnabled(tx))) return [];
   const feeds = await tx.query<{ count: string }>(
     `select count(*)::text as count
        from bank_account_settings s

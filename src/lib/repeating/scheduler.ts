@@ -1,3 +1,4 @@
+import { accountingEnabled } from "@/lib/organisations/accounting-switch";
 import { withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { listAllOrganisations } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
@@ -29,7 +30,8 @@ async function runOrganisationKind(
 ): Promise<{ made: number; failed: number }> {
   let made = 0;
   let failed = 0;
-  const ids = await withOrganisationTransaction(organisation, kind.actor, (tx) => listDueTemplateIds(tx, kind, today));
+  // Paused while Accounting is off (MOD6); the dates missed are made once it's back on.
+  const ids = await withOrganisationTransaction(organisation, kind.actor, async (tx) => ((await accountingEnabled(tx)) ? listDueTemplateIds(tx, kind, today) : []));
   for (const id of ids) {
     try {
       const result = await withOrganisationTransaction(organisation, kind.actor, (tx) => runTemplates(tx, kind, { templateId: id, today }));

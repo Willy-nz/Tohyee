@@ -39,6 +39,8 @@ export default function OrganisationsPage() {
   const [idTouched, setIdTouched] = useState(false);
   const [baseCurrency, setBaseCurrency] = useState("NZD");
   const [ownerEmail, setOwnerEmail] = useState("");
+  // #181: the modules it starts with (changed later under Modules).
+  const [modules, setModules] = useState({ accounting: true, gstRegistered: true, crm: false, analytics: false });
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
@@ -56,12 +58,15 @@ export default function OrganisationsPage() {
     setBusy(true);
     setStatus(null);
     try {
-      const result = await api<{ organisation: OrganisationAdminView }>("/api/admin/organisations", {
+      const result = await api<{ organisation: OrganisationAdminView; modulesNote: string | null }>("/api/admin/organisations", {
         method: "POST",
-        body: { id, displayName: name, baseCurrency, ownerEmail: ownerEmail || undefined },
+        body: { id, displayName: name, baseCurrency, ownerEmail: ownerEmail || undefined, modules: { ...modules, gstRegistered: modules.accounting && modules.gstRegistered } },
       });
       if (result.organisation.provisioningStatus === "ready") {
-        setStatus({ tone: "success", text: `Created ${result.organisation.displayName} with its own database (${result.organisation.databaseName}).` });
+        setStatus({
+          tone: "success",
+          text: `Created ${result.organisation.displayName} with its own database (${result.organisation.databaseName}).${result.modulesNote ? ` ${result.modulesNote}` : ""}`,
+        });
       } else {
         setStatus({
           tone: "error",
@@ -72,6 +77,7 @@ export default function OrganisationsPage() {
       setId("");
       setIdTouched(false);
       setOwnerEmail("");
+      setModules({ accounting: true, gstRegistered: true, crm: false, analytics: false });
       list.reload();
       router.refresh();
     } catch (caught) {
@@ -137,8 +143,26 @@ export default function OrganisationsPage() {
               <input type="email" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} />
             </Field>
           </div>
+          <fieldset style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 6 }}>
+            <legend className={ui.muted}>Modules (at least one of Accounting, CRM or Analytics; changed later under Modules)</legend>
+            <label className={ui.checkbox}>
+              <input type="checkbox" checked={modules.accounting} onChange={(event) => setModules({ ...modules, accounting: event.target.checked })} /> Accounting
+            </label>
+            {modules.accounting ? (
+              <label className={ui.checkbox}>
+                <input type="checkbox" checked={modules.gstRegistered} onChange={(event) => setModules({ ...modules, gstRegistered: event.target.checked })} /> Tax: registered
+                for GST
+              </label>
+            ) : null}
+            <label className={ui.checkbox}>
+              <input type="checkbox" checked={modules.crm} onChange={(event) => setModules({ ...modules, crm: event.target.checked })} /> CRM
+            </label>
+            <label className={ui.checkbox}>
+              <input type="checkbox" checked={modules.analytics} onChange={(event) => setModules({ ...modules, analytics: event.target.checked })} /> Analytics
+            </label>
+          </fieldset>
           <div>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || (!modules.accounting && !modules.crm && !modules.analytics)}>
               {busy ? "Creating database…" : "Create organisation"}
             </Button>
           </div>
