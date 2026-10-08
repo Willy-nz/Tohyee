@@ -15422,3 +15422,172 @@ dated outside every uploaded period asks for a rate rather than falling back
   the source changes (any day of the year), not only part-way through one.
 - A file can have currencies Tohyee doesn't support (IRD's lists have
   dozens); those are skipped with the unused ones.
+
+## Drafts for the remaining add-on stages (#196), 8 Oct 2026 (not yet approved by Jess)
+
+Drafted before anything is built, as AGENTS.md asks, from the audit in #196
+and stages 7-10 of docs/XERO-ADDONS-PLAN.md. Nothing here is decided: each
+part ends with the questions that need Jess's answers. Glimmers by Jess
+(NZD, GST registered, invoice basis) is the organisation throughout.
+
+### Jobs and visits inside Projects (stage 8, ServiceM8 and Tradify)
+
+One workflow for both apps (the audit's suggestion and Jess's 5 Oct answer
+4): a **job** is a project with a site address, and its **visits** are on a
+calendar. Setup: Kobe Cafe (customer), job "Install display cabinet" at
+12 Princes Street, Dunedin; Will is the staff member, staff cost rate
+40.00/hour; task "Labour" at 90.00/hour; item "Cabinet hinge" (stock,
+average cost 6.00, sells for 12.00 + GST).
+
+- **JV1** Making a job: a project with "This is a job" ticked, the site
+  address and a contact person on site. Jobs list shows only jobs, with
+  their next visit. Nothing is posted.
+- **JV2** Scheduling: a visit on Tue 13 Oct 2026, 9:00-11:30, assigned to
+  Will. It shows on the jobs calendar (day, week, by staff member). Two
+  visits for Will that overlap are allowed but flagged "Will is booked
+  twice 10:00-11:30". Nothing is posted.
+- **JV3** Dispatch: on the day Will opens "My visits" on his phone, taps
+  **Start** at 9:04 and **Finish** at 11:20. That's 2 h 16 m of project
+  time on "Labour" for Will (as PJ time entries), cost 2.2667 x 40.00 =
+  **90.67**, chargeable at 90.00/hour = **204.00**. Nothing is posted until
+  it's invoiced (as PJ).
+- **JV4** Materials: Will adds 4 x Cabinet hinge used on the visit. Stock
+  moves out when the job is invoiced, not before (as ST1: cost of sales
+  posts on the invoice): 4 x 12.00 = 48.00 + 7.20 GST on the invoice; Dr
+  5000 Cost of sales 24.00, Cr 1400 Stock 24.00 on approval.
+- **JV5** Checklist: the job has the checklist "Install" (Measure, Fit,
+  Clean up, Customer walkthrough). Each tick records who and when. Finishing
+  a visit with unticked items asks "Finish anyway?" and records the answer.
+- **JV6** Photos and signature: Will attaches two photos and the on-site
+  contact signs on screen. They're kept with the visit (as record
+  attachments, in the organisation's own database and backups) and can be
+  added to the invoice email.
+- **JV7** Invoice from the job: the project invoice (PJ) brings in the
+  labour (204.00), the hinges (48.00) and any chargeable expenses: total
+  252.00 + 37.80 GST = **289.80**.
+- **JV8** Service reminder: the job has "every 12 months from the last
+  visit". On 13 Oct 2027 a reminder appears under Jobs, "Kobe Cafe: annual
+  service due", with a button to book a visit. No text message (decision on
+  5 Oct); an email to the customer only if Jess wants it (question 3).
+- **JV9** Calendar sync: Will's visits appear in his Google or Microsoft
+  calendar through the CRM's existing calendar connection (one way, Tohyee
+  to calendar). Moving the event in Google doesn't move the visit.
+
+Questions for Jess:
+1. Should a visit's Start/Finish make project time by itself (JV3), or
+   should Will confirm the hours first?
+2. Materials (JV4): out of stock when invoiced (as now), or when used on the
+   visit?
+3. Service reminders (JV8): a reminder in Tohyee only, or also an email to
+   the customer?
+4. Calendar sync (JV9): one way is drafted; is two-way needed?
+5. Is a staff member who isn't a Tohyee user (no login) assigned to visits,
+   or does everyone on the calendar need a login?
+
+### Rosters and clocking in inside Payroll (stage 9, Deputy)
+
+Setup: Glimmers' shop, Saturdays 9:00-17:00. Employees Aroha (hourly,
+25.00/hour) and Tama (hourly, 24.00/hour). Workforce budget for the shop:
+800.00 a week (WB).
+
+- **RS1** A roster: week starting Mon 19 Oct 2026, shift Sat 24 Oct
+  9:00-17:00 with a 30-minute unpaid break, Aroha. Roster cost = 7.5 h x
+  25.00 = **187.50**, plus the employer's KiwiSaver at 3% = **5.63**, so
+  **193.13** against the 800.00 budget. Nothing is posted.
+- **RS2** Unavailability: Tama has marked Saturdays unavailable. Rostering
+  him on Sat 24 Oct warns "Tama is unavailable"; it can still be saved with
+  a reason.
+- **RS3** Leave: Aroha has approved annual leave 22-26 Oct. Her Sat shift
+  warns "Aroha is on leave" and isn't counted as worked.
+- **RS4** Publishing: the roster is published; each employee with a login
+  sees their shifts. Changes after publishing are listed as changes.
+- **RS5** Clock in: Aroha clocks in at 8:57 and out at 17:06 on the shop's
+  device, with a 30-minute break. Clocked time is 7 h 39 m.
+- **RS6** Into the timesheet: the clocked time fills Aroha's timesheet for
+  the week (TS) as 7.65 hours on Sat 24 Oct, marked "from clock-in", for
+  her approver to approve as any timesheet. Rounding: none (question 2).
+- **RS7** Roster against actual: the week shows rostered 7.5 h, clocked
+  7.65 h, difference 0.15 h (3.75 at 25.00), and cost against the workforce
+  budget once the pay run is approved.
+- **RS8** A missed clock-out: Tama clocks in at 9:00 and never clocks out.
+  At midnight the shift is "Needs attention"; nothing goes to his timesheet
+  until a manager enters the out time.
+
+Questions for Jess:
+1. Location when clocking in: none, the device's location recorded, or
+   clock-in only allowed near the shop?
+2. Rounding clocked time (to the nearest 5 or 15 minutes, or none)?
+3. Should roster costs include holiday pay and ACC levies, or just wages
+   and KiwiSaver as drafted?
+4. Do employees without a Tohyee login need to clock in (a shared device
+   with a PIN)?
+
+### Direct debit with GoCardless (stage 10, BECS NZ)
+
+What GoCardless says (checked 8 Oct 2026, [BECS NZ payment
+timings](https://support.gocardless.com/hc/en-nz/articles/360001448765-BECS-NZ-payment-timings)
+and [the timings update](https://support.gocardless.com/hc/en-us/articles/20530024934812-BECS-NZ-Payment-Timings-improvements)):
+a payment can be created up to the morning of its charge date (about
+3:30-5:30 am NZ time, depending on daylight saving), the customer is
+charged on that date, and the money reaches the merchant's account four
+business days later (D+4). The authority (mandate) is set up with the first
+payment. Not found: how long after the charge date a failure can still be
+reported, and whether GoCardless's NZ fees include GST.
+
+Setup as the online payments (PN): a **GoCardless** bank account 1070 as
+the clearing account, fees to 6060 Bank fees. Kobe Cafe has signed a direct
+debit authority through GoCardless's page.
+
+- **GC1** Turning it on: an admin connects GoCardless (its API token, stored
+  encrypted as the other providers) and turns on "Collect by direct debit"
+  for chosen customers. Nothing is posted.
+- **GC2** Authority: Kobe Cafe gets a link to GoCardless's page to sign the
+  authority. Once GoCardless says it's active, the contact shows "Direct
+  debit: active".
+- **GC3** Collection: INV-0030 for **115.00** is due Fri 30 Oct 2026.
+  Tohyee asks GoCardless to collect it on that date, early that morning.
+  The invoice shows "Collecting 115.00 on 30 Oct". Nothing is posted yet.
+- **GC4** Confirmed: GoCardless reports the payment confirmed. A payment of
+  115.00 on 30 Oct into 1070 is recorded against INV-0030: Dr 1070 115.00,
+  Cr 1100 115.00.
+- **GC5** Payout: on Thu 5 Nov GoCardless pays out 115.00 less its fee
+  (fee amount from GoCardless's report, say **1.15**): Dr 1000 113.85, Dr
+  6060 1.15, Cr 1070 115.00. The 113.85 bank line matches the payout.
+- **GC6** Failure: the payment fails (insufficient funds). The payment in
+  GC4 is reversed (voided with the reason), INV-0030 is due again, and the
+  invoice and Home say "Direct debit failed: insufficient funds". Retry:
+  question 2.
+- **GC7** Cancelled authority: Kobe Cafe cancels the authority at their
+  bank. Collections already asked for are cancelled; INV-0030 stays due;
+  the contact shows "Direct debit: cancelled".
+- **GC8** Part payment: INV-0031 for 230.00 already has 100.00 paid by
+  transfer; only the 130.00 due is collected.
+- **GC9** Voided or credited before the charge date: the collection is
+  cancelled (as PN10).
+- **GC10** The same notice twice from GoCardless changes nothing (as the
+  other providers' duplicate protection).
+
+Questions for Jess:
+1. Collect every invoice for a customer with an authority automatically on
+   its due date, or only invoices ticked for it?
+2. After a failure, retry automatically (GoCardless can retry) or leave it
+   to a person?
+3. Is GST on GoCardless fees claimable (does their NZ invoice show GST)?
+   Not checked; the draft posts the fee without GST until known.
+4. GoCardless gets the fees as a separate report; is it acceptable for the
+   payout (GC5) to be matched by hand at first?
+
+### The next sales platform (stage 7)
+
+Stripe sales, Square, Amazon, eBay, Etsy and PayPal sales remain. Each
+posts orders as Shopify and WooCommerce do (no summary mode, Jess 5 Oct).
+Not decided which comes next. Glimmers sells on Shopify; Stripe and PayPal
+are already connected for payments, so:
+
+- **Stripe sales** would treat each Stripe charge not linked to a Tohyee
+  invoice as a sale (an invoice and its payment), reusing the Stripe login.
+- **Etsy** suits handmade goods (Etsy's API needs an approved app; not
+  checked whether it's available to a self-hosted install).
+- **Square** suits in-person sales at markets.
+
+Question for Jess: which one next, and is it one Glimmers uses?
