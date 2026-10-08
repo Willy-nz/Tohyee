@@ -15358,9 +15358,25 @@ Setup: Glimmers (NZD, year 1 Apr - 31 Mar) has used **ECB** rates since
 - **FX9** **Typed only**: nothing is added automatically; documents work as
   MC48-MC49.
 
-Still open:
+Approved by Jess, 8 Oct 2026 ("Yes, use the suggestions"): a document
+dated outside every uploaded period asks for a rate rather than falling back
+(FX5), and documents record where their rate came from (FX4). As built
+(decision 479):
 
-1. Should a document dated outside every uploaded period ask for a rate
-   (FX5), or fall back to the last rate used, as today (MC48)?
-2. Should documents record their rate's source (FX4)? This needs a new
-   column on documents, and older documents wouldn't have one.
+- The source is on Accounting › Exchange rates (the page the ECB setting
+  was already on), not under Settings.
+- A document records **Typed** for a rate typed on it, else the list
+  entry's source: **ECB**, the set's name, **Exchange rates list** for a
+  rate typed into the list, or **Last rate used**. Invoices, bills, credit
+  notes and supplier credit notes record it; payments and refunds don't
+  yet. Documents from before this have none.
+- FX5 for repeating documents: while there's no set for the date, the
+  template can't make the document and tries again on its next run, rather
+  than leaving a draft.
+- FX6: a set that overlaps one already saved replaces every set it
+  overlaps; their rates are archived, so dates they alone covered ask for a
+  rate until a set covers them again.
+- FX7: a reason is asked for whenever ECB or uploaded sets are in use and
+  the source changes (any day of the year), not only part-way through one.
+- A file can have currencies Tohyee doesn't support (IRD's lists have
+  dozens); those are skipped with the unused ones.

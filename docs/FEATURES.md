@@ -485,6 +485,18 @@ that something happened.
 - **Exchange rates from the European Central Bank** (FX1, decision 437):
   turned on per organisation, each working day's ECB rates are added to the
   exchange rates list for the currencies in use; typed rates stay.
+- **Rate source and uploaded rate sets** (#183, FX2-FX9 approved by Jess 8
+  Oct 2026, decision 479, tenant migration 0110): Accounting › Exchange
+  rates chooses where rates come from: ECB (daily), uploaded rate sets, or
+  typed only. A set is a CSV or Excel file of currency and rate for a
+  period, named for its source (IRD's monthly averages, the Reserve Bank,
+  a bank), quoted either way round and previewed before it's saved. While
+  sets are the source, a document dated in a set's period takes its rate
+  and a date outside every set asks for one. A set overlapping another
+  replaces it with a reason. Changing the source while ECB or sets are in
+  use asks for the reason Inland Revenue asks you to keep. Every rate in
+  the list shows its source, and invoices, bills and credit notes record
+  where their rate came from.
 - **Cash flow forecast** (Reports, Cash flow forecast; CF1-CF9, decisions
   432-436, tenant migration 0101), like NetSuite's Cash 360: today's bank
   balance, then money in and out by day, week or month (about 3 months by

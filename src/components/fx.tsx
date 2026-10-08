@@ -5,7 +5,7 @@ import { Field } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { isRateText } from "@/lib/money/fx";
 
-type RateUsed = { rate: string; date: string; source: "list" | "posted" | "revaluation" };
+type RateUsed = { rate: string; date: string; source: "list" | "posted" | "revaluation"; label?: string; until?: string | null };
 
 /**
  * The rate a foreign-currency document or payment starts with: the exchange
@@ -46,9 +46,9 @@ export function ExchangeRateField({
       ? `${baseCurrency} per 1 ${currencyCode}, up to 8 decimal places.`
       : suggested
         ? suggested.source === "list"
-          ? `From the exchange rates list, effective ${formatDate(suggested.date)}. Change it if the rate on the day was different.`
+          ? `From ${suggested.label && suggested.label !== "Exchange rates list" ? suggested.label : "the exchange rates list"}, effective ${formatDate(suggested.date)}${suggested.until ? ` to ${formatDate(suggested.until)}` : ""}. Change it if the rate on the day was different.`
           : `The last ${currencyCode} rate used, on ${formatDate(suggested.date)}. Change it if the rate on the day was different.`
-        : `No ${currencyCode} rate in the exchange rates list or used on or before this date yet, so type it (or add rates under Accounting › Exchange rates).`;
+        : `No ${currencyCode} rate for this date in the exchange rates list or its uploaded rate sets yet, so type it (or add rates under Accounting › Exchange rates).`;
   return (
     <Field label={`Exchange rate (${baseCurrency} per 1 ${currencyCode})`} hint={hint}>
       <input

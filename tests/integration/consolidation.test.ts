@@ -313,15 +313,15 @@ describeWithDatabase("consolidation (CO1-CO11, FX1)", () => {
     await w.as(w.ids.holdings, (tx) => updateEcbSettings(tx, { enabled: true }, "2026-10-05"));
     expect((await refreshEcbRates(holdings)).added).toBe(1);
     const aud = (await w.as(w.ids.holdings, (tx) => listedRates(tx, ["AUD"]))).get("AUD")!;
-    expect(aud.find((entry) => entry.date === "2026-10-05")).toEqual({ rate: "1.117647", date: "2026-10-05" });
+    expect(aud.find((entry) => entry.date === "2026-10-05")).toEqual({ rate: "1.117647", date: "2026-10-05", until: null, label: "ECB" });
     // A rate already there for the date (typed) is never replaced, and running again adds nothing.
     await w.as(w.ids.pty, (tx) => addExchangeRates(tx, { idempotencyKey: key("rate"), rates: [{ currencyCode: "NZD", effectiveDate: "2026-10-05", rate: "0.9" }] }));
     await w.as(w.ids.pty, (tx) => updateEcbSettings(tx, { enabled: true, extraCurrencies: ["NZD", "USD"] }, "2026-10-02"));
     expect((await refreshEcbRates(pty)).added).toBe(3);
     const ptyRates = await w.as(w.ids.pty, (tx) => listedRates(tx, ["NZD", "USD"]));
     expect(ptyRates.get("NZD")).toEqual([
-      { rate: "0.9", date: "2026-10-05" },
-      { rate: "0.898936", date: "2026-10-02" },
+      { rate: "0.9", date: "2026-10-05", until: null, label: "Exchange rates list" },
+      { rate: "0.898936", date: "2026-10-02", until: null, label: "ECB" },
     ]);
     expect(ptyRates.get("USD")!.map((entry) => [entry.date, entry.rate])).toEqual([
       ["2026-10-05", "1.559633"],

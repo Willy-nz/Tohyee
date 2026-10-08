@@ -24,7 +24,7 @@ import {
   type PaidStatus,
 } from "@/lib/invoices/amounts";
 import { controlAccountCode, GST_ACCOUNT, setBaseLineAmounts, type ControlAccount, type ForeignOption } from "@/lib/invoices/service";
-import { assertForeignLinesSupported, contactCurrency, convertDocumentLines, exchangeRateFor, parseRateInput } from "@/lib/fx/documents";
+import { assertForeignLinesSupported, contactCurrency, convertDocumentLines, exchangeRateWithSource, keptRateSource, parseRateInput } from "@/lib/fx/documents";
 import { type AvailableOn, sideRefusal } from "@/lib/tax/available-on";
 import type { TaxCategory } from "@/lib/tax/categories";
 import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
@@ -114,6 +114,8 @@ export type BillSummary = {
   total: string;
   /** Base currency per 1 unit of the bill's currency; null for a base-currency bill (MC10). */
   exchangeRate: string | null;
+  /** Where the rate came from (FX4): "Typed", "ECB", an uploaded set's name, "Exchange rates list" or "Last rate used"; null before #183. */
+  exchangeRateSource: string | null;
   /** The base-currency amounts of a foreign-currency bill (its lines converted one by one); null otherwise. */
   baseSubtotal: string | null;
   baseTaxTotal: string | null;
@@ -182,6 +184,7 @@ type BillRow = {
   amount_paid: string;
   amount_credited: string;
   exchange_rate: string | null;
+  exchange_rate_source: string | null;
   base_subtotal: string | null;
   base_tax_total: string | null;
   base_total: string | null;
@@ -206,7 +209,7 @@ const SUMMARY_COLUMNS = `b.id, b.status, b.contact_id, c.name as contact_name, b
   b.supplier_invoice_number, b.amounts_mode, b.currency_code, b.subtotal, b.tax_total, b.total,
   paid.amount_paid, credited.amount_credited, b.approval_journal_id, b.approved_at, b.approved_by_email, b.void_date, b.void_journal_id, b.voided_at,
   b.voided_by_email, b.created_by_email, b.created_at, b.updated_at, b.custom_fields, b.purchase_order_id, po.po_number,
-  b.is_opening_balance, b.exchange_rate::text, b.base_subtotal::text, b.base_tax_total::text, b.base_total::text,
+  b.is_opening_balance, b.exchange_rate::text, b.exchange_rate_source, b.base_subtotal::text, b.base_tax_total::text, b.base_total::text,
   base_settled.base_settled::text`;
 
 /** Bills with their supplier and the sums of their active payments and supplier credit applied. */
@@ -268,6 +271,7 @@ function toSummary(row: BillRow): BillSummary {
     taxTotal: row.tax_total,
     total: row.total,
     exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    exchangeRateSource: row.exchange_rate_source,
     baseSubtotal: baseMoney(row.base_subtotal),
     baseTaxTotal: baseMoney(row.base_tax_total),
     baseTotal: baseMoney(row.base_total),
@@ -346,6 +350,8 @@ export type DraftDetails = {
   customInput: Record<string, unknown> | undefined;
   /** As sent: undefined or null when not given (a foreign-currency bill then takes the last rate used). */
   exchangeRateInput?: string | null;
+  /** When `exchangeRateInput` is the bill's own saved rate: where it came from, so an edit keeps it (FX4). */
+  exchangeRateSourceInput?: string | null;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -356,6 +362,7 @@ export type ResolvedDraft = DraftDetails & {
   taxTotal: string;
   total: string;
   exchangeRate: string | null;
+  exchangeRateSource: string | null;
   baseSubtotal: string | null;
   baseTaxTotal: string | null;
   baseTotal: string | null;
@@ -629,11 +636,14 @@ export async function resolveDraft(
   });
   // A foreign-currency bill (MC10, MC75): a rate for its date; each line (GST included) converted.
   let exchangeRate: string | null = null;
+  let exchangeRateSource: string | null = null;
   let base: ReturnType<typeof convertDocumentLines> | null = null;
   if (currencyCode !== tx.baseCurrency) {
     // A purchase order or repeating bill (MC27, MC28) has no rate: the bill made from it takes one for its date.
     if (!foreign.template) {
-      exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.billDate, typed: draft.exchangeRateInput, what: "bill" });
+      const found = await exchangeRateWithSource(tx, { currencyCode, date: draft.billDate, typed: draft.exchangeRateInput, typedSource: draft.exchangeRateSourceInput, what: "bill" });
+      exchangeRate = found?.rate ?? null;
+      exchangeRateSource = found?.source ?? null;
       base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
     }
   }
@@ -648,6 +658,7 @@ export async function resolveDraft(
     taxTotal: amounts.taxTotal,
     total: amounts.total,
     exchangeRate,
+    exchangeRateSource,
     baseSubtotal: base?.baseSubtotal ?? null,
     baseTaxTotal: base?.baseTaxTotal ?? null,
     baseTotal: base?.baseTotal ?? null,
@@ -1094,9 +1105,9 @@ export async function createBill(
       `insert into bills (command_source, idempotency_key, request_hash, contact_id, bill_date, due_date,
                           supplier_invoice_number, amounts_mode, currency_code, subtotal, tax_total, total,
                           created_by_user_id, created_by_email, purchase_order_id,
-                          exchange_rate, base_subtotal, base_tax_total, base_total)
+                          exchange_rate, base_subtotal, base_tax_total, base_total, exchange_rate_source)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14, $15,
-               $16::numeric, $17::numeric, $18::numeric, $19::numeric)
+               $16::numeric, $17::numeric, $18::numeric, $19::numeric, $20)
        on conflict (command_source, idempotency_key) do nothing
        returning id`,
       [
@@ -1119,6 +1130,7 @@ export async function createBill(
         resolved.baseSubtotal,
         resolved.baseTaxTotal,
         resolved.baseTotal,
+        resolved.exchangeRateSource,
       ],
     ),
   );
@@ -1179,6 +1191,7 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
           ? saved.exchangeRateInput
           : undefined,
   });
+  draft.exchangeRateSourceInput = keptRateSource(draft.exchangeRateInput, current.exchangeRate, current.exchangeRateSource);
   const resolved = await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines, { foreignCurrency: true });
   const same = sameAsStored(resolved, current);
   if (same.header && same.lines) {
@@ -1203,7 +1216,7 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
           set contact_id = $2, bill_date = $3, due_date = $4, supplier_invoice_number = $5, amounts_mode = $6,
               currency_code = $7, subtotal = $8::numeric, tax_total = $9::numeric, total = $10::numeric,
               exchange_rate = $11::numeric, base_subtotal = $12::numeric, base_tax_total = $13::numeric, base_total = $14::numeric,
-              updated_at = now()
+              exchange_rate_source = $15, updated_at = now()
         where id = $1`,
       [
         current.id,
@@ -1220,6 +1233,7 @@ export async function updateBill(tx: OrgTx, billIdInput: unknown, input: BillInp
         resolved.baseSubtotal,
         resolved.baseTaxTotal,
         resolved.baseTotal,
+        resolved.exchangeRateSource,
       ],
     ),
   );

@@ -17,7 +17,7 @@ export function ForeignTotals({
   openLabel,
   openBase,
 }: {
-  document: { exchangeRate: string | null; baseTaxTotal: string | null; baseTotal: string | null };
+  document: { exchangeRate: string | null; exchangeRateSource?: string | null; baseTaxTotal: string | null; baseTotal: string | null };
   baseCurrency: string;
   hasTax: boolean;
   openLabel?: string;
@@ -26,7 +26,7 @@ export function ForeignTotals({
   if (!document.exchangeRate) return null;
   return (
     <>
-      <Stat label="Exchange rate" value={document.exchangeRate} />
+      <Stat label={document.exchangeRateSource ? `Exchange rate (${document.exchangeRateSource})` : "Exchange rate"} value={document.exchangeRate} />
       {hasTax ? <Stat label={`GST (${baseCurrency})`} value={<Money value={document.baseTaxTotal} />} /> : null}
       <Stat label={`Total (${baseCurrency})`} value={<Money value={document.baseTotal} />} />
       {openLabel && openBase !== null && openBase !== undefined ? (

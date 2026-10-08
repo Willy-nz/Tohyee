@@ -22,7 +22,7 @@ import {
 } from "@/lib/invoices/amounts";
 import { controlAccountCode, GST_ACCOUNT, setBaseLineAmounts } from "@/lib/invoices/service";
 import { getJournal, parseJournalBody, postJournalBody, sameForeign } from "@/lib/ledger/journals";
-import { assertForeignLinesSupported, contactCurrency, convertDocumentLines, exchangeRateFor, parseRateInput } from "@/lib/fx/documents";
+import { assertForeignLinesSupported, contactCurrency, convertDocumentLines, exchangeRateWithSource, keptRateSource, parseRateInput } from "@/lib/fx/documents";
 import { type AvailableOn, sideRefusal } from "@/lib/tax/available-on";
 import type { TaxCategory } from "@/lib/tax/categories";
 import { assertPostingDateAllowed } from "@/lib/ledger/period-controls";
@@ -105,6 +105,8 @@ export type SupplierCreditNoteSummary = {
   total: string;
   /** Base currency per 1 unit of the credit note's currency; null for a base-currency one (MC12). */
   exchangeRate: string | null;
+  /** Where the rate came from (FX4); null before #183. */
+  exchangeRateSource: string | null;
   baseSubtotal: string | null;
   baseTaxTotal: string | null;
   baseTotal: string | null;
@@ -167,6 +169,7 @@ type CreditNoteRow = {
   amount_applied: string;
   amount_refunded: string;
   exchange_rate: string | null;
+  exchange_rate_source: string | null;
   base_subtotal: string | null;
   base_tax_total: string | null;
   base_total: string | null;
@@ -188,7 +191,7 @@ const SUMMARY_COLUMNS = `n.id, n.status, n.supplier_credit_note_number, n.contac
   n.reference, n.amounts_mode, n.currency_code, n.subtotal, n.tax_total, n.total, applied.amount_applied,
   refunded.amount_refunded, n.approval_journal_id, n.approved_at, n.approved_by_email, n.void_date, n.void_journal_id,
   n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at, n.custom_fields,
-  n.exchange_rate::text, n.base_subtotal::text, n.base_tax_total::text, n.base_total::text, applied.base_applied::text`;
+  n.exchange_rate::text, n.exchange_rate_source, n.base_subtotal::text, n.base_tax_total::text, n.base_total::text, applied.base_applied::text`;
 
 /** Supplier credit notes with their supplier and the sums of their active applications and refunds. */
 const SUMMARY_FROM = `supplier_credit_notes n
@@ -249,6 +252,7 @@ function toSummary(row: CreditNoteRow): SupplierCreditNoteSummary {
     taxTotal: row.tax_total,
     total: row.total,
     exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    exchangeRateSource: row.exchange_rate_source,
     baseSubtotal: baseMoney(row.base_subtotal),
     baseTaxTotal: baseMoney(row.base_tax_total),
     baseTotal: baseMoney(row.base_total),
@@ -315,6 +319,8 @@ type DraftDetails = {
   customInput: Record<string, unknown> | undefined;
   /** As sent: undefined or null when not given (a foreign-currency one then takes the last rate used). */
   exchangeRateInput?: string | null;
+  /** When `exchangeRateInput` is the credit note's own saved rate: where it came from, so an edit keeps it (FX4). */
+  exchangeRateSourceInput?: string | null;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -325,6 +331,7 @@ type ResolvedDraft = DraftDetails & {
   taxTotal: string;
   total: string;
   exchangeRate: string | null;
+  exchangeRateSource: string | null;
   baseSubtotal: string | null;
   baseTaxTotal: string | null;
   baseTotal: string | null;
@@ -554,9 +561,18 @@ async function resolveDraft(
   });
   // A foreign-currency supplier credit note (MC12): as a foreign-currency bill.
   let exchangeRate: string | null = null;
+  let exchangeRateSource: string | null = null;
   let base: ReturnType<typeof convertDocumentLines> | null = null;
   if (currencyCode !== tx.baseCurrency) {
-    exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.creditNoteDate, typed: draft.exchangeRateInput, what: "supplier credit note" });
+    const found = await exchangeRateWithSource(tx, {
+      currencyCode,
+      date: draft.creditNoteDate,
+      typed: draft.exchangeRateInput,
+      typedSource: draft.exchangeRateSourceInput,
+      what: "supplier credit note",
+    });
+    exchangeRate = found?.rate ?? null;
+    exchangeRateSource = found?.source ?? null;
     base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
   }
 
@@ -570,6 +586,7 @@ async function resolveDraft(
     taxTotal: amounts.taxTotal,
     total: amounts.total,
     exchangeRate,
+    exchangeRateSource,
     baseSubtotal: base?.baseSubtotal ?? null,
     baseTaxTotal: base?.baseTaxTotal ?? null,
     baseTotal: base?.baseTotal ?? null,
@@ -920,9 +937,9 @@ export async function createSupplierCreditNote(
       `insert into supplier_credit_notes (command_source, idempotency_key, request_hash, contact_id, credit_note_date,
                                           supplier_credit_note_number, reference, amounts_mode, currency_code,
                                           subtotal, tax_total, total, created_by_user_id, created_by_email,
-                                          exchange_rate, base_subtotal, base_tax_total, base_total)
+                                          exchange_rate, base_subtotal, base_tax_total, base_total, exchange_rate_source)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14,
-               $15::numeric, $16::numeric, $17::numeric, $18::numeric)
+               $15::numeric, $16::numeric, $17::numeric, $18::numeric, $19)
        on conflict (command_source, idempotency_key) do nothing
        returning id`,
       [
@@ -944,6 +961,7 @@ export async function createSupplierCreditNote(
         resolved.baseSubtotal,
         resolved.baseTaxTotal,
         resolved.baseTotal,
+        resolved.exchangeRateSource,
       ],
     ),
   );
@@ -1005,6 +1023,7 @@ export async function updateSupplierCreditNote(
           ? saved.exchangeRateInput
           : undefined,
   });
+  draft.exchangeRateSourceInput = keptRateSource(draft.exchangeRateInput, current.exchangeRate, current.exchangeRateSource);
   const resolved = await resolveDraft(tx, draft, keptValues(current.lines), keptCustom(current.customFields, ...current.lines.map((line) => line.customFields)), current.lines);
   const same = sameAsStored(resolved, current);
   if (same.header && same.lines) {
@@ -1028,7 +1047,7 @@ export async function updateSupplierCreditNote(
           set contact_id = $2, credit_note_date = $3, supplier_credit_note_number = $4, reference = $5,
               amounts_mode = $6, currency_code = $7, subtotal = $8::numeric, tax_total = $9::numeric,
               total = $10::numeric, exchange_rate = $11::numeric, base_subtotal = $12::numeric,
-              base_tax_total = $13::numeric, base_total = $14::numeric, updated_at = now()
+              base_tax_total = $13::numeric, base_total = $14::numeric, exchange_rate_source = $15, updated_at = now()
         where id = $1`,
       [
         current.id,
@@ -1045,6 +1064,7 @@ export async function updateSupplierCreditNote(
         resolved.baseSubtotal,
         resolved.baseTaxTotal,
         resolved.baseTotal,
+        resolved.exchangeRateSource,
       ],
     ),
   );

@@ -181,7 +181,7 @@ describeWithDatabase("currency exchange rates list", () => {
       params({ exchangeRateId: correctionId }),
     );
     expect(archived.status).toBe(200);
-    expect(await run((tx) => lastRateFor(tx, "USD", "2026-08-15"))).toEqual({ rate: "1.65", date: "2026-08-01", source: "list" });
+    expect(await run((tx) => lastRateFor(tx, "USD", "2026-08-15"))).toMatchObject({ rate: "1.65", date: "2026-08-01", source: "list" });
     await expect(run((tx) => archiveExchangeRate(tx, correctionId))).rejects.toThrow(/already archived/);
     const all = await run((tx) => listExchangeRates(tx, { includeArchived: true }));
     expect(all.rates.find((rate) => rate.id === correctionId)).toMatchObject({ rate: "1.66", archivedByEmail: "fxr-bookkeeper@example.com" });
@@ -203,7 +203,7 @@ describeWithDatabase("currency exchange rates list", () => {
   it("MC48: a new document takes the list's rate effective on its date, before the last rate used; a typed rate still wins", async () => {
     // Typed 1.70 on 10 Jul: that's the last USD rate used from then on.
     expect((await invoice("INV-0001", "2026-07-10", "1000.00", "1.70")).baseTotal).toBe("1700.00");
-    expect(await run((tx) => lastRateFor(tx, "USD", "2026-07-15"))).toEqual({ rate: "1.6", date: "2026-07-01", source: "list" });
+    expect(await run((tx) => lastRateFor(tx, "USD", "2026-07-15"))).toMatchObject({ rate: "1.6", date: "2026-07-01", source: "list" });
     const second = await invoice("INV-0002", "2026-07-15", "500.00");
     expect(second).toMatchObject({ exchangeRate: "1.6", baseTotal: "800.00" });
     expect(await posted(second.approvalJournalId!)).toEqual([
@@ -242,7 +242,7 @@ describeWithDatabase("currency exchange rates list", () => {
       importStatementFile(tx, usd, { idempotencyKey: key("import"), fileName: "usd.csv", fileBase64: Buffer.from("Date,Amount,Payee\n20/08/2026,100.00,ACME INC\n").toString("base64") }),
     );
     const line = (await run((tx) => listStatementLines(tx, usd, { status: "unreconciled" }))).lines[0];
-    expect([line.suggestedRate, line.baseAmount]).toEqual([{ rate: "1.65", date: "2026-08-01", source: "list" }, "165.00"]);
+    expect([line.suggestedRate, line.baseAmount]).toEqual([{ rate: "1.65", date: "2026-08-01", source: "list", label: "Exchange rates list", until: null }, "165.00"]);
     // Matched to INV-0003 with no rate typed: at 1.65, which is INV-0003's own, so no gain.
     await run((tx) => reconcileStatementLine(tx, line.id, { idempotencyKey: key("rec"), kind: "payments", allocations: [{ invoiceId: invoices["INV-0003"], amount: "100.00" }] }));
     expect(await run((tx) => getInvoice(tx, invoices["INV-0003"]))).toMatchObject({ amountDue: "100.00", amountDueBase: "165.00" });
