@@ -1608,8 +1608,9 @@ isn't acceptable, because people would trust it:
 - automatic statement files from zipped files, Tohyee's own email addresses
   (there's no relay), checking a file's account number, or moving or
   deleting files after reading them
-- bank feeds from providers other than Akahu, Akahu feeds for
-  foreign-currency accounts (Akahu's transactions don't say their currency),
+- bank feeds from providers other than Akahu, SimpleFIN, Stripe, PayPal and
+  Wise, Akahu feeds for foreign-currency accounts (Akahu's transactions
+  don't say their currency),
   an adjustment when splitting one posted transaction across several
   statement lines, and old Excel (.xls) files
 - on foreign-currency documents (MC11): the reverse charge on imported
@@ -1617,7 +1618,8 @@ isn't acceptable, because people would trust it:
   NetSuite, MC30), chargeable expenses on foreign-currency projects and
   projects in currencies without cents (MC70), approving repeating ones
   automatically without a rate from the exchange rates list, and sales on the
-  payments GST basis; an automatic daily exchange rate feed; also paying NZD
+  payments GST basis; automatic exchange rates from anywhere but the ECB
+  (an RBNZ or IRD set comes in as an uploaded file, #183); also paying NZD
   documents from a foreign-currency statement line, standard-rated GST on
   foreign-currency spend and receive money, adjustments on foreign-currency
   lines, and transfers between two foreign-currency accounts

@@ -173,6 +173,23 @@ export function OnlinePaymentsSettings({ organisationId }: { organisationId: str
           </div>
         ))}
       </Card>
+      <Card
+        title="Refunds and disputes"
+        description="Tohyee only ever takes money in through Stripe and PayPal. Refunds and disputes are dealt with in their own dashboards, and come into Tohyee through the bank feed (examples PN8, PN9, PPN8)."
+      >
+        <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
+          <li>
+            <strong>A refund</strong> made in Stripe or PayPal arrives as a minus line on its bank account. The invoice doesn&apos;t change by itself:
+            make a credit note for the invoice, refund it from that bank account, and reconcile the minus line against that refund.
+          </li>
+          <li>
+            <strong>A dispute (chargeback)</strong> arrives as a minus line, with Stripe&apos;s fee as its own line; the invoice stays paid.
+            Whoever reconciles decides how to code it: a credit note for the invoice if the dispute is lost, for example. If it&apos;s won, the money
+            coming back is a plus line.
+          </li>
+          <li>Tohyee doesn&apos;t watch disputes or their deadlines; keep an eye on them in Stripe or PayPal.</li>
+        </ol>
+      </Card>
     </>
   );
 }
