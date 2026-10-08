@@ -117,8 +117,8 @@ jobs:
         run: |
           work="$RUNNER_TEMP/shots-branch"
           git init -q "$work"
-          # Only the .png files, so nothing from the build can reach .git.
-          find shots -maxdepth 1 -type f -name '*.png' -exec cp {} "$work" \;
+          # Only the .png files and the frame timings, so nothing from the build can reach .git.
+          find shots -maxdepth 1 -type f \( -name '*.png' -o -name 'timings.txt' \) -exec cp {} "$work" \;
           cd "$work"
           git config user.name 'github-actions'
           git config user.email 'github-actions@users.noreply.github.com'

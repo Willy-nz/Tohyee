@@ -41,15 +41,22 @@ namespace Tohyee.Tray
                 form.ShowSettings();
                 foreach (var page in new[] { "home", "organisations", "users", "backups", "analytics", "email", "stats", "updates" })
                 {
+                    if (Transitions)
+                    {
+                        form.Activate();
+                        Pump();
+                    }
+                    Clock.Restart();
                     form.Navigate(page);
                     if (Transitions)
                     {
-                        // What the window shows while the page is being made and its data arrives.
-                        Save(form, folder, Name(page) + "-t0");
+                        // What the window shows while the page is being made and its data arrives:
+                        // copied straight away, with the real time since the click written down (#198).
+                        Frame(form, folder, Name(page) + "-t0");
                         PumpFor(1);
-                        Save(form, folder, Name(page) + "-t1");
+                        Frame(form, folder, Name(page) + "-t1");
                         PumpFor(4);
-                        Save(form, folder, Name(page) + "-t2");
+                        Frame(form, folder, Name(page) + "-t2");
                     }
                     Pump();
                     if (Transitions) PumpFor(20);
@@ -60,10 +67,11 @@ namespace Tohyee.Tray
                     // Coming back to a page that's already made.
                     form.Navigate("home");
                     Pump();
+                    Clock.Restart();
                     form.Navigate("organisations");
-                    Save(form, folder, "again-organisations-t0");
+                    Frame(form, folder, "again-organisations-t0");
                     PumpFor(1);
-                    Save(form, folder, "again-organisations-t1");
+                    Frame(form, folder, "again-organisations-t1");
                     // A selected row, to check it reads clearly.
                     var list = FindList(form);
                     if (list != null && list.Items.Count > 2)
@@ -147,6 +155,25 @@ namespace Tohyee.Tray
                 Application.DoEvents();
                 Thread.Sleep(15);
             }
+        }
+
+        /// <summary>Time since the last page was asked for, for the transition frames.</summary>
+        private static readonly System.Diagnostics.Stopwatch Clock = new System.Diagnostics.Stopwatch();
+
+        /// <summary>
+        /// A transition frame: the screen copied at once, without waiting for painting to settle
+        /// (Save waits about 600 ms first, so its "-t0" pictures were never the first frame, #198),
+        /// with the milliseconds since the page was asked for kept in timings.txt.
+        /// </summary>
+        private static void Frame(Form form, string folder, string name)
+        {
+            var elapsed = Clock.Elapsed.TotalMilliseconds;
+            using (var bitmap = new Bitmap(form.ClientSize.Width, form.ClientSize.Height))
+            {
+                using (var g = Graphics.FromImage(bitmap)) g.CopyFromScreen(form.PointToScreen(Point.Empty), Point.Empty, bitmap.Size);
+                bitmap.Save(Path.Combine(folder, name + ".png"), ImageFormat.Png);
+            }
+            File.AppendAllText(Path.Combine(folder, "timings.txt"), name + ": " + elapsed.ToString("0") + " ms after the page was asked for" + Environment.NewLine);
         }
 
         private static void Save(Form form, string folder, string name)

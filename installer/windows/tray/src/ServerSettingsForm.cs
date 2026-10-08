@@ -39,6 +39,10 @@ namespace Tohyee.Tray
         private BackupsPage _backupsPage;
         private bool _backUpWhenSignedIn;
         private bool _updatesWhenSignedIn;
+        /// <summary>Goes up each time the window signs in or out, so work started for an earlier session can tell (#198).</summary>
+        private int _session;
+        /// <summary>Goes up each time a page is shown.</summary>
+        private int _navigations;
 
         public string Current { get; private set; }
 
@@ -81,6 +85,7 @@ namespace Tohyee.Tray
 
         private void Clear()
         {
+            _session++;
             SuspendLayout();
             var pages = new List<Control>(_pages.Values);
             _pages.Clear();
@@ -196,6 +201,7 @@ namespace Tohyee.Tray
             page.BringToFront();
             _content.ResumeLayout();
             Current = key;
+            _navigations++;
             _sidebar.Select(key);
         }
 
@@ -228,11 +234,16 @@ namespace Tohyee.Tray
         private async void RemindAboutBackupKey()
         {
             if (_app.Api.IsDemo) return;
+            // #198: the answer can take a while. If the person has opened another page (or signed
+            // out and in) meanwhile, the reminder doesn't pull them away; it comes again next time.
+            var session = _session;
+            var navigations = _navigations;
             try
             {
                 var result = await _app.Api.Get("/api/admin/backups");
                 var keyStatus = J.Obj(result, "keyStatus");
                 if (!J.Bool(keyStatus, "keySet") || J.Str(keyStatus, "savedCopyCheckedAt") != null || _sidebar == null || _sidebar.IsDisposed) return;
+                if (session != _session || navigations != _navigations || IsDisposed) return;
                 Navigate("backups");
                 MessageBox.Show(this,
                     "Save a copy of your backup key.\n\nBackups can only be opened with it, so if this computer is lost or rebuilt without a copy, the backups can't be restored. Use \"Show the key\", save it in a password manager, then \"Check my saved copy\".",
