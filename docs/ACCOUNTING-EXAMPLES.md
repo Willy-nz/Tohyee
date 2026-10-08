@@ -15186,21 +15186,12 @@ customer and Paper Co a GST-registered supplier.
   the earliest date in its books (so nothing changes for it). One without a
   number is not registered.
 
-Questions for Jess:
-
-1. Should **Registered for GST** be its own switch with a "from" date (and
-   an "until" date when deregistering), as above? The other choice is to
-   keep "no GST number means not registered", which has no dates.
-2. I don't know exactly how Xero sets this in NZ, and the design rule is to
-   look at Xero first. Could you check what Xero's financial settings
-   show for an organisation that isn't registered?
-3. Refuse GST, zero-rated and exempt codes while not registered (NR2), or
-   only warn?
-4. On deregistering, GST may be due on assets still held. Should Tohyee
-   work that out (it needs each asset's market value), or remind the user
-   and leave it to them (NR6)?
-5. #181 asks for a "Tax" module that can be turned off. Should turning Tax
-   off simply mean "not registered for GST"?
+Answered by Jess, 8 Oct 2026: **Registered for GST** is its own switch with
+a "from" date and an "until" date when deregistering (NR5-NR6); "Tax off"
+in #181 means this switch. Still open: questions 3 (refuse or warn on GST
+codes; the draft refuses) and 4 (GST on assets held at deregistration; the
+draft reminds rather than works it out). How Xero shows this hasn't been
+checked.
 
 ### Turning Accounting and Tax off (#181)
 
@@ -15237,15 +15228,11 @@ CRM, and **Kobe Numbers** with only Analytics.
 - **MOD7** Existing organisations keep Accounting and Tax on, so nothing
   changes for them.
 
-Questions for Jess:
-
-1. Choose modules when **creating an organisation**, not at `/setup` (as
-   above)? `/setup` makes no organisation today.
-2. Should "Tax" be the GST registration from #180, rather than a separate
-   module?
-3. Pause syncs and repeating documents while Accounting is off (MOD6), or
-   refuse to turn it off while a sales platform or bank feed is connected?
-4. Is payroll part of Accounting for this (it is today)?
+Answered by Jess, 8 Oct 2026: modules are chosen when an organisation is
+created (and changed in Settings), not at `/setup`; "Tax" is the GST
+registration switch from #180, not a separate module. Still open: pause or
+refuse while a feed is connected (the draft pauses, MOD6), and payroll stays
+part of Accounting.
 
 ### Several bank feed logins per organisation (#182)
 
@@ -15283,16 +15270,12 @@ and 1010 to Will's BNZ savings.
   "Akahu", and every existing link points to it. Nothing needs to be
   entered again.
 
-Questions for Jess:
-
-1. Change decision 388 for every API feed (SimpleFIN, Stripe, PayPal,
-   Wise), or only Akahu for now? For Stripe, PayPal and Wise, the "one
-   balance per currency" rules would become per login.
-2. I'm not certain whether one Akahu personal app can hold more than one
-   person's bank logins. If it can, some of this may not be needed. Do you
-   know from setting yours up?
-3. Can every organisation admin see and remove every login, or only the
-   person who added it?
+Answered by Jess, 8 Oct 2026: several logins for **every** API feed
+(Akahu, SimpleFIN, Stripe, PayPal and Wise), replacing decision 388's "one
+connection per provider"; Stripe, PayPal and Wise's one-balance-per-currency
+rule becomes per login. Still open: whether one Akahu personal app can hold
+more than one person's logins, and who can see and remove each login (the
+draft lets every organisation admin).
 
 ### Choosing where exchange rates come from (#183)
 
@@ -15319,43 +15302,54 @@ Bank approves your IP address. I couldn't confirm that on the Bank's own
 site. So an automatic RBNZ feed may not work for self-hosted servers; RBNZ
 rates may need to come in as the Bank's downloaded file.
 
+Answered by Jess, 8 Oct 2026: accountants who use IRD's rates, or any
+other set, need a way to **upload a set of rates and make them the
+exchange rates for a period**. So besides the daily ECB feed and typed
+rates, an organisation can use uploaded rate sets, each named for where it
+came from (IRD, RBNZ, a bank, anything) and covering a period.
+
 Setup: Glimmers (NZD, year 1 Apr - 31 Mar) has used **ECB** rates since
-1 Jul 2026, and has USD invoices.
+1 Jul 2026, and has USD and AUD invoices.
 
 - **FX2** Settings › Exchange rates has **Rate source**: ECB (automatic,
-  daily), RBNZ, or Typed only. Every rate in the list shows its source:
-  **ECB**, **RBNZ** or **Typed**. Rates from before this change show ECB if
-  the ECB job added them, else Typed.
-- **FX3** Changing ECB to RBNZ on 1 Nov 2026 asks for a reason and shows:
-  "Inland Revenue asks you to use the same exchange rate source over time.
-  This year (from 1 Apr 2026) has used ECB rates, so it would use two
-  sources. Keep a note of why you're changing." The reason is kept in the
-  history.
-- **FX4** Changing the source changes nothing already in the books: INV-0042
-  (USD 1,000.00 at **1.6543**, NZD 1,654.30) stays exactly as it is. No
-  rates are archived.
-- **FX5** RBNZ quotes USD per NZD 1. RBNZ's **0.6045** for 3 Nov 2026
-  goes in the list as **1.654260** NZD per USD (1 / 0.6045, to 6 decimal
-  places). An invoice for USD 500.00 dated 3 Nov takes it: **NZD 827.13**.
-- **FX6** With RBNZ chosen, the ECB job stops adding rates for Glimmers.
-  For dates from 1 Nov, a new document takes the latest RBNZ or typed rate
-  on or before its date, not an ECB one. If there isn't one, it asks for a
-  rate (MC49).
-- **FX7** A rate typed on a document (say the bank's settlement rate
-  1.6610) still wins. The document records that its rate was **Typed**.
-- **FX8** **Typed only**: nothing is added automatically; documents work as
+  daily), Uploaded rate sets, or Typed only. Every rate in the list shows
+  where it came from (**ECB**, the set's name, or **Typed**). Rates from
+  before this change show ECB if the ECB job added them, else Typed.
+- **FX3** Uploading a set: name **IRD monthly average**, period **1 Oct -
+  31 Oct 2026**, a CSV or Excel file of currency and rate, and which way
+  the rates are quoted (foreign currency per NZD 1, or NZD per 1 foreign).
+  With the first: USD **0.6045** becomes **1.654260** NZD per USD, AUD
+  **0.8950** becomes **1.117318** (1 / rate, to 6 decimal places). A
+  preview shows each line ("1 USD = 1.654260 NZD") before it's saved. A
+  currency the organisation doesn't use is listed and skipped; a blank or
+  non-numeric rate refuses the whole file, naming the row.
+- **FX4** With Uploaded rate sets chosen, a document dated in the period
+  takes the set's rate for its currency, whatever day it is: an invoice for
+  USD 500.00 dated 15 Oct is **NZD 827.13**; a bill for AUD 1,200.00 dated
+  31 Oct is **NZD 1,340.78**. A rate typed on the document still wins (the
+  bank's settlement rate, say), and the document records **Typed**.
+- **FX5** A date outside every uploaded period (say 3 Nov, with no
+  November set yet) doesn't carry October's rate forward: the document asks
+  for a rate and says "There's no IRD monthly average set for November
+  2026 yet." Repeating documents stay as drafts until there is (MC52).
+- **FX6** A second set can't overlap a period already covered unless it
+  replaces it. Replacing asks for a reason and changes nothing already
+  approved (FX8); new documents in the period take the new rates.
+- **FX7** Changing the source mid-year (ECB to uploaded sets on 1 Nov 2026)
+  asks for a reason and shows: "Inland Revenue asks you to use the same
+  exchange rate source over time. This year (from 1 Apr 2026) has used ECB
+  rates, so it would use two sources. Keep a note of why you're changing."
+  The reason is kept in the history.
+- **FX8** Changing the source, or replacing a set, changes nothing already
+  in the books: INV-0042 (USD 1,000.00 at **1.6543**, NZD 1,654.30) stays
+  exactly as it is. With uploaded sets chosen, the ECB job stops adding
+  rates for Glimmers; its earlier rates stay in the list.
+- **FX9** **Typed only**: nothing is added automatically; documents work as
   MC48-MC49.
 
-Questions for Jess:
+Still open:
 
-1. How should RBNZ rates come in? I'd suggest uploading the Bank's
-   exchange rate file (or saving it to a folder Tohyee reads, like the
-   Analytics folders). Asking the Reserve Bank whether Tohyee servers may
-   download it automatically is the other way.
-2. Warn when the source changes mid-year (FX3, as #183 asks), or refuse
-   until the start of the next financial year?
-3. IRD also describes mid-month, end-of-month and rolling 12-month
-   average methods. Should Tohyee offer any of those, or stay with
-   daily rates?
-4. Should documents record their rate's source (FX7)? This needs a new
+1. Should a document dated outside every uploaded period ask for a rate
+   (FX5), or fall back to the last rate used, as today (MC48)?
+2. Should documents record their rate's source (FX4)? This needs a new
    column on documents, and older documents wouldn't have one.
