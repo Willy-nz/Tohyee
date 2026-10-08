@@ -27,6 +27,9 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const status = data.data?.stripe ?? null;
+  // Another login (#182, BK30): its name.
+  const [adding, setAdding] = useState(false);
+  const [loginName, setLoginName] = useState("");
 
   async function run(label: string, work: () => Promise<void>) {
     setBusy(label);
@@ -43,30 +46,32 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
   const connect = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void run("connect", async () => {
-      await api("/api/bank-feeds/stripe", { method: "POST", body: { organisationId, apiKey } });
+      await api("/api/bank-feeds/stripe", { method: "POST", body: { organisationId, name: loginName.trim() || undefined, apiKey } });
+      setLoginName("");
+      setAdding(false);
       setApiKey("");
       setMessage({ tone: "success", text: "Connected. Link Stripe's balance on its bank account's Bank feed tab." });
       data.reload();
     });
   };
-  const sync = () =>
+  const sync = (connectionId: string | null) =>
     run("sync", async () => {
-      const response = await api<{ result: StripeSyncResult }>("/api/bank-feeds/stripe/sync", { method: "POST", body: { organisationId } });
+      const response = await api<{ result: StripeSyncResult }>("/api/bank-feeds/stripe/sync", { method: "POST", body: { organisationId, connectionId } });
       setMessage(syncMessage(response.result));
       data.reload();
     });
-  const changeHours = (hours: number) =>
+  const changeHours = (connectionId: string | null, hours: number) =>
     run("hours", async () => {
-      await api("/api/bank-feeds/stripe", { method: "PATCH", body: { organisationId, syncEveryHours: hours } });
+      await api("/api/bank-feeds/stripe", { method: "PATCH", body: { organisationId, connectionId, syncEveryHours: hours } });
       data.reload();
     });
-  const disconnect = async () => {
+  const disconnect = async (connectionId: string | null, name: string | null) => {
     if (
-      !(await confirm("Disconnect Stripe? Tohyee deletes the key and unlinks its balances. Lines already brought in stay; nothing posted changes."))
+      !(await confirm(`Disconnect ${name ?? "Stripe"}? Tohyee deletes the key and unlinks its balances. Lines already brought in stay; nothing posted changes.`))
     )
       return;
     await run("disconnect", async () => {
-      await api("/api/bank-feeds/stripe", { method: "DELETE", query: { organisationId } });
+      await api("/api/bank-feeds/stripe", { method: "DELETE", query: { organisationId, ...(connectionId ? { connectionId } : {}) } });
       data.reload();
     });
   };
@@ -81,45 +86,21 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
           This server has no TOHYEE_SECRET_KEY, so the Stripe key can&apos;t be stored. The server admin needs to set it.
         </Notice>
       ) : null}
-      {!status.connected ? (
-        can("admin") ? (
-          <form onSubmit={connect} style={{ display: "grid", gap: 12 }} autoComplete="off">
-            <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
-              <li>In this organisation&apos;s Stripe dashboard, open Developers → API keys and create a restricted key.</li>
-              <li>
-                Give it read access to the balance. To offer Pay now on invoices, also give it read access to Checkout Sessions and write access to
-                payment links (and the prices and products they make): these only take money in. Copy it.
-              </li>
-              <li>Paste it below. Tohyee checks it with Stripe, then stores it encrypted. Full secret keys aren&apos;t accepted.</li>
-            </ol>
-            <div className={ui.grid2}>
-              <Field label="Restricted key" hint="Starts with rk_live_.">
-                <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value.trim())} required />
-              </Field>
-            </div>
-            <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
-              <Button type="submit" disabled={busy !== null || !apiKey || !status.secretsAvailable}>
-                {busy === "connect" ? "Checking with Stripe…" : "Connect"}
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <Empty>Not connected. An organisation admin can connect Stripe.</Empty>
-        )
-      ) : (
-        <>
+      {status.connections.map((connection) => (
+        <div key={connection.connectionId} style={{ display: "grid", gap: 12 }}>
+          {status.connections.length > 1 || connection.name !== "Stripe" ? <h4 style={{ margin: 0 }}>{connection.name}</h4> : null}
           <p>
-            <Badge tone={status.lastSyncStatus === "failed" ? "red" : "green"}>{status.lastSyncStatus === "failed" ? "Problem" : "Connected"}</Badge>{" "}
-            {status.keyHint}
-            {status.liveMode ? null : <Badge tone="amber">Test mode</Badge>}
+            <Badge tone={connection.lastSyncStatus === "failed" ? "red" : "green"}>{connection.lastSyncStatus === "failed" ? "Problem" : "Connected"}</Badge>{" "}
+            {connection.keyHint}
+            {connection.liveMode ? null : <Badge tone="amber">Test mode</Badge>}
             <span className={ui.muted}>
               {" "}
-              · connected {formatDateTime(status.createdAt)}
-              {personName(status, "createdBy") ? ` by ${personName(status, "createdBy")}` : ""} · last synced{" "}
-              {status.lastSyncedAt ? formatDateTime(status.lastSyncedAt) : "not yet"}
+              · connected {formatDateTime(connection.createdAt)}
+              {personName(connection, "createdBy") ? ` by ${personName(connection, "createdBy")}` : ""} · last synced{" "}
+              {connection.lastSyncedAt ? formatDateTime(connection.lastSyncedAt) : "not yet"}
             </span>
           </p>
-          {status.lastSyncError ? <Notice tone="error">{status.lastSyncError}</Notice> : null}
+          {connection.lastSyncError ? <Notice tone="error">{connection.lastSyncError}</Notice> : null}
           <div className={ui.tableWrap}>
             <table className={ui.table} style={{ minWidth: 480 }}>
               <thead>
@@ -131,7 +112,7 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
                 </tr>
               </thead>
               <tbody>
-                {status.balances.map((balance) => (
+                {connection.balances.map((balance) => (
                   <tr key={balance.currency}>
                     <td>{balance.currency}</td>
                     <td className={ui.num}>{balance.available}</td>
@@ -144,7 +125,7 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
           </div>
           <div className={ui.actions} style={{ justifyContent: "flex-start", alignItems: "center", flexWrap: "wrap" }}>
             {can("bookkeeper") ? (
-              <Button onClick={() => void sync()} disabled={busy !== null}>
+              <Button onClick={() => void sync(connection.connectionId)} disabled={busy !== null}>
                 {busy === "sync" ? "Syncing…" : "Sync now"}
               </Button>
             ) : null}
@@ -152,7 +133,7 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
               <>
                 <label style={{ display: "flex", gap: 8, alignItems: "center", whiteSpace: "nowrap" }}>
                   Sync every
-                  <select value={status.syncEveryHours} disabled={busy !== null} onChange={(event) => void changeHours(Number(event.target.value))}>
+                  <select value={connection.syncEveryHours} disabled={busy !== null} onChange={(event) => void changeHours(connection.connectionId, Number(event.target.value))}>
                     {[1, 2, 3, 4, 6, 8, 12, 24].map((hours) => (
                       <option key={hours} value={hours}>
                         {hours === 1 ? "hour" : `${hours} hours`}
@@ -160,7 +141,7 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
                     ))}
                   </select>
                 </label>
-                <Button variant="secondary" onClick={() => void disconnect()} disabled={busy !== null}>
+                <Button variant="secondary" onClick={() => void disconnect(connection.connectionId, connection.name)} disabled={busy !== null}>
                   Disconnect
                 </Button>
               </>
@@ -170,8 +151,50 @@ export function StripeSettingsCard({ organisationId }: { organisationId: string 
             Each charge comes in at its full amount with Stripe&apos;s fees (and any tax on them) as separate lines. Reconcile payouts as transfers to
             the bank account they landed in.
           </p>
-        </>
-      )}
+        </div>
+      ))}
+      {!status.connected || adding ? (
+        can("admin") ? (
+          <form onSubmit={connect} style={{ display: "grid", gap: 12 }} autoComplete="off">
+            <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
+              <li>In this organisation&apos;s Stripe dashboard, open Developers → API keys and create a restricted key.</li>
+              <li>
+                Give it read access to the balance. To offer Pay now on invoices, also give it read access to Checkout Sessions and write access to
+                payment links (and the prices and products they make): these only take money in. Copy it.
+              </li>
+              <li>Paste it below. Tohyee checks it with Stripe, then stores it encrypted. Full secret keys aren&apos;t accepted.</li>
+            </ol>
+            <div className={ui.grid2}>
+              {status.connected ? (
+                <Field label="Name" hint="Whose login this is, to tell it apart.">
+                  <input value={loginName} onChange={(event) => setLoginName(event.target.value)} maxLength={100} required />
+                </Field>
+              ) : null}
+              <Field label="Restricted key" hint="Starts with rk_live_.">
+                <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value.trim())} required />
+              </Field>
+            </div>
+            <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+              <Button type="submit" disabled={busy !== null || !apiKey || !status.secretsAvailable}>
+                {busy === "connect" ? "Checking with Stripe…" : "Connect"}
+              </Button>
+              {adding ? (
+                <Button variant="secondary" onClick={() => setAdding(false)}>
+                  Cancel
+                </Button>
+              ) : null}
+            </div>
+          </form>
+        ) : (
+          <Empty>Not connected. An organisation admin can connect Stripe.</Empty>
+        )
+      ) : can("admin") ? (
+        <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+          <Button variant="secondary" onClick={() => setAdding(true)}>
+            Add another Stripe login
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -189,8 +212,16 @@ function LinkForm({
 }) {
   const today = todayInBrowser();
   const currency = account.currencyCode ?? account.statementCurrency;
-  const free = status.balances.filter((balance) => !balance.linkedAccountId || balance.linkedAccountId === account.id);
-  const [choice, setChoice] = useState(() => free.find((balance) => balance.currency === currency)?.currency ?? "");
+  // Every login's balances (#182): one link per currency per login.
+  const balances = status.connections.flatMap((connection) =>
+    connection.balances.map((balance) => ({ ...balance, connectionId: connection.connectionId ?? "", loginName: connection.name ?? "" })),
+  );
+  const several = status.connections.length > 1;
+  const free = balances.filter((balance) => !balance.linkedAccountId || balance.linkedAccountId === account.id);
+  const [choice, setChoice] = useState(() => {
+    const first = free.find((balance) => balance.currency === currency);
+    return first ? `${first.connectionId}|${first.currency}` : "";
+  });
   const [startDate, setStartDate] = useState(() =>
     account.lastLineDate && account.lastLineDate < today ? account.lastLineDate : daysBefore(today, 90),
   );
@@ -202,7 +233,7 @@ function LinkForm({
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/bank-accounts/${account.id}/stripe`, { method: "POST", body: { organisationId, currency: choice, startDate } });
+      await api(`/api/bank-accounts/${account.id}/stripe`, { method: "POST", body: { organisationId, connectionId: choice.split("|")[0], currency: choice.split("|")[1], startDate } });
       onLinked();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -220,8 +251,8 @@ function LinkForm({
           <select value={choice} onChange={(event) => setChoice(event.target.value)} required>
             <option value="">Choose the balance</option>
             {free.map((balance) => (
-              <option key={balance.currency} value={balance.currency} disabled={balance.currency !== currency}>
-                {balance.currency}
+              <option key={`${balance.connectionId}|${balance.currency}`} value={`${balance.connectionId}|${balance.currency}`} disabled={balance.currency !== currency}>
+                {several ? `${balance.loginName} · ${balance.currency}` : balance.currency}
               </option>
             ))}
           </select>
@@ -257,7 +288,7 @@ export function StripePanel({ organisationId, account, onChanged }: { organisati
     setBusy(true);
     setMessage(null);
     try {
-      const response = await api<{ result: StripeSyncResult }>("/api/bank-feeds/stripe/sync", { method: "POST", body: { organisationId } });
+      const response = await api<{ result: StripeSyncResult }>("/api/bank-feeds/stripe/sync", { method: "POST", body: { organisationId, connectionId: link.data?.link?.connectionId ?? null } });
       setMessage(syncMessage(response.result));
       reload();
     } catch (caught) {

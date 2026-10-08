@@ -15305,9 +15305,30 @@ and 1010 to Will's BNZ savings.
 Answered by Jess, 8 Oct 2026: several logins for **every** API feed
 (Akahu, SimpleFIN, Stripe, PayPal and Wise), replacing decision 388's "one
 connection per provider"; Stripe, PayPal and Wise's one-balance-per-currency
-rule becomes per login. Still open: whether one Akahu personal app can hold
-more than one person's logins, and who can see and remove each login (the
-draft lets every organisation admin).
+rule becomes per login. Approved with the suggestions: every organisation
+admin can see and remove each login. As built (decision 481):
+
+- The first login can be left unnamed and is called after the provider
+  ("Akahu"), as an existing connection is (BK37); every other login needs
+  its own name.
+- Saving new tokens for a login changes that login's tokens in place, so
+  its links carry on (BK34); before, saving replaced the connection.
+- BK33: the account's message is "Will's BNZ login needs new tokens."
+  followed by Akahu's own reason. The scheduled sync skips a login that
+  needs new tokens until they're saved.
+- BK35: removing a login unlinks its accounts (their Akahu details are
+  cleared); before, accounts stayed linked but couldn't sync.
+- With several logins, anything that acts on one login (sync now,
+  disconnect, linking, new tokens) has to say which; with one login it
+  works as before.
+- Online payments (Pay now on invoices) use the first Stripe or PayPal
+  login connected, and its linked balance; disconnecting another login
+  leaves them alone.
+- SimpleFIN's daily request limit is still counted for the organisation
+  as a whole, across its logins (the safe reading: not checked whether the
+  Bridge counts per access URL).
+- Not checked: whether one Akahu personal app can hold more than one
+  person's logins (Akahu's terms); Tohyee doesn't depend on it.
 
 ### Choosing where exchange rates come from (#183)
 

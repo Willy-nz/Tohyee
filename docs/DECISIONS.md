@@ -3658,3 +3658,23 @@ testing) and #154's code signing (later, Jess).
      them directly. That gap is known (told to Jess) and can be closed
      later by checking the switch in the Accounting API routes.
 
+### Several bank feed logins (decision 481)
+
+481. **Several named logins per bank feed provider** (#182, examples
+     BK30-BK37 approved by Jess, 8 Oct 2026; replaces decision 388's "one
+     connection per provider", and the "one connection per organisation"
+     in decisions 392, 396 and 400). Each provider's connections table
+     keeps any number of active logins, each with a name unique among them
+     (migration 0112 drops the one-active-connection indexes; existing
+     connections are named after the provider). Akahu feeds now record
+     their login (`bank_account_settings.akahu_connection_id`) and Akahu
+     logins keep a `token_problem`; the other providers' links already had
+     a connection. Every command that acts on a login takes its id, and
+     with a single login it can be left out, so single-login organisations
+     and the existing API work as before. One feed per account (decision
+     389) stays, and an Akahu or SimpleFIN account (a joint account seen by
+     two logins) can still be linked to only one Tohyee account; Stripe,
+     PayPal and Wise allow one link per currency per login. Online
+     payments use the first Stripe or PayPal login. The SimpleFIN request
+     limit (decision 391) is still counted per organisation.
+

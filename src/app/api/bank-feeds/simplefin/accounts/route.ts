@@ -8,5 +8,5 @@ export const POST = route(async (request) => {
     organisation: membership.organisation,
     actor: { userId: auth.user.id, email: auth.user.email },
   }));
-  return json({ simplefin: await refreshSimpleFinAccounts(organisation, actor) });
+  return json({ simplefin: await refreshSimpleFinAccounts(organisation, actor, body.connectionId) });
 });

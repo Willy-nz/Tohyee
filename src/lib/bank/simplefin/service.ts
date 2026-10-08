@@ -21,6 +21,7 @@ import { ConflictError, NotFoundError, UnavailableError, ValidationError } from 
 import { listAllOrganisations } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
+import { newLoginName, pickLogin } from "@/lib/bank/logins";
 import { requireId, requireString } from "@/lib/validation";
 
 /**
@@ -47,8 +48,11 @@ export type SimpleFinAccountOption = {
   linkedAccountId: string | null;
 };
 
-export type SimpleFinStatus = {
+export type SimpleFinConnectionStatus = {
   connected: boolean;
+  /** The login (#182, BK30): its id and name; null when nothing is connected. */
+  connectionId: string | null;
+  name: string | null;
   host: string | null;
   syncEveryHours: number;
   lastSyncedAt: string | null;
@@ -62,7 +66,13 @@ export type SimpleFinStatus = {
   secretsAvailable: boolean;
 };
 
+/** The first login's status (as before several logins), and every login's. */
+export type SimpleFinStatus = SimpleFinConnectionStatus & { connections: SimpleFinConnectionStatus[] };
+
 export type SimpleFinLink = {
+  /** The login it syncs with (#182). */
+  connectionId: string | null;
+  loginName: string | null;
   simplefinAccountId: string;
   simplefinAccountName: string | null;
   connectionName: string | null;
@@ -88,6 +98,7 @@ type StoredAccount = {
 
 type ConnectionRow = {
   id: string;
+  name: string;
   access_url_ciphertext: string;
   host: string;
   sync_every_hours: number;
@@ -110,13 +121,18 @@ function requireSecrets(): void {
   }
 }
 
-async function activeConnection(tx: OrgTx, lock = false): Promise<ConnectionRow | null> {
+async function activeConnections(tx: OrgTx, lock = false): Promise<ConnectionRow[]> {
   const result = await tx.query<ConnectionRow>(
-    `select id::text, access_url_ciphertext, host, sync_every_hours, sync_minute, last_synced_at, last_sync_status, last_sync_error,
+    `select id::text, name, access_url_ciphertext, host, sync_every_hours, sync_minute, last_synced_at, last_sync_status, last_sync_error,
             last_problems, accounts, lease_until, created_at, created_by_email
-       from simplefin_connections where status = 'active' ${lock ? "for update" : ""}`,
+       from simplefin_connections where status = 'active' order by id ${lock ? "for update" : ""}`,
   );
-  return result.rows[0] ?? null;
+  return result.rows;
+}
+
+/** The login a command is for (#182): the one chosen by `connectionId`, or the only one. */
+async function activeConnection(tx: OrgTx, lock = false, connectionId?: unknown): Promise<ConnectionRow | null> {
+  return pickLogin(await activeConnections(tx, lock), connectionId, "simplefin");
 }
 
 async function requestsSince(tx: OrgTx, hours = 24): Promise<{ count: number; oldest: string | null }> {
@@ -166,20 +182,29 @@ function problemText(problem: SimpleFinProblem): string {
 }
 
 export async function getSimpleFinStatus(tx: OrgTx): Promise<SimpleFinStatus> {
-  const row = await activeConnection(tx);
+  const rows = await activeConnections(tx);
   const links = await tx.query<{ account_id: string; simplefin_account_id: string }>(
     "select account_id::text, simplefin_account_id from simplefin_links where active",
   );
   const linked = new Map(links.rows.map((link) => [link.simplefin_account_id, link.account_id]));
+  // The Bridge's daily limit is counted for the organisation as a whole (decision 391), across its logins.
+  const requests = rows.length ? (await requestsSince(tx)).count : 0;
+  const connections = rows.map((row) => connectionStatus(row, linked, requests));
+  return { ...(connections[0] ?? connectionStatus(null, linked, 0)), connections };
+}
+
+function connectionStatus(row: ConnectionRow | null, linked: ReadonlyMap<string, string>, requests: number): SimpleFinConnectionStatus {
   return {
     connected: row !== null,
+    connectionId: row?.id ?? null,
+    name: row?.name ?? null,
     host: row?.host ?? null,
     syncEveryHours: row?.sync_every_hours ?? DEFAULT_SIMPLEFIN_HOURS,
     lastSyncedAt: row?.last_synced_at ? new Date(row.last_synced_at).toISOString() : null,
     lastSyncStatus: row?.last_sync_status ?? "never",
     lastSyncError: row?.last_sync_error ?? null,
     problems: row?.last_problems ?? [],
-    requestsLast24h: row ? (await requestsSince(tx)).count : 0,
+    requestsLast24h: requests,
     accounts: (row?.accounts ?? []).map((account) => ({
       id: account.id,
       name: account.name,
@@ -202,12 +227,13 @@ export async function getSimpleFinStatus(tx: OrgTx): Promise<SimpleFinStatus> {
 export async function connectSimpleFin(
   organisation: OrganisationRecord,
   actor: Actor,
-  input: { setupToken?: unknown; syncEveryHours?: unknown },
+  input: { name?: unknown; setupToken?: unknown; syncEveryHours?: unknown },
 ): Promise<SimpleFinStatus> {
   requireSecrets();
   const hours = parseHours(input.syncEveryHours, DEFAULT_SIMPLEFIN_HOURS);
   await withOrganisationTransaction(organisation, actor, async (tx) => {
-    if (await activeConnection(tx)) throw new ConflictError("SimpleFIN is already connected. Disconnect it first to use another setup token.");
+    // Several logins (#182): only the name must be new.
+    await newLoginName(tx, "simplefin", input.name);
   });
   let access: string;
   let set: SimpleFinAccountSet;
@@ -218,10 +244,11 @@ export async function connectSimpleFin(
     throw simpleFinProblem(error);
   }
   return withOrganisationTransaction(organisation, actor, async (tx) => {
-    if (await activeConnection(tx, true)) throw new ConflictError("SimpleFIN is already connected. Disconnect it first to use another setup token.");
+    await tx.query("lock table simplefin_connections in share row exclusive mode");
+    const name = await newLoginName(tx, "simplefin", input.name);
     const inserted = await tx.query<{ id: string }>(
-      `insert into simplefin_connections (access_url_ciphertext, host, sync_every_hours, sync_minute, accounts, last_problems, created_by_email)
-       values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7) returning id::text`,
+      `insert into simplefin_connections (access_url_ciphertext, host, sync_every_hours, sync_minute, accounts, last_problems, created_by_email, name)
+       values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8) returning id::text`,
       [
         encryptSecret(access),
         accessHost(access),
@@ -230,6 +257,7 @@ export async function connectSimpleFin(
         JSON.stringify(storedAccounts(set)),
         JSON.stringify(set.problems.map(problemText)),
         tx.actor.email,
+        name,
       ],
     );
     const id = inserted.rows[0].id;
@@ -245,8 +273,8 @@ export async function connectSimpleFin(
 }
 
 /** Changes how often SimpleFIN is synced (1-24 hours). Admins. */
-export async function updateSimpleFinSettings(tx: OrgTx, input: { syncEveryHours?: unknown }): Promise<SimpleFinStatus> {
-  const row = await activeConnection(tx, true);
+export async function updateSimpleFinSettings(tx: OrgTx, input: { syncEveryHours?: unknown; connectionId?: unknown }): Promise<SimpleFinStatus> {
+  const row = await activeConnection(tx, true, input.connectionId);
   if (!row) throw new NotFoundError("SimpleFIN isn't connected.");
   const hours = parseHours(input.syncEveryHours, row.sync_every_hours);
   await tx.query("update simplefin_connections set sync_every_hours = $2 where id = $1", [row.id, hours]);
@@ -263,11 +291,15 @@ export async function updateSimpleFinSettings(tx: OrgTx, input: { syncEveryHours
  * Disconnects (SF10): the stored access URL is deleted and every account
  * unlinked. Lines and reconciliations stay. Admins.
  */
-export async function disconnectSimpleFin(tx: OrgTx): Promise<SimpleFinStatus> {
-  const row = await activeConnection(tx, true);
+export async function disconnectSimpleFin(tx: OrgTx, connectionId?: unknown): Promise<SimpleFinStatus> {
+  const row = await activeConnection(tx, true, connectionId);
   if (!row) throw new NotFoundError("SimpleFIN isn't connected.");
   if (row.lease_until && new Date(row.lease_until).getTime() > Date.now()) throw new ConflictError("SimpleFIN is syncing. Try again in a minute.");
-  const unlinked = await tx.query("update simplefin_links set active = false, connection_id = null, updated_at = now() where active");
+  const unlinked = await tx.query(
+    // Only this login's accounts (#182, BK35).
+    "update simplefin_links set active = false, connection_id = null, updated_at = now() where active and connection_id = $1",
+    [row.id],
+  );
   await tx.query(
     `update simplefin_connections set status = 'removed', access_url_ciphertext = null, removed_at = now(), removed_by_email = $2 where id = $1`,
     [row.id, tx.actor.email],
@@ -294,10 +326,12 @@ async function linkRow(tx: OrgTx, accountId: string) {
     last_sync_status: "never" | "ok" | "failed";
     last_sync_error: string | null;
     last_skipped: Array<{ id: string | null; reason: string }>;
+    connection_id: string | null;
+    login_name: string | null;
   }>(
-    `select simplefin_account_id, simplefin_account_name, connection_name, currency_code, start_date::text, time_zone, active,
-            last_synced_at, last_sync_status, last_sync_error, last_skipped
-       from simplefin_links where account_id = $1`,
+    `select l.simplefin_account_id, l.simplefin_account_name, l.connection_name, l.currency_code, l.start_date::text, l.time_zone, l.active,
+            l.last_synced_at, l.last_sync_status, l.last_sync_error, l.last_skipped, l.connection_id::text, c.name as login_name
+       from simplefin_links l left join simplefin_connections c on c.id = l.connection_id where l.account_id = $1`,
     [accountId],
   );
   return result.rows[0] ?? null;
@@ -314,6 +348,8 @@ export async function getSimpleFinLink(tx: OrgTx, accountIdInput: unknown): Prom
     [accountId],
   );
   return {
+    connectionId: row.connection_id,
+    loginName: row.login_name,
     simplefinAccountId: row.simplefin_account_id,
     simplefinAccountName: row.simplefin_account_name,
     connectionName: row.connection_name,
@@ -336,14 +372,21 @@ export async function getSimpleFinLink(tx: OrgTx, accountIdInput: unknown): Prom
 export async function linkSimpleFinAccount(
   tx: OrgTx,
   accountIdInput: unknown,
-  input: { simplefinAccountId?: unknown; startDate?: unknown; timeZone?: unknown },
+  input: { simplefinAccountId?: unknown; startDate?: unknown; timeZone?: unknown; connectionId?: unknown },
 ): Promise<SimpleFinLink> {
   const accountId = requireId(accountIdInput, "accountId");
   const simplefinAccountId = requireString(input.simplefinAccountId, "SimpleFIN account", { maxLength: 200 });
   const startDate = parseIsoDate(input.startDate, "startDate");
   const timeZone = parseTimeZone(input.timeZone);
-  const connection = await activeConnection(tx);
-  if (!connection) throw new ValidationError("Connect SimpleFIN first (Bank accounts → SimpleFIN bank feeds).");
+  // The login it's listed under (#182): the one chosen, the only one, or the one whose list has it.
+  const logins = await activeConnections(tx);
+  const connection =
+    input.connectionId != null && input.connectionId !== ""
+      ? await activeConnection(tx, false, input.connectionId)
+      : logins.length > 1
+        ? (logins.find((login) => login.accounts.some((account) => account.id === simplefinAccountId)) ?? null)
+        : (logins[0] ?? null);
+  if (!connection) throw new ValidationError(logins.length ? "SimpleFIN didn't list that account. Refresh the account list and try again." : "Connect SimpleFIN first (Bank accounts → SimpleFIN bank feeds).");
   const option = connection.accounts.find((account) => account.id === simplefinAccountId);
   if (!option) throw new ValidationError("SimpleFIN didn't list that account. Refresh the account list and try again.");
   const account = await lockStatementAccount(tx, accountId, "simplefin");
@@ -482,12 +525,12 @@ function epochOf(date: string): number {
 export async function syncSimpleFin(
   organisation: OrganisationRecord,
   actor: Actor,
-  options: { manual?: boolean } = {},
+  options: { manual?: boolean; connectionId?: unknown } = {},
 ): Promise<SimpleFinSyncResult> {
   const limit = options.manual ? MANUAL_REQUEST_LIMIT : BRIDGE_REQUEST_LIMIT;
   const prepared = await withOrganisationTransaction(organisation, actor, async (tx) => {
     requireSecrets();
-    const row = await activeConnection(tx, true);
+    const row = await activeConnection(tx, true, options.connectionId);
     if (!row) throw new ValidationError("SimpleFIN isn't connected. An admin can connect it under Bank accounts → SimpleFIN bank feeds.");
     if (row.lease_until && new Date(row.lease_until).getTime() > Date.now()) throw new ConflictError("SimpleFIN is already syncing.");
     const used = await requestsSince(tx);
@@ -674,10 +717,10 @@ export async function syncSimpleFin(
 }
 
 /** Asks the Bridge for its account list again (no transactions), for linking a new account. Admins; counts towards the limit. */
-export async function refreshSimpleFinAccounts(organisation: OrganisationRecord, actor: Actor): Promise<SimpleFinStatus> {
+export async function refreshSimpleFinAccounts(organisation: OrganisationRecord, actor: Actor, connectionId?: unknown): Promise<SimpleFinStatus> {
   const prepared = await withOrganisationTransaction(organisation, actor, async (tx) => {
     requireSecrets();
-    const row = await activeConnection(tx);
+    const row = await activeConnection(tx, false, connectionId);
     if (!row) throw new ValidationError("SimpleFIN isn't connected.");
     const used = await requestsSince(tx);
     if (used.count >= MANUAL_REQUEST_LIMIT)
@@ -712,29 +755,33 @@ export async function syncDueSimpleFin(now = new Date()): Promise<{ synced: numb
   try {
     for (const organisation of await listAllOrganisations()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
-      let due = false;
+      let due: string[] = [];
       try {
+        // Each login that's due, on its own (#182).
         due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) => {
-          const row = await activeConnection(tx);
-          if (!row) return false;
-          const links = await tx.query(`select 1 from simplefin_links where active and ${ACCOUNTING_ON_SQL} limit 1`);
-          if (!links.rowCount) return false;
-          const minute = (now.getUTCMinutes() - row.sync_minute + 60) % 60;
-          const last = row.last_synced_at ? new Date(row.last_synced_at).getTime() : 0;
-          // A few minutes' grace so a 6-hourly sync doesn't slip by a quarter hour each time.
-          return minute < 15 && now.getTime() - last >= row.sync_every_hours * 3_600_000 - 20 * 60_000;
+          const ids: string[] = [];
+          for (const row of await activeConnections(tx)) {
+            const links = await tx.query(`select 1 from simplefin_links where active and connection_id = $1 and ${ACCOUNTING_ON_SQL} limit 1`, [row.id]);
+            if (!links.rowCount) continue;
+            const minute = (now.getUTCMinutes() - row.sync_minute + 60) % 60;
+            const last = row.last_synced_at ? new Date(row.last_synced_at).getTime() : 0;
+            // A few minutes' grace so a 6-hourly sync doesn't slip by a quarter hour each time.
+            if (minute < 15 && now.getTime() - last >= row.sync_every_hours * 3_600_000 - 20 * 60_000) ids.push(row.id);
+          }
+          return ids;
         });
       } catch {
         continue;
       }
-      if (!due) continue;
-      try {
-        const result = await syncSimpleFin(organisation, FEED_ACTOR);
-        if (result.status === "failed") failed += 1;
-        else synced += 1;
-      } catch (error) {
-        failed += 1;
-        console.warn(`[tohyee] SimpleFIN sync failed for ${organisation.id}: ${error instanceof Error ? error.message : error}`);
+      for (const connectionId of due) {
+        try {
+          const result = await syncSimpleFin(organisation, FEED_ACTOR, { connectionId });
+          if (result.status === "failed") failed += 1;
+          else synced += 1;
+        } catch (error) {
+          failed += 1;
+          console.warn(`[tohyee] SimpleFIN sync failed for ${organisation.id}: ${error instanceof Error ? error.message : error}`);
+        }
       }
     }
     return { synced, failed };

@@ -35,7 +35,12 @@ export const DELETE = route(async (request) => {
     organisation: membership.organisation,
     actor: { userId: auth.user.id, email: auth.user.email },
   }));
-  const links = await closeAllPaymentLinks(organisation, actor, "Stripe disconnected");
-  const stripe = await withOrganisation(request, organisationId, "admin", (tx) => disconnectStripe(tx));
+  // Online payments use the first Stripe login (#182): only disconnecting that one switches its payment links off.
+  const connectionId = searchParams(request).get("connectionId");
+  const status = await withOrganisation(request, organisationId, "admin", (tx) => getStripeStatus(tx));
+  const first = status.connections[0]?.connectionId ?? null;
+  const usedForPayments = first !== null && (connectionId === null || connectionId === "" ? status.connections.length === 1 : connectionId === first);
+  const links = usedForPayments ? await closeAllPaymentLinks(organisation, actor, "Stripe disconnected") : { failed: [] as string[] };
+  const stripe = await withOrganisation(request, organisationId, "admin", (tx) => disconnectStripe(tx, connectionId));
   return json({ stripe, linksNotSwitchedOff: links.failed });
 });

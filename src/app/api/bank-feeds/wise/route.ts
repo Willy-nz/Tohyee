@@ -26,6 +26,6 @@ export const PATCH = route(async (request) => {
 
 /** Disconnects: the token is deleted and currencies unlinked. Lines stay. Admins. */
 export const DELETE = route(async (request) => {
-  const wise = await withOrganisation(request, searchParams(request).get("organisationId"), "admin", (tx) => disconnectWise(tx));
+  const wise = await withOrganisation(request, searchParams(request).get("organisationId"), "admin", (tx) => disconnectWise(tx, searchParams(request).get("connectionId")));
   return json({ wise });
 });

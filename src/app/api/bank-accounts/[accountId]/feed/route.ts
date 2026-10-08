@@ -7,13 +7,15 @@ type Context = { params: Promise<{ accountId: string }> };
 
 /**
  * Links an Akahu account to this bank or credit card account (`akahuAccountId`,
- * `startDate`: the first date to bring in). The Akahu account is checked with
+ * `startDate`: the first date to bring in; `connectionId`: which login, when
+ * there are several). The Akahu account is checked with
  * Akahu first, outside any database transaction.
  */
 export const POST = route<Context>(async (request, context) => {
   const { accountId } = await context.params;
   const body = await readJson(request);
-  const credentials = await withOrganisation(request, body.organisationId, "admin", (tx) => akahuCredentialsFor(tx));
+  // The login it's linked through (#182, BK31): the one chosen, or the only one.
+  const credentials = await withOrganisation(request, body.organisationId, "admin", (tx) => akahuCredentialsFor(tx, body.connectionId));
   let accounts;
   try {
     accounts = await listAkahuAccounts(credentials);
@@ -21,13 +23,14 @@ export const POST = route<Context>(async (request, context) => {
     throw akahuProblem(error);
   }
   const akahuAccount = accounts.find((account) => account._id === body.akahuAccountId);
-  if (!akahuAccount) throw new ValidationError("Akahu doesn't have that account for this connection.");
+  if (!akahuAccount) throw new ValidationError(`Akahu doesn't have that account for ${credentials.name}.`);
   await withOrganisation(request, body.organisationId, "admin", (tx) =>
     linkBankFeed(tx, accountId, {
       akahuAccountId: akahuAccount._id,
       akahuAccountName: [akahuAccount.name, akahuAccount.formatted_account].filter(Boolean).join(" · "),
       connectionName: akahuAccount.connection?.name ?? null,
       startDate: body.startDate,
+      connectionId: credentials.connectionId,
     }),
   );
   return json({ linked: true }, { status: 201 });

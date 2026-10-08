@@ -8,7 +8,7 @@ export const POST = route(async (request) => {
     organisation: membership.organisation,
     actor: { userId: auth.user.id, email: auth.user.email },
   }));
-  const result = await syncPayPal(organisation, actor);
+  const result = await syncPayPal(organisation, actor, new Date(), { connectionId: body.connectionId });
   const paypal = await withOrganisation(request, body.organisationId, "viewer", (tx) => getPayPalStatus(tx));
   return json({ result, paypal });
 });

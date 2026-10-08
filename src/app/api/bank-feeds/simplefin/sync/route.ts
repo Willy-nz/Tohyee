@@ -8,7 +8,7 @@ export const POST = route(async (request) => {
     organisation: membership.organisation,
     actor: { userId: auth.user.id, email: auth.user.email },
   }));
-  const result = await syncSimpleFin(organisation, actor, { manual: true });
+  const result = await syncSimpleFin(organisation, actor, { manual: true, connectionId: body.connectionId });
   const simplefin = await withOrganisation(request, body.organisationId, "viewer", (tx) => getSimpleFinStatus(tx));
   return json({ result, simplefin });
 });

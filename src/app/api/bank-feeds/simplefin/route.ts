@@ -26,6 +26,6 @@ export const PATCH = route(async (request) => {
 
 /** Disconnects: the access URL is deleted and accounts unlinked. Lines stay. Admins. */
 export const DELETE = route(async (request) => {
-  const simplefin = await withOrganisation(request, searchParams(request).get("organisationId"), "admin", (tx) => disconnectSimpleFin(tx));
+  const simplefin = await withOrganisation(request, searchParams(request).get("organisationId"), "admin", (tx) => disconnectSimpleFin(tx, searchParams(request).get("connectionId")));
   return json({ simplefin });
 });

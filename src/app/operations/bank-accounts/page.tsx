@@ -13,9 +13,9 @@ import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import type { BankAccount } from "@/lib/bank/accounts";
-import type { AkahuSettings } from "@/lib/bank/akahu/settings";
+import type { AkahuLogin, AkahuSettings } from "@/lib/bank/akahu/settings";
 import { api, errorMessage } from "@/lib/client/api";
-import { formatDate, formatDateTime, personName } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import { useConfirm } from "@/components/confirm-dialog";
 
@@ -87,51 +87,35 @@ function AddAccountForm({ organisationId, onAdded }: { organisationId: string; o
   );
 }
 
-/** The organisation's own Akahu personal app: each organisation sets up its own, with its own bank logins. */
+/**
+ * The organisation's Akahu personal apps (#182, BK30-BK35): one or more
+ * logins, each named, with its own tokens and sync hours. Each linked account
+ * syncs with its own login's tokens.
+ */
 function AkahuSettingsCard({ organisationId }: { organisationId: string }) {
   const confirm = useConfirm();
   const { can } = useWorkspace();
   const settings = useApiData<{ akahu: AkahuSettings }>("/api/bank-feeds/akahu/settings", { organisationId });
-  const [editing, setEditing] = useState(false);
-  const [appToken, setAppToken] = useState("");
-  const [userToken, setUserToken] = useState("");
-  const [syncEveryHours, setSyncEveryHours] = useState("");
+  // Which form is open: a new login, or new tokens for one login.
+  const [form, setForm] = useState<{ mode: "add" } | { mode: "edit"; login: AkahuLogin } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const akahu = settings.data?.akahu ?? null;
 
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function remove(login: AkahuLogin) {
+    const accounts = login.linkedAccounts.map((account) => `${account.code} ${account.name}`).join(", ");
+    if (
+      !(await confirm(
+        `Remove ${login.name}? Its tokens are deleted${accounts ? ` and ${accounts} stop${login.linkedAccounts.length === 1 ? "s" : ""} syncing` : ""}. Lines already brought in stay. Other logins carry on.`,
+      ))
+    )
+      return;
     setBusy(true);
     setError(null);
     setSaved(null);
     try {
-      const result = await api<{ akahu: AkahuSettings; accountCount: number }>("/api/bank-feeds/akahu/settings", {
-        method: "PUT",
-        body: { organisationId, appToken: appToken || undefined, userToken: userToken || undefined, syncEveryHours: syncEveryHours || undefined },
-      });
-      setSaved(
-        `Saved. Akahu shares ${result.accountCount} ${result.accountCount === 1 ? "account" : "accounts"} with this app; link each one on its bank account's Bank feed tab.`,
-      );
-      setAppToken("");
-      setUserToken("");
-      setEditing(false);
-      settings.reload();
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove() {
-    if (!(await confirm("Remove this organisation's Akahu tokens? Linked accounts stay linked but stop syncing until tokens are saved again."))) return;
-    setBusy(true);
-    setError(null);
-    setSaved(null);
-    try {
-      await api("/api/bank-feeds/akahu/settings", { method: "DELETE", query: { organisationId } });
+      await api("/api/bank-feeds/akahu/settings", { method: "DELETE", query: { organisationId, connectionId: login.connectionId } });
       settings.reload();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -142,7 +126,7 @@ function AkahuSettingsCard({ organisationId }: { organisationId: string }) {
 
   if (settings.error) return <Notice tone="error">{settings.error}</Notice>;
   if (!akahu) return <p className={ui.muted}>Loading…</p>;
-  const showForm = can("admin") && (editing || !akahu.configured);
+  const showAdd = can("admin") && (form?.mode === "add" || !akahu.configured);
   return (
     <div style={{ display: "grid", gap: 12 }}>
       {saved ? <Notice tone="success">{saved}</Notice> : null}
@@ -153,74 +137,165 @@ function AkahuSettingsCard({ organisationId }: { organisationId: string }) {
           installer does this when it updates Tohyee).
         </Notice>
       ) : null}
-      {akahu.configured ? (
-        <p>
-          <Badge tone="green">Set up</Badge> App {akahu.appTokenHint}, syncing every {akahu.syncEveryHours}{" "}
-          {akahu.syncEveryHours === 1 ? "hour" : "hours"}
-          <span className={ui.muted}>
-            {" "}
-            · saved {formatDateTime(akahu.createdAt)}
-            {personName(akahu, "createdBy") ? ` by ${personName(akahu, "createdBy")}` : ""}
-          </span>
-        </p>
-      ) : (
-        <p className={ui.muted}>Not set up yet.</p>
-      )}
-      {showForm ? (
-        <form onSubmit={(event) => void save(event)} style={{ display: "grid", gap: 12 }} autoComplete="off">
-          <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
-            <li>Sign in at my.akahu.nz with this organisation&apos;s own Akahu login and connect its banks.</li>
-            <li>Open Developers and create a personal app.</li>
-            <li>Copy the App ID token and the user token into the boxes below.</li>
-          </ol>
-          <div className={ui.grid3}>
-            <Field label="App ID token" hint={akahu.configured ? "Leave blank to keep the saved one." : "Starts with app_token_."}>
-              <input value={appToken} onChange={(event) => setAppToken(event.target.value.trim())} required={!akahu.configured} />
-            </Field>
-            <Field label="User token" hint={akahu.configured ? "Leave blank to keep the saved one." : "Starts with user_token_."}>
-              <input
-                type="password"
-                value={userToken}
-                onChange={(event) => setUserToken(event.target.value.trim())}
-                required={!akahu.configured}
-              />
-            </Field>
-            <Field label="Sync every (hours)" hint="Akahu itself refreshes from the banks about once a day.">
-              <input
-                type="number"
-                min={1}
-                max={24}
-                placeholder={String(akahu.syncEveryHours)}
-                value={syncEveryHours}
-                onChange={(event) => setSyncEveryHours(event.target.value)}
-              />
-            </Field>
-          </div>
-          <div className={ui.actions}>
-            {akahu.configured ? (
-              <Button variant="secondary" onClick={() => setEditing(false)}>
-                Cancel
+      {akahu.logins.length === 0 ? <p className={ui.muted}>Not set up yet.</p> : null}
+      {akahu.logins.map((login) => (
+        <div key={login.connectionId} style={{ display: "grid", gap: 8 }}>
+          <p style={{ margin: 0 }}>
+            <strong>{login.name}</strong>{" "}
+            {login.tokenProblem ? <Badge tone="red">{login.tokenProblem}</Badge> : <Badge tone="green">Set up</Badge>} App {login.appTokenHint}, syncing
+            every {login.syncEveryHours} {login.syncEveryHours === 1 ? "hour" : "hours"}
+            <span className={ui.muted}>
+              {" "}
+              · saved {formatDateTime(login.createdAt)}
+              {login.createdByEmail ? ` by ${login.createdByEmail}` : ""}
+              {login.linkedAccounts.length
+                ? ` · linked to ${login.linkedAccounts.map((account) => `${account.code} ${account.name}`).join(", ")}`
+                : " · no accounts linked yet"}
+            </span>
+          </p>
+          {form?.mode === "edit" && form.login.connectionId === login.connectionId ? (
+            <AkahuTokensForm
+              organisationId={organisationId}
+              login={login}
+              secretsAvailable={akahu.secretsAvailable}
+              onCancel={() => setForm(null)}
+              onSaved={(message) => {
+                setSaved(message);
+                setForm(null);
+                settings.reload();
+              }}
+            />
+          ) : can("admin") ? (
+            <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
+              <Button variant="secondary" size="small" onClick={() => setForm({ mode: "edit", login })}>
+                New tokens or sync hours
               </Button>
-            ) : null}
-            <Button type="submit" disabled={busy || !akahu.secretsAvailable}>
-              {busy ? "Checking with Akahu…" : "Save"}
-            </Button>
-          </div>
-          <p className={ui.muted}>The tokens are checked with Akahu, then stored encrypted. They&apos;re never shown again.</p>
-        </form>
-      ) : null}
-      {can("admin") && akahu.configured && !editing ? (
+              <Button variant="secondary" size="small" onClick={() => void remove(login)} disabled={busy}>
+                Remove
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ))}
+      {showAdd ? (
+        <AkahuTokensForm
+          organisationId={organisationId}
+          login={null}
+          first={!akahu.configured}
+          secretsAvailable={akahu.secretsAvailable}
+          onCancel={akahu.configured ? () => setForm(null) : undefined}
+          onSaved={(message) => {
+            setSaved(message);
+            setForm(null);
+            settings.reload();
+          }}
+        />
+      ) : can("admin") && akahu.configured && form === null ? (
         <div className={ui.actions} style={{ justifyContent: "flex-start" }}>
-          <Button variant="secondary" onClick={() => setEditing(true)}>
-            Change
-          </Button>
-          <Button variant="secondary" onClick={() => void remove()} disabled={busy}>
-            Remove
+          <Button variant="secondary" onClick={() => setForm({ mode: "add" })}>
+            Add another login
           </Button>
         </div>
       ) : null}
       {!can("admin") && !akahu.configured ? <p className={ui.muted}>An organisation admin can set up bank feeds.</p> : null}
     </div>
+  );
+}
+
+/** Adds an Akahu login (`login` null) or saves new tokens or sync hours for one. */
+function AkahuTokensForm({
+  organisationId,
+  login,
+  first = false,
+  secretsAvailable,
+  onCancel,
+  onSaved,
+}: {
+  organisationId: string;
+  login: AkahuLogin | null;
+  first?: boolean;
+  secretsAvailable: boolean;
+  onCancel?: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const [name, setName] = useState(first ? "Akahu" : "");
+  const [appToken, setAppToken] = useState("");
+  const [userToken, setUserToken] = useState("");
+  const [syncEveryHours, setSyncEveryHours] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ akahu: AkahuSettings; accountCount: number }>("/api/bank-feeds/akahu/settings", {
+        method: "PUT",
+        body: {
+          organisationId,
+          ...(login ? { connectionId: login.connectionId } : { add: true, name: name.trim() }),
+          appToken: appToken || undefined,
+          userToken: userToken || undefined,
+          syncEveryHours: syncEveryHours || undefined,
+        },
+      });
+      onSaved(
+        `Saved ${login?.name ?? name.trim()}. Akahu shares ${result.accountCount} ${result.accountCount === 1 ? "account" : "accounts"} with it; link each one on its bank account's Bank feed tab.`,
+      );
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form onSubmit={(event) => void save(event)} style={{ display: "grid", gap: 12 }} autoComplete="off">
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {login ? null : (
+        <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 4 }}>
+          <li>Sign in at my.akahu.nz with the Akahu login that has these bank logins, and connect its banks.</li>
+          <li>Open Developers and create a personal app.</li>
+          <li>Copy the App ID token and the user token into the boxes below.</li>
+        </ol>
+      )}
+      <div className={ui.grid4}>
+        {login ? null : (
+          <Field label="Name" hint="Whose bank logins these are, e.g. Will's BNZ login.">
+            <input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required />
+          </Field>
+        )}
+        <Field label="App ID token" hint={login ? "Leave blank to keep the saved one." : "Starts with app_token_."}>
+          <input value={appToken} onChange={(event) => setAppToken(event.target.value.trim())} required={!login} />
+        </Field>
+        <Field label="User token" hint={login ? "Leave blank to keep the saved one." : "Starts with user_token_."}>
+          <input type="password" value={userToken} onChange={(event) => setUserToken(event.target.value.trim())} required={!login} />
+        </Field>
+        <Field label="Sync every (hours)" hint="Akahu itself refreshes from the banks about once a day.">
+          <input
+            type="number"
+            min={1}
+            max={24}
+            placeholder={String(login?.syncEveryHours ?? 6)}
+            value={syncEveryHours}
+            onChange={(event) => setSyncEveryHours(event.target.value)}
+          />
+        </Field>
+      </div>
+      <div className={ui.actions}>
+        {onCancel ? (
+          <Button variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+        ) : null}
+        <Button type="submit" disabled={busy || !secretsAvailable}>
+          {busy ? "Checking with Akahu…" : login ? `Save ${login.name}` : "Add login"}
+        </Button>
+      </div>
+      <p className={ui.muted}>
+        The tokens are checked with Akahu, then stored encrypted. They&apos;re never shown again.
+        {login ? " Accounts the new tokens can't see stop syncing until they're linked again." : ""}
+      </p>
+    </form>
   );
 }
 

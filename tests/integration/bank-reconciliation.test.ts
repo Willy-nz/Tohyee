@@ -739,7 +739,8 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
     // Blank tokens keep the saved ones.
     expect(await body(await saveTokens(owner, { syncEveryHours: 6 }))).toMatchObject({ akahu: { configured: true, syncEveryHours: 6 } });
     const stored = await world.sql("select app_token_ciphertext, user_token_ciphertext, status from akahu_connections order by id");
-    expect(stored.rows.map((row) => row.status)).toEqual(["removed", "active"]);
+    // New tokens for the same login replace its tokens in place, so its links carry on (#182, BK34).
+    expect(stored.rows.map((row) => row.status)).toEqual(["active"]);
     expect(JSON.stringify(stored.rows)).not.toMatch(/user_token_xyz|app_token_abc/);
     const read = await body(
       await akahuSettingsRoute.GET(
@@ -796,7 +797,8 @@ describeWithDatabase("bank accounts, statements and reconciliation", () => {
     setAkahuFetchForTests(async () => new Response(JSON.stringify({ success: false, message: "Token revoked" }), { status: 401 }));
     await expect(syncBankFeedAccount(organisation, world.bank.id)).rejects.toThrow("Akahu refused the tokens: Token revoked");
     expect(await world.asUser(viewer, (tx) => getBankAccount(tx, world.bank.id))).toMatchObject({
-      feed: { lastSyncStatus: "failed", lastSyncError: "Akahu refused the tokens: Token revoked. Check the App ID token and user token." },
+      // BK33: the login needs new tokens (its row says so too).
+      feed: { lastSyncStatus: "failed", lastSyncError: "Akahu needs new tokens. Akahu refused the tokens: Token revoked. Check the App ID token and user token." },
     });
     expect((await world.lines(world.bank.id, "unreconciled")).length).toBe(3);
   });

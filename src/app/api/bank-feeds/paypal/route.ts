@@ -33,7 +33,12 @@ export const DELETE = route(async (request) => {
     actor: { userId: auth.user.id, email: auth.user.email },
   }));
   // PPN9: open PayPal invoices are cancelled before the secret is deleted.
-  const links = await closeAllPayPalInvoices(organisation, actor, "PayPal disconnected");
-  const paypal = await withOrganisation(request, organisationId, "admin", (tx) => disconnectPayPal(tx));
+  // Online payments use the first PayPal login (#182): only disconnecting that one switches its payment links off.
+  const connectionId = searchParams(request).get("connectionId");
+  const status = await withOrganisation(request, organisationId, "admin", (tx) => getPayPalStatus(tx));
+  const first = status.connections[0]?.connectionId ?? null;
+  const usedForPayments = first !== null && (connectionId === null || connectionId === "" ? status.connections.length === 1 : connectionId === first);
+  const links = usedForPayments ? await closeAllPayPalInvoices(organisation, actor, "PayPal disconnected") : { failed: [] as string[] };
+  const paypal = await withOrganisation(request, organisationId, "admin", (tx) => disconnectPayPal(tx, connectionId));
   return json({ paypal, linksNotSwitchedOff: links.failed });
 });

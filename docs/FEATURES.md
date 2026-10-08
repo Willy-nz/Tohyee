@@ -485,6 +485,14 @@ that something happened.
 - **Exchange rates from the European Central Bank** (FX1, decision 437):
   turned on per organisation, each working day's ECB rates are added to the
   exchange rates list for the currencies in use; typed rates stay.
+- **Several logins per bank feed** (#182, BK30-BK37 approved by Jess 8 Oct
+  2026, decision 481, tenant migration 0112): Akahu, SimpleFIN, Stripe,
+  PayPal and Wise each take any number of named logins (say Jess's ANZ
+  login and Will's BNZ login). Linking lists every login's accounts as
+  "login · account", each account syncs with its own login's tokens, a
+  login whose tokens are refused says so without affecting the others, new
+  tokens carry its accounts on, and removing a login stops only its feeds.
+  Stripe, PayPal and Wise allow one link per currency per login.
 - **Accounting as a module** (#181, MOD2-MOD7 approved by Jess 8 Oct 2026,
   decision 480, tenant migration 0111): a server admin chooses an
   organisation's modules when creating it (Accounting, Tax = registered for

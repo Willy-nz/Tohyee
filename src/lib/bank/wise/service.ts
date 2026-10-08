@@ -22,6 +22,7 @@ import { add, cmp, dec, neg, sub, toFixedString } from "@/lib/money/decimal";
 import { listAllOrganisations } from "@/lib/organisations/admin";
 import type { OrganisationRecord } from "@/lib/organisations/registry";
 import { decryptSecret, encryptSecret, secretsAvailable } from "@/lib/secrets";
+import { newLoginName, pickLogin } from "@/lib/bank/logins";
 import { requireId } from "@/lib/validation";
 
 /**
@@ -37,8 +38,11 @@ const DAY_MS = 86_400_000;
 
 export type WiseBalanceOption = WiseBalance & { linkedAccountId: string | null };
 
-export type WiseStatus = {
+export type WiseConnectionStatus = {
   connected: boolean;
+  /** The login (#182, BK30): its id and name; null when nothing is connected. */
+  connectionId: string | null;
+  name: string | null;
   profileId: number | null;
   profileName: string | null;
   syncEveryHours: number;
@@ -51,8 +55,14 @@ export type WiseStatus = {
   secretsAvailable: boolean;
 };
 
+/** The first login's status (as before several logins), and every login's. */
+export type WiseStatus = WiseConnectionStatus & { connections: WiseConnectionStatus[] };
+
 export type WiseLink = {
   currencyCode: string;
+  /** The login it syncs with (#182). */
+  connectionId: string | null;
+  loginName: string | null;
   startDate: string;
   lastSyncedAt: string | null;
   lastSyncStatus: "never" | "ok" | "failed";
@@ -61,6 +71,7 @@ export type WiseLink = {
 
 type ConnectionRow = {
   id: string;
+  name: string;
   token_ciphertext: string;
   profile_id: string;
   profile_name: string | null;
@@ -82,13 +93,18 @@ function requireSecrets(): void {
   }
 }
 
-async function activeConnection(tx: OrgTx, lock = false): Promise<ConnectionRow | null> {
+async function activeConnections(tx: OrgTx, lock = false): Promise<ConnectionRow[]> {
   const result = await tx.query<ConnectionRow>(
-    `select id::text, token_ciphertext, profile_id::text, profile_name, sync_every_hours, balances, last_synced_at, last_sync_status, last_sync_error,
+    `select id::text, name, token_ciphertext, profile_id::text, profile_name, sync_every_hours, balances, last_synced_at, last_sync_status, last_sync_error,
             lease_until, created_at, created_by_email
-       from wise_connections where status = 'active' ${lock ? "for update" : ""}`,
+       from wise_connections where status = 'active' order by id ${lock ? "for update" : ""}`,
   );
-  return result.rows[0] ?? null;
+  return result.rows;
+}
+
+/** The login a command is for (#182): the one chosen by `connectionId`, or the only one. */
+async function activeConnection(tx: OrgTx, lock = false, connectionId?: unknown): Promise<ConnectionRow | null> {
+  return pickLogin(await activeConnections(tx, lock), connectionId, "wise");
 }
 
 function parseHours(input: unknown, fallback: number): number {
@@ -99,11 +115,21 @@ function parseHours(input: unknown, fallback: number): number {
 }
 
 export async function getWiseStatus(tx: OrgTx): Promise<WiseStatus> {
-  const row = await activeConnection(tx);
-  const links = await tx.query<{ account_id: string; currency_code: string }>("select account_id::text, currency_code from wise_links where active");
-  const linked = new Map(links.rows.map((link) => [link.currency_code, link.account_id]));
+  const rows = await activeConnections(tx);
+  const links = await tx.query<{ account_id: string; currency_code: string; connection_id: string | null }>(
+    "select account_id::text, currency_code, connection_id::text from wise_links where active",
+  );
+  const connections = rows.map((row) => connectionStatus(row, links.rows));
+  return { ...(connections[0] ?? connectionStatus(null, [])), connections };
+}
+
+function connectionStatus(row: ConnectionRow | null, links: ReadonlyArray<{ account_id: string; currency_code: string; connection_id: string | null }>): WiseConnectionStatus {
+  // One link per currency per login (#182).
+  const linked = new Map(links.filter((link) => row !== null && link.connection_id === row.id).map((link) => [link.currency_code, link.account_id]));
   return {
     connected: row !== null,
+    connectionId: row?.id ?? null,
+    name: row?.name ?? null,
     profileId: row ? Number(row.profile_id) : null,
     profileName: row?.profile_name ?? null,
     syncEveryHours: row?.sync_every_hours ?? DEFAULT_WISE_HOURS,
@@ -121,13 +147,14 @@ export async function getWiseStatus(tx: OrgTx): Promise<WiseStatus> {
 export async function connectWise(
   organisation: OrganisationRecord,
   actor: Actor,
-  input: { token?: unknown; syncEveryHours?: unknown },
+  input: { name?: unknown; token?: unknown; syncEveryHours?: unknown },
 ): Promise<WiseStatus> {
   requireSecrets();
   const token = parseToken(input.token);
   const hours = parseHours(input.syncEveryHours, DEFAULT_WISE_HOURS);
   await withOrganisationTransaction(organisation, actor, async (tx) => {
-    if (await activeConnection(tx)) throw new ConflictError("Wise is already connected. Disconnect it first to use another token.");
+    // Several logins (#182): only the name must be new.
+    await newLoginName(tx, "wise", input.name);
   });
   let profile;
   let balances: WiseBalance[];
@@ -139,11 +166,12 @@ export async function connectWise(
     throw wiseProblem(error);
   }
   return withOrganisationTransaction(organisation, actor, async (tx) => {
-    if (await activeConnection(tx, true)) throw new ConflictError("Wise is already connected. Disconnect it first to use another token.");
+    await tx.query("lock table wise_connections in share row exclusive mode");
+    const name = await newLoginName(tx, "wise", input.name);
     const inserted = await tx.query<{ id: string }>(
-      `insert into wise_connections (token_ciphertext, profile_id, profile_name, sync_every_hours, balances, created_by_email)
-       values ($1, $2, $3, $4, $5::jsonb, $6) returning id::text`,
-      [encryptSecret(token), profile.id, profile.name?.slice(0, 200) ?? null, hours, JSON.stringify(balances), tx.actor.email],
+      `insert into wise_connections (token_ciphertext, profile_id, profile_name, sync_every_hours, balances, created_by_email, name)
+       values ($1, $2, $3, $4, $5::jsonb, $6, $7) returning id::text`,
+      [encryptSecret(token), profile.id, profile.name?.slice(0, 200) ?? null, hours, JSON.stringify(balances), tx.actor.email, name],
     );
     await writeAuditEvent(tx, {
       eventType: "bank_feed.wise_connected",
@@ -156,8 +184,8 @@ export async function connectWise(
 }
 
 /** Changes how often Wise is synced (1-24 hours). Admins. */
-export async function updateWiseSettings(tx: OrgTx, input: { syncEveryHours?: unknown }): Promise<WiseStatus> {
-  const row = await activeConnection(tx, true);
+export async function updateWiseSettings(tx: OrgTx, input: { syncEveryHours?: unknown; connectionId?: unknown }): Promise<WiseStatus> {
+  const row = await activeConnection(tx, true, input.connectionId);
   if (!row) throw new NotFoundError("Wise isn't connected.");
   const hours = parseHours(input.syncEveryHours, row.sync_every_hours);
   await tx.query("update wise_connections set sync_every_hours = $2 where id = $1", [row.id, hours]);
@@ -171,11 +199,15 @@ export async function updateWiseSettings(tx: OrgTx, input: { syncEveryHours?: un
 }
 
 /** Disconnects (WI10): the stored token is deleted and every currency unlinked. Lines stay. Admins. */
-export async function disconnectWise(tx: OrgTx): Promise<WiseStatus> {
-  const row = await activeConnection(tx, true);
+export async function disconnectWise(tx: OrgTx, connectionId?: unknown): Promise<WiseStatus> {
+  const row = await activeConnection(tx, true, connectionId);
   if (!row) throw new NotFoundError("Wise isn't connected.");
   if (row.lease_until && new Date(row.lease_until).getTime() > Date.now()) throw new ConflictError("Wise is syncing. Try again in a minute.");
-  const unlinked = await tx.query("update wise_links set active = false, connection_id = null, updated_at = now() where active");
+  const unlinked = await tx.query(
+    // Only this login's accounts (#182, BK35).
+    "update wise_links set active = false, connection_id = null, updated_at = now() where active and connection_id = $1",
+    [row.id],
+  );
   await tx.query("update wise_connections set status = 'removed', token_ciphertext = null, removed_at = now(), removed_by_email = $2 where id = $1", [
     row.id,
     tx.actor.email,
@@ -198,12 +230,17 @@ export async function getWiseLink(tx: OrgTx, accountIdInput: unknown): Promise<W
     last_synced_at: string | null;
     last_sync_status: "never" | "ok" | "failed";
     last_sync_error: string | null;
-  }>("select currency_code, start_date::text, last_synced_at, last_sync_status, last_sync_error from wise_links where account_id = $1 and active", [
+    connection_id: string | null;
+    login_name: string | null;
+  }>(`select l.currency_code, l.start_date::text, l.last_synced_at, l.last_sync_status, l.last_sync_error, l.connection_id::text, c.name as login_name
+       from wise_links l left join wise_connections c on c.id = l.connection_id where l.account_id = $1 and l.active`, [
     accountId,
   ]);
   const row = result.rows[0];
   if (!row) return null;
   return {
+    connectionId: row.connection_id,
+    loginName: row.login_name,
     currencyCode: row.currency_code,
     startDate: row.start_date,
     lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at).toISOString() : null,
@@ -213,12 +250,12 @@ export async function getWiseLink(tx: OrgTx, accountIdInput: unknown): Promise<W
 }
 
 /** Links a Wise currency balance to a bank account in that currency (WI2). One feed per account. Admins. */
-export async function linkWiseBalance(tx: OrgTx, accountIdInput: unknown, input: { currency?: unknown; startDate?: unknown }): Promise<WiseLink> {
+export async function linkWiseBalance(tx: OrgTx, accountIdInput: unknown, input: { currency?: unknown; startDate?: unknown; connectionId?: unknown }): Promise<WiseLink> {
   const accountId = requireId(accountIdInput, "accountId");
   if (typeof input.currency !== "string" || !/^[A-Za-z]{3}$/.test(input.currency)) throw new ValidationError("Choose Wise's balance currency.");
   const currency = input.currency.toUpperCase();
   const startDate = parseIsoDate(input.startDate, "startDate");
-  const connection = await activeConnection(tx);
+  const connection = await activeConnection(tx, false, input.connectionId);
   if (!connection) throw new ValidationError("Connect Wise first (Bank accounts → Wise).");
   const balance = connection.balances.find((entry) => entry.currency === currency);
   if (!balance) throw new ValidationError(`The Wise account has no ${currency} balance.`);
@@ -233,8 +270,12 @@ export async function linkWiseBalance(tx: OrgTx, accountIdInput: unknown, input:
     [accountId],
   );
   if (other.rows[0]) throw new ConflictError(`${account.code} already has a ${other.rows[0].feed} feed. Stop it first.`);
-  const taken = await tx.query("select 1 from wise_links where active and currency_code = $1 and account_id <> $2", [currency, accountId]);
-  if (taken.rowCount) throw new ConflictError(`Wise's ${currency} balance is already linked to another bank account.`);
+  const taken = await tx.query("select 1 from wise_links where active and currency_code = $1 and account_id <> $2 and connection_id = $3", [
+    currency,
+    accountId,
+    connection.id,
+  ]);
+  if (taken.rowCount) throw new ConflictError(`${connection.name}'s ${currency} balance is already linked to another bank account.`);
   await tx.query(
     `insert into wise_links (account_id, connection_id, balance_id, currency_code, start_date, active, created_by_email)
      values ($1, $2, $3, $4, $5, true, $6)
@@ -351,10 +392,15 @@ type ActiveLink = { account_id: string; balance_id: string; currency_code: strin
  * from three days before its last line (or its start date), oldest first,
  * each transaction compared with the running balance before it.
  */
-export async function syncWise(organisation: OrganisationRecord, actor: Actor, now = new Date()): Promise<WiseSyncResult> {
+export async function syncWise(
+  organisation: OrganisationRecord,
+  actor: Actor,
+  now = new Date(),
+  options: { connectionId?: unknown } = {},
+): Promise<WiseSyncResult> {
   const prepared = await withOrganisationTransaction(organisation, actor, async (tx) => {
     requireSecrets();
-    const row = await activeConnection(tx, true);
+    const row = await activeConnection(tx, true, options.connectionId);
     if (!row) throw new ValidationError("Wise isn't connected. An admin can connect it under Bank accounts → Wise.");
     if (row.lease_until && new Date(row.lease_until).getTime() > Date.now()) throw new ConflictError("Wise is already syncing.");
     await tx.query("update wise_connections set lease_until = now() + interval '10 minutes' where id = $1", [row.id]);
@@ -525,28 +571,32 @@ export async function syncDueWise(): Promise<{ synced: number; failed: number }>
   try {
     for (const organisation of await listAllOrganisations()) {
       if (!organisation.isActive || organisation.provisioningStatus !== "ready" || organisation.migrationStatus !== "current") continue;
-      let due = false;
+      let due: string[] = [];
       try {
-        due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) => {
-          const result = await tx.query(
-            `select 1 from wise_connections c
-              where c.status = 'active' and exists (select 1 from wise_links l where l.active) and ${ACCOUNTING_ON_SQL}
+        // Each login that's due, on its own (#182).
+        due = await withOrganisationTransaction(organisation, FEED_ACTOR, async (tx) =>
+          (
+            await tx.query<{ id: string }>(
+              `select c.id::text from wise_connections c
+                where c.status = 'active' and exists (select 1 from wise_links l where l.active and l.connection_id = c.id) and ${ACCOUNTING_ON_SQL}
                 and (c.last_synced_at is null or c.last_synced_at < now() - make_interval(hours => c.sync_every_hours))
-                and (c.lease_until is null or c.lease_until < now())`,
-          );
-          return (result.rowCount ?? 0) > 0;
-        });
+                and (c.lease_until is null or c.lease_until < now())
+                order by c.id`,
+            )
+          ).rows.map((row) => row.id),
+        );
       } catch {
         continue;
       }
-      if (!due) continue;
-      try {
-        const result = await syncWise(organisation, FEED_ACTOR);
-        if (result.status === "failed") failed += 1;
-        else synced += 1;
-      } catch (error) {
-        failed += 1;
-        console.warn(`[tohyee] Wise sync failed for ${organisation.id}: ${error instanceof Error ? error.message : error}`);
+      for (const connectionId of due) {
+        try {
+          const result = await syncWise(organisation, FEED_ACTOR, new Date(), { connectionId });
+          if (result.status === "failed") failed += 1;
+          else synced += 1;
+        } catch (error) {
+          failed += 1;
+          console.warn(`[tohyee] Wise sync failed for ${organisation.id}: ${error instanceof Error ? error.message : error}`);
+        }
       }
     }
     return { synced, failed };
