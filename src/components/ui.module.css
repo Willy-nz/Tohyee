@@ -25,7 +25,7 @@
   min-width: 0;
 }
 
-/* Home's header: a faint drawing of the mountains behind the greeting. */
+/* Home's header: a softly blended restoration of the supplied mountain photo. */
 .pageHeaderDecorated {
   position: relative;
   isolation: isolate;
@@ -40,18 +40,24 @@
   width: min(520px, 55%);
   aspect-ratio: 700 / 202;
   pointer-events: none;
-  /* The photo's light and shade in the theme's blue (Jess: grey was too grey). */
-  background: url("/images/aoraki-strip.jpg") center / cover no-repeat, var(--accent);
-  background-blend-mode: luminosity;
-  opacity: 0.35;
-  /* Fades in from the left and out at the bottom, so there are no hard edges. */
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 35%), linear-gradient(to bottom, #000 70%, transparent);
+  /* Preserve the cool photographic colours instead of flattening them into blue. */
+  background: url("/images/aoraki-restored.webp") center 45% / cover no-repeat;
+  opacity: 0.28;
+  /* Fade every edge; keep the central peak legible without a rectangular sky patch. */
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28%, #000 92%, transparent), linear-gradient(to bottom, transparent, #000 22%, #000 65%, transparent);
   -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(to right, transparent, #000 35%), linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28%, #000 92%, transparent), linear-gradient(to bottom, transparent, #000 22%, #000 65%, transparent);
   mask-composite: intersect;
 }
 
-/* On a phone the header is narrow and the greeting wraps, so the drawing is left out. */
+/* Long greetings and utility controls always stay on the page's solid canvas. */
+.pageHeaderDecorated > div:not(.watermark) {
+  position: relative;
+  background: var(--bg);
+  box-shadow: 12px 0 12px var(--bg);
+}
+
+/* On a phone the greeting wraps, so omit the decoration and its reserved space. */
 @media (max-width: 767px) {
   .watermark {
     display: none;
