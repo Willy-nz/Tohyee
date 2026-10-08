@@ -42,7 +42,7 @@ PayPal, Shopify, WooCommerce, mailbox or connected AI account yet.**
 | 5 | PayPal | Pay with PayPal, payments into linked balances, the PayPal feed | PPN1-PPN10, PP1-PP10 | No | PayPal sales as a sales platform (stage 7) |
 | 6 | ServiceM8 | Foundations: projects, tasks, time, expenses, quotes, invoices, CRM | Projects tests | n/a | Stage 8: visits calendar, dispatch, checklists, signatures, job photos, service reminders |
 | 7 | Deputy | Foundations: employees, leave, timesheets, workforce budgets | Payroll tests | n/a | Stage 9: rosters, shift costs, unavailability, clock in and out |
-| 8 | GoCardless | Nothing | - | - | Stage 10: all of it. Not offered anywhere in Tohyee |
+| 8 | GoCardless | Direct debit (BECS NZ): authorities through GoCardless's page, collection on the due date with "don't collect this one", payments recorded into a clearing account, failures voided with "Try again", payouts posted with fees | GC1-GC10 | No: no real GoCardless account (a sandbox account would be the first check) | Automatic retry (declined by Jess); the failure's own reason (GoCardless gives it in its events, which Tohyee doesn't read yet); GST on fees (not known) |
 | 9 | Tradify | As ServiceM8 (one jobs workflow for both, stage 8) | - | - | As ServiceM8, plus calendar sync |
 | 10 | A2X | Shopify orders, refunds, payouts, chargebacks, reserves; WooCommerce orders | SPC1-SPC31, WC1-WC10 | No | Stripe sales, Square, Amazon, eBay, Etsy, PayPal sales. Summary posting: declined by Jess, not missing |
 
@@ -143,4 +143,5 @@ phone width).
    unavailability and leave as conflicts, clock in and out (location: ask
    Jess), hours into timesheets, cost against workforce budgets and sales.
 10. **Direct debit (GoCardless, BECS NZ):** mandates, collection on the due
-    date, clearing-account accounting as stage 4.
+    date, clearing-account accounting as stage 4. Built 8 Oct 2026 (GC1-GC10,
+    decision 482), tested against a pretend GoCardless only.

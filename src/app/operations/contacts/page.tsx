@@ -21,6 +21,7 @@ import {
 } from "@/components/customers";
 import { useModules } from "@/components/modules";
 import { SalespersonField, useSalespeople } from "@/components/salespeople";
+import { ContactDirectDebitCard } from "@/components/direct-debit";
 import { Badge, Button, Card, Empty, Field, Notice, Page, PageHeader, ui } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
@@ -588,6 +589,7 @@ function Contacts({ organisationId }: { organisationId: string }) {
           />
         </Card>
       ) : null}
+      {editing && editing.isCustomer ? <ContactDirectDebitCard key={`dd-${editing.id}`} organisationId={organisationId} contactId={editing.id} /> : null}
       <Card
         title={type === "customers" ? "Customers" : type === "suppliers" ? "Suppliers" : "Contacts"}
         actions={

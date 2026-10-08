@@ -15546,7 +15546,7 @@ payment. Not found: how long after the charge date a failure can still be
 reported, and whether GoCardless's NZ fees include GST.
 
 Setup as the online payments (PN): a **GoCardless** bank account 1070 as
-the clearing account, fees to 6060 Bank fees. Kobe Cafe has signed a direct
+the clearing account, fees to 6020 Bank fees. Kobe Cafe has signed a direct
 debit authority through GoCardless's page.
 
 - **GC1** Turning it on: an admin connects GoCardless (its API token, stored
@@ -15563,7 +15563,7 @@ debit authority through GoCardless's page.
   Cr 1100 115.00.
 - **GC5** Payout: on Thu 5 Nov GoCardless pays out 115.00 less its fee
   (fee amount from GoCardless's report, say **1.15**): Dr 1000 113.85, Dr
-  6060 1.15, Cr 1070 115.00. The 113.85 bank line matches the payout.
+  6020 1.15, Cr 1070 115.00. The 113.85 bank line matches the payout.
 - **GC6** Failure: the payment fails (insufficient funds). The payment in
   GC4 is reversed (voided with the reason), INV-0030 is due again, and the
   invoice and Home say "Direct debit failed: insufficient funds". Retry:
@@ -15594,6 +15594,24 @@ this one" tick on the invoice; 2, no automatic retry: a failure shows on the
 invoice and Home with "Try again"; 3, not known, so fees are posted without
 GST until a GoCardless invoice shows otherwise; 4, not discussed (the draft
 stands).
+
+Built 8 Oct 2026 (decision 482, tests/integration/gocardless.test.ts,
+against a pretend GoCardless only). How the examples came out:
+- GC1 is per organisation, not "for chosen customers": a customer is chosen
+  by having an active authority (answer 1). Turning it on needs the
+  clearing account (a NZD bank account, e.g. 1070), the payout bank account
+  (e.g. 1000) and the fees account (an expense account, e.g. 6020).
+- GC3: a collection is asked for when the invoice is due within three days,
+  for its due date (or GoCardless's earliest possible date, if later).
+- GC6: the reason shown is the payment's status ("GoCardless says it
+  failed.", or a chargeback); GoCardless's own reason, such as insufficient
+  funds, is in its events, which Tohyee doesn't read yet. Failures show on
+  the invoice, in the top bar and in Settings › Online payments.
+- GC9: a collection GoCardless has already sent to the bank can't be
+  cancelled; the invoice then says so, and any difference is refunded in
+  GoCardless.
+- GC5 is posted by Tohyee from GoCardless's paid payouts; the 113.85 bank
+  line is matched to that journal by hand when reconciling (question 4).
 
 ### The next sales platform (stage 7)
 

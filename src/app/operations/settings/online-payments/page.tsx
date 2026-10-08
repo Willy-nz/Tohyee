@@ -8,7 +8,7 @@ import { Page, PageHeader } from "@/components/ui";
 export default function OnlinePaymentsPage() {
   return (
     <Page>
-      <PageHeader title="Online payments" description="Let customers pay invoices online through your own Stripe or PayPal account." />
+      <PageHeader title="Online payments" description="Let customers pay invoices online through your own Stripe or PayPal account, or collect them by direct debit with GoCardless." />
       <RequireOrganisation>{(organisationId) => <OnlinePaymentsSettings key={organisationId} organisationId={organisationId} />}</RequireOrganisation>
     </Page>
   );
