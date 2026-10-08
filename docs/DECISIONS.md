@@ -3605,3 +3605,31 @@ testing) and #154's code signing (later, Jess).
      tax code is still refused on tax-exclusive or inclusive lines (the
      editors start unregistered organisations on No GST amounts); an
      item's GST code isn't copied onto the line while not registered.
+
+### Where exchange rates come from (decision 479)
+
+479. **ECB, uploaded rate sets or typed only** (#183, examples FX2-FX9
+     approved by Jess, 8 Oct 2026: "a way to upload and set as the exchange
+     rates for a period"). The source is kept with the ECB settings
+     (`ecb_rate_settings.rate_source`, migration 0110); choosing ECB turns
+     its daily job on and anything else turns it off, so the existing ECB
+     switch and the source can't disagree. Existing organisations with the
+     ECB on start on ECB, the rest on typed only, which is how they already
+     worked. An uploaded set's rates are ordinary entries in the exchange
+     rates list, tied to the set and effective from its period's start, but
+     used only up to its period's end (no other entry has an end). While
+     sets are the source, only a set covering the date counts: no other
+     list entry and no last rate used, so October's rates never carry into
+     November (FX5); the same rule gives payments and statement lines their
+     starting rate. Rates in a file quoted as foreign currency per NZD 1 are
+     turned round to 6 decimal places (as FX3 says). Sets
+     are never changed or deleted; replacing one marks it replaced and
+     archives its rates. Documents record where their rate came from as
+     text ("Typed", "ECB", the set's name, "Exchange rates list", "Last
+     rate used") so the record survives a set being replaced; an edit that
+     keeps the saved rate keeps its source. Inland Revenue's guidance
+     ([Overseas currency conversion to NZ dollars](https://www.ird.govt.nz/managing-my-tax/overseas-currency-conversion-to-nz-dollars),
+     checked 8 Oct 2026) is why a change of source asks for a reason, kept
+     in `exchange_rate_source_changes`. No RBNZ feed: its site may block
+     automatic downloads, so its rates come in as an uploaded file.
+

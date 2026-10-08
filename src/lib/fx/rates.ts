@@ -30,6 +30,13 @@ export type ExchangeRate = {
   createdAt: string;
   archivedAt: string | null;
   archivedByEmail: string | null;
+  /** Where it came from (FX2): the ECB's daily job, an uploaded set, or typed (or pasted) here. */
+  source: "ecb" | "set" | "typed";
+  /** "ECB", the set's name, or "Typed". */
+  sourceLabel: string;
+  rateSetId: string | null;
+  /** For a set's rate, the last day it's used (the set's period end). */
+  until: string | null;
 };
 
 export type ExchangeRatesList = {
@@ -52,12 +59,17 @@ type Row = {
   created_at: string;
   archived_at: string | null;
   archived_by_email: string | null;
+  command_source: string;
+  rate_set_id: string | null;
+  set_name: string | null;
+  set_end: string | null;
 };
 
-const SELECT = `select id::text, currency_code, effective_date::text, rate::text, note, created_by_email, created_at, archived_at, archived_by_email
-                  from currency_exchange_rates`;
+const COLUMNS = `r.id::text, r.currency_code, r.effective_date::text, r.rate::text, r.note, r.created_by_email, r.created_at, r.archived_at, r.archived_by_email,
+                 r.command_source, r.rate_set_id::text, s.name as set_name, s.period_end::text as set_end`;
+const SELECT = `select ${COLUMNS} from currency_exchange_rates r left join exchange_rate_sets s on s.id = r.rate_set_id`;
 /** Which entry wins for a date: the latest effective date on or before it, then the one added last. */
-const ORDER = "order by effective_date desc, created_at desc, id desc";
+const ORDER = "order by r.effective_date desc, r.created_at desc, r.id desc";
 
 function toRate(row: Row): ExchangeRate {
   return {
@@ -70,11 +82,20 @@ function toRate(row: Row): ExchangeRate {
     createdAt: row.created_at,
     archivedAt: row.archived_at,
     archivedByEmail: row.archived_by_email,
+    source: row.rate_set_id ? "set" : row.command_source === "ecb" ? "ecb" : "typed",
+    sourceLabel: row.set_name ?? (row.command_source === "ecb" ? "ECB" : "Typed"),
+    rateSetId: row.rate_set_id,
+    until: row.set_end,
   };
 }
 
+/** The label a document records for a list rate it took (FX4). */
+export function listSourceLabel(rate: Pick<ExchangeRate, "source" | "sourceLabel">): string {
+  return rate.source === "typed" ? "Exchange rates list" : rate.sourceLabel;
+}
+
 export async function listExchangeRates(tx: OrgTx, options: { includeArchived?: boolean; today?: string } = {}): Promise<ExchangeRatesList> {
-  const rows = await tx.query<Row>(`${SELECT} ${options.includeArchived ? "" : "where archived_at is null"} ${ORDER}`);
+  const rows = await tx.query<Row>(`${SELECT} ${options.includeArchived ? "" : "where r.archived_at is null"} ${ORDER}`);
   const rates = rows.rows.map(toRate);
   const used = await tx.query<{ code: string }>(
     `select code from (
@@ -91,32 +112,38 @@ export async function listExchangeRates(tx: OrgTx, options: { includeArchived?: 
     currenciesInUse: used.rows.map((row) => row.code),
     current: used.rows.map((row) => ({
       currencyCode: row.code,
-      rate: active.find((rate) => rate.currencyCode === row.code && rate.effectiveDate <= today) ?? null,
+      rate: active.find((rate) => rate.currencyCode === row.code && rate.effectiveDate <= today && (rate.until === null || today <= rate.until)) ?? null,
     })),
     rates,
   };
 }
 
+export type ListedRate = { rate: string; date: string; until: string | null; label: string };
+
 /**
  * The list's entries for some currencies, newest effective date first (the
- * order `lastRateOnOrBefore` wants), archived ones left out.
+ * order `lastRateOnOrBefore` wants), archived ones left out. An uploaded
+ * set's rate is used only up to its period's end (`until`). With uploaded
+ * sets as the source (FX4), only sets' rates count.
  */
-export async function listedRates(tx: OrgTx, currencies: readonly string[]): Promise<Map<string, Array<{ rate: string; date: string }>>> {
+export async function listedRates(tx: OrgTx, currencies: readonly string[], options: { setsOnly?: boolean } = {}): Promise<Map<string, ListedRate[]>> {
   const wanted = [...new Set(currencies)].filter((code) => code !== tx.baseCurrency);
-  const byCurrency = new Map<string, Array<{ rate: string; date: string }>>(wanted.map((code) => [code, []]));
+  const byCurrency = new Map<string, ListedRate[]>(wanted.map((code) => [code, []]));
   if (wanted.length === 0) return byCurrency;
-  const rows = await tx.query<{ currency_code: string; rate: string; effective_date: string }>(
-    `select currency_code, rate::text, effective_date::text from currency_exchange_rates
-      where archived_at is null and currency_code = any($1::text[]) ${ORDER}`,
+  const rows = await tx.query<Row>(
+    `${SELECT} where r.archived_at is null and r.currency_code = any($1::text[]) ${options.setsOnly ? "and r.rate_set_id is not null" : ""} ${ORDER}`,
     [wanted],
   );
-  for (const row of rows.rows) byCurrency.get(row.currency_code)?.push({ rate: toPlainString(dec(row.rate)), date: row.effective_date });
+  for (const row of rows.rows) {
+    const rate = toRate(row);
+    byCurrency.get(row.currency_code)?.push({ rate: rate.rate, date: rate.effectiveDate, until: rate.until, label: listSourceLabel(rate) });
+  }
   return byCurrency;
 }
 
 /** The list's rate for a currency effective on a date (MC48), or null. */
-export async function listedRateOn(tx: OrgTx, currencyCode: string, date: string): Promise<{ rate: string; date: string } | null> {
-  return (await listedRates(tx, [currencyCode])).get(currencyCode)?.find((entry) => entry.date <= date) ?? null;
+export async function listedRateOn(tx: OrgTx, currencyCode: string, date: string): Promise<ListedRate | null> {
+  return (await listedRates(tx, [currencyCode])).get(currencyCode)?.find((entry) => entry.date <= date && (entry.until === null || date <= entry.until)) ?? null;
 }
 
 type RateInput = { currencyCode: unknown; effectiveDate: unknown; rate: unknown; note?: unknown };
@@ -163,8 +190,8 @@ export async function addExchangeRates(
         })();
   const hash = requestHash("exchange_rates", { rates: parsed });
   const earlier = await tx.query<Row & { request_hash: string }>(
-    `${SELECT.replace("from currency_exchange_rates", ", request_hash from currency_exchange_rates")}
-      where command_source = $1 and idempotency_key = $2 order by line_number`,
+    `select ${COLUMNS}, r.request_hash from currency_exchange_rates r left join exchange_rate_sets s on s.id = r.rate_set_id
+      where r.command_source = $1 and r.idempotency_key = $2 order by r.line_number`,
     [source, idempotencyKey],
   );
   if (earlier.rows[0]) {
@@ -177,7 +204,8 @@ export async function addExchangeRates(
       `insert into currency_exchange_rates (command_source, idempotency_key, line_number, request_hash, currency_code, effective_date, rate, note,
                                             created_by_user_id, created_by_email)
        values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10)
-       returning id::text, currency_code, effective_date::text, rate::text, note, created_by_email, created_at, archived_at, archived_by_email`,
+       returning id::text, currency_code, effective_date::text, rate::text, note, created_by_email, created_at, archived_at, archived_by_email,
+                 command_source, rate_set_id::text, null as set_name, null as set_end`,
       [source, idempotencyKey, index + 1, hash, rate.currencyCode, rate.effectiveDate, rate.rate, rate.note, tx.actor.userId, tx.actor.email],
     );
     added.push(toRate(inserted.rows[0]));
@@ -200,16 +228,16 @@ export async function addExchangeRates(
  */
 export async function archiveExchangeRate(tx: OrgTx, idInput: unknown): Promise<ExchangeRate> {
   const id = requireId(idInput, "exchangeRateId");
-  const found = await tx.query<Row>(`${SELECT} where id = $1 for update`, [id]);
+  const found = await tx.query<Row>(`${SELECT} where r.id = $1 for update of r`, [id]);
   const row = found.rows[0];
   if (!row) throw new NotFoundError("Exchange rate not found.");
   if (row.archived_at) throw new ConflictError("This exchange rate is already archived.");
-  const updated = await tx.query<Row>(
-    `update currency_exchange_rates set archived_at = now(), archived_by_user_id = $2, archived_by_email = $3 where id = $1
-     returning id::text, currency_code, effective_date::text, rate::text, note, created_by_email, created_at, archived_at, archived_by_email`,
-    [id, tx.actor.userId, tx.actor.email],
-  );
-  const rate = toRate(updated.rows[0]);
+  await tx.query("update currency_exchange_rates set archived_at = now(), archived_by_user_id = $2, archived_by_email = $3 where id = $1", [
+    id,
+    tx.actor.userId,
+    tx.actor.email,
+  ]);
+  const rate = toRate((await tx.query<Row>(`${SELECT} where r.id = $1`, [id])).rows[0]);
   await writeAuditEvent(tx, {
     eventType: "exchange_rate.archived",
     entityType: "exchange_rate",

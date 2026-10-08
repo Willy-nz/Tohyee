@@ -1,4 +1,5 @@
 import { writeAuditEvent } from "@/lib/audit";
+import { setRateSource } from "@/lib/fx/sources";
 import { type Actor, type OrgTx, withOrganisationTransaction } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { dec, divide, toPlainString } from "@/lib/money/decimal";
@@ -115,7 +116,7 @@ export async function getEcbSettings(tx: OrgTx): Promise<EcbSettings> {
 }
 
 /** Turns ECB rates on or off (admins), and the extra currencies to bring in. */
-export async function updateEcbSettings(tx: OrgTx, input: { enabled?: unknown; extraCurrencies?: unknown }, today: string): Promise<EcbSettings> {
+export async function updateEcbSettings(tx: OrgTx, input: { enabled?: unknown; extraCurrencies?: unknown; reason?: unknown }, today: string): Promise<EcbSettings> {
   const current = await getEcbSettings(tx);
   const enabled = optionalBoolean(input.enabled, "enabled") ?? current.enabled;
   const extra =
@@ -129,12 +130,11 @@ export async function updateEcbSettings(tx: OrgTx, input: { enabled?: unknown; e
             }),
           ),
         ].filter((code) => code !== tx.baseCurrency);
-  await tx.query(
-    `update ecb_rate_settings set enabled = $1, enabled_on = case when $1 and not enabled then $2::date when not $1 then null else enabled_on end,
-            extra_currencies = $3, last_error = case when $1 then last_error else null end, updated_by_email = $4, updated_at = now()
-      where id = true`,
-    [enabled, today, extra, tx.actor.email],
-  );
+  // Turning the ECB on or off is choosing the rate source (#183, FX2): typed only when it goes off.
+  if (enabled !== current.enabled) {
+    await setRateSource(tx, { source: enabled ? "ecb" : "typed", reason: input.reason }, today);
+  }
+  await tx.query("update ecb_rate_settings set extra_currencies = $1, updated_by_email = $2, updated_at = now() where id = true", [extra, tx.actor.email]);
   await writeAuditEvent(tx, { eventType: "ecb_rates.updated", entityType: "ecb_rates", entityId: "1", details: { enabled, extraCurrencies: extra } });
   return getEcbSettings(tx);
 }

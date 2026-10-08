@@ -1,5 +1,6 @@
 import { writeAuditEvent } from "@/lib/audit";
 import { listedRates } from "@/lib/fx/rates";
+import { getRateSource } from "@/lib/fx/sources";
 import { parseIsoDate } from "@/lib/dates";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { NotFoundError, ValidationError } from "@/lib/errors";
@@ -243,6 +244,10 @@ export type RateUsed = {
    * line converted at it, or a revaluation's closing rate.
    */
   source: "list" | "posted" | "revaluation";
+  /** For the list's rates: where the entry came from ("ECB", an uploaded set's name, "Exchange rates list"; FX2, FX4). */
+  label?: string;
+  /** For an uploaded set's rate: the last day it's used (FX5). */
+  until?: string | null;
 };
 
 /**
@@ -292,11 +297,16 @@ export async function ratesUsed(tx: OrgTx, currencies: readonly string[]): Promi
  * books (`ratesUsed`).
  */
 export async function defaultRates(tx: OrgTx, currencies: readonly string[]): Promise<Map<string, RateUsed[]>> {
-  const listed = await listedRates(tx, currencies);
-  const used = await ratesUsed(tx, currencies);
+  // With uploaded rate sets as the source (FX4, FX5), only a set covering the date counts: no other list entry and no last rate used.
+  const setsOnly = (await getRateSource(tx)) === "uploaded";
+  const listed = await listedRates(tx, currencies, { setsOnly });
+  const used = setsOnly ? new Map<string, RateUsed[]>() : await ratesUsed(tx, currencies);
   const byCurrency = new Map<string, RateUsed[]>();
-  for (const [code, rates] of used) {
-    byCurrency.set(code, [...(listed.get(code) ?? []).map((entry): RateUsed => ({ ...entry, source: "list" })), ...rates]);
+  for (const code of listed.keys()) {
+    byCurrency.set(code, [
+      ...(listed.get(code) ?? []).map((entry): RateUsed => ({ rate: entry.rate, date: entry.date, source: "list", label: entry.label, until: entry.until })),
+      ...(used.get(code) ?? []),
+    ]);
   }
   return byCurrency;
 }
@@ -304,11 +314,16 @@ export async function defaultRates(tx: OrgTx, currencies: readonly string[]): Pr
 /**
  * The rate for a date from `defaultRates` (or `ratesUsed`), or null: the
  * list's entry effective on or before it, like NetSuite's Currency Exchange
- * Rates (MC48); with none, the last rate used on or before it (D4, MC3, MC49).
+ * Rates (MC48), and for an uploaded set's rate no later than its period's
+ * end (FX5); with none, the last rate used on or before it (D4, MC3, MC49).
  */
 export function lastRateOnOrBefore(rates: readonly RateUsed[] | undefined, date: string): RateUsed | null {
   const all = rates ?? [];
-  return all.find((entry) => entry.source === "list" && entry.date <= date) ?? all.find((entry) => entry.source !== "list" && entry.date <= date) ?? null;
+  return (
+    all.find((entry) => entry.source === "list" && entry.date <= date && (entry.until == null || date <= entry.until)) ??
+    all.find((entry) => entry.source !== "list" && entry.date <= date) ??
+    null
+  );
 }
 
 export async function lastRateFor(tx: OrgTx, currency: string, date: string): Promise<RateUsed | null> {

@@ -1,6 +1,7 @@
 "use client";
 
 import { EcbRatesCard } from "@/components/consolidation";
+import { RateSetsCard, RateSourceCard } from "@/components/exchange-rate-sources";
 import { type FormEvent, useState } from "react";
 import { useApiData } from "@/components/hooks";
 import { Badge, Button, Card, Empty, Field, Notice, ui } from "@/components/ui";
@@ -8,6 +9,7 @@ import { useWorkspace } from "@/components/workspace";
 import { api, errorMessage, newIdempotencyKey } from "@/lib/client/api";
 import { formatDate, formatDateTime, personName, todayInBrowser } from "@/lib/format";
 import type { ExchangeRate, ExchangeRatesList } from "@/lib/fx/rates";
+import type { RateSourceSettings } from "@/lib/fx/sources";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import { isRateText } from "@/lib/money/fx";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -21,6 +23,7 @@ export function ExchangeRatesManager({ organisationId }: { organisationId: strin
   const { can } = useWorkspace();
   const [showArchived, setShowArchived] = useState(false);
   const list = useApiData<ExchangeRatesList>("/api/fx/rates", { organisationId, includeArchived: showArchived ? "true" : null });
+  const source = useApiData<{ settings: RateSourceSettings }>("/api/exchange-rates/source", { organisationId });
   const [message, setMessage] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   if (list.error) return <Notice tone="error">{list.error}</Notice>;
@@ -35,7 +38,16 @@ export function ExchangeRatesManager({ organisationId }: { organisationId: strin
   return (
     <>
       {message ? <Notice tone="success">{message}</Notice> : null}
-      <EcbRatesCard organisationId={organisationId} canAdmin={can("admin")} onChanged={list.reload} />
+      <RateSourceCard
+        organisationId={organisationId}
+        canAdmin={can("admin")}
+        onChanged={() => {
+          source.reload();
+          list.reload();
+        }}
+      />
+      {source.data?.settings.source === "ecb" ? <EcbRatesCard organisationId={organisationId} canAdmin={can("admin")} sourceManaged onChanged={list.reload} /> : null}
+      {source.data?.settings.source === "uploaded" ? <RateSetsCard organisationId={organisationId} baseCurrency={data.baseCurrency} canEdit={editable} onChanged={list.reload} /> : null}
       <Card
         title="In effect today"
         description={`New foreign-currency invoices, bills, credit notes, payments, refunds and bank statement lines start with the rate in effect on their date (${data.baseCurrency} per 1 unit). You can still change it on each one. With no rate here, they start with the last rate used in the books.`}
@@ -106,6 +118,7 @@ export function ExchangeRatesManager({ organisationId }: { organisationId: strin
                   <th>Currency</th>
                   <th>Effective from</th>
                   <th className={ui.num}>Rate ({data.baseCurrency} per 1)</th>
+                  <th>Source</th>
                   <th>Note</th>
                   <th>Added</th>
                   <th />
@@ -157,6 +170,10 @@ function RateRow({
       <td data-label="Effective from">{formatDate(rate.effectiveDate)}</td>
       <td data-label="Rate" className={ui.num}>
         {rate.rate}
+      </td>
+      <td data-label="Source">
+        {rate.sourceLabel}
+        {rate.until ? <div className={ui.muted}>to {formatDate(rate.until)}</div> : null}
       </td>
       <td data-label="Note" className={ui.muted}>
         {rate.note ?? ""}

@@ -806,7 +806,18 @@ export function ConsolidationGroupView({ groupId }: { groupId: string }) {
 }
 
 /** On Exchange rates: daily rates from the European Central Bank (FX1). */
-export function EcbRatesCard({ organisationId, canAdmin, onChanged }: { organisationId: string; canAdmin: boolean; onChanged: () => void }) {
+export function EcbRatesCard({
+  organisationId,
+  canAdmin,
+  onChanged,
+  sourceManaged = false,
+}: {
+  organisationId: string;
+  canAdmin: boolean;
+  onChanged: () => void;
+  /** The Rate source card turns the ECB on and off (#183), so this card only sets currencies and checks. */
+  sourceManaged?: boolean;
+}) {
   const loaded = useApiData<{ settings: EcbSettings }>("/api/exchange-rates/ecb", { organisationId });
   const [extra, setExtra] = useState("");
   const [busy, setBusy] = useState(false);
@@ -851,15 +862,17 @@ export function EcbRatesCard({ organisationId, canAdmin, onChanged }: { organisa
                 disabled={busy}
                 onClick={() =>
                   void run(async () => {
+                    const extraCurrencies = (extra || settings.extraCurrencies.join(",")).split(",").map((code) => code.trim()).filter(Boolean);
                     await api("/api/exchange-rates/ecb", {
                       method: "PUT",
-                      body: { organisationId, enabled: !settings.enabled, extraCurrencies: (extra || settings.extraCurrencies.join(",")).split(",").map((code) => code.trim()).filter(Boolean) },
+                      body: { organisationId, ...(sourceManaged ? {} : { enabled: !settings.enabled }), extraCurrencies },
                     });
+                    if (sourceManaged) return "Currencies saved.";
                     return settings.enabled ? "ECB rates are off." : "ECB rates are on.";
                   })
                 }
               >
-                {settings.enabled ? "Turn off" : "Turn on"}
+                {sourceManaged ? "Save currencies" : settings.enabled ? "Turn off" : "Turn on"}
               </Button>
               {settings.enabled ? (
                 <Button

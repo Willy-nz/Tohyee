@@ -2,6 +2,7 @@ import { isBankOrCreditCard } from "@/lib/accounts/types";
 import type { OrgTx } from "@/lib/db/org-transaction";
 import { ValidationError } from "@/lib/errors";
 import { listedRateOn } from "@/lib/fx/rates";
+import { getRateSource, missingSetRateReason } from "@/lib/fx/sources";
 import { lastRateFor } from "@/lib/ledger/foreign";
 import { parseExchangeRate } from "@/lib/ledger/journals";
 import { currencyMinorUnits } from "@/lib/money/currency";
@@ -42,25 +43,57 @@ export async function contactCurrency(tx: OrgTx, contactId: string): Promise<str
  * on the date (MC48), or else the last rate used for the currency on or
  * before the date (like a statement line's, D4; MC49). Null in the base
  * currency, where a typed rate is refused. With no rate to use, it must be
- * typed.
+ * typed. With uploaded rate sets as the source, only a set covering the
+ * date counts, and the message says which set is missing (FX4, FX5).
  */
 export async function exchangeRateFor(
   tx: OrgTx,
   input: { currencyCode: string; date: string; typed: unknown; what: string },
 ): Promise<string | null> {
+  return (await exchangeRateWithSource(tx, input))?.rate ?? null;
+}
+
+/**
+ * `exchangeRateFor` with where the rate came from, for documents to record
+ * (FX4): "Typed" when typed (or `typedSource` when the typed value is the
+ * document's own saved rate, so an edit keeps where it came from), else the
+ * list entry's source ("ECB", an uploaded set's name, "Exchange rates
+ * list") or "Last rate used".
+ */
+export async function exchangeRateWithSource(
+  tx: OrgTx,
+  input: { currencyCode: string; date: string; typed: unknown; what: string; typedSource?: string | null },
+): Promise<{ rate: string; source: string | null } | null> {
   const blank = input.typed === undefined || input.typed === null || input.typed === "";
   if (input.currencyCode === tx.baseCurrency) {
     if (!blank) throw new ValidationError(`This ${input.what} is in ${tx.baseCurrency}, so it has no exchange rate.`);
     return null;
   }
-  if (!blank) return parseExchangeRate(input.typed, "exchangeRate");
+  if (!blank) return { rate: parseExchangeRate(input.typed, "exchangeRate"), source: input.typedSource === undefined ? "Typed" : input.typedSource };
   const last = await lastRateFor(tx, input.currencyCode, input.date);
   if (!last) {
+    if ((await getRateSource(tx)) === "uploaded") {
+      throw new ValidationError(
+        `Type the exchange rate for this ${input.what} (${tx.baseCurrency} per 1 ${input.currencyCode}). ${await missingSetRateReason(tx, input.currencyCode, input.date)}`,
+      );
+    }
     throw new ValidationError(
       `Type the exchange rate for this ${input.what} (${tx.baseCurrency} per 1 ${input.currencyCode}): no ${input.currencyCode} rate has been used on or before ${input.date} yet, and the exchange rates list (Accounting › Exchange rates) has none effective by then.`,
     );
   }
-  return last.rate;
+  return { rate: last.rate, source: last.source === "list" ? (last.label ?? "Exchange rates list") : "Last rate used" };
+}
+
+/**
+ * On an edit, where the rate came from when it's still the document's saved
+ * rate (sent again unchanged, or not sent): the saved source, so saving a
+ * draft doesn't turn an ECB or set rate into "Typed" (FX4). Undefined when
+ * the rate changed.
+ */
+export function keptRateSource(sent: string | null | undefined, savedRate: string | null, savedSource: string | null): string | null | undefined {
+  if (sent == null || savedRate === null || cmp(dec(sent), dec(savedRate)) !== 0) return undefined;
+  // An older draft's source isn't known (null), and stays unknown rather than guessed.
+  return savedSource;
 }
 
 /** An exchange rate as sent: undefined when not sent, null when sent blank, else the text. */

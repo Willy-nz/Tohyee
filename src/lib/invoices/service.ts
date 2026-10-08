@@ -27,7 +27,8 @@ import {
   assertForeignSalesBasis,
   contactCurrency,
   convertDocumentLines,
-  exchangeRateFor,
+  exchangeRateWithSource,
+  keptRateSource,
   parseRateInput,
 } from "@/lib/fx/documents";
 import { type AvailableOn, sideRefusal } from "@/lib/tax/available-on";
@@ -112,6 +113,8 @@ export type InvoiceSummary = {
   total: string;
   /** Base currency per 1 unit of the invoice's currency; null for a base-currency invoice (MC2). */
   exchangeRate: string | null;
+  /** Where the rate came from (FX4): "Typed", "ECB", an uploaded set's name, "Exchange rates list" or "Last rate used"; null before #183. */
+  exchangeRateSource: string | null;
   /** The base-currency amounts of a foreign-currency invoice (its lines converted one by one); null otherwise. */
   baseSubtotal: string | null;
   baseTaxTotal: string | null;
@@ -193,6 +196,7 @@ type InvoiceRow = {
   amount_paid: string;
   amount_credited: string;
   exchange_rate: string | null;
+  exchange_rate_source: string | null;
   base_subtotal: string | null;
   base_tax_total: string | null;
   base_total: string | null;
@@ -220,7 +224,7 @@ const SUMMARY_COLUMNS = `i.id, i.status, i.invoice_number, i.contact_id, c.name 
   paid.amount_paid, credited.amount_credited, i.approval_journal_id, i.approved_at, i.approved_by_email, i.void_date, i.void_journal_id,
   i.voided_at, i.voided_by_email, i.created_by_email, i.created_at, i.updated_at, i.custom_fields,
   i.salesperson_id, sp.name as salesperson_name, i.is_opening_balance, i.sales_order_id, so.so_number,
-  i.exchange_rate::text, i.base_subtotal::text, i.base_tax_total::text, i.base_total::text, base_settled.base_settled::text`;
+  i.exchange_rate::text, i.exchange_rate_source, i.base_subtotal::text, i.base_tax_total::text, i.base_total::text, base_settled.base_settled::text`;
 
 /**
  * Invoices with their customer, what their active payments paid on them (a
@@ -288,6 +292,7 @@ function toSummary(row: InvoiceRow): InvoiceSummary {
     taxTotal: row.tax_total,
     total: row.total,
     exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    exchangeRateSource: row.exchange_rate_source,
     baseSubtotal: baseMoney(row.base_subtotal),
     baseTaxTotal: baseMoney(row.base_tax_total),
     baseTotal: baseMoney(row.base_total),
@@ -367,6 +372,8 @@ type DraftDetails = {
   salespersonInput: string | null | undefined;
   /** As sent: undefined or null when not given (a foreign-currency invoice then takes the last rate used, MC3). */
   exchangeRateInput?: string | null;
+  /** When `exchangeRateInput` is the invoice's own saved rate: where it came from, so an edit keeps it (FX4). */
+  exchangeRateSourceInput?: string | null;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -377,6 +384,7 @@ type ResolvedDraft = DraftDetails & {
   taxTotal: string;
   total: string;
   exchangeRate: string | null;
+  exchangeRateSource: string | null;
   baseSubtotal: string | null;
   baseTaxTotal: string | null;
   baseTotal: string | null;
@@ -642,11 +650,20 @@ async function resolveDraft(
   });
   // A foreign-currency invoice (MC2, MC71): a rate for its date; each line (GST included) converted.
   let exchangeRate: string | null = null;
+  let exchangeRateSource: string | null = null;
   let base: ReturnType<typeof convertDocumentLines> | null = null;
   if (currencyCode !== tx.baseCurrency) {
     await assertForeignSalesBasis(tx, "invoice", currencyCode);
     if (!foreign.template) {
-      exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.invoiceDate, typed: draft.exchangeRateInput, what: "invoice" });
+      const found = await exchangeRateWithSource(tx, {
+        currencyCode,
+        date: draft.invoiceDate,
+        typed: draft.exchangeRateInput,
+        typedSource: draft.exchangeRateSourceInput,
+        what: "invoice",
+      });
+      exchangeRate = found?.rate ?? null;
+      exchangeRateSource = found?.source ?? null;
       base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
     }
   }
@@ -662,6 +679,7 @@ async function resolveDraft(
     taxTotal: amounts.taxTotal,
     total: amounts.total,
     exchangeRate,
+    exchangeRateSource,
     baseSubtotal: base?.baseSubtotal ?? null,
     baseTaxTotal: base?.baseTaxTotal ?? null,
     baseTotal: base?.baseTotal ?? null,
@@ -1090,9 +1108,9 @@ export async function createInvoice(
     `insert into sales_invoices (command_source, idempotency_key, request_hash, contact_id, invoice_date, due_date,
                                  reference, amounts_mode, currency_code, subtotal, tax_total, total,
                                  created_by_user_id, created_by_email,
-                                 exchange_rate, base_subtotal, base_tax_total, base_total, sales_order_id)
+                                 exchange_rate, base_subtotal, base_tax_total, base_total, sales_order_id, exchange_rate_source)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::numeric, $11::numeric, $12::numeric, $13, $14,
-             $15::numeric, $16::numeric, $17::numeric, $18::numeric, $19)
+             $15::numeric, $16::numeric, $17::numeric, $18::numeric, $19, $20)
      on conflict (command_source, idempotency_key) do nothing
      returning id`,
     [
@@ -1115,6 +1133,7 @@ export async function createInvoice(
       resolved.baseTaxTotal,
       resolved.baseTotal,
       link?.salesOrderId ?? null,
+      resolved.exchangeRateSource,
     ],
   );
   const invoiceId = inserted.rows[0]?.id;
@@ -1175,6 +1194,7 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
           ? saved.exchangeRateInput
           : undefined,
   });
+  draft.exchangeRateSourceInput = keptRateSource(draft.exchangeRateInput, current.exchangeRate, current.exchangeRateSource);
   const resolved = await resolveDraft(
     tx,
     draft,
@@ -1206,7 +1226,7 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
         set contact_id = $2, invoice_date = $3, due_date = $4, reference = $5, amounts_mode = $6,
             currency_code = $7, subtotal = $8::numeric, tax_total = $9::numeric, total = $10::numeric,
             exchange_rate = $11::numeric, base_subtotal = $12::numeric, base_tax_total = $13::numeric, base_total = $14::numeric,
-            updated_at = now()
+            exchange_rate_source = $15, updated_at = now()
       where id = $1`,
     [
       current.id,
@@ -1223,6 +1243,7 @@ export async function updateInvoice(tx: OrgTx, invoiceIdInput: unknown, input: I
       resolved.baseSubtotal,
       resolved.baseTaxTotal,
       resolved.baseTotal,
+      resolved.exchangeRateSource,
     ],
   );
   await tx.query("delete from sales_invoice_lines where invoice_id = $1", [current.id]);

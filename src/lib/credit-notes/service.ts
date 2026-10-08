@@ -26,7 +26,8 @@ import {
   assertForeignSalesBasis,
   contactCurrency,
   convertDocumentLines,
-  exchangeRateFor,
+  exchangeRateWithSource,
+  keptRateSource,
   parseRateInput,
 } from "@/lib/fx/documents";
 import { type AvailableOn, sideRefusal } from "@/lib/tax/available-on";
@@ -108,6 +109,8 @@ export type CreditNoteSummary = {
   total: string;
   /** Base currency per 1 unit of the credit note's currency; null for a base-currency credit note (MC7). */
   exchangeRate: string | null;
+  /** Where the rate came from (FX4); null before #183. */
+  exchangeRateSource: string | null;
   baseSubtotal: string | null;
   baseTaxTotal: string | null;
   baseTotal: string | null;
@@ -176,6 +179,7 @@ type CreditNoteRow = {
   amount_applied: string;
   amount_refunded: string;
   exchange_rate: string | null;
+  exchange_rate_source: string | null;
   base_subtotal: string | null;
   base_tax_total: string | null;
   base_total: string | null;
@@ -201,7 +205,7 @@ const SUMMARY_COLUMNS = `n.id, n.status, n.credit_note_number, n.contact_id, c.n
   refunded.amount_refunded, n.approval_journal_id, n.approved_at, n.approved_by_email, n.void_date, n.void_journal_id,
   n.voided_at, n.voided_by_email, n.created_by_email, n.created_at, n.updated_at, n.custom_fields,
   n.salesperson_id, sp.name as salesperson_name, n.return_invoice_id,
-  n.exchange_rate::text, n.base_subtotal::text, n.base_tax_total::text, n.base_total::text, applied.base_applied::text`;
+  n.exchange_rate::text, n.exchange_rate_source, n.base_subtotal::text, n.base_tax_total::text, n.base_total::text, applied.base_applied::text`;
 
 /** Credit notes with their customer and the sums of their active applications and refunds. */
 const SUMMARY_FROM = `sales_credit_notes n
@@ -263,6 +267,7 @@ function toSummary(row: CreditNoteRow): CreditNoteSummary {
     taxTotal: row.tax_total,
     total: row.total,
     exchangeRate: row.exchange_rate === null ? null : toPlainString(dec(row.exchange_rate)),
+    exchangeRateSource: row.exchange_rate_source,
     baseSubtotal: baseMoney(row.base_subtotal),
     baseTaxTotal: baseMoney(row.base_tax_total),
     baseTotal: baseMoney(row.base_total),
@@ -334,6 +339,8 @@ type DraftDetails = {
   returnInvoiceId: string | null;
   /** As sent: undefined or null when not given (a foreign-currency credit note then takes the last rate used). */
   exchangeRateInput?: string | null;
+  /** When `exchangeRateInput` is the credit note's own saved rate: where it came from, so an edit keeps it (FX4). */
+  exchangeRateSourceInput?: string | null;
 };
 
 /** A draft checked against the chart of accounts, tax codes and contacts, with its amounts. */
@@ -344,6 +351,7 @@ type ResolvedDraft = DraftDetails & {
   taxTotal: string;
   total: string;
   exchangeRate: string | null;
+  exchangeRateSource: string | null;
   baseSubtotal: string | null;
   baseTaxTotal: string | null;
   baseTotal: string | null;
@@ -556,10 +564,19 @@ async function resolveDraft(
   });
   // A foreign-currency credit note (MC7): as a foreign-currency invoice.
   let exchangeRate: string | null = null;
+  let exchangeRateSource: string | null = null;
   let base: ReturnType<typeof convertDocumentLines> | null = null;
   if (currencyCode !== tx.baseCurrency) {
     await assertForeignSalesBasis(tx, "credit_note", currencyCode);
-    exchangeRate = await exchangeRateFor(tx, { currencyCode, date: draft.creditNoteDate, typed: draft.exchangeRateInput, what: "credit note" });
+    const found = await exchangeRateWithSource(tx, {
+      currencyCode,
+      date: draft.creditNoteDate,
+      typed: draft.exchangeRateInput,
+      typedSource: draft.exchangeRateSourceInput,
+      what: "credit note",
+    });
+    exchangeRate = found?.rate ?? null;
+    exchangeRateSource = found?.source ?? null;
     base = convertDocumentLines(amounts.lines, exchangeRate!, currencyMinorUnits(tx.baseCurrency));
   }
 
@@ -574,6 +591,7 @@ async function resolveDraft(
     taxTotal: amounts.taxTotal,
     total: amounts.total,
     exchangeRate,
+    exchangeRateSource,
     baseSubtotal: base?.baseSubtotal ?? null,
     baseTaxTotal: base?.baseTaxTotal ?? null,
     baseTotal: base?.baseTotal ?? null,
@@ -869,9 +887,9 @@ export async function createCreditNote(
     `insert into sales_credit_notes (command_source, idempotency_key, request_hash, contact_id, credit_note_date,
                                      reference, amounts_mode, currency_code, subtotal, tax_total, total,
                                      created_by_user_id, created_by_email,
-                                     exchange_rate, base_subtotal, base_tax_total, base_total)
+                                     exchange_rate, base_subtotal, base_tax_total, base_total, exchange_rate_source)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10::numeric, $11::numeric, $12, $13,
-             $14::numeric, $15::numeric, $16::numeric, $17::numeric)
+             $14::numeric, $15::numeric, $16::numeric, $17::numeric, $18)
      on conflict (command_source, idempotency_key) do nothing
      returning id`,
     [
@@ -892,6 +910,7 @@ export async function createCreditNote(
       resolved.baseSubtotal,
       resolved.baseTaxTotal,
       resolved.baseTotal,
+      resolved.exchangeRateSource,
     ],
   );
   const creditNoteId = inserted.rows[0]?.id;
@@ -956,6 +975,7 @@ export async function updateCreditNote(
           ? saved.exchangeRateInput
           : undefined,
   });
+  draft.exchangeRateSourceInput = keptRateSource(draft.exchangeRateInput, current.exchangeRate, current.exchangeRateSource);
   const resolved = await resolveDraft(
     tx,
     draft,
@@ -989,7 +1009,7 @@ export async function updateCreditNote(
         set contact_id = $2, credit_note_date = $3, reference = $4, amounts_mode = $5,
             currency_code = $6, subtotal = $7::numeric, tax_total = $8::numeric, total = $9::numeric,
             exchange_rate = $10::numeric, base_subtotal = $11::numeric, base_tax_total = $12::numeric, base_total = $13::numeric,
-            updated_at = now()
+            exchange_rate_source = $14, updated_at = now()
       where id = $1`,
     [
       current.id,
@@ -1005,6 +1025,7 @@ export async function updateCreditNote(
       resolved.baseSubtotal,
       resolved.baseTaxTotal,
       resolved.baseTotal,
+      resolved.exchangeRateSource,
     ],
   );
   await tx.query("delete from sales_credit_note_lines where credit_note_id = $1", [current.id]);
