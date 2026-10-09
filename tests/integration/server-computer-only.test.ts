@@ -115,11 +115,7 @@ describeWithDatabase("server settings: the server computer only", () => {
       let reply = { status: 0, body: "" };
       for (let attempt = 0; attempt < 50; attempt += 1) {
         try {
-          reply = await get(adminPort, "/server/users?x=1", {
-            [LOCAL_ADMIN_HEADER]: "forged",
-            "x-forwarded-host": "evil.example",
-            "cf-connecting-ip": "203.0.113.9",
-          });
+          reply = await get(adminPort, "/server/users?x=1", { [LOCAL_ADMIN_HEADER]: "forged", "x-real-ip": "203.0.113.9" });
           break;
         } catch {
           await new Promise((resolve) => setTimeout(resolve, 20));
@@ -127,9 +123,24 @@ describeWithDatabase("server settings: the server computer only", () => {
       }
       expect(reply).toEqual({ status: 200, body: "main saw /server/users?x=1" });
       expect(seen[0][LOCAL_ADMIN_HEADER]).toBe(localAdminSecret());
-      expect(seen[0]["x-forwarded-host"]).toBeUndefined();
-      expect(seen[0]["cf-connecting-ip"]).toBeUndefined();
+      expect(seen[0]["x-real-ip"]).toBeUndefined();
       expect(seen[0].host).toBe(`127.0.0.1:${adminPort}`);
+
+      // #208 item 4: a tunnel route pointed at this port brings Cloudflare's or a proxy's headers, or the public name.
+      const tunnelled: Array<Record<string, string>> = [
+        { "cf-ray": "8c1f-AKL", "cf-connecting-ip": "203.0.113.9" },
+        { "x-forwarded-for": "203.0.113.9" },
+        { "x-forwarded-host": "books.example.nz" },
+        { host: "k7m2q9.tohyee.example" },
+        { host: "tohyee-pc.tail1a2b3c.ts.net" },
+      ];
+      for (const headers of tunnelled) {
+        const refused = await get(adminPort, "/server/users", headers);
+        expect(refused.status).toBe(403);
+        expect(refused.body).toContain("only work on the server computer itself");
+      }
+      expect(seen).toHaveLength(1);
+      expect((await get(adminPort, "/server", { host: `localhost:${adminPort}` })).status).toBe(200);
     } finally {
       await new Promise<void>((resolve) => main.close(() => resolve()));
     }

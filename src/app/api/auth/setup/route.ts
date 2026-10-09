@@ -1,5 +1,7 @@
 import { json, readJson, route } from "@/lib/api/http";
 import { assertSameOrigin } from "@/lib/auth/guard";
+import { assertSignInRate } from "@/lib/auth/rate-limit";
+import { assertRemoteAllowed } from "@/lib/auth/remote";
 import { completeSetup, needsSetup } from "@/lib/auth/service";
 import { sessionCookieHeader, sessionMetaFrom } from "@/lib/auth/sessions";
 
@@ -11,6 +13,8 @@ export const GET = route(async () => {
 /** Creates the first server admin. Needs the SETUP_TOKEN from the server's environment. */
 export const POST = route(async (request) => {
   assertSameOrigin(request);
+  assertSignInRate(request);
+  assertRemoteAllowed(request.headers);
   const body = await readJson(request);
   const result = await completeSetup(
     {

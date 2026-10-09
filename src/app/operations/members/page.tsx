@@ -7,6 +7,7 @@ import { Badge, Button, Card, Field, Notice, Page, PageHeader, ui } from "@/comp
 import { useWorkspace } from "@/components/workspace";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/roles";
 import { api, errorMessage } from "@/lib/client/api";
+import type { Handover } from "@/lib/organisations/handover";
 import type { Member } from "@/lib/organisations/members";
 import { useConfirm } from "@/components/confirm-dialog";
 
@@ -22,6 +23,7 @@ function Members({ organisationId }: { organisationId: string }) {
   const confirm = useConfirm();
   const { user, current, can } = useWorkspace();
   const members = useApiData<{ members: Member[] }>(`/api/organisations/${organisationId}/members`);
+  const handover = useApiData<{ handover: Handover | null }>(can("admin") ? `/api/organisations/${organisationId}/handover` : null);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("bookkeeper");
@@ -50,9 +52,30 @@ function Members({ organisationId }: { organisationId: string }) {
     return <Notice tone="warning">Only organisation admins and owners can manage people.</Notice>;
   }
 
+  const waiting = handover.data?.handover ?? null;
   return (
     <>
       {status ? <Notice tone={status.tone}>{status.text}</Notice> : null}
+      {waiting ? (
+        <Card title="A server admin is handing this organisation over">
+          <Notice tone="warning">
+            {waiting.requestedByEmail} asked to make {waiting.toName} ({waiting.toEmail}) an owner. It happens on{" "}
+            {new Date(waiting.takesEffectAt).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })} unless an owner or
+            admin cancels it. Their reason: &ldquo;{waiting.reason}&rdquo;
+          </Notice>
+          <Button
+            variant="danger"
+            onClick={async () => {
+              if (await confirm(`Cancel the handover to ${waiting.toEmail}? The server admin who asked is told.`)) {
+                await run(() => api(`/api/organisations/${organisationId}/handover`, { method: "DELETE" }), "The handover is cancelled.");
+                handover.reload();
+              }
+            }}
+          >
+            Cancel the handover
+          </Button>
+        </Card>
+      ) : null}
       <Card title="Add someone" description="They need a login first. A server admin creates logins under Users.">
         <form className={ui.inlineForm} onSubmit={(event) => void add(event)}>
           <Field label="Email">

@@ -13,7 +13,10 @@ import { stdin, stdout } from "node:process";
 import { COMMAND_LINE_ADMIN } from "@/lib/audit";
 import { hashPassword, validateNewPassword } from "@/lib/auth/password";
 import { normaliseEmail, parseDisplayName } from "@/lib/auth/service";
+import { createSetupLink, emailSetupLink, sendSetupLink } from "@/lib/auth/setup-links";
+import { twoStepRequired } from "@/lib/auth/sessions";
 import { resetTwoStep } from "@/lib/auth/two-step";
+import { randomBytes } from "node:crypto";
 import { closeAllPools } from "@/lib/db/pools";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 import { getLocalMailRelay, updateLocalMailRelay } from "@/lib/email/local-relay";
@@ -56,12 +59,14 @@ Organisations
 
 Users
   users list [--json]
-  users create --email EMAIL --name NAME [--server-admin]   password: TOHYEE_PASSWORD or asked
+  users create --email EMAIL --name NAME [--server-admin]   prints their setup link (with two-step sign-in on;
+                                            otherwise password: TOHYEE_PASSWORD or asked)
   users rename --email EMAIL --name NAME
   users set-password --email EMAIL          password: TOHYEE_PASSWORD or asked
   users login --email EMAIL --on|--off      allow or stop them signing in
   users server-admin --email EMAIL --on|--off
-  users reset-two-step --email EMAIL        lost phone: they set it up again at next sign-in
+  users reset-two-step --email EMAIL        lost phone: prints a setup link to set it up again
+  users setup-link --email EMAIL            a new setup link for a login that hasn't set up two-step
 
 Remote access (use Tohyee from anywhere; one way at a time)
   remote-access show [--json]
@@ -271,17 +276,30 @@ async function createUserCommand(args: string[]) {
   const email = normaliseEmail(required(args, "email"));
   const displayName = parseDisplayName(required(args, "name"));
   const isServerAdmin = flag(args, "server-admin");
-  const passwordHash = await hashPassword(validateNewPassword(await readPassword()));
-  const inserted = await coreQuery<{ id: string }>(
-    `insert into users (email, display_name, password_hash, is_server_admin)
-     values ($1, $2, $3, $4)
-     on conflict (email) do nothing
-     returning id`,
-    [email, displayName, passwordHash, isServerAdmin],
-  );
-  if (!inserted.rows[0]) throw new Error(`There's already a user with the email ${email}.`);
-  await audit("user.created_via_cli", inserted.rows[0].id, { email, isServerAdmin });
+  // With two-step sign-in on, they choose their own password through a setup link (#208).
+  const withLink = twoStepRequired();
+  const passwordHash = await hashPassword(withLink ? randomBytes(32).toString("base64url") : validateNewPassword(await readPassword()));
+  const created = await withCoreTransaction(async (client) => {
+    const inserted = await client.query<{ id: string }>(
+      `insert into users (email, display_name, password_hash, is_server_admin)
+       values ($1, $2, $3, $4)
+       on conflict (email) do nothing
+       returning id`,
+      [email, displayName, passwordHash, isServerAdmin],
+    );
+    if (!inserted.rows[0]) throw new Error(`There's already a user with the email ${email}.`);
+    return { id: inserted.rows[0].id, link: withLink ? await createSetupLink(client, inserted.rows[0].id, actor) : null };
+  });
+  await audit("user.created_via_cli", created.id, { email, isServerAdmin });
   console.log(`Created ${email}${isServerAdmin ? " (server admin)" : ""}.`);
+  if (created.link) await printSetupLink({ email, displayName }, created.link);
+}
+
+async function printSetupLink(user: { email: string; displayName: string }, link: { url: string; expiresAt: string; localOnly: boolean }) {
+  const emailed = await emailSetupLink(user, link, actor.email);
+  console.log(`Setup link (works once, until ${link.expiresAt.slice(0, 16).replace("T", " ")} UTC)${emailed ? ", also emailed to them" : ""}:`);
+  console.log(`  ${link.url}`);
+  if (link.localOnly) console.log("Remote access is off, so the link only works on the same network as this server.");
 }
 
 async function setPasswordCommand(args: string[]) {
@@ -307,8 +325,23 @@ async function resetTwoStepCommand(args: string[]) {
   // emailed reset link (e.g. the only server admin, with no email set up).
   const email = normaliseEmail(required(args, "email"));
   const userId = await userIdFor(email);
-  await withCoreTransaction((client) => resetTwoStep(client, userId, { userId: null, email: "admin-cli" }, "command_line"));
-  console.log(`Two-step sign-in reset for ${email}; they set it up again at their next sign-in.`);
+  const link = await withCoreTransaction(async (client) => {
+    await resetTwoStep(client, userId, { userId: null, email: "admin-cli" }, "command_line");
+    return twoStepRequired() ? createSetupLink(client, userId, actor) : null;
+  });
+  console.log(`Two-step sign-in reset for ${email}.`);
+  if (link) {
+    const user = (await coreQuery<{ display_name: string }>("select display_name from users where id = $1", [userId])).rows[0];
+    await printSetupLink({ email, displayName: user.display_name }, link);
+  }
+}
+
+async function setupLinkCommand(args: string[]) {
+  const email = normaliseEmail(required(args, "email"));
+  const link = await sendSetupLink(actor, await userIdFor(email));
+  console.log(`New setup link for ${email} (works once, until ${link.expiresAt.slice(0, 16).replace("T", " ")} UTC)${link.emailed ? ", also emailed to them" : ""}:`);
+  console.log(`  ${link.url}`);
+  if (link.localOnly) console.log("Remote access is off, so the link only works on the same network as this server.");
 }
 
 async function users(command: string | undefined, args: string[]) {
@@ -332,6 +365,7 @@ async function users(command: string | undefined, args: string[]) {
   if (command === "create") return createUserCommand(args);
   if (command === "set-password") return setPasswordCommand(args);
   if (command === "reset-two-step") return resetTwoStepCommand(args);
+  if (command === "setup-link") return setupLinkCommand(args);
   if (command === "rename") {
     const user = await updateUser(actor, await userIdFor(required(args, "email")), { displayName: required(args, "name") });
     console.log(`${user.email} is now called ${user.displayName}.`);

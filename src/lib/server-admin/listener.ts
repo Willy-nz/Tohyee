@@ -4,8 +4,9 @@ import { LOCAL_ADMIN_HEADER, localAdminPort, localAdminSecret } from "@/lib/serv
 
 /**
  * The local-only address for server settings (see local.ts): listens on
- * 127.0.0.1 and passes every request on to the main server, marked with the
- * secret header. Anything else claiming that header is stripped first.
+ * 127.0.0.1 and passes requests from this computer on to the main server,
+ * marked with the secret header. Anything else claiming that header is
+ * stripped first, and requests a proxy or tunnel brought are refused.
  */
 
 const holder = globalThis as typeof globalThis & { __tohyeeLocalAdminServer?: Server };
@@ -20,7 +21,29 @@ export function mainServerTarget(): { host: string; port: number } {
 }
 
 /** Headers a browser can't be trusted to send to the local address, and the proxy's own marker. */
-const DROPPED = new Set([LOCAL_ADMIN_HEADER, "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip", "cf-connecting-ip"]);
+const DROPPED = new Set([LOCAL_ADMIN_HEADER, "x-forwarded-proto", "x-real-ip"]);
+
+/**
+ * Headers only a proxy adds: Cloudflare (its tunnel, your own domain or the
+ * Tohyee address) and other reverse proxies. A request carrying one came
+ * through remote access, even though it arrives on 127.0.0.1, because a tunnel
+ * route can be pointed at this port (in Cloudflare's dashboard, say). Such a
+ * request is refused, not passed on (#208 item 4).
+ */
+const PROXIED = ["cf-ray", "cf-connecting-ip", "cf-visitor", "cdn-loop", "x-forwarded-for", "x-forwarded-host", "forwarded", "tailscale-funnel-request"];
+
+/** The names this computer answers to; a tunnel passes the public name on instead (or Tailscale's *.ts.net). */
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/** Why a request to the local address is refused, or null when it's from this computer. */
+export function notFromThisComputer(headers: Record<string, string | string[] | undefined>): string | null {
+  const proxied = PROXIED.find((name) => headers[name] !== undefined);
+  if (proxied) return `it came through remote access or another proxy (${proxied})`;
+  const host = typeof headers.host === "string" ? headers.host.toLowerCase() : "";
+  const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0];
+  if (!LOCAL_HOSTS.has(name)) return `it was addressed to ${host || "no host"}, not to this computer`;
+  return null;
+}
 
 export function startLocalAdminListener(): void {
   const port = localAdminPort();
@@ -32,6 +55,13 @@ export function startLocalAdminListener(): void {
   }
   const secret = localAdminSecret();
   const server = createServer((incoming, outgoing) => {
+    const refused = notFromThisComputer(incoming.headers);
+    if (refused) {
+      outgoing.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
+      outgoing.end(`Server settings only work on the server computer itself. This request was refused because ${refused}.`);
+      incoming.resume();
+      return;
+    }
     const headers: Record<string, string | string[]> = {};
     for (const [name, value] of Object.entries(incoming.headers)) {
       if (value !== undefined && !DROPPED.has(name.toLowerCase())) headers[name] = value;

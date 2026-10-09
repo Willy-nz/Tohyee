@@ -3704,3 +3704,88 @@ testing) and #154's code signing (later, Jess).
      GoCardless webhooks (the check polls instead, as the other
      providers), reading GoCardless's events for the reason a payment
      failed, and foreign-currency invoices.
+
+### Remote access hardening (decision 483)
+
+483. **Remote access hardening, part 1** (#208 items 3-6, 9 Oct 2026, from
+     the safety review Jess asked for).
+     - **Sign-in address:** the per-address sign-in limit and the address
+       saved with a session use the last X-Forwarded-For entry that isn't
+       this computer (the one the nearest proxy wrote), not the first,
+       which a visitor could change on every try.
+     - **Emailed two-step reset:** wrong passwords there now count towards
+       the account's lockout (shared `claimPasswordTry`), and it and setup
+       have the per-address limit too.
+     - **Server settings address:** it refuses requests carrying a proxy's
+       headers or addressed to anything but 127.0.0.1 or localhost, so
+       pointing a tunnel route at it doesn't reach server settings.
+     - **Without `TOHYEE_SECRET_KEY`** (no two-step sign-in), sign-ins and
+       sessions that came through remote access (Cloudflare's headers, or a
+       Tailscale Funnel `*.ts.net` address) are refused, and the server
+       app's Home flags remote access left on.
+     - **HSTS:** `Strict-Transport-Security: max-age=31536000` on every
+       response, without `includeSubDomains`.
+
+     Not checked against a real tunnel: that Cloudflare's tunnel and
+     Tailscale Funnel add the visitor's address at the end of
+     X-Forwarded-For. If Funnel doesn't, the per-address limit behind
+     Funnel is as before (the per-account lockout still applies).
+
+### Setup links instead of passwords (decision 484)
+
+484. **New logins get a setup link** (#208 item 2, 9 Oct 2026; Jess: "local
+     network only" doesn't work because new users may be miles from the
+     server, and she agreed to setup links).
+     - **Creating a login:** with two-step sign-in on (the server has its
+       secret key), a server admin no longer chooses a password. Adding a
+       login, or resetting someone's two-step sign-in, makes a one-time
+       setup link valid for 7 days (core migration 0009,
+       `user_setup_links`, only a hash kept).
+     - **Sending it:** it's emailed when the server can send email, and can
+       always be copied (server app, `/server/users`, `tohyee-admin users
+       create | reset-two-step | setup-link`). It starts with remote
+       access's public address, or this computer's name with a note that it
+       only works on the local network.
+     - **Using it:** at `/login/setup-account` the person chooses their
+       password and goes straight on to set up their authenticator app.
+       Making a new link retires the old one.
+     - **Sign-in:** a correct password for a login without two-step is now
+       refused ("open the setup link…") instead of starting two-step set-up,
+       so a stolen password can't register someone else's authenticator.
+     - **Still possible:** the first admin (`SETUP_TOKEN`), the emailed
+       lost-phone reset (password plus email) and the changed-secret-key
+       path start set-up as before.
+     - **Without the secret key:** nothing changes; there's no two-step
+       sign-in, and admins set temporary passwords as before.
+     - **On upgrade:** existing logins that never set up two-step need a
+       setup link ("Send setup link" on the Users page).
+
+### Handing an organisation over (decision 485)
+
+485. **A server admin can hand an organisation over** (#208, Jess 9 Oct
+     2026: the main admin should be able to recover any organisation, as
+     people forget passwords or die and the accounting data mustn't be lost).
+     - **Why it's needed:** today, if an organisation's only owner can't act,
+       nobody can make a new owner, and the only workaround is signing in as
+       them.
+     - **What it does:** a server admin, on the server computer only, names
+       a login and a reason, and after a **7-day wait** that person becomes
+       an owner (an existing role is raised to owner; nobody loses access).
+       Core migration 0010, `organisation_handovers`. The 15-minute
+       scheduler can be turned off with `TOHYEE_HANDOVER_SCHEDULER=off`.
+     - **Who's told:** the organisation's owners and admins are emailed at
+       once, see it on the Members page and in the top bar, and any of them
+       can cancel it. So can a server admin.
+     - **Not to yourself:** a server admin can't hand an organisation to
+       themselves (Jess). It's recorded in the server's log and in the
+       organisation's own history.
+     - **Why 7 days:** Jess asked for whatever suits a server with perhaps
+       100 client organisations, where the server admin is an outsider to
+       each. The wait protects clients from a mistake or a misused admin
+       account and costs little in a genuine case.
+     - **Still possible:** two server admins acting together could hand
+       organisations to each other. Having a second server admin is still
+       advised.
+     - **Architecture:** this is the one deliberate exception to "being a
+       server admin doesn't give access to any organisation's books".
+

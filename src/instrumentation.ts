@@ -260,6 +260,12 @@ export async function register() {
     }
   }
 
+  if (process.env.TOHYEE_HANDOVER_SCHEDULER !== "off") {
+    // Organisation handovers whose 7-day wait is over (#208).
+    const { startHandoverScheduler } = await import("@/lib/organisations/handover");
+    startHandoverScheduler();
+  }
+
   if (process.env.TOHYEE_REMOTE_ACCESS !== "off") {
     const { applyRemoteAccess } = await import("@/lib/remote/settings");
     const { stopTunnelOnExit } = await import("@/lib/remote/tunnel");

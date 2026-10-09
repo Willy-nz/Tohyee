@@ -10,6 +10,7 @@ import { formatDateTime } from "@/lib/format";
 import { CURRENCY_MINOR_UNITS } from "@/lib/money/currency";
 import type { OrganisationAdminView } from "@/lib/organisations/admin";
 import { useConfirm } from "@/components/confirm-dialog";
+import { HandoverCard } from "@/components/server-handover";
 
 function slugify(name: string): string {
   return name
@@ -249,6 +250,7 @@ export default function OrganisationsPage() {
           </table>
         </div>
       </Card>
+      <HandoverCard organisations={list.data?.organisations ?? []} />
     </Page>
   );
 }

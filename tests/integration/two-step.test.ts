@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import * as adminTwoStepRoute from "@/app/api/admin/users/[userId]/two-step/route";
+import * as setupLinkRoute from "@/app/api/admin/users/[userId]/setup-link/route";
 import * as adminUsersRoute from "@/app/api/admin/users/route";
+import * as setupAccountRoute from "@/app/api/auth/setup-account/route";
 import * as loginRoute from "@/app/api/auth/login/route";
 import * as logoutRoute from "@/app/api/auth/logout/route";
 import * as sessionRoute from "@/app/api/auth/session/route";
@@ -276,8 +278,9 @@ describeWithDatabase("two-step sign-in (authenticator app and backup codes)", ()
     expect(sent.map((email) => email.subject)).toContain("Tohyee: two-step sign-in turned on");
   });
 
-  it("a server admin can reset someone else's two-step; new users set it up at their first sign-in", async () => {
-    const created = await adminUsersRoute.POST(
+  it("a server admin can reset someone else's two-step; new users set up their login with a setup link (#208)", async () => {
+    // With two-step on, the admin doesn't choose a password.
+    const withPassword = await adminUsersRoute.POST(
       apiRequest("/api/admin/users", {
         method: "POST",
         cookie: adminCookie,
@@ -285,11 +288,44 @@ describeWithDatabase("two-step sign-in (authenticator app and backup codes)", ()
       }),
       noContext,
     );
+    expect(withPassword.status).toBe(400);
+    const created = await adminUsersRoute.POST(
+      apiRequest("/api/admin/users", { method: "POST", cookie: adminCookie, body: { email: "kim@example.com", displayName: "Kim" } }),
+      noContext,
+    );
     expect(created.status).toBe(201);
-    const kimId = ((await body(created)).user as { id: string; twoStepEnabled: boolean }).id;
+    const createdBody = await body(created);
+    const kimId = (createdBody.user as { id: string }).id;
+    const setupLink = createdBody.setupLink as { url: string; emailed: boolean; localOnly: boolean };
+    // The server's public address was saved by the test above, so the link uses it; email is set up, so it was emailed.
+    expect(setupLink).toMatchObject({ emailed: true, localOnly: false });
+    expect(setupLink.url).toMatch(/^https:\/\/books\.example\.nz\/login\/setup-account\?token=/);
+    expect(sent.find((email) => email.to === "kim@example.com")?.text).toContain(setupLink.url);
+    expect(((await body(await adminUsersRoute.GET(apiRequest("/api/admin/users", { cookie: adminCookie }), noContext))).users as Array<{ email: string; setupLinkExpiresAt: string | null }>).find((user) => user.email === "kim@example.com")?.setupLinkExpiresAt).not.toBeNull();
+    const kimToken = decodeURIComponent(new URL(setupLink.url).searchParams.get("token")!);
+
+    // A password alone can't start setting up two-step: someone who learns one can't register their own app.
+    await coreQuery("update users set password_hash = (select password_hash from users where email = 'jess@example.com') where id = $1", [kimId]);
     const first = await login("kim@example.com");
-    expect(await body(first)).toMatchObject({ stage: "enrol" });
-    const kimPending = cookieFrom(first);
+    expect(first.status).toBe(403);
+    expect((await body(first)).error).toContain("Open the setup link your server admin sent you");
+
+    expect(await body(await setupAccountRoute.GET(apiRequest(`/api/auth/setup-account?token=${encodeURIComponent(kimToken)}`), noContext))).toEqual({
+      valid: true,
+      email: "kim@example.com",
+      displayName: "Kim",
+    });
+    expect((await setupAccountRoute.POST(apiRequest("/api/auth/setup-account", { method: "POST", body: { token: kimToken, password: "short" } }), noContext)).status).toBe(400);
+    const usedLink = await setupAccountRoute.POST(
+      apiRequest("/api/auth/setup-account", { method: "POST", body: { token: kimToken, password: "kims-own-password-123" } }),
+      noContext,
+    );
+    expect(usedLink.status).toBe(200);
+    // Works once.
+    expect((await setupAccountRoute.POST(apiRequest("/api/auth/setup-account", { method: "POST", body: { token: kimToken, password: "kims-own-password-123" } }), noContext)).status).toBe(401);
+    expect((await body(await setupAccountRoute.GET(apiRequest(`/api/auth/setup-account?token=${encodeURIComponent(kimToken)}`), noContext))).valid).toBe(false);
+    const kimPending = cookieFrom(usedLink);
+    expect(await body(await twoStepRoute.GET(apiRequest("/api/auth/two-step", { cookie: kimPending }), noContext))).toMatchObject({ stage: "enrol" });
     const kimSecret = (await body(await enrolRoute.GET(apiRequest("/api/auth/two-step/enrol", { cookie: kimPending }), noContext))).secret as string;
     const kim = cookieFrom(await post(enrolRoute, "/api/auth/two-step/enrol", kimPending, { code: totpCode(kimSecret, currentStep()) }));
     expect((await session(kim)).status).toBe(200);
@@ -304,14 +340,23 @@ describeWithDatabase("two-step sign-in (authenticator app and backup codes)", ()
       params({ userId: kimId }),
     );
     expect(reset.status).toBe(200);
-    expect(((await body(reset)).user as { twoStepEnabled: boolean }).twoStepEnabled).toBe(false);
+    const resetBody = await body(reset);
+    expect((resetBody.user as { twoStepEnabled: boolean }).twoStepEnabled).toBe(false);
+    // A fresh setup link to set it up again; asking for another stops the first.
+    const resetLink = (resetBody.setupLink as { url: string }).url;
+    const again = await setupLinkRoute.POST(apiRequest(`/api/admin/users/${kimId}/setup-link`, { method: "POST", cookie: adminCookie }), params({ userId: kimId }));
+    expect(again.status).toBe(200);
+    const oldToken = decodeURIComponent(new URL(resetLink).searchParams.get("token")!);
+    expect((await body(await setupAccountRoute.GET(apiRequest(`/api/auth/setup-account?token=${encodeURIComponent(oldToken)}`), noContext))).valid).toBe(false);
     expect((await session(kim)).status).toBe(401);
     expect(sent.some((email) => email.to === "kim@example.com" && email.subject === "Tohyee: two-step sign-in was reset")).toBe(true);
     const audit = await coreQuery<{ event_type: string }>(
       "select event_type from admin_audit_events where entity_id = $1 order by id",
       [kimId],
     );
-    expect(audit.rows.map((row) => row.event_type)).toEqual(expect.arrayContaining(["user.two_step_enabled", "user.two_step_reset"]));
+    expect(audit.rows.map((row) => row.event_type)).toEqual(
+      expect.arrayContaining(["user.setup_link_created", "user.setup_completed", "user.two_step_enabled", "user.two_step_reset"]),
+    );
   });
 
   it("if the server's secret key is changed, the password leads to setting two-step up again", async () => {

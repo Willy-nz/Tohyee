@@ -1,3 +1,5 @@
+import { type Role, roleAtLeast } from "@/lib/auth/roles";
+import { waitingHandover } from "@/lib/organisations/handover";
 import { listFailedCollections } from "@/lib/payments/gocardless";
 import { accountingEnabled } from "@/lib/organisations/accounting-switch";
 import type { OrgTx } from "@/lib/db/org-transaction";
@@ -9,7 +11,16 @@ export type TopBarNotice = {
 };
 
 /** Non-blocking top-bar notices for the current organisation. */
-export async function listTopBarNotices(tx: OrgTx): Promise<TopBarNotice[]> {
+export async function listTopBarNotices(tx: OrgTx, role: Role | null = null): Promise<TopBarNotice[]> {
+  // #208: a server admin is handing this organisation over; owners and admins can cancel it.
+  const handover = role && roleAtLeast(role, "admin") ? await waitingHandover(tx.organisationId) : null;
+  const handoverNotice: TopBarNotice[] = handover
+    ? [{ id: "organisation-handover", message: `A server admin is making ${handover.toEmail} an owner. Check or cancel it.`, href: "/operations/members" }]
+    : [];
+  return [...handoverNotice, ...(await accountingNotices(tx))];
+}
+
+async function accountingNotices(tx: OrgTx): Promise<TopBarNotice[]> {
   // Accounting's notices (bank feeds) aren't shown while it's off (MOD6).
   if (!(await accountingEnabled(tx))) return [];
   const feeds = await tx.query<{ count: string }>(

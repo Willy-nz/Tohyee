@@ -6,7 +6,8 @@ import { TooManyRequestsError } from "@/lib/errors";
  * A light per-address limit on the sign-in routes (#130), on top of the
  * per-account limits: password and code tries from one address, together.
  * Kept in memory, so a restart starts again. Behind a proxy the address is
- * what the proxy says (X-Forwarded-For), so it's a brake, not the guard: the
+ * the one the nearest proxy added to X-Forwarded-For (clientAddress, #208),
+ * not one the visitor can choose; it's still a brake, not the guard: the
  * per-account counts are. With no address (no proxy in front), it doesn't
  * apply: one shared bucket would let anyone lock everyone out.
  */
