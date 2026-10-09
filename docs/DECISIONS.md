@@ -3925,3 +3925,29 @@ testing) and #154's code signing (later, Jess).
        on, as on the screen. create_account has no idempotency key; a retry
        is refused because the code is taken.
 
+### Remote access, written down (decision 490)
+
+490. **How remote access works, and who can see the traffic** (#208 item 8,
+     9 Oct 2026; the ways themselves were decided with Jess on 30 Sep 2026
+     and are in FEATURES). Recorded here because DECISIONS had no entry.
+     - **Three ways, one at a time:** a Tohyee address (a Cloudflare Worker
+       the project runs makes a Cloudflare tunnel for the server; see
+       `relay/README.md`), your own domain on Cloudflare (Connect to
+       Cloudflare, or a pasted tunnel token), or Tailscale Funnel. None needs
+       a port opened on the router.
+     - **Who can see the traffic:** with either Cloudflare way, Cloudflare
+       decrypts traffic on its network (its privacy policy applies), and for
+       a Tohyee address whoever runs the Tohyee address's Cloudflare account
+       decides where the address points. Tailscale's Funnel relay doesn't
+       decrypt it (Tailscale's Funnel documentation); TLS ends on this
+       computer. The Remote access pages say so.
+     - **Guards (decisions 483-487):** remote access only with two-step
+       sign-in in force; server settings refuse anything that came through a
+       proxy; the client address is the nearest proxy's; sign-ins through
+       remote access are logged and flagged.
+     - **Smaller items:** through remote access `/api/health` answers only
+       `{"status": "ok"}` (or "degraded"), not the version or the database's
+       state; the server app deletes cloudflared's `cert.pem` (an API token for
+       the domain) and tunnel credentials when it starts, in case Connect to
+       Cloudflare was interrupted.
+

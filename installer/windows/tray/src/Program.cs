@@ -54,6 +54,9 @@ namespace Tohyee.Tray
                     return 0;
                 }
 
+                // A Cloudflare sign-in file (an API token for the domain) left behind if the
+                // app stopped partway through connecting is removed now (#208 item 8).
+                CloudflaredCli.RemoveSignInFiles();
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 using (var app = new TrayApp(settings, openSettings, backUp))

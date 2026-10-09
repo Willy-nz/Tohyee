@@ -175,7 +175,11 @@ function TohyeeAddressCard({ remote, onChanged }: { remote: RemoteAccess; onChan
           </button>
         </p>
       ) : null}
-      <p className={ui.muted}>Run by the Tohyee project. Your books still stay on this computer; the address service never sees them.</p>
+      <p className={ui.muted}>
+        Run by the Tohyee project. Your books stay on this computer, but the traffic passes through Cloudflare&apos;s network, where Cloudflare
+        can read it (under Cloudflare&apos;s privacy policy), and whoever runs the Tohyee address&apos;s Cloudflare account decides where the
+        address points.
+      </p>
     </Card>
   );
 }
@@ -261,6 +265,13 @@ export default function RemoteAccessPage() {
               to Cloudflare instead. Tailscale&apos;s free plan is for non-commercial use only; businesses need a paid Tailscale plan.
             </Notice>
           ) : null}
+          {/* #208 item 8: say plainly who can see the traffic. */}
+          <Notice tone="info">
+            <strong>Who can see the traffic.</strong> With a Tohyee address or your own domain, Cloudflare carries every page and sign-in
+            between the browser and this computer, and decrypts it on its network to do so (under Cloudflare&apos;s privacy policy). With
+            Tailscale Funnel it stays encrypted until it reaches this computer: Tailscale&apos;s relay passes it on without decrypting it. Either
+            way your books stay on this computer, and two-step sign-in is required for every login through remote access.
+          </Notice>
           <TohyeeAddressCard remote={remote} onChanged={setRemote} />
           {!remote.twoStepRequired ? (
             <Notice tone="error">

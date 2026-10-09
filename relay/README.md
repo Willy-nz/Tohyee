@@ -271,8 +271,8 @@ if you get close to `MAX_ACTIVE`.
   writing).
 - **Privacy**: the Worker keeps the little listed under "What the Worker
   stores". Cloudflare, as the network in the middle, handles the traffic for
-  every address under its own privacy policy; Tohyee's own privacy note should
-  say so.
+  every address under its own privacy policy. Tohyee's Remote access pages
+  say so (decision 490).
 
 ## Developing
 
