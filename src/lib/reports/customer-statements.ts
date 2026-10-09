@@ -165,18 +165,18 @@ async function outstandingAsAt(tx: OrgTx, ids: string[], asAt: string, names: Ma
     `${RECEIVABLES_SQL}
      select 'invoice' as type, i.id::text as document_id, i.id::text as link_id, i.invoice_number as number, i.invoice_date as date,
             i.due_date, i.contact_id::text, s.total::text as original, i.amount_due::text as outstanding,
-            i.amount_due_base::text as outstanding_base
+            i.amount_due_base::text as outstanding_base, i.id as sort_id
        from invoices i join sales_invoices s on s.id = i.id
       where (i.amount_due <> 0 or i.amount_due_base <> 0) and i.contact_id = any($2::bigint[])
      union all
      select 'credit_note', id::text, id::text, credit_note_number, credit_note_date, null, contact_id::text, total::text, (-unused)::text,
-            (-coalesce(base_unused, unused))::text
+            (-coalesce(base_unused, unused))::text, id
        from credit_notes_open where (unused <> 0 or coalesce(base_unused, 0) <> 0) and contact_id = any($2::bigint[])
      union all
      select 'overpayment', id::text, id::text, invoice_number, payment_date, null, contact_id::text, overpayment_amount::text, (-unused)::text,
-            (-coalesce(base_unused, unused))::text
+            (-coalesce(base_unused, unused))::text, id
        from overpayments_open where (unused <> 0 or coalesce(base_unused, 0) <> 0) and contact_id = any($2::bigint[])
-     order by date, type desc, length(document_id), document_id`,
+     order by date, type desc, sort_id`,
     [asAt, ids],
   );
   let buckets: Buckets = emptyBuckets();
