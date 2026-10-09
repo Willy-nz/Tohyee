@@ -286,7 +286,10 @@ Server-wide:
 
 - **Server admin**: creates organisations and users, repairs organisations,
   sets up remote access and email. Being a server admin does *not* grant
-  access to any organisation's books; that trust boundary is deliberate.
+  access to any organisation's books; that trust boundary is deliberate. The
+  one exception is "Hand over this organisation" (decision 485): a new owner
+  (never the server admin themselves) after a 7-day wait that the
+  organisation's owners and admins are told about and can cancel.
   Server settings live apart from the books (`/server`) and only work on the
   server computer itself: Tohyee opens a second address on 127.0.0.1
   (`TOHYEE_ADMIN_PORT`, default the main port + 1) that passes requests on to

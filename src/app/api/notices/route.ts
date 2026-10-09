@@ -4,6 +4,6 @@ import { listTopBarNotices } from "@/lib/notices/top-bar";
 /** GET: non-blocking notices shown in the top bar. */
 export const GET = route(async (request) => {
   const params = searchParams(request);
-  const notices = await withOrganisation(request, params.get("organisationId"), "viewer", (tx) => listTopBarNotices(tx));
+  const notices = await withOrganisation(request, params.get("organisationId"), "viewer", (tx, { membership }) => listTopBarNotices(tx, membership.role));
   return json({ notices });
 });

@@ -41,7 +41,10 @@ Tohyee (the books) are at the bottom.
   access, the organisations and email (click one to go to its page; grey bars
   until they load; two to a row in a narrow window); and the latest news as a
   short list, the conference with it.
-- **Organisations, Email**: as before.
+- **Organisations**: as before, plus **Hand over…** for when an
+  organisation's owners can't add a new owner (decision 485): a new owner
+  after 7 days, which its owners and admins are told about and can cancel.
+- **Email**: as before.
 - **Users**: with two-step sign-in on, adding someone (or resetting their
   two-step sign-in) gives a one-time setup link to send them, emailed too
   when the server can send email; they choose their own password with it

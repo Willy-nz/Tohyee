@@ -3760,3 +3760,32 @@ testing) and #154's code signing (later, Jess).
      - **On upgrade:** existing logins that never set up two-step need a
        setup link ("Send setup link" on the Users page).
 
+### Handing an organisation over (decision 485)
+
+485. **A server admin can hand an organisation over** (#208, Jess 9 Oct
+     2026: the main admin should be able to recover any organisation, as
+     people forget passwords or die and the accounting data mustn't be lost).
+     - **Why it's needed:** today, if an organisation's only owner can't act,
+       nobody can make a new owner, and the only workaround is signing in as
+       them.
+     - **What it does:** a server admin, on the server computer only, names
+       a login and a reason, and after a **7-day wait** that person becomes
+       an owner (an existing role is raised to owner; nobody loses access).
+       Core migration 0010, `organisation_handovers`. The 15-minute
+       scheduler can be turned off with `TOHYEE_HANDOVER_SCHEDULER=off`.
+     - **Who's told:** the organisation's owners and admins are emailed at
+       once, see it on the Members page and in the top bar, and any of them
+       can cancel it. So can a server admin.
+     - **Not to yourself:** a server admin can't hand an organisation to
+       themselves (Jess). It's recorded in the server's log and in the
+       organisation's own history.
+     - **Why 7 days:** Jess asked for whatever suits a server with perhaps
+       100 client organisations, where the server admin is an outsider to
+       each. The wait protects clients from a mistake or a misused admin
+       account and costs little in a genuine case.
+     - **Still possible:** two server admins acting together could hand
+       organisations to each other. Having a second server admin is still
+       advised.
+     - **Architecture:** this is the one deliberate exception to "being a
+       server admin doesn't give access to any organisation's books".
+
