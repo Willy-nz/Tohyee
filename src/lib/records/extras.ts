@@ -273,7 +273,7 @@ async function historyFor(tx: OrgTx, recordType: RecordType, recordId: string): 
          or (entity_type in ('record_note', 'record_attachment')
              and details->>'recordType' = $1 and details->>'recordId' = $2)
          ${relatedSql}
-      order by created_at, id`,
+      order by audit_events.created_at, audit_events.id`,
     params,
   );
   return result.rows.map((row) => ({

@@ -59,7 +59,7 @@ type ConnectionRow = {
 async function activeConnections(tx: OrgTx, lock = false): Promise<ConnectionRow[]> {
   const result = await tx.query<ConnectionRow>(
     `select id::text, name, app_token_ciphertext, user_token_ciphertext, app_token_hint, sync_every_hours, token_problem, created_at, created_by_email
-       from akahu_connections where status = 'active' order by id ${lock ? "for update" : ""}`,
+       from akahu_connections where status = 'active' order by akahu_connections.id ${lock ? "for update" : ""}`,
   );
   return result.rows;
 }

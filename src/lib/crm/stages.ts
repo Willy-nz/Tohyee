@@ -254,7 +254,7 @@ export type SalesProcess = {
 /** Each opportunity record type's sales process. */
 export async function listSalesProcesses(tx: OrgTx): Promise<SalesProcess[]> {
   const result = await tx.query<{ id: string; name: string; is_active: boolean; stage_keys: string[] | null }>(
-    "select id::text, name, is_active, stage_keys from crm_record_types where record = 'opportunity' order by sort_order, id",
+    "select id::text, name, is_active, stage_keys from crm_record_types where record = 'opportunity' order by sort_order, crm_record_types.id",
   );
   return result.rows.map((row) => ({ recordTypeId: row.id, recordTypeName: row.name, isActive: row.is_active, stageKeys: row.stage_keys }));
 }

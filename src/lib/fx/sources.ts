@@ -316,7 +316,7 @@ function parseSetInput(input: Record<string, unknown>): ParsedSet {
 async function overlapping(tx: OrgTx, periodStart: string, periodEnd: string): Promise<RateSetPreview["overlaps"]> {
   const found = await tx.query<{ id: string; name: string; period_start: string; period_end: string }>(
     `select id::text, name, period_start::text, period_end::text from exchange_rate_sets
-      where replaced_at is null and period_start <= $2 and period_end >= $1 order by period_start, id`,
+      where replaced_at is null and period_start <= $2 and period_end >= $1 order by exchange_rate_sets.period_start, exchange_rate_sets.id`,
     [periodStart, periodEnd],
   );
   return found.rows.map((row) => ({ id: row.id, name: row.name, periodStart: row.period_start, periodEnd: row.period_end }));

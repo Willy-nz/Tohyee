@@ -410,7 +410,7 @@ export async function profitAndLossSplit(tx: OrgTx, input: { from?: unknown; to?
     [plain.from, plain.to, categoryId],
   );
   const tops = await tx.query<{ id: string; name: string; is_active: boolean }>(
-    "select id::text, name, is_active from tracking_values where category_id = $1 and parent_id is null order by lower(name), id",
+    "select id::text, name, is_active from tracking_values where category_id = $1 and parent_id is null order by lower(name), tracking_values.id",
     [categoryId],
   );
   const used = new Set(rows.rows.map((row) => row.bucket));

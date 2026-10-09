@@ -133,7 +133,7 @@ export async function agedPayables(tx: OrgTx, input: { asAt?: unknown }): Promis
     `${PAYABLES_SQL}
      select id::text, contact_id::text, supplier_invoice_number, bill_date, due_date, amount_due::text, currency_code, amount_due_base::text, custom_fields
        from bills_due
-      where amount_due <> 0 or amount_due_base <> 0 order by due_date, id`,
+      where amount_due <> 0 or amount_due_base <> 0 order by due_date, bills_due.id`,
     [asAt],
   );
   const creditRows = await tx.query<{
@@ -148,7 +148,7 @@ export async function agedPayables(tx: OrgTx, input: { asAt?: unknown }): Promis
   }>(
     `${PAYABLES_SQL}
      select id::text, contact_id::text, supplier_credit_note_number, credit_note_date, unused::text, currency_code, unused_base::text, custom_fields from credit
-      where unused <> 0 or unused_base <> 0 order by credit_note_date, id`,
+      where unused <> 0 or unused_base <> 0 order by credit_note_date, credit.id`,
     [asAt],
   );
   const contactRows = await tx.query<{ id: string; name: string; currency_code: string | null }>("select id::text, name, currency_code from contacts");

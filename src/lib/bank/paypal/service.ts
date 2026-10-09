@@ -94,7 +94,7 @@ async function activeConnections(tx: OrgTx, lock = false): Promise<ConnectionRow
   const result = await tx.query<ConnectionRow>(
     `select id::text, name, client_id, client_secret_ciphertext, sync_every_hours, balances, last_synced_at, last_sync_status, last_sync_error,
             lease_until, created_at, created_by_email
-       from paypal_connections where status = 'active' order by id ${lock ? "for update" : ""}`,
+       from paypal_connections where status = 'active' order by paypal_connections.id ${lock ? "for update" : ""}`,
   );
   return result.rows;
 }

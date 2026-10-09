@@ -90,7 +90,7 @@ export async function defaultRecordType(tx: OrgTx, record: LayoutRecord): Promis
 
 async function customFieldInfo(tx: OrgTx): Promise<Pick<CustomField, "id" | "record" | "label" | "type">[]> {
   const result = await tx.query<{ id: string; record: CustomField["record"]; label: string; type: CustomField["type"] }>(
-    "select id::text, record, label, field_type as type from custom_fields order by id",
+    "select id::text, record, label, field_type as type from custom_fields order by custom_fields.id",
   );
   return result.rows;
 }

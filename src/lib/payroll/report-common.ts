@@ -103,7 +103,7 @@ export async function payItemsInOrder(tx: OrgTx): Promise<Array<{ id: string; na
     `select id::text, name, category, kind, account_id::text from payroll_pay_items
       order by array_position(array['earnings', 'deduction', 'employer_contribution'], category),
                array_position(${PAY_ITEM_KIND_ORDER_SQL}, kind),
-               lower(name), id`,
+               lower(name), payroll_pay_items.id`,
   );
   return result.rows.map((row) => ({ id: row.id, name: row.name, category: row.category, kind: row.kind, accountId: row.account_id }));
 }

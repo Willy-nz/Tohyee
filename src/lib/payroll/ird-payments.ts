@@ -305,7 +305,7 @@ export async function recordIrdPayment(
   const overlapping = await tx.query<{ payment_number: string; period_start: string; period_end: string }>(
     `select payment_number::text, period_start::text, period_end::text from payroll_ird_payments
       where status = 'active' and period_start <= $2 and period_end >= $1 and (period_start, period_end) <> ($1::date, $2::date)
-      order by payment_number limit 1`,
+      order by payroll_ird_payments.payment_number limit 1`,
     [period.start, period.end],
   );
   if (overlapping.rows[0]) {

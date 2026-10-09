@@ -160,7 +160,7 @@ export async function listLeaveBalances(tx: OrgTx, onInput?: unknown): Promise<L
   const on = onInput ? parseIsoDate(onInput, "As at") : todayIsoDate();
   const employees = await tx.query<{ id: string }>(
     `select id::text from payroll_employees where not is_archived and start_date <= $1 and (finish_date is null or finish_date >= $1 - 400)
-      order by lower(last_name), lower(first_name), id`,
+      order by lower(last_name), lower(first_name), payroll_employees.id`,
     [on],
   );
   const summaries: LeaveSummary[] = [];

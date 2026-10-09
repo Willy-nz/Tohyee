@@ -270,7 +270,7 @@ export async function approvalBudget(tx: OrgTx, requestIdInput: unknown): Promis
   const month = `${(facts.date || todayIsoDate()).slice(0, 7)}-01`;
   const monthEnd = (await tx.query<{ end: string }>("select (date_trunc('month', $1::date) + interval '1 month - 1 day')::date::text as end", [month])).rows[0].end;
   const budgets = await tx.query<{ id: string; name: string; is_overall: boolean; tracking_value_id: string | null }>(
-    "select id::text, name, is_overall, tracking_value_id::text from budgets where archived_at is null order by is_overall, id",
+    "select id::text, name, is_overall, tracking_value_id::text from budgets where archived_at is null order by is_overall, budgets.id",
   );
   const overall = budgets.rows.find((budget) => budget.is_overall) ?? null;
   const byValue = new Map(budgets.rows.filter((budget) => budget.tracking_value_id).map((budget) => [budget.tracking_value_id!, budget]));

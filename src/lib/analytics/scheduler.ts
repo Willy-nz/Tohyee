@@ -58,7 +58,7 @@ export async function runDueLoads(now = new Date()): Promise<LoadRun[]> {
             if (!enabled.rows[0]?.on) return [];
             // The books are copied for every organisation with Analytics on; CSV sources need a folder.
             const sources = hasFolder
-              ? await tx.query<{ id: string }>("select id::text from analytics_sources where reload_daily order by id")
+              ? await tx.query<{ id: string }>("select id::text from analytics_sources where reload_daily order by analytics_sources.id")
               : { rows: [] as Array<{ id: string }> };
             const books = await tx.query<{ status: string; trigger: string; started_at: Date }>(
               `select status, trigger, started_at from analytics_load_runs

@@ -141,7 +141,7 @@ async function settingsRow(tx: OrgTx, lock = false): Promise<SettingsRow | null>
 async function stripeConnection(tx: OrgTx): Promise<{ id: string; key: string | null; liveMode: boolean } | null> {
   const found = await tx.query<{ id: string; api_key_ciphertext: string; live_mode: boolean }>(
     // With several Stripe logins (#182), online payments use the first one connected.
-    "select id::text, api_key_ciphertext, live_mode from stripe_connections where status = 'active' order by id limit 1",
+    "select id::text, api_key_ciphertext, live_mode from stripe_connections where status = 'active' order by stripe_connections.id limit 1",
   );
   const row = found.rows[0];
   if (!row) return null;

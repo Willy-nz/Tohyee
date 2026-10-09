@@ -1954,7 +1954,7 @@ export async function voidPayRun(
   if (voidDate < run.pay_date) throw new ValidationError(`The void date can't be before the pay date (${run.pay_date}).`);
   // Undo in order (PPAY3, PPAY12): wage payments, then IRD payments for its period, then the pay run.
   const wagePayments = await tx.query<{ payment_number: string }>(
-    "select payment_number::text from payroll_wage_payments where pay_run_id = $1 and status = 'active' order by payment_number",
+    "select payment_number::text from payroll_wage_payments where pay_run_id = $1 and status = 'active' order by payroll_wage_payments.payment_number",
     [run.id],
   );
   if (wagePayments.rows.length > 0) {
@@ -1962,7 +1962,7 @@ export async function voidPayRun(
   }
   const irdPayments = await tx.query<{ payment_number: string; period_start: string; period_end: string }>(
     `select payment_number::text, period_start::text, period_end::text from payroll_ird_payments
-      where status = 'active' and period_start <= $1 and period_end >= $1 order by payment_number`,
+      where status = 'active' and period_start <= $1 and period_end >= $1 order by payroll_ird_payments.payment_number`,
     [run.pay_date],
   );
   if (irdPayments.rows.length > 0) {

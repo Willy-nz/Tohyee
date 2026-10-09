@@ -125,7 +125,7 @@ async function activeConnections(tx: OrgTx, lock = false): Promise<ConnectionRow
   const result = await tx.query<ConnectionRow>(
     `select id::text, name, access_url_ciphertext, host, sync_every_hours, sync_minute, last_synced_at, last_sync_status, last_sync_error,
             last_problems, accounts, lease_until, created_at, created_by_email
-       from simplefin_connections where status = 'active' order by id ${lock ? "for update" : ""}`,
+       from simplefin_connections where status = 'active' order by simplefin_connections.id ${lock ? "for update" : ""}`,
   );
   return result.rows;
 }
