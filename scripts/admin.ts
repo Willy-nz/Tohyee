@@ -18,6 +18,7 @@ import { twoStepRequired } from "@/lib/auth/sessions";
 import { resetTwoStep } from "@/lib/auth/two-step";
 import { randomBytes } from "node:crypto";
 import { closeAllPools } from "@/lib/db/pools";
+import { grantServiceAccess, WINDOWS_SERVICE_ACCOUNT } from "@/lib/server-admin/folder-access";
 import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 import { getLocalMailRelay, updateLocalMailRelay } from "@/lib/email/local-relay";
 import { getEmailSettings, sendEmail, updateEmailSettings } from "@/lib/email/mailer";
@@ -554,6 +555,7 @@ async function backups(command: string | undefined, args: string[]) {
     const time = option(args, "time");
     if (time !== null) input.time = time;
     if (Object.keys(input).length === 0) throw new UsageError("Say what to change: --on/--off, --folder or --time.");
+    if (input.folder) giveServiceAccess(input.folder, "write");
     const settings = await updateBackupSettings(COMMAND_LINE_ADMIN, input);
     console.log(`Backups saved: ${settings.enabled ? `nightly at ${settings.time}` : "off"}, into ${settings.folder}.`);
     return;
@@ -644,6 +646,12 @@ async function updates(command: string | undefined, args: string[]) {
   });
 }
 
+/** Decision 486: on Windows the service runs as its own limited account; a chosen folder is given to it. */
+function giveServiceAccess(folder: string, access: "read" | "write") {
+  const problem = grantServiceAccess(folder, access);
+  if (problem) console.warn(`Couldn't give Tohyee's service (${WINDOWS_SERVICE_ACCOUNT}) access to ${folder}: ${problem}`);
+}
+
 async function analytics(command: string | undefined, args: string[]) {
   const { listSourceFolders, setSourceFolder } = await import("@/lib/analytics/folders");
   if (command === "folders") {
@@ -658,6 +666,7 @@ async function analytics(command: string | undefined, args: string[]) {
     const id = option(args, "id");
     const folder = option(args, "folder");
     if (!id || folder === null) throw new UsageError("Use: analytics folder --id ORGANISATION --folder PATH");
+    if (folder) giveServiceAccess(folder, "read");
     const saved = await setSourceFolder(COMMAND_LINE_ADMIN, id, folder);
     console.log(saved ? `${id} reads analytics files from ${saved}.` : `${id} has no analytics folder now.`);
     return;
@@ -679,6 +688,7 @@ async function bank(command: string | undefined, args: string[]) {
     const id = option(args, "id");
     const folder = option(args, "folder");
     if (!id || folder === null) throw new UsageError("Use: bank folder --id ORGANISATION --folder PATH");
+    if (folder) giveServiceAccess(folder, "read");
     const saved = await setBankFilesFolder(COMMAND_LINE_ADMIN, id, folder);
     console.log(saved ? `${id} reads bank statement files from ${saved}.` : `${id} has no bank files folder now.`);
     return;

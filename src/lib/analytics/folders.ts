@@ -5,6 +5,7 @@ import { coreQuery, withCoreTransaction } from "@/lib/db/transactions";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { analyticsFolder } from "@/lib/analytics/paths";
 import { readServerSetting } from "@/lib/server-settings";
+import { canListFolder, folderAccessHint } from "@/lib/server-admin/folder-access";
 
 /**
  * The folder on the server each organisation's analytics files are read
@@ -30,12 +31,7 @@ export async function organisationSourceFolder(organisationId: string): Promise<
 export async function sourceFolderStatus(organisationId: string): Promise<{ chosen: boolean; readable: boolean }> {
   const folder = await organisationSourceFolder(organisationId);
   if (!folder) return { chosen: false, readable: false };
-  try {
-    fs.accessSync(/* turbopackIgnore: true */ folder, fs.constants.R_OK);
-    return { chosen: true, readable: fs.statSync(/* turbopackIgnore: true */ folder).isDirectory() };
-  } catch {
-    return { chosen: true, readable: false };
-  }
+  return { chosen: true, readable: canListFolder(folder) };
 }
 
 /** Server admins: every organisation with its folder (or none) and whether it can be read. */
@@ -46,15 +42,7 @@ export async function listSourceFolders(): Promise<Array<{ organisationId: strin
   );
   return organisations.rows.map((row) => {
     const folder = folders[row.id] ?? null;
-    let readable = false;
-    if (folder) {
-      try {
-        fs.accessSync(/* turbopackIgnore: true */ folder, fs.constants.R_OK);
-        readable = fs.statSync(/* turbopackIgnore: true */ folder).isDirectory();
-      } catch {
-        readable = false;
-      }
-    }
+    const readable = folder ? canListFolder(folder) : false;
     return { organisationId: row.id, displayName: row.display_name, folder, readable };
   });
 }
@@ -73,11 +61,11 @@ export async function setSourceFolder(auth: ServerAdminAuth, organisationId: str
     let stat: fs.Stats;
     try {
       stat = fs.statSync(/* turbopackIgnore: true */ folder);
-      fs.accessSync(/* turbopackIgnore: true */ folder, fs.constants.R_OK);
     } catch {
-      throw new ValidationError("Tohyee can't open that folder. Check it exists and the Tohyee service can read it.");
+      throw new ValidationError("Tohyee can't find that folder. Check it exists.");
     }
     if (!stat.isDirectory()) throw new ValidationError("That's a file, not a folder.");
+    if (!canListFolder(folder)) throw new ValidationError(`Tohyee can't open that folder.${folderAccessHint(folder, "read")}`);
     // Tohyee's own analytics data isn't a source.
     const own = path.resolve(analyticsFolder());
     const chosen = path.resolve(/* turbopackIgnore: true */ folder);

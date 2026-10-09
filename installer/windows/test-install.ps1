@@ -68,6 +68,10 @@ function Assert-Services {
     if ($service.Status -ne 'Running') { throw "$name isn't running" }
     if ($service.StartType -ne 'Automatic') { throw "$name doesn't start automatically" }
   }
+  # Decision 486: Tohyee runs as its own limited account, not SYSTEM.
+  $runsAs = (Get-CimInstance Win32_Service -Filter "Name='Tohyee'").StartName
+  Write-Host "Tohyee runs as $runsAs"
+  if ($runsAs -ne 'NT SERVICE\Tohyee') { throw "The Tohyee service runs as $runsAs, not NT SERVICE\Tohyee." }
 }
 
 function Read-Settings {

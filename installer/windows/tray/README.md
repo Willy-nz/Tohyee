@@ -23,6 +23,10 @@ sign-in. There's no browser involved.
 
 ## The window
 
+The Tohyee service runs as its own limited account, `NT SERVICE\Tohyee`
+(decision 486). Choosing a backup folder (Browse, Use OneDrive, Use Google
+Drive) or an analytics folder here gives that account access to it.
+
 A dark window in the style of a media server's app (`src/Theme.cs`): a
 sidebar with the logo and the pages in groups (Home; People: Organisations,
 Users; Keep safe: Backups, Updates; Connect: Remote access, Email,

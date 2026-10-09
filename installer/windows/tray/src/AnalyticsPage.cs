@@ -18,7 +18,7 @@ namespace Tohyee.Tray
             _api = api;
             BackColor = Theme.Bg;
             _page = Ui.Page("Analytics", "The folder on this computer each organisation's analytics reads CSV files from. Tohyee only reads them; it never changes or deletes files there.");
-            var note = Ui.Card(_page, "Analytics folders", "Use a full path. The Tohyee service needs to be able to read it. Leave blank for none.");
+            var note = Ui.Card(_page, "Analytics folders", "Use a full path. Saving gives the Tohyee service permission to read it. Leave blank for none.");
             var buttons = Ui.Row();
             buttons.Controls.Add(Ui.Btn("Refresh", async (s, e) => await Reload()));
             note.Body.Controls.Add(buttons);
@@ -74,6 +74,9 @@ namespace Tohyee.Tray
             save.Click += async (s, e) =>
             {
                 var chosen = folder.Text.Trim();
+                // Decision 486: the service runs as its own account, so it's given the chosen folder to read first.
+                var problem = chosen.Length > 0 ? FolderAccess.Grant(chosen, false) : null;
+                if (problem != null) Ui.Show(_message, problem, true);
                 if (await Ui.Busy(this, _message, async () =>
                 {
                     await _api.Put("/api/admin/analytics-folders", new Dictionary<string, object>

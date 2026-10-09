@@ -7,6 +7,7 @@ import { type AdminActor, type ServerAdminAuth, writeAdminAuditEvent } from "@/l
 import { normaliseEmail } from "@/lib/auth/service";
 import { BACKUP_EXTENSION, type BackupHeader, readBackupHeader, readDecrypted, writeEncrypted } from "@/lib/backups/format";
 import { startPgTool } from "@/lib/backups/pg-tools";
+import { folderAccessHint } from "@/lib/server-admin/folder-access";
 import { backupsToKeep } from "@/lib/backups/retention";
 import { coreDatabaseName } from "@/lib/db/connection";
 import { LATEST_TENANT_VERSION } from "@/lib/db/migrations";
@@ -129,7 +130,7 @@ async function assertWritableFolder(folder: string): Promise<void> {
     } catch {
       who = "";
     }
-    throw new ValidationError(`Tohyee (the server${who}) can't write to ${folder}: ${reason}`);
+    throw new ValidationError(`Tohyee (the server${who}) can't write to ${folder}: ${reason}.${folderAccessHint(folder, "write")}`);
   }
 }
 
