@@ -274,12 +274,19 @@ $addressServiceEnv</service>
   # can't take over the computer. It gets only what it needs: to read the
   # program and its service settings, to write its logs, backups, analytics
   # data and temporary files, and each folder a server admin has chosen
-  # (backups: write; analytics and bank files: read). The command line goes
-  # to sc.exe exactly as written, so the empty password (a virtual account
-  # has none) isn't dropped.
+  # (backups: write; analytics and bank files: read). A virtual account has
+  # no password: sc.exe is given none (with password= "" it failed with
+  # 1057 in CI),
+  # and Windows' own service manager is the fallback.
   $account = 'NT SERVICE\Tohyee'
-  $sc = Start-Process -FilePath 'sc.exe' -ArgumentList "config Tohyee obj= ""$account"" password= """"" -Wait -PassThru -NoNewWindow
-  if ($sc.ExitCode -ne 0) { throw "Couldn't set the Tohyee service to run as $account (sc.exe exit code $($sc.ExitCode))." }
+  $sc = Start-Process -FilePath 'sc.exe' -ArgumentList "config Tohyee obj= ""$account""" -Wait -PassThru -NoNewWindow
+  if ($sc.ExitCode -ne 0) {
+    Write-Host "sc.exe couldn't set the account (exit code $($sc.ExitCode)); trying Win32_Service.Change."
+    $service = Get-CimInstance Win32_Service -Filter "Name='Tohyee'"
+    $changed = Invoke-CimMethod -InputObject $service -MethodName Change -Arguments @{ StartName = $account }
+    if ($changed.ReturnValue -ne 0) { throw "Couldn't set the Tohyee service to run as $account (sc.exe exit code $($sc.ExitCode), Win32_Service.Change $($changed.ReturnValue))." }
+  }
+  Write-Host "The Tohyee service runs as $((Get-CimInstance Win32_Service -Filter "Name='Tohyee'").StartName)."
   Invoke-Checked 'icacls.exe' @($InstallDir, '/grant', "$($account):(OI)(CI)RX", '/T', '/C', '/Q')
   Invoke-Checked 'icacls.exe' @($DataRoot, '/grant', "$($account):(RX)", '/Q')
   Invoke-Checked 'icacls.exe' @($ServiceDir, '/grant', "$($account):(OI)(CI)RX", '/T', '/Q')
