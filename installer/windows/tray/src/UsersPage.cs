@@ -31,6 +31,7 @@ namespace Tohyee.Tray
             buttons.Controls.Add(Ui.Btn("Server admin on/off", async (s, e) => await ToggleAdmin()));
             buttons.Controls.Add(Ui.Btn("Reset two-step", async (s, e) => await ResetTwoStep()));
             buttons.Controls.Add(Ui.Btn("Send setup link", async (s, e) => await SendSetupLink()));
+            buttons.Controls.Add(Ui.Btn("Sign out everywhere", async (s, e) => await SignOutEverywhere()));
             buttons.Controls.Add(Ui.Btn("Login on/off", async (s, e) => await ToggleActive()));
             buttons.Controls.Add(Ui.Btn("Refresh", async (s, e) => await Reload()));
             card.Body.Controls.Add(buttons);
@@ -176,6 +177,19 @@ namespace Tohyee.Tray
             var on = !J.Bool(user, "isServerAdmin");
             if (!Ui.Confirm(FindForm(), on ? "Make " + J.Str(user, "email") + " a server admin? They'll be able to change these settings on this computer." : J.Str(user, "email") + " will no longer be a server admin.")) return;
             await Change(user, new Dictionary<string, object> { { "isServerAdmin", on } }, J.Str(user, "email") + (on ? " is now a server admin." : " is no longer a server admin."));
+        }
+
+        /// <summary>#208: ends every session of theirs (a stolen phone, a flagged sign-in). They can sign straight back in.</summary>
+        private async Task SignOutEverywhere()
+        {
+            var user = Selected();
+            if (user == null) return;
+            if (!Ui.Confirm(FindForm(), "Sign " + J.Str(user, "email") + " out everywhere? They can sign straight back in with their password and two-step sign-in, so if someone else knows the password, set a new one too.")) return;
+            await Ui.Busy(this, _status, async () =>
+            {
+                var result = await _api.Post(UserPath(user) + "/sign-out", null);
+                Ui.Show(_status, J.Str(user, "email") + " is signed out everywhere (" + J.Int(result, "ended") + " " + (J.Int(result, "ended") == 1 ? "session" : "sessions") + ").", false);
+            });
         }
 
         private async Task ToggleActive()

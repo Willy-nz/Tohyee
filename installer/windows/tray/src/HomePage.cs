@@ -139,6 +139,8 @@ namespace Tohyee.Tray
                 if (IsDisposed) return;
                 await ShowUpdates();
                 if (IsDisposed) return;
+                await ShowSignIns();
+                if (IsDisposed) return;
                 await ShowPhone();
                 if (IsDisposed) return;
                 await ShowOrganisations();
@@ -316,6 +318,25 @@ namespace Tohyee.Tray
             Found("updates", problems);
         }
 
+        /// <summary>#208: flagged sign-ins since a server admin last looked.</summary>
+        private async Task ShowSignIns()
+        {
+            var problems = new List<Attention>();
+            try
+            {
+                var count = J.Int(J.Obj(await _app.Api.Get("/api/admin/sign-ins?flagged=true&limit=1"), "unseen"), "count");
+                if (count > 0)
+                {
+                    problems.Add(new Attention(count == 1 ? "A sign-in was flagged." : count + " sign-ins were flagged.", "Check they were expected (a new device, failed tries, a backup code…).", "Open Sign-ins", "signins", Theme.Warning));
+                }
+            }
+            catch (ApiException)
+            {
+                // The Sign-ins page shows the problem itself.
+            }
+            Found("signins", problems);
+        }
+
         /// <summary>Keeps what a check found, then redraws Needs attention and that page's sidebar badge.</summary>
         private void Found(string key, List<Attention> problems)
         {
@@ -333,7 +354,7 @@ namespace Tohyee.Tray
 
         private void ShowAttention()
         {
-            var order = new[] { "server", "backups", "updates", "organisations", "phone" };
+            var order = new[] { "server", "backups", "updates", "signins", "organisations", "phone" };
             var all = order.Where(k => _found.ContainsKey(k)).SelectMany(k => _found[k]).ToList();
             _attentionItems.SuspendLayout();
             foreach (var old in _attentionItems.Controls.Cast<Control>().ToList()) old.Dispose();

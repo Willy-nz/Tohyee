@@ -11,6 +11,7 @@ import { WorkspaceProvider, type WorkspaceUser } from "./workspace";
 const LINKS = [
   { href: "/server/organisations", label: "Organisations" },
   { href: "/server/users", label: "Users" },
+  { href: "/server/sign-ins", label: "Sign-ins" },
   { href: "/server/remote-access", label: "Remote access" },
   { href: "/server/email", label: "Email" },
   { href: "/server/analytics", label: "Analytics folders" },
