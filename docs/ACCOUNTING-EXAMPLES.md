@@ -1388,6 +1388,42 @@ and post key "Helper".
   than 24 hours ago, or is in a locked period; or when the other side of its
   transfer was matched by someone else.
 
+### Full access outside banking (#205 section 4; approvals decided by Jess, 9 Oct 2026)
+
+A Full access key (decision 489) can also do day-to-day accounting outside
+banking, through the same services as the screens, so each action posts what
+the screen would (credit notes CN1-CN9, supplier credit notes, overpayments,
+purchase and sales orders, quotes, repeating documents, items, tracking, the
+chart, budgets, fixed assets FA1-FA9, expense claims EC1-EC9). It never
+deletes, voids, archives, switches off, pauses, disposes of an asset or rolls
+back a depreciation run, and payroll, lock dates, GST filing, users, roles and
+settings stay out. A document an approval rule covers is approved by people
+only, as AW13.
+
+Setup as AIB (Jess, owner, Full access key "Claude"); customer Kobe Ltd with
+INV-0001 (115.00, I1); supplier Kauri Supplies.
+
+- **AIF1** Claude makes a credit note for Kobe Ltd, one line 20.00 + GST on
+  4000 (23.00), approves it (Dr 4000 20.00 / Dr 2100 3.00 / Cr 1100 23.00, as
+  CN2) and applies 23.00 to INV-0001: INV-0001 has **92.00** due. Retrying
+  each call with the same key does nothing more.
+- **AIF2** A purchase order for Kauri Supplies of 500.00 + GST is approved by
+  Claude (no rule covers it). With the rule "Over $1,000" for purchase
+  orders, Claude's approve of a 1,150.00 one is refused: "This purchase order
+  needs a person's approval (rule: Over $1,000)." (AW13).
+- **AIF3** Claude adds item "CONSULT" (service, 150.00, 4000, GST) and an
+  account 6125 "Fuel cards" (expense), then edits both. Sending `isActive:
+  false` with an edit changes nothing: they stay active.
+- **AIF4** With the FA1 type "Computer equipment" (1620, 1630, 6300, DV 50%),
+  Claude registers the FA laptop typed in (cost 2,000.00, bought 10 May 2026)
+  and runs depreciation to 31 May 2026, as FA3: Dr 6300 **83.33** / Cr 1630
+  **83.33**. The preview before shows the same and posts nothing.
+- **AIF5** A Make and post key can read credit notes, quotes, items and the
+  rest, but every tool here that changes anything is refused, and so is
+  reading expense claims (people's own spending).
+- **AIF6** A refund of 23.00 paid to Kobe Ltd for a second approved 23.00
+  credit note, from 1000, posts Dr 1100 23.00 / Cr 1000 23.00 (as CN8).
+
 ### Bank feeds (Akahu)
 
 Bank feeds come from Akahu (NZ open finance). Each organisation sets up its

@@ -316,9 +316,10 @@ function AiConnect({ organisationId }: { organisationId: string }) {
           </div>
         ))}
         <Notice tone="info">
-          <strong>It never deletes.</strong> At every level, your AI can&apos;t delete, void, archive, roll back, refund or remove anything, not even a
-          draft. Those stay with people, in Tohyee. The one exception: a Full access key can undo a bank reconciliation it made itself in the last 24
-          hours, which reverses what it posted for that line on the line&apos;s date. Payroll isn&apos;t included, nor are users, roles, keys, lock
+          <strong>It never deletes.</strong> At every level, your AI can&apos;t delete, void, archive, roll back or remove anything, not even a
+          draft. Those stay with people, in Tohyee. Only a Full access key records refunds you pay or receive, and it can undo a bank reconciliation it
+          made itself in the last 24 hours, which reverses what it posted for that line on the line&apos;s date. Anything an approval rule covers
+          waits for a person. Payroll isn&apos;t included, nor are users, roles, keys, lock
           dates or server settings.
         </Notice>
       </Card>

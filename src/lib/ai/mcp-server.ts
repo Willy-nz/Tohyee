@@ -33,7 +33,7 @@ const LEVEL_WORDS = {
   post:
     "You can look things up, add and edit contacts, make and edit drafts, approve invoices and bills, post draft journals and record payments. You can't delete, void, archive, roll back or refund anything.",
   full:
-    "You can do everything at the \"Make and post\" level, and also reconcile bank statement lines and make and edit bank rules. You can't delete, void, archive, roll back or refund anything, exclude lines or switch rules off. The only undo you have is unmatch_bank_line, for your own reconciliations in the last 24 hours; anything else a person must unreconcile in Tohyee. Reconcile in small batches and check the results.",
+    "You can do everything at the \"Make and post\" level, and also reconcile bank statement lines, make and edit bank rules, make, edit and approve credit notes, quotes, sales and purchase orders and repeating invoices and bills, apply credit, record refunds, approve and pay expense claims, add and edit items, accounts, tracking, budgets and fixed assets, and run depreciation. You can't delete, void, archive, pause, roll back or dispose of anything, exclude lines or switch anything off, and anything an approval rule covers is for a person to approve. The only undo you have is unmatch_bank_line, for your own reconciliations in the last 24 hours. Work in small batches and check the results.",
 } as const;
 
 /**
@@ -54,7 +54,7 @@ export function mcpServerFor(identity: AiTokenIdentity): McpServer {
       `as ${identity.user.displayName} (${identity.membership.role}), at the level "${AI_ACCESS_LEVEL_LABELS[level]}". ${LEVEL_WORDS[level]} ` +
       "Call get_organisation first for the base currency, financial year and today's date. " +
       "Amounts are decimal strings; dates are YYYY-MM-DD. Before changing anything, say what you'll do and check with the person.",
-    tools: tools.map((tool) => ({ ...tool, readOnly: tool.level === "read" })),
+    tools: tools.map((tool) => ({ ...tool, readOnly: tool.readOnly ?? tool.level === "read" })),
     unavailableTool(name) {
       const tool = findAiTool(name);
       if (!tool) return null;
@@ -72,7 +72,7 @@ export function mcpServerFor(identity: AiTokenIdentity): McpServer {
           organisation,
           { userId: identity.user.id, email: identity.user.email, via: aiKeyVia(identity) },
           (tx) => tool.run(tx, args, { role: identity.membership.role, organisationId: organisation.id, source: `ai-${identity.tokenId}` }),
-          { people, readOnly: tool.level === "read" },
+          { people, readOnly: tool.readOnly ?? tool.level === "read" },
         );
         const answer = result instanceof ToolFileAnswer ? result.answer : result;
         const json = boundedJson(answer);

@@ -6,7 +6,8 @@ import { type Role, roleAtLeast } from "@/lib/auth/roles";
  *  draft  also make and edit drafts (invoices, bills, journals) and contacts; nothing posts
  *  post   also approve and post them, and record payments
  *  full   also reconcile bank statement lines and make and edit bank rules
- *         (decision 488, #205); only Owners make one, and it works as
+ *         (decision 488), and do day-to-day accounting outside banking
+ *         (decision 489, #205); only Owners make one, and it works as
  *         "post" when its owner is no longer an Owner
  * Never delete (decision 347): no level deletes, voids, archives, rolls back,
  * refunds or removes anything. The one exception is a Full access key undoing
@@ -29,12 +30,12 @@ export const AI_ACCESS_LEVEL_HELP: Record<AiAccessLevel, string> = {
   post:
     "It can also approve invoices and bills, post draft journals and record payments, so what it does goes into the books.",
   full:
-    "It can also reconcile bank statement lines (match them, code them as spend or receive money, record transfers, apply bank rules, up to 100 lines at a time) and make and edit bank rules. It can undo only its own reconciliations, within 24 hours. Only Owners can make one.",
+    "It can also reconcile bank statement lines (up to 100 at a time) and make and edit bank rules; make, edit and approve credit notes, quotes, sales and purchase orders and repeating invoices and bills; apply credit and record refunds; approve and pay expense claims; add and edit items, accounts, tracking, budgets and fixed assets, and run depreciation. Anything an approval rule covers still waits for a person. It can undo only its own bank reconciliations, within 24 hours. Only Owners can make one.",
 };
 
 /** Shown before a Full access key is made; the person must tick it (decision 488). */
 export const FULL_ACCESS_WARNING =
-  "A Full access key can post spend money, receive money, payments and transfers into your books without anyone checking each one first. Anyone who gets the key can do the same, as you. Make one only for an AI you trust, keep the key secret, and revoke it when you stop using it.";
+  "A Full access key can post spend money, receive money, payments, transfers, credit notes, refunds and depreciation into your books without anyone checking each one first. Anyone who gets the key can do the same, as you. Make one only for an AI you trust, keep the key secret, and revoke it when you stop using it.";
 
 const RANK: Record<AiAccessLevel, number> = { read: 0, draft: 1, post: 2, full: 3 };
 
