@@ -822,6 +822,17 @@ that something happened.
   limits per sender against spam) and from a **mailbox folder or label**
   (each email once; one from an open lead adds a note to it), unassigned and
   "to review" (decision 493).
+- **CRM duplicates** (decision 494, #216): CRM › Duplicates suggests
+  companies with the same name (ignoring case, accents, punctuation and
+  endings like Ltd), email or phone, and people with the same email or the
+  same name at the same company. A company with no accounting records can
+  be merged into the other (its people, deals, tasks, activities and
+  converted leads move across; it's archived and says where it went); two
+  that both have accounting records are only linked as the same customer,
+  shown on each company's page. People merge within their company. Adding
+  a company or a lead warns about similar companies, people and open leads.
+  Merging needs the bookkeeper role or higher; anyone who changes CRM
+  records can mark a pair as not duplicates.
   **CRM custom fields** (like Salesforce's): the organisation's own fields
   on companies (contact fields used on prospects), people and
   opportunities, with the same types, required fields, defaults and

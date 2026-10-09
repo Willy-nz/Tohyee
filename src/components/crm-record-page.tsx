@@ -63,6 +63,8 @@ type CompanyData = {
   creditNoteCount: number;
   notesCount: number;
   filesCount: number;
+  mergedInto: { id: string; name: string } | null;
+  sameCustomer: Array<{ id: string; name: string }>;
 };
 
 type PersonData = { person: Person; recordType: RecordType; opportunities: Opportunity[]; tasks: Task[]; activities: Activity[]; timeline: TimelineEntry[] };
@@ -706,6 +708,23 @@ export function CompanyRecordPage({ organisationId, contactId }: { organisationI
                 </Button>
               ) : null}
               <Link href="/operations/contacts">Contact details</Link>
+              {page.mergedInto ? (
+                <Notice>
+                  Merged into <Link href={`/crm/companies/${page.mergedInto.id}`}>{page.mergedInto.name}</Link>. Its notes and files stay here.
+                </Notice>
+              ) : null}
+              {page.sameCustomer.length > 0 ? (
+                <Notice>
+                  Same customer as{" "}
+                  {page.sameCustomer.map((other, index) => (
+                    <span key={other.id}>
+                      {index > 0 ? ", " : ""}
+                      <Link href={`/crm/companies/${other.id}`}>{other.name}</Link>
+                    </span>
+                  ))}
+                  .
+                </Notice>
+              ) : null}
               {error ? <Notice tone="error">{error}</Notice> : null}
             </>
           }

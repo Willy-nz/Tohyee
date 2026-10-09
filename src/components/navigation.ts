@@ -271,6 +271,7 @@ export const CRM_MENUS: Menu[] = [
   { label: "Tasks", href: "/crm/tasks", area: ["/crm/tasks"] },
   { label: "Email and calendar", href: "/crm/mail", area: ["/crm/mail"] },
   { label: "Teams", href: "/crm/teams", area: ["/crm/teams"] },
+  { label: "Duplicates", href: "/crm/duplicates", area: ["/crm/duplicates"] },
   { label: "Record types", href: "/crm/record-types", area: ["/crm/record-types"], minRole: "admin" as const },
   { label: "Stages", href: "/crm/stages", area: ["/crm/stages"], minRole: "admin" as const },
 ].map((menu) => ({ ...menu, groups: [], module: "crm" as const }));

@@ -4038,3 +4038,37 @@ testing) and #154's code signing (later, Jess).
        website through a real tunnel, and the mailboxes against real Gmail,
        Microsoft and IMAP accounts.
 
+494. **Duplicates: merge CRM-only companies, link ones with accounting
+     records** (#216 stage 1; Jess 10 Oct 2026: "merge CRM-only; link if
+     invoiced").
+     - **Suggested:** companies whose names match once case, accents,
+       punctuation and endings like Ltd, Limited, NZ and Co are ignored, or
+       that share an email or a phone number (digits only, +64 read as 0);
+       people with the same email, or the same name at the same company.
+       Archived and merged records, and pairs someone has reviewed, aren't
+       suggested again. Adding a company or a lead shows similar companies,
+       people and open leads (only leads the person can see) as a warning;
+       it never stops the save.
+     - **Merging a company:** only one with nothing in the books can be
+       merged away. "In the books" means any reference to it outside the
+       CRM, found from the database's foreign keys, so a new table that
+       refers to companies counts automatically. Its people, deals, tasks,
+       activities, converted leads and email links move to the one kept;
+       the kept one's empty email, phone and postal address are filled from
+       it; its primary person stops being primary if the kept company has
+       one. It's archived with `merged_into_contact_id` pointing at the one
+       kept. Its notes and files stay on it, because notes and file records
+       can't be changed (NF rules); the archived company says where it went.
+       No journal, invoice or balance changes, so there's no accounting
+       example.
+     - **Both have accounting records:** they can't be merged; they're
+       marked as the same customer, and each company's page links to the
+       other. Merging customers with invoices (moving invoices, statements
+       and balances) would change the books and isn't built.
+     - **People:** merged only within the same company and only when nothing
+       outside the CRM refers to the one merged away; deals, tasks,
+       activities, converted leads and email links move; blanks are filled.
+       People at different companies can be marked as not duplicates.
+     - **Who:** anyone who can change CRM records can mark pairs; merging
+       archives a record, so it needs the bookkeeper role or higher (not
+       sales reps or managers).

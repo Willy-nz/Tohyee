@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
+import { SimilarRecords } from "@/components/crm-similar";
 import { readFileAsBase64 } from "@/components/bank/common";
 import { memberName, useBusy, useTeam } from "@/components/crm";
 import { LeadSources } from "@/components/crm-lead-sources";
@@ -71,6 +72,7 @@ function NewLead({ organisationId, onDone }: { organisationId: string; onDone: (
     <form onSubmit={submit} style={{ display: "grid", gap: 10 }}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <LeadFields form={form} onChange={setForm} />
+      <SimilarRecords organisationId={organisationId} name={form.companyName} email={form.email} phone={form.phone} />
       <span className={ui.rowButtons}>
         <Button type="submit" disabled={busy}>
           Add lead

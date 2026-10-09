@@ -95,7 +95,7 @@ function toLead(row: LeadRow): Lead {
 }
 
 /** SQL limiting leads to the scope's (see `seesLead`), adding the owners as the next parameter. */
-function leadScopeSql(scope: CrmScope | undefined, params: unknown[]): string {
+export function leadScopeSql(scope: CrmScope | undefined, params: unknown[]): string {
   if (!scope || scope.owners === null) return "true";
   params.push(scope.owners);
   return `(l.owner_user_id = any($${params.length}::text[])${scope.role === "sales_manager" ? " or l.owner_user_id is null" : ""})`;
